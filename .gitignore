@@ -1,6 +1,6 @@
 # Rust build output. Lives inside the repo because the root disk is nearly full;
 # CARGO_TARGET_DIR points here.
-/target/
+target/
 **/*.rs.bk
 
 # Python

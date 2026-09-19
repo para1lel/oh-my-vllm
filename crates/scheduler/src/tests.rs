@@ -42,7 +42,7 @@ fn make_req(id: u64, num_tokens: usize, max_output: usize) -> Request {
 fn dummy_output(rid: u64) -> RequestOutput {
     RequestOutput {
         request_id: rid,
-        next_token_id: 42,
+        token_ids: vec![42],
         num_accepted_draft_tokens: 0,
         new_draft_token_ids: Vec::new(),
     }
@@ -212,7 +212,7 @@ fn mtp_rollback_adjusts_computed_tokens() {
     sched.update(WorkerOutput {
         outputs: vec![RequestOutput {
             request_id: 1,
-            next_token_id: 42,
+            token_ids: vec![42],
             num_accepted_draft_tokens: 0,
             new_draft_token_ids: vec![10, 11, 12, 13],
         }],
@@ -224,7 +224,7 @@ fn mtp_rollback_adjusts_computed_tokens() {
     sched.update(WorkerOutput {
         outputs: vec![RequestOutput {
             request_id: 1,
-            next_token_id: 99,
+            token_ids: vec![10, 11, 99],
             num_accepted_draft_tokens: 2,
             new_draft_token_ids: Vec::new(),
         }],
@@ -251,4 +251,52 @@ fn abort_removes_request() {
     sched.add_request(make_req(3, 4, 10));
     sched.abort(3);
     assert_eq!(sched.num_waiting(), 0, "req 3 must be removed from waiting");
+}
+
+#[test]
+fn partial_prefill_advances_without_generating_a_token() {
+    let mut sched = make_scheduler(64, 8);
+    sched.add_request(make_req(1, 16, 1));
+    assert_eq!(sched.schedule().num_batched_tokens, 8);
+    sched.update(WorkerOutput {
+        outputs: vec![RequestOutput {
+            request_id: 1,
+            token_ids: vec![],
+            num_accepted_draft_tokens: 0,
+            new_draft_token_ids: vec![],
+        }],
+    });
+    let second = sched.schedule();
+    assert_eq!(second.scheduled[0].num_computed_tokens, 8);
+    assert_eq!(second.num_batched_tokens, 8);
+    sched.update(WorkerOutput {
+        outputs: vec![dummy_output(1)],
+    });
+    assert_eq!(sched.num_running(), 0);
+    assert_eq!(sched.schedule().finished_request_ids, vec![1]);
+    assert!(sched.schedule().finished_request_ids.is_empty());
+}
+
+#[test]
+fn partial_tail_stops_at_checkpoint_boundary() {
+    let mut sched = make_scheduler(64, 128);
+    sched.add_request(make_req(1, 11, 1));
+    assert_eq!(sched.schedule().num_batched_tokens, 8);
+}
+
+#[test]
+fn output_count_truncates_speculative_tail_to_request_limit() {
+    let mut sched = make_scheduler(64, 128);
+    sched.add_request(make_req(1, 4, 2));
+    sched.schedule();
+    let result = sched.update(WorkerOutput {
+        outputs: vec![RequestOutput {
+            request_id: 1,
+            token_ids: vec![10, 11, 12],
+            num_accepted_draft_tokens: 0,
+            new_draft_token_ids: vec![],
+        }],
+    });
+    assert_eq!(result.outputs[0].token_ids, vec![10, 11]);
+    assert_eq!(sched.num_running(), 0);
 }

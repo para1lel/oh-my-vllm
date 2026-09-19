@@ -39,15 +39,16 @@ class RuntimeTests(unittest.TestCase):
                     str(ROOT / "scripts/with-gpu.sh"),
                     "bash",
                     "-c",
-                    'echo "$CUDA_VISIBLE_DEVICES"; exit 7',
+                    'read -r input; echo "$CUDA_VISIBLE_DEVICES:$input"; exit 7',
                 ],
                 env={**os.environ, "PATH": directory + ":" + os.environ["PATH"]},
+                input="stdin-preserved\n",
                 capture_output=True,
                 text=True,
                 timeout=5,
             )
             self.assertEqual(result.returncode, 7)
-            self.assertEqual(result.stdout.strip(), "GPU-test-idle")
+            self.assertEqual(result.stdout.strip(), "GPU-test-idle:stdin-preserved")
 
 
 if __name__ == "__main__":

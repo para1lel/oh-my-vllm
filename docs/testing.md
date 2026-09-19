@@ -100,3 +100,20 @@ checks structured timestamps/correlation and GPU selection with mocked nvidia-sm
 All actual GPU tests must use scripts/with-gpu.sh, including the older examples
 above. The old standalone SDPA GQA test is historical evidence only, not actual
 vLLM-path coverage. Actual GQA/GDN reference tests remain required.
+
+## Actual-path reference probe
+
+Run the vllm conda Python scripts/smoke-text.py through with-gpu.sh and with-env.sh.
+For FP64 checks set OH_MY_VLLM_ENFORCE_EAGER=1 and OH_MY_VLLM_WORKER_PYTHON to
+an absolute tests/probe_worker.py path. This instruments the selected FlashInfer
+FA/GDN prefill and packed recurrent GDN decode calls; it does not substitute
+kernels. It requires all six output/state check categories before successful exit.
+Use --context-repeats 100 to exercise a block-boundary prefill split. This probe
+is single-request only and must never be used in throughput measurements.
+
+References use actual rounded inputs in CPU FP64. Output checks use atol=rtol=0.03
+for BF16. Recurrent state checks require normalized RMS error <=1% and worst
+absolute error <=2% of the reference peak. Relative per-element errors are
+unstable near zero: the initial 0.03 elementwise state threshold rejected 2 of
+786432 coordinates despite small aggregate error. Both state metrics are logged.
+These bounds diagnose state/kernel errors; they are not FP8 full-model equality.

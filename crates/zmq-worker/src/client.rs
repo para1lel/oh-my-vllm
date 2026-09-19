@@ -61,8 +61,19 @@ impl Default for WorkerConfig {
 /// Handle to the running Python model worker.
 pub struct WorkerClient {
     sock: DealerSocket,
-    _child: Child,
+    _child: ManagedChild,
     step_id: u64,
+    pub logical_num_blocks: u32,
+}
+
+/// Reap the owned worker on errors as well as normal shutdown.
+struct ManagedChild(Child);
+
+impl Drop for ManagedChild {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
 }
 
 impl WorkerClient {
@@ -76,15 +87,17 @@ impl WorkerClient {
         info!("ZMQ DEALER socket bound at {addr}");
 
         // Fork the Python worker process.
-        let child = Command::new(&config.python_executable)
-            .args(["-m", "oh_my_vllm.worker.zmq_bridge", "--socket", &addr])
-            .env(
-                "OH_MY_VLLM_RUN_ID",
-                std::env::var("OH_MY_VLLM_RUN_ID")
-                    .unwrap_or_else(|_| format!("pid-{}", std::process::id())),
-            )
-            .spawn()?;
-        info!("Python worker launched (pid {})", child.id());
+        let child = ManagedChild(
+            Command::new(&config.python_executable)
+                .args(["-m", "oh_my_vllm.worker.zmq_bridge", "--socket", &addr])
+                .env(
+                    "OH_MY_VLLM_RUN_ID",
+                    std::env::var("OH_MY_VLLM_RUN_ID")
+                        .unwrap_or_else(|_| format!("pid-{}", std::process::id())),
+                )
+                .spawn()?,
+        );
+        info!("Python worker launched (pid {})", child.0.id());
 
         // Send the init message.  The Python process needs a moment to import
         // and connect its DEALER socket before we can deliver the first message,
@@ -117,9 +130,10 @@ impl WorkerClient {
             .await
             .map_err(|_| Error::Timeout)??;
 
-        match ready_reply {
-            crate::protocol::PythonMessage::Ready => {
-                info!("Python worker is ready");
+        let logical_num_blocks = match ready_reply {
+            crate::protocol::PythonMessage::Ready { logical_num_blocks } => {
+                info!(logical_num_blocks, "Python worker is ready");
+                logical_num_blocks
             }
             crate::protocol::PythonMessage::Error(e) => {
                 return Err(Error::WorkerError(e.message));
@@ -127,12 +141,13 @@ impl WorkerClient {
             other => {
                 return Err(Error::UnexpectedMessageType(format!("{other:?}")));
             }
-        }
+        };
 
         Ok(Self {
             sock,
             _child: child,
             step_id: 0,
+            logical_num_blocks,
         })
     }
 
@@ -168,7 +183,10 @@ impl WorkerClient {
         preempted_request_ids: &[u64],
         num_batched_tokens: usize,
     ) -> Result<WorkerOutput> {
-        if scheduled.is_empty() {
+        if scheduled.is_empty()
+            && finished_request_ids.is_empty()
+            && preempted_request_ids.is_empty()
+        {
             debug!("empty batch — skipping execute");
             return Ok(WorkerOutput {
                 outputs: Vec::new(),
@@ -210,7 +228,7 @@ impl WorkerClient {
                     .into_iter()
                     .map(|o| RequestOutput {
                         request_id: o.request_id,
-                        next_token_id: o.next_token_id,
+                        token_ids: o.token_ids,
                         num_accepted_draft_tokens: o.num_accepted_draft_tokens as usize,
                         new_draft_token_ids: o.new_draft_token_ids,
                     })
@@ -223,8 +241,22 @@ impl WorkerClient {
 
     /// Send a graceful shutdown to the Python worker.
     pub async fn shutdown(&mut self) -> Result<()> {
-        warn!("sending shutdown to Python worker");
-        Self::send_raw(&mut self.sock, &RustMessage::Shutdown).await
+        info!("sending shutdown to Python worker");
+        Self::send_raw(&mut self.sock, &RustMessage::Shutdown).await?;
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            if let Some(status) = self._child.0.try_wait()? {
+                return if status.success() {
+                    Ok(())
+                } else {
+                    Err(Error::WorkerDied)
+                };
+            }
+            if Instant::now() >= deadline {
+                return Err(Error::Timeout);
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
     }
 
     // ── internal helpers ──────────────────────────────────────────────────────

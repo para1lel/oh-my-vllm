@@ -50,7 +50,7 @@ pub struct WorkerOutput {
 pub struct RequestOutput {
     pub request_id: RequestId,
     /// Verified next token for this request (greedy / sampled).
-    pub next_token_id: u32,
+    pub token_ids: Vec<u32>,
     /// How many of the speculative draft tokens were accepted.
     /// 0 means speculation was not used or all drafts were rejected.
     pub num_accepted_draft_tokens: usize,

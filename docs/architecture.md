@@ -107,3 +107,11 @@ The IPC file must not exist when the binary starts — clean it up between runs.
 ## 6. Proposed / pending (not accepted)
 
 None outstanding at handoff time.
+
+## Installed GPUWorker adaptation (2026-09-19)
+
+ADR-002 supersedes the old API names and assumed physical group ordering above.
+The adapter uses Worker, CachedRequestData, execute_model then sample_tokens,
+and preserves request IDs and every returned token. Rust sends completion-only
+steps. Logical FA/Mamba tables map into the worker's actual three Mamba groups
+plus one FA group using disjoint physical block IDs (ADR-002). Rust chunk boundaries preserve Mamba checkpoint alignment.

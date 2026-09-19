@@ -81,3 +81,7 @@ These must not be added without explicit user confirmation.
 Environment/logging foundation is under independent review. Next: actual-path
 accuracy and E2E, full feature/combination testing, then fair performance
 acceptance. Each milestone requires sub-agent review and fixes before commit.
+
+GPUWorker adapter sub-milestone reviewed and verified: coherent real text plus
+actual-path FP64 probes for short and cross-block inputs. Long workloads and
+full feature/performance acceptance remain open.

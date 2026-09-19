@@ -1,6 +1,6 @@
 //! Rust side of the Rust ↔ Python ZMQ boundary.
 //!
-//! This crate launches the Python worker process, connects a ZMQ PAIR socket,
+//! This crate launches the Python worker process, connects a ZMQ DEALER socket,
 //! and provides [`WorkerClient`] — the async handle the scheduler calls to
 //! execute one inference step.
 //!
@@ -20,7 +20,7 @@
 //! Python → Rust:
 //! - `{"type":"ready"}`
 //! - `{"type":"execute_result", "outputs":[{"request_id":u64,
-//!    "next_token_id":u32, "num_accepted_draft_tokens":u32,
+//!    "token_ids":[u32], "num_accepted_draft_tokens":u32,
 //!    "new_draft_token_ids":[u32]}]}`
 //! - `{"type":"error", "message":str}`
 

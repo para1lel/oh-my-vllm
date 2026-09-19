@@ -1,7 +1,7 @@
 """oh_my_vllm.worker.zmq_bridge — ZMQ process entry point for the Python worker.
 
 This module is the Python side of the Rust ↔ Python ZMQ boundary.  The Rust
-scheduler forks this process, then sends msgpack-encoded messages over a PAIR
+scheduler forks this process, then sends msgpack-encoded messages over a DEALER
 socket.  We decode each message, call OhMyVllmWorker.execute_model, encode the
 result, and send it back.
 
@@ -20,7 +20,7 @@ Message envelope (msgpack dict):
   Python → Rust:
     {"type": "ready"}                          # after init completes
     {"type": "execute_result",
-     "outputs": [{"request_id": int, "next_token_id": int,
+     "outputs": [{"request_id": int, "token_ids": [int],
                   "num_accepted_draft_tokens": int,
                   "new_draft_token_ids": list[int]}, ...]}
     {"type": "error", "message": str}
@@ -82,7 +82,7 @@ def _encode_worker_output(wo: WorkerOutput) -> dict:
         "outputs": [
             {
                 "request_id": o.request_id,
-                "next_token_id": o.next_token_id,
+                "token_ids": o.token_ids,
                 "num_accepted_draft_tokens": o.num_accepted_draft_tokens,
                 "new_draft_token_ids": o.new_draft_token_ids,
             }
@@ -115,7 +115,15 @@ def serve(socket_addr: str) -> None:
             if msg_type == "init":
                 try:
                     worker = _handle_init(msg)
-                    sock.send(msgpack.packb({"type": "ready"}, use_bin_type=True))
+                    sock.send(
+                        msgpack.packb(
+                            {
+                                "type": "ready",
+                                "logical_num_blocks": worker.logical_num_blocks,
+                            },
+                            use_bin_type=True,
+                        )
+                    )
                     logger.info("Worker ready")
                 except Exception:
                     err = traceback.format_exc()
@@ -181,6 +189,8 @@ def serve(socket_addr: str) -> None:
 
             elif msg_type == "shutdown":
                 logger.info("Shutdown received")
+                if worker is not None:
+                    worker.shutdown()
                 break
 
             else:
@@ -193,74 +203,32 @@ def serve(socket_addr: str) -> None:
 
 def _handle_init(msg: dict) -> OhMyVllmWorker:
     """Build a VllmConfig and initialise the worker from an 'init' message."""
-    from vllm.config import (
-        CacheConfig,
-        DeviceConfig,
-        LoadConfig,
-        ModelConfig,
-        ParallelConfig,
-        SchedulerConfig,
-        VllmConfig,
-    )
+    from vllm.engine.arg_utils import EngineArgs
 
-    model_path: str = msg["model_path"]
-    num_gpu_blocks: int = msg["num_gpu_blocks"]
-    block_size: int = msg.get("block_size", 784)
-    tp_size: int = msg.get("tensor_parallel_size", 1)
-    max_model_len: int = msg.get("max_model_len", 65536)
-    num_speculative_tokens: int = msg.get("num_speculative_tokens", 0)
-
-    model_config = ModelConfig(
-        model=model_path,
-        tokenizer=model_path,
-        tokenizer_mode="auto",
+    num_gpu_blocks = msg["num_gpu_blocks"]
+    num_speculative_tokens = msg.get("num_speculative_tokens", 0)
+    if msg.get("block_size", 784) != 784:
+        raise ValueError("Target model requires block_size=784")
+    vllm_config = EngineArgs(
+        model=msg["model_path"],
         trust_remote_code=True,
-        dtype="auto",
-        seed=0,
-        max_model_len=max_model_len,
-    )
-    cache_config = CacheConfig(
-        block_size=block_size,
-        gpu_memory_utilization=0.90,
-        cache_dtype="auto",
-        num_gpu_blocks_override=num_gpu_blocks,
-        enable_prefix_caching=True,
+        language_model_only=True,
+        enforce_eager=os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") == "1",
+        block_size=784,
         mamba_cache_mode="align",
-    )
-    parallel_config = ParallelConfig(
-        pipeline_parallel_size=1,
-        tensor_parallel_size=tp_size,
-    )
-    scheduler_config = SchedulerConfig(
-        max_model_len=max_model_len,
-        is_encoder_decoder=False,
-        max_num_seqs=256,
+        num_gpu_blocks_override=num_gpu_blocks,
+        max_model_len=msg.get("max_model_len", 65536),
+        max_num_seqs=min(32, num_gpu_blocks - 1),
         max_num_batched_tokens=32768,
+        enable_prefix_caching=True,
         enable_chunked_prefill=True,
-    )
-    vllm_config = VllmConfig(
-        model_config=model_config,
-        cache_config=cache_config,
-        parallel_config=parallel_config,
-        scheduler_config=scheduler_config,
-        device_config=DeviceConfig(device="cuda"),
-        load_config=LoadConfig(load_format="auto"),
-    )
-
-    if num_speculative_tokens > 0:
-        from oh_my_vllm.worker.spec_decode import build_speculative_config
-
-        vllm_config = VllmConfig(
-            model_config=model_config,
-            cache_config=cache_config,
-            parallel_config=parallel_config,
-            scheduler_config=scheduler_config,
-            device_config=DeviceConfig(device="cuda"),
-            load_config=LoadConfig(load_format="auto"),
-            speculative_config=build_speculative_config(
-                model_path, num_speculative_tokens
-            ),
-        )
+        async_scheduling=False,
+        speculative_config=(
+            {"method": "mtp", "num_speculative_tokens": num_speculative_tokens}
+            if num_speculative_tokens
+            else None
+        ),
+    ).create_engine_config()
 
     worker = OhMyVllmWorker(vllm_config, num_speculative_tokens=num_speculative_tokens)
     worker.init_device()
@@ -279,7 +247,7 @@ def main() -> None:
     parser.add_argument(
         "--socket",
         default=os.environ.get("OH_MY_VLLM_SOCKET", "ipc:///tmp/oh-my-vllm.ipc"),
-        help="ZMQ PAIR socket address to connect to",
+        help="ZMQ DEALER socket address to connect to",
     )
     args = parser.parse_args()
     serve(args.socket)

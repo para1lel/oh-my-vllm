@@ -57,7 +57,7 @@ pub struct AbortMsg {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PythonMessage {
-    Ready,
+    Ready { logical_num_blocks: u32 },
     ExecuteResult(ExecuteResultMsg),
     Error(ErrorMsg),
 }
@@ -70,7 +70,7 @@ pub struct ExecuteResultMsg {
 #[derive(Debug, Deserialize)]
 pub struct RequestResultMsg {
     pub request_id: u64,
-    pub next_token_id: u32,
+    pub token_ids: Vec<u32>,
     #[serde(default)]
     pub num_accepted_draft_tokens: u32,
     #[serde(default)]

@@ -82,6 +82,10 @@ impl HybridCoordinator {
         &self.pool
     }
 
+    pub fn block_size(&self) -> usize {
+        self.block_size
+    }
+
     pub fn full_attn_blocks(&self, request_id: RequestId) -> &[u32] {
         self.full_attn.blocks(request_id)
     }

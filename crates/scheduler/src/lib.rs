@@ -65,9 +65,38 @@ pub struct Scheduler {
     /// tables returned by the KV cache for building `ScheduledRequest`.
     block_tables: FxHashMap<RequestId, (Vec<u32>, Vec<u32>)>,
     kv: HybridCoordinator,
+    finished_ids: Vec<u64>,
 }
 
 impl Scheduler {
+    fn aligned_prefill(&self, request: &Request, start: usize, count: usize) -> usize {
+        let prefill_end = request
+            .prompt_len
+            .max(request.token_ids.len().saturating_sub(1));
+        if start >= prefill_end {
+            return count;
+        }
+        let block = self.kv.block_size();
+        let mut end = start + count;
+        if end < prefill_end && self.config.max_num_batched_tokens >= block {
+            end = end / block * block;
+        }
+        let last_boundary = request.token_ids.len() / block * block;
+        let next_boundary = (start / block + 1) * block;
+        for stop in [
+            last_boundary,
+            if start.is_multiple_of(block) {
+                0
+            } else {
+                next_boundary
+            },
+        ] {
+            if start < stop && stop < end {
+                end = stop;
+            }
+        }
+        end.saturating_sub(start)
+    }
     pub fn new(config: SchedulerConfig, kv: HybridCoordinator) -> Self {
         Self {
             config,
@@ -75,6 +104,7 @@ impl Scheduler {
             running: VecDeque::new(),
             block_tables: FxHashMap::default(),
             kv,
+            finished_ids: Vec::new(),
         }
     }
 
@@ -101,9 +131,13 @@ impl Scheduler {
     /// Call this once per inference step. After the worker finishes, call
     /// [`update`] with the results before calling `schedule` again.
     pub fn schedule(&mut self) -> SchedulerOutput {
+        let started = std::time::Instant::now();
         self.kv.new_step_starts();
 
-        let mut output = SchedulerOutput::default();
+        let mut output = SchedulerOutput {
+            finished_request_ids: std::mem::take(&mut self.finished_ids),
+            ..Default::default()
+        };
         let mut token_budget = self.config.max_num_batched_tokens;
 
         // ── phase 1: running requests (decode / continued prefill) ────────────
@@ -113,7 +147,11 @@ impl Scheduler {
         let mut still_running: VecDeque<Request> = VecDeque::new();
         while let Some(mut req) = self.running.pop_front() {
             let tokens_needed = req.num_tokens_with_spec() - req.num_computed_tokens;
-            let to_schedule = tokens_needed.min(token_budget);
+            let to_schedule = self.aligned_prefill(
+                &req,
+                req.num_computed_tokens,
+                tokens_needed.min(token_budget),
+            );
             if to_schedule == 0 {
                 still_running.push_back(req);
                 continue;
@@ -136,7 +174,8 @@ impl Scheduler {
                     entry.0.extend_from_slice(&new_fa);
                     entry.1.extend_from_slice(&new_mb);
 
-                    let (fa_table, mb_table) = self.block_tables[&req.id].clone();
+                    let fa_table = self.kv.full_attn_blocks(req.id).to_vec();
+                    let mb_table = self.kv.mamba_blocks(req.id).to_vec();
                     // Combine confirmed + draft tokens so the worker receives the full
                     // speculative sequence. For non-MTP requests draft_token_ids is empty.
                     let all_tokens: Vec<u32> = req
@@ -185,7 +224,7 @@ impl Scheduler {
 
             let total_tokens = req.num_tokens_with_spec();
             let remaining = total_tokens - hit_len;
-            let to_schedule = remaining.min(token_budget);
+            let to_schedule = self.aligned_prefill(&req, hit_len, remaining.min(token_budget));
             if to_schedule == 0 {
                 self.waiting.push_front(req);
                 break;
@@ -237,6 +276,14 @@ impl Scheduler {
         }
 
         output.num_batched_tokens = output.scheduled.iter().map(|s| s.token_ids.len()).sum();
+        tracing::debug!(
+            elapsed_us = started.elapsed().as_micros() as u64,
+            running = self.running.len(),
+            waiting = self.waiting.len(),
+            scheduled_tokens = output.num_batched_tokens,
+            free_blocks = self.kv.pool().num_free_blocks(),
+            "schedule"
+        );
         output
     }
 
@@ -252,10 +299,10 @@ impl Scheduler {
     ///
     /// Panics if `worker.outputs` has a different length than the number of
     /// running requests that were scheduled, or references an unknown id.
-    pub fn update(&mut self, worker: WorkerOutput) {
+    pub fn update(&mut self, mut worker: WorkerOutput) -> WorkerOutput {
         let mut finished_ids = Vec::new();
 
-        for result in worker.outputs {
+        for result in &mut worker.outputs {
             let req = match self.running.iter_mut().find(|r| r.id == result.request_id) {
                 Some(r) => r,
                 None => continue,
@@ -277,11 +324,20 @@ impl Scheduler {
             }
 
             // Append the verified output token and install new drafts.
-            req.append_token(result.next_token_id);
+            result
+                .token_ids
+                .truncate(req.max_tokens.saturating_sub(req.num_generated_tokens()));
+            for &token in &result.token_ids {
+                if req.is_finished() {
+                    break;
+                }
+                req.append_token(token);
+            }
+            req.draft_token_ids.clear();
             req.block_hashes = self.kv.compute_block_hashes(&req.token_ids);
 
             if self.config.enable_mtp && !result.new_draft_token_ids.is_empty() {
-                req.set_drafts(result.new_draft_token_ids);
+                req.set_drafts(std::mem::take(&mut result.new_draft_token_ids));
             }
 
             if req.is_finished() {
@@ -289,12 +345,15 @@ impl Scheduler {
             }
         }
 
+        self.finished_ids.extend_from_slice(&finished_ids);
+
         // Remove finished requests and free their blocks.
         for id in &finished_ids {
             self.running.retain(|r| r.id != *id);
             self.kv.free(*id);
             self.block_tables.remove(id);
         }
+        worker
     }
 
     /// Abort a request by id, removing it from whichever queue it is in.

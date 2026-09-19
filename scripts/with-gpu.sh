@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Wait for an idle B200; retain a cooperative lock until the command exits.
 set -euo pipefail
+exec {command_stdin}<&0
 if (( $# == 0 )); then
     echo "usage: scripts/with-gpu.sh COMMAND [ARGS...]" >&2
     exit 2
@@ -23,7 +24,7 @@ while true; do
                 export OH_MY_VLLM_RUN_ID="${OH_MY_VLLM_RUN_ID:-$(date -u +%Y%m%dT%H%M%S)-$$}"
                 echo "$(date -u +%FT%TZ) run=$OH_MY_VLLM_RUN_ID gpu=$uuid" >&2
                 # exec keeps the lock fd open in the command and its children.
-                exec "$@"
+                exec "$@" <&"$command_stdin"
             fi
         fi
         exec {gpu_lock}>&-

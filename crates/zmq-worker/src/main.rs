@@ -122,6 +122,7 @@ async fn run() -> Result<()> {
         .await
         .context("failed to launch Python worker")?;
     info!("Python worker ready");
+    let logical_num_blocks = worker_client.logical_num_blocks;
 
     match cli.cmd {
         Cmd::Run { tokens, max_tokens } => {
@@ -129,7 +130,7 @@ async fn run() -> Result<()> {
                 &mut worker_client,
                 tokens,
                 max_tokens,
-                cli.num_gpu_blocks,
+                logical_num_blocks,
                 cli.block_size,
             )
             .await?
@@ -146,7 +147,7 @@ async fn run() -> Result<()> {
                 input_len,
                 output_len,
                 warmup,
-                cli.num_gpu_blocks,
+                logical_num_blocks,
                 cli.block_size,
             )
             .await?
@@ -191,6 +192,10 @@ async fn run_single(
     loop {
         let step = sched.schedule();
         if step.scheduled.is_empty() {
+            anyhow::ensure!(
+                sched.num_running() == 0 && sched.num_waiting() == 0,
+                "scheduler stalled with unfinished requests"
+            );
             break;
         }
         let worker_out = client
@@ -203,12 +208,16 @@ async fn run_single(
             .await
             .context("execute_one_step")?;
 
+        let worker_out = sched.update(worker_out);
         for o in &worker_out.outputs {
-            output_tokens.push(o.next_token_id);
+            output_tokens.extend_from_slice(&o.token_ids);
         }
-        sched.update(worker_out);
 
         if sched.num_running() == 0 && sched.num_waiting() == 0 {
+            let cleanup = sched.schedule();
+            client
+                .execute_one_step(&[], &cleanup.finished_request_ids, &[], 0)
+                .await?;
             break;
         }
     }
@@ -287,6 +296,10 @@ async fn bench_run(
     loop {
         let step = sched.schedule();
         if step.scheduled.is_empty() {
+            anyhow::ensure!(
+                sched.num_running() == 0 && sched.num_waiting() == 0,
+                "scheduler stalled with unfinished requests"
+            );
             break;
         }
         let worker_out = client
@@ -297,9 +310,17 @@ async fn bench_run(
                 step.num_batched_tokens,
             )
             .await?;
-        total_output += worker_out.outputs.len();
-        sched.update(worker_out);
+        let worker_out = sched.update(worker_out);
+        total_output += worker_out
+            .outputs
+            .iter()
+            .map(|o| o.token_ids.len())
+            .sum::<usize>();
         if sched.num_running() == 0 && sched.num_waiting() == 0 {
+            let cleanup = sched.schedule();
+            client
+                .execute_one_step(&[], &cleanup.finished_request_ids, &[], 0)
+                .await?;
             break;
         }
     }

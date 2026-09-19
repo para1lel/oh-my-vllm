@@ -28,8 +28,30 @@ for an idle B200 and pin its UUID. Never interrupt unrelated GPU processes.
 
 ## Unverified / risks
 
-No end-to-end forward or performance acceptance has passed yet. Existing
+End-to-end 16-token smoke and coherent 64-token Chinese generation have passed.
+Actual-path FP64 probes passed for GQA/GDN prefill/decode and recurrent state
+on a short real-text request. Cross-boundary probe also passed (100 repeated context paragraphs, followed
+by 8 decoded tokens). Performance
+acceptance has not passed yet. Existing
 standalone GQA test does not establish coverage of the actual inference path.
 The benchmark has unequal inputs, sampling and warmup cache state and must be
 repaired before its results can be used. Internal GPUWorker API adaptation,
 cache allocation and request lifecycle remain to be verified.
+
+## Adapter sub-milestone (in progress)
+
+Installed Worker API, request lifecycle and physical KV aliasing repaired.
+Three physical Mamba groups must use distinct block IDs: repeating IDs aliases
+shared tensors. Ready now communicates conservative logical pool capacity;
+ADR-002 records mapping and memory tradeoff. Rust consumes every returned token,
+including empty intermediate-prefill results and bounded multi-token tails.
+The old two-field-config-only diagnosis was insufficient.
+
+Review found shutdown races, probe coverage omission and token overcounting;
+fixes and regression tests are in place; independent re-review passed.
+58 Rust tests, all-feature clippy, ruff, runtime/entrypoint tests and 3 adapter
+tests passed. The bs=4 long-workload run is in progress; bs=1/2 and all-mode
+performance/functional acceptance are not yet run. GPU logs are
+under /tmp/oh-my-vllm-text-d.log and /tmp/oh-my-vllm-probe-d.log (not committed).
+Local .vscode/settings.json selects the oh-my-vllm conda Python with python/
+extraPath; it is ignored. User authorized committing existing .gitignore change.
