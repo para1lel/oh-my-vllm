@@ -4,7 +4,8 @@
 
 AGENTS.md governs the model, block784, Rust scheduler/KV ownership and conda
 entrypoints. Single-GPU tests wait for any idle B200 and pin its UUID; unrelated
-GPU processes must never be interrupted. No push/PR authorized. Every milestone
+GPU processes must never be interrupted. The user authorized creating and syncing
+the private GitHub repository below; no PR was requested. Every milestone
 requires independent subagent review and a commit with the required attribution.
 User authorized committing all project changes, including the original .gitignore
 modification. Local .vscode/settings.json selects conda oh-my-vllm for Python
@@ -50,10 +51,25 @@ findings. The earlier actual-path GQA/GDN FP64 and ordinary/MTP/prefix text chec
 remain applicable; no inference kernels or numerical path changed in this stage.
 
 No remaining blocker within the agreed scope. The local VSCode environment is
-verified and ignored; .gitignore was included in ca65aba. No push or PR requested.
+verified and ignored; .gitignore was included in ca65aba.
 Logs/traces stay outside git; reproducible numeric and text evidence is retained.
 The sections below are chronological history, including superseded blockers and
 incomplete-performance status. Use this section and acceptance.md for current status.
+
+## GitHub repository synchronization
+
+At the user's request, created the private repository
+https://github.com/para1lel/oh-my-vllm using the existing gh CLI credentials.
+The authenticated API identity is para1lel (the local gh account label is zynier).
+Set origin to https://github.com/para1lel/oh-my-vllm.git and pushed main with its
+complete commit history through fefba8a; main now tracks origin/main. The local
+repository has no other branches or tags. GitHub reports visibility PRIVATE.
+Ignored local settings, build artifacts and GPU traces were not added to git.
+
+This synchronization changes no runtime code. Cargo workspace tests (64),
+all-feature clippy and Python format/check were rerun and passed. No GPU tests
+were rerun for this repository/documentation operation. This handoff update is
+included in the final synchronization commit.
 
 ## Historical milestones
 
