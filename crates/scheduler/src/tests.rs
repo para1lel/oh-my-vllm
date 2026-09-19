@@ -242,6 +242,9 @@ fn abort_removes_request() {
 
     // Schedule both.
     let _ = sched.schedule();
+    sched.update(WorkerOutput {
+        outputs: vec![dummy_output(1), dummy_output(2)],
+    });
 
     // Abort req 1 while it is running.
     sched.abort(1);
@@ -251,6 +254,33 @@ fn abort_removes_request() {
     sched.add_request(make_req(3, 4, 10));
     sched.abort(3);
     assert_eq!(sched.num_waiting(), 0, "req 3 must be removed from waiting");
+    sched.abort(1); // Repeated/unknown cancellation is idempotent.
+    sched.abort(99);
+    assert_eq!(sched.schedule().finished_request_ids, vec![1, 3]);
+    sched.update(WorkerOutput {
+        outputs: vec![dummy_output(2)],
+    });
+    assert!(sched.schedule().finished_request_ids.is_empty());
+}
+
+#[test]
+fn abort_preempted_request_notifies_worker_once() {
+    let mut sched = make_scheduler(9, 128);
+    sched.add_request(make_req(1, 8, 10));
+    sched.add_request(make_req(2, 8, 10));
+    assert_eq!(sched.schedule().scheduled.len(), 2);
+    sched.update(WorkerOutput {
+        outputs: vec![dummy_output(1), dummy_output(2)],
+    });
+    let next = sched.schedule();
+    assert_eq!(next.preempted_request_ids, vec![2]);
+    sched.update(WorkerOutput {
+        outputs: vec![dummy_output(1)],
+    });
+    sched.abort(2);
+    sched.abort(2);
+    assert_eq!(sched.num_waiting(), 0);
+    assert_eq!(sched.schedule().finished_request_ids, vec![2]);
 }
 
 #[test]

@@ -368,14 +368,20 @@ impl Scheduler {
         worker
     }
 
-    /// Abort a request by id, removing it from whichever queue it is in.
+    /// Abort between completed steps. The next schedule notifies the worker,
+    /// including for registered requests that have not yet been admitted.
     pub fn abort(&mut self, request_id: RequestId) {
         if self.running.iter().any(|r| r.id == request_id) {
             self.running.retain(|r| r.id != request_id);
             self.kv.free(request_id);
             self.block_tables.remove(&request_id);
+            self.finished_ids.push(request_id);
         } else {
+            let before = self.waiting.len();
             self.waiting.retain(|r| r.id != request_id);
+            if self.waiting.len() != before {
+                self.finished_ids.push(request_id);
+            }
         }
     }
 }

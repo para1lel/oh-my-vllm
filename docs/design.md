@@ -48,6 +48,13 @@ All messages are msgpack dicts with a `"type"` key.
 {"type": "shutdown"}
 ```
 
+Cancel requests only between completed execution steps. `Scheduler::abort`
+releases Rust ownership and queues a `finished_request_ids` notification for the
+next execute, including when no requests remain scheduled. The driver must flush
+that final notification. Python clears its registrations and adapter state and
+forwards the finished IDs to GPUWorker. The legacy standalone `abort` message
+uses the same finished-only path without a reply; it does not change Rust state.
+
 **Python → Rust:**
 
 ```

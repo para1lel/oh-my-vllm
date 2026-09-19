@@ -1,5 +1,5 @@
 //! Direct inference driver and reproducible fixed-token benchmark.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -39,6 +39,11 @@ enum Cmd {
     Run {
         #[arg(long, num_args = 1..)]
         tokens: Vec<u32>,
+        /// Whitespace-separated token IDs, one request per line.
+        #[arg(long, conflicts_with = "tokens")]
+        prompt_file: Option<PathBuf>,
+        #[arg(long, default_value_t = 0)]
+        arrival_interval: usize,
         #[arg(long, default_value_t = 64)]
         max_tokens: usize,
         /// Seed this prompt first and require a real prefix-cache hit.
@@ -91,6 +96,39 @@ async fn run() -> Result<()> {
         "requires block_size=784 and TP=1"
     );
     ensure!(cli.num_gpu_blocks >= 6, "physical cache is too small");
+    // Reject malformed input before loading the model or allocating GPU memory.
+    let run_prompts = if let Cmd::Run {
+        tokens,
+        prompt_file,
+        max_tokens,
+        ..
+    } = &cli.cmd
+    {
+        let prompts = if let Some(path) = prompt_file {
+            std::fs::read_to_string(path)?
+                .lines()
+                .map(|line| line.split_whitespace().map(str::parse::<u32>).collect())
+                .collect::<std::result::Result<Vec<Vec<u32>>, _>>()?
+        } else {
+            vec![tokens.clone()]
+        };
+        ensure!(
+            !prompts.is_empty()
+                && prompts.len() <= 32
+                && prompts.iter().all(|tokens| !tokens.is_empty())
+                && *max_tokens > 0,
+            "nonempty input and positive output required"
+        );
+        ensure!(
+            prompts.iter().all(
+                |tokens| tokens.len().saturating_add(*max_tokens) <= cli.max_model_len as usize
+            ),
+            "request exceeds context limit"
+        );
+        Some(prompts)
+    } else {
+        None
+    };
     let mut client = WorkerClient::launch(WorkerConfig {
         model_path: cli.model,
         socket_path: cli.socket,
@@ -122,45 +160,44 @@ async fn run() -> Result<()> {
     let mut next_id = 1;
     match cli.cmd {
         Cmd::Run {
-            tokens,
+            tokens: _,
+            prompt_file: _,
+            arrival_interval,
             max_tokens,
             prefix_hit,
         } => {
-            ensure!(
-                !tokens.is_empty() && max_tokens > 0,
-                "nonempty input and positive output required"
-            );
-            ensure!(
-                tokens.len() + max_tokens <= cli.max_model_len as usize,
-                "request exceeds context limit"
-            );
+            let prompts = run_prompts.expect("validated Run input");
             if prefix_hit {
-                execute_batch(
-                    &mut client,
-                    &mut scheduler,
-                    &mut next_id,
-                    std::slice::from_ref(&tokens),
-                    1,
-                    0,
-                )
-                .await?;
+                execute_batch(&mut client, &mut scheduler, &mut next_id, &prompts, 1, 0).await?;
             }
             let result = execute_batch(
                 &mut client,
                 &mut scheduler,
                 &mut next_id,
-                &[tokens],
+                &prompts,
                 max_tokens,
-                0,
+                arrival_interval,
             )
             .await?;
             ensure!(
-                !prefix_hit || result.prefix_hit_tokens > 0,
+                !prefix_hit || result.initial_prefix_hit_tokens > 0,
                 "prompt did not hit prefix cache"
             );
             println!(
                 "output token ids: {:?}",
                 result.outputs.values().next().unwrap()
+            );
+            println!(
+                "output batches: {:?}",
+                result.outputs.values().collect::<Vec<_>>()
+            );
+            println!(
+                "batch stats: {{\"steps\":{},\"prefix_hit_tokens\":{},\"initial_prefix_hit_tokens\":{},\"preemptions\":{},\"accepted_draft_tokens\":{}}}",
+                result.steps,
+                result.prefix_hit_tokens,
+                result.initial_prefix_hit_tokens,
+                result.preemptions,
+                result.accepted_draft_tokens
             );
         }
         Cmd::Bench(args) => {
@@ -206,7 +243,7 @@ async fn run() -> Result<()> {
                 if iteration >= args.warmup {
                     let count: usize = result.outputs.values().map(Vec::len).sum();
                     println!(
-                        "BENCH_RESULT {{\"batch_size\":{},\"input_len\":{},\"output_len\":{},\"output_tokens\":{},\"elapsed_s\":{},\"output_tps\":{},\"steps\":{},\"prefix_hit_tokens\":{},\"preemptions\":{},\"proposed_draft_tokens\":{},\"accepted_draft_tokens\":{}}}",
+                        "BENCH_RESULT {{\"batch_size\":{},\"input_len\":{},\"output_len\":{},\"output_tokens\":{},\"elapsed_s\":{},\"output_tps\":{},\"steps\":{},\"prefix_hit_tokens\":{},\"initial_prefix_hit_tokens\":{},\"preemptions\":{},\"proposed_draft_tokens\":{},\"accepted_draft_tokens\":{}}}",
                         args.batch_size,
                         args.input_len,
                         args.output_len,
@@ -215,6 +252,7 @@ async fn run() -> Result<()> {
                         count as f64 / result.elapsed,
                         result.steps,
                         result.prefix_hit_tokens,
+                        result.initial_prefix_hit_tokens,
                         result.preemptions,
                         result.proposed_draft_tokens,
                         result.accepted_draft_tokens
@@ -232,6 +270,7 @@ struct BatchResult {
     elapsed: f64,
     steps: usize,
     prefix_hit_tokens: usize,
+    initial_prefix_hit_tokens: usize,
     preemptions: usize,
     proposed_draft_tokens: usize,
     accepted_draft_tokens: usize,
@@ -250,6 +289,8 @@ async fn execute_batch(
     let mut pending = prompts.iter().peekable();
     let mut steps: usize = 0;
     let mut prefix_hit_tokens = 0;
+    let mut initial_prefix_hit_tokens = 0;
+    let mut awaiting_first_schedule = BTreeSet::new();
     let mut preemptions = 0;
     let mut proposed_draft_tokens = 0;
     let mut accepted_draft_tokens = 0;
@@ -262,6 +303,7 @@ async fn execute_batch(
                 client.register_request(id, prompt.clone()).await?;
                 scheduler.add_request(Request::new(id, prompt.clone(), max_tokens, vec![]));
                 outputs.insert(id, vec![]);
+                awaiting_first_schedule.insert(id);
                 if arrival_interval > 0 {
                     break;
                 }
@@ -269,6 +311,13 @@ async fn execute_batch(
         }
         let step = scheduler.schedule();
         prefix_hit_tokens += step.cache_hit_tokens;
+        if !awaiting_first_schedule.is_empty() {
+            for request in &step.scheduled {
+                if awaiting_first_schedule.remove(&request.request_id) {
+                    initial_prefix_hit_tokens += request.num_computed_tokens;
+                }
+            }
+        }
         preemptions += step.preempted_request_ids.len();
         if step.scheduled.is_empty() {
             ensure!(
@@ -313,13 +362,14 @@ async fn execute_batch(
     let elapsed = started.elapsed().as_secs_f64();
     info!(
         steps,
-        elapsed, prefix_hit_tokens, preemptions, "batch_complete"
+        elapsed, prefix_hit_tokens, initial_prefix_hit_tokens, preemptions, "batch_complete"
     );
     Ok(BatchResult {
         outputs,
         elapsed,
         steps,
         prefix_hit_tokens,
+        initial_prefix_hit_tokens,
         preemptions,
         proposed_draft_tokens,
         accepted_draft_tokens,

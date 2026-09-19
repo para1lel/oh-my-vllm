@@ -46,6 +46,13 @@ scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vll
 scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output /tmp/ordinary.json
 ```
 
+For multiple real prompts, `run --prompt-file PATH` reads one whitespace-separated
+token-ID sequence per line (up to 32 requests). `--arrival-interval N` staggers
+admission by scheduling steps; `--prefix-hit` seeds the prompts and requires an
+initial cache hit. The output includes ordered token batches and feature counters.
+See testing.md for the two-request `scripts/smoke-batch.py` checks with memory
+pressure and inspection of generated text after preemption.
+
 The GPU wrapper waits for an idle B200: no compute processes, at most64MiB used
 and zero reported utilization. It selects a UUID and holds a cooperative flock.
 Unrelated programs need not honor the lock. The benchmark additionally detects

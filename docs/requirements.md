@@ -63,7 +63,7 @@ matching vLLM modes. Identical token inputs, fixed output counts, sampling,
 execution settings, memory budgets and timing boundaries are required. Exclude
 loading, compilation and warmup; include scheduling and transport. Report at
 least three measurements and their median, rerunning if variance is material.
-Faster than 105% is a pass. Full performance acceptance remains incomplete; measured rows are tracked in handoff.md.
+Faster than 105% is a pass. All nine required rows passed; raw measurements and configuration are linked in acceptance.md.
 
 ---
 
@@ -116,7 +116,7 @@ EngineArgs enables MTP when num_speculative_tokens>0. The actual Worker returns
 all sampled/accepted output tokens and next drafts via take_draft_token_ids.
 Rust schedules drafts, reserves target states, and rolls back scheduled rejections.
 ADR003 records BF16 SSM to retain block784. Coherent MTP text, actual-path FP64
-and feature combinations have passed; full MTP performance acceptance is pending.
+and feature combinations have passed; MTP performance passed at batch sizes 1/2/4.
 
 ---
 

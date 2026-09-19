@@ -10,7 +10,52 @@ User authorized committing all project changes, including the original .gitignor
 modification. Local .vscode/settings.json selects conda oh-my-vllm for Python
 analysis and adds python/ to resolution; .vscode/ is ignored, as requested.
 
-## Saved milestones
+## Current status: acceptance complete
+
+All nine target performance rows passed on the clean 12d227d binary: ordinary
+batch1/2/4 = 101.66%/101.29%/101.46%; MTP = 102.64%/103.78%/100.77%; prefix =
+101.68%/101.55%/97.13%. Each has two warmups and three measurements, matched GPU
+and single-core CPU affinity, and monitored GPU ownership. Exact protocol,
+commands, identities and all raw repetitions are committed under bench/baseline/
+2026-09-19-acceptance.json. See acceptance.md for table and limitations.
+
+MTP batch2 showed material spread, so an additional three-warmup/five-measurement
+pair was run and retained separately in 2026-09-19-mtp-bs2-repeat.json. It passed
+at98.85%, with within-engine spread0.67%/0.13% (vLLM/framework). This confirms the
+95% gate; do not claim the initial3.78% advantage as a stable speedup. The repeat
+used the same binary; unrelated dirty edits are recorded, and Python runtime
+sources were unchanged until all measurements completed.
+
+Final code review found cancellation retained Python/native Worker state and
+that aggregate cache-hit counters could falsely establish seeded prefix reuse
+in a preemption smoke. Both were fixed: abort queues/forwards finished-only
+notifications; initial_prefix_hit_tokens counts first actual admission only.
+Run supports ordered prompt-file batches and staggered arrivals, with input
+validation before GPU startup. A new smoke checks two distinct Chinese topics
+through actual recompute preemption and inspects both beginning and tail.
+
+The repeated ordinary text test observed2 preemptions, initial hits0; MTP plus
+prefix observed4 preemptions, initial hits3136, accepted drafts1143. Both produced
+1024 tokens per request and coherent Beijing/Tokyo text without switching topics.
+Full generated text, counters and dirty binary identity are saved in
+2026-09-19-batch-text.json. These text/cancellation/CLI changes follow the measured
+12d227d executable; the full nine-row matrix was not rerun on the later binary.
+Independent review found no material performance risk from those changes.
+
+Verification:64 Rust tests passed, all-target/all-feature clippy passed, Python
+format/check passed; runtime tools2, benchmark tools4, adapter4 and bridge2 CPU
+tests passed. The new legacy-abort regression failed before the fix and passes
+now. Independent code and performance/data reviews passed after resolving their
+findings. The earlier actual-path GQA/GDN FP64 and ordinary/MTP/prefix text checks
+remain applicable; no inference kernels or numerical path changed in this stage.
+
+No remaining blocker within the agreed scope. The local VSCode environment is
+verified and ignored; .gitignore was included in ca65aba. No push or PR requested.
+Logs/traces stay outside git; reproducible numeric and text evidence is retained.
+The sections below are chronological history, including superseded blockers and
+incomplete-performance status. Use this section and acceptance.md for current status.
+
+## Historical milestones
 
 - 4444ab1: documentation/environment alignment, idle GPU selection, correlated
   timestamped Rust/Python logging. Independent review and required checks passed.

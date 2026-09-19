@@ -1,8 +1,11 @@
 """Exercise current installed vLLM dataclasses without a model or CUDA kernels."""
 
 import unittest
+from contextlib import nullcontext
+from unittest.mock import Mock, patch
 
 from oh_my_vllm.worker.model_runner import (
+    OhMyVllmWorker,
     ScheduledRequest,
     SchedulerAdapter,
     SchedulerOutput,
@@ -11,6 +14,35 @@ from vllm import SamplingParams
 
 
 class AdapterTest(unittest.TestCase):
+    def test_finished_notification_clears_all_worker_request_state(self):
+        worker = object.__new__(OhMyVllmWorker)
+        worker.config = object()
+        worker._num_speculative_tokens = 0
+        worker._worker = Mock()
+        worker._worker.execute_model.return_value = None
+        worker.adapter = SchedulerAdapter(["fa", "mamba"])
+        worker.prompt_token_ids_map = {1: [1, 2]}
+        worker.sampling_params_map = {1: SamplingParams(temperature=0)}
+        worker.adapter.convert(
+            SchedulerOutput(
+                [ScheduledRequest(1, [1, 2], 0, [1], [2])], num_batched_tokens=2
+            ),
+            worker.prompt_token_ids_map,
+            worker.sampling_params_map,
+        )
+        worker.adapter.preempted.add(1)
+        with patch("vllm.config.set_current_vllm_config", return_value=nullcontext()):
+            result = worker.execute_model(SchedulerOutput(finished_request_ids=[1]))
+        self.assertEqual(result.outputs, [])
+        notification = worker._worker.execute_model.call_args.args[0]
+        self.assertEqual(notification.finished_req_ids, {"1"})
+        worker._worker.sample_tokens.assert_not_called()
+        self.assertFalse(worker.adapter.blocks)
+        self.assertFalse(worker.adapter.output_counts)
+        self.assertFalse(worker.adapter.preempted)
+        self.assertFalse(worker.prompt_token_ids_map)
+        self.assertFalse(worker.sampling_params_map)
+
     def test_prefix_hit_is_new_and_running_blocks_are_deltas(self):
         adapter = SchedulerAdapter(["fa", "mamba", "mamba"])
         prompts = {1: list(range(1570))}

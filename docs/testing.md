@@ -14,6 +14,7 @@ scripts/with-env.sh python -m unittest discover -s tests -p test_runtime_tools.p
 scripts/with-env.sh python -m unittest discover -s tests -p test_benchmark_tools.py
 scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python -m unittest discover -s tests -p test_scheduler_adapter.py
 scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python -m unittest discover -s tests -p test_bridge_logging.py
+scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python -m unittest discover -s tests -p test_bridge_abort.py
 ```
 
 Rust tests cover pool/free/hash/prefix accounting, chunked prefill, arrivals,
@@ -77,6 +78,24 @@ Results report exact output counts, cache hits, preemptions, proposed and accept
 drafts. Feature smoke runs may use warmup 0/repetitions 1; they are not performance
 acceptance measurements.
 
+For request isolation through recompute, run two distinct real Chinese prompts
+with staggered arrivals and a constrained pool:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/smoke-batch.py --socket /tmp/batch-text.ipc --scheduler-blocks 10
+scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/smoke-batch.py --socket /tmp/batch-mtp-text.ipc --scheduler-blocks 18 --num-speculative-tokens 4 --prefix-hit
+```
+
+Each request has 2048 input and 1024 output tokens. The script requires observed
+preemptions, checks the beginning and tail for the correct city, and prints full
+text for inspection. MTP additionally requires accepted drafts; prefix mode
+requires `initial_prefix_hit_tokens > 0`, which excludes cache hits from recompute
+after preemption. These are semantic smoke checks, not full-model equivalence.
+Rust `run --prompt-file PATH` accepts one whitespace-separated token-ID request
+per line; `--arrival-interval 3` admits the next request three steps later.
+CPU cancellation tests cover running, waiting and preempted requests and the
+finished-only notification that clears Python registration, adapter and Worker state.
+
 ## Matched performance acceptance
 
 ```bash
@@ -95,7 +114,8 @@ Results preserve starting HEAD, dirty status/diff hash, binary hash, vLLM versio
 configuration and raw repetitions. A dirty source is never labeled as clean HEAD.
 Timeout cleanup terminates the entire owned engine process group. Median framework
 throughput must reach >=95% in every mode/batch, with additional repetitions when
-variance is material. See handoff.md for current results; no overall pass yet.
+variance is material. See acceptance.md for the completed nine-row matrix and
+its precise execution settings.
 
 The driver requires a single GPU UUID and polls GPU compute clients throughout
 each engine run. A process outside the owned engine process group invalidates

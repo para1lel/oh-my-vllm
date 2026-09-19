@@ -14,18 +14,17 @@
 These milestones passed independent review and required checks. Verification
 counts and individual run outcomes are in handoff.md, rather than duplicated here.
 
-## In progress
+## Acceptance
 
-- Complete real-text prefix-hit validation and keep all current documentation
-  aligned with AGENTS.md and production code.
-- Measure and repair remaining performance gaps. Target batch1/2/4,
-  input32768/output4096, ordinary/MTP/prefix, at least95% of matched vLLM.
-- Investigate RPC wakeup overhead and CPU affinity with matching baseline settings.
-- Rerun cases with material variance or external GPU interference; retain actual
-  configuration/source/binary identity with acceptance artifacts.
+Real prefix-hit text and documentation reconciliation were saved in 12d227d.
+The full ordinary/MTP/prefix performance matrix passed at batch sizes 1/2/4;
+[acceptance.md](acceptance.md) links raw evidence and configuration. Additional
+multi-request text tests exercise staggered arrivals, recompute preemption and
+MTP/prefix together, with separate initial-admission cache-hit accounting.
+Cancellation now propagates finished notifications through the Worker lifecycle.
 
-Whole-project performance acceptance has not passed. Partial passing rows do not
-complete this phase. Each further milestone needs review, fixes, checks and commit.
+Final variance follow-up, independent review and required checks are recorded in
+handoff.md. Future changes need the same review/check/commit discipline.
 
 ## Deferred scope
 

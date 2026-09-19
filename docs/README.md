@@ -8,6 +8,7 @@ project constraints; handoff.md records current evidence, blockers and pending r
 - [Design](design.md): wire messages, logical/physical cache and scheduler lifecycle.
 - [Development](development.md): conda wrappers, build and timestamped logging.
 - [Testing](testing.md): actual-path FP64, text, feature and performance commands.
+- [Acceptance](acceptance.md): complete matrix, raw evidence and coverage limits.
 - [Profiling](profiling.md): host timings and optional kernel diagnostics.
 - [Plan](plan.md): completed milestones and remaining work.
 - [Contributing](../CONTRIBUTING.md): reviews, checks and commits.
@@ -16,5 +17,5 @@ project constraints; handoff.md records current evidence, blockers and pending r
 - [ADR003](decisions/ADR-003-mtp-state-slots.md): speculative states and BF16 SSM.
 
 Ordinary/MTP text, actual-path probes and feature combinations have passed checks.
-Full nine-case performance acceptance remains incomplete; consult the current
-handoff rather than historical test counts or commit-time status descriptions.
+All nine performance rows passed. Consult acceptance.md for exact configuration
+and handoff.md for history rather than relying on old commit-time status entries.

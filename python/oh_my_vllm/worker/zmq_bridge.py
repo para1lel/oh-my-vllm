@@ -185,7 +185,10 @@ def serve(socket_addr: str) -> None:
 
             elif msg_type == "abort":
                 if worker is not None:
-                    worker.unregister_request(msg["request_id"])
+                    # Registration cleanup alone leaves native runner/adapter state.
+                    worker.execute_model(
+                        SchedulerOutput(finished_request_ids=[msg["request_id"]])
+                    )
 
             elif msg_type == "shutdown":
                 logger.info("Shutdown received")

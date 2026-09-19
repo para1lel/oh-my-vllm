@@ -30,8 +30,9 @@ input32768, output4096, one warmup and three measured repetitions.
 
 The target is at least 95% of matched vLLM EngineCore throughput for batch1/2/4
 in ordinary, MTP and controlled prefix-hit modes. Faster than 105% also passes.
-Full acceptance is still in progress; [handoff](docs/handoff.md) distinguishes
-actual measurements, failed/interrupted runs and remaining work.
+The nine required performance rows passed (97.13%–103.78% of matched vLLM).
+[Acceptance evidence](docs/acceptance.md) records measurements, exact configuration
+and correctness coverage; [handoff](docs/handoff.md) preserves the work history.
 
 ```bash
 scripts/with-env.sh cargo test --workspace
