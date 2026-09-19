@@ -1,0 +1,18 @@
+[package]
+name = "oh-my-vllm-zmq-worker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "oh-my-vllm-zmq-worker"
+path = "src/main.rs"
+
+[dependencies]
+oh-my-vllm-scheduler.workspace = true
+rmp-serde.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+zeromq.workspace = true
