@@ -102,7 +102,7 @@ def serve(socket_addr: str) -> None:
     logger.info("Connecting to Rust scheduler at %s", socket_addr)
 
     ctx = zmq.Context()
-    sock = ctx.socket(zmq.PAIR)
+    sock = ctx.socket(zmq.DEALER)
     sock.connect(socket_addr)
 
     worker: OhMyVllmWorker | None = None
