@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use oh_my_vllm_kv_cache::coordinator::HybridCoordinator;
 use oh_my_vllm_scheduler::{Request, Scheduler, SchedulerConfig};
-use tracing::info;
+use tracing::{Instrument, info};
 use tracing_subscriber::EnvFilter;
 
 use oh_my_vllm_zmq_worker::client::{WorkerClient, WorkerConfig};
@@ -94,8 +94,17 @@ async fn main() -> Result<()> {
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
+        .with_writer(std::io::stderr)
+        .with_ansi(false)
         .init();
 
+    let run_id = std::env::var("OH_MY_VLLM_RUN_ID")
+        .unwrap_or_else(|_| format!("pid-{}", std::process::id()));
+    let span = tracing::info_span!("inference", run_id);
+    run().instrument(span).await
+}
+
+async fn run() -> Result<()> {
     let cli = Cli::parse();
 
     let worker_cfg = WorkerConfig {

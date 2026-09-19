@@ -20,5 +20,7 @@ fi
 export PATH="$ENV_PREFIX/bin:$PATH"
 # Keep build artifacts inside the repo: the root disk has little room left.
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$(git rev-parse --show-toplevel)/target}"
+export PYTHONPATH="$(git rev-parse --show-toplevel)/python${PYTHONPATH:+:$PYTHONPATH}"
+export OH_MY_VLLM_WORKER_PYTHON="${OH_MY_VLLM_WORKER_PYTHON:-/data0/shared/dongwu.chen/conda-envs/vllm/bin/python}"
 
 exec "$@"

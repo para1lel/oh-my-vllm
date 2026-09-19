@@ -35,11 +35,13 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import time
 import traceback
 
 import msgpack
 import zmq
 
+from oh_my_vllm.worker.logging_utils import configure_logging
 from oh_my_vllm.worker.model_runner import (
     OhMyVllmWorker,
     ScheduledRequest,
@@ -47,7 +49,7 @@ from oh_my_vllm.worker.model_runner import (
     WorkerOutput,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("oh_my_vllm.worker.zmq_bridge")
 
 
 # ---------------------------------------------------------------------------
@@ -95,10 +97,7 @@ def _encode_worker_output(wo: WorkerOutput) -> dict:
 
 
 def serve(socket_addr: str) -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [zmq_bridge] %(levelname)s %(message)s",
-    )
+    configure_logging()
     logger.info("Connecting to Rust scheduler at %s", socket_addr)
 
     ctx = zmq.Context()
@@ -145,12 +144,27 @@ def serve(socket_addr: str) -> None:
                     )
                     continue
                 try:
+                    started = time.perf_counter_ns()
                     sched_out = _decode_scheduler_output(msg)
+                    decoded = time.perf_counter_ns()
                     worker_out = worker.execute_model(sched_out)
+                    executed = time.perf_counter_ns()
                     sock.send(
                         msgpack.packb(
                             _encode_worker_output(worker_out), use_bin_type=True
                         )
+                    )
+                    logger.debug(
+                        "execute_step",
+                        extra={
+                            "fields": {
+                                "step_id": msg.get("step_id"),
+                                "decode_us": (decoded - started) / 1000,
+                                "execute_host_us": (executed - decoded) / 1000,
+                                "encode_send_us": (time.perf_counter_ns() - executed)
+                                / 1000,
+                            }
+                        },
                     )
                 except Exception:
                     err = traceback.format_exc()

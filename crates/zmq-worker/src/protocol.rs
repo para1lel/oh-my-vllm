@@ -31,6 +31,7 @@ pub struct RegisterMsg {
 
 #[derive(Debug, Serialize)]
 pub struct ExecuteMsg {
+    pub step_id: u64,
     pub scheduled: Vec<ScheduledRequestMsg>,
     pub finished_request_ids: Vec<u64>,
     pub preempted_request_ids: Vec<u64>,

@@ -48,21 +48,15 @@ Requires: GPU, model weights at `/data0/shared/Qwen3.8-27B-FP8`, ~3 min to load.
 rm -f /tmp/oh-my-vllm.ipc
 export PATH="/data0/shared/dongwu.chen/conda-envs/vllm/bin:$PATH"
 export PYTHONPATH="/data0/shared/dongwu.chen/oh-my-vllm/python:$PYTHONPATH"
-export CUDA_VISIBLE_DEVICES=0
-./target/release/oh-my-vllm-zmq-worker \
+# Use scripts/with-gpu.sh for every single-GPU test
+scripts/with-gpu.sh scripts/with-env.sh ./target/release/oh-my-vllm-zmq-worker \
     --model /data0/shared/Qwen3.8-27B-FP8 \
     --num-gpu-blocks 2048 --block-size 784 --max-model-len 8192 \
     run --tokens 1 2 3 4 5 --max-tokens 16
 ```
 
-**Status:** NOT YET VERIFIED. Attempts in the last session were blocked by
-`CacheConfig(swap_space=...)` and `SchedulerConfig(is_encoder_decoder=...)` errors
-from a vLLM API mismatch. Both fixes are on disk (unstaged) as of the handoff:
-- `python/oh_my_vllm/worker/zmq_bridge.py` — removed `swap_space`, added
-  `mamba_cache_mode="align"` to `CacheConfig`; added `is_encoder_decoder=False`
-  and `max_model_len=` to `SchedulerConfig`
-
-These changes must be committed and the smoke test run before Phase 4 is complete.
+**Status:** NOT YET VERIFIED. The historical config fixes are already committed;
+the actual installed GPUWorker API still requires adaptation. See handoff.md.
 
 ## Throughput benchmark (REQ-PERF-001)
 
@@ -87,7 +81,7 @@ python benchmarks/compare_vllm.py \
 | REQ-FUNC-004 Preemption | `crates/scheduler/src/tests.rs` | ✓ unit tested |
 | REQ-FUNC-005 MTP spec decode | — | code exists, not E2E verified |
 | REQ-GOAL-001 Single request returns answer | smoke test | **not run** |
-| REQ-PERF-001 ±5% throughput | `benchmarks/compare_vllm.py` | **not run** |
+| REQ-PERF-001 >=95% throughput | `benchmarks/compare_vllm.py` | **not run** |
 
 ## Change-triggered verification
 
@@ -98,3 +92,11 @@ python benchmarks/compare_vllm.py \
 | `python/oh_my_vllm/worker/` | `ruff check python/` + smoke test |
 | Any | pre-commit hooks (`cargo fmt`, `clippy`, `ruff`) |
 | Performance-affecting | `benchmarks/compare_vllm.py` |
+
+## Runtime foundation tests
+
+`scripts/with-env.sh python -m unittest discover -s tests -p test_runtime_tools.py`
+checks structured timestamps/correlation and GPU selection with mocked nvidia-smi.
+All actual GPU tests must use scripts/with-gpu.sh, including the older examples
+above. The old standalone SDPA GQA test is historical evidence only, not actual
+vLLM-path coverage. Actual GQA/GDN reference tests remain required.

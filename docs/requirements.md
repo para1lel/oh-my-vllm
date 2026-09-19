@@ -10,7 +10,7 @@ _Confirmed status: user-confirmed unless noted. Last reviewed: 2026-09-19._
 **Priority:** must-have
 
 Build a Rust-first inference framework for Qwen3.5-27B-FP8 on a single B200 GPU
-that reaches within ±5% of vLLM EngineCore throughput on the benchmark workloads
+that reaches at least 95% of vLLM EngineCore throughput on the benchmark workloads
 below. Rust owns the scheduler and KV cache; Python wraps vLLM's `GPUWorker`.
 
 **Acceptance:** `benchmarks/compare_vllm.py` prints ✓ for every workload row.
@@ -52,14 +52,18 @@ values is fine, but the default and all production paths use 784.
 **Status:** user-confirmed
 **Priority:** must-have
 
-| Workload | bs | input tokens | output tokens | metric | target |
-|---|---|---|---|---|---|
-| prefill-heavy | 1 | 32768 | 128 | TTFT | ±5% of vLLM |
-| decode-heavy | 4 | 2048 | 4096 | output tok/s | ±5% of vLLM |
-| mixed | 2 | 32768 | 4096 | output tok/s | ±5% of vLLM |
+| bs | input tokens | output tokens | metric | target |
+|---|---|---|---|---|
+| 1 | 32768 | 4096 | output tok/s | >=95% of matched vLLM |
+| 2 | 32768 | 4096 | output tok/s | >=95% of matched vLLM |
+| 4 | 32768 | 4096 | output tok/s | >=95% of matched vLLM |
 
-**Not yet verified** — smoke test and benchmark runs were initiated in the last
-session but blocked by Python config errors (see `docs/handoff.md`).
+Run each row in ordinary decoding, MTP, and controlled prefix-hit modes against
+matching vLLM modes. Identical token inputs, fixed output counts, sampling,
+execution settings, memory budgets and timing boundaries are required. Exclude
+loading, compilation and warmup; include scheduling and transport. Report at
+least three measurements and their median, rerunning if variance is material.
+Faster than 105% is a pass. No performance result has yet been verified.
 
 ---
 
@@ -117,12 +121,20 @@ draft counts from `sampled_token_ids`. Rust scheduler handles rollback.
 
 ---
 
-## REQ-ACC-001 — Single-layer GQA accuracy
+## REQ-ACC-001 — Actual-path GQA/GDN accuracy
 
-**Status:** user-confirmed; **verified** ✓
+Compare the actual inference GQA and GDN kernels against independent CPU FP64
+references, covering prefill, decode, chunk boundaries and recurrent state.
+Document dtype-dependent tolerances. Existing standalone GQA results do not
+establish actual-path coverage. Also demonstrate coherent real-text inference,
+including MTP and prefix hits. Full-model token equality is not an acceptance gate.
 
-GPU FP16 GQA output must be within atol=1e-2, rtol=1e-2 of a CPU FP64 reference.
-Verified in `tests/test_gqa_accuracy.py`; 3/3 cases pass, max_err=8.4e-4.
+## REQ-OBS-001 — Timestamped diagnostic logging
+
+Both processes need UTC timestamps, monotonic durations, run/request/step
+correlation, and configurable levels. Default logging must avoid per-step I/O;
+debug mode exposes scheduler, KV, transport and worker timing. Host execution
+time must not be presented as CUDA kernel time. Profiling is opt-in.
 
 ---
 

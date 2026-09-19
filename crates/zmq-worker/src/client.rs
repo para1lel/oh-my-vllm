@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 use std::process::{Child, Command};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use oh_my_vllm_scheduler::output::{RequestOutput, ScheduledRequest, WorkerOutput};
 use tokio::time::timeout;
@@ -48,7 +48,11 @@ impl Default for WorkerConfig {
             block_size: 784,
             tensor_parallel_size: 1,
             max_model_len: 65536,
-            python_executable: PathBuf::from("python"),
+            python_executable: std::env::var_os("OH_MY_VLLM_WORKER_PYTHON")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    PathBuf::from("/data0/shared/dongwu.chen/conda-envs/vllm/bin/python")
+                }),
             init_timeout: Duration::from_secs(300),
         }
     }
@@ -58,6 +62,7 @@ impl Default for WorkerConfig {
 pub struct WorkerClient {
     sock: DealerSocket,
     _child: Child,
+    step_id: u64,
 }
 
 impl WorkerClient {
@@ -68,11 +73,16 @@ impl WorkerClient {
         // Bind on the Rust side; the Python side connects.
         let mut sock = DealerSocket::new();
         sock.bind(&addr).await?;
-        info!("ZMQ PAIR socket bound at {addr}");
+        info!("ZMQ DEALER socket bound at {addr}");
 
         // Fork the Python worker process.
         let child = Command::new(&config.python_executable)
             .args(["-m", "oh_my_vllm.worker.zmq_bridge", "--socket", &addr])
+            .env(
+                "OH_MY_VLLM_RUN_ID",
+                std::env::var("OH_MY_VLLM_RUN_ID")
+                    .unwrap_or_else(|_| format!("pid-{}", std::process::id())),
+            )
             .spawn()?;
         info!("Python worker launched (pid {})", child.id());
 
@@ -122,6 +132,7 @@ impl WorkerClient {
         Ok(Self {
             sock,
             _child: child,
+            step_id: 0,
         })
     }
 
@@ -131,6 +142,11 @@ impl WorkerClient {
         request_id: u64,
         prompt_token_ids: Vec<u32>,
     ) -> Result<()> {
+        debug!(
+            request_id,
+            input_tokens = prompt_token_ids.len(),
+            "register_request"
+        );
         let msg = RustMessage::Register(RegisterMsg {
             request_id,
             prompt_token_ids,
@@ -159,7 +175,10 @@ impl WorkerClient {
             });
         }
 
+        self.step_id += 1;
+        let started = Instant::now();
         let msg = RustMessage::Execute(ExecuteMsg {
+            step_id: self.step_id,
             scheduled: scheduled
                 .iter()
                 .map(|s| ScheduledRequestMsg {
@@ -176,7 +195,15 @@ impl WorkerClient {
         });
         Self::send_raw(&mut self.sock, &msg).await?;
 
-        match Self::recv_raw(&mut self.sock).await? {
+        let reply = Self::recv_raw(&mut self.sock).await?;
+        debug!(
+            step_id = self.step_id,
+            requests = scheduled.len(),
+            num_batched_tokens,
+            elapsed_us = started.elapsed().as_micros() as u64,
+            "execute_round_trip"
+        );
+        match reply {
             crate::protocol::PythonMessage::ExecuteResult(r) => Ok(WorkerOutput {
                 outputs: r
                     .outputs

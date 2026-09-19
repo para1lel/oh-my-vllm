@@ -9,15 +9,15 @@
 | Rust build + Python lint | `/data0/shared/dongwu.chen/conda-envs/oh-my-vllm` | cargo, ruff, pre-commit |
 | Model runner | `/data0/shared/dongwu.chen/conda-envs/vllm` | Python 3.12, torch, vllm, CUDA |
 
-The Python worker subprocess (`oh_my_vllm.worker.zmq_bridge`) must run under the
-**vllm** env. The Rust binary spawns `python` — it finds whatever `python` is on
-`PATH`. Always set both before any end-to-end run:
+The Python worker uses the absolute vllm conda interpreter. Framework commands
+run through scripts/with-env.sh. GPU commands additionally use scripts/with-gpu.sh.
+The following variables can also be set manually:
 
 ```bash
 export PATH="/data0/shared/dongwu.chen/conda-envs/vllm/bin:$PATH"
 export PYTHONPATH="/data0/shared/dongwu.chen/oh-my-vllm/python:$PYTHONPATH"
 export CARGO_TARGET_DIR=/data0/shared/dongwu.chen/oh-my-vllm/target
-export CUDA_VISIBLE_DEVICES=0   # single B200
+# Use scripts/with-gpu.sh for every single-GPU test
 ```
 
 The oh-my-vllm Python package is **not** pip-installed into the vllm env — only
@@ -97,8 +97,8 @@ cargo build --release --bin oh-my-vllm-zmq-worker
 rm -f /tmp/oh-my-vllm.ipc   # clean up stale socket if any
 export PATH="/data0/shared/dongwu.chen/conda-envs/vllm/bin:$PATH"
 export PYTHONPATH="/data0/shared/dongwu.chen/oh-my-vllm/python:$PYTHONPATH"
-export CUDA_VISIBLE_DEVICES=0
-./target/release/oh-my-vllm-zmq-worker \
+# Use scripts/with-gpu.sh for every single-GPU test
+scripts/with-gpu.sh scripts/with-env.sh ./target/release/oh-my-vllm-zmq-worker \
     --model /data0/shared/Qwen3.8-27B-FP8 \
     --num-gpu-blocks 2048 \
     --block-size 784 \
@@ -143,3 +143,23 @@ python -c "import inspect; from vllm.config import CacheConfig; print(inspect.si
 **Pre-commit hook stash conflict** — run `cargo fmt && cargo clippy --fix --allow-dirty`,
 then `ruff format python/ && ruff check --fix python/`, then stage everything
 including `Cargo.lock` before committing.
+
+## Runtime entrypoints and logs (2026-09-19)
+
+Use `scripts/with-env.sh COMMAND` for framework commands; it sets both
+PYTHONPATH and CARGO_TARGET_DIR. The worker interpreter defaults to the absolute
+vllm conda Python path, overridable by OH_MY_VLLM_WORKER_PYTHON. No uv is used.
+Wrap GPU commands with `scripts/with-gpu.sh`: it waits for an idle B200 (no
+compute processes, <=64 MiB used, zero reported utilization), uses its UUID,
+and holds a cooperative per-GPU flock. Unrelated programs do not honor this
+lock, so avoid launching other GPU jobs during a comparison. Baseline and
+framework measurements must run within one wrapper invocation on the same GPU.
+
+Logs go to stderr, separate from result stdout. Rust uses timestamped tracing
+key/value events; Python uses JSON lines with UTC timestamps. The wrapper sets
+OH_MY_VLLM_RUN_ID; Rust forwards the same ID even without the wrapper. Set
+RUST_LOG=debug and OH_MY_VLLM_LOG_LEVEL=DEBUG for per-step diagnostics.
+Python execute_host_us measures the host call, not CUDA kernel duration.
+The initial instrumentation covers worker RPC and Python execution; scheduler,
+KV, summaries and optional CUDA events will be added alongside their lifecycle
+repairs. Default INFO avoids per-step output. Capture logs outside the repository.

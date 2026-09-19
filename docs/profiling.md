@@ -79,7 +79,7 @@ python benchmarks/compare_vllm.py \
 
 The script runs vLLM first (using its offline `LLM` API) then oh-my-vllm, and
 prints a comparison table with throughput and the percentage difference. The
-±5% target is measured on output tokens per second.
+>=95% target is measured on output tokens per second.
 
 ## Interpreting a gap
 

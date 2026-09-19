@@ -25,6 +25,10 @@ docs(handoff): add full engineering handoff documentation suite
 
 ## Before committing
 
+At every milestone, start a sub-agent code review for best practices and
+correctness/performance risks. Fix findings and obtain a passing review before
+committing. Update architecture/decision documents when rewriting modules.
+
 Stage `Cargo.lock` alongside any Rust changes to prevent the pre-commit hook from failing with a stash conflict:
 
 ```bash

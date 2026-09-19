@@ -48,7 +48,7 @@ two-phase block allocation (vLLM issue #33775 ordering), watermark enforcement.
 | TASK-4-01 | GQA accuracy test | ✓ verified (`7131da9`) |
 | TASK-4-02 | Release binary builds clean | ✓ verified |
 | TASK-E2E-001 | End-to-end smoke test | ⏳ fixes on disk, not committed or verified |
-| TASK-BENCH-001 | ±5% throughput benchmark vs vLLM | ⏳ not started |
+| TASK-BENCH-001 | >=95% throughput benchmark vs vLLM | ⏳ not started |
 
 ---
 
@@ -75,3 +75,9 @@ Out of scope for all phases (REQ-OUT-SCOPE-001):
 - LoRA, multimodal
 
 These must not be added without explicit user confirmation.
+
+## Takeover milestones (2026-09-19)
+
+Environment/logging foundation is under independent review. Next: actual-path
+accuracy and E2E, full feature/combination testing, then fair performance
+acceptance. Each milestone requires sub-agent review and fixes before commit.

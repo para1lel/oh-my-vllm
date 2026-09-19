@@ -3,7 +3,7 @@
 ## Project goal (user-confirmed)
 
 Build a Rust-first inference framework for **Qwen3.5-27B-FP8 on a single B200 GPU**
-that matches vLLM EngineCore throughput within **±5%** on the workloads in
+that matches vLLM EngineCore throughput at least **95%** on the workloads in
 `docs/requirements.md`. Rust owns scheduling and KV cache; Python wraps vLLM's
 `GPUWorker` for the model runner. The two sides talk over a ZMQ DEALER socket
 using msgpack.
@@ -11,8 +11,8 @@ using msgpack.
 ## Non-negotiable constraints
 
 - **Target model:** `/data0/shared/Qwen3.8-27B-FP8` (Qwen3.5-27B, 48 GDN + 16 FA layers)
-- **Target hardware:** single B200 GPU, `CUDA_VISIBLE_DEVICES=0`
-- **Performance target:** ±5% of vLLM EngineCore on bs=1/2/4, in=32768, out=4096
+- **Target hardware:** single B200 GPU, wait for any idle B200 with `scripts/with-gpu.sh`; pin the selected GPU UUID
+- **Performance target:** at least 95% of vLLM EngineCore on bs=1/2/4, in=32768, out=4096
 - **Python env for model runner:** `/data0/shared/dongwu.chen/conda-envs/vllm/bin/python`
   — this env has vLLM, torch, CUDA. The oh-my-vllm Python package is not installed
   there; set `PYTHONPATH=/data0/shared/dongwu.chen/oh-my-vllm/python:$PYTHONPATH`
@@ -47,7 +47,7 @@ using msgpack.
 2. `ruff format python/ && ruff check python/` must pass (Python)
 3. `cargo clippy --all-targets --all-features -- -D warnings` must pass
 4. Stage only changed files; never `git add .`
-5. Commit with Conventional Commits format + attribution line
+5. Start a sub-agent code review after each milestone; fix correctness, performance, and best-practice findings before committing with Conventional Commits format + attribution line
 6. Update `docs/handoff.md` with what was done, what was verified, what remains
 
 ## Verification requirements
