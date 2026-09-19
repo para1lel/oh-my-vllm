@@ -1,92 +1,68 @@
-//! oh-my-vllm binary — wires the Rust scheduler to the Python model worker.
-//!
-//! Subcommands:
-//!   run   — serve a hard-coded prompt for smoke-testing the end-to-end loop.
-//!   bench — run a synthetic throughput benchmark and print token/s numbers.
-
+//! Direct inference driver and reproducible fixed-token benchmark.
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use anyhow::{Context, Result, ensure};
+use clap::{Args, Parser, Subcommand};
 use oh_my_vllm_kv_cache::coordinator::HybridCoordinator;
 use oh_my_vllm_scheduler::{Request, Scheduler, SchedulerConfig};
+use oh_my_vllm_zmq_worker::client::{WorkerClient, WorkerConfig};
 use tracing::{Instrument, info};
 use tracing_subscriber::EnvFilter;
 
-use oh_my_vllm_zmq_worker::client::{WorkerClient, WorkerConfig};
-
-// ---------------------------------------------------------------------------
-// CLI definition
-// ---------------------------------------------------------------------------
-
 #[derive(Parser)]
-#[command(name = "oh-my-vllm", about = "Rust scheduler + Python model worker")]
 struct Cli {
-    /// Path to the model weights directory.
     #[arg(long, default_value = "/data0/shared/Qwen3.8-27B-FP8")]
     model: PathBuf,
-
-    /// ZMQ IPC socket path (without ipc:// prefix).
     #[arg(long, default_value = "/tmp/oh-my-vllm.ipc")]
     socket: PathBuf,
-
-    /// Number of GPU KV cache blocks to pre-allocate.
     #[arg(long, default_value_t = 1024)]
     num_gpu_blocks: u32,
-
-    /// KV cache block size in tokens.
     #[arg(long, default_value_t = 784)]
     block_size: u32,
-
-    /// Tensor parallel size (1 = single GPU).
     #[arg(long, default_value_t = 1)]
     tp: u32,
-
-    /// Maximum sequence length.
     #[arg(long, default_value_t = 65536)]
     max_model_len: u32,
-
+    #[arg(long, default_value_t = 0)]
+    num_speculative_tokens: usize,
+    /// Restrict Rust's pool for preemption tests; cannot exceed worker capacity.
+    #[arg(long)]
+    scheduler_blocks: Option<u32>,
     #[command(subcommand)]
     cmd: Cmd,
 }
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Run a single prompt end-to-end and print the generated tokens.
     Run {
-        /// Prompt token ids (space-separated integers).
-        #[arg(long, num_args = 1.., value_delimiter = ' ')]
+        #[arg(long, num_args = 1..)]
         tokens: Vec<u32>,
-
-        /// Maximum output tokens to generate.
         #[arg(long, default_value_t = 64)]
         max_tokens: usize,
     },
-
-    /// Synthetic throughput benchmark.
-    Bench {
-        /// Batch size (number of concurrent requests).
-        #[arg(long, default_value_t = 1)]
-        batch_size: usize,
-
-        /// Input sequence length in tokens.
-        #[arg(long, default_value_t = 512)]
-        input_len: usize,
-
-        /// Output sequence length in tokens.
-        #[arg(long, default_value_t = 128)]
-        output_len: usize,
-
-        /// Warm-up steps before timing.
-        #[arg(long, default_value_t = 2)]
-        warmup: usize,
-    },
+    Bench(BenchArgs),
 }
 
-// ---------------------------------------------------------------------------
-// Entry point
-// ---------------------------------------------------------------------------
+#[derive(Args)]
+struct BenchArgs {
+    #[arg(long, default_value_t = 1)]
+    batch_size: usize,
+    #[arg(long, default_value_t = 32768)]
+    input_len: usize,
+    #[arg(long, default_value_t = 4096)]
+    output_len: usize,
+    #[arg(long, default_value_t = 1)]
+    warmup: usize,
+    #[arg(long, default_value_t = 3)]
+    repetitions: usize,
+    #[arg(long)]
+    prefix_hit: bool,
+    /// Admit one request every N steps to exercise continuous batching.
+    #[arg(long, default_value_t = 0)]
+    arrival_interval: usize,
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -97,212 +73,187 @@ async fn main() -> Result<()> {
         .with_writer(std::io::stderr)
         .with_ansi(false)
         .init();
-
     let run_id = std::env::var("OH_MY_VLLM_RUN_ID")
         .unwrap_or_else(|_| format!("pid-{}", std::process::id()));
-    let span = tracing::info_span!("inference", run_id);
-    run().instrument(span).await
+    run()
+        .instrument(tracing::info_span!("inference", run_id))
+        .await
 }
 
 async fn run() -> Result<()> {
     let cli = Cli::parse();
-
-    let worker_cfg = WorkerConfig {
+    ensure!(
+        cli.block_size == 784 && cli.tp == 1,
+        "requires block_size=784 and TP=1"
+    );
+    ensure!(cli.num_gpu_blocks >= 6, "physical cache is too small");
+    let mut client = WorkerClient::launch(WorkerConfig {
         model_path: cli.model,
         socket_path: cli.socket,
         num_gpu_blocks: cli.num_gpu_blocks,
         block_size: cli.block_size,
         tensor_parallel_size: cli.tp,
         max_model_len: cli.max_model_len,
+        num_speculative_tokens: cli.num_speculative_tokens,
         ..WorkerConfig::default()
-    };
-
-    info!("Launching Python model worker…");
-    let mut worker_client = WorkerClient::launch(worker_cfg)
-        .await
-        .context("failed to launch Python worker")?;
-    info!("Python worker ready");
-    let logical_num_blocks = worker_client.logical_num_blocks;
-
+    })
+    .await
+    .context("launch worker")?;
+    let blocks = cli.scheduler_blocks.unwrap_or(client.logical_num_blocks);
+    ensure!(
+        blocks > 1 && blocks <= client.logical_num_blocks,
+        "invalid scheduler pool capacity"
+    );
+    let mut kv = HybridCoordinator::new(blocks, 784, true, 0);
+    kv.set_speculative_blocks(cli.num_speculative_tokens);
+    let mut scheduler = Scheduler::new(
+        SchedulerConfig {
+            max_num_seqs: 32.min((cli.num_gpu_blocks - 1) as usize),
+            enable_mtp: cli.num_speculative_tokens > 0,
+            mtp_draft_len: cli.num_speculative_tokens,
+            ..SchedulerConfig::default()
+        },
+        kv,
+    );
+    let mut next_id = 1;
     match cli.cmd {
         Cmd::Run { tokens, max_tokens } => {
-            run_single(
-                &mut worker_client,
-                tokens,
+            ensure!(
+                !tokens.is_empty() && max_tokens > 0,
+                "nonempty input and positive output required"
+            );
+            ensure!(
+                tokens.len() + max_tokens <= cli.max_model_len as usize,
+                "request exceeds context limit"
+            );
+            let result = execute_batch(
+                &mut client,
+                &mut scheduler,
+                &mut next_id,
+                &[tokens],
                 max_tokens,
-                logical_num_blocks,
-                cli.block_size,
+                0,
             )
-            .await?
-        }
-        Cmd::Bench {
-            batch_size,
-            input_len,
-            output_len,
-            warmup,
-        } => {
-            bench(
-                &mut worker_client,
-                batch_size,
-                input_len,
-                output_len,
-                warmup,
-                logical_num_blocks,
-                cli.block_size,
-            )
-            .await?
-        }
-    }
-
-    worker_client.shutdown().await?;
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-fn make_scheduler(num_gpu_blocks: u32, block_size: u32) -> Scheduler {
-    let kv = HybridCoordinator::new(
-        num_gpu_blocks,
-        block_size as usize,
-        true, // enable_caching
-        0,    // watermark_blocks
-    );
-    Scheduler::new(SchedulerConfig::default(), kv)
-}
-
-/// Smoke-test: run one request to completion and print the output token ids.
-async fn run_single(
-    client: &mut WorkerClient,
-    tokens: Vec<u32>,
-    max_tokens: usize,
-    num_gpu_blocks: u32,
-    block_size: u32,
-) -> Result<()> {
-    let mut sched = make_scheduler(num_gpu_blocks, block_size);
-    let req = Request::new(1, tokens.clone(), max_tokens, Vec::new());
-    client
-        .register_request(1, tokens)
-        .await
-        .context("register_request")?;
-    sched.add_request(req);
-
-    let mut output_tokens: Vec<u32> = Vec::new();
-    loop {
-        let step = sched.schedule();
-        if step.scheduled.is_empty() {
-            anyhow::ensure!(
-                sched.num_running() == 0 && sched.num_waiting() == 0,
-                "scheduler stalled with unfinished requests"
+            .await?;
+            println!(
+                "output token ids: {:?}",
+                result.outputs.values().next().unwrap()
             );
-            break;
         }
-        let worker_out = client
-            .execute_one_step(
-                &step.scheduled,
-                &step.finished_request_ids,
-                &step.preempted_request_ids,
-                step.num_batched_tokens,
-            )
-            .await
-            .context("execute_one_step")?;
-
-        let worker_out = sched.update(worker_out);
-        for o in &worker_out.outputs {
-            output_tokens.extend_from_slice(&o.token_ids);
-        }
-
-        if sched.num_running() == 0 && sched.num_waiting() == 0 {
-            let cleanup = sched.schedule();
-            client
-                .execute_one_step(&[], &cleanup.finished_request_ids, &[], 0)
+        Cmd::Bench(args) => {
+            ensure!(
+                args.batch_size > 0
+                    && args.batch_size <= 32
+                    && args.input_len > 0
+                    && args.output_len > 0
+                    && args.repetitions > 0,
+                "invalid benchmark dimensions"
+            );
+            ensure!(
+                args.input_len + args.output_len <= cli.max_model_len as usize,
+                "workload exceeds context limit"
+            );
+            // Same deterministic, valid token IDs as the Python baseline. Distinct
+            // first tokens ensure the cold mode has no cross-request prefix hits.
+            let prompts: Vec<Vec<u32>> = (0..args.batch_size)
+                .map(|request| {
+                    (0..args.input_len)
+                        .map(|i| ((i + request * 997) % 32000 + 1) as u32)
+                        .collect()
+                })
+                .collect();
+            for iteration in 0..args.warmup + args.repetitions {
+                ensure!(
+                    scheduler.reset_prefix_cache(),
+                    "cache reset with live requests"
+                );
+                if args.prefix_hit {
+                    execute_batch(&mut client, &mut scheduler, &mut next_id, &prompts, 1, 0)
+                        .await?;
+                }
+                let result = execute_batch(
+                    &mut client,
+                    &mut scheduler,
+                    &mut next_id,
+                    &prompts,
+                    args.output_len,
+                    args.arrival_interval,
+                )
                 .await?;
-            break;
+                if iteration >= args.warmup {
+                    let count: usize = result.outputs.values().map(Vec::len).sum();
+                    println!(
+                        "BENCH_RESULT {{\"batch_size\":{},\"input_len\":{},\"output_len\":{},\"output_tokens\":{},\"elapsed_s\":{},\"output_tps\":{},\"steps\":{},\"prefix_hit_tokens\":{},\"preemptions\":{},\"proposed_draft_tokens\":{},\"accepted_draft_tokens\":{}}}",
+                        args.batch_size,
+                        args.input_len,
+                        args.output_len,
+                        count,
+                        result.elapsed,
+                        count as f64 / result.elapsed,
+                        result.steps,
+                        result.prefix_hit_tokens,
+                        result.preemptions,
+                        result.proposed_draft_tokens,
+                        result.accepted_draft_tokens
+                    );
+                }
+            }
         }
     }
-
-    println!("output token ids: {:?}", output_tokens);
+    client.shutdown().await?;
     Ok(())
 }
 
-/// Throughput benchmark: run `batch_size` requests of fixed length and report tokens/s.
-async fn bench(
-    client: &mut WorkerClient,
-    batch_size: usize,
-    input_len: usize,
-    output_len: usize,
-    warmup: usize,
-    num_gpu_blocks: u32,
-    block_size: u32,
-) -> Result<()> {
-    info!("Warming up ({warmup} runs)…");
-    for _ in 0..warmup {
-        bench_run(
-            client,
-            batch_size,
-            input_len,
-            output_len,
-            num_gpu_blocks,
-            block_size,
-        )
-        .await?;
-    }
-
-    info!("Benchmarking…");
-    let t0 = Instant::now();
-    let output_tokens = bench_run(
-        client,
-        batch_size,
-        input_len,
-        output_len,
-        num_gpu_blocks,
-        block_size,
-    )
-    .await?;
-    let elapsed = t0.elapsed().as_secs_f64();
-
-    let input_tokens = batch_size * input_len;
-    let total_tokens = input_tokens + output_tokens;
-    println!(
-        "batch_size={batch_size}  input_len={input_len}  output_len={output_len}\n\
-         output tokens : {output_tokens}\n\
-         total tokens  : {total_tokens}\n\
-         wall time     : {elapsed:.3}s\n\
-         throughput    : {:.1} output tok/s  |  {:.1} total tok/s",
-        output_tokens as f64 / elapsed,
-        total_tokens as f64 / elapsed,
-    );
-    Ok(())
+struct BatchResult {
+    outputs: BTreeMap<u64, Vec<u32>>,
+    elapsed: f64,
+    steps: usize,
+    prefix_hit_tokens: usize,
+    preemptions: usize,
+    proposed_draft_tokens: usize,
+    accepted_draft_tokens: usize,
 }
 
-async fn bench_run(
+async fn execute_batch(
     client: &mut WorkerClient,
-    batch_size: usize,
-    input_len: usize,
-    output_len: usize,
-    num_gpu_blocks: u32,
-    block_size: u32,
-) -> Result<usize> {
-    let mut sched = make_scheduler(num_gpu_blocks, block_size);
-    for i in 0..batch_size {
-        let id = (i + 1) as u64;
-        let tokens: Vec<u32> = (0..input_len as u32).collect();
-        let req = Request::new(id, tokens.clone(), output_len, Vec::new());
-        client.register_request(id, tokens).await?;
-        sched.add_request(req);
-    }
-    let mut total_output = 0usize;
+    scheduler: &mut Scheduler,
+    next_id: &mut u64,
+    prompts: &[Vec<u32>],
+    max_tokens: usize,
+    arrival_interval: usize,
+) -> Result<BatchResult> {
+    let started = Instant::now();
+    let mut outputs = BTreeMap::<u64, Vec<u32>>::new();
+    let mut pending = prompts.iter().peekable();
+    let mut steps: usize = 0;
+    let mut prefix_hit_tokens = 0;
+    let mut preemptions = 0;
+    let mut proposed_draft_tokens = 0;
+    let mut accepted_draft_tokens = 0;
     loop {
-        let step = sched.schedule();
+        let idle = scheduler.num_running() + scheduler.num_waiting() == 0;
+        if arrival_interval == 0 || idle || steps.is_multiple_of(arrival_interval) {
+            for prompt in pending.by_ref() {
+                let id = *next_id;
+                *next_id += 1;
+                client.register_request(id, prompt.clone()).await?;
+                scheduler.add_request(Request::new(id, prompt.clone(), max_tokens, vec![]));
+                outputs.insert(id, vec![]);
+                if arrival_interval > 0 {
+                    break;
+                }
+            }
+        }
+        let step = scheduler.schedule();
+        prefix_hit_tokens += step.cache_hit_tokens;
+        preemptions += step.preempted_request_ids.len();
         if step.scheduled.is_empty() {
-            anyhow::ensure!(
-                sched.num_running() == 0 && sched.num_waiting() == 0,
+            ensure!(
+                scheduler.num_running() + scheduler.num_waiting() == 0,
                 "scheduler stalled with unfinished requests"
             );
-            break;
         }
-        let worker_out = client
+        let result = client
             .execute_one_step(
                 &step.scheduled,
                 &step.finished_request_ids,
@@ -310,19 +261,44 @@ async fn bench_run(
                 step.num_batched_tokens,
             )
             .await?;
-        let worker_out = sched.update(worker_out);
-        total_output += worker_out
-            .outputs
-            .iter()
-            .map(|o| o.token_ids.len())
-            .sum::<usize>();
-        if sched.num_running() == 0 && sched.num_waiting() == 0 {
-            let cleanup = sched.schedule();
+        if !step.scheduled.is_empty() {
+            steps += 1;
+            for output in &result.outputs {
+                proposed_draft_tokens += output.new_draft_token_ids.len();
+                accepted_draft_tokens += output.num_accepted_draft_tokens;
+            }
+            let result = scheduler.update(result);
+            for output in result.outputs {
+                outputs
+                    .get_mut(&output.request_id)
+                    .context("unexpected request ID")?
+                    .extend(output.token_ids);
+            }
+        }
+        if scheduler.num_running() + scheduler.num_waiting() == 0 && pending.peek().is_none() {
+            let cleanup = scheduler.schedule();
             client
                 .execute_one_step(&[], &cleanup.finished_request_ids, &[], 0)
                 .await?;
             break;
         }
     }
-    Ok(total_output)
+    ensure!(
+        outputs.len() == prompts.len() && outputs.values().all(|tokens| tokens.len() == max_tokens),
+        "incomplete output"
+    );
+    let elapsed = started.elapsed().as_secs_f64();
+    info!(
+        steps,
+        elapsed, prefix_hit_tokens, preemptions, "batch_complete"
+    );
+    Ok(BatchResult {
+        outputs,
+        elapsed,
+        steps,
+        prefix_hit_tokens,
+        preemptions,
+        proposed_draft_tokens,
+        accepted_draft_tokens,
+    })
 }

@@ -300,3 +300,42 @@ fn output_count_truncates_speculative_tail_to_request_limit() {
     assert_eq!(result.outputs[0].token_ids, vec![10, 11]);
     assert_eq!(sched.num_running(), 0);
 }
+
+#[test]
+fn mtp_acceptance_preserves_tokens_and_rejects_only_scheduled_drafts() {
+    let mut kv = make_coord(64);
+    kv.set_speculative_blocks(2);
+    let mut scheduler = Scheduler::new(
+        SchedulerConfig {
+            max_num_batched_tokens: 16,
+            max_num_seqs: 4,
+            enable_mtp: true,
+            mtp_draft_len: 2,
+        },
+        kv,
+    );
+    scheduler.add_request(make_req(1, 4, 10));
+    scheduler.schedule();
+    scheduler.update(WorkerOutput {
+        outputs: vec![RequestOutput {
+            request_id: 1,
+            token_ids: vec![42],
+            num_accepted_draft_tokens: 0,
+            new_draft_token_ids: vec![10, 11],
+        }],
+    });
+    assert_eq!(scheduler.schedule().num_batched_tokens, 3);
+    scheduler.update(WorkerOutput {
+        outputs: vec![RequestOutput {
+            request_id: 1,
+            token_ids: vec![10, 99],
+            num_accepted_draft_tokens: 1,
+            new_draft_token_ids: vec![],
+        }],
+    });
+    let request = scheduler.running.front().unwrap();
+    assert_eq!(request.num_computed_tokens, 6);
+    assert_eq!(&request.token_ids[4..], &[42, 10, 99]);
+    assert!(request.draft_token_ids.is_empty());
+    assert_eq!(scheduler.schedule().scheduled[0].token_ids, vec![99]);
+}

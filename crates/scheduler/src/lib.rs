@@ -69,6 +69,10 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
+    pub fn reset_prefix_cache(&mut self) -> bool {
+        self.running.is_empty() && self.waiting.is_empty() && self.kv.reset_prefix_cache()
+    }
+
     fn aligned_prefill(&self, request: &Request, start: usize, count: usize) -> usize {
         let prefill_end = request
             .prompt_len
@@ -178,16 +182,17 @@ impl Scheduler {
                     let mb_table = self.kv.mamba_blocks(req.id).to_vec();
                     // Combine confirmed + draft tokens so the worker receives the full
                     // speculative sequence. For non-MTP requests draft_token_ids is empty.
-                    let all_tokens: Vec<u32> = req
+                    let scheduled_tokens = req
                         .token_ids
                         .iter()
                         .chain(req.draft_token_ids.iter())
+                        .skip(req.num_computed_tokens)
+                        .take(to_schedule)
                         .copied()
                         .collect();
-                    let end = (req.num_computed_tokens + to_schedule).min(all_tokens.len());
                     output.scheduled.push(ScheduledRequest {
                         request_id: req.id,
-                        token_ids: all_tokens[req.num_computed_tokens..end].to_vec(),
+                        token_ids: scheduled_tokens,
                         num_computed_tokens: req.num_computed_tokens,
                         fa_block_table: fa_table,
                         mamba_block_table: mb_table,
@@ -250,6 +255,7 @@ impl Scheduler {
                     self.block_tables
                         .insert(req.id, (fa_table.clone(), mb_table.clone()));
 
+                    output.cache_hit_tokens += hit_len;
                     let computed_start = hit_len;
                     output.scheduled.push(ScheduledRequest {
                         request_id: req.id,
@@ -308,20 +314,16 @@ impl Scheduler {
                 None => continue,
             };
 
-            // Commit in-flight tokens to computed.
-            req.num_computed_tokens += req.num_in_flight_tokens;
+            // Only drafts actually scheduled in this step can be rejected.
+            let scheduled_end = req.num_computed_tokens + req.num_in_flight_tokens;
+            let scheduled_drafts = scheduled_end.saturating_sub(req.token_ids.len());
+            assert!(
+                result.num_accepted_draft_tokens <= scheduled_drafts,
+                "worker accepted unscheduled drafts"
+            );
+            req.num_computed_tokens =
+                scheduled_end - scheduled_drafts + result.num_accepted_draft_tokens;
             req.num_in_flight_tokens = 0;
-
-            // Handle MTP acceptance rollback: if fewer draft tokens were
-            // accepted than were proposed, we still credit the accepted ones.
-            if result.num_accepted_draft_tokens < req.draft_token_ids.len() {
-                // Roll back num_computed_tokens to exclude rejected drafts — the
-                // coordinator already allocated blocks for them, but cache_blocks
-                // won't register them since they exceeded num_tokens().
-                // The next step's allocate_slots call will handle the gap.
-                let accepted = result.num_accepted_draft_tokens;
-                req.num_computed_tokens -= req.draft_token_ids.len() - accepted;
-            }
 
             // Append the verified output token and install new drafts.
             result
@@ -334,10 +336,20 @@ impl Scheduler {
                 req.append_token(token);
             }
             req.draft_token_ids.clear();
-            req.block_hashes = self.kv.compute_block_hashes(&req.token_ids);
+            let full_blocks = req.token_ids.len() / self.kv.block_size();
+            if full_blocks > req.block_hashes.len() {
+                req.block_hashes = self.kv.compute_block_hashes(&req.token_ids);
+            }
 
             if self.config.enable_mtp && !result.new_draft_token_ids.is_empty() {
-                req.set_drafts(std::mem::take(&mut result.new_draft_token_ids));
+                let mut drafts = std::mem::take(&mut result.new_draft_token_ids);
+                drafts.truncate(
+                    self.config.mtp_draft_len.min(
+                        req.max_tokens
+                            .saturating_sub(req.num_generated_tokens() + 1),
+                    ),
+                );
+                req.set_drafts(drafts);
             }
 
             if req.is_finished() {

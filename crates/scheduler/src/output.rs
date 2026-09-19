@@ -34,6 +34,7 @@ pub struct SchedulerOutput {
     pub preempted_request_ids: Vec<RequestId>,
     /// Total tokens the GPU will process across all scheduled requests.
     pub num_batched_tokens: usize,
+    pub cache_hit_tokens: usize,
 }
 
 // ── worker feedback ───────────────────────────────────────────────────────────

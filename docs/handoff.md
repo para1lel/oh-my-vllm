@@ -1,57 +1,73 @@
-# Handoff — oh-my-vllm
+# Handoff — 2026-09-19
 
-Updated 2026-09-19. Baseline: 94b827f. Pre-existing user change: `.gitignore`.
-The previously documented two unstaged worker fixes are already in HEAD.
+## Scope and authoritative decisions
 
-## Current work
+AGENTS.md governs the model, block784, Rust scheduler/KV ownership and conda
+entrypoints. Single-GPU tests wait for any idle B200 and pin its UUID; unrelated
+GPU processes must never be interrupted. No push/PR authorized. Every milestone
+requires independent subagent review and a commit with the required attribution.
+User authorized committing all project changes, including the original .gitignore
+modification. Local .vscode/settings.json selects conda oh-my-vllm for Python
+analysis and adds python/ to resolution; .vscode/ is ignored, as requested.
 
-Stage 1: documentation, conda entrypoints, idle B200 selection, timestamped logs.
-55 Rust tests, clippy with all features/-D warnings, Python format/check,
-two CPU runtime tests and real Python -m bridge logging test passed.
-Independent review passed after fixing logger entrypoint, async tracing and
-documentation findings. GPU smoke is waiting
-for an idle B200; all eight cards are occupied by an unrelated process. No GPU
-accuracy or performance check has been run in this stage.
+## Saved milestones
 
-## Accepted delivery plan
+- 4444ab1: documentation/environment alignment, idle GPU selection, correlated
+  timestamped Rust/Python logging. Independent review and required checks passed.
+- ca65aba: installed GPUWorker API adaptation, actual output lifecycle, physical
+  hybrid cache alias fix (ADR-002), actual-path FP64 probe and coherent Chinese.
+  Independent review and required checks passed (58 Rust tests at that stage).
 
-1. Diagnostic/environment foundation; review and commit.
-2. Actual-path GQA/GDN FP64 tests and coherent text; all ordinary workloads.
-3. Complete MTP, prefix caching, continuous batching, recompute preemption and
-   combination tests, with milestone reviews and commits.
-4. Fair measurements for bs=1/2/4, 32768 input / 4096 output, ordinary/MTP/prefix
-   modes: median output throughput >=95% of matching vLLM, minimum three runs.
+## Current milestone: MTP and feature/benchmark lifecycle
 
-Rust owns scheduling/KV; Python uses GPUWorker in the existing vllm conda env.
-Use the oh-my-vllm conda env for framework work, no uv. Single GPU tests wait
-for an idle B200 and pin its UUID. Never interrupt unrelated GPU processes.
+MTP now schedules and consumes real drafts, retains all accepted tokens, rolls
+back only scheduled rejections, and reserves/migrates private recurrent states.
+BF16 SSM storage preserves block784 in MTP mode and is matched in vLLM (ADR-003).
+Bench keeps one worker, resets caches, supports controlled prefix seeding,
+request arrivals and reduced scheduler capacity for recompute preemption.
+Matched driver uses identical token IDs/sampling/warmup/cache policy, three
+measurements, exact cached-token checks and draft counters on both engines.
+It records initial source/binary identity and owns engine process-group cleanup.
 
-## Unverified / risks
+Review first found missing timeout descendant cleanup, silent zero-draft mode,
+incomplete cache-hit equivalence, misleading dirty-version attribution and
+missing MTP allocator regressions. Fixes were independently re-reviewed with no
+blocking findings. Additional multi-block speculative slot migration test added.
+62 Rust tests and all-feature clippy passed; ruff Python checks, runtime tools and
+benchmark process-group CPU tests passed. Adapter (3) and bridge logging (1) checks also passed.
 
-End-to-end 16-token smoke and coherent 64-token Chinese generation have passed.
-Actual-path FP64 probes passed for GQA/GDN prefill/decode and recurrent state
-on a short real-text request. Cross-boundary probe also passed (100 repeated context paragraphs, followed
-by 8 decoded tokens). Performance
-acceptance has not passed yet. Existing
-standalone GQA test does not establish coverage of the actual inference path.
-The benchmark has unequal inputs, sampling and warmup cache state and must be
-repaired before its results can be used. Internal GPUWorker API adaptation,
-cache allocation and request lifecycle remain to be verified.
+Actual GPU evidence (logs outside repository):
 
-## Adapter sub-milestone (in progress)
+- /tmp/oh-my-vllm-text-d.log: ordinary coherent 64-token Chinese output.
+- /tmp/oh-my-vllm-probe-d.log and -probe-boundary.log: actual GQA/GDN
+  prefill/decode/state FP64 checks, including cross784 continuation, passed.
+- /tmp/oh-my-vllm-mtp-text-a.log: MTP4 coherent64tokens in27steps.
+- /tmp/oh-my-vllm-probe-mtp-a.log and -probe-mtp-boundary.log: actual target
+  fused MTP verification/all draft states, GQA and GDN prefill passed FP64 bounds;
+  cross-boundary32-token Chinese output is coherent, all8 categories covered.
+- /tmp/oh-my-vllm-prefix-a.log: prefix + arrivals, output256, hits3136.
+- /tmp/oh-my-vllm-preempt-a.log: ordinary reduced pool, output2048,
+  3 recompute preemptions, hits3920 on resumed requests.
+- /tmp/oh-my-vllm-combined.log: MTP4 + prefix + arrivals, output256,
+  hits3136,43steps,300proposed/181accepted drafts.
 
-Installed Worker API, request lifecycle and physical KV aliasing repaired.
-Three physical Mamba groups must use distinct block IDs: repeating IDs aliases
-shared tensors. Ready now communicates conservative logical pool capacity;
-ADR-002 records mapping and memory tradeoff. Rust consumes every returned token,
-including empty intermediate-prefill results and bounded multi-token tails.
-The old two-field-config-only diagnosis was insufficient.
+- /tmp/oh-my-vllm-mtp-preempt-b.log: MTP4 reduced logical pool18, output2048,
+  3preemptions, hits5488,2024proposed/1545accepted drafts.
+- /tmp/oh-my-vllm-mtp-pair-short.json: updated driver short MTP paired run
+  passed with real nonzero draft metrics on both engines and zero cold cache hits;
+  this 2048->64 case is not a target workload acceptance result.
 
-Review found shutdown races, probe coverage omission and token overcounting;
-fixes and regression tests are in place; independent re-review passed.
-58 Rust tests, all-feature clippy, ruff, runtime/entrypoint tests and 3 adapter
-tests passed. The bs=4 long-workload run is in progress; bs=1/2 and all-mode
-performance/functional acceptance are not yet run. GPU logs are
-under /tmp/oh-my-vllm-text-d.log and /tmp/oh-my-vllm-probe-d.log (not committed).
-Local .vscode/settings.json selects the oh-my-vllm conda Python with python/
-extraPath; it is ignored. User authorized committing existing .gitignore change.
+## Performance status and remaining work
+
+Full acceptance has NOT passed. Preliminary ordinary paired32768->4096 medians
+relative to vLLM: bs1=94.10%, bs2=94.77%, bs4=95.87%. Raw logs/results are
+/tmp/oh-my-vllm-ordinary-bs{1,2,4}.{log,json}. These were measured before the
+identity/metrics review fixes on a dirty working tree; do not label their
+numbers as clean ca65aba results or final acceptance artifacts. The initial
+bs4 standalone313.3tok/s had no matched warmup and is not acceptance evidence.
+
+Remaining: validate updated baseline prefix-hit fields end-to-end;
+profile and repair ordinary bs1/2
+shortfall; run all ordinary/MTP/prefix batch1/2/4 matched acceptance cases with
+reproducible artifacts and investigate material variance. GPU kernel timing is
+not covered by host-duration logs. Update this handoff with measured outcomes.

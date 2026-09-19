@@ -85,6 +85,11 @@ class SchedulerAdapter:
                 for kind, offset in zip(self.group_kinds, self.offsets, strict=True)
             )
             result.num_scheduled_tokens[str(rid)] = len(request.token_ids)
+            known_tokens = len(prompts[rid]) + self.output_counts.get(rid, 0)
+            spec_start = max(0, known_tokens - request.num_computed_tokens)
+            drafts = request.token_ids[spec_start:]
+            if drafts:
+                result.scheduled_spec_decode_tokens[str(rid)] = drafts
             if rid not in self.blocks:
                 result.scheduled_new_reqs.append(
                     NewRequestData(
@@ -241,6 +246,7 @@ class OhMyVllmWorker:
             self.prompt_token_ids_map,
             self.sampling_params_map,
         )
+        vllm_output.num_spec_tokens_to_schedule = self._num_speculative_tokens
         output = self._worker.execute_model(vllm_output)
         if rust_output.scheduled and output is None:
             output = self._worker.sample_tokens(None)
@@ -257,6 +263,13 @@ class OhMyVllmWorker:
                 )
             )
         )
+        new_drafts = {}
+        if self._num_speculative_tokens and rust_output.scheduled:
+            draft_output = self._worker.take_draft_token_ids()
+            if draft_output is not None:
+                new_drafts = dict(
+                    zip(draft_output.req_ids, draft_output.draft_token_ids, strict=True)
+                )
         results = []
         for request in rust_output.scheduled:
             rid = request.request_id
@@ -264,7 +277,11 @@ class OhMyVllmWorker:
                 raise RuntimeError(f"Worker omitted scheduled request {rid}")
             tokens = sampled[str(rid)]
             self.adapter.output_counts[rid] += len(tokens)
-            results.append(RequestOutput(rid, tokens, max(0, len(tokens) - 1)))
+            results.append(
+                RequestOutput(
+                    rid, tokens, max(0, len(tokens) - 1), new_drafts.get(str(rid), [])
+                )
+            )
         for rid in rust_output.finished_request_ids:
             self.unregister_request(rid)
         return WorkerOutput(results)

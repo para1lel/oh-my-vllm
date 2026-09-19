@@ -389,3 +389,81 @@ fn reset_prefix_cache_clears_entries() {
         assert_eq!(c.pool().num_cached_entries(), 0);
     }
 }
+
+#[test]
+fn speculative_state_blocks_cross_boundary_reuse_and_free() {
+    let mut kv = HybridCoordinator::new(64, 784, false, 0);
+    kv.set_speculative_blocks(4);
+    let mut req = Req::new(1, 784);
+    kv.allocate_slots(&req, (vec![], vec![]), 0, 784, 0, false)
+        .unwrap();
+    let original = kv.mamba_blocks(1).to_vec();
+    assert_eq!(original.len(), 5);
+    assert!(original.iter().all(|&id| id != NULL_BLOCK_ID));
+    req.num_computed_tokens = 784;
+    req.num_tokens = 785;
+    req.waiting = false;
+    kv.new_step_starts();
+    kv.allocate_slots(&req, (vec![], vec![]), 0, 5, 0, false)
+        .unwrap();
+    assert_eq!(&kv.mamba_blocks(1)[..5], original.as_slice());
+    assert_eq!(kv.mamba_blocks(1).len(), 6);
+    // Reject all four drafts; another step fits in already reserved slots.
+    req.num_computed_tokens = 785;
+    req.num_tokens = 786;
+    kv.new_step_starts();
+    kv.allocate_slots(&req, (vec![], vec![]), 0, 1, 0, false)
+        .unwrap();
+    assert_eq!(kv.mamba_blocks(1).len(), 6);
+    kv.free(1);
+    assert_eq!(kv.pool().num_free_blocks(), 63);
+}
+
+#[test]
+fn speculative_prefix_hit_allocates_private_state_and_draft_slots() {
+    let mut kv = HybridCoordinator::new(64, 784, true, 0);
+    kv.set_speculative_blocks(4);
+    let tokens: Vec<u32> = (0..784).collect();
+    let hashes = kv.compute_block_hashes(&tokens);
+    let req = Req::new(1, 784).with_hashes(hashes.clone());
+    kv.allocate_slots(&req, (vec![], vec![]), 0, 784, 0, false)
+        .unwrap();
+    let checkpoint = kv.mamba_blocks(1)[0];
+    kv.free(1);
+    kv.new_step_starts();
+    let req2 = Req::new(2, 785).with_hashes(hashes);
+    let (fa, mb, hit) = kv.get_computed_blocks(&req2);
+    assert_eq!(hit, 784);
+    assert_eq!(mb, vec![checkpoint]);
+    kv.allocate_slots(&req2, (fa, mb), hit, 1, 0, false)
+        .unwrap();
+    let table = kv.mamba_blocks(2);
+    assert_eq!(table.len(), 6);
+    assert_eq!(table[0], checkpoint);
+    let unique: std::collections::HashSet<_> = table.iter().copied().collect();
+    assert_eq!(unique.len(), 6);
+    kv.free(2);
+    assert_eq!(kv.pool().num_free_blocks(), 63);
+}
+
+#[test]
+fn speculative_slots_migrate_across_large_prefill_chunk() {
+    let mut kv = HybridCoordinator::new(64, 784, false, 0);
+    kv.set_speculative_blocks(4);
+    let mut req = Req::new(1, 784 * 8);
+    kv.allocate_slots(&req, (vec![], vec![]), 0, 784, 0, false)
+        .unwrap();
+    let original = kv.mamba_blocks(1).to_vec();
+    req.num_computed_tokens = 784;
+    req.waiting = false;
+    kv.new_step_starts();
+    kv.allocate_slots(&req, (vec![], vec![]), 0, 784 * 7, 0, false)
+        .unwrap();
+    let migrated = kv.mamba_blocks(1);
+    assert_eq!(migrated.len(), 12);
+    assert!(migrated[1..7].iter().all(|&id| id == NULL_BLOCK_ID));
+    assert_eq!(&migrated[7..11], &original[1..5]);
+    assert_ne!(migrated[11], NULL_BLOCK_ID);
+    kv.free(1);
+    assert_eq!(kv.pool().num_free_blocks(), 63);
+}

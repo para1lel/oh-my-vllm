@@ -27,10 +27,10 @@
 //!   `if self.block_size == hash_block_size: return None`,
 //! - the tail of `FullAttentionManager.cache_blocks`, guarded by the same test.
 //!
-//! Three more branches are dead from configuration rather than block sizes:
-//! `MambaSpec.num_speculative_blocks` defaults to 0 (MTP's draft has no GDN
-//! layers, so no speculative state blocks are reserved); `retention_interval` is
-//! `None`, so `reachable_block_mask` returns `None` and caching is dense; and with
+//! MTP verification reserves one recurrent state slot per draft token, even
+//! though the draft model has no GDN layers (see ADR-003). Ordinary decoding
+//! reserves no speculative slots. `retention_interval` is `None`, so
+//! `reachable_block_mask` returns `None` and caching is dense; and with
 //! no KV connector there are no external computed tokens. Sliding-window,
 //! cross-attention, DCP/PCP and encoder paths do not exist for this model at all.
 //!
@@ -107,6 +107,7 @@ pub struct GroupManager {
     group_id: u32,
     block_size: usize,
     enable_caching: bool,
+    num_speculative_blocks: usize,
     /// Block ids backing each request, in token order. Interior `NULL_BLOCK_ID`
     /// entries are positions whose KV is intentionally absent (Mamba skips every
     /// block but the state checkpoint).
@@ -138,12 +139,17 @@ impl GroupManager {
             group_id,
             block_size,
             enable_caching,
+            num_speculative_blocks: 0,
             req_to_blocks: FxHashMap::default(),
             num_cached_block: FxHashMap::default(),
             allocated_block_reqs: FxHashSet::default(),
             last_state_block_idx: FxHashMap::default(),
             cached_blocks_this_step: FxHashSet::default(),
         }
+    }
+
+    pub fn set_speculative_blocks(&mut self, count: usize) {
+        self.num_speculative_blocks = count;
     }
 
     #[inline]
@@ -251,13 +257,22 @@ impl GroupManager {
             // Lookahead tokens are excluded on purpose: scheduling
             // `k * block_size + num_lookahead` tokens would break the alignment
             // the mode is named for, and MTP's draft has no GDN layers to feed.
-            let num_required = cdiv(num_tokens_main_model, self.block_size);
+            let num_required =
+                cdiv(num_tokens_main_model, self.block_size) + self.num_speculative_blocks;
             let num_new = num_required as isize
                 - new_computed_blocks.len() as isize
                 - num_req_blocks as isize;
             // Only ever one block: the new state checkpoint. Everything before
             // it is null.
-            let num_new = if num_new > 0 { 1 } else { 0 };
+            let num_new = if num_new > 0 {
+                if self.allocated_block_reqs.contains(&request_id) {
+                    1
+                } else {
+                    1 + self.num_speculative_blocks
+                }
+            } else {
+                0
+            };
             return BlocksNeeded::Blocks(num_new + num_evictable(new_computed_blocks, pool));
         }
 
@@ -343,7 +358,8 @@ impl GroupManager {
                 new
             }
             GroupKind::MambaAlign => {
-                let num_required = cdiv(num_tokens_main_model, self.block_size);
+                let num_required =
+                    cdiv(num_tokens_main_model, self.block_size) + self.num_speculative_blocks;
                 let prev_len = self.blocks(request_id).len();
                 if num_required <= prev_len {
                     // Over-allocated in an earlier step; nothing to do.
@@ -354,11 +370,17 @@ impl GroupManager {
                     // Either the state block from the previous step, or the block
                     // a prefix hit landed on. Both become freeable once this
                     // step's state has been copied out of them.
-                    self.last_state_block_idx.insert(request_id, prev_len - 1);
+                    let offset = if self.allocated_block_reqs.contains(&request_id) {
+                        self.num_speculative_blocks
+                    } else {
+                        0
+                    };
+                    self.last_state_block_idx
+                        .insert(request_id, prev_len - 1 - offset);
                 }
 
                 // Every block but the last holds no state.
-                let num_skipped_blocks = num_required - 1;
+                let num_skipped_blocks = num_required - self.num_speculative_blocks - 1;
                 let blocks = self.req_to_blocks.entry(request_id).or_default();
                 if prev_len < num_skipped_blocks {
                     blocks.extend(std::iter::repeat_n(
@@ -366,11 +388,17 @@ impl GroupManager {
                         num_skipped_blocks - prev_len,
                     ));
                 }
+                if self.allocated_block_reqs.contains(&request_id) {
+                    for idx in prev_len - self.num_speculative_blocks..prev_len {
+                        if idx >= num_skipped_blocks {
+                            break;
+                        }
+                        blocks.push(blocks[idx]);
+                        blocks[idx] = NULL_BLOCK_ID;
+                    }
+                }
                 let num_new = num_required - blocks.len();
-                debug_assert_eq!(
-                    num_new, 1,
-                    "align mode adds exactly the one state block per step"
-                );
+                debug_assert!(num_new <= self.num_speculative_blocks + 1);
                 let mut appended = blocks[prev_len..].to_vec();
 
                 let new = pool

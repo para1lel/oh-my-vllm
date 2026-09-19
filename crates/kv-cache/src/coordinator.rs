@@ -82,6 +82,10 @@ impl HybridCoordinator {
         &self.pool
     }
 
+    pub fn set_speculative_blocks(&mut self, count: usize) {
+        self.mamba.set_speculative_blocks(count);
+    }
+
     pub fn block_size(&self) -> usize {
         self.block_size
     }

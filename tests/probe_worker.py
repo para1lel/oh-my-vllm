@@ -7,10 +7,12 @@ It synchronizes and copies small layer inputs to CPU, so never benchmark with it
 
 import json
 import math
+import os
 import runpy
 import sys
 
 import torch
+from oh_my_vllm.worker.model_runner import OhMyVllmWorker
 from vllm.forward_context import get_forward_context
 from vllm.model_executor.layers.mamba.gdn import qwen_gdn_linear_attn as gdn
 from vllm.v1.attention.backends.flashinfer import FlashInferImpl
@@ -80,12 +82,22 @@ def recurrence(q, k, v, g, beta, state, normalize):
 original_fa = FlashInferImpl.forward
 selected_fa = None
 keys, values = [], []
+request_start = 0
+original_execute = OhMyVllmWorker.execute_model
+
+
+def execute(self, output):
+    global request_start
+    if output.scheduled:
+        assert len(output.scheduled) == 1, "probe requires a single request"
+        request_start = output.scheduled[0].num_computed_tokens
+    return original_execute(self, output)
 
 
 def fa_forward(
     self, layer, query, key, value, kv_cache, attn_metadata, output, **kwargs
 ):
-    global selected_fa
+    global selected_fa, keys, values
     if attn_metadata is None:
         return original_fa(
             self, layer, query, key, value, kv_cache, attn_metadata, output, **kwargs
@@ -98,7 +110,10 @@ def fa_forward(
         )
     count = attn_metadata.num_actual_tokens
     q, k, v = map(cpu, (query[:count], key[:count], value[:count]))
-    start = sum(t.shape[0] for t in keys)
+    start = request_start
+    if keys:
+        keys = [torch.cat(keys)[:start]]
+        values = [torch.cat(values)[:start]]
     keys.append(k)
     values.append(v)
     k, v = torch.cat(keys), torch.cat(values)
@@ -111,7 +126,11 @@ def fa_forward(
     result = original_fa(
         self, layer, query, key, value, kv_cache, attn_metadata, output, **kwargs
     )
-    check("gqa_prefill" if count > 1 else "gqa_decode", output[:count], ref)
+    check(
+        "gqa_prefill" if attn_metadata.num_prefills > 0 else "gqa_decode",
+        output[:count],
+        ref,
+    )
     return result
 
 
@@ -168,6 +187,63 @@ def decode(**kwargs):
     return result
 
 
+original_mtp = gdn.ops.fused_gdn_decode_post_conv_mtp
+last_mtp_context = None
+
+
+def mtp(**kwargs):
+    global last_mtp_context
+    context = get_forward_context()
+    if context.attn_metadata is None or context is last_mtp_context:
+        return original_mtp(**kwargs)
+    last_mtp_context = context
+    indices = kwargs["state_indices"]
+    assert indices.shape[0] == 1
+    source = indices[0, int(kwargs["num_accepted_tokens"][0]) - 1]
+    initial = kwargs["state"][source : source + 1].clone()
+    _, heads, value_dim, key_dim = initial.shape
+    count = int(kwargs["cu_seqlens"][1])
+    mixed = kwargs["mixed_qkv"][:count]
+    qk_dim = (mixed.shape[-1] - heads * value_dim) // 2
+    q, k, v = mixed.split([qk_dim, qk_dim, heads * value_dim], dim=-1)
+    q = q.reshape(1, count, -1, key_dim)
+    k = k.reshape_as(q)
+    v = v.reshape(1, count, heads, value_dim)
+    decay = -cpu(kwargs["A_log"]).exp() * torch.nn.functional.softplus(
+        cpu(kwargs["a"][:count]) + cpu(kwargs["dt_bias"])
+    )
+    beta = cpu(kwargs["b"][:count]).sigmoid()
+    ref, _ = recurrence(q, k, v, decay[None], beta[None], initial, True)
+    states = []
+    for end in range(1, count + 1):
+        _, state = recurrence(
+            q[:, :end],
+            k[:, :end],
+            v[:, :end],
+            decay[None, :end],
+            beta[None, :end],
+            initial,
+            True,
+        )
+        states.append(state)
+    # The fused kernel explicitly rounds recurrent output to BF16 before RMSNorm.
+    ref = ref[0].bfloat16().double()
+    ref = ref / (ref.square().mean(-1, keepdim=True) + kwargs["norm_eps"]).sqrt()
+    ref = (
+        ref
+        * cpu(kwargs["norm_weight"])
+        * torch.nn.functional.silu(cpu(kwargs["output_gate"][:count]))
+    )
+    result = original_mtp(**kwargs)
+    check("gdn_mtp_decode", kwargs["out"][:count], ref)
+    for index, state in enumerate(states):
+        check("gdn_mtp_state", kwargs["state"][indices[0, index]], state)
+    return result
+
+
+OhMyVllmWorker.execute_model = execute
+gdn.ops.fused_gdn_decode_post_conv_mtp = mtp
+
 FlashInferImpl.forward = fa_forward
 gdn.fi_chunk_gated_delta_rule = prefill
 gdn.fused_recurrent_gated_delta_rule_packed_decode = decode
@@ -182,6 +258,9 @@ required = {
     "gdn_decode",
     "gdn_decode_state",
 }
+if os.environ.get("OH_MY_VLLM_PROBE_MTP") == "1":
+    required -= {"gdn_decode", "gdn_decode_state"}
+    required |= {"gdn_mtp_decode", "gdn_mtp_state"}
 if not required <= coverage:
     raise RuntimeError(f"Actual-path probe coverage missing: {required - coverage}")
 print(

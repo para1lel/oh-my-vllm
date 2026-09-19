@@ -160,6 +160,16 @@ key/value events; Python uses JSON lines with UTC timestamps. The wrapper sets
 OH_MY_VLLM_RUN_ID; Rust forwards the same ID even without the wrapper. Set
 RUST_LOG=debug and OH_MY_VLLM_LOG_LEVEL=DEBUG for per-step diagnostics.
 Python execute_host_us measures the host call, not CUDA kernel duration.
-The initial instrumentation covers worker RPC and Python execution; scheduler,
-KV, summaries and optional CUDA events will be added alongside their lifecycle
-repairs. Default INFO avoids per-step output. Capture logs outside the repository.
+Per-step events cover scheduler duration/free blocks, worker RPC, Python decode,
+execution and encode/send. INFO batch summaries include steps, cache hits and
+preemption count; BENCH_RESULT adds token throughput and draft statistics.
+GPU kernel timing still requires a separate profiling run (see profiling.md).
+Default INFO avoids per-step output. Capture logs outside the repository.
+
+
+The ignored .vscode/settings.json selects the oh-my-vllm conda interpreter for
+Python analysis and adds ${workspaceFolder}/python to source resolution. Worker
+execution still uses the vllm conda interpreter through with-env.sh.
+
+The benchmark driver owns and cleans engine process groups, records source and
+binary identity, and compares exact cache-hit counts. See testing.md for commands.

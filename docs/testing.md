@@ -1,119 +1,96 @@
 # Testing Guide — oh-my-vllm
 
-## Test layers
+## Environments and CPU checks
 
-| Layer | Location | Command | Env needed |
-|---|---|---|---|
-| Rust unit tests | `crates/*/src/tests.rs` | `cargo test --workspace` | oh-my-vllm conda env |
-| GQA accuracy | `tests/test_gqa_accuracy.py` | `python tests/test_gqa_accuracy.py` | vllm conda env + GPU |
-| Smoke test (E2E) | Manual (CLI) | see below | vllm env + GPU + model weights |
-| Throughput benchmark | `benchmarks/compare_vllm.py` | see below | vllm env + GPU + model weights |
-
-## Rust unit tests
+All commands use scripts/with-env.sh to set PYTHONPATH and CARGO_TARGET_DIR.
+The framework uses conda oh-my-vllm; GPUWorker and baseline use conda vllm.
 
 ```bash
-export PATH="/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin:$PATH"
-export CARGO_TARGET_DIR=/data0/shared/dongwu.chen/oh-my-vllm/target
-cargo test --workspace
+scripts/with-env.sh cargo test --workspace
+scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
+scripts/with-env.sh ruff format python/
+scripts/with-env.sh ruff check python/
+scripts/with-env.sh python -m unittest discover -s tests -p test_runtime_tools.py
+scripts/with-env.sh python -m unittest discover -s tests -p test_benchmark_tools.py
+scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python -m unittest discover -s tests -p test_scheduler_adapter.py
+scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python -m unittest discover -s tests -p test_bridge_logging.py
 ```
 
-**Current status (code-observed, not re-verified this session):**
-- `kv-cache` crate: 47 tests pass (as of commit `ed30ef9`)
-- `scheduler` crate: 8 tests pass (as of commit `4a2e520`)
+Rust tests cover pool/free/hash/prefix accounting, chunked prefill, arrivals,
+recompute preemption, MTP acceptance/rejection, private prefix-hit states,
+speculative slot migration over multiple blocks, and complete release.
+CPU benchmark tests check invalid MTP configuration and descendant cleanup.
 
-These tests cover: block pool LRU operations, chain-hash prefix cache, two-phase
-allocation, scheduler FCFS ordering, chunked prefill, continuous batching,
-preemption by recompute, MTP draft rollback.
+## GPU selection and real text
 
-## GQA accuracy test
-
-Verifies that GPU FP16 attention output is within atol=1e-2, rtol=1e-2 of a
-CPU FP64 reference. Standalone — no model weights, no ZMQ.
+Every single-GPU command waits for any idle B200 using scripts/with-gpu.sh.
+Use a unique socket per run. Do not terminate unrelated GPU processes.
 
 ```bash
-export PATH="/data0/shared/dongwu.chen/conda-envs/vllm/bin:$PATH"
-python tests/test_gqa_accuracy.py
+scripts/with-env.sh cargo build --release -p oh-my-vllm-zmq-worker
+scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/smoke-text.py --socket /tmp/text-check.ipc --max-tokens 64
 ```
 
-**Verified result** (commit `7131da9`, 2026-09-19): 3/3 cases pass.
-- `(1, 40, 8, 128, 128)` max_err=7.68e-4
-- `(2, 16, 4, 64, 64)` max_err=8.37e-4
-- `(1, 40, 8, 512, 128)` max_err=5.21e-4
+Add --num-speculative-tokens 4 for MTP; add --context-repeats 100 to cross a
+784-token boundary. Both ordinary and MTP paths have produced coherent Chinese.
+Fixed output limits deliberately ignore EOS, as does the throughput baseline.
 
-## End-to-end smoke test
+## Actual-path FP64 reference probe
 
-Requires: GPU, model weights at `/data0/shared/Qwen3.8-27B-FP8`, ~3 min to load.
+Add these environment variables to the real-text command (after with-env.sh):
 
 ```bash
-rm -f /tmp/oh-my-vllm.ipc
-export PATH="/data0/shared/dongwu.chen/conda-envs/vllm/bin:$PATH"
-export PYTHONPATH="/data0/shared/dongwu.chen/oh-my-vllm/python:$PYTHONPATH"
-# Use scripts/with-gpu.sh for every single-GPU test
-scripts/with-gpu.sh scripts/with-env.sh ./target/release/oh-my-vllm-zmq-worker \
-    --model /data0/shared/Qwen3.8-27B-FP8 \
-    --num-gpu-blocks 2048 --block-size 784 --max-model-len 8192 \
-    run --tokens 1 2 3 4 5 --max-tokens 16
+env OH_MY_VLLM_ENFORCE_EAGER=1 OH_MY_VLLM_WORKER_PYTHON=/data0/shared/dongwu.chen/oh-my-vllm/tests/probe_worker.py
 ```
 
-**Status:** NOT YET VERIFIED. The historical config fixes are already committed;
-the actual installed GPUWorker API still requires adaptation. See handoff.md.
+For MTP also set OH_MY_VLLM_PROBE_MTP=1 and pass --num-speculative-tokens 4.
+The probe instruments a selected real FlashInfer GQA layer and target GDN
+prefill/packed decode/fused MTP calls. It never substitutes production kernels.
+It checks outputs and recurrent states, including each speculative state.
+Required coverage categories must appear before shutdown can succeed. This is
+single-request, eager diagnostic coverage; never enable it in throughput runs.
 
-## Throughput benchmark (REQ-PERF-001)
+References use actual rounded inputs in CPU FP64. BF16 output checks use
+atol=rtol=0.03. Recurrent state checks require normalized RMS error <=1% and
+maximum absolute error <=2% of the reference peak; both metrics are logged.
+Near-zero elementwise state relative errors are unstable. These checks diagnose
+individual kernel/state paths, not full-model FP8 token equality. The historical
+standalone SDPA test is supplementary and does not establish actual-path coverage.
+
+## Feature combinations and preemption
+
+The Rust bench command accepts --arrival-interval (steps between arrivals),
+--prefix-hit (seed before timed batch), --warmup and --repetitions. Global
+--scheduler-blocks can shrink the Rust pool for deterministic memory pressure
+without changing physical GPU allocation. Verify preemptions >0 in its result;
+a constrained pool alone does not prove that preemption happened.
+
+Examples with 256 physical blocks and max-model-len 8192:
+
+- Ordinary: scheduler-blocks 10, batch-size 2, input-len 2048, output-len 1024.
+- MTP/prefix/arrivals: num-speculative-tokens 4, batch-size 2, input-len 2048,
+  output-len 128, prefix-hit, arrival-interval 3.
+
+Results report exact output counts, cache hits, preemptions, proposed and accepted
+drafts. Feature smoke runs may use warmup 0/repetitions 1; they are not performance
+acceptance measurements.
+
+## Matched performance acceptance
 
 ```bash
-python benchmarks/compare_vllm.py \
-    --model /data0/shared/Qwen3.8-27B-FP8 \
-    --num-gpu-blocks 4096 \
-    --batch-sizes 1 2 4 \
-    --input-len 32768 --output-len 4096
+scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output /tmp/ordinary.json
 ```
 
-**Status:** NOT YET RUN. This is the final Phase 4 gate.
+Repeat with --mode mtp and --mode prefix. Defaults are input32768/output4096,
+1024 physical blocks, one warmup and three measurements. Each engine runs in its
+own process on the same selected GPU with matching input IDs, sampling, cache
+state and model configuration. Prefix seeding occurs outside the timer; both
+engines must report exactly batch_size*32144 cached tokens for the default input.
+MTP uses four drafts and BF16 SSM in both engines (ADR-003), and both must report
+actual drafts. The timer includes request submission through completion.
 
-## Requirements coverage
-
-| Requirement | Test | Status |
-|---|---|---|
-| REQ-ACC-001 GQA accuracy | `tests/test_gqa_accuracy.py` | ✓ verified |
-| REQ-FUNC-001 Chunked prefill | `crates/scheduler/src/tests.rs` | ✓ unit tested |
-| REQ-FUNC-002 Continuous batching | `crates/scheduler/src/tests.rs` | ✓ unit tested |
-| REQ-FUNC-003 Prefix caching | `crates/kv-cache/src/tests/` | ✓ unit tested |
-| REQ-FUNC-004 Preemption | `crates/scheduler/src/tests.rs` | ✓ unit tested |
-| REQ-FUNC-005 MTP spec decode | — | code exists, not E2E verified |
-| REQ-GOAL-001 Single request returns answer | smoke test | **not run** |
-| REQ-PERF-001 >=95% throughput | `benchmarks/compare_vllm.py` | **not run** |
-
-## Change-triggered verification
-
-| Change area | Must run |
-|---|---|
-| `crates/kv-cache/` | `cargo test --workspace` |
-| `crates/scheduler/` | `cargo test --workspace` |
-| `python/oh_my_vllm/worker/` | `ruff check python/` + smoke test |
-| Any | pre-commit hooks (`cargo fmt`, `clippy`, `ruff`) |
-| Performance-affecting | `benchmarks/compare_vllm.py` |
-
-## Runtime foundation tests
-
-`scripts/with-env.sh python -m unittest discover -s tests -p test_runtime_tools.py`
-checks structured timestamps/correlation and GPU selection with mocked nvidia-smi.
-All actual GPU tests must use scripts/with-gpu.sh, including the older examples
-above. The old standalone SDPA GQA test is historical evidence only, not actual
-vLLM-path coverage. Actual GQA/GDN reference tests remain required.
-
-## Actual-path reference probe
-
-Run the vllm conda Python scripts/smoke-text.py through with-gpu.sh and with-env.sh.
-For FP64 checks set OH_MY_VLLM_ENFORCE_EAGER=1 and OH_MY_VLLM_WORKER_PYTHON to
-an absolute tests/probe_worker.py path. This instruments the selected FlashInfer
-FA/GDN prefill and packed recurrent GDN decode calls; it does not substitute
-kernels. It requires all six output/state check categories before successful exit.
-Use --context-repeats 100 to exercise a block-boundary prefill split. This probe
-is single-request only and must never be used in throughput measurements.
-
-References use actual rounded inputs in CPU FP64. Output checks use atol=rtol=0.03
-for BF16. Recurrent state checks require normalized RMS error <=1% and worst
-absolute error <=2% of the reference peak. Relative per-element errors are
-unstable near zero: the initial 0.03 elementwise state threshold rejected 2 of
-786432 coordinates despite small aggregate error. Both state metrics are logged.
-These bounds diagnose state/kernel errors; they are not FP8 full-model equality.
+Results preserve starting HEAD, dirty status/diff hash, binary hash, vLLM version,
+configuration and raw repetitions. A dirty source is never labeled as clean HEAD.
+Timeout cleanup terminates the entire owned engine process group. Median framework
+throughput must reach >=95% in every mode/batch, with additional repetitions when
+variance is material. See handoff.md for current results; no overall pass yet.

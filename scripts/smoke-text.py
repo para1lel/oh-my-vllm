@@ -12,6 +12,7 @@ parser.add_argument("--max-tokens", type=int, default=64)
 parser.add_argument("--prompt", default="请用中文简短介绍北京。")
 parser.add_argument("--socket", required=True)
 parser.add_argument("--context-repeats", type=int, default=0)
+parser.add_argument("--num-speculative-tokens", type=int, default=0)
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 model = "/data0/shared/Qwen3.8-27B-FP8"
@@ -37,6 +38,8 @@ result = subprocess.run(
         "8192",
         "--num-gpu-blocks",
         "128",
+        "--num-speculative-tokens",
+        str(args.num_speculative_tokens),
         "run",
         "--tokens",
         *map(str, tokens),

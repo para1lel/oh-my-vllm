@@ -21,6 +21,7 @@ pub struct InitMsg {
     pub block_size: u32,
     pub tensor_parallel_size: u32,
     pub max_model_len: u32,
+    pub num_speculative_tokens: usize,
 }
 
 #[derive(Debug, Serialize)]

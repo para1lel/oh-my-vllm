@@ -33,6 +33,7 @@ pub struct WorkerConfig {
     pub tensor_parallel_size: u32,
     /// Maximum sequence length in tokens.
     pub max_model_len: u32,
+    pub num_speculative_tokens: usize,
     /// Python executable to use.
     pub python_executable: PathBuf,
     /// Timeout waiting for the worker to become ready after launch.
@@ -48,6 +49,7 @@ impl Default for WorkerConfig {
             block_size: 784,
             tensor_parallel_size: 1,
             max_model_len: 65536,
+            num_speculative_tokens: 0,
             python_executable: std::env::var_os("OH_MY_VLLM_WORKER_PYTHON")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| {
@@ -108,6 +110,7 @@ impl WorkerClient {
             block_size: config.block_size,
             tensor_parallel_size: config.tensor_parallel_size,
             max_model_len: config.max_model_len,
+            num_speculative_tokens: config.num_speculative_tokens,
         });
         let mut delay_ms = 100u64;
         let deadline = std::time::Instant::now() + config.init_timeout;

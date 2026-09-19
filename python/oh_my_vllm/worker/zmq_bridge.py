@@ -216,6 +216,7 @@ def _handle_init(msg: dict) -> OhMyVllmWorker:
         enforce_eager=os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") == "1",
         block_size=784,
         mamba_cache_mode="align",
+        mamba_ssm_cache_dtype="bfloat16" if num_speculative_tokens else "auto",
         num_gpu_blocks_override=num_gpu_blocks,
         max_model_len=msg.get("max_model_len", 65536),
         max_num_seqs=min(32, num_gpu_blocks - 1),
