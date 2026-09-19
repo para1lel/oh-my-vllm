@@ -11,6 +11,7 @@ import datetime
 import hashlib
 import json
 import os
+import shutil
 import signal
 import statistics
 import subprocess
@@ -23,13 +24,46 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def assert_gpu_exclusive(gpu, process_group):
+    """Reject measurements contaminated by non-cooperating GPU clients."""
+    snapshot = subprocess.check_output(
+        ["nvidia-smi", "--query-compute-apps=gpu_uuid,pid", "--format=csv,noheader"],
+        text=True,
+        timeout=10,
+    )
+    for line in snapshot.splitlines():
+        uuid, pid = (part.strip() for part in line.split(",", 1))
+        if uuid != gpu:
+            continue
+        try:
+            group = os.getpgid(int(pid))
+        except ProcessLookupError:
+            continue  # The process exited between the snapshot and lookup.
+        if group != process_group:
+            raise RuntimeError(f"GPU contention on {gpu}: external process {pid}")
+
+
 def run_engine(command, timeout=3600):
     """Own the entire engine process group, including model-worker children."""
     process = subprocess.Popen(
         command, text=True, stdout=subprocess.PIPE, start_new_session=True
     )
     try:
-        stdout, _ = process.communicate(timeout=timeout)
+        deadline = time.monotonic() + timeout
+        gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+        while True:
+            if gpu.startswith("GPU-"):
+                assert_gpu_exclusive(gpu, process.pid)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, timeout)
+            try:
+                stdout, _ = process.communicate(timeout=min(1, remaining))
+                break
+            except subprocess.TimeoutExpired:
+                continue
+        if gpu.startswith("GPU-"):
+            assert_gpu_exclusive(gpu, process.pid)
         if process.returncode:
             raise subprocess.CalledProcessError(process.returncode, command, stdout)
         return stdout
@@ -45,7 +79,7 @@ def run_engine(command, timeout=3600):
         process.stdout.close()
 
 
-def source_identity():
+def source_identity(binary):
     def git(*arguments):
         return subprocess.check_output(["git", *arguments], cwd=ROOT)
 
@@ -53,9 +87,7 @@ def source_identity():
         "git_commit": git("rev-parse", "HEAD").decode().strip(),
         "git_status": git("status", "--porcelain").decode(),
         "git_diff_sha256": hashlib.sha256(git("diff", "HEAD", "--binary")).hexdigest(),
-        "binary_sha256": hashlib.sha256(
-            (ROOT / "target/release/oh-my-vllm-zmq-worker").read_bytes()
-        ).hexdigest(),
+        "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
     }
 
 
@@ -159,9 +191,9 @@ def parse_rows(stdout: str, marker: str):
 
 def compare(args):
     selected_gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "")
-    if not selected_gpu or "," in selected_gpu:
+    if not selected_gpu.startswith("GPU-") or "," in selected_gpu:
         raise RuntimeError(
-            "Run this script through scripts/with-gpu.sh to select one idle GPU"
+            "Run this script through scripts/with-gpu.sh to select one idle GPU UUID"
         )
     if os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") == "1" or os.environ.get(
         "OH_MY_VLLM_WORKER_PYTHON", ""
@@ -169,7 +201,8 @@ def compare(args):
         raise RuntimeError(
             "Disable accuracy probes/eager override for matched benchmarks"
         )
-    identity = source_identity()
+    args.binary = args.binary.resolve()
+    identity = source_identity(args.binary)
     all_results = []
     for batch in args.batch_sizes:
         base_cmd = [
@@ -196,12 +229,19 @@ def compare(args):
             str(args.speculative_tokens),
         ]
         with tempfile.TemporaryDirectory(prefix="oh-my-vllm-bench-") as directory:
+            binary_snapshot = Path(directory) / "worker"
+            shutil.copy2(args.binary, binary_snapshot)
+            if (
+                hashlib.sha256(binary_snapshot.read_bytes()).hexdigest()
+                != identity["binary_sha256"]
+            ):
+                raise RuntimeError("binary changed after identity capture")
             baseline_run = run_engine(base_cmd)
             base_rows = parse_rows(baseline_run, "BASELINE_RESULT ")
             if len(base_rows) != 1:
                 raise RuntimeError(f"missing baseline result: {baseline_run[-2000:]}")
             command = [
-                str(ROOT / "target/release/oh-my-vllm-zmq-worker"),
+                str(binary_snapshot),
                 "--model",
                 args.model,
                 "--socket",
@@ -247,6 +287,7 @@ def compare(args):
         result = {
             "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
             "gpu": selected_gpu,
+            "cpu_affinity": sorted(os.sched_getaffinity(0)),
             "source": identity,
             "vllm_version": base_rows[0]["version"],
             "mode": args.mode,
@@ -282,6 +323,9 @@ def main():
     )
     parser.add_argument("--speculative-tokens", type=int, default=4)
     parser.add_argument("--output")
+    parser.add_argument(
+        "--binary", type=Path, default=ROOT / "target/release/oh-my-vllm-zmq-worker"
+    )
     parser.add_argument("--baseline", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.repetitions < 3 or args.warmup < 1:

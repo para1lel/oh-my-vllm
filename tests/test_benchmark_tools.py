@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location(
@@ -36,6 +37,36 @@ class BenchmarkTests(unittest.TestCase):
             state = Path(f"/proc/{pid}/stat")
             if state.exists():
                 self.assertIn(state.read_text().split(") ")[1][0], ("Z", "X"))
+
+    def test_contention_detection_ignores_other_gpus_and_own_group(self):
+        with (
+            patch.object(
+                compare.subprocess,
+                "check_output",
+                return_value="GPU-own, 11\nGPU-other, 12\n",
+            ),
+            patch.object(compare.os, "getpgid", return_value=77),
+        ):
+            compare.assert_gpu_exclusive("GPU-own", 77)
+        with (
+            patch.object(
+                compare.subprocess, "check_output", return_value="GPU-own, 11\n"
+            ),
+            patch.object(compare.os, "getpgid", return_value=88),
+            self.assertRaisesRegex(RuntimeError, "external process 11"),
+        ):
+            compare.assert_gpu_exclusive("GPU-own", 77)
+
+    def test_numeric_gpu_id_cannot_bypass_contention_monitor(self):
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "benchmarks/compare_vllm.py")],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "CUDA_VISIBLE_DEVICES": "0"},
+            timeout=10,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("idle GPU UUID", result.stderr)
 
     def test_zero_drafts_rejected_before_loading_model(self):
         result = subprocess.run(

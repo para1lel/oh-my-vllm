@@ -94,3 +94,21 @@ configuration and raw repetitions. A dirty source is never labeled as clean HEAD
 Timeout cleanup terminates the entire owned engine process group. Median framework
 throughput must reach >=95% in every mode/batch, with additional repetitions when
 variance is material. See handoff.md for current results; no overall pass yet.
+
+The driver requires a single GPU UUID and polls GPU compute clients throughout
+each engine run. A process outside the owned engine process group invalidates
+the measurement and causes owned-engine cleanup. Other GPU users are never killed.
+This supplements the cooperative lock: unrelated jobs do not honor that lock.
+Polling cannot exclude arbitrarily short interference between samples; investigate
+variance and retain evidence before declaring acceptance.
+
+Use --binary /absolute/path/to/worker for an isolated runtime experiment. The
+actual executable is copied into the private benchmark directory and its hash
+must match the captured identity before either engine starts. Do not modify Python
+worker/vLLM sources during a run. CPU tests cover monitor ownership and rejection
+of numeric GPU IDs, in addition to timeout cleanup and invalid MTP configuration.
+
+For a CPU-affinity experiment, place taskset -c CPU before the benchmark Python
+command, after the environment/GPU wrappers. Both engines inherit the same CPU
+mask, which is recorded as cpu_affinity. Compare complete matching configurations;
+a CPU echo/host-timing improvement alone does not establish target throughput.

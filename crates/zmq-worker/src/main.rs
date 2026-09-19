@@ -64,7 +64,8 @@ struct BenchArgs {
     arrival_interval: usize,
 }
 
-#[tokio::main]
+// The controller has one inference stream; keep IPC wakeups on the same thread.
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(

@@ -173,3 +173,9 @@ execution still uses the vllm conda interpreter through with-env.sh.
 
 The benchmark driver owns and cleans engine process groups, records source and
 binary identity, and compares exact cache-hit counts. See testing.md for commands.
+
+The controller is being evaluated with a current-thread Tokio runtime: scheduling
+and the single RPC stream do not require a CPU worker pool. Use an independent
+cargo --target-dir and benchmark --binary when comparing variants, so a build
+cannot replace an executable used by another run. See handoff.md for measured
+status; a runtime change alone is not evidence of a throughput improvement.

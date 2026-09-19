@@ -93,3 +93,32 @@ no valid profile came from /tmp/oh-my-vllm-profile.log. Init retry currently wai
 until its timeout if a child dies before connecting; improve early child-exit
 reporting when revisiting client lifecycle. Pending GPU commands may finish after
 this note; inspect their logs before restarting any run.
+
+## IPC experiment and monitored measurements
+
+The cProfile/DEBUG run completed: Rust scheduling median1us, RPC median11606us,
+Python execution median10930us. The current-thread Tokio experiment completed
+actual32768->256 inference; corresponding medians were11513us and10937us. These
+are diagnostics on separate GPUs, not acceptance throughput evidence. A CPU echo
+experiment with10ms simulated execution reduced128-step elapsed from1.355s to
+1.305s when controller and responder shared a CPU. A real paired ordinary bs1
+experiment now uses the same inherited CPU8 affinity for both engines.
+
+Benchmark changes now reject numeric GPU IDs, detect external same-GPU clients
+by process group during execution, support --binary, and execute a hash-checked
+private binary copy. Independent review passed after closing GPU-ID bypass and
+binary replacement windows. Four CPU benchmark tests,62 Rust tests, clippy and
+ruff passed; current-thread real diagnostic output completed correctly.
+
+The unmonitored MTP run encountered an external GPU user after startup; its
+bs1 result is invalid and its next owned engine was stopped. Do not use
+/tmp/oh-my-vllm-mtp-long.json for acceptance. Replacement monitoring-enabled
+/tmp/oh-my-vllm-mtp-monitored.json has bs1 ratio94.18% (old multi-thread binary),
+so it fails the95% gate. bs2 completed at96.2063%; bs4 is pending. Current-thread
+ordinary bs1/2 pairing is /tmp/oh-my-vllm-current-thread-pair.{log,json};
+bs1 median ratio95.0964% is a preliminary pass with a slow first repetition,
+so repeat before final acceptance.
+CPU8 ordinary bs1 pairing is /tmp/oh-my-vllm-pinned-ordinary-bs1.{log,json}.
+Both variants live in /tmp/oh-my-vllm-current-thread-target/release/ to avoid
+replacing target/release while another measurement uses it. Record and compare
+actual binary hashes, not just source HEAD. Overall acceptance remains incomplete.
