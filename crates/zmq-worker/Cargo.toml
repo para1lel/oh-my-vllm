@@ -9,10 +9,14 @@ name = "oh-my-vllm-zmq-worker"
 path = "src/main.rs"
 
 [dependencies]
+anyhow.workspace = true
+clap.workspace = true
+oh-my-vllm-kv-cache.workspace = true
 oh-my-vllm-scheduler.workspace = true
 rmp-serde.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+tracing-subscriber.workspace = true
 zeromq.workspace = true
