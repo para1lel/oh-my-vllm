@@ -71,3 +71,25 @@ profile and repair ordinary bs1/2
 shortfall; run all ordinary/MTP/prefix batch1/2/4 matched acceptance cases with
 reproducible artifacts and investigate material variance. GPU kernel timing is
 not covered by host-duration logs. Update this handoff with measured outcomes.
+
+## GPU availability interruption (12:09 UTC)
+
+Feature milestone committed as b2e3a11 after final independent review; all hooks
+passed. Updated prefix paired smoke failed during framework initialization:
+an unrelated job occupied the selected GPU between the two engines, leaving
+156.1GiB free versus the worker's requested164.09GiB. This is not a cache
+correctness failure or a valid throughput measurement. All eight B200s had
+unrelated compute processes at that observation. No unrelated process was terminated.
+
+The waiting scripts acquired idle cards again around12:10UTC:
+- Prefix long batch1/2/4 pair: /tmp/oh-my-vllm-prefix-long.log and eventual .json.
+- MTP long batch1/2/4 pair: /tmp/oh-my-vllm-mtp-long.log and eventual .json.
+- Ordinary execution cProfile/DEBUG diagnostic: /tmp/oh-my-vllm-profile-b.log,
+  eventual /tmp/oh-my-vllm-execute-profile.pstats (never commit profiling data).
+
+The first temporary profiling wrapper rejected the interpreter's -m arguments
+before connecting. Its owned Rust driver was terminated and the wrapper fixed;
+no valid profile came from /tmp/oh-my-vllm-profile.log. Init retry currently waits
+until its timeout if a child dies before connecting; improve early child-exit
+reporting when revisiting client lifecycle. Pending GPU commands may finish after
+this note; inspect their logs before restarting any run.
