@@ -1,0 +1,31 @@
+[workspace]
+members = [
+    "crates/kv-cache",
+    "crates/scheduler",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+# Keep versions aligned with vLLM's rust/Cargo.toml so that vendored crates
+# (engine-core-client, tokenizer, chat) can be dropped in without a resolver
+# conflict later.
+rustc-hash = "2.1.1"
+sha2 = "0.10.9"
+thiserror = "2.0.17"
+tracing = "0.1.41"
+
+oh-my-vllm-kv-cache = { path = "crates/kv-cache" }
+
+[profile.release]
+# The scheduler + KV cache are latency-critical and small enough that whole-program
+# optimization is cheap; we care about per-step CPU time, not build time.
+lto = "fat"
+codegen-units = 1
+
+[profile.bench]
+inherits = "release"

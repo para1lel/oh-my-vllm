@@ -1,0 +1,41 @@
+# Rust build output. Lives inside the repo because the root disk is nearly full;
+# CARGO_TARGET_DIR points here.
+/target/
+**/*.rs.bk
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Compiled extensions and model artifacts must never be committed.
+*.so
+*.pyd
+*.safetensors
+*.bin
+*.pt
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Profiling output
+perf.data*
+flamegraph.svg
+*.nsys-rep
+*.sqlite
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Benchmark scratch. Results we want to keep are committed under
+# bench/baseline/ explicitly; everything else under bench/ is transient.
+bench/scratch/

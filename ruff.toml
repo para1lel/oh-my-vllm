@@ -1,0 +1,18 @@
+# Python lint/format settings, shared by the pre-commit hook and manual runs.
+# Matches vLLM's own ruff setup so code copied from there needs no reformatting.
+line-length = 88
+target-version = "py312"
+
+[lint]
+select = [
+	"E", # pycodestyle errors
+	"F", # pyflakes
+	"I", # import sorting
+	"UP", # pyupgrade
+	"B", # bugbear
+	"SIM", # simplify
+	"RUF",
+]
+
+[format]
+docstring-code-format = true
