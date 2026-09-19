@@ -76,7 +76,9 @@ impl WorkerClient {
             .spawn()?;
         info!("Python worker launched (pid {})", child.id());
 
-        // Send the init message.
+        // Send the init message.  The Python process needs a moment to import
+        // and connect its DEALER socket before we can deliver the first message,
+        // so retry with exponential backoff until the send succeeds.
         let init = RustMessage::Init(InitMsg {
             model_path: config.model_path.to_string_lossy().into_owned(),
             num_gpu_blocks: config.num_gpu_blocks,
@@ -84,7 +86,21 @@ impl WorkerClient {
             tensor_parallel_size: config.tensor_parallel_size,
             max_model_len: config.max_model_len,
         });
-        Self::send_raw(&mut sock, &init).await?;
+        let mut delay_ms = 100u64;
+        let deadline = std::time::Instant::now() + config.init_timeout;
+        loop {
+            match Self::send_raw(&mut sock, &init).await {
+                Ok(()) => break,
+                Err(e) => {
+                    if std::time::Instant::now() >= deadline {
+                        return Err(e);
+                    }
+                    warn!("Init send failed ({e}), retrying in {delay_ms}ms…");
+                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                    delay_ms = (delay_ms * 2).min(2000);
+                }
+            }
+        }
 
         // Wait for `ready`.
         let ready_reply = timeout(config.init_timeout, Self::recv_raw(&mut sock))

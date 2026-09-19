@@ -208,19 +208,21 @@ def _handle_init(msg: dict) -> OhMyVllmWorker:
     cache_config = CacheConfig(
         block_size=block_size,
         gpu_memory_utilization=0.90,
-        swap_space=0,
         cache_dtype="auto",
         num_gpu_blocks_override=num_gpu_blocks,
         enable_prefix_caching=True,
+        mamba_cache_mode="align",
     )
     parallel_config = ParallelConfig(
         pipeline_parallel_size=1,
         tensor_parallel_size=tp_size,
     )
     scheduler_config = SchedulerConfig(
-        max_num_batched_tokens=32768,
-        max_num_seqs=256,
         max_model_len=max_model_len,
+        is_encoder_decoder=False,
+        max_num_seqs=256,
+        max_num_batched_tokens=32768,
+        enable_chunked_prefill=True,
     )
     vllm_config = VllmConfig(
         model_config=model_config,

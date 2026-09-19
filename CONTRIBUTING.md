@@ -1,0 +1,83 @@
+# Contributing to oh-my-vllm
+
+## Commit conventions
+
+Every commit message must follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<scope>): <short description>
+
+[optional body]
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+```
+
+The attribution line is required on every commit made with AI assistance. Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`. Scope matches the crate or module: `kv-cache`, `scheduler`, `zmq-worker`, `zmq-bridge`, `spec-decode`, `bench`, `docs`.
+
+Examples:
+```
+feat(scheduler): add preemption by recompute
+
+fix(zmq-bridge): remove swap_space from CacheConfig, add mamba_cache_mode
+
+docs(handoff): add full engineering handoff documentation suite
+```
+
+## Before committing
+
+Stage `Cargo.lock` alongside any Rust changes to prevent the pre-commit hook from failing with a stash conflict:
+
+```bash
+git add Cargo.lock <your other changed files>
+```
+
+The pre-commit hooks run automatically:
+- `cargo fmt --all` and `cargo clippy --all-targets -- -D warnings`
+- `cargo test --all` (all 55 unit tests must pass)
+- `ruff format` and `ruff check --fix` on `python/`
+- `scripts/fix_whitespace.py`
+
+If a hook fails, fix the reported issue and re-stage. Do not use `--no-verify`.
+
+## Code standards
+
+**Rust:** follow `rustfmt` defaults (enforced by hook). No `#[allow(dead_code)]` or `#[allow(unused)]` without a comment explaining why the item must be kept. All `unsafe` blocks must have a `// Safety:` comment stating the invariant being upheld.
+
+**Python:** `ruff` enforces formatting and linting (PEP 8 + selected rules). No bare `except:`. Type hints on all public function signatures.
+
+## Definition of done
+
+A task is done when:
+1. The code change is committed and the pre-commit hooks pass.
+2. Affected tests pass (Rust unit tests for scheduler/kv-cache changes; `test_gqa_accuracy.py` for attention changes).
+3. The end-to-end smoke test passes if the change touches `zmq_bridge.py`, `model_runner.py`, or `client.rs`.
+4. `docs/plan.md` and `docs/handoff.md` are updated to reflect the new task status.
+
+## Adding a new feature
+
+1. Add or update the relevant `REQ-*` entry in `docs/requirements.md`.
+2. Write the Rust or Python code.
+3. Add unit tests (Rust: `#[cfg(test)]` module in the same file; Python: `tests/` directory).
+4. Update `docs/testing.md` with the new test location and expected result.
+5. Commit with a `feat(...)` message following the convention above.
+
+## Running tests manually
+
+```bash
+# Rust unit tests (oh-my-vllm conda env)
+export PATH="/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin:$PATH"
+cargo test --workspace
+
+# GQA accuracy test (vllm conda env, GPU)
+export PATH="/data0/shared/dongwu.chen/conda-envs/vllm/bin:$PATH"
+python tests/test_gqa_accuracy.py
+
+# End-to-end smoke test (see docs/development.md for the full command)
+```
+
+## What not to do
+
+- Do not add swap-based preemption, multi-GPU, HTTP/gRPC serving, LoRA, or multimodal inputs — these are explicitly out of scope (REQ-OUT-SCOPE-001). Open a discussion first if scope needs to change.
+- Do not commit secrets, tokens, `.env` values, or production credentials.
+- Do not force-push to any branch without explicit confirmation from the project owner.
+- Do not upgrade the `zeromq` Rust crate without checking that `DealerSocket` and `ipc-transport` still work correctly — see `docs/decisions/ADR-001-zmq-socket-type.md`.
