@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "oh-my-vllm"
+version = "0.1.0"
+description = "Rust-accelerated inference framework for hybrid attention/Mamba models"
+requires-python = ">=3.12"
+dependencies = [
+    "pyzmq==26.2.1",
+    "msgpack==1.1.0",
+    "torch>=2.6.0",
+    "numpy>=1.26.0",
+]
+
+[project.optional-dependencies]
+vllm = [
+    # vllm is installed separately from the monorepo; reference it as a path
+    # dependency when running from the repo or as a wheel in CI.
+    # pip install -e /data0/shared/dongwu.chen/vllm
+]
+dev = [
+    "pytest==8.3.5",
+    "pytest-asyncio==0.25.3",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["oh_my_vllm*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
