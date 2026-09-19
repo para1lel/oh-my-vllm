@@ -194,6 +194,7 @@ def _handle_init(msg: dict) -> OhMyVllmWorker:
     block_size: int = msg.get("block_size", 784)
     tp_size: int = msg.get("tensor_parallel_size", 1)
     max_model_len: int = msg.get("max_model_len", 65536)
+    num_speculative_tokens: int = msg.get("num_speculative_tokens", 0)
 
     model_config = ModelConfig(
         model=model_path,
@@ -230,7 +231,22 @@ def _handle_init(msg: dict) -> OhMyVllmWorker:
         load_config=LoadConfig(load_format="auto"),
     )
 
-    worker = OhMyVllmWorker(vllm_config)
+    if num_speculative_tokens > 0:
+        from oh_my_vllm.worker.spec_decode import build_speculative_config
+
+        vllm_config = VllmConfig(
+            model_config=model_config,
+            cache_config=cache_config,
+            parallel_config=parallel_config,
+            scheduler_config=scheduler_config,
+            device_config=DeviceConfig(device="cuda"),
+            load_config=LoadConfig(load_format="auto"),
+            speculative_config=build_speculative_config(
+                model_path, num_speculative_tokens
+            ),
+        )
+
+    worker = OhMyVllmWorker(vllm_config, num_speculative_tokens=num_speculative_tokens)
     worker.init_device()
     worker.load_model()
     worker.initialize_cache(num_gpu_blocks)

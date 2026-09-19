@@ -171,6 +171,7 @@ class OhMyVllmWorker:
         vllm_config: VllmConfig,
         sampling_params_map: dict | None = None,
         prompt_token_ids_map: dict | None = None,
+        num_speculative_tokens: int = 0,
     ) -> None:
         from vllm.v1.worker.gpu_worker import GPUWorker
 
@@ -180,6 +181,8 @@ class OhMyVllmWorker:
         # Mutable maps updated by the Rust side as requests arrive / finish.
         self.sampling_params_map: dict = sampling_params_map or {}
         self.prompt_token_ids_map: dict = prompt_token_ids_map or {}
+        # 0 means MTP spec decode is disabled.
+        self._num_speculative_tokens = num_speculative_tokens
 
     def init_device(self) -> None:
         self._worker.init_device()
@@ -227,17 +230,32 @@ class OhMyVllmWorker:
         if model_runner_output is None:
             return WorkerOutput(outputs=[])
 
-        outputs: list[RequestOutput] = []
-        for req_id_str, sampled_token_ids in zip(
-            vllm_out.num_scheduled_tokens.keys(),
-            model_runner_output.sampled_token_ids or [],
-            strict=False,
-        ):
-            req_id = int(req_id_str)
-            next_token = sampled_token_ids[0] if sampled_token_ids else 0
-            outputs.append(
-                RequestOutput(request_id=req_id, next_token_id=int(next_token))
-            )
+        req_ids = list(vllm_out.num_scheduled_tokens.keys())
+        raw_sampled: list[list[int]] = model_runner_output.sampled_token_ids or []
+
+        if self._num_speculative_tokens > 0:
+            from oh_my_vllm.worker.spec_decode import parse_mtp_output
+
+            parsed = parse_mtp_output(raw_sampled, self._num_speculative_tokens)
+            outputs: list[RequestOutput] = [
+                RequestOutput(
+                    request_id=int(req_id),
+                    next_token_id=next_tok,
+                    num_accepted_draft_tokens=num_accepted,
+                    new_draft_token_ids=new_drafts,
+                )
+                for req_id, (next_tok, num_accepted, new_drafts) in zip(
+                    req_ids, parsed, strict=False
+                )
+            ]
+        else:
+            outputs = [
+                RequestOutput(
+                    request_id=int(req_id),
+                    next_token_id=int(toks[0]) if toks else 0,
+                )
+                for req_id, toks in zip(req_ids, raw_sampled, strict=False)
+            ]
 
         # Clean up finished requests from our local maps.
         for rid in rust_output.finished_request_ids:
