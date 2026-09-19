@@ -13,7 +13,7 @@ Build a Rust-first inference framework for Qwen3.5-27B-FP8 on a single B200 GPU
 that reaches at least 95% of vLLM EngineCore throughput on the benchmark workloads
 below. Rust owns the scheduler and KV cache; Python wraps vLLM's `GPUWorker`.
 
-**Acceptance:** `benchmarks/compare_vllm.py` prints ✓ for every workload row.
+**Acceptance:** `benchmarks/compare_vllm.py` records passed=true for every required mode/workload row.
 
 ---
 
@@ -63,7 +63,7 @@ matching vLLM modes. Identical token inputs, fixed output counts, sampling,
 execution settings, memory budgets and timing boundaries are required. Exclude
 loading, compilation and warmup; include scheduling and transport. Report at
 least three measurements and their median, rerunning if variance is material.
-Faster than 105% is a pass. No performance result has yet been verified.
+Faster than 105% is a pass. Full performance acceptance remains incomplete; measured rows are tracked in handoff.md.
 
 ---
 
@@ -72,8 +72,8 @@ Faster than 105% is a pass. No performance result has yet been verified.
 **Status:** user-confirmed; **implemented** (code-observed)
 
 Long prompts are processed in chunks bounded by `max_num_batched_tokens=32768`.
-This is a natural consequence of `to_schedule = remaining.min(token_budget)` in
-`crates/scheduler/src/lib.rs`; no dedicated branch is required.
+The scheduler applies the token budget and an explicit aligned_prefill split to
+materialize Mamba checkpoints at block boundaries.
 
 ---
 
@@ -101,7 +101,7 @@ Coordinated across both KV groups. See `crates/kv-cache/src/`.
 
 When the block pool is exhausted during scheduling, the last-admitted running
 request is evicted back to the waiting queue with `num_computed_tokens=0`.
-See `crates/scheduler/src/lib.rs:160-172`.
+See the schedule/update lifecycle in `crates/scheduler/src/lib.rs`.
 
 **Explicitly deferred:** swap-based preemption (CPU KV offload). Not planned for
 the current scope because it requires Python-side CPU tensor management.
@@ -110,14 +110,13 @@ the current scope because it requires Python-side CPU tensor management.
 
 ## REQ-FUNC-005 — MTP speculative decoding
 
-**Status:** user-confirmed; **implemented but not end-to-end verified**
+**Status:** user-confirmed; implemented and exercised end-to-end.
 
-Activates via `SpeculativeConfig` passed to `VllmConfig` when
-`num_speculative_tokens > 0`. Uses vLLM's `Step3p5MTPProposer` internally.
-`parse_mtp_output` in `python/oh_my_vllm/worker/spec_decode.py` extracts accepted
-draft counts from `sampled_token_ids`. Rust scheduler handles rollback.
-
-**Not yet verified:** MTP path has not been exercised end-to-end against the model.
+EngineArgs enables MTP when num_speculative_tokens>0. The actual Worker returns
+all sampled/accepted output tokens and next drafts via take_draft_token_ids.
+Rust schedules drafts, reserves target states, and rolls back scheduled rejections.
+ADR003 records BF16 SSM to retain block784. Coherent MTP text, actual-path FP64
+and feature combinations have passed; full MTP performance acceptance is pending.
 
 ---
 

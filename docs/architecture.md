@@ -50,7 +50,7 @@ Python process (oh_my_vllm.worker.zmq_bridge)
 
 1. `Scheduler.schedule()` → `SchedulerOutput` (scheduled requests, block tables)
 2. `WorkerClient.execute_one_step()` → msgpack `ExecuteMsg` over ZMQ
-3. Python decodes, calls `GPUWorker.execute_model(VllmSchedulerOutput)`
+3. Python decodes, calls `Worker.execute_model`, then `sample_tokens` if needed
 4. Python encodes `ExecuteResultMsg` with per-request next tokens
 5. Rust decodes, calls `Scheduler.update(WorkerOutput)`
 6. Finished requests freed; MTP draft tokens rolled back if rejected
@@ -74,7 +74,7 @@ Python process (oh_my_vllm.worker.zmq_bridge)
 
 These are not configurable for the current target model:
 
-- `block_size = 784` — used throughout the KV cache and asserted at construction
+- `block_size = 784` — enforced at production CLI/worker boundaries; generic unit tests use smaller blocks
 - Mamba group uses `mamba_cache_mode="align"`: running/checkpoint state plus
   temporary protected previous state and K speculative state slots when MTP is enabled.
   Slots migrate across chunk boundaries; null placeholders preserve logical positions.
@@ -111,7 +111,7 @@ None outstanding at handoff time.
 
 ## Installed GPUWorker adaptation (2026-09-19)
 
-ADR-002 supersedes the old API names and assumed physical group ordering above.
+ADR-002 records the installed API and physical group mapping.
 The adapter uses Worker, CachedRequestData, execute_model then sample_tokens,
 and preserves request IDs and every returned token. Rust sends completion-only
 steps. Logical FA/Mamba tables map into the worker's actual three Mamba groups

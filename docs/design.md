@@ -32,6 +32,7 @@ All messages are msgpack dicts with a `"type"` key.
  "prompt_token_ids": list[int]}
 
 {"type": "execute",
+ "step_id": int,
  "scheduled": [
    {"request_id": int,
     "token_ids": list[int],
@@ -50,14 +51,14 @@ All messages are msgpack dicts with a `"type"` key.
 **Python → Rust:**
 
 ```
-{"type": "ready"}
+{"type": "ready", "logical_num_blocks": int}
 
 {"type": "execute_result",
  "outputs": [
    {"request_id": int,
-    "next_token_id": int,
+    "token_ids": list[int],  # empty prefill, one normal token, or accepted MTP outputs
     "num_accepted_draft_tokens": int,  # MTP: accepted draft count
-    "new_draft_token_ids": list[int]}  # always [] (drafts from vLLM's MTP head)
+    "new_draft_token_ids": list[int]}  # actual next drafts from Worker.take_draft_token_ids()
  ]}
 
 {"type": "error", "message": str}
@@ -72,13 +73,15 @@ Qwen3.5-27B has two attention groups requiring separate block tables:
 - **Group 0 (full attention):** 16 layers, standard block layout,
   `block_size=784` tokens per block. Prefix cache enabled.
 - **Group 1 (GatedDeltaNet / Mamba):** 48 layers in `mamba_cache_mode="align"`.
-  At most one live block per request (the checkpoint after the last processed
-  token). Prefix cache uses the same chain hash, but only the most recent
-  checkpoint is retained.
+  Running/checkpoint state, a temporarily protected previous state and K
+  speculative state slots in MTP mode. Null placeholders preserve block positions.
+  Cached checkpoints may outlive requests until the shared pool evicts them.
 
 Both groups draw from a single shared `BlockPool`. This means a request that
 holds many full-attention blocks and a Mamba checkpoint all compete for the same
-physical pool of GPU memory regions.
+logical pool. Physical groups share GPU tensors and require distinct addresses: Python
+uses stride=max(group count per kind), mapping logical b to b*stride+kind offset
+(null stays0). Ready exposes floor(physical capacity/stride); see ADR002.
 
 ### BlockPool
 
@@ -91,8 +94,9 @@ matches vLLM's `KVCacheBlock` design.
 ### Prefix cache
 
 Chain-hash: each block's hash is `SHA-256(parent_hash || token_ids || extra_keys)[0..8]`
-truncated to 64 bits. The chain structure means a cache hit on block N implies
-hits on blocks 0..N-1, which the allocator relies on.
+truncated to 64 bits. Each hash depends on all preceding token content; it does not guarantee that
+earlier blocks are still resident. The FA finder requires a contiguous resident
+prefix, which is then reconciled with an available Mamba checkpoint.
 
 The coordinator's `find_longest_cache_hit` returns the longest consistent prefix
 hit across both groups. For the `is_simple_hybrid=True` case (Qwen3.5):
@@ -106,11 +110,11 @@ double-counting blocks that move from the prefix cache into the free queue:
 
 1. `remove_skipped_blocks` — free Mamba blocks no longer needed for the current
    step (the one two steps back in align mode).
-2. `get_num_blocks_to_allocate` — count needed blocks for each group, touching
-   (de-queuing) prefix-cache blocks that will be reused.
+2. `get_num_blocks_to_allocate` — count capacity with read-only pool access.
 3. Check pool availability including watermark. Return `None` if insufficient —
    this is the preemption signal.
-4. `add_local_computed_blocks` for all groups before any new allocations.
+4. `add_local_computed_blocks` touches/dequeues all reused cached blocks before
+   any group allocates new blocks.
 5. `allocate_new_blocks` for each group.
 6. `cache_blocks` — register newly-full blocks in the prefix cache.
 
@@ -125,19 +129,23 @@ per step:
 2. **Waiting queue** — admit new requests up to `max_num_seqs` and
    `max_num_batched_tokens`. Per-step token budget comes from
    `max_num_batched_tokens`; each request takes `min(remaining, budget)` tokens,
-   giving chunked prefill naturally.
+   followed by explicit Mamba-aligned prefill splitting so checkpoints are
+   materialized at reusable boundaries.
 
 Preemption is by recompute only (no CPU swap). The last-admitted running request
 is the first evicted.
 
 ## MTP speculative decoding
 
-When `num_speculative_tokens > 0`, vLLM's `SpeculativeConfig` is passed to
-`VllmConfig`, which activates `Step3p5MTPProposer` internally. The Python
-worker's `execute_model` receives an extended `sampled_token_ids` list where
-each entry has length between 1 (all drafts rejected) and
-`num_speculative_tokens + 1` (all accepted + bonus token). `parse_mtp_output`
-extracts `(next_token_id, num_accepted, [])` per request.
+When num_speculative_tokens>0, EngineArgs creates the MTP configuration. Python
+sets the scheduled draft tokens and num_spec_tokens_to_schedule, calls Worker
+execute_model/sample_tokens, then take_draft_token_ids. Result IDs are matched
+by request ID. Intermediate prefills return empty outputs; accepted MTP outputs
+remain lists and no accepted token is collapsed into a single next token.
 
-The Rust scheduler tracks `num_accepted_draft_tokens` from the worker output and
-rolls back `num_computed_tokens` for rejected drafts in `Scheduler::update`.
+Rust reserves K target recurrent-state slots, migrates them after large chunks,
+and rolls back only scheduled rejected drafts. Prefix-hit requests are new to
+the worker; resumed requests replace tables, ordinary running updates append
+suffixes. Finished IDs are flushed even when no model tokens remain scheduled.
+BF16 SSM in MTP mode preserves block784 and is matched in the baseline (ADR003).
+Legacy spec_decode.py helpers are not used by this execution path.

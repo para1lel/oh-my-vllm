@@ -1,87 +1,34 @@
-# Implementation Plan — oh-my-vllm
+# Implementation plan
 
-_Phases 1–2 complete. Phase 3 mostly complete. Phase 4 in progress. Phase 5 docs done._
+## Completed and saved
 
----
+1. Environment/documentation foundation, idle GPU selection and timestamped logs
+   (4444ab1).
+2. Actual installed GPUWorker adapter, correct physical hybrid mapping, coherent
+   Chinese and actual-path GQA/GDN FP64 checks (ca65aba, ADR002).
+3. Actual MTP drafts/state lifecycle, prefix/arrival/preemption combinations,
+   MTP cross-block FP64 checks and matched benchmark lifecycle (b2e3a11, ADR003).
+4. Controller thread experiment and benchmark interference/identity safeguards
+   (914de33).
 
-## Phase 1 — Minimal viable prototype ✓
+These milestones passed independent review and required checks. Verification
+counts and individual run outcomes are in handoff.md, rather than duplicated here.
 
-**Status:** complete (commits `7b0fbbb`, `ed30ef9`, `4a2e520`, `60b8e81`)
+## In progress
 
-| TASK | Description | Status |
-|---|---|---|
-| TASK-1-01 | Rust workspace + crate structure | ✓ done |
-| TASK-1-02 | kv-cache crate: BlockPool, chain-hash, HybridCoordinator | ✓ done, 47 tests |
-| TASK-1-03 | scheduler crate: FCFS, chunked prefill, continuous batching | ✓ done, 8 tests |
-| TASK-1-04 | Python OhMyVllmWorker wrapper around vllm GPUWorker | ✓ done |
-| TASK-1-05 | ZMQ bridge (Python DEALER server) | ✓ done |
+- Complete real-text prefix-hit validation and keep all current documentation
+  aligned with AGENTS.md and production code.
+- Measure and repair remaining performance gaps. Target batch1/2/4,
+  input32768/output4096, ordinary/MTP/prefix, at least95% of matched vLLM.
+- Investigate RPC wakeup overhead and CPU affinity with matching baseline settings.
+- Rerun cases with material variance or external GPU interference; retain actual
+  configuration/source/binary identity with acceptance artifacts.
 
----
+Whole-project performance acceptance has not passed. Partial passing rows do not
+complete this phase. Each further milestone needs review, fixes, checks and commit.
 
-## Phase 2 — KV cache + continuous batching ✓
+## Deferred scope
 
-**Status:** complete, included in Phase 1 milestones above
-
-Prefix cache reconciliation for the Qwen3.5 hybrid (is_simple_hybrid=True),
-two-phase block allocation (vLLM issue #33775 ordering), watermark enforcement.
-
----
-
-## Phase 3 — Preemption + MTP ✓ (code complete, E2E unverified)
-
-**Status:** code complete; end-to-end not verified
-
-| TASK | Description | Status |
-|---|---|---|
-| TASK-3-01 | Preemption by recompute in Rust scheduler | ✓ done (`f60bbc5`) |
-| TASK-3-02 | MTP spec decode Python helpers | ✓ done (`658e78c`) |
-| TASK-3-03 | Swap-based preemption (CPU offload) | **explicitly deferred** (REQ-OUT-SCOPE-001) |
-
----
-
-## Phase 4 — Performance alignment ✓/⏳
-
-**Status:** partially complete
-
-| TASK | Description | Status |
-|---|---|---|
-| TASK-4-01 | GQA accuracy test | ✓ verified (`7131da9`) |
-| TASK-4-02 | Release binary builds clean | ✓ verified |
-| TASK-E2E-001 | End-to-end smoke test | ⏳ fixes on disk, not committed or verified |
-| TASK-BENCH-001 | >=95% throughput benchmark vs vLLM | ⏳ not started |
-
----
-
-## Phase 5 — Docs + CI
-
-**Status:** docs complete; CI not implemented
-
-| TASK | Description | Status |
-|---|---|---|
-| TASK-5-01 | README.md | ✓ done (`0301c28`) |
-| TASK-5-02 | docs/design.md, docs/profiling.md | ✓ done (`0301c28`) |
-| TASK-5-03 | benchmarks/compare_vllm.py | ✓ done (`0301c28`) |
-| TASK-5-04 | AGENTS.md, CLAUDE.md, CONTRIBUTING.md, docs/ suite | ✓ done (this commit) |
-| TASK-5-05 | CI (GitHub Actions or similar) | **not started** — low priority until E2E verified |
-
----
-
-## Scope boundary
-
-Out of scope for all phases (REQ-OUT-SCOPE-001):
-- Swap-based preemption
-- Multi-GPU
-- HTTP/gRPC server
-- LoRA, multimodal
-
-These must not be added without explicit user confirmation.
-
-## Takeover milestones (2026-09-19)
-
-Environment/logging foundation is under independent review. Next: actual-path
-accuracy and E2E, full feature/combination testing, then fair performance
-acceptance. Each milestone requires sub-agent review and fixes before commit.
-
-GPUWorker adapter sub-milestone reviewed and verified: coherent real text plus
-actual-path FP64 probes for short and cross-block inputs. Long workloads and
-full feature/performance acceptance remain open.
+CPU KV swap, multiple GPUs, HTTP/gRPC serving, LoRA, multimodal execution and
+production deployment remain outside the current task. CI is not implemented;
+local pre-commit checks are required. See requirements.md for scope authority.

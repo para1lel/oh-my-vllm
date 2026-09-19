@@ -1,6 +1,6 @@
 //! Async client handle for the Python model worker.
 //!
-//! `WorkerClient` owns the ZMQ PAIR socket and the Python child process.
+//! `WorkerClient` owns the ZMQ DEALER socket and the Python child process.
 //! The scheduler calls `execute_one_step` once per inference step.
 
 use std::path::PathBuf;
@@ -89,7 +89,7 @@ impl WorkerClient {
         info!("ZMQ DEALER socket bound at {addr}");
 
         // Fork the Python worker process.
-        let child = ManagedChild(
+        let mut child = ManagedChild(
             Command::new(&config.python_executable)
                 .args(["-m", "oh_my_vllm.worker.zmq_bridge", "--socket", &addr])
                 .env(
@@ -115,6 +115,9 @@ impl WorkerClient {
         let mut delay_ms = 100u64;
         let deadline = std::time::Instant::now() + config.init_timeout;
         loop {
+            if child.0.try_wait()?.is_some() {
+                return Err(Error::WorkerDied);
+            }
             match Self::send_raw(&mut sock, &init).await {
                 Ok(()) => break,
                 Err(e) => {
@@ -275,5 +278,27 @@ impl WorkerClient {
         let raw: ZmqMessage = sock.recv().await?;
         let bytes = raw.into_vec().into_iter().next().unwrap_or_default();
         Ok(decode(&bytes)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn reports_child_exit_before_connection_without_waiting_for_init_timeout() {
+        let socket_path =
+            std::env::temp_dir().join(format!("oh-my-vllm-dead-child-{}.ipc", std::process::id()));
+        let config = WorkerConfig {
+            python_executable: PathBuf::from("/bin/false"),
+            socket_path: socket_path.clone(),
+            init_timeout: Duration::from_secs(60),
+            ..WorkerConfig::default()
+        };
+        let result = timeout(Duration::from_secs(2), WorkerClient::launch(config))
+            .await
+            .expect("dead worker must be detected before the initialization deadline");
+        assert!(matches!(result, Err(Error::WorkerDied)));
+        let _ = std::fs::remove_file(socket_path);
     }
 }

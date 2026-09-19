@@ -13,6 +13,8 @@ parser.add_argument("--prompt", default="请用中文简短介绍北京。")
 parser.add_argument("--socket", required=True)
 parser.add_argument("--context-repeats", type=int, default=0)
 parser.add_argument("--num-speculative-tokens", type=int, default=0)
+parser.add_argument("--prefix-hit", action="store_true")
+parser.add_argument("--binary", type=Path)
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 model = "/data0/shared/Qwen3.8-27B-FP8"
@@ -29,7 +31,7 @@ tokens = tokenizer.apply_chat_template(
 )
 result = subprocess.run(
     [
-        str(root / "target/release/oh-my-vllm-zmq-worker"),
+        str(args.binary or root / "target/release/oh-my-vllm-zmq-worker"),
         "--model",
         model,
         "--socket",
@@ -45,6 +47,7 @@ result = subprocess.run(
         *map(str, tokens),
         "--max-tokens",
         str(args.max_tokens),
+        *(["--prefix-hit"] if args.prefix_hit else []),
     ],
     check=True,
     stdout=subprocess.PIPE,

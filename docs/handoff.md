@@ -122,3 +122,34 @@ CPU8 ordinary bs1 pairing is /tmp/oh-my-vllm-pinned-ordinary-bs1.{log,json}.
 Both variants live in /tmp/oh-my-vllm-current-thread-target/release/ to avoid
 replacing target/release while another measurement uses it. Record and compare
 actual binary hashes, not just source HEAD. Overall acceptance remains incomplete.
+
+
+## Documentation and real prefix-text completion
+
+The current README, design/protocol, development/profiling commands, plan/index,
+requirements and contributing guide were audited against code and AGENTS.md.
+Removed obsolete next_token_id/always-empty drafts, old Worker API, single Mamba
+slot, standalone-only accuracy claims, outdated validation status and unwrapped
+GPU/environment commands. Historical HTTP-serving baseline captures are explicitly
+separated from matched EngineCore investigation data in bench/baseline/README.md.
+Completed investigation pairs are preserved in the adjacent2026-09-19 JSON; they
+are not the full acceptance matrix and missing early CPU masks are null.
+
+Run --prefix-hit seeds the same prompt, then requires a real cache hit before
+returning text. smoke-text supports this and an isolated --binary. Both ordinary
+and MTP prefix text runs passed with64 output tokens and a coherent initial Chinese
+answer (/tmp/oh-my-vllm-prefix-text.log and -mtp-prefix-text.log). Fixed-length
+smoke intentionally ignores EOS, so output after the first answer may continue
+with subsequent chat-role tokens; do not interpret this as an EOS-stopping API.
+The client now detects a worker that exits before connecting; its new CPU test
+passes in0.10s instead of waiting the initialization timeout.63 Rust tests,
+all-feature clippy, Python format/check and both actual prefix text checks passed.
+Independent code/document review found no blocking code issues; listed document
+cleanup suggestions were addressed.
+
+All three CPU-affinity candidate pairs were interrupted by external GPU clients
+and produced no valid comparison result. The new monitor correctly rejected them.
+The current-thread ordinary bs2 and prefix later batches were also interrupted.
+The user was asked asynchronously about a stable single-card measurement window;
+no reply yet. At approximately12:39UTC the short tests obtained cards and completed.
+Continue to wait for any idle B200 and never interrupt other users' processes.

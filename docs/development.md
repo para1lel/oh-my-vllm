@@ -1,181 +1,85 @@
-# Development Guide — oh-my-vllm
+# Development guide
 
-## Environment setup
+## Environments
 
-### Two conda environments in use
+| Purpose | Conda environment |
+|---|---|
+| Rust, framework Python, lint and hooks | /data0/shared/dongwu.chen/conda-envs/oh-my-vllm |
+| GPUWorker, torch, vLLM and baseline | /data0/shared/dongwu.chen/conda-envs/vllm |
 
-| Purpose | Path | Contains |
-|---|---|---|
-| Rust build + Python lint | `/data0/shared/dongwu.chen/conda-envs/oh-my-vllm` | cargo, ruff, pre-commit |
-| Model runner | `/data0/shared/dongwu.chen/conda-envs/vllm` | Python 3.12, torch, vllm, CUDA |
+Use scripts/with-env.sh for every cargo/Python command. It sets PYTHONPATH to the
+repository's python/ directory, CARGO_TARGET_DIR to target/, the framework PATH,
+and OH_MY_VLLM_WORKER_PYTHON to the absolute vllm conda Python. The worker package
+is not installed in that environment. No uv or conda package installation is used.
+If a Python dependency is missing, use the vllm environment's python -m pip through
+with-env.sh; do not install dependencies without first checking what is missing.
 
-The Python worker uses the absolute vllm conda interpreter. Framework commands
-run through scripts/with-env.sh. GPU commands additionally use scripts/with-gpu.sh.
-The following variables can also be set manually:
+The vLLM environment uses an editable checkout at /data0/shared/dongwu.chen/vllm.
+Installed version metadata alone is not an immutable source pin. Record the
+actual source/configuration and executable identity for measurements.
 
-```bash
-export PATH="/data0/shared/dongwu.chen/conda-envs/vllm/bin:$PATH"
-export PYTHONPATH="/data0/shared/dongwu.chen/oh-my-vllm/python:$PYTHONPATH"
-export CARGO_TARGET_DIR=/data0/shared/dongwu.chen/oh-my-vllm/target
-# Use scripts/with-gpu.sh for every single-GPU test
-```
+The ignored .vscode/settings.json selects conda oh-my-vllm for Python analysis
+and adds ${workspaceFolder}/python. Execution of GPUWorker still uses conda vllm.
 
-The oh-my-vllm Python package is **not** pip-installed into the vllm env — only
-`PYTHONPATH` makes it importable. `msgpack` and `pyzmq` are required in that env:
+## Build and checks
 
-```bash
-# Run once in the vllm env if missing:
-pip install msgpack pyzmq
-```
-
-### Rust build
+The Rust workspace uses edition2024 and the existing conda toolchain.
 
 ```bash
-# Builds the inference binary (release, ~30s on first build):
-export PATH="/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin:$PATH"
-export CARGO_TARGET_DIR=/data0/shared/dongwu.chen/oh-my-vllm/target
-cargo build --release --bin oh-my-vllm-zmq-worker
-# Output: target/release/oh-my-vllm-zmq-worker
-```
-
-Rust edition: 2024. Workspace root: `Cargo.toml`. Three crates:
-- `crates/kv-cache` — KV cache, prefix cache
-- `crates/scheduler` — request scheduler
-- `crates/zmq-worker` — binary, ZMQ client
-
-### Pre-commit hooks
-
-All hooks run via `scripts/with-env.sh` which activates the oh-my-vllm env:
-
-```bash
-cargo fmt --all               # Rust formatting
-cargo clippy … -D warnings    # Rust linting (warnings = errors)
-cargo test --all               # Rust tests
-ruff format --force-exclude    # Python formatting
-ruff check --force-exclude --fix  # Python linting
-scripts/fix_whitespace.py      # trailing whitespace + final newline
-```
-
-**Known trap:** the hook stashes unstaged files before formatting. If `Cargo.lock`
-is unstaged, it will be stashed and then the hook may fail to pop it because
-`cargo fmt` touched it. Always `git add Cargo.lock` alongside Rust changes.
-
-Run hooks manually:
-
-```bash
-pre-commit run --all-files
-# or per-hook:
+scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
 scripts/with-env.sh cargo fmt --all
+scripts/with-env.sh cargo test --workspace
+scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
+scripts/with-env.sh ruff check python/
+scripts/with-env.sh pre-commit run --all-files
 ```
 
-## Build commands (source of truth: `.pre-commit-config.yaml`, `Cargo.toml`)
+Hooks are local/system hooks from .pre-commit-config.yaml. Stage only intentional
+changed paths, including Cargo.lock when changed. Avoid unstaged hook edits that
+conflict with pre-commit's temporary stash. Never disable hooks or use git add .
+
+## GPU execution
 
 ```bash
-# Format all Rust
-cargo fmt --all
-
-# Lint all Rust (strict)
-cargo clippy --all-targets --all-features -- -D warnings
-
-# Run all Rust tests
-cargo test --workspace
-
-# Format Python
-ruff format python/
-
-# Lint Python
-ruff check python/
-
-# Build release binary
-cargo build --release --bin oh-my-vllm-zmq-worker
+scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64
+scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output /tmp/ordinary.json
 ```
 
-## Smoke test (requires GPU, ~3 min to load model)
+The GPU wrapper waits for an idle B200: no compute processes, at most64MiB used
+and zero reported utilization. It selects a UUID and holds a cooperative flock.
+Unrelated programs need not honor the lock. The benchmark additionally detects
+external same-GPU clients while engines run, invalidating affected measurements.
+Do not interrupt unrelated jobs. Use unique sockets; only remove a stale socket
+after confirming its owner has exited.
 
-```bash
-rm -f /tmp/oh-my-vllm.ipc   # clean up stale socket if any
-export PATH="/data0/shared/dongwu.chen/conda-envs/vllm/bin:$PATH"
-export PYTHONPATH="/data0/shared/dongwu.chen/oh-my-vllm/python:$PYTHONPATH"
-# Use scripts/with-gpu.sh for every single-GPU test
-scripts/with-gpu.sh scripts/with-env.sh ./target/release/oh-my-vllm-zmq-worker \
-    --model /data0/shared/Qwen3.8-27B-FP8 \
-    --num-gpu-blocks 2048 \
-    --block-size 784 \
-    --max-model-len 8192 \
-    run --tokens 1 2 3 4 5 --max-tokens 16
-# Expected: "output token ids: [...]"
-```
+The benchmark defaults to input32768/output4096,1024 physical blocks, one warmup
+and three measurements. Run ordinary, mtp and prefix modes. See testing.md for
+accuracy probes, combinations and acceptance details. Never enable eager/probe
+execution in acceptance runs. --binary supports isolated builds; the driver
+executes a hash-verified private copy. Do not edit Python/vLLM sources during a run.
 
-## Benchmark comparison
+## Logs and diagnostics
 
-```bash
-python benchmarks/compare_vllm.py \
-    --model /data0/shared/Qwen3.8-27B-FP8 \
-    --num-gpu-blocks 4096 \
-    --batch-sizes 1 2 4 \
-    --input-len 2048 --output-len 512
-```
+Logs go to stderr, results to stdout. Rust tracing and Python JSON lines use UTC
+timestamps. OH_MY_VLLM_RUN_ID correlates both sides; step_id correlates RPC calls.
+INFO records initialization, capacity and batch summaries. RUST_LOG=debug and
+OH_MY_VLLM_LOG_LEVEL=DEBUG enable scheduling time/free blocks, RPC duration,
+Python message decode, host execution and encode/send timings.
 
-## External dependencies (not in repo)
-
-| Dependency | Location | Notes |
-|---|---|---|
-| Qwen3.5-27B-FP8 weights | `/data0/shared/Qwen3.8-27B-FP8` | ~55 GB, do not copy |
-| vLLM (Python) | conda vllm env | version pinned in that env |
-| CUDA | system | B200 requires CUDA 12.6+ |
+Host duration is not CUDA kernel duration. Use a separate profiling run for GPU
+timing; keep traces outside the repository. Default INFO avoids per-step I/O.
+The controller uses one Tokio thread for its serial scheduler/RPC stream. CPU
+affinity experiments must apply the same inherited mask to both engines and record
+it; taskset can be placed before the benchmark Python command. See handoff.md for
+measured results, including failed cases and pending acceptance.
 
 ## Troubleshooting
 
-**"Address already in use"** — stale IPC socket from a previous run: `rm -f /tmp/oh-my-vllm.ipc`
-
-**"Not connected to peers"** — Rust sent Init before Python connected. The retry
-loop in `client.rs:launch()` handles this; if it still fails, the Python worker
-likely crashed on import. Check Python stderr.
-
-**`CacheConfig` or `SchedulerConfig` validation errors** — the vllm conda env's
-vLLM version may differ from what the code expects. Check `_handle_init()` in
-`python/oh_my_vllm/worker/zmq_bridge.py` and compare against the actual signatures:
-```bash
-python -c "import inspect; from vllm.config import CacheConfig; print(inspect.signature(CacheConfig))"
-```
-
-**Pre-commit hook stash conflict** — run `cargo fmt && cargo clippy --fix --allow-dirty`,
-then `ruff format python/ && ruff check --fix python/`, then stage everything
-including `Cargo.lock` before committing.
-
-## Runtime entrypoints and logs (2026-09-19)
-
-Use `scripts/with-env.sh COMMAND` for framework commands; it sets both
-PYTHONPATH and CARGO_TARGET_DIR. The worker interpreter defaults to the absolute
-vllm conda Python path, overridable by OH_MY_VLLM_WORKER_PYTHON. No uv is used.
-Wrap GPU commands with `scripts/with-gpu.sh`: it waits for an idle B200 (no
-compute processes, <=64 MiB used, zero reported utilization), uses its UUID,
-and holds a cooperative per-GPU flock. Unrelated programs do not honor this
-lock, so avoid launching other GPU jobs during a comparison. Baseline and
-framework measurements must run within one wrapper invocation on the same GPU.
-
-Logs go to stderr, separate from result stdout. Rust uses timestamped tracing
-key/value events; Python uses JSON lines with UTC timestamps. The wrapper sets
-OH_MY_VLLM_RUN_ID; Rust forwards the same ID even without the wrapper. Set
-RUST_LOG=debug and OH_MY_VLLM_LOG_LEVEL=DEBUG for per-step diagnostics.
-Python execute_host_us measures the host call, not CUDA kernel duration.
-Per-step events cover scheduler duration/free blocks, worker RPC, Python decode,
-execution and encode/send. INFO batch summaries include steps, cache hits and
-preemption count; BENCH_RESULT adds token throughput and draft statistics.
-GPU kernel timing still requires a separate profiling run (see profiling.md).
-Default INFO avoids per-step output. Capture logs outside the repository.
-
-
-The ignored .vscode/settings.json selects the oh-my-vllm conda interpreter for
-Python analysis and adds ${workspaceFolder}/python to source resolution. Worker
-execution still uses the vllm conda interpreter through with-env.sh.
-
-The benchmark driver owns and cleans engine process groups, records source and
-binary identity, and compares exact cache-hit counts. See testing.md for commands.
-
-The controller is being evaluated with a current-thread Tokio runtime: scheduling
-and the single RPC stream do not require a CPU worker pool. Use an independent
-cargo --target-dir and benchmark --binary when comparing variants, so a build
-cannot replace an executable used by another run. See handoff.md for measured
-status; a runtime change alone is not evidence of a throughput improvement.
+- Init failure: inspect Python's traceback and conda interpreter in the launch log.
+  The Worker API/configuration must match the local editable checkout.
+- Address in use: choose another socket or confirm the stale socket's owner exited.
+- Unexpected worker exit: check stderr before rerunning; a dead child before
+  connection is reported promptly instead of consuming the full init timeout.
+- Insufficient startup memory: wait for an idle card again. An external job may
+  have started after selection; do not lower limits to hide a contaminated pair.

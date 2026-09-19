@@ -32,7 +32,9 @@ scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vll
 ```
 
 Add --num-speculative-tokens 4 for MTP; add --context-repeats 100 to cross a
-784-token boundary. Both ordinary and MTP paths have produced coherent Chinese.
+784-token boundary. Combine --prefix-hit with --context-repeats 100 to seed the
+prompt first and require a nonzero cache hit before decoding the real answer.
+--binary selects an isolated build for this text smoke. Both ordinary and MTP paths have produced coherent Chinese.
 Fixed output limits deliberately ignore EOS, as does the throughput baseline.
 
 ## Actual-path FP64 reference probe

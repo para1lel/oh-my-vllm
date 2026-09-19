@@ -41,6 +41,9 @@ enum Cmd {
         tokens: Vec<u32>,
         #[arg(long, default_value_t = 64)]
         max_tokens: usize,
+        /// Seed this prompt first and require a real prefix-cache hit.
+        #[arg(long)]
+        prefix_hit: bool,
     },
     Bench(BenchArgs),
 }
@@ -118,7 +121,11 @@ async fn run() -> Result<()> {
     );
     let mut next_id = 1;
     match cli.cmd {
-        Cmd::Run { tokens, max_tokens } => {
+        Cmd::Run {
+            tokens,
+            max_tokens,
+            prefix_hit,
+        } => {
             ensure!(
                 !tokens.is_empty() && max_tokens > 0,
                 "nonempty input and positive output required"
@@ -127,6 +134,17 @@ async fn run() -> Result<()> {
                 tokens.len() + max_tokens <= cli.max_model_len as usize,
                 "request exceeds context limit"
             );
+            if prefix_hit {
+                execute_batch(
+                    &mut client,
+                    &mut scheduler,
+                    &mut next_id,
+                    std::slice::from_ref(&tokens),
+                    1,
+                    0,
+                )
+                .await?;
+            }
             let result = execute_batch(
                 &mut client,
                 &mut scheduler,
@@ -136,6 +154,10 @@ async fn run() -> Result<()> {
                 0,
             )
             .await?;
+            ensure!(
+                !prefix_hit || result.prefix_hit_tokens > 0,
+                "prompt did not hit prefix cache"
+            );
             println!(
                 "output token ids: {:?}",
                 result.outputs.values().next().unwrap()
