@@ -7,6 +7,7 @@ prefix hash; boundary rows no longer depend on a token outside that prefix.
 """
 
 import os
+from itertools import pairwise
 
 import torch
 
@@ -33,6 +34,7 @@ class MTP:
         self.attention = MTPAttention(max_tokens)
         self.next_position: dict[int, int] = {}
         self.graphs = {}
+        self.chains = {}
 
     def forget(self, request_id: int) -> None:
         self.next_position.pop(request_id, None)
@@ -45,7 +47,7 @@ class MTP:
         tables: list[list[int]],
         positions: list[int],
     ) -> torch.Tensor:
-        self.attention.plan(starts, tables, positions)
+        decode_mode = max(b - a for a, b in pairwise(starts)) <= 5
         slots = [
             table[p // BLOCK] * BLOCK + p % BLOCK
             for i, table in enumerate(tables)
@@ -57,16 +59,22 @@ class MTP:
             self.attention,
         )
         token_tensor = device_tensor(tokens, device=self.device)
-        if (
-            self.attention.decode_mode
-            and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1"
-        ):
+        if decode_mode and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1":
             from oh_my_vllm.worker.decode_graph import DraftGraph
 
             extent = min(self.max_tokens, ((max(positions) + 4096) // 4096) * 4096)
             key = (len(tokens), len(starts) - 1, extent)
-            if key in self.graphs or len(self.graphs) < 32:
-                tables_tensor = self.attention.tables
+            if key in self.graphs or len(self.graphs) + len(self.chains) < 32:
+                width = (self.max_tokens + BLOCK - 1) // BLOCK
+                tables_tensor = device_tensor(
+                    [
+                        table + [0] * (width - len(table))
+                        for i, table in enumerate(tables)
+                        for _ in range(starts[i + 1] - starts[i])
+                    ],
+                    device=self.device,
+                    dtype=torch.int32,
+                )
                 starts_tensor = (
                     device_tensor(starts, device=self.device, dtype=torch.int32)
                     if len(tokens) > len(starts) - 1
@@ -86,7 +94,37 @@ class MTP:
                 return self.graphs[key].replay(
                     token_tensor, hidden, batch, tables_tensor, starts_tensor
                 )
+        self.attention.plan(starts, tables, positions)
         return self.model.draft(token_tensor, hidden, batch, self.cache)
+
+    def _proposal_graph(self, hidden: torch.Tensor, eligible) -> list[list[int]] | None:
+        # All three subsequent writes must fit Rust's private allocated pages.
+        # Near a boundary, retain the stepwise path that shrinks the active batch.
+        if (
+            self.device.type != "cuda"
+            or os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") == "1"
+            or any(computed + 3 >= limit for _, _, computed, limit in eligible)
+        ):
+            return None
+        from oh_my_vllm.worker.decode_graph import ProposalGraph
+
+        last_position = max(p for _, _, p, _ in eligible) + 3
+        extent = min(self.max_tokens, ((last_position + 4096) // 4096) * 4096)
+        key = (len(eligible), extent)
+        if key not in self.chains and len(self.graphs) + len(self.chains) >= 32:
+            return None
+        width = (self.max_tokens + BLOCK - 1) // BLOCK
+        tables = device_tensor(
+            [table + [0] * (width - len(table)) for _, table, _, _ in eligible],
+            device=self.device,
+            dtype=torch.int64,
+        )
+        positions = device_tensor([p for _, _, p, _ in eligible], device=self.device)
+        if key not in self.chains:
+            self.chains[key] = ProposalGraph(
+                self.model, self.cache, hidden, positions, tables, extent
+            )
+        return self.chains[key].replay(hidden, positions, tables).tolist()
 
     def propose(
         self,
@@ -155,6 +193,11 @@ class MTP:
         if not eligible:
             return proposals
         last_hidden = draft_hidden[selected]
+        graph_tokens = self._proposal_graph(last_hidden, eligible)
+        if graph_tokens is not None:
+            for (rid, _, _, _), row in zip(eligible, graph_tokens, strict=True):
+                proposals[rid] = row
+            return proposals
         next_tokens = self.model.logits(last_hidden).argmax(-1).tolist()
         for (rid, _, _, _), token in zip(eligible, next_tokens, strict=True):
             proposals[rid].append(token)
@@ -172,7 +215,9 @@ class MTP:
             tables = [table for _, table, _, _ in eligible]
             last_hidden = self._run(
                 tokens,
-                last_hidden[active],
+                last_hidden
+                if active == list(range(len(last_hidden)))
+                else last_hidden[active],
                 list(range(len(active) + 1)),
                 tables,
                 positions,

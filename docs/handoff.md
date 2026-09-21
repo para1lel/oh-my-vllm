@@ -1,5 +1,25 @@
 # Handoff — 2026-09-21
 
+## Four-proposal CUDA Graph — final MTP rerun pending
+
+The ca5a200 matrix passed all six ordinary/prefix rows and MTP bs1. MTP bs2
+measured94.31% of the frozen baseline, so acceptance remains incomplete. Its
+three repetitions agree closely. The obsolete MTP bs4 attempt was stopped after
+two external-GPU-contention discards because another MTP optimization was ready.
+
+The proposer now captures initial greedy selection and three draft/head steps in
+one graph, transferring all four tokens together. All three cache writes must fit
+Rust's allocated pages; near-boundary batches retain the old stepwise trimming.
+Capture/warmup restores overwritten FA rows, and row indices remain graph-owned.
+An isolated prototype exposed a dangling row-index buffer; a new allocator-pressure
+and dynamic-table regression covers the fix. The corrected diagnostic measured
+409.517tok/s for bs2, with the same steps and accepted draft count as the stepwise
+candidate. The target/sampler/ordinary/prefix paths are unchanged by this patch.
+Retain the six valid ca5a200 ordinary/prefix rows and rerun all three MTP rows on
+the new clean commit, explicitly recording each implementation identity. GPU pytest
+passes92 tests and12 subtests, with no skips. Rust75 tests, fmt/width/clippy, ruff
+and all pre-commit checks pass.
+
 ## Batched sampling and metadata staging — final matrix pending
 
 Seven f9c283d rows passed: ordinary bs1/2/4, MTP bs1/4 and prefix bs1/2.

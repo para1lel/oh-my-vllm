@@ -128,3 +128,12 @@ Other sampling configurations retain full target-distribution construction. Smal
 private CPU metadata tensors use nonblocking copies on the same stream as their
 GPU consumers; this removes explicit per-copy waits without assuming that
 pageable transfers necessarily overlap computation.
+
+When every active MTP request has room for three further cache writes, a proposal
+graph computes the initial greedy token and three autoregressive draft/head steps
+without intermediate host synchronization. It returns all four proposals in one
+transfer. Near an allocation/context boundary, the stepwise proposer still trims
+the active set and proposal count. Warmup/capture restores all three speculative
+FA destinations; persistent row indices, positions, tables, hidden inputs, model
+and cache references remain alive for replay. Both proposer graph families share
+the existing32-shape budget.
