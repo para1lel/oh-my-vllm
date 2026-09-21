@@ -23,6 +23,8 @@ using msgpack.
 - **Attribution line on every commit:**
   `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
 - **Reply language:** Chinese when user writes Chinese, English otherwise
+- **Branch policy:** Develop and commit only on `main`. Do not create new local
+  or remote branches, including feature branches and branch-backed worktrees.
 
 ## Forbidden actions
 
@@ -37,6 +39,7 @@ using msgpack.
 ## Task start checklist
 
 1. `git status --short` — note any unstaged changes before touching anything
+   Confirm the current branch is `main` before making changes.
 2. Check `docs/handoff.md` for current task state and blockers
 3. Read the relevant sub-directory `AGENTS.md` if one exists (none yet, but check)
 4. Set the two environment variables above before any `cargo` or `python` invocation

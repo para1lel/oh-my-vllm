@@ -1,5 +1,11 @@
 # Contributing to oh-my-vllm
 
+## Branch policy
+
+Develop and commit directly on `main`. Do not create local or remote feature
+branches or branch-backed worktrees. Confirm `main` is checked out before editing.
+Pushing and opening PRs still require explicit user instructions (AGENTS.md).
+
 ## Commit conventions
 
 Every commit message must follow [Conventional Commits](https://www.conventionalcommits.org/):

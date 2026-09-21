@@ -1,6 +1,17 @@
 # Handoff — 2026-09-21
 
-## Latest task — real MTP4 serving acceptance complete
+## Latest workflow decision — develop only on main
+
+The user requires all development and commits on `main`, with no new local or
+remote branches. AGENTS.md and CONTRIBUTING.md now record this policy. The serving
+commits through a7f47fd were fast-forwarded onto local main without rewriting or
+discarding work and published to origin/main. The codex/openai-compatible-serving
+branch was then deleted locally and on GitHub; only main remains in both places.
+Independent review passed; 73 Rust tests, all-target/all-feature clippy and Python
+format/check passed. The policy documentation is committed directly on main.
+This workflow-only change does not alter the running service or its acceptance.
+
+## Latest implementation — real MTP4 serving acceptance complete
 
 The host CUDA/NVML fault recovered: seven visible B200s enumerate normally, and
 an idle UUID-pinned card passed cuInit, allocation and matrix multiplication.
