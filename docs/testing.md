@@ -11,9 +11,9 @@ cover `test_independent_kernels.py`, `test_independent_decode_attention.py`,
 `--num-speculative-tokens 4`. Probe tolerances below are unchanged.
 
 The independent path has passed ordinary/MTP text, MTP prefix/preemption batches,
-12 Chat/Responses constraint cases and service lifecycle. These are staged
-correctness results. Final independent oh-my-pi acceptance and the complete
-nine-row frozen-baseline performance matrix remain pending.
+12 Chat/Responses constraint cases and service lifecycle. The independent nine-row
+frozen-baseline matrix passes. Both final oh-my-pi workflows completed with MTP4,
+real source reads and tool-result follow-ups. See acceptance.md for answer-review caveats and timings.
 
 ## Environments and CPU checks
 
@@ -191,13 +191,14 @@ macros, comments and string literals; tabs expand using rustfmt's tab size.
 fields manually and use `concat!` to wrap long literals without changing values.
 Configuration and hook changes trigger both Rust style hooks.
 
-## Independent runtime migration (in progress)
+## Independent operator and model probes
 
 Run these in the new conda environment. Separate FlashInfer/Triton cache roots
 prevent a successful run from silently reusing artifacts compiled in the old
 environment. The model probe is a short eager diagnostic, not a service or
 performance acceptance run. The independent Worker is the only execution path;
-final oh-my-pi and full performance acceptance are still pending.
+the complete performance matrix passes. See acceptance.md for final service and
+agentic evidence.
 
 ```bash
 CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p test_independent_sampler.py

@@ -146,25 +146,27 @@ is the first evicted.
 
 ## MTP speculative decoding
 
-When num_speculative_tokens>0, EngineArgs creates the MTP configuration. Python
-sets the scheduled draft tokens and num_spec_tokens_to_schedule, calls Worker
-execute_model/sample_tokens, then take_draft_token_ids. Result IDs are matched
-by request ID. Intermediate prefills return empty outputs; accepted MTP outputs
-remain lists and no accepted token is collapsed into a single next token.
+With num_speculative_tokens=4, the independent Worker verifies scheduled drafts
+against target samples and returns retained tokens plus explicit next-draft IDs.
+Intermediate prefills return empty outputs; accepted lists are never collapsed.
+Rust reserves recurrent-state slots, migrates committed sources after chunks, and
+rolls back only scheduled rejected drafts. Prefix admissions and recompute resumes
+carry complete accepted history; running updates append incremental suffixes.
+Finished IDs are flushed even when no model tokens remain. BF16 MTP state retains
+block784, matching the frozen baseline. There is no vLLM runner or draft handler.
 
-Rust reserves K target recurrent-state slots, migrates them after large chunks,
-and rolls back only scheduled rejected drafts. Prefix-hit requests are new to
-the worker; resumed requests are re-admitted with complete accepted history and
-replacement tables, ordinary running updates omit history and append
-suffixes. Finished IDs are flushed even when no model tokens remain scheduled.
-BF16 SSM in MTP mode preserves block784 and is matched in the baseline (ADR003).
-V2 is mandatory. The local RustDraftTokensHandler copies actual draft IDs for
-unconstrained batches too; native V2 count-only -1 placeholders cannot cross the
-unsigned Rust token protocol. Unused legacy spec_decode.py helpers were removed.
-The block pool records fresh allocations (including reused pages), excluding
-prefix references and live speculative slots. Python expands these logical IDs
-over the physical stride and passes V2's new_block_ids_to_zero before execution.
-Startup also clears cache storage after dummy warmup, preserving graph addresses.
+MTP caches are indexed by their input token with first valid position 1; boundary
+hidden features restore a prefix without mutating shared pages. When all three
+further writes fit allocated pages, a proposal graph generates four greedy drafts
+without intermediate host synchronization. Otherwise, stepwise generation trims
+at allocation/context boundaries. Target verification and draft-head warmup share
+KV reads across a request's queries, preserving independent causal masks.
+
+Fresh logical allocation IDs remain a wire compatibility hint. The owned kernels
+fully overwrite committed recurrent destinations, initialize new requests from
+immutable zero state, and mask FA reads by valid lengths; they do not require the
+old V2 physical-stride remapping or new_block_ids_to_zero call. Graph warmup and
+capture save and restore every mutated FA/state destination before actual replay.
 
 ## Serving protocol extension (2026-09-21)
 
@@ -177,6 +179,6 @@ fixed-length greedy for Run/Bench.
 Serving execute outputs optionally add text (incremental decoded text), finish_reason
 (stop/length or null), and cumulative reasoning_tokens. Token IDs remain the
 authoritative Rust scheduling/KV input. Grammar masks stay entirely in Python and
-are passed to GPUWorker before sampling, including speculative verification rows.
+are applied by the owned target sampler, including speculative verification rows.
 Rust detects worker process exit while awaiting replies and uses the existing
 finished_request_ids cleanup path for EOS, length and cancellation.

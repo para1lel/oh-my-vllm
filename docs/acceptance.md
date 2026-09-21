@@ -1,19 +1,67 @@
 # Acceptance evidence
 
-## Independent runtime — final acceptance in progress
+## Independent runtime — 2026-09-21
 
-The default runtime now uses project-owned model/Worker code and independent
-libraries in conda oh-my-vllm. Staged correctness evidence is saved in
-[stage2](../bench/baseline/2026-09-21-independent-stage2.json). Final clean-runtime
-checks, both oh-my-pi tasks and the monitored nine-row matrix are pending.
-The V2 results below are historical and do not establish independent acceptance.
+All nine 32768→4096 rows pass 95% against the original frozen EngineCore baseline.
+No native baseline was rerun. Each row used two warmups and three measurements,
+block 784, the original CPU affinity, and an exclusively monitored UUID-pinned B200.
+
+| Mode | Batch | Original baseline tok/s | Independent tok/s | Ratio |
+|---|---:|---:|---:|---:|
+| ordinary | 1 | 92.21 | 102.51 | 111.17% |
+| ordinary | 2 | 167.87 | 170.36 | 101.48% |
+| ordinary | 4 | 250.96 | 278.80 | 111.09% |
+| mtp | 1 | 269.16 | 285.73 | 106.16% |
+| mtp | 2 | 418.53 | 403.86 | 96.49% |
+| mtp | 4 | 446.61 | 546.98 | 122.47% |
+| prefix | 1 | 95.16 | 109.19 | 114.73% |
+| prefix | 2 | 179.44 | 190.07 | 105.93% |
+| prefix | 4 | 333.32 | 336.16 | 100.85% |
+
+[Full independent evidence](../bench/baseline/2026-09-21-independent-acceptance.json)
+records raw repetitions, hashes, runtime identity, correctness and discarded runs.
+The six ordinary/prefix rows used clean commit ca5a200; the three final MTP rows
+used clean commit 5c0848e. The latter changes only MTP execution and adds a new
+ProposalGraph class: existing graph definitions are AST-identical, and other
+non-MTP production modules are unchanged. Each row retains its actual identity.
+This is a historical comparison, not a same-source/same-GPU paired experiment.
+Prior failed measurements and contaminated diagnostics remain in the intermediate
+artifacts; none replace the frozen baseline or contribute to the final medians.
+GPU-process polling cannot exclude arbitrarily short interference between samples.
+
+The final GPU suite passes 92 tests and 12 subtests, without skips. Rust 75 tests,
+fmt, hard 100-column Rust checks, clippy, ruff and all hooks pass. Original actual-
+model GQA/GDN FP64 tolerances remain unchanged (output atol/rtol 0.03, state NRMSE
+1% and relative-peak error 2%). Actual grouped target and draft attention also pass.
+Ordinary and MTP text tests cover prefix reuse, staggered arrivals and recompute;
+real service tests pass 12 API/reasoning/constraint combinations and cancellation,
+stored continuation/deletion and mixed-batch cleanup. All use conda oh-my-vllm.
+
+Final oh-my-pi readback completed on Chat and Responses with MTP4 and medium
+reasoning: 7 and 18 successful read calls, zero tool errors, 3 and 6 model turns,
+and 26.27 / 36.68 seconds end to end. Both read the required scheduler and Worker
+source and correctly described the goal, architecture and independent runtime.
+Responses says three ordinary/prefix rows rather than six (three per mode), uses
+brackets to denote an optional shell flag, and overstates full-file reading; these
+minor answer defects are retained in the evidence, not silently corrected. Its
+nine-row all-pass conclusion is correct. The earlier diagnostic-number
+misinterpretation is superseded, not claimed as perfectly grounded.
+
+Every request has nonzero MTP proposal/acceptance counts. Cold first-request TTFT
+is 6363 ms, explained by preparation (1102 ms) and prefill (4066 + 1194 ms).
+The first subsequent decode takes 1536 ms, consistent with graph warmup/capture
+overhead but without a separate capture timer. Later TTFT is 652–1917 ms.
+Final-answer output rates are 158.78 / 197.25 tok/s. No hang or unexplained sustained
+slowdown was observed; these mixed cold/warm workflows have no strict throughput
+gate. Owned server/worker processes exited, nvidia-smi shows no compute processes,
+and ports 18013/18014 are released.
 
 ## Historical V2 Model Runner acceptance — 2026-09-21
 
 The predecessor implementation used V2 exclusively, with Rust scheduling/KV ownership and no
 vLLM source changes. All nine 32768→4096 rows pass the >=95% gate against the frozen
 2026-09-19 EngineCore measurements. Only the framework was rerun: two warmups and
-three measured repetitions per row, MTP4 where applicable, block784, original
+three measured repetitions per row, MTP4 where applicable, block 784, original
 per-row CPU affinity, and one UUID-pinned B200 per run.
 
 | Mode | Batch | Historical EngineCore tok/s | V2 framework tok/s | Ratio |
@@ -48,7 +96,7 @@ the original matrix is not replaced. Even the slowest follow-up measurement
 over the fastest historical baseline reaches at least 99.69%.
 Polling cannot exclude activity between samples. Every measured request generated 4096 tokens with no preemption.
 
-Actual scheduled GQA/GDN FP64 probes pass ordinary and MTP paths across block784:
+Actual scheduled GQA/GDN FP64 probes pass ordinary and MTP paths across block 784:
 51 and 40 checks respectively, zero nonfinite values. Maximum state NRMSE is
 0.2704% and maximum relative error is 0.3916%, below unchanged 1%/2% limits;
 output atol/rtol remain 0.03. Two-request text tests preserve city isolation and
@@ -85,7 +133,7 @@ they describe their original binaries, not additional V2 runs.
 ## Serving acceptance — 2026-09-21
 
 Real Qwen3.5-27B-FP8 serving passed on B200 UUID
-GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad with four MTP drafts and block784.
+GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad with four MTP drafts and block 784.
 [Recorded requests, results and metrics](../bench/baseline/2026-09-21-serving-acceptance.json)
 include the release-binary identity, commands, actual tool paths and final answers.
 

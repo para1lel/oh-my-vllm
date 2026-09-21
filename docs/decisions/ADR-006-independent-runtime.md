@@ -1,6 +1,6 @@
 # ADR-006: Own the GPU execution runtime
 
-Date: 2026-09-21. Status: user-approved; implementation in progress.
+Date: 2026-09-21. Status: user-approved; implemented. Acceptance evidence is in ../acceptance.md.
 
 ## Decision
 

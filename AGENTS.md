@@ -6,8 +6,8 @@ Build a Rust-first inference framework for **Qwen3.5-27B-FP8 on a single B200 GP
 that matches vLLM EngineCore throughput at least **95%** on the workloads in
 `docs/requirements.md`. Rust owns serving, scheduling and logical KV cache;
 Python owns GPU computation. The two sides use ZMQ DEALER and msgpack.
-The active migration replaces vLLM with project-owned implementations and
-independent libraries. The transitional adapter is removed.
+The runtime uses project-owned implementations and independent libraries.
+The transitional vLLM adapter is removed.
 Builds, tests and inference must not install, import or link vLLM, use its
 source checkout, or depend on the old vllm conda environment or build caches.
 

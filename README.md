@@ -37,14 +37,15 @@ Chat Completions and Responses are served at `http://127.0.0.1:8000/v1`, with
 thinking, tools, JSON constraints and stored Responses. See [serving](docs/serving.md)
 for supported schemas, OMP configuration and acceptance commands. CPU/client tests
 pass. The independent Worker has passed real MTP4 constraint/lifecycle checks;
-final independent oh-my-pi and complete performance acceptance are in progress.
+all nine independent performance rows pass. Both final oh-my-pi workflows completed with MTP4 and real tool calls;
+answer-review caveats and timing evidence are recorded in acceptance.md.
 See [handoff](docs/handoff.md) for current results.
 
 ## Verification and performance
 
 The target is at least 95% of the original EngineCore throughput for batch 1/2/4
-in ordinary, MTP and controlled prefix-hit modes. The historical V2 matrix passed;
-those measurements do not establish acceptance of the independent runtime.
+in ordinary, MTP and controlled prefix-hit modes. The independent matrix passes all nine rows. Historical V2 measurements remain
+separate evidence.
 [Acceptance evidence](docs/acceptance.md) separates current and historical results.
 
 ```bash

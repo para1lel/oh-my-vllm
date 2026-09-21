@@ -112,8 +112,9 @@ the current scope because it requires Python-side CPU tensor management.
 
 **Status:** user-confirmed; implemented and exercised end-to-end.
 
-EngineArgs enables MTP when num_speculative_tokens>0. The actual Worker returns
-all sampled/accepted output tokens and next drafts via take_draft_token_ids.
+The runtime configuration enables MTP4 with num_speculative_tokens=4. The owned
+Worker returns all retained target tokens and explicit new_draft_token_ids in
+the same protocol response.
 Rust schedules drafts, reserves target states, and rolls back scheduled rejections.
 ADR003 records BF16 SSM to retain block784. Coherent MTP text, actual-path FP64
 and feature combinations have passed; MTP performance passed at batch sizes 1/2/4.
@@ -128,13 +129,14 @@ Document dtype-dependent tolerances. Existing standalone GQA results do not
 establish actual-path coverage. Also demonstrate coherent real-text inference,
 including MTP and prefix hits. Full-model token equality is not an acceptance gate.
 
-## REQ-RUNNER-002 — Independent runtime (active migration)
+## REQ-RUNNER-002 — Independent runtime
 
 Replace the vLLM implementation dependency with code maintained in this repository
 and independent libraries. Preserve Rust serving/scheduling/logical KV and Python
 GPU execution. Final builds, tests and services must neither install/import/link
 vLLM nor depend on its source, conda environment or cached compiled artifacts.
-The V2 adapter was transitional and is now removed; final acceptance is pending.
+The V2 adapter is removed. Runtime independence, correctness and all nine
+performance rows pass; final agentic readback is recorded in acceptance.md.
 
 Use recent compatible stable dependencies selected in dependency order, with the
 verified versions pinned. Higher-level dependencies live in conda oh-my-vllm;
