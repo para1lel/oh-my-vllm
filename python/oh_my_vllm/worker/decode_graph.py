@@ -115,10 +115,14 @@ class DraftGraph:
     """Capture the single MTP layer; preserve overwritten FA rows during capture."""
 
     @torch.inference_mode()
-    def __init__(self, model, cache, tokens, hidden, batch, tables, extent):
+    def __init__(
+        self, model, cache, tokens, hidden, batch, tables, extent, starts=None
+    ):
         self.tokens, self.input_hidden = tokens.clone(), hidden.clone()
         self.attention = DecodeAttention(tables.clone(), batch.positions + 1, extent)
         self.attention.first = 1
+        if starts is not None and tokens.numel() > starts.numel() - 1:
+            self.attention.starts = starts.clone()
         self.batch = AttentionBatch(
             batch.positions.clone(), batch.fa_slots.clone(), self.attention
         )
@@ -138,7 +142,9 @@ class DraftGraph:
         finally:
             cache[pages, :, offsets] = saved
 
-    def replay(self, tokens, hidden, batch, tables):
+    def replay(self, tokens, hidden, batch, tables, starts=None):
+        if self.attention.starts is not None:
+            self.attention.starts.copy_(starts)
         self.tokens.copy_(tokens)
         self.input_hidden.copy_(hidden)
         self.batch.positions.copy_(batch.positions)

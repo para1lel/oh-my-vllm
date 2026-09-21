@@ -14,6 +14,7 @@ from oh_my_vllm.kernels.mtp_attention import MTPAttention
 from oh_my_vllm.models.qwen import AttentionBatch, Qwen
 from oh_my_vllm.worker.batch_plan import BLOCK, PlannedRequest
 from oh_my_vllm.worker.protocol import RequestOutput
+from oh_my_vllm.worker.tensors import device_tensor
 
 
 class MTP:
@@ -51,11 +52,11 @@ class MTP:
             for p in positions[starts[i] : starts[i + 1]]
         ]
         batch = AttentionBatch(
-            torch.tensor(positions, device=self.device),
-            torch.tensor(slots, device=self.device),
+            device_tensor(positions, device=self.device),
+            device_tensor(slots, device=self.device),
             self.attention,
         )
-        token_tensor = torch.tensor(tokens, device=self.device)
+        token_tensor = device_tensor(tokens, device=self.device)
         if (
             self.attention.decode_mode
             and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1"
@@ -63,9 +64,14 @@ class MTP:
             from oh_my_vllm.worker.decode_graph import DraftGraph
 
             extent = min(self.max_tokens, ((max(positions) + 4096) // 4096) * 4096)
-            key = (len(tokens), extent)
+            key = (len(tokens), len(starts) - 1, extent)
             if key in self.graphs or len(self.graphs) < 32:
                 tables_tensor = self.attention.tables
+                starts_tensor = (
+                    device_tensor(starts, device=self.device, dtype=torch.int32)
+                    if len(tokens) > len(starts) - 1
+                    else None
+                )
                 if key not in self.graphs:
                     self.graphs[key] = DraftGraph(
                         self.model,
@@ -75,9 +81,10 @@ class MTP:
                         batch,
                         tables_tensor,
                         extent,
+                        starts_tensor,
                     )
                 return self.graphs[key].replay(
-                    token_tensor, hidden, batch, tables_tensor
+                    token_tensor, hidden, batch, tables_tensor, starts_tensor
                 )
         return self.model.draft(token_tensor, hidden, batch, self.cache)
 
@@ -99,7 +106,9 @@ class MTP:
                 rows.append(starts[i] + boundary - begin - 1)
                 pages.append(req.fa_block_table[boundary // BLOCK - 1])
         if rows:
-            self.boundary_hidden[torch.tensor(pages, device=self.device)] = hidden[rows]
+            self.boundary_hidden[device_tensor(pages, device=self.device)] = hidden[
+                rows
+            ]
         tokens, positions, tables, parts, query_starts = [], [], [], [], [0]
         eligible, selected = [], []
         for i, (plan, count, output) in enumerate(

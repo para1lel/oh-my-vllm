@@ -1,5 +1,25 @@
 # Handoff — 2026-09-21
 
+## Batched sampling and metadata staging — final matrix pending
+
+Seven f9c283d rows passed: ordinary bs1/2/4, MTP bs1/4 and prefix bs1/2.
+MTP bs2 and prefix bs4 were excluded because diagnostic processes accidentally
+shared their pinned CPU cores during measurement. Those rows are not accepted
+as formal results; raw attempts and exclusion reasons are retained in the
+batched-sampling artifact. Diagnostic jobs now use separate CPU cores20/21.
+
+Plain greedy requests now reduce all target rows and transfer their selections
+once per batch, preserving first-rejection and invalid-reachable-row semantics.
+Masks, penalties and stochastic sampling retain the general sampler. MTP draft
+warmup/verification also shares KV reads, with request count in its graph key.
+Private host metadata uses nonblocking copies on the consuming CUDA stream;
+pageable staging can still synchronize internally. No claim of guaranteed DMA
+overlap is made. Full-row graph logits avoid redundant indexing copies.
+Candidate diagnostics measured399.111tok/s for MTP bs2 and338.548tok/s for
+prefix bs4 (one warmup/measurement, not final acceptance). GPU pytest passes91
+tests and12 subtests, with no skips; Rust75 tests, fmt/width/clippy, ruff and
+all pre-commit checks pass. The next action is a clean-commit nine-row matrix.
+
 ## Grouped verification optimization — final acceptance pending
 
 Clean commit9c8e27b's MTP bs1 measured247.345tok/s (91.895% of original

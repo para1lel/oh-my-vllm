@@ -96,5 +96,47 @@ class DecodeGraphTest(unittest.TestCase):
         self.assertEqual(fa[2, 0, 11].item(), 17)
 
 
+@unittest.skipUnless(torch.cuda.is_available(), "requires CUDA")
+class GroupedDraftGraphTest(unittest.TestCase):
+    @torch.inference_mode()
+    def test_first_one_and_dynamic_regrouping(self):
+        from oh_my_vllm.kernels.decode_attention import decode
+
+        class AttentionModel:
+            def draft(self, tokens, hidden, batch, cache):
+                return batch.attention(hidden.view(-1, 24, 256), cache).flatten(1)
+
+        torch.manual_seed(94)
+        cache = torch.randn(5, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
+        hidden = torch.randn(5, 24 * 256, device="cuda", dtype=torch.bfloat16)
+        tokens = torch.ones(5, device="cuda", dtype=torch.int64)
+        tables = torch.tensor(
+            [[1, 3]] * 2 + [[2, 4]] * 3, device="cuda", dtype=torch.int32
+        )
+        positions = torch.tensor([780, 781, 783, 784, 785], device="cuda")
+        batch = AttentionBatch(positions, torch.arange(5, device="cuda"), None)
+        starts = torch.tensor([0, 2, 5], device="cuda", dtype=torch.int32)
+        graph = DraftGraph(
+            AttentionModel(), cache, tokens, hidden, batch, tables, 1568, starts
+        )
+        for regroup in (False, True):
+            if regroup:
+                starts.copy_(torch.tensor([0, 4, 5], device="cuda"))
+                tables[:4] = torch.tensor([2, 4], device="cuda")
+                tables[4] = torch.tensor([1, 3], device="cuda")
+                positions.copy_(torch.tensor([782, 783, 784, 785, 44], device="cuda"))
+                hidden.mul_(0.5)
+            actual = graph.replay(tokens, hidden, batch, tables, starts)
+            expected = decode(
+                hidden.view(-1, 24, 256),
+                cache,
+                tables,
+                positions + 1,
+                first=1,
+                max_tokens=1568,
+            ).flatten(1)
+            torch.testing.assert_close(actual, expected, atol=0.03, rtol=0.03)
+
+
 if __name__ == "__main__":
     unittest.main()

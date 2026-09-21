@@ -11,9 +11,10 @@ from oh_my_vllm.models.qwen import Batch, Qwen
 from oh_my_vllm.worker.batch_plan import BLOCK, plan_request, validate_batch
 from oh_my_vllm.worker.protocol import RequestOutput, SchedulerOutput, WorkerOutput
 from oh_my_vllm.worker.runtime import identity, verify_loaded_modules
-from oh_my_vllm.worker.sampler import RequestSampler
+from oh_my_vllm.worker.sampler import RequestSampler, greedy_rows, verify_rows
 from oh_my_vllm.worker.sampling import SamplingParams
 from oh_my_vllm.worker.serving import ServingAdapter
+from oh_my_vllm.worker.tensors import device_tensor
 
 logger = logging.getLogger(__name__)
 
@@ -207,28 +208,28 @@ class OhMyVllmWorker:
                 256,
             )
         batch = Batch(
-            positions=torch.tensor(positions, device="cuda"),
-            starts=cpu_starts.cuda(),
-            sequence_ids=torch.tensor(sequence_ids, dtype=torch.int32, device="cuda"),
-            state_reads=torch.tensor(
+            positions=device_tensor(positions, device="cuda"),
+            starts=cpu_starts.cuda(non_blocking=True),
+            sequence_ids=device_tensor(sequence_ids, dtype=torch.int32, device="cuda"),
+            state_reads=device_tensor(
                 [p.source for p in plans], dtype=torch.int32, device="cuda"
             ),
-            state_writes=torch.tensor(writes, dtype=torch.int32, device="cuda"),
-            final_state_writes=torch.tensor(
+            state_writes=device_tensor(writes, dtype=torch.int32, device="cuda"),
+            final_state_writes=device_tensor(
                 [p.writes[-1] for p in plans], device="cuda"
             ),
-            fa_slots=torch.tensor(slots, device="cuda"),
+            fa_slots=device_tensor(slots, device="cuda"),
             attention=self.attention,
             prefill_sequences=sum(p.prefill for p in plans),
             prefill_tokens=sum(len(p.writes) for p in plans if p.prefill),
         )
-        token_tensor = torch.tensor(ids, device="cuda")
+        token_tensor = device_tensor(ids, device="cuda")
         graph_logits = None
         if use_graph:
             from oh_my_vllm.worker.decode_graph import DecodeGraph
 
             width = (extent + BLOCK - 1) // BLOCK
-            tables = torch.tensor(
+            tables = device_tensor(
                 [
                     p.request.fa_block_table[:width]
                     + [0] * (width - len(p.request.fa_block_table[:width]))
@@ -251,13 +252,14 @@ class OhMyVllmWorker:
         selected = [
             starts[i] + row for i, p in enumerate(plans) for row in p.sample_indices
         ]
-        logits = (
-            graph_logits[selected]
-            if graph_logits is not None
-            else self.model.logits(hidden[selected])
-            if selected
-            else None
-        )
+        logits = None
+        if selected:
+            if graph_logits is None:
+                logits = self.model.logits(hidden[selected])
+            elif selected == list(range(len(ids))):
+                logits = graph_logits
+            else:
+                logits = graph_logits[selected]
         # The grammar adapter only needs these two protocol-independent mappings.
         masks = {}
         if self.serving is not None:
@@ -284,16 +286,29 @@ class OhMyVllmWorker:
                     count = len(by_id[int(rid)].drafts) + 1
                     masks[int(rid)] = output.grammar_bitmask[offset : offset + count]
                     offset += count
+        greedy = None
+        if (
+            logits is not None
+            and not masks
+            and all(
+                self.samplers[p.request.request_id].plain_greedy
+                for p in plans
+                if p.sample_indices
+            )
+        ):
+            greedy = greedy_rows(logits)
         results, copies, counts, row = [], [], [], 0
         for plan in plans:
             rid = plan.request.request_id
             tokens = []
             if plan.sample_indices:
-                tokens = self.samplers[rid].sample(
-                    logits[row : row + len(plan.sample_indices)],
-                    drafts=plan.drafts,
-                    bitmask=masks.get(rid),
-                )
+                end = row + len(plan.sample_indices)
+                if greedy is not None:
+                    tokens = verify_rows(greedy[row:end], plan.drafts)
+                else:
+                    tokens = self.samplers[rid].sample(
+                        logits[row:end], drafts=plan.drafts, bitmask=masks.get(rid)
+                    )
                 row += len(plan.sample_indices)
             text, finish, reasoning = "", None, 0
             if self.serving is not None and rid in self.serving.generations:
@@ -319,7 +334,7 @@ class OhMyVllmWorker:
             )
         if copies:
             sources, destinations = (
-                torch.tensor(values, device="cuda")
+                device_tensor(values, device="cuda")
                 for values in zip(*copies, strict=True)
             )
             for kind, cache in zip(self.model.kinds, self.caches, strict=True):

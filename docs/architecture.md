@@ -118,6 +118,13 @@ For graph target verification, up to five consecutive queries of a request share
 one tiled KV read. Each query retains its own causal length; requests never share
 a table or attention normalization. CUDA Graph replay copies ragged starts as
 well as tables and lengths, so the same graph supports different per-request
-counts. Ordinary one-query decode and draft-head graphs retain the single-query
-path. Grouped FP64 reference tests cover both split counts, page boundaries, the
+counts. Ordinary one-query decode retains the single-query path; draft-head
+verification uses the same grouped path, keyed by token count and request count. Grouped FP64 reference tests cover both split counts, page boundaries, the
 shifted first valid position, and regrouping during replay.
+
+Unmasked greedy batches without penalties transfer only selected tokens and row
+validity, once for all requests. Each request then verifies its own draft prefix.
+Other sampling configurations retain full target-distribution construction. Small
+private CPU metadata tensors use nonblocking copies on the same stream as their
+GPU consumers; this removes explicit per-copy waits without assuming that
+pageable transfers necessarily overlap computation.

@@ -92,6 +92,31 @@ def probabilities(
     return scores.softmax(-1)
 
 
+def greedy_rows(logits: torch.Tensor) -> list[list[int]]:
+    """One batched device-to-host transfer for unpenalized, unmasked greedy rows.
+
+    max propagates NaN and picks the first tied index. A finite maximum also
+    rejects +inf and all-masked rows without allocating a vocabulary-sized PMF.
+    """
+    if logits.ndim != 2 or logits.numel() == 0:
+        raise ValueError("greedy logits must be a nonempty matrix")
+    values, tokens = logits.max(-1)
+    return torch.stack((tokens, torch.isfinite(values).to(torch.int64)), -1).tolist()
+
+
+def verify_rows(rows: Sequence[Sequence[int]], drafts: Sequence[int]) -> list[int]:
+    if len(rows) != len(drafts) + 1:
+        raise ValueError("one target row is required per draft plus the bonus")
+    accepted = []
+    for row, (token, valid) in enumerate(rows):
+        if not valid:
+            raise RuntimeError("reachable target distribution has no valid token")
+        accepted.append(token)
+        if row == len(drafts) or token != drafts[row]:
+            break
+    return accepted
+
+
 class RequestSampler:
     def __init__(
         self, params: SamplingParams, prompt: Sequence[int], device: str | torch.device
@@ -104,6 +129,16 @@ class RequestSampler:
             self.generator.seed()
         else:
             self.generator.manual_seed(params.seed)
+
+    @property
+    def plain_greedy(self) -> bool:
+        p = self.params
+        return (
+            p.temperature == 0
+            and p.repetition_penalty == 1
+            and p.frequency_penalty == 0
+            and p.presence_penalty == 0
+        )
 
     def sample(
         self,
@@ -133,14 +168,7 @@ class RequestSampler:
             selected = (probs / noise).argmax(-1)
         valid = torch.isfinite(probs).all(-1) & (probs.sum(-1) > 0)
         rows = torch.stack((selected, valid.to(torch.int64)), -1).tolist()
-        accepted = []
-        for row, (token, is_valid) in enumerate(rows):
-            if not is_valid:
-                raise RuntimeError("reachable target distribution has no valid token")
-            accepted.append(token)
-            if row == len(drafts) or token != drafts[row]:
-                break
-        return accepted
+        return verify_rows(rows, drafts)
 
     def commit(self, tokens: Sequence[int]) -> None:
         """Record only tokens retained after EOS/stop/length handling."""
