@@ -1,5 +1,18 @@
 # Handoff — 2026-09-21
 
+## Latest cleanup — release task-owned GPU programs promptly
+
+The user identified that the acceptance service had been left running without
+an explicit request to retain it. Sent SIGINT to the verified task-owned Rust
+server (PID 821668); it shut down its Python worker (PID 821857). Both processes
+are gone, port 8000 is no longer listening, and nvidia-smi no longer lists the
+worker's 87,516 MiB allocation. No unrelated process was stopped.
+
+AGENTS.md and CONTRIBUTING.md now require prompt cleanup after tests/runs,
+including completion, failure, cancellation and handoff. Keeping a GPU service
+running requires an explicit user request and a documented handoff exception.
+The serving implementation and recorded acceptance results are unchanged.
+
 ## Latest workflow decision — develop only on main
 
 The user requires all development and commits on `main`, with no new local or
@@ -9,7 +22,7 @@ discarding work and published to origin/main. The codex/openai-compatible-servin
 branch was then deleted locally and on GitHub; only main remains in both places.
 Independent review passed; 73 Rust tests, all-target/all-feature clippy and Python
 format/check passed. The policy documentation is committed directly on main.
-This workflow-only change does not alter the running service or its acceptance.
+That workflow-only change did not alter the service or its acceptance.
 
 ## Latest implementation — real MTP4 serving acceptance complete
 
@@ -50,11 +63,10 @@ EngineCore matrix and FP64 probes were not rerun because this change is confined
 to HTTP output handling and diagnostic timing. The agreed serving task has no
 remaining GPU blocker or required implementation work.
 
-The verified local service remains running at http://127.0.0.1:8000/v1 at this
-handoff (Rust PID 821668, worker PID 821857, selected GPU UUID above). Its log is
-/tmp/oh-my-vllm-serving-live4.log; it uses DEBUG worker phase logging for this
-verification session. These PIDs are a session snapshot, not persistent service
-identifiers. Normal startup defaults to INFO as documented in serving.md.
+The acceptance service previously ran at http://127.0.0.1:8000/v1 (Rust PID
+821668, worker PID 821857) and has now been stopped as recorded above. Its log
+remains at /tmp/oh-my-vllm-serving-live4.log and used DEBUG worker phase logging.
+Normal startup defaults to INFO as documented in serving.md.
 
 ## Earlier implementation milestone — GPU acceptance was blocked
 

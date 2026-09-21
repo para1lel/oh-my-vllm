@@ -12,6 +12,11 @@ using msgpack.
 
 - **Target model:** `/data0/shared/Qwen3.8-27B-FP8` (Qwen3.5-27B, 48 GDN + 16 FA layers)
 - **Target hardware:** single B200 GPU, wait for any idle B200 with `scripts/with-gpu.sh`; pin the selected GPU UUID
+- **GPU cleanup:** Promptly stop GPU programs started for the task as soon as
+  their tests/runs finish, including inference servers and child workers. Do not
+  leave them running after completion, failure, cancellation or handoff unless
+  the user explicitly asks to keep them running. Verify owned processes have
+  exited and no longer appear in `nvidia-smi`; never stop unrelated processes.
 - **Performance target:** at least 95% of vLLM EngineCore on bs=1/2/4, in=32768, out=4096
 - **Python env for model runner:** `/data0/shared/dongwu.chen/conda-envs/vllm/bin/python`
   — this env has vLLM, torch, CUDA. The oh-my-vllm Python package is not installed
@@ -52,6 +57,9 @@ using msgpack.
 4. Stage only changed files; never `git add .`
 5. Start a sub-agent code review after each milestone; fix correctness, performance, and best-practice findings before committing with Conventional Commits format + attribution line
 6. Update `docs/handoff.md` with what was done, what was verified, what remains
+7. Stop all task-owned GPU servers/workers and verify GPU resources and temporary
+   service ports are released. Record any explicitly requested running service
+   exception in the handoff; do not infer one from a request to test or run it.
 
 ## Verification requirements
 

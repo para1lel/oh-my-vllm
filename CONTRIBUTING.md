@@ -62,6 +62,10 @@ A task is done when:
 2. Affected tests pass (Rust unit tests for scheduler/kv-cache changes; actual-path GQA/GDN FP64 probes for attention/state changes, including MTP when affected).
 3. The end-to-end smoke test passes if the change touches `zmq_bridge.py`, `model_runner.py`, or `client.rs`.
 4. `docs/plan.md` and `docs/handoff.md` are updated to reflect the new task status.
+5. Task-owned GPU servers and workers are stopped promptly after their runs,
+   including on failure or cancellation. Verify their processes, GPU allocations
+   and temporary service ports are gone. Leave a service running only when the
+   user explicitly requests it, and document that exception in the handoff.
 
 ## Adding a new feature
 
