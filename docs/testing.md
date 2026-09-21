@@ -3,7 +3,8 @@
 ## Environments and CPU checks
 
 All commands use scripts/with-env.sh to set PYTHONPATH and CARGO_TARGET_DIR.
-The framework uses conda oh-my-vllm; GPUWorker and baseline use conda vllm.
+The independent runtime uses conda oh-my-vllm. The transitional V2 GPUWorker
+still uses conda vllm; baseline data is frozen and must not be regenerated.
 
 ```bash
 scripts/with-env.sh cargo test --workspace
@@ -200,3 +201,30 @@ macros, comments and string literals; tabs expand using rustfmt's tab size.
 `rustfmt` alone may leave `json!` bodies beyond max_width untouched. Split their
 fields manually and use `concat!` to wrap long literals without changing values.
 Configuration and hook changes trigger both Rust style hooks.
+
+## Independent runtime migration (in progress)
+
+Run these in the new conda environment. Separate FlashInfer/Triton cache roots
+prevent a successful run from silently reusing artifacts compiled in the old
+environment. The model probe is a short eager diagnostic, not a service or
+performance acceptance run. The production Worker replacement remains pending.
+
+```bash
+CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p test_independent_sampler.py
+CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p test_serving_worker.py
+scripts/with-gpu.sh scripts/with-env.sh env \
+  FLASHINFER_WORKSPACE_BASE=/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent \
+  TRITON_CACHE_DIR=/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent/triton \
+  PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 OMP_NUM_THREADS=1 MAX_JOBS=8 \
+  python -m pytest tests/test_independent_kernels.py -x -q
+scripts/with-gpu.sh scripts/with-env.sh env \
+  FLASHINFER_WORKSPACE_BASE=/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent \
+  TRITON_CACHE_DIR=/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent/triton \
+  OMP_NUM_THREADS=1 MAX_JOBS=8 python scripts/probe-independent-model.py
+```
+
+The operator tests use CPU references for block-scaled FP8, paged GQA, gated
+delta recurrence, causal convolution, RMS normalization and partial rotary
+embedding. They include multiple FP8 rows, non-contiguous logical attention
+pages, 784/785-token boundaries and per-candidate MTP state snapshots. They do
+not replace the actual-model FP64 probes or final service/performance acceptance.

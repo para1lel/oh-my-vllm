@@ -25,3 +25,8 @@ replacing its original measurements. See docs/acceptance.md for interpretation.
 2026-09-19-batch-text.json preserves full generated text and observed counters
 for ordinary and MTP/prefix two-request preemption checks. Its dirty build
 identity is explicit; these are semantic smoke results, not throughput data.
+
+`2026-09-21-independent-stage1.json` records the first independent-runtime
+milestone: new-environment operator/CPU tests, short eager model output and the
+transitional adapter's MTP4 service checks. It is not the final migration
+acceptance or a replacement performance baseline.

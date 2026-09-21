@@ -128,7 +128,26 @@ Document dtype-dependent tolerances. Existing standalone GQA results do not
 establish actual-path coverage. Also demonstrate coherent real-text inference,
 including MTP and prefix hits. Full-model token equality is not an acceptance gate.
 
-## REQ-RUNNER-001 — V2 Model Runner
+## REQ-RUNNER-002 — Independent runtime (active migration)
+
+Replace the vLLM implementation dependency with code maintained in this repository
+and independent libraries. Preserve Rust serving/scheduling/logical KV and Python
+GPU execution. Final builds, tests and services must neither install/import/link
+vLLM nor depend on its source, conda environment or cached compiled artifacts.
+Transitional milestones may retain the V2 adapter described below.
+
+Use recent compatible stable dependencies selected in dependency order, with the
+verified versions pinned. Higher-level dependencies live in conda oh-my-vllm;
+working system CUDA/compiler tools are allowed. Selected code may be ported with
+provenance and licensing, but copying the framework wholesale is not acceptable.
+
+Keep all existing functionality and FP64 tolerances. Run targeted regressions at
+each milestone and all nine original-baseline >=95% checks at final acceptance.
+Do not rerun native vLLM or require a new V2-relative threshold. Future model
+architectures, single-node multi-GPU, other NVIDIA GPUs and local DSpark need brief
+extension documentation only. See ADR-006 for the user-confirmed boundaries.
+
+## REQ-RUNNER-001 — V2 Model Runner (completed predecessor)
 
 Use GPUWorker's V2 Model Runner exclusively, with no legacy implementation or
 fallback. Preserve all existing offline and serving features, including MTP4

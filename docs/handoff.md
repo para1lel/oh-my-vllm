@@ -1,6 +1,39 @@
 # Handoff — 2026-09-21
 
-## Current migration — V2 complete and verified
+## Current migration — independent GPU runtime in progress
+
+The user approved ADR-006 after the design interview. Rust/Python ownership stays
+unchanged. Final builds/tests/inference must not depend on vLLM, its source, old
+environment or compiled cache artifacts. Intermediate stages may retain vLLM.
+Only the original frozen EngineCore baseline is an acceptance reference.
+
+First milestone: establish stable dependencies in conda oh-my-vllm and validate
+independent FP8, GQA and GDN/MTP state operators against CPU references. The new
+operator modules are not yet the production execution path. The 80-package stable
+candidate closure is installed in conda oh-my-vllm, including the editable project;
+pip check passes and vLLM is not importable. All 11 GPU operator tests pass in that
+environment with independent FlashInfer/Triton caches; 17 service/sampling CPU tests
+also pass there. The complete transitional CPU suite has 48 passing tests in the
+old environment. Rust workspace tests, fmt/width and clippy pass.
+
+Numerical tests exposed two FlashInfer boundary mismatches: prefill's advertised
+q/k normalization flag is unused, requiring explicit normalization; CUTLASS's
+K-major activation scale requires contiguous K groups despite its column-major
+parameter description. Both are fixed and covered by numerical tests. Quantizer
+FP32 rounding is independently checked before FP64 GEMM reference comparison.
+The sampler review caught NaN/+inf greedy rows; reachable bad rows now fail,
+while unreachable rows after draft rejection remain harmless. Static re-review
+passes. The independent model probe generated 32 coherent Chinese tokens with
+finite hidden states. Twelve Chat/Responses × off/medium × JSON/object/tool real
+MTP4 service cases pass through the transitional V2 adapter; this validates the
+service utility migration, not independent MTP. All task-owned GPU processes
+exited and port18012 is released. Evidence is recorded in
+bench/baseline/2026-09-21-independent-stage1.json. Production MTP, graph integration,
+actual-model FP64 and final acceptance remain pending.
+Existing V2 service still defaults to the old environment until replacement. Do
+not claim full runtime independence or performance acceptance yet.
+
+## Previous migration — V2 complete and verified
 
 Implementation `d85c23e` requires V2 exclusively; no old-runner fallback or vLLM
 source edits remain. Rust retains scheduling/KV and accepted history. Resumption

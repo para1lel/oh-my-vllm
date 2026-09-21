@@ -1,5 +1,26 @@
 # Implementation plan
 
+## Active migration — independent runtime (ADR-006)
+
+1. Resolve recent compatible stable dependencies in conda `oh-my-vllm`; validate
+   independent FP8, GQA, GDN and convolution/state operators against CPU FP64.
+   Exercise ragged MTP snapshots, prefix isolation and the 784-token boundary.
+2. Validate the concrete Qwen model and greedy draft/target sampling, then replace
+   the Worker adapter while retaining Rust scheduling, cache ownership and ZMQ.
+3. Integrate MTP4, hybrid cache checkpoints, preemption/resumption, structured
+   decoding and service lifecycle. Add CUDA graph execution and measure hot paths.
+4. Remove all runtime/build/test dependencies on vLLM, its checkout, old conda
+   environment and artifacts. Verify clean independent caches and dependencies.
+5. Run existing correctness, both real oh-my-pi tasks with MTP, and the nine-row
+   performance matrix against only the original frozen EngineCore baseline.
+   Reconcile documents, obtain independent review, commit and push `main`.
+
+The environment/operator milestone is validated; production migration continues.
+Intermediate use of the old adapter is
+explicitly allowed; it is not evidence of final independence. Future model,
+NVIDIA backend, single-node multi-GPU and local DSpark extension points are
+documented without placeholder interfaces or additional acceptance scope.
+
 ## Completed and saved
 
 1. Environment/documentation foundation, idle GPU selection and timestamped logs

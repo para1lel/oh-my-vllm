@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from functools import wraps
 from typing import TYPE_CHECKING
 
@@ -279,7 +279,10 @@ class OhMyVllmWorker:
                 self.config.model_config.max_model_len,
             )
         ids, sampling = self.serving.prepare(request_id, request)
-        self.register_request(request_id, ids, sampling)
+        # Transitional boundary: service utilities no longer depend on vLLM.
+        from vllm.sampling_params import SamplingParams
+
+        self.register_request(request_id, ids, SamplingParams(**asdict(sampling)))
         return ids
 
     def unregister_request(self, request_id: int):
@@ -301,6 +304,12 @@ class OhMyVllmWorker:
         trace = logger.isEnabledFor(logging.DEBUG)
         mask_started = time.perf_counter_ns() if trace else 0
         grammar = self.serving.masks(vllm_output) if self.serving is not None else None
+        if grammar is not None:
+            from vllm.v1.core.sched.output import GrammarOutput
+
+            grammar = GrammarOutput(
+                grammar.structured_output_request_ids, grammar.grammar_bitmask
+            )
         model_started = time.perf_counter_ns() if trace else 0
         vllm_output.has_structured_output_requests = grammar is not None
         output = self._worker.execute_model(vllm_output)

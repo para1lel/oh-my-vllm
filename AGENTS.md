@@ -4,9 +4,12 @@
 
 Build a Rust-first inference framework for **Qwen3.5-27B-FP8 on a single B200 GPU**
 that matches vLLM EngineCore throughput at least **95%** on the workloads in
-`docs/requirements.md`. Rust owns scheduling and KV cache; Python wraps vLLM's
-`GPUWorker` for the model runner. The two sides talk over a ZMQ DEALER socket
-using msgpack.
+`docs/requirements.md`. Rust owns serving, scheduling and logical KV cache;
+Python owns GPU computation. The two sides use ZMQ DEALER and msgpack.
+The active migration replaces vLLM with project-owned implementations and
+independent libraries. Transitional stages may still call vLLM, but final
+builds, tests and inference must not install, import or link vLLM, use its
+source checkout, or depend on the old vllm conda environment or build caches.
 
 ## Non-negotiable constraints
 
@@ -18,9 +21,20 @@ using msgpack.
   the user explicitly asks to keep them running. Verify owned processes have
   exited and no longer appear in `nvidia-smi`; never stop unrelated processes.
 - **Performance target:** at least 95% of vLLM EngineCore on bs=1/2/4, in=32768, out=4096
-- **Python env for model runner:** `/data0/shared/dongwu.chen/conda-envs/vllm/bin/python`
-  — this env has vLLM, torch, CUDA. The oh-my-vllm Python package is not installed
-  there; set `PYTHONPATH=/data0/shared/dongwu.chen/oh-my-vllm/python:$PYTHONPATH`
+- **Target Python environment:** `/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python`.
+  During migration only, the existing adapter may use the old vllm environment.
+  Set `PYTHONPATH=/data0/shared/dongwu.chen/oh-my-vllm/python:$PYTHONPATH`.
+- **Dependencies:** Select recent compatible stable releases in dependency order,
+  then pin the verified combination. Higher-level dependencies belong in the
+  oh-my-vllm environment. Use working system CUDA/compiler tools when convenient;
+  otherwise maintain those tools in the environment. The host provides the driver.
+- **Scope:** Keep all existing features. Future model architectures, single-node
+  multi-GPU, other NVIDIA backends and the local DSpark checkpoint need brief
+  extension documentation only, not empty interfaces or untested support claims.
+- **Regression baseline:** Only compare against the original frozen EngineCore
+  artifact; do not rerun it or impose a new V2-relative performance threshold.
+  Intermediate stages require relevant correctness tests and review; incomplete
+  performance work must be explicit. Final acceptance requires all nine rows.
 - **Rust env:** `/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/cargo`
   (`CARGO_TARGET_DIR=/data0/shared/dongwu.chen/oh-my-vllm/target`)
 - **Block size:** 784 tokens (Qwen3.5 hybrid requirement — do not change)
@@ -35,7 +49,7 @@ using msgpack.
 
 - Do not change `block_size` away from 784
 - Do not swap-in vLLM's own scheduler (the whole point is Rust owns scheduling)
-- Do not add Python dependencies via conda — use pip inside the vllm env
+- Install Python dependencies with pip inside the oh-my-vllm environment
 - Do not `git push` or open PRs without explicit instruction
 - Do not `git add .` — stage only the files you intentionally changed
 - Do not disable pre-commit hooks (`--no-verify`)

@@ -38,6 +38,48 @@ class ServingTests(unittest.TestCase):
         request.update(overrides)
         return self.adapter.prepare(1, copy.deepcopy(request))
 
+    def test_native_streaming_unicode_and_stop(self):
+        from oh_my_vllm.worker.serving import Generation
+
+        text = "北京🙂 café\n<tool_call>"
+        ids = self.adapter.tokenizer.encode(text, add_special_tokens=False)
+        generation = Generation(None, 1024, [], set())
+        parts = [
+            generation.consume([token], self.adapter.tokenizer)[1] for token in ids
+        ]
+        self.assertEqual("".join(parts), text)
+        self.assertNotIn("\ufffd", "".join(parts))
+        generation = Generation(None, 1024, ["🙂 café"], set())
+        parts = [
+            generation.consume([token], self.adapter.tokenizer)[1] for token in ids
+        ]
+        self.assertEqual("".join(parts), "北京")
+        self.assertEqual(generation.finished, "stop")
+
+    def test_sampling_fields_and_invalid_parameters(self):
+        _, params = self.prepare(
+            sampling={
+                "frequency_penalty": 0.5,
+                "presence_penalty": -0.5,
+                "repetition_penalty": 1.1,
+                "seed": 123,
+            }
+        )
+        self.assertEqual(params.frequency_penalty, 0.5)
+        self.assertEqual(params.presence_penalty, -0.5)
+        self.assertEqual(params.repetition_penalty, 1.1)
+        self.assertEqual(params.seed, 123)
+        for sampling in [
+            {"temperature": -1},
+            {"top_p": 0},
+            {"top_k": 1.5},
+            {"seed": 1.5},
+            {"presence_penalty": 3},
+            {"repetition_penalty": 0},
+        ]:
+            with self.subTest(sampling=sampling), self.assertRaises(ValueError):
+                self.prepare(sampling=sampling)
+
     def test_template_ids_and_thinking(self):
         ids, params = self.prepare()
         self.assertIsInstance(ids, list)

@@ -4,15 +4,27 @@
 
 | Purpose | Conda environment |
 |---|---|
-| Rust, framework Python, lint and hooks | /data0/shared/dongwu.chen/conda-envs/oh-my-vllm |
-| GPUWorker, torch, vLLM and baseline | /data0/shared/dongwu.chen/conda-envs/vllm |
+| Rust, independent GPU runtime, lint and hooks | /data0/shared/dongwu.chen/conda-envs/oh-my-vllm |
+| Transitional V2 GPUWorker only (to be removed) | /data0/shared/dongwu.chen/conda-envs/vllm |
 
 Use scripts/with-env.sh for every cargo/Python command. It sets PYTHONPATH to the
 repository's python/ directory, CARGO_TARGET_DIR to target/, the framework PATH,
 and OH_MY_VLLM_WORKER_PYTHON to the absolute vllm conda Python. The worker package
 is not installed in that environment. No uv or conda package installation is used.
-If a Python dependency is missing, use the vllm environment's python -m pip through
-with-env.sh; do not install dependencies without first checking what is missing.
+Install new Python dependencies with pip inside `oh-my-vllm`, through with-env.sh.
+The independent runtime's direct dependencies are in python/pyproject.toml and
+its complete pinned Linux/Python3.12 closure is requirements/runtime.txt.
+The current candidate is installed and passes pip check; full GPU/model validation
+is in progress. CUDA13.1 and the compiler come from the host, while Torch2.14's
+CUDA13.0 runtime libraries are installed in the conda environment.
+
+```bash
+scripts/with-env.sh python -m pip install -r requirements/runtime.txt
+scripts/with-env.sh python -m pip check
+```
+
+Do not regenerate the frozen EngineCore baseline. The old worker executable
+remains the service default only during the explicitly allowed transition.
 
 The vLLM environment uses an editable checkout at /data0/shared/dongwu.chen/vllm.
 Installed version metadata alone is not an immutable source pin. Record the

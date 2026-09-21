@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import xgrammar as xgr
+from tokenizers.decoders import DecodeStream
 from transformers import AutoTokenizer
 from xgrammar.structural_tag import (
     AnyTextFormat,
@@ -16,6 +17,8 @@ from xgrammar.structural_tag import (
     StructuralTag,
     TagFormat,
 )
+
+from oh_my_vllm.worker.sampling import GrammarOutput, SamplingParams
 
 # Deliberately bounded subset: unknown keywords must never silently weaken strictness.
 _SCHEMA_KEYS = {
@@ -47,12 +50,12 @@ _SCHEMA_KEYS = {
 def validate_schema(schema: dict, *, strict: bool = False) -> None:
     if not isinstance(schema, dict):
         raise ValueError("schema must be an object")
-    from vllm.v1.structured_output.backend_xgrammar import (
-        has_xgrammar_unsupported_json_features,
-    )
-
-    if has_xgrammar_unsupported_json_features(schema):
-        raise ValueError("schema contains unsupported XGrammar constraints")
+    # Keep the documented supported subset even if a newer compiler accepts
+    # additional keywords. Mixed string constraints must not silently weaken.
+    if ("pattern" in schema or "format" in schema) and (
+        "minLength" in schema or "maxLength" in schema
+    ):
+        raise ValueError("cannot combine pattern/format with string length bounds")
     unknown = set(schema) - _SCHEMA_KEYS
     if unknown:
         raise ValueError(f"unsupported schema keywords: {sorted(unknown)}")
@@ -165,15 +168,11 @@ class Generation:
     reasoning_end: int | None = None
     reasoning_tokens: int = 0
     ids: list[int] = field(default_factory=list)
-    pieces: list[str] | None = None
-    prefix: int = 0
-    read: int = 0
+    decoder: DecodeStream = field(default_factory=DecodeStream)
     pending: str = ""
     finished: str | None = None
 
     def consume(self, tokens: list[int], tokenizer) -> tuple[list[int], str]:
-        from vllm.tokenizers.detokenizer_utils import detokenize_incrementally
-
         accepted, text = [], ""
         for token in tokens:
             if self.finished:
@@ -189,18 +188,7 @@ class Generation:
                 self.reasoning_tokens += 1
                 if token == self.reasoning_end:
                     self.reasoning_end = None
-            pieces, delta, self.prefix, self.read = detokenize_incrementally(
-                tokenizer,
-                self.ids,
-                self.pieces,
-                self.prefix,
-                self.read,
-                skip_special_tokens=False,
-            )
-            if self.pieces is None:
-                self.pieces = pieces
-            else:
-                self.pieces.extend(pieces)
+            delta = self.decoder.step(tokenizer.backend_tokenizer, token) or ""
             self.pending += delta
             matches = [
                 self.pending.find(stop) for stop in self.stop if stop in self.pending
@@ -233,13 +221,13 @@ class Generation:
 
 class ServingAdapter:
     def __init__(self, model_path: str, vocab_size: int, max_model_len: int):
-        from vllm.tokenizers.hf import get_cached_tokenizer
-
-        # Incremental decoding asks len(tokenizer) for every token. The raw HF
-        # backend recomputes vocabulary size (~29 ms/token on this model).
-        self.tokenizer = get_cached_tokenizer(
-            AutoTokenizer.from_pretrained(model_path, local_files_only=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_path, local_files_only=True
         )
+        # DecodeStream uses the Rust tokenizer directly, avoiding repeated
+        # Python vocabulary enumeration and retaining partial UTF-8 bytes.
+        if not self.tokenizer.is_fast:
+            raise ValueError("serving requires a fast tokenizer for streaming decode")
         self.defaults = json.loads(
             (Path(model_path) / "generation_config.json").read_text()
         )
@@ -256,8 +244,6 @@ class ServingAdapter:
         self._mask = None
 
     def prepare(self, request_id: int, request: dict):
-        from vllm.sampling_params import SamplingParams
-
         thinking = request["effort"] != "off"
         tools = request.get("tools", [])
         choice = request.get("tool_choice", "auto" if tools else "none")
@@ -339,8 +325,6 @@ class ServingAdapter:
         return ids, params
 
     def masks(self, scheduled):
-        from vllm.v1.core.sched.output import GrammarOutput
-
         ids = [
             rid
             for rid in scheduled.num_scheduled_tokens

@@ -1,0 +1,189 @@
+"""Gated delta recurrence with explicit read and per-token write slots.
+
+State layout is [slot, value_head, value_dim, key_dim]. A verification call
+reads its committed state and writes separate candidate states. The scheduler
+chooses the accepted slot later; rejected candidates never mutate a prefix.
+"""
+
+import torch
+import triton
+import triton.language as tl
+
+
+@triton.jit
+def _recurrent(
+    Q,
+    K,
+    V,
+    G,
+    Beta,
+    Pool,
+    Starts,
+    ReadSlots,
+    WriteSlots,
+    Out,
+    HQ: tl.constexpr,
+    HV: tl.constexpr,
+    D: tl.constexpr,
+    BV: tl.constexpr,
+):
+    seq = tl.program_id(0)
+    head = tl.program_id(1)
+    vd = tl.program_id(2) * BV + tl.arange(0, BV)
+    kd = tl.arange(0, D)
+    qhead = head // (HV // HQ)
+    first = tl.load(Starts + seq)
+    end = tl.load(Starts + seq + 1)
+    source = tl.load(ReadSlots + seq)
+    offsets = (head * D + vd[:, None]) * D + kd[None, :]
+    state = tl.load(Pool + source * HV * D * D + offsets).to(tl.float32)
+    for token in range(first, end):
+        q = tl.load(Q + (token * HQ + qhead) * D + kd).to(tl.float32)
+        k = tl.load(K + (token * HQ + qhead) * D + kd).to(tl.float32)
+        q *= tl.rsqrt(tl.sum(q * q, 0) + 1e-6) * (D**-0.5)
+        k *= tl.rsqrt(tl.sum(k * k, 0) + 1e-6)
+        v = tl.load(V + (token * HV + head) * D + vd).to(tl.float32)
+        decay = tl.exp(tl.load(G + token * HV + head))
+        beta = tl.load(Beta + token * HV + head)
+        state *= decay
+        residual = (v - tl.sum(state * k[None, :], 1)) * beta
+        state += residual[:, None] * k[None, :]
+        value = tl.sum(state * q[None, :], 1)
+        tl.store(Out + (token * HV + head) * D + vd, value)
+        target = tl.load(WriteSlots + token)
+        # Negative destinations allow outputs without committing a snapshot.
+        tl.store(Pool + target * HV * D * D + offsets, state, target >= 0)
+
+
+def recurrent(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    log_decay: torch.Tensor,
+    beta: torch.Tensor,
+    pool: torch.Tensor,
+    starts: torch.Tensor,
+    read_slots: torch.Tensor,
+    write_slots: torch.Tensor,
+) -> torch.Tensor:
+    """Decode/verify ragged sequences, storing each token's recurrent state.
+
+    Slot allocation is the caller's responsibility: destinations must be unique,
+    must not overwrite another sequence's source, and must not be shared prefixes.
+    Index tensors stay on GPU; this function performs no device-to-host reads.
+    """
+    if q.shape != k.shape or q.ndim != 3 or q.shape[-1] != 128:
+        raise ValueError("GDN requires matching [tokens, heads, 128] q/k")
+    if v.ndim != 3 or v.shape[0] != q.shape[0] or v.shape[-1] != 128:
+        raise ValueError("GDN value shape does not match q/k")
+    if (
+        q.shape[0] == 0
+        or q.shape[1] == 0
+        or v.shape[1] == 0
+        or v.shape[1] % q.shape[1]
+        or pool.shape[1:] != (v.shape[1], 128, 128)
+    ):
+        raise ValueError("GDN head ratio or state layout is invalid")
+    if log_decay.shape != v.shape[:2] or beta.shape != log_decay.shape:
+        raise ValueError("GDN gate shape does not match value heads")
+    if starts.numel() != read_slots.numel() + 1:
+        raise ValueError("GDN sequence offsets do not match read slots")
+    if write_slots.numel() != q.shape[0]:
+        raise ValueError("GDN requires one candidate state slot per token")
+    tensors = (q, k, v, log_decay, beta, pool, starts, read_slots, write_slots)
+    if any(t.dtype != torch.bfloat16 for t in (q, k, v)):
+        raise ValueError("GDN q/k/v must be BF16")
+    if any(t.dtype != torch.float32 for t in (log_decay, beta)):
+        raise ValueError("GDN gates must be FP32")
+    if pool.dtype not in (torch.float32, torch.bfloat16):
+        raise ValueError("GDN states must be FP32 or BF16")
+    if any(
+        t.ndim != 1 or t.dtype not in (torch.int32, torch.int64)
+        for t in (starts, read_slots, write_slots)
+    ):
+        raise ValueError("GDN offsets and slots must be integer vectors")
+    if any(
+        not t.is_cuda or not t.is_contiguous() or t.device != q.device for t in tensors
+    ):
+        raise ValueError("GDN tensors must be contiguous on the same CUDA device")
+    output = torch.empty_like(v)
+    _recurrent[(read_slots.numel(), v.shape[1], 8)](
+        q,
+        k,
+        v,
+        log_decay,
+        beta,
+        pool,
+        starts,
+        read_slots,
+        write_slots,
+        output,
+        q.shape[1],
+        v.shape[1],
+        128,
+        16,
+    )
+    return output
+
+
+def prefill(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    log_decay: torch.Tensor,
+    beta: torch.Tensor,
+    initial_state: torch.Tensor,
+    starts: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Independent FlashInfer prefill; gates use log-decay at our boundary."""
+    from flashinfer.gdn_prefill import chunk_gated_delta_rule
+
+    if q.ndim != 3 or q.shape != k.shape or q.shape[-1] != 128:
+        raise ValueError("GDN prefill requires matching [tokens,heads,128] q/k")
+    if (
+        v.ndim != 3
+        or v.shape[0] != q.shape[0]
+        or v.shape[-1] != 128
+        or q.numel() == 0
+        or v.shape[1] == 0
+        or v.shape[1] % q.shape[1]
+    ):
+        raise ValueError("GDN prefill value layout or head ratio is invalid")
+    if log_decay.shape != v.shape[:2] or beta.shape != log_decay.shape:
+        raise ValueError("GDN prefill gate shape does not match value heads")
+    if (
+        starts.ndim != 1
+        or starts.dtype not in (torch.int32, torch.int64)
+        or initial_state.shape != (starts.numel() - 1, v.shape[1], 128, 128)
+    ):
+        raise ValueError("GDN prefill initial states do not match sequence offsets")
+    if any(t.dtype != torch.bfloat16 for t in (q, k, v)) or any(
+        t.dtype != torch.float32 for t in (log_decay, beta, initial_state)
+    ):
+        raise ValueError("GDN prefill requires BF16 q/k/v and FP32 gates/state")
+    if any(
+        not t.is_cuda or t.device != q.device or not t.is_contiguous()
+        for t in (q, k, v, log_decay, beta, initial_state, starts)
+    ):
+        raise ValueError("GDN prefill tensors must be contiguous on one CUDA device")
+
+    # FlashInfer 0.6.18 exposes use_qk_l2norm_in_kernel but its prefill body
+    # does not implement it. Normalize explicitly, including the model epsilon.
+    q = (q.float() * torch.rsqrt(q.float().square().sum(-1, keepdim=True) + 1e-6)).to(
+        q.dtype
+    )
+    k = (k.float() * torch.rsqrt(k.float().square().sum(-1, keepdim=True) + 1e-6)).to(
+        k.dtype
+    )
+    # FlashInfer uses multiplicative decay rather than log-decay.
+    return chunk_gated_delta_rule(
+        q=q.contiguous(),
+        k=k.contiguous(),
+        v=v.contiguous(),
+        g=log_decay.float().exp().contiguous(),
+        beta=beta.float().contiguous(),
+        initial_state=initial_state,
+        output_final_state=True,
+        cu_seqlens=starts,
+        use_qk_l2norm_in_kernel=False,
+    )

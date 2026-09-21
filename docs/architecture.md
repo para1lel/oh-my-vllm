@@ -171,3 +171,20 @@ timer. Arrival interval admits requests while existing requests decode. Reduced
 scheduler-blocks exercises recompute preemption without altering physical cache.
 The timer includes registration through completion notification. Results include
 cache hits, preemptions and generated/accepted draft counts.
+
+## Independent runtime migration — staged implementation
+
+ADR-006 replaces the Python GPUWorker dependency while preserving Rust ownership
+and the ZMQ contract. The current service still uses the V2 adapter above. New
+`kernels/` modules implement explicit recurrent state snapshots, causal
+convolution, normalization and rotary embedding, with independent FlashInfer
+operators for FP8 GEMM, paged attention and chunked GDN prefill. `models/qwen.py`
+loads the concrete checkpoint directly from safetensors and composes these
+operators; it is currently an eager diagnostic path, not the production runner.
+
+Service preparation/detokenization now uses Hugging Face Tokenizers and XGrammar
+directly, with framework-owned sampling configuration. The transitional adapter
+converts that configuration at its vLLM boundary. The standalone target sampler
+applies penalties and grammar masks per draft prefix, accepts deterministic
+drafts until the first target-sample mismatch, and commits only retained tokens.
+Production cache planning, MTP execution and graph integration are still pending.
