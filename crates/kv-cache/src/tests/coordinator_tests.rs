@@ -454,6 +454,7 @@ fn speculative_slots_migrate_across_large_prefill_chunk() {
     kv.allocate_slots(&req, (vec![], vec![]), 0, 784, 0, false)
         .unwrap();
     let original = kv.mamba_blocks(1).to_vec();
+    kv.take_newly_allocated();
     req.num_computed_tokens = 784;
     req.waiting = false;
     kv.new_step_starts();
@@ -464,6 +465,13 @@ fn speculative_slots_migrate_across_large_prefill_chunk() {
     assert!(migrated[1..7].iter().all(|&id| id == NULL_BLOCK_ID));
     assert_eq!(&migrated[7..11], &original[1..5]);
     assert_ne!(migrated[11], NULL_BLOCK_ID);
+    let fresh = kv.take_newly_allocated();
+    for retained in &original[1..5] {
+        assert!(
+            !fresh.contains(retained),
+            "migrated state must not be zeroed"
+        );
+    }
     kv.free(1);
     assert_eq!(kv.pool().num_free_blocks(), 63);
 }

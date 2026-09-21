@@ -21,6 +21,8 @@ class ScheduledRequest:
     num_computed_tokens: int
     fa_block_table: list[int]
     mamba_block_table: list[int]
+    prefill_token_ids: list[int] | None = None
+    new_block_ids_to_zero: list[int] = field(default_factory=list)
 
 
 @dataclass
@@ -60,7 +62,6 @@ class SchedulerAdapter:
             counts[kind] = counts.get(kind, 0) + 1
         self.blocks: dict[int, tuple[list[int], ...]] = {}
         self.output_counts: dict[int, int] = {}
-        self.preempted: set[int] = set()
 
     def convert(self, output: SchedulerOutput, prompts: dict, sampling: dict):
         from vllm.v1.core.sched.output import CachedRequestData, NewRequestData
@@ -69,14 +70,31 @@ class SchedulerAdapter:
         result = VllmOutput.make_empty()
         result.finished_req_ids = {str(rid) for rid in output.finished_request_ids}
         result.preempted_req_ids = {str(rid) for rid in output.preempted_request_ids}
-        self.preempted.update(output.preempted_request_ids)
+        for rid in output.preempted_request_ids:
+            # V2 removes preempted requests; resumption must be a new request.
+            self.blocks.pop(rid, None)
         for rid in output.finished_request_ids:
             self.blocks.pop(rid, None)
             self.output_counts.pop(rid, None)
-            self.preempted.discard(rid)
         cached = CachedRequestData.make_empty()
+        blocks_to_zero = set()
         for request in output.scheduled:
             rid = request.request_id
+            # Each logical allocation reserves the full physical stride across
+            # shared FA/Mamba storage. Rust excludes prefix hits and live slots.
+            for block in request.new_block_ids_to_zero:
+                if block <= 0:
+                    raise ValueError("Cannot zero the reserved null block")
+                blocks_to_zero.update(
+                    block * self.stride + offset for offset in range(self.stride)
+                )
+            if rid not in self.blocks:
+                history = request.prefill_token_ids
+                if history is None or history[: len(prompts[rid])] != prompts[rid]:
+                    raise ValueError("V2 admission requires complete accepted history")
+                self.output_counts[rid] = len(history) - len(prompts[rid])
+            elif request.prefill_token_ids is not None:
+                raise ValueError("unexpected admission history for a running request")
             blocks = tuple(
                 [
                     0 if block == 0 else block * self.stride + offset
@@ -99,6 +117,7 @@ class SchedulerAdapter:
                     NewRequestData(
                         req_id=str(rid),
                         prompt_token_ids=prompts[rid],
+                        prefill_token_ids=request.prefill_token_ids,
                         mm_features=[],
                         sampling_params=sampling[rid],
                         pooling_params=None,
@@ -107,30 +126,25 @@ class SchedulerAdapter:
                         lora_request=None,
                     )
                 )
-                self.output_counts[rid] = 0
             else:
                 cached.req_ids.append(str(rid))
                 cached.num_computed_tokens.append(request.num_computed_tokens)
                 cached.num_output_tokens.append(self.output_counts[rid])
-                if rid in self.preempted:
-                    cached.resumed_req_ids.add(str(rid))
-                    cached.new_block_ids.append(blocks)
-                    self.preempted.remove(rid)
-                else:
-                    old = self.blocks[rid]
-                    # Skipped Mamba entries become null but are never read again.
-                    # Persistent batch tables need only the appended suffix.
-                    for before, after in zip(old, blocks, strict=True):
-                        if len(after) < len(before):
-                            raise ValueError("block table shrank without preemption")
-                    cached.new_block_ids.append(
-                        tuple(
-                            after[len(before) :]
-                            for before, after in zip(old, blocks, strict=True)
-                        )
+                old = self.blocks[rid]
+                # Skipped Mamba entries become null but are never read again.
+                # Persistent batch tables need only the appended suffix.
+                for before, after in zip(old, blocks, strict=True):
+                    if len(after) < len(before):
+                        raise ValueError("block table shrank without preemption")
+                cached.new_block_ids.append(
+                    tuple(
+                        after[len(before) :]
+                        for before, after in zip(old, blocks, strict=True)
                     )
+                )
             self.blocks[rid] = blocks
         result.scheduled_cached_reqs = cached
+        result.new_block_ids_to_zero = sorted(blocks_to_zero) or None
         result.total_num_scheduled_tokens = sum(result.num_scheduled_tokens.values())
         if result.total_num_scheduled_tokens != output.num_batched_tokens:
             raise ValueError("Rust token budget does not match scheduled tokens")
@@ -154,6 +168,8 @@ class OhMyVllmWorker:
         from vllm.utils.network_utils import get_open_port
         from vllm.v1.worker.gpu_worker import Worker
 
+        if not vllm_config.use_v2_model_runner:
+            raise ValueError("Only V2 Model Runner is supported")
         self.config = vllm_config
         self._worker = Worker(
             vllm_config,
@@ -171,6 +187,18 @@ class OhMyVllmWorker:
     @with_config
     def init_device(self):
         self._worker.init_device()
+        from vllm.v1.worker.gpu.model_runner import GPUModelRunner
+
+        runner = self._worker.model_runner
+        if not isinstance(runner, GPUModelRunner):
+            raise TypeError(f"Expected V2 Model Runner, got {type(runner)}")
+        if self._num_speculative_tokens:
+            from oh_my_vllm.worker.v2_runner import RustDraftTokensHandler
+
+            runner.draft_tokens_handler = RustDraftTokensHandler(runner.device)
+        logger.info(
+            "Model runner: %s.%s", type(runner).__module__, type(runner).__name__
+        )
 
     @with_config
     def load_model(self):
@@ -216,6 +244,9 @@ class OhMyVllmWorker:
         self.logical_num_blocks = cache.num_blocks // self.adapter.stride
         self._worker.initialize_from_config(cache)
         self._worker.compile_or_warm_up_model()
+        from oh_my_vllm.worker.v2_runner import clear_warmup_cache
+
+        clear_warmup_cache(self._worker.model_runner)
 
     @with_config
     def shutdown(self):

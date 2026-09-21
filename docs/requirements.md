@@ -128,6 +128,21 @@ Document dtype-dependent tolerances. Existing standalone GQA results do not
 establish actual-path coverage. Also demonstrate coherent real-text inference,
 including MTP and prefix hits. Full-model token equality is not an acceptance gate.
 
+## REQ-RUNNER-001 — V2 Model Runner
+
+Use GPUWorker's V2 Model Runner exclusively, with no legacy implementation or
+fallback. Preserve all existing offline and serving features, including MTP4
+with constrained decoding, prefix caching, recompute preemption and cancellation.
+Do not modify vLLM source; implement required adaptations in this project.
+Rust owns accepted history and may send its complete contents on admission and
+resumption, while normal decode remains incremental and drafts remain separate.
+
+For this migration, reuse the frozen nine-row EngineCore baseline in
+bench/baseline/2026-09-19-acceptance.json. Do not rerun vLLM baseline. Retain the
+95% performance gate, existing FP64 tolerances and HTTP observability checks.
+Record current editable vLLM revision separately from its package version and
+the historical baseline identity. See ADR-005.
+
 ## REQ-OBS-001 — Timestamped diagnostic logging
 
 Both processes need UTC timestamps, monotonic durations, run/request/step

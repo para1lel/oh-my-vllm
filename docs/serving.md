@@ -136,6 +136,17 @@ Also exercise the 12 real constrained-output cases (keep MTP enabled):
 scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/serving-acceptance.py --output-dir /tmp/oh-my-vllm-serving-constraints
 ```
 
+`scripts/serving-lifecycle.py --server-log /tmp/serve.log --output /tmp/serving-lifecycle.json` additionally
+checks all five thinking levels, stored response retrieval/continuation/deletion,
+concurrent plain/constrained requests, and a successful request after disconnect.
+Start the service with `RUST_LOG=info,oh_my_vllm_zmq_worker::serving=debug` and
+redirect its output to the supplied log file. The script requires log evidence
+that both mixed requests shared a scheduled batch and the disconnected request
+was canceled and released by the Worker RPC. It disconnects only after nonempty
+generated SSE content. Use --base-url on all three scripts when the service uses
+a non-default port. Check actual MTP activity in server logs, and stop the service
+and its worker immediately after the runs.
+
 The agentic script creates an isolated models.yml, allows read/grep/glob, and asks:
 
 > Read this repository's README, architecture documentation and necessary source.

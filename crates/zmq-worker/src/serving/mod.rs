@@ -33,7 +33,7 @@ use std::{
 };
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{StreamExt, wrappers::ReceiverStream};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 #[derive(Args, Clone)]
 pub struct ServeArgs {
@@ -475,7 +475,11 @@ async fn execute(
     client: &mut WorkerClient,
     batch: &oh_my_vllm_scheduler::SchedulerOutput,
 ) -> Result<oh_my_vllm_scheduler::WorkerOutput> {
-    Ok(tokio::time::timeout(
+    if batch.scheduled.len() > 1 {
+        let request_ids: Vec<_> = batch.scheduled.iter().map(|r| r.request_id).collect();
+        debug!(?request_ids, "scheduled mixed batch");
+    }
+    let output = tokio::time::timeout(
         Duration::from_secs(120),
         client.execute_one_step(
             &batch.scheduled,
@@ -484,7 +488,11 @@ async fn execute(
             batch.num_batched_tokens,
         ),
     )
-    .await??)
+    .await??;
+    if !batch.finished_request_ids.is_empty() {
+        debug!(request_ids = ?batch.finished_request_ids, "worker requests released");
+    }
+    Ok(output)
 }
 
 async fn run_engine(
@@ -574,6 +582,7 @@ async fn run_engine(
             if let Err(error) = events.and_then(|events| send_events(request, events)) {
                 scheduler.abort(id);
                 active.remove(&id).unwrap().fail(&error.to_string());
+                info!(request_id = id, error = %error, "request aborted");
                 continue;
             }
             if let Some(reason) = reason {

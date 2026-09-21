@@ -18,6 +18,13 @@ The vLLM environment uses an editable checkout at /data0/shared/dongwu.chen/vllm
 Installed version metadata alone is not an immutable source pin. Record the
 actual source/configuration and executable identity for measurements.
 
+The framework requires V2 Model Runner. It sets VLLM_USE_V2_MODEL_RUNNER=1 before
+creating EngineArgs and rejects an explicitly disabled setting. Startup logs the
+actual V2 runner class. No vLLM source patch or legacy fallback is used; local
+adaptations live in worker/v2_runner.py. For migration benchmarks use
+compare_vllm.py --baseline-json as documented in testing.md; do not regenerate
+the historical baseline.
+
 The ignored .vscode/settings.json selects conda oh-my-vllm for Python analysis
 and adds ${workspaceFolder}/python. Execution of GPUWorker still uses conda vllm.
 

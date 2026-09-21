@@ -193,6 +193,8 @@ impl Scheduler {
                     output.scheduled.push(ScheduledRequest {
                         request_id: req.id,
                         token_ids: scheduled_tokens,
+                        prefill_token_ids: None,
+                        new_block_ids_to_zero: self.kv.take_newly_allocated(),
                         num_computed_tokens: req.num_computed_tokens,
                         fa_block_table: fa_table,
                         mamba_block_table: mb_table,
@@ -261,6 +263,8 @@ impl Scheduler {
                         request_id: req.id,
                         token_ids: req.token_ids[computed_start..computed_start + to_schedule]
                             .to_vec(),
+                        prefill_token_ids: Some(req.token_ids.clone()),
+                        new_block_ids_to_zero: self.kv.take_newly_allocated(),
                         num_computed_tokens: hit_len,
                         fa_block_table: fa_table,
                         mamba_block_table: mb_table,

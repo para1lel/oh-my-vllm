@@ -66,7 +66,7 @@ Python process (oh_my_vllm.worker.zmq_bridge)
 | `crates/zmq-worker/` | Rust binary | `main()` in `src/main.rs` | CLI, ZMQ client, inference loop |
 | `python/oh_my_vllm/worker/zmq_bridge.py` | Python | `serve()` | ZMQ server, message dispatch |
 | `python/oh_my_vllm/worker/model_runner.py` | Python | `OhMyVllmWorker` | vLLM GPUWorker wrapper, output adaptation |
-| `python/oh_my_vllm/worker/spec_decode.py` | Python | Legacy helpers | Not used by the current inference path |
+| `python/oh_my_vllm/worker/v2_runner.py` | Python | `RustDraftTokensHandler` | Real V2 draft IDs transferred to Rust |
 
 ---
 
@@ -98,7 +98,6 @@ Use unique IPC paths for concurrent runs; remove a stale socket only after its o
 
 ## 5. Not yet implemented
 
-- OpenAI HTTP GPU/agentic acceptance — implementation exists, CUDA host fault blocks acceptance
 - gRPC server — outside scope
 - Swap-based preemption (CPU KV offload) — explicitly deferred (REQ-OUT-SCOPE-001)
 - Multi-GPU / tensor parallel > 1
@@ -128,13 +127,37 @@ releases finished/cancelled requests through the existing finished-only lifecycl
 OMP executes tools locally and sends results back. See serving.md for the exact
 compatibility limits; acceptance.md records the completed real MTP4 verification.
 
-## Installed GPUWorker adaptation (2026-09-19)
+## Python side: V2 GPUWorker adaptation (2026-09-21)
 
 ADR-002 records the installed API and physical group mapping.
 The adapter uses Worker, CachedRequestData, execute_model then sample_tokens,
 and preserves request IDs and every returned token. Rust sends completion-only
 steps. Logical FA/Mamba tables map into the worker's actual three Mamba groups
 plus one FA group using disjoint physical block IDs (ADR-002). Rust chunk boundaries preserve Mamba checkpoint alignment.
+
+Only `vllm.v1.worker.gpu.model_runner.GPUModelRunner` is supported. Initialization
+sets `VLLM_USE_V2_MODEL_RUNNER=1`, rejects an explicit conflicting setting and checks
+the actual runner class. There is no V1 fallback and no change to vLLM source.
+ADR-005 describes the V2 boundary and project-owned draft-transfer adaptation.
+
+Rust sends `prefill_token_ids` containing all accepted history on first admission
+and recompute resumption, including cached prefixes and previous accepted output.
+Original prompt length remains separate. Unverified drafts never enter this
+history. Python removes preempted worker state and resumes via `NewRequestData`;
+ordinary running updates omit history and append only block-table deltas.
+The worker output count is restored from history length minus original prompt
+length, preserving draft positions and output limits across resumption.
+
+V2 normally returns placeholder draft IDs for unconstrained requests. Our local
+`RustDraftTokensHandler` reuses its asynchronous D2H/event path for every MTP batch,
+so the unsigned Rust protocol always receives actual draft IDs. A copied batch
+flag controls transfer only; sampling and grammar flags remain unchanged.
+
+Hybrid cache zeroing is mandatory in V2: the Rust block pool reports genuinely
+new allocations, including recycled pages, and Python maps each to its reserved
+physical stride for V2's pre-execution zeroer. Prefix hits and live state slots
+are excluded. Startup clears dummy warmup cache contents in place before requests
+arrive. These prevent stale mixed-layout bytes from becoming NaN on later reads.
 
 ## MTP and benchmark lifecycle
 

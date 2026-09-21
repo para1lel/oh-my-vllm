@@ -238,6 +238,8 @@ impl WorkerClient {
                 .map(|s| ScheduledRequestMsg {
                     request_id: s.request_id,
                     token_ids: s.token_ids.clone(),
+                    prefill_token_ids: s.prefill_token_ids.clone(),
+                    new_block_ids_to_zero: s.new_block_ids_to_zero.clone(),
                     num_computed_tokens: s.num_computed_tokens as u32,
                     fa_block_table: s.fa_block_table.clone(),
                     mamba_block_table: s.mamba_block_table.clone(),

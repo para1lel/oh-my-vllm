@@ -1,5 +1,43 @@
 # Handoff — 2026-09-21
 
+## Current migration — V2 implementation and correctness milestone
+
+GPUWorker now requires V2 Model Runner with no legacy fallback. Rust sends full
+accepted history only on admission/resumption; V2 re-admits preempted requests.
+The local draft handler returns real MTP IDs even for unconstrained requests.
+Rust reports genuinely new cache allocations for V2 zeroing, excluding cached
+prefixes and migrated live MTP states. Startup clears dummy warmup cache contents
+in place. No vLLM source was modified; unused legacy MTP helpers were removed.
+
+Actual V2 FP64 ordinary/MTP probes pass after crossing block784, with the existing
+tolerances unchanged. Probes now activate only inside real scheduled requests:
+V2 dummy warmup supplies attention metadata and must not count as test coverage.
+The real ordinary two-request text test passes with two preemptions and 1024
+tokens per city. MTP4/prefix/staggered arrivals also pass with three preemptions,
+3136 initial cache-hit tokens and 1181 accepted drafts. CPU checks pass 75 Rust tests and 39 Python unittest
+tests, rustfmt/hard width, clippy and ruff. Independent runner/zeroing review passed.
+
+Initial serving verification passed 12 constraint cases and both real OMP APIs.
+It exposed native V2 -1 draft placeholders on plain MTP, fixed by real draft D2H.
+One early Chat run exhausted its reasoning budget through repetition; subsequent
+Chat and Responses tasks completed grounded final answers. Precision probes then
+exposed nonfinite GQA output after warmup, fixed by startup/runtime cache zeroing.
+Final post-fix serving constraints and both OMP tasks passed. Review strengthened
+the lifecycle script to require DEBUG-log proof of same-batch scheduling and
+cancellation/Worker release; this stronger log assertion still needs a GPU run.
+Do not label the migration fully accepted until that and performance pass.
+
+Next: run nine framework performance rows against the frozen 2026-09-19 baseline
+with --baseline-json (never rerun EngineCore), record evidence, finish document
+alignment/review, then commit and push main. Actual editable vLLM HEAD is
+039b2ad67da6d64f7c1835c4738c7fb545ad37fc; package metadata is stale g6376c601e.
+Historical and current source identities must remain distinct.
+
+All three task-owned HTTP services and all probes/text runs were stopped; owned
+processes and port 18002 were released. An unrelated user's pytest process later
+occupied all visible GPUs. Further runs must wait with scripts/with-gpu.sh and
+must not terminate unrelated processes.
+
 ## Latest maintenance — enforce Rust formatting inside macros
 
 The reported error-response line in serving/mod.rs was 234 characters, yet

@@ -168,6 +168,14 @@ fn prefix_cache_hit_reduces_scheduled_tokens() {
         "prefix cache should give a non-zero hit; got {}",
         sr.num_computed_tokens
     );
+    let hit_blocks = sr.num_computed_tokens / BS;
+    for cached in &sr.fa_block_table[..hit_blocks] {
+        assert!(!sr.new_block_ids_to_zero.contains(cached));
+    }
+    for cached in &sr.mamba_block_table[..hit_blocks] {
+        assert!(!sr.new_block_ids_to_zero.contains(cached));
+    }
+    assert!(!sr.new_block_ids_to_zero.is_empty());
 }
 
 // ── pool exhaustion: preemption ───────────────────────────────────────────────
@@ -281,6 +289,44 @@ fn abort_preempted_request_notifies_worker_once() {
     sched.abort(2);
     assert_eq!(sched.num_waiting(), 0);
     assert_eq!(sched.schedule().finished_request_ids, vec![2]);
+}
+
+#[test]
+fn preemption_resends_accepted_history_without_drafts() {
+    let mut sched = make_scheduler(9, 128);
+    sched.add_request(make_req(1, 8, 10));
+    sched.add_request(make_req(2, 8, 10));
+    let first = sched.schedule();
+    for request in &first.scheduled {
+        assert_eq!(request.prefill_token_ids, Some((0..8).collect()));
+    }
+    let mut second_output = dummy_output(2);
+    second_output.new_draft_token_ids = vec![90, 91];
+    sched.update(WorkerOutput {
+        outputs: vec![dummy_output(1), second_output],
+    });
+    let next = sched.schedule();
+    assert_eq!(next.preempted_request_ids, vec![2]);
+    assert!(next.scheduled[0].prefill_token_ids.is_none());
+    let resumed = next
+        .scheduled
+        .iter()
+        .find(|request| request.request_id == 2)
+        .unwrap();
+    assert_eq!(
+        resumed.prefill_token_ids,
+        Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 42])
+    );
+    assert!(sched.running.back().unwrap().draft_token_ids.is_empty());
+    sched.update(WorkerOutput {
+        outputs: vec![dummy_output(1), dummy_output(2)],
+    });
+    sched.abort(1);
+    let running = sched.schedule();
+    assert_eq!(running.scheduled.len(), 1);
+    let request = &running.scheduled[0];
+    assert_eq!(request.request_id, 2);
+    assert!(request.prefill_token_ids.is_none());
 }
 
 #[test]

@@ -33,7 +33,16 @@ def check(name, actual, expected, atol=0.03, rtol=0.03):
     actual = cpu(actual).reshape(expected.shape)
     error = (actual - expected).abs().max().item()
     print(
-        json.dumps({"probe": name, "max_abs_error": error, "atol": atol, "rtol": rtol}),
+        json.dumps(
+            {
+                "probe": name,
+                "max_abs_error": error,
+                "atol": atol,
+                "rtol": rtol,
+                "actual_nonfinite": int((~actual.isfinite()).sum()),
+                "reference_nonfinite": int((~expected.isfinite()).sum()),
+            }
+        ),
         file=sys.stderr,
         flush=True,
     )
@@ -83,22 +92,27 @@ original_fa = FlashInferImpl.forward
 selected_fa = None
 keys, values = [], []
 request_start = 0
+real_request_active = False
 original_execute = OhMyVllmWorker.execute_model
 
 
 def execute(self, output):
-    global request_start
+    global request_start, real_request_active
     if output.scheduled:
         assert len(output.scheduled) == 1, "probe requires a single request"
         request_start = output.scheduled[0].num_computed_tokens
-    return original_execute(self, output)
+    real_request_active = bool(output.scheduled)
+    try:
+        return original_execute(self, output)
+    finally:
+        real_request_active = False
 
 
 def fa_forward(
     self, layer, query, key, value, kv_cache, attn_metadata, output, **kwargs
 ):
     global selected_fa, keys, values
-    if attn_metadata is None:
+    if not real_request_active or attn_metadata is None:
         return original_fa(
             self, layer, query, key, value, kv_cache, attn_metadata, output, **kwargs
         )
@@ -141,7 +155,11 @@ last_prefill_context = None
 def prefill(**kwargs):
     global last_prefill_context
     context = get_forward_context()
-    if context.attn_metadata is None or context is last_prefill_context:
+    if (
+        not real_request_active
+        or context.attn_metadata is None
+        or context is last_prefill_context
+    ):
         return original_prefill(**kwargs)
     last_prefill_context = context
     ref, state = recurrence(
@@ -161,7 +179,11 @@ last_decode_context = None
 def decode(**kwargs):
     global last_decode_context
     context = get_forward_context()
-    if context.attn_metadata is None or context is last_decode_context:
+    if (
+        not real_request_active
+        or context.attn_metadata is None
+        or context is last_decode_context
+    ):
         return original_decode(**kwargs)
     last_decode_context = context
     state = kwargs["initial_state"][kwargs["ssm_state_indices"].long()]
@@ -194,7 +216,11 @@ last_mtp_context = None
 def mtp(**kwargs):
     global last_mtp_context
     context = get_forward_context()
-    if context.attn_metadata is None or context is last_mtp_context:
+    if (
+        not real_request_active
+        or context.attn_metadata is None
+        or context is last_mtp_context
+    ):
         return original_mtp(**kwargs)
     last_mtp_context = context
     indices = kwargs["state_indices"]

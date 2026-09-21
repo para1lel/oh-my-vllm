@@ -37,6 +37,8 @@ All messages are msgpack dicts with a `"type"` key.
    {"request_id": int,
     "token_ids": list[int],
     "num_computed_tokens": int,
+    "prefill_token_ids": [int],  // admission/resumption only: full accepted history
+    "new_block_ids_to_zero": [int],  // fresh logical allocations; excludes cache hits
     "fa_block_table": list[int],
     "mamba_block_table": list[int]}
  ],
@@ -152,10 +154,17 @@ remain lists and no accepted token is collapsed into a single next token.
 
 Rust reserves K target recurrent-state slots, migrates them after large chunks,
 and rolls back only scheduled rejected drafts. Prefix-hit requests are new to
-the worker; resumed requests replace tables, ordinary running updates append
+the worker; resumed requests are re-admitted with complete accepted history and
+replacement tables, ordinary running updates omit history and append
 suffixes. Finished IDs are flushed even when no model tokens remain scheduled.
 BF16 SSM in MTP mode preserves block784 and is matched in the baseline (ADR003).
-Legacy spec_decode.py helpers are not used by this execution path.
+V2 is mandatory. The local RustDraftTokensHandler copies actual draft IDs for
+unconstrained batches too; native V2 count-only -1 placeholders cannot cross the
+unsigned Rust token protocol. Unused legacy spec_decode.py helpers were removed.
+The block pool records fresh allocations (including reused pages), excluding
+prefix references and live speculative slots. Python expands these logical IDs
+over the physical stride and passes V2's new_block_ids_to_zero before execution.
+Startup also clears cache storage after dummy warmup, preserving graph addresses.
 
 ## Serving protocol extension (2026-09-21)
 

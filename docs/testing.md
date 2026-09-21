@@ -52,6 +52,9 @@ prefill/packed decode/fused MTP calls. It never substitutes production kernels.
 It checks outputs and recurrent states, including each speculative state.
 Required coverage categories must appear before shutdown can succeed. This is
 single-request, eager diagnostic coverage; never enable it in throughput runs.
+V2 warmup may provide attention metadata for dummy tensors, so probes activate
+only inside an actual scheduled request. Dummy initialization never satisfies
+coverage or enters the FP64 comparison.
 
 References use actual rounded inputs in CPU FP64. BF16 output checks use
 atol=rtol=0.03. Recurrent state checks require normalized RMS error <=1% and
@@ -97,6 +100,24 @@ CPU cancellation tests cover running, waiting and preempted requests and the
 finished-only notification that clears Python registration, adapter and Worker state.
 
 ## Matched performance acceptance
+
+For the V2 migration, use the historical comparison mode instead of running a
+new EngineCore baseline. It validates an exact workload match and runs only the
+framework. Repeat the command with modes mtp and prefix; keep two warmups and
+three measured repetitions and one CPU core per run:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh taskset -c 8 /data0/shared/dongwu.chen/conda-envs/vllm/bin/python benchmarks/compare_vllm.py --baseline-json bench/baseline/2026-09-19-acceptance.json --mode ordinary --batch-sizes 1 2 4 --warmup 2 --repetitions 3 --output /tmp/v2-ordinary.json
+```
+
+The output records the baseline artifact hash and current editable vLLM commit
+independently of package metadata. Historical data is not a same-source paired
+comparison. Historical rows used cores 8–16 respectively (ordinary, MTP, prefix;
+bs1/2/4 within each mode); use per-row taskset when matching those exact masks.
+The historical artifact must carry the complete matching model/runtime protocol;
+row-only lists and supplemental repeats without protocol metadata are rejected.
+The following original paired command remains available for future
+explicitly authorized baseline updates:
 
 ```bash
 scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output /tmp/ordinary.json

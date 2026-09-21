@@ -64,6 +64,8 @@ def _decode_scheduled_request(d: dict) -> ScheduledRequest:
         num_computed_tokens=d["num_computed_tokens"],
         fa_block_table=list(d["fa_block_table"]),
         mamba_block_table=list(d["mamba_block_table"]),
+        prefill_token_ids=d.get("prefill_token_ids"),
+        new_block_ids_to_zero=d["new_block_ids_to_zero"],
     )
 
 
@@ -227,6 +229,10 @@ def serve(socket_addr: str) -> None:
 
 def _handle_init(msg: dict) -> OhMyVllmWorker:
     """Build a VllmConfig and initialise the worker from an 'init' message."""
+    # This project only implements the V2 contract. Never silently select V1.
+    if os.environ.get("VLLM_USE_V2_MODEL_RUNNER", "1") != "1":
+        raise ValueError("oh-my-vllm requires VLLM_USE_V2_MODEL_RUNNER=1")
+    os.environ["VLLM_USE_V2_MODEL_RUNNER"] = "1"
     from vllm.engine.arg_utils import EngineArgs
 
     num_gpu_blocks = msg["num_gpu_blocks"]

@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 import datetime
 import hashlib
+import importlib.metadata
+import importlib.util
 import json
 import os
 import shutil
@@ -22,6 +24,89 @@ from contextlib import suppress
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def vllm_identity():
+    """Record editable source identity independently of stale wheel metadata."""
+    package = Path(importlib.util.find_spec("vllm").origin).parent
+    revision = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=package, text=True
+    ).strip()
+    status = subprocess.check_output(
+        ["git", "status", "--porcelain"], cwd=package, text=True
+    )
+    return {
+        "package_version": importlib.metadata.version("vllm"),
+        "source_path": str(package),
+        "git_commit": revision,
+        "git_status": status,
+        "git_diff_sha256": hashlib.sha256(
+            subprocess.check_output(
+                ["git", "diff", "HEAD", "--binary"],
+                cwd=package,
+            )
+        ).hexdigest(),
+        "runner": "vllm.v1.worker.gpu.model_runner.GPUModelRunner",
+    }
+
+
+def historical_baseline(path, args, batch):
+    """Select an exact workload from frozen data without starting vLLM."""
+    artifact = json.loads(Path(path).read_text())
+    expected_protocol = {
+        "model": args.model,
+        "block_size": 784,
+        "max_model_len": 65536,
+        "max_num_seqs": 32,
+        "max_num_batched_tokens": 32768,
+        "language_model_only": True,
+        "enable_chunked_prefill": True,
+        "enable_prefix_caching": True,
+        "async_scheduling": False,
+        "temperature": 0,
+        "ignore_eos": True,
+        "detokenize": False,
+        "mtp_ssm_dtype": "bfloat16",
+        "ordinary_prefix_ssm_dtype": "auto",
+    }
+    if not isinstance(artifact, dict) or any(
+        artifact.get("protocol", {}).get(key) != value
+        for key, value in expected_protocol.items()
+    ):
+        raise ValueError("historical baseline protocol is missing or does not match")
+    if artifact.get("warmup_per_engine") != args.warmup:
+        raise ValueError("historical baseline warmup count does not match")
+    rows = artifact.get("rows", [])
+    matches = [
+        row
+        for row in rows
+        if all(
+            row.get(key) == value
+            for key, value in {
+                "mode": args.mode,
+                "batch_size": batch,
+                "input_len": args.input_len,
+                "output_len": args.output_len,
+                "num_gpu_blocks": args.num_gpu_blocks,
+                "speculative_tokens": args.speculative_tokens
+                if args.mode == "mtp"
+                else 0,
+            }.items()
+        )
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            "historical baseline must contain exactly one matching workload"
+        )
+    selected = matches[0]
+    if len(selected["baseline"]) < 3:
+        raise ValueError("historical baseline has fewer than three measurements")
+    if any(
+        row["output_tokens"] != batch * args.output_len or row["output_tps"] <= 0
+        for row in selected["baseline"]
+    ):
+        raise ValueError("historical baseline contains incomplete measurements")
+    return selected
 
 
 def assert_gpu_exclusive(gpu, process_group):
@@ -88,6 +173,10 @@ def source_identity(binary):
         "git_status": git("status", "--porcelain").decode(),
         "git_diff_sha256": hashlib.sha256(git("diff", "HEAD", "--binary")).hexdigest(),
         "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+        "python_sources_sha256": {
+            str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted((ROOT / "python").rglob("*.py"))
+        },
     }
 
 
@@ -203,6 +292,7 @@ def compare(args):
         )
     args.binary = args.binary.resolve()
     identity = source_identity(args.binary)
+    runtime_identity = vllm_identity()
     all_results = []
     for batch in args.batch_sizes:
         base_cmd = [
@@ -236,10 +326,21 @@ def compare(args):
                 != identity["binary_sha256"]
             ):
                 raise RuntimeError("binary changed after identity capture")
-            baseline_run = run_engine(base_cmd)
-            base_rows = parse_rows(baseline_run, "BASELINE_RESULT ")
-            if len(base_rows) != 1:
-                raise RuntimeError(f"missing baseline result: {baseline_run[-2000:]}")
+            if args.baseline_json:
+                historical = historical_baseline(args.baseline_json, args, batch)
+                base_rows = [
+                    {
+                        "version": historical["vllm_version"],
+                        "runs": historical["baseline"],
+                    }
+                ]
+            else:
+                baseline_run = run_engine(base_cmd)
+                base_rows = parse_rows(baseline_run, "BASELINE_RESULT ")
+                if len(base_rows) != 1:
+                    raise RuntimeError(
+                        f"missing baseline result: {baseline_run[-2000:]}"
+                    )
             command = [
                 str(binary_snapshot),
                 "--model",
@@ -274,12 +375,13 @@ def compare(args):
         expected_hits = (
             batch * ((args.input_len - 1) // 784 * 784) if args.mode == "prefix" else 0
         )
-        if len(base) != args.repetitions or any(
+        if (not args.baseline_json and len(base) != args.repetitions) or any(
             row["prefix_hit_tokens"] != expected_hits for row in base + ours
         ):
             raise RuntimeError("engines did not use the expected matched cache state")
         if args.mode == "mtp" and any(
-            row["proposed_draft_tokens"] <= 0 for row in base + ours
+            row["proposed_draft_tokens"] <= 0 or row["accepted_draft_tokens"] <= 0
+            for row in base + ours
         ):
             raise RuntimeError("MTP did not produce draft tokens")
         base_median = statistics.median(row["output_tps"] for row in base)
@@ -290,6 +392,16 @@ def compare(args):
             "cpu_affinity": sorted(os.sched_getaffinity(0)),
             "source": identity,
             "vllm_version": base_rows[0]["version"],
+            "framework_vllm": runtime_identity,
+            "comparison": "historical" if args.baseline_json else "matched",
+            "baseline_artifact": str(args.baseline_json)
+            if args.baseline_json
+            else None,
+            "baseline_sha256": hashlib.sha256(
+                args.baseline_json.read_bytes()
+            ).hexdigest()
+            if args.baseline_json
+            else None,
             "mode": args.mode,
             "batch_size": batch,
             "input_len": args.input_len,
@@ -327,7 +439,14 @@ def main():
         "--binary", type=Path, default=ROOT / "target/release/oh-my-vllm-zmq-worker"
     )
     parser.add_argument("--baseline", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--baseline-json",
+        type=Path,
+        help="Use frozen workload rows; run only the framework, never vLLM baseline",
+    )
     args = parser.parse_args()
+    if args.baseline and args.baseline_json:
+        parser.error("--baseline and --baseline-json are mutually exclusive")
     if args.repetitions < 3 or args.warmup < 1:
         parser.error("acceptance requires >=3 measurements and >=1 warmup")
     if args.mode == "mtp" and args.speculative_tokens <= 0:

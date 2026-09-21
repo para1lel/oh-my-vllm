@@ -47,6 +47,9 @@ pub struct ExecuteMsg {
 pub struct ScheduledRequestMsg {
     pub request_id: u64,
     pub token_ids: Vec<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefill_token_ids: Option<Vec<u32>>,
+    pub new_block_ids_to_zero: Vec<u32>,
     pub num_computed_tokens: u32,
     pub fa_block_table: Vec<u32>,
     pub mamba_block_table: Vec<u32>,

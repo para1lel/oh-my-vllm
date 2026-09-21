@@ -107,6 +107,11 @@ impl HybridCoordinator {
         self.mamba.new_step_starts();
     }
 
+    /// Fresh logical blocks requiring worker-side zeroing before their first use.
+    pub fn take_newly_allocated(&mut self) -> Vec<u32> {
+        self.pool.take_newly_allocated()
+    }
+
     // ── prefix cache lookup ─────────────────────────────────────────────────
 
     /// Find the longest cache hit for `block_hashes`, capped at
