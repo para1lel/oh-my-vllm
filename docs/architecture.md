@@ -111,3 +111,13 @@ backend extensions, single-node multi-GPU collectives, and the local DSpark draf
 checkpoint. These require concrete implementations when pursued; there are no empty
 interfaces, PD-disaggregation paths or multi-node components in the current runtime.
 Historical vLLM/V2 integration decisions remain in earlier ADRs and acceptance data.
+
+### Grouped speculative verification attention
+
+For graph target verification, up to five consecutive queries of a request share
+one tiled KV read. Each query retains its own causal length; requests never share
+a table or attention normalization. CUDA Graph replay copies ragged starts as
+well as tables and lengths, so the same graph supports different per-request
+counts. Ordinary one-query decode and draft-head graphs retain the single-query
+path. Grouped FP64 reference tests cover both split counts, page boundaries, the
+shifted first valid position, and regrouping during replay.

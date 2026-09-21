@@ -1,5 +1,24 @@
 # Handoff — 2026-09-21
 
+## Grouped verification optimization — final acceptance pending
+
+Clean commit9c8e27b's MTP bs1 measured247.345tok/s (91.895% of original
+baseline), failing95%; prefix bs1 passed110.240%. Other attempts were discarded
+when the monitor detected external GPU clients. The baseline was not rerun.
+Target verification now shares KV reads across up to5 queries from one request,
+with separate per-row causal masks and dynamic ragged starts in CUDA Graphs.
+An uncommitted diagnostic measured263.494tok/s (one warmup/measurement); this
+is not final acceptance. Raw preoptimization rows and the diagnostic are in
+bench/baseline/2026-09-21-independent-grouped-decode.json.
+
+Default independent actual-model ordinary/MTP FP64 probes passed, as did
+ordinary and MTP prefix/preemption text regressions,12 constrained MTP service
+cases, lifecycle/cancellation and both real oh-my-pi API workflows. Both agent
+runs made9 successful read tool calls; the Responses answer misstated the earlier
+ordinary diagnostic as below threshold. It was correctly marked non-final, but
+that factual slip must not be represented as perfect answer accuracy. Rerun the
+agent tasks against final documentation. The service and port18013 were released.
+
 ## Current execution path — independent Worker only
 
 The legacy GPUWorker/V2 adapter and adapter-specific tests are removed. The owned

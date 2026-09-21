@@ -14,6 +14,7 @@ class DecodeAttention:
         self.lengths = lengths
         self.extent = extent
         self.first = 0
+        self.starts = None
 
     def __call__(self, query: torch.Tensor, cache: torch.Tensor) -> torch.Tensor:
         return decode(
@@ -23,6 +24,7 @@ class DecodeAttention:
             self.lengths,
             first=self.first,
             max_tokens=self.extent,
+            starts=self.starts,
         )
 
 
@@ -60,6 +62,8 @@ class DecodeGraph:
             },
             attention=self.attention,
         )
+        if tokens.numel() > batch.starts.numel() - 1:
+            self.attention.starts = self.batch.starts
         self.graph = torch.cuda.CUDAGraph()
         state_slots = batch.state_writes.unique()
         state_slots = state_slots[state_slots >= 0]

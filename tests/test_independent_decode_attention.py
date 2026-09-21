@@ -64,3 +64,65 @@ def test_graph_replay_reads_updated_lengths_and_tables():
         rtol=0.03,
         atol=0.03,
     )
+
+
+@pytest.mark.parametrize("first", [0, 1])
+def test_grouped_verification_preserves_ragged_causality(first):
+    torch.manual_seed(91)
+    starts = torch.tensor([0, 5, 6, 9], device="cuda", dtype=torch.int32)
+    query = torch.randn(9, 24, 256, device="cuda", dtype=torch.bfloat16)
+    cache = torch.randn(7, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
+    tables = torch.tensor(
+        [[2, 5]] * 5 + [[1, 4]] + [[6, 3]] * 3, device="cuda", dtype=torch.int32
+    )
+    lengths = torch.tensor(
+        [782, 783, 784, 785, 786, 2, 34, 35, 36], device="cuda", dtype=torch.int32
+    )
+
+    def run():
+        return decode(
+            query, cache, tables, lengths, first=first, max_tokens=1568, starts=starts
+        )
+
+    actual = run()
+    torch.testing.assert_close(
+        actual.cpu().double(),
+        reference(query, cache, tables, lengths, first),
+        rtol=0.03,
+        atol=0.03,
+    )
+    graph = torch.cuda.CUDAGraph()
+    torch.cuda.synchronize()
+    with torch.cuda.graph(graph):
+        actual = run()
+    # Same total/request shape, different row grouping, tables and lengths.
+    starts.copy_(torch.tensor([0, 2, 6, 9], device="cuda", dtype=torch.int32))
+    tables[:2] = tables[6]
+    tables[2:6] = torch.tensor([1, 4], device="cuda", dtype=torch.int32)
+    lengths.copy_(torch.tensor([800, 801, 70, 71, 72, 73, 90, 91, 92], device="cuda"))
+    graph.replay()
+    torch.testing.assert_close(
+        actual.cpu().double(),
+        reference(query, cache, tables, lengths, first),
+        rtol=0.03,
+        atol=0.03,
+    )
+
+
+@pytest.mark.parametrize("first", [0, 1])
+def test_single_group_verification(first):
+    torch.manual_seed(92)
+    query = torch.randn(5, 24, 256, device="cuda", dtype=torch.bfloat16)
+    cache = torch.randn(3, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
+    tables = torch.tensor([[2, 1]] * 5, device="cuda", dtype=torch.int32)
+    lengths = torch.arange(782, 787, device="cuda", dtype=torch.int32)
+    starts = torch.tensor([0, 5], device="cuda", dtype=torch.int32)
+    actual = decode(
+        query, cache, tables, lengths, first=first, max_tokens=1568, starts=starts
+    )
+    torch.testing.assert_close(
+        actual.cpu().double(),
+        reference(query, cache, tables, lengths, first),
+        rtol=0.03,
+        atol=0.03,
+    )
