@@ -1,6 +1,6 @@
 # OpenAI-compatible local serving
 
-**Status (2026-09-21):** real Qwen + MTP4 acceptance passed on a UUID-pinned B200:
+**Status (2026-09-21):** real Qwen + V2 Model Runner + MTP4 acceptance passed on a UUID-pinned B200:
 both oh-my-pi agentic tasks, 12 JSON/strict-tool combinations, all five thinking
 levels and lifecycle checks. The earlier CUDA/NVML outage has recovered.
 See [acceptance.md](acceptance.md) for evidence, performance observations and limits.
@@ -152,9 +152,13 @@ The agentic script creates an isolated models.yml, allows read/grep/glob, and as
 > Read this repository's README, architecture documentation and necessary source.
 > Introduce the project goals, architecture, how to run it and its current
 > completion status. Cite the files supporting your answer. Do not modify files.
+> Read at least crates/scheduler/src/lib.rs and
+> python/oh_my_vllm/worker/model_runner.py with the read tool before writing
+> the final answer; directory listings alone do not count.
 
 It saves client JSONL, stderr and exact command/configuration. Verify tool execution,
 follow-up model requests with tool results, and a final answer grounded in files.
+Verify successful reads of both named implementation files in the client JSONL.
 Exit zero alone does not pass acceptance. The script kills its owned process group
 on timeout. The dummy local API key is not a credential.
 

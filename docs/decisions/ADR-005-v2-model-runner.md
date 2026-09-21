@@ -1,6 +1,6 @@
 # ADR-005: Use V2 Model Runner exclusively
 
-Date: 2026-09-21. Status: accepted by the user; regression verification in progress.
+Date: 2026-09-21. Status: accepted, implemented and verified.
 
 ## Decision
 
@@ -46,3 +46,7 @@ baseline. Record artifact hash, runtime source identity and binary identity.
 The editable vLLM source is at 039b2ad67da6d64f7c1835c4738c7fb545ad37fc while its
 package metadata still reports g6376c601e, matching the historical version label.
 This is a historical comparison, not a same-source paired benchmark.
+
+All nine historical performance rows and real FP64/text/MTP/serving/OMP checks
+passed. See [acceptance evidence](../acceptance.md) for measured results and
+source-identity limitations.

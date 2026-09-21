@@ -2,8 +2,8 @@
 
 A Rust-first inference framework for Qwen3.5-27B-FP8 on a single B200 GPU.
 Rust owns scheduling and KV cache bookkeeping. Python wraps the installed vLLM
-GPUWorker (class `Worker`) for model execution. They exchange msgpack messages
-over ZMQ DEALER; the framework does not use vLLM's scheduler.
+GPUWorker (class `Worker`) with V2 Model Runner exclusively for model execution.
+They exchange msgpack messages over ZMQ DEALER; the framework does not use vLLM's scheduler.
 
 The model at `/data0/shared/Qwen3.8-27B-FP8` has 16 full-attention and 48 GDN layers.
 Rust tracks two logical KV groups; Python maps these into disjoint physical
@@ -19,12 +19,14 @@ uv is needed. Every GPU test waits for an idle B200 and selects its UUID.
 ```bash
 scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
 scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64
-scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output /tmp/ordinary.json
+scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python benchmarks/compare_vllm.py --baseline-json bench/baseline/2026-09-19-acceptance.json --mode ordinary --batch-sizes 1 2 4 --warmup 2 --output /tmp/ordinary.json
 ```
 
 Use unique sockets for concurrent runs. Add `--num-speculative-tokens 4` to the text script for MTP.
 Benchmark modes are ordinary, mtp and prefix. Defaults are 1024 physical blocks,
-input32768, output4096, one warmup and three measured repetitions.
+input32768, output4096, one warmup and three measured repetitions. The historical
+comparison above requires two warmups to match the frozen protocol and never
+launches native EngineCore.
 
 ## Local OpenAI service
 
@@ -36,13 +38,15 @@ Chat Completions and Responses are served at `http://127.0.0.1:8000/v1`, with
 thinking, tools, JSON constraints and stored Responses. See [serving](docs/serving.md)
 for supported schemas, OMP configuration and acceptance commands. CPU/client tests
 and real MTP4 acceptance pass; see [serving evidence](docs/acceptance.md).
-The EngineCore performance results below predate this serving extension.
+The current V2 matrix reuses the frozen EngineCore baseline without rerunning it.
 
 ## Verification and performance
 
 The target is at least 95% of matched vLLM EngineCore throughput for batch1/2/4
 in ordinary, MTP and controlled prefix-hit modes. Faster than 105% also passes.
-The nine required performance rows passed (97.13%–103.78% of matched vLLM).
+The nine V2 performance rows passed (97.22%–106.62% of the frozen EngineCore
+baseline). Current and historical vLLM source identities differ; this is a
+historical comparison, not a paired measurement of the V2 change alone.
 [Acceptance evidence](docs/acceptance.md) records measurements, exact configuration
 and correctness coverage; [handoff](docs/handoff.md) preserves the work history.
 
@@ -66,5 +70,5 @@ Every milestone requires independent code review and a commit.
 - crates/zmq-worker: CLI, model-worker lifecycle and ZMQ client.
 - python/oh_my_vllm/worker: model adapter, bridge, structured logs.
 - tests/probe_worker.py: actual-path FP64 diagnostic (never for throughput).
-- benchmarks/compare_vllm.py: paired measurements with source/binary identity.
-- python/oh_my_vllm/worker/spec_decode.py: legacy helpers, outside current execution.
+- benchmarks/compare_vllm.py: historical replay or paired measurements with identities.
+- python/oh_my_vllm/worker/v2_runner.py: real draft transfer and startup cache clearing.

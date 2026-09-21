@@ -18,6 +18,9 @@ TASK = (
     "Read this repository's README, architecture documentation and necessary source. "
     "Introduce the project goals, architecture, how to run it and its current "
     "completion status. Cite the files supporting your answer. Do not modify files."
+    " Read at least crates/scheduler/src/lib.rs and "
+    "python/oh_my_vllm/worker/model_runner.py with the read tool before writing "
+    "the final answer; directory listings alone do not count."
 )
 
 

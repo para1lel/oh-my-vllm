@@ -1,42 +1,38 @@
 # Handoff — 2026-09-21
 
-## Current migration — V2 implementation and correctness milestone
+## Current migration — V2 complete and verified
 
-GPUWorker now requires V2 Model Runner with no legacy fallback. Rust sends full
-accepted history only on admission/resumption; V2 re-admits preempted requests.
-The local draft handler returns real MTP IDs even for unconstrained requests.
-Rust reports genuinely new cache allocations for V2 zeroing, excluding cached
-prefixes and migrated live MTP states. Startup clears dummy warmup cache contents
-in place. No vLLM source was modified; unused legacy MTP helpers were removed.
+Implementation `d85c23e` requires V2 exclusively; no old-runner fallback or vLLM
+source edits remain. Rust retains scheduling/KV and accepted history. Resumption
+re-admits requests with full accepted history; ordinary decode stays incremental.
+Local draft transfer supplies real MTP IDs. Startup cache clearing and fresh-page
+zeroing prevent stale hybrid state without clearing shared prefixes/live MTP slots.
 
-Actual V2 FP64 ordinary/MTP probes pass after crossing block784, with the existing
-tolerances unchanged. Probes now activate only inside real scheduled requests:
-V2 dummy warmup supplies attention metadata and must not count as test coverage.
-The real ordinary two-request text test passes with two preemptions and 1024
-tokens per city. MTP4/prefix/staggered arrivals also pass with three preemptions,
-3136 initial cache-hit tokens and 1181 accepted drafts. CPU checks pass 75 Rust tests and 39 Python unittest
-tests, rustfmt/hard width, clippy and ruff. Independent runner/zeroing review passed.
+All nine ordinary/MTP/prefix × bs1/2/4, 32768→4096 rows pass at 97.22%–106.62%
+of the frozen 2026-09-19 EngineCore baseline. No baseline was rerun. Each row has
+two warmups and three measurements from a clean implementation commit. 6 attempts
+with external GPU contention were discarded; unrelated processes were untouched.
+Prefix variance follow-ups retain five measurements each without replacing the
+original matrix: bs2 reaches 100.02% with 0.09% spread; bs4 reaches 99.94% with
+0.07% spread.
+Actual vLLM source HEAD is 039b2ad67da6d64f7c1835c4738c7fb545ad37fc, while package
+metadata remains g6376c601e. This is historical, not same-source paired evidence.
+See [acceptance](acceptance.md) and
+[recorded results](../bench/baseline/2026-09-21-v2-acceptance.json).
 
-Initial serving verification passed 12 constraint cases and both real OMP APIs.
-It exposed native V2 -1 draft placeholders on plain MTP, fixed by real draft D2H.
-One early Chat run exhausted its reasoning budget through repetition; subsequent
-Chat and Responses tasks completed grounded final answers. Precision probes then
-exposed nonfinite GQA output after warmup, fixed by startup/runtime cache zeroing.
-Final post-fix serving constraints and both OMP tasks passed. Review strengthened
-the lifecycle script to require DEBUG-log proof of same-batch scheduling and
-cancellation/Worker release; this stronger log assertion still needs a GPU run.
-Do not label the migration fully accepted until that and performance pass.
+Actual FP64 ordinary/MTP probes pass unchanged tolerances with zero nonfinite
+values. Coherent multi-request text survives ordinary/MTP preemptions, prefix hits
+and staggered arrivals. Twelve real constraint cases preserve MTP. Two lifecycle
+rounds prove same-batch mixing and Worker release after disconnect. Both real OMP
+APIs read implementation files and complete tool follow-ups with no tool errors.
+The acceptance prompt now explicitly requires those source reads. Evidence keeps
+preliminary runs, the Chat citation typo and the earlier failures/fixes separately.
 
-Next: run nine framework performance rows against the frozen 2026-09-19 baseline
-with --baseline-json (never rerun EngineCore), record evidence, finish document
-alignment/review, then commit and push main. Actual editable vLLM HEAD is
-039b2ad67da6d64f7c1835c4738c7fb545ad37fc; package metadata is stale g6376c601e.
-Historical and current source identities must remain distinct.
-
-All three task-owned HTTP services and all probes/text runs were stopped; owned
-processes and port 18002 were released. An unrelated user's pytest process later
-occupied all visible GPUs. Further runs must wait with scripts/with-gpu.sh and
-must not terminate unrelated processes.
+Checks pass: 75 Rust tests, 39 Python unittest tests, rustfmt/hard width, clippy,
+ruff and pre-commit. Independent implementation and final evidence reviews pass.
+All task-owned probes, benchmark workers and HTTP servers stopped; GPU process
+inventory and port18002 checked after the final run. No running-service exception.
+No migration acceptance work remains.
 
 ## Latest maintenance — enforce Rust formatting inside macros
 

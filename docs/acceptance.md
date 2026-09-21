@@ -1,5 +1,79 @@
 # Acceptance evidence
 
+## V2 Model Runner acceptance — 2026-09-21
+
+The framework now uses V2 exclusively, with Rust scheduling/KV ownership and no
+vLLM source changes. All nine 32768→4096 rows pass the >=95% gate against the frozen
+2026-09-19 EngineCore measurements. Only the framework was rerun: two warmups and
+three measured repetitions per row, MTP4 where applicable, block784, original
+per-row CPU affinity, and one UUID-pinned B200 per run.
+
+| Mode | Batch | Historical EngineCore tok/s | V2 framework tok/s | Ratio |
+|---|---:|---:|---:|---:|
+| ordinary | 1 | 92.21 | 92.16 | 99.94% |
+| ordinary | 2 | 167.87 | 166.96 | 99.46% |
+| ordinary | 4 | 250.96 | 252.26 | 100.52% |
+| mtp | 1 | 269.16 | 286.98 | 106.62% |
+| mtp | 2 | 418.53 | 434.80 | 103.89% |
+| mtp | 4 | 446.61 | 451.12 | 101.01% |
+| prefix | 1 | 95.16 | 95.60 | 100.46% |
+| prefix | 2 | 179.44 | 179.29 | 99.92% |
+| prefix | 4 | 333.32 | 324.07 | 97.22% |
+
+[Full V2 evidence](../bench/baseline/2026-09-21-v2-acceptance.json) records every
+repetition, commands, frozen-baseline SHA256, binary/worker source hashes, GPU/CPU
+identity and correctness results. Measurements used clean implementation commit
+`d85c23e`. Actual editable vLLM HEAD is `039b2ad67da6d64f7c1835c4738c7fb545ad37fc`;
+installed package metadata still reports the historical `g6376c601e` build label.
+This is a historical comparison, not a same-source or same-GPU paired benchmark,
+and does not establish that V2 alone caused any speedup. The original baseline
+and historical 2026-09-19 MTP-bs2 supplemental repeat are unchanged; that historical
+repeat was not substituted for the main baseline.
+
+Independent queues ran on distinct GPUs with process monitoring every second.
+6 attempts were discarded in full after detecting outside GPU processes; only
+subsequent uncontended runs contribute numbers. Prefix bs2/bs4 originally showed
+3.46%/4.47% within-run spread, so framework-only follow-ups used two warmups and
+five measurements each: bs2 reaches 100.02% of baseline with 0.09% spread; bs4
+reaches 99.94% with 0.07% spread. The artifact preserves both rounds;
+the original matrix is not replaced. Even the slowest follow-up measurement
+over the fastest historical baseline reaches at least 99.69%.
+Polling cannot exclude activity between samples. Every measured request generated 4096 tokens with no preemption.
+
+Actual scheduled GQA/GDN FP64 probes pass ordinary and MTP paths across block784:
+51 and 40 checks respectively, zero nonfinite values. Maximum state NRMSE is
+0.2704% and maximum relative error is 0.3916%, below unchanged 1%/2% limits;
+output atol/rtol remain 0.03. Two-request text tests preserve city isolation and
+1024-token budgets through two ordinary and three MTP preemptions. The latter
+combines prefix reuse, staggered arrivals and 1181 accepted drafts.
+
+All 12 Chat/Responses × off/medium × JSON object/schema/strict-tool cases pass
+with actual proposed and accepted MTP drafts. Lifecycle checks pass twice and
+prove mixed plain/constrained request IDs entered the same batch, and disconnect
+cancellation reached a successful Worker release RPC before follow-up success.
+All five thinking levels and stored Responses retrieve/continue/delete pass.
+
+Both real oh-my-pi tasks read README/architecture and implementation files
+`crates/scheduler/src/lib.rs` and `python/oh_my_vllm/worker/model_runner.py`.
+Chat used four assistant turns/nine tools, Responses four turns/eleven tools,
+with zero tool errors and positive MTP counters on all eight server requests.
+Earlier documentation-only runs are retained separately as preliminary evidence.
+Answers describe files at read time, before this final status update; Chat has a
+nonblocking `docs/accepting.md` citation typo preserved in the artifact.
+
+Warm short constraint cases report 183.49–283.70 output tok/s and 42–65 ms TTFT,
+with zero queue wait in sequential runs. The first request has a roughly 1.1 s
+initialization spike. These are serving observations, not a matched benchmark or
+new HTTP performance gate. No persistent stall or worker error was observed in
+the final runs. All task-owned GPU workers/services stopped and port18002 released.
+
+Checks pass: 75 Rust tests, 39 Python unittest tests, rustfmt, hard 100-character
+Rust limit, clippy with warnings denied, ruff and pre-commit hooks. Independent
+reviews cover V2 adaptation, cache zeroing, regression protocol and evidence.
+
+The sections below preserve earlier serving and matched EngineCore evidence;
+they describe their original binaries, not additional V2 runs.
+
 ## Serving acceptance — 2026-09-21
 
 Real Qwen3.5-27B-FP8 serving passed on B200 UUID
