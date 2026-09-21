@@ -85,6 +85,7 @@ GPU test scripts wait for any idle B200, and baseline/worker use conda vllm whil
 framework tools use conda oh-my-vllm. VSCode's ignored local settings select the
 framework environment for Python analysis.
 
-HTTP serving, multi-GPU execution, CPU KV swap, multimodal inputs, LoRA and
-production deployment remain outside the agreed scope. Performance evidence
-does not imply those features have been implemented.
+Multi-GPU execution, CPU KV swap, multimodal inputs, LoRA and production
+deployment remain outside the agreed scope. OpenAI-compatible HTTP serving was
+accepted as future scope on 2026-09-21 (see serving.md), but is not implemented or
+covered by this acceptance evidence. These measurements remain EngineCore-level.

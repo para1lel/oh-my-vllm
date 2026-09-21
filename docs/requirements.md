@@ -1,6 +1,6 @@
 # Requirements — oh-my-vllm
 
-_Confirmed status: user-confirmed unless noted. Last reviewed: 2026-09-19._
+_Confirmed status: user-confirmed unless noted. Last reviewed: 2026-09-21._
 
 ---
 
@@ -137,6 +137,51 @@ time must not be presented as CUDA kernel time. Profiling is opt-in.
 
 ---
 
+## REQ-SERVE-001 — OpenAI-compatible local service
+
+**Status:** user-confirmed 2026-09-21; not implemented
+**Priority:** must-have for the serving extension
+
+Support both Chat Completions and Responses, with streaming and non-streaming
+responses, model discovery, function tool calls, tool-result history, usage,
+termination and error semantics. Both the service and oh-my-pi run on the current
+machine. Prefer Rust for HTTP entry points, protocol adaptation and request
+lifecycle; preserve Rust scheduler/KV ownership and the existing GPUWorker split.
+This extends the former HTTP exclusion; it does not replace the EngineCore
+performance requirements or claim HTTP-level performance acceptance.
+
+Responses must support full-history requests and stored responses with
+`previous_response_id`, retrieval and deletion. Use bounded, expiring in-memory
+storage; continuation across service restarts is not required. Exact limits and
+the remaining compatibility surface must be specified before implementation.
+
+## REQ-SERVE-002 — Configurable thinking strength
+
+**Status:** user-confirmed 2026-09-21; not implemented
+
+Expose configurable thinking strength through both APIs. Exact external levels,
+default and model mappings remain undecided. The local template supports thinking
+off and native low/medium/xhigh; high is not a native level. Do not silently treat
+all levels alike or claim hard thinking budgets or measured quality differences.
+See [serving design notes](serving.md) for observed constraints and pending choices.
+
+## REQ-SERVE-003 — Real oh-my-pi acceptance on both APIs
+
+**Status:** user-confirmed 2026-09-21; not run
+
+Run oh-my-pi in this repository against each API separately. Ask it to read README,
+architecture documentation and necessary source, then describe project goals,
+architecture, operation and current completion status with file references.
+Require actual tool calls, tool results returned to the model, and a grounded final
+answer; do not modify repository files during that task. Tools execute in oh-my-pi.
+Test both APIs, plus non-streaming, cancellation, errors and thinking mapping.
+Detailed planned coverage is in [serving.md](serving.md).
+
+The present user request authorizes documentation only, not serving implementation
+or execution of this acceptance task.
+
+---
+
 ## REQ-OUT-SCOPE-001 — Explicitly excluded
 
 **Status:** user-confirmed
@@ -144,6 +189,6 @@ time must not be presented as CUDA kernel time. Profiling is opt-in.
 - Multimodal inputs (text-only for the current scope; architecture leaves hooks)
 - Swap-based preemption (CPU KV offload)
 - Multi-GPU / tensor parallel > 1
-- HTTP/gRPC server (binary currently drives inference directly via ZMQ)
+- gRPC server (OpenAI-compatible HTTP is now accepted future scope, REQ-SERVE-001)
 - LoRA adapters
 - Production deployment or containerisation

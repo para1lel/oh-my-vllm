@@ -1,4 +1,29 @@
-# Handoff — 2026-09-19
+# Handoff — 2026-09-21
+
+## Latest task — serving discussion documented (2026-09-21)
+
+The user requested documentation only and explicitly stopped implementation.
+Accepted future scope: both OpenAI Chat Completions and Responses, configurable
+thinking, Rust-first outer entry points, full-history and stored Responses with
+bounded/expiring memory and no restart persistence. Both service and oh-my-pi run
+on this machine. Each API must independently pass a real oh-my-pi task that reads
+this repository and returns a file-grounded project introduction without edits.
+
+See serving.md, REQ-SERVE-001..003 and ADR-004. Requirements, architecture, plan,
+index and contribution scope were reconciled. Existing EngineCore acceptance
+below applies to the previous implementation, not the future HTTP service.
+No runtime or client configuration was changed, and no service/GPU/agentic test
+was launched. Native thinking levels are off/low/medium/xhigh; external mappings,
+defaults and the other open choices are explicitly listed in serving.md.
+
+Verification: independent documentation review passed with no blocking findings;
+64 Rust tests, all-target/all-feature clippy, Python format/check and git diff
+whitespace checks passed. Python formatting left all six files unchanged. GPU,
+HTTP and agentic acceptance tests were not run: this task changes documentation
+only and serving is not implemented. Serving implementation remains future work,
+not a blocker for this documentation-only task.
+
+## Previous engine implementation handoff (2026-09-19)
 
 ## Scope and authoritative decisions
 

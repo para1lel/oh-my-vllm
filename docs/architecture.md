@@ -1,6 +1,6 @@
 # Architecture — oh-my-vllm
 
-_Updated: 2026-09-19. See handoff.md for verification evidence._
+_Updated: 2026-09-21. See handoff.md for verification evidence._
 
 ---
 
@@ -98,16 +98,27 @@ Use unique IPC paths for concurrent runs; remove a stale socket only after its o
 
 ## 5. Not yet implemented
 
-- HTTP/gRPC server (the binary is a direct CLI driver, not a serving endpoint)
+- OpenAI-compatible HTTP server — accepted future scope, not implemented
+- gRPC server — outside scope
 - Swap-based preemption (CPU KV offload) — explicitly deferred (REQ-OUT-SCOPE-001)
 - Multi-GPU / tensor parallel > 1
 - LoRA, multimodal
 
 ---
 
-## 6. Proposed / pending (not accepted)
+## 6. Accepted serving direction (not implemented)
 
-None outstanding at handoff time.
+Both Chat Completions and Responses will feed the existing Rust-owned inference
+engine. Prefer Rust for HTTP, protocol adaptation, response storage and request
+lifecycle. Python continues to wrap GPUWorker; exact placement of tokenizer,
+template and model-specific parsing is pending. A shared internal generation
+representation is recommended, not an implemented interface.
+
+Responses supports full-history input and bounded, expiring in-memory stored
+responses; restart persistence is not required. oh-my-pi executes tools locally
+and sends their results back to the service. See [serving.md](serving.md) for the
+confirmed scope, observed gaps and unresolved details, and
+[ADR-004](decisions/ADR-004-openai-serving.md) for the accepted direction.
 
 ## Installed GPUWorker adaptation (2026-09-19)
 

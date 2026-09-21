@@ -81,7 +81,7 @@ scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vll
 
 ## What not to do
 
-- Do not add swap-based preemption, multi-GPU, HTTP/gRPC serving, LoRA, or multimodal inputs — these are explicitly out of scope (REQ-OUT-SCOPE-001). Open a discussion first if scope needs to change.
+- Do not add swap-based preemption, multi-GPU, gRPC serving, LoRA, or multimodal inputs — these are explicitly out of scope (REQ-OUT-SCOPE-001). Open a discussion first if scope needs to change. OpenAI-compatible HTTP serving is accepted future scope (REQ-SERVE-001); the 2026-09-21 task covers documentation only.
 - Do not commit secrets, tokens, `.env` values, or production credentials.
 - Do not force-push to any branch without explicit confirmation from the project owner.
 - Do not upgrade the `zeromq` Rust crate without checking that `DealerSocket` and `ipc-transport` still work correctly — see `docs/decisions/ADR-001-zmq-socket-type.md`.

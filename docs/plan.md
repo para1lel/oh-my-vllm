@@ -28,6 +28,17 @@ handoff.md. Future changes need the same review/check/commit discipline.
 
 ## Deferred scope
 
-CPU KV swap, multiple GPUs, HTTP/gRPC serving, LoRA, multimodal execution and
+CPU KV swap, multiple GPUs, gRPC serving, LoRA, multimodal execution and
 production deployment remain outside the current task. CI is not implemented;
 local pre-commit checks are required. See requirements.md for scope authority.
+
+## Serving extension — discussion documented, implementation not started
+
+The 2026-09-21 discussion accepted both OpenAI APIs, configurable thinking,
+in-memory Responses history and Rust-first entry points. The user requested only
+documentation for this task. See [serving.md](serving.md) for open decisions.
+
+Future implementation sequence (proposal): specify remaining compatibility and
+thinking mappings; add a persistent engine lifecycle and correct termination;
+implement both HTTP protocols and response storage; validate both using real
+oh-my-pi repository-reading tasks. No service or agentic acceptance run exists yet.

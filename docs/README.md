@@ -11,10 +11,12 @@ project constraints; handoff.md records current evidence, blockers and pending r
 - [Acceptance](acceptance.md): complete matrix, raw evidence and coverage limits.
 - [Profiling](profiling.md): host timings and optional kernel diagnostics.
 - [Plan](plan.md): completed milestones and remaining work.
+- [Serving](serving.md): accepted OpenAI-compatible extension, gaps and pending decisions; not implemented.
 - [Contributing](../CONTRIBUTING.md): reviews, checks and commits.
 - [ADR001](decisions/ADR-001-zmq-socket-type.md): DEALER socket choice.
 - [ADR002](decisions/ADR-002-gpuworker-adapter.md): installed Worker and physical IDs.
 - [ADR003](decisions/ADR-003-mtp-state-slots.md): speculative states and BF16 SSM.
+- [ADR004](decisions/ADR-004-openai-serving.md): Rust-first dual-API serving direction.
 
 Ordinary/MTP text, actual-path probes and feature combinations have passed checks.
 All nine performance rows passed. Consult acceptance.md for exact configuration
