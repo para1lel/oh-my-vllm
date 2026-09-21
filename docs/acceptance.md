@@ -1,11 +1,39 @@
-# Acceptance evidence — 2026-09-19
+# Acceptance evidence
 
-## Serving status — 2026-09-21
+## Serving acceptance — 2026-09-21
 
-OpenAI-compatible serving has CPU protocol, tokenizer/grammar and installed
-client wiring coverage. Real model MTP/agentic acceptance and serving performance
-inspection are blocked by host CUDA/NVML failures. See [handoff.md](handoff.md).
-The matrix below predates serving and does not validate the new HTTP paths.
+Real Qwen3.5-27B-FP8 serving passed on B200 UUID
+GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad with four MTP drafts and block784.
+[Recorded requests, results and metrics](../bench/baseline/2026-09-21-serving-acceptance.json)
+include the release-binary identity, commands, actual tool paths and final answers.
+
+- Chat and Responses each completed the real read-only oh-my-pi repository task,
+  including README, architecture and source reads, tool-result follow-ups and
+  a file-grounded final answer. Both used medium thinking and MTP4.
+- All 12 API × off/medium × JSON object/JSON Schema/strict-tool cases completed
+  valid output with real proposed and accepted MTP drafts, without fallback.
+- All five thinking levels, stored continuation/retrieve/delete, mixed structured
+  and ordinary batches, disconnect cleanup and a subsequent request passed.
+  Explicit named-tool and no-tool choices passed on both APIs as well.
+- After first-request initialization, the 11 short constraint cases reported
+  202.8–280.1 output tok/s including request preparation and prefill. Final agentic
+  answers reported 208.1 tok/s (Chat, 2,005 output tokens) and 219.3 tok/s
+  (Responses, 4,490 tokens). These are workload observations, not a new throughput
+  gate or a matched vLLM comparison. Queues were empty in these sequential runs.
+
+The runs found and fixed two defects: Qwen XML wrapping newlines had entered file
+paths; uncached tokenizer length queried the vocabulary on every output token
+(~29 ms each). Same-GPU constrained runs after caching reduced output processing
+to ~0.1 ms per step. DEBUG phase timings are host durations, not kernel timings.
+One initial Chat thinking-loop retry recovered; it remains in the saved evidence.
+The final answers cite docs as they existed at read time, including the earlier
+GPU outage; those status docs were reconciled after acceptance. Both API tasks
+were then repeated with updated docs: no tool errors or retries, updated grounded
+answers, and no repository diff changes. The artifact retains both rounds.
+GPU ownership was
+checked with snapshots; this does not exclude brief outside activity.
+
+The EngineCore matrix below predates serving and does not validate the HTTP paths.
 
 ## Matched performance
 
@@ -94,5 +122,5 @@ framework environment for Python analysis.
 
 Multi-GPU execution, CPU KV swap, multimodal inputs, LoRA and production
 deployment remain outside the agreed scope. OpenAI-compatible HTTP serving is
-implemented (see serving.md), with GPU acceptance pending; it is not covered by
+implemented (see serving.md), with its own acceptance above; it is not covered by
 this historical performance evidence. These measurements remain EngineCore-level.

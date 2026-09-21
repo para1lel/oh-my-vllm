@@ -139,7 +139,7 @@ time must not be presented as CUDA kernel time. Profiling is opt-in.
 
 ## REQ-SERVE-001 — OpenAI-compatible local service
 
-**Status:** user-confirmed 2026-09-21; implemented, GPU acceptance pending
+**Status:** user-confirmed 2026-09-21; implemented; real MTP4 acceptance passed
 **Priority:** must-have for the serving extension
 
 Support both Chat Completions and Responses, with streaming and non-streaming
@@ -158,7 +158,7 @@ payload; see serving.md for configurable limits, errors and compatibility.
 
 ## REQ-SERVE-002 — Configurable thinking strength
 
-**Status:** user-confirmed 2026-09-21; implemented, GPU acceptance pending
+**Status:** user-confirmed 2026-09-21; implemented; real MTP4 acceptance passed
 
 Expose off/low/medium/high/xhigh with default medium. high aliases native xhigh;
 OpenAI none aliases off. Use the native template and separate reasoning from text
@@ -167,7 +167,7 @@ specified in serving.md. These are prompt controls, not hard thinking budgets.
 
 ## REQ-SERVE-003 — Real oh-my-pi acceptance on both APIs
 
-**Status:** user-confirmed 2026-09-21; not run
+**Status:** user-confirmed 2026-09-21; both real MTP4 agentic tasks passed
 
 Run oh-my-pi in this repository against each API separately. Ask it to read README,
 architecture documentation and necessary source, then describe project goals,
@@ -179,8 +179,8 @@ Detailed planned coverage is in [serving.md](serving.md).
 
 The implementation request supersedes the earlier documentation-only discussion.
 Both real agentic runs must enable MTP. Scripted worker/client protocol tests do
-not satisfy real model acceptance. GPU initialization is currently blocked by a
-host CUDA/NVML fault; see handoff.md.
+not satisfy real model acceptance. The earlier host CUDA/NVML fault recovered;
+real evidence and limitations are recorded in acceptance.md and handoff.md.
 
 ## REQ-SERVE-004 — Constrained decoding with MTP
 

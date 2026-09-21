@@ -32,15 +32,14 @@ CPU KV swap, multiple GPUs, gRPC serving, LoRA, multimodal execution and
 production deployment remain outside the current task. CI is not implemented;
 local pre-commit checks are required. See requirements.md for scope authority.
 
-## Serving extension — implemented, GPU acceptance blocked
+## Serving extension — implemented and accepted with real MTP4
 
-The confirmed design is implemented in Rust HTTP/protocol/state modules and the
-Python model/grammar adapter. CPU and OMP protocol tests use the real Rust server,
-tokenizer and XGrammar with scripted model output. They do not validate GPU MTP.
+Both real oh-my-pi API tasks passed after the host CUDA/NVML outage recovered.
+Real JSON/strict-tool tests, thinking levels and lifecycle checks passed. The GPU
+runs exposed Qwen XML wrapping-newline handling and repeated tokenizer vocabulary
+lookup overhead; both were fixed and retested. See acceptance.md for current
+serving evidence, which remains separate from the older EngineCore matrix.
 
-Remaining: restore functional CUDA/NVML on this host; launch an idle UUID-pinned
-B200 with MTP4; run both actual OMP repository-reading tasks, strict JSON/tool
-cases, ordinary serving EOS/cancellation and log-based performance checks. Repeat
-actual-path state/attention probes if GPU investigation changes those paths.
-Record evidence and resolve runtime findings before declaring serving accepted.
-See serving.md, testing.md and the latest handoff entry.
+The supported subset and deliberate exclusions remain in serving.md. No further
+work is required for the agreed serving task; normal future changes retain the
+review/check discipline and model/hardware/scheduler invariants.

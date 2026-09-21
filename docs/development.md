@@ -101,3 +101,13 @@ For CPU-only tokenizer/schema/HTTP tests on a GPU host, set VLLM_TARGET_DEVICE=c
 and CUDA_VISIBLE_DEVICES='' before starting Python. This avoids NVML enumeration
 and does not validate CUDA execution. tests/fixtures/serving_worker.py is scripted
 output for integration tests only; never use it to report model acceptance or speed.
+
+Real constrained-output check against a running MTP4 server:
+
+```bash
+scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/serving-acceptance.py --output-dir /tmp/oh-my-vllm-serving-constraints
+```
+
+The script saves complete requests/responses; use matching response/request IDs
+to inspect real MTP proposal/acceptance counters in server logs. DEBUG Python
+worker_phases exposes grammar/model-sampling/output host time separately.

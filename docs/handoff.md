@@ -1,6 +1,51 @@
 # Handoff — 2026-09-21
 
-## Latest task — OpenAI-compatible serving implemented; GPU acceptance blocked
+## Latest task — real MTP4 serving acceptance complete
+
+The host CUDA/NVML fault recovered: seven visible B200s enumerate normally, and
+an idle UUID-pinned card passed cuInit, allocation and matrix multiplication.
+The real serving run used GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad, MTP4,
+Qwen3.5-27B-FP8 and block784. Rust still owns HTTP, scheduling and KV.
+
+Both real oh-my-pi tasks completed with successful README/architecture/source
+reads, tool-result follow-ups and grounded final answers. Real tests passed all
+12 Chat/Responses × off/medium × JSON object/schema/strict-tool combinations,
+all five thinking levels, stored Responses continuation/retrieve/delete, mixed
+constraint/plain batching, and disconnect recovery. Every constraint case
+proposed and accepted actual MTP drafts. See acceptance.md and
+bench/baseline/2026-09-21-serving-acceptance.json for commands and evidence.
+
+Real runs exposed two defects missed by the scripted CPU worker. Qwen wraps
+ordinary XML parameters in newlines; the parser now removes one wrapper on each
+side, matching the installed vLLM parser, while preserving schema enum/const
+values exactly. Tokenizer length recomputed the full vocabulary on every output
+token (~29 ms); vLLM's cached tokenizer removes that cost. Added DEBUG-only
+grammar/model-sampling/output phase timings to identify such host overhead.
+
+Warm short constraint cases reported 202.8–280.1 output tok/s, versus ~30 before
+the tokenizer fix. Final agentic answers reported 208.1/219.3 tok/s; these are
+serving observations, not a matched EngineCore performance comparison. One Chat
+thinking-loop retry recovered and is preserved in evidence. The initial answers
+faithfully cite then-current docs that still described the recovered GPU outage;
+status documentation was reconciled afterward.
+Both APIs were subsequently rerun against the updated docs, with zero tool errors
+or retries and unchanged repository diff; doc_refresh_agentic stores those answers.
+Named-tool and no-tool choices also passed on both real APIs.
+
+CPU regression coverage remains 73 Rust tests, 16 serving Python/HTTP cases and
+12 existing Python tests. Independent review approved the newline and tokenizer
+fixes. No kernel/scheduler/KV change was made in this follow-up; the historical
+EngineCore matrix and FP64 probes were not rerun because this change is confined
+to HTTP output handling and diagnostic timing. The agreed serving task has no
+remaining GPU blocker or required implementation work.
+
+The verified local service remains running at http://127.0.0.1:8000/v1 at this
+handoff (Rust PID 821668, worker PID 821857, selected GPU UUID above). Its log is
+/tmp/oh-my-vllm-serving-live4.log; it uses DEBUG worker phase logging for this
+verification session. These PIDs are a session snapshot, not persistent service
+identifiers. Normal startup defaults to INFO as documented in serving.md.
+
+## Earlier implementation milestone — GPU acceptance was blocked
 
 The user subsequently authorized implementation and confirmed both APIs, default
 medium thinking (high maps to xhigh), JSON/strict tools with MTP, and observational

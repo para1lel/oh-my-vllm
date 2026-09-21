@@ -53,7 +53,7 @@ def main():
                     )
                     answer = (
                         f"<tool_call>\n<function={name}>\n{intent}"
-                        "<parameter=path>README.md</parameter>\n"
+                        "<parameter=path>\nREADME.md\n</parameter>\n"
                         "</function>\n</tool_call>"
                     )
                 elif "long" in text:

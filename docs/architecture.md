@@ -126,7 +126,7 @@ Execute replies optionally include incremental text, finish reason and reasoning
 counts. Rust parses model reasoning/XML calls and routes protocol events, then
 releases finished/cancelled requests through the existing finished-only lifecycle.
 OMP executes tools locally and sends results back. See serving.md for the exact
-compatibility limits and the blocked real-GPU acceptance status.
+compatibility limits; acceptance.md records the completed real MTP4 verification.
 
 ## Installed GPUWorker adaptation (2026-09-19)
 

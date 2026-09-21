@@ -1,9 +1,9 @@
 # OpenAI-compatible local serving
 
-**Status (2026-09-21):** implementation and CPU/client protocol tests are available.
-Real Qwen + MTP agentic acceptance is **not complete**: two selected idle B200s
-failed a minimal CUDA allocation, and service initialization failed in NVML.
-See handoff.md. Scripted CPU-worker results are never model or performance evidence.
+**Status (2026-09-21):** real Qwen + MTP4 acceptance passed on a UUID-pinned B200:
+both oh-my-pi agentic tasks, 12 JSON/strict-tool combinations, all five thinking
+levels and lifecycle checks. The earlier CUDA/NVML outage has recovered.
+See [acceptance.md](acceptance.md) for evidence, performance observations and limits.
 
 ## Run
 
@@ -78,7 +78,8 @@ speculative prefix. Simulated grammar advancement is rolled back; only accepted
 output advances persistent state. An invalid draft is rejected at its first masked
 position. This path does not turn off MTP or switch to vLLM's scheduler.
 CPU tests cover mask rollback, rejected drafts, and reasoning-end crossings;
-GPU verification remains required before claiming this integration works on-device.
+Real MTP4 runs additionally verify both APIs at off/medium with JSON object, JSON
+Schema and strict tools; every completed case proposed and accepted actual drafts.
 
 Supported schema keywords are explicitly listed in worker/serving.py; unsupported
 backend features/combinations are rejected, including unknown string formats and
@@ -94,7 +95,10 @@ pattern/format combined with length bounds. Tool XML has extra encoding limits:
   differ only in surrounding spaces/newlines/tabs; encoding padding is restored
   from the unique schema value. XML anyOf cannot have sibling const/enum. JSON answer schemas
   do not have these XML-specific restrictions.
-- Raw string quotes, whitespace and function/tool-close literals are preserved.
+- Unconstrained strings remove one leading/trailing newline from Qwen's XML
+  template markup, matching the installed vLLM parser. Quotes, spaces, additional
+  newlines and function/tool-close literals are preserved. Enum/const strings
+  instead recover their exact schema value, including its own newlines.
   Parsers recognize closing tags only outside parameter values. A literal tool tag
   in ordinary text or a JSON answer is not interpreted as a tool invocation.
 
@@ -126,7 +130,13 @@ scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts
 scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/agentic-acceptance.py --api responses --output-dir /tmp/oh-my-vllm-agentic-responses
 ```
 
-The script creates an isolated models.yml, allows read/grep/glob, and asks:
+Also exercise the 12 real constrained-output cases (keep MTP enabled):
+
+```bash
+scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/serving-acceptance.py --output-dir /tmp/oh-my-vllm-serving-constraints
+```
+
+The agentic script creates an isolated models.yml, allows read/grep/glob, and asks:
 
 > Read this repository's README, architecture documentation and necessary source.
 > Introduce the project goals, architecture, how to run it and its current
@@ -141,7 +151,8 @@ OMP uses native non-strict tool schemas because its strict normalization introdu
 ambiguous nullable XML strings. Separate strict API tests cover supported schemas.
 OMP minimal maps to off: the installed client's off control falls back to its
 lowest supported effort. low→low, medium→medium, high/xhigh/max→xhigh. Both off and
-medium client paths have passed scripted protocol tests; GPU behavior is pending.
+medium client paths passed scripted protocol tests. Both real agentic API tasks
+passed at medium, and all five thinking levels passed real API checks.
 
 No new strict serving throughput threshold is set. Check real logs for queue wait,
 preparation time, TTFT, end-to-end output tok/s, steps, cache hits and MTP proposed/
@@ -149,3 +160,9 @@ accepted tokens. Use DEBUG for RPC/worker host timing; do not label it CUDA kern
 time. Investigate persistent queueing, stalls, unexpected zero proposals/acceptance,
 excess preemption, memory growth or worker errors. Compare like workloads after
 warmup. Existing EngineCore >=95% requirements remain separate and unchanged.
+
+The tokenizer uses vLLM's cached HF adapter. Without it, this installed tokenizer
+recomputed vocabulary size on every incremental token (~29 ms/token), reducing
+short constrained requests to ~30 tok/s. Cached properties removed that bottleneck.
+DEBUG worker_phases separates grammar, model/sample and output host durations;
+these timings include host scheduling/synchronization and are not kernel timings.

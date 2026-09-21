@@ -233,8 +233,12 @@ class Generation:
 
 class ServingAdapter:
     def __init__(self, model_path: str, vocab_size: int, max_model_len: int):
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            model_path, local_files_only=True
+        from vllm.tokenizers.hf import get_cached_tokenizer
+
+        # Incremental decoding asks len(tokenizer) for every token. The raw HF
+        # backend recomputes vocabulary size (~29 ms/token on this model).
+        self.tokenizer = get_cached_tokenizer(
+            AutoTokenizer.from_pretrained(model_path, local_files_only=True)
         )
         self.defaults = json.loads(
             (Path(model_path) / "generation_config.json").read_text()

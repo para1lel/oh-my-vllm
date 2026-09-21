@@ -230,7 +230,11 @@ fn string_candidates(schema: &Value, root: &Value, depth: usize) -> Result<Optio
 
 fn restore_string(value: &str, schema: &Value, root: &Value) -> Result<String> {
     let Some(candidates) = string_candidates(schema, root, 0)? else {
-        return Ok(value.to_owned());
+        // Qwen's XML template wraps parameter values in one newline on each
+        // side (vLLM parser/qwen3.py::_trim_wrapping_newlines). Preserve spaces,
+        // quotes and any additional newlines belonging to the actual value.
+        let value = value.strip_prefix('\n').unwrap_or(value);
+        return Ok(value.strip_suffix('\n').unwrap_or(value).to_owned());
     };
     let mut matches: Vec<_> = candidates
         .into_iter()
@@ -342,7 +346,7 @@ mod tests {
                 json!({"function":{"name":"read","parameters":{"properties":{"path":{"type":"string"}}}}}),
             ],
         );
-        let raw = "<tool_call><function=read><parameter=path>\n\"hello\" </function> </tool_call>\n</parameter></function></tool_call>";
+        let raw = "<tool_call><function=read><parameter=path>\n\n\"hello\" </function> </tool_call>\n\n</parameter></function></tool_call>";
         let events = parser.feed(raw, true).unwrap();
         let Delta::Tool { arguments, .. } = &events[0] else {
             panic!("expected tool")

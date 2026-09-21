@@ -35,8 +35,8 @@ scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --s
 Chat Completions and Responses are served at `http://127.0.0.1:8000/v1`, with
 thinking, tools, JSON constraints and stored Responses. See [serving](docs/serving.md)
 for supported schemas, OMP configuration and acceptance commands. CPU/client tests
-pass; real model/MTP serving acceptance is blocked by the current host CUDA/NVML
-fault. The EngineCore performance results below predate this serving extension.
+and real MTP4 acceptance pass; see [serving evidence](docs/acceptance.md).
+The EngineCore performance results below predate this serving extension.
 
 ## Verification and performance
 

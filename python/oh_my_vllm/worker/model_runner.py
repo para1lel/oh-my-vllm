@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from functools import wraps
 from typing import TYPE_CHECKING
@@ -266,7 +267,10 @@ class OhMyVllmWorker:
             self.sampling_params_map,
         )
         vllm_output.num_spec_tokens_to_schedule = self._num_speculative_tokens
+        trace = logger.isEnabledFor(logging.DEBUG)
+        mask_started = time.perf_counter_ns() if trace else 0
         grammar = self.serving.masks(vllm_output) if self.serving is not None else None
+        model_started = time.perf_counter_ns() if trace else 0
         vllm_output.has_structured_output_requests = grammar is not None
         output = self._worker.execute_model(vllm_output)
         if rust_output.scheduled and output is None:
@@ -291,6 +295,7 @@ class OhMyVllmWorker:
                 new_drafts = dict(
                     zip(draft_output.req_ids, draft_output.draft_token_ids, strict=True)
                 )
+        output_started = time.perf_counter_ns() if trace else 0
         results = []
         for request in rust_output.scheduled:
             rid = request.request_id
@@ -317,4 +322,16 @@ class OhMyVllmWorker:
             )
         for rid in rust_output.finished_request_ids:
             self.unregister_request(rid)
+        if trace:
+            logger.debug(
+                "worker_phases",
+                extra={
+                    "fields": {
+                        "grammar_host_us": (model_started - mask_started) / 1000,
+                        "model_sample_host_us": (output_started - model_started) / 1000,
+                        "output_host_us": (time.perf_counter_ns() - output_started)
+                        / 1000,
+                    }
+                },
+            )
         return WorkerOutput(results)

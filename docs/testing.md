@@ -155,5 +155,7 @@ MTP4 service, both OMP providers must independently execute the documented task,
 return tool results and produce a file-grounded answer. Also exercise strict JSON
 and tool constraints with MTP, check nonzero actual draft proposals, inspect
 acceptance and latency/throughput logs, and check cleanup after cancellation.
-The current CUDA/NVML host failure prevents that final acceptance; record failures
-in handoff.md instead of treating scripted output as a pass.
+Real MTP4 acceptance passed after the CUDA/NVML host fault recovered; see
+acceptance.md. Reproduce constrained cases with scripts/serving-acceptance.py and
+inspect per-request MTP counters alongside saved responses. Scripted output alone
+is never GPU evidence.

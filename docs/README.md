@@ -11,7 +11,7 @@ project constraints; handoff.md records current evidence, blockers and pending r
 - [Acceptance](acceptance.md): complete matrix, raw evidence and coverage limits.
 - [Profiling](profiling.md): host timings and optional kernel diagnostics.
 - [Plan](plan.md): completed milestones and remaining work.
-- [Serving](serving.md): implemented OpenAI-compatible subset, client commands and pending GPU acceptance.
+- [Serving](serving.md): implemented OpenAI-compatible subset, client commands and real GPU acceptance evidence.
 - [Contributing](../CONTRIBUTING.md): reviews, checks and commits.
 - [ADR001](decisions/ADR-001-zmq-socket-type.md): DEALER socket choice.
 - [ADR002](decisions/ADR-002-gpuworker-adapter.md): installed Worker and physical IDs.

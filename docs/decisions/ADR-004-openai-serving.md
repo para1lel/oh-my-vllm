@@ -1,7 +1,7 @@
 # ADR-004 — Rust-first OpenAI-compatible serving
 
 **Date:** 2026-09-21
-**Status:** Accepted; implemented, GPU acceptance pending
+**Status:** Accepted; implemented, real MTP4 acceptance passed
 
 ## Context
 
@@ -33,4 +33,4 @@ throughput gate. Axum and an engine actor own request lifecycle; Python owns
 local template preparation and XGrammar mask state only. Stored Responses default
 to one-hour TTL, 1,000 records and 256 MiB serialized payload, with no persistence.
 Unsupported protocol/schema features fail explicitly. See [serving.md](../serving.md)
-for the supported subset and [handoff.md](../handoff.md) for acceptance blockers.
+for the supported subset and [handoff.md](../handoff.md) for acceptance evidence.
