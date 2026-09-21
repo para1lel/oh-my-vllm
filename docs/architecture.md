@@ -98,7 +98,7 @@ Use unique IPC paths for concurrent runs; remove a stale socket only after its o
 
 ## 5. Not yet implemented
 
-- OpenAI-compatible HTTP server — accepted future scope, not implemented
+- OpenAI HTTP GPU/agentic acceptance — implementation exists, CUDA host fault blocks acceptance
 - gRPC server — outside scope
 - Swap-based preemption (CPU KV offload) — explicitly deferred (REQ-OUT-SCOPE-001)
 - Multi-GPU / tensor parallel > 1
@@ -106,19 +106,27 @@ Use unique IPC paths for concurrent runs; remove a stale socket only after its o
 
 ---
 
-## 6. Accepted serving direction (not implemented)
+## 6. Rust OpenAI serving
 
-Both Chat Completions and Responses will feed the existing Rust-owned inference
-engine. Prefer Rust for HTTP, protocol adaptation, response storage and request
-lifecycle. Python continues to wrap GPUWorker; exact placement of tokenizer,
-template and model-specific parsing is pending. A shared internal generation
-representation is recommended, not an implemented interface.
+`serve` in crates/zmq-worker/src/serving uses Axum for both OpenAI adapters,
+model discovery and stored Responses endpoints. A bounded channel feeds one Rust
+engine owner between inference steps; it owns online admission, response delivery,
+request deadlines, disconnect cancellation and the existing Scheduler/KV objects.
+A bounded, expiring in-memory store retains Responses snapshots. Each API has its
+own JSON/SSE representation backed by a shared output/parser representation.
 
-Responses supports full-history input and bounded, expiring in-memory stored
-responses; restart persistence is not required. oh-my-pi executes tools locally
-and sends their results back to the service. See [serving.md](serving.md) for the
-confirmed scope, observed gaps and unresolved details, and
-[ADR-004](decisions/ADR-004-openai-serving.md) for the accepted direction.
+A `prepare` ZMQ RPC lets Python tokenize/template and validate per-request sampling
+and schemas before Rust admission. Python serving.py uses the installed XGrammar
+compiler and keeps per-request grammar/detokenization state. Speculative masks are
+built for each draft prefix plus the bonus position, rolled back after simulation,
+and passed to GPUWorker.sample_tokens. Only accepted tokens advance persistent
+grammar state. No masks/tensors cross ZMQ and no vLLM scheduler is called.
+
+Execute replies optionally include incremental text, finish reason and reasoning
+counts. Rust parses model reasoning/XML calls and routes protocol events, then
+releases finished/cancelled requests through the existing finished-only lifecycle.
+OMP executes tools locally and sends results back. See serving.md for the exact
+compatibility limits and the blocked real-GPU acceptance status.
 
 ## Installed GPUWorker adaptation (2026-09-19)
 

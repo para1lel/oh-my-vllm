@@ -17,6 +17,7 @@ class AdapterTest(unittest.TestCase):
     def test_finished_notification_clears_all_worker_request_state(self):
         worker = object.__new__(OhMyVllmWorker)
         worker.config = object()
+        worker.serving = None
         worker._num_speculative_tokens = 0
         worker._worker = Mock()
         worker._worker.execute_model.return_value = None

@@ -1,7 +1,7 @@
 # ADR-004 — Rust-first OpenAI-compatible serving
 
 **Date:** 2026-09-21
-**Status:** Accepted direction; not implemented
+**Status:** Accepted; implemented, GPU acceptance pending
 
 ## Context
 
@@ -21,12 +21,16 @@ restart persistence is unnecessary. Test both APIs with actual oh-my-pi runs.
 
 ## Consequences
 
-HTTP is accepted future scope. The offline loop needs online request admission,
+HTTP is implemented scope. The service adds online request admission,
 streaming, EOS/stop handling and cancellation propagation. Model-specific tool
 and thinking output must be converted to each API's wire representation.
-API compatibility details and thinking mappings require further specification;
+API compatibility details and thinking mappings are specified in serving.md;
 this decision does not promise every OpenAI platform feature.
 
-The user ended the discussion with a documentation-only instruction. No runtime
-changes or GPU acceptance runs are authorized by that final instruction.
-See [serving.md](../serving.md) for details and unresolved decisions.
+The user subsequently authorized implementation: default medium, high→xhigh,
+MTP-compatible token constraints, and performance inspection without a new HTTP
+throughput gate. Axum and an engine actor own request lifecycle; Python owns
+local template preparation and XGrammar mask state only. Stored Responses default
+to one-hour TTL, 1,000 records and 256 MiB serialized payload, with no persistence.
+Unsupported protocol/schema features fail explicitly. See [serving.md](../serving.md)
+for the supported subset and [handoff.md](../handoff.md) for acceptance blockers.

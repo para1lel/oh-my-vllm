@@ -32,13 +32,15 @@ CPU KV swap, multiple GPUs, gRPC serving, LoRA, multimodal execution and
 production deployment remain outside the current task. CI is not implemented;
 local pre-commit checks are required. See requirements.md for scope authority.
 
-## Serving extension — discussion documented, implementation not started
+## Serving extension — implemented, GPU acceptance blocked
 
-The 2026-09-21 discussion accepted both OpenAI APIs, configurable thinking,
-in-memory Responses history and Rust-first entry points. The user requested only
-documentation for this task. See [serving.md](serving.md) for open decisions.
+The confirmed design is implemented in Rust HTTP/protocol/state modules and the
+Python model/grammar adapter. CPU and OMP protocol tests use the real Rust server,
+tokenizer and XGrammar with scripted model output. They do not validate GPU MTP.
 
-Future implementation sequence (proposal): specify remaining compatibility and
-thinking mappings; add a persistent engine lifecycle and correct termination;
-implement both HTTP protocols and response storage; validate both using real
-oh-my-pi repository-reading tasks. No service or agentic acceptance run exists yet.
+Remaining: restore functional CUDA/NVML on this host; launch an idle UUID-pinned
+B200 with MTP4; run both actual OMP repository-reading tasks, strict JSON/tool
+cases, ordinary serving EOS/cancellation and log-based performance checks. Repeat
+actual-path state/attention probes if GPU investigation changes those paths.
+Record evidence and resolve runtime findings before declaring serving accepted.
+See serving.md, testing.md and the latest handoff entry.

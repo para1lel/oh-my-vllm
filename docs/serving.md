@@ -1,125 +1,151 @@
-# OpenAI-compatible serving — discussion record
+# OpenAI-compatible local serving
 
-**Date:** 2026-09-21
-**Status:** User-confirmed scope; implementation and acceptance not started.
-This task records the discussion only; it does not implement or launch a service.
+**Status (2026-09-21):** implementation and CPU/client protocol tests are available.
+Real Qwen + MTP agentic acceptance is **not complete**: two selected idle B200s
+failed a minimal CUDA allocation, and service initialization failed in NVML.
+See handoff.md. Scripted CPU-worker results are never model or performance evidence.
 
-## Confirmed decisions
+## Run
 
-- Run the service and oh-my-pi on the current machine; run oh-my-pi in this repo.
-- Implement both `/v1/chat/completions` and `/v1/responses`, streaming and
-  non-streaming, plus `/v1/models`. Support text, function tools, tool-result
-  history, usage, termination and errors using each API's own representation.
-- Prefer Rust for HTTP entry points, protocol adaptation and request lifecycle.
-  Rust keeps scheduling and KV ownership; Python wraps GPUWorker. Existing
-  model, single-B200 selection, block784 and hybrid-cache constraints remain.
-- Support configurable thinking strength through both APIs.
-- Support Responses full-history replay and `store`/`previous_response_id`,
-  response retrieval and deletion. Use bounded, expiring memory. Responses need
-  not survive restart; exact capacities and expiration durations remain open.
-- Test both APIs using oh-my-pi, and cover non-streaming, cancellation, errors
-  and thinking parameter mapping with automated tests.
+```bash
+scripts/with-env.sh cargo build --release
+scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/oh-my-vllm-serve.ipc --num-speculative-tokens 4 serve
+```
 
-## Agentic acceptance
+Defaults: `127.0.0.1:8000`, model ID `qwen3.5-27b-fp8`, no authentication for the
+local workflow. Set `serve --listen` and `--served-model-name` as needed. Rust
+owns HTTP (Axum), protocol adaptation, response state, online admission,
+cancellation, scheduling and KV. Python owns tokenizer/template application,
+XGrammar state and masks, incremental detokenization, and GPUWorker execution.
+No Python scheduler or tool executor is introduced. KV block size remains 784.
 
-For each API separately, ask oh-my-pi:
+## Compatibility surface
+
+- `GET /v1/models`.
+- `POST /v1/chat/completions`: streaming SSE and non-streaming JSON, text and
+  function tools, tool-result history, usage and finish reasons.
+- `POST /v1/responses`: its own typed SSE events and JSON output items, text,
+  function tools, full-history replay and `previous_response_id` continuation.
+- `GET /v1/responses/{id}` and `DELETE /v1/responses/{id}`.
+- Tool choice: auto, none, required, named function; multiple calls are allowed
+  unless `parallel_tool_calls=false`. The service generates calls; OMP runs tools.
+- Sampling: temperature, top_p, top_k, seed, frequency/presence/repetition penalties.
+  Defaults come from the local generation_config.json (temperature 1, top_p .95,
+  top_k 20). Offline Run/Bench retain greedy, fixed-length, ignore-EOS behavior.
+- Default output budget: 8,192 tokens, including reasoning and text. The CLI
+  context default is 65,536; prompt + output budget exceeding it is an error.
+  No automatic truncation. EOS ends generation; up to four nonempty stop strings
+  work for ordinary text, including across token/UTF-8 boundaries. Stops cannot
+  interrupt enabled tools or structured output. Length exhaustion returns
+  `length` / `incomplete`; an unfinished tool call is never delivered for execution.
+- Text-only inputs, one completion per request. Unknown top-level fields and
+  unsupported features such as logprobs, background mode and automatic truncation
+  produce errors. This is a documented subset, not full OpenAI platform parity.
+
+Protocol references: [Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create),
+[Responses](https://developers.openai.com/api/reference/resources/responses/methods/create),
+[Responses SSE](https://developers.openai.com/api/reference/resources/responses/streaming-events),
+[Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
+The installed OMP 18.2.6 provider payloads and event consumers are also tested.
+
+## Thinking and replay
+
+Chat accepts `reasoning_effort`; Responses accepts `reasoning.effort`.
+Default is medium. Native off/low/medium/xhigh map to the model template; high
+explicitly aliases xhigh, and the OpenAI-style none aliases off. These are prompt
+controls, not fixed reasoning budgets or a claim of monotonic quality/latency.
+Unknown efforts fail. Thinking stays separate from content/JSON/tool arguments:
+Chat uses reasoning_content; Responses uses readable reasoning summary events/items.
+These contain the local model's emitted reasoning, not a separately generated summary.
+
+OMP's validated chat_template_kwargs preserve_thinking/enable_thinking/reasoning_effort
+extensions are supported; other template options fail. Direct enable_thinking=false
+also selects off. History tool arguments arrive as JSON strings and become objects
+before templating. Responses readable reasoning is mapped back to the assistant's
+reasoning_content. Instructions supplied as a Responses top-level field apply only
+to that response and are not inherited via previous_response_id.
+
+## Constraints and MTP
+
+JSON object, JSON Schema and tool argument grammars are applied **before sampling**.
+Reasoning may precede the constrained answer. Response JSON and enabled tools cannot
+be combined in one request. strict=true requires closed objects with every property
+required. Unsupported schemas fail; there is no validate-and-retry substitute.
+
+XGrammar builds Qwen-native XML tool grammars and JSON answer grammars. For MTP,
+each scheduled draft position and the bonus position get the mask for their
+speculative prefix. Simulated grammar advancement is rolled back; only accepted
+output advances persistent state. An invalid draft is rejected at its first masked
+position. This path does not turn off MTP or switch to vLLM's scheduler.
+CPU tests cover mask rollback, rejected drafts, and reasoning-end crossings;
+GPU verification remains required before claiming this integration works on-device.
+
+Supported schema keywords are explicitly listed in worker/serving.py; unsupported
+backend features/combinations are rejected, including unknown string formats and
+pattern/format combined with length bounds. Tool XML has extra encoding limits:
+
+- Tool parameters require a direct object root (no root $ref/anyOf) and known,
+  unambiguously typed properties. Explicit open additionalProperties is unsupported.
+  Omitted additionalProperties in a non-strict tool is closed to known properties.
+- Local property $ref and unambiguous anyOf are supported; mixed string/non-string
+  XML unions are rejected because raw `null`/`123` cannot distinguish JSON types.
+- XML strings with pattern, length or format constraints are rejected. String
+  enum/const cannot contain the parameter closing delimiter or candidates that
+  differ only in surrounding spaces/newlines/tabs; encoding padding is restored
+  from the unique schema value. XML anyOf cannot have sibling const/enum. JSON answer schemas
+  do not have these XML-specific restrictions.
+- Raw string quotes, whitespace and function/tool-close literals are preserved.
+  Parsers recognize closing tags only outside parameter values. A literal tool tag
+  in ordinary text or a JSON answer is not interpreted as a tool invocation.
+
+## State and resource limits
+
+Responses defaults to store=true; OMP normally sends store=false. Stored responses
+and their resolved conversation snapshots expire one hour after completion. Limits
+are 1,000 records and 256 MiB of serialized response/history payload, configurable
+with response-ttl-seconds, response-capacity and response-max-bytes. Object/allocation
+overhead is additional to that serialized-byte budget. Oldest records are evicted
+when capacity is reached; oversized records fail explicitly. Unknown/deleted/expired
+IDs return 404. Restart invalidates IDs. Concurrent continuations copy a snapshot;
+deleting an ancestor does not invalidate already-started requests or saved children.
+
+HTTP bodies are limited to 8 MiB; admission channel and active request limit are
+64 each; Rust schedules up to 32 concurrent sequences. Each stream has a 256-event
+buffer. A disconnected or slow client cancels its request, not the engine.
+The default request timeout is 600 seconds (configurable); preparation/step RPCs
+have 120-second deadlines and detect worker exit. Fatal worker errors fail pending
+requests; later submissions return unavailable until restart. Ctrl-C stops the
+owned worker and closes streams. In-flight kernels are not individually preempted.
+
+## OMP task and verification
+
+Run the service with MTP enabled, then run both commands separately:
+
+```bash
+scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/agentic-acceptance.py --api chat --output-dir /tmp/oh-my-vllm-agentic-chat
+scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/agentic-acceptance.py --api responses --output-dir /tmp/oh-my-vllm-agentic-responses
+```
+
+The script creates an isolated models.yml, allows read/grep/glob, and asks:
 
 > Read this repository's README, architecture documentation and necessary source.
 > Introduce the project goals, architecture, how to run it and its current
 > completion status. Cite the files supporting your answer. Do not modify files.
 
-Observe actual tool calls executed by oh-my-pi, tool results returned in a later
-model request, and a final answer grounded in the repository. A plausible answer
-without tool execution is not sufficient. The inference service generates tool
-calls; it does not execute repository tools itself. Save reproducible test
-configuration and evidence without credentials or profiling traces.
+It saves client JSONL, stderr and exact command/configuration. Verify tool execution,
+follow-up model requests with tool results, and a final answer grounded in files.
+Exit zero alone does not pass acceptance. The script kills its owned process group
+on timeout. The dummy local API key is not a credential.
 
-## Observed implementation gaps
+OMP uses native non-strict tool schemas because its strict normalization introduces
+ambiguous nullable XML strings. Separate strict API tests cover supported schemas.
+OMP minimal maps to off: the installed client's off control falls back to its
+lowest supported effort. low→low, medium→medium, high/xhigh/max→xhigh. Both off and
+medium client paths have passed scripted protocol tests; GPU behavior is pending.
 
-The existing binary has Run/Bench entry points, not HTTP serving. Its stepwise
-token outputs, continuous batching and between-step cancellation are reusable.
-Online admission and per-request delivery channels are still needed.
-
-`crates/scheduler/src/request.rs` currently completes by max token count, and
-`python/oh_my_vllm/worker/model_runner.py` defaults to greedy, ignore-EOS sampling.
-Serving needs proper EOS/stop and length semantics. ZMQ registration currently
-carries prompt IDs but not per-request sampling parameters. Preserve fixed-length
-benchmark behavior while introducing serving behavior deliberately.
-
-No serving chat template adapter, incremental text decoder, tool/reasoning
-parser or SSE serializer exists. Client disconnects and failures must connect to
-the existing cancellation/Worker cleanup lifecycle; slow consumers need a policy.
-No serving performance or agentic success has been measured. Existing EngineCore
-acceptance is separate and must not be presented as HTTP performance evidence.
-
-## Local model and client facts (read-only inspection)
-
-The model's `/data0/shared/Qwen3.8-27B-FP8/chat_template.jinja` supports tools and
-tool history. Generated calls use XML-like `<tool_call><function=...>` syntax,
-not OpenAI JSON. Historical function arguments must become dictionaries before
-templating. The service must preserve tool call identifiers across turns.
-
-Native thinking behavior observed in that template:
-
-| Mode | Template behavior |
-|---|---|
-| off | `enable_thinking=false`, inserts an empty closed thinking section |
-| low | Enables thinking and adds a brief-thinking instruction |
-| medium | Enables thinking without an extra effort instruction |
-| xhigh | Enables thinking and adds a more thorough-thinking instruction |
-| high | Rejected when thinking is enabled |
-
-The template defaults to thinking enabled with xhigh. These are prompt-level
-controls, not hard token budgets; no monotonic quality/latency claim is supported.
-The service default and external aliases are not decided. In particular, do not
-silently accept high as an independent native level. The installed vLLM
-`vllm/parser/qwen3.py` has a potential reusable reasoning/XML-tool parser; using
-it would not require vLLM's scheduler. Reuse versus Rust parsing remains open.
-
-The inspected `/home/dongwu.chen/.local/bin/omp` reports v18.2.6. Its providers
-support `openai-completions` and `openai-responses` with a custom base URL.
-Chat streaming consumes content/tool-call deltas and requires a finish reason.
-Responses consumes typed SSE events with item IDs, output indices and call IDs;
-it defaults to `store:false` and can also use stored continuation. A Chat SSE
-serializer cannot be reused unchanged as a Responses serializer.
-
-Responses thinking uses `reasoning.effort`; OMP supports effort maps. Its UI levels
-are broader than the native model levels, so configuration and service validation
-must agree. Installed/legacy state directories differ: verify the active config
-or use an explicit isolated state directory when testing. No client config was
-changed during this discussion.
-
-## Remaining design choices (not user-confirmed)
-
-- External thinking levels, aliases, default, disable semantics and how reasoning
-  is exposed/replayed by each API. Native prompt differences need tests; actual
-  model behavior still needs GPU validation.
-- Detailed compatibility matrix: tool choice/parallel calls, strict schemas,
-  structured output, supported sampling fields, and handling unsupported fields.
-  Both APIs are required; exhaustive OpenAI platform parity was not agreed.
-- Responses defaults, limits/TTL, unknown/expired ID errors, concurrent access,
-  deletion semantics and any endpoints beyond creation/retrieval/deletion.
-- HTTP library, port, listen address, authentication, request limits, timeout,
-  queue/backpressure policy and exact tokenizer/template/parser placement.
-- Context/output limits, default sampling, stop handling, and any additional
-  serving performance gate. The existing EngineCore target remains unchanged.
-
-A shared internal request/event model is recommended so both API adapters use
-the same engine, cancellation and output parsing. This is a proposal, not code.
-
-## Planned verification (not run)
-
-- Both real oh-my-pi provider paths complete the repository-reading task.
-- Both streaming and non-streaming represent the same text/tool outcomes;
-  fragmented tool arguments, UTF-8 boundaries, final events and usage are tested.
-- Full-history and stored Responses chains preserve tool-result associations;
-  retrieval, deletion, expiry, capacity and restart invalidation are tested.
-- EOS, output limits, stop strings, disconnects, malformed requests and worker
-  failures terminate correctly and release resources.
-- Thinking configuration produces the intended template and protocol fields;
-  invalid levels are handled according to the eventual explicit mapping.
-
-Future implementation should pin compatibility to the official
-[Chat Completions reference](https://platform.openai.com/docs/api-reference/chat)
-and [Responses reference](https://platform.openai.com/docs/api-reference/responses),
-and verify against the installed client rather than assuming protocol equivalence.
+No new strict serving throughput threshold is set. Check real logs for queue wait,
+preparation time, TTFT, end-to-end output tok/s, steps, cache hits and MTP proposed/
+accepted tokens. Use DEBUG for RPC/worker host timing; do not label it CUDA kernel
+time. Investigate persistent queueing, stalls, unexpected zero proposals/acceptance,
+excess preemption, memory growth or worker errors. Compare like workloads after
+warmup. Existing EngineCore >=95% requirements remain separate and unchanged.

@@ -1,6 +1,53 @@
 # Handoff — 2026-09-21
 
-## Latest task — serving discussion documented (2026-09-21)
+## Latest task — OpenAI-compatible serving implemented; GPU acceptance blocked
+
+The user subsequently authorized implementation and confirmed both APIs, default
+medium thinking (high maps to xhigh), JSON/strict tools with MTP, and observational
+performance checks without a new serving throughput gate. Rust now owns Axum HTTP,
+request lifecycle, protocol events and bounded Responses storage. Python handles
+local templates, incremental detokenization and XGrammar masks across speculative
+prefixes; Rust scheduler/KV ownership and block784 are unchanged.
+
+Implemented Chat/Responses streaming and nonstreaming, models, tool history,
+response retrieve/delete/continuation, cancellation and deadlines. See serving.md
+for the supported subset, explicit schema restrictions and commands. Added an
+isolated real oh-my-pi runner for the agreed read-only repository introduction.
+
+CPU evidence: Rust unit tests and actual Rust HTTP/ZMQ integration tests pass;
+actual local tokenizer/XGrammar tests cover speculative rollback, invalid drafts,
+EOS/bonus rows and thinking boundaries. Installed oh-my-pi 18.2.6 completed tool
+read/follow-up exchanges via both APIs at medium and off against the scripted CPU
+worker. These verify client wiring only, not model quality or GPU MTP acceptance.
+Client logs are in /tmp/oh-my-vllm-omp-wire3{,-responses}/ and
+/tmp/oh-my-vllm-omp-off2-{chat,responses}/ on this host.
+
+Final checks: 73 Rust tests, all-target/all-feature clippy, rustfmt, Python
+format/check, 16 serving CPU/HTTP tests and 12 existing adapter/bridge/runtime/
+benchmark-tool tests passed. Independent reviews fixed stream cancellation,
+history inheritance, schema ambiguity and XML boundary issues; subsequent review
+passed. The EOS-draft regression verifies rollback including a terminal token.
+No actual GPU FP64, MTP correctness or performance regression suite could run on
+this host during this task; CPU tests explicitly select VLLM_TARGET_DEVICE=cpu.
+
+Real GPU attempt: an MTP4 service failed before model initialization with NVML
+Unknown Error (/tmp/oh-my-vllm-serving-mtp.log). Minimal torch CUDA allocation also
+failed on two idle B200 UUIDs selected with scripts/with-gpu.sh:
+GPU-1b174534-ebba-826f-b452-8e7f3c05c301 and
+GPU-b0da5a7e-8dcf-e7dd-9836-a29a45d01b45. NVML cannot obtain the device handle for
+0000:4B:00.0. No unrelated GPU process was stopped or device reset attempted.
+The final release build passed; another MTP4 startup failed in the same NVML
+initialization path (/tmp/oh-my-vllm-serving-final-mtp.log). Owned test servers
+and clients were stopped after verification.
+
+Remaining: restore host CUDA/NVML health, start the real MTP4 service, run both
+agentic-acceptance.py API tasks, inspect actual tool results/final answers, test
+JSON/strict tools with real speculative acceptance and review latency/throughput/
+proposal/acceptance logs. No real serving performance number or GPU acceptance
+is claimed. Earlier EngineCore performance results below are historical evidence,
+not measurements of this serving change.
+
+## Previous task — serving discussion documented (2026-09-21)
 
 The user requested documentation only and explicitly stopped implementation.
 Accepted future scope: both OpenAI Chat Completions and Responses, configurable

@@ -1,5 +1,12 @@
 # Acceptance evidence — 2026-09-19
 
+## Serving status — 2026-09-21
+
+OpenAI-compatible serving has CPU protocol, tokenizer/grammar and installed
+client wiring coverage. Real model MTP/agentic acceptance and serving performance
+inspection are blocked by host CUDA/NVML failures. See [handoff.md](handoff.md).
+The matrix below predates serving and does not validate the new HTTP paths.
+
 ## Matched performance
 
 All nine required rows passed the >=95% throughput gate on single B200 GPUs.
@@ -86,6 +93,6 @@ framework tools use conda oh-my-vllm. VSCode's ignored local settings select the
 framework environment for Python analysis.
 
 Multi-GPU execution, CPU KV swap, multimodal inputs, LoRA and production
-deployment remain outside the agreed scope. OpenAI-compatible HTTP serving was
-accepted as future scope on 2026-09-21 (see serving.md), but is not implemented or
-covered by this acceptance evidence. These measurements remain EngineCore-level.
+deployment remain outside the agreed scope. OpenAI-compatible HTTP serving is
+implemented (see serving.md), with GPU acceptance pending; it is not covered by
+this historical performance evidence. These measurements remain EngineCore-level.

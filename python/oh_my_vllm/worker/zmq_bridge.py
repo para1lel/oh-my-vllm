@@ -85,6 +85,15 @@ def _encode_worker_output(wo: WorkerOutput) -> dict:
                 "token_ids": o.token_ids,
                 "num_accepted_draft_tokens": o.num_accepted_draft_tokens,
                 "new_draft_token_ids": o.new_draft_token_ids,
+                **(
+                    {
+                        "text": o.text,
+                        "finish_reason": o.finish_reason,
+                        "reasoning_tokens": o.reasoning_tokens,
+                    }
+                    if o.text or o.finish_reason or o.reasoning_tokens
+                    else {}
+                ),
             }
             for o in wo.outputs
         ],
@@ -133,6 +142,18 @@ def serve(socket_addr: str) -> None:
                             {"type": "error", "message": err}, use_bin_type=True
                         )
                     )
+
+            elif msg_type == "prepare":
+                try:
+                    if worker is None:
+                        raise RuntimeError("worker not initialised")
+                    ids = worker.prepare_request(msg["request_id"], msg["request"])
+                    reply = {"type": "prepared", "prompt_token_ids": ids}
+                except Exception as exc:
+                    if worker is not None:
+                        worker.unregister_request(msg["request_id"])
+                    reply = {"type": "error", "message": str(exc)}
+                sock.send(msgpack.packb(reply, use_bin_type=True))
 
             elif msg_type == "register":
                 if worker is None:

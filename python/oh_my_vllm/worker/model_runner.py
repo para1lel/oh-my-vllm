@@ -36,6 +36,9 @@ class RequestOutput:
     token_ids: list[int]
     num_accepted_draft_tokens: int = 0
     new_draft_token_ids: list[int] = field(default_factory=list)
+    text: str = ""
+    finish_reason: str | None = None
+    reasoning_tokens: int = 0
 
 
 @dataclass
@@ -162,6 +165,7 @@ class OhMyVllmWorker:
         self.prompt_token_ids_map: dict = {}
         self.adapter: SchedulerAdapter | None = None
         self._num_speculative_tokens = num_speculative_tokens
+        self.serving = None
 
     @with_config
     def init_device(self):
@@ -233,9 +237,24 @@ class OhMyVllmWorker:
             ignore_eos=True,
         )
 
+    def prepare_request(self, request_id: int, request: dict):
+        from oh_my_vllm.worker.serving import ServingAdapter
+
+        if self.serving is None:
+            self.serving = ServingAdapter(
+                self.config.model_config.model,
+                self.config.model_config.get_vocab_size(),
+                self.config.model_config.max_model_len,
+            )
+        ids, sampling = self.serving.prepare(request_id, request)
+        self.register_request(request_id, ids, sampling)
+        return ids
+
     def unregister_request(self, request_id: int):
         self.prompt_token_ids_map.pop(request_id, None)
         self.sampling_params_map.pop(request_id, None)
+        if self.serving is not None:
+            self.serving.generations.pop(request_id, None)
 
     @with_config
     def execute_model(self, rust_output: SchedulerOutput) -> WorkerOutput:
@@ -247,9 +266,11 @@ class OhMyVllmWorker:
             self.sampling_params_map,
         )
         vllm_output.num_spec_tokens_to_schedule = self._num_speculative_tokens
+        grammar = self.serving.masks(vllm_output) if self.serving is not None else None
+        vllm_output.has_structured_output_requests = grammar is not None
         output = self._worker.execute_model(vllm_output)
         if rust_output.scheduled and output is None:
-            output = self._worker.sample_tokens(None)
+            output = self._worker.sample_tokens(grammar)
         if output is not None and hasattr(output, "get_output"):
             output = output.get_output()
         sampled = (
@@ -276,10 +297,22 @@ class OhMyVllmWorker:
             if str(rid) not in sampled:
                 raise RuntimeError(f"Worker omitted scheduled request {rid}")
             tokens = sampled[str(rid)]
+            text, finish_reason, reasoning_tokens = "", None, 0
+            if self.serving is not None and rid in self.serving.generations:
+                generation = self.serving.generations[rid]
+                tokens, text = generation.consume(tokens, self.serving.tokenizer)
+                finish_reason = generation.finished
+                reasoning_tokens = generation.reasoning_tokens
             self.adapter.output_counts[rid] += len(tokens)
             results.append(
                 RequestOutput(
-                    rid, tokens, max(0, len(tokens) - 1), new_drafts.get(str(rid), [])
+                    rid,
+                    tokens,
+                    max(0, len(tokens) - 1),
+                    new_drafts.get(str(rid), []),
+                    text,
+                    finish_reason,
+                    reasoning_tokens,
                 )
             )
         for rid in rust_output.finished_request_ids:

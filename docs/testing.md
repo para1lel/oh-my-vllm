@@ -134,3 +134,26 @@ For a CPU-affinity experiment, place taskset -c CPU before the benchmark Python
 command, after the environment/GPU wrappers. Both engines inherit the same CPU
 mask, which is recorded as cpu_affinity. Compare complete matching configurations;
 a CPU echo/host-timing improvement alone does not establish target throughput.
+
+## Serving CPU, client and GPU coverage
+
+```bash
+scripts/with-env.sh cargo build
+VLLM_TARGET_DEVICE=cpu CUDA_VISIBLE_DEVICES='' scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python -m unittest discover -s tests -p 'test_serving*.py'
+```
+
+Rust tests cover incremental reasoning/XML, literal strings, request mapping and
+response state. test_serving_worker.py uses the real tokenizer/XGrammar for
+strict constraints, valid/invalid speculative-prefix rollback, reasoning-end
+crossings, EOS, stop and UTF-8. test_serving_http.py starts the real Rust server
+and a scripted CPU ZMQ worker: both API representations, usage, tool history,
+stored continuation/deletion/expiry, length truncation, cancellation, concurrency,
+bad requests and fatal worker errors. These are not GPU/model evidence.
+
+See serving.md for scripts/agentic-acceptance.py. With a real UUID-pinned B200 and
+MTP4 service, both OMP providers must independently execute the documented task,
+return tool results and produce a file-grounded answer. Also exercise strict JSON
+and tool constraints with MTP, check nonzero actual draft proposals, inspect
+acceptance and latency/throughput logs, and check cleanup after cancellation.
+The current CUDA/NVML host failure prevents that final acceptance; record failures
+in handoff.md instead of treating scripted output as a pass.

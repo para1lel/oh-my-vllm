@@ -51,6 +51,7 @@ enum Cmd {
         prefix_hit: bool,
     },
     Bench(BenchArgs),
+    Serve(oh_my_vllm_zmq_worker::serving::ServeArgs),
 }
 
 #[derive(Args)]
@@ -157,8 +158,12 @@ async fn run() -> Result<()> {
         },
         kv,
     );
+    if let Cmd::Serve(args) = cli.cmd {
+        return oh_my_vllm_zmq_worker::serving::serve(client, scheduler, args).await;
+    }
     let mut next_id = 1;
     match cli.cmd {
+        Cmd::Serve(_) => unreachable!(),
         Cmd::Run {
             tokens: _,
             prompt_file: _,

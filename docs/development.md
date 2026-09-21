@@ -90,3 +90,14 @@ measured results, including failed cases and pending acceptance.
   connection is reported promptly instead of consuming the full init timeout.
 - Insufficient startup memory: wait for an idle card again. An external job may
   have started after selection; do not lower limits to hide a contaminated pair.
+
+## OpenAI serving development
+
+See serving.md for launch/OMP commands and the protocol compatibility matrix.
+Rust adds Axum/serde_json/tokio-stream; Python uses already-installed tokenizer,
+XGrammar and vLLM packages. No Python package installation was needed.
+
+For CPU-only tokenizer/schema/HTTP tests on a GPU host, set VLLM_TARGET_DEVICE=cpu
+and CUDA_VISIBLE_DEVICES='' before starting Python. This avoids NVML enumeration
+and does not validate CUDA execution. tests/fixtures/serving_worker.py is scripted
+output for integration tests only; never use it to report model acceptance or speed.

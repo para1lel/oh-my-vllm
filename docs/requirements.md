@@ -139,7 +139,7 @@ time must not be presented as CUDA kernel time. Profiling is opt-in.
 
 ## REQ-SERVE-001 — OpenAI-compatible local service
 
-**Status:** user-confirmed 2026-09-21; not implemented
+**Status:** user-confirmed 2026-09-21; implemented, GPU acceptance pending
 **Priority:** must-have for the serving extension
 
 Support both Chat Completions and Responses, with streaming and non-streaming
@@ -152,18 +152,18 @@ performance requirements or claim HTTP-level performance acceptance.
 
 Responses must support full-history requests and stored responses with
 `previous_response_id`, retrieval and deletion. Use bounded, expiring in-memory
-storage; continuation across service restarts is not required. Exact limits and
-the remaining compatibility surface must be specified before implementation.
+storage; continuation across service restarts is not required. Defaults are
+store=true, one-hour TTL, 1,000 records and 256 MiB serialized response/history
+payload; see serving.md for configurable limits, errors and compatibility.
 
 ## REQ-SERVE-002 — Configurable thinking strength
 
-**Status:** user-confirmed 2026-09-21; not implemented
+**Status:** user-confirmed 2026-09-21; implemented, GPU acceptance pending
 
-Expose configurable thinking strength through both APIs. Exact external levels,
-default and model mappings remain undecided. The local template supports thinking
-off and native low/medium/xhigh; high is not a native level. Do not silently treat
-all levels alike or claim hard thinking budgets or measured quality differences.
-See [serving design notes](serving.md) for observed constraints and pending choices.
+Expose off/low/medium/high/xhigh with default medium. high aliases native xhigh;
+OpenAI none aliases off. Use the native template and separate reasoning from text
+and tool arguments. OMP mappings, replay and validated template extensions are
+specified in serving.md. These are prompt controls, not hard thinking budgets.
 
 ## REQ-SERVE-003 — Real oh-my-pi acceptance on both APIs
 
@@ -177,8 +177,25 @@ answer; do not modify repository files during that task. Tools execute in oh-my-
 Test both APIs, plus non-streaming, cancellation, errors and thinking mapping.
 Detailed planned coverage is in [serving.md](serving.md).
 
-The present user request authorizes documentation only, not serving implementation
-or execution of this acceptance task.
+The implementation request supersedes the earlier documentation-only discussion.
+Both real agentic runs must enable MTP. Scripted worker/client protocol tests do
+not satisfy real model acceptance. GPU initialization is currently blocked by a
+host CUDA/NVML fault; see handoff.md.
+
+## REQ-SERVE-004 — Constrained decoding with MTP
+
+Support JSON object, JSON Schema and strict function arguments using token-level
+masks, including the MTP verification path. No silent non-MTP fallback and no
+post-generation-only validation substitute. Reject unsupported schemas explicitly.
+Support tool choice auto/none/required/named and parallel_tool_calls=false.
+Supported schema and XML encoding limits are specified in serving.md.
+
+## REQ-SERVE-005 — Serving observability
+
+No additional strict HTTP throughput gate. Inspect actual queue/preparation time,
+TTFT, output rate, steps/cache behavior and MTP proposed/accepted counters. Diagnose
+abnormal logs and resource retention. Do not use old EngineCore results as serving
+performance evidence. Existing REQ-PERF-001 remains unchanged.
 
 ---
 
@@ -189,6 +206,6 @@ or execution of this acceptance task.
 - Multimodal inputs (text-only for the current scope; architecture leaves hooks)
 - Swap-based preemption (CPU KV offload)
 - Multi-GPU / tensor parallel > 1
-- gRPC server (OpenAI-compatible HTTP is now accepted future scope, REQ-SERVE-001)
+- gRPC server (OpenAI-compatible HTTP is in scope, REQ-SERVE-001)
 - LoRA adapters
 - Production deployment or containerisation

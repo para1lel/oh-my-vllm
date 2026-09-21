@@ -156,3 +156,18 @@ the worker; resumed requests replace tables, ordinary running updates append
 suffixes. Finished IDs are flushed even when no model tokens remain scheduled.
 BF16 SSM in MTP mode preserves block784 and is matched in the baseline (ADR003).
 Legacy spec_decode.py helpers are not used by this execution path.
+
+## Serving protocol extension (2026-09-21)
+
+`prepare` carries request_id and a normalized request object (messages, tools,
+effort/template options, output format, max_tokens, sampling, stop). Python validates,
+compiles constraints and registers the request, replying `prepared` with
+prompt_token_ids, or `error` before Rust admission. Legacy `register` remains
+fixed-length greedy for Run/Bench.
+
+Serving execute outputs optionally add text (incremental decoded text), finish_reason
+(stop/length or null), and cumulative reasoning_tokens. Token IDs remain the
+authoritative Rust scheduling/KV input. Grammar masks stay entirely in Python and
+are passed to GPUWorker before sampling, including speculative verification rows.
+Rust detects worker process exit while awaiting replies and uses the existing
+finished_request_ids cleanup path for EOS, length and cancellation.

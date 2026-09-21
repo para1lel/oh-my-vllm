@@ -26,6 +26,18 @@ Use unique sockets for concurrent runs. Add `--num-speculative-tokens 4` to the 
 Benchmark modes are ordinary, mtp and prefix. Defaults are 1024 physical blocks,
 input32768, output4096, one warmup and three measured repetitions.
 
+## Local OpenAI service
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/oh-my-vllm-serve.ipc --num-speculative-tokens 4 serve
+```
+
+Chat Completions and Responses are served at `http://127.0.0.1:8000/v1`, with
+thinking, tools, JSON constraints and stored Responses. See [serving](docs/serving.md)
+for supported schemas, OMP configuration and acceptance commands. CPU/client tests
+pass; real model/MTP serving acceptance is blocked by the current host CUDA/NVML
+fault. The EngineCore performance results below predate this serving extension.
+
 ## Verification and performance
 
 The target is at least 95% of matched vLLM EngineCore throughput for batch1/2/4

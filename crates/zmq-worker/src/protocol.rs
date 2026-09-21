@@ -9,6 +9,10 @@ use serde::{Deserialize, Serialize};
 pub enum RustMessage {
     Init(InitMsg),
     Register(RegisterMsg),
+    Prepare {
+        request_id: u64,
+        request: serde_json::Value,
+    },
     Execute(ExecuteMsg),
     Abort(AbortMsg),
     Shutdown,
@@ -60,6 +64,7 @@ pub struct AbortMsg {
 pub enum PythonMessage {
     Ready { logical_num_blocks: u32 },
     ExecuteResult(ExecuteResultMsg),
+    Prepared { prompt_token_ids: Vec<u32> },
     Error(ErrorMsg),
 }
 
@@ -76,6 +81,12 @@ pub struct RequestResultMsg {
     pub num_accepted_draft_tokens: u32,
     #[serde(default)]
     pub new_draft_token_ids: Vec<u32>,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub finish_reason: Option<String>,
+    #[serde(default)]
+    pub reasoning_tokens: usize,
 }
 
 #[derive(Debug, Deserialize)]

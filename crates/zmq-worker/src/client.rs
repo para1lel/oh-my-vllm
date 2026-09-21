@@ -65,7 +65,9 @@ pub struct WorkerClient {
     sock: DealerSocket,
     _child: ManagedChild,
     step_id: u64,
+    serving_enabled: bool,
     pub logical_num_blocks: u32,
+    pub serving_outputs: std::collections::BTreeMap<u64, (String, Option<String>, usize)>,
 }
 
 /// Reap the owned worker on errors as well as normal shutdown.
@@ -132,9 +134,12 @@ impl WorkerClient {
         }
 
         // Wait for `ready`.
-        let ready_reply = timeout(config.init_timeout, Self::recv_raw(&mut sock))
-            .await
-            .map_err(|_| Error::Timeout)??;
+        let ready_reply = timeout(
+            config.init_timeout,
+            Self::recv_with_child(&mut sock, &mut child),
+        )
+        .await
+        .map_err(|_| Error::Timeout)??;
 
         let logical_num_blocks = match ready_reply {
             crate::protocol::PythonMessage::Ready { logical_num_blocks } => {
@@ -153,7 +158,9 @@ impl WorkerClient {
             sock,
             _child: child,
             step_id: 0,
+            serving_enabled: false,
             logical_num_blocks,
+            serving_outputs: Default::default(),
         })
     }
 
@@ -173,6 +180,29 @@ impl WorkerClient {
             prompt_token_ids,
         });
         Self::send_raw(&mut self.sock, &msg).await
+    }
+
+    /// Prepare model input and sampling before Rust admission. The reply is correlated
+    /// by the single-owner, sequential RPC stream.
+    pub async fn prepare_request(
+        &mut self,
+        request_id: u64,
+        request: serde_json::Value,
+    ) -> Result<Vec<u32>> {
+        self.serving_enabled = true;
+        Self::send_raw(
+            &mut self.sock,
+            &RustMessage::Prepare {
+                request_id,
+                request,
+            },
+        )
+        .await?;
+        match Self::recv_with_child(&mut self.sock, &mut self._child).await? {
+            crate::protocol::PythonMessage::Prepared { prompt_token_ids } => Ok(prompt_token_ids),
+            crate::protocol::PythonMessage::Error(e) => Err(Error::WorkerError(e.message)),
+            other => Err(Error::UnexpectedMessageType(format!("{other:?}"))),
+        }
     }
 
     /// Tell the Python worker to drop a request (aborted or evicted permanently).
@@ -219,7 +249,7 @@ impl WorkerClient {
         });
         Self::send_raw(&mut self.sock, &msg).await?;
 
-        let reply = Self::recv_raw(&mut self.sock).await?;
+        let reply = Self::recv_with_child(&mut self.sock, &mut self._child).await?;
         debug!(
             step_id = self.step_id,
             requests = scheduled.len(),
@@ -228,18 +258,32 @@ impl WorkerClient {
             "execute_round_trip"
         );
         match reply {
-            crate::protocol::PythonMessage::ExecuteResult(r) => Ok(WorkerOutput {
-                outputs: r
-                    .outputs
-                    .into_iter()
-                    .map(|o| RequestOutput {
-                        request_id: o.request_id,
-                        token_ids: o.token_ids,
-                        num_accepted_draft_tokens: o.num_accepted_draft_tokens as usize,
-                        new_draft_token_ids: o.new_draft_token_ids,
-                    })
-                    .collect(),
-            }),
+            crate::protocol::PythonMessage::ExecuteResult(r) => {
+                if self.serving_enabled {
+                    self.serving_outputs = r
+                        .outputs
+                        .iter()
+                        .map(|o| {
+                            (
+                                o.request_id,
+                                (o.text.clone(), o.finish_reason.clone(), o.reasoning_tokens),
+                            )
+                        })
+                        .collect();
+                }
+                Ok(WorkerOutput {
+                    outputs: r
+                        .outputs
+                        .into_iter()
+                        .map(|o| RequestOutput {
+                            request_id: o.request_id,
+                            token_ids: o.token_ids,
+                            num_accepted_draft_tokens: o.num_accepted_draft_tokens as usize,
+                            new_draft_token_ids: o.new_draft_token_ids,
+                        })
+                        .collect(),
+                })
+            }
             crate::protocol::PythonMessage::Error(e) => Err(Error::WorkerError(e.message)),
             other => Err(Error::UnexpectedMessageType(format!("{other:?}"))),
         }
@@ -272,6 +316,23 @@ impl WorkerClient {
         let zmq_msg = ZmqMessage::from(bytes);
         sock.send(zmq_msg).await?;
         Ok(())
+    }
+
+    async fn recv_with_child(
+        sock: &mut DealerSocket,
+        child: &mut ManagedChild,
+    ) -> Result<crate::protocol::PythonMessage> {
+        let receive = Self::recv_raw(sock);
+        tokio::pin!(receive);
+        let mut heartbeat = tokio::time::interval(Duration::from_millis(100));
+        loop {
+            tokio::select! {
+                reply = &mut receive => return reply,
+                _ = heartbeat.tick() => {
+                    if child.0.try_wait()?.is_some() { return Err(Error::WorkerDied); }
+                }
+            }
+        }
     }
 
     async fn recv_raw(sock: &mut DealerSocket) -> Result<crate::protocol::PythonMessage> {
