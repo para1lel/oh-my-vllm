@@ -1,5 +1,24 @@
 # Handoff — 2026-09-21
 
+## Current execution path — independent Worker only
+
+The legacy GPUWorker/V2 adapter and adapter-specific tests are removed. The owned
+Worker is now worker/model_runner.py; probe_worker.py instruments this implementation.
+Rust and scripts/with-env.sh default to conda oh-my-vllm with independent kernel
+caches. No opt-in flag or old implementation remains. Benchmark code can only run
+the framework and read the original frozen baseline, checked by fixed SHA256.
+The parsed baseline and recorded hash use the same immutable byte snapshot.
+
+All54 CPU unittests ran in the target environment (52 pass,2 CUDA tests skipped
+there). Rust75 tests, release build, fmt/width/clippy, ruff and pip check pass.
+A default-path real MTP arithmetic run generated25 and passed module/library
+shutdown audit. Its strace file-access audit found zero accesses to either the
+vLLM source checkout or old conda environment; traces stay outside the repository.
+Full GPU pytest passes:80 tests and12 subtests, with no skips. All task-owned
+GPU processes exited. Next: commit the independently reviewed removal, then
+run the monitored clean-commit nine-row matrix and both real oh-my-pi tasks. Do not
+edit Python code during measurements. No final migration acceptance claim yet.
+
 ## Current migration — independent GPU runtime in progress
 
 The user approved ADR-006 after the design interview. Rust/Python ownership stays

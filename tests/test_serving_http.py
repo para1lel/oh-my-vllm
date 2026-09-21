@@ -6,6 +6,7 @@ import os
 import signal
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -14,7 +15,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PYTHON = "/data0/shared/dongwu.chen/conda-envs/vllm/bin/python"
+PYTHON = sys.executable
 
 
 class HttpTests(unittest.TestCase):

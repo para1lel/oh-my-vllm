@@ -1,0 +1,54 @@
+{
+  "purpose": "Removal of legacy runtime and test dependencies; final workload acceptance remains pending.",
+  "parent_commit": "6f97236",
+  "runtime": {
+    "timestamp": "2026-09-21T11:37:35.192948+00:00",
+    "level": "INFO",
+    "run_id": "20260921T113716-2194385",
+    "pid": 2195780,
+    "component": "oh_my_vllm.worker.model_runner",
+    "message": "Independent runtime",
+    "python": "/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python",
+    "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+    "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+    "packages": {
+      "torch": "2.14.0",
+      "triton": "3.8.0",
+      "flashinfer-python": "0.6.18.post1",
+      "transformers": "5.17.0",
+      "tokenizers": "0.23.2",
+      "safetensors": "0.8.0",
+      "xgrammar": "0.2.7",
+      "pyzmq": "27.2.0",
+      "msgpack": "1.2.2"
+    },
+    "flashinfer_workspace": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent",
+    "triton_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent/triton",
+    "vllm_importable": false
+  },
+  "checks": {
+    "rust_tests": 75,
+    "full_gpu_pytest": 80,
+    "pytest_subtests": 12,
+    "pytest_skipped": 0,
+    "cpu_unittest_passed": 52,
+    "cpu_unittest_cuda_skipped": 2,
+    "release_fmt_width_clippy_ruff_pip_check": "pass"
+  },
+  "file_access_audit": {
+    "tool": "strace -f -e trace=%file",
+    "run": "default worker, actual MTP4 arithmetic prompt, 24 fixed output tokens",
+    "old_source_accesses": 0,
+    "old_environment_accesses": 0,
+    "trace_committed": false
+  },
+  "loaded_module_library_audit": "passed at worker shutdown after real execution",
+  "baseline_sha256": "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e",
+  "baseline_execution_code": "removed; only byte-identical copies of the original frozen artifact accepted",
+  "cleanup": "all task-owned GPU processes exited; no service retained",
+  "remaining": [
+    "clean implementation commit nine-row original-baseline performance matrix",
+    "both real independent oh-my-pi tasks",
+    "final evidence and documentation reconciliation"
+  ]
+}

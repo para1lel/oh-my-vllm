@@ -55,7 +55,7 @@ class BenchmarkTests(unittest.TestCase):
                         ).hexdigest(),
                     },
                 ),
-                patch.object(compare, "vllm_identity", return_value={}),
+                patch.object(compare, "runtime_identity", return_value={}),
                 patch.object(compare, "run_engine", return_value=output) as run,
                 patch("builtins.print"),
             ):
@@ -65,7 +65,14 @@ class BenchmarkTests(unittest.TestCase):
             self.assertNotIn("--baseline", run.call_args.args[0])
             invalid = Path(directory) / "invalid.json"
             original = json.loads(artifact.read_text())
-            for mutation in ("model", "block_size", "missing", "list", "warmup"):
+            for mutation in (
+                "model",
+                "block_size",
+                "missing",
+                "list",
+                "warmup",
+                "throughput",
+            ):
                 data = json.loads(artifact.read_text())
                 if mutation in ("model", "block_size"):
                     data["protocol"][mutation] = "wrong"
@@ -73,12 +80,14 @@ class BenchmarkTests(unittest.TestCase):
                     del data["protocol"]
                 elif mutation == "list":
                     data = original["rows"]
+                elif mutation == "throughput":
+                    data["rows"][0]["baseline"][0]["output_tps"] += 1
                 else:
                     data["warmup_per_engine"] = 99
                 invalid.write_text(json.dumps(data))
                 with self.assertRaises(ValueError):
                     compare.historical_baseline(invalid, args, 1)
-            with self.assertRaisesRegex(ValueError, "protocol"):
+            with self.assertRaisesRegex(ValueError, "baseline hash"):
                 compare.historical_baseline(
                     ROOT / "bench/baseline/2026-09-19-mtp-bs2-repeat.json", args, 2
                 )

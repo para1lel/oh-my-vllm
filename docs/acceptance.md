@@ -1,8 +1,16 @@
 # Acceptance evidence
 
-## V2 Model Runner acceptance — 2026-09-21
+## Independent runtime — final acceptance in progress
 
-The framework now uses V2 exclusively, with Rust scheduling/KV ownership and no
+The default runtime now uses project-owned model/Worker code and independent
+libraries in conda oh-my-vllm. Staged correctness evidence is saved in
+[stage2](../bench/baseline/2026-09-21-independent-stage2.json). Final clean-runtime
+checks, both oh-my-pi tasks and the monitored nine-row matrix are pending.
+The V2 results below are historical and do not establish independent acceptance.
+
+## Historical V2 Model Runner acceptance — 2026-09-21
+
+The predecessor implementation used V2 exclusively, with Rust scheduling/KV ownership and no
 vLLM source changes. All nine 32768→4096 rows pass the >=95% gate against the frozen
 2026-09-19 EngineCore measurements. Only the framework was rerun: two warmups and
 three measured repetitions per row, MTP4 where applicable, block784, original

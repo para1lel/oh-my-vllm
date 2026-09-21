@@ -1,60 +1,31 @@
 # Development guide
 
-## Environments
+## Environment
 
-| Purpose | Conda environment |
-|---|---|
-| Rust, independent GPU runtime, lint and hooks | /data0/shared/dongwu.chen/conda-envs/oh-my-vllm |
-| Transitional V2 GPUWorker only (to be removed) | /data0/shared/dongwu.chen/conda-envs/vllm |
+All Rust tools, Python packages, tests and model execution use
+`/data0/shared/dongwu.chen/conda-envs/oh-my-vllm`. Use `scripts/with-env.sh` for
+cargo/Python commands. It sets PATH, PYTHONPATH, CARGO_TARGET_DIR and the Worker
+Python. The legacy adapter and old-environment default have been removed.
 
-Use scripts/with-env.sh for every cargo/Python command. It sets PYTHONPATH to the
-repository's python/ directory, CARGO_TARGET_DIR to target/, the framework PATH,
-and OH_MY_VLLM_WORKER_PYTHON to the absolute vllm conda Python. The worker package
-is not installed in that environment. No uv or conda package installation is used.
-Install new Python dependencies with pip inside `oh-my-vllm`, through with-env.sh.
-The independent runtime's direct dependencies are in python/pyproject.toml and
-its complete pinned Linux/Python3.12 closure is requirements/runtime.txt.
-The current candidate is installed and passes pip check; full GPU/model validation
-is in progress. CUDA13.1 and the compiler come from the host, while Torch2.14's
-CUDA13.0 runtime libraries are installed in the conda environment.
+Install Python dependencies with pip in that environment. Direct dependencies are
+in python/pyproject.toml; requirements/runtime.txt pins the complete stable
+Linux/Python3.12 closure. Host CUDA13.1/compiler tools build kernels, while Torch2.14
+uses its installed CUDA13.0 runtime libraries. The host supplies the NVIDIA driver.
 
 ```bash
 scripts/with-env.sh python -m pip install -r requirements/runtime.txt
 scripts/with-env.sh python -m pip check
 ```
 
-Do not regenerate the frozen EngineCore baseline. The old worker executable
-remains the service default only during the explicitly allowed transition.
+The wrapper selects independent FlashInfer/Triton cache directories under
+`/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent`. Override the common root
+with OH_MY_VLLM_RUNTIME_CACHE. FlashInfer may compile kernels or download its own
+versioned NVIDIA GEMM cubins on first use. These are independent library artifacts,
+not old vLLM build outputs. Runtime startup records library versions; shutdown
+checks imported modules and mapped libraries. No vLLM package may be installed.
 
-The vLLM environment uses an editable checkout at /data0/shared/dongwu.chen/vllm.
-Installed version metadata alone is not an immutable source pin. Record the
-actual source/configuration and executable identity for measurements.
-
-The framework requires V2 Model Runner. It sets VLLM_USE_V2_MODEL_RUNNER=1 before
-creating EngineArgs and rejects an explicitly disabled setting. Startup logs the
-actual V2 runner class. No vLLM source patch or legacy fallback is used; local
-adaptations live in worker/v2_runner.py. For migration benchmarks use
-compare_vllm.py --baseline-json as documented in testing.md; do not regenerate
-the historical baseline.
-
-The ignored .vscode/settings.json selects conda oh-my-vllm for Python analysis
-and adds ${workspaceFolder}/python. Execution of GPUWorker still uses conda vllm.
-
-## Independent Worker during migration
-
-To exercise the new Worker, add these settings after `scripts/with-env.sh`:
-
-```bash
-env OH_MY_VLLM_INDEPENDENT=1 \
-  OH_MY_VLLM_WORKER_PYTHON=/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python \
-  FLASHINFER_WORKSPACE_BASE=/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent \
-  TRITON_CACHE_DIR=/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent/triton
-```
-
-GPU commands still start with `scripts/with-gpu.sh`. These independent caches were
-built without old vLLM artifacts; FlashInfer downloads its own versioned NVIDIA
-GEMM cubins on first use. `OH_MY_VLLM_ENFORCE_EAGER=1` disables both target and MTP
-graphs for diagnostics. Never use that override for throughput acceptance.
+`OH_MY_VLLM_ENFORCE_EAGER=1` disables target and MTP graphs for diagnostics only.
+Do not regenerate the frozen EngineCore baseline or enable probes during acceptance.
 
 ## Build and checks
 
@@ -77,8 +48,8 @@ conflict with pre-commit's temporary stash. Never disable hooks or use git add .
 ## GPU execution
 
 ```bash
-scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64
-scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output /tmp/ordinary.json
+scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64
+scripts/with-gpu.sh scripts/with-env.sh python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output /tmp/ordinary.json
 ```
 
 For multiple real prompts, `run --prompt-file PATH` reads one whitespace-separated
@@ -95,11 +66,11 @@ external same-GPU clients while engines run, invalidating affected measurements.
 Do not interrupt unrelated jobs. Use unique sockets; only remove a stale socket
 after confirming its owner has exited.
 
-The benchmark defaults to input32768/output4096,1024 physical blocks, one warmup
+The benchmark defaults to input32768/output4096,1024 capacity units, two warmups
 and three measurements. Run ordinary, mtp and prefix modes. See testing.md for
 accuracy probes, combinations and acceptance details. Never enable eager/probe
 execution in acceptance runs. --binary supports isolated builds; the driver
-executes a hash-verified private copy. Do not edit Python/vLLM sources during a run.
+executes a hash-verified private copy. Do not edit Python sources during a run.
 
 ## Logs and diagnostics
 
@@ -119,7 +90,7 @@ measured results, including failed cases and pending acceptance.
 ## Troubleshooting
 
 - Init failure: inspect Python's traceback and conda interpreter in the launch log.
-  The Worker API/configuration must match the local editable checkout.
+  Check pinned dependencies, checkpoint configuration and independent cache settings.
 - Address in use: choose another socket or confirm the stale socket's owner exited.
 - Unexpected worker exit: check stderr before rerunning; a dead child before
   connection is reported promptly instead of consuming the full init timeout.
@@ -129,23 +100,22 @@ measured results, including failed cases and pending acceptance.
 ## OpenAI serving development
 
 See serving.md for launch/OMP commands and the protocol compatibility matrix.
-Rust adds Axum/serde_json/tokio-stream; Python uses already-installed tokenizer,
-XGrammar and vLLM packages. No Python package installation was needed.
+Rust uses Axum/serde_json/tokio-stream; Python uses the pinned tokenizer and
+XGrammar packages.
 
-For CPU-only tokenizer/schema/HTTP tests on a GPU host, set VLLM_TARGET_DEVICE=cpu
-and CUDA_VISIBLE_DEVICES='' before starting Python. This avoids NVML enumeration
+For CPU-only tokenizer/schema/HTTP tests on a GPU host, set
+CUDA_VISIBLE_DEVICES='' before starting Python. This avoids device initialization
 and does not validate CUDA execution. tests/fixtures/serving_worker.py is scripted
 output for integration tests only; never use it to report model acceptance or speed.
 
 Real constrained-output check against a running MTP4 server:
 
 ```bash
-scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/serving-acceptance.py --output-dir /tmp/oh-my-vllm-serving-constraints
+scripts/with-env.sh python scripts/serving-acceptance.py --output-dir /tmp/oh-my-vllm-serving-constraints
 ```
 
 The script saves complete requests/responses; use matching response/request IDs
-to inspect real MTP proposal/acceptance counters in server logs. DEBUG Python
-worker_phases exposes grammar/model-sampling/output host time separately.
+to inspect real MTP proposal/acceptance counters in server logs. Python DEBUG logs expose message decode, execution and encode/send time.
 
 ## Strict Rust formatting
 

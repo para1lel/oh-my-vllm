@@ -6,7 +6,7 @@ Use the independent environment/cache settings in development.md. CPU tests cove
 `test_batch_plan.py`, `test_mtp_plan.py` and `test_independent_sampler.py`; CUDA tests
 cover `test_independent_kernels.py`, `test_independent_decode_attention.py`,
 `test_decode_graph.py` and `test_elementwise.py`. Actual-model probes use
-`tests/probe_independent_worker.py` as `OH_MY_VLLM_WORKER_PYTHON`, together with
+`tests/probe_worker.py` as `OH_MY_VLLM_WORKER_PYTHON`, together with
 `OH_MY_VLLM_ENFORCE_EAGER=1`; MTP adds `OH_MY_VLLM_PROBE_MTP=1` and
 `--num-speculative-tokens 4`. Probe tolerances below are unchanged.
 
@@ -18,8 +18,8 @@ nine-row frozen-baseline performance matrix remain pending.
 ## Environments and CPU checks
 
 All commands use scripts/with-env.sh to set PYTHONPATH and CARGO_TARGET_DIR.
-The independent runtime uses conda oh-my-vllm. The transitional V2 GPUWorker
-still uses conda vllm; baseline data is frozen and must not be regenerated.
+All tests and the model Worker use conda oh-my-vllm. Baseline data is frozen
+and must not be regenerated. The old adapter and its tests have been removed.
 
 ```bash
 scripts/with-env.sh cargo test --workspace
@@ -28,9 +28,9 @@ scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
 scripts/with-env.sh python -m unittest discover -s tests -p test_runtime_tools.py
 scripts/with-env.sh python -m unittest discover -s tests -p test_benchmark_tools.py
-scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python -m unittest discover -s tests -p test_scheduler_adapter.py
-scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python -m unittest discover -s tests -p test_bridge_logging.py
-scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python -m unittest discover -s tests -p test_bridge_abort.py
+CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p 'test_*.py'
+scripts/with-env.sh python -m unittest discover -s tests -p test_bridge_logging.py
+scripts/with-env.sh python -m unittest discover -s tests -p test_bridge_abort.py
 ```
 
 Rust tests cover pool/free/hash/prefix accounting, chunked prefill, arrivals,
@@ -45,7 +45,7 @@ Use a unique socket per run. Do not terminate unrelated GPU processes.
 
 ```bash
 scripts/with-env.sh cargo build --release -p oh-my-vllm-zmq-worker
-scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/smoke-text.py --socket /tmp/text-check.ipc --max-tokens 64
+scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/text-check.ipc --max-tokens 64
 ```
 
 Add --num-speculative-tokens 4 for MTP; add --context-repeats 100 to cross a
@@ -64,13 +64,11 @@ env OH_MY_VLLM_ENFORCE_EAGER=1 OH_MY_VLLM_WORKER_PYTHON=/data0/shared/dongwu.che
 
 For MTP also set OH_MY_VLLM_PROBE_MTP=1 and pass --num-speculative-tokens 4.
 The probe instruments a selected real FlashInfer GQA layer and target GDN
-prefill/packed decode/fused MTP calls. It never substitutes production kernels.
+prefill/recurrent verification calls and MTP paged decode. It never substitutes production kernels.
 It checks outputs and recurrent states, including each speculative state.
 Required coverage categories must appear before shutdown can succeed. This is
 single-request, eager diagnostic coverage; never enable it in throughput runs.
-V2 warmup may provide attention metadata for dummy tensors, so probes activate
-only inside an actual scheduled request. Dummy initialization never satisfies
-coverage or enters the FP64 comparison.
+Graph capture is disabled, so diagnostic CPU copies observe real requests only.
 
 References use actual rounded inputs in CPU FP64. BF16 output checks use
 atol=rtol=0.03. Recurrent state checks require normalized RMS error <=1% and
@@ -101,8 +99,8 @@ For request isolation through recompute, run two distinct real Chinese prompts
 with staggered arrivals and a constrained pool:
 
 ```bash
-scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/smoke-batch.py --socket /tmp/batch-text.ipc --scheduler-blocks 10
-scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/smoke-batch.py --socket /tmp/batch-mtp-text.ipc --scheduler-blocks 18 --num-speculative-tokens 4 --prefix-hit
+scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-batch.py --socket /tmp/batch-text.ipc --scheduler-blocks 10
+scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-batch.py --socket /tmp/batch-mtp-text.ipc --scheduler-blocks 18 --num-speculative-tokens 4 --prefix-hit
 ```
 
 Each request has 2048 input and 1024 output tokens. The script requires observed
@@ -113,70 +111,46 @@ after preemption. These are semantic smoke checks, not full-model equivalence.
 Rust `run --prompt-file PATH` accepts one whitespace-separated token-ID request
 per line; `--arrival-interval 3` admits the next request three steps later.
 CPU cancellation tests cover running, waiting and preempted requests and the
-finished-only notification that clears Python registration, adapter and Worker state.
+finished-only notification that clears Python registration, sampling, MTP and Worker state.
 
-## Matched performance acceptance
+## Frozen-baseline performance acceptance
 
-For the V2 migration, use the historical comparison mode instead of running a
-new EngineCore baseline. It validates an exact workload match and runs only the
-framework. Repeat the command with modes mtp and prefix; keep two warmups and
-three measured repetitions and one CPU core per run:
-
-```bash
-scripts/with-gpu.sh scripts/with-env.sh taskset -c 8 /data0/shared/dongwu.chen/conda-envs/vllm/bin/python benchmarks/compare_vllm.py --baseline-json bench/baseline/2026-09-19-acceptance.json --mode ordinary --batch-sizes 1 2 4 --warmup 2 --repetitions 3 --output /tmp/v2-ordinary.json
-```
-
-The output records the baseline artifact hash and current editable vLLM commit
-independently of package metadata. Historical data is not a same-source paired
-comparison. Historical rows used cores 8–16 respectively (ordinary, MTP, prefix;
-bs1/2/4 within each mode); use per-row taskset when matching those exact masks.
-The historical artifact must carry the complete matching model/runtime protocol;
-row-only lists and supplemental repeats without protocol metadata are rejected.
-The following original paired command remains available for future
-explicitly authorized baseline updates:
+The benchmark launches only the framework and validates an exact workload match
+against `bench/baseline/2026-09-19-acceptance.json`, including its fixed SHA256.
+An identical copy is allowed; changed or substitute data is rejected. There is no baseline execution
+code path. Use two warmups and three measured repetitions per row:
 
 ```bash
-scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output /tmp/ordinary.json
+scripts/with-gpu.sh scripts/with-env.sh taskset -c 8 python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 --warmup 2 --repetitions 3 --output /tmp/independent-ordinary-bs1.json
 ```
 
-Repeat with --mode mtp and --mode prefix. Defaults are input32768/output4096,
-1024 physical blocks, one warmup and three measurements. Each engine runs in its
-own process on the same selected GPU with matching input IDs, sampling, cache
-state and model configuration. Prefix seeding occurs outside the timer; both
-engines must report exactly batch_size*32144 cached tokens for the default input.
-MTP uses four drafts and BF16 SSM in both engines (ADR-003), and both must report
-actual drafts. The timer includes request submission through completion.
+Run ordinary, mtp and prefix for bs1/2/4. The original rows used CPU cores8..16 in
+that order; use each row's original mask and record it. Defaults are32768 input,
+4096 output and1024 capacity units (341 logical blocks). MTP uses four proposals
+and BF16 GDN state; ordinary/prefix use FP32 GDN state. Controlled prefix hits must
+be exactly batch_size*32144. Prefix seeding occurs outside the timer. The timer
+includes registration through completion notification. The deterministic token-ID
+workload, sampling, cache policy and context limits must match frozen metadata.
 
-Results preserve starting HEAD, dirty status/diff hash, binary hash, vLLM version,
-configuration and raw repetitions. A dirty source is never labeled as clean HEAD.
-Timeout cleanup terminates the entire owned engine process group. Median framework
-throughput must reach >=95% in every mode/batch, with additional repetitions when
-variance is material. See acceptance.md for the completed nine-row matrix and
-its precise execution settings.
+The driver records original artifact hash, source HEAD/status/diff, every Python
+source hash, executable hash, current independent runtime versions, GPU UUID,
+CPU mask and raw measurements. It executes a hash-verified private binary copy.
+Do not edit Python sources during a measurement. Final acceptance requires a clean
+implementation commit; diagnostics are explicitly separate. Median throughput must
+be >=95% in each of all nine rows, with follow-up measurements for material variance.
 
-The driver requires a single GPU UUID and polls GPU compute clients throughout
-each engine run. A process outside the owned engine process group invalidates
-the measurement and causes owned-engine cleanup. Other GPU users are never killed.
-This supplements the cooperative lock: unrelated jobs do not honor that lock.
-Polling cannot exclude arbitrarily short interference between samples; investigate
-variance and retain evidence before declaring acceptance.
-
-Use --binary /absolute/path/to/worker for an isolated runtime experiment. The
-actual executable is copied into the private benchmark directory and its hash
-must match the captured identity before either engine starts. Do not modify Python
-worker/vLLM sources during a run. CPU tests cover monitor ownership and rejection
-of numeric GPU IDs, in addition to timeout cleanup and invalid MTP configuration.
-
-For a CPU-affinity experiment, place taskset -c CPU before the benchmark Python
-command, after the environment/GPU wrappers. Both engines inherit the same CPU
-mask, which is recorded as cpu_affinity. Compare complete matching configurations;
-a CPU echo/host-timing improvement alone does not establish target throughput.
+GPU clients are monitored throughout each run. External same-GPU processes invalidate
+that run and trigger cleanup of the owned process group; unrelated users are never
+killed. UUID pinning and cooperative locking do not replace this monitoring. Polling
+cannot exclude arbitrarily short interference, so investigate unexplained variance.
+Timeout cleanup includes child workers. CPU tests cover these ownership rules and
+reject numeric GPU IDs, invalid MTP settings and accidental legacy interpreters.
 
 ## Serving CPU, client and GPU coverage
 
 ```bash
 scripts/with-env.sh cargo build
-VLLM_TARGET_DEVICE=cpu CUDA_VISIBLE_DEVICES='' scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python -m unittest discover -s tests -p 'test_serving*.py'
+CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p 'test_serving*.py'
 ```
 
 Rust tests cover incremental reasoning/XML, literal strings, request mapping and
@@ -192,8 +166,8 @@ MTP4 service, both OMP providers must independently execute the documented task,
 return tool results and produce a file-grounded answer. Also exercise strict JSON
 and tool constraints with MTP, check nonzero actual draft proposals, inspect
 acceptance and latency/throughput logs, and check cleanup after cancellation.
-Real MTP4 acceptance passed after the CUDA/NVML host fault recovered; see
-acceptance.md. Reproduce constrained cases with scripts/serving-acceptance.py and
+Historical V2 acceptance is recorded in acceptance.md; current independent
+acceptance status is in handoff.md. Reproduce constrained cases with scripts/serving-acceptance.py and
 inspect per-request MTP counters alongside saved responses. Scripted output alone
 is never GPU evidence.
 
@@ -222,8 +196,8 @@ Configuration and hook changes trigger both Rust style hooks.
 Run these in the new conda environment. Separate FlashInfer/Triton cache roots
 prevent a successful run from silently reusing artifacts compiled in the old
 environment. The model probe is a short eager diagnostic, not a service or
-performance acceptance run. The independent Worker is available explicitly;
-default switchover and removal of legacy runtime/test dependencies remain pending.
+performance acceptance run. The independent Worker is the only execution path;
+final oh-my-pi and full performance acceptance are still pending.
 
 ```bash
 CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p test_independent_sampler.py

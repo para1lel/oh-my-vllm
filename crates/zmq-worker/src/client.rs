@@ -53,7 +53,7 @@ impl Default for WorkerConfig {
             python_executable: std::env::var_os("OH_MY_VLLM_WORKER_PYTHON")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| {
-                    PathBuf::from("/data0/shared/dongwu.chen/conda-envs/vllm/bin/python")
+                    PathBuf::from("/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python")
                 }),
             init_timeout: Duration::from_secs(300),
         }

@@ -7,8 +7,8 @@ that matches vLLM EngineCore throughput at least **95%** on the workloads in
 `docs/requirements.md`. Rust owns serving, scheduling and logical KV cache;
 Python owns GPU computation. The two sides use ZMQ DEALER and msgpack.
 The active migration replaces vLLM with project-owned implementations and
-independent libraries. Transitional stages may still call vLLM, but final
-builds, tests and inference must not install, import or link vLLM, use its
+independent libraries. The transitional adapter is removed.
+Builds, tests and inference must not install, import or link vLLM, use its
 source checkout, or depend on the old vllm conda environment or build caches.
 
 ## Non-negotiable constraints
@@ -22,7 +22,6 @@ source checkout, or depend on the old vllm conda environment or build caches.
   exited and no longer appear in `nvidia-smi`; never stop unrelated processes.
 - **Performance target:** at least 95% of vLLM EngineCore on bs=1/2/4, in=32768, out=4096
 - **Target Python environment:** `/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python`.
-  During migration only, the existing adapter may use the old vllm environment.
   Set `PYTHONPATH=/data0/shared/dongwu.chen/oh-my-vllm/python:$PYTHONPATH`.
 - **Dependencies:** Select recent compatible stable releases in dependency order,
   then pin the verified combination. Higher-level dependencies belong in the

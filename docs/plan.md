@@ -17,7 +17,8 @@
 
 The environment/operator and independent Worker integration are validated.
 MTP4, prefix/preemption, graphs and real constraint/lifecycle cases pass.
-Runtime-default removal, final oh-my-pi tasks and performance acceptance continue.
+Runtime-default removal is implemented. Clean-runtime verification, final
+oh-my-pi tasks and performance acceptance continue.
 Intermediate use of the old adapter is
 explicitly allowed; it is not evidence of final independence. Future model,
 NVIDIA backend, single-node multi-GPU and local DSpark extension points are

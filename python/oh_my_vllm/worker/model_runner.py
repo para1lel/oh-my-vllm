@@ -1,351 +1,350 @@
-"""GPUWorker adapter. Scheduling and logical KV allocation remain in Rust."""
-
-from __future__ import annotations
+"""Project-owned single-device GPU execution; Rust retains cache allocations."""
 
 import logging
-import time
-from dataclasses import asdict
-from functools import wraps
-from typing import TYPE_CHECKING
+import os
+from dataclasses import dataclass
 
-if TYPE_CHECKING:
-    from vllm.config import VllmConfig
+import torch
 
-from oh_my_vllm.worker.protocol import (
-    RequestOutput,
-    SchedulerOutput,
-    WorkerOutput,
-)
-from oh_my_vllm.worker.protocol import (
-    ScheduledRequest as ScheduledRequest,
-)
+from oh_my_vllm.kernels.attention import PagedAttention
+from oh_my_vllm.models.qwen import Batch, Qwen
+from oh_my_vllm.worker.batch_plan import BLOCK, plan_request, validate_batch
+from oh_my_vllm.worker.protocol import RequestOutput, SchedulerOutput, WorkerOutput
+from oh_my_vllm.worker.runtime import identity, verify_loaded_modules
+from oh_my_vllm.worker.sampler import RequestSampler
+from oh_my_vllm.worker.sampling import SamplingParams
+from oh_my_vllm.worker.serving import ServingAdapter
 
 logger = logging.getLogger(__name__)
 
 
-class SchedulerAdapter:
-    """Translate full Rust block tables into vLLM's incremental request updates."""
-
-    def __init__(self, group_kinds: list[str]):
-        self.group_kinds = group_kinds
-        self.stride = max(group_kinds.count(kind) for kind in set(group_kinds))
-        counts = {}
-        self.offsets = []
-        for kind in group_kinds:
-            self.offsets.append(counts.get(kind, 0))
-            counts[kind] = counts.get(kind, 0) + 1
-        self.blocks: dict[int, tuple[list[int], ...]] = {}
-        self.output_counts: dict[int, int] = {}
-
-    def convert(self, output: SchedulerOutput, prompts: dict, sampling: dict):
-        from vllm.v1.core.sched.output import CachedRequestData, NewRequestData
-        from vllm.v1.core.sched.output import SchedulerOutput as VllmOutput
-
-        result = VllmOutput.make_empty()
-        result.finished_req_ids = {str(rid) for rid in output.finished_request_ids}
-        result.preempted_req_ids = {str(rid) for rid in output.preempted_request_ids}
-        for rid in output.preempted_request_ids:
-            # V2 removes preempted requests; resumption must be a new request.
-            self.blocks.pop(rid, None)
-        for rid in output.finished_request_ids:
-            self.blocks.pop(rid, None)
-            self.output_counts.pop(rid, None)
-        cached = CachedRequestData.make_empty()
-        blocks_to_zero = set()
-        for request in output.scheduled:
-            rid = request.request_id
-            # Each logical allocation reserves the full physical stride across
-            # shared FA/Mamba storage. Rust excludes prefix hits and live slots.
-            for block in request.new_block_ids_to_zero:
-                if block <= 0:
-                    raise ValueError("Cannot zero the reserved null block")
-                blocks_to_zero.update(
-                    block * self.stride + offset for offset in range(self.stride)
-                )
-            if rid not in self.blocks:
-                history = request.prefill_token_ids
-                if history is None or history[: len(prompts[rid])] != prompts[rid]:
-                    raise ValueError("V2 admission requires complete accepted history")
-                self.output_counts[rid] = len(history) - len(prompts[rid])
-            elif request.prefill_token_ids is not None:
-                raise ValueError("unexpected admission history for a running request")
-            blocks = tuple(
-                [
-                    0 if block == 0 else block * self.stride + offset
-                    for block in (
-                        request.fa_block_table
-                        if kind == "fa"
-                        else request.mamba_block_table
-                    )
-                ]
-                for kind, offset in zip(self.group_kinds, self.offsets, strict=True)
-            )
-            result.num_scheduled_tokens[str(rid)] = len(request.token_ids)
-            known_tokens = len(prompts[rid]) + self.output_counts.get(rid, 0)
-            spec_start = max(0, known_tokens - request.num_computed_tokens)
-            drafts = request.token_ids[spec_start:]
-            if drafts:
-                result.scheduled_spec_decode_tokens[str(rid)] = drafts
-            if rid not in self.blocks:
-                result.scheduled_new_reqs.append(
-                    NewRequestData(
-                        req_id=str(rid),
-                        prompt_token_ids=prompts[rid],
-                        prefill_token_ids=request.prefill_token_ids,
-                        mm_features=[],
-                        sampling_params=sampling[rid],
-                        pooling_params=None,
-                        block_ids=blocks,
-                        num_computed_tokens=request.num_computed_tokens,
-                        lora_request=None,
-                    )
-                )
-            else:
-                cached.req_ids.append(str(rid))
-                cached.num_computed_tokens.append(request.num_computed_tokens)
-                cached.num_output_tokens.append(self.output_counts[rid])
-                old = self.blocks[rid]
-                # Skipped Mamba entries become null but are never read again.
-                # Persistent batch tables need only the appended suffix.
-                for before, after in zip(old, blocks, strict=True):
-                    if len(after) < len(before):
-                        raise ValueError("block table shrank without preemption")
-                cached.new_block_ids.append(
-                    tuple(
-                        after[len(before) :]
-                        for before, after in zip(old, blocks, strict=True)
-                    )
-                )
-            self.blocks[rid] = blocks
-        result.scheduled_cached_reqs = cached
-        result.new_block_ids_to_zero = sorted(blocks_to_zero) or None
-        result.total_num_scheduled_tokens = sum(result.num_scheduled_tokens.values())
-        if result.total_num_scheduled_tokens != output.num_batched_tokens:
-            raise ValueError("Rust token budget does not match scheduled tokens")
-        result.num_common_prefix_blocks = [0] * len(self.group_kinds)
-        return result
-
-
-def with_config(method):
-    @wraps(method)
-    def wrapped(self, *args, **kwargs):
-        from vllm.config import set_current_vllm_config
-
-        with set_current_vllm_config(self.config):
-            return method(self, *args, **kwargs)
-
-    return wrapped
+@dataclass(frozen=True)
+class RuntimeConfig:
+    model: str
+    max_model_len: int = 65536
+    num_gpu_blocks: int = 1024
+    speculative_tokens: int = 0
 
 
 class OhMyVllmWorker:
-    def __init__(self, vllm_config: VllmConfig, num_speculative_tokens: int = 0):
-        from vllm.utils.network_utils import get_open_port
-        from vllm.v1.worker.gpu_worker import Worker
-
-        if not vllm_config.use_v2_model_runner:
-            raise ValueError("Only V2 Model Runner is supported")
-        self.config = vllm_config
-        self._worker = Worker(
-            vllm_config,
-            local_rank=0,
-            rank=0,
-            distributed_init_method=f"tcp://127.0.0.1:{get_open_port()}",
-            is_driver_worker=True,
-        )
-        self.sampling_params_map: dict = {}
-        self.prompt_token_ids_map: dict = {}
-        self.adapter: SchedulerAdapter | None = None
-        self._num_speculative_tokens = num_speculative_tokens
+    def __init__(self, config: RuntimeConfig):
+        if config.speculative_tokens not in (0, 4):
+            raise ValueError("independent runtime supports ordinary or MTP4")
+        if config.num_gpu_blocks < 6 or config.max_model_len <= 0:
+            raise ValueError("invalid runtime capacity")
+        self.config = config
+        # Preserve the original scheduler capacity, without vLLM's physical padding.
+        self.logical_num_blocks = config.num_gpu_blocks // 3
+        self.histories: dict[int, list[int]] = {}
+        self.samplers: dict[int, RequestSampler] = {}
+        self.sources: dict[int, int] = {}
+        self.computed: dict[int, int] = {}
         self.serving = None
 
-    @with_config
-    def init_device(self):
-        self._worker.init_device()
-        from vllm.v1.worker.gpu.model_runner import GPUModelRunner
+    def init_device(self) -> None:
+        logger.info("Independent runtime", extra={"fields": identity()})
+        torch.cuda.set_device(0)
 
-        runner = self._worker.model_runner
-        if not isinstance(runner, GPUModelRunner):
-            raise TypeError(f"Expected V2 Model Runner, got {type(runner)}")
-        if self._num_speculative_tokens:
-            from oh_my_vllm.worker.v2_runner import RustDraftTokensHandler
+    @torch.inference_mode()
+    def load_model(self) -> None:
+        self.model = Qwen(self.config.model, mtp=bool(self.config.speculative_tokens))
 
-            runner.draft_tokens_handler = RustDraftTokensHandler(runner.device)
-        logger.info(
-            "Model runner: %s.%s", type(runner).__module__, type(runner).__name__
-        )
-
-    @with_config
-    def load_model(self):
-        from vllm.platforms import current_platform
-
-        self._worker.load_model()
-        # Match the executor's post-load setup before obtaining cache specs.
-        # This also sets Mamba block size and page padding, not just FA size.
-        current_platform.update_block_size_for_backend(self.config)
-        if self.config.cache_config.block_size != 784:
-            raise ValueError("Backend changed the required block size of 784")
-
-    @with_config
-    def initialize_cache(self, num_gpu_blocks: int):
-        from vllm.v1.core.kv_cache_utils import get_kv_cache_configs
-        from vllm.v1.kv_cache_interface import KVCacheSpecKind, get_kv_cache_spec_kind
-
-        specs = self._worker.get_kv_cache_spec()
-        available = self._worker.determine_available_memory()
-        cache = get_kv_cache_configs(self.config, [specs], [available])[0]
-        if cache.num_blocks != num_gpu_blocks:
-            raise ValueError(
-                f"KV capacity mismatch: Rust={num_gpu_blocks}, "
-                f"worker={cache.num_blocks}"
-            )
-        kinds = []
-        for group in cache.kv_cache_groups:
-            spec = group.kv_cache_spec
-            if spec.block_size != 784:
-                raise ValueError(
-                    f"Physical KV group has incompatible block size: {spec}"
+    @torch.inference_mode()
+    def initialize_cache(self) -> None:
+        self.caches = []
+        for kind in self.model.kinds:
+            if kind == "full_attention":
+                cache = torch.zeros(
+                    self.logical_num_blocks,
+                    2,
+                    BLOCK,
+                    4,
+                    256,
+                    dtype=torch.bfloat16,
+                    device="cuda",
                 )
-            if get_kv_cache_spec_kind(spec) == KVCacheSpecKind.FULL_ATTENTION:
-                kinds.append("fa")
-            elif get_kv_cache_spec_kind(spec) == KVCacheSpecKind.MAMBA:
-                kinds.append("mamba")
             else:
-                raise TypeError(f"Unsupported KV group: {spec}")
-        if set(kinds) != {"fa", "mamba"}:
-            raise ValueError(f"Expected FA and Mamba groups, got {kinds}")
-        logger.info("KV physical groups: %s; blocks=%s", kinds, cache.num_blocks)
-        self.adapter = SchedulerAdapter(kinds)
-        self.logical_num_blocks = cache.num_blocks // self.adapter.stride
-        self._worker.initialize_from_config(cache)
-        self._worker.compile_or_warm_up_model()
-        from oh_my_vllm.worker.v2_runner import clear_warmup_cache
+                cache = (
+                    torch.zeros(
+                        self.logical_num_blocks,
+                        10240,
+                        3,
+                        dtype=torch.bfloat16,
+                        device="cuda",
+                    ),
+                    torch.zeros(
+                        self.logical_num_blocks,
+                        48,
+                        128,
+                        128,
+                        dtype=torch.bfloat16
+                        if self.config.speculative_tokens
+                        else torch.float32,
+                        device="cuda",
+                    ),
+                )
+            self.caches.append(cache)
+        self.attention = PagedAttention()
+        self.graphs = {}
+        from oh_my_vllm.worker.mtp import MTP
 
-        clear_warmup_cache(self._worker.model_runner)
-
-    @with_config
-    def shutdown(self):
-        from vllm.distributed import cleanup_dist_env_and_memory
-
-        self._worker.shutdown()
-        cleanup_dist_env_and_memory()
+        self.mtp = (
+            MTP(self.model, self.logical_num_blocks, self.config.max_model_len)
+            if self.config.speculative_tokens
+            else None
+        )
 
     def register_request(
-        self, request_id: int, prompt_token_ids: list[int], sampling_params=None
-    ):
-        from vllm.sampling_params import SamplingParams
-
-        if request_id in self.prompt_token_ids_map:
-            raise ValueError(f"Duplicate request {request_id}")
-        self.prompt_token_ids_map[request_id] = prompt_token_ids
-        self.sampling_params_map[request_id] = sampling_params or SamplingParams(
-            temperature=0,
-            max_tokens=self.config.model_config.max_model_len,
-            ignore_eos=True,
+        self,
+        request_id: int,
+        prompt_token_ids: list[int],
+        sampling_params: SamplingParams | None = None,
+    ) -> None:
+        if request_id in self.histories:
+            raise ValueError("duplicate request")
+        if not prompt_token_ids or any(not 0 <= t < 248320 for t in prompt_token_ids):
+            raise ValueError("invalid prompt tokens")
+        params = sampling_params or SamplingParams(
+            self.config.max_model_len, temperature=0, ignore_eos=True
         )
+        self.histories[request_id] = list(prompt_token_ids)
+        self.samplers[request_id] = RequestSampler(params, prompt_token_ids, "cuda")
 
-    def prepare_request(self, request_id: int, request: dict):
-        from oh_my_vllm.worker.serving import ServingAdapter
-
+    def prepare_request(self, request_id: int, request: dict) -> list[int]:
         if self.serving is None:
             self.serving = ServingAdapter(
-                self.config.model_config.model,
-                self.config.model_config.get_vocab_size(),
-                self.config.model_config.max_model_len,
+                self.config.model, 248320, self.config.max_model_len
             )
-        ids, sampling = self.serving.prepare(request_id, request)
-        # Transitional boundary: service utilities no longer depend on vLLM.
-        from vllm.sampling_params import SamplingParams
-
-        self.register_request(request_id, ids, SamplingParams(**asdict(sampling)))
+        ids, params = self.serving.prepare(request_id, request)
+        self.register_request(request_id, ids, params)
         return ids
 
-    def unregister_request(self, request_id: int):
-        self.prompt_token_ids_map.pop(request_id, None)
-        self.sampling_params_map.pop(request_id, None)
+    def unregister_request(self, request_id: int) -> None:
+        if self.mtp is not None:
+            self.mtp.forget(request_id)
+        for mapping in (self.histories, self.samplers, self.sources, self.computed):
+            mapping.pop(request_id, None)
         if self.serving is not None:
             self.serving.generations.pop(request_id, None)
 
-    @with_config
-    def execute_model(self, rust_output: SchedulerOutput) -> WorkerOutput:
-        if self.adapter is None:
-            raise RuntimeError("KV cache is not initialized")
-        vllm_output = self.adapter.convert(
-            rust_output,
-            self.prompt_token_ids_map,
-            self.sampling_params_map,
-        )
-        vllm_output.num_spec_tokens_to_schedule = self._num_speculative_tokens
-        trace = logger.isEnabledFor(logging.DEBUG)
-        mask_started = time.perf_counter_ns() if trace else 0
-        grammar = self.serving.masks(vllm_output) if self.serving is not None else None
-        if grammar is not None:
-            from vllm.v1.core.sched.output import GrammarOutput
-
-            grammar = GrammarOutput(
-                grammar.structured_output_request_ids, grammar.grammar_bitmask
-            )
-        model_started = time.perf_counter_ns() if trace else 0
-        vllm_output.has_structured_output_requests = grammar is not None
-        output = self._worker.execute_model(vllm_output)
-        if rust_output.scheduled and output is None:
-            output = self._worker.sample_tokens(grammar)
-        if output is not None and hasattr(output, "get_output"):
-            output = output.get_output()
-        sampled = (
-            {}
-            if output is None
-            else dict(
-                zip(
-                    output.req_ids,
-                    output.sampled_token_ids,
-                    strict=True,
-                )
-            )
-        )
-        new_drafts = {}
-        if self._num_speculative_tokens and rust_output.scheduled:
-            draft_output = self._worker.take_draft_token_ids()
-            if draft_output is not None:
-                new_drafts = dict(
-                    zip(draft_output.req_ids, draft_output.draft_token_ids, strict=True)
-                )
-        output_started = time.perf_counter_ns() if trace else 0
-        results = []
-        for request in rust_output.scheduled:
+    @torch.inference_mode()
+    def execute_model(self, scheduled: SchedulerOutput) -> WorkerOutput:
+        for rid in scheduled.finished_request_ids:
+            self.unregister_request(rid)
+        for rid in scheduled.preempted_request_ids:
+            if self.mtp is not None:
+                self.mtp.forget(rid)
+            self.sources.pop(rid, None)
+            self.computed.pop(rid, None)
+        if scheduled.num_batched_tokens != sum(
+            len(r.token_ids) for r in scheduled.scheduled
+        ):
+            raise ValueError("Rust token budget disagrees with scheduled input")
+        plans = []
+        for request in scheduled.scheduled:
             rid = request.request_id
-            if str(rid) not in sampled:
-                raise RuntimeError(f"Worker omitted scheduled request {rid}")
-            tokens = sampled[str(rid)]
-            text, finish_reason, reasoning_tokens = "", None, 0
+            if (
+                rid in self.computed
+                and self.computed[rid] != request.num_computed_tokens
+            ):
+                raise ValueError(
+                    "Rust computed position disagrees with committed state"
+                )
+            if (
+                request.num_computed_tokens + len(request.token_ids)
+                > self.config.max_model_len
+            ):
+                raise ValueError("scheduled input exceeds the model context")
+            plans.append(
+                plan_request(
+                    request,
+                    self.histories[rid],
+                    self.sources.get(rid),
+                    self.logical_num_blocks,
+                    self.config.speculative_tokens,
+                )
+            )
+        if not plans:
+            return WorkerOutput([])
+        validate_batch(plans)
+        plans.sort(key=lambda p: not p.prefill)
+        ids, positions, sequence_ids, writes, slots, pages = [], [], [], [], [], []
+        starts, page_starts, last_lengths = [0], [0], []
+        for sequence, plan in enumerate(plans):
+            req = plan.request
+            count = len(req.token_ids)
+            end = req.num_computed_tokens + count
+            ids.extend(req.token_ids)
+            positions.extend(range(req.num_computed_tokens, end))
+            sequence_ids.extend([sequence] * count)
+            writes.extend(plan.writes)
+            slots.extend(
+                req.fa_block_table[p // BLOCK] * BLOCK + p % BLOCK
+                for p in range(req.num_computed_tokens, end)
+            )
+            starts.append(len(ids))
+            pages.extend(req.fa_block_table[: (end + BLOCK - 1) // BLOCK])
+            page_starts.append(len(pages))
+            last_lengths.append((end - 1) % BLOCK + 1)
+        cpu_starts = torch.tensor(starts, dtype=torch.int32)
+        extent = min(
+            self.config.max_model_len, ((max(positions) + 4096) // 4096) * 4096
+        )
+        key = (len(ids), len(plans), extent)
+        use_graph = (
+            not any(p.prefill for p in plans)
+            and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1"
+            and (key in self.graphs or len(self.graphs) < 32)
+        )
+        if not use_graph:
+            self.attention.plan(
+                cpu_starts,
+                torch.tensor(page_starts, dtype=torch.int32),
+                torch.tensor(pages, dtype=torch.int32),
+                torch.tensor(last_lengths, dtype=torch.int32),
+                24,
+                4,
+                256,
+            )
+        batch = Batch(
+            positions=torch.tensor(positions, device="cuda"),
+            starts=cpu_starts.cuda(),
+            sequence_ids=torch.tensor(sequence_ids, dtype=torch.int32, device="cuda"),
+            state_reads=torch.tensor(
+                [p.source for p in plans], dtype=torch.int32, device="cuda"
+            ),
+            state_writes=torch.tensor(writes, dtype=torch.int32, device="cuda"),
+            final_state_writes=torch.tensor(
+                [p.writes[-1] for p in plans], device="cuda"
+            ),
+            fa_slots=torch.tensor(slots, device="cuda"),
+            attention=self.attention,
+            prefill_sequences=sum(p.prefill for p in plans),
+            prefill_tokens=sum(len(p.writes) for p in plans if p.prefill),
+        )
+        token_tensor = torch.tensor(ids, device="cuda")
+        graph_logits = None
+        if use_graph:
+            from oh_my_vllm.worker.decode_graph import DecodeGraph
+
+            width = (extent + BLOCK - 1) // BLOCK
+            tables = torch.tensor(
+                [
+                    p.request.fa_block_table[:width]
+                    + [0] * (width - len(p.request.fa_block_table[:width]))
+                    for p in plans
+                    for _ in p.writes
+                ],
+                dtype=torch.int32,
+                device="cuda",
+            )
+            if key not in self.graphs:
+                logger.debug(
+                    "Capture target graph: tokens=%d requests=%d extent=%d", *key
+                )
+                self.graphs[key] = DecodeGraph(
+                    self.model, self.caches, token_tensor, batch, tables, extent
+                )
+            hidden, graph_logits = self.graphs[key].replay(token_tensor, batch, tables)
+        if graph_logits is None:
+            hidden = self.model.forward(token_tensor, batch, self.caches)
+        selected = [
+            starts[i] + row for i, p in enumerate(plans) for row in p.sample_indices
+        ]
+        logits = (
+            graph_logits[selected]
+            if graph_logits is not None
+            else self.model.logits(hidden[selected])
+            if selected
+            else None
+        )
+        # The grammar adapter only needs these two protocol-independent mappings.
+        masks = {}
+        if self.serving is not None:
+            from types import SimpleNamespace
+
+            output = self.serving.masks(
+                SimpleNamespace(
+                    num_scheduled_tokens={
+                        str(p.request.request_id): len(p.writes)
+                        for p in plans
+                        if p.sample_indices
+                    },
+                    scheduled_spec_decode_tokens={
+                        str(p.request.request_id): p.drafts
+                        for p in plans
+                        if p.sample_indices
+                    },
+                )
+            )
+            if output is not None:
+                offset = 0
+                by_id = {p.request.request_id: p for p in plans}
+                for rid in output.structured_output_request_ids:
+                    count = len(by_id[int(rid)].drafts) + 1
+                    masks[int(rid)] = output.grammar_bitmask[offset : offset + count]
+                    offset += count
+        results, copies, counts, row = [], [], [], 0
+        for plan in plans:
+            rid = plan.request.request_id
+            tokens = []
+            if plan.sample_indices:
+                tokens = self.samplers[rid].sample(
+                    logits[row : row + len(plan.sample_indices)],
+                    drafts=plan.drafts,
+                    bitmask=masks.get(rid),
+                )
+                row += len(plan.sample_indices)
+            text, finish, reasoning = "", None, 0
             if self.serving is not None and rid in self.serving.generations:
                 generation = self.serving.generations[rid]
                 tokens, text = generation.consume(tokens, self.serving.tokenizer)
-                finish_reason = generation.finished
-                reasoning_tokens = generation.reasoning_tokens
-            self.adapter.output_counts[rid] += len(tokens)
+                finish, reasoning = generation.finished, generation.reasoning_tokens
+            count, source, checkpoints = plan.commit(len(tokens))
+            counts.append(count)
+            self.sources[rid] = source
+            self.computed[rid] = plan.request.num_computed_tokens + count
+            copies.extend(checkpoints)
+            self.samplers[rid].commit(tokens)
+            self.histories[rid].extend(tokens)
             results.append(
                 RequestOutput(
                     rid,
                     tokens,
-                    max(0, len(tokens) - 1),
-                    new_drafts.get(str(rid), []),
-                    text,
-                    finish_reason,
-                    reasoning_tokens,
+                    num_accepted_draft_tokens=max(0, len(tokens) - 1),
+                    text=text,
+                    finish_reason=finish,
+                    reasoning_tokens=reasoning,
                 )
             )
-        for rid in rust_output.finished_request_ids:
-            self.unregister_request(rid)
-        if trace:
-            logger.debug(
-                "worker_phases",
-                extra={
-                    "fields": {
-                        "grammar_host_us": (model_started - mask_started) / 1000,
-                        "model_sample_host_us": (output_started - model_started) / 1000,
-                        "output_host_us": (time.perf_counter_ns() - output_started)
-                        / 1000,
-                    }
-                },
+        if copies:
+            sources, destinations = (
+                torch.tensor(values, device="cuda")
+                for values in zip(*copies, strict=True)
             )
+            for kind, cache in zip(self.model.kinds, self.caches, strict=True):
+                if kind == "linear_attention":
+                    for pool in cache:
+                        pool.index_copy_(0, destinations, pool.index_select(0, sources))
+        if self.mtp is not None:
+            drafts = self.mtp.propose(
+                plans, starts, counts, hidden, self.histories, results
+            )
+            for output in results:
+                output.new_draft_token_ids = drafts[output.request_id]
         return WorkerOutput(results)
+
+    def shutdown(self) -> None:
+        verify_loaded_modules()
+        logger.info("Independent runtime module/library audit passed")
+        self.histories.clear()
+        self.samplers.clear()
+        self.sources.clear()
+        self.computed.clear()
+        self.graphs.clear()
+        self.caches = []
+        self.model = None
+        self.attention = None
+        self.serving = None
+        self.mtp = None
+        torch.cuda.empty_cache()

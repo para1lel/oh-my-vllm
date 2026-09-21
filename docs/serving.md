@@ -1,9 +1,9 @@
 # OpenAI-compatible local serving
 
-**Status (2026-09-21):** real Qwen + V2 Model Runner + MTP4 acceptance passed on a UUID-pinned B200:
-both oh-my-pi agentic tasks, 12 JSON/strict-tool combinations, all five thinking
-levels and lifecycle checks. The earlier CUDA/NVML outage has recovered.
-See [acceptance.md](acceptance.md) for evidence, performance observations and limits.
+**Status (2026-09-21):** the independent Qwen Worker has passed real MTP4 JSON/tool
+constraints, all thinking levels and lifecycle checks. Both oh-my-pi tasks still
+need final independent-runtime acceptance. Historical V2 results remain in
+[acceptance.md](acceptance.md); current progress is in [handoff.md](handoff.md).
 
 ## Run
 
@@ -16,7 +16,7 @@ Defaults: `127.0.0.1:8000`, model ID `qwen3.5-27b-fp8`, no authentication for th
 local workflow. Set `serve --listen` and `--served-model-name` as needed. Rust
 owns HTTP (Axum), protocol adaptation, response state, online admission,
 cancellation, scheduling and KV. Python owns tokenizer/template application,
-XGrammar state and masks, incremental detokenization, and GPUWorker execution.
+XGrammar state and masks, incremental detokenization, and project-owned GPU model execution.
 No Python scheduler or tool executor is introduced. KV block size remains 784.
 
 ## Compatibility surface
@@ -96,7 +96,7 @@ pattern/format combined with length bounds. Tool XML has extra encoding limits:
   from the unique schema value. XML anyOf cannot have sibling const/enum. JSON answer schemas
   do not have these XML-specific restrictions.
 - Unconstrained strings remove one leading/trailing newline from Qwen's XML
-  template markup, matching the installed vLLM parser. Quotes, spaces, additional
+  template markup, matching the supported Qwen XML representation. Quotes, spaces, additional
   newlines and function/tool-close literals are preserved. Enum/const strings
   instead recover their exact schema value, including its own newlines.
   Parsers recognize closing tags only outside parameter values. A literal tool tag
@@ -126,14 +126,14 @@ owned worker and closes streams. In-flight kernels are not individually preempte
 Run the service with MTP enabled, then run both commands separately:
 
 ```bash
-scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/agentic-acceptance.py --api chat --output-dir /tmp/oh-my-vllm-agentic-chat
-scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/agentic-acceptance.py --api responses --output-dir /tmp/oh-my-vllm-agentic-responses
+scripts/with-env.sh python scripts/agentic-acceptance.py --api chat --output-dir /tmp/oh-my-vllm-agentic-chat
+scripts/with-env.sh python scripts/agentic-acceptance.py --api responses --output-dir /tmp/oh-my-vllm-agentic-responses
 ```
 
 Also exercise the 12 real constrained-output cases (keep MTP enabled):
 
 ```bash
-scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/serving-acceptance.py --output-dir /tmp/oh-my-vllm-serving-constraints
+scripts/with-env.sh python scripts/serving-acceptance.py --output-dir /tmp/oh-my-vllm-serving-constraints
 ```
 
 `scripts/serving-lifecycle.py --server-log /tmp/serve.log --output /tmp/serving-lifecycle.json` additionally
@@ -176,8 +176,8 @@ time. Investigate persistent queueing, stalls, unexpected zero proposals/accepta
 excess preemption, memory growth or worker errors. Compare like workloads after
 warmup. Existing EngineCore >=95% requirements remain separate and unchanged.
 
-The tokenizer uses vLLM's cached HF adapter. Without it, this installed tokenizer
-recomputed vocabulary size on every incremental token (~29 ms/token), reducing
-short constrained requests to ~30 tok/s. Cached properties removed that bottleneck.
-DEBUG worker_phases separates grammar, model/sample and output host durations;
-these timings include host scheduling/synchronization and are not kernel timings.
+The tokenizer uses Transformers with native Tokenizers DecodeStream for incremental
+decoding. Vocabulary properties are obtained once during preparation, avoiding
+repeated tokenizer metadata work per output token. Python DEBUG logs separate
+message decoding, host execution and response encoding; those durations include
+synchronization and are not CUDA kernel timings.

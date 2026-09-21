@@ -1,32 +1,31 @@
 # oh-my-vllm
 
 A Rust-first inference framework for Qwen3.5-27B-FP8 on a single B200 GPU.
-Rust owns scheduling and KV cache bookkeeping. Python wraps the installed vLLM
-GPUWorker (class `Worker`) with V2 Model Runner exclusively for model execution.
-They exchange msgpack messages over ZMQ DEALER; the framework does not use vLLM's scheduler.
+Rust owns HTTP serving, scheduling and logical KV cache. Python runs the
+project-owned Qwen model and GPU state/compute kernels using independent libraries.
+They exchange msgpack over ZMQ DEALER. Runtime, builds and tests use conda
+`oh-my-vllm`, without installing or importing vLLM.
 
 The model at `/data0/shared/Qwen3.8-27B-FP8` has 16 full-attention and 48 GDN layers.
-Rust tracks two logical KV groups; Python maps these into disjoint physical
-hybrid groups. Production block size is 784. See [architecture](docs/architecture.md),
+Block size is 784. See [architecture](docs/architecture.md),
 [wire protocol](docs/design.md) and [decisions](docs/decisions/).
 
 ## Quick start
 
-Use conda oh-my-vllm for framework commands and conda vllm for GPUWorker/baseline.
-The wrappers set PYTHONPATH and CARGO_TARGET_DIR; no editable package install or
-uv is needed. Every GPU test waits for an idle B200 and selects its UUID.
+The wrappers select the framework environment, Python path, build directory and
+independent kernel caches. GPU tests wait for an idle B200 and pin its UUID.
 
 ```bash
+scripts/with-env.sh python -m pip install -r requirements/runtime.txt
 scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
-scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64
-scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python benchmarks/compare_vllm.py --baseline-json bench/baseline/2026-09-19-acceptance.json --mode ordinary --batch-sizes 1 2 4 --warmup 2 --output /tmp/ordinary.json
+scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64
+scripts/with-gpu.sh scripts/with-env.sh python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --warmup 2 --output /tmp/ordinary.json
 ```
 
-Use unique sockets for concurrent runs. Add `--num-speculative-tokens 4` to the text script for MTP.
-Benchmark modes are ordinary, mtp and prefix. Defaults are 1024 physical blocks,
-input32768, output4096, one warmup and three measured repetitions. The historical
-comparison above requires two warmups to match the frozen protocol and never
-launches native EngineCore.
+Use unique sockets. Add `--num-speculative-tokens 4` to the text script for MTP.
+Benchmark modes are ordinary, mtp and prefix. Defaults retain the capacity unit
+1024 (341 logical blocks), input 32768, output 4096, two warmups and three measured
+repetitions. Only framework measurements run; the original EngineCore data is frozen.
 
 ## Local OpenAI service
 
@@ -37,38 +36,38 @@ scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --s
 Chat Completions and Responses are served at `http://127.0.0.1:8000/v1`, with
 thinking, tools, JSON constraints and stored Responses. See [serving](docs/serving.md)
 for supported schemas, OMP configuration and acceptance commands. CPU/client tests
-and real MTP4 acceptance pass; see [serving evidence](docs/acceptance.md).
-The current V2 matrix reuses the frozen EngineCore baseline without rerunning it.
+pass. The independent Worker has passed real MTP4 constraint/lifecycle checks;
+final independent oh-my-pi and complete performance acceptance are in progress.
+See [handoff](docs/handoff.md) for current results.
 
 ## Verification and performance
 
-The target is at least 95% of matched vLLM EngineCore throughput for batch1/2/4
-in ordinary, MTP and controlled prefix-hit modes. Faster than 105% also passes.
-The nine V2 performance rows passed (97.22%–106.62% of the frozen EngineCore
-baseline). Current and historical vLLM source identities differ; this is a
-historical comparison, not a paired measurement of the V2 change alone.
-[Acceptance evidence](docs/acceptance.md) records measurements, exact configuration
-and correctness coverage; [handoff](docs/handoff.md) preserves the work history.
+The target is at least 95% of the original EngineCore throughput for batch 1/2/4
+in ordinary, MTP and controlled prefix-hit modes. The historical V2 matrix passed;
+those measurements do not establish acceptance of the independent runtime.
+[Acceptance evidence](docs/acceptance.md) separates current and historical results.
 
 ```bash
 scripts/with-env.sh cargo test --workspace
+scripts/with-env.sh cargo fmt --all --check
+scripts/with-env.sh python scripts/check_rust_line_width.py
 scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
+CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p 'test_*.py'
 ```
 
-[Testing](docs/testing.md) explains actual-path GQA/GDN FP64 probes, coherent text,
-prefix/MTP/arrival/preemption combinations and matched performance measurements.
-[Development](docs/development.md) covers environment and timestamped multilevel
-logs; [profiling](docs/profiling.md) distinguishes host and GPU timing.
-Every milestone requires independent code review and a commit.
+[Testing](docs/testing.md) covers actual-model FP64 probes, prefix/MTP/preemption,
+service and performance checks. [Development](docs/development.md) covers the
+pinned environment and logs; [profiling](docs/profiling.md) separates host and GPU
+measurements. Every milestone requires independent review and a commit.
 
 ## Layout
 
-- crates/kv-cache: logical hybrid pool, prefix cache, state reservations.
-- crates/scheduler: requests, token budgets, chunk alignment, preemption, MTP.
-- crates/zmq-worker: CLI, model-worker lifecycle and ZMQ client.
-- python/oh_my_vllm/worker: model adapter, bridge, structured logs.
-- tests/probe_worker.py: actual-path FP64 diagnostic (never for throughput).
-- benchmarks/compare_vllm.py: historical replay or paired measurements with identities.
-- python/oh_my_vllm/worker/v2_runner.py: real draft transfer and startup cache clearing.
+- crates/kv-cache: logical hybrid pool, prefix cache and state reservations.
+- crates/scheduler: requests, token budgets, chunk alignment, preemption and MTP.
+- crates/zmq-worker: HTTP APIs, CLI, model process lifecycle and ZMQ client.
+- python/oh_my_vllm/worker: execution, MTP, sampling, graphs and bridge.
+- python/oh_my_vllm/models and kernels: concrete model and independent GPU operators.
+- tests/probe_worker.py: actual-model FP64 diagnostic, never for throughput.
+- benchmarks/compare_vllm.py: framework measurements against original frozen data.

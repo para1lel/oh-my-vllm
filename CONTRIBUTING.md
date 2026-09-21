@@ -90,7 +90,7 @@ scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
 
 # Coherent text; actual-path FP64 variants are documented in docs/testing.md.
-scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python scripts/smoke-text.py --socket /tmp/contribution-smoke.ipc --max-tokens 64
+scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/contribution-smoke.ipc --max-tokens 64
 
 ```
 

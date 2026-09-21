@@ -11,7 +11,7 @@ _Confirmed status: user-confirmed unless noted. Last reviewed: 2026-09-21._
 
 Build a Rust-first inference framework for Qwen3.5-27B-FP8 on a single B200 GPU
 that reaches at least 95% of vLLM EngineCore throughput on the benchmark workloads
-below. Rust owns the scheduler and KV cache; Python wraps vLLM's `GPUWorker`.
+below. Rust owns serving, scheduling and logical KV; Python owns GPU computation.
 
 **Acceptance:** `benchmarks/compare_vllm.py` records passed=true for every required mode/workload row.
 
@@ -134,7 +134,7 @@ Replace the vLLM implementation dependency with code maintained in this reposito
 and independent libraries. Preserve Rust serving/scheduling/logical KV and Python
 GPU execution. Final builds, tests and services must neither install/import/link
 vLLM nor depend on its source, conda environment or cached compiled artifacts.
-Transitional milestones may retain the V2 adapter described below.
+The V2 adapter was transitional and is now removed; final acceptance is pending.
 
 Use recent compatible stable dependencies selected in dependency order, with the
 verified versions pinned. Higher-level dependencies live in conda oh-my-vllm;
@@ -180,7 +180,7 @@ Support both Chat Completions and Responses, with streaming and non-streaming
 responses, model discovery, function tool calls, tool-result history, usage,
 termination and error semantics. Both the service and oh-my-pi run on the current
 machine. Prefer Rust for HTTP entry points, protocol adaptation and request
-lifecycle; preserve Rust scheduler/KV ownership and the existing GPUWorker split.
+lifecycle; preserve Rust scheduler/KV ownership and the Rust/Python GPU-computation split.
 This extends the former HTTP exclusion; it does not replace the EngineCore
 performance requirements or claim HTTP-level performance acceptance.
 

@@ -21,6 +21,11 @@ export PATH="$ENV_PREFIX/bin:$PATH"
 # Keep build artifacts inside the repo: the root disk has little room left.
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$(git rev-parse --show-toplevel)/target}"
 export PYTHONPATH="$(git rev-parse --show-toplevel)/python${PYTHONPATH:+:$PYTHONPATH}"
-export OH_MY_VLLM_WORKER_PYTHON="${OH_MY_VLLM_WORKER_PYTHON:-/data0/shared/dongwu.chen/conda-envs/vllm/bin/python}"
+export OH_MY_VLLM_WORKER_PYTHON="${OH_MY_VLLM_WORKER_PYTHON:-$ENV_PREFIX/bin/python}"
+# Keep independently built kernels separate from other frameworks' artifacts.
+RUNTIME_CACHE="${OH_MY_VLLM_RUNTIME_CACHE:-/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent}"
+export FLASHINFER_WORKSPACE_BASE="${FLASHINFER_WORKSPACE_BASE:-$RUNTIME_CACHE}"
+export TRITON_CACHE_DIR="${TRITON_CACHE_DIR:-$RUNTIME_CACHE/triton}"
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 
 exec "$@"

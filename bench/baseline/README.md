@@ -35,3 +35,7 @@ acceptance or a replacement performance baseline.
 correctness, the FP8 backend defect and fix, final real service/probe results and
 one explicitly non-acceptance throughput diagnostic. The default adapter removal,
 real independent oh-my-pi tasks and final monitored nine-row matrix remain pending.
+
+`2026-09-21-independent-stage3.json` records removal of legacy runtime/test
+dependencies, full target-environment GPU/CPU tests and real file/module/library
+independence audits. Final workload acceptance is recorded separately.

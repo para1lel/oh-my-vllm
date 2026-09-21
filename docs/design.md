@@ -53,8 +53,7 @@ All messages are msgpack dicts with a `"type"` key.
 Cancel requests only between completed execution steps. `Scheduler::abort`
 releases Rust ownership and queues a `finished_request_ids` notification for the
 next execute, including when no requests remain scheduled. The driver must flush
-that final notification. Python clears its registrations and adapter state and
-forwards the finished IDs to GPUWorker. The legacy standalone `abort` message
+that final notification. Python clears registrations, sampling, accepted-state and MTP progress. The legacy standalone `abort` message
 uses the same finished-only path without a reply; it does not change Rust state.
 
 **Python → Rust:**
@@ -67,7 +66,7 @@ uses the same finished-only path without a reply; it does not change Rust state.
    {"request_id": int,
     "token_ids": list[int],  # empty prefill, one normal token, or accepted MTP outputs
     "num_accepted_draft_tokens": int,  # MTP: accepted draft count
-    "new_draft_token_ids": list[int]}  # actual next drafts from Worker.take_draft_token_ids()
+    "new_draft_token_ids": list[int]}  # actual next drafts from the project MTP proposer
  ]}
 
 {"type": "error", "message": str}
@@ -88,9 +87,10 @@ Qwen3.5-27B has two attention groups requiring separate block tables:
 
 Both groups draw from a single shared `BlockPool`. This means a request that
 holds many full-attention blocks and a Mamba checkpoint all compete for the same
-logical pool. Physical groups share GPU tensors and require distinct addresses: Python
-uses stride=max(group count per kind), mapping logical b to b*stride+kind offset
-(null stays0). Ready exposes floor(physical capacity/stride); see ADR002.
+logical pool. Python allocates separate per-layer tensors at logical capacity;
+block IDs directly address their slots. The historical CLI capacity unit is kept:
+ready exposes floor(num_gpu_blocks/3), matching the frozen baseline. There is no
+vLLM physical-stride remapping; ADR002 describes that superseded implementation.
 
 ### BlockPool
 

@@ -42,12 +42,8 @@ import msgpack
 import zmq
 
 from oh_my_vllm.worker.logging_utils import configure_logging
-from oh_my_vllm.worker.model_runner import (
-    OhMyVllmWorker,
-    ScheduledRequest,
-    SchedulerOutput,
-    WorkerOutput,
-)
+from oh_my_vllm.worker.model_runner import OhMyVllmWorker, RuntimeConfig
+from oh_my_vllm.worker.protocol import ScheduledRequest, SchedulerOutput, WorkerOutput
 
 logger = logging.getLogger("oh_my_vllm.worker.zmq_bridge")
 
@@ -228,63 +224,21 @@ def serve(socket_addr: str) -> None:
 
 
 def _handle_init(msg: dict) -> OhMyVllmWorker:
-    """Build a VllmConfig and initialise the worker from an 'init' message."""
-    if os.environ.get("OH_MY_VLLM_INDEPENDENT") == "1":
-        from oh_my_vllm.worker.independent_runner import (
-            IndependentWorker,
-            RuntimeConfig,
-        )
-
-        if msg.get("block_size", 784) != 784 or msg.get("tensor_parallel_size", 1) != 1:
-            raise ValueError("independent runtime requires block784 and one GPU")
-        worker = IndependentWorker(
-            RuntimeConfig(
-                msg["model_path"],
-                msg.get("max_model_len", 65536),
-                msg["num_gpu_blocks"],
-                msg.get("num_speculative_tokens", 0),
-            )
-        )
-        worker.init_device()
-        worker.load_model()
-        worker.initialize_cache()
-        return worker
-    # This project only implements the V2 contract. Never silently select V1.
-    if os.environ.get("VLLM_USE_V2_MODEL_RUNNER", "1") != "1":
-        raise ValueError("oh-my-vllm requires VLLM_USE_V2_MODEL_RUNNER=1")
-    os.environ["VLLM_USE_V2_MODEL_RUNNER"] = "1"
-    from vllm.engine.arg_utils import EngineArgs
-
-    num_gpu_blocks = msg["num_gpu_blocks"]
-    num_speculative_tokens = msg.get("num_speculative_tokens", 0)
     if msg.get("block_size", 784) != 784:
         raise ValueError("Target model requires block_size=784")
-    vllm_config = EngineArgs(
-        model=msg["model_path"],
-        trust_remote_code=True,
-        language_model_only=True,
-        enforce_eager=os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") == "1",
-        block_size=784,
-        mamba_cache_mode="align",
-        mamba_ssm_cache_dtype="bfloat16" if num_speculative_tokens else "auto",
-        num_gpu_blocks_override=num_gpu_blocks,
-        max_model_len=msg.get("max_model_len", 65536),
-        max_num_seqs=min(32, num_gpu_blocks - 1),
-        max_num_batched_tokens=32768,
-        enable_prefix_caching=True,
-        enable_chunked_prefill=True,
-        async_scheduling=False,
-        speculative_config=(
-            {"method": "mtp", "num_speculative_tokens": num_speculative_tokens}
-            if num_speculative_tokens
-            else None
-        ),
-    ).create_engine_config()
-
-    worker = OhMyVllmWorker(vllm_config, num_speculative_tokens=num_speculative_tokens)
+    if msg.get("tensor_parallel_size", 1) != 1:
+        raise ValueError("Only single-device inference is implemented")
+    worker = OhMyVllmWorker(
+        RuntimeConfig(
+            msg["model_path"],
+            msg.get("max_model_len", 65536),
+            msg["num_gpu_blocks"],
+            msg.get("num_speculative_tokens", 0),
+        )
+    )
     worker.init_device()
     worker.load_model()
-    worker.initialize_cache(num_gpu_blocks)
+    worker.initialize_cache()
     return worker
 
 

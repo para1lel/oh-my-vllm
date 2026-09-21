@@ -1,14 +1,7 @@
-"""Phase 4 accuracy test: single GQA layer output vs CPU FP64 reference.
+"""Supplementary PyTorch SDPA vs CPU FP64; not actual model-path acceptance.
 
-Verifies that the attention backend selected by vLLM for Qwen3.5 full-attention
-layers (FlashAttention / tml_fa4) matches a CPU scaled-dot-product reference to
-within atol=1e-2, rtol=1e-2.  The test is standalone — no model weights, no ZMQ
-— it just runs a single attention layer with random inputs.
-
-Run with:
-    pytest tests/test_gqa_accuracy.py -v
-or directly:
-    python tests/test_gqa_accuracy.py
+Production paged attention is covered by test_independent_kernels.py,
+test_independent_decode_attention.py and the actual-model probe_worker.py.
 """
 
 from __future__ import annotations
@@ -95,12 +88,12 @@ def gqa_gpu(
     "batch,num_heads,num_kv_heads,seq_len,head_dim",
     [
         # Qwen3.5-27B full-attention layer shape:
-        #   40 query heads, 8 KV heads, head_dim=128 (typical FP8 config).
-        (1, 40, 8, 128, 128),
+        #   24 query heads, 4 KV heads, head_dim=256.
+        (1, 24, 4, 128, 256),
         # Smaller shape for faster CI runs.
         (2, 16, 4, 64, 64),
         # Prefill length matching our benchmark (seq_len chunk).
-        (1, 40, 8, 512, 128),
+        (1, 24, 4, 512, 256),
     ],
 )
 def test_gqa_accuracy(
@@ -147,9 +140,9 @@ if __name__ == "__main__":
         sys.exit(0)
 
     cases = [
-        (1, 40, 8, 128, 128),
+        (1, 24, 4, 128, 256),
         (2, 16, 4, 64, 64),
-        (1, 40, 8, 512, 128),
+        (1, 24, 4, 512, 256),
     ]
     passed = 0
     for args in cases:

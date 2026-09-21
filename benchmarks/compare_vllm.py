@@ -1,7 +1,7 @@
-"""Matched token-ID benchmarks; invoke under scripts/with-gpu.sh.
+"""Compare framework measurements against the original frozen EngineCore data.
 
-Each engine lives in a separate child process. A pair shares one GPU, inputs,
-configuration, warmup/cache policy, output limits and request-to-completion timer.
+Run under scripts/with-gpu.sh. Only framework processes are launched; the baseline
+is immutable data and there is no code path that installs or runs vLLM.
 """
 
 from __future__ import annotations
@@ -9,8 +9,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import hashlib
-import importlib.metadata
-import importlib.util
 import json
 import os
 import shutil
@@ -24,35 +22,25 @@ from contextlib import suppress
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+BASELINE_SHA256 = "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e"
 
 
-def vllm_identity():
-    """Record editable source identity independently of stale wheel metadata."""
-    package = Path(importlib.util.find_spec("vllm").origin).parent
-    revision = subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=package, text=True
-    ).strip()
-    status = subprocess.check_output(
-        ["git", "status", "--porcelain"], cwd=package, text=True
-    )
-    return {
-        "package_version": importlib.metadata.version("vllm"),
-        "source_path": str(package),
-        "git_commit": revision,
-        "git_status": status,
-        "git_diff_sha256": hashlib.sha256(
-            subprocess.check_output(
-                ["git", "diff", "HEAD", "--binary"],
-                cwd=package,
-            )
-        ).hexdigest(),
-        "runner": "vllm.v1.worker.gpu.model_runner.GPUModelRunner",
-    }
+def runtime_identity():
+    """Describe the independent environment; reject accidental legacy execution."""
+    from oh_my_vllm.worker.runtime import identity
+
+    worker = Path(os.environ.get("OH_MY_VLLM_WORKER_PYTHON", sys.executable))
+    if worker.resolve() != Path(sys.executable).resolve():
+        raise RuntimeError("benchmark worker must use the current independent Python")
+    return identity()
 
 
-def historical_baseline(path, args, batch):
+def historical_baseline(path, args, batch, *, data_bytes=None):
     """Select an exact workload from frozen data without starting vLLM."""
-    artifact = json.loads(Path(path).read_text())
+    data_bytes = Path(path).read_bytes() if data_bytes is None else data_bytes
+    if hashlib.sha256(data_bytes).hexdigest() != BASELINE_SHA256:
+        raise ValueError("baseline hash differs from the original frozen artifact")
+    artifact = json.loads(data_bytes)
     expected_protocol = {
         "model": args.model,
         "block_size": 784,
@@ -180,96 +168,6 @@ def source_identity(binary):
     }
 
 
-def prompts(batch: int, length: int) -> list[list[int]]:
-    return [
-        [(i + request * 997) % 32000 + 1 for i in range(length)]
-        for request in range(batch)
-    ]
-
-
-def draft_metrics(llm):
-    metrics = llm.get_metrics()
-    return {
-        key: sum(metric.value for metric in metrics if metric.name == name)
-        for key, name in {
-            "proposed_draft_tokens": "vllm:spec_decode_num_draft_tokens",
-            "accepted_draft_tokens": "vllm:spec_decode_num_accepted_tokens",
-        }.items()
-    }
-
-
-def baseline(args):
-    import vllm
-    from vllm import LLM, SamplingParams
-
-    speculative = args.speculative_tokens if args.mode == "mtp" else 0
-    llm = LLM(
-        model=args.model,
-        trust_remote_code=True,
-        language_model_only=True,
-        block_size=784,
-        mamba_cache_mode="align",
-        mamba_ssm_cache_dtype="bfloat16" if speculative else "auto",
-        max_model_len=65536,
-        max_num_seqs=32,
-        max_num_batched_tokens=32768,
-        num_gpu_blocks_override=args.num_gpu_blocks,
-        enable_prefix_caching=True,
-        enable_chunked_prefill=True,
-        async_scheduling=False,
-        disable_log_stats=False,
-        speculative_config=(
-            {"method": "mtp", "num_speculative_tokens": speculative}
-            if speculative
-            else None
-        ),
-    )
-    inputs = [
-        {"prompt_token_ids": ids}
-        for ids in prompts(args.batch_sizes[0], args.input_len)
-    ]
-    sampling = SamplingParams(
-        temperature=0, max_tokens=args.output_len, ignore_eos=True, detokenize=False
-    )
-    results = []
-    for iteration in range(args.warmup + args.repetitions):
-        if not llm.reset_prefix_cache():
-            raise RuntimeError("baseline prefix cache reset failed")
-        if args.mode == "prefix":
-            llm.generate(
-                inputs,
-                SamplingParams(
-                    temperature=0, max_tokens=1, ignore_eos=True, detokenize=False
-                ),
-                use_tqdm=False,
-            )
-        before = draft_metrics(llm)
-        start = time.perf_counter()
-        outputs = llm.generate(inputs, sampling, use_tqdm=False)
-        elapsed = time.perf_counter() - start
-        after = draft_metrics(llm)
-        counts = [len(output.outputs[0].token_ids) for output in outputs]
-        if counts != [args.output_len] * len(inputs):
-            raise RuntimeError(f"incomplete baseline output: {counts}")
-        if iteration >= args.warmup:
-            results.append(
-                {
-                    **{key: after[key] - before[key] for key in before},
-                    "output_tokens": sum(counts),
-                    "prefix_hit_tokens": sum(
-                        output.num_cached_tokens for output in outputs
-                    ),
-                    "elapsed_s": elapsed,
-                    "output_tps": sum(counts) / elapsed,
-                }
-            )
-    print(
-        "BASELINE_RESULT " + json.dumps({"version": vllm.__version__, "runs": results}),
-        flush=True,
-    )
-    llm.llm_engine.engine_core.shutdown()
-
-
 def parse_rows(stdout: str, marker: str):
     return [
         json.loads(line[len(marker) :])
@@ -292,32 +190,10 @@ def compare(args):
         )
     args.binary = args.binary.resolve()
     identity = source_identity(args.binary)
-    runtime_identity = vllm_identity()
+    runtime = runtime_identity()
+    baseline_bytes = args.baseline_json.read_bytes()
     all_results = []
     for batch in args.batch_sizes:
-        base_cmd = [
-            sys.executable,
-            str(Path(__file__).resolve()),
-            "--baseline",
-            "--model",
-            args.model,
-            "--num-gpu-blocks",
-            str(args.num_gpu_blocks),
-            "--batch-sizes",
-            str(batch),
-            "--input-len",
-            str(args.input_len),
-            "--output-len",
-            str(args.output_len),
-            "--warmup",
-            str(args.warmup),
-            "--repetitions",
-            str(args.repetitions),
-            "--mode",
-            args.mode,
-            "--speculative-tokens",
-            str(args.speculative_tokens),
-        ]
         with tempfile.TemporaryDirectory(prefix="oh-my-vllm-bench-") as directory:
             binary_snapshot = Path(directory) / "worker"
             shutil.copy2(args.binary, binary_snapshot)
@@ -326,21 +202,12 @@ def compare(args):
                 != identity["binary_sha256"]
             ):
                 raise RuntimeError("binary changed after identity capture")
-            if args.baseline_json:
-                historical = historical_baseline(args.baseline_json, args, batch)
-                base_rows = [
-                    {
-                        "version": historical["vllm_version"],
-                        "runs": historical["baseline"],
-                    }
-                ]
-            else:
-                baseline_run = run_engine(base_cmd)
-                base_rows = parse_rows(baseline_run, "BASELINE_RESULT ")
-                if len(base_rows) != 1:
-                    raise RuntimeError(
-                        f"missing baseline result: {baseline_run[-2000:]}"
-                    )
+            historical = historical_baseline(
+                args.baseline_json, args, batch, data_bytes=baseline_bytes
+            )
+            base_rows = [
+                {"version": historical["vllm_version"], "runs": historical["baseline"]}
+            ]
             command = [
                 str(binary_snapshot),
                 "--model",
@@ -375,9 +242,7 @@ def compare(args):
         expected_hits = (
             batch * ((args.input_len - 1) // 784 * 784) if args.mode == "prefix" else 0
         )
-        if (not args.baseline_json and len(base) != args.repetitions) or any(
-            row["prefix_hit_tokens"] != expected_hits for row in base + ours
-        ):
+        if any(row["prefix_hit_tokens"] != expected_hits for row in base + ours):
             raise RuntimeError("engines did not use the expected matched cache state")
         if args.mode == "mtp" and any(
             row["proposed_draft_tokens"] <= 0 or row["accepted_draft_tokens"] <= 0
@@ -392,16 +257,10 @@ def compare(args):
             "cpu_affinity": sorted(os.sched_getaffinity(0)),
             "source": identity,
             "vllm_version": base_rows[0]["version"],
-            "framework_vllm": runtime_identity,
-            "comparison": "historical" if args.baseline_json else "matched",
-            "baseline_artifact": str(args.baseline_json)
-            if args.baseline_json
-            else None,
-            "baseline_sha256": hashlib.sha256(
-                args.baseline_json.read_bytes()
-            ).hexdigest()
-            if args.baseline_json
-            else None,
+            "framework_runtime": runtime,
+            "comparison": "historical",
+            "baseline_artifact": str(args.baseline_json),
+            "baseline_sha256": hashlib.sha256(baseline_bytes).hexdigest(),
             "mode": args.mode,
             "batch_size": batch,
             "input_len": args.input_len,
@@ -428,7 +287,7 @@ def main():
     parser.add_argument("--batch-sizes", type=int, nargs="+", default=[1, 2, 4])
     parser.add_argument("--input-len", type=int, default=32768)
     parser.add_argument("--output-len", type=int, default=4096)
-    parser.add_argument("--warmup", type=int, default=1)
+    parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--repetitions", type=int, default=3)
     parser.add_argument(
         "--mode", choices=["ordinary", "mtp", "prefix"], default="ordinary"
@@ -438,25 +297,20 @@ def main():
     parser.add_argument(
         "--binary", type=Path, default=ROOT / "target/release/oh-my-vllm-zmq-worker"
     )
-    parser.add_argument("--baseline", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--baseline-json",
         type=Path,
+        default=ROOT / "bench/baseline/2026-09-19-acceptance.json",
         help="Use frozen workload rows; run only the framework, never vLLM baseline",
     )
     args = parser.parse_args()
-    if args.baseline and args.baseline_json:
-        parser.error("--baseline and --baseline-json are mutually exclusive")
     if args.repetitions < 3 or args.warmup < 1:
         parser.error("acceptance requires >=3 measurements and >=1 warmup")
     if args.mode == "mtp" and args.speculative_tokens <= 0:
         parser.error("MTP requires positive --speculative-tokens")
     if min(args.batch_sizes) <= 0 or min(args.input_len, args.output_len) <= 0:
         parser.error("batch sizes and token lengths must be positive")
-    if args.baseline:
-        baseline(args)
-    else:
-        compare(args)
+    compare(args)
 
 
 if __name__ == "__main__":

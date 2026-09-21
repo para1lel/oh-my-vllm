@@ -35,7 +35,7 @@ as a hypothesis until measured.
 
 ## Python and CUDA profiling
 
-Wrap selected worker calls in a diagnostic harness, using the conda vllm Python
+Wrap selected worker calls in a diagnostic harness, using the conda oh-my-vllm Python
 and GPU/environment wrappers. torch.profiler with CPU and CUDA activities can
 separate kernel work from host launch/wait time; cProfile only explains Python
 and host-call time. A diagnostic wrapper passed as OH_MY_VLLM_WORKER_PYTHON must
@@ -51,7 +51,7 @@ prof.export_chrome_trace("/tmp/oh-my-vllm-trace.json")
 ```
 
 Use initialization logs and the actual backend configuration to identify kernels.
-The current probe wraps FlashInferImpl and selected GDN prefill/packed/fused MTP
+The current probe wraps the independent paged-attention and GDN prefill/recurrent
 calls; do not require a historical FA kernel name. Check FP8 GEMM dispatch,
 CUDAGraph coverage, prefill chunk boundaries, draft counts and any runtime JIT
 warnings. Different kernel paths require investigation, not an automatic claim
@@ -60,7 +60,7 @@ that one named backend is correct for every version.
 ## Matched acceptance
 
 ```bash
-scripts/with-gpu.sh scripts/with-env.sh /data0/shared/dongwu.chen/conda-envs/vllm/bin/python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output /tmp/ordinary.json
+scripts/with-gpu.sh scripts/with-env.sh python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output /tmp/ordinary.json
 ```
 
 Repeat for mtp and prefix. The script emits JSON with raw repetitions, medians
