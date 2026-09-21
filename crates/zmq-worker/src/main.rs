@@ -197,7 +197,11 @@ async fn run() -> Result<()> {
                 result.outputs.values().collect::<Vec<_>>()
             );
             println!(
-                "batch stats: {{\"steps\":{},\"prefix_hit_tokens\":{},\"initial_prefix_hit_tokens\":{},\"preemptions\":{},\"accepted_draft_tokens\":{}}}",
+                concat!(
+                    "batch stats: {{\"steps\":{},\"prefix_hit_tokens\":{},",
+                    "\"initial_prefix_hit_tokens\":{},\"preemptions\":{},",
+                    "\"accepted_draft_tokens\":{}}}"
+                ),
                 result.steps,
                 result.prefix_hit_tokens,
                 result.initial_prefix_hit_tokens,
@@ -248,7 +252,13 @@ async fn run() -> Result<()> {
                 if iteration >= args.warmup {
                     let count: usize = result.outputs.values().map(Vec::len).sum();
                     println!(
-                        "BENCH_RESULT {{\"batch_size\":{},\"input_len\":{},\"output_len\":{},\"output_tokens\":{},\"elapsed_s\":{},\"output_tps\":{},\"steps\":{},\"prefix_hit_tokens\":{},\"initial_prefix_hit_tokens\":{},\"preemptions\":{},\"proposed_draft_tokens\":{},\"accepted_draft_tokens\":{}}}",
+                        concat!(
+                            "BENCH_RESULT {{\"batch_size\":{},\"input_len\":{},",
+                            "\"output_len\":{},\"output_tokens\":{},\"elapsed_s\":{},",
+                            "\"output_tps\":{},\"steps\":{},\"prefix_hit_tokens\":{},",
+                            "\"initial_prefix_hit_tokens\":{},\"preemptions\":{},",
+                            "\"proposed_draft_tokens\":{},\"accepted_draft_tokens\":{}}}"
+                        ),
                         args.batch_size,
                         args.input_len,
                         args.output_len,

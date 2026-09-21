@@ -159,3 +159,23 @@ Real MTP4 acceptance passed after the CUDA/NVML host fault recovered; see
 acceptance.md. Reproduce constrained cases with scripts/serving-acceptance.py and
 inspect per-request MTP counters alongside saved responses. Scripted output alone
 is never GPU evidence.
+
+## Strict Rust formatting
+
+```bash
+scripts/with-env.sh cargo fmt --all
+scripts/with-env.sh cargo fmt --all --check
+scripts/with-env.sh python scripts/check_rust_line_width.py
+scripts/with-env.sh python -m unittest discover -s tests -p test_rust_style.py
+scripts/with-env.sh pre-commit run cargo-fmt --all-files
+scripts/with-env.sh pre-commit run rust-line-width --all-files
+```
+
+`rustfmt.toml` sets stable Rust 2024 formatting, 100-character width, Unix
+newlines and multiline if/else and let/else expressions. Pre-commit checks
+formatting instead of silently rewriting it. A separate hard-width hook reads
+the same configuration and checks tracked/unignored new `.rs` files, including
+macros, comments and string literals; tabs expand using rustfmt's tab size.
+`rustfmt` alone may leave `json!` bodies beyond max_width untouched. Split their
+fields manually and use `concat!` to wrap long literals without changing values.
+Configuration and hook changes trigger both Rust style hooks.

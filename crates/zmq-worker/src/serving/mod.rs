@@ -136,7 +136,20 @@ struct Active {
 }
 
 fn error(status: StatusCode, message: impl ToString) -> Response {
-    (status, Json(json!({"error":{"message":message.to_string(),"type":if status == StatusCode::INTERNAL_SERVER_ERROR {"server_error"} else {"invalid_request_error"},"param":null,"code":status.as_u16().to_string()}}))).into_response()
+    let kind = if status == StatusCode::INTERNAL_SERVER_ERROR {
+        "server_error"
+    } else {
+        "invalid_request_error"
+    };
+    let body = json!({
+        "error": {
+            "message": message.to_string(),
+            "type": kind,
+            "param": null,
+            "code": status.as_u16().to_string(),
+        },
+    });
+    (status, Json(body)).into_response()
 }
 async fn chat(
     State(app): State<App>,
@@ -234,9 +247,17 @@ async fn generate(
         .into_response()
 }
 async fn models(State(app): State<App>) -> Json<Value> {
-    Json(
-        json!({"object":"list","data":[{"id":app.model,"object":"model","created":0,"owned_by":"oh-my-vllm"}]}),
-    )
+    Json(json!({
+        "object": "list",
+        "data": [
+            {
+                "id": app.model,
+                "object": "model",
+                "created": 0,
+                "owned_by": "oh-my-vllm",
+            },
+        ],
+    }))
 }
 async fn retrieve(State(app): State<App>, Path(id): Path<String>) -> Response {
     let mut store = app.store.lock().unwrap();
@@ -252,7 +273,12 @@ async fn delete(State(app): State<App>, Path(id): Path<String>) -> Response {
     match store.entries.remove(&id) {
         Some(s) => {
             store.bytes -= s.bytes;
-            Json(json!({"id":id,"object":"response.deleted","deleted":true})).into_response()
+            Json(json!({
+                "id": id,
+                "object": "response.deleted",
+                "deleted": true,
+            }))
+            .into_response()
         }
         None => error(StatusCode::NOT_FOUND, "response not found or expired"),
     }
@@ -572,13 +598,16 @@ async fn run_engine(
                     let _ = request.events.try_send(json!("[DONE]"));
                 }
                 let elapsed = request.started.elapsed().as_secs_f64();
+                let ttft_ms = request
+                    .first_token
+                    .map(|t| t.duration_since(request.started).as_millis());
                 info!(request_id = id,
                     output_tokens = request.output.output_tokens,
                     input_tokens = request.output.input_tokens,
                     cached_tokens = request.output.cached_tokens,
                     reasoning_tokens = request.output.reasoning_tokens,
                     elapsed_s = elapsed,
-                    ttft_ms = request.first_token.map(|t| t.duration_since(request.started).as_millis()),
+                    ttft_ms,
                     output_tps = request.output.output_tokens as f64 / elapsed,
                     steps = request.steps,
                     proposed_draft_tokens = request.proposed,

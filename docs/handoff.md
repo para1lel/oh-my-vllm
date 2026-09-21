@@ -1,5 +1,25 @@
 # Handoff — 2026-09-21
 
+## Latest maintenance — enforce Rust formatting inside macros
+
+The reported error-response line in serving/mod.rs was 234 characters, yet
+cargo fmt --check passed because rustfmt does not reliably reflow JSON macro
+bodies and max_width is not a hard validation rule. Added stable rustfmt.toml
+and a separate hard 100-character check covering all tracked/unignored new Rust
+files, including macros, comments and strings. Pre-commit now rejects formatting
+drift with cargo fmt --check; it also runs the width check when configuration or
+hook definitions change. Both checks read the repository's formatting policy.
+
+Expanded JSON macros and logging expressions, split long literals with concat!,
+and applied the stricter multiline-if/let-else settings. This is a formatting
+change; protocol data and test strings remain unchanged. Added five checker
+regressions. The actual new pre-commit hook rejected a temporary copy of the
+original 234-character line, then passed on the reformatted repository.
+Review identified a Unicode line-separator bypass in splitlines(); physical-line
+splitting and a regression now prevent it. Checks passed: 73 Rust tests, 16
+serving Python/HTTP tests, five style regressions, clippy, rustfmt and ruff.
+No GPU process was started for this maintenance task.
+
 ## Latest cleanup — release task-owned GPU programs promptly
 
 The user identified that the acceptance service had been left running without

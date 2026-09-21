@@ -10,11 +10,18 @@ repos:
     hooks:
       - id: cargo-fmt
         name: cargo fmt
-        description: Format Rust sources in place.
-        entry: scripts/with-env.sh cargo fmt --all
+        description: Reject Rust formatting drift; run cargo fmt --all to fix it.
+        entry: scripts/with-env.sh cargo fmt --all --check
         language: system
         pass_filenames: false
-        files: \.rs$
+        files: (\.rs$|(^|/)rustfmt\.toml$|^\.pre-commit-config\.yaml$)
+
+      - id: rust-line-width
+        name: Rust hard line-width limit (including macros)
+        entry: scripts/with-env.sh python scripts/check_rust_line_width.py
+        language: system
+        pass_filenames: false
+        files: (\.rs$|(^|/)rustfmt\.toml$|^scripts/check_rust_line_width\.py$|^\.pre-commit-config\.yaml$)
 
       - id: cargo-clippy
         name: cargo clippy

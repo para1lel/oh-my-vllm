@@ -52,6 +52,8 @@ using msgpack.
 ## Task end checklist
 
 1. `cargo test --workspace` must pass (Rust)
+   Also run `cargo fmt --all --check` and `python scripts/check_rust_line_width.py`
+   through `scripts/with-env.sh`.
 2. `ruff format python/ && ruff check python/` must pass (Python)
 3. `cargo clippy --all-targets --all-features -- -D warnings` must pass
 4. Stage only changed files; never `git add .`
@@ -70,7 +72,11 @@ using msgpack.
 ## Engineering standards
 
 See `CONTRIBUTING.md` for full rules. Short version:
-- Rust: `rustfmt` + `clippy -D warnings`; `unsafe` blocks need a `// SAFETY:` comment
+- Rust: use `rustfmt.toml`, `cargo fmt --all --check` and `clippy -D warnings`.
+  Pre-commit enforces a hard 100-character line limit, including macro bodies,
+  strings and comments (tabs expanded). Split long JSON macros into fields and
+  long literals with `concat!`; rustfmt success alone is insufficient.
+  `unsafe` blocks need a `// SAFETY:` comment.
 - Python: `ruff format` + `ruff check` (config in `ruff.toml`); Python ≥ 3.12
 - All hooks defined in `.pre-commit-config.yaml` run via `scripts/with-env.sh`
 

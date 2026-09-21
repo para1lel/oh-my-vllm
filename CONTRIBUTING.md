@@ -42,16 +42,21 @@ git add Cargo.lock <your other changed files>
 ```
 
 The pre-commit hooks run automatically:
-- `cargo fmt --all` and `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo fmt --all --check` and `cargo clippy --all-targets --all-features -- -D warnings`
+- `python scripts/check_rust_line_width.py` checks all tracked and unignored new
+  Rust files against the hard width in `rustfmt.toml`, including macro bodies
 - `cargo test --all` (the complete suite must pass)
 - `ruff format` and `ruff check --fix` on staged Python files
 - `scripts/fix_whitespace.py`
 
 If a hook fails, fix the reported issue and re-stage. Do not use `--no-verify`.
+Run `scripts/with-env.sh cargo fmt --all` to fix normal formatting. Macro bodies
+and long literals may require manual wrapping: `rustfmt` cannot reliably format
+arbitrary macro syntax and its `max_width` is not a hard validation rule.
 
 ## Code standards
 
-**Rust:** follow `rustfmt` defaults (enforced by hook). No `#[allow(dead_code)]` or `#[allow(unused)]` without a comment explaining why the item must be kept. All `unsafe` blocks must have a `// SAFETY:` comment stating the invariant being upheld.
+**Rust:** follow `rustfmt.toml` and the hard 100-character line limit (tabs expanded), including macros, strings and comments. Keep JSON fields on separate lines and use `concat!` for long literals. No `#[allow(dead_code)]` or `#[allow(unused)]` without a comment explaining why the item must be kept. All `unsafe` blocks must have a `// SAFETY:` comment stating the invariant being upheld.
 
 **Python:** `ruff` enforces formatting and linting (PEP 8 + selected rules). No bare `except:`. Type hints on all public function signatures.
 

@@ -199,10 +199,19 @@ pub fn normalize(
         if let Some(instructions) = body.get("instructions").filter(|v| !v.is_null()) {
             ensure!(instructions.is_string(), "instructions must be a string");
             messages.retain(|m| m["role"] != "system");
-            messages.insert(0, json!({"role":"system", "content":instructions}));
+            messages.insert(
+                0,
+                json!({
+                    "role": "system",
+                    "content": instructions,
+                }),
+            );
         }
         match body.get("input") {
-            Some(Value::String(text)) => messages.push(json!({"role":"user","content":text})),
+            Some(Value::String(text)) => messages.push(json!({
+                "role": "user",
+                "content": text,
+            })),
             Some(Value::Array(items)) => {
                 for item in items {
                     append_input(&mut messages, item)?;
@@ -299,15 +308,27 @@ pub fn normalize(
                 !tools.iter().any(|t: &Value| t["function"]["name"] == name),
                 "duplicate tool name"
             );
-            tools.push(json!({"type":"function","function":function}));
+            tools.push(json!({
+                "type": "function",
+                "function": function,
+            }));
         }
     }
     let mut choice = body
         .get("tool_choice")
         .cloned()
-        .unwrap_or(json!(if tools.is_empty() { "none" } else { "auto" }));
+        .unwrap_or(json!(if tools.is_empty() {
+            "none"
+        } else {
+            "auto"
+        }));
     if responses && choice.is_object() && choice["type"] == "function" {
-        choice = json!({"type":"function","function":{"name":choice["name"]}});
+        choice = json!({
+            "type": "function",
+            "function": {
+                "name": choice["name"],
+            },
+        });
     }
     match &choice {
         Value::String(s) if ["auto", "none", "required"].contains(&s.as_str()) => {
@@ -324,7 +345,9 @@ pub fn normalize(
         }
         _ => bail!("unsupported tool_choice"),
     }
-    let mut format = json!({"type":"text"});
+    let mut format = json!({
+        "type": "text",
+    });
     if responses {
         if let Some(text) = body.get("text") {
             if let Some(f) = text.get("format") {
@@ -409,7 +432,18 @@ pub fn normalize(
         stop.is_empty() || (format["type"] == "text" && (tools.is_empty() || choice == "none")),
         "stop strings cannot interrupt structured output or tool calls"
     );
-    let normalized = json!({"messages":messages,"tools":tools,"tool_choice":choice,"parallel_tool_calls":body.get("parallel_tool_calls").cloned().unwrap_or(json!(true)),"effort":effort,"preserve_thinking":template.get("preserve_thinking").cloned().unwrap_or(json!(true)),"format":format,"max_tokens":max_tokens,"sampling":sampling,"stop":stop});
+    let normalized = json!({
+        "messages": messages,
+        "tools": tools,
+        "tool_choice": choice,
+        "parallel_tool_calls": body.get("parallel_tool_calls").cloned().unwrap_or(json!(true)),
+        "effort": effort,
+        "preserve_thinking": template.get("preserve_thinking").cloned().unwrap_or(json!(true)),
+        "format": format,
+        "max_tokens": max_tokens,
+        "sampling": sampling,
+        "stop": stop,
+    });
     // Metadata is retained in the response but never used as a model instruction.
     if body.get("metadata").is_none() {
         body["metadata"] = json!({});
@@ -453,7 +487,10 @@ fn text_content(value: &Value) -> Result<Value> {
 
 fn assistant_item(messages: &mut Vec<Value>) -> &mut Value {
     if messages.last().is_none_or(|m| m["role"] != "assistant") {
-        messages.push(json!({"role":"assistant","content":""}));
+        messages.push(json!({
+            "role": "assistant",
+            "content": "",
+        }));
     }
     messages.last_mut().unwrap()
 }
@@ -468,20 +505,39 @@ fn append_input(messages: &mut Vec<Value>, item: &Value) -> Result<()> {
                 text.push_str(content.as_str().unwrap_or_default());
                 message["content"] = json!(text);
             } else {
-                messages.push(json!({"role":item["role"],"content":content}));
+                messages.push(json!({
+                    "role": item["role"],
+                    "content": content,
+                }));
             }
         }
         "function_call" => {
-            let call = json!({"id":item["call_id"],"type":"function","function":{"name":item["name"],"arguments":item["arguments"]}});
+            let call = json!({
+                "id": item["call_id"],
+                "type": "function",
+                "function": {
+                    "name": item["name"],
+                    "arguments": item["arguments"],
+                },
+            });
             let message = assistant_item(messages);
-            if message.get("tool_calls").is_none() {message["tool_calls"] = json!([]);}
+            if message.get("tool_calls").is_none() {
+                message["tool_calls"] = json!([]);
+            }
             message["tool_calls"].as_array_mut().unwrap().push(call);
         }
-        "function_call_output" => messages.push(json!({"role":"tool","tool_call_id":item["call_id"],"content":text_content(&item["output"])?})),
+        "function_call_output" => messages.push(json!({
+            "role": "tool",
+            "tool_call_id": item["call_id"],
+            "content": text_content(&item["output"])?,
+        })),
         "reasoning" => {
             let mut text = String::new();
             for part in item["summary"].as_array().into_iter().flatten() {
-                ensure!(part["type"] == "summary_text" && part["text"].is_string(), "invalid reasoning summary");
+                ensure!(
+                    part["type"] == "summary_text" && part["text"].is_string(),
+                    "invalid reasoning summary"
+                );
                 text.push_str(part["text"].as_str().unwrap());
             }
             assistant_item(messages)["reasoning_content"] = json!(text);
@@ -496,9 +552,50 @@ mod tests {
     use super::*;
     #[test]
     fn replay_tool_association_and_mapping() {
-        let r = normalize(json!({"model":"m","reasoning":{"effort":"high"},"input":[{"type":"function_call","call_id":"c","name":"read","arguments":"{}"},{"type":"function_call_output","call_id":"c","output":"file"}]}), true, "m", None).unwrap();
+        let r = normalize(
+            json!({
+                "model": "m",
+                "reasoning": {
+                    "effort": "high",
+                },
+                "input": [
+                    {
+                        "type": "function_call",
+                        "call_id": "c",
+                        "name": "read",
+                        "arguments": "{}",
+                    },
+                    {
+                        "type": "function_call_output",
+                        "call_id": "c",
+                        "output": "file",
+                    },
+                ],
+            }),
+            true,
+            "m",
+            None,
+        )
+        .unwrap();
         assert_eq!(r.normalized["effort"], "xhigh");
         assert_eq!(r.normalized["messages"][1]["tool_call_id"], "c");
-        assert!(normalize(json!({"model":"m","input":[{"type":"function_call_output","call_id":"missing","output":"x"}]}), true, "m", None).is_err());
+        assert!(
+            normalize(
+                json!({
+                    "model": "m",
+                    "input": [
+                        {
+                            "type": "function_call_output",
+                            "call_id": "missing",
+                            "output": "x",
+                        },
+                    ],
+                }),
+                true,
+                "m",
+                None
+            )
+            .is_err()
+        );
     }
 }

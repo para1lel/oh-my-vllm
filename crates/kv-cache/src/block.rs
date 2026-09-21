@@ -142,12 +142,24 @@ impl FreeKVCacheBlockQueue {
 
         for i in 0..num_blocks {
             let idx = i as usize;
-            blocks[idx].prev_free = if i == 0 { head } else { i - 1 };
-            blocks[idx].next_free = if i + 1 == num_blocks { tail } else { i + 1 };
+            blocks[idx].prev_free = if i == 0 {
+                head
+            } else {
+                i - 1
+            };
+            blocks[idx].next_free = if i + 1 == num_blocks {
+                tail
+            } else {
+                i + 1
+            };
         }
 
         blocks[head as usize].prev_free = NULL;
-        blocks[head as usize].next_free = if num_blocks == 0 { tail } else { 0 };
+        blocks[head as usize].next_free = if num_blocks == 0 {
+            tail
+        } else {
+            0
+        };
         blocks[tail as usize].prev_free = if num_blocks == 0 {
             head
         } else {

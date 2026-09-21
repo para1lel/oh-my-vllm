@@ -144,10 +144,11 @@ fn tool_end(raw: &str, tools: &[Value]) -> Result<Option<usize>> {
     let Some((name, tail)) = rest[10..].split_once('>') else {
         return Ok(None);
     };
-    let schema = &tools
+    let tool = tools
         .iter()
         .find(|tool| tool["function"]["name"] == name)
-        .ok_or_else(|| anyhow::anyhow!("unknown generated function: {name}"))?["function"]["parameters"];
+        .ok_or_else(|| anyhow::anyhow!("unknown generated function: {name}"))?;
+    let schema = &tool["function"]["parameters"];
     rest = tail.trim_start();
     loop {
         if rest.starts_with("</function>") {
@@ -305,11 +306,27 @@ mod tests {
     fn fragmented_reasoning_and_typed_tool() {
         let mut parser = Parser::new(
             true,
-            vec![
-                json!({"function":{"name":"read","parameters":{"properties":{"path":{"type":"string"},"n":{"type":"integer"}}}}}),
-            ],
+            vec![json!({
+                "function": {
+                    "name": "read",
+                    "parameters": {
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                            },
+                            "n": {
+                                "type": "integer",
+                            },
+                        },
+                    },
+                },
+            })],
         );
-        let raw = "想一想</think>\n<tool_call>\n<function=read>\n<parameter=path>README.md</parameter>\n<parameter=n>2</parameter>\n</function>\n</tool_call>";
+        let raw = concat!(
+            "想一想</think>\n<tool_call>\n<function=read>\n",
+            "<parameter=path>README.md</parameter>\n",
+            "<parameter=n>2</parameter>\n</function>\n</tool_call>"
+        );
         let mut reasoning = String::new();
         let mut calls = Vec::new();
         for c in raw.chars() {
@@ -328,7 +345,10 @@ mod tests {
         assert_eq!(calls[0].0, "read");
         assert_eq!(
             serde_json::from_str::<Value>(&calls[0].1).unwrap(),
-            json!({"path":"README.md","n":2})
+            json!({
+                "path": "README.md",
+                "n": 2,
+            })
         );
     }
     #[test]
@@ -342,11 +362,24 @@ mod tests {
     fn tool_strings_preserve_quotes_newlines_and_close_tag_literals() {
         let mut parser = Parser::new(
             false,
-            vec![
-                json!({"function":{"name":"read","parameters":{"properties":{"path":{"type":"string"}}}}}),
-            ],
+            vec![json!({
+                "function": {
+                    "name": "read",
+                    "parameters": {
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                            },
+                        },
+                    },
+                },
+            })],
         );
-        let raw = "<tool_call><function=read><parameter=path>\n\n\"hello\" </function> </tool_call>\n\n</parameter></function></tool_call>";
+        let raw = concat!(
+            "<tool_call><function=read><parameter=path>\n\n",
+            "\"hello\" </function> </tool_call>\n\n",
+            "</parameter></function></tool_call>"
+        );
         let events = parser.feed(raw, true).unwrap();
         let Delta::Tool { arguments, .. } = &events[0] else {
             panic!("expected tool")
@@ -358,7 +391,14 @@ mod tests {
     }
     #[test]
     fn incomplete_tool_is_an_error() {
-        let mut parser = Parser::new(false, vec![json!({"function":{"name":"read"}})]);
+        let mut parser = Parser::new(
+            false,
+            vec![json!({
+                "function": {
+                    "name": "read",
+                },
+            })],
+        );
         assert!(parser.feed("<tool_call><function=read>", true).is_err());
     }
 
@@ -366,16 +406,32 @@ mod tests {
     fn fragmented_nested_json_preserves_xml_delimiters() {
         let mut parser = Parser::new(
             false,
-            vec![json!({"function":{
-                "name":"test", "parameters":{"properties":{
-                    "object":{"type":"object"}, "array":{"type":"array"},
-                    "number":{"type":"number"}, "flag":{"type":"boolean"}
-                }}
-            }})],
+            vec![json!({
+                "function": {
+                    "name": "test",
+                    "parameters": {
+                        "properties": {
+                            "object": {
+                                "type": "object",
+                            },
+                            "array": {
+                                "type": "array",
+                            },
+                            "number": {
+                                "type": "number",
+                            },
+                            "flag": {
+                                "type": "boolean",
+                            },
+                        },
+                    },
+                },
+            })],
         );
         let raw = concat!(
             "<tool_call><function=test>",
-            "<parameter=object>{\"nested\":{\"text\":\"</parameter></function></tool_call>\"}}</parameter>",
+            "<parameter=object>{\"nested\":{\"text\":\"",
+            "</parameter></function></tool_call>\"}}</parameter>",
             "<parameter=array>[\"</parameter>\", {\"x\":\"\\\"quoted\\\"\"}]</parameter>",
             "<parameter=number>-12.5e2</parameter>",
             "<parameter=flag>true</parameter></function></tool_call>"
@@ -391,9 +447,19 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<Value>(arguments).unwrap(),
             json!({
-                "object":{"nested":{"text":"</parameter></function></tool_call>"}},
-                "array":["</parameter>", {"x":"\"quoted\""}],
-                "number":-1250.0, "flag":true
+                "object": {
+                    "nested": {
+                        "text": "</parameter></function></tool_call>",
+                    },
+                },
+                "array": [
+                    "</parameter>",
+                    {
+                        "x": "\"quoted\"",
+                    },
+                ],
+                "number": -1250.0,
+                "flag": true,
             })
         );
         assert_eq!(events.len(), 1);
@@ -401,15 +467,35 @@ mod tests {
 
     #[test]
     fn enum_const_padding_restores_schema_values() {
-        let root = json!({"$defs":{"word":{"type":"string","const":"\nabc\n"}}});
+        let root = json!({
+            "$defs": {
+                "word": {
+                    "type": "string",
+                    "const": "\nabc\n",
+                },
+            },
+        });
         assert_eq!(
-            restore_string(" \nabc\n\t", &json!({"$ref":"#/$defs/word"}), &root).unwrap(),
+            restore_string(
+                " \nabc\n\t",
+                &json!({
+                    "$ref": "#/$defs/word",
+                }),
+                &root
+            )
+            .unwrap(),
             "\nabc\n"
         );
         assert_eq!(
             restore_string(
                 " \tabc\n",
-                &json!({"type":"string","enum":["abc","def"]}),
+                &json!({
+                    "type": "string",
+                    "enum": [
+                        "abc",
+                        "def",
+                    ],
+                }),
                 &root
             )
             .unwrap(),
@@ -418,7 +504,18 @@ mod tests {
         assert_eq!(
             restore_string(
                 "\tdef ",
-                &json!({"anyOf":[{"type":"string","const":"abc"},{"type":"string","const":"def"}]}),
+                &json!({
+                    "anyOf": [
+                        {
+                            "type": "string",
+                            "const": "abc",
+                        },
+                        {
+                            "type": "string",
+                            "const": "def",
+                        },
+                    ],
+                }),
                 &root
             )
             .unwrap(),
@@ -427,14 +524,38 @@ mod tests {
         assert!(
             restore_string(
                 " abc ",
-                &json!({"type":"string","enum":["abc"," abc"]}),
+                &json!({
+                    "type": "string",
+                    "enum": [
+                        "abc",
+                        " abc",
+                    ],
+                }),
                 &root
             )
             .is_err()
         );
-        assert!(restore_string("abc", &json!({"type":"string","const":"\nabc\n"}), &root).is_err());
+        assert!(
+            restore_string(
+                "abc",
+                &json!({
+                    "type": "string",
+                    "const": "\nabc\n",
+                }),
+                &root
+            )
+            .is_err()
+        );
         assert_eq!(
-            restore_string(" \n", &json!({"type":"string","const":""}), &root).unwrap(),
+            restore_string(
+                " \n",
+                &json!({
+                    "type": "string",
+                    "const": "",
+                }),
+                &root
+            )
+            .unwrap(),
             ""
         );
     }
