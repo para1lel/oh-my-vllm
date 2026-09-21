@@ -4,49 +4,23 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 from functools import wraps
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from vllm.config import VllmConfig
 
+from oh_my_vllm.worker.protocol import (
+    RequestOutput,
+    SchedulerOutput,
+    WorkerOutput,
+)
+from oh_my_vllm.worker.protocol import (
+    ScheduledRequest as ScheduledRequest,
+)
+
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ScheduledRequest:
-    request_id: int
-    token_ids: list[int]
-    num_computed_tokens: int
-    fa_block_table: list[int]
-    mamba_block_table: list[int]
-    prefill_token_ids: list[int] | None = None
-    new_block_ids_to_zero: list[int] = field(default_factory=list)
-
-
-@dataclass
-class SchedulerOutput:
-    scheduled: list[ScheduledRequest] = field(default_factory=list)
-    finished_request_ids: list[int] = field(default_factory=list)
-    preempted_request_ids: list[int] = field(default_factory=list)
-    num_batched_tokens: int = 0
-
-
-@dataclass
-class RequestOutput:
-    request_id: int
-    token_ids: list[int]
-    num_accepted_draft_tokens: int = 0
-    new_draft_token_ids: list[int] = field(default_factory=list)
-    text: str = ""
-    finish_reason: str | None = None
-    reasoning_tokens: int = 0
-
-
-@dataclass
-class WorkerOutput:
-    outputs: list[RequestOutput]
 
 
 class SchedulerAdapter:

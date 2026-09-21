@@ -68,16 +68,20 @@ def main() -> None:
             writes = torch.full((count,), -1, dtype=torch.int32, device="cuda")
             writes[-1] = destination
             batch = Batch(
-                torch.arange(computed, computed + count, device="cuda"),
-                starts.cuda(),
-                torch.zeros(count, dtype=torch.int32, device="cuda"),
-                torch.tensor([source], dtype=torch.int32, device="cuda"),
-                writes,
-                torch.tensor([destination], dtype=torch.int64, device="cuda"),
-                torch.arange(computed + 784, computed + count + 784, device="cuda"),
-                plan,
-                int(step == 0),
-                count if step == 0 else 0,
+                positions=torch.arange(computed, computed + count, device="cuda"),
+                starts=starts.cuda(),
+                sequence_ids=torch.zeros(count, dtype=torch.int32, device="cuda"),
+                state_reads=torch.tensor([source], dtype=torch.int32, device="cuda"),
+                state_writes=writes,
+                final_state_writes=torch.tensor(
+                    [destination], dtype=torch.int64, device="cuda"
+                ),
+                fa_slots=torch.arange(
+                    computed + 784, computed + count + 784, device="cuda"
+                ),
+                attention=plan,
+                prefill_sequences=int(step == 0),
+                prefill_tokens=count if step == 0 else 0,
             )
             hidden = model.forward(torch.tensor(tokens, device="cuda"), batch, caches)
             if not torch.isfinite(hidden).all():

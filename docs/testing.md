@@ -1,5 +1,20 @@
 # Testing Guide — oh-my-vllm
 
+## Independent migration checks
+
+Use the independent environment/cache settings in development.md. CPU tests cover
+`test_batch_plan.py`, `test_mtp_plan.py` and `test_independent_sampler.py`; CUDA tests
+cover `test_independent_kernels.py`, `test_independent_decode_attention.py`,
+`test_decode_graph.py` and `test_elementwise.py`. Actual-model probes use
+`tests/probe_independent_worker.py` as `OH_MY_VLLM_WORKER_PYTHON`, together with
+`OH_MY_VLLM_ENFORCE_EAGER=1`; MTP adds `OH_MY_VLLM_PROBE_MTP=1` and
+`--num-speculative-tokens 4`. Probe tolerances below are unchanged.
+
+The independent path has passed ordinary/MTP text, MTP prefix/preemption batches,
+12 Chat/Responses constraint cases and service lifecycle. These are staged
+correctness results. Final independent oh-my-pi acceptance and the complete
+nine-row frozen-baseline performance matrix remain pending.
+
 ## Environments and CPU checks
 
 All commands use scripts/with-env.sh to set PYTHONPATH and CARGO_TARGET_DIR.
@@ -207,7 +222,8 @@ Configuration and hook changes trigger both Rust style hooks.
 Run these in the new conda environment. Separate FlashInfer/Triton cache roots
 prevent a successful run from silently reusing artifacts compiled in the old
 environment. The model probe is a short eager diagnostic, not a service or
-performance acceptance run. The production Worker replacement remains pending.
+performance acceptance run. The independent Worker is available explicitly;
+default switchover and removal of legacy runtime/test dependencies remain pending.
 
 ```bash
 CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p test_independent_sampler.py

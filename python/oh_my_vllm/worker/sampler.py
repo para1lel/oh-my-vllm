@@ -36,27 +36,33 @@ def probabilities(
     histories = (prompt, generated, drafts)
     if any(type(t) is not int or not 0 <= t < vocab for h in histories for t in h):
         raise ValueError("sampling history token is outside the vocabulary")
-    prompt_counts = torch.bincount(
-        torch.tensor(prompt, device=scores.device, dtype=torch.int64), minlength=vocab
-    )
-    counts = torch.bincount(
-        torch.tensor(generated, device=scores.device, dtype=torch.int64),
-        minlength=vocab,
-    )
-    for row in range(scores.shape[0]):
-        current = scores[row]
-        if params.repetition_penalty != 1:
-            repeated = (prompt_counts + counts) > 0
-            penalized = torch.where(
-                current > 0,
-                current / params.repetition_penalty,
-                current * params.repetition_penalty,
-            )
-            current.copy_(torch.where(repeated, penalized, current))
-        current.sub_(counts * params.frequency_penalty)
-        current.sub_((counts > 0) * params.presence_penalty)
-        if row < len(drafts):
-            counts[drafts[row]] += 1
+    if (
+        params.repetition_penalty != 1
+        or params.frequency_penalty != 0
+        or params.presence_penalty != 0
+    ):
+        prompt_counts = torch.bincount(
+            torch.tensor(prompt, device=scores.device, dtype=torch.int64),
+            minlength=vocab,
+        )
+        counts = torch.bincount(
+            torch.tensor(generated, device=scores.device, dtype=torch.int64),
+            minlength=vocab,
+        )
+        for row in range(scores.shape[0]):
+            current = scores[row]
+            if params.repetition_penalty != 1:
+                repeated = (prompt_counts + counts) > 0
+                penalized = torch.where(
+                    current > 0,
+                    current / params.repetition_penalty,
+                    current * params.repetition_penalty,
+                )
+                current.copy_(torch.where(repeated, penalized, current))
+            current.sub_(counts * params.frequency_penalty)
+            current.sub_((counts > 0) * params.presence_penalty)
+            if row < len(drafts):
+                counts[drafts[row]] += 1
     if bitmask is not None:
         if bitmask.shape != (scores.shape[0], (vocab + 31) // 32):
             raise ValueError("grammar bitmask does not match sampling rows/vocabulary")
@@ -105,8 +111,18 @@ class RequestSampler:
         drafts: Sequence[int] = (),
         bitmask: np.ndarray | torch.Tensor | None = None,
     ) -> list[int]:
+        needs_history = (
+            self.params.repetition_penalty != 1
+            or self.params.frequency_penalty != 0
+            or self.params.presence_penalty != 0
+        )
         probs = probabilities(
-            logits, self.params, self.prompt, self.generated, drafts, bitmask
+            logits,
+            self.params,
+            self.prompt if needs_history else (),
+            self.generated if needs_history else (),
+            drafts,
+            bitmask,
         )
         if self.params.temperature == 0:
             selected = probs.argmax(-1)

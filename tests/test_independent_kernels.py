@@ -252,3 +252,25 @@ def test_normalization_and_partial_rotary():
     ]:
         with pytest.raises(ValueError):
             operation()
+
+
+@pytest.mark.parametrize("rows", [16, 17, 20, 24, 32, 33])
+def test_fp8_real_width_tile_boundary_is_deterministic(rows):
+    torch.manual_seed(rows)
+    x = torch.randn(rows, 5120, device="cuda", dtype=torch.bfloat16)
+    weight = torch.randn(256, 5120, device="cuda").to(torch.float8_e4m3fn)
+    scale = torch.rand(2, 40, device="cuda") * 0.01
+    quantized, activation_scale = fp8.quantize(x)
+    restored_x = (
+        quantized.cpu().double()
+        * activation_scale.cpu().double().repeat_interleave(128, 1)
+    )
+    restored_w = weight.cpu().double() * scale.cpu().double().repeat_interleave(
+        128, 0
+    ).repeat_interleave(128, 1)
+    expected = restored_x @ restored_w.T
+    first = fp8.linear(x, weight, scale)
+    check(first, expected)
+    for _ in range(3):
+        repeated = fp8.linear(x, weight, scale)
+        torch.testing.assert_close(repeated, first, rtol=0, atol=0)

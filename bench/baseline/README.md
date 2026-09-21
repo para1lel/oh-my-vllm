@@ -30,3 +30,8 @@ identity is explicit; these are semantic smoke results, not throughput data.
 milestone: new-environment operator/CPU tests, short eager model output and the
 transitional adapter's MTP4 service checks. It is not the final migration
 acceptance or a replacement performance baseline.
+
+`2026-09-21-independent-stage2.json` records independent Worker/MTP/graph
+correctness, the FP8 backend defect and fix, final real service/probe results and
+one explicitly non-acceptance throughput diagnostic. The default adapter removal,
+real independent oh-my-pi tasks and final monitored nine-row matrix remain pending.

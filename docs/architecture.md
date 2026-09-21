@@ -4,6 +4,33 @@ _Updated: 2026-09-21. See handoff.md for verification evidence._
 
 ---
 
+## Independent execution path (migration in progress)
+
+`OH_MY_VLLM_INDEPENDENT=1` selects `worker/independent_runner.py` with the
+`oh-my-vllm` Python environment. The default remains the transitional V2 adapter
+until final migration checks. Rust owns all logical allocations and token history.
+The independent Worker validates allocations in `batch_plan.py`, runs the concrete
+Qwen model, commits accepted GDN/conv state and returns target samples and MTP drafts.
+
+MTP cache row p combines target hidden[p-1] with token[p], using a uniform +1
+RoPE shift and excluding absent row zero from attention. This makes cached rows
+match Rust's prefix hashes. Target hidden at each 784-token boundary is retained
+with its FA page. A missing next page defers the boundary row and shortens drafts;
+it does not allocate pages outside Rust. Accepted cross-boundary state snapshots
+are copied into their checkpoint slots before subsequent requests can reuse them.
+
+Decode and MTP CUDA graphs own stable input buffers. Warmup/capture snapshots all
+FA/state destinations and restores them before the first real replay. Request IDs,
+positions, page tables and state slots are dynamic. Prefill remains eager; graph
+storage is bounded to 32 shapes per target/proposer cache, with eager fallback.
+
+FP8 uses independent FlashInfer TRT-LLM kernels for <=32 rows, with column-major
+activation scales and row-major checkpoint scales. Larger inputs use CUTLASS with
+row-major scales. CUTLASS SM100's 17..32-row low-latency path produced nondeterministic
+wrong results, so it is never selected. Actual-width repeated FP64 tests cover the
+16/17/20/24/32/33 transition. GDN, convolution, normalization, RoPE, paged decode and
+pointwise fusions are project-owned Triton kernels; long GDN/FA prefill uses FlashInfer.
+
 ## 1. Implemented architecture (code-observed)
 
 ```
@@ -180,11 +207,12 @@ and the ZMQ contract. The current service still uses the V2 adapter above. New
 convolution, normalization and rotary embedding, with independent FlashInfer
 operators for FP8 GEMM, paged attention and chunked GDN prefill. `models/qwen.py`
 loads the concrete checkpoint directly from safetensors and composes these
-operators; it is currently an eager diagnostic path, not the production runner.
+operators for the opt-in independent Worker described above.
 
 Service preparation/detokenization now uses Hugging Face Tokenizers and XGrammar
 directly, with framework-owned sampling configuration. The transitional adapter
 converts that configuration at its vLLM boundary. The standalone target sampler
 applies penalties and grammar masks per draft prefix, accepts deterministic
 drafts until the first target-sample mismatch, and commits only retained tokens.
-Production cache planning, MTP execution and graph integration are still pending.
+Independent cache planning, MTP execution and graphs are implemented. The default
+switchover and removal of the transitional adapter remain pending.

@@ -229,6 +229,26 @@ def serve(socket_addr: str) -> None:
 
 def _handle_init(msg: dict) -> OhMyVllmWorker:
     """Build a VllmConfig and initialise the worker from an 'init' message."""
+    if os.environ.get("OH_MY_VLLM_INDEPENDENT") == "1":
+        from oh_my_vllm.worker.independent_runner import (
+            IndependentWorker,
+            RuntimeConfig,
+        )
+
+        if msg.get("block_size", 784) != 784 or msg.get("tensor_parallel_size", 1) != 1:
+            raise ValueError("independent runtime requires block784 and one GPU")
+        worker = IndependentWorker(
+            RuntimeConfig(
+                msg["model_path"],
+                msg.get("max_model_len", 65536),
+                msg["num_gpu_blocks"],
+                msg.get("num_speculative_tokens", 0),
+            )
+        )
+        worker.init_device()
+        worker.load_model()
+        worker.initialize_cache()
+        return worker
     # This project only implements the V2 contract. Never silently select V1.
     if os.environ.get("VLLM_USE_V2_MODEL_RUNNER", "1") != "1":
         raise ValueError("oh-my-vllm requires VLLM_USE_V2_MODEL_RUNNER=1")

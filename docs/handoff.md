@@ -7,6 +7,8 @@ unchanged. Final builds/tests/inference must not depend on vLLM, its source, old
 environment or compiled cache artifacts. Intermediate stages may retain vLLM.
 Only the original frozen EngineCore baseline is an acceptance reference.
 
+### Stage 1 (completed before Worker integration)
+
 First milestone: establish stable dependencies in conda oh-my-vllm and validate
 independent FP8, GQA and GDN/MTP state operators against CPU references. The new
 operator modules are not yet the production execution path. The 80-package stable
@@ -32,6 +34,34 @@ bench/baseline/2026-09-21-independent-stage1.json. Production MTP, graph integra
 actual-model FP64 and final acceptance remain pending.
 Existing V2 service still defaults to the old environment until replacement. Do
 not claim full runtime independence or performance acceptance yet.
+
+## Independent Worker integration milestone
+
+The opt-in independent Worker now executes Rust schedules, owns concrete model
+computation and preserves Rust's logical allocations. Host planning checks accepted
+history, physical state aliases and 784-token checkpoint copies. Shifted MTP cache
+rows preserve prefix immutability, restore boundary hidden features and shorten
+proposals when Rust has not yet allocated the next page. Target/draft graphs restore
+all touched state after warmup/capture; dedicated CUDA tests cover in-place state
+and recurrent reuse of a graph's output.
+
+Ordinary/MTP text, MTP prefix+five-preemption batches, twelve real constrained API
+cases and full service lifecycle pass. A real arithmetic failure exposed
+nondeterministic FlashInfer CUTLASS SM100 FP8 results for 17..32 rows; the final
+small-matrix path uses independently validated TRT-LLM kernels and their distinct
+activation-scale layout. Seventeen operator, three paged-decode, three pointwise,
+and two graph GPU tests pass. Final ordinary/MTP actual-input FP64 probes pass
+unchanged tolerances. Rust75 tests, fmt/width/clippy and ruff pass. Transitional CPU
+suite:58 pass,2 GPU tests skipped there (run separately in the target environment).
+The full CPU suite still needs the old environment only for legacy adapter tests.
+
+A one-warmup/one-measurement diagnostic ordinary32K->4096 run reached94.499tok/s.
+This is not the monitored clean-commit acceptance matrix. Final nine-row performance,
+both independent oh-my-pi tasks, removal of the old default/environment/legacy tests
+and final documentation reconciliation remain pending. Evidence is in
+bench/baseline/2026-09-21-independent-stage2.json. All task-owned GPU processes exited
+and port18012 is released. Continue implementation; do not treat this milestone as
+completion of ADR-006.
 
 ## Previous migration — V2 complete and verified
 

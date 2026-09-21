@@ -15,7 +15,9 @@
    performance matrix against only the original frozen EngineCore baseline.
    Reconcile documents, obtain independent review, commit and push `main`.
 
-The environment/operator milestone is validated; production migration continues.
+The environment/operator and independent Worker integration are validated.
+MTP4, prefix/preemption, graphs and real constraint/lifecycle cases pass.
+Runtime-default removal, final oh-my-pi tasks and performance acceptance continue.
 Intermediate use of the old adapter is
 explicitly allowed; it is not evidence of final independence. Future model,
 NVIDIA backend, single-node multi-GPU and local DSpark extension points are

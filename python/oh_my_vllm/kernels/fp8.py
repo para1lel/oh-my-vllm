@@ -6,7 +6,9 @@ import triton.language as tl
 
 
 @triton.jit
-def _quantize(X, Q, Scales, Rows: tl.constexpr, Width: tl.constexpr):
+def _quantize(
+    X, Q, Scales, Rows: tl.constexpr, Width: tl.constexpr, Column: tl.constexpr
+):
     row = tl.program_id(0)
     group = tl.program_id(1)
     columns = group * 128 + tl.arange(0, 128)
@@ -16,10 +18,13 @@ def _quantize(X, Q, Scales, Rows: tl.constexpr, Width: tl.constexpr):
     tl.store(Q + row * Width + columns, quantized)
     # CUTLASS K-major uses contiguous K groups, despite FlashInfer 0.6.18
     # describing this argument as column-major. Multi-row FP64 tests cover it.
-    tl.store(Scales + row * (Width // 128) + group, scale)
+    offset = group * Rows + row if Column else row * (Width // 128) + group
+    tl.store(Scales + offset, scale)
 
 
-def quantize(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def quantize(
+    x: torch.Tensor, *, column_major: bool = False
+) -> tuple[torch.Tensor, torch.Tensor]:
     if x.dtype not in (torch.bfloat16, torch.float16, torch.float32):
         raise ValueError("FP8 input must be BF16, FP16 or FP32")
     if (
@@ -34,8 +39,11 @@ def quantize(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         )
     rows, width = x.shape
     data = torch.empty_like(x, dtype=torch.float8_e4m3fn)
-    scales = torch.empty((rows, width // 128), dtype=torch.float32, device=x.device)
-    _quantize[(rows, width // 128)](x, data, scales, rows, width)
+    shape = (width // 128, rows) if column_major else (rows, width // 128)
+    scales = torch.empty(shape, dtype=torch.float32, device=x.device)
+    if column_major:
+        scales = scales.T
+    _quantize[(rows, width // 128)](x, data, scales, rows, width, column_major)
     return data, scales
 
 
@@ -61,7 +69,11 @@ def linear(
         raise ValueError(
             "FP8 weights/scales must be contiguous on the input GPU, scales FP32"
         )
-    data, scale = quantize(x)
+    # TRT-LLM's independent FlashInfer backend is faster for decode and avoids
+    # CUTLASS SM100's nondeterministic 17..32-row low-latency path. Its activation
+    # scales are column-major; checkpoint weight scales remain row-major.
+    small = x.shape[0] <= 32
+    data, scale = quantize(x, column_major=small)
     return gemm_fp8_nt_groupwise(
         data,
         weight,
@@ -69,5 +81,5 @@ def linear(
         weight_scale,
         scale_major_mode="K",
         out_dtype=torch.bfloat16,
-        backend="cutlass",
+        backend="trtllm" if small else "cutlass",
     )

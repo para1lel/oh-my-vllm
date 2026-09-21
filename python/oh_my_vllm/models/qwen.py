@@ -16,6 +16,8 @@ from safetensors import safe_open
 
 from oh_my_vllm.kernels import attention, fp8, gdn
 from oh_my_vllm.kernels.convolution import causal_conv
+from oh_my_vllm.kernels.elementwise import delta_gates, silu_mul
+from oh_my_vllm.kernels.mtp_attention import MTPAttention
 from oh_my_vllm.kernels.normalization import rms_norm, rotary
 
 LayerCache = torch.Tensor | tuple[torch.Tensor, torch.Tensor]
@@ -67,15 +69,19 @@ class Linear:
 
 
 @dataclass
-class Batch:
+class AttentionBatch:
     positions: torch.Tensor
+    fa_slots: torch.Tensor
+    attention: attention.PagedAttention | MTPAttention
+
+
+@dataclass
+class Batch(AttentionBatch):
     starts: torch.Tensor
     sequence_ids: torch.Tensor
     state_reads: torch.Tensor
     state_writes: torch.Tensor
     final_state_writes: torch.Tensor
-    fa_slots: torch.Tensor
-    attention: attention.PagedAttention
     prefill_sequences: int
     prefill_tokens: int
 
@@ -140,7 +146,7 @@ class Layer:
             self.out = checkpoint.linear(p + ".out_proj")
 
     def full_attention(
-        self, x: torch.Tensor, batch: Batch, cache: torch.Tensor
+        self, x: torch.Tensor, batch: AttentionBatch, cache: torch.Tensor
     ) -> torch.Tensor:
         qg, k, v = self.qkv(x).split([12288, 1024, 1024], -1)
         q, gate = qg.reshape(-1, 24, 512).chunk(2, -1)
@@ -171,9 +177,7 @@ class Layer:
             k.reshape(-1, 16, 128).contiguous(),
             v.reshape(-1, 48, 128).contiguous(),
         )
-        b, a = self.ba(x).float().chunk(2, -1)
-        decay = (-self.a_log.exp() * F.softplus(a + self.dt_bias)).contiguous()
-        beta = b.sigmoid().contiguous()
+        decay, beta = delta_gates(self.ba(x), self.a_log, self.dt_bias)
         out = batch.delta(q, k, v, decay, beta, state_pool)
         out = rms_norm(out, self.gate_norm, gate=z.reshape(-1, 48, 128))
         return self.out(out.flatten(1))
@@ -187,8 +191,8 @@ class Layer:
         else:
             result = self.delta_attention(normalized, batch, cache)
         x = x + result
-        gate, up = self.gate_up(rms_norm(x, self.post_norm)).chunk(2, -1)
-        return x + self.down(F.silu(gate) * up)
+        packed = self.gate_up(rms_norm(x, self.post_norm))
+        return x + self.down(silu_mul(packed))
 
 
 class Qwen:
@@ -269,7 +273,7 @@ class Qwen:
         self,
         tokens: torch.Tensor,
         hidden: torch.Tensor,
-        batch: Batch,
+        batch: AttentionBatch,
         cache: torch.Tensor,
     ) -> torch.Tensor:
         embedded = rms_norm(

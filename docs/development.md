@@ -40,6 +40,22 @@ the historical baseline.
 The ignored .vscode/settings.json selects conda oh-my-vllm for Python analysis
 and adds ${workspaceFolder}/python. Execution of GPUWorker still uses conda vllm.
 
+## Independent Worker during migration
+
+To exercise the new Worker, add these settings after `scripts/with-env.sh`:
+
+```bash
+env OH_MY_VLLM_INDEPENDENT=1 \
+  OH_MY_VLLM_WORKER_PYTHON=/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python \
+  FLASHINFER_WORKSPACE_BASE=/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent \
+  TRITON_CACHE_DIR=/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent/triton
+```
+
+GPU commands still start with `scripts/with-gpu.sh`. These independent caches were
+built without old vLLM artifacts; FlashInfer downloads its own versioned NVIDIA
+GEMM cubins on first use. `OH_MY_VLLM_ENFORCE_EAGER=1` disables both target and MTP
+graphs for diagnostics. Never use that override for throughput acceptance.
+
 ## Build and checks
 
 The Rust workspace uses edition2024 and the existing conda toolchain.
