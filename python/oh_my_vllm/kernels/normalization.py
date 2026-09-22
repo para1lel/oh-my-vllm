@@ -15,15 +15,24 @@ def _rms(
     Eps: tl.constexpr,
     Gated: tl.constexpr,
     Block: tl.constexpr,
+    Heads: tl.constexpr,
+    XS: tl.constexpr,
+    XH: tl.constexpr,
+    XD: tl.constexpr,
+    GS: tl.constexpr,
+    GH: tl.constexpr,
+    GD: tl.constexpr,
 ):
     row = tl.program_id(0)
     col = tl.arange(0, Block)
-    x = tl.load(X + row * D + col, col < D, 0).to(tl.float32)
+    offset = row // Heads * XS + row % Heads * XH + col * XD
+    x = tl.load(X + offset, col < D, 0).to(tl.float32)
     inv = tl.rsqrt(tl.sum(x * x, 0) / D + Eps)
     w = tl.load(Weight + col, col < D, 0).to(tl.float32)
     value = x * inv * w
     if Gated:
-        gate = tl.load(Gate + row * D + col, col < D, 0).to(tl.float32)
+        offset_gate = row // Heads * GS + row % Heads * GH + col * GD
+        gate = tl.load(Gate + offset_gate, col < D, 0).to(tl.float32)
         value *= gate * tl.sigmoid(gate)
     tl.store(Out + row * D + col, value, col < D)
 
@@ -48,10 +57,17 @@ def rms_norm(
         raise ValueError("RMS normalization tensors must share one CUDA device")
     if not weight.is_contiguous():
         raise ValueError("RMS normalization weight must be contiguous")
-    x = x.contiguous()
-    out = torch.empty_like(x)
-    if gate is not None:
-        gate = gate.contiguous()
+    out = torch.empty(x.shape, device=x.device, dtype=x.dtype)
+
+    # Preserve packed projection views; flatten only uncommon higher-rank inputs.
+    def rows(tensor):
+        if tensor.ndim == 3:
+            return tensor
+        return tensor.reshape(-1, 1, tensor.shape[-1])
+
+    x = rows(x)
+    gate = rows(gate) if gate is not None else None
+    gs = gate.stride() if gate is not None else (0, 0, 0)
     _rms[(x.numel() // x.shape[-1],)](
         x,
         weight,
@@ -61,6 +77,9 @@ def rms_norm(
         epsilon,
         gate is not None,
         triton.next_power_of_2(x.shape[-1]),
+        x.shape[1],
+        *x.stride(),
+        *gs,
     )
     return out
 

@@ -163,7 +163,7 @@ class Layer:
         conv_pool, state_pool = cache
         mixed, z = self.qkvz(x).split([10240, 6144], -1)
         mixed = causal_conv(
-            mixed.contiguous(),
+            mixed,
             self.conv,
             conv_pool,
             batch.sequence_ids,
@@ -173,9 +173,9 @@ class Layer:
         )
         q, k, v = mixed.split([2048, 2048, 6144], -1)
         q, k, v = (
-            q.reshape(-1, 16, 128).contiguous(),
-            k.reshape(-1, 16, 128).contiguous(),
-            v.reshape(-1, 48, 128).contiguous(),
+            q.reshape(-1, 16, 128),
+            k.reshape(-1, 16, 128),
+            v.reshape(-1, 48, 128),
         )
         decay, beta = delta_gates(self.ba(x), self.a_log, self.dt_bias)
         out = batch.delta(q, k, v, decay, beta, state_pool)

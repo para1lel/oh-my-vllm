@@ -16,7 +16,7 @@ from oh_my_vllm.kernels.mtp_attention import MTPAttention
 from oh_my_vllm.models.qwen import AttentionBatch, Qwen
 from oh_my_vllm.worker.batch_plan import BLOCK, PlannedRequest
 from oh_my_vllm.worker.protocol import RequestOutput
-from oh_my_vllm.worker.tensors import device_tensor
+from oh_my_vllm.worker.tensors import device_tensor, device_vectors
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +56,10 @@ class MTP:
             for i, table in enumerate(tables)
             for p in positions[starts[i] : starts[i + 1]]
         ]
-        batch = AttentionBatch(
-            device_tensor(positions, device=self.device),
-            device_tensor(slots, device=self.device),
-            self.attention,
+        position_tensor, slot_tensor, token_tensor = device_vectors(
+            [positions, slots, tokens], device=self.device
         )
-        token_tensor = device_tensor(tokens, device=self.device)
+        batch = AttentionBatch(position_tensor, slot_tensor, self.attention)
         if decode_mode and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1":
             from oh_my_vllm.worker.decode_graph import DraftGraph
 

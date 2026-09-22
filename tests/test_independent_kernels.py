@@ -52,19 +52,26 @@ def check(actual, expected, state=False):
         torch.testing.assert_close(actual, expected, atol=0.03, rtol=0.03)
 
 
-def inputs(tokens):
+def inputs(tokens, strided=False):
     q = torch.randn(tokens, 16, 128, device="cuda", dtype=torch.bfloat16)
     k = torch.randn_like(q)
     v = torch.randn(tokens, 48, 128, device="cuda", dtype=torch.bfloat16)
+    if strided:
+        packed = torch.cat((q.flatten(1), k.flatten(1), v.flatten(1)), dim=1)
+        q, k, v = (
+            part.reshape(tokens, -1, 128)
+            for part in packed.split([2048, 2048, 6144], dim=1)
+        )
     g = -torch.rand(tokens, 48, device="cuda")
     beta = torch.rand_like(g)
     return q, k, v, g, beta
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
-def test_ragged_mtp_snapshots_and_prefix_isolation(dtype):
+@pytest.mark.parametrize("strided", [False, True])
+def test_ragged_mtp_snapshots_and_prefix_isolation(dtype, strided):
     torch.manual_seed(19)
-    q, k, v, g, beta = inputs(6)
+    q, k, v, g, beta = inputs(6, strided)
     pool = torch.randn(12, 48, 128, 128, device="cuda", dtype=dtype) * 0.05
     before = pool.clone()
     # Distinct source rows, ragged verification lengths 1 and 5, noncontiguous
@@ -107,9 +114,10 @@ def test_ragged_mtp_snapshots_and_prefix_isolation(dtype):
 
 
 @pytest.mark.parametrize("length", [17, 784, 785])
-def test_prefill_state(length):
+@pytest.mark.parametrize("strided", [False, True])
+def test_prefill_state(length, strided):
     torch.manual_seed(length)
-    q, k, v, g, beta = inputs(length)
+    q, k, v, g, beta = inputs(length, strided)
     initial = torch.randn(1, 48, 128, 128, device="cuda") * 0.05
     starts = torch.tensor([0, length], device="cuda", dtype=torch.int32)
     out, state = gdn.prefill(q, k, v, g, beta, initial, starts)
@@ -223,11 +231,14 @@ def test_long_prefill_keeps_ragged_requests_isolated():
     check(plan(query, cache), expected)
 
 
-def test_convolution_ragged_snapshots():
+@pytest.mark.parametrize("strided", [False, True])
+def test_convolution_ragged_snapshots(strided):
     from oh_my_vllm.kernels.convolution import causal_conv
 
     torch.manual_seed(11)
     x = torch.randn(790, 10240, device="cuda", dtype=torch.bfloat16)
+    if strided:
+        x = torch.cat((x, torch.zeros_like(x)), dim=1)[:, :10240]
     weights = torch.randn(10240, 4, device="cuda", dtype=torch.bfloat16)
     pool = torch.randn(10, 10240, 3, device="cuda", dtype=torch.bfloat16)
     before = pool.clone()
@@ -260,13 +271,17 @@ def test_convolution_ragged_snapshots():
     torch.testing.assert_close(pool[[1, 2]], before[[1, 2]])
 
 
-def test_normalization_and_partial_rotary():
+@pytest.mark.parametrize("strided", [False, True])
+def test_normalization_and_partial_rotary(strided):
     from oh_my_vllm.kernels.normalization import rms_norm, rotary
 
     torch.manual_seed(71)
     x = torch.randn(3, 24, 256, device="cuda", dtype=torch.bfloat16)
     weight = torch.randn(256, device="cuda") + 1
     gate = torch.randn_like(x)
+    if strided:
+        x = torch.cat((x, torch.zeros_like(x)), dim=-1)[..., :256]
+        gate = torch.cat((gate, torch.zeros_like(gate)), dim=1)[:, :24]
     xc, wc, gc = (t.cpu().double() for t in (x, weight, gate))
     expected = xc * torch.rsqrt(xc.square().mean(-1, keepdim=True) + 1e-6) * wc
     check(rms_norm(x, weight), expected)

@@ -26,6 +26,9 @@ def _recurrent(
     HV: tl.constexpr,
     D: tl.constexpr,
     BV: tl.constexpr,
+    QS: tl.constexpr,
+    KS: tl.constexpr,
+    VS: tl.constexpr,
 ):
     seq = tl.program_id(0)
     head = tl.program_id(1)
@@ -38,11 +41,11 @@ def _recurrent(
     offsets = (head * D + vd[:, None]) * D + kd[None, :]
     state = tl.load(Pool + source * HV * D * D + offsets).to(tl.float32)
     for token in range(first, end):
-        q = tl.load(Q + (token * HQ + qhead) * D + kd).to(tl.float32)
-        k = tl.load(K + (token * HQ + qhead) * D + kd).to(tl.float32)
+        q = tl.load(Q + token * QS + qhead * D + kd).to(tl.float32)
+        k = tl.load(K + token * KS + qhead * D + kd).to(tl.float32)
         q *= tl.rsqrt(tl.sum(q * q, 0) + 1e-6) * (D**-0.5)
         k *= tl.rsqrt(tl.sum(k * k, 0) + 1e-6)
-        v = tl.load(V + (token * HV + head) * D + vd).to(tl.float32)
+        v = tl.load(V + token * VS + head * D + vd).to(tl.float32)
         decay = tl.exp(tl.load(G + token * HV + head))
         beta = tl.load(Beta + token * HV + head)
         state *= decay
@@ -53,6 +56,18 @@ def _recurrent(
         target = tl.load(WriteSlots + token)
         # Negative destinations allow outputs without committing a snapshot.
         tl.store(Pool + target * HV * D * D + offsets, state, target >= 0)
+
+
+def _validate_rows(tensor: torch.Tensor) -> None:
+    if (
+        not tensor.is_cuda
+        or tensor.stride(2) != 1
+        or tensor.stride(1) != tensor.shape[2]
+        or tensor.stride(0) < tensor.shape[1] * tensor.shape[2]
+    ):
+        raise ValueError(
+            "GDN requires dense head rows with non-overlapping token strides"
+        )
 
 
 def recurrent(
@@ -90,7 +105,11 @@ def recurrent(
         raise ValueError("GDN sequence offsets do not match read slots")
     if write_slots.numel() != q.shape[0]:
         raise ValueError("GDN requires one candidate state slot per token")
-    tensors = (q, k, v, log_decay, beta, pool, starts, read_slots, write_slots)
+    tensors = (log_decay, beta, pool, starts, read_slots, write_slots)
+    for tensor in (q, k, v):
+        _validate_rows(tensor)
+        if tensor.device != q.device:
+            raise ValueError("GDN tensors must share one CUDA device")
     if any(t.dtype != torch.bfloat16 for t in (q, k, v)):
         raise ValueError("GDN q/k/v must be BF16")
     if any(t.dtype != torch.float32 for t in (log_decay, beta)):
@@ -106,7 +125,7 @@ def recurrent(
         not t.is_cuda or not t.is_contiguous() or t.device != q.device for t in tensors
     ):
         raise ValueError("GDN tensors must be contiguous on the same CUDA device")
-    output = torch.empty_like(v)
+    output = torch.empty(v.shape, device=v.device, dtype=v.dtype)
     _recurrent[(read_slots.numel(), v.shape[1], 8)](
         q,
         k,
@@ -122,6 +141,9 @@ def recurrent(
         v.shape[1],
         128,
         16,
+        q.stride(0),
+        k.stride(0),
+        v.stride(0),
     )
     return output
 
@@ -163,9 +185,14 @@ def prefill(
         raise ValueError("GDN prefill requires BF16 q/k/v and FP32 gates/state")
     if any(
         not t.is_cuda or t.device != q.device or not t.is_contiguous()
-        for t in (q, k, v, log_decay, beta, initial_state, starts)
+        for t in (log_decay, beta, initial_state, starts)
     ):
         raise ValueError("GDN prefill tensors must be contiguous on one CUDA device")
+
+    for tensor in (q, k, v):
+        _validate_rows(tensor)
+        if tensor.device != q.device:
+            raise ValueError("GDN tensors must share one CUDA device")
 
     # FlashInfer 0.6.18 exposes use_qk_l2norm_in_kernel but its prefill body
     # does not implement it. Normalize explicitly, including the model epsilon.

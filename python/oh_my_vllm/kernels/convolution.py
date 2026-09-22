@@ -16,6 +16,7 @@ def _conv(
     Writes,
     Out,
     C: tl.constexpr,
+    XStride: tl.constexpr,
     BC: tl.constexpr,
     Tokens: tl.constexpr,
     BT: tl.constexpr,
@@ -30,7 +31,7 @@ def _conv(
     for tap in tl.static_range(4):
         pos = token + tap - 3
         x = tl.load(
-            X + pos * C + channels, valid & (pos >= first) & (channels < C), 0
+            X + pos * XStride + channels, valid & (pos >= first) & (channels < C), 0
         ).to(tl.float32)
         old = tl.load(
             Sources + (seq * C + channels) * 3 + pos - first + 3,
@@ -78,13 +79,19 @@ def causal_conv(
     metadata = (sequence_ids, starts, read_slots, write_slots)
     if any(t.ndim != 1 or t.dtype not in (torch.int32, torch.int64) for t in metadata):
         raise ValueError("convolution metadata must be integer vectors")
-    tensors = (x, weight, pool, *metadata)
+    if x.stride(1) != 1 or x.stride(0) < x.shape[1]:
+        raise ValueError(
+            "convolution rows must be non-overlapping with unit channel stride"
+        )
+    tensors = (weight, pool, *metadata)
     if any(
         not t.is_cuda or t.device != x.device or not t.is_contiguous() for t in tensors
     ):
         raise ValueError("convolution tensors must be contiguous on one CUDA device")
+    if not x.is_cuda or x.device != pool.device:
+        raise ValueError("convolution inputs must share the pool CUDA device")
     sources = pool.index_select(0, read_slots)
-    out = torch.empty_like(x)
+    out = torch.empty(x.shape, device=x.device, dtype=x.dtype)
     # Tile long-prefill rows to amortize CTA scheduling; decode retains one row.
     rows = 8 if len(x) >= 128 else 1
     _conv[(triton.cdiv(len(x), rows), triton.cdiv(x.shape[1], 128))](
@@ -97,6 +104,7 @@ def causal_conv(
         write_slots,
         out,
         x.shape[1],
+        x.stride(0),
         128,
         len(x),
         rows,

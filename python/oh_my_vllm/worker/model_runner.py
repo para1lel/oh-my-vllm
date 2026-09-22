@@ -14,7 +14,7 @@ from oh_my_vllm.worker.runtime import identity, verify_loaded_modules
 from oh_my_vllm.worker.sampler import RequestSampler, greedy_rows, verify_rows
 from oh_my_vllm.worker.sampling import SamplingParams
 from oh_my_vllm.worker.serving import ServingAdapter
-from oh_my_vllm.worker.tensors import device_tensor
+from oh_my_vllm.worker.tensors import device_tensor, device_vectors
 
 logger = logging.getLogger(__name__)
 
@@ -223,23 +223,32 @@ class OhMyVllmWorker:
                 4,
                 256,
             )
+        metadata = device_vectors(
+            [
+                positions,
+                starts,
+                sequence_ids,
+                [p.source for p in plans],
+                writes,
+                [p.writes[-1] for p in plans],
+                slots,
+                ids,
+            ]
+        )
         batch = Batch(
-            positions=device_tensor(positions, device="cuda"),
-            starts=cpu_starts.cuda(non_blocking=True),
-            sequence_ids=device_tensor(sequence_ids, dtype=torch.int32, device="cuda"),
-            state_reads=device_tensor(
-                [p.source for p in plans], dtype=torch.int32, device="cuda"
-            ),
-            state_writes=device_tensor(writes, dtype=torch.int32, device="cuda"),
-            final_state_writes=device_tensor(
-                [p.writes[-1] for p in plans], device="cuda"
-            ),
-            fa_slots=device_tensor(slots, device="cuda"),
+            positions=metadata[0],
+            # FlashInfer prefill consumes int32 offsets; convert once per batch.
+            starts=metadata[1].to(torch.int32),
+            sequence_ids=metadata[2],
+            state_reads=metadata[3],
+            state_writes=metadata[4],
+            final_state_writes=metadata[5],
+            fa_slots=metadata[6],
             attention=self.attention,
             prefill_sequences=sum(p.prefill for p in plans),
             prefill_tokens=sum(len(p.writes) for p in plans if p.prefill),
         )
-        token_tensor = device_tensor(ids, device="cuda")
+        token_tensor = metadata[7]
         graph_logits = None
         if use_graph:
             from oh_my_vllm.worker.decode_graph import DecodeGraph

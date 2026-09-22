@@ -163,3 +163,10 @@ Long-prefill pointwise work uses eight-token convolution tiles and larger SiLU
 blocks; short decode retains its original tile sizes. Large gate/up projections
 use the independent CUTLASS dual-SM GEMM. BF16 rounding and per-token FP8 scales
 are unchanged and checked against FP64 references.
+
+Convolution, GDN recurrence and RMS normalization accept packed projection views
+with explicit token/head strides. Outputs remain dense and recurrent source
+snapshots retain their isolation guarantees. Host integer metadata is copied in
+one buffer per target/draft group, whose device views retain the backing storage.
+Graph inputs still copy into persistent buffers; GDN prefill starts are converted
+once to int32 before layer execution.

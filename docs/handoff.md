@@ -73,6 +73,15 @@ baseline step-count diagnostic found 898 steps versus our 899, pointing to
 per-step cost rather than acceptance rate. Alternate private GEMM tactics
 triggered illegal access in a temporary prototype and are not used in runtime.
 
+Packed GDN/convolution/RMS inputs now retain their token/head strides; target
+and draft metadata transfers are grouped. Review requested a single int32 starts
+conversion per batch to avoid repeated FlashInfer casts; implemented. GPU suite
+120 tests +12 subtests, actual MTP FP64, all 12 service constraints, lifecycle
+and 131099-input prefix checks pass. Service18017 exited/released. Diagnostics
+improved MTP bs1/2 to305.86/450.65 tok/s, still below their new baseline gates.
+See 2026-09-22-strided-metadata.json. Prefix2 baseline continues to retry after
+variance failures and repeated unrelated GPU entrants; user authorized retries.
+
 ## Previous task: independent runtime
 
 The independent runtime is implemented and all nine performance rows pass the
