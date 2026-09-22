@@ -1,5 +1,22 @@
 # Handoff — 2026-09-22
 
+## Medium residual RMS cache policy
+
+Only2048–4095-row residual RMS now uses a streaming store cache hint for its two
+outputs. This preserves the stored BF16 bits and stream visibility while reducing
+input eviction in the operator workload. The26-case dirty-source RMS diagnostic
+passes all decisions; the previously failing2496-row case saves about1.30us in
+paired mean latency. This is not complete operator/framework acceptance, and
+possible downstream cache misses still require the final end-to-end gates.
+
+Full CUDA correctness passes160 tests plus28 subtests, and FP64 boundary checks
+at2047/2048/4095/4096 rows pass with exact residual sums. A compiler incompatibility
+in the first packing intrinsic was fixed before these successful reruns; its test
+process was stopped. Independent review, separate TileFoundry/Nsight observations
+and all-file checks pass. Evidence is in
+`bench/baseline/2026-09-22-cuda-rms-stream-progress.json`.
+All owned GPU programs exited. Default remains TileLang; migration continues.
+
 ## Gated RMS specialization and complete-matrix update
 
 Clean d45c4f2 completes all173 cases:111 pass,62 fail, with no detected GPU

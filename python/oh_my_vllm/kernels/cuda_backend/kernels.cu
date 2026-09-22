@@ -221,7 +221,25 @@ template <typename T, int Vector>
 __device__ AlignedVector<T, Vector> load_aligned_vector(const T *p) {
   return *reinterpret_cast<const AlignedVector<T, Vector> *>(p);
 }
-template <bool Residual, int Threads, int Vector>
+template <int Vector, bool Streaming>
+__device__ void store_rms_vector(__nv_bfloat16 *destination,
+                                 AlignedVector<__nv_bfloat16, Vector> value) {
+  if constexpr (Streaming) {
+    static_assert(Vector == 4);
+    // Medium residual batches otherwise evict reused inputs with both outputs.
+    // The cache hint changes eviction priority, not visibility or stored bits.
+    unsigned lo = static_cast<unsigned>(__bfloat16_as_ushort(value.value[0])) |
+                  (static_cast<unsigned>(__bfloat16_as_ushort(value.value[1])) << 16);
+    unsigned hi = static_cast<unsigned>(__bfloat16_as_ushort(value.value[2])) |
+                  (static_cast<unsigned>(__bfloat16_as_ushort(value.value[3])) << 16);
+    asm volatile("st.global.cs.v2.u32 [%0], {%1,%2};" ::"l"(destination), "r"(lo), "r"(hi)
+                 : "memory");
+  } else {
+    *reinterpret_cast<AlignedVector<__nv_bfloat16, Vector> *>(destination) = value;
+  }
+}
+
+template <bool Residual, int Threads, int Vector, bool Streaming>
 __global__ void rms5120_kernel(const __nv_bfloat16 *__restrict__ x,
                                const __nv_bfloat16 *__restrict__ residual,
                                const float *__restrict__ w,
@@ -256,8 +274,7 @@ __global__ void rms5120_kernel(const __nv_bfloat16 *__restrict__ x,
       total += v * v;
     }
     if constexpr (Residual)
-      *reinterpret_cast<AlignedVector<__nv_bfloat16, Vector> *>(
-          summed + static_cast<int64_t>(row) * 5120 + col) = q;
+      store_rms_vector<Vector, Streaming>(summed + static_cast<int64_t>(row) * 5120 + col, q);
   }
   total = warp_sum(total);
   __shared__ float partial[Threads / 32];
@@ -275,8 +292,7 @@ __global__ void rms5120_kernel(const __nv_bfloat16 *__restrict__ x,
     for (int j = 0; j < Vector; ++j)
       value.value[j] =
           __float2bfloat16_rn(values[chunk][j] * inv * weight.value[j]);
-    *reinterpret_cast<AlignedVector<__nv_bfloat16, Vector> *>(
-        out + static_cast<int64_t>(row) * 5120 + col) = value;
+    store_rms_vector<Vector, Streaming>(out + static_cast<int64_t>(row) * 5120 + col, value);
   }
 }
 
@@ -290,8 +306,8 @@ void launch_rms5120(TensorView x, TensorView residual, TensorView weight,
                     TensorView out, TensorView summed, bool add,
                     float epsilon) {
   auto stream = stream_for(x);
-#define RMS5120(R, Threads, Vector)                                            \
-  rms5120_kernel<R, Threads, Vector><<<x.size(0), Threads, 0, stream>>>(       \
+#define RMS5120(R, Threads, Vector, Streaming)                                            \
+  rms5120_kernel<R, Threads, Vector, Streaming><<<x.size(0), Threads, 0, stream>>>(       \
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),                        \
       static_cast<const __nv_bfloat16 *>(residual.data_ptr()),                 \
       static_cast<const float *>(weight.data_ptr()),                           \
@@ -302,23 +318,23 @@ void launch_rms5120(TensorView x, TensorView residual, TensorView weight,
   if (x.size(0) >= 4096) {
     if (add) {
       if (aligned(x, 16) && aligned(residual, 16) && aligned(weight, 32)) {
-        RMS5120(true, 320, 8);
+        RMS5120(true, 320, 8, false);
       } else {
-        RMS5120(true, 320, 4);
+        RMS5120(true, 320, 4, false);
       }
     } else {
-      RMS5120(false, 160, 4);
+      RMS5120(false, 160, 4, false);
     }
   } else if (x.size(0) >= 2048) {
     if (add) {
-      RMS5120(true, 128, 4);
+      RMS5120(true, 128, 4, true);
     } else {
-      RMS5120(false, 128, 4);
+      RMS5120(false, 128, 4, false);
     }
   } else if (add) {
-    RMS5120(true, 256, 4);
+    RMS5120(true, 256, 4, false);
   } else {
-    RMS5120(false, 256, 4);
+    RMS5120(false, 256, 4, false);
   }
 #undef RMS5120
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess)
