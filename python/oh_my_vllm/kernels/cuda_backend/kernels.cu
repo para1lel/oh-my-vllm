@@ -825,16 +825,22 @@ attention_partial_kernel(const __nv_bfloat16 *__restrict__ query,
                      value_buffers + ((step + 1) % Buffers) * BK * 256);
     }
     float score[ScoreTiles][4] = {};
+#pragma unroll 8
+    for (int inner = 0; inner < 256; inner += 16) {
+      unsigned qa[BQ / 16][4], kb[BK / 32][2];
 #pragma unroll
-    for (int tile = 0; tile < ScoreTiles; ++tile) {
-      int column_tile = (tile * 4 + warp) % (BK / 8);
-      int row_base = (tile * 4 + warp) / (BK / 8) * 16;
-#pragma unroll 1
-      for (int inner = 0; inner < 256; inner += 16) {
-        unsigned qa[4], kb[2];
-        load_a(qa, q + row_base * 256, inner, lane);
-        load_k(kb, k, inner, column_tile, lane);
-        mma_bf16(score[tile], qa[0], qa[1], qa[2], qa[3], kb[0], kb[1]);
+      for (int rg = 0; rg < BQ / 16; ++rg)
+        load_a(qa[rg], q + rg * 16 * 256, inner, lane);
+#pragma unroll
+      for (int kt = 0; kt < BK / 32; ++kt)
+        load_k(kb[kt], k, inner, kt * 4 + warp, lane);
+#pragma unroll
+      for (int rg = 0; rg < BQ / 16; ++rg) {
+#pragma unroll
+        for (int kt = 0; kt < BK / 32; ++kt) {
+          mma_bf16(score[rg * (BK / 32) + kt], qa[rg][0], qa[rg][1], qa[rg][2], qa[rg][3],
+                   kb[kt][0], kb[kt][1]);
+        }
       }
     }
 #pragma unroll
@@ -902,16 +908,26 @@ attention_partial_kernel(const __nv_bfloat16 *__restrict__ query,
     }
 #pragma unroll
     for (int tile = 0; tile < AccTiles; ++tile) {
-      int row_base = (tile * 4 + warp) / 32 * 16;
+      // Four column warps make the row group independent of warp. Keep this
+      // index static so alpha and denominator remain register arrays.
+      int row_base = (tile / 8) * 16;
 #pragma unroll
       for (int j = 0; j < 4; ++j)
         acc[tile][j] *= alpha[row_base / 8 + j / 2];
+    }
 #pragma unroll
-      for (int inner = 0; inner < BK; inner += 16) {
-        unsigned pa[4], vb[2];
-        load_a(pa, p + row_base * 64, inner, lane, 64);
-        load_v(vb, v, inner, ((tile * 4 + warp) % 32) * 8, lane);
-        mma_bf16(acc[tile], pa[0], pa[1], pa[2], pa[3], vb[0], vb[1]);
+    for (int inner = 0; inner < BK; inner += 16) {
+      unsigned pa[BQ / 16][4];
+#pragma unroll
+      for (int rg = 0; rg < BQ / 16; ++rg)
+        load_a(pa[rg], p + rg * 16 * 64, inner, lane, 64);
+#pragma unroll
+      for (int ct = 0; ct < 8; ++ct) {
+        unsigned vb[2];
+        load_v(vb, v, inner, (ct * 4 + warp) * 8, lane);
+#pragma unroll
+        for (int rg = 0; rg < BQ / 16; ++rg)
+          mma_bf16(acc[rg * 8 + ct], pa[rg][0], pa[rg][1], pa[rg][2], pa[rg][3], vb[0], vb[1]);
       }
     }
     __syncthreads();
@@ -928,11 +944,11 @@ attention_partial_kernel(const __nv_bfloat16 *__restrict__ query,
   for (int tile = 0; tile < AccTiles; ++tile) {
 #pragma unroll
     for (int j = 0; j < 4; ++j) {
-      int rg = (tile * 4 + warp) / 32 * 2 + j / 2;
+      int rg = (tile / 8) * 2 + j / 2;
       int r = (rg / 2) * 16 + fr + (rg % 2) * 8;
       int qr = qbase + r, row = start + qr / ratio;
       if (row < end) {
-        int col = ((tile * 4 + warp) % 32) * 8 + fc + j % 2;
+        int col = ((tile % 8) * 4 + warp) * 8 + fc + j % 2;
         int64_t dst =
             ((static_cast<int64_t>(row) * h + kh * ratio + qr % ratio) * splits + split) * 256 +
             col;
@@ -958,8 +974,10 @@ void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorV
   int h = q.size(1), hk = cache.size(3), splits = lse.size(2);
   int bq = grouped ? 32 : 16, bk = grouped ? 64 : 32;
   int tiles = ((grouped ? 5 : 1) * (h / hk) + bq - 1) / bq;
+  // Only four ungrouped queries benefit from double buffering on B200.
+  // Larger eager batches need the occupancy afforded by one shared KV tile.
   int shared_bytes =
-      (bq * 256 + 2 * ((!grouped && q.size(0) > 2) ? 2 : 1) * bk * 256 + bq * 64) * 2 +
+      (bq * 256 + 2 * ((!grouped && q.size(0) == 4) ? 2 : 1) * bk * 256 + bq * 64) * 2 +
       (8 * bq) * 4;
   dim3 grid((grouped ? starts.size(0) - 1 : q.size(0)) * tiles, hk, splits);
 #define ATTENTION(M, G, B)                                                                         \
@@ -976,7 +994,7 @@ void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorV
     if (grouped) {
       ATTENTION(true, true, 1);
     } else {
-      if (q.size(0) > 2) {
+      if (q.size(0) == 4) {
         ATTENTION(true, false, 2);
       } else {
         ATTENTION(true, false, 1);
@@ -986,7 +1004,7 @@ void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorV
     if (grouped) {
       ATTENTION(false, true, 1);
     } else {
-      if (q.size(0) > 2) {
+      if (q.size(0) == 4) {
         ATTENTION(false, false, 2);
       } else {
         ATTENTION(false, false, 1);
@@ -1008,57 +1026,40 @@ template <int Splits>
 __global__ void attention_merge_kernel(const float *__restrict__ partial,
                                        const float *__restrict__ lse,
                                        __nv_bfloat16 *__restrict__ out) {
-  constexpr int splits = Splits;
-  int row = blockIdx.x, lane = threadIdx.x & 31;
-  extern __shared__ float weights[];
-  // Compute each split weight once, shared by all256 output columns.
-  if (threadIdx.x < 32) {
-    float maximum = -INFINITY;
-    for (int i = lane; i < splits; i += 32)
-      maximum = fmaxf(maximum, lse[row * splits + i]);
-    maximum = warp_max(maximum);
-    float total = 0;
-    for (int i = lane; i < splits; i += 32) {
-      float weight = softmax_exp2(lse[row * splits + i] - maximum);
-      weights[i] = weight;
-      total += weight;
-    }
-    total = warp_sum(total);
-    if (lane == 0)
-      weights[splits] = total;
-  }
+  int row = blockIdx.x, tid = threadIdx.x, lane = tid & 31, warp = tid / 32;
+  __shared__ float weights[Splits], scratch[8];
+  float log = tid < Splits ? lse[row * Splits + tid] : -INFINITY;
+  float maximum = warp_max(log);
+  if (lane == 0)
+    scratch[warp] = maximum;
   __syncthreads();
-  float accumulators[2][8] = {};
-#pragma unroll 1
-  for (int base = 0; base < splits; base += 8) {
-#pragma unroll
-    for (int j = 0; j < 8; ++j) {
-      float weight = weights[base + j];
-#pragma unroll
-      for (int half = 0; half < 2; ++half) {
-        int col = threadIdx.x + half * 128;
-        accumulators[half][j] +=
-            partial[(static_cast<int64_t>(row) * splits + base + j) * 256 + col] * weight;
-      }
-    }
+  maximum = warp_max(lane < 4 ? scratch[lane] : -INFINITY);
+  float weight = tid < Splits ? softmax_exp2(log - maximum) : 0.f;
+  if (tid < Splits)
+    weights[tid] = weight;
+  float total = warp_sum(weight);
+  if (lane == 0)
+    scratch[warp + 4] = total;
+  __syncthreads();
+  total = warp_sum(lane < 4 ? scratch[lane + 4] : 0.f);
+  float2 accum = make_float2(0.f, 0.f);
+#pragma unroll 128
+  for (int i = 0; i < Splits; ++i) {
+    float2 value = reinterpret_cast<const float2 *>(
+        partial)[(static_cast<int64_t>(row) * Splits + i) * 128 + tid];
+    float w = weights[i];
+    accum.x += value.x * w;
+    accum.y += value.y * w;
   }
-#pragma unroll
-  for (int half = 0; half < 2; ++half) {
-    float value = 0;
-#pragma unroll
-    for (int j = 0; j < 8; ++j)
-      value += accumulators[half][j];
-    out[static_cast<int64_t>(row) * 256 + threadIdx.x + half * 128] =
-        __float2bfloat16_rn(value / weights[splits]);
-  }
+  reinterpret_cast<__nv_bfloat162 *>(out)[row * 128 + tid] =
+      __floats2bfloat162_rn(accum.x / total, accum.y / total);
 }
+
 void attention_merge(TensorView partial, TensorView lse, TensorView out) {
 #define MERGE(S)                                                                                   \
-  attention_merge_kernel<S>                                                                        \
-      <<<lse.size(0) * lse.size(1), 128, (S + 1) * sizeof(float), stream_for(out)>>>(              \
-          static_cast<const float *>(partial.data_ptr()),                                          \
-          static_cast<const float *>(lse.data_ptr()),                                              \
-          static_cast<__nv_bfloat16 *>(out.data_ptr()))
+  attention_merge_kernel<S><<<lse.size(0) * lse.size(1), 128, 0, stream_for(out)>>>(               \
+      static_cast<const float *>(partial.data_ptr()), static_cast<const float *>(lse.data_ptr()),  \
+      static_cast<__nv_bfloat16 *>(out.data_ptr()))
   if (lse.size(2) == 16) {
     MERGE(16);
   } else if (lse.size(2) == 64) {

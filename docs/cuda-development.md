@@ -1,5 +1,29 @@
 # CUDA kernel development
 
+## Attention fragment reuse and merge optimization
+
+The attention diagnostic now passes the speed decision for all 16 static cases,
+with three rounds of 20 interleaved pairs and no detected GPU interference.
+This dirty-source subset is not full acceptance. Q/K and probability/value MMA
+fragments are reused across output tiles; static register indices eliminate
+local-memory spills. The merge uses shared split weights and vector output.
+Ungrouped KV double buffering is limited to four queries to preserve occupancy
+for larger eager batches. The sampled final eager profile reports zero local
+loads/stores; TileFoundry estimates remain separate from measured counters.
+
+The unchanged full CUDA suite passes 160 tests plus 28 subtests. Actual-model
+ordinary and MTP4 eager FP64 probes pass, including recurrent states and draft
+attention. Forced-length probe text is not semantic or agentic acceptance.
+Merge reduction order changes, so numerical tolerance results do not establish
+bitwise equivalence. Independent review and all-file checks pass. Summarized
+source identities, timings, hardware observations and probe coverage are in
+`bench/baseline/2026-09-22-cuda-attention-progress.json`.
+
+RMS, Q/K normalization, KV append and other failed cases still need tuning.
+The latest complete clean matrix remains 80/173; do not add subset pass counts.
+Full operator and framework performance acceptance remain outstanding; default
+backend stays TileLang. All task-owned GPU programs have exited.
+
 ## Packed SiLU follow-up
 
 Cleancb867d4 completed all173 operator cases without detected GPU interference:

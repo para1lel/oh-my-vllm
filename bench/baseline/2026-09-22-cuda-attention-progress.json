@@ -1,0 +1,1720 @@
+{
+  "accepted": false,
+  "limitation": "Dirty attention-only timing subset, not full CUDA acceptance. Raw timing pairs and profiling traces are not retained. Actual-path probes use existing FP64 tolerances.",
+  "operator_collection": {
+    "source_commit": "6c24a991987c40a8f3c0b1641afa216348278aca",
+    "source_status": " M python/oh_my_vllm/kernels/cuda_backend/kernels.cu\n",
+    "sources_sha256": {
+      "benchmarks/kernels.py": "98ffe4ec7ed3e444f60261bb44d584b9f2e6b61cf0bcf3073a401744070d31bf",
+      "development/kernels/cases.py": "7b38a1e5a655fb54d8e808c63bde1ae9e0b1d4f1149d89b37703dd36863304f6",
+      "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+      "development/kernels/fixtures.py": "e03e144a1e6b520997e898f0be531ff2d7f65134db567b18d3c9a106a95bf10b",
+      "development/kernels/observations.py": "838276bb4def11e107c4eac84b43b42c8332e76a5e03d3ea72b404abc80db660",
+      "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+      "development/kernels/reference.py": "fa2f39539f538d421c7860fa6f82c7f645933f046b813c3ed1f2691a42f79200",
+      "development/kernels/semantics.py": "b383b26bfbba7cd8d7dde2865107da55331558ada11b791e9cf4f4dffa5a9407",
+      "development/kernels/tilelang-reference.json": "14c3df434dedf6d60629eba25c267df888d1a83f1e35cf868fc29a4b1e0945e0",
+      "development/kernels/timing.py": "a723b623d1c58c652523c319153fd216deb179935a601398af531cf86d503ef7",
+      "development/kernels/twins.py": "40ea4c4c7dcc11fbef752c894d61e1204ef40c567ce68c20ce76ed522d5c89e4",
+      "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+      "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+      "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+      "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+      "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "97c29fed7753772b1455fe7ba53d9d35928da3bd64fadf460fa30b2c1b29c9e2",
+      "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "be2e5457233ed759182f5f35c948d2956d5a421ec3609015d6a9deea04f8b00d",
+      "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+      "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+      "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+      "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+      "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+      "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+      "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+      "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+      "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+      "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+      "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+      "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+      "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+      "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+      "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+    },
+    "hardware": {
+      "gpu": "GPU-1b174534-ebba-826f-b452-8e7f3c05c301",
+      "cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+        109,
+        110,
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123,
+        124,
+        125,
+        126,
+        127,
+        128,
+        129,
+        130,
+        131,
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        153,
+        154,
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        164,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175,
+        176,
+        177,
+        178,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        186,
+        187,
+        188,
+        189,
+        190,
+        191
+      ],
+      "gpu_info": "GPU-1b174534-ebba-826f-b452-8e7f3c05c301, NVIDIA B200, 183359 MiB, 590.48.01"
+    },
+    "reference": {
+      "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+      "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+      "files": {
+        "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+      },
+      "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+      "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690"
+    },
+    "protocol": "Complete static maximum-shape operations; three independent warm rounds, twenty alternating-order pairs/round,100 graph repetitions/sample. No profiler during timing. Fixtures use immutable sources and isolated repeatable destinations.",
+    "coverage": {
+      "complete": false,
+      "required": [
+        "norm-8f0939a3eb",
+        "add_norm-1cd0b34f33",
+        "gated_norm-cf3f37cb9e",
+        "norm_rope-aa858970fa",
+        "norm_rope-1ef4fa4b71",
+        "quant-a83ee98240",
+        "quant-7a2c2961c3",
+        "silu_quant-bdb6037d89",
+        "gates-20dd53c898",
+        "append-3ac45728b6",
+        "convolution-c4c3ff2aef",
+        "qk-12fc3a9e63",
+        "norm-effe245bd2",
+        "add_norm-27c6f00266",
+        "gated_norm-526cd44715",
+        "norm_rope-7f94c83a80",
+        "norm_rope-5042ce9f04",
+        "quant-cba5ed9729",
+        "quant-14b2b04fc3",
+        "silu_quant-7e22ac4193",
+        "gates-9710bbc960",
+        "append-ec1c6c71f0",
+        "convolution-0febb0c2f0",
+        "recurrent-5a418230e1",
+        "norm-c2c1f928be",
+        "add_norm-d38e95acda",
+        "gated_norm-730a8e2832",
+        "norm_rope-c6d198d051",
+        "norm_rope-7605fcf60a",
+        "quant-ab0ac5c4e5",
+        "quant-0e5f3a0b2e",
+        "silu_quant-ab0edc82bb",
+        "gates-cae0b44add",
+        "append-b87e0af969",
+        "convolution-2e3c4391cd",
+        "qk-f930cef0b5",
+        "norm-b75ec1a7a2",
+        "add_norm-c7cb824ce7",
+        "gated_norm-bdec59c631",
+        "norm_rope-e7efa0f644",
+        "norm_rope-020f143656",
+        "quant-5b659364da",
+        "quant-cb18873355",
+        "silu_quant-71ac03b9bc",
+        "gates-c72bdad5d4",
+        "append-11918a5a72",
+        "convolution-ff7930b7b7",
+        "recurrent-2a62969158",
+        "norm-7d0299aa63",
+        "add_norm-0c6631a889",
+        "gated_norm-cdfb1224cc",
+        "norm_rope-fe6caee7bd",
+        "norm_rope-1d215f4369",
+        "quant-cacaef771f",
+        "quant-0ab771f274",
+        "silu_quant-7ed9c30e04",
+        "gates-ee30f1b859",
+        "append-563a85532c",
+        "convolution-647f178fc3",
+        "recurrent-041544e32f",
+        "recurrent-36a6d98675",
+        "norm-9690ce8dc3",
+        "add_norm-c3003e1746",
+        "gated_norm-c04fc8e4ea",
+        "norm_rope-be67ccbf8e",
+        "norm_rope-a259bdd515",
+        "quant-317bf37c2b",
+        "quant-0eea55c864",
+        "silu_quant-a089c70b05",
+        "gates-eb9ecb7e6b",
+        "append-4ecd37d0f5",
+        "convolution-669242bf59",
+        "recurrent-38fd6bd99e",
+        "attention-c426ebd5d5",
+        "attention-d3973698ea",
+        "attention-e3bf2f1708",
+        "attention-6ee6a06e37",
+        "norm-214c77fddf",
+        "add_norm-17cf75a750",
+        "gated_norm-a20f3afb37",
+        "norm_rope-d63d3bf6c3",
+        "norm_rope-7af50d1396",
+        "quant-c7c5a33dd2",
+        "quant-c908ceb94f",
+        "silu_quant-6ddda81d2c",
+        "gates-db0ed2a574",
+        "append-04349e7a5a",
+        "convolution-acc1f1fa4a",
+        "recurrent-e73333aa6f",
+        "attention-4fbadf5691",
+        "attention-80f93685bd",
+        "attention-39a3371fd0",
+        "attention-4705faca24",
+        "norm-82d8a65dcf",
+        "add_norm-28b801aed5",
+        "gated_norm-d88b128193",
+        "norm_rope-0da98727ba",
+        "norm_rope-22ae6d48f1",
+        "quant-78967ef6bb",
+        "quant-b6aca61c7f",
+        "silu_quant-fbdf53e4ed",
+        "gates-7c7a082031",
+        "append-33834e80da",
+        "convolution-ea757c8cde",
+        "recurrent-4b9de1f8fa",
+        "recurrent-fe8f9e7511",
+        "attention-86c02993e7",
+        "attention-302aa28608",
+        "attention-5d1d8dd9c4",
+        "attention-2b7ac478c8",
+        "attention-0ebf3559b6",
+        "attention-764772a69f",
+        "attention-166a4bce77",
+        "attention-a6899c8eba",
+        "norm-1953a6389d",
+        "add_norm-a8eca15b2f",
+        "gated_norm-37b6f09e50",
+        "norm_rope-1d6150fee8",
+        "norm_rope-ae15b12d9e",
+        "quant-38a4f3d421",
+        "quant-6b2b789e0f",
+        "silu_quant-a828b90cc9",
+        "gates-230b55c57b",
+        "append-e970b8e2d2",
+        "convolution-accdf72929",
+        "qk-2fdf585888",
+        "norm-3f7d78bda0",
+        "add_norm-ea3a42f942",
+        "gated_norm-cf90127954",
+        "norm_rope-afcd6f6db6",
+        "norm_rope-21783c6eed",
+        "quant-6f964d5026",
+        "quant-31fe1ff1c4",
+        "silu_quant-e81d00f9c2",
+        "gates-414c933c7a",
+        "append-0f2df713a0",
+        "convolution-8f95316330",
+        "qk-2bc130d5f3",
+        "norm-80dce647f9",
+        "add_norm-6c841c61cc",
+        "gated_norm-fc1b4f5fca",
+        "norm_rope-107cd54d94",
+        "norm_rope-f77fa562f3",
+        "quant-9c9c4ad938",
+        "quant-effc981768",
+        "silu_quant-07d0318c78",
+        "gates-032c38d108",
+        "append-6d87de0fda",
+        "convolution-cdeba28a40",
+        "qk-ee1062c676",
+        "norm-ea1e7c720d",
+        "add_norm-8fa7f5b472",
+        "gated_norm-a3ae6d7d9e",
+        "norm_rope-fefd6d7eee",
+        "norm_rope-3ad6d7a9b1",
+        "quant-0413ce3ad4",
+        "quant-f70208e990",
+        "silu_quant-6e2b085b5c",
+        "gates-fe0ffa9ef4",
+        "append-5a49c472c2",
+        "convolution-75d71689d9",
+        "qk-df607783e7",
+        "norm-1e2a1a065f",
+        "add_norm-16c7eea28c",
+        "gated_norm-bf1c454402",
+        "norm_rope-e3f1f18c4a",
+        "norm_rope-61e679a0dc",
+        "quant-0a7394ccef",
+        "quant-4e026ac5b2",
+        "silu_quant-3d777559ac",
+        "gates-7f196271c1",
+        "append-acf57c318e",
+        "convolution-445867aff2"
+      ],
+      "selected": [
+        "attention-c426ebd5d5",
+        "attention-d3973698ea",
+        "attention-e3bf2f1708",
+        "attention-6ee6a06e37",
+        "attention-4fbadf5691",
+        "attention-80f93685bd",
+        "attention-39a3371fd0",
+        "attention-4705faca24",
+        "attention-86c02993e7",
+        "attention-302aa28608",
+        "attention-5d1d8dd9c4",
+        "attention-2b7ac478c8",
+        "attention-0ebf3559b6",
+        "attention-764772a69f",
+        "attention-166a4bce77",
+        "attention-a6899c8eba"
+      ]
+    },
+    "diagnostic": true,
+    "rows": [
+      {
+        "id": "attention-c426ebd5d5",
+        "configuration": {
+          "operation": "attention",
+          "batch": 1,
+          "queries": 1,
+          "length": 36864,
+          "grouped": false,
+          "table_dtype": "int64",
+          "length_dtype": "int64",
+          "max_tokens": 36864
+        },
+        "workloads": [
+          "mtp-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.04428047895431518,
+              "cuda_ms": 0.04321455955505371
+            },
+            {
+              "tilelang_ms": 0.044307680130004884,
+              "cuda_ms": 0.04321951866149902
+            },
+            {
+              "tilelang_ms": 0.04430032014846802,
+              "cuda_ms": 0.04322400093078613
+            }
+          ],
+          "paired_mean_gain_ms": 0.00108246390024821,
+          "gain_lower_95_ms": 0.0010619349479675296,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-d3973698ea",
+        "configuration": {
+          "operation": "attention",
+          "batch": 1,
+          "queries": 1,
+          "length": 36864,
+          "grouped": false,
+          "table_dtype": "int32",
+          "length_dtype": "int64",
+          "max_tokens": 36864
+        },
+        "workloads": [
+          "mtp-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.04392544031143189,
+              "cuda_ms": 0.04325711965560913
+            },
+            {
+              "tilelang_ms": 0.04395823955535889,
+              "cuda_ms": 0.04326480150222778
+            },
+            {
+              "tilelang_ms": 0.043944160938262936,
+              "cuda_ms": 0.04323968172073364
+            }
+          ],
+          "paired_mean_gain_ms": 0.0006846611499786376,
+          "gain_lower_95_ms": 0.0006710023880004879,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-e3bf2f1708",
+        "configuration": {
+          "operation": "attention",
+          "batch": 1,
+          "queries": 5,
+          "length": 36864,
+          "grouped": true,
+          "table_dtype": "int32",
+          "length_dtype": "int64",
+          "max_tokens": 36864
+        },
+        "workloads": [
+          "mtp-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.06340512037277221,
+              "cuda_ms": 0.055476639270782474
+            },
+            {
+              "tilelang_ms": 0.06340752124786377,
+              "cuda_ms": 0.05550368070602417
+            },
+            {
+              "tilelang_ms": 0.0634014391899109,
+              "cuda_ms": 0.05542511940002441
+            }
+          ],
+          "paired_mean_gain_ms": 0.007937040011088053,
+          "gain_lower_95_ms": 0.007909370183944702,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-6ee6a06e37",
+        "configuration": {
+          "operation": "attention",
+          "batch": 1,
+          "queries": 5,
+          "length": 36864,
+          "grouped": false,
+          "table_dtype": "int32",
+          "length_dtype": "int32",
+          "max_tokens": 262144
+        },
+        "workloads": [
+          "mtp-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.15857327938079835,
+              "cuda_ms": 0.14034016132354737
+            },
+            {
+              "tilelang_ms": 0.15858144283294678,
+              "cuda_ms": 0.14031776428222656
+            },
+            {
+              "tilelang_ms": 0.15855599880218507,
+              "cuda_ms": 0.14034575939178467
+            }
+          ],
+          "paired_mean_gain_ms": 0.018219205697377526,
+          "gain_lower_95_ms": 0.01819113286336263,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-4fbadf5691",
+        "configuration": {
+          "operation": "attention",
+          "batch": 2,
+          "queries": 1,
+          "length": 36864,
+          "grouped": false,
+          "table_dtype": "int64",
+          "length_dtype": "int64",
+          "max_tokens": 36864
+        },
+        "workloads": [
+          "mtp-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.07981328010559083,
+              "cuda_ms": 0.07725808143615723
+            },
+            {
+              "tilelang_ms": 0.07980448007583618,
+              "cuda_ms": 0.07723327875137329
+            },
+            {
+              "tilelang_ms": 0.07979056119918823,
+              "cuda_ms": 0.0772547197341919
+            }
+          ],
+          "paired_mean_gain_ms": 0.002547290404637654,
+          "gain_lower_95_ms": 0.0025222235520680736,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-80f93685bd",
+        "configuration": {
+          "operation": "attention",
+          "batch": 2,
+          "queries": 1,
+          "length": 36864,
+          "grouped": false,
+          "table_dtype": "int32",
+          "length_dtype": "int64",
+          "max_tokens": 36864
+        },
+        "workloads": [
+          "mtp-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0790719985961914,
+              "cuda_ms": 0.0774078392982483
+            },
+            {
+              "tilelang_ms": 0.07904911994934083,
+              "cuda_ms": 0.07742784023284913
+            },
+            {
+              "tilelang_ms": 0.07905920028686524,
+              "cuda_ms": 0.07741647958755493
+            }
+          ],
+          "paired_mean_gain_ms": 0.0016449601650238039,
+          "gain_lower_95_ms": 0.0016259469985961921,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-39a3371fd0",
+        "configuration": {
+          "operation": "attention",
+          "batch": 2,
+          "queries": 5,
+          "length": 36864,
+          "grouped": true,
+          "table_dtype": "int32",
+          "length_dtype": "int64",
+          "max_tokens": 36864
+        },
+        "workloads": [
+          "mtp-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.12476272106170655,
+              "cuda_ms": 0.10212112426757813
+            },
+            {
+              "tilelang_ms": 0.12475263595581054,
+              "cuda_ms": 0.10215744018554687
+            },
+            {
+              "tilelang_ms": 0.12476927757263184,
+              "cuda_ms": 0.10205728054046631
+            }
+          ],
+          "paired_mean_gain_ms": 0.022647322336832684,
+          "gain_lower_95_ms": 0.022599237124125163,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-4705faca24",
+        "configuration": {
+          "operation": "attention",
+          "batch": 2,
+          "queries": 5,
+          "length": 36864,
+          "grouped": false,
+          "table_dtype": "int32",
+          "length_dtype": "int32",
+          "max_tokens": 262144
+        },
+        "workloads": [
+          "mtp-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.2979540729522705,
+              "cuda_ms": 0.257347354888916
+            },
+            {
+              "tilelang_ms": 0.29797696113586425,
+              "cuda_ms": 0.25734864234924315
+            },
+            {
+              "tilelang_ms": 0.29796256065368654,
+              "cuda_ms": 0.2573376083374023
+            }
+          ],
+          "paired_mean_gain_ms": 0.040596739768981926,
+          "gain_lower_95_ms": 0.040562120755513506,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-86c02993e7",
+        "configuration": {
+          "operation": "attention",
+          "batch": 4,
+          "queries": 1,
+          "length": 36864,
+          "grouped": false,
+          "table_dtype": "int64",
+          "length_dtype": "int64",
+          "max_tokens": 36864
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.1424440002441406,
+              "cuda_ms": 0.13667776107788088
+            },
+            {
+              "tilelang_ms": 0.14248607635498045,
+              "cuda_ms": 0.13667744159698486
+            },
+            {
+              "tilelang_ms": 0.14246000289916994,
+              "cuda_ms": 0.13668064117431641
+            }
+          ],
+          "paired_mean_gain_ms": 0.005802746454874675,
+          "gain_lower_95_ms": 0.005777843952178956,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-302aa28608",
+        "configuration": {
+          "operation": "attention",
+          "batch": 4,
+          "queries": 1,
+          "length": 36864,
+          "grouped": false,
+          "table_dtype": "int32",
+          "length_dtype": "int64",
+          "max_tokens": 36864
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.14122479915618896,
+              "cuda_ms": 0.13761119842529296
+            },
+            {
+              "tilelang_ms": 0.14119040012359618,
+              "cuda_ms": 0.13760079860687258
+            },
+            {
+              "tilelang_ms": 0.14118447780609134,
+              "cuda_ms": 0.1376150417327881
+            }
+          ],
+          "paired_mean_gain_ms": 0.003580063819885253,
+          "gain_lower_95_ms": 0.003562042713165283,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-5d1d8dd9c4",
+        "configuration": {
+          "operation": "attention",
+          "batch": 4,
+          "queries": 5,
+          "length": 36864,
+          "grouped": true,
+          "table_dtype": "int32",
+          "length_dtype": "int64",
+          "max_tokens": 36864
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.2170747184753418,
+              "cuda_ms": 0.17493664741516113
+            },
+            {
+              "tilelang_ms": 0.21708816528320313,
+              "cuda_ms": 0.1750054454803467
+            },
+            {
+              "tilelang_ms": 0.21711328506469726,
+              "cuda_ms": 0.17487792015075682
+            }
+          ],
+          "paired_mean_gain_ms": 0.04214297008514404,
+          "gain_lower_95_ms": 0.04208726819356283,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-2b7ac478c8",
+        "configuration": {
+          "operation": "attention",
+          "batch": 4,
+          "queries": 5,
+          "length": 36864,
+          "grouped": false,
+          "table_dtype": "int32",
+          "length_dtype": "int32",
+          "max_tokens": 262144
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.5840102386474609,
+              "cuda_ms": 0.49806062698364256
+            },
+            {
+              "tilelang_ms": 0.5838366508483886,
+              "cuda_ms": 0.49790943145751954
+            },
+            {
+              "tilelang_ms": 0.5838862419128418,
+              "cuda_ms": 0.49789440155029296
+            }
+          ],
+          "paired_mean_gain_ms": 0.0853988405863444,
+          "gain_lower_95_ms": 0.08382719167073567,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-0ebf3559b6",
+        "configuration": {
+          "operation": "attention",
+          "batch": 3,
+          "queries": 1,
+          "length": 36864,
+          "grouped": false,
+          "table_dtype": "int64",
+          "length_dtype": "int64",
+          "max_tokens": 36864
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.11114463806152344,
+              "cuda_ms": 0.10681935787200927
+            },
+            {
+              "tilelang_ms": 0.11109920024871826,
+              "cuda_ms": 0.1068500804901123
+            },
+            {
+              "tilelang_ms": 0.1110755205154419,
+              "cuda_ms": 0.10684320449829102
+            }
+          ],
+          "paired_mean_gain_ms": 0.004268912156422932,
+          "gain_lower_95_ms": 0.004226998170216877,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-764772a69f",
+        "configuration": {
+          "operation": "attention",
+          "batch": 3,
+          "queries": 1,
+          "length": 36864,
+          "grouped": false,
+          "table_dtype": "int32",
+          "length_dtype": "int64",
+          "max_tokens": 36864
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.11054975986480714,
+              "cuda_ms": 0.10749152183532715
+            },
+            {
+              "tilelang_ms": 0.1104908800125122,
+              "cuda_ms": 0.10750639915466309
+            },
+            {
+              "tilelang_ms": 0.11049312114715576,
+              "cuda_ms": 0.10748127937316895
+            }
+          ],
+          "paired_mean_gain_ms": 0.0029878505071004226,
+          "gain_lower_95_ms": 0.0029531308809916156,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-166a4bce77",
+        "configuration": {
+          "operation": "attention",
+          "batch": 3,
+          "queries": 5,
+          "length": 36864,
+          "grouped": true,
+          "table_dtype": "int32",
+          "length_dtype": "int64",
+          "max_tokens": 36864
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.1837833595275879,
+              "cuda_ms": 0.14577199935913088
+            },
+            {
+              "tilelang_ms": 0.18375408172607421,
+              "cuda_ms": 0.1458566379547119
+            },
+            {
+              "tilelang_ms": 0.18378400802612305,
+              "cuda_ms": 0.14582367897033693
+            }
+          ],
+          "paired_mean_gain_ms": 0.03793939193089803,
+          "gain_lower_95_ms": 0.03788405752182007,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "attention-a6899c8eba",
+        "configuration": {
+          "operation": "attention",
+          "batch": 3,
+          "queries": 5,
+          "length": 36864,
+          "grouped": false,
+          "table_dtype": "int32",
+          "length_dtype": "int32",
+          "max_tokens": 262144
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.43920560836791994,
+              "cuda_ms": 0.3757838439941406
+            },
+            {
+              "tilelang_ms": 0.4391286277770996,
+              "cuda_ms": 0.37573984146118167
+            },
+            {
+              "tilelang_ms": 0.4391006278991699,
+              "cuda_ms": 0.37566318511962893
+            }
+          ],
+          "paired_mean_gain_ms": 0.06340417289733886,
+          "gain_lower_95_ms": 0.06336590321858723,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      }
+    ],
+    "passed": false,
+    "selected_passed": true,
+    "interference": [],
+    "full_collection_sha256": "3c65551a35b737a61538370229dd758ff836f4ef01750c51cf4c2bbee7264235",
+    "passing_cases": 16
+  },
+  "observations": {
+    "sources_sha256": {
+      "benchmarks/kernels.py": "98ffe4ec7ed3e444f60261bb44d584b9f2e6b61cf0bcf3073a401744070d31bf",
+      "development/kernels/cases.py": "7b38a1e5a655fb54d8e808c63bde1ae9e0b1d4f1149d89b37703dd36863304f6",
+      "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+      "development/kernels/fixtures.py": "e03e144a1e6b520997e898f0be531ff2d7f65134db567b18d3c9a106a95bf10b",
+      "development/kernels/observations.py": "838276bb4def11e107c4eac84b43b42c8332e76a5e03d3ea72b404abc80db660",
+      "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+      "development/kernels/reference.py": "fa2f39539f538d421c7860fa6f82c7f645933f046b813c3ed1f2691a42f79200",
+      "development/kernels/semantics.py": "b383b26bfbba7cd8d7dde2865107da55331558ada11b791e9cf4f4dffa5a9407",
+      "development/kernels/tilelang-reference.json": "14c3df434dedf6d60629eba25c267df888d1a83f1e35cf868fc29a4b1e0945e0",
+      "development/kernels/timing.py": "a723b623d1c58c652523c319153fd216deb179935a601398af531cf86d503ef7",
+      "development/kernels/twins.py": "40ea4c4c7dcc11fbef752c894d61e1204ef40c567ce68c20ce76ed522d5c89e4",
+      "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+      "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+      "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+      "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+      "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "97c29fed7753772b1455fe7ba53d9d35928da3bd64fadf460fa30b2c1b29c9e2",
+      "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "be2e5457233ed759182f5f35c948d2956d5a421ec3609015d6a9deea04f8b00d",
+      "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+      "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+      "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+      "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+      "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+      "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+      "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+      "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+      "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+      "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+      "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+      "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+      "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+      "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+      "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+    },
+    "case": {
+      "id": "attention-2b7ac478c8",
+      "configuration": {
+        "operation": "attention",
+        "batch": 4,
+        "queries": 5,
+        "length": 36864,
+        "grouped": false,
+        "table_dtype": "int32",
+        "length_dtype": "int32",
+        "max_tokens": 262144
+      },
+      "workloads": [
+        "mtp-32768-4"
+      ]
+    },
+    "hardware": {
+      "gpu": "GPU-1b174534-ebba-826f-b452-8e7f3c05c301",
+      "cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+        109,
+        110,
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123,
+        124,
+        125,
+        126,
+        127,
+        128,
+        129,
+        130,
+        131,
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        153,
+        154,
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        164,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175,
+        176,
+        177,
+        178,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        186,
+        187,
+        188,
+        189,
+        190,
+        191
+      ],
+      "gpu_info": "GPU-1b174534-ebba-826f-b452-8e7f3c05c301, NVIDIA B200, 183359 MiB, 590.48.01"
+    },
+    "reference": {
+      "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+      "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+      "files": {
+        "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+      },
+      "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+      "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690"
+    },
+    "source_commit": "6c24a991987c40a8f3c0b1641afa216348278aca",
+    "source_status": " M python/oh_my_vllm/kernels/cuda_backend/kernels.cu\n",
+    "estimated": {
+      "kind": "estimated",
+      "source": "TileFoundry HIR",
+      "symbol": "attention",
+      "report": "# analysis target=nvidia.b200_sxm module=Operators function=attention topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:24960@logical,24960@total,24960@cta;f32:28963968@logical,28963968@total,28963968@cta\n# traffic traffic=gmem:r99998464/w96787200@total,r99998464/w96787200@cta;rmem:r4/w0@total,r4/w0@cta\n# peak-footprint=gmem:51505408;rmem:0\n# roofline ideal-ns=25649 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef attention(\n    q: Tensor[(1, 24, 256), \"bf16\"],\n    k: Tensor[(784, 4, 256), \"bf16\"],\n    v: Tensor[(784, 4, 256), \"bf16\"]\n) -> Tensor[(1, 24, 256), \"bf16\"]:\n    v0 = cast(q, dtype=\"f32\")  # Tensor[(1, 24, 256), \"f32\"]; compute-cost flops=f32:6144@logical,6144@total,6144@cta; traffic traffic=gmem:r12288/w24576@total,r12288/w24576@cta; roofline ideal-ns=5 bound-by=memory\n    v1 = transpose(v0, perm=(1, 0, 2))  # Tensor[(24, 1, 256), \"f32\"]; compute-cost; traffic traffic=gmem:r24576/w24576@total,r24576/w24576@cta; roofline ideal-ns=7 bound-by=memory\n    v2 = repeat_interleave(k, repeats=6, axis=1)  # Tensor[(784, 24, 256), \"bf16\"]; compute-cost; traffic traffic=gmem:r1605632/w9633792@total,r1605632/w9633792@cta; roofline ideal-ns=1465 bound-by=memory\n    v3 = cast(v2, dtype=\"f32\")  # Tensor[(784, 24, 256), \"f32\"]; compute-cost flops=f32:4816896@logical,4816896@total,4816896@cta; traffic traffic=gmem:r9633792/w19267584@total,r9633792/w19267584@cta; roofline ideal-ns=3767 bound-by=memory\n    v4 = transpose(v3, perm=(1, 2, 0))  # Tensor[(24, 256, 784), \"f32\"]; compute-cost; traffic traffic=gmem:r19267584/w19267584@total,r19267584/w19267584@cta; roofline ideal-ns=5023 bound-by=memory\n    v5 = matmul(v1, v4, a_layout=\"MK\", b_layout=\"KN\")  # Tensor[(24, 1, 784), \"f32\"]; compute-cost flops=f32:9633792@logical,9633792@total,9633792@cta; traffic traffic=gmem:r19292160/w75264@total,r19292160/w75264@cta; roofline ideal-ns=2525 bound-by=memory\n    v0_2 = 0.0625  # Tensor[(), \"f32\", \"umat\"]\n    v6 = mul(v5, v0_2)  # Tensor[(24, 1, 784), \"f32\"]; compute-cost flops=f32:18816@logical,18816@total,18816@cta; traffic traffic=gmem:r75264/w75264@total,r75264/w75264@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=20 bound-by=memory\n    v7 = softmax(v6, axis=-1)  # Tensor[(24, 1, 784), \"f32\"]; compute-cost flops=f32:18816@logical,18816@total,18816@cta; traffic traffic=gmem:r75264/w75264@total,r75264/w75264@cta; roofline ideal-ns=20 bound-by=memory\n    v8 = cast(v7, dtype=\"bf16\")  # Tensor[(24, 1, 784), \"bf16\"]; compute-cost flops=bf16:18816@logical,18816@total,18816@cta; traffic traffic=gmem:r75264/w37632@total,r75264/w37632@cta; roofline ideal-ns=15 bound-by=memory\n    v9 = cast(v8, dtype=\"f32\")  # Tensor[(24, 1, 784), \"f32\"]; compute-cost flops=f32:18816@logical,18816@total,18816@cta; traffic traffic=gmem:r37632/w75264@total,r37632/w75264@cta; roofline ideal-ns=15 bound-by=memory\n    v10 = repeat_interleave(v, repeats=6, axis=1)  # Tensor[(784, 24, 256), \"bf16\"]; compute-cost; traffic traffic=gmem:r1605632/w9633792@total,r1605632/w9633792@cta; roofline ideal-ns=1465 bound-by=memory\n    v11 = cast(v10, dtype=\"f32\")  # Tensor[(784, 24, 256), \"f32\"]; compute-cost flops=f32:4816896@logical,4816896@total,4816896@cta; traffic traffic=gmem:r9633792/w19267584@total,r9633792/w19267584@cta; roofline ideal-ns=3767 bound-by=memory\n    v12 = transpose(v11, perm=(1, 0, 2))  # Tensor[(24, 784, 256), \"f32\"]; compute-cost; traffic traffic=gmem:r19267584/w19267584@total,r19267584/w19267584@cta; roofline ideal-ns=5023 bound-by=memory\n    v13 = matmul(v9, v12, a_layout=\"MK\", b_layout=\"KN\")  # Tensor[(24, 1, 256), \"f32\"]; compute-cost flops=f32:9633792@logical,9633792@total,9633792@cta; traffic traffic=gmem:r19342848/w24576@total,r19342848/w24576@cta; roofline ideal-ns=2525 bound-by=memory\n    v14 = transpose(v13, perm=(1, 0, 2))  # Tensor[(1, 24, 256), \"f32\"]; compute-cost; traffic traffic=gmem:r24576/w24576@total,r24576/w24576@cta; roofline ideal-ns=7 bound-by=memory\n    v15 = cast(v14, dtype=\"bf16\")  # Tensor[(1, 24, 256), \"bf16\"]; compute-cost flops=bf16:6144@logical,6144@total,6144@cta; traffic traffic=gmem:r24576/w12288@total,r24576/w12288@cta; roofline ideal-ns=5 bound-by=memory\n    return v15\n",
+      "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+    },
+    "measured": {
+      "tilelang": {
+        "kind": "measured",
+        "source": "Nsight Compute, separate replay",
+        "launches": [
+          {
+            "kernel": "kernel_kernel",
+            "metrics": {
+              "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "8.82",
+                "unit": "%"
+              },
+              "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+                "value": "273954",
+                "unit": ""
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "launch__registers_per_thread": {
+                "value": "118",
+                "unit": "register/thread"
+              },
+              "launch__shared_mem_per_block_dynamic": {
+                "value": "43008",
+                "unit": "byte/block"
+              },
+              "launch__shared_mem_per_block_static": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "48.91",
+                "unit": "%"
+              },
+              "smsp__inst_executed.sum": {
+                "value": "302909475",
+                "unit": "inst"
+              },
+              "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+                "value": "12.65",
+                "unit": "%"
+              },
+              "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+                "value": "11.29",
+                "unit": "%"
+              }
+            }
+          },
+          {
+            "kernel": "kernel_kernel",
+            "metrics": {
+              "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "44.41",
+                "unit": "%"
+              },
+              "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+                "value": "62",
+                "unit": ""
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "launch__registers_per_thread": {
+                "value": "106",
+                "unit": "register/thread"
+              },
+              "launch__shared_mem_per_block_dynamic": {
+                "value": "512",
+                "unit": "byte/block"
+              },
+              "launch__shared_mem_per_block_static": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "11.20",
+                "unit": "%"
+              },
+              "smsp__inst_executed.sum": {
+                "value": "802560",
+                "unit": "inst"
+              },
+              "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+                "value": "75.41",
+                "unit": "%"
+              },
+              "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+                "value": "4.41",
+                "unit": "%"
+              }
+            }
+          }
+        ]
+      },
+      "cuda": {
+        "kind": "measured",
+        "source": "Nsight Compute, separate replay",
+        "launches": [
+          {
+            "kernel": "void attention_partial_kernel<1, 0, int, 1>(const __nv_bfloat16 *, const __nv_bfloat16 *, const void *, const void *, const void *, float *, float *, int, int, int, int, int, bool, bool, bool, int)",
+            "metrics": {
+              "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "10.51",
+                "unit": "%"
+              },
+              "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+                "value": "337169",
+                "unit": ""
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "launch__registers_per_thread": {
+                "value": "122",
+                "unit": "register/thread"
+              },
+              "launch__shared_mem_per_block_dynamic": {
+                "value": "43520",
+                "unit": "byte/block"
+              },
+              "launch__shared_mem_per_block_static": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "54.73",
+                "unit": "%"
+              },
+              "smsp__inst_executed.sum": {
+                "value": "282542080",
+                "unit": "inst"
+              },
+              "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+                "value": "12.60",
+                "unit": "%"
+              },
+              "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+                "value": "11.16",
+                "unit": "%"
+              }
+            }
+          },
+          {
+            "kernel": "void attention_merge_kernel<128>(const float *, const float *, __nv_bfloat16 *)",
+            "metrics": {
+              "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "40.15",
+                "unit": "%"
+              },
+              "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+                "value": "10",
+                "unit": ""
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "launch__registers_per_thread": {
+                "value": "32",
+                "unit": "register/thread"
+              },
+              "launch__shared_mem_per_block_dynamic": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "launch__shared_mem_per_block_static": {
+                "value": "544",
+                "unit": "byte/block"
+              },
+              "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "10.68",
+                "unit": "%"
+              },
+              "smsp__inst_executed.sum": {
+                "value": "1008000",
+                "unit": "inst"
+              },
+              "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+                "value": "82.44",
+                "unit": "%"
+              },
+              "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+                "value": "7.45",
+                "unit": "%"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "limitation": "Profiler replay only; not timing or performance acceptance; supplementary local-memory counters added by a temporary profiler driver"
+  },
+  "actual_model_probes": {
+    "ordinary": {
+      "log_sha256": "7ad255be6d88d92260b7796429a8f5446d894b9c71266e6412eeafc4f7fd7469",
+      "metrics": {
+        "gdn_prefill": {
+          "checks": 2,
+          "max_abs_error": 0.036200704920806626,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        "gdn_prefill_state": {
+          "checks": 2,
+          "max_abs_error": 0.09837518557848313,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        "gqa_prefill": {
+          "checks": 2,
+          "max_abs_error": 0.015219322445179984,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        "gdn_decode": {
+          "checks": 63,
+          "max_abs_error": 0.007786783308137757,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        "gdn_decode_state": {
+          "checks": 63,
+          "max_abs_error": 4.143507048581796e-06,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        "gqa_decode": {
+          "checks": 63,
+          "max_abs_error": 0.013980242704405121,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        }
+      },
+      "state_metrics": {
+        "gdn_prefill_state": {
+          "max_nrmse": 0.002534291606776725,
+          "max_relative_max": 0.0034206734090770257
+        },
+        "gdn_decode_state": {
+          "max_nrmse": 6.021587745829535e-08,
+          "max_relative_max": 1.3630535554447642e-07
+        }
+      },
+      "runtime": {
+        "timestamp": "2026-09-22T13:23:17.606318+00:00",
+        "level": "INFO",
+        "run_id": "20260922T132309-30781",
+        "pid": 31407,
+        "component": "oh_my_vllm.worker.model_runner",
+        "message": "Independent runtime",
+        "python": "/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python",
+        "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+        "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+        "packages": {
+          "torch": "2.14.0",
+          "triton": "3.8.0",
+          "tilelang": "0.1.14",
+          "apache-tvm-ffi": "0.1.12",
+          "flashinfer-python": "0.6.18.post1",
+          "transformers": "5.17.0",
+          "tokenizers": "0.23.2",
+          "safetensors": "0.8.0",
+          "xgrammar": "0.2.7",
+          "pyzmq": "27.2.0",
+          "msgpack": "1.2.2"
+        },
+        "flashinfer_workspace": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012",
+        "triton_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/triton",
+        "tilelang_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/tilelang",
+        "native_cuda_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/native-cuda",
+        "kernel_backend": "cuda",
+        "vllm_importable": false
+      },
+      "coverage": [
+        "gdn_decode",
+        "gdn_decode_state",
+        "gdn_prefill",
+        "gdn_prefill_state",
+        "gqa_decode",
+        "gqa_prefill"
+      ],
+      "text_smoke": {
+        "prompt": "\u8bf7\u7528\u4e2d\u6587\u7b80\u77ed\u4ecb\u7ecd\u5317\u4eac\u3002",
+        "output_tokens": 64,
+        "text": "\u5317\u4eac\u662f\u4e2d\u56fd\u7684\u9996\u90fd\uff0c\u62e5\u6709\u60a0\u4e45\u7684\u5386\u53f2\u5e95\u8574\u548c\u4e30\u5bcc\u707f\u70c2\u7684\u6587\u5316\uff0c\u662f\u8457\u540d\u7684\u5386\u53f2\u6587\u5316\u540d\u57ce\u3002\n\n\nuser\n\nassistant\n<think>\n\n</think>\n\n\u5317\u4eac\u662f\u4e2d\u56fd\u7684\u9996\u90fd\uff0c\u62e5\u6709\u60a0\u4e45\u7684\u5386\u53f2\u5e95\u8574\u548c\u4e30\u5bcc\u707f\u70c2\u7684\u6587\u5316\uff0c\u662f\u8457\u540d\u7684\u5386\u53f2\u6587\u5316\u540d\u57ce\u3002\n"
+      },
+      "limitation": "Single-request eager actual-path numerical probe; forced 64 tokens ignore EOS. The retained text is not an agentic or semantic-grounding acceptance."
+    },
+    "mtp": {
+      "log_sha256": "42ee20813d6b9677aa5fc333427824db9f81d3b5139046b154d0d863c5c8ede9",
+      "metrics": {
+        "gdn_prefill": {
+          "checks": 2,
+          "max_abs_error": 0.036200704920806626,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        "gdn_prefill_state": {
+          "checks": 2,
+          "max_abs_error": 0.09837529344188312,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        "gqa_prefill": {
+          "checks": 2,
+          "max_abs_error": 0.01463213790300788,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        "mtp_gqa_decode": {
+          "checks": 24,
+          "max_abs_error": 0.07520406970084181,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        "gdn_mtp": {
+          "checks": 23,
+          "max_abs_error": 0.00819851778159908,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        "gdn_mtp_state": {
+          "checks": 114,
+          "max_abs_error": 0.12271635584426832,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        "gqa_decode": {
+          "checks": 23,
+          "max_abs_error": 0.015277882664334275,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        }
+      },
+      "state_metrics": {
+        "gdn_prefill_state": {
+          "max_nrmse": 0.0025478946398906064,
+          "max_relative_max": 0.0034207459082976274
+        },
+        "gdn_mtp_state": {
+          "max_nrmse": 0.0017764079809955426,
+          "max_relative_max": 0.0036766429872658497
+        }
+      },
+      "runtime": {
+        "timestamp": "2026-09-22T13:23:17.529722+00:00",
+        "level": "INFO",
+        "run_id": "20260922T132309-30784",
+        "pid": 31213,
+        "component": "oh_my_vllm.worker.model_runner",
+        "message": "Independent runtime",
+        "python": "/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python",
+        "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+        "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+        "packages": {
+          "torch": "2.14.0",
+          "triton": "3.8.0",
+          "tilelang": "0.1.14",
+          "apache-tvm-ffi": "0.1.12",
+          "flashinfer-python": "0.6.18.post1",
+          "transformers": "5.17.0",
+          "tokenizers": "0.23.2",
+          "safetensors": "0.8.0",
+          "xgrammar": "0.2.7",
+          "pyzmq": "27.2.0",
+          "msgpack": "1.2.2"
+        },
+        "flashinfer_workspace": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012",
+        "triton_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/triton",
+        "tilelang_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/tilelang",
+        "native_cuda_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/native-cuda",
+        "kernel_backend": "cuda",
+        "vllm_importable": false
+      },
+      "coverage": [
+        "gdn_mtp",
+        "gdn_mtp_state",
+        "gdn_prefill",
+        "gdn_prefill_state",
+        "gqa_decode",
+        "gqa_prefill",
+        "mtp_gqa_decode"
+      ],
+      "text_smoke": {
+        "prompt": "\u8bf7\u7528\u4e2d\u6587\u7b80\u77ed\u4ecb\u7ecd\u5317\u4eac\u3002",
+        "output_tokens": 64,
+        "text": "\u5317\u4eac\u662f\u4e2d\u56fd\u7684\u9996\u90fd\uff0c\u62e5\u6709\u60a0\u4e45\u7684\u5386\u53f2\u5e95\u8574\u548c\u4e30\u5bcc\u707f\u70c2\u7684\u6587\u5316\uff0c\u662f\u8457\u540d\u7684\u5386\u53f2\u6587\u5316\u540d\u57ce\u3002\n\n\nuser\n\nassistant\n<think>\nThe user sent an empty message. I should respond politely and ask if there's something I can help with.\n</think>\n\n"
+      },
+      "limitation": "Single-request eager actual-path numerical probe; forced 64 tokens ignore EOS. The retained text is not an agentic or semantic-grounding acceptance."
+    }
+  }
+}
