@@ -1,5 +1,30 @@
 # Handoff — 2026-09-22
 
+## Model convolution layout specialization
+
+The CUDA model convolution specializes 10240 channels with token stride16384.
+It loads four BF16 weights together, uses a stable sigmoid for FP32 accumulations,
+and chooses four rows per block for medium inputs and eight for large inputs.
+Weight alignment and conservative disjoint pool/input spans guard the optimized
+path; other layouts or possible aliases retain the generic CUDA implementation.
+Source states are still snapshotted before candidate writes, including writes
+that overwrite another sequence's original source slot.
+
+The13-case dirty-source convolution subset passes all speed decisions. Full
+correctness passes169 tests plus28 subtests; the existing ragged convolution test
+now includes the real16384 stride alongside10240/20480 without changing references
+or tolerances. Extra FP64 checks cover127/128 and4095/4096 rows, weight offsets,
+pool/weight aliases, cancellation, near-zero and large signed values, and negative
+values near exponential underflow. Written snapshots and untouched slots remain
+exact. The initial temporary checker had a CPU/GPU reference-device mismatch;
+that harness issue was corrected before the successful supplemental run.
+
+Ordinary/MTP4 eager model FP64 probes pass. Forced-length text with control tokens
+and repetition does not establish agentic acceptance. Independent review and
+separate TileFoundry/Nsight observations are summarized in
+`bench/baseline/2026-09-22-cuda-convolution-progress.json`.
+Full operator/framework acceptance remains pending; default stays TileLang.
+
 ## Vector GDN recurrence
 
 The clean c40cd5c matrix passes 129/147 cases, with no detected GPU interference.

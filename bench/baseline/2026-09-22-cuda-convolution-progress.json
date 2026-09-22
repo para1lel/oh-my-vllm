@@ -1,0 +1,1407 @@
+{
+  "accepted": false,
+  "limitation": "13-case dirty convolution subset passes; full147-case and all framework acceptance outstanding. Default remains TileLang.",
+  "collection": {
+    "source_commit": "f3e2f19542dd44a23bc6efb6647b05d3ad4d90f9",
+    "source_status": " M python/oh_my_vllm/kernels/cuda_backend/kernels.cu\n",
+    "sources_sha256": {
+      "benchmarks/kernels.py": "98ffe4ec7ed3e444f60261bb44d584b9f2e6b61cf0bcf3073a401744070d31bf",
+      "development/kernels/cases.py": "13a71e3253d20e7b2e26ad0764885bb8cd8cb5bb1260c263a92a4669b63c5e19",
+      "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+      "development/kernels/fixtures.py": "bd346bf0acbd0218fa3a59e6c572790307ebfb19467e5d0a7ccdaf4a40cf5595",
+      "development/kernels/observations.py": "838276bb4def11e107c4eac84b43b42c8332e76a5e03d3ea72b404abc80db660",
+      "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+      "development/kernels/reference.py": "ddf5a63e286e975a81e74982d24ebd575e94a0208c0a013ff3b20eb0f06adf12",
+      "development/kernels/semantics.py": "96be066b579b829f9179ec87bb39f70ceebcdcd6aa5c7845482ce1614e79cd99",
+      "development/kernels/tilelang-reference.json": "14c3df434dedf6d60629eba25c267df888d1a83f1e35cf868fc29a4b1e0945e0",
+      "development/kernels/timing.py": "1f8afa6dde7cf2bc31256f4a5bbd58e7bf7a5da1b30cabba00e0b200355d8006",
+      "development/kernels/twins.py": "608ac3edd7d08e6e47a1ccdefb5c4d7c891b3080d8e3cb05d05a0b8be121117b",
+      "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+      "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+      "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+      "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+      "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+      "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+      "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "f503653e68f8d4304b110d762ec86bf9366de2486b654d1d7b1296cd364653e0",
+      "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+      "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+      "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+      "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+      "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+      "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+      "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+      "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+      "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+      "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+      "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+      "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+      "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+      "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+      "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+      "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+    },
+    "hardware": {
+      "gpu": "GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad",
+      "cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+        109,
+        110,
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123,
+        124,
+        125,
+        126,
+        127,
+        128,
+        129,
+        130,
+        131,
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        153,
+        154,
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        164,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175,
+        176,
+        177,
+        178,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        186,
+        187,
+        188,
+        189,
+        190,
+        191
+      ],
+      "gpu_info": "GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad, NVIDIA B200, 183359 MiB, 590.48.01"
+    },
+    "reference": {
+      "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+      "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+      "files": {
+        "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+      },
+      "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+      "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690"
+    },
+    "protocol": "Complete static maximum-shape operations; three independent warm rounds, twenty alternating-order pairs/round,100 graph repetitions/sample. No profiler during timing. Fixtures use immutable sources and isolated repeatable destinations.",
+    "coverage": {
+      "complete": false,
+      "required": [
+        "norm-8f0939a3eb",
+        "add_norm-1cd0b34f33",
+        "gated_norm-cf3f37cb9e",
+        "prepare_attention-2123658257",
+        "quant-a83ee98240",
+        "quant-7a2c2961c3",
+        "silu_quant-bdb6037d89",
+        "gates-20dd53c898",
+        "convolution-c4c3ff2aef",
+        "qk-12fc3a9e63",
+        "norm-effe245bd2",
+        "add_norm-27c6f00266",
+        "gated_norm-526cd44715",
+        "prepare_attention-831ee3469c",
+        "quant-cba5ed9729",
+        "quant-14b2b04fc3",
+        "silu_quant-7e22ac4193",
+        "gates-9710bbc960",
+        "convolution-0febb0c2f0",
+        "recurrent-5a418230e1",
+        "norm-c2c1f928be",
+        "add_norm-d38e95acda",
+        "gated_norm-730a8e2832",
+        "prepare_attention-7eb9ea324c",
+        "quant-ab0ac5c4e5",
+        "quant-0e5f3a0b2e",
+        "silu_quant-ab0edc82bb",
+        "gates-cae0b44add",
+        "convolution-2e3c4391cd",
+        "qk-f930cef0b5",
+        "norm-b75ec1a7a2",
+        "add_norm-c7cb824ce7",
+        "gated_norm-bdec59c631",
+        "prepare_attention-e2b930a517",
+        "quant-5b659364da",
+        "quant-cb18873355",
+        "silu_quant-71ac03b9bc",
+        "gates-c72bdad5d4",
+        "convolution-ff7930b7b7",
+        "recurrent-2a62969158",
+        "norm-7d0299aa63",
+        "add_norm-0c6631a889",
+        "gated_norm-cdfb1224cc",
+        "prepare_attention-50d5f5fd1d",
+        "quant-cacaef771f",
+        "quant-0ab771f274",
+        "silu_quant-7ed9c30e04",
+        "gates-ee30f1b859",
+        "convolution-647f178fc3",
+        "recurrent-041544e32f",
+        "recurrent-36a6d98675",
+        "norm-9690ce8dc3",
+        "add_norm-c3003e1746",
+        "gated_norm-c04fc8e4ea",
+        "prepare_attention-e3ad7889b2",
+        "quant-317bf37c2b",
+        "quant-0eea55c864",
+        "silu_quant-a089c70b05",
+        "gates-eb9ecb7e6b",
+        "convolution-669242bf59",
+        "recurrent-38fd6bd99e",
+        "attention-c426ebd5d5",
+        "attention-d3973698ea",
+        "attention-e3bf2f1708",
+        "attention-6ee6a06e37",
+        "norm-214c77fddf",
+        "add_norm-17cf75a750",
+        "gated_norm-a20f3afb37",
+        "prepare_attention-15fddb117a",
+        "quant-c7c5a33dd2",
+        "quant-c908ceb94f",
+        "silu_quant-6ddda81d2c",
+        "gates-db0ed2a574",
+        "convolution-acc1f1fa4a",
+        "recurrent-e73333aa6f",
+        "attention-4fbadf5691",
+        "attention-80f93685bd",
+        "attention-39a3371fd0",
+        "attention-4705faca24",
+        "norm-82d8a65dcf",
+        "add_norm-28b801aed5",
+        "gated_norm-d88b128193",
+        "prepare_attention-53663d6020",
+        "quant-78967ef6bb",
+        "quant-b6aca61c7f",
+        "silu_quant-fbdf53e4ed",
+        "gates-7c7a082031",
+        "convolution-ea757c8cde",
+        "recurrent-4b9de1f8fa",
+        "recurrent-fe8f9e7511",
+        "attention-86c02993e7",
+        "attention-302aa28608",
+        "attention-5d1d8dd9c4",
+        "attention-2b7ac478c8",
+        "attention-0ebf3559b6",
+        "attention-764772a69f",
+        "attention-166a4bce77",
+        "attention-a6899c8eba",
+        "norm-1953a6389d",
+        "add_norm-a8eca15b2f",
+        "gated_norm-37b6f09e50",
+        "prepare_attention-857fc001ea",
+        "quant-38a4f3d421",
+        "quant-6b2b789e0f",
+        "silu_quant-a828b90cc9",
+        "gates-230b55c57b",
+        "convolution-accdf72929",
+        "qk-2fdf585888",
+        "norm-3f7d78bda0",
+        "add_norm-ea3a42f942",
+        "gated_norm-cf90127954",
+        "prepare_attention-396e3971a6",
+        "quant-6f964d5026",
+        "quant-31fe1ff1c4",
+        "silu_quant-e81d00f9c2",
+        "gates-414c933c7a",
+        "convolution-8f95316330",
+        "qk-2bc130d5f3",
+        "norm-80dce647f9",
+        "add_norm-6c841c61cc",
+        "gated_norm-fc1b4f5fca",
+        "prepare_attention-c7a5f6c559",
+        "quant-9c9c4ad938",
+        "quant-effc981768",
+        "silu_quant-07d0318c78",
+        "gates-032c38d108",
+        "convolution-cdeba28a40",
+        "qk-ee1062c676",
+        "norm-ea1e7c720d",
+        "add_norm-8fa7f5b472",
+        "gated_norm-a3ae6d7d9e",
+        "prepare_attention-409a17bee0",
+        "quant-0413ce3ad4",
+        "quant-f70208e990",
+        "silu_quant-6e2b085b5c",
+        "gates-fe0ffa9ef4",
+        "convolution-75d71689d9",
+        "qk-df607783e7",
+        "norm-1e2a1a065f",
+        "add_norm-16c7eea28c",
+        "gated_norm-bf1c454402",
+        "prepare_attention-70856729ec",
+        "quant-0a7394ccef",
+        "quant-4e026ac5b2",
+        "silu_quant-3d777559ac",
+        "gates-7f196271c1",
+        "convolution-445867aff2"
+      ],
+      "selected": [
+        "convolution-c4c3ff2aef",
+        "convolution-0febb0c2f0",
+        "convolution-2e3c4391cd",
+        "convolution-ff7930b7b7",
+        "convolution-647f178fc3",
+        "convolution-669242bf59",
+        "convolution-acc1f1fa4a",
+        "convolution-ea757c8cde",
+        "convolution-accdf72929",
+        "convolution-8f95316330",
+        "convolution-cdeba28a40",
+        "convolution-75d71689d9",
+        "convolution-445867aff2"
+      ]
+    },
+    "diagnostic": true,
+    "rows": [
+      {
+        "id": "convolution-c4c3ff2aef",
+        "configuration": {
+          "operation": "convolution",
+          "counts": [
+            32144
+          ]
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "mtp-32768-1",
+          "ordinary-131072-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 2.2413937377929685,
+              "cuda_ms": 1.6004468536376955
+            },
+            {
+              "tilelang_ms": 2.2414138031005857,
+              "cuda_ms": 1.6004611206054689
+            },
+            {
+              "tilelang_ms": 2.2414030456542973,
+              "cuda_ms": 1.6004373931884766
+            }
+          ],
+          "paired_mean_gain_ms": 0.6406651229858399,
+          "gain_lower_95_ms": 0.6398322448730468,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "convolution-0febb0c2f0",
+        "configuration": {
+          "operation": "convolution",
+          "counts": [
+            1
+          ]
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "prefix-32768-1",
+          "ordinary-131072-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.003681440055370331,
+              "cuda_ms": 0.0033534400165081022
+            },
+            {
+              "tilelang_ms": 0.00367823988199234,
+              "cuda_ms": 0.0033483199775218965
+            },
+            {
+              "tilelang_ms": 0.0036724799871444705,
+              "cuda_ms": 0.0033526399731636045
+            }
+          ],
+          "paired_mean_gain_ms": 0.00032920001943906145,
+          "gain_lower_95_ms": 0.00032311466336250305,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "convolution-2e3c4391cd",
+        "configuration": {
+          "operation": "convolution",
+          "counts": [
+            624,
+            32144
+          ]
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "ordinary-32768-4",
+          "mtp-32768-2",
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 2.300668258666992,
+              "cuda_ms": 1.6321553802490234
+            },
+            {
+              "tilelang_ms": 2.300673751831055,
+              "cuda_ms": 1.6321617126464845
+            },
+            {
+              "tilelang_ms": 2.300662078857422,
+              "cuda_ms": 1.6321598815917968
+            }
+          ],
+          "paired_mean_gain_ms": 0.6690405705769856,
+          "gain_lower_95_ms": 0.6684872894287109,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "convolution-ff7930b7b7",
+        "configuration": {
+          "operation": "convolution",
+          "counts": [
+            1,
+            1
+          ]
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "prefix-32768-2",
+          "ordinary-131072-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.004177919924259186,
+              "cuda_ms": 0.003859360069036484
+            },
+            {
+              "tilelang_ms": 0.0041764800250530245,
+              "cuda_ms": 0.0038606399297714234
+            },
+            {
+              "tilelang_ms": 0.004176799952983856,
+              "cuda_ms": 0.0038548800349235534
+            }
+          ],
+          "paired_mean_gain_ms": 0.000320266659061114,
+          "gain_lower_95_ms": 0.0003141066382328668,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "convolution-647f178fc3",
+        "configuration": {
+          "operation": "convolution",
+          "counts": [
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        "workloads": [
+          "ordinary-32768-4",
+          "prefix-32768-4",
+          "ordinary-131072-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.004992799907922745,
+              "cuda_ms": 0.004665440022945404
+            },
+            {
+              "tilelang_ms": 0.004983519911766052,
+              "cuda_ms": 0.004668799936771393
+            },
+            {
+              "tilelang_ms": 0.004975360035896301,
+              "cuda_ms": 0.004675200134515762
+            }
+          ],
+          "paired_mean_gain_ms": 0.0003140426377455392,
+          "gain_lower_95_ms": 0.00030364264051119483,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "convolution-669242bf59",
+        "configuration": {
+          "operation": "convolution",
+          "counts": [
+            5
+          ]
+        },
+        "workloads": [
+          "mtp-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0037452800571918486,
+              "cuda_ms": 0.0035225600004196167
+            },
+            {
+              "tilelang_ms": 0.003744000047445297,
+              "cuda_ms": 0.003521279990673065
+            },
+            {
+              "tilelang_ms": 0.003744480013847351,
+              "cuda_ms": 0.003521760106086731
+            }
+          ],
+          "paired_mean_gain_ms": 0.000218912015358607,
+          "gain_lower_95_ms": 0.0002156320065259934,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "convolution-acc1f1fa4a",
+        "configuration": {
+          "operation": "convolution",
+          "counts": [
+            5,
+            5
+          ]
+        },
+        "workloads": [
+          "mtp-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.004257600009441375,
+              "cuda_ms": 0.004075360000133515
+            },
+            {
+              "tilelang_ms": 0.00425823986530304,
+              "cuda_ms": 0.004074719995260238
+            },
+            {
+              "tilelang_ms": 0.0042529600858688356,
+              "cuda_ms": 0.004076959937810898
+            }
+          ],
+          "paired_mean_gain_ms": 0.0001744799613952636,
+          "gain_lower_95_ms": 0.00017073600490887956,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "convolution-ea757c8cde",
+        "configuration": {
+          "operation": "convolution",
+          "counts": [
+            5,
+            5,
+            5,
+            5
+          ]
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.005407040119171143,
+              "cuda_ms": 0.005362880229949951
+            },
+            {
+              "tilelang_ms": 0.005417439937591553,
+              "cuda_ms": 0.005358240008354187
+            },
+            {
+              "tilelang_ms": 0.0054150399565696715,
+              "cuda_ms": 0.0053496000170707705
+            }
+          ],
+          "paired_mean_gain_ms": 5.8463970820109015e-05,
+          "gain_lower_95_ms": 5.2847961584726955e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "convolution-accdf72929",
+        "configuration": {
+          "operation": "convolution",
+          "counts": [
+            624
+          ]
+        },
+        "workloads": [
+          "prefix-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.03880128026008606,
+              "cuda_ms": 0.03504447937011719
+            },
+            {
+              "tilelang_ms": 0.03879312038421631,
+              "cuda_ms": 0.03504240036010742
+            },
+            {
+              "tilelang_ms": 0.038796000480651856,
+              "cuda_ms": 0.03503391981124878
+            }
+          ],
+          "paired_mean_gain_ms": 0.003756176034609477,
+          "gain_lower_95_ms": 0.0037479839722315477,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "convolution-8f95316330",
+        "configuration": {
+          "operation": "convolution",
+          "counts": [
+            624,
+            624
+          ]
+        },
+        "workloads": [
+          "prefix-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.07618783950805665,
+              "cuda_ms": 0.06682944059371948
+            },
+            {
+              "tilelang_ms": 0.0761520004272461,
+              "cuda_ms": 0.06678784132003784
+            },
+            {
+              "tilelang_ms": 0.07618031978607179,
+              "cuda_ms": 0.06678591966629029
+            }
+          ],
+          "paired_mean_gain_ms": 0.009369285186131794,
+          "gain_lower_95_ms": 0.009354032357533772,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "convolution-cdeba28a40",
+        "configuration": {
+          "operation": "convolution",
+          "counts": [
+            624,
+            624,
+            624,
+            624
+          ]
+        },
+        "workloads": [
+          "prefix-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.18179648399353027,
+              "cuda_ms": 0.13294623851776122
+            },
+            {
+              "tilelang_ms": 0.1817963218688965,
+              "cuda_ms": 0.13292895793914794
+            },
+            {
+              "tilelang_ms": 0.1817796802520752,
+              "cuda_ms": 0.13292384147644043
+            }
+          ],
+          "paired_mean_gain_ms": 0.048853803952534997,
+          "gain_lower_95_ms": 0.048844396432240804,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "convolution-75d71689d9",
+        "configuration": {
+          "operation": "convolution",
+          "counts": [
+            144,
+            32144
+          ]
+        },
+        "workloads": [
+          "ordinary-131072-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 2.2681494140625,
+              "cuda_ms": 1.6084193420410156
+            },
+            {
+              "tilelang_ms": 2.2680860900878907,
+              "cuda_ms": 1.608425750732422
+            },
+            {
+              "tilelang_ms": 2.2681001281738284,
+              "cuda_ms": 1.608401107788086
+            }
+          ],
+          "paired_mean_gain_ms": 0.660225112915039,
+          "gain_lower_95_ms": 0.6596787109375001,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "convolution-445867aff2",
+        "configuration": {
+          "operation": "convolution",
+          "counts": [
+            144,
+            32144,
+            1,
+            1
+          ]
+        },
+        "workloads": [
+          "ordinary-131072-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 2.270145111083984,
+              "cuda_ms": 1.6100787353515624
+            },
+            {
+              "tilelang_ms": 2.270108947753906,
+              "cuda_ms": 1.6100657653808592
+            },
+            {
+              "tilelang_ms": 2.2701323699951175,
+              "cuda_ms": 1.6100583648681641
+            }
+          ],
+          "paired_mean_gain_ms": 0.6600641555786133,
+          "gain_lower_95_ms": 0.6600490951538086,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      }
+    ],
+    "estimates": {
+      "convolution": {
+        "kind": "estimated",
+        "source": "TileFoundry HIR",
+        "symbol": "convolution",
+        "report": "# analysis target=nvidia.b200_sxm module=Operators function=convolution topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:256@logical,256@total,256@cta;f32:4352@logical,4352@total,4352@cta\n# traffic traffic=gmem:r23040/w19456@total,r23040/w19456@cta;rmem:r64/w0@total,r64/w0@cta\n# peak-footprint=gmem:8960;rmem:0\n# roofline ideal-ns=6 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\nfrom tilefoundry.ir.types.shard import ComposedLayout, Layout\n\n@func\ndef convolution(\n    x: Tensor[(2, 128), \"bf16\"],\n    weight: Tensor[(128, 4), \"bf16\"],\n    state: Tensor[(128, 3), \"bf16\"]\n):\n    v0 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v1 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v0_2 = x[0:1, :]  # Tensor[(1, 128), \"bf16\"]; compute-cost; traffic traffic=rmem:r16/w0@total,r16/w0@cta; roofline\n    v1_2 = transpose(v0_2, perm=(1, 0))  # Tensor[(128, 1), \"bf16\"]; compute-cost; traffic traffic=gmem:r256/w256@total,r256/w256@cta; roofline ideal-ns=1 bound-by=memory\n    v2_2 = concat(state, v1_2, axis=1)  # Tensor[(128, 4), \"bf16\", Layout((128, 4), (4, 1))]; compute-cost; traffic traffic=gmem:r1024/w1024@total,r1024/w1024@cta; roofline ideal-ns=1 bound-by=memory\n    v3 = cast(v2_2, dtype=\"f32\")  # Tensor[(128, 4), \"f32\", Layout((128, 4), (4, 1))]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v4 = cast(weight, dtype=\"f32\")  # Tensor[(128, 4), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v5 = mul(v3, v4)  # Tensor[(128, 4), \"f32\", Layout((128, 4), (4, 1))]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r4096/w2048@total,r4096/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v6 = reduce(v5, axes=(-1,), keepdim=False, kind=\"sum\")  # Tensor[(128,), \"f32\", Layout((128,), (1,))]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w512@total,r2048/w512@cta; roofline ideal-ns=1 bound-by=balanced\n    v7 = silu(v6)  # Tensor[(128,), \"f32\", Layout((128,), (1,))]; compute-cost flops=f32:128@logical,128@total,128@cta; traffic traffic=gmem:r512/w512@total,r512/w512@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = cast(v7, dtype=\"bf16\")  # Tensor[(128,), \"bf16\", Layout((128,), (1,))]; compute-cost flops=bf16:128@logical,128@total,128@cta; traffic traffic=gmem:r512/w256@total,r512/w256@cta; roofline ideal-ns=1 bound-by=balanced\n    v9 = reshape(v8, new_shape=(1, 128))  # Tensor[(1, 128), \"bf16\", Layout((1, 128), (128, 1))]; compute-cost; traffic; roofline\n    v3_2 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v4_2 = 1  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v10 = v2_2[:, 1:4]  # Tensor[(128, 3), \"bf16\", ComposedLayout( inner=None, offset=1, outer=Layout((128, 3), (4, 1)), )]; compute-cost; traffic traffic=rmem:r16/w0@total,r16/w0@cta; roofline\n    v6_2 = 1  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v7_2 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v11 = x[1:2, :]  # Tensor[(1, 128), \"bf16\"]; compute-cost; traffic traffic=rmem:r16/w0@total,r16/w0@cta; roofline\n    v12 = transpose(v11, perm=(1, 0))  # Tensor[(128, 1), \"bf16\"]; compute-cost; traffic traffic=gmem:r256/w256@total,r256/w256@cta; roofline ideal-ns=1 bound-by=memory\n    v13 = concat(v10, v12, axis=1)  # Tensor[(128, 4), \"bf16\", Layout((128, 4), (4, 1))]; compute-cost; traffic traffic=gmem:r1024/w1024@total,r1024/w1024@cta; roofline ideal-ns=1 bound-by=memory\n    v14 = cast(v13, dtype=\"f32\")  # Tensor[(128, 4), \"f32\", Layout((128, 4), (4, 1))]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v15 = cast(weight, dtype=\"f32\")  # Tensor[(128, 4), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v16 = mul(v14, v15)  # Tensor[(128, 4), \"f32\", Layout((128, 4), (4, 1))]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r4096/w2048@total,r4096/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v17 = reduce(v16, axes=(-1,), keepdim=False, kind=\"sum\")  # Tensor[(128,), \"f32\", Layout((128,), (1,))]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w512@total,r2048/w512@cta; roofline ideal-ns=1 bound-by=balanced\n    v18 = silu(v17)  # Tensor[(128,), \"f32\", Layout((128,), (1,))]; compute-cost flops=f32:128@logical,128@total,128@cta; traffic traffic=gmem:r512/w512@total,r512/w512@cta; roofline ideal-ns=1 bound-by=balanced\n    v19 = cast(v18, dtype=\"bf16\")  # Tensor[(128,), \"bf16\", Layout((128,), (1,))]; compute-cost flops=bf16:128@logical,128@total,128@cta; traffic traffic=gmem:r512/w256@total,r512/w256@cta; roofline ideal-ns=1 bound-by=balanced\n    v20 = reshape(v19, new_shape=(1, 128))  # Tensor[(1, 128), \"bf16\", Layout((1, 128), (128, 1))]; compute-cost; traffic; roofline\n    v21 = concat(v9, v20, axis=0)  # Tensor[(2, 128), \"bf16\", Layout((2, 128), (128, 1))]; compute-cost; traffic traffic=gmem:r512/w512@total,r512/w512@cta; roofline ideal-ns=1 bound-by=memory\n    v22 = reshape(v10, new_shape=(1, 128, 3))  # Tensor[(1, 128, 3), \"bf16\"]; compute-cost; traffic; roofline\n    v9_2 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v10_2 = 1  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v23 = v13[:, 1:4]  # Tensor[(128, 3), \"bf16\", ComposedLayout( inner=None, offset=1, outer=Layout((128, 3), (4, 1)), )]; compute-cost; traffic traffic=rmem:r16/w0@total,r16/w0@cta; roofline\n    v24 = reshape(v23, new_shape=(1, 128, 3))  # Tensor[(1, 128, 3), \"bf16\"]; compute-cost; traffic; roofline\n    v25 = concat(v22, v24, axis=0)  # Tensor[(2, 128, 3), \"bf16\", Layout((2, 128, 3), (384, 3, 1))]; compute-cost; traffic traffic=gmem:r1536/w1536@total,r1536/w1536@cta; roofline ideal-ns=1 bound-by=memory\n    return (v21, v25)\n",
+        "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+      }
+    },
+    "passed": false,
+    "selected_passed": true,
+    "interference": [],
+    "raw_report_sha256": "18439d5bf73cb5be8320f8b0e22a5510d5c677d999ebdb1b4fe09c6e3c8038d9"
+  },
+  "observations": {
+    "sources_sha256": {
+      "benchmarks/kernels.py": "98ffe4ec7ed3e444f60261bb44d584b9f2e6b61cf0bcf3073a401744070d31bf",
+      "development/kernels/cases.py": "13a71e3253d20e7b2e26ad0764885bb8cd8cb5bb1260c263a92a4669b63c5e19",
+      "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+      "development/kernels/fixtures.py": "bd346bf0acbd0218fa3a59e6c572790307ebfb19467e5d0a7ccdaf4a40cf5595",
+      "development/kernels/observations.py": "838276bb4def11e107c4eac84b43b42c8332e76a5e03d3ea72b404abc80db660",
+      "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+      "development/kernels/reference.py": "ddf5a63e286e975a81e74982d24ebd575e94a0208c0a013ff3b20eb0f06adf12",
+      "development/kernels/semantics.py": "96be066b579b829f9179ec87bb39f70ceebcdcd6aa5c7845482ce1614e79cd99",
+      "development/kernels/tilelang-reference.json": "14c3df434dedf6d60629eba25c267df888d1a83f1e35cf868fc29a4b1e0945e0",
+      "development/kernels/timing.py": "1f8afa6dde7cf2bc31256f4a5bbd58e7bf7a5da1b30cabba00e0b200355d8006",
+      "development/kernels/twins.py": "608ac3edd7d08e6e47a1ccdefb5c4d7c891b3080d8e3cb05d05a0b8be121117b",
+      "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+      "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+      "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+      "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+      "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+      "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+      "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "f503653e68f8d4304b110d762ec86bf9366de2486b654d1d7b1296cd364653e0",
+      "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+      "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+      "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+      "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+      "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+      "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+      "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+      "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+      "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+      "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+      "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+      "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+      "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+      "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+      "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+      "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+    },
+    "case": {
+      "id": "convolution-ea757c8cde",
+      "configuration": {
+        "operation": "convolution",
+        "counts": [
+          5,
+          5,
+          5,
+          5
+        ]
+      },
+      "workloads": [
+        "mtp-32768-4"
+      ]
+    },
+    "hardware": {
+      "gpu": "GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad",
+      "cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+        109,
+        110,
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123,
+        124,
+        125,
+        126,
+        127,
+        128,
+        129,
+        130,
+        131,
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        153,
+        154,
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        164,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175,
+        176,
+        177,
+        178,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        186,
+        187,
+        188,
+        189,
+        190,
+        191
+      ],
+      "gpu_info": "GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad, NVIDIA B200, 183359 MiB, 590.48.01"
+    },
+    "reference": {
+      "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+      "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+      "files": {
+        "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+      },
+      "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+      "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690"
+    },
+    "source_commit": "f3e2f19542dd44a23bc6efb6647b05d3ad4d90f9",
+    "source_status": " M python/oh_my_vllm/kernels/cuda_backend/kernels.cu\n M tests/test_independent_kernels.py\n",
+    "estimated": {
+      "kind": "estimated",
+      "source": "TileFoundry HIR",
+      "symbol": "convolution",
+      "report": "# analysis target=nvidia.b200_sxm module=Operators function=convolution topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:256@logical,256@total,256@cta;f32:4352@logical,4352@total,4352@cta\n# traffic traffic=gmem:r23040/w19456@total,r23040/w19456@cta;rmem:r64/w0@total,r64/w0@cta\n# peak-footprint=gmem:8960;rmem:0\n# roofline ideal-ns=6 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\nfrom tilefoundry.ir.types.shard import ComposedLayout, Layout\n\n@func\ndef convolution(\n    x: Tensor[(2, 128), \"bf16\"],\n    weight: Tensor[(128, 4), \"bf16\"],\n    state: Tensor[(128, 3), \"bf16\"]\n):\n    v0 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v1 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v0_2 = x[0:1, :]  # Tensor[(1, 128), \"bf16\"]; compute-cost; traffic traffic=rmem:r16/w0@total,r16/w0@cta; roofline\n    v1_2 = transpose(v0_2, perm=(1, 0))  # Tensor[(128, 1), \"bf16\"]; compute-cost; traffic traffic=gmem:r256/w256@total,r256/w256@cta; roofline ideal-ns=1 bound-by=memory\n    v2_2 = concat(state, v1_2, axis=1)  # Tensor[(128, 4), \"bf16\", Layout((128, 4), (4, 1))]; compute-cost; traffic traffic=gmem:r1024/w1024@total,r1024/w1024@cta; roofline ideal-ns=1 bound-by=memory\n    v3 = cast(v2_2, dtype=\"f32\")  # Tensor[(128, 4), \"f32\", Layout((128, 4), (4, 1))]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v4 = cast(weight, dtype=\"f32\")  # Tensor[(128, 4), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v5 = mul(v3, v4)  # Tensor[(128, 4), \"f32\", Layout((128, 4), (4, 1))]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r4096/w2048@total,r4096/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v6 = reduce(v5, axes=(-1,), keepdim=False, kind=\"sum\")  # Tensor[(128,), \"f32\", Layout((128,), (1,))]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w512@total,r2048/w512@cta; roofline ideal-ns=1 bound-by=balanced\n    v7 = silu(v6)  # Tensor[(128,), \"f32\", Layout((128,), (1,))]; compute-cost flops=f32:128@logical,128@total,128@cta; traffic traffic=gmem:r512/w512@total,r512/w512@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = cast(v7, dtype=\"bf16\")  # Tensor[(128,), \"bf16\", Layout((128,), (1,))]; compute-cost flops=bf16:128@logical,128@total,128@cta; traffic traffic=gmem:r512/w256@total,r512/w256@cta; roofline ideal-ns=1 bound-by=balanced\n    v9 = reshape(v8, new_shape=(1, 128))  # Tensor[(1, 128), \"bf16\", Layout((1, 128), (128, 1))]; compute-cost; traffic; roofline\n    v3_2 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v4_2 = 1  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v10 = v2_2[:, 1:4]  # Tensor[(128, 3), \"bf16\", ComposedLayout( inner=None, offset=1, outer=Layout((128, 3), (4, 1)), )]; compute-cost; traffic traffic=rmem:r16/w0@total,r16/w0@cta; roofline\n    v6_2 = 1  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v7_2 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v11 = x[1:2, :]  # Tensor[(1, 128), \"bf16\"]; compute-cost; traffic traffic=rmem:r16/w0@total,r16/w0@cta; roofline\n    v12 = transpose(v11, perm=(1, 0))  # Tensor[(128, 1), \"bf16\"]; compute-cost; traffic traffic=gmem:r256/w256@total,r256/w256@cta; roofline ideal-ns=1 bound-by=memory\n    v13 = concat(v10, v12, axis=1)  # Tensor[(128, 4), \"bf16\", Layout((128, 4), (4, 1))]; compute-cost; traffic traffic=gmem:r1024/w1024@total,r1024/w1024@cta; roofline ideal-ns=1 bound-by=memory\n    v14 = cast(v13, dtype=\"f32\")  # Tensor[(128, 4), \"f32\", Layout((128, 4), (4, 1))]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v15 = cast(weight, dtype=\"f32\")  # Tensor[(128, 4), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v16 = mul(v14, v15)  # Tensor[(128, 4), \"f32\", Layout((128, 4), (4, 1))]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r4096/w2048@total,r4096/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v17 = reduce(v16, axes=(-1,), keepdim=False, kind=\"sum\")  # Tensor[(128,), \"f32\", Layout((128,), (1,))]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w512@total,r2048/w512@cta; roofline ideal-ns=1 bound-by=balanced\n    v18 = silu(v17)  # Tensor[(128,), \"f32\", Layout((128,), (1,))]; compute-cost flops=f32:128@logical,128@total,128@cta; traffic traffic=gmem:r512/w512@total,r512/w512@cta; roofline ideal-ns=1 bound-by=balanced\n    v19 = cast(v18, dtype=\"bf16\")  # Tensor[(128,), \"bf16\", Layout((128,), (1,))]; compute-cost flops=bf16:128@logical,128@total,128@cta; traffic traffic=gmem:r512/w256@total,r512/w256@cta; roofline ideal-ns=1 bound-by=balanced\n    v20 = reshape(v19, new_shape=(1, 128))  # Tensor[(1, 128), \"bf16\", Layout((1, 128), (128, 1))]; compute-cost; traffic; roofline\n    v21 = concat(v9, v20, axis=0)  # Tensor[(2, 128), \"bf16\", Layout((2, 128), (128, 1))]; compute-cost; traffic traffic=gmem:r512/w512@total,r512/w512@cta; roofline ideal-ns=1 bound-by=memory\n    v22 = reshape(v10, new_shape=(1, 128, 3))  # Tensor[(1, 128, 3), \"bf16\"]; compute-cost; traffic; roofline\n    v9_2 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v10_2 = 1  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v23 = v13[:, 1:4]  # Tensor[(128, 3), \"bf16\", ComposedLayout( inner=None, offset=1, outer=Layout((128, 3), (4, 1)), )]; compute-cost; traffic traffic=rmem:r16/w0@total,r16/w0@cta; roofline\n    v24 = reshape(v23, new_shape=(1, 128, 3))  # Tensor[(1, 128, 3), \"bf16\"]; compute-cost; traffic; roofline\n    v25 = concat(v22, v24, axis=0)  # Tensor[(2, 128, 3), \"bf16\", Layout((2, 128, 3), (384, 3, 1))]; compute-cost; traffic traffic=gmem:r1536/w1536@total,r1536/w1536@cta; roofline ideal-ns=1 bound-by=memory\n    return (v21, v25)\n",
+      "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+    },
+    "measured": {
+      "tilelang": {
+        "kind": "measured",
+        "source": "Nsight Compute (separate replay)",
+        "launches": [
+          {
+            "launch_id": "0",
+            "kernel": "void at::<unnamed>::indexSelectSmallIndex<c10::BFloat16, long, unsigned int, 2, 2, (int)-2>(at::TensorInfo<T1, T3>, at::TensorInfo<const T1, T3>, at::TensorInfo<const T2, T3>, int, int, T3, long)",
+            "metrics": {
+              "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "0.32",
+                "unit": "%"
+              },
+              "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+                "value": "0",
+                "unit": ""
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "launch__registers_per_thread": {
+                "value": "28",
+                "unit": "register/thread"
+              },
+              "launch__shared_mem_per_block_dynamic": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "launch__shared_mem_per_block_static": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "5.12",
+                "unit": "%"
+              },
+              "smsp__inst_executed.sum": {
+                "value": "353280",
+                "unit": "inst"
+              },
+              "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+                "value": "48.38",
+                "unit": "%"
+              },
+              "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+                "value": "15.02",
+                "unit": "%"
+              }
+            }
+          },
+          {
+            "launch_id": "1",
+            "kernel": "kernel_kernel",
+            "metrics": {
+              "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "1.07",
+                "unit": "%"
+              },
+              "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+                "value": "0",
+                "unit": ""
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "launch__registers_per_thread": {
+                "value": "24",
+                "unit": "register/thread"
+              },
+              "launch__shared_mem_per_block_dynamic": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "launch__shared_mem_per_block_static": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "14.96",
+                "unit": "%"
+              },
+              "smsp__inst_executed.sum": {
+                "value": "917760",
+                "unit": "inst"
+              },
+              "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+                "value": "59.81",
+                "unit": "%"
+              },
+              "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+                "value": "4.62",
+                "unit": "%"
+              }
+            }
+          }
+        ]
+      },
+      "cuda": {
+        "kind": "measured",
+        "source": "Nsight Compute (separate replay)",
+        "launches": [
+          {
+            "launch_id": "0",
+            "kernel": "void at::<unnamed>::indexSelectSmallIndex<c10::BFloat16, long, unsigned int, 2, 2, (int)-2>(at::TensorInfo<T1, T3>, at::TensorInfo<const T1, T3>, at::TensorInfo<const T2, T3>, int, int, T3, long)",
+            "metrics": {
+              "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "0.32",
+                "unit": "%"
+              },
+              "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+                "value": "0",
+                "unit": ""
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "launch__registers_per_thread": {
+                "value": "28",
+                "unit": "register/thread"
+              },
+              "launch__shared_mem_per_block_dynamic": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "launch__shared_mem_per_block_static": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "5.02",
+                "unit": "%"
+              },
+              "smsp__inst_executed.sum": {
+                "value": "353280",
+                "unit": "inst"
+              },
+              "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+                "value": "49.67",
+                "unit": "%"
+              },
+              "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+                "value": "13.89",
+                "unit": "%"
+              }
+            }
+          },
+          {
+            "launch_id": "1",
+            "kernel": "void model_convolution_kernel<1>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, const void *, const void *, const __nv_bfloat16 *, const void *, __nv_bfloat16 *, int, bool, bool, bool)",
+            "metrics": {
+              "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "1.17",
+                "unit": "%"
+              },
+              "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+                "value": "0",
+                "unit": ""
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "launch__registers_per_thread": {
+                "value": "32",
+                "unit": "register/thread"
+              },
+              "launch__shared_mem_per_block_dynamic": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "launch__shared_mem_per_block_static": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "19.79",
+                "unit": "%"
+              },
+              "smsp__inst_executed.sum": {
+                "value": "1113600",
+                "unit": "inst"
+              },
+              "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+                "value": "38.39",
+                "unit": "%"
+              },
+              "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+                "value": "7.59",
+                "unit": "%"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "limitation": "Profiler replay only; not timing or performance acceptance",
+    "raw_report_sha256": "4d21491c10859cdacb92899bf0935d0d8a1b90d8ed59d9dbb16e69ef23ff961e"
+  },
+  "validation": {
+    "conv-final-tests": {
+      "result": "169 passed;28 subtests; no skips. Existing ragged test adds actual16384 token stride; original10240/20480 remain.",
+      "sha256": "53875278b515ce9d9052f621c5363015fdc1a2044708e8c8df50d6de831c0d91"
+    },
+    "conv-boundaries": {
+      "result": "Initial temporary checker failed CPU/GPU reference-device mismatch before comparison; fixed in supplemental rerun",
+      "sha256": "12202d418f6706dcb31fb21bfaf3c4604b28bdb43e759737ebace4e581200cd5"
+    },
+    "conv-final-boundaries": {
+      "result": "Original FP64 tolerances and exact snapshots/untouched slots pass for1/5/127/128/4095/4096 rows,weight offset,pool/weight alias,cancellation,near-zero,large signed and negative underflow-region values. Not exhaustive or bitwise activation equivalence.",
+      "sha256": "35838e78a2c1598089cc17f41255dfa694188a5ce45b7a9d012bcb8a05e19dc8"
+    },
+    "conv-ordinary-fp64": {
+      "result": "Actual-model eager ordinary independent FP64 probes pass; forced64-token text includes repetition/control tokens, not agentic acceptance",
+      "sha256": "5110c24990578e924d866a8fbc155b766a412d1b15eb4a7b6f900fe3ca64cfe8"
+    },
+    "conv-mtp-fp64": {
+      "result": "Actual-model eager MTP4 independent FP64 probes pass; forced64-token text includes control tokens/repetition, not agentic acceptance",
+      "sha256": "4e5f05fe24e1dd3260badb04dfbe0968688468b0b9a2929a6b592287c5cd235e"
+    },
+    "conv-hooks": {
+      "result": "All-file Rust fmt/width/clippy/tests and Ruff pass",
+      "sha256": "f3e55f7f9832bec68142bbdf0c7408e40148ee73f45759bc29a8788189aeb010"
+    }
+  },
+  "test_sources_sha256": {
+    "tests/test_independent_kernels.py": "34460eb0e3e23aab95573d5e4d0810ec73a1343e4fdabcd37888af4530123ab4"
+  },
+  "implementation": "C10240/stride16384 layout,aligned four-weight loads,stable FP32 SiLU. Restricted path guarded by pool/read-only conservative spans; generic CUDA retained. Source index_select snapshot unchanged.",
+  "review": "Independent review passed; requested FP32 activation and boundary/alignment/alias supplements passed."
+}

@@ -330,14 +330,15 @@ def test_long_prefill_keeps_ragged_requests_isolated():
     check(plan(query, cache), expected)
 
 
-@pytest.mark.parametrize("strided", [False, True])
-def test_convolution_ragged_snapshots(strided):
+@pytest.mark.parametrize("stride", [10240, 16384, 20480])
+def test_convolution_ragged_snapshots(stride):
     from oh_my_vllm.kernels.convolution import causal_conv
 
     torch.manual_seed(11)
     x = torch.randn(790, 10240, device="cuda", dtype=torch.bfloat16)
-    if strided:
-        x = torch.cat((x, torch.zeros_like(x)), dim=1)[:, :10240]
+    if stride != 10240:
+        padding = x.new_zeros((len(x), stride - 10240))
+        x = torch.cat((x, padding), dim=1)[:, :10240]
     weights = torch.randn(10240, 4, device="cuda", dtype=torch.bfloat16)
     pool = torch.randn(10, 10240, 3, device="cuda", dtype=torch.bfloat16)
     before = pool.clone()
