@@ -1,5 +1,13 @@
 # CUDA kernel development
 
+## Current verification
+
+Clean c36d1c9 passes147/147 operator configurations and all12 framework rows.
+Correctness passes173 tests plus28 subtests; six full-context boundaries pass.
+Updated-document agentic readback and the default-CUDA selection remain pending.
+See acceptance.md and handoff.md for current status. All milestones below are
+historical; their case/test counts must not be reported as current.
+
 ## Paired FP32 Q/K normalization
 
 The packed16-head/10240-stride path now uses aligned eight-element loads and

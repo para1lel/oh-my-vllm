@@ -6,6 +6,11 @@
 
 模型位于 `/data0/shared/Qwen3.8-27B-FP8`，包含 16 层全注意力和 48 层 GDN。块大小为 784。参见[架构](docs/architecture.zh.md)、[通信协议](docs/design.zh.md)和[设计决策](docs/decisions/)。
 
+当前 CUDA 验证：147/147项算子、全部12组吞吐/TTFT、173项正确性测试及28个
+子测试、六组完整上下文边界均通过。更新文档后的 agentic 读回和最终选择检查
+完成前，默认后端仍为 TileLang。历史阶段数量不是当前状态；见
+[交接记录](docs/handoff.zh.md) 和[验收记录](docs/acceptance.zh.md)。
+
 ## 快速开始
 
 包装脚本选择框架环境、Python 路径、构建目录和独立 kernel 缓存。GPU 测试等待空闲 B200，并固定其 UUID。

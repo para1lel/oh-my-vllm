@@ -1,0 +1,3131 @@
+{
+  "service_identity": {
+    "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/identity.json",
+    "sha256": "6f1ea65b5e22bf3fdf1b5d77382cbf5f8637e36f4d6c9724e1ea6fca19b62578",
+    "data": {
+      "source": {
+        "git_commit": "c36d1c94d89974e79d644df133f22685b5555179",
+        "git_status": "",
+        "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+        "python_sources_sha256": {
+          "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+          "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+          "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+          "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+          "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+          "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+          "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+          "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+          "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+          "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+          "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+          "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+          "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+          "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+          "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+          "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+          "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+          "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+          "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+          "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+          "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+          "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+          "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+          "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+          "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+          "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+          "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+          "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+          "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+          "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+          "python/oh_my_vllm/worker/runtime.py": "c1d2319d536c81a3f874def9113b72b4144aca1ea8f4c447e09fd12f80b4f019",
+          "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+          "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+          "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+          "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+          "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+        }
+      },
+      "runtime": {
+        "python": "/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python",
+        "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+        "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+        "packages": {
+          "torch": "2.14.0",
+          "triton": "3.8.0",
+          "tilelang": "0.1.14",
+          "apache-tvm-ffi": "0.1.12",
+          "flashinfer-python": "0.6.18.post1",
+          "transformers": "5.17.0",
+          "tokenizers": "0.23.2",
+          "safetensors": "0.8.0",
+          "xgrammar": "0.2.7",
+          "pyzmq": "27.2.0",
+          "msgpack": "1.2.2"
+        },
+        "flashinfer_workspace": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012",
+        "triton_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/triton",
+        "tilelang_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/tilelang",
+        "native_cuda_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/native-cuda",
+        "kernel_backend": "cuda",
+        "vllm_importable": false
+      },
+      "hardware": {
+        "gpu": "GPU-81c2e3a2-685d-59a9-e801-7e068fffc377",
+        "cpu_affinity": [
+          136,
+          137,
+          138,
+          139,
+          140,
+          141,
+          142,
+          143
+        ],
+        "gpu_info": "GPU-81c2e3a2-685d-59a9-e801-7e068fffc377, NVIDIA B200, 183359 MiB, 590.48.01"
+      }
+    }
+  },
+  "constraints": [
+    {
+      "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/constraints/chat-medium-json_object.json",
+      "sha256": "b8951d539ded2ae5f01c06e8880b79e4e127a997690c5fe0da515131764fe439",
+      "data": {
+        "request": {
+          "model": "qwen3.8-27b-fp8",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "user",
+              "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+            }
+          ],
+          "reasoning_effort": "medium",
+          "max_completion_tokens": 4096,
+          "response_format": {
+            "type": "json_object"
+          }
+        },
+        "response": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "\n\n{\"n\": 123, \"label\": \"verified\"}",
+                "reasoning_content": "The user is asking me to:\n1. Return JSON with n=123 and label=verified\n2. For tool use, call report with those arguments\n\nLet me think about this. The user wants me to return a JSON object with specific fields. They also mention \"for tool use, call report with those arguments\" - but I don't have a tool called \"report\" available to me. I should just return the JSON as requested.\n\nLet me provide the JSON:\n```json\n{\"n\": 123, \"label\": \"verified\"}\n```\n\nI don't have a \"report\" tool available, so I'll just return the JSON and note that I don't have that tool.\n",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1790090777,
+          "id": "chatcmpl_582585_6ab29e19_4",
+          "model": "qwen3.8-27b-fp8",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 167,
+            "completion_tokens_details": {
+              "reasoning_tokens": 151
+            },
+            "prompt_tokens": 33,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 200
+          }
+        },
+        "elapsed_s": 0.4941703910008073
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/constraints/chat-medium-json_schema.json",
+      "sha256": "792353d2026516416a017932ee0a74867ad4a98125abdea633e07bd9189b2625",
+      "data": {
+        "request": {
+          "model": "qwen3.8-27b-fp8",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "user",
+              "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+            }
+          ],
+          "reasoning_effort": "medium",
+          "max_completion_tokens": 4096,
+          "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+              "name": "result",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "n": {
+                    "type": "integer",
+                    "enum": [
+                      123
+                    ]
+                  },
+                  "label": {
+                    "type": "string",
+                    "const": "verified"
+                  }
+                },
+                "required": [
+                  "n",
+                  "label"
+                ],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          }
+        },
+        "response": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "\n\n{\"label\":\"verified\",\"n\":123}",
+                "reasoning_content": "The user is asking me to:\n1. Return JSON with n=123 and label=verified\n2. For tool use, call report with those arguments\n\nLet me think about this. The user wants me to return a JSON object with specific fields. They also mention \"for tool use, call report with those arguments\" - but I don't have a tool called \"report\" available to me. I should just return the JSON as requested.\n\nLet me provide the JSON:\n```json\n{\"n\": 123, \"label\": \"verified\"}\n```\n\nI don't have a \"report\" tool available, so I'll just return the JSON and note that I don't have that tool.\n",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1790090777,
+          "id": "chatcmpl_582585_6ab29e19_5",
+          "model": "qwen3.8-27b-fp8",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 164,
+            "completion_tokens_details": {
+              "reasoning_tokens": 151
+            },
+            "prompt_tokens": 33,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 197
+          }
+        },
+        "elapsed_s": 0.49847261000832077
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/constraints/chat-medium-tool.json",
+      "sha256": "6599946a69c3dae17c80f24dfb996f530d4a96a43dd44bbb3e8901e5d51311e6",
+      "data": {
+        "request": {
+          "model": "qwen3.8-27b-fp8",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "user",
+              "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+            }
+          ],
+          "reasoning_effort": "medium",
+          "max_completion_tokens": 4096,
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "report",
+                "description": "Report the result.",
+                "strict": true,
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "n": {
+                      "type": "integer",
+                      "enum": [
+                        123
+                      ]
+                    },
+                    "label": {
+                      "type": "string",
+                      "const": "verified"
+                    }
+                  },
+                  "required": [
+                    "n",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          ],
+          "tool_choice": "required",
+          "parallel_tool_calls": false
+        },
+        "response": {
+          "choices": [
+            {
+              "finish_reason": "tool_calls",
+              "index": 0,
+              "message": {
+                "content": "\n\n",
+                "reasoning_content": "The user wants me to call the report tool with n=123 and label=\"verified\".\n",
+                "role": "assistant",
+                "tool_calls": [
+                  {
+                    "function": {
+                      "arguments": "{\"label\":\"verified\",\"n\":123}",
+                      "name": "report"
+                    },
+                    "id": "call_chatcmpl_582585_6ab29e1a_6_0",
+                    "type": "function"
+                  }
+                ]
+              }
+            }
+          ],
+          "created": 1790090778,
+          "id": "chatcmpl_582585_6ab29e1a_6",
+          "model": "qwen3.8-27b-fp8",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 61,
+            "completion_tokens_details": {
+              "reasoning_tokens": 22
+            },
+            "prompt_tokens": 323,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 384
+          }
+        },
+        "elapsed_s": 0.21044497200637124
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/constraints/chat-off-json_object.json",
+      "sha256": "25403d22bc71f66060bed3d56d49184cb6150706989f20364b4d78c193df5dc1",
+      "data": {
+        "request": {
+          "model": "qwen3.8-27b-fp8",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "user",
+              "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+            }
+          ],
+          "reasoning_effort": "off",
+          "max_completion_tokens": 4096,
+          "response_format": {
+            "type": "json_object"
+          }
+        },
+        "response": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "{\n  \"n\": 123,\n  \"label\": \"verified\"\n}",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1790090772,
+          "id": "chatcmpl_582585_6ab29e14_1",
+          "model": "qwen3.8-27b-fp8",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 22,
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "prompt_tokens": 35,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 57
+          }
+        },
+        "elapsed_s": 5.293328268002369
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/constraints/chat-off-json_schema.json",
+      "sha256": "1f1e872b33794629bfcf690faf484cffab14c746fd06cf66e32a0c8c19f7c608",
+      "data": {
+        "request": {
+          "model": "qwen3.8-27b-fp8",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "user",
+              "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+            }
+          ],
+          "reasoning_effort": "off",
+          "max_completion_tokens": 4096,
+          "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+              "name": "result",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "n": {
+                    "type": "integer",
+                    "enum": [
+                      123
+                    ]
+                  },
+                  "label": {
+                    "type": "string",
+                    "const": "verified"
+                  }
+                },
+                "required": [
+                  "n",
+                  "label"
+                ],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          }
+        },
+        "response": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "{\n  \"label\": \"verified\",\n  \"n\": 123\n}",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1790090776,
+          "id": "chatcmpl_582585_6ab29e18_2",
+          "model": "qwen3.8-27b-fp8",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 21,
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "prompt_tokens": 35,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 56
+          }
+        },
+        "elapsed_s": 0.09659552099765278
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/constraints/chat-off-tool.json",
+      "sha256": "8c9d51c69a5ccd3908035fe42790db894567b18ae590a3a45cec0b5d7caf9282",
+      "data": {
+        "request": {
+          "model": "qwen3.8-27b-fp8",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "user",
+              "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+            }
+          ],
+          "reasoning_effort": "off",
+          "max_completion_tokens": 4096,
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "report",
+                "description": "Report the result.",
+                "strict": true,
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "n": {
+                      "type": "integer",
+                      "enum": [
+                        123
+                      ]
+                    },
+                    "label": {
+                      "type": "string",
+                      "const": "verified"
+                    }
+                  },
+                  "required": [
+                    "n",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          ],
+          "tool_choice": "required",
+          "parallel_tool_calls": false
+        },
+        "response": {
+          "choices": [
+            {
+              "finish_reason": "tool_calls",
+              "index": 0,
+              "message": {
+                "content": null,
+                "role": "assistant",
+                "tool_calls": [
+                  {
+                    "function": {
+                      "arguments": "{\"label\":\"verified\",\"n\":123}",
+                      "name": "report"
+                    },
+                    "id": "call_chatcmpl_582585_6ab29e19_3_0",
+                    "type": "function"
+                  }
+                ]
+              }
+            }
+          ],
+          "created": 1790090777,
+          "id": "chatcmpl_582585_6ab29e19_3",
+          "model": "qwen3.8-27b-fp8",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 38,
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "prompt_tokens": 325,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 363
+          }
+        },
+        "elapsed_s": 0.1764015670050867
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/constraints/responses-medium-json_object.json",
+      "sha256": "580d23c81b0d14a51d227fc21f875723c3266346978f59d333ff2a8223a302f9",
+      "data": {
+        "request": {
+          "model": "qwen3.8-27b-fp8",
+          "temperature": 0,
+          "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+          "reasoning": {
+            "effort": "medium"
+          },
+          "max_output_tokens": 4096,
+          "store": false,
+          "text": {
+            "format": {
+              "type": "json_object"
+            }
+          }
+        },
+        "response": {
+          "background": false,
+          "completed_at": 1790090779,
+          "created_at": 1790090778,
+          "error": null,
+          "id": "resp_582585_6ab29e1a_10",
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": 4096,
+          "metadata": {},
+          "model": "qwen3.8-27b-fp8",
+          "object": "response",
+          "output": [
+            {
+              "id": "rs_resp_582585_6ab29e1a_10",
+              "summary": [
+                {
+                  "text": "The user is asking me to:\n1. Return JSON with n=123 and label=verified\n2. For tool use, call report with those arguments\n\nLet me think about this. The user wants me to return a JSON object with specific fields. They also mention \"for tool use, call report with those arguments\" - but I don't have a tool called \"report\" available to me. I should just return the JSON as requested.\n\nLet me provide the JSON:\n```json\n{\"n\": 123, \"label\": \"verified\"}\n```\n\nI don't have a \"report\" tool available, so I'll just return the JSON and note that I don't have that tool.\n",
+                  "type": "summary_text"
+                }
+              ],
+              "type": "reasoning"
+            },
+            {
+              "content": [
+                {
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "\n\n{\"n\": 123, \"label\": \"verified\"}",
+                  "type": "output_text"
+                }
+              ],
+              "id": "msg_resp_582585_6ab29e1a_10",
+              "role": "assistant",
+              "status": "completed",
+              "type": "message"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "previous_response_id": null,
+          "reasoning": {
+            "effort": "medium",
+            "summary": "auto"
+          },
+          "service_tier": "default",
+          "status": "completed",
+          "store": false,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "json_object"
+            }
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_p": 0.95,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 33,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 167,
+            "output_tokens_details": {
+              "reasoning_tokens": 151
+            },
+            "total_tokens": 200
+          },
+          "user": null
+        },
+        "elapsed_s": 0.48557360300037544
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/constraints/responses-medium-json_schema.json",
+      "sha256": "753ba34a6733fbbe16b7117b6cb5185bb4bf8d3f392001ff2c3bd222c1920eba",
+      "data": {
+        "request": {
+          "model": "qwen3.8-27b-fp8",
+          "temperature": 0,
+          "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+          "reasoning": {
+            "effort": "medium"
+          },
+          "max_output_tokens": 4096,
+          "store": false,
+          "text": {
+            "format": {
+              "type": "json_schema",
+              "name": "result",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "n": {
+                    "type": "integer",
+                    "enum": [
+                      123
+                    ]
+                  },
+                  "label": {
+                    "type": "string",
+                    "const": "verified"
+                  }
+                },
+                "required": [
+                  "n",
+                  "label"
+                ],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          }
+        },
+        "response": {
+          "background": false,
+          "completed_at": 1790090779,
+          "created_at": 1790090779,
+          "error": null,
+          "id": "resp_582585_6ab29e1b_11",
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": 4096,
+          "metadata": {},
+          "model": "qwen3.8-27b-fp8",
+          "object": "response",
+          "output": [
+            {
+              "id": "rs_resp_582585_6ab29e1b_11",
+              "summary": [
+                {
+                  "text": "The user is asking me to:\n1. Return JSON with n=123 and label=verified\n2. For tool use, call report with those arguments\n\nLet me think about this. The user wants me to return a JSON object with specific fields. They also mention \"for tool use, call report with those arguments\" - but I don't have a tool called \"report\" available to me. I should just return the JSON as requested.\n\nLet me provide the JSON:\n```json\n{\"n\": 123, \"label\": \"verified\"}\n```\n\nI don't have a \"report\" tool available, so I'll just return the JSON and note that I don't have that tool.\n",
+                  "type": "summary_text"
+                }
+              ],
+              "type": "reasoning"
+            },
+            {
+              "content": [
+                {
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "\n\n{\"label\":\"verified\",\"n\":123}",
+                  "type": "output_text"
+                }
+              ],
+              "id": "msg_resp_582585_6ab29e1b_11",
+              "role": "assistant",
+              "status": "completed",
+              "type": "message"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "previous_response_id": null,
+          "reasoning": {
+            "effort": "medium",
+            "summary": "auto"
+          },
+          "service_tier": "default",
+          "status": "completed",
+          "store": false,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "name": "result",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "const": "verified",
+                    "type": "string"
+                  },
+                  "n": {
+                    "enum": [
+                      123
+                    ],
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "n",
+                  "label"
+                ],
+                "type": "object"
+              },
+              "strict": true,
+              "type": "json_schema"
+            }
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_p": 0.95,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 33,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 164,
+            "output_tokens_details": {
+              "reasoning_tokens": 151
+            },
+            "total_tokens": 197
+          },
+          "user": null
+        },
+        "elapsed_s": 0.4965740379993804
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/constraints/responses-medium-tool.json",
+      "sha256": "22cc42fc21cd7759e3cc741a19ffdc56c923f8cef57212e6d4f414025e76f8e2",
+      "data": {
+        "request": {
+          "model": "qwen3.8-27b-fp8",
+          "temperature": 0,
+          "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+          "reasoning": {
+            "effort": "medium"
+          },
+          "max_output_tokens": 4096,
+          "store": false,
+          "tools": [
+            {
+              "type": "function",
+              "name": "report",
+              "description": "Report the result.",
+              "strict": true,
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "n": {
+                    "type": "integer",
+                    "enum": [
+                      123
+                    ]
+                  },
+                  "label": {
+                    "type": "string",
+                    "const": "verified"
+                  }
+                },
+                "required": [
+                  "n",
+                  "label"
+                ],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "required",
+          "parallel_tool_calls": false
+        },
+        "response": {
+          "background": false,
+          "completed_at": 1790090779,
+          "created_at": 1790090779,
+          "error": null,
+          "id": "resp_582585_6ab29e1b_12",
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": 4096,
+          "metadata": {},
+          "model": "qwen3.8-27b-fp8",
+          "object": "response",
+          "output": [
+            {
+              "id": "rs_resp_582585_6ab29e1b_12",
+              "summary": [
+                {
+                  "text": "The user wants me to call the report tool with n=123 and label=\"verified\".\n",
+                  "type": "summary_text"
+                }
+              ],
+              "type": "reasoning"
+            },
+            {
+              "content": [
+                {
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "\n\n",
+                  "type": "output_text"
+                }
+              ],
+              "id": "msg_resp_582585_6ab29e1b_12",
+              "role": "assistant",
+              "status": "completed",
+              "type": "message"
+            },
+            {
+              "arguments": "{\"label\":\"verified\",\"n\":123}",
+              "call_id": "call_resp_582585_6ab29e1b_12_0",
+              "id": "fc_resp_582585_6ab29e1b_12_0",
+              "name": "report",
+              "status": "completed",
+              "type": "function_call"
+            }
+          ],
+          "parallel_tool_calls": false,
+          "previous_response_id": null,
+          "reasoning": {
+            "effort": "medium",
+            "summary": "auto"
+          },
+          "service_tier": "default",
+          "status": "completed",
+          "store": false,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            }
+          },
+          "tool_choice": "required",
+          "tools": [
+            {
+              "description": "Report the result.",
+              "name": "report",
+              "parameters": {
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "const": "verified",
+                    "type": "string"
+                  },
+                  "n": {
+                    "enum": [
+                      123
+                    ],
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "n",
+                  "label"
+                ],
+                "type": "object"
+              },
+              "strict": true,
+              "type": "function"
+            }
+          ],
+          "top_p": 0.95,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 323,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 61,
+            "output_tokens_details": {
+              "reasoning_tokens": 22
+            },
+            "total_tokens": 384
+          },
+          "user": null
+        },
+        "elapsed_s": 0.19820843399793375
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/constraints/responses-off-json_object.json",
+      "sha256": "125adc2c88f03046304e010c100a644e4a0042796b4bf4176eb387f7b74ee4cc",
+      "data": {
+        "request": {
+          "model": "qwen3.8-27b-fp8",
+          "temperature": 0,
+          "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+          "reasoning": {
+            "effort": "off"
+          },
+          "max_output_tokens": 4096,
+          "store": false,
+          "text": {
+            "format": {
+              "type": "json_object"
+            }
+          }
+        },
+        "response": {
+          "background": false,
+          "completed_at": 1790090778,
+          "created_at": 1790090778,
+          "error": null,
+          "id": "resp_582585_6ab29e1a_7",
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": 4096,
+          "metadata": {},
+          "model": "qwen3.8-27b-fp8",
+          "object": "response",
+          "output": [
+            {
+              "content": [
+                {
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "{\n  \"n\": 123,\n  \"label\": \"verified\"\n}",
+                  "type": "output_text"
+                }
+              ],
+              "id": "msg_resp_582585_6ab29e1a_7",
+              "role": "assistant",
+              "status": "completed",
+              "type": "message"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "previous_response_id": null,
+          "reasoning": {
+            "effort": "off",
+            "summary": "auto"
+          },
+          "service_tier": "default",
+          "status": "completed",
+          "store": false,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "json_object"
+            }
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_p": 0.95,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 35,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 22,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 57
+          },
+          "user": null
+        },
+        "elapsed_s": 0.08981036799377762
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/constraints/responses-off-json_schema.json",
+      "sha256": "5086525a132d7865d6ca0ec1c2c9a0f30c912213e5dc29d7dd2b8618d8f620c4",
+      "data": {
+        "request": {
+          "model": "qwen3.8-27b-fp8",
+          "temperature": 0,
+          "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+          "reasoning": {
+            "effort": "off"
+          },
+          "max_output_tokens": 4096,
+          "store": false,
+          "text": {
+            "format": {
+              "type": "json_schema",
+              "name": "result",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "n": {
+                    "type": "integer",
+                    "enum": [
+                      123
+                    ]
+                  },
+                  "label": {
+                    "type": "string",
+                    "const": "verified"
+                  }
+                },
+                "required": [
+                  "n",
+                  "label"
+                ],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          }
+        },
+        "response": {
+          "background": false,
+          "completed_at": 1790090778,
+          "created_at": 1790090778,
+          "error": null,
+          "id": "resp_582585_6ab29e1a_8",
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": 4096,
+          "metadata": {},
+          "model": "qwen3.8-27b-fp8",
+          "object": "response",
+          "output": [
+            {
+              "content": [
+                {
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "{\n  \"label\": \"verified\",\n  \"n\": 123\n}",
+                  "type": "output_text"
+                }
+              ],
+              "id": "msg_resp_582585_6ab29e1a_8",
+              "role": "assistant",
+              "status": "completed",
+              "type": "message"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "previous_response_id": null,
+          "reasoning": {
+            "effort": "off",
+            "summary": "auto"
+          },
+          "service_tier": "default",
+          "status": "completed",
+          "store": false,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "name": "result",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "const": "verified",
+                    "type": "string"
+                  },
+                  "n": {
+                    "enum": [
+                      123
+                    ],
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "n",
+                  "label"
+                ],
+                "type": "object"
+              },
+              "strict": true,
+              "type": "json_schema"
+            }
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_p": 0.95,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 35,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 21,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 56
+          },
+          "user": null
+        },
+        "elapsed_s": 0.09069945200462826
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/constraints/responses-off-tool.json",
+      "sha256": "3ed1eece6cc39d90c233df6517b57a75c2d014a6fcb245a2fdf76967a1463684",
+      "data": {
+        "request": {
+          "model": "qwen3.8-27b-fp8",
+          "temperature": 0,
+          "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+          "reasoning": {
+            "effort": "off"
+          },
+          "max_output_tokens": 4096,
+          "store": false,
+          "tools": [
+            {
+              "type": "function",
+              "name": "report",
+              "description": "Report the result.",
+              "strict": true,
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "n": {
+                    "type": "integer",
+                    "enum": [
+                      123
+                    ]
+                  },
+                  "label": {
+                    "type": "string",
+                    "const": "verified"
+                  }
+                },
+                "required": [
+                  "n",
+                  "label"
+                ],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "required",
+          "parallel_tool_calls": false
+        },
+        "response": {
+          "background": false,
+          "completed_at": 1790090778,
+          "created_at": 1790090778,
+          "error": null,
+          "id": "resp_582585_6ab29e1a_9",
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": 4096,
+          "metadata": {},
+          "model": "qwen3.8-27b-fp8",
+          "object": "response",
+          "output": [
+            {
+              "arguments": "{\"label\":\"verified\",\"n\":123}",
+              "call_id": "call_resp_582585_6ab29e1a_9_0",
+              "id": "fc_resp_582585_6ab29e1a_9_0",
+              "name": "report",
+              "status": "completed",
+              "type": "function_call"
+            }
+          ],
+          "parallel_tool_calls": false,
+          "previous_response_id": null,
+          "reasoning": {
+            "effort": "off",
+            "summary": "auto"
+          },
+          "service_tier": "default",
+          "status": "completed",
+          "store": false,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            }
+          },
+          "tool_choice": "required",
+          "tools": [
+            {
+              "description": "Report the result.",
+              "name": "report",
+              "parameters": {
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "const": "verified",
+                    "type": "string"
+                  },
+                  "n": {
+                    "enum": [
+                      123
+                    ],
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "n",
+                  "label"
+                ],
+                "type": "object"
+              },
+              "strict": true,
+              "type": "function"
+            }
+          ],
+          "top_p": 0.95,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 325,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 38,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 363
+          },
+          "user": null
+        },
+        "elapsed_s": 0.12889247899875045
+      }
+    }
+  ],
+  "lifecycle": {
+    "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/lifecycle.json",
+    "sha256": "90199c04debeb9ac68730f92aa13ce7bb9cff571fa76c31dcb9ef75c38919e0c",
+    "data": {
+      "off": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "content": "25",
+              "role": "assistant"
+            }
+          }
+        ],
+        "created": 1790090780,
+        "id": "chatcmpl_582585_6ab29e1c_13",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 3,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 24,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 27
+        }
+      },
+      "low": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "content": "\n\n25",
+              "reasoning_content": "用户要求计算12+13，只回答结果。\n12+13=25\n",
+              "role": "assistant"
+            }
+          }
+        ],
+        "created": 1790090780,
+        "id": "chatcmpl_582585_6ab29e1c_14",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 28,
+          "completion_tokens_details": {
+            "reasoning_tokens": 24
+          },
+          "prompt_tokens": 52,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 80
+        }
+      },
+      "medium": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "content": "\n\n25",
+              "reasoning_content": "The user asks to calculate 12+13 and only answer with the result.\n\n12+13=25\n",
+              "role": "assistant"
+            }
+          }
+        ],
+        "created": 1790090780,
+        "id": "chatcmpl_582585_6ab29e1c_15",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 33,
+          "completion_tokens_details": {
+            "reasoning_tokens": 29
+          },
+          "prompt_tokens": 22,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 55
+        }
+      },
+      "high": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "content": "\n\n25",
+              "reasoning_content": "The user asks in Chinese: “计算 12+13,只回答结果。” which means “Calculate 12+13, only answer the result.” Need respond only result. 12+13=25. Final should be just 25.\n",
+              "role": "assistant"
+            }
+          }
+        ],
+        "created": 1790090780,
+        "id": "chatcmpl_582585_6ab29e1c_16",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 64,
+          "completion_tokens_details": {
+            "reasoning_tokens": 60
+          },
+          "prompt_tokens": 64,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 128
+        }
+      },
+      "xhigh": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "content": "\n\n25",
+              "reasoning_content": "The user asks to calculate 12+13 and only answer the result. 12+13=25. Must output only result.\n",
+              "role": "assistant"
+            }
+          }
+        ],
+        "created": 1790090780,
+        "id": "chatcmpl_582585_6ab29e1c_17",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 38,
+          "completion_tokens_details": {
+            "reasoning_tokens": 34
+          },
+          "prompt_tokens": 64,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 102
+        }
+      },
+      "stored": [
+        {
+          "background": false,
+          "completed_at": 1790090780,
+          "created_at": 1790090780,
+          "error": null,
+          "id": "resp_582585_6ab29e1c_18",
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": 128,
+          "metadata": {},
+          "model": "qwen3.8-27b-fp8",
+          "object": "response",
+          "output": [
+            {
+              "content": [
+                {
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "OK",
+                  "type": "output_text"
+                }
+              ],
+              "id": "msg_resp_582585_6ab29e1c_18",
+              "role": "assistant",
+              "status": "completed",
+              "type": "message"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "previous_response_id": null,
+          "reasoning": {
+            "effort": "off",
+            "summary": "auto"
+          },
+          "service_tier": "default",
+          "status": "completed",
+          "store": true,
+          "temperature": 1.0,
+          "text": {
+            "format": {
+              "type": "text"
+            }
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_p": 0.95,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 23,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 2,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 25
+          },
+          "user": null
+        },
+        {
+          "background": false,
+          "completed_at": 1790090780,
+          "created_at": 1790090780,
+          "error": null,
+          "id": "resp_582585_6ab29e1c_19",
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": 128,
+          "metadata": {},
+          "model": "qwen3.8-27b-fp8",
+          "object": "response",
+          "output": [
+            {
+              "content": [
+                {
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "The number you asked me to remember is 731.",
+                  "type": "output_text"
+                }
+              ],
+              "id": "msg_resp_582585_6ab29e1c_19",
+              "role": "assistant",
+              "status": "completed",
+              "type": "message"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "previous_response_id": "resp_582585_6ab29e1c_18",
+          "reasoning": {
+            "effort": "off",
+            "summary": "auto"
+          },
+          "service_tier": "default",
+          "status": "completed",
+          "store": true,
+          "temperature": 1.0,
+          "text": {
+            "format": {
+              "type": "text"
+            }
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_p": 0.95,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 47,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 14,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 61
+          },
+          "user": null
+        }
+      ],
+      "mixed": [
+        {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "{\n  \"n\": 123\n}",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1790090780,
+          "id": "chatcmpl_582585_6ab29e1c_20",
+          "model": "qwen3.8-27b-fp8",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 13,
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "prompt_tokens": 25,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 38
+          }
+        },
+        {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "25",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1790090780,
+          "id": "chatcmpl_582585_6ab29e1c_21",
+          "model": "qwen3.8-27b-fp8",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 3,
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "prompt_tokens": 24,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 27
+          }
+        }
+      ],
+      "after_disconnect": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "content": "25",
+              "role": "assistant"
+            }
+          }
+        ],
+        "created": 1790090781,
+        "id": "chatcmpl_582585_6ab29e1d_23",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 3,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 24,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 27
+        }
+      },
+      "log_verification": {
+        "mixed_request_ids": [
+          20,
+          21
+        ],
+        "canceled_request_id": 22,
+        "same_batch": true,
+        "worker_released": true
+      }
+    }
+  },
+  "long_context": {
+    "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/long-context.json",
+    "sha256": "92eed6c1cca74cb0befc7dcaa1349a1ece1a7b23e2f4a7d99e3a8498f8e2b977",
+    "data": [
+      {
+        "api": "chat/completions",
+        "repeat": 0,
+        "elapsed_s": 9.495231636989047,
+        "response": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "{\n  \"label\": \"verified\",\n  \"n\": 123\n}",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1790090784,
+          "id": "chatcmpl_582585_6ab29e20_24",
+          "model": "qwen3.8-27b-fp8",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 21,
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "prompt_tokens": 131099,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 131120
+          }
+        },
+        "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f"
+      },
+      {
+        "api": "chat/completions",
+        "repeat": 1,
+        "elapsed_s": 0.3188441289967159,
+        "response": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "{\n  \"label\": \"verified\",\n  \"n\": 123\n}",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1790090794,
+          "id": "chatcmpl_582585_6ab29e2a_25",
+          "model": "qwen3.8-27b-fp8",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 21,
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "prompt_tokens": 131099,
+            "prompt_tokens_details": {
+              "cached_tokens": 130928
+            },
+            "total_tokens": 131120
+          }
+        },
+        "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f"
+      },
+      {
+        "api": "responses",
+        "repeat": 0,
+        "elapsed_s": 0.26549016700300854,
+        "response": {
+          "background": false,
+          "completed_at": 1790090794,
+          "created_at": 1790090794,
+          "error": null,
+          "id": "resp_582585_6ab29e2a_26",
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": 256,
+          "metadata": {},
+          "model": "qwen3.8-27b-fp8",
+          "object": "response",
+          "output": [
+            {
+              "content": [
+                {
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "{\n  \"label\": \"verified\",\n  \"n\": 123\n}",
+                  "type": "output_text"
+                }
+              ],
+              "id": "msg_resp_582585_6ab29e2a_26",
+              "role": "assistant",
+              "status": "completed",
+              "type": "message"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "previous_response_id": null,
+          "reasoning": {
+            "effort": "off",
+            "summary": "auto"
+          },
+          "service_tier": "default",
+          "status": "completed",
+          "store": false,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "name": "result",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "const": "verified",
+                    "type": "string"
+                  },
+                  "n": {
+                    "enum": [
+                      123
+                    ],
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "n",
+                  "label"
+                ],
+                "type": "object"
+              },
+              "strict": true,
+              "type": "json_schema"
+            }
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_p": 0.95,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 131099,
+            "input_tokens_details": {
+              "cached_tokens": 130928
+            },
+            "output_tokens": 21,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 131120
+          },
+          "user": null
+        },
+        "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f"
+      },
+      {
+        "api": "responses",
+        "repeat": 1,
+        "elapsed_s": 0.27157058399461675,
+        "response": {
+          "background": false,
+          "completed_at": 1790090794,
+          "created_at": 1790090794,
+          "error": null,
+          "id": "resp_582585_6ab29e2a_27",
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": 256,
+          "metadata": {},
+          "model": "qwen3.8-27b-fp8",
+          "object": "response",
+          "output": [
+            {
+              "content": [
+                {
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "{\n  \"label\": \"verified\",\n  \"n\": 123\n}",
+                  "type": "output_text"
+                }
+              ],
+              "id": "msg_resp_582585_6ab29e2a_27",
+              "role": "assistant",
+              "status": "completed",
+              "type": "message"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "previous_response_id": null,
+          "reasoning": {
+            "effort": "off",
+            "summary": "auto"
+          },
+          "service_tier": "default",
+          "status": "completed",
+          "store": false,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "name": "result",
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "const": "verified",
+                    "type": "string"
+                  },
+                  "n": {
+                    "enum": [
+                      123
+                    ],
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "n",
+                  "label"
+                ],
+                "type": "object"
+              },
+              "strict": true,
+              "type": "json_schema"
+            }
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_p": 0.95,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 131099,
+            "input_tokens_details": {
+              "cached_tokens": 130928
+            },
+            "output_tokens": 21,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 131120
+          },
+          "user": null
+        },
+        "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f"
+      }
+    ]
+  },
+  "agentic": [
+    {
+      "api": "chat",
+      "run": {
+        "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/omp-chat/chat-run.json",
+        "sha256": "41c30102c53e17115b479d48c2217d7e617c4ac2e514b7ccff0d6ff5b55cc3ef",
+        "data": {
+          "api": "chat",
+          "command": [
+            "/home/dongwu.chen/.local/bin/omp",
+            "--cwd",
+            "/data0/shared/dongwu.chen/oh-my-vllm",
+            "--model",
+            "oh-my-vllm-chat/qwen3.8-27b-fp8",
+            "--thinking",
+            "medium",
+            "--tools",
+            "read,grep,glob",
+            "--no-lsp",
+            "--no-extensions",
+            "--no-skills",
+            "--no-rules",
+            "--no-title",
+            "--no-session",
+            "--mode",
+            "json",
+            "--max-time",
+            "10m",
+            "--print",
+            "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count."
+          ],
+          "exit_code": 0,
+          "elapsed_s": 17.446580831994652,
+          "task": "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count.",
+          "requires_review": "Verify real tool execution, tool-result follow-up requests, grounded final answer, and MTP counters in server logs; exit zero alone is not acceptance."
+        }
+      },
+      "raw_events_sha256": "0ba1a906b2a60201b9ad39fd45dac60cd2b6af4038783b9cc7f7ded217d2c774",
+      "tool_calls": [
+        {
+          "id": "call_chatcmpl_582585_6ab29e2b_28_0",
+          "name": "read",
+          "args": {
+            "path": "/data0/shared/dongwu.chen/oh-my-vllm/README.md"
+          }
+        },
+        {
+          "id": "call_chatcmpl_582585_6ab29e2b_28_1",
+          "name": "read",
+          "args": {
+            "path": "/data0/shared/dongwu.chen/oh-my-vllm"
+          }
+        },
+        {
+          "id": "call_chatcmpl_582585_6ab29e2c_29_0",
+          "name": "read",
+          "args": {
+            "path": "/data0/shared/dongwu.chen/oh-my-vllm/docs/architecture.md"
+          }
+        },
+        {
+          "id": "call_chatcmpl_582585_6ab29e2c_29_1",
+          "name": "read",
+          "args": {
+            "path": "/data0/shared/dongwu.chen/oh-my-vllm/crates/scheduler/src/lib.rs"
+          }
+        },
+        {
+          "id": "call_chatcmpl_582585_6ab29e2c_29_2",
+          "name": "read",
+          "args": {
+            "path": "/data0/shared/dongwu.chen/oh-my-vllm/python/oh_my_vllm/worker/model_runner.py"
+          }
+        },
+        {
+          "id": "call_chatcmpl_582585_6ab29e2d_30_0",
+          "name": "read",
+          "args": {
+            "path": "/data0/shared/dongwu.chen/oh-my-vllm/docs/handoff.md"
+          }
+        },
+        {
+          "id": "call_chatcmpl_582585_6ab29e2e_31_0",
+          "name": "read",
+          "args": {
+            "path": "/data0/shared/dongwu.chen/oh-my-vllm/docs/acceptance.md"
+          }
+        },
+        {
+          "id": "call_chatcmpl_582585_6ab29e2e_31_1",
+          "name": "read",
+          "args": {
+            "path": "/data0/shared/dongwu.chen/oh-my-vllm/docs/serving.md"
+          }
+        }
+      ],
+      "tool_result_errors": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "request_logs": [
+        "2026-09-22T15:26:36.523862Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=28 output_tokens=122 input_tokens=6989 cached_tokens=0 reasoning_tokens=18 elapsed_s=0.909432513 ttft_ms=367 output_tps=134.14959137270253 steps=31 proposed_draft_tokens=116 accepted_draft_tokens=92 finish_reason=stop",
+        "2026-09-22T15:26:37.526140Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=29 output_tokens=219 input_tokens=9744 cached_tokens=6272 reasoning_tokens=43 elapsed_s=0.972221325 ttft_ms=222 output_tps=225.25735073749797 steps=52 proposed_draft_tokens=200 accepted_draft_tokens=168 finish_reason=stop",
+        "2026-09-22T15:26:38.319467Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=30 output_tokens=109 input_tokens=14043 cached_tokens=9408 reasoning_tokens=51 elapsed_s=0.757182752 ttft_ms=249 output_tps=143.95467898877865 steps=31 proposed_draft_tokens=115 accepted_draft_tokens=79 finish_reason=stop",
+        "2026-09-22T15:26:39.750616Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=31 output_tokens=232 input_tokens=18508 cached_tokens=14112 reasoning_tokens=122 elapsed_s=1.394718702 ttft_ms=317 output_tps=166.3417861016106 steps=77 proposed_draft_tokens=300 accepted_draft_tokens=156 finish_reason=stop",
+        "2026-09-22T15:26:52.626342Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=32 output_tokens=2452 input_tokens=27090 cached_tokens=18032 reasoning_tokens=663 elapsed_s=12.841355907 ttft_ms=645 output_tps=190.94556819061302 steps=722 proposed_draft_tokens=2873 accepted_draft_tokens=1731 finish_reason=stop"
+      ],
+      "final_message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "I have enough information. In order to ground my understanding of the architecture, I could also briefly skim design.md and requirements.md, but I already have plenty of material. The user was asking for the project's goals, architecture, how to run it, and the current completion status, and I also need to cite files. I've already read the required files. I'll write the final answer in English (the user is writing in English). I'll cite the following:\n\n- README.md, docs/architecture.md, docs/acceptance.md, docs/serving.md, docs/handoff.md, crates/scheduler/src/lib.rs, python/oh_my_vllm/worker/model_runner.py, docs/requirements.md (should I quickly check this? I know the goal from AGENTS.md and README, so strictly speaking it's not necessary). I could also cite docs/testing.md — but I haven't read it, so I should only cite what I've read, or quickly verify. I'll cite what I've actually read, and maybe add a brief reference to requirements. Actually, to be safe, I'll only cite files I've read: README.md, docs/architecture.md, docs/handoff.md, docs/acceptance.md, docs/serving.md, crates/scheduler/src/lib.rs, python/oh_my_vllm/worker/model_runner.py.\n\nCompletion status: As of 2026-09-22:\n- All 12 rows of the TileLang migration performance gate pass (acceptance.md).\n- Serving acceptance has passed (README, serving.md, acceptance.md).\n- 262144-token boundary check has passed.\n- CUDA migration (REQ-KERNEL-002) is in progress / active: all entries have native CUDA, but formal 173-case acceptance and framework acceptance are pending, and the default backend remains TileLang (active section of handoff.md).\n- According to serving.md, \"the current performance gate remains pending\"? Wait — serving.md says \"the current performance gate remains pending; refer to acceptance.md and handoff.md,\" but acceptance.md shows that all 12 rows pass with TileLang. Hmm, the status line in serving.md is dated 2026-09-22 and says the performance gate is pending, but the acceptance table shows a pass. Let me check: the last part of the handoff says \"the full 147-case and framework acceptance remain pending; the default backend remains TileLang until full acceptance\" — this is about the CUDA migration acceptance (147/173 cases), not about the TileLang performance gate. serving.md says \"the current performance gate remains pending\" — maybe it's pointing to CUDA framework acceptance. I should present this carefully: the TileLang baseline has been accepted and passes all 12 performance rows; the in-progress CUDA migration has not yet been accepted (per-operator formal acceptance + framework acceptance pending; the default backend is still TileLang).\n\nAnswer structure: Goals, Architecture (Rust side, Python side, wire, cache/MTP, kernel), How to run, Completion status. In a concise, evidence-based style.\n",
+            "thinkingSignature": "reasoning_content"
+          },
+          {
+            "type": "text",
+            "text": "\n\n## oh-my-vllm — Overview\n\n### Goals\n\nBuild a Rust-first inference framework for **Qwen3.8-27B-FP8 on a single B200 GPU** (checkpoint at `/data0/shared/Qwen3.8-27B-FP8`) that reaches **≥95% of vLLM EngineCore throughput and ≤110% of its TTFT** on 12 workload rows (bs=1/2/4, in=32768 or 131072, out=4096, ordinary/MTP4/prefix-hit modes), with spread/median ≤10%. The project is fully independent of vLLM at runtime, build and test time — no vLLM install, import, or adapter; the transitional vLLM adapter has been removed ([README.md](README.md), [AGENTS.md](AGENTS.md) non-negotiable constraints). Model shape: 64 layers = 16 full-attention + 48 GDN (gated delta net) layers, block size 784 tokens, hybrid FA + Mamba KV groups.\n\n### Architecture\n\nTwo processes, communicating over **ZMQ DEALER with msgpack** ([README.md](README.md), [docs/architecture.md](docs/architecture.md)):\n\n**Rust side** (owns serving, scheduling, logical KV):\n- `crates/scheduler` — port of the core scheduling logic: FCFS waiting→running queues, per-step token budget with chunked prefill as a consequence of `remaining.min(budget)`, continuous batching (decode before new prefill), prefix-cache lookup, recompute preemption, and MTP accounting with rollback on rejected drafts ([crates/scheduler/src/lib.rs:1-17](crates/scheduler/src/lib.rs:1-17)).\n- `crates/kv-cache` — shared logical block pool, chain-hashed prefixes, aligned Mamba checkpoints, two-phase allocation (reuse prefixes before allocating new pages) ([docs/architecture.md](docs/architecture.md)).\n- `crates/zmq-worker` — Axum HTTP (OpenAI-compatible Chat Completions + Responses), CLI, model-process lifecycle, cancellation, ZMQ transport ([docs/serving.md](docs/serving.md)).\n\n**Python side** (owns single-device GPU computation):\n- `worker/model_runner.py` — `OhMyVllmWorker`: model loading via `models/qwen.py` (direct safetensors, one-layer MTP head sharing embedding/output), persistent per-request histories/samplers, cache tensors, and `execute_model()` orchestration over `SchedulerOutput`/`WorkerOutput` protocol messages ([python/oh_my_vllm/worker/model_runner.py](python/oh_my_vllm/worker/model_runner.py)).\n- `worker/` modules: `serving.py` (tokenizer/chat template/XGrammar masks), `mtp.py` (shifted MTP cache, proposal generation), `sampler.py` (target sampling + greedy-draft verification), `batch_plan.py` (accepted-state selection, checkpoint copies), `decode_graph.py` (CUDA graph capture/replay), `protocol.py` (wire dataclasses) ([docs/architecture.md](docs/architecture.md)).\n\n**Key design points:**\n- Rust allocates all logical FA pages (784 tokens each) and Mamba slots; Python never allocates pages outside Rust. Rejected speculative candidates never become cached prefixes; boundary-crossing tokens preserve exact recurrent snapshots in checkpoint slots.\n- MTP4: up to 4 drafts per step, verified against target distributions with per-draft grammar masks; greedy proposals verified by successive-prefix matching.\n- Independent FA/GDN capacities (`--mamba-blocks`) (ADR-007); 262144 total tokens supported.\n- Kernels: independent FlashInfer TRT-LLM FP8 GEMM + CUTLASS for large GEMM; FlashInfer for long prefill; project-owned kernels (GDN recurrence, causal conv, paged split-KV GQA decode, RMS/RoPE/fusions) were all migrated from Triton to **TileLang** and are currently migrating to **B200 CUDA** ([docs/architecture.md](docs/architecture.md)).\n\n### How to run\n\nEnvironment: conda `oh-my-vllm` at `/data0/shared/dongwu.chen/conda-envs/oh-my-vllm`; wrappers `scripts/with-env.sh` (env) and `scripts/with-gpu.sh` (wait for idle B200, pin UUID) ([README.md](README.md)):\n\n```bash\nuv pip install --python .../conda-envs/oh-my-vllm/bin/python -r requirements/runtime.txt\nscripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker\n# text smoke test\nscripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64\n# OpenAI-compatible service (MTP4, 262144 context)\nscripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker \\\n  --socket /tmp/oh-my-vllm-serve.ipc --num-gpu-blocks 4200 --mamba-blocks 128 \\\n  --max-model-len 262144 --num-speculative-tokens 4 serve\n```\n\nService exposes Chat Completions and Responses at `127.0.0.1:8000/v1` with thinking levels, tools, JSON-schema constraints, and stored Responses ([docs/serving.md](docs/serving.md)). Verification: `cargo test --workspace`, fmt/clippy, ruff, `python -m unittest discover -s tests` ([README.md](README.md), [docs/testing.md](docs/testing.md)).\n\n### Current completion status (2026-09-22)\n\n**Done and accepted:**\n- **Performance target met**: all 12 TileLang rows pass throughput ≥95% and TTFT ≤110% of the refreshed frozen EngineCore baseline (ratios 95.31%–123.53% throughput, 80.06%–101.47% TTFT), 2 warmups + 5 repetitions each ([docs/acceptance.md](docs/acceptance.md), table under \"TileLang migration\").\n- **Serving accepted**: real MTP4 JSON/tool constraints (12 cases), all thinking levels, stored-Responses lifecycle, mixed-batch scheduling, disconnect release, both oh-my-pi agentic workflows, 131099-input strict-JSON with 130928-token prefix reuse ([docs/serving.md](docs/serving.md), [docs/acceptance.md](docs/acceptance.md)).\n- **Long context**: all six 258048-input/4096-output boundary rows (ordinary/MTP × bs 1/2/4) finish without OOM or recompute preemption; peak reserved ~134.7 GB ([docs/acceptance.md](docs/acceptance.md)).\n- Full GPU correctness suite (146 tests + 12 subtests), all Rust/Python lint gates, real-model FP64 probes ([docs/acceptance.md](docs/acceptance.md)).\n\n**In progress (not accepted):** the approved **CUDA kernel migration** (REQ-KERNEL-002) — [docs/handoff.md](docs/handoff.md) \"Active: CUDA/PTX custom kernels\". All owned kernel entries now have native CUDA/PTX implementations, with per-operator subset speed wins (Q/K normalization, convolution, GDN recurrence, quantization, fused attention prepare, gated RMS, SiLU, attention), but the formal **173-case operator matrix and framework-level acceptance remain outstanding**; the default backend stays TileLang until complete. The frozen TileLang implementation is the currently accepted reference ([docs/architecture.md](docs/architecture.md), [docs/cuda-development.md](docs/cuda-development.md)).\n\nSo: the framework's stated performance/serving/correctness goals are met by the TileLang build; the open work is finishing and accepting the CUDA migration."
+          }
+        ],
+        "api": "openai-completions",
+        "provider": "oh-my-vllm-chat",
+        "model": "qwen3.8-27b-fp8",
+        "usage": {
+          "input": 9058,
+          "output": 2452,
+          "cacheRead": 18032,
+          "cacheWrite": 0,
+          "totalTokens": 29542,
+          "reasoningTokens": 663,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "stopReason": "stop",
+        "timestamp": 1790090799783,
+        "responseId": "chatcmpl_582585_6ab29e2f_32",
+        "duration": 12843.285403999998,
+        "ttft": 647.4100989999997,
+        "completedAt": 1790090812636
+      },
+      "review": "Protocol/tool-result follow-up/MTP and request release pass. Final answer facts require updated-document readback: both refer to obsolete173-case matrix, Responses additionally cites old48/173 and153+24 tests and incorrectly says prefill sorts last. Long-input131072 is ordinary-only."
+    },
+    {
+      "api": "responses",
+      "run": {
+        "path": "/tmp/oh-my-vllm-cuda-service-c36d1c9/omp-responses/responses-run.json",
+        "sha256": "1a10fe3d9bf40fa4696d7809834e5941c9a7d22c742f9086330547c6f18c287f",
+        "data": {
+          "api": "responses",
+          "command": [
+            "/home/dongwu.chen/.local/bin/omp",
+            "--cwd",
+            "/data0/shared/dongwu.chen/oh-my-vllm",
+            "--model",
+            "oh-my-vllm-responses/qwen3.8-27b-fp8",
+            "--thinking",
+            "medium",
+            "--tools",
+            "read,grep,glob",
+            "--no-lsp",
+            "--no-extensions",
+            "--no-skills",
+            "--no-rules",
+            "--no-title",
+            "--no-session",
+            "--mode",
+            "json",
+            "--max-time",
+            "10m",
+            "--print",
+            "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count."
+          ],
+          "exit_code": 0,
+          "elapsed_s": 24.008925921007176,
+          "task": "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count.",
+          "requires_review": "Verify real tool execution, tool-result follow-up requests, grounded final answer, and MTP counters in server logs; exit zero alone is not acceptance."
+        }
+      },
+      "raw_events_sha256": "14d3c925b5b097535d9f784ea751301b84ddf9c9e1db4a5df7e780b3271d5033",
+      "tool_calls": [
+        {
+          "id": "call_resp_582585_6ab29e3d_33_0|fc_resp_582585_6ab29e3d_33_0",
+          "name": "read",
+          "args": {
+            "path": "README.md"
+          }
+        },
+        {
+          "id": "call_resp_582585_6ab29e3d_33_1|fc_resp_582585_6ab29e3d_33_1",
+          "name": "read",
+          "args": {
+            "path": "docs/architecture.md"
+          }
+        },
+        {
+          "id": "call_resp_582585_6ab29e3d_33_2|fc_resp_582585_6ab29e3d_33_2",
+          "name": "read",
+          "args": {
+            "path": "crates/scheduler/src/lib.rs"
+          }
+        },
+        {
+          "id": "call_resp_582585_6ab29e3d_33_3|fc_resp_582585_6ab29e3d_33_3",
+          "name": "read",
+          "args": {
+            "path": "python/oh_my_vllm/worker/model_runner.py"
+          }
+        },
+        {
+          "id": "call_resp_582585_6ab29e3e_34_0|fc_resp_582585_6ab29e3e_34_0",
+          "name": "read",
+          "args": {
+            "path": "crates/scheduler/src/lib.rs:44-300"
+          }
+        },
+        {
+          "id": "call_resp_582585_6ab29e3e_34_1|fc_resp_582585_6ab29e3e_34_1",
+          "name": "read",
+          "args": {
+            "path": "python/oh_my_vllm/worker/model_runner.py:34-180"
+          }
+        },
+        {
+          "id": "call_resp_582585_6ab29e3e_34_2|fc_resp_582585_6ab29e3e_34_2",
+          "name": "read",
+          "args": {
+            "path": "docs/handoff.md"
+          }
+        },
+        {
+          "id": "call_resp_582585_6ab29e3e_34_3|fc_resp_582585_6ab29e3e_34_3",
+          "name": "read",
+          "args": {
+            "path": "docs/requirements.md"
+          }
+        },
+        {
+          "id": "call_resp_582585_6ab29e3f_35_0|fc_resp_582585_6ab29e3f_35_0",
+          "name": "read",
+          "args": {
+            "path": "python/oh_my_vllm/worker/model_runner.py:184-399"
+          }
+        },
+        {
+          "id": "call_resp_582585_6ab29e3f_35_1|fc_resp_582585_6ab29e3f_35_1",
+          "name": "read",
+          "args": {
+            "path": "crates/scheduler/src/lib.rs:304-394"
+          }
+        },
+        {
+          "id": "call_resp_582585_6ab29e3f_35_2|fc_resp_582585_6ab29e3f_35_2",
+          "name": "read",
+          "args": {
+            "path": "docs/handoff.md:301-646"
+          }
+        },
+        {
+          "id": "call_resp_582585_6ab29e3f_35_3|fc_resp_582585_6ab29e3f_35_3",
+          "name": "read",
+          "args": {
+            "path": "docs/requirements.md:301-328"
+          }
+        },
+        {
+          "id": "call_resp_582585_6ab29e42_36_0|fc_resp_582585_6ab29e42_36_0",
+          "name": "read",
+          "args": {
+            "path": "docs/acceptance.md:1-120"
+          }
+        },
+        {
+          "id": "call_resp_582585_6ab29e42_36_1|fc_resp_582585_6ab29e42_36_1",
+          "name": "glob",
+          "args": {
+            "path": "crates; python/oh_my_vllm"
+          }
+        }
+      ],
+      "tool_result_errors": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "request_logs": [
+        "2026-09-22T15:26:54.048785Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=33 output_tokens=229 input_tokens=6990 cached_tokens=0 reasoning_tokens=57 elapsed_s=0.948848098 ttft_ms=313 output_tps=241.3452695775968 steps=53 proposed_draft_tokens=204 accepted_draft_tokens=177 finish_reason=stop",
+        "2026-09-22T15:26:55.894141Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=34 output_tokens=374 input_tokens=12494 cached_tokens=6272 reasoning_tokens=161 elapsed_s=1.806889618 ttft_ms=299 output_tps=206.985527103737 steps=114 proposed_draft_tokens=446 accepted_draft_tokens=261 finish_reason=stop",
+        "2026-09-22T15:26:57.972425Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=35 output_tokens=336 input_tokens=24350 cached_tokens=12544 reasoning_tokens=99 elapsed_s=2.039281867 ttft_ms=606 output_tps=164.76388352057072 steps=91 proposed_draft_tokens=356 accepted_draft_tokens=246 finish_reason=stop",
+        "2026-09-22T15:27:05.233215Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=36 output_tokens=1293 input_tokens=33842 cached_tokens=24304 reasoning_tokens=1172 elapsed_s=7.225646823 ttft_ms=677 output_tps=178.94591746226013 steps=414 proposed_draft_tokens=1646 accepted_draft_tokens=880 finish_reason=stop",
+        "2026-09-22T15:27:16.664394Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=37 output_tokens=2330 input_tokens=38027 cached_tokens=33712 reasoning_tokens=170 elapsed_s=11.396642633 ttft_ms=314 output_tps=204.44617551253876 steps=696 proposed_draft_tokens=2768 accepted_draft_tokens=1635 finish_reason=stop"
+      ],
+      "final_message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "Everything I need is in place. Let me draft the answer in English (since the user wrote in English). I'll organize it as follows:\n\n1. Project goals\n2. Architecture (Rust/Python separation, execution flow, hybrid KV, MTP)\n3. How to run it\n4. Current completion status\n\nCite files: README.md, docs/architecture.md, docs/requirements.md, docs/handoff.md, docs/acceptance.md, crates/scheduler/src/lib.rs, python/oh_my_vllm/worker/model_runner.py, and also crates/kv-cache, crates/zmq-worker, python/oh_my_vllm/worker/*, etc.\n\nKeep it structured and evidence-based. Use mermaid for the execution flow (this is a real flow). Keep it concise.\n\n\n",
+            "thinkingSignature": "{\"id\":\"rs_resp_582585_6ab29e49_37\",\"summary\":[{\"text\":\"Everything I need is in place. Let me draft the answer in English (since the user wrote in English). I'll organize it as follows:\\n\\n1. Project goals\\n2. Architecture (Rust/Python separation, execution flow, hybrid KV, MTP)\\n3. How to run it\\n4. Current completion status\\n\\nCite files: README.md, docs/architecture.md, docs/requirements.md, docs/handoff.md, docs/acceptance.md, crates/scheduler/src/lib.rs, python/oh_my_vllm/worker/model_runner.py, and also crates/kv-cache, crates/zmq-worker, python/oh_my_vllm/worker/*, etc.\\n\\nKeep it structured and evidence-based. Use mermaid for the execution flow (this is a real flow). Keep it concise.\\n\",\"type\":\"summary_text\"}],\"type\":\"reasoning\"}"
+          },
+          {
+            "type": "text",
+            "text": "\n\n# oh-my-vllm — project overview\n\n## 1. Project goals\n\n**Stated goal** (user-confirmed, `docs/requirements.md` REQ-GOAL-001, `README.md`): build a **Rust-first inference framework** for **Qwen3.8-27B-FP8** on a **single B200 GPU** that reaches **≥95% of vLLM EngineCore throughput** (and **≤110% of its TTFT**, with **spread/median ≤10%**) on a 12-workload matrix (ordinary / MTP4 / prefix-hit × in 32768 & 131072, out 4096, batch 1/2/4).\n\nThe hard design constraint (REQ-ARCH-001, `docs/architecture.md`): **Rust owns HTTP serving, scheduling, and logical KV allocation; Python owns GPU compute.** The boundary is a single ZMQ DEALER socket with msgpack — no shared memory, no tensor crossing, no vLLM anywhere in the runtime (REQ-RUNNER-002: the former vLLM adapter is fully removed).\n\nOther confirmed goals:\n- **262144-token total context** without OOM or recompute preemption (REQ-CONTEXT-001).\n- Block size **784** — hard constraint of the Qwen3.8 hybrid architecture (48 GDN + 16 full-attention layers, REQ-MODEL-001).\n- OpenAI-compatible local service (Chat Completions + Responses, streaming, tools, thinking levels, stored responses — REQ-SERVE-001/002) and **MTP4 speculative decoding with constrained decoding** (REQ-FUNC-005, REQ-SERVE-004).\n- Custom-kernel program: Triton → TileLang (REQ-KERNEL-001, **done and accepted**) → CUDA/inline-PTX (REQ-KERNEL-002, **in progress**).\n\n## 2. Architecture\n\nTwo processes, one GPU:\n\n```mermaid\nflowchart LR\n  subgraph Rust\n    H[HTTP /v1 Chat+Responses<br/>crates/zmq-worker] --> S[Scheduler<br/>crates/scheduler]\n    S <--> K[HybridCoordinator<br/>FA+Mamba pools, prefix cache<br/>crates/kv-cache]\n  end\n  H <-->|ZMQ DEALER + msgpack| P[OhMyVllmWorker<br/>model_runner.py]\n  P --> M[Qwen 64 layers + MTP head<br/>models/qwen.py]\n  M --> Kk[TileLang/CUDA kernels +<br/>FlashInfer GEMM/attention]\n```\n\n**Rust side**\n- `crates/scheduler/src/lib.rs` — port of vLLM v1 scheduling focused on Qwen3.8/one-GPU. `schedule()` runs two phases per step: (1) **running queue first** (decode/continued-prefill; `aligned_prefill` truncates chunks at 784-token boundaries to materialize Mamba checkpoints) with **recompute preemption** from the tail when the pool is exhausted, and (2) **waiting queue** admission with **prefix-cache lookup** (`get_computed_blocks`) up to `max_num_seqs`/`max_num_batched_tokens=32768`. `update()` commits verified tokens, advances `num_computed_tokens` by accepted MTP drafts (asserting the worker can only accept scheduled drafts), installs new drafts, and frees finished requests; `abort()` cancels between steps.\n- `crates/kv-cache/` — shared logical block pool, chain-hashed prefixes (SHA-256 truncated to 64 bits, LRU eviction), aligned Mamba checkpoints, two-phase allocation (reused prefixes before new pages), speculative reservations (`docs/architecture.md`).\n- `crates/zmq-worker/` — CLI, OpenAI HTTP APIs, model-process lifecycle, cancellation, ZMQ client, correlated logs.\n\n**Python side** (`python/oh_my_vllm/`)\n- `worker/model_runner.py` — `OhMyVllmWorker`: loads safetensors directly, allocates per-layer cache tensors (FA: `[blocks,2,784,4,256]` BF16; GDN: `[slots,48,128,128]` FP32 ordinarily / BF16 with MTP, plus `[slots,10240,3]` conv state), validates every Rust-scheduled address against its own tensor capacities, plans the batch (prefills sorted last), runs the model (eager or via a CUDA graph keyed on `(tokens, requests, extent)`, ≤32 cached shapes), applies per-draft grammar bitmasks, samples with penalties/top-k/top-p, commits only retained outputs + state checkpoint copies, then proposes up to 4 new MTP drafts (`worker/mtp.py`).\n- Supporting modules: `batch_plan.py` (host validation, accepted-state selection), `sampler.py`, `serving.py` (tokenizer/chat-template/XGrammar), `decode_graph.py`, `protocol.py`, `runtime.py` (startup/shutdown audit that no legacy module or library is loaded).\n- `kernels/` — project-owned custom operators with an explicit backend: **frozen TileLang** (`kernels/tilelang_reference/`) and native CUDA (`kernels/cuda_backend/kernels.cu`); independent FlashInfer TRT-LLM FP8 GEMM / ragged attention and CUTLASS for GEMM.\n\n**Key mechanisms** (`docs/architecture.md`): GDN candidate-snapshot writes where a rejected draft never becomes a cached prefix; boundary snapshots preserved at every 784-token crossing; grouped 5-query speculative verification attention; independent FA/GDN capacities (`--mamba-blocks`); long-prefill attention that gathers active KV into ragged TRT-LLM attention for ≥1024-token query spans.\n\n## 3. How to run it\n\nFrom `README.md` (env: conda `oh-my-vllm`, wrappers pick env/paths and wait for an idle B200):\n\n```bash\nuv pip install --python /data0/.../conda-envs/oh-my-vllm/bin/python -r requirements/runtime.txt\nscripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker\n# text smoke test (add --num-speculative-tokens 4 for MTP)\nscripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py \\\n  --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64\n```\n\nOpenAI-compatible local service at `http://127.0.0.1:8000/v1`:\n\n```bash\nscripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker \\\n  --socket /tmp/oh-my-vllm-serve.ipc --num-gpu-blocks 4200 --mamba-blocks 128 \\\n  --max-model-len 262144 --num-speculative-tokens 4 serve\n```\n\nVerification: `cargo test --workspace`, `cargo fmt --check`, `check_rust_line_width.py`, `clippy -D warnings`, `ruff format/check`, and the CPU test suite (`docs/testing.md`, `docs/development.md`).\n\n## 4. Current completion status (as of `docs/handoff.md`, 2026-09-22)\n\n**Accepted / done:**\n- **Independent runtime** (REQ-RUNNER-002) — no vLLM installed/imported/linked; all nine original frozen-baseline rows ≥95% (`docs/acceptance.md` 2026-09-21).\n- **TileLang migration** (REQ-KERNEL-001) — complete and accepted on `da75c02`: **all 12 rows pass** throughput ≥95% (min 95.31%, MTP batch4), TTFT ≤110% (max 101.47%), stability ≤10% (user-revised from 5%); 146 GPU tests + 12 subtests no skips; six 262144-total-token boundary rows with zero preemption (peak reserved ≈134.7 GB ordinary / 137.7 GB MTP); twelve real MTP4 constraint cases, stored-response lifecycle, and both real oh-my-pi agentic runs pass.\n- All functional requirements implemented (chunked prefill, continuous batching, prefix caching, recompute preemption, MTP4, OpenAI service, constrained decoding, thinking levels).\n\n**In progress, not accepted:**\n- **CUDA/PTX migration** (REQ-KERNEL-002, \"Active\" in `docs/handoff.md`): every project-owned entry now has a native CUDA implementation (full suite 153 tests + 24 subtests), but the formal 173-case static speed matrix against frozen TileLang is still incomplete — latest clean full collection (`7437e0f`) shows 48/173 per-case wins, with subset-level wins in attention, SiLU, quantization, recurrence, convolution, RMS, and Q/K normalization recorded separately (subset wins cannot count toward acceptance). **The default backend remains TileLang** until all 173 cases stably beat it plus full framework, context, service, and agentic re-acceptance.\n\n**Explicitly out of scope** (REQ-OUT-SCOPE-001): multimodal, swap preemption, multi-GPU/TP>1, gRPC, LoRA, containerization.",
+            "textSignature": "{\"v\":1,\"id\":\"msg_resp_582585_6ab29e49_37\"}"
+          }
+        ],
+        "api": "openai-responses",
+        "provider": "oh-my-vllm-responses",
+        "model": "qwen3.8-27b-fp8",
+        "usage": {
+          "input": 4315,
+          "output": 2330,
+          "cacheRead": 33712,
+          "cacheWrite": 0,
+          "totalTokens": 40357,
+          "reasoningTokens": 170,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "stopReason": "stop",
+        "timestamp": 1790090825265,
+        "responseId": "resp_582585_6ab29e49_37",
+        "duration": 11400.410358000001,
+        "ttft": 316.5080539999999,
+        "completedAt": 1790090836673
+      },
+      "review": "Protocol/tool-result follow-up/MTP and request release pass. Final answer facts require updated-document readback: both refer to obsolete173-case matrix, Responses additionally cites old48/173 and153+24 tests and incorrectly says prefill sorts last. Long-input131072 is ordinary-only."
+    }
+  ],
+  "boundary": [
+    {
+      "path": "/tmp/oh-my-vllm-cuda-boundary-c36d1c9/mtp-1-attempt1.json",
+      "sha256": "df49efabc575aa1f1149fbd6e75eb0b676e8f04b9f9277de311f81171928cd7f",
+      "data": {
+        "source": {
+          "git_commit": "c36d1c94d89974e79d644df133f22685b5555179",
+          "git_status": "",
+          "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+          "python_sources_sha256": {
+            "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+            "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+            "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+            "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+            "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+            "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+            "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+            "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+            "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+            "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+            "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+            "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+            "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+            "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+            "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+            "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+            "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+            "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+            "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+            "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+            "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+            "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+            "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+            "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+            "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+            "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+            "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+            "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+            "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+            "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+            "python/oh_my_vllm/worker/runtime.py": "c1d2319d536c81a3f874def9113b72b4144aca1ea8f4c447e09fd12f80b4f019",
+            "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+            "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+            "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+            "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+            "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+          }
+        },
+        "runtime": {
+          "python": "/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python",
+          "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+          "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+          "packages": {
+            "torch": "2.14.0",
+            "triton": "3.8.0",
+            "tilelang": "0.1.14",
+            "apache-tvm-ffi": "0.1.12",
+            "flashinfer-python": "0.6.18.post1",
+            "transformers": "5.17.0",
+            "tokenizers": "0.23.2",
+            "safetensors": "0.8.0",
+            "xgrammar": "0.2.7",
+            "pyzmq": "27.2.0",
+            "msgpack": "1.2.2"
+          },
+          "flashinfer_workspace": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012",
+          "triton_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/triton",
+          "tilelang_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/tilelang",
+          "native_cuda_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/native-cuda",
+          "kernel_backend": "cuda",
+          "vllm_importable": false
+        },
+        "hardware": {
+          "gpu": "GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5",
+          "cpu_affinity": [
+            128,
+            129,
+            130,
+            131,
+            132,
+            133,
+            134,
+            135
+          ],
+          "gpu_info": "GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5, NVIDIA B200, 183359 MiB, 590.48.01"
+        },
+        "command": [
+          "/data0/shared/dongwu.chen/oh-my-vllm/target/release/oh-my-vllm-zmq-worker",
+          "--socket",
+          "/tmp/oh-my-vllm-cuda-boundary-mtp.ipc",
+          "--num-gpu-blocks",
+          "4200",
+          "--mamba-blocks",
+          "128",
+          "--max-model-len",
+          "262144",
+          "--num-speculative-tokens",
+          "4",
+          "bench",
+          "--batch-size",
+          "1",
+          "--input-len",
+          "258048",
+          "--output-len",
+          "4096",
+          "--warmup",
+          "0",
+          "--repetitions",
+          "1"
+        ],
+        "runs": [
+          {
+            "batch_size": 1,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 4096,
+            "elapsed_s": 45.816931304,
+            "output_tps": 89.39926536813702,
+            "steps": 1263,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 5010,
+            "accepted_draft_tokens": 2842,
+            "ttft_s": [
+              26.758058529
+            ]
+          }
+        ],
+        "log_sha256": "0a3f94117a25cae7172a63bc8f5e65bed082844e45c56fb3c10affdac9033e4f"
+      },
+      "peak_gpu_memory": {
+        "max_allocated_bytes": 122322355712,
+        "max_reserved_bytes": 125600530432,
+        "scope": "PyTorch allocator high water through worker shutdown, including model/cache/graphs; not total device usage."
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-boundary-c36d1c9/mtp-2-attempt2.json",
+      "sha256": "d56eebc3c1d25473ad354fc669472f6eccaa2a6de71cccecbf11a7ab22f0e0f5",
+      "data": {
+        "source": {
+          "git_commit": "c36d1c94d89974e79d644df133f22685b5555179",
+          "git_status": "",
+          "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+          "python_sources_sha256": {
+            "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+            "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+            "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+            "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+            "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+            "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+            "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+            "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+            "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+            "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+            "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+            "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+            "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+            "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+            "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+            "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+            "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+            "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+            "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+            "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+            "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+            "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+            "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+            "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+            "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+            "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+            "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+            "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+            "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+            "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+            "python/oh_my_vllm/worker/runtime.py": "c1d2319d536c81a3f874def9113b72b4144aca1ea8f4c447e09fd12f80b4f019",
+            "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+            "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+            "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+            "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+            "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+          }
+        },
+        "runtime": {
+          "python": "/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python",
+          "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+          "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+          "packages": {
+            "torch": "2.14.0",
+            "triton": "3.8.0",
+            "tilelang": "0.1.14",
+            "apache-tvm-ffi": "0.1.12",
+            "flashinfer-python": "0.6.18.post1",
+            "transformers": "5.17.0",
+            "tokenizers": "0.23.2",
+            "safetensors": "0.8.0",
+            "xgrammar": "0.2.7",
+            "pyzmq": "27.2.0",
+            "msgpack": "1.2.2"
+          },
+          "flashinfer_workspace": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012",
+          "triton_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/triton",
+          "tilelang_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/tilelang",
+          "native_cuda_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/native-cuda",
+          "kernel_backend": "cuda",
+          "vllm_importable": false
+        },
+        "hardware": {
+          "gpu": "GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad",
+          "cpu_affinity": [
+            128,
+            129,
+            130,
+            131,
+            132,
+            133,
+            134,
+            135
+          ],
+          "gpu_info": "GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad, NVIDIA B200, 183359 MiB, 590.48.01"
+        },
+        "command": [
+          "/data0/shared/dongwu.chen/oh-my-vllm/target/release/oh-my-vllm-zmq-worker",
+          "--socket",
+          "/tmp/oh-my-vllm-cuda-boundary-mtp-2-585072.ipc",
+          "--num-gpu-blocks",
+          "4200",
+          "--mamba-blocks",
+          "128",
+          "--max-model-len",
+          "262144",
+          "--num-speculative-tokens",
+          "4",
+          "bench",
+          "--batch-size",
+          "2",
+          "--input-len",
+          "258048",
+          "--output-len",
+          "4096",
+          "--warmup",
+          "0",
+          "--repetitions",
+          "1"
+        ],
+        "runs": [
+          {
+            "batch_size": 2,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 8192,
+            "elapsed_s": 73.366842742,
+            "output_tps": 111.65806914722747,
+            "steps": 1254,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 8989,
+            "accepted_draft_tokens": 5939,
+            "ttft_s": [
+              30.106366775,
+              50.234602389
+            ]
+          }
+        ],
+        "log_sha256": "015fc70f6746801da19a2596074b7c18edf7346befb0880f473b416d367d55cb"
+      },
+      "peak_gpu_memory": {
+        "max_allocated_bytes": 122425709568,
+        "max_reserved_bytes": 130094727168,
+        "scope": "PyTorch allocator high water through worker shutdown, including model/cache/graphs; not total device usage."
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-boundary-c36d1c9/mtp-4-attempt2.json",
+      "sha256": "aacff89c7e8b7b69912c31a0e4466df2619029c33d1d9a48536a37d59951c9ff",
+      "data": {
+        "source": {
+          "git_commit": "c36d1c94d89974e79d644df133f22685b5555179",
+          "git_status": "",
+          "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+          "python_sources_sha256": {
+            "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+            "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+            "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+            "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+            "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+            "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+            "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+            "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+            "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+            "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+            "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+            "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+            "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+            "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+            "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+            "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+            "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+            "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+            "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+            "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+            "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+            "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+            "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+            "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+            "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+            "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+            "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+            "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+            "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+            "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+            "python/oh_my_vllm/worker/runtime.py": "c1d2319d536c81a3f874def9113b72b4144aca1ea8f4c447e09fd12f80b4f019",
+            "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+            "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+            "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+            "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+            "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+          }
+        },
+        "runtime": {
+          "python": "/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python",
+          "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+          "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+          "packages": {
+            "torch": "2.14.0",
+            "triton": "3.8.0",
+            "tilelang": "0.1.14",
+            "apache-tvm-ffi": "0.1.12",
+            "flashinfer-python": "0.6.18.post1",
+            "transformers": "5.17.0",
+            "tokenizers": "0.23.2",
+            "safetensors": "0.8.0",
+            "xgrammar": "0.2.7",
+            "pyzmq": "27.2.0",
+            "msgpack": "1.2.2"
+          },
+          "flashinfer_workspace": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012",
+          "triton_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/triton",
+          "tilelang_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/tilelang",
+          "native_cuda_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/native-cuda",
+          "kernel_backend": "cuda",
+          "vllm_importable": false
+        },
+        "hardware": {
+          "gpu": "GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad",
+          "cpu_affinity": [
+            128,
+            129,
+            130,
+            131,
+            132,
+            133,
+            134,
+            135
+          ],
+          "gpu_info": "GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad, NVIDIA B200, 183359 MiB, 590.48.01"
+        },
+        "command": [
+          "/data0/shared/dongwu.chen/oh-my-vllm/target/release/oh-my-vllm-zmq-worker",
+          "--socket",
+          "/tmp/oh-my-vllm-cuda-boundary-mtp-4-585072.ipc",
+          "--num-gpu-blocks",
+          "4200",
+          "--mamba-blocks",
+          "128",
+          "--max-model-len",
+          "262144",
+          "--num-speculative-tokens",
+          "4",
+          "bench",
+          "--batch-size",
+          "4",
+          "--input-len",
+          "258048",
+          "--output-len",
+          "4096",
+          "--warmup",
+          "0",
+          "--repetitions",
+          "1"
+        ],
+        "runs": [
+          {
+            "batch_size": 4,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 16384,
+            "elapsed_s": 129.966793812,
+            "output_tps": 126.06296977441669,
+            "steps": 1316,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 16272,
+            "accepted_draft_tokens": 12306,
+            "ttft_s": [
+              30.024113877,
+              53.459776962,
+              77.487724074,
+              98.496291597
+            ]
+          }
+        ],
+        "log_sha256": "85e74a1aa63022c404ecbcfe85a6918185c7b809ea020249f0f2b50d262d2c54"
+      },
+      "peak_gpu_memory": {
+        "max_allocated_bytes": 124565033472,
+        "max_reserved_bytes": 130094727168,
+        "scope": "PyTorch allocator high water through worker shutdown, including model/cache/graphs; not total device usage."
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-boundary-c36d1c9/ordinary-1-attempt1.json",
+      "sha256": "d83c138e690995697cbfc3e3f4fcbd1acee96eda85cd25aeee77c2f76c1d0598",
+      "data": {
+        "source": {
+          "git_commit": "c36d1c94d89974e79d644df133f22685b5555179",
+          "git_status": "",
+          "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+          "python_sources_sha256": {
+            "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+            "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+            "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+            "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+            "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+            "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+            "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+            "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+            "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+            "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+            "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+            "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+            "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+            "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+            "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+            "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+            "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+            "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+            "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+            "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+            "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+            "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+            "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+            "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+            "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+            "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+            "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+            "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+            "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+            "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+            "python/oh_my_vllm/worker/runtime.py": "c1d2319d536c81a3f874def9113b72b4144aca1ea8f4c447e09fd12f80b4f019",
+            "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+            "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+            "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+            "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+            "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+          }
+        },
+        "runtime": {
+          "python": "/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python",
+          "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+          "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+          "packages": {
+            "torch": "2.14.0",
+            "triton": "3.8.0",
+            "tilelang": "0.1.14",
+            "apache-tvm-ffi": "0.1.12",
+            "flashinfer-python": "0.6.18.post1",
+            "transformers": "5.17.0",
+            "tokenizers": "0.23.2",
+            "safetensors": "0.8.0",
+            "xgrammar": "0.2.7",
+            "pyzmq": "27.2.0",
+            "msgpack": "1.2.2"
+          },
+          "flashinfer_workspace": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012",
+          "triton_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/triton",
+          "tilelang_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/tilelang",
+          "native_cuda_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/native-cuda",
+          "kernel_backend": "cuda",
+          "vllm_importable": false
+        },
+        "hardware": {
+          "gpu": "GPU-81c2e3a2-685d-59a9-e801-7e068fffc377",
+          "cpu_affinity": [
+            120,
+            121,
+            122,
+            123,
+            124,
+            125,
+            126,
+            127
+          ],
+          "gpu_info": "GPU-81c2e3a2-685d-59a9-e801-7e068fffc377, NVIDIA B200, 183359 MiB, 590.48.01"
+        },
+        "command": [
+          "/data0/shared/dongwu.chen/oh-my-vllm/target/release/oh-my-vllm-zmq-worker",
+          "--socket",
+          "/tmp/oh-my-vllm-cuda-boundary-ordinary.ipc",
+          "--num-gpu-blocks",
+          "4200",
+          "--mamba-blocks",
+          "128",
+          "--max-model-len",
+          "262144",
+          "--num-speculative-tokens",
+          "0",
+          "bench",
+          "--batch-size",
+          "1",
+          "--input-len",
+          "258048",
+          "--output-len",
+          "4096",
+          "--warmup",
+          "0",
+          "--repetitions",
+          "1"
+        ],
+        "runs": [
+          {
+            "batch_size": 1,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 4096,
+            "elapsed_s": 72.819481423,
+            "output_tps": 56.24868400540793,
+            "steps": 4105,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0,
+            "ttft_s": [
+              26.316600046
+            ]
+          }
+        ],
+        "log_sha256": "617b1093929b8a993dc2c12a5b61e9119584315437e951f6dd9e6c9cbdae36f4"
+      },
+      "peak_gpu_memory": {
+        "max_allocated_bytes": 126193300992,
+        "max_reserved_bytes": 130182807552,
+        "scope": "PyTorch allocator high water through worker shutdown, including model/cache/graphs; not total device usage."
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-boundary-c36d1c9/ordinary-2-attempt2.json",
+      "sha256": "8246ead1aaae6df908ca241cb2ee34eee97e717b508d9dda6a260801e70d09c0",
+      "data": {
+        "source": {
+          "git_commit": "c36d1c94d89974e79d644df133f22685b5555179",
+          "git_status": "",
+          "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+          "python_sources_sha256": {
+            "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+            "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+            "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+            "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+            "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+            "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+            "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+            "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+            "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+            "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+            "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+            "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+            "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+            "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+            "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+            "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+            "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+            "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+            "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+            "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+            "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+            "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+            "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+            "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+            "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+            "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+            "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+            "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+            "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+            "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+            "python/oh_my_vllm/worker/runtime.py": "c1d2319d536c81a3f874def9113b72b4144aca1ea8f4c447e09fd12f80b4f019",
+            "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+            "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+            "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+            "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+            "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+          }
+        },
+        "runtime": {
+          "python": "/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python",
+          "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+          "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+          "packages": {
+            "torch": "2.14.0",
+            "triton": "3.8.0",
+            "tilelang": "0.1.14",
+            "apache-tvm-ffi": "0.1.12",
+            "flashinfer-python": "0.6.18.post1",
+            "transformers": "5.17.0",
+            "tokenizers": "0.23.2",
+            "safetensors": "0.8.0",
+            "xgrammar": "0.2.7",
+            "pyzmq": "27.2.0",
+            "msgpack": "1.2.2"
+          },
+          "flashinfer_workspace": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012",
+          "triton_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/triton",
+          "tilelang_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/tilelang",
+          "native_cuda_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/native-cuda",
+          "kernel_backend": "cuda",
+          "vllm_importable": false
+        },
+        "hardware": {
+          "gpu": "GPU-80cebbaf-a106-2605-b902-f5f9a08645ea",
+          "cpu_affinity": [
+            120,
+            121,
+            122,
+            123,
+            124,
+            125,
+            126,
+            127
+          ],
+          "gpu_info": "GPU-80cebbaf-a106-2605-b902-f5f9a08645ea, NVIDIA B200, 183359 MiB, 590.48.01"
+        },
+        "command": [
+          "/data0/shared/dongwu.chen/oh-my-vllm/target/release/oh-my-vllm-zmq-worker",
+          "--socket",
+          "/tmp/oh-my-vllm-cuda-boundary-ordinary-2-584957.ipc",
+          "--num-gpu-blocks",
+          "4200",
+          "--mamba-blocks",
+          "128",
+          "--max-model-len",
+          "262144",
+          "--num-speculative-tokens",
+          "0",
+          "bench",
+          "--batch-size",
+          "2",
+          "--input-len",
+          "258048",
+          "--output-len",
+          "4096",
+          "--warmup",
+          "0",
+          "--repetitions",
+          "1"
+        ],
+        "runs": [
+          {
+            "batch_size": 2,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 8192,
+            "elapsed_s": 104.245704654,
+            "output_tps": 78.58357356008017,
+            "steps": 4113,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0,
+            "ttft_s": [
+              28.918942021,
+              47.965662678
+            ]
+          }
+        ],
+        "log_sha256": "5e9c805933bc48a9559d47e1f4e6d2370dc0cdb2b43ec0173f951dc4804613e5"
+      },
+      "peak_gpu_memory": {
+        "max_allocated_bytes": 126575863808,
+        "max_reserved_bytes": 132433051648,
+        "scope": "PyTorch allocator high water through worker shutdown, including model/cache/graphs; not total device usage."
+      }
+    },
+    {
+      "path": "/tmp/oh-my-vllm-cuda-boundary-c36d1c9/ordinary-4-attempt2.json",
+      "sha256": "d2710feaf1ed24f39c7e68155c373051dac6812689aebd058a14cff81c8632e7",
+      "data": {
+        "source": {
+          "git_commit": "c36d1c94d89974e79d644df133f22685b5555179",
+          "git_status": "",
+          "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+          "python_sources_sha256": {
+            "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+            "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+            "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+            "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+            "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+            "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+            "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+            "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+            "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+            "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+            "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+            "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+            "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+            "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+            "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+            "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+            "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+            "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+            "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+            "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+            "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+            "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+            "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+            "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+            "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+            "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+            "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+            "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+            "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+            "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+            "python/oh_my_vllm/worker/runtime.py": "c1d2319d536c81a3f874def9113b72b4144aca1ea8f4c447e09fd12f80b4f019",
+            "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+            "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+            "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+            "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+            "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+          }
+        },
+        "runtime": {
+          "python": "/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python",
+          "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+          "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+          "packages": {
+            "torch": "2.14.0",
+            "triton": "3.8.0",
+            "tilelang": "0.1.14",
+            "apache-tvm-ffi": "0.1.12",
+            "flashinfer-python": "0.6.18.post1",
+            "transformers": "5.17.0",
+            "tokenizers": "0.23.2",
+            "safetensors": "0.8.0",
+            "xgrammar": "0.2.7",
+            "pyzmq": "27.2.0",
+            "msgpack": "1.2.2"
+          },
+          "flashinfer_workspace": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012",
+          "triton_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/triton",
+          "tilelang_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/tilelang",
+          "native_cuda_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/native-cuda",
+          "kernel_backend": "cuda",
+          "vllm_importable": false
+        },
+        "hardware": {
+          "gpu": "GPU-80cebbaf-a106-2605-b902-f5f9a08645ea",
+          "cpu_affinity": [
+            120,
+            121,
+            122,
+            123,
+            124,
+            125,
+            126,
+            127
+          ],
+          "gpu_info": "GPU-80cebbaf-a106-2605-b902-f5f9a08645ea, NVIDIA B200, 183359 MiB, 590.48.01"
+        },
+        "command": [
+          "/data0/shared/dongwu.chen/oh-my-vllm/target/release/oh-my-vllm-zmq-worker",
+          "--socket",
+          "/tmp/oh-my-vllm-cuda-boundary-ordinary-4-584957.ipc",
+          "--num-gpu-blocks",
+          "4200",
+          "--mamba-blocks",
+          "128",
+          "--max-model-len",
+          "262144",
+          "--num-speculative-tokens",
+          "0",
+          "bench",
+          "--batch-size",
+          "4",
+          "--input-len",
+          "258048",
+          "--output-len",
+          "4096",
+          "--warmup",
+          "0",
+          "--repetitions",
+          "1"
+        ],
+        "runs": [
+          {
+            "batch_size": 4,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 16384,
+            "elapsed_s": 169.52392909,
+            "output_tps": 96.64712284542296,
+            "steps": 4129,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0,
+            "ttft_s": [
+              28.98256472,
+              51.239947494,
+              73.565822477,
+              92.814593789
+            ]
+          }
+        ],
+        "log_sha256": "e9e1b18e790c421d7beeeb01e63ffe7360e95c83006ad60ed0e3c9ab9136ca66"
+      },
+      "peak_gpu_memory": {
+        "max_allocated_bytes": 128691857408,
+        "max_reserved_bytes": 134687490048,
+        "scope": "PyTorch allocator high water through worker shutdown, including model/cache/graphs; not total device usage."
+      }
+    }
+  ],
+  "smoke": {
+    "ordinary": {
+      "path": "/tmp/oh-my-vllm-cuda-smoke-c36d1c9/ordinary.log",
+      "sha256": "0c31a2aa8d7c022fb4b386d0404bfb32b73e520d701e73150c2997cfdc93d7aa",
+      "stdout": "2026-09-22T15:27:27.384003Z  INFO inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: ZMQ DEALER socket bound at ipc:///tmp/oh-my-vllm-cuda-smoke-ordinary.ipc\n2026-09-22T15:27:27.384222Z  INFO inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Python worker launched (pid 588595)\n2026-09-22T15:27:27.384231Z  WARN inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Init send failed (ZMQ error: Failed to deliver message (1 frames) cause of Not connected to peers. Unable to send messages), retrying in 100ms…\n2026-09-22T15:27:27.485518Z  WARN inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Init send failed (ZMQ error: Failed to deliver message (1 frames) cause of Not connected to peers. Unable to send messages), retrying in 200ms…\n2026-09-22T15:27:27.686791Z  WARN inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Init send failed (ZMQ error: Failed to deliver message (1 frames) cause of Not connected to peers. Unable to send messages), retrying in 400ms…\n2026-09-22T15:27:28.088255Z  WARN inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Init send failed (ZMQ error: Failed to deliver message (1 frames) cause of Not connected to peers. Unable to send messages), retrying in 800ms…\n2026-09-22T15:27:28.889192Z  WARN inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Init send failed (ZMQ error: Failed to deliver message (1 frames) cause of Not connected to peers. Unable to send messages), retrying in 1600ms…\n2026-09-22T15:27:30.489957Z  WARN inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Init send failed (ZMQ error: Failed to deliver message (1 frames) cause of Not connected to peers. Unable to send messages), retrying in 2000ms…\n{\"timestamp\": \"2026-09-22T15:27:31.313424+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 588595, \"component\": \"oh_my_vllm.worker.zmq_bridge\", \"message\": \"Connecting to Rust scheduler at ipc:///tmp/oh-my-vllm-cuda-smoke-ordinary.ipc\"}\n{\"timestamp\": \"2026-09-22T15:27:32.495172+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 588595, \"component\": \"oh_my_vllm.worker.model_runner\", \"message\": \"Independent runtime\", \"python\": \"/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python\", \"python_version\": \"3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]\", \"runner\": \"oh_my_vllm.worker.model_runner.OhMyVllmWorker\", \"packages\": {\"torch\": \"2.14.0\", \"triton\": \"3.8.0\", \"tilelang\": \"0.1.14\", \"apache-tvm-ffi\": \"0.1.12\", \"flashinfer-python\": \"0.6.18.post1\", \"transformers\": \"5.17.0\", \"tokenizers\": \"0.23.2\", \"safetensors\": \"0.8.0\", \"xgrammar\": \"0.2.7\", \"pyzmq\": \"27.2.0\", \"msgpack\": \"1.2.2\"}, \"flashinfer_workspace\": \"/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012\", \"triton_cache\": \"/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/triton\", \"tilelang_cache\": \"/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/tilelang\", \"native_cuda_cache\": \"/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/native-cuda\", \"kernel_backend\": \"cuda\", \"vllm_importable\": false}\n{\"timestamp\": \"2026-09-22T15:27:38.963419+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 588595, \"component\": \"oh_my_vllm.worker.zmq_bridge\", \"message\": \"Worker ready\"}\n2026-09-22T15:27:38.963681Z  INFO inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Python worker is ready logical_num_blocks=85\n{\"timestamp\": \"2026-09-22T15:27:43.765885+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 588595, \"component\": \"oh_my_vllm.worker.model_runner\", \"message\": \"Capture target graph: tokens=1 requests=1 extent=4096\"}\n{\"timestamp\": \"2026-09-22T15:27:44.073129+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 588595, \"component\": \"oh_my_vllm.worker.model_runner\", \"message\": \"Capture target graph: tokens=2 requests=2 extent=4096\"}\n2026-09-22T15:27:59.649464Z  INFO inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker: batch_complete steps=1747 elapsed=20.68576021 prefix_hit_tokens=2352 initial_prefix_hit_tokens=0 preemptions=2\n2026-09-22T15:27:59.649602Z  INFO inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: sending shutdown to Python worker\n{\"timestamp\": \"2026-09-22T15:27:59.649904+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 588595, \"component\": \"oh_my_vllm.worker.zmq_bridge\", \"message\": \"Shutdown received\"}\n{\"timestamp\": \"2026-09-22T15:27:59.650586+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 588595, \"component\": \"oh_my_vllm.worker.model_runner\", \"message\": \"GPU memory high water\", \"max_allocated_bytes\": 47675856384, \"max_reserved_bytes\": 48354033664}\n{\"timestamp\": \"2026-09-22T15:27:59.656394+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 588595, \"component\": \"oh_my_vllm.worker.model_runner\", \"message\": \"Independent runtime module/library audit passed\"}\n{\"stats\": {\"steps\": 1747, \"prefix_hit_tokens\": 2352, \"initial_prefix_hit_tokens\": 0, \"preemptions\": 2, \"accepted_draft_tokens\": 0}, \"requests\": [{\"question\": \"请用中文写一篇至少四千字的文章,详细介绍北京的历史、地理、交通、文化和景点。每段都以“北京:”开头,不要介绍另一个城市。请直接开始正文。\", \"output_tokens\": 1024, \"text\": \"北京:作为中华人民共和国的首都，北京不仅是一座现代化的国际大都市，更是一座承载着数千年厚重历史的文化名城。它位于华北平原的西北边缘，背靠燕山，面向渤海，这种独特的地理位置赋予了它“龙脉”般的战略意义。从辽代开始，北京就逐渐成为中国北方的政治中心，历经金、元、明、清四个朝代的更迭，这里见证了无数王朝的兴衰荣辱。特别是自元朝定都于此以来，北京便正式成为中国统一多民族国家的政治中心，其城市格局、建筑风格以及文化传统都深深打上了皇家都城的烙印。这种历史积淀使得北京不仅仅是一个地理坐标，更是一个文化符号，象征着中华文明的延续与传承。在漫长的历史长河中，北京不断吸收着来自全国各地的文化精华，形成了兼容并蓄、博大精深的城市性格，这种性格既体现在其宏伟庄严的皇家建筑上，也体现在其市井巷陌中充满烟火气的百姓生活中。\\n\\n北京:从地理环境来看，北京的地形呈现出西北高、东南低的阶梯状分布，这种地势特征对城市的气候、水文以及生态格局产生了深远影响。西北部是连绵起伏的燕山山脉和太行山脉的余脉，这里山峦叠嶂，森林茂密，是重要的生态屏障和水源涵养地，其中著名的香山、八达岭长城等景点均坐落于此。东南部则是广阔的华北平原，地势平坦开阔，土壤肥沃，适宜农业发展和城市建设。这种“依山傍水”的地理格局，使得北京既有北方城市的雄浑壮阔，又不失江南水乡般的灵动秀美。北京的气候属于暖温带半湿润大陆性季风气候，四季分明，春季多风干燥，夏季炎热多雨，秋季天高气爽，冬季寒冷干燥。这种气候特点不仅影响了北京人的饮食习惯和生活方式，也塑造了北京独特的自然景观，如春天的玉兰花、夏天的荷花、秋天的红叶以及冬天的雪景，都成为了这座城市不可或缺的自然名片。\\n\\n北京:在交通方面，北京已经构建起了一套高效、便捷且覆盖广泛的现代化综合交通网络，这不仅是城市运转的动脉，也是连接全国乃至世界的枢纽。北京拥有中国最繁忙的机场群之一，包括首都国际机场和大兴国际机场，这两座机场如同双翼，将北京与全球各大城市紧密相连，每年接待数以亿计的国内外旅客。在铁路交通方面，北京南站、北京西站、北京北站等高铁枢纽构成了中国高铁网络的中心节点，使得北京与上海、广州、成都等主要城市之间的旅行时间大幅缩短，极大地促进了区域经济的一体化发展。市内交通方面，北京地铁线路纵横交错，覆盖了城市的主要区域和郊区新城，其运营里程和客流量均位居世界前列，是市民日常出行的重要选择。此外，北京还大力发展公共交通，包括快速公交系统（BRT）和常规公交线路，形成了多层次、立体化的地面交通体系。为了缓解交通拥堵，北京还实施了严格的机动车限行政策，并大力推广新能源汽车和共享单车，倡导绿色出行理念，努力构建更加可持续的城市交通环境。\\n\\n北京:北京的文化底蕴之深厚，在世界城市中首屈一指，这种文化不仅体现在物质层面的古建筑和文物上，更深深融入到了市民的精神生活和日常行为中。北京是京剧的发源地和主要演出地，京剧作为中国的国粹，以其独特的唱腔、身段和服饰，展现了中华传统艺术的最高成就。除了京剧，北京还有评剧、河北梆子等多种地方戏曲形式，它们共同构成了北京丰富多彩的戏曲文化景观。在文学艺术领域，北京更是名家辈出，老舍、巴金、曹禺等文学巨匠都曾在此生活创作，留下了许多描绘北京风土人情的经典作品。这些作品不仅记录了北京的历史变迁，也深刻揭示了北京人的性格特征和精神世界。此外，北京还是中国现代艺术的重要中心，798艺术区等当代艺术聚集地，汇聚了众多艺术家和画廊，展示了中国当代艺术的创新活力和国际视野。这种传统与现代交融的文化氛围，使得北京成为了一个充满创意和灵感的城市，吸引着世界各地的艺术家和文化爱好者前来交流和学习。\\n\\n北京:说到北京的景点，首先不得不提的是故宫，这座世界上现存规模最大、保存最为完整的木质结构古建筑群，曾是明清两代二十四位皇帝的皇宫。故宫的红墙黄瓦、金碧辉煌，不仅展示了中国古代建筑艺术的巅峰水平，也见证了明清两代的历史风云。漫步在故宫的长廊和庭院中，仿佛能听到历史的回响，感受到皇权的威严与神秘。除了故宫，天坛也是北京不可错过的景点之一，这里是明清两代皇帝祭天、祈谷的场所，其建筑布局严谨，设计精巧，尤其是祈年殿，以其独特的圆形结构和蓝色琉璃瓦顶，象征着天圆地方的宇宙观。颐和园则是中国现存规模最大、保存最完整的皇家园林，它以昆明湖和万寿山为基址，以杭州西湖为蓝本，汲取江南园林的设计手法，形成了山水相间、亭台楼阁错落有致的优美景观。这些皇家\"}, {\"question\": \"请用中文写一篇至少四千字的文章,详细介绍东京的历史、地理、交通、文化和景点。每段都以“东京:”开头,不要介绍另一个城市。请直接开始正文。\", \"output_tokens\": 1024, \"text\": \"东京:作为日本的首都及最大城市，东京不仅是日本政治、经济、文化和交通的中心，更是全球最具影响力的国际大都市之一。这座城市的历史可以追溯到数百年前，其前身江户在德川幕府时期崛起为日本的实际统治中心，拥有深厚的历史底蕴。然而，东京并非仅仅是一座古老的城市，它更是一个不断进化、充满活力的现代都市。从明治维新开始，东京迅速现代化，吸收了西方文明的同时保留了日本传统的精髓，形成了独特的“和洋折衷”风格。这种历史与现代的交融，使得东京在全球城市中独树一帜，既有着宁静的神社和传统的茶道，也有着霓虹闪烁的涩谷十字路口和尖端科技园区。理解东京，需要从其复杂的历史脉络入手，因为这座城市的每一寸土地都承载着过去的记忆与未来的愿景，它是日本民族精神的缩影，也是亚洲乃至世界文化交汇的重要节点。\\n\\n东京:在地理上，东京位于本州岛关东平原的南部，濒临东京湾，其地理位置极为优越，拥有天然的深水良港，这为日本早期的贸易和后来的工业化奠定了坚实基础。东京都下辖23个特别区以及多摩地区、伊豆群岛和小笠原群岛，总面积约为2194平方公里，其中大部分为平原和丘陵地带。这种地形使得城市扩张相对容易，但也带来了人口密度极高的挑战。东京的气候属于亚热带季风气候，四季分明，春季樱花盛开，夏季炎热多雨，秋季凉爽宜人，冬季则相对干燥寒冷。尽管东京地处地震带，面临地震和台风的自然风险，但通过先进的建筑抗震技术和完善的防灾体系，这座城市展现出了极强的韧性。东京湾沿岸的填海造陆工程不仅扩大了城市面积，也创造了如台场等新的娱乐和商业中心，展示了人类改造自然环境的智慧与能力。地理上的多样性，从繁华的市中心到宁静的郊区，从高楼林立的天际线到绿意盎然的公园，构成了东京独特的空间格局。\\n\\n东京:交通系统是东京城市运转的动脉，其高效、准时和覆盖范围之广，堪称世界之最。东京拥有世界上最复杂的铁路网络，包括JR东日本、东京地铁、都营地铁以及众多私营铁路公司，这些线路交织成一张巨大的网，连接着城市的每一个角落。每天，数百万通勤者依靠这些轨道交通系统往返于家和公司之间，高峰时段的拥挤程度虽然令人咋舌，但秩序井然，体现了日本社会的高度纪律性。除了铁路，东京的巴士系统也极为发达，补充了铁路未能覆盖的区域，而自行车则是短途出行的重要补充。东京的交通规划不仅注重速度，更强调便捷性和可达性，许多车站都设有详细的导视系统和多语言标识，方便游客和居民使用。此外，东京的出租车服务虽然价格较高，但司机服务专业，车辆整洁，是体验城市另一种方式的选择。高效的交通系统不仅支撑了东京庞大的经济体量，也促进了城市各区域之间的紧密联系，使得东京虽然面积广阔，但在时间距离上却显得紧凑而高效。\\n\\n东京:文化方面，东京是传统与现代完美融合的典范。在这里，你可以看到穿着和服的女性在浅草寺前拍照留念，也可以看到穿着西装的上班族在银座的高楼间匆匆走过。东京的文化生活丰富多彩，从传统的能剧、歌舞伎到现代的流行音乐、动漫和时尚，应有尽有。东京是亚洲时尚的中心之一，原宿、表参道和涩谷是潮流文化的发源地，这里的年轻人引领着全球的时尚趋势。同时，东京也是美食的天堂，从精致的怀石料理到街头的小摊小吃，从高级寿司店到拉面馆，各种风味汇聚于此，满足了不同口味的需求。东京的博物馆和艺术馆数量众多，如东京国立博物馆、森美术馆和teamLab无界美术馆等，展示了从古代文物到当代艺术的广泛收藏。此外，东京的夜生活同样精彩，新宿、池袋和六本木等地遍布酒吧、俱乐部和卡拉OK，为游客和居民提供了丰富的娱乐选择。这种多元文化的共存，使得东京成为一个充满包容性和创造力的城市，吸引了来自世界各地的艺术家、学者和游客。\\n\\n东京:景点方面，东京拥有众多世界闻名的地标和自然奇观。皇居是东京的象征之一，曾是德川幕府将军的居所，如今是日本天皇的官邸，其宏伟的建筑和广阔的绿地让人感受到历史的庄严。明治神宫位于原宿附近，是供奉明治天皇和昭宪皇后的神社，周围被茂密的森林环绕，是都市中难得的宁静之地。浅草寺是东京最古老的寺庙，雷门的大红灯笼是其标志性景观，周边的仲见世商店街充满了传统的手工艺品和美食。涩谷十字路口则是世界上最繁忙的人行横道，象征着东京的现代与活力，周围的SHIBUYA SKY观景台提供了俯瞰城市全景的绝佳视角。东京塔和东京晴空塔是两座著名的地标建筑，前者是红色的钢铁结构，后者则是蓝色的现代摩天大楼，两者都提供了俯瞰东京湾和城市夜景\"}]}\n"
+    },
+    "mtp": {
+      "path": "/tmp/oh-my-vllm-cuda-smoke-c36d1c9/mtp.log",
+      "sha256": "2a2281be0eb598531feae1e238c80f955876e04ec450b85544326346b80fde68",
+      "stdout": "2026-09-22T15:28:04.310389Z  INFO inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: ZMQ DEALER socket bound at ipc:///tmp/oh-my-vllm-cuda-smoke-mtp.ipc\n2026-09-22T15:28:04.310690Z  INFO inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Python worker launched (pid 591262)\n2026-09-22T15:28:04.310699Z  WARN inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Init send failed (ZMQ error: Failed to deliver message (1 frames) cause of Not connected to peers. Unable to send messages), retrying in 100ms…\n2026-09-22T15:28:04.410917Z  WARN inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Init send failed (ZMQ error: Failed to deliver message (1 frames) cause of Not connected to peers. Unable to send messages), retrying in 200ms…\n2026-09-22T15:28:04.612235Z  WARN inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Init send failed (ZMQ error: Failed to deliver message (1 frames) cause of Not connected to peers. Unable to send messages), retrying in 400ms…\n2026-09-22T15:28:05.013698Z  WARN inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Init send failed (ZMQ error: Failed to deliver message (1 frames) cause of Not connected to peers. Unable to send messages), retrying in 800ms…\n2026-09-22T15:28:05.814579Z  WARN inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Init send failed (ZMQ error: Failed to deliver message (1 frames) cause of Not connected to peers. Unable to send messages), retrying in 1600ms…\n2026-09-22T15:28:07.415299Z  WARN inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Init send failed (ZMQ error: Failed to deliver message (1 frames) cause of Not connected to peers. Unable to send messages), retrying in 2000ms…\n{\"timestamp\": \"2026-09-22T15:28:08.011132+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.zmq_bridge\", \"message\": \"Connecting to Rust scheduler at ipc:///tmp/oh-my-vllm-cuda-smoke-mtp.ipc\"}\n{\"timestamp\": \"2026-09-22T15:28:09.420743+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.model_runner\", \"message\": \"Independent runtime\", \"python\": \"/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python\", \"python_version\": \"3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]\", \"runner\": \"oh_my_vllm.worker.model_runner.OhMyVllmWorker\", \"packages\": {\"torch\": \"2.14.0\", \"triton\": \"3.8.0\", \"tilelang\": \"0.1.14\", \"apache-tvm-ffi\": \"0.1.12\", \"flashinfer-python\": \"0.6.18.post1\", \"transformers\": \"5.17.0\", \"tokenizers\": \"0.23.2\", \"safetensors\": \"0.8.0\", \"xgrammar\": \"0.2.7\", \"pyzmq\": \"27.2.0\", \"msgpack\": \"1.2.2\"}, \"flashinfer_workspace\": \"/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012\", \"triton_cache\": \"/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/triton\", \"tilelang_cache\": \"/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/tilelang\", \"native_cuda_cache\": \"/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/native-cuda\", \"kernel_backend\": \"cuda\", \"vllm_importable\": false}\n{\"timestamp\": \"2026-09-22T15:28:15.922841+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.zmq_bridge\", \"message\": \"Worker ready\"}\n2026-09-22T15:28:15.923166Z  INFO inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: Python worker is ready logical_num_blocks=85\n{\"timestamp\": \"2026-09-22T15:28:19.824745+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture proposal graph: (1, 4096)\"}\n2026-09-22T15:28:19.914573Z  INFO inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker: batch_complete steps=3 elapsed=3.991382379 prefix_hit_tokens=1568 initial_prefix_hit_tokens=0 preemptions=1\n{\"timestamp\": \"2026-09-22T15:28:19.950021+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.model_runner\", \"message\": \"Capture target graph: tokens=5 requests=1 extent=4096\"}\n{\"timestamp\": \"2026-09-22T15:28:20.117202+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture draft graph: (2, 1, 4096)\"}\n{\"timestamp\": \"2026-09-22T15:28:20.136692+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture draft graph: (1, 1, 4096)\"}\n{\"timestamp\": \"2026-09-22T15:28:20.176791+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture proposal graph: (2, 4096)\"}\n{\"timestamp\": \"2026-09-22T15:28:20.195544+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.model_runner\", \"message\": \"Capture target graph: tokens=10 requests=2 extent=4096\"}\n{\"timestamp\": \"2026-09-22T15:28:20.429290+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture draft graph: (4, 2, 4096)\"}\n{\"timestamp\": \"2026-09-22T15:28:20.491832+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture draft graph: (2, 2, 4096)\"}\n{\"timestamp\": \"2026-09-22T15:28:20.517504+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture draft graph: (6, 2, 4096)\"}\n{\"timestamp\": \"2026-09-22T15:28:20.531450+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture draft graph: (9, 2, 4096)\"}\n{\"timestamp\": \"2026-09-22T15:28:20.546482+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture draft graph: (3, 2, 4096)\"}\n{\"timestamp\": \"2026-09-22T15:28:20.560215+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture draft graph: (5, 2, 4096)\"}\n{\"timestamp\": \"2026-09-22T15:28:21.107139+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture draft graph: (7, 2, 4096)\"}\n{\"timestamp\": \"2026-09-22T15:28:21.418263+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture draft graph: (8, 2, 4096)\"}\n{\"timestamp\": \"2026-09-22T15:28:22.248074+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture draft graph: (3, 1, 4096)\"}\n{\"timestamp\": \"2026-09-22T15:28:22.296433+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture draft graph: (5, 1, 4096)\"}\n{\"timestamp\": \"2026-09-22T15:28:22.378474+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.mtp\", \"message\": \"Capture draft graph: (4, 1, 4096)\"}\n{\"timestamp\": \"2026-09-22T15:28:22.405660+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.model_runner\", \"message\": \"Capture target graph: tokens=3 requests=1 extent=4096\"}\n{\"timestamp\": \"2026-09-22T15:28:26.233341+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.model_runner\", \"message\": \"Capture target graph: tokens=1 requests=1 extent=4096\"}\n{\"timestamp\": \"2026-09-22T15:28:29.641159+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.model_runner\", \"message\": \"Capture target graph: tokens=4 requests=1 extent=4096\"}\n{\"timestamp\": \"2026-09-22T15:28:29.708870+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.model_runner\", \"message\": \"Capture target graph: tokens=2 requests=1 extent=4096\"}\n2026-09-22T15:28:29.774183Z  INFO inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker: batch_complete steps=764 elapsed=9.859583056 prefix_hit_tokens=10192 initial_prefix_hit_tokens=3136 preemptions=5\n2026-09-22T15:28:29.774311Z  INFO inference{run_id=\"20260922T152724-587100\"}: oh_my_vllm_zmq_worker::client: sending shutdown to Python worker\n{\"timestamp\": \"2026-09-22T15:28:29.774636+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.zmq_bridge\", \"message\": \"Shutdown received\"}\n{\"timestamp\": \"2026-09-22T15:28:29.775352+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.model_runner\", \"message\": \"GPU memory high water\", \"max_allocated_bytes\": 42605040128, \"max_reserved_bytes\": 43125833728}\n{\"timestamp\": \"2026-09-22T15:28:29.780865+00:00\", \"level\": \"INFO\", \"run_id\": \"20260922T152724-587100\", \"pid\": 591262, \"component\": \"oh_my_vllm.worker.model_runner\", \"message\": \"Independent runtime module/library audit passed\"}\n{\"stats\": {\"steps\": 764, \"prefix_hit_tokens\": 10192, \"initial_prefix_hit_tokens\": 3136, \"preemptions\": 5, \"accepted_draft_tokens\": 1154}, \"requests\": [{\"question\": \"请用中文写一篇至少四千字的文章,详细介绍北京的历史、地理、交通、文化和景点。每段都以“北京:”开头,不要介绍另一个城市。请直接开始正文。\", \"output_tokens\": 1024, \"text\": \"北京:作为中华人民共和国的首都，北京不仅是中国政治、文化和国际交流的中心，更是一座拥有三千多年建城史、八百多年建都史的古老城市。这座城市的历史底蕴深厚，从辽代的燕京到金代的中都，从元大都的宏伟规划到明清两代的紫禁城，北京见证了中国封建社会最后的辉煌与近代历史的沧桑巨变。在漫长的历史长河中，北京始终处于中国北方地区的核心地位，其城市格局深受传统风水学说和儒家礼制的影响，形成了中轴对称、前朝后市的经典布局。这种独特的城市形态不仅体现了古代中国“天人合一”的哲学思想，也奠定了北京作为世界文化遗产城市的坚实基础。如今，北京在保留历史风貌的同时，不断融入现代都市的活力，成为传统与现代完美融合的典范，吸引着来自世界各地的游客和学者前来探索其深厚的历史脉络。\\n\\n北京:从地理环境来看，北京位于华北平原的西北边缘，背靠燕山山脉，西倚太行山脉，东南面向渤海湾，这种“背山面海”的地理格局赋予了北京独特的自然风貌和战略地位。北京市总面积约为16410.54平方公里，地形呈现西北高、东南低的特点，西部和北部为山地和丘陵，约占全市总面积的六分之五，而东南部则是广阔的平原，约占总面积的六分之一。这种地形差异使得北京的气候具有显著的季风特征，属于暖温带半湿润大陆性季风气候，四季分明，春季多风干燥，夏季炎热多雨，秋季天高气爽，冬季寒冷干燥。丰富的水资源主要来源于密云水库和官厅水库，这些大型水利设施不仅为城市提供了充足的饮用水源，也调节了区域小气候，对维持北京生态平衡起到了至关重要的作用。此外，北京周边分布着众多自然保护区和森林公园，如香山、百望山等，这些绿色屏障不仅美化了城市环境，也为市民提供了休闲健身的好去处，体现了人与自然和谐共生的理念。\\n\\n北京:在交通网络方面，北京已经构建起一个立体化、多层次、高效率的综合交通体系，涵盖了航空、铁路、公路、城市轨道交通以及水上运输等多种方式。北京首都国际机场和北京大兴国际机场双枢纽格局的形成，极大地提升了北京的国际连通性，使其成为全球最繁忙的航空枢纽之一，连接着全球各大洲的主要城市。在铁路方面，北京南站、北京西站、北京北站等高铁枢纽构成了中国高速铁路网的核心节点，通过京沪、京广、京哈等干线，北京与全国各大城市实现了快速通达，极大地缩短了时空距离。市内交通方面，北京地铁网络规模位居世界前列，线路纵横交错，覆盖了城市的主要居住区、商业区和旅游景点，为市民出行提供了便捷、环保的选择。同时，北京大力发展公共交通优先策略，通过优化公交线路、推广共享单车和新能源汽车，有效缓解了城市交通拥堵问题，提升了城市运行的效率和舒适度，展现了现代国际大都市的交通管理水平。\\n\\n北京:北京的文化底蕴极为丰富，它是中华文明的重要发祥地之一，也是多元文化交汇融合的熔炉。作为全国的文化中心，北京拥有众多高等学府、科研机构和文化艺术团体，如北京大学、清华大学、中国科学院等，这些机构不仅推动了科学技术的进步，也孕育了深厚的学术氛围和人文精神。北京的文化特色体现在其独特的语言、饮食、艺术和民俗之中。北京话作为普通话的基础，以其儿化音丰富、语调幽默风趣而著称，成为了中国语言文化的重要代表。在饮食方面，北京菜（京菜）融合了鲁菜、满族菜和宫廷菜的特点，以烤鸭、涮羊肉、炸酱面等名吃闻名遐迩，不仅满足了味蕾的需求，更承载了深厚的历史记忆和生活情趣。此外，北京还是京剧、昆曲、相声、评书等传统艺术形式的重要发源地和传播中心，这些艺术形式在长期的发展中形成了独特的审美风格，成为了中国非物质文化遗产的重要组成部分，向世界展示了中华文化的博大精深和独特魅力。\\n\\n北京:北京的旅游景点众多，其中最具代表性的当属故宫博物院。故宫，又称紫禁城，是明清两代的皇家宫殿，也是世界上现存规模最大、保存最完整的木质结构古建筑群。它位于北京中轴线的中心，占地面积72万平方米，拥有大小宫殿七十多座，房屋九千余间。故宫的建筑布局严谨，气势恢宏，红墙黄瓦，金碧辉煌，充分体现了中国古代皇权的至高无上和建筑艺术的精湛技艺。游客在故宫中漫步，不仅可以欣赏到精美的建筑细节和珍贵的文物藏品，还能感受到历史的厚重和皇家的威严。除了故宫，天坛也是北京不可错过的景点之一。天坛是明清两代皇帝祭天、祈谷的场所，其主体建筑祈年殿以其独特的圆形设计和蓝色琉璃瓦顶而闻名，象征着“天圆地方”的宇宙观。天坛的建筑布局严谨，环境幽静，是体验中国古代祭祀文化和建筑美学的绝佳之地。\\n\\n北京:除了皇家建筑，北京的胡同文化也是其独特魅力所在。胡同是北京传统民居的载体，也是老北京生活方式的缩影\"}, {\"question\": \"请用中文写一篇至少四千字的文章,详细介绍东京的历史、地理、交通、文化和景点。每段都以“东京:”开头,不要介绍另一个城市。请直接开始正文。\", \"output_tokens\": 1024, \"text\": \"东京:作为日本的首都以及全球最具影响力的超级都市之一，东京的历史渊源可以追溯到数百年前的江户时代。在1603年，德川家康在此建立了幕府，将这里定为政治中心，并开始了大规模的城市建设，包括挖掘运河、修建道路以及规划城市布局，从而奠定了现代东京的基础。当时的江户迅速从一个渔村发展成为一个拥有百万人口的大都市，成为日本经济、文化和政治的核心。随着1868年明治维新的发生，江户被改名为东京，意为“东方的首都”，标志着日本从封建社会向现代国家的转型。这一时期，东京开始引入西方的建筑风格和工业技术，城市面貌发生了翻天覆地的变化，从传统的木结构房屋逐渐转变为砖石结构的现代建筑，同时也建立了现代化的教育体系和基础设施。\\n\\n东京:在地理上，东京位于日本本州岛关东平原的东南部，是一个由23个特别区、26个市、5个町和8个村组成的庞大都市圈。东京湾位于城市的东南侧，为这座城市提供了重要的港口资源和海上交通通道，同时也塑造了东京独特的海岸线景观。城市的地形相对平坦，但北部和西部有一些低矮的山丘，如目黑川沿岸的丘陵地带，这些地形特征为城市提供了自然的排水系统和休闲空间。东京的气候属于温带季风气候，四季分明，春季温暖宜人，夏季炎热潮湿，秋季凉爽干燥，冬季则较为寒冷且多雪。这种气候条件不仅影响了当地居民的生活方式，也决定了城市绿化和农业发展的特点，使得东京在繁忙的都市生活中依然能够保持一定的自然生态平衡。\\n\\n东京:东京的交通系统以其高效、准时和便捷而闻名于世，是全球最复杂的公共交通网络之一。东京地铁和JR东日本铁路构成了城市交通的骨架，连接着城市的各个角落以及周边的卫星城市。地铁线路密集，覆盖了23个特别区的大部分区域，乘客可以在几分钟内换乘不同的线路，极大地提高了出行效率。此外，东京还拥有发达的巴士网络，作为轨道交通的补充，服务于那些地铁无法直接到达的区域。新干线高速列车则将东京与日本其他主要城市紧密连接起来，使得长距离旅行变得快速而舒适。除了公共交通，东京的出租车服务也非常发达，虽然价格较高，但提供了灵活便捷的出行选择。近年来，随着环保意识的增强，自行车道和步行区的建设也在不断完善，鼓励市民采用更绿色的出行方式。\\n\\n东京:东京的文化呈现出传统与现代完美融合的独特风貌，这种多元性使其成为全球文化交汇的中心。在传统文化方面，东京保留了大量的历史遗迹和神社寺庙，如明治神宫、浅草寺和上野东照宫，这些地方不仅是宗教活动的场所，也是展示日本传统建筑艺术和民俗文化的窗口。茶道、花道、能剧和歌舞伎等传统艺术形式在东京依然有着广泛的受众和传承者，许多专门的文化中心和剧院定期举办演出，吸引国内外游客前来观赏。与此同时，东京也是流行文化的发源地，动漫、漫画、电子游戏和时尚产业在这里蓬勃发展。秋叶原作为动漫文化的圣地，聚集了大量的模型店、游戏厅和主题咖啡馆，吸引了无数粉丝前来朝圣。原宿和表参道则是时尚潮流的前沿阵地，各种前卫的设计和品牌在这里展示，反映了东京年轻一代的审美趋势和创新精神。\\n\\n东京:东京的景点丰富多样，涵盖了历史古迹、现代地标、自然公园和商业街区等多个类别，满足了不同游客的需求。皇居是东京最著名的地标之一，作为日本天皇的居所，它周围环绕着广阔的绿地和护城河，游客可以在此感受皇室的庄严与宁静。东京塔和东京晴空塔是城市的象征性建筑，前者建于1958年，是战后日本复兴的象征，后者则是目前世界最高的自立式电波塔，提供了俯瞰整个东京湾和城市全景的绝佳视角。涩谷十字路口是全球最繁忙的人行横道之一，其独特的交通信号灯设计和周围的高楼大厦构成了东京现代都市生活的经典画面。新宿歌舞伎町则是亚洲最大的娱乐区，霓虹灯闪烁，夜生活丰富多彩，展现了东京另一面的活力与喧嚣。\\n\\n东京:除了上述著名景点，东京还拥有众多博物馆和艺术馆，为游客提供了深入了解日本历史和艺术的机会。东京国立博物馆是日本最大的博物馆，收藏了大量从古代到现代的珍贵文物，包括国宝级的佛像、刀剑和绘画作品。国立新美术馆则以其现代化的建筑设计和国际性的艺术展览而闻名，经常举办来自世界各地的当代艺术展。上野公园内不仅有博物馆，还有动物园和植物园，是市民休闲和游客观光的好去处。此外，东京的公园系统也非常完善，代代木公园、滨离宫恩赐庭园和井之头公园等地方为市民提供了亲近自然的空间，特别是在樱花盛开的季节，这些公园成为赏樱的热门地点，吸引了大量游客前来体验日本传统的赏樱文化。\\n\\n东京:东京的美食文化同样丰富多彩，从高端的怀石料理到街头的街头小吃，应有尽有。寿司是东京最具代表性的美食之一\"}]}\n"
+    },
+    "identity": {
+      "path": "/tmp/oh-my-vllm-cuda-smoke-c36d1c9/identity.json",
+      "sha256": "9024508d2009e4f573f907d2d4990abccea954e2ded93e388446ac37c32bd683",
+      "data": {
+        "source": {
+          "git_commit": "c36d1c94d89974e79d644df133f22685b5555179",
+          "git_status": "",
+          "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+          "python_sources_sha256": {
+            "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+            "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+            "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+            "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+            "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+            "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+            "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+            "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+            "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+            "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+            "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+            "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+            "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+            "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+            "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+            "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+            "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+            "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+            "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+            "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+            "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+            "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+            "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+            "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+            "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+            "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+            "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+            "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+            "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+            "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+            "python/oh_my_vllm/worker/runtime.py": "c1d2319d536c81a3f874def9113b72b4144aca1ea8f4c447e09fd12f80b4f019",
+            "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+            "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+            "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+            "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+            "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+          }
+        },
+        "runtime": {
+          "python": "/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python",
+          "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+          "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+          "packages": {
+            "torch": "2.14.0",
+            "triton": "3.8.0",
+            "tilelang": "0.1.14",
+            "apache-tvm-ffi": "0.1.12",
+            "flashinfer-python": "0.6.18.post1",
+            "transformers": "5.17.0",
+            "tokenizers": "0.23.2",
+            "safetensors": "0.8.0",
+            "xgrammar": "0.2.7",
+            "pyzmq": "27.2.0",
+            "msgpack": "1.2.2"
+          },
+          "flashinfer_workspace": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012",
+          "triton_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/triton",
+          "tilelang_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/tilelang",
+          "native_cuda_cache": "/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012/native-cuda",
+          "kernel_backend": "cuda",
+          "vllm_importable": false
+        },
+        "hardware": {
+          "gpu": "GPU-81c2e3a2-685d-59a9-e801-7e068fffc377",
+          "cpu_affinity": [
+            144,
+            145,
+            146,
+            147,
+            148,
+            149,
+            150,
+            151
+          ],
+          "gpu_info": "GPU-81c2e3a2-685d-59a9-e801-7e068fffc377, NVIDIA B200, 183359 MiB, 590.48.01"
+        }
+      }
+    }
+  },
+  "prior_harness_failures": [
+    "Service first attempt omitted documented serving debug logging; mixed/release audit failed; complete rerun with debug logging succeeds.",
+    "Boundary initial batch2 launch reused batch1 IPC socket path and failed address-in-use before model execution; unique batch/PID sockets used for successful2/4 retries."
+  ],
+  "accepted": false,
+  "limitation": "Feature collection with initial agentic grounding failure retained; complete framework performance passes separately. Final updated-document factual readback and default selection remain."
+}

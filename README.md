@@ -12,6 +12,12 @@ The model at `/data0/shared/Qwen3.8-27B-FP8` has 16 full-attention and 48 GDN la
 Block size is 784. See [architecture](docs/architecture.md),
 [wire protocol](docs/design.md) and [decisions](docs/decisions/).
 
+Current CUDA verification:147/147 operator cases, all12 throughput/TTFT rows,
+173 correctness tests plus28 subtests and six full-context boundaries pass.
+The default remains TileLang pending updated-document agentic readback and final
+selection checks. Historical milestone counts are not current status; see
+[handoff](docs/handoff.md) and [acceptance](docs/acceptance.md).
+
 ## Quick start
 
 The wrappers select the framework environment, Python path, build directory and

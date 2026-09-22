@@ -1,5 +1,58 @@
 # Acceptance evidence
 
+## CUDA verification — current, 2026-09-22
+
+Clean `c36d1c9` passes all147 static operator cases against frozen TileLang,
+all12 frozen-vLLM throughput/TTFT/stability comparisons, and six262144-token
+boundary runs. The active inventory is147;173 was the pre-fusion inventory.
+Full CUDA correctness passes173 tests plus28 subtests without relaxed tolerances.
+The12 workloads are32768 input ordinary/MTP/prefix × batch1/2/4, plus131072
+input ordinary-only × batch1/2/4; every output is4096 tokens.
+
+| Workload | Baseline tok/s | CUDA tok/s | Throughput ratio | TTFT ratio |
+|---|---:|---:|---:|---:|
+| ordinary-32768-1 | 90.10 | 105.30 | 116.86% | 93.14% |
+| ordinary-32768-2 | 163.50 | 193.08 | 118.09% | 95.60% |
+| ordinary-32768-4 | 288.41 | 331.64 | 114.99% | 96.37% |
+| mtp-32768-1 | 329.36 | 329.24 | 99.96% | 93.92% |
+| mtp-32768-2 | 497.37 | 490.52 | 98.62% | 94.81% |
+| mtp-32768-4 | 729.62 | 711.53 | 97.52% | 97.50% |
+| prefix-32768-1 | 93.01 | 109.10 | 117.30% | 82.96% |
+| prefix-32768-2 | 173.52 | 217.06 | 125.09% | 85.02% |
+| prefix-32768-4 | 325.31 | 380.50 | 116.97% | 76.01% |
+| ordinary-131072-1 | 72.35 | 82.68 | 114.29% | 92.95% |
+| ordinary-131072-2 | 114.06 | 129.45 | 113.49% | 91.54% |
+| ordinary-131072-4 | 162.85 | 178.82 | 109.80% | 93.82% |
+
+All rows use two complete warmups and five measured repetitions, matching the
+frozen baseline CPU affinity and UUID-pinned B200 process monitoring. No vLLM
+baseline was rerun. Prefix1 initially failed stability twice and prefix2 once;
+complete uninstrumented repeats pass with10% stability unchanged. A temporary
+GC diagnostic found no collection in measured intervals, but did not establish
+the precise jitter cause and is not acceptance. Three passing sets shared
+physical CPU cores with other task runs and were conservatively replaced by
+complete repeats without that overlap. All previous attempts are preserved.
+
+The147 operator cases each pass three warm rounds of20 interleaved pairs and a
+positive one-sided95% bootstrap gain bound. Small gains can be only nanoseconds;
+no larger minimum margin is claimed. TileFoundry HIR estimates and separately
+measured Nsight counters remain distinct from acceptance latency. CUDA C++ handles
+vector loads/stores, normalization, quantization, convolution and recurrence;
+inline PTX supplies selected reciprocal/cache controls and tensor-core
+attention instructions. Frozen TileLang remains available as the comparison.
+
+Real-text ordinary/MTP preemption and prefix checks, twelve MTP4 constraints,
+lifecycle and four long strict-JSON calls pass. Both initial oh-my-pi runs execute
+real tools and follow-up requests with accepted drafts, but their final answers
+misstate current/history counts; Responses also reverses prefill ordering.
+Updated-document factual readback remains pending; default remains TileLang.
+
+Evidence: `bench/baseline/2026-09-22-cuda-operators.json`,
+`2026-09-22-cuda-framework.json`, and `2026-09-22-cuda-features.json`.
+The feature artifact distinguishes successful protocol behavior from incomplete
+answer grounding and retains harness setup failures. Historical sections below
+are not current CUDA status.
+
 ## TileLang migration — 2026-09-22
 
 Implementation `da75c02` replaces all project-owned Triton kernels in seven
