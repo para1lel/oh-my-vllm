@@ -1,5 +1,27 @@
 # Handoff — 2026-09-22
 
+## RMS launch and vector-width tuning
+
+Model-width RMS now selects 128 threads for medium batches, 160 for large plain
+RMS and 320 for large residual RMS. Large residuals use eight-element vectors
+only when input/residual are16-byte and weights32-byte aligned; otherwise the
+four-element or generic path remains. Compile-time divisibility checks ensure
+complete row coverage. Reduction order changes; existing tolerances are retained.
+
+The final unchanged-source diagnostic passes26/26 RMS cases. Earlier diagnostics
+pass24/26 then25/26; the latter has one unusually slow CUDA sample and fails the
+confidence bound despite faster medians in all three rounds. No samples were
+excluded and no interference was detected; its exact cause remains unresolved.
+All attempts are summarized in `bench/baseline/2026-09-22-cuda-rms-progress.json`,
+with separate TileFoundry/Nsight observations. These are dirty-source subsets,
+not full operator or framework acceptance.
+
+The full CUDA suite passes160 tests plus28 subtests. Temporary FP64 checks cover
+2047/2048/4095/4096-row dispatch boundaries, nondefault epsilon, and both alignment
+fallbacks at4096 rows; residual sums remain bitwise equal to the reference.
+Independent review and all-file checks pass. All owned GPU programs exited.
+Default remains TileLang; remaining operator tuning and full acceptance continue.
+
 ## Attention fragment reuse and merge optimization
 
 The attention diagnostic now passes the speed decision for all 16 static cases,

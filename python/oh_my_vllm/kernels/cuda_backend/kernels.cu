@@ -213,30 +213,36 @@ void gates(TensorView ba, TensorView log, TensorView bias, TensorView decay, Ten
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA gate launch failed";
 }
 
-template <typename T> struct alignas(sizeof(T) * 4) AlignedFour {
-  T value[4];
+template <typename T, int Vector>
+struct alignas(sizeof(T) * Vector) AlignedVector {
+  T value[Vector];
 };
-template <typename T> __device__ AlignedFour<T> load_aligned_four(const T *p) {
-  return *reinterpret_cast<const AlignedFour<T> *>(p);
+template <typename T, int Vector>
+__device__ AlignedVector<T, Vector> load_aligned_vector(const T *p) {
+  return *reinterpret_cast<const AlignedVector<T, Vector> *>(p);
 }
-template <bool Residual, int Threads>
+template <bool Residual, int Threads, int Vector>
 __global__ void rms5120_kernel(const __nv_bfloat16 *__restrict__ x,
                                const __nv_bfloat16 *__restrict__ residual,
-                               const float *__restrict__ w, __nv_bfloat16 *__restrict__ out,
+                               const float *__restrict__ w,
+                               __nv_bfloat16 *__restrict__ out,
                                __nv_bfloat16 *__restrict__ summed, float eps) {
-  constexpr int Chunks = 5120 / (Threads * 4);
+  static_assert(Threads % 32 == 0 && 5120 % (Threads * Vector) == 0);
+  constexpr int Chunks = 5120 / (Threads * Vector);
   int row = blockIdx.x, lane = threadIdx.x & 31;
-  float values[Chunks][4], total = 0;
+  float values[Chunks][Vector], total = 0;
 #pragma unroll
   for (int chunk = 0; chunk < Chunks; ++chunk) {
-    int col = chunk * Threads * 4 + threadIdx.x * 4;
-    auto q = load_aligned_four(x + static_cast<int64_t>(row) * 5120 + col);
-    AlignedFour<__nv_bfloat16> r;
+    int col = chunk * Threads * Vector + threadIdx.x * Vector;
+    auto q = load_aligned_vector<__nv_bfloat16, Vector>(
+        x + static_cast<int64_t>(row) * 5120 + col);
+    AlignedVector<__nv_bfloat16, Vector> r;
     if constexpr (Residual)
-      r = load_aligned_four(residual + static_cast<int64_t>(row) * 5120 + col);
+      r = load_aligned_vector<__nv_bfloat16, Vector>(
+          residual + static_cast<int64_t>(row) * 5120 + col);
     if constexpr (Residual) {
 #pragma unroll
-      for (int j = 0; j < 4; j += 2) {
+      for (int j = 0; j < Vector; j += 2) {
         auto pair = __hadd2(__halves2bfloat162(q.value[j], q.value[j + 1]),
                             __halves2bfloat162(r.value[j], r.value[j + 1]));
         q.value[j] = __low2bfloat16(pair);
@@ -244,14 +250,14 @@ __global__ void rms5120_kernel(const __nv_bfloat16 *__restrict__ x,
       }
     }
 #pragma unroll
-    for (int j = 0; j < 4; ++j) {
+    for (int j = 0; j < Vector; ++j) {
       float v = __bfloat162float(q.value[j]);
       values[chunk][j] = v;
       total += v * v;
     }
     if constexpr (Residual)
-      *reinterpret_cast<AlignedFour<__nv_bfloat16> *>(summed + static_cast<int64_t>(row) * 5120 +
-                                                      col) = q;
+      *reinterpret_cast<AlignedVector<__nv_bfloat16, Vector> *>(
+          summed + static_cast<int64_t>(row) * 5120 + col) = q;
   }
   total = warp_sum(total);
   __shared__ float partial[Threads / 32];
@@ -262,48 +268,74 @@ __global__ void rms5120_kernel(const __nv_bfloat16 *__restrict__ x,
   float inv = rsqrtf(total * (1.f / 5120.f) + eps);
 #pragma unroll
   for (int chunk = 0; chunk < Chunks; ++chunk) {
-    int col = chunk * Threads * 4 + threadIdx.x * 4;
-    auto weight = load_aligned_four(w + col);
-    AlignedFour<__nv_bfloat16> value;
+    int col = chunk * Threads * Vector + threadIdx.x * Vector;
+    auto weight = load_aligned_vector<float, Vector>(w + col);
+    AlignedVector<__nv_bfloat16, Vector> value;
 #pragma unroll
-    for (int j = 0; j < 4; ++j)
-      value.value[j] = __float2bfloat16_rn(values[chunk][j] * inv * weight.value[j]);
-    *reinterpret_cast<AlignedFour<__nv_bfloat16> *>(out + static_cast<int64_t>(row) * 5120 + col) =
-        value;
+    for (int j = 0; j < Vector; ++j)
+      value.value[j] =
+          __float2bfloat16_rn(values[chunk][j] * inv * weight.value[j]);
+    *reinterpret_cast<AlignedVector<__nv_bfloat16, Vector> *>(
+        out + static_cast<int64_t>(row) * 5120 + col) = value;
   }
+}
+
+bool aligned(TensorView tensor, uintptr_t bytes) {
+  return (reinterpret_cast<uintptr_t>(tensor.data_ptr()) & (bytes - 1)) == 0;
 }
 
 // Public wrappers allocate both destinations independently. The fast path is
 // entered only for aligned contiguous model-width rows; other layouts use RMS.
-void launch_rms5120(TensorView x, TensorView residual, TensorView weight, TensorView out,
-                    TensorView summed, bool add, float epsilon) {
+void launch_rms5120(TensorView x, TensorView residual, TensorView weight,
+                    TensorView out, TensorView summed, bool add,
+                    float epsilon) {
   auto stream = stream_for(x);
-#define RMS5120(R)                                                                                 \
-  rms5120_kernel<R, 256><<<x.size(0), 256, 0, stream>>>(                                           \
-      static_cast<const __nv_bfloat16 *>(x.data_ptr()),                                            \
-      static_cast<const __nv_bfloat16 *>(residual.data_ptr()),                                     \
-      static_cast<const float *>(weight.data_ptr()), static_cast<__nv_bfloat16 *>(out.data_ptr()), \
+#define RMS5120(R, Threads, Vector)                                            \
+  rms5120_kernel<R, Threads, Vector><<<x.size(0), Threads, 0, stream>>>(       \
+      static_cast<const __nv_bfloat16 *>(x.data_ptr()),                        \
+      static_cast<const __nv_bfloat16 *>(residual.data_ptr()),                 \
+      static_cast<const float *>(weight.data_ptr()),                           \
+      static_cast<__nv_bfloat16 *>(out.data_ptr()),                            \
       static_cast<__nv_bfloat16 *>(summed.data_ptr()), epsilon)
-  if (add) {
-    RMS5120(true);
+  // Larger rows are bandwidth-bound; residual traffic benefits from more warps.
+  // Medium batches need fewer threads per row to avoid excess scheduling waves.
+  if (x.size(0) >= 4096) {
+    if (add) {
+      if (aligned(x, 16) && aligned(residual, 16) && aligned(weight, 32)) {
+        RMS5120(true, 320, 8);
+      } else {
+        RMS5120(true, 320, 4);
+      }
+    } else {
+      RMS5120(false, 160, 4);
+    }
+  } else if (x.size(0) >= 2048) {
+    if (add) {
+      RMS5120(true, 128, 4);
+    } else {
+      RMS5120(false, 128, 4);
+    }
+  } else if (add) {
+    RMS5120(true, 256, 4);
   } else {
-    RMS5120(false);
+    RMS5120(false, 256, 4);
   }
 #undef RMS5120
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA model-width RMS launch failed";
-}
-bool aligned(TensorView tensor, uintptr_t bytes) {
-  return (reinterpret_cast<uintptr_t>(tensor.data_ptr()) & (bytes - 1)) == 0;
+  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess)
+      << "CUDA model-width RMS launch failed";
 }
 
 struct Strides {
   int64_t token, head, dim;
 };
 template <bool Large, bool Gated, bool Residual>
-__global__ void rms_kernel(const __nv_bfloat16 *__restrict__ x, const float *__restrict__ weight,
-                           const __nv_bfloat16 *__restrict__ gate, __nv_bfloat16 *__restrict__ out,
-                           __nv_bfloat16 *__restrict__ summed, int rows, int heads, int width,
-                           Strides xs, Strides gs, float epsilon) {
+__global__ void rms_kernel(const __nv_bfloat16 *__restrict__ x,
+                           const float *__restrict__ weight,
+                           const __nv_bfloat16 *__restrict__ gate,
+                           __nv_bfloat16 *__restrict__ out,
+                           __nv_bfloat16 *__restrict__ summed, int rows,
+                           int heads, int width, Strides xs, Strides gs,
+                           float epsilon) {
   int lane = threadIdx.x & 31;
   int row = Large ? blockIdx.x : blockIdx.x * 4 + threadIdx.x / 32;
   if (row >= rows)
