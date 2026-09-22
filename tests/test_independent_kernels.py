@@ -68,7 +68,7 @@ def inputs(tokens, strided=False):
     return q, k, v, g, beta
 
 
-@pytest.mark.parametrize("tokens", [1, 7, 129])
+@pytest.mark.parametrize("tokens", [1, 7, 129, 2048, 4096])
 @pytest.mark.parametrize("strided", [False, True])
 def test_prefill_qk_normalization_fp64(tokens, strided):
     q, k, *_ = inputs(tokens, strided)

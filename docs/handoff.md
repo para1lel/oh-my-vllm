@@ -1,5 +1,30 @@
 # Handoff — 2026-09-22
 
+## Paired FP32 Q/K normalization
+
+The packed16-head/10240-stride path now uses aligned eight-element loads and
+B200 paired FP32 arithmetic for square accumulation, normalization and selected
+joint Q/K reductions. Fixed128/256-thread geometry covers whole head groups;
+64-bit addresses and explicit layout/alignment checks protect indexing. Other
+layouts retain the generic CUDA kernel. Half-warp recurrence code is unchanged.
+
+All six dirty-source Q/K configurations pass the formal speed decision. The
+first build failed because an obsolete launch argument survived signature cleanup;
+that run failed compilation and its test process was stopped. All following
+validation uses the corrected source. Full correctness passes173 tests plus28
+subtests, including2048/4096 rows added to the existing FP64 normalization test.
+Temporary original-tolerance checks also cover2047/2048 and4095/4096 boundaries,
+Q/K offsets, different strides, generic heads and separate aligned allocations.
+Ordinary/MTP4 eager model FP64 probes pass. Forced-length outputs with whitespace,
+control tokens or repetition do not establish agentic acceptance.
+
+Independent TileFoundry/Nsight observations include a1248-token case with fewer
+executed warp instructions (1078272 versus1317888) and32 versus30 registers/thread.
+These observations are separate from latency acceptance. See
+`bench/baseline/2026-09-22-cuda-qk-progress.json` for source identities, failed-build
+history and formal summaries. Full147-case and framework acceptance remain pending;
+the default backend stays TileLang until complete acceptance.
+
 ## Model convolution layout specialization
 
 The CUDA model convolution specializes 10240 channels with token stride16384.
