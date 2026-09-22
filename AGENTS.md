@@ -36,7 +36,7 @@ source checkout, or depend on the old vllm conda environment or build caches.
   Baseline-only tooling may use the isolated vLLM environment; project builds,
   tests and inference must remain independent. Every row requires throughput
   >=95% and TTFT <=110% of the new baseline. Use at least two complete warmups
-  and five measured repetitions; investigate and repeat if spread/median >5%.
+  and five measured repetitions; investigate and repeat if spread/median >10%.
 - **Context:** Support input plus output up to 262144 tokens. Ordinary and MTP4
   boundary runs at batch 1/2/4 must finish without OOM or recompute preemption.
   Optimize memory layout as needed; retain block784 and existing correctness.

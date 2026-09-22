@@ -49,6 +49,6 @@ scripts/with-gpu.sh scripts/with-env.sh pytest -q tests
 
 ## 验收与性能
 
-保留文档规定的全部服务、agentic、最大上下文和正确性检查。使用冻结 EngineCore 的 12 组对比：吞吐至少 95%、TTFT 至多 1.1 倍，并满足既有稳定性和来源审计。捕获/测量前预热所有待测 shape。逐运行的 TileLang 和第三方 Triton 缓存根目录防止并发编译污染审计；FlashInfer 也必须完整预热，正式重复期间保持不变。
+保留文档规定的全部服务、agentic、最大上下文和正确性检查。使用冻结 EngineCore 的 12 组对比：吞吐至少 95%、TTFT 至多 1.1 倍，两种指标、两个引擎的极差/中位数均至多 10%，并满足既有来源审计。捕获/测量前预热所有待测 shape。逐运行的 TileLang 和第三方 Triton 缓存根目录防止并发编译污染审计；FlashInfer 也必须完整预热，正式重复期间保持不变。
 
 任一组失败时，分析实际模型、定位主导开销、跨所需 shape 做针对性优化后重测。用 TileFoundry 成本/显存分析指导实验，再在实际模型运行中验证收益。完成前全部 12 组必须通过吞吐、TTFT 和稳定性门槛；性能或正确性失败都不能仅凭解释豁免。未来模型/后端可添加语义模块和 TileLang 特化，无需改变 Rust 调度；多 GPU 和本地 DSpark 仍属未来架构工作。

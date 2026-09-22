@@ -1,5 +1,10 @@
 # Testing Guide — oh-my-vllm
 
+Current EngineCore comparisons require throughput >=95%, TTFT <=110%, and
+(max-min)/median <=10% for both metrics in both baseline and candidate. The
+user revised stability from 5% on 2026-09-22. Re-evaluation must preserve the
+original artifacts and all raw repetitions, and identify the new policy.
+
 ## Independent migration checks
 
 Use the independent environment/cache settings in development.md. CPU tests cover

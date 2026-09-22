@@ -1,13 +1,17 @@
-# Active plan — TTFT and long context
+# Completed plan — TileLang, TTFT and long context
 
-1. Freeze updated official vLLM main and adapt its isolated baseline environment.
-2. Add per-request TTFT and independent FA/GDN capacities; test cache ownership.
-3. Establish the 12-row baseline and measure the independent runtime.
-4. Optimize until TTFT <=110% and throughput >=95% on every row.
-5. Verify 262144-total-context ordinary/MTP4 batch 1/2/4, long prefix and constraints.
-6. Review, reconcile docs/evidence, commit/push main and verify GPU cleanup.
+1. Updated and froze the isolated official vLLM main baseline and its environment.
+2. Implemented per-request TTFT and independent FA/GDN cache capacities.
+3. Replaced all seven owned Triton kernel modules with TileLang; integrated the
+   development-only personal TileFoundry fork and offline autotuning workflow.
+4. Tuned required shapes until all twelve rows passed throughput >=95%, TTFT
+   <=110%, and the user-revised10% stability gate. Preserved original raw sets.
+5. Passed unchanged correctness, six262144-token ordinary/MTP4 boundary rows,
+   long prefix, constraints, lifecycle and both actual oh-my-pi providers.
+6. Added25 Chinese companions and synchronized final evidence. Final document
+   readback, review, main commit/push and GPU cleanup verification close the task.
 
-Current work is in steps 1–2. No new acceptance result is claimed.
+See acceptance.md and handoff.md for current evidence and answer limitations.
 
 # Implementation status
 

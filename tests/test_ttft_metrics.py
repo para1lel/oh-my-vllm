@@ -73,10 +73,32 @@ class TTFTMetricsTest(unittest.TestCase):
         )
         self.assertFalse(metrics.compare(baseline, self.artifact([1, 2], 94))["passed"])
         unstable = self.artifact([1, 2])
-        unstable["runs"][0]["ttft_s"][1] = 2.2
+        unstable["runs"][0]["ttft_s"][1] = 2.3
         result = metrics.compare(baseline, unstable)
         self.assertFalse(result["stable"])
         self.assertFalse(result["passed"])
+
+    def test_ten_percent_stability_boundary_for_both_metrics_and_engines(self):
+        for engine in ("baseline", "candidate"):
+            for metric in ("ttft_s", "output_tps"):
+                for spread, expected in ((0.06, True), (0.10, True), (0.11, False)):
+                    with self.subTest(engine=engine, metric=metric, spread=spread):
+                        artifacts = {
+                            "baseline": self.artifact([10, 100]),
+                            "candidate": self.artifact([10, 100]),
+                        }
+                        run = artifacts[engine]["runs"][0]
+                        value = 100 + round(100 * spread)
+                        if metric == "ttft_s":
+                            run[metric][1] = value
+                        else:
+                            run[metric] = value
+                        result = metrics.compare(**artifacts)
+                        self.assertEqual(result["max_spread"], 0.10)
+                        self.assertEqual(result["stable"], expected)
+                        self.assertEqual(result["passed"], expected)
+                        self.assertEqual(result["ttft_ratio"], 1)
+                        self.assertEqual(result["throughput_ratio"], 1)
 
     def test_invalid_or_partial_measurements_are_rejected(self):
         for field, value in [

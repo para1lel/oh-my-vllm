@@ -22,5 +22,7 @@ project constraints; handoff.md records current evidence, blockers and pending r
 - [ADR004](decisions/ADR-004-openai-serving.md): Rust-first dual-API serving direction.
 
 Ordinary/MTP text, actual-path probes and feature combinations have passed checks.
-All nine performance rows passed. Consult acceptance.md for exact configuration
+All twelve TileLang throughput/TTFT rows pass with the user-approved10% stability
+limit. [TileLang development](tilelang-development.md) covers offline autotuning
+and the development-only TileFoundry fork. Consult acceptance.md for exact configuration
 and handoff.md for history rather than relying on old commit-time status entries.

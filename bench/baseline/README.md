@@ -1,5 +1,15 @@
 # Benchmark evidence
 
+`2026-09-22-tilelang-acceptance.json` preserves all twelve final raw candidate
+and frozen baseline sets, prior failed attempts and interference exclusions.
+The clean measured implementation is da75c02. On user instruction, stability
+changed from5% to10% for both metrics and both engines. Original embedded
+`candidate.comparison` decisions remain unchanged; use each row
+`comparison_under_current_policy` for the new verdict. All twelve pass.
+`2026-09-22-tilelang-correctness.json` records the unchanged full GPU suite,
+actual-model probes, six boundaries, text/preemption and real MTP service/agentic
+evidence with generated-answer limitations. Temporary operator records are omitted.
+
 The historical baseline_*, clean_* and mtp_* JSON files are existing vLLM serving
 captures (OpenAI endpoint). Their settings, input data, timing boundary and MTP
 configuration differ from the current matched EngineCore protocol. Preserve them

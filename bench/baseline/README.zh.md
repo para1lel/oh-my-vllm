@@ -1,5 +1,7 @@
 # 基准测试证据
 
+`2026-09-22-tilelang-acceptance.json` 保留最终 12 组候选实现和冻结基线的完整原始测量，以及历史失败和干扰排除记录。测量实现为干净提交 da75c02。按用户要求，两种指标、两个引擎的稳定性上限从 5% 改为 10%。内嵌的原始 `candidate.comparison` 判定不变，新判定见每组的 `comparison_under_current_policy`，全部 12 组通过。`2026-09-22-tilelang-correctness.json` 记录未改动的完整 GPU 测试、实际模型探针、六组边界、文本/抢占和真实 MTP 服务/agentic 证据，并保留生成回答的局限。不收录临时算子实验记录。
+
 历史 baseline_*、clean_* 和 mtp_* JSON 是已有的 vLLM 服务抓取结果（OpenAI 端点）。其设置、输入数据、计时边界和 MTP 配置与当前配对 EngineCore 协议不同。将其保留为历史数据，不得作为当前验收的分母。
 
 2026-09-19-paired-investigation.json 保留该次会话完成的配对测量，包括失败比例、实际重复测量及可执行文件/源码身份。它明确不是最终验收矩阵。在当时阶段，ordinary bs1 需要因方差重测，多个模式/batch 尚未测量或低于 95%。下述完整验收产物取代该状态。一些早期记录没有捕获 CPU 亲和性掩码，以 null 表示。后续受干扰或不完整的配对被排除，不赋予性能数值。

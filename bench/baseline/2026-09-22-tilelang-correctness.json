@@ -1,0 +1,5372 @@
+{
+  "model": "Qwen3.8-27B-FP8",
+  "implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+  "status": "correctness and required service/agentic/boundary evidence; performance is separate",
+  "provenance": "Runs began on the reviewed working tree now committed as the implementation_commit. Source remained unchanged during each run. Operator experiments are intentionally excluded.",
+  "tests": {
+    "gpu_pytest": {
+      "tests": 146,
+      "subtests": 12,
+      "skipped": 0,
+      "log": {
+        "path": "/tmp/oh-my-vllm-tilelang-fused-precise-suite.log",
+        "sha256": "05ba0fb670db1f8fd53307e05c101796ee09b065d629aa50daa7aabce9a3a0a1"
+      }
+    },
+    "hooks": {
+      "path": "/tmp/oh-my-vllm-tilelang-fused-precise-final-hooks.log",
+      "sha256": "f3e55f7f9832bec68142bbdf0c7408e40148ee73f45759bc29a8788189aeb010"
+    }
+  },
+  "boundaries": [
+    {
+      "mode": "ordinary",
+      "batch_size": 1,
+      "result": {
+        "batch_size": 1,
+        "input_len": 258048,
+        "output_len": 4096,
+        "output_tokens": 4096,
+        "elapsed_s": 104.384131001,
+        "output_tps": 39.2396809814009,
+        "steps": 4105,
+        "prefix_hit_tokens": 0,
+        "initial_prefix_hit_tokens": 0,
+        "preemptions": 0,
+        "proposed_draft_tokens": 0,
+        "accepted_draft_tokens": 0,
+        "ttft_s": [
+          49.742031066
+        ]
+      },
+      "memory": {
+        "timestamp": "2026-09-22T08:58:00.826778+00:00",
+        "level": "INFO",
+        "run_id": "20260922T085604-3116047",
+        "pid": 3116076,
+        "component": "oh_my_vllm.worker.model_runner",
+        "message": "GPU memory high water",
+        "max_allocated_bytes": 126193300992,
+        "max_reserved_bytes": 130182807552
+      },
+      "log": {
+        "path": "/tmp/oh-my-vllm-tilelang-accepted-boundary-ordinary1.log",
+        "sha256": "00ac0145296cb38788d5317baf84fe4afabf07a3d2c4547e6896eb7f418b4a4b"
+      }
+    },
+    {
+      "mode": "ordinary",
+      "batch_size": 2,
+      "result": {
+        "batch_size": 2,
+        "input_len": 258048,
+        "output_len": 4096,
+        "output_tokens": 8192,
+        "elapsed_s": 114.137851125,
+        "output_tps": 71.77285991680702,
+        "steps": 4113,
+        "prefix_hit_tokens": 0,
+        "initial_prefix_hit_tokens": 0,
+        "preemptions": 0,
+        "proposed_draft_tokens": 0,
+        "accepted_draft_tokens": 0,
+        "ttft_s": [
+          33.487584116,
+          55.576094061
+        ]
+      },
+      "memory": {
+        "timestamp": "2026-09-22T09:00:07.858923+00:00",
+        "level": "INFO",
+        "run_id": "20260922T085604-3116047",
+        "pid": 3129551,
+        "component": "oh_my_vllm.worker.model_runner",
+        "message": "GPU memory high water",
+        "max_allocated_bytes": 126707896320,
+        "max_reserved_bytes": 132433051648
+      },
+      "log": {
+        "path": "/tmp/oh-my-vllm-tilelang-accepted-boundary-ordinary2.log",
+        "sha256": "d0d2933d427e17df9c23d602140a860824fa8a779f039caf4da26161c738f176"
+      }
+    },
+    {
+      "mode": "ordinary",
+      "batch_size": 4,
+      "result": {
+        "batch_size": 4,
+        "input_len": 258048,
+        "output_len": 4096,
+        "output_tokens": 16384,
+        "elapsed_s": 312.493387483,
+        "output_tps": 52.42990941973551,
+        "steps": 4129,
+        "prefix_hit_tokens": 0,
+        "initial_prefix_hit_tokens": 0,
+        "preemptions": 0,
+        "proposed_draft_tokens": 0,
+        "accepted_draft_tokens": 0,
+        "ttft_s": [
+          30.096675066,
+          56.393849043,
+          89.074092811,
+          132.987658589
+        ]
+      },
+      "memory": {
+        "timestamp": "2026-09-22T09:05:33.308759+00:00",
+        "level": "INFO",
+        "run_id": "20260922T085604-3116047",
+        "pid": 3140339,
+        "component": "oh_my_vllm.worker.model_runner",
+        "message": "GPU memory high water",
+        "max_allocated_bytes": 128823910400,
+        "max_reserved_bytes": 134687490048
+      },
+      "log": {
+        "path": "/tmp/oh-my-vllm-tilelang-accepted-boundary-ordinary4.log",
+        "sha256": "3283d66111752b1c4e14fd799f69476f6b7f2b494a05512d34f566ab6309b689"
+      }
+    },
+    {
+      "mode": "mtp",
+      "batch_size": 1,
+      "result": {
+        "batch_size": 1,
+        "input_len": 258048,
+        "output_len": 4096,
+        "output_tokens": 4096,
+        "elapsed_s": 90.994281905,
+        "output_tps": 45.01381750862448,
+        "steps": 1041,
+        "prefix_hit_tokens": 0,
+        "initial_prefix_hit_tokens": 0,
+        "preemptions": 0,
+        "proposed_draft_tokens": 4115,
+        "accepted_draft_tokens": 3064,
+        "ttft_s": [
+          62.093123475
+        ]
+      },
+      "memory": {
+        "timestamp": "2026-09-22T08:57:48.468186+00:00",
+        "level": "INFO",
+        "run_id": "20260922T085606-3116177",
+        "pid": 3116256,
+        "component": "oh_my_vllm.worker.model_runner",
+        "message": "GPU memory high water",
+        "max_allocated_bytes": 122322355712,
+        "max_reserved_bytes": 125600530432
+      },
+      "log": {
+        "path": "/tmp/oh-my-vllm-tilelang-accepted-boundary-mtp1.log",
+        "sha256": "598eca71893285ce93723eb39e9552d2a3aa6607801525d60999491db1e7f490"
+      }
+    },
+    {
+      "mode": "mtp",
+      "batch_size": 2,
+      "result": {
+        "batch_size": 2,
+        "input_len": 258048,
+        "output_len": 4096,
+        "output_tokens": 8192,
+        "elapsed_s": 83.436397816,
+        "output_tps": 98.18257037013502,
+        "steps": 1227,
+        "prefix_hit_tokens": 0,
+        "initial_prefix_hit_tokens": 0,
+        "preemptions": 0,
+        "proposed_draft_tokens": 9092,
+        "accepted_draft_tokens": 5914,
+        "ttft_s": [
+          35.052032243,
+          57.245646585
+        ]
+      },
+      "memory": {
+        "timestamp": "2026-09-22T08:59:24.699083+00:00",
+        "level": "INFO",
+        "run_id": "20260922T085606-3116177",
+        "pid": 3128687,
+        "component": "oh_my_vllm.worker.model_runner",
+        "message": "GPU memory high water",
+        "max_allocated_bytes": 122557707264,
+        "max_reserved_bytes": 130094727168
+      },
+      "log": {
+        "path": "/tmp/oh-my-vllm-tilelang-accepted-boundary-mtp2.log",
+        "sha256": "bdb380e2ecacc578338ca3ce83df574ed2e74413eddb45fb6ca17a7c7f7a53b2"
+      }
+    },
+    {
+      "mode": "mtp",
+      "batch_size": 4,
+      "result": {
+        "batch_size": 4,
+        "input_len": 258048,
+        "output_len": 4096,
+        "output_tokens": 16384,
+        "elapsed_s": 149.257268974,
+        "output_tps": 109.77019821295286,
+        "steps": 1127,
+        "prefix_hit_tokens": 0,
+        "initial_prefix_hit_tokens": 0,
+        "preemptions": 0,
+        "proposed_draft_tokens": 15588,
+        "accepted_draft_tokens": 12475,
+        "ttft_s": [
+          31.850707474,
+          60.047314074,
+          88.808425922,
+          113.810027884
+        ]
+      },
+      "memory": {
+        "timestamp": "2026-09-22T09:02:06.035598+00:00",
+        "level": "INFO",
+        "run_id": "20260922T085606-3116177",
+        "pid": 3136208,
+        "component": "oh_my_vllm.worker.model_runner",
+        "message": "GPU memory high water",
+        "max_allocated_bytes": 124698101760,
+        "max_reserved_bytes": 137703194624
+      },
+      "log": {
+        "path": "/tmp/oh-my-vllm-tilelang-accepted-boundary-mtp4.log",
+        "sha256": "22afef59ac49f4ff1ba65e74c4232a6cab0d7283871d0094fd582dbf671a5861"
+      }
+    }
+  ],
+  "probes": [
+    {
+      "mode": "ordinary",
+      "coverage": [
+        "gdn_decode",
+        "gdn_decode_state",
+        "gdn_prefill",
+        "gdn_prefill_state",
+        "gqa_decode",
+        "gqa_prefill"
+      ],
+      "checks": [
+        {
+          "probe": "gdn_prefill",
+          "max_abs_error": 0.015263148241572821,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_prefill_state",
+          "max_abs_error": 0.0901361767235187,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_prefill",
+          "max_abs_error": 0.007821590872210127,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.0038949194716901836,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.9145779194550414e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.007593031785899207,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.0038534023536800355,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.989893078757632e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.008308816343454595,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.003868394720630386,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.4170639214560197e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004550269812669816,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007712678006819296,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.6238976751358223e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004020261542097003,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006825212433434924,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.819890108833988e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.00530527299674155,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007092882558062286,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.3223442227049418e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004005608308346842,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.005189396349297493,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.7119485988814631e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004332312308775732,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007183377244818878,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.6498502343486052e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003892705497046789,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006771840134101037,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.8564784909358423e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.00411148140170825,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.0034911636676273616,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.023059039402142e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.005235831156788162,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007679581739004515,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.6216672779355576e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003973654656214576,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007626129142500382,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.927868471085503e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004255071637147667,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.0050827938825630525,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.348904999394108e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0070800467058842464,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.0070019529573972505,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.7214395927899204e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.00397433388068813,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006421118345695476,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.8772487155871431e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003863763768731543,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006808283989711672,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.0877059796475805e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.006842287711964712,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007671019103798304,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.5889024851389877e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0038523138601314066,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006994401526684513,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.8941560178120653e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004112428596661388,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007382946352720854,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.4512942928822667e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003866473217150057,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.0074169430472559306,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.17765322574337e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0038056228828891037,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.0076910510955094935,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.9859517230713664e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003842407370063805,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.00524369027700633,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.9586429225171287e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.006280911445087689,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.0034974405554630827,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.5776017967539246e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003833339811723846,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006684737212150793,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.1749629439682394e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0038908936550541284,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006717342357144496,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.130889818374726e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004038846056741319,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007555054874728739,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 3.0180499592802335e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0038549667429210732,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007032709735095732,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.4241501037636226e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.007004636844605283,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.0038922834831340847,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.9683404346437783e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0042893315613306005,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007293919879613142,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.343462305987032e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.007113584372364201,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007753364498396476,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.0046487811953284e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.00789140534506183,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006269635455285805,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.2747467234296437e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0039842872003967855,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006610882912980287,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.298025989944108e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004118463555929708,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006606957190860463,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.1573816937348056e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0061127066701729404,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006635656270603363,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.010451076728259e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004030050765679416,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007426221021436863,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.3719909094666036e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003932089457693966,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.004995303791801575,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.0975589229976777e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.006443141252723272,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007002317206957986,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.2715757701519124e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003918000970623892,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006324141831412167,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 3.1186773661318057e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003822910157975201,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007158375948065565,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.588878693643437e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0039559592424629475,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.0045489571770716,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.5795320155452828e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003871214699131542,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006036748519328228,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.807540674609754e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003953754994135084,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.0068753567810246885,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.8176603191477625e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004013948960925884,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006603384312296345,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.5290221107022717e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004477861583282339,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006797240742629107,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.434119412697555e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003852459234670036,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006241994770329384,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.8124060296997868e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0038298851827369695,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007451673662959735,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.5271750700994744e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004022612195935693,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.0064105344330052105,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.9202469029598888e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004033690080192942,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.0074144093952597245,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.248039816521441e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003913072849080157,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006350531230247203,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.162512249270776e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003896139030196144,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006007735458087193,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.985113200930755e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.00399897532166027,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007084919296974412,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 3.010719904494863e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003892297922595489,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007340751389765199,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.0185678835105136e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0039560033833669905,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.005922533061893276,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.8476572947179193e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0038554944524977763,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007243327682592504,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.3941386224635153e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004072713382623494,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007074755771056651,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.8832639341326285e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004035886635837871,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.004208224896091295,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.193181749987616e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0043906731113905195,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.0034470659007872495,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 2.3490078504551093e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0039147037450200095,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.007676644160286905,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.3470674975479824e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003931940155059266,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.002946095117560832,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.5753825870490346e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0038474175332567917,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.003875460710536238,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.952067300692306e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003899749893562454,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.003322288446729438,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.7681659336687972e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.00393827245707179,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.005659482876321675,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.9665875683472223e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.003912048947509961,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.006984611388267226,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 1.7487291685824857e-06,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.005361184876135017,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        }
+      ],
+      "text": {
+        "prompt": "请用中文简短介绍北京。",
+        "output_tokens": 64,
+        "text": "北京是中国的首都，也是全国的政治、文化、国际交往和科技创新中心。作为拥有三千多年历史的古都，这里汇聚了故宫、长城、天坛等世界文化遗产，同时兼具现代都市的繁华与活力，是一座传统与现代完美融合的城市。\n\nuser\n"
+      },
+      "log": {
+        "path": "/tmp/oh-my-vllm-tilelang-fused-precise-ordinary-probe.log",
+        "sha256": "21341bc64cd9aae77962fa0dde28486b70e25e3b62d5940afcee01cde4566060"
+      }
+    },
+    {
+      "mode": "mtp",
+      "coverage": [
+        "gdn_decode",
+        "gdn_decode_state",
+        "gdn_mtp",
+        "gdn_mtp_state",
+        "gdn_prefill",
+        "gdn_prefill_state",
+        "gqa_decode",
+        "gqa_prefill",
+        "mtp_gqa_decode"
+      ],
+      "checks": [
+        {
+          "probe": "gdn_prefill",
+          "max_abs_error": 0.015263148241572821,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_prefill_state",
+          "max_abs_error": 0.0901361767235187,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_prefill",
+          "max_abs_error": 0.007821590872210127,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.06218951121863725,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007655549674666862,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05212993560685675,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05589264730792465,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05199010922371272,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.059633506024336924,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06186694022329675,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.007743720469987281,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.07145856640156723,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007079780024565441,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.061712991600369804,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.059521021045298994,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.057402415321330835,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06140081586081436,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.0616505988939231,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.007238316519315724,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.066810789269649,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.00754288100633449,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05524577316383983,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05816629593109823,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.060100610486653494,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06074888656052124,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06247655406050967,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.006353173602109408,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.07360165873907576,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007726088201429615,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.056981896501490326,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06077416867310248,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05925681901376123,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06129694583231071,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06122626232085793,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004352311422549882,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.07407316109703643,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007244818079636062,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05935189399625784,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.056998671855048144,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06042416300542186,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05900919958526174,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.0572429947750841,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0076707897927486,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.07181291224557285,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007274632022217453,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06200779965775283,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.061382141575460736,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06210108713925422,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.061272737093016616,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.056784796234705226,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0052742964837468875,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.07077195154353078,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.0075541670965435515,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05757807581363039,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.059998001200401774,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.061871801806656634,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.061945265072406386,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06156495285876318,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004515124141404092,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.06879481614626215,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007281840766669934,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06178485926069044,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.062043107802200126,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06105923630995491,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06099870994323453,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06198606961608277,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.007342448345019292,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.0628665902968244,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.0077699615499136065,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06166381232297624,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.057217390478779606,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05931640798932847,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05906824057271365,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05939242080416918,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.005409883781439806,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.07532552328526876,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007598591771481811,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05962315777368232,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06047823753554482,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05996445890013291,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06217348501548514,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.058949928794959305,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004700707898204648,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.07296080571497043,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007173813529371298,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.0618323921203654,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06204911098488708,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06228275591169563,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05688569881921168,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06236112896273127,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.007843781068102906,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.07085296297585586,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007609663233201669,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.057459304916314125,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.04866439392370836,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05873873829128584,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.061426039666496735,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.058634586155257296,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.007493718504332225,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.06826644282795513,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007259306018474465,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06133670881802189,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05706134961291909,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.061108779344618114,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.060535800270479,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05710214902711286,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004454717786465334,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.06493974710230788,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007697970351818295,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06116804638602247,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.062028259694152155,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.060963814831971774,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.0500658003305503,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.0980585753517147,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0052783755513874375,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.07278610560513954,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007632502875238423,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06132183531621038,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.062018398899944316,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06234112789222124,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.062197021859550006,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05985613942806722,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.005006111718622197,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.06650977706914318,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.006539271655968459,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06216959532378752,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.061759290867733796,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.0621949381597382,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05882493634768693,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06083676827617879,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0042426103220079,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.06222711488573651,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007799944088932698,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.0620839489346352,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05938486631162476,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.062199634377812174,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.062318464557332476,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06000881347948095,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.006455077674234033,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.08029736571694102,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007673799979266871,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.061409179945155046,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06196557278909154,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.0595887688942085,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06072898838691998,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06069722048719228,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.007113979388831737,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.0654358271484412,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007778080691693834,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.061686760947377905,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06123192989304371,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.09388667973163223,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.08004728230012148,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.10718193119561903,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004129703587529621,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.06700961164520436,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007807995868090334,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.11119603524518595,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.056910491264819285,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.07609496573947894,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05924883614734,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.061978187025918174,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004021647341507784,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.06671841976949011,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007712706668508762,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.07024893678854482,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.07146631901323275,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.12212956689834442,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.10616822391245506,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.054553240640117906,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0064153343964665765,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.07064522528224515,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007358229655443971,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.07941107678160364,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.08184129873384194,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.062274697964870285,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05582288761383225,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06035515154062665,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.007628292816335147,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.08423777814581612,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.007725718980047258,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06115562423148191,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05705737208679196,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05746007371624984,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06157700562459212,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.053807083132074496,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.005793702130136857,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.06781435114391954,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.005360527987165131,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.058813623324571296,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05168044348453549,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.05359856342906966,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.0042206185737792,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.035470866929914635,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp",
+          "max_abs_error": 0.0037858585395404987,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.06144428592653384,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_mtp_state",
+          "max_abs_error": 0.058110635558257684,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.005995667436893726,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.05751901857504649,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode",
+          "max_abs_error": 0.003799952472176571,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gdn_decode_state",
+          "max_abs_error": 0.06126067322273343,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "gqa_decode",
+          "max_abs_error": 0.004577105786015112,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        },
+        {
+          "probe": "mtp_gqa_decode",
+          "max_abs_error": 0.0654720288705839,
+          "atol": 0.03,
+          "rtol": 0.03,
+          "actual_nonfinite": 0,
+          "reference_nonfinite": 0
+        }
+      ],
+      "text": {
+        "prompt": "请用中文简短介绍北京。",
+        "output_tokens": 64,
+        "text": "北京是中国的首都，也是全国的政治、文化、国际交往和科技创新中心。作为拥有三千多年历史的古都，这里汇聚了故宫、天坛、长城等世界文化遗产，同时兼具现代都市的繁华与活力，是传统底蕴与现代发展完美融合的国际大都市。\n\n"
+      },
+      "log": {
+        "path": "/tmp/oh-my-vllm-tilelang-fused-precise-mtp-probe.log",
+        "sha256": "47c9a0bf3a392ff48e8952009c20d71cc3065f18624e6a13ff20522fada53e61"
+      }
+    }
+  ],
+  "agentic": [
+    {
+      "api": "chat",
+      "run": {
+        "api": "chat",
+        "command": [
+          "/home/dongwu.chen/.local/bin/omp",
+          "--cwd",
+          "/data0/shared/dongwu.chen/oh-my-vllm",
+          "--model",
+          "oh-my-vllm-chat/qwen3.8-27b-fp8",
+          "--thinking",
+          "medium",
+          "--tools",
+          "read,grep,glob",
+          "--no-lsp",
+          "--no-extensions",
+          "--no-skills",
+          "--no-rules",
+          "--no-title",
+          "--no-session",
+          "--mode",
+          "json",
+          "--max-time",
+          "10m",
+          "--print",
+          "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count."
+        ],
+        "exit_code": 0,
+        "elapsed_s": 17.095472275992506,
+        "task": "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count.",
+        "requires_review": "Verify real tool execution, tool-result follow-up requests, grounded final answer, and MTP counters in server logs; exit zero alone is not acceptance."
+      },
+      "tool_starts": 9,
+      "tool_results": 9,
+      "tool_errors": 0,
+      "paths": [
+        "README.md",
+        "docs/architecture.md",
+        "docs/handoff.md",
+        "docs/requirements.md",
+        "crates/scheduler/src/lib.rs",
+        "python/oh_my_vllm/worker/model_runner.py",
+        "crates/scheduler/src/lib.rs:44-200",
+        "python/oh_my_vllm/worker/model_runner.py:34-130",
+        "docs/development.md"
+      ],
+      "final_text": "\n\n# oh-my-vllm — Overview\n\n## 1. Project goal\n\nA Rust-first inference framework for **Qwen3.8-27B-FP8 on a single B200 GPU** that reaches **≥95% of vLLM EngineCore throughput** (and TTFT ≤110%) on a 12-row benchmark matrix (ordinary / MTP4 / prefix-hit × in=32768 or 131072, out=4096, batch 1/2/4) — `docs/requirements.md` (REQ-GOAL-001, REQ-PERF-001/002), `README.md`.\n\nThe core design constraint is a hard **Rust/Python split** (REQ-ARCH-001): Rust owns serving, scheduling, token budgets, KV block allocation, prefix cache and preemption; Python owns model loading, forward pass, attention kernels and CUDA graph capture. The boundary is one ZMQ DEALER socket carrying msgpack — no shared memory, no tensor crossing (`docs/architecture.md`). The runtime is fully **independent of vLLM** (no install/import/link; the old V2 adapter is removed) — REQ-RUNNER-002.\n\nTarget model: `/data0/shared/Qwen3.8-27B-FP8` with **16 full-attention + 48 GatedDeltaNet (Mamba) layers**, hybrid block size **784 tokens** (hard constraint), FA group (16 layers) + Mamba group (48 layers, `align` mode) — REQ-MODEL-001, `README.md`.\n\n## 2. Architecture\n\n**Rust side** (`docs/architecture.md`, verified in source):\n- `crates/scheduler` — FCFS waiting/running queues, per-step token budget (default `max_num_batched_tokens=32768`, `max_num_seqs=256`), chunked prefill as a consequence of `remaining.min(budget)` plus an `aligned_prefill` split that stops at 784-token block boundaries to materialize Mamba checkpoints, continuous batching (phase 1 drains the running queue before phase 2 admits waiting requests), recompute preemption (evict last running request back to waiting with `num_computed_tokens=0`), and MTP draft accounting/rollback — `crates/scheduler/src/lib.rs`.\n- `crates/kv-cache` — shared logical block pool, SHA-256→64-bit chain-hash prefix cache with LRU eviction coordinated across both KV groups, aligned Mamba checkpoints, speculative reservations; two-phase allocation (reuse prefix before new pages). An optional independent GDN pool is supported via `--mamba-blocks` (ADR-007).\n- `crates/zmq-worker` — CLI, OpenAI-compatible HTTP (Axum), model-process lifecycle, ZMQ transport, cancellation, correlated UTC-timestamped logging.\n\n**Python side** (`docs/architecture.md`, verified in `python/oh_my_vllm/worker/model_runner.py`):\n- `worker/model_runner.py` — `OhMyVllmWorker`: loads the project-owned `Qwen` model from safetensors, allocates FA pages `[blocks,2,784,heads,dim]` BF16 and Mamba state (causal conv BF16 `[slot,10240,3]` + recurrent `[slot,48,128,128]`, FP32 normally / BF16 under MTP), orchestrates `execute_model`, keeps per-request histories/samplers.\n- `worker/` also has `batch_plan.py` (host validation, checkpoint copies), `sampler.py` (penalties, top-k/p, exact MTP greedy verification), `serving.py` (chat template, tokenizer, XGrammar masks), `mtp.py` (shifted MTP cache, proposal generation), `decode_graph.py` (target + MTP CUDA graphs, ≤32 graph shapes each), `runtime.py` (dependency-identity audit).\n- Kernels: project-owned **TileLang** kernels for GDN recurrence, causal convolution, paged split-KV GQA decode, normalization, NeoX RoPE (FP64 phase to avoid error near position 262144) and pointwise fusions; FlashInfer TRT-LLM for FP8 GEMM and long-prefill attention — `docs/architecture.md`.\n- MTP4: target/draft verification where every draft row shares a uniform +1 RoPE shift so rows match Rust's prefix hash; rejected candidates never become cached prefixes; boundary snapshots preserved at 784 crossings.\n\n## 3. How to run\n\nEnvironment: everything lives in conda `oh-my-vllm`; `scripts/with-env.sh` sets PATH/PYTHONPATH/CARGO_TARGET_DIR, `scripts/with-gpu.sh` waits for an idle B200 and pins its UUID (`docs/development.md`).\n\n```bash\n# install + build\nuv pip install --python /data0/.../conda-envs/oh-my-vllm/bin/python -r requirements/runtime.txt\nscripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker\n\n# GPU smoke test (add --num-speculative-tokens 4 for MTP)\nscripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py \\\n  --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64\n\n# OpenAI-compatible service (Chat + Responses at http://127.0.0.1:8000/v1)\nscripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker \\\n  --socket /tmp/oh-my-vllm-serve.ipc --num-gpu-blocks 4200 --mamba-blocks 128 \\\n  --max-model-len 262144 --num-speculative-tokens 4 serve\n\n# tests\nscripts/with-env.sh cargo test --workspace          # + fmt, clippy -D warnings\nCUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p 'test_*.py'\n```\nBenchmarks: `benchmarks/ttft.py` (current 12-row throughput/TTFT gates), `benchmarks/compare_vllm.py` (historical nine-row comparison), `benchmarks/baseline/enginecore.py` (isolated baseline collector only) — `docs/development.md`, `README.md`.\n\n## 4. Completion status (as of handoff 2026-09-22)\n\n**Completed and accepted:**\n- Independent runtime (no vLLM): all nine original-baseline performance rows ≥95%; actual-model FP64 probes, prefix reuse, recompute preemption, 12 real MTP4 constraint cases, service lifecycle, and both real oh-my-pi agentic acceptance runs passed — `docs/handoff.md`, `docs/acceptance.md`.\n- OpenAI service (REQ-SERVE-001…004): Chat Completions + Responses, thinking levels, tools, JSON-schema constraints with MTP, stored responses — all real-MTP4 acceptance passed.\n- 262144-token boundary: all six ordinary/MTP4 batch 1/2/4 runs (258048 in + 4096 out) finished with **zero preemptions**.\n- Fresh 12-row vLLM main baseline collected and frozen (`bench/baseline/2026-09-22-refreshed-enginecore.json`), upstream SHA `e9f169d16b9408bb9ae44f75072b91a5521d733c`.\n\n**In progress — TileLang kernel migration (current active task, REQ-KERNEL-001):**\n- All 15 project-owned Triton kernels in seven modules replaced by TileLang; no owned Triton imports/fallback remain; TileFoundry pinned as dev-only fork under `3rdparty/TileFoundry`.\n- Correctness is green: full GPU suite 146 tests + 12 subtests, no skips; Rust workspace tests/fmt/clippy pass; actual-model ordinary/MTP FP64 probes pass.\n- **Performance is NOT accepted yet**: the latest formal run (clean `874a54a`) reaches **94.9688%** of baseline on MTP batch-4 — just below the 95% gate (earlier best rows: MTP batch1/2 at 97.386%/95.351%; prefix batch-1 TTFT-stability also failed twice). The remaining gap is a throughput tuning problem (draft attention was the clearest unfavorable kernel difference, per `docs/performance-gap-2026-09-22.md`), and **the final formal 12-row acceptance is pending**. The handoff explicitly notes no final performance claim has been made.\n\nIn short: feature-complete and correct, runtime fully independent of vLLM, service and long-context acceptance done; the only open gate is closing the ~0.14% MTP-batch-4 throughput shortfall (plus prefix batch-1 TTFT stability) under the new baseline.",
+      "log": {
+        "path": "/tmp/oh-my-vllm-tilelang-accepted-agentic-chat/chat.jsonl",
+        "sha256": "c5c0bd48eeea6e14f51b3e784da3a31c11fce012bb15306e67bafed3543eb717"
+      }
+    },
+    {
+      "api": "responses",
+      "run": {
+        "api": "responses",
+        "command": [
+          "/home/dongwu.chen/.local/bin/omp",
+          "--cwd",
+          "/data0/shared/dongwu.chen/oh-my-vllm",
+          "--model",
+          "oh-my-vllm-responses/qwen3.8-27b-fp8",
+          "--thinking",
+          "medium",
+          "--tools",
+          "read,grep,glob",
+          "--no-lsp",
+          "--no-extensions",
+          "--no-skills",
+          "--no-rules",
+          "--no-title",
+          "--no-session",
+          "--mode",
+          "json",
+          "--max-time",
+          "10m",
+          "--print",
+          "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count."
+        ],
+        "exit_code": 0,
+        "elapsed_s": 22.057522856004653,
+        "task": "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count.",
+        "requires_review": "Verify real tool execution, tool-result follow-up requests, grounded final answer, and MTP counters in server logs; exit zero alone is not acceptance."
+      },
+      "tool_starts": 9,
+      "tool_results": 9,
+      "tool_errors": 0,
+      "paths": [
+        ".",
+        "README.md",
+        "docs/architecture.md",
+        "crates/scheduler/src/lib.rs",
+        "python/oh_my_vllm/worker/model_runner.py",
+        "docs/handoff.md",
+        "docs/design.md",
+        "docs/requirements.md",
+        "docs/acceptance.md:1-120"
+      ],
+      "final_text": "\n\n# oh-my-vllm\n\n## Project goals\n\nA Rust-first inference framework for **Qwen3.8-27B-FP8 on a single B200 GPU** (`/data0/shared/Qwen3.8-27B-FP8`), with vLLM removed from the runtime entirely. Core goals, per `README.md` and `docs/requirements.md`:\n\n- **REQ-GOAL-001 / REQ-PERF-001/002**: reach ≥95% of refreshed official vLLM EngineCore throughput and ≤110% of its TTFT on a 12-row matrix — ordinary / MTP4 / prefix-hit × batch 1/2/4 at 32768→4096 tokens, plus ordinary batch 1/2/4 at 131072 input. Two warmups, ≥5 measured repetitions, ≤5% spread.\n- **REQ-CONTEXT-001**: support 262144 total input/output tokens (boundary: 258048 in + 4096 out, no OOM or preemption).\n- **REQ-MODEL-001**: block size **784** — a hard constraint of the hybrid 48-GDN + 16-full-attention architecture.\n- **REQ-RUNNER-002**: builds, tests and inference must not install, import or link vLLM; the transitional V2 adapter is removed.\n- **REQ-KERNEL-001** (active, 2026-09-22): replace all 15 project-owned Triton kernels with TileLang, keeping existing correctness tests/tolerances; all 12 rows must pass throughput, TTFT and stability gates before completion.\n\n## Architecture\n\nThe split is a design rule, not a convenience (`docs/requirements.md` REQ-ARCH-001, `docs/design.md`):\n\n- **Rust owns** HTTP serving, request queues, token budgets, KV block allocation, prefix cache, preemption, and accepted-token history.\n- **Python owns** model loading, forward pass, kernels and CUDA graph capture.\n- The boundary is a single **ZMQ DEALER socket with msgpack** messages — no shared memory, no tensors crossing. Protocol: Rust sends `init`/`register`/`execute`/`abort`/`shutdown`; Python replies `ready`/`execute_result`/`error` (`docs/design.md`).\n\nRust crates (`README.md` Layout, `docs/architecture.md`):\n- `crates/scheduler/src/lib.rs` — FCFS waiting→running queues; chunked prefill falls out of `min(remaining, budget)` against `max_num_batched_tokens`; decode is scheduled before new prefills (continuous batching); prefix lookup and allocation via `HybridCoordinator::get_computed_blocks` / `allocate_slots`; **preemption by recompute only** (last-admitted request evicted, `num_computed_tokens=0`); MTP accounting with rollback via `set_drafts([])`.\n- `crates/kv-cache` — shared logical `BlockPool` with hand-written LRU free queue, chain-hash prefix cache (SHA-256 truncated to 64 bits), two-phase allocation (touch reused prefixes before allocating new pages), Mamba checkpoint slots and speculative reservations.\n- `crates/zmq-worker` — CLI, OpenAI-compatible HTTP APIs (Chat Completions + Responses), model-process lifecycle, ZMQ transport.\n\nPython side (`docs/architecture.md`):\n- `python/oh_my_vllm/worker/model_runner.py` — `OhMyVllmWorker`: loads the `Qwen` model, allocates per-layer cache tensors at logical capacity, keeps persistent per-request histories/samplers, runs `ServingAdapter` (chat template, tokenizer, XGrammar constraints), and executes `SchedulerOutput` batches; `RuntimeConfig` accepts `speculative_tokens ∈ {0, 4}` and an independent `mamba_blocks` GDN pool.\n- `models/qwen.py` (64-layer target + one-layer MTP head), `worker/sampler.py` (verification of draft prefixes against target samples), `worker/mtp.py` (shifted MTP cache, proposal graphs), `worker/decode_graph.py` (target/proposer CUDA graphs, ≤32 shapes each), `kernels/` (now TileLang: GDN recurrence, causal conv, paged split-KV GQA decode, RMS+RoPE fusion, pointwise fusions; FlashInfer TRT-LLM FP8 GEMM and ragged attention for prefill).\n- Hybrid cache: 16 FA layers + 48 GDN layers draw from the same logical pool (now independently sized via `--mamba-blocks`, ADR-007); GDN state `[slot,48,128,128]`; a token crossing a 784-boundary stores its recurrent snapshot in a checkpoint slot.\n\n## How to run\n\nPer `README.md` Quick start (all commands wrapped by `scripts/with-env.sh`, which sets the conda `oh-my-vllm` env, `PYTHONPATH` and build dir; `scripts/with-gpu.sh` waits for an idle B200 and pins its UUID):\n\n```bash\n# deps + build\nuv pip install --python /data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python -r requirements/runtime.txt\nscripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker\n\n# offline smoke (add --num-speculative-tokens 4 for MTP)\nscripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py \\\n  --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64\n\n# OpenAI-compatible local service (Chat + Responses at http://127.0.0.1:8000/v1)\nscripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker \\\n  --socket /tmp/oh-my-vllm-serve.ipc --num-gpu-blocks 4200 --mamba-blocks 128 \\\n  --max-model-len 262144 --num-speculative-tokens 4 serve\n```\n\nVerification commands: `cargo test --workspace`, `cargo fmt --all --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `ruff format/check python/`, CPU `unittest discover`, plus GPU pytest suites and `benchmarks/ttft.py` for the formal gates (`README.md`, `docs/testing.md`).\n\n## Current completion status\n\nSource: `docs/handoff.md` (2026-09-22), `docs/acceptance.md`, `README.md`.\n\n**Done:**\n- Independent runtime fully in place — no vLLM install/import/link; all nine rows of the *original* frozen baseline passed ≥95% (historical, not the new gate) (`docs/acceptance.md`, 2026-09-21 section).\n- Serving extension complete and accepted: Chat Completions + Responses, tools, JSON-schema/strict constraints, stored Responses, five thinking levels, both real oh-my-pi agentic workflows with MTP4 (`README.md`, `docs/requirements.md` REQ-SERVE-001…005).\n- All six 262144-total-token ordinary/MTP4 boundary checks pass with zero preemption (peak ≈135 GB ordinary / 140 GB MTP4); a signed-int32 page-offset overflow at high context was found and fixed (`docs/handoff.md`, `docs/acceptance.md`).\n- TileLang migration: **all seven production kernel modules use TileLang, with no owned Triton imports or fallback**; full GPU suite passes 146 tests + 12 subtests; actual-model ordinary/MTP FP64 probes pass; a RoPE phase-error fix near position 262144 (FP64 phase computation) is in and validated.\n\n**Not done — blocking completion:**\n- The refreshed 12-row baseline (official vLLM main, frozen SHA `e9f169d1`, `bench/baseline/2026-09-22-refreshed-enginecore.json`) acceptance is still pending. On the pre-TileLang candidate `ee2fb63`, 10/12 rows passed: MTP batch4 landed at 94.87% (692.190 vs 693.140 tok/s gate) and prefix batch1 failed TTFT stability (`docs/acceptance.md`).\n- The latest post-migration formal run on clean `874a54a` reaches **94.9688% on formal MTP batch4 — still below 95%**, with TTFT/stability passing (`docs/handoff.md`). Attention shape tuning (128 splits, BK32, merge streaming) and offline TileFoundry tuning continue; no final 12-row or full feature acceptance exists yet.\n\nIn short: functionally complete and vLLM-independent, with long-context and serving accepted; the outstanding work is closing the last ~0.1% throughput gap on the new 12-row performance matrix under the TileLang kernel set.",
+      "log": {
+        "path": "/tmp/oh-my-vllm-tilelang-accepted-agentic-responses/responses.jsonl",
+        "sha256": "d55ae8aaf8ab8c14aaf1b76cf3518fe88e64fead1e6ae525006d02485fcbf87b"
+      }
+    }
+  ],
+  "tools": {
+    "torch": "2.14.0",
+    "tilelang": "0.1.14",
+    "tilefoundry": "0.0.3.dev13+g6b1b1493e",
+    "apache-tvm-ffi": "0.1.12",
+    "protobuf": "6.33.6",
+    "ortools": "9.15.6755",
+    "transformers": "5.17.0",
+    "flashinfer-python": "0.6.18.post1"
+  },
+  "tilefoundry_gitlink": "6b1b1493efcb55f3f2f327b5cc90a01181adf690",
+  "boundary_drivers": {
+    "ordinary": {
+      "path": "/tmp/oh-my-vllm-tilelang-accepted-boundary-ordinary-driver.log",
+      "sha256": "d952749f9cae80e484b03417eed2d6f2b384ec1495a2938df04fbed65780f737"
+    },
+    "mtp": {
+      "path": "/tmp/oh-my-vllm-tilelang-accepted-boundary-mtp-driver.log",
+      "sha256": "d056007cf62944e7b5b71c088ece8c1896171d224db423afb65fbe706d31b089"
+    }
+  },
+  "boundary_method": "Six cold single runs (258048 input +4096 output, batch1/2/4). Functional capacity checks, not performance comparisons; timings include compilation/capture and concurrent host activity. An unrelated GPU process3145072 appeared during ordinary batch4; its elapsed time is not uncontended performance evidence. The owned worker completed without OOM/preemption and exited. No unrelated process was stopped.",
+  "probe_note": "Original FP64 tolerances unchanged. Fixed-length ordinary smoke continues past EOS and includes a trailing user marker; numerical coverage passed, this is not an EOS-aware serving response.",
+  "constraints": {
+    "chat-off-json_object": {
+      "request": {
+        "model": "qwen3.8-27b-fp8",
+        "temperature": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+          }
+        ],
+        "reasoning_effort": "off",
+        "max_completion_tokens": 4096,
+        "response_format": {
+          "type": "json_object"
+        }
+      },
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "content": "{\n  \"n\": 123,\n  \"label\": \"verified\"\n}",
+              "role": "assistant"
+            }
+          }
+        ],
+        "created": 1790067378,
+        "id": "chatcmpl_3116420_6ab242b2_1",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 22,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 35,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 57
+        }
+      },
+      "elapsed_s": 40.73835394400521
+    },
+    "chat-off-json_schema": {
+      "request": {
+        "model": "qwen3.8-27b-fp8",
+        "temperature": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+          }
+        ],
+        "reasoning_effort": "off",
+        "max_completion_tokens": 4096,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "name": "result",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "n": {
+                  "type": "integer",
+                  "enum": [
+                    123
+                  ]
+                },
+                "label": {
+                  "type": "string",
+                  "const": "verified"
+                }
+              },
+              "required": [
+                "n",
+                "label"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          }
+        }
+      },
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "content": "{\n  \"label\": \"verified\",\n  \"n\": 123\n}",
+              "role": "assistant"
+            }
+          }
+        ],
+        "created": 1790067418,
+        "id": "chatcmpl_3116420_6ab242da_2",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 21,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 35,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 56
+        }
+      },
+      "elapsed_s": 0.10574711000663228
+    },
+    "chat-off-tool": {
+      "request": {
+        "model": "qwen3.8-27b-fp8",
+        "temperature": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+          }
+        ],
+        "reasoning_effort": "off",
+        "max_completion_tokens": 4096,
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "report",
+              "description": "Report the result.",
+              "strict": true,
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "n": {
+                    "type": "integer",
+                    "enum": [
+                      123
+                    ]
+                  },
+                  "label": {
+                    "type": "string",
+                    "const": "verified"
+                  }
+                },
+                "required": [
+                  "n",
+                  "label"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "tool_choice": "required",
+        "parallel_tool_calls": false
+      },
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "tool_calls",
+            "index": 0,
+            "message": {
+              "content": null,
+              "role": "assistant",
+              "tool_calls": [
+                {
+                  "function": {
+                    "arguments": "{\"label\":\"verified\",\"n\":123}",
+                    "name": "report"
+                  },
+                  "id": "call_chatcmpl_3116420_6ab242da_3_0",
+                  "type": "function"
+                }
+              ]
+            }
+          }
+        ],
+        "created": 1790067418,
+        "id": "chatcmpl_3116420_6ab242da_3",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 38,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 325,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 363
+        }
+      },
+      "elapsed_s": 9.137109308998333
+    },
+    "chat-medium-json_object": {
+      "request": {
+        "model": "qwen3.8-27b-fp8",
+        "temperature": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+          }
+        ],
+        "reasoning_effort": "medium",
+        "max_completion_tokens": 4096,
+        "response_format": {
+          "type": "json_object"
+        }
+      },
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "content": "\n\n{\"n\": 123, \"label\": \"verified\"}",
+              "reasoning_content": "The user is asking me to:\n1. Return JSON with n=123 and label=verified\n2. For tool use, call report with those arguments\n\nLet me think about this. The user wants me to return a JSON object with specific fields. They also mention \"for tool use, call report with those arguments\" - but I don't have a tool called \"report\" available to me. I should just return the JSON as requested.\n\nLet me format the JSON:\n```json\n{\"n\": 123, \"label\": \"verified\"}\n```\n\nI don't have a \"report\" tool available, so I'll just provide the JSON output.\n",
+              "role": "assistant"
+            }
+          }
+        ],
+        "created": 1790067427,
+        "id": "chatcmpl_3116420_6ab242e3_4",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 159,
+          "completion_tokens_details": {
+            "reasoning_tokens": 143
+          },
+          "prompt_tokens": 33,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 192
+        }
+      },
+      "elapsed_s": 0.4968454809859395
+    },
+    "chat-medium-json_schema": {
+      "request": {
+        "model": "qwen3.8-27b-fp8",
+        "temperature": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+          }
+        ],
+        "reasoning_effort": "medium",
+        "max_completion_tokens": 4096,
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "name": "result",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "n": {
+                  "type": "integer",
+                  "enum": [
+                    123
+                  ]
+                },
+                "label": {
+                  "type": "string",
+                  "const": "verified"
+                }
+              },
+              "required": [
+                "n",
+                "label"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          }
+        }
+      },
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "content": "\n\n{\"label\": \"verified\", \"n\": 123}",
+              "reasoning_content": "The user is asking me to:\n1. Return JSON with n=123 and label=verified\n2. For tool use, call report with those arguments\n\nLet me think about this. The user wants me to return a JSON object with specific fields. They also mention \"for tool use, call report with those arguments\" - but I don't have a tool called \"report\" available to me. I should just return the JSON as requested.\n\nLet me format the JSON:\n```json\n{\"n\": 123, \"label\": \"verified\"}\n```\n\nI don't have a \"report\" tool available, so I'll just provide the JSON output.\n",
+              "role": "assistant"
+            }
+          }
+        ],
+        "created": 1790067428,
+        "id": "chatcmpl_3116420_6ab242e4_5",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 159,
+          "completion_tokens_details": {
+            "reasoning_tokens": 143
+          },
+          "prompt_tokens": 33,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 192
+        }
+      },
+      "elapsed_s": 0.501220057005412
+    },
+    "chat-medium-tool": {
+      "request": {
+        "model": "qwen3.8-27b-fp8",
+        "temperature": 0,
+        "messages": [
+          {
+            "role": "user",
+            "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+          }
+        ],
+        "reasoning_effort": "medium",
+        "max_completion_tokens": 4096,
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "report",
+              "description": "Report the result.",
+              "strict": true,
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "n": {
+                    "type": "integer",
+                    "enum": [
+                      123
+                    ]
+                  },
+                  "label": {
+                    "type": "string",
+                    "const": "verified"
+                  }
+                },
+                "required": [
+                  "n",
+                  "label"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        ],
+        "tool_choice": "required",
+        "parallel_tool_calls": false
+      },
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "tool_calls",
+            "index": 0,
+            "message": {
+              "content": "\n\n",
+              "reasoning_content": "The user wants me to call the report tool with n=123 and label=\"verified\".\n",
+              "role": "assistant",
+              "tool_calls": [
+                {
+                  "function": {
+                    "arguments": "{\"label\":\"verified\",\"n\":123}",
+                    "name": "report"
+                  },
+                  "id": "call_chatcmpl_3116420_6ab242e4_6_0",
+                  "type": "function"
+                }
+              ]
+            }
+          }
+        ],
+        "created": 1790067428,
+        "id": "chatcmpl_3116420_6ab242e4_6",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 61,
+          "completion_tokens_details": {
+            "reasoning_tokens": 22
+          },
+          "prompt_tokens": 323,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 384
+        }
+      },
+      "elapsed_s": 0.22171903599519283
+    },
+    "responses-off-json_object": {
+      "request": {
+        "model": "qwen3.8-27b-fp8",
+        "temperature": 0,
+        "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+        "reasoning": {
+          "effort": "off"
+        },
+        "max_output_tokens": 4096,
+        "store": false,
+        "text": {
+          "format": {
+            "type": "json_object"
+          }
+        }
+      },
+      "response": {
+        "background": false,
+        "completed_at": 1790067429,
+        "created_at": 1790067429,
+        "error": null,
+        "id": "resp_3116420_6ab242e5_7",
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": 4096,
+        "metadata": {},
+        "model": "qwen3.8-27b-fp8",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\n  \"n\": 123,\n  \"label\": \"verified\"\n}",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_resp_3116420_6ab242e5_7",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "previous_response_id": null,
+        "reasoning": {
+          "effort": "off",
+          "summary": "auto"
+        },
+        "service_tier": "default",
+        "status": "completed",
+        "store": false,
+        "temperature": 0,
+        "text": {
+          "format": {
+            "type": "json_object"
+          }
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.95,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 35,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 22,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 57
+        },
+        "user": null
+      },
+      "elapsed_s": 0.0970466390135698
+    },
+    "responses-off-json_schema": {
+      "request": {
+        "model": "qwen3.8-27b-fp8",
+        "temperature": 0,
+        "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+        "reasoning": {
+          "effort": "off"
+        },
+        "max_output_tokens": 4096,
+        "store": false,
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "name": "result",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "n": {
+                  "type": "integer",
+                  "enum": [
+                    123
+                  ]
+                },
+                "label": {
+                  "type": "string",
+                  "const": "verified"
+                }
+              },
+              "required": [
+                "n",
+                "label"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          }
+        }
+      },
+      "response": {
+        "background": false,
+        "completed_at": 1790067429,
+        "created_at": 1790067429,
+        "error": null,
+        "id": "resp_3116420_6ab242e5_8",
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": 4096,
+        "metadata": {},
+        "model": "qwen3.8-27b-fp8",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\n  \"label\": \"verified\",\n  \"n\": 123\n}",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_resp_3116420_6ab242e5_8",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "previous_response_id": null,
+        "reasoning": {
+          "effort": "off",
+          "summary": "auto"
+        },
+        "service_tier": "default",
+        "status": "completed",
+        "store": false,
+        "temperature": 0,
+        "text": {
+          "format": {
+            "name": "result",
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "const": "verified",
+                  "type": "string"
+                },
+                "n": {
+                  "enum": [
+                    123
+                  ],
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "n",
+                "label"
+              ],
+              "type": "object"
+            },
+            "strict": true,
+            "type": "json_schema"
+          }
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.95,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 35,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 21,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 56
+        },
+        "user": null
+      },
+      "elapsed_s": 0.09948373299266677
+    },
+    "responses-off-tool": {
+      "request": {
+        "model": "qwen3.8-27b-fp8",
+        "temperature": 0,
+        "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+        "reasoning": {
+          "effort": "off"
+        },
+        "max_output_tokens": 4096,
+        "store": false,
+        "tools": [
+          {
+            "type": "function",
+            "name": "report",
+            "description": "Report the result.",
+            "strict": true,
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "n": {
+                  "type": "integer",
+                  "enum": [
+                    123
+                  ]
+                },
+                "label": {
+                  "type": "string",
+                  "const": "verified"
+                }
+              },
+              "required": [
+                "n",
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ],
+        "tool_choice": "required",
+        "parallel_tool_calls": false
+      },
+      "response": {
+        "background": false,
+        "completed_at": 1790067429,
+        "created_at": 1790067429,
+        "error": null,
+        "id": "resp_3116420_6ab242e5_9",
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": 4096,
+        "metadata": {},
+        "model": "qwen3.8-27b-fp8",
+        "object": "response",
+        "output": [
+          {
+            "arguments": "{\"label\":\"verified\",\"n\":123}",
+            "call_id": "call_resp_3116420_6ab242e5_9_0",
+            "id": "fc_resp_3116420_6ab242e5_9_0",
+            "name": "report",
+            "status": "completed",
+            "type": "function_call"
+          }
+        ],
+        "parallel_tool_calls": false,
+        "previous_response_id": null,
+        "reasoning": {
+          "effort": "off",
+          "summary": "auto"
+        },
+        "service_tier": "default",
+        "status": "completed",
+        "store": false,
+        "temperature": 0,
+        "text": {
+          "format": {
+            "type": "text"
+          }
+        },
+        "tool_choice": "required",
+        "tools": [
+          {
+            "description": "Report the result.",
+            "name": "report",
+            "parameters": {
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "const": "verified",
+                  "type": "string"
+                },
+                "n": {
+                  "enum": [
+                    123
+                  ],
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "n",
+                "label"
+              ],
+              "type": "object"
+            },
+            "strict": true,
+            "type": "function"
+          }
+        ],
+        "top_p": 0.95,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 325,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 38,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 363
+        },
+        "user": null
+      },
+      "elapsed_s": 0.13530979199276771
+    },
+    "responses-medium-json_object": {
+      "request": {
+        "model": "qwen3.8-27b-fp8",
+        "temperature": 0,
+        "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+        "reasoning": {
+          "effort": "medium"
+        },
+        "max_output_tokens": 4096,
+        "store": false,
+        "text": {
+          "format": {
+            "type": "json_object"
+          }
+        }
+      },
+      "response": {
+        "background": false,
+        "completed_at": 1790067430,
+        "created_at": 1790067429,
+        "error": null,
+        "id": "resp_3116420_6ab242e5_10",
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": 4096,
+        "metadata": {},
+        "model": "qwen3.8-27b-fp8",
+        "object": "response",
+        "output": [
+          {
+            "id": "rs_resp_3116420_6ab242e5_10",
+            "summary": [
+              {
+                "text": "The user is asking me to:\n1. Return JSON with n=123 and label=verified\n2. For tool use, call report with those arguments\n\nLet me think about this. The user wants me to return a JSON object with specific fields. They also mention \"for tool use, call report with those arguments\" - but I don't have a tool called \"report\" available to me. I should just return the JSON as requested.\n\nLet me format the JSON:\n```json\n{\"n\": 123, \"label\": \"verified\"}\n```\n\nI don't have a \"report\" tool available, so I'll just provide the JSON output.\n",
+                "type": "summary_text"
+              }
+            ],
+            "type": "reasoning"
+          },
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "\n\n{\"n\": 123, \"label\": \"verified\"}",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_resp_3116420_6ab242e5_10",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "previous_response_id": null,
+        "reasoning": {
+          "effort": "medium",
+          "summary": "auto"
+        },
+        "service_tier": "default",
+        "status": "completed",
+        "store": false,
+        "temperature": 0,
+        "text": {
+          "format": {
+            "type": "json_object"
+          }
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.95,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 33,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 159,
+          "output_tokens_details": {
+            "reasoning_tokens": 143
+          },
+          "total_tokens": 192
+        },
+        "user": null
+      },
+      "elapsed_s": 0.4854849739931524
+    },
+    "responses-medium-json_schema": {
+      "request": {
+        "model": "qwen3.8-27b-fp8",
+        "temperature": 0,
+        "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+        "reasoning": {
+          "effort": "medium"
+        },
+        "max_output_tokens": 4096,
+        "store": false,
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "name": "result",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "n": {
+                  "type": "integer",
+                  "enum": [
+                    123
+                  ]
+                },
+                "label": {
+                  "type": "string",
+                  "const": "verified"
+                }
+              },
+              "required": [
+                "n",
+                "label"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          }
+        }
+      },
+      "response": {
+        "background": false,
+        "completed_at": 1790067430,
+        "created_at": 1790067430,
+        "error": null,
+        "id": "resp_3116420_6ab242e6_11",
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": 4096,
+        "metadata": {},
+        "model": "qwen3.8-27b-fp8",
+        "object": "response",
+        "output": [
+          {
+            "id": "rs_resp_3116420_6ab242e6_11",
+            "summary": [
+              {
+                "text": "The user is asking me to:\n1. Return JSON with n=123 and label=verified\n2. For tool use, call report with those arguments\n\nLet me think about this. The user wants me to return a JSON object with specific fields. They also mention \"for tool use, call report with those arguments\" - but I don't have a tool called \"report\" available to me. I should just return the JSON as requested.\n\nLet me format the JSON:\n```json\n{\"n\": 123, \"label\": \"verified\"}\n```\n\nI don't have a \"report\" tool available, so I'll just provide the JSON output.\n",
+                "type": "summary_text"
+              }
+            ],
+            "type": "reasoning"
+          },
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "\n\n{\"label\": \"verified\", \"n\": 123}",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_resp_3116420_6ab242e6_11",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "previous_response_id": null,
+        "reasoning": {
+          "effort": "medium",
+          "summary": "auto"
+        },
+        "service_tier": "default",
+        "status": "completed",
+        "store": false,
+        "temperature": 0,
+        "text": {
+          "format": {
+            "name": "result",
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "const": "verified",
+                  "type": "string"
+                },
+                "n": {
+                  "enum": [
+                    123
+                  ],
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "n",
+                "label"
+              ],
+              "type": "object"
+            },
+            "strict": true,
+            "type": "json_schema"
+          }
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.95,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 33,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 159,
+          "output_tokens_details": {
+            "reasoning_tokens": 143
+          },
+          "total_tokens": 192
+        },
+        "user": null
+      },
+      "elapsed_s": 0.49823533299786504
+    },
+    "responses-medium-tool": {
+      "request": {
+        "model": "qwen3.8-27b-fp8",
+        "temperature": 0,
+        "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+        "reasoning": {
+          "effort": "medium"
+        },
+        "max_output_tokens": 4096,
+        "store": false,
+        "tools": [
+          {
+            "type": "function",
+            "name": "report",
+            "description": "Report the result.",
+            "strict": true,
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "n": {
+                  "type": "integer",
+                  "enum": [
+                    123
+                  ]
+                },
+                "label": {
+                  "type": "string",
+                  "const": "verified"
+                }
+              },
+              "required": [
+                "n",
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          }
+        ],
+        "tool_choice": "required",
+        "parallel_tool_calls": false
+      },
+      "response": {
+        "background": false,
+        "completed_at": 1790067430,
+        "created_at": 1790067430,
+        "error": null,
+        "id": "resp_3116420_6ab242e6_12",
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": 4096,
+        "metadata": {},
+        "model": "qwen3.8-27b-fp8",
+        "object": "response",
+        "output": [
+          {
+            "id": "rs_resp_3116420_6ab242e6_12",
+            "summary": [
+              {
+                "text": "The user wants me to call the report tool with n=123 and label=\"verified\".\n",
+                "type": "summary_text"
+              }
+            ],
+            "type": "reasoning"
+          },
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "\n\n",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_resp_3116420_6ab242e6_12",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          },
+          {
+            "arguments": "{\"label\":\"verified\",\"n\":123}",
+            "call_id": "call_resp_3116420_6ab242e6_12_0",
+            "id": "fc_resp_3116420_6ab242e6_12_0",
+            "name": "report",
+            "status": "completed",
+            "type": "function_call"
+          }
+        ],
+        "parallel_tool_calls": false,
+        "previous_response_id": null,
+        "reasoning": {
+          "effort": "medium",
+          "summary": "auto"
+        },
+        "service_tier": "default",
+        "status": "completed",
+        "store": false,
+        "temperature": 0,
+        "text": {
+          "format": {
+            "type": "text"
+          }
+        },
+        "tool_choice": "required",
+        "tools": [
+          {
+            "description": "Report the result.",
+            "name": "report",
+            "parameters": {
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "const": "verified",
+                  "type": "string"
+                },
+                "n": {
+                  "enum": [
+                    123
+                  ],
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "n",
+                "label"
+              ],
+              "type": "object"
+            },
+            "strict": true,
+            "type": "function"
+          }
+        ],
+        "top_p": 0.95,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 323,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 61,
+          "output_tokens_details": {
+            "reasoning_tokens": 22
+          },
+          "total_tokens": 384
+        },
+        "user": null
+      },
+      "elapsed_s": 0.20854716000030749
+    }
+  },
+  "lifecycle": {
+    "off": {
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "message": {
+            "content": "25",
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1790067430,
+      "id": "chatcmpl_3116420_6ab242e6_13",
+      "model": "qwen3.8-27b-fp8",
+      "object": "chat.completion",
+      "usage": {
+        "completion_tokens": 3,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "prompt_tokens": 24,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 27
+      }
+    },
+    "low": {
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "message": {
+            "content": "\n\n25",
+            "reasoning_content": "用户要求计算 12+13，只回答结果。\n12+13=25\n",
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1790067430,
+      "id": "chatcmpl_3116420_6ab242e6_14",
+      "model": "qwen3.8-27b-fp8",
+      "object": "chat.completion",
+      "usage": {
+        "completion_tokens": 29,
+        "completion_tokens_details": {
+          "reasoning_tokens": 25
+        },
+        "prompt_tokens": 52,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 81
+      }
+    },
+    "medium": {
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "message": {
+            "content": "\n\n25",
+            "reasoning_content": "用户要求计算 12+13，只回答结果。\n\n12 + 13 = 25\n",
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1790067430,
+      "id": "chatcmpl_3116420_6ab242e6_15",
+      "model": "qwen3.8-27b-fp8",
+      "object": "chat.completion",
+      "usage": {
+        "completion_tokens": 31,
+        "completion_tokens_details": {
+          "reasoning_tokens": 27
+        },
+        "prompt_tokens": 22,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 53
+      }
+    },
+    "high": {
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "message": {
+            "content": "\n\n25",
+            "reasoning_content": "We need answer only result. User asks Chinese: 计算 12+13,只回答结果。 Means compute 12+13, only answer result. Final should be 25. Ensure no extra.\n",
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1790067431,
+      "id": "chatcmpl_3116420_6ab242e7_16",
+      "model": "qwen3.8-27b-fp8",
+      "object": "chat.completion",
+      "usage": {
+        "completion_tokens": 53,
+        "completion_tokens_details": {
+          "reasoning_tokens": 49
+        },
+        "prompt_tokens": 64,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 117
+      }
+    },
+    "xhigh": {
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "message": {
+            "content": "\n\n25",
+            "reasoning_content": "We need answer user's request: \"计算 12+13,只回答结果。\" Means calculate 12+13, only answer result. Must final only result. Now final 25.\n",
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1790067431,
+      "id": "chatcmpl_3116420_6ab242e7_17",
+      "model": "qwen3.8-27b-fp8",
+      "object": "chat.completion",
+      "usage": {
+        "completion_tokens": 51,
+        "completion_tokens_details": {
+          "reasoning_tokens": 47
+        },
+        "prompt_tokens": 64,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 115
+      }
+    },
+    "stored": [
+      {
+        "background": false,
+        "completed_at": 1790067431,
+        "created_at": 1790067431,
+        "error": null,
+        "id": "resp_3116420_6ab242e7_18",
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": 128,
+        "metadata": {},
+        "model": "qwen3.8-27b-fp8",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "OK",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_resp_3116420_6ab242e7_18",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "previous_response_id": null,
+        "reasoning": {
+          "effort": "off",
+          "summary": "auto"
+        },
+        "service_tier": "default",
+        "status": "completed",
+        "store": true,
+        "temperature": 1.0,
+        "text": {
+          "format": {
+            "type": "text"
+          }
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.95,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 23,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 2,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 25
+        },
+        "user": null
+      },
+      {
+        "background": false,
+        "completed_at": 1790067431,
+        "created_at": 1790067431,
+        "error": null,
+        "id": "resp_3116420_6ab242e7_19",
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": 128,
+        "metadata": {},
+        "model": "qwen3.8-27b-fp8",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "You asked me to remember the number 731.",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_resp_3116420_6ab242e7_19",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "previous_response_id": "resp_3116420_6ab242e7_18",
+        "reasoning": {
+          "effort": "off",
+          "summary": "auto"
+        },
+        "service_tier": "default",
+        "status": "completed",
+        "store": true,
+        "temperature": 1.0,
+        "text": {
+          "format": {
+            "type": "text"
+          }
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.95,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 47,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 13,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 60
+        },
+        "user": null
+      }
+    ],
+    "mixed": [
+      {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "content": "{\n  \"n\": 123\n}",
+              "role": "assistant"
+            }
+          }
+        ],
+        "created": 1790067431,
+        "id": "chatcmpl_3116420_6ab242e7_20",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 13,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 25,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 38
+        }
+      },
+      {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "content": "25",
+              "role": "assistant"
+            }
+          }
+        ],
+        "created": 1790067431,
+        "id": "chatcmpl_3116420_6ab242e7_21",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 3,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 24,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 27
+        }
+      }
+    ],
+    "after_disconnect": {
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "index": 0,
+          "message": {
+            "content": "25",
+            "role": "assistant"
+          }
+        }
+      ],
+      "created": 1790067434,
+      "id": "chatcmpl_3116420_6ab242ea_23",
+      "model": "qwen3.8-27b-fp8",
+      "object": "chat.completion",
+      "usage": {
+        "completion_tokens": 3,
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "prompt_tokens": 24,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 27
+      }
+    },
+    "log_verification": {
+      "mixed_request_ids": [
+        20,
+        21
+      ],
+      "canceled_request_id": 22,
+      "same_batch": true,
+      "worker_released": true
+    }
+  },
+  "long_service": [
+    {
+      "api": "chat/completions",
+      "repeat": 0,
+      "elapsed_s": 16.39628291799454,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "content": "{\n  \"label\": \"verified\",\n  \"n\": 123\n}",
+              "role": "assistant"
+            }
+          }
+        ],
+        "created": 1790067437,
+        "id": "chatcmpl_3116420_6ab242ed_24",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 21,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 131099,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 131120
+        }
+      },
+      "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f"
+    },
+    {
+      "api": "chat/completions",
+      "repeat": 1,
+      "elapsed_s": 0.29941699501068797,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "message": {
+              "content": "{\n  \"label\": \"verified\",\n  \"n\": 123\n}",
+              "role": "assistant"
+            }
+          }
+        ],
+        "created": 1790067454,
+        "id": "chatcmpl_3116420_6ab242fe_25",
+        "model": "qwen3.8-27b-fp8",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 21,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 131099,
+          "prompt_tokens_details": {
+            "cached_tokens": 130928
+          },
+          "total_tokens": 131120
+        }
+      },
+      "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f"
+    },
+    {
+      "api": "responses",
+      "repeat": 0,
+      "elapsed_s": 0.28333999500318896,
+      "response": {
+        "background": false,
+        "completed_at": 1790067454,
+        "created_at": 1790067454,
+        "error": null,
+        "id": "resp_3116420_6ab242fe_26",
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": 256,
+        "metadata": {},
+        "model": "qwen3.8-27b-fp8",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\n  \"label\": \"verified\",\n  \"n\": 123\n}",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_resp_3116420_6ab242fe_26",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "previous_response_id": null,
+        "reasoning": {
+          "effort": "off",
+          "summary": "auto"
+        },
+        "service_tier": "default",
+        "status": "completed",
+        "store": false,
+        "temperature": 0,
+        "text": {
+          "format": {
+            "name": "result",
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "const": "verified",
+                  "type": "string"
+                },
+                "n": {
+                  "enum": [
+                    123
+                  ],
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "n",
+                "label"
+              ],
+              "type": "object"
+            },
+            "strict": true,
+            "type": "json_schema"
+          }
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.95,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 131099,
+          "input_tokens_details": {
+            "cached_tokens": 130928
+          },
+          "output_tokens": 21,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 131120
+        },
+        "user": null
+      },
+      "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f"
+    },
+    {
+      "api": "responses",
+      "repeat": 1,
+      "elapsed_s": 0.2743103719985811,
+      "response": {
+        "background": false,
+        "completed_at": 1790067454,
+        "created_at": 1790067454,
+        "error": null,
+        "id": "resp_3116420_6ab242fe_27",
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": 256,
+        "metadata": {},
+        "model": "qwen3.8-27b-fp8",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\n  \"label\": \"verified\",\n  \"n\": 123\n}",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_resp_3116420_6ab242fe_27",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "previous_response_id": null,
+        "reasoning": {
+          "effort": "off",
+          "summary": "auto"
+        },
+        "service_tier": "default",
+        "status": "completed",
+        "store": false,
+        "temperature": 0,
+        "text": {
+          "format": {
+            "name": "result",
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "const": "verified",
+                  "type": "string"
+                },
+                "n": {
+                  "enum": [
+                    123
+                  ],
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "n",
+                "label"
+              ],
+              "type": "object"
+            },
+            "strict": true,
+            "type": "json_schema"
+          }
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.95,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 131099,
+          "input_tokens_details": {
+            "cached_tokens": 130928
+          },
+          "output_tokens": 21,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 131120
+        },
+        "user": null
+      },
+      "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f"
+    }
+  ],
+  "batch_text": [
+    {
+      "mode": "batch",
+      "result": {
+        "stats": {
+          "steps": 1747,
+          "prefix_hit_tokens": 2352,
+          "initial_prefix_hit_tokens": 0,
+          "preemptions": 2,
+          "accepted_draft_tokens": 0
+        },
+        "requests": [
+          {
+            "question": "请用中文写一篇至少四千字的文章,详细介绍北京的历史、地理、交通、文化和景点。每段都以“北京:”开头,不要介绍另一个城市。请直接开始正文。",
+            "output_tokens": 1024,
+            "text": "北京:作为中华人民共和国的首都，北京不仅是一座现代化的国际大都市，更是一座拥有三千多年建城史、八百多年建都史的古老城市。它位于华北平原的西北边缘，背靠燕山，西倚太行山，面向渤海，这种独特的地理格局赋予了它“龙脉”般的庄严与厚重。从辽代开始，北京就逐渐成为中国北方的政治中心，历经金、元、明、清四个朝代的更迭，这里见证了无数王朝的兴衰荣辱，也积淀了深厚的历史文化底蕴。如今，北京不仅是中国的政治中心、文化中心、国际交往中心和科技创新中心，更是世界了解中国的重要窗口。在这座城市里，古老的胡同与现代的高楼大厦交相辉映，传统的四合院与时尚的购物中心比邻而居，这种古今交融的独特风貌，使得北京在全球城市中独树一帜，散发着迷人的魅力。\n\n北京:在地理环境方面，北京的地势西北高、东南低，由山地、平原和丘陵组成。西部和北部是连绵起伏的山脉，包括太行山和燕山两大山系，这些山脉构成了北京的天然屏障，也孕育了丰富的自然资源。东南部则是广阔的平原，属于华北平原的一部分，地势平坦，土壤肥沃，适宜农业发展。北京的主要河流有永定河、潮白河、北运河等，它们大多发源于西部和北部的山区，流经平原后汇入渤海。其中，永定河是北京的母亲河，历史上曾多次改道，对北京的城市发展产生了深远影响。此外，北京还拥有众多湖泊和水库，如密云水库、官厅水库等，这些水体不仅为城市提供了重要的水源，也调节了区域气候，改善了生态环境。北京的气候属于暖温带半湿润大陆性季风气候，四季分明，春季多风干燥，夏季炎热多雨，秋季天高气爽，冬季寒冷干燥。这种气候特点使得北京的四季景观各具特色，春有百花争艳，夏有绿树成荫，秋有红叶满山，冬有银装素裹，为游客提供了丰富的旅游体验。\n\n北京:交通网络是北京作为国际大都市的重要支撑，其发达程度在全国乃至全球都名列前茅。北京拥有世界上最繁忙的机场之一——北京首都国际机场和北京大兴国际机场，这两座机场连接着全球各大城市，使得北京成为国际航空枢纽。在铁路方面，北京南站、北京西站、北京北站等高铁站构成了庞大的铁路网络，通过京沪、京广、京哈等高铁线路，北京与全国各大城市实现了快速连接，极大地缩短了时空距离。市内交通方面，北京地铁系统规模庞大，线路纵横交错，覆盖了城市的主要区域，为市民和游客提供了便捷、高效的出行方式。此外，北京还拥有发达的公交系统和出租车服务，以及日益完善的共享单车网络，形成了多层次、立体化的城市交通体系。为了缓解交通拥堵，北京还实施了限行措施，鼓励市民使用公共交通工具，并大力发展新能源汽车，致力于建设绿色、低碳的交通环境。随着城市副中心通州的建设，北京的交通格局正在进一步优化，区域间的联系更加紧密，为城市的可持续发展提供了有力保障。\n\n北京:文化是北京最鲜明的名片，这里汇聚了中华文明的精华，承载着中华民族的精神记忆。北京的文化底蕴深厚，涵盖了宫廷文化、胡同文化、京剧文化、文学艺术等多个领域。故宫、天坛、颐和园等皇家园林和建筑，展示了中国古代建筑艺术的巅峰成就，体现了皇权至上的思想和天人合一的哲学理念。胡同和四合院则是北京市民生活的缩影，它们保留了老北京的生活气息和邻里温情，是研究北京民俗文化的活化石。京剧作为中国的国粹，起源于北京，其唱腔优美、表演细腻，深受国内外观众的喜爱。此外，北京还是中国文学艺术的重镇，涌现出了众多著名的作家、画家、音乐家和艺术家，如老舍、齐白石、梅兰芳等，他们的作品不仅丰富了中国的文化艺术宝库，也提升了北京的文化影响力。近年来，北京还积极举办各类国际文化节庆活动，如北京国际电影节、北京国际图书节等，促进了中外文化交流，提升了北京的国际文化软实力。\n\n北京:景点众多是北京旅游的一大特色，这里既有世界文化遗产，也有现代地标建筑，满足了不同游客的需求。故宫博物院是世界上现存规模最大、保存最完整的木质结构古建筑群，它曾是明清两代皇帝的居所，如今收藏了大量珍贵文物，是了解中国历史文化的必去之地。天坛是明清两代皇帝祭天的地方，其建筑布局严谨，造型独特，体现了中国古代天文观念和宇宙观。颐和园是中国现存规模最大、保存最完整的皇家园林，它以昆明湖和万寿山为基址，以杭州西湖为蓝本，汲取江南园林的设计手法，形成了山水相间、亭台楼阁错落有致的景观。长城是中国的象征，其中八达岭长城和慕田峪长城最为著名，它们蜿蜒于崇山峻岭之间，气势磅礴，令人叹为观止。此外，北京还有圆明园遗址公园、景山公园、北海公园、南锣鼓巷、798艺术区等众多"
+          },
+          {
+            "question": "请用中文写一篇至少四千字的文章,详细介绍东京的历史、地理、交通、文化和景点。每段都以“东京:”开头,不要介绍另一个城市。请直接开始正文。",
+            "output_tokens": 1024,
+            "text": "东京:作为日本的首都及最大城市，东京不仅是日本政治、经济、文化和交通的中心，更是全球最具影响力的国际大都市之一。这座城市的历史可以追溯到数百年前，其前身江户在德川幕府时期成为日本的实际统治中心，奠定了其作为权力核心的地位。1868年明治维新后，江户改名为东京，意为“东方的京城”，标志着日本从封建社会向现代国家转型的重要一步。如今，东京以其独特的魅力吸引着来自世界各地的游客、商人和学者，它既保留了深厚的传统文化底蕴，又展现出极具未来感的现代科技风貌。这种传统与现代的完美融合，使得东京在全球城市排名中始终名列前茅，成为亚洲乃至全球最具活力的城市之一。理解东京，不仅需要关注其表面的繁华景象，更需要深入探究其历史脉络、地理特征、交通网络、文化精髓以及丰富的旅游景点，才能全面领略这座超级都市的独特魅力。\n\n东京:从地理角度来看，东京位于日本本州岛关东平原的东南部，地处太平洋沿岸，拥有得天独厚的地理位置。东京都下辖23个特别区以及多摩地区、伊豆群岛和小笠原群岛，总面积约为2194平方公里。其中，23个特别区构成了东京的核心区域，这里人口密度极高，是商业、行政和文化活动的主要集中地。多摩地区则位于东京的西部和南部，地形较为复杂，包含山地、丘陵和平原，是许多居民居住的地方，同时也拥有众多自然公园和休闲设施。东京的地形总体呈现东南高、西北低的趋势，西部和南部多山，而东部和北部则多为平原。这种地形特征对东京的城市规划和交通布局产生了深远影响。例如，山手线等铁路线路大致沿着山麓地带呈环形分布，连接了各个主要区域。此外，东京还面临着地震、台风等自然灾害的威胁，因此城市基础设施的建设非常注重抗震性能和防灾能力。尽管面临诸多挑战，东京依然凭借其优越的地理位置和强大的城市韧性，保持着全球领先的城市地位。\n\n东京:东京的交通系统以其高效、准时和便捷而闻名于世，是全球最发达的城市交通网络之一。东京的公共交通主要由铁路、地铁、巴士和出租车组成，其中铁路和地铁构成了城市交通的骨架。JR东日本、东京地铁、都营地铁以及私铁公司共同编织了一张密集的交通网，覆盖了东京的每一个角落。山手线作为东京最著名的环形铁路线，连接了新宿、涩谷、池袋、上野等主要车站，是游客和市民日常出行的重要选择。除了山手线，还有中央线、总武线、京滨东北线等多条干线铁路，以及无数支线铁路，形成了复杂的换乘网络。地铁系统则深入城市地下，提供了更精细化的服务，如银座线、丸之内线、日比谷线等，每条线路都有其独特的色彩和标识，方便乘客识别。巴士系统则填补了铁路和地铁未能覆盖的空白区域，提供了门到门的便利服务。东京的交通不仅速度快，而且准点率极高，即使在早晚高峰时段，也能保持相对有序的运行。此外，东京还大力发展自行车道和步行道，鼓励绿色出行，进一步提升了城市的交通可持续性。\n\n东京:东京的文化丰富多彩，既有深厚的传统底蕴，又有鲜明的现代特色。作为日本的文化中心，东京汇聚了各种艺术形式，包括传统艺术如能剧、歌舞伎、花道、茶道，以及现代艺术如当代绘画、雕塑、电影、音乐和时尚。东京的博物馆和美术馆数量众多，如东京国立博物馆、国立新美术馆、森美术馆等，收藏了大量珍贵的艺术品和历史文物，展示了日本乃至亚洲的艺术成就。此外，东京还是日本流行文化的重要发源地，动漫、漫画、电子游戏和偶像文化在这里蓬勃发展，影响了全球年轻人的生活方式。东京的时尚产业也极具影响力，原宿、表参道、银座等区域是时尚潮流的聚集地，设计师品牌和国际大牌在此交汇，展现了东京独特的审美风格。在饮食文化方面，东京拥有从高端怀石料理到街头小吃、从传统寿司到现代融合菜的各种美食选择，满足了不同口味的需求。东京的文化氛围开放包容，各种文化元素在这里碰撞融合，形成了独特的都市文化景观。\n\n东京:东京的旅游景点众多，涵盖了历史古迹、现代地标、自然公园和购物娱乐区等多个方面。浅草寺是东京最古老的寺庙，建于628年，其标志性的雷门大灯笼是游客必打卡的地标之一。在浅草寺周边，游客可以体验到传统的日本风情，品尝地道的街头小吃，购买纪念品。明治神宫位于原宿附近，是一座供奉明治天皇和昭宪皇后的神社，周围被茂密的森林环绕，是都市中难得的宁静之地。皇居是现任天皇的居所，虽然内部不对外开放，但外围的东御苑和北之丸公园免费开放，游客可以在此欣赏历史建筑和自然景观。新宿是东京最大的交通枢纽和商业中心，高楼林立，霓虹闪烁"
+          }
+        ]
+      },
+      "log": {
+        "path": "/tmp/oh-my-vllm-tilelang-accepted-batch.log",
+        "sha256": "b967bac856c9bbd2981de409fc2ca7504ad0ede88d804fd439f4ab1553a27917"
+      }
+    },
+    {
+      "mode": "batch-mtp",
+      "result": {
+        "stats": {
+          "steps": 740,
+          "prefix_hit_tokens": 7056,
+          "initial_prefix_hit_tokens": 3136,
+          "preemptions": 3,
+          "accepted_draft_tokens": 1176
+        },
+        "requests": [
+          {
+            "question": "请用中文写一篇至少四千字的文章,详细介绍北京的历史、地理、交通、文化和景点。每段都以“北京:”开头,不要介绍另一个城市。请直接开始正文。",
+            "output_tokens": 1024,
+            "text": "北京:作为中华人民共和国的首都，北京不仅是中国政治、文化和国际交流的中心，更是一座拥有三千多年建城史、八百多年建都史的古老城市。这座城市的历史底蕴深厚，从辽代的燕京、金代的中都、元大都，到明清两代的京师，直至现代的新中国首都，北京始终处于中国历史发展的核心位置。其历史脉络清晰地记录了中国古代政治制度的演变、城市规划的巅峰以及多元文化的融合。在漫长的历史长河中，北京见证了无数朝代的更迭与兴衰，每一块砖瓦、每一座宫殿都承载着厚重的历史记忆。这种历史连续性使得北京不仅仅是一个地理概念，更是一个文化符号，象征着中华文明的坚韧与辉煌。了解北京，首先必须深入理解其历史背景，因为正是这些历史积淀赋予了这座城市独特的灵魂与气质，使其在全球众多大都市中独树一帜，成为东方古都的典范。\n\n北京:在地理环境方面，北京位于华北平原的北部边缘，背靠燕山山脉，西倚太行山脉，面向渤海，这种“背山面海”的地理格局赋予了北京独特的自然风貌和战略地位。北京市总面积约为16410.54平方公里，地形呈现西北高、东南低的特点。西北部为山地和丘陵，约占全市总面积的六分之五，主要山脉包括燕山和太行山，其中东部的军都山和南部的太行山构成了北京的天然屏障。东南部为平原，约占全市总面积的六分之一，主要由永定河、潮白河等河流冲积而成，地势平坦开阔，是城市建设和农业发展的主要区域。这种地形差异不仅影响了北京的气候特征，也决定了其城市空间布局的基本形态。北京属于暖温带半湿润大陆性季风气候，四季分明，春季多风干燥，夏季炎热多雨，秋季天高气爽，冬季寒冷干燥。这种气候条件使得北京在四季中呈现出截然不同的自然景观，从春天的樱花烂漫到夏天的荷花盛开，从秋天的红叶满山到冬天的银装素裹，每一季都有独特的魅力。\n\n北京:交通网络是北京作为国际大都市的重要支撑，其发达的交通体系不仅连接着城市的各个角落，也将其与全国乃至世界紧密相连。北京拥有世界上最繁忙的机场之一——北京首都国际机场和北京大兴国际机场，这两座机场共同构成了北京的国际航空枢纽，每年接待数以千万计的国内外旅客。铁路方面，北京南站、北京西站、北京北站等高铁枢纽站构成了中国高速铁路网络的核心节点，通过京沪、京广、京哈等高铁线路，北京与上海、广州、哈尔滨等主要城市实现了快速连接，极大地缩短了时空距离。在城市内部，北京地铁系统是全球规模最大的城市轨道交通网络之一，线路纵横交错，覆盖了城市的主要居住区、商业区和旅游景点，为市民和游客提供了便捷、高效的出行方式。此外，北京还建立了完善的公交系统和快速路网络，包括二环路、三环路、四环路、五环路以及六环路，形成了环状加放射状的道路结构，有效缓解了城市交通压力。近年来，随着共享单车、网约车等新型出行方式的兴起，北京的绿色出行理念得到了进一步推广，交通结构更加多元化，为城市的可持续发展提供了有力保障。\n\n北京:文化是北京最鲜明的名片，这座城市汇聚了中华文化的精华，展现了传统与现代的完美融合。北京是京剧的发源地之一，京剧艺术以其独特的唱腔、身段和服饰，成为了中国国粹，吸引了无数国内外观众。除了京剧，北京还拥有丰富的非物质文化遗产，如景泰蓝、漆器、剪纸等手工艺技艺，这些技艺不仅体现了匠人的精湛技艺，也承载着深厚的文化内涵。在文学艺术领域，北京诞生了众多杰出的作家、画家和音乐家，他们的作品深刻反映了社会变迁和人民情感，为中国文化艺术的发展做出了巨大贡献。北京还是中国高等教育和科研的重镇，拥有北京大学、清华大学等众多世界知名高校，以及中国科学院、中国社会科学院等顶级科研机构，这些机构不仅培养了大量高素质人才，也推动了科技创新和文化交流。此外，北京定期举办各类文化节庆活动，如北京国际电影节、北京国际图书节等，这些活动不仅丰富了市民的文化生活，也提升了北京的国际影响力，使其成为世界文化之都的重要组成部分。\n\n北京:故宫，又称紫禁城，是北京最具代表性的景点之一，也是世界上现存规模最大、保存最为完整的木质结构古建筑群。故宫始建于明永乐四年（1406年），历时十四年建成，曾是明清两代二十四位皇帝的皇宫。故宫占地面积72万平方米，建筑面积约15万平方米，拥有大小宫殿七十多座，房屋九千余间。其建筑布局严谨，中轴线对称，体现了中国古代“天人合一”的哲学思想和皇权至上的政治理念。故宫内的太和殿、中和殿、保和殿三大殿是举行重大典礼的地方，象征着皇权的威严；乾清宫、交泰殿、坤宁宫则是皇帝的寝宫，展现了宫廷生活的私密与奢华。故宫不仅是一座建筑宝库，更是一座巨大的博物馆，收藏了数以百万计的珍贵文物，包括书画、陶瓷、玉器、金银"
+          },
+          {
+            "question": "请用中文写一篇至少四千字的文章,详细介绍东京的历史、地理、交通、文化和景点。每段都以“东京:”开头,不要介绍另一个城市。请直接开始正文。",
+            "output_tokens": 1024,
+            "text": "东京:作为日本的首都及最大城市，东京不仅是日本政治、经济、文化和交通的中心，更是全球最具影响力的国际大都市之一。这座城市的历史可以追溯到数百年前，其前身是江户，一个由德川家康建立的幕府所在地。1868年明治维新后，天皇迁都至此，并正式更名为东京，意为“东方的京城”。这一名称的变更标志着日本从封建社会向现代国家转型的重要时刻。如今，东京以其独特的魅力吸引着来自世界各地的游客、商人和学者。它是一座融合了古老传统与现代科技的城市，在这里，你可以看到千年古刹与摩天大楼比邻而立，感受到传统茶道与流行文化交织的独特氛围。东京的人口密度极高，拥有超过一千四百万居民，若算上整个东京都市圈，人口更是超过三千七百万，使其成为世界上人口最多的都市区之一。这种高密度的人口结构不仅带来了巨大的活力，也促使城市在基础设施、公共服务和文化设施方面达到了极高的水平。东京的国际化程度极高，拥有众多外国使馆、国际组织办事处和跨国公司总部，是全球金融、贸易和科技的重要枢纽。无论是对于想要了解日本文化的游客，还是寻求商业机会的企业家，东京都提供了一个无与伦比的平台。这座城市以其高效、整洁和安全著称，同时也以其丰富的饮食文化、艺术场景和娱乐设施闻名于世。在东京，时间仿佛被压缩，过去、现在和未来在这里交汇，创造出一种独特的都市体验。\n\n东京:从地理角度来看，东京位于日本本州岛关东平原的东南部，濒临东京湾。这一地理位置赋予了东京天然的港口优势，使其自古以来就是重要的贸易中心。东京的地形多样，既有平坦的平原，也有起伏的山丘和丘陵。城市的核心区域主要由填海造陆形成，这使得东京拥有众多人工岛屿和沿海地区。东京湾不仅是重要的交通枢纽，也是城市景观的重要组成部分，沿岸分布着众多商业区、住宅区和休闲设施。东京的气候属于温带季风气候，四季分明。春季温暖宜人，樱花盛开，是旅游的最佳季节之一；夏季炎热潮湿，是梅雨季节，降雨量较大；秋季凉爽干燥，红叶满山，景色宜人；冬季寒冷干燥，偶尔会有降雪，但通常不会太厚。这种气候特点使得东京的四季各有特色，为居民和游客提供了不同的户外活动选择。东京的水系发达，隅田川、荒川等河流穿城而过，不仅为城市提供了水源，也构成了城市景观的一部分。河流沿岸通常设有公园和步道，是市民休闲的好去处。此外，东京周围的山脉，如奥多摩和秩父，为城市提供了丰富的自然资源，也是户外探险和自然观察的理想地点。这些山脉不仅保护了城市免受自然灾害的影响，也为城市居民提供了逃离都市喧嚣、亲近自然的避难所。东京的地理环境与其城市规划紧密相连，城市的发展充分利用了自然地形和水系，形成了独特的城市肌理。\n\n东京:东京的交通系统是其城市运转的命脉，也是全球最发达、最高效的公共交通网络之一。东京的轨道交通以地铁和私铁为主，形成了密集且覆盖广泛的网络。东京地铁由多家运营商共同运营，包括东京地下铁、都营地铁等，线路纵横交错，连接城市的各个角落。除了地铁，还有众多私营铁路公司，如JR东日本、东急、京王、小田急等，它们不仅服务于市内交通，还连接周边城市，形成了庞大的通勤网络。东京的铁路系统以其准点率、安全性和便利性著称，列车班次频繁，几乎每几分钟就有一班，极大地方便了市民的出行。除了轨道交通，东京的公交系统也非常发达，公交车线路覆盖了地铁无法到达的区域，为市民提供了灵活的出行选择。此外，东京还有发达的出租车服务，虽然价格较高，但在夜间或紧急情况下非常方便。东京的机场系统同样世界领先，拥有成田国际机场和羽田机场两个主要国际机场，以及多个国内机场。成田机场位于城市东部，距离市中心较远，但交通连接便捷；羽田机场则位于城市南部，靠近市中心，是许多国际航线的枢纽。东京的交通系统不仅服务于本地居民，也为游客提供了极大的便利。城市内设有多个旅游信息中心，提供多语言的交通指南和地图，帮助游客轻松规划行程。此外，东京还引入了智能交通系统，利用大数据和人工智能优化交通流量，减少拥堵和污染。这种高效的交通网络是东京作为全球大都市的重要支撑，也是其城市竞争力的重要组成部分。\n\n东京:东京的文化底蕴深厚，融合了日本传统与现代流行文化，形成了独特的文化景观。在传统文化方面，东京拥有众多历史遗迹和博物馆，如东京国立博物馆、上野公园内的众多博物馆、浅草寺、明治神宫等。这些场所不仅展示了日本的历史和艺术，也体现了日本人对传统文化的尊重和传承。东京的茶道、花道、能剧等传统艺术形式依然活跃，许多道场和剧院定期举办表演和体验活动，让游客能够亲身体验日本文化的精髓。在流行文化方面，东京是全球动漫"
+          }
+        ]
+      },
+      "log": {
+        "path": "/tmp/oh-my-vllm-tilelang-accepted-batch-mtp.log",
+        "sha256": "0599cdca617c3efa684a9d8f2f7a833056dd8711abaa6b9c6d07246e15d30754"
+      }
+    }
+  ],
+  "service_request_counters": [
+    "2026-09-22T08:56:58.718392Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=1 output_tokens=22 input_tokens=35 cached_tokens=0 reasoning_tokens=0 elapsed_s=40.731780055 ttft_ms=31198 output_tps=0.5401187959449223 steps=6 proposed_draft_tokens=20 accepted_draft_tokens=16 finish_reason=stop",
+    "2026-09-22T08:56:58.824385Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=2 output_tokens=21 input_tokens=35 cached_tokens=0 reasoning_tokens=0 elapsed_s=0.104946449 ttft_ms=41 output_tps=200.10205395325002 steps=6 proposed_draft_tokens=20 accepted_draft_tokens=15 finish_reason=stop",
+    "2026-09-22T08:57:07.961577Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=3 output_tokens=38 input_tokens=325 cached_tokens=0 reasoning_tokens=0 elapsed_s=9.136393097 ttft_ms=9038 output_tps=4.159190568592936 steps=9 proposed_draft_tokens=32 accepted_draft_tokens=29 finish_reason=stop",
+    "2026-09-22T08:57:08.458751Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=4 output_tokens=159 input_tokens=33 cached_tokens=0 reasoning_tokens=143 elapsed_s=0.496037963 ttft_ms=50 output_tps=320.5399825416185 steps=38 proposed_draft_tokens=148 accepted_draft_tokens=121 finish_reason=stop",
+    "2026-09-22T08:57:08.960270Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=5 output_tokens=159 input_tokens=33 cached_tokens=0 reasoning_tokens=143 elapsed_s=0.500465175 ttft_ms=41 output_tps=317.70442368942054 steps=39 proposed_draft_tokens=152 accepted_draft_tokens=120 finish_reason=stop",
+    "2026-09-22T08:57:09.182286Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=6 output_tokens=61 input_tokens=323 cached_tokens=0 reasoning_tokens=22 elapsed_s=0.22099931 ttft_ms=52 output_tps=276.01896132616884 steps=15 proposed_draft_tokens=56 accepted_draft_tokens=46 finish_reason=stop",
+    "2026-09-22T08:57:09.279814Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=7 output_tokens=22 input_tokens=35 cached_tokens=0 reasoning_tokens=0 elapsed_s=0.096411382 ttft_ms=38 output_tps=228.18882525716725 steps=6 proposed_draft_tokens=20 accepted_draft_tokens=16 finish_reason=stop",
+    "2026-09-22T08:57:09.379429Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=8 output_tokens=21 input_tokens=35 cached_tokens=0 reasoning_tokens=0 elapsed_s=0.098854545 ttft_ms=37 output_tps=212.43332817929615 steps=6 proposed_draft_tokens=20 accepted_draft_tokens=15 finish_reason=stop",
+    "2026-09-22T08:57:09.514985Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=9 output_tokens=38 input_tokens=325 cached_tokens=0 reasoning_tokens=0 elapsed_s=0.134654158 ttft_ms=39 output_tps=282.2044307016498 steps=9 proposed_draft_tokens=32 accepted_draft_tokens=29 finish_reason=stop",
+    "2026-09-22T08:57:10.000656Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=10 output_tokens=159 input_tokens=33 cached_tokens=0 reasoning_tokens=143 elapsed_s=0.484588355 ttft_ms=37 output_tps=328.1135387580661 steps=38 proposed_draft_tokens=148 accepted_draft_tokens=121 finish_reason=stop",
+    "2026-09-22T08:57:10.499175Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=11 output_tokens=159 input_tokens=33 cached_tokens=0 reasoning_tokens=143 elapsed_s=0.497465475 ttft_ms=38 output_tps=319.62017062591127 steps=39 proposed_draft_tokens=152 accepted_draft_tokens=120 finish_reason=stop",
+    "2026-09-22T08:57:10.708036Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=12 output_tokens=61 input_tokens=323 cached_tokens=0 reasoning_tokens=22 elapsed_s=0.207594065 ttft_ms=39 output_tps=293.84269728520417 steps=15 proposed_draft_tokens=56 accepted_draft_tokens=46 finish_reason=stop",
+    "2026-09-22T08:57:10.868330Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=13 output_tokens=3 input_tokens=24 cached_tokens=0 reasoning_tokens=0 elapsed_s=0.104134483 ttft_ms=93 output_tps=28.80890089020752 steps=2 proposed_draft_tokens=4 accepted_draft_tokens=1 finish_reason=stop",
+    "2026-09-22T08:57:10.982510Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=14 output_tokens=29 input_tokens=52 cached_tokens=0 reasoning_tokens=25 elapsed_s=0.113466479 ttft_ms=40 output_tps=255.58209134170806 steps=7 proposed_draft_tokens=24 accepted_draft_tokens=22 finish_reason=stop",
+    "2026-09-22T08:57:11.096593Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=15 output_tokens=31 input_tokens=22 cached_tokens=0 reasoning_tokens=27 elapsed_s=0.113457399 ttft_ms=39 output_tps=273.23030735086746 steps=7 proposed_draft_tokens=24 accepted_draft_tokens=24 finish_reason=stop",
+    "2026-09-22T08:57:11.326260Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=16 output_tokens=53 input_tokens=64 cached_tokens=0 reasoning_tokens=49 elapsed_s=0.228883541 ttft_ms=41 output_tps=231.55880832864256 steps=16 proposed_draft_tokens=60 accepted_draft_tokens=37 finish_reason=stop",
+    "2026-09-22T08:57:11.539338Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=17 output_tokens=51 input_tokens=64 cached_tokens=0 reasoning_tokens=47 elapsed_s=0.212443461 ttft_ms=37 output_tps=240.06387280613922 steps=15 proposed_draft_tokens=56 accepted_draft_tokens=36 finish_reason=stop",
+    "2026-09-22T08:57:11.588855Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=18 output_tokens=2 input_tokens=23 cached_tokens=0 reasoning_tokens=0 elapsed_s=0.04881734 ttft_ms=38 output_tps=40.969049112467005 steps=2 proposed_draft_tokens=4 accepted_draft_tokens=0 finish_reason=stop",
+    "2026-09-22T08:57:11.664796Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=19 output_tokens=13 input_tokens=47 cached_tokens=0 reasoning_tokens=0 elapsed_s=0.075125584 ttft_ms=39 output_tps=173.04357993410076 steps=4 proposed_draft_tokens=12 accepted_draft_tokens=9 finish_reason=stop",
+    "2026-09-22T08:57:14.832788Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=21 output_tokens=3 input_tokens=24 cached_tokens=0 reasoning_tokens=0 elapsed_s=3.16516341 ttft_ms=1302 output_tps=0.9478183624017061 steps=2 proposed_draft_tokens=4 accepted_draft_tokens=1 finish_reason=stop",
+    "2026-09-22T08:57:14.843440Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=20 output_tokens=13 input_tokens=25 cached_tokens=0 reasoning_tokens=0 elapsed_s=3.176206856 ttft_ms=38 output_tps=4.092932415734324 steps=4 proposed_draft_tokens=12 accepted_draft_tokens=9 finish_reason=stop",
+    "2026-09-22T08:57:14.960213Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=23 output_tokens=3 input_tokens=24 cached_tokens=0 reasoning_tokens=0 elapsed_s=0.061506712 ttft_ms=51 output_tps=48.77516457065694 steps=2 proposed_draft_tokens=4 accepted_draft_tokens=1 finish_reason=stop",
+    "2026-09-22T08:57:34.081519Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=24 output_tokens=21 input_tokens=131099 cached_tokens=0 reasoning_tokens=0 elapsed_s=16.382004345 ttft_ms=13287 output_tps=1.2818944225472308 steps=11 proposed_draft_tokens=20 accepted_draft_tokens=15 finish_reason=stop",
+    "2026-09-22T08:57:34.381816Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=25 output_tokens=21 input_tokens=131099 cached_tokens=130928 reasoning_tokens=0 elapsed_s=0.292251393 ttft_ms=223 output_tps=71.85594492615472 steps=6 proposed_draft_tokens=20 accepted_draft_tokens=15 finish_reason=stop",
+    "2026-09-22T08:57:34.666193Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=26 output_tokens=21 input_tokens=131099 cached_tokens=130928 reasoning_tokens=0 elapsed_s=0.276700408 ttft_ms=208 output_tps=75.89435863788101 steps=6 proposed_draft_tokens=20 accepted_draft_tokens=15 finish_reason=stop",
+    "2026-09-22T08:57:34.941202Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=27 output_tokens=21 input_tokens=131099 cached_tokens=130928 reasoning_tokens=0 elapsed_s=0.267623844 ttft_ms=199 output_tps=78.46834454705763 steps=6 proposed_draft_tokens=20 accepted_draft_tokens=15 finish_reason=stop",
+    "2026-09-22T08:57:37.340064Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=28 output_tokens=317 input_tokens=6887 cached_tokens=0 reasoning_tokens=62 elapsed_s=1.53822333 ttft_ms=406 output_tps=206.08190879538927 steps=71 proposed_draft_tokens=274 accepted_draft_tokens=247 finish_reason=stop",
+    "2026-09-22T08:57:40.136920Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=29 output_tokens=402 input_tokens=20449 cached_tokens=6272 reasoning_tokens=254 elapsed_s=2.752953191 ttft_ms=749 output_tps=146.02500373570646 steps=142 proposed_draft_tokens=560 accepted_draft_tokens=261 finish_reason=stop",
+    "2026-09-22T08:57:52.428489Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=30 output_tokens=2259 input_tokens=25225 cached_tokens=20384 reasoning_tokens=211 elapsed_s=12.260177746 ttft_ms=331 output_tps=184.2550774385812 steps=664 proposed_draft_tokens=2645 accepted_draft_tokens=1596 finish_reason=stop",
+    "2026-09-22T08:57:53.751650Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=31 output_tokens=168 input_tokens=6888 cached_tokens=0 reasoning_tokens=92 elapsed_s=0.82476321 ttft_ms=320 output_tps=203.69482775547178 steps=41 proposed_draft_tokens=156 accepted_draft_tokens=128 finish_reason=stop",
+    "2026-09-22T08:57:54.703228Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=32 output_tokens=166 input_tokens=9637 cached_tokens=6272 reasoning_tokens=32 elapsed_s=0.921055704 ttft_ms=198 output_tps=180.2279702292577 steps=43 proposed_draft_tokens=164 accepted_draft_tokens=124 finish_reason=stop",
+    "2026-09-22T08:57:55.916512Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=33 output_tokens=158 input_tokens=13698 cached_tokens=9408 reasoning_tokens=73 elapsed_s=1.178194653 ttft_ms=331 output_tps=134.1034773818482 steps=48 proposed_draft_tokens=184 accepted_draft_tokens=111 finish_reason=stop",
+    "2026-09-22T08:57:58.697087Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=34 output_tokens=568 input_tokens=20776 cached_tokens=13328 reasoning_tokens=479 elapsed_s=2.75111301 ttft_ms=407 output_tps=206.46189303579354 steps=180 proposed_draft_tokens=712 accepted_draft_tokens=389 finish_reason=stop",
+    "2026-09-22T08:58:14.522860Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=35 output_tokens=3498 input_tokens=27118 cached_tokens=20384 reasoning_tokens=1438 elapsed_s=15.803593974 ttft_ms=393 output_tps=221.34205711402694 steps=1001 proposed_draft_tokens=3988 accepted_draft_tokens=2498 finish_reason=stop"
+  ],
+  "service_log": {
+    "path": "/tmp/oh-my-vllm-tilelang-accepted-service-server.log",
+    "sha256": "1b89d04578e45a5b49b5e432f85f46ee5f93c0f6c92157f21d750547a8bf10c4"
+  },
+  "agentic_review": "Both APIs made9 successful tool calls, read both required source files and used tool-result follow-ups. Chat17.095s/Responses22.058s. Both explicitly report pending final TileLang acceptance at read time. Caveats: Chat abbreviates the install path and its final gap estimate reuses an older0.14% figure; Responses uses an approximate0.1% gap and historical memory figures. Final text is preserved. Neither answer is claimed perfectly grounded.",
+  "discarded_validation_drivers": "An early diagnostic overlapped source editing; a probe driver incorrectly set the MTP coverage flag to4; and a batch rerun reused a stale IPC socket. These attempts are not acceptance. Corrected fixed-source/flag/unique-socket runs are retained here.",
+  "cleanup": "Service 18025 and its owned worker exited; port released. Each test/boundary worker exited at completion. Formal benchmark workers are managed separately."
+}

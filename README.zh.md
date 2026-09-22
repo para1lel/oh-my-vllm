@@ -16,7 +16,7 @@ scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
 scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64
 ```
 
-请使用唯一的 socket 路径。文本脚本加上 `--num-speculative-tokens 4` 即启用 MTP。当前回归包含普通、MTP4 和前缀命中模式，每组完整预热两次、正式测量至少五次。新的 12 组吞吐/TTFT 基线正在收集，详见[测试](docs/testing.zh.md)。`benchmarks/compare_vllm.py` 保留此前九组历史对比及其原始配置。
+请使用唯一的 socket 路径。文本脚本加上 `--num-speculative-tokens 4` 即启用 MTP。当前回归包含普通、MTP4 和前缀命中模式，每组完整预热两次、正式测量至少五次。全部 12 组 TileLang 吞吐/TTFT 对比已通过，稳定性采用用户批准的 10% 上限，详见[测试](docs/testing.zh.md)。`benchmarks/compare_vllm.py` 保留此前九组历史对比及其原始配置。
 
 ## 本地 OpenAI 服务
 
@@ -24,11 +24,11 @@ scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /t
 scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/oh-my-vllm-serve.ipc --num-gpu-blocks 4200 --mamba-blocks 128 --max-model-len 262144 --num-speculative-tokens 4 serve
 ```
 
-Chat Completions 和 Responses 地址为 `http://127.0.0.1:8000/v1`，支持思考、工具、JSON 约束和 Responses 存储。[服务文档](docs/serving.zh.md)说明支持的 schema、OMP 配置和验收命令。CPU/客户端测试已通过；真实 MTP4 约束、生命周期、长前缀复用及两种 oh-my-pi 工作流已通过。六组输入输出合计 262144 token 的边界检查通过且无抢占；正式 12 组吞吐/TTFT 验收仍待完成。当前结果见[交接记录](docs/handoff.zh.md)。
+Chat Completions 和 Responses 地址为 `http://127.0.0.1:8000/v1`，支持思考、工具、JSON 约束和 Responses 存储。[服务文档](docs/serving.zh.md)说明支持的 schema、OMP 配置和验收命令。CPU/客户端测试已通过；真实 MTP4 约束、生命周期、长前缀复用及两种 oh-my-pi 工作流已通过。六组输入输出合计 262144 token 的边界检查通过且无抢占；正式 12 组吞吐/TTFT 验收全部通过。当前结果见[交接记录](docs/handoff.zh.md)。
 
 ## 验证与性能
 
-全部 12 组要求吞吐至少达到更新后 vLLM EngineCore 的 95%，TTFT 不超过其 110%。此前独立运行时的九组测试已通过原始冻结基线门槛；这些历史结果不满足新的 TTFT 验收要求。[验收证据](docs/acceptance.zh.md)分别说明当前与历史结果。
+全部 12 组要求吞吐至少达到更新后 vLLM EngineCore 的 95%，TTFT 不超过其 110%，两种指标的极差/中位数均 <=10%。TileLang 实现已通过这些门槛，详见当前验收表。此前独立运行时的九组测试已通过原始冻结基线门槛；这些历史结果不满足新的 TTFT 验收要求。[验收证据](docs/acceptance.zh.md)分别说明当前与历史结果。
 
 ```bash
 scripts/with-env.sh cargo test --workspace

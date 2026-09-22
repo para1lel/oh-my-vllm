@@ -75,10 +75,14 @@ median of per-repetition maximum request TTFTs. Pure GPU prefill timing is diagn
 At least two full warmups and five measured repetitions are required. Ordinary/MTP
 measurements reset prefix reuse; prefix mode explicitly seeds the controlled hit.
 Compilation/new graph capture invalidates a measured run. If TTFT or throughput
-(max-min)/median exceeds 5%, investigate and repeat the complete measurement set;
+(max-min)/median exceeds 10%, investigate and repeat the complete measurement set;
 retain every attempt and reason for exclusion. No cherry-picked repetitions.
-Cold latency is reported separately with no hard gate. Fix failures rather than
-relaxing thresholds. Final acceptance of the new matrix is pending.
+The user revised the stability limit from 5% to 10% on 2026-09-22 for both
+metrics and both engines. Preserve original artifacts and record the new policy
+when re-evaluating complete raw measurement sets. Throughput/TTFT ratio gates
+remain unchanged. Cold latency is reported separately with no hard gate. Fix failures rather than
+relaxing thresholds without user authorization. All twelve TileLang rows pass
+the revised policy; see acceptance.md and the preserved raw evidence.
 
 ## REQ-CONTEXT-001 — Maximum context and memory
 

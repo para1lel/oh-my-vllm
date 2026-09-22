@@ -1,5 +1,7 @@
 # 测试指南 — oh-my-vllm
 
+当前 EngineCore 对比要求吞吐 >=95%、TTFT <=110%，基线和候选实现的两种指标均满足 (max-min)/median <=10%。用户于 2026-09-22 将稳定性上限从 5% 调整为 10%。重新判定必须保留原产物和全部原始重复，并注明新规则。
+
 ## 独立迁移检查
 
 使用 development.md 中的独立环境/缓存设置。CPU 测试包含 `test_batch_plan.py`、`test_mtp_plan.py`、`test_independent_sampler.py`；CUDA 测试包含 `test_independent_kernels.py`、`test_independent_decode_attention.py`、`test_decode_graph.py`、`test_elementwise.py`。实际模型探针将 `tests/probe_worker.py` 指定为 `OH_MY_VLLM_WORKER_PYTHON`，并设置 `OH_MY_VLLM_ENFORCE_EAGER=1`；MTP 另加 `OH_MY_VLLM_PROBE_MTP=1` 和 `--num-speculative-tokens 4`。下述探针容差保持不变。

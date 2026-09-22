@@ -1,5 +1,31 @@
 # Handoff — 2026-09-22
 
+## Current: TileLang acceptance and revised stability
+
+All seven project-owned custom-kernel modules now use TileLang. Clean measured
+implementation da75c02 passes all twelve frozen EngineCore throughput/TTFT rows
+under the user-approved10% spread/median limit (revised from5% on2026-09-22).
+The same complete raw measurement sets were re-evaluated; original decisions
+are preserved. Prefix batch1 has5.97% TTFT spread and failed only the old gate.
+Minimum throughput ratio is95.3098%; maximum TTFT ratio is101.4735%.
+The comparator emits its stability limit and CPU tests cover both engines and
+metrics below, at and above10%. No GPU inference source changed for this revision.
+
+The unchanged full GPU suite passes146 tests +12 subtests, with no skips. Actual
+ordinary/MTP FP64 probes, six262144-total-token capacity rows (no OOM/preemption),
+text/preemption/prefix, twelve MTP4 constraint cases, lifecycle and long-service
+checks pass. Both real oh-my-pi APIs completed nine successful tool calls each,
+with positive MTP activity. Their answers predate this final acceptance update;
+raw answers and grounding caveats are retained. Final document readback is next.
+See acceptance.md and bench/baseline/2026-09-22-tilelang-*.json for full evidence.
+
+TileFoundry is development-only, pinned to the personal fork6b1b149. Offline
+TileLang AutoTuner and cost/memory analysis inform production dispatch. The HIR
+cannot represent FP64 phase reduction; independent FP64/model tests remain the
+correctness authority. All25 owned Markdown documents have Chinese companions.
+Earlier sections below are historical progress, not current blockers.
+
+
 ## Bilingual documentation (user-requested)
 
 All 25 project-owned Markdown sources now have same-directory `.zh.md`

@@ -19,4 +19,4 @@
 - [ADR003](decisions/ADR-003-mtp-state-slots.zh.md)：推测状态和 BF16 SSM。
 - [ADR004](decisions/ADR-004-openai-serving.zh.md)：以 Rust 为主的双 API 服务方向。
 
-普通/MTP 文本、实际路径探针和功能组合已经通过检查。原有九组性能测试全部通过。具体配置见 acceptance.md，历史情况见 handoff.md；不要仅依赖旧提交时的状态记录。
+普通/MTP 文本、实际路径探针和功能组合已经通过检查。全部 12 组 TileLang 吞吐/TTFT 测试通过，稳定性采用用户批准的 10% 上限。[TileLang 开发](tilelang-development.zh.md)说明离线自动调优和仅开发使用的 TileFoundry fork。具体配置见 acceptance.md，历史情况见 handoff.md；不要仅依赖旧提交时的状态记录。

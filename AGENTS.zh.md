@@ -17,7 +17,7 @@
 - **目标 Python 环境：** `/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python`。设置 `PYTHONPATH=/data0/shared/dongwu.chen/oh-my-vllm/python:$PYTHONPATH`。
 - **依赖：** 按依赖顺序选择较新且兼容的稳定版本，验证后固定组合。高层依赖放在 oh-my-vllm 环境中。方便时使用可正常工作的系统 CUDA/编译工具，否则放在该环境中维护。驱动由宿主机提供。
 - **范围：** 保留全部现有功能。未来模型架构、单机多 GPU、其他 NVIDIA 后端及本地 DSpark checkpoint 只需简要说明扩展方式，不添加空接口，也不声称支持未经测试的能力。
-- **回归基线（2026-09-22）：** 用户授权将隔离的 vLLM 仓库/环境更新到官方 main 并冻结 SHA，然后重测全部 12 组 TTFT 和吞吐。旧产物作为历史保留。仅基线工具可以使用隔离的 vLLM 环境；项目构建、测试和推理必须保持独立。每组要求吞吐 >=95%、TTFT <= 新基线的 110%。至少完整预热两次、测量五次；极差/中位数 >5% 时调查并重测。
+- **回归基线（2026-09-22）：** 用户授权将隔离的 vLLM 仓库/环境更新到官方 main 并冻结 SHA，然后重测全部 12 组 TTFT 和吞吐。旧产物作为历史保留。仅基线工具可以使用隔离的 vLLM 环境；项目构建、测试和推理必须保持独立。每组要求吞吐 >=95%、TTFT <= 新基线的 110%。至少完整预热两次、测量五次；极差/中位数 >10% 时调查并重测。
 - **上下文：** 支持输入与输出合计最多 262144 token。普通模式及 MTP4 的 batch 1/2/4 边界测试必须无 OOM、无重计算抢占地完成。按需优化显存布局，保留 block784 和现有正确性。
 - **Rust 环境：** `/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/cargo`；`CARGO_TARGET_DIR=/data0/shared/dongwu.chen/oh-my-vllm/target`。
 - **块大小：** 784 token（Qwen3.8 混合模型要求，不可更改）。

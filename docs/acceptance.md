@@ -1,6 +1,82 @@
 # Acceptance evidence
 
-## TTFT and 262144 context — in progress, 2026-09-22
+## TileLang migration — 2026-09-22
+
+Implementation `da75c02` replaces all project-owned Triton kernels in seven
+modules with TileLang. Independent libraries may still use Triton internally.
+TileFoundry is a development-only personal fork/submodule; production does not
+import it. Runtime/build/test independence from vLLM is retained.
+
+All12 rows pass throughput>=95%, TTFT<=110% and spread/median<=10%.
+
+| Mode / input / batch | Baseline tok/s | TileLang tok/s | Throughput ratio | TTFT ratio |
+|---|---:|---:|---:|---:|
+| ordinary-32768-1 | 90.10 | 104.58 | 116.06% | 98.57% |
+| ordinary-32768-2 | 163.50 | 190.17 | 116.31% | 100.31% |
+| ordinary-32768-4 | 288.41 | 327.68 | 113.62% | 98.67% |
+| mtp-32768-1 | 329.36 | 316.30 | 96.03% | 98.63% |
+| mtp-32768-2 | 497.37 | 480.03 | 96.51% | 100.72% |
+| mtp-32768-4 | 729.62 | 695.40 | 95.31% | 101.47% |
+| prefix-32768-1 | 93.01 | 109.00 | 117.20% | 82.33% |
+| prefix-32768-2 | 173.52 | 214.35 | 123.53% | 85.17% |
+| prefix-32768-4 | 325.31 | 376.40 | 115.71% | 80.06% |
+| ordinary-131072-1 | 72.35 | 81.79 | 113.05% | 96.45% |
+| ordinary-131072-2 | 114.06 | 127.04 | 111.38% | 95.70% |
+| ordinary-131072-4 | 162.85 | 176.23 | 108.21% | 96.52% |
+
+See [performance evidence](../bench/baseline/2026-09-22-tilelang-acceptance.json) for complete repetitions, provenance, prior failures and interference exclusions, and [correctness evidence](../bench/baseline/2026-09-22-tilelang-correctness.json) for functional and real-service records.
+
+On 2026-09-22 the user revised stability from 5% to 10%, leaving throughput
+and TTFT ratio gates unchanged. Complete raw sets were re-evaluated under the
+new policy; original decisions remain intact. Prefix batch1 has5.97% TTFT
+spread/median: it failed only the old5% gate and passes the new policy.
+
+Every final row uses this same clean implementation, two full warmups and five
+measured repetitions, the frozen baseline's CPU affinity, a UUID-pinned B200 and
+compilation/capture/cache/interference audits. The refreshed official EngineCore
+baseline is unchanged; vLLM was not rerun for this migration. This is a historical
+comparison across independent runs and framework versions, not a same-source
+paired experiment. Discarded external-GPU attempts and prior failed/unstable
+candidates remain in the evidence; no repetitions are selected individually.
+
+The complete existing GPU suite passes146 tests and12 subtests, without skips.
+Actual ordinary/MTP FP64 probes retain the original output/state tolerances.
+Packed views, candidate snapshots, graph replay and long positions remain covered.
+The fused Q/K normalization preserves its BF16 boundary; FP64 phase reduction
+fixes amplified rotary error near262144 before FP32 sin/cos. Rust workspace,
+fmt, hard100-column checks, clippy, Ruff and all-file hooks pass.
+
+All six258048-input/4096-output boundary rows complete without OOM or recompute
+preemption. Peak reserved memory is134687490048 bytes for ordinary and
+137703194624 bytes for MTP. These are cold capacity diagnostics, not throughput
+comparisons; ordinary batch4 also encountered an unrelated GPU process.
+Ordinary/MTP two-request text checks retain distinct Beijing/Tokyo subjects,
+1024-token outputs, and2/3 recompute preemptions. MTP uses3136 initial prefix-hit
+tokens and1176 accepted drafts. Fixed-length text probes ignore EOS; their trailing
+role markers are not EOS-aware service output.
+
+Twelve real MTP4 constraint cases, all thinking levels, stored-response lifecycle,
+mixed-batch scheduling and disconnect release pass. Both APIs accept131099-input
+strict JSON and reuse130928 cached tokens. The real oh-my-pi workflows read both
+required source files and send tool results back to the model; request logs show
+actual MTP proposals/acceptance. Final answer caveats are retained with raw text.
+Chat/Responses each completed9 successful tool calls in17.10/22.06s, with MTP activity on every request. Their answers correctly distinguish pending acceptance at read time, but reuse older gap estimates; Chat abbreviates the install path and Responses quotes historical memory. Complete text and these caveats are retained; successful tool execution is not perfect answer grounding.
+
+Offline TileLang AutoTuner searches use legal metadata, explicit CUDA Graph timing
+and independent references with no mismatch waiver. TileFoundry cost/memory
+analysis guides hypotheses; complete-operator and actual-model results decide
+production dispatch. Main improvements include asynchronous/coalesced KV access,
+shape-specific split/merge layouts, recurrent-state tiling, quantization/RMS launch
+choices and Q/K normalization/rotation fusion. Production never searches online.
+Temporary operator tests, tuning records and GPU traces remain outside the repo.
+The pinned HIR lacks FP64 and cannot certify the fused long-position phase path;
+its explicitly documented approximation does not replace FP64/model acceptance.
+
+All25 project-owned Markdown documents have Chinese companions. Agents use the
+English originals; future edits update both languages in the same change.
+
+
+## Historical TTFT and 262144-context investigation — 2026-09-22
 
 All six ordinary/MTP4 batch 1/2/4 maximum-context checks complete 258048 input +
 4096 output tokens without preemption. Separate FA/GDN capacities use 1400/128

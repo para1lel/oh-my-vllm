@@ -14,6 +14,8 @@ from pathlib import Path
 from compare_vllm import ROOT, parse_rows, run_engine, runtime_identity, source_identity
 from measurement import FROZEN_SHA, audit, hardware_identity
 
+MAX_SPREAD = 0.10
+
 
 def summarize(runs, batch_size, output_len, minimum=5):
     if len(runs) < minimum:
@@ -102,13 +104,16 @@ def compare(baseline, candidate):
     ours = summarize(candidate["runs"], workload["batch_size"], workload["output_len"])
     latency = ours["ttft_s"]["median"] / base["ttft_s"]["median"]
     throughput = ours["output_tps"]["median"] / base["output_tps"]["median"]
-    stable = all(m["spread"] <= 0.05 for group in (base, ours) for m in group.values())
+    stable = all(
+        m["spread"] <= MAX_SPREAD for group in (base, ours) for m in group.values()
+    )
     return dict(
         baseline=base,
         candidate=ours,
         ttft_ratio=latency,
         throughput_ratio=throughput,
         stable=stable,
+        max_spread=MAX_SPREAD,
         passed=stable and latency <= 1.1 and throughput >= 0.95,
     )
 

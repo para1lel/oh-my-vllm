@@ -101,7 +101,8 @@ CPU FP64 reference and actual-model checks remain authoritative for that boundar
 
 Retain all documented service, agentic, maximum-context and correctness checks.
 Use the twelve frozen EngineCore comparison rows: throughput at least95%, TTFT at
-most1.1x, with existing stability and provenance audits. Warm every measured shape
+most1.1x, spread/median at most10% for both metrics and both engines, and
+existing provenance audits. Warm every measured shape
 before capture/measurement. Per-run TileLang and third-party Triton cache roots
 prevent concurrent compilation from contaminating the audit; FlashInfer must also
 be fully warmed and unchanged during measured repetitions.

@@ -25,8 +25,8 @@ scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /t
 
 Use unique sockets. Add `--num-speculative-tokens 4` to the text script for MTP.
 Current regression uses ordinary, MTP4 and prefix-hit modes, with two full warmups
-and at least five measured repetitions. The new 12-row throughput/TTFT baseline
-is being collected; see [testing](docs/testing.md). `benchmarks/compare_vllm.py`
+and at least five measured repetitions. All twelve TileLang throughput/TTFT
+comparisons pass with the user-approved10% stability limit; see [testing](docs/testing.md). `benchmarks/compare_vllm.py`
 retains the prior nine-row historical comparison and its original configuration.
 
 ## Local OpenAI service
@@ -40,13 +40,14 @@ thinking, tools, JSON constraints and stored Responses. See [serving](docs/servi
 for supported schemas, OMP configuration and acceptance commands. CPU/client tests
 pass. Real MTP4 constraints, lifecycle, long prefix reuse and both oh-my-pi
 workflows have passed. Six 262144-total-token boundary checks pass without
-preemption; formal 12-row throughput/TTFT acceptance remains pending.
+preemption; all twelve formal throughput/TTFT comparisons pass.
 See [handoff](docs/handoff.md) for current results.
 
 ## Verification and performance
 
 The target is at least 95% of the refreshed vLLM EngineCore throughput and at most
-110% of its TTFT on all 12 rows. The prior nine-row independent-runtime matrix
+110% of its TTFT on all 12 rows, with spread/median <=10% for both metrics.
+The TileLang implementation passes these gates; see the current acceptance table. The prior nine-row independent-runtime matrix
 passed against its original frozen baseline; those historical results do not
 satisfy the new TTFT gate.
 [Acceptance evidence](docs/acceptance.md) separates current and historical results.
