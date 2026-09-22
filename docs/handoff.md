@@ -45,7 +45,7 @@ tests: 14 pass. See 2026-09-22-prefill-quantization.json for limitations and has
 Post-optimization ordinary/MTP actual-model FP64 checks also pass. Four initial
 baseline attempts were aborted because an external TP4 job entered their GPUs;
 see 2026-09-22-ttft-discarded.json. Those results are excluded. The collector now
-streams to disk so interference/timeout retains child output. Seven baseline rows have passed collection audits; remaining
+streams to disk so interference/timeout retains child output. Eleven baseline rows have passed collection audits; remaining
 rows are collecting/retrying in /tmp/oh-my-vllm-ttft-final. Prefix4 attempt103
 was rejected for TTFT spread 13.94% despite stable throughput. User confirmed to
 keep waiting/retrying when external GPU interference occurs. No complete 12-row
@@ -61,6 +61,17 @@ maximum-context reruns pass without preemption, with unchanged peak reserved
 memory. See 2026-09-22-ragged-prefill.json. Final numerical checks, including
 mixed long-decode isolation, pass (3 tests). Finish baseline
 collection, performance fixes and reviews before claiming completion.
+
+Prefill convolution/SiLU tiling and dual-SM large-projection GEMM reduce a
+diagnostic GPU profile from 1.816 to 1.721 seconds. Full GPU suite passes
+113 tests +12 subtests; actual-model MTP target/draft FP64 checks pass.
+See 2026-09-22-prefill-tiles.json. First candidate rows exposed shared Triton
+cache audit contamination, so subsequent runs must use separate Triton roots.
+The 131072-input batch1 candidate on 0ad2bb4 passed both gates; other first
+rows are diagnostic only. MTP throughput remains below threshold. Isolated
+baseline step-count diagnostic found 898 steps versus our 899, pointing to
+per-step cost rather than acceptance rate. Alternate private GEMM tactics
+triggered illegal access in a temporary prototype and are not used in runtime.
 
 ## Previous task: independent runtime
 

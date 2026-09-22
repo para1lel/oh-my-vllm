@@ -7,7 +7,7 @@ from oh_my_vllm.kernels.elementwise import delta_gates, silu_mul
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
 
 
-@pytest.mark.parametrize("rows", [1, 5, 37])
+@pytest.mark.parametrize("rows", [1, 5, 37, 128, 129])
 def test_pointwise(rows):
     torch.manual_seed(rows)
     packed = torch.randn(rows, 34816, device="cuda", dtype=torch.bfloat16)

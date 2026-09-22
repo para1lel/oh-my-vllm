@@ -104,6 +104,7 @@ def linear(
         scale,
         weight_scale,
         scale_major_mode="K",
+        mma_sm=2 if x.shape[0] >= 256 and weight.shape[0] >= 32768 else 1,
         out_dtype=torch.bfloat16,
         backend="trtllm" if small else "cutlass",
     )

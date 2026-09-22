@@ -23,7 +23,10 @@ def silu_mul(packed: torch.Tensor) -> torch.Tensor:
         raise ValueError("packed gate/up must be contiguous CUDA data")
     rows, width = packed.shape[0], packed.shape[1] // 2
     out = torch.empty((rows, width), dtype=packed.dtype, device=packed.device)
-    _silu_mul[(triton.cdiv(out.numel(), 256),)](packed, out, width, out.numel(), 256)
+    block = 1024 if rows >= 128 else 256
+    _silu_mul[(triton.cdiv(out.numel(), block),)](
+        packed, out, width, out.numel(), block
+    )
     return out
 
 

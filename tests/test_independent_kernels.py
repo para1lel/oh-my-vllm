@@ -118,15 +118,18 @@ def test_prefill_state(length):
     check(state[0], states[-1], state=True)
 
 
-@pytest.mark.parametrize("rows", [1, 4, 33, 127, 128, 129, 784, 785])
-def test_fp8_block_scales(rows):
+@pytest.mark.parametrize(
+    "rows,features",
+    [(rows, 256) for rows in [1, 4, 33, 127, 128, 129, 784, 785]] + [(257, 32768)],
+)
+def test_fp8_block_scales(rows, features):
     torch.manual_seed(rows)
     x = torch.randn(rows, 512, device="cuda", dtype=torch.bfloat16)
     x[:, :128] = 0
     x[:, 128:256] *= 8
     x[:, 256:384] *= 0.001
-    weight = (torch.randn(256, 512, device="cuda") * 20).to(torch.float8_e4m3fn)
-    scale = torch.rand(2, 4, device="cuda") * 0.01
+    weight = (torch.randn(features, 512, device="cuda") * 20).to(torch.float8_e4m3fn)
+    scale = torch.rand(features // 128, 4, device="cuda") * 0.01
     out = fp8.linear(x, weight, scale)
     quantized, activation_scale = fp8.quantize(x)
     cpu_x = x.cpu().double().reshape(rows, -1, 128)

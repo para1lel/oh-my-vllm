@@ -17,21 +17,24 @@ def _conv(
     Out,
     C: tl.constexpr,
     BC: tl.constexpr,
+    Tokens: tl.constexpr,
+    BT: tl.constexpr,
 ):
-    token = tl.program_id(0)
-    channels = tl.program_id(1) * BC + tl.arange(0, BC)
-    seq = tl.load(SeqIds + token)
+    token = tl.program_id(0) * BT + tl.arange(0, BT)[:, None]
+    channels = tl.program_id(1) * BC + tl.arange(0, BC)[None, :]
+    valid = token < Tokens
+    seq = tl.load(SeqIds + token, valid, 0)
     first = tl.load(Starts + seq)
-    target = tl.load(Writes + token)
-    total = tl.full((BC,), 0, tl.float32)
+    target = tl.load(Writes + token, valid, -1)
+    total = tl.full((BT, BC), 0, tl.float32)
     for tap in tl.static_range(4):
         pos = token + tap - 3
-        x = tl.load(X + pos * C + channels, (pos >= first) & (channels < C), 0).to(
-            tl.float32
-        )
+        x = tl.load(
+            X + pos * C + channels, valid & (pos >= first) & (channels < C), 0
+        ).to(tl.float32)
         old = tl.load(
             Sources + (seq * C + channels) * 3 + pos - first + 3,
-            (pos < first) & (channels < C),
+            valid & (pos < first) & (channels < C),
             0,
         ).to(tl.float32)
         value = tl.where(pos >= first, x, old)
@@ -44,7 +47,7 @@ def _conv(
                 (target >= 0) & (channels < C),
             )
     total = total * tl.sigmoid(total)
-    tl.store(Out + token * C + channels, total, channels < C)
+    tl.store(Out + token * C + channels, total, valid & (channels < C))
 
 
 def causal_conv(
@@ -82,7 +85,9 @@ def causal_conv(
         raise ValueError("convolution tensors must be contiguous on one CUDA device")
     sources = pool.index_select(0, read_slots)
     out = torch.empty_like(x)
-    _conv[(len(x), triton.cdiv(x.shape[1], 128))](
+    # Tile long-prefill rows to amortize CTA scheduling; decode retains one row.
+    rows = 8 if len(x) >= 128 else 1
+    _conv[(triton.cdiv(len(x), rows), triton.cdiv(x.shape[1], 128))](
         x,
         weight,
         pool,
@@ -93,5 +98,7 @@ def causal_conv(
         out,
         x.shape[1],
         128,
+        len(x),
+        rows,
     )
     return out
