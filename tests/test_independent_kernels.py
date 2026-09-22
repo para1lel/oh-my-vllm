@@ -472,3 +472,95 @@ def test_fused_silu_quantization_preserves_rounding(rows):
         actual = fp8.quantize(packed, column_major=column_major, silu_gate=True)
         for a, b in zip(actual, expected, strict=True):
             torch.testing.assert_close(a.float(), b.float(), atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("rows", [1, 5])
+@pytest.mark.parametrize("index_dtype", [torch.int32, torch.int64])
+@pytest.mark.parametrize("slot_dtype", [torch.int32, torch.int64])
+def test_attention_preparation_fp64_cache_and_graph(rows, index_dtype, slot_dtype):
+    from oh_my_vllm.kernels.attention_prepare import prepare_attention
+
+    torch.manual_seed(784)
+    packed = torch.randn(rows, 14336, device="cuda", dtype=torch.bfloat16)
+    qw = torch.randn(256, device="cuda") + 1
+    kw = torch.randn_like(qw) + 1
+    positions = torch.tensor(
+        [0, 784, 131071, 262140, 262143][:rows], device="cuda", dtype=index_dtype
+    )
+    slots = torch.tensor(
+        [1567] if rows == 1 else [-1, 1567, 1568, 789, 3134],
+        device="cuda",
+        dtype=slot_dtype,
+    )
+    cache = torch.full((5, 2, 784, 4, 256), 0.125, device="cuda", dtype=torch.bfloat16)
+
+    def verify(out):
+        untouched = torch.ones(5, 784, dtype=torch.bool)
+        for slot in slots.cpu().tolist():
+            if slot >= 0:
+                untouched[slot // 784, slot % 784] = False
+        values = packed.cpu().double()
+        freq = 10000000.0 ** (-torch.arange(32, dtype=torch.float64) / 32)
+        angle = positions.cpu().double()[:, None, None] * freq[None, None]
+
+        def reference_norm_rope(x, weight):
+            normalized = x * torch.rsqrt(x.square().mean(-1, keepdim=True) + 1e-6)
+            normalized = (
+                (normalized * weight.cpu().double()).to(torch.bfloat16).double()
+            )
+            result = normalized.clone()
+            result[..., :32] = (
+                normalized[..., :32] * angle.cos()
+                - normalized[..., 32:64] * angle.sin()
+            )
+            result[..., 32:64] = (
+                normalized[..., 32:64] * angle.cos()
+                + normalized[..., :32] * angle.sin()
+            )
+            return result
+
+        expected_q = reference_norm_rope(
+            values[:, :12288].view(rows, 24, 512)[..., :256], qw
+        )
+        expected_k = reference_norm_rope(values[:, 12288:13312].view(rows, 4, 256), kw)
+        expected_v = packed[:, 13312:].reshape(rows, 4, 256).cpu()
+        check(out, expected_q)
+        actual = cache.cpu()
+        for token, slot in enumerate(slots.cpu().tolist()):
+            if slot >= 0:
+                check(actual[slot // 784, 0, slot % 784], expected_k[token])
+                torch.testing.assert_close(
+                    actual[slot // 784, 1, slot % 784],
+                    expected_v[token],
+                    rtol=0,
+                    atol=0,
+                )
+        for kind in (0, 1):
+            torch.testing.assert_close(
+                actual[:, kind][untouched],
+                torch.full_like(actual[:, kind][untouched], 0.125),
+                rtol=0,
+                atol=0,
+            )
+
+    original = packed.clone()
+    stream = torch.cuda.Stream()
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        out = prepare_attention(packed, qw, kw, positions, cache, slots)
+    stream.synchronize()
+    verify(out)
+    torch.testing.assert_close(packed, original, rtol=0, atol=0)
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        captured = prepare_attention(packed, qw, kw, positions, cache, slots)
+    packed.mul_(0.75)
+    positions.add_(1)
+    slots.copy_(torch.where(slots >= 0, slots + 17, slots))
+    cache.fill_(0.125)
+    graph.replay()
+    torch.cuda.synchronize()
+    verify(captured)
+    with pytest.raises(ValueError, match="overlap"):
+        alias = cache.flatten()[: rows * 14336].view(rows, 14336)
+        prepare_attention(alias, qw, kw, positions, cache, slots)

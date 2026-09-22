@@ -496,6 +496,62 @@ __device__ const double rotary_frequency[32] = {
     0x1.7961810874aa1p-18, 0x1.c8198c91f9fc4p-19, 0x1.139e9527f964ap-19, 0x1.4d1c97f4e952dp-20,
     0x1.9298ace36f12dp-21, 0x1.e69338f8adcd5p-22, 0x1.26091b11c865ep-22, 0x1.635e883bbc810p-23};
 
+__global__ void prepare_attention_kernel(const __nv_bfloat16 *packed, const float *qw,
+                                         const float *kw, const void *positions,
+                                         __nv_bfloat16 *cache, const void *slots,
+                                         __nv_bfloat16 *out, int n, int64_t capacity, bool pw,
+                                         bool sw) {
+  int row = blockIdx.x * 4 + threadIdx.x / 32, lane = threadIdx.x & 31;
+  if (row >= n * 28)
+    return;
+  int token = row / 28, head = row % 28;
+  bool key = head >= 24;
+  int64_t offset = (int64_t)token * 14336 + (key ? 12288 + (head - 24) * 256 : head * 512);
+  const float *weight = key ? kw : qw;
+  float values[8], total = 0;
+#pragma unroll
+  for (int j = 0; j < 8; ++j) {
+    values[j] = __bfloat162float(packed[offset + lane + j * 32]);
+    total += values[j] * values[j];
+  }
+  float inv = rsqrtf(warp_sum(total) / 256.f + 1e-6f);
+#pragma unroll
+  for (int j = 0; j < 8; ++j)
+    values[j] = __bfloat162float(__float2bfloat16_rn(values[j] * inv * weight[lane + j * 32]));
+  double angle = static_cast<double>(index_at(positions, pw, token)) * rotary_frequency[lane];
+  constexpr double tau = 6.283185307179586476925286766559;
+  float a = (float)(angle - nearbyint(angle / tau) * tau);
+  float c = cosf(a), s = sinf(a);
+  float left = values[0], right = values[1];
+  values[0] = left * c - right * s;
+  values[1] = right * c + left * s;
+  if (key) {
+    int64_t slot = index_at(slots, sw, token);
+    if (slot < 0 || slot >= capacity)
+      return;
+    int64_t dst = ((slot / 784) * 1568 + slot % 784) * 1024 + (head - 24) * 256;
+#pragma unroll
+    for (int j = 0; j < 8; ++j) {
+      cache[dst + lane + j * 32] = __float2bfloat16_rn(values[j]);
+      cache[dst + 802816 + lane + j * 32] =
+          packed[(int64_t)token * 14336 + 13312 + (head - 24) * 256 + lane + j * 32];
+    }
+  } else {
+#pragma unroll
+    for (int j = 0; j < 8; ++j)
+      out[((int64_t)token * 24 + head) * 256 + lane + j * 32] = __float2bfloat16_rn(values[j]);
+  }
+}
+void prepare_attention(TensorView p, TensorView qw, TensorView kw, TensorView pos, TensorView cache,
+                       TensorView slots, TensorView out) {
+  prepare_attention_kernel<<<(p.size(0) * 28 + 3) / 4, 128, 0, stream_for(p)>>>(
+      (const __nv_bfloat16 *)p.data_ptr(), (const float *)qw.data_ptr(),
+      (const float *)kw.data_ptr(), pos.data_ptr(), (__nv_bfloat16 *)cache.data_ptr(),
+      slots.data_ptr(), (__nv_bfloat16 *)out.data_ptr(), p.size(0), cache.size(0) * 784,
+      pos.dtype().bits == 64, slots.dtype().bits == 64);
+  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess);
+}
+
 __global__ void rms_rope_kernel(const __nv_bfloat16 *__restrict__ x,
                                 const float *__restrict__ weight,
                                 const void *__restrict__ positions, __nv_bfloat16 *__restrict__ out,

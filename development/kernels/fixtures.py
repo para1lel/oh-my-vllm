@@ -7,6 +7,7 @@ import torch
 from development.kernels.timing import reference_operator
 
 ENTRIES = {
+    "prepare_attention": ("attention_prepare", "prepare_attention"),
     "norm": ("normalization", "rms_norm"),
     "add_norm": ("normalization", "add_rms_norm"),
     "gated_norm": ("normalization", "rms_norm"),
@@ -41,6 +42,17 @@ def fixture(config):
     def metadata(values, dtype=torch.int64):
         return torch.tensor(values, device="cuda", dtype=dtype)
 
+    if operation == "prepare_attention":
+        packed = random(n, 14336)
+        qw, kw = random(256, dtype=torch.float32), random(256, dtype=torch.float32)
+        dtype = getattr(torch, config["index_dtype"])
+        positions = torch.arange(n, device="cuda", dtype=dtype)
+        slots = positions + 784
+        pool = torch.empty(1400, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
+        other = torch.empty_like(pool)
+        return lambda: reference(
+            packed, qw, kw, positions, pool, slots
+        ), lambda: candidate(packed, qw, kw, positions, other, slots)
     if operation in ("norm", "add_norm"):
         x, w = random(n, 5120), random(5120, dtype=torch.float32)
         args = (x, w) if operation == "norm" else (x, random(n, 5120), w)

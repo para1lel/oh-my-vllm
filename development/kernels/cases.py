@@ -52,13 +52,15 @@ def cases():
                 add(workload, "norm", tokens=n, width=5120)
                 add(workload, "add_norm", tokens=n, width=5120)
                 add(workload, "gated_norm", tokens=n, heads=48, width=128)
-                for heads in (4, 24):
-                    add(workload, "norm_rope", tokens=n, heads=heads)
+                # Layer.full_attention is shared by target and MTP. The actual
+                # projection chain now fuses Q/K RMS/RoPE, V.contiguous(), and
+                # append. Batch.positions/fa_slots and DraftGraph buffers are
+                # int64; int32 attention table/length metadata is unrelated.
+                add(workload, "prepare_attention", tokens=n, index_dtype="int64")
                 for width in (5120, 6144):
                     add(workload, "quant", tokens=n, width=width, column=n <= 32)
                 add(workload, "silu_quant", tokens=n, width=17408, column=n <= 32)
                 add(workload, "gates", tokens=n)
-                add(workload, "append", tokens=n)
                 add(workload, "convolution", counts=shape)
                 if phase == "prefill":
                     add(workload, "qk", tokens=sum(c for c in shape if c > 1))
@@ -103,6 +105,11 @@ def cases():
 
 
 # The quantized checkpoint's MLP uses fused SiLU quantization, and Q/K use
-# fused RMS/RoPE. Standalone silu/rotary remain covered by existing correctness
+# fused attention preparation. Standalone entries retain existing correctness
 # tests, but are not called in the twelve production performance workloads.
-UNUSED = {"silu": "fused into silu_quant", "rope": "fused into norm_rope"}
+UNUSED = {
+    "silu": "fused into silu_quant",
+    "rope": "fused into prepare_attention",
+    "norm_rope": "Q/K chain fused into prepare_attention",
+    "append": "KV write and V layout conversion fused into prepare_attention",
+}

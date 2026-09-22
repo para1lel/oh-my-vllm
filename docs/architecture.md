@@ -182,6 +182,13 @@ the intermediate BF16 rounding and packed projection strides. Its fixed256-wide
 heads,64 rotary dimensions and theta10000000 match the validated Qwen checkpoint.
 It computes and reduces the phase in FP64 before FP32 sin/cos, avoiding amplified
 frequency/angle rounding error near the maximum context.
+The staged CUDA backend combines the complete full-attention preparation chain:
+Q/K RMS/RoPE, V layout conversion and physical KV writes. Target and MTP call the
+same `attention_prepare.prepare_attention` entry with packed14336 projections.
+The returned Q is contiguous; the gate half of each512-wide Q head is untouched.
+Cache must not alias inputs, and negative slots skip KV writes while retaining Q.
+The default TileLang backend preserves the original complete frozen chain.
+
 GDN recurrence uses 32-value tiles for at least four sequences, 16 otherwise.
 
 Target decode graphs expose existing 784-token pages to native TRT-LLM attention

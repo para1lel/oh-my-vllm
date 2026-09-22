@@ -1,5 +1,31 @@
 # CUDA kernel 开发
 
+## 全注意力准备流程融合
+
+主模型和 MTP 现在共用生产准备入口，CUDA 将 Q/K RMS/RoPE、V 布局转换及 KV
+追加合并执行，返回 Q 并写入相同的 K/V 缓存行，packed gate 值保持原样。
+两次 BF16 舍入和 FP64 相位约化均保留。负 slot 仅跳过 KV 写入。
+TileLang 后端仍执行原有完整冻结链，保留 V.contiguous() 的真实行为：
+已经连续时不复制，不人为强制增加副本。
+
+根据变化后的真实生产调用重新推导静态配置：13 个融合配置替代 26 个独立
+RMS/RoPE 和 13 个 append 调用，共 147 项。主模型 Batch 和 MTP/DraftGraph 的
+positions/slots 是 int64，与注意力的 int32 tables/lengths 无关。
+独立 API 保留正确性测试，并明确列为这些性能工作负载未调用的入口。
+旧 173 项矩阵的 111 项通过、62 项失败记录保留，不重新算作通过。
+
+未提交源码的融合子集 13/13 通过速度判据。CUDA 完整测试通过 168 项及 28 项
+子测试；新增八组检查在冻结 TileLang 后端也通过。覆盖单/五 token、所有
+positions/slots dtype 组合、接近 262144 的位置、跨页和分散 slot、V 与未写缓存
+逐位一致、两次 BF16 舍入、非默认 stream，以及改变输入和写入目的地后的图重放。
+真实模型 ordinary/MTP4 eager FP64 探针通过；强制长度文本不代表语义或 agentic
+验收。TileFoundry 代表性逻辑链检查和单独的 Nsight 采集通过；HIR 中缓存拼接和
+FP32 相位仍是估算，不代表原生流量或精确相位验证。
+
+证据见 `bench/baseline/2026-09-22-cuda-attention-prepare-progress.json`。
+独立审查和全文件检查通过，本任务 GPU 程序均已退出。完整 147 项及框架验收
+尚未完成；默认后端仍为 TileLang。
+
 ## 中等规模残差 RMS 的缓存策略
 
 仅 2048–4095 行残差 RMS 的两个输出使用 streaming store 缓存提示，保留 BF16

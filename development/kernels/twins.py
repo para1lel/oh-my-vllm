@@ -61,6 +61,24 @@ class TileLang:
         return normalization.rms_rotary(x, weight, positions)
 
     @runtime_func
+    def prepare_attention(self, packed, qw, kw, positions, old_k, old_v):
+        from oh_my_vllm.kernels.attention_prepare import tilelang_prepare
+
+        cache = torch.zeros(
+            (2, 2, 784, 4, 256), device=packed.device, dtype=packed.dtype
+        )
+        prior = torch.arange(783, device=packed.device, dtype=torch.int64)
+        slots = torch.tensor([783, 784], device=packed.device, dtype=torch.int64)
+        attention.append(cache, old_k, old_v, prior)
+        q = tilelang_prepare(packed, qw, kw, positions, cache, slots)
+        logical = torch.arange(785, device=packed.device)
+        return (
+            q,
+            cache[logical // 784, 0, logical % 784],
+            cache[logical // 784, 1, logical % 784],
+        )
+
+    @runtime_func
     def quant(self, x):
         return fp8.quantize(x)
 

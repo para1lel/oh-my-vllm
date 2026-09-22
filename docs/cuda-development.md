@@ -1,5 +1,35 @@
 # CUDA kernel development
 
+## Full-attention preparation fusion
+
+Target and MTP now share a production preparation entry that fuses Q/K RMS/RoPE,
+V layout conversion and KV append on CUDA. It returns Q and writes the same K/V
+cache rows; packed gate values remain untouched. Both BF16 rounding points and
+FP64 phase reduction remain. Negative slots skip only KV writes. The TileLang
+backend executes the original complete frozen chain, preserving V.contiguous()
+as a no-op for already-contiguous views rather than forcing a copy.
+
+Static cases are re-derived from the changed production call graph:13 fused
+configurations replace26 independent RMS/RoPE and13 append invocations, giving
+147 cases. Target Batch and MTP/DraftGraph positions/slots are int64; attention's
+int32 tables/lengths are unrelated. Existing standalone APIs remain covered by
+correctness tests and are explicitly unused in the performance workloads. The
+old173-case111-pass/62-fail collection is retained, not reclassified as passing.
+
+The dirty-source fused subset passes13/13 speed decisions. Full CUDA tests pass
+168 plus28 subtests; eight new checks also pass with frozen TileLang. They cover
+single/five tokens, all positions/slots dtype combinations, near262144 positions,
+page boundaries/scattered slots, exact V/untouched cache, both BF16 roundings,
+nondefault stream and graph replay after changing inputs and write destinations.
+Actual-model ordinary/MTP4 eager FP64 probes pass. Their forced-length text does
+not establish semantic/agentic acceptance. TileFoundry's representative logical
+chain check and separate Nsight collection pass; HIR cache concatenation and
+FP32 phase are estimates, not native traffic or precise phase validation.
+
+See `bench/baseline/2026-09-22-cuda-attention-prepare-progress.json`. Independent
+review and all-file checks pass, and all owned GPU programs exited. Full147-case
+and framework acceptance remain outstanding; default stays TileLang.
+
 ## Medium residual RMS cache policy
 
 Only2048–4095-row residual RMS now uses a streaming store cache hint for its two

@@ -21,6 +21,7 @@ def compiled():
             "rms",
             "add_rms",
             "rms_rope",
+            "prepare_attention",
             "rope",
             "normalize_qk",
             "recurrent",

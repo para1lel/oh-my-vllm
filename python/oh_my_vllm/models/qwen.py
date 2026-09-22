@@ -15,10 +15,11 @@ import torch.nn.functional as F
 from safetensors import safe_open
 
 from oh_my_vllm.kernels import attention, fp8, gdn
+from oh_my_vllm.kernels.attention_prepare import prepare_attention
 from oh_my_vllm.kernels.convolution import causal_conv
 from oh_my_vllm.kernels.elementwise import delta_gates, silu_mul
 from oh_my_vllm.kernels.mtp_attention import MTPAttention
-from oh_my_vllm.kernels.normalization import add_rms_norm, rms_norm, rms_rotary
+from oh_my_vllm.kernels.normalization import add_rms_norm, rms_norm
 
 LayerCache = torch.Tensor | tuple[torch.Tensor, torch.Tensor]
 
@@ -153,12 +154,11 @@ class Layer:
     def full_attention(
         self, x: torch.Tensor, batch: AttentionBatch, cache: torch.Tensor
     ) -> torch.Tensor:
-        qg, k, v = self.qkv(x).split([12288, 1024, 1024], -1)
-        q, gate = qg.reshape(-1, 24, 512).chunk(2, -1)
-        q = rms_rotary(q, self.q_norm, batch.positions)
-        k = rms_rotary(k.reshape(-1, 4, 256), self.k_norm, batch.positions)
-        v = v.reshape(-1, 4, 256).contiguous()
-        attention.append(cache, k, v, batch.fa_slots)
+        packed = self.qkv(x)
+        gate = packed[:, :12288].reshape(-1, 24, 512)[..., 256:]
+        q = prepare_attention(
+            packed, self.q_norm, self.k_norm, batch.positions, cache, batch.fa_slots
+        )
         out = batch.attention(q, cache)
         return self.out((out * gate.sigmoid()).flatten(1))
 

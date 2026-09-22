@@ -7,6 +7,12 @@ def reference_operator(module, name):
     """Bind the whole frozen operation, including Python-side copies/allocations."""
     from importlib import import_module
 
+    if (module, name) == ("attention_prepare", "prepare_attention"):
+        # The production pre-fusion chain, composed only of immutable kernels.
+        # Its V.contiguous() is a no-op when the original view is contiguous.
+        from oh_my_vllm.kernels.attention_prepare import tilelang_prepare
+
+        return tilelang_prepare
     path = f"oh_my_vllm.kernels.tilelang_reference.{module}"
     function = getattr(import_module(path), name)
     if function.__module__ != path:

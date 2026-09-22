@@ -41,7 +41,8 @@ The source tree must remain available for the editable installation.
    Preserve its supported shapes, packed strides, dtypes, returned state,
    aliasing rules and numerical rounding boundaries.
 2. Express complete logical behavior in development/kernels/semantics.py.
-   development/kernels/twins.py calls production code through thin adapters.
+   development/kernels/twins.py calls frozen TileLang operations through thin adapters.
+   The attention-preparation twin composes the complete pre-fusion production chain.
    Snapshots and updated logical cache are outputs, not hidden side effects.
 3. Use TileFoundry analysis to inspect arithmetic, memory and roofline hypotheses.
    The supplied single logical CTA is an analysis topology, not the actual

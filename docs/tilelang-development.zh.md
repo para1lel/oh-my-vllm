@@ -25,7 +25,7 @@ gitlink 固定我们的 para1lel/TileFoundry fork，基于上游 main b5aaa44216
 ## Agent 工作流
 
 1. 选择算子前阅读生产包装器和已有测试。保留支持的 shape、packed stride、dtype、返回状态、别名规则和数值舍入边界。
-2. 在 development/kernels/semantics.py 表达完整逻辑行为。development/kernels/twins.py 通过薄适配层调用生产代码。快照和更新后的逻辑缓存是输出，不隐藏为副作用。
+2. 在 development/kernels/semantics.py 表达完整逻辑行为。development/kernels/twins.py 通过薄适配层调用冻结的 TileLang 算子。注意力准备 twin 组合完整的融合前生产执行链。快照和更新后的逻辑缓存是输出，不隐藏为副作用。
 3. 用 TileFoundry 分析算术量、显存和 roofline 假设。提供的单个逻辑 CTA 是分析拓扑，不是实际 TileLang 放置方式。HIR 成本估计不是实测 GPU 时延。
 4. 实现并调优 TileLang kernel。保留公开 Python 接口、调度器所有权、持久 784-token 页及 MTP 排除位置零的契约。可改变内部 tile、融合及临时布局。长度不决定算法/布局时采用动态 token 维度。
 5. 临时算子实验放在仓库外，随后运行已有必需测试和实际模型验收。及时停止任务自有 GPU 程序。不提交微基准脚本、生成 kernel、报告、缓存内容或实验记录。

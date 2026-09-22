@@ -95,6 +95,49 @@ class Operators:
         return rope(normalized, positions)  # noqa: F821
 
     @func
+    def prepare_attention(
+        packed: Tensor[(2, 14336), DType.bf16],
+        qw: Tensor[(256,), DType.f32],
+        kw: Tensor[(256,), DType.f32],
+        positions: Tensor[(2,), DType.i64],
+        old_k: Tensor[(783, 4, 256), DType.bf16],
+        old_v: Tensor[(783, 4, 256), DType.bf16],
+    ):
+        # Representative logical cache rows, not physical memory traffic. As in
+        # norm_rope, HIR lacks f64 and cannot validate production phase accuracy.
+        q = tf.cast(tf.reshape(packed[:, :12288], (2, 24, 512))[:, :, :256], "f32")
+        k = tf.cast(tf.reshape(packed[:, 12288:13312], (2, 4, 256)), "f32")
+        v = tf.reshape(packed[:, 13312:], (2, 4, 256))
+        qmean = tf.reduce(tf.square(q), (-1,), True, "mean")
+        kmean = tf.reduce(tf.square(k), (-1,), True, "mean")
+        normalized = tf.concat(
+            [
+                tf.cast(q * tf.rsqrt(qmean + 1e-6) * qw, "bf16"),
+                tf.cast(k * tf.rsqrt(kmean + 1e-6) * kw, "bf16"),
+            ],
+            axis=1,
+        )
+        exponents = tf.cast(tf.arange(Tensor[(32,), DType.i64]), "f32") * (-2.0 / 64.0)
+        angle = tf.reshape(tf.cast(positions, "f32"), (2, 1, 1)) * tf.reshape(
+            tf.exp(exponents * 16.11809565095832), (1, 1, 32)
+        )
+        left = tf.cast(normalized[:, :, :32], "f32")
+        right = tf.cast(normalized[:, :, 32:64], "f32")
+        rotated = tf.concat(
+            [
+                tf.cast(left * tf.cos(angle) - right * tf.sin(angle), "bf16"),
+                tf.cast(right * tf.cos(angle) + left * tf.sin(angle), "bf16"),
+                normalized[:, :, 64:],
+            ],
+            axis=2,
+        )
+        return (
+            rotated[:, :24, :],
+            tf.concat([old_k, rotated[:, 24:, :]], axis=0),
+            tf.concat([old_v, v], axis=0),
+        )
+
+    @func
     def quant(x: Tensor[(2, 256), DType.bf16]):
         values = tf.reshape(tf.cast(x, "f32"), (2, 2, 128))
         maximum = tf.reduce(values, (-1,), True, "abs_max")

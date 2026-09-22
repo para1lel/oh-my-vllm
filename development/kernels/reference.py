@@ -28,6 +28,7 @@ def source_hashes(root=ROOT):
     paths = [
         *root.glob("python/oh_my_vllm/kernels/**/*.py"),
         *root.glob("python/oh_my_vllm/kernels/**/*.cu"),
+        root / "python/oh_my_vllm/models/qwen.py",
         *root.glob("development/kernels/*.py"),
         root / "development/kernels/tilelang-reference.json",
         root / "requirements/runtime.txt",
