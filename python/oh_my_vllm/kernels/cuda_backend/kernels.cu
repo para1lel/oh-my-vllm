@@ -672,6 +672,112 @@ void normalize_qk(TensorView q, TensorView k, TensorView oq, TensorView ok) {
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA Q/K normalization launch failed";
 }
 
+// Validated callers use positive dense/row-strided views. Conservative byte
+// spans include padding so a fast restricted path never assumes false independence.
+uint64_t tensor_span_bytes(TensorView tensor) {
+  if (!tensor.numel())
+    return 0;
+  uint64_t elements = 1;
+  for (int i = 0; i < tensor.ndim(); ++i)
+    elements += (tensor.size(i) - 1) * tensor.stride(i);
+  return elements * (tensor.dtype().bits / 8);
+}
+bool disjoint_storage(TensorView output, TensorView input) {
+  auto first = reinterpret_cast<uintptr_t>(output.data_ptr());
+  auto second = reinterpret_cast<uintptr_t>(input.data_ptr());
+  return first + tensor_span_bytes(output) <= second || second + tensor_span_bytes(input) <= first;
+}
+__device__ float half_warp_sum(float value) {
+#pragma unroll
+  for (int offset = 8; offset; offset >>= 1)
+    value += __shfl_xor_sync(0xffffffff, value, offset, 16);
+  return value;
+}
+
+template <typename State, int Rows, int Warps>
+__global__ void
+recurrent_vector_kernel(const __nv_bfloat16 *__restrict__ q, const __nv_bfloat16 *__restrict__ k,
+                        const __nv_bfloat16 *__restrict__ v, const float *__restrict__ decay,
+                        const float *__restrict__ beta, State *__restrict__ pool,
+                        const void *__restrict__ starts, const void *__restrict__ reads,
+                        const void *__restrict__ writes, bool sw, bool rw, bool ww,
+                        __nv_bfloat16 *__restrict__ out, int64_t qs, int64_t ks, int64_t vs) {
+  static_assert(128 % (Rows * Warps * 2) == 0);
+  constexpr int hq = 16, hv = 48;
+  int seq = blockIdx.x, head = blockIdx.y, lane = threadIdx.x & 15;
+  int first_v = blockIdx.z * (Rows * Warps * 2) + threadIdx.x / 16 * Rows;
+  int qhead = head / (hv / hq);
+  int64_t source = index_at(reads, rw, seq);
+  float state[Rows][8];
+#pragma unroll
+  for (int i = 0; i < Rows; ++i) {
+    auto v = *reinterpret_cast<const AlignedVector<State, 8> *>(
+        pool + ((source * hv + head) * 128 + first_v + i) * 128 + lane * 8);
+#pragma unroll
+    for (int j = 0; j < 8; ++j)
+      state[i][j] = static_cast<float>(v.value[j]);
+  }
+  // Persistent FP32 values survive all candidates; only destination snapshots round.
+  for (int token = index_at(starts, sw, seq); token < index_at(starts, sw, seq + 1); ++token) {
+    float qv[8], kv[8], qq = 0, kk = 0;
+    auto qpack = *reinterpret_cast<const AlignedVector<__nv_bfloat16, 8> *>(q + token * qs +
+                                                                            qhead * 128 + lane * 8);
+    auto kpack = *reinterpret_cast<const AlignedVector<__nv_bfloat16, 8> *>(k + token * ks +
+                                                                            qhead * 128 + lane * 8);
+#pragma unroll
+    for (int j = 0; j < 8; ++j) {
+      qv[j] = __bfloat162float(qpack.value[j]);
+      kv[j] = __bfloat162float(kpack.value[j]);
+      qq += qv[j] * qv[j];
+      kk += kv[j] * kv[j];
+    }
+    float qi = rsqrtf(half_warp_sum(qq) + 1e-6f) * 0.08838834764831844f;
+    float ki = rsqrtf(half_warp_sum(kk) + 1e-6f);
+#pragma unroll
+    for (int j = 0; j < 8; ++j) {
+      qv[j] *= qi;
+      kv[j] *= ki;
+    }
+    float g = expf(decay[token * hv + head]), b = beta[token * hv + head];
+    int64_t target = index_at(writes, ww, token);
+#pragma unroll
+    for (int i = 0; i < Rows; ++i) {
+      float recall = 0;
+#pragma unroll
+      for (int j = 0; j < 8; ++j) {
+        state[i][j] *= g;
+        recall += state[i][j] * kv[j];
+      }
+      recall = half_warp_sum(recall);
+      float residual = (__bfloat162float(v[token * vs + head * 128 + first_v + i]) - recall) * b;
+      float result = 0;
+#pragma unroll
+      for (int j = 0; j < 8; ++j) {
+        state[i][j] += residual * kv[j];
+        result += state[i][j] * qv[j];
+      }
+      if (target >= 0) {
+        AlignedVector<State, 8> snapshot;
+#pragma unroll
+        for (int j = 0; j < 4; ++j) {
+          if constexpr (std::is_same_v<State, __nv_bfloat16>)
+            reinterpret_cast<__nv_bfloat162 *>(snapshot.value)[j] =
+                __floats2bfloat162_rn(state[i][j * 2], state[i][j * 2 + 1]);
+          else {
+            snapshot.value[j * 2] = state[i][j * 2];
+            snapshot.value[j * 2 + 1] = state[i][j * 2 + 1];
+          }
+        }
+        *reinterpret_cast<AlignedVector<State, 8> *>(
+            pool + ((target * hv + head) * 128 + first_v + i) * 128 + lane * 8) = snapshot;
+      }
+      result = half_warp_sum(result);
+      if (lane == 0)
+        out[(static_cast<int64_t>(token) * hv + head) * 128 + first_v + i] =
+            __float2bfloat16_rn(result);
+    }
+  }
+}
 template <typename State>
 __global__ void recurrent_kernel(const __nv_bfloat16 *q, const __nv_bfloat16 *k,
                                  const __nv_bfloat16 *v, const float *decay, const float *beta,
@@ -737,6 +843,43 @@ __global__ void recurrent_kernel(const __nv_bfloat16 *q, const __nv_bfloat16 *k,
 void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, TensorView beta,
                TensorView pool, TensorView starts, TensorView reads, TensorView writes,
                TensorView out) {
+  bool vector = q.size(1) == 16 && v.size(1) == 48 && q.stride(0) % 8 == 0 &&
+                k.stride(0) % 8 == 0 && reinterpret_cast<uintptr_t>(q.data_ptr()) % 16 == 0 &&
+                reinterpret_cast<uintptr_t>(k.data_ptr()) % 16 == 0 &&
+                reinterpret_cast<uintptr_t>(pool.data_ptr()) % (pool.dtype().bits) == 0;
+  for (auto input : {q, k, v, decay, beta, starts, reads, writes})
+    vector = vector && disjoint_storage(pool, input);
+  if (vector) {
+#define VECTOR_REC(S, R, W)                                                                        \
+  recurrent_vector_kernel<S, R, W>                                                                 \
+      <<<dim3(reads.size(0), 48, 128 / (R * W * 2)), W * 32, 0, stream_for(q)>>>(                  \
+          static_cast<const __nv_bfloat16 *>(q.data_ptr()),                                        \
+          static_cast<const __nv_bfloat16 *>(k.data_ptr()),                                        \
+          static_cast<const __nv_bfloat16 *>(v.data_ptr()),                                        \
+          static_cast<const float *>(decay.data_ptr()),                                            \
+          static_cast<const float *>(beta.data_ptr()), static_cast<S *>(pool.data_ptr()),          \
+          starts.data_ptr(), reads.data_ptr(), writes.data_ptr(), starts.dtype().bits == 64,       \
+          reads.dtype().bits == 64, writes.dtype().bits == 64,                                     \
+          static_cast<__nv_bfloat16 *>(out.data_ptr()), q.stride(0), k.stride(0), v.stride(0))
+    if (pool.dtype().code == kDLBfloat) {
+      if (reads.size(0) == 1) {
+        VECTOR_REC(__nv_bfloat16, 2, 2);
+      } else {
+        VECTOR_REC(__nv_bfloat16, 4, 2);
+      }
+    } else {
+      if (reads.size(0) <= 2) {
+        VECTOR_REC(float, 2, 2);
+      } else if (reads.size(0) == 3) {
+        VECTOR_REC(float, 2, 4);
+      } else {
+        VECTOR_REC(float, 4, 2);
+      }
+    }
+#undef VECTOR_REC
+    TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA vector recurrence launch failed";
+    return;
+  }
   dim3 grid(reads.size(0), v.size(1), 8);
 #define REC(S)                                                                                     \
   recurrent_kernel<S><<<grid, 128, 0, stream_for(q)>>>(                                            \
@@ -756,7 +899,6 @@ void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, Tenso
 #undef REC
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA recurrence launch failed";
 }
-
 template <bool Vector>
 __global__ void append_kernel(const __nv_bfloat16 *k, const __nv_bfloat16 *v, __nv_bfloat16 *cache,
                               const void *slots, int width, bool wide) {

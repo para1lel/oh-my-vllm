@@ -1,5 +1,30 @@
 # Handoff — 2026-09-22
 
+## Vector GDN recurrence
+
+The clean c40cd5c matrix passes 129/147 cases, with no detected GPU interference.
+The remaining 18 failures are recurrent (7), Q/K normalization (6) and convolution
+(5). This complete result is separate from subsequent subset improvements.
+
+The model recurrence now assigns eight contiguous key values to each of 16 lanes,
+uses vector state/Q/K loads and paired BF16 snapshot conversions, and keeps the
+persistent state in FP32 throughout verification. Model heads, base/row alignment
+and conservative disjoint storage spans guard restricted pointers. Generic heads,
+unaligned views and possible pool/input overlap use the existing generic CUDA
+path. Own-source in-place updates remain valid; no TileLang fallback is introduced.
+
+The first two formal subsets pass 7/8; FP32 batch3 fails. Four warps with two
+value rows per half warp resolve that case, and the final subset passes 8/8.
+Full correctness passes 168 tests plus 28 subtests. Extra FP64 checks cover generic
+heads, input/pool offsets, odd token strides, source aliasing, padding-span overlap,
+mixed metadata widths, three sequences and same-source writes, without changing
+original tolerances. Ordinary/MTP4 eager model probe results and independent
+TileFoundry/Nsight observations are recorded in
+`bench/baseline/2026-09-22-cuda-recurrent-progress.json`.
+
+Independent review passes. This is partial migration evidence: full operator and
+framework acceptance remain pending, and the default backend stays TileLang.
+
 ## Vector FP8 quantization and reciprocal refinement
 
 Plain quantization now uses four-element input/output vectors. Host dispatch
