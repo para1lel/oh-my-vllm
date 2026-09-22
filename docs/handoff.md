@@ -13,7 +13,10 @@ Simple TileFoundry fixes are authorized; substantial fixes require discussion.
 Temporary operator experiments and records stay outside the repository. Final
 tests/evidence are limited to user-required and already-documented acceptance.
 Keep vLLM ratio gates; do not introduce a Triton-relative gate. Profile, optimize
-and explain remaining performance failures. Current stage: all seven production kernel modules use TileLang, with no owned
+and resolve performance failures. The user strengthened the goal: all twelve rows
+must pass throughput, TTFT and stability gates; measured explanations alone are
+not completion. Tune across required shapes, informed by TileFoundry analysis.
+Current stage: all seven production kernel modules use TileLang, with no owned
 Triton imports or fallback. Token dimensions are dynamic where they do not choose
 an algorithm/layout; existing CUDA graph shape keys remain unchanged.
 TileFoundry fork at 6b1b149 has the dependency and HIR sin/cos adaptations, reviewed
@@ -34,10 +37,15 @@ Operator experiments and their records remain outside the repository.
 
 The migration optimization keeps dynamic token/batch dimensions and computes
 attention split extents on device. KV gather uses explicit coalesced placement;
-single-sequence GDN uses warp-local reductions. Review found no correctness
+one- and two-sequence GDN uses warp-local reductions. Review found no correctness
 blockers. Optimized full suite again passes146+12 with no skips, and both actual
 ordinary/MTP FP64 probes pass. Six boundary rows passed before this optimization;
-their optimized reruns plus service/agentic and formal performance remain active.
+their optimized reruns plus service/agentic subsequently passed on 6a6e6a5.
+Its first formal matrix passed seven of twelve rows: MTP throughput failed at
+batch 1/2/4, and prefix TTFT stability failed at batch 1/2. These are incomplete
+results, not final acceptance. The subsequent two-sequence GDN layout passes the
+full 146-test suite plus 12 subtests; final model and performance reruns remain
+pending while attention shape tuning continues.
 Historical performance figures below describe the pre-TileLang implementation,
 not acceptance for this migration.
 

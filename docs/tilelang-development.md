@@ -81,8 +81,10 @@ prevent concurrent compilation from contaminating the audit; FlashInfer must als
 be fully warmed and unchanged during measured repetitions.
 
 If a row fails, profile the actual model, identify the dominant cost, make
-targeted improvements and retest. Report remaining failures and measured causes
-explicitly. A performance shortfall may remain with evidence; a correctness
-failure cannot be waived. Future models/backends can supply additional semantic
+targeted improvements across the required shapes and retest. Use TileFoundry cost
+and memory analysis to guide experiments, then verify gains in actual-model runs.
+All twelve rows must pass throughput, TTFT and stability gates before completion;
+neither performance nor correctness failures can be waived by an explanation.
+Future models/backends can supply additional semantic
 modules and TileLang specializations without changing Rust scheduling; multi-GPU
 and the local DSpark model remain future architecture work.

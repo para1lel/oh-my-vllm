@@ -96,9 +96,9 @@ def _recurrent(
             kk = T.alloc_fragment((128,), "float32")
             qsum = T.alloc_fragment((1,), "float32")
             ksum = T.alloc_fragment((1,), "float32")
-            # One sequence benefits from warp-local reductions; larger batches
+            # Small batches benefit from warp-local reductions; larger batches
             # retain the compiler layout for higher state throughput.
-            if sequences == 1:
+            if sequences <= 2:
                 T.annotate_layout(
                     {
                         state: tilelang.layout.Fragment(

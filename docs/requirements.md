@@ -286,7 +286,9 @@ may be downgraded; those libraries will not be maintained locally.
 
 Keep the existing correctness and twelve-row frozen vLLM acceptance criteria.
 There is no performance or correctness gate relative to the former Triton kernels.
-Investigate, optimize and retest performance failures; clearly document measured
-causes when gates remain unmet. Temporary operator tests and their records must
+All twelve rows must pass throughput, TTFT and stability gates before completion.
+Investigate and tune kernels across the required shapes, using TileFoundry analysis
+and actual-model measurements; explanations do not waive failed performance gates.
+Temporary operator tests and their records must
 stay outside the repository. Final retained tests/evidence are the user-required
 and previously documented acceptance checks. See tilelang-development.md.
