@@ -203,7 +203,8 @@ __global__ void gates_kernel(const __nv_bfloat16 *__restrict__ ba, const float *
   float a = __bfloat162float(ba[offset + 48]) + bias[head];
   float softplus = a > 20.f ? a : log1pf(expf(a));
   decay[i] = -expf(log[head]) * softplus;
-  beta[i] = 1.f / (1.f + expf(-b));
+  float e = __expf(-fabsf(b));
+  beta[i] = __fdividef(b >= 0.f ? 1.f : e, 1.f + e);
 }
 void gates(TensorView ba, TensorView log, TensorView bias, TensorView decay, TensorView beta) {
   gates_kernel<<<(ba.size(0) * 48 + 255) / 256, 256, 0, stream_for(ba)>>>(

@@ -1,5 +1,25 @@
 # Handoff — 2026-09-22
 
+## Stable GDN beta and complete operator matrix
+
+The clean087bb51 collection completes147 operator cases:113 pass and34 fail,
+without detected GPU interference. Remaining failures are quantization12,
+recurrent7, Q/K normalization6, convolution5 and gates4. This is not acceptance.
+
+GDN beta now uses a bounded exponential and fast division with denominator in
+[1,2]; decay and all existing tolerances remain unchanged. The13-case dirty-source
+gates subset passes every speed decision. Full CUDA correctness passes168 tests
+plus28 subtests. A temporary exhaustive check of all65536 BF16 beta encodings
+passes the original1e-7 absolute/1e-6 relative tolerance against FP64 sigmoid,
+including signed zero, infinities and NaNs (maximum finite absolute error
+9.1063e-8). This does not claim bitwise equivalence.
+
+Independent review passes. Separate TileFoundry estimates and paired Nsight
+observations are retained with the formal summaries in
+`bench/baseline/2026-09-22-cuda-gates-progress.json`. Subset wins are not added to
+the previous full-matrix count. Full framework performance, context and service
+acceptance remain outstanding; the default backend remains TileLang.
+
 ## Full-attention preparation fusion
 
 Target and MTP now share a production preparation entry that fuses Q/K RMS/RoPE,
