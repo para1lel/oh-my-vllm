@@ -62,6 +62,20 @@ required source files and send tool results back to the model; request logs show
 actual MTP proposals/acceptance. Final answer caveats are retained with raw text.
 Chat/Responses each completed9 successful tool calls in17.10/22.06s, with MTP activity on every request. Their answers correctly distinguish pending acceptance at read time, but reuse older gap estimates; Chat abbreviates the install path and Responses quotes historical memory. Complete text and these caveats are retained; successful tool execution is not perfect answer grounding.
 
+The final document readback on83d77ff completed Chat7/Responses13 successful
+tool calls in22.51/34.78s. Both read the required sources and sent tool results
+back; all7 model requests proposed and accepted MTP drafts. Final requests run
+at252.31/234.24tok/s with TTFT279/351ms. The first cold Chat request includes
+compilation/capture; these timings are service diagnostics, not EngineCore gates.
+Both answers correctly report all12 rows and10% stability. Review limitations:
+Chat reads structural source summaries and calls the default8000 address live;
+Responses overstates reading all documents in full (acceptance read stops at300
+lines), simplifies scheduler computed-token accounting, and quotes the prior9/9
+tool round. Both retain the handoff snapshot's pending-readback wording. These
+are generated-answer caveats, not current blockers. Full text and both readback
+rounds are retained. All task-owned GPU programs exited, and temporary service
+ports18025/18026/18027 were verified released; unrelated clients were untouched.
+
 Offline TileLang AutoTuner searches use legal metadata, explicit CUDA Graph timing
 and independent references with no mismatch waiver. TileFoundry cost/memory
 analysis guides hypotheses; complete-operator and actual-model results decide

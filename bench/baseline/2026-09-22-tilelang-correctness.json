@@ -5368,5 +5368,253 @@
   },
   "agentic_review": "Both APIs made9 successful tool calls, read both required source files and used tool-result follow-ups. Chat17.095s/Responses22.058s. Both explicitly report pending final TileLang acceptance at read time. Caveats: Chat abbreviates the install path and its final gap estimate reuses an older0.14% figure; Responses uses an approximate0.1% gap and historical memory figures. Final text is preserved. Neither answer is claimed perfectly grounded.",
   "discarded_validation_drivers": "An early diagnostic overlapped source editing; a probe driver incorrectly set the MTP coverage flag to4; and a batch rerun reused a stale IPC socket. These attempts are not acceptance. Corrected fixed-source/flag/unique-socket runs are retained here.",
-  "cleanup": "Service 18025 and its owned worker exited; port released. Each test/boundary worker exited at completion. Formal benchmark workers are managed separately."
+  "cleanup": "All task-owned test, boundary, formal benchmark, and service/worker processes exited. Verified readback worker PIDs3330329/3340261 and final benchmark3270926 absent; ports18025/18026/18027 released. Remaining nvidia-smi clients belong to other users and were not stopped.",
+  "documentation_readbacks": [
+    {
+      "source_commit": "119b6658acd985c480cc143611b9d6ce40cc775c",
+      "agentic": [
+        {
+          "api": "chat",
+          "run": {
+            "api": "chat",
+            "command": [
+              "/home/dongwu.chen/.local/bin/omp",
+              "--cwd",
+              "/data0/shared/dongwu.chen/oh-my-vllm",
+              "--model",
+              "oh-my-vllm-chat/qwen3.8-27b-fp8",
+              "--thinking",
+              "medium",
+              "--tools",
+              "read,grep,glob",
+              "--no-lsp",
+              "--no-extensions",
+              "--no-skills",
+              "--no-rules",
+              "--no-title",
+              "--no-session",
+              "--mode",
+              "json",
+              "--max-time",
+              "10m",
+              "--print",
+              "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count."
+            ],
+            "exit_code": 0,
+            "elapsed_s": 34.62938472800306,
+            "task": "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count.",
+            "requires_review": "Verify real tool execution, tool-result follow-up requests, grounded final answer, and MTP counters in server logs; exit zero alone is not acceptance."
+          },
+          "tool_starts": 5,
+          "tool_results": 5,
+          "tool_errors": 0,
+          "paths": [
+            "/data0/shared/dongwu.chen/oh-my-vllm/README.md",
+            "/data0/shared/dongwu.chen/oh-my-vllm/docs/architecture.md",
+            "/data0/shared/dongwu.chen/oh-my-vllm/docs/handoff.md",
+            "crates/scheduler/src/lib.rs",
+            "python/oh_my_vllm/worker/model_runner.py"
+          ],
+          "final_text": "\n\n## oh-my-vllm\n\n### Project goal\n\nBuild a Rust-first inference framework for **Qwen3.8-27B-FP8 on a single B200 GPU** that matches vLLM EngineCore at **≥95% throughput and ≤110% TTFT** on 12 workloads (bs=1/2/4, in=32768, out=4096, plus MTP4 and prefix-hit modes). Rust owns HTTP serving, scheduling, and logical KV cache; Python owns GPU computation; the two exchange msgpack over ZMQ DEALER. The transitional vLLM adapter is gone — the runtime, build, and tests never install, import, or link vLLM (`AGENTS.md`, `README.md`).\n\nKey model constraints: 16 full-attention + 48 GDN (linear-recurrent) layers, block size 784 tokens, context up to 262144 tokens (`AGENTS.md`, `docs/architecture.md`).\n\n### Architecture\n\n**Two processes, one socket.**\n\n1. **Rust side** (`crates/`):\n   - `kv-cache` — shared logical block pool with chain-hashed prefixes, aligned Mamba checkpoints, two-phase allocation (reuse before new pages); an independent GDN pool is available via `--mamba-blocks` (ADR-007).\n   - `scheduler` (`crates/scheduler/src/lib.rs`) — a port of vLLM v1's core scheduling: FCFS waiting→running queues, per-step token budget (`max_num_batched_tokens`), chunked prefill as `remaining.min(budget)`, continuous batching (decode before new prefill), prefix-cache lookup and slot allocation through `HybridCoordinator`, recompute-based preemption, and MTP draft accounting with rollback via `set_drafts([])`.\n   - `zmq-worker` — CLI, OpenAI-compatible HTTP APIs (Chat Completions + Responses with thinking/tools/JSON constraints), model-process lifecycle, cancellation, ZMQ transport.\n\n2. **Python side** (`python/oh_my_vllm/`):\n   - `worker/model_runner.py` — `OhMyVllmWorker`: loads the project-owned Qwen model from safetensors, allocates cache tensors directly at Rust-reported logical capacity, and orchestrates `execute_model` (validate accepted history/state → run model → sample with per-draft grammar masks → commit retained outputs → select accepted recurrent snapshots → save boundary checkpoints → generate MTP proposals).\n   - Supporting modules: `serving.py` (tokenizer, chat template, XGrammar masks, incremental decode), `sampler.py` (penalties, top-k/p, greedy verification of drafts), `mtp.py` (MTP head sharing embedding/output weights, shifted cache), `batch_plan.py` (host validation, no page allocation), `decode_graph.py` (CUDA graphs, ≤32 shapes per family, eager fallback).\n   - Kernels: FlashInfer TRT-LLM FP8 GEMM/CUTLASS for projections; all 7 project-owned kernel modules (GDN recurrence, causal conv, paged split-KV decode, RMS, RoPE, pointwise fusions) now implemented in **TileLang**; CUDA-graph decode exposes 784-token pages as 49×16-token subpages for zero-copy native attention (`docs/architecture.md`, `README.md`).\n\n**Execution flow** (docs/architecture.md): Rust normalizes request → Python's `ServingAdapter` tokenizes → Rust admits, resolves prefixes, allocates FA/Mamba tables → Python validates, executes, samples → Python commits retained tokens, snapshots recurrent state, proposes MTP drafts → Rust updates accepted history and rolls back rejections. Rejected MTP candidates never become cached prefixes; a token crossing a 784-boundary snapshots its recurrent state into the checkpoint slot.\n\n### How to run\n\n```bash\n# env: scripts/with-env.sh selects conda env, PYTHONPATH, CARGO_TARGET_DIR\nuv pip install --python .../conda-envs/oh-my-vllm/bin/python -r requirements/runtime.txt\nscripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker\n\n# text smoke test (GPU wrapper waits for idle B200, pins its UUID)\nscripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py \\\n  --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64\n# add --num-speculative-tokens 4 for MTP\n\n# OpenAI-compatible service on 127.0.0.1:8000/v1\nscripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker \\\n  --socket /tmp/oh-my-vllm-serve.ipc --num-gpu-blocks 4200 --mamba-blocks 128 \\\n  --max-model-len 262144 --num-speculative-tokens 4 serve\n```\n\nVerification suite: `cargo test --workspace`, `cargo fmt/clippy`, `ruff format/check`, CPU `unittest discover` (README \"Quick start\" / \"Verification\" sections).\n\n### Completion status (as of 2026-09-22)\n\n**Essentially complete for the stated goals**, with one pending item:\n\n- **Performance acceptance: PASSED.** All 12 frozen EngineCore rows (ordinary/MTP4/prefix × bs 1/2/4) pass throughput, TTFT, and the user-revised 10% stability gate on clean implementation `da75c02`: minimum throughput ratio **95.31%**, maximum TTFT ratio **101.47%**, max spread 5.97% (`docs/handoff.md` \"Current\" section, `docs/acceptance.md`, `bench/baseline/2026-09-22-tilelang-*.json`).\n- **Correctness: full GPU suite passes — 146 tests + 12 subtests, no skips**; actual-model ordinary/MTP FP64 probes pass; six 262144-total-token boundary rows pass without OOM or preemption; 12 MTP4 constraint cases, service lifecycle, and both real oh-my-pi agentic workflows (Chat/Responses, 9 successful tool calls each) pass.\n- **TileLang migration: done for kernels** — all 15 project-owned Triton kernels replaced across 7 modules, no owned Triton imports or fallbacks; TileFoundry is pinned as a development-only fork (`3rdparty/TileFoundry` @ 6b1b149). The README notes \"final migration performance acceptance is still pending\" as a documentation-level caveat, though the handoff's current section reports the 12-row gate already passing on the clean implementation.\n- **Remaining/future**: ADR-006 documents future model architectures, single-node multi-GPU, other NVIDIA backends, and the local DSpark checkpoint as documentation-only extension scope (explicitly no empty interfaces); the pending long-context acceptance protocol for independent FA/GDN capacities (ADR-007) is noted as pending.\n\nEvidence: `README.md`, `docs/architecture.md`, `docs/handoff.md` (current section), `crates/scheduler/src/lib.rs` (module docstring and `Scheduler` API), `python/oh_my_vllm/worker/model_runner.py` (`OhMyVllmWorker` lifecycle and `execute_model`), `docs/decisions/ADR-006`, `docs/decisions/ADR-007`.",
+          "log": {
+            "path": "/tmp/oh-my-vllm-tilelang-readback-agentic-chat/chat.jsonl",
+            "sha256": "d3a87564b650dc6c10a46dee87c29da24fb99382d35f4e72b7910a6b7fcdb4a6"
+          }
+        },
+        {
+          "api": "responses",
+          "run": {
+            "api": "responses",
+            "command": [
+              "/home/dongwu.chen/.local/bin/omp",
+              "--cwd",
+              "/data0/shared/dongwu.chen/oh-my-vllm",
+              "--model",
+              "oh-my-vllm-responses/qwen3.8-27b-fp8",
+              "--thinking",
+              "medium",
+              "--tools",
+              "read,grep,glob",
+              "--no-lsp",
+              "--no-extensions",
+              "--no-skills",
+              "--no-rules",
+              "--no-title",
+              "--no-session",
+              "--mode",
+              "json",
+              "--max-time",
+              "10m",
+              "--print",
+              "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count."
+            ],
+            "exit_code": 0,
+            "elapsed_s": 19.7514678590087,
+            "task": "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count.",
+            "requires_review": "Verify real tool execution, tool-result follow-up requests, grounded final answer, and MTP counters in server logs; exit zero alone is not acceptance."
+          },
+          "tool_starts": 9,
+          "tool_results": 9,
+          "tool_errors": 0,
+          "paths": [
+            "README.md",
+            "docs/architecture.md",
+            "crates/scheduler/src/lib.rs",
+            "python/oh_my_vllm/worker/model_runner.py",
+            "crates/scheduler/src/lib.rs:44-400",
+            "python/oh_my_vllm/worker/model_runner.py:34-340",
+            "docs/handoff.md",
+            "docs/handoff.md:301-310",
+            "docs/requirements.md"
+          ],
+          "final_text": "\n\n# oh-my-vllm\n\n## 项目目标\n\nRust-first 推理框架，目标模型 **Qwen3.8-27B-FP8**（`/data0/shared/Qwen3.8-27B-FP8`，48 层 GDN + 16 层 full-attention 混合架构）跑在**单张 B200** 上。核心 KPI：在 12 个工作负载行（ordinary/MTP4/prefix-hit × 32768-in/4096-out 和 131072-in，bs 1/2/4）上达到刷新后的 vLLM EngineCore 吞吐量的 **≥95%** 且 TTFT **≤110%**，spread/median ≤10%（README；`docs/requirements.md` REQ-GOAL-001、REQ-PERF-001/002）。\n\n关键设计约束（`docs/requirements.md`、AGENTS.md）：\n- Rust 拥有 HTTP serving、调度、逻辑 KV 分配；Python 拥有 GPU 计算；边界是单一 ZMQ DEALER  socket + msgpack，无共享内存（REQ-ARCH-001）。\n- 块大小固定 **784** tokens（混合架构硬约束，禁止修改）。\n- 最大上下文 262144 tokens，边界测试 258048-in+4096-out 不得 OOM 或发生 preemption（REQ-CONTEXT-001）。\n- 运行时、构建、测试**不得**安装/导入/链接 vLLM，过渡 adapter 已删除（REQ-RUNNER-002）。\n\n## 架构\n\n执行流（`docs/architecture.md` \"Execution flow\"）：\n\n1. Rust 前端归一化 Chat/Responses 请求；Python 的 `ServingAdapter` 套 chat template、tokenizer、XGrammar 约束，返回 prompt IDs。\n2. Rust 调度器接收请求、解析共享前缀、分配 FA/Mamba 表，混合批排 prefill/decode/MTP draft。\n3. Python 校验已接受历史和物理状态地址，跑 Qwen 模型，按每个 draft 的 grammar mask 从 target 分布采样。\n4. Python 只提交保留的输出，选择接受的 recurrent 快照，保存跨越 784 边界的 checkpoint，生成新 MTP 提案。\n5. Rust 更新已接受历史、回滚被拒投机位置、释放完成请求。\n\n**Rust 侧**（`crates/`）：\n- `crates/scheduler`：读 `crates/scheduler/src/lib.rs` 可见完整实现——FCFS `waiting`/`running` 队列（`VecDeque<Request>`），`schedule()` 分两阶段：phase 1 先走 running 队列（decode/续 prefill 优先于新 prefill，即连续批处理），`aligned_prefill()` 用 `remaining.min(budget)` + 784 块边界对齐实现 chunked prefill 和 Mamba checkpoint 物化；池耗尽时对 running 尾部做 recompute preemption（`num_computed_tokens` 清零、回插 waiting 队首）；`update()` 处理 MTP 接受数、`num_computed_tokens` 回滚、新 draft 安装和完成释放（`SchedulerConfig` 默认 `max_num_batched_tokens=32768`、`mtp_draft_len=4`）。\n- `crates/kv-cache`：共享逻辑块池、链式哈希前缀缓存、对齐 Mamba checkpoint、投机预留；两阶段分配先碰复用前缀再分配新页。\n- `crates/zmq-worker`：CLI、OpenAI 兼容 HTTP（Chat Completions + Responses）、模型进程生命周期、取消、ZMQ 传输。\n\n**Python 侧**（`python/oh_my_vllm/`）：\n- 读 `python/oh_my_vllm/worker/model_runner.py` 可见 `OhMyVllmWorker`：`initialize_cache` 按层分配 FA 张量 `[blocks,2,784,4,256]` BF16 和 Mamba 张量（causal conv `[slots,10240,3]` BF16 + SSM `[slots,48,128,128]`，普通 FP32/MTP 下 BF16）；`execute_model` 对 Rust 输出做防御性校验（token 预算、computed 位置、表容量），经 `batch_plan` 规划、按 prefill 排序、拼 position/sequence/slot 元数据，decode-only 批次走 `DecodeGraph` CUDA graph（key 为 `(tokens, requests, extent)`，上限 32 个 shape，超出则 eager），否则 `self.model.forward` 直接执行；采样路径区分纯贪心快速路径（`greedy_rows`+`verify_rows`）与带 grammar bitmask 的 `RequestSampler.sample`。\n- `models/qwen.py` 直接读 safetensors，64 层 target + 单层 MTP head；`worker/sampler.py` 惩罚/贪心/随机采样与贪心提案验证；`worker/mtp.py` MTP 移位缓存与提案生成；`worker/decode_graph.py` graph 捕获/回放；`worker/serving.py` XGrammar 约束解码。\n- GPU kernel：项目自有 TileLang kernel（GDN recurrence、causal conv、paged split-KV GQA decode、RMS+RoPE 等）；FP8 GEMM 用独立 FlashInfer TRT-LLM（≤32 行）/CUTLASS；长 prefill 用 FlashInfer ragged TRT-LLM attention。\n\n## 如何运行\n\n```bash\n# 环境准备（conda oh-my-vllm；with-env.sh 选环境/Python 路径/独立 kernel 缓存）\nuv pip install --python /data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python -r requirements/runtime.txt\nscripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker\n\n# 文本冒烟（with-gpu.sh 等待空闲 B200 并固定 UUID）\nscripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py \\\n  --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64\n\n# 本地 OpenAI 服务（MTP4）\nscripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker \\\n  --socket /tmp/oh-my-vllm-serve.ipc --num-gpu-blocks 4200 --mamba-blocks 128 \\\n  --max-model-len 262144 --num-speculative-tokens 4 serve\n```\n服务在 `http://127.0.0.1:8000/v1` 提供 Chat Completions 与 Responses（含 thinking、tools、JSON 约束、存储式 Responses，见 `docs/serving.md`）。文本脚本加 `--num-speculative-tokens 4` 启用 MTP（README \"Quick start\" / \"Local OpenAI service\"）。验证命令：`cargo test --workspace`、fmt/line-width/clippy、`ruff`、CPU unittest（README \"Verification\"；`docs/testing.md`、`docs/development.md`）。\n\n## 当前完成状态（截至 2026-09-22，`docs/handoff.md` \"Current\"）\n\n**主体功能全部完成并通过验收**：\n\n- **性能**：最新 TileLang 迁移实现（da75c02）通过全部 12 行冻结 EngineCore 吞吐/TTFT 门槛，且满足用户批准的 10% 稳定性上限（原 5%，2026-09-22 修订）。最低吞吐比 **95.31%**，最高 TTFT 比 **101.47%**（`docs/handoff.md`；`bench/baseline/2026-09-22-tilelang-*.json`；`docs/acceptance.md` 区分当前与历史结果）。旧九行矩阵对旧基线通过但满足不了新 TTFT 门槛，已归档为历史（README）。\n- **正确性/功能**：完整 GPU 套件 146 测试 + 12 子测试全过、无 skip；实际模型 ordinary/MTP FP64 probe、六个 262144 总量边界行（无 OOM/preemption）、text/preemption/prefix、12 个 MTP4 约束用例、服务生命周期与长服务检查全过；两个真实 oh-my-pi API 工作流各完成 9 次成功工具调用且 MTP 活动为正。\n- **kernel 迁移**：7 个自有 kernel 模块全部迁到 TileLang，生产代码无自有 Triton 残留；TileFoundry 仅开发用途，pin 在个人 fork 6b1b149。迁移性能验收（REQ-KERNEL-001 的 12 行门槛）已按上条通过——handoff 中\"final migration performance acceptance pending\"是 README 旧措辞，以 handoff Current 节为准。\n- **文档**：25 个项目 Markdown 均有中文 companion。\n\n**明确不在范围**（`docs/requirements.md` REQ-OUT-SCOPE-001）：多模态、swap/CPU KV offload preemption、多 GPU/TP>1、gRPC、LoRA、生产容器化。未来扩展（其他模型、单机多卡、DSpark draft）只需简短扩展文档（ADR-006）。\n\n**下一步**：handoff 仅记\"final document readback is next\"，无未决正确性或性能阻塞项。",
+          "log": {
+            "path": "/tmp/oh-my-vllm-tilelang-readback-agentic-responses/responses.jsonl",
+            "sha256": "0d6a3ba92a96203c5679e640c891ea84f08f2bb7b7b8e544f5b6f08982d2ae2d"
+          }
+        }
+      ],
+      "server_log": {
+        "path": "/tmp/oh-my-vllm-tilelang-readback-service-server.log",
+        "sha256": "36e0d24d7a1ea0e15d4ae0cbec3b3506c7b7b32d2afb49ad2d6d31e1f662f2ad"
+      },
+      "request_counters": [
+        "2026-09-22T09:41:05.280855Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=1 output_tokens=204 input_tokens=6888 cached_tokens=0 reasoning_tokens=39 elapsed_s=19.290338926 ttft_ms=8915 output_tps=10.575241875353662 steps=51 proposed_draft_tokens=193 accepted_draft_tokens=154 finish_reason=stop",
+        "2026-09-22T09:41:13.082073Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=2 output_tokens=127 input_tokens=16251 cached_tokens=7056 reasoning_tokens=33 elapsed_s=7.76063685 ttft_ms=4504 output_tps=16.364636363573695 steps=31 proposed_draft_tokens=116 accepted_draft_tokens=97 finish_reason=stop",
+        "2026-09-22T09:41:20.163878Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=3 output_tokens=1715 input_tokens=17546 cached_tokens=15680 reasoning_tokens=55 elapsed_s=7.060235498 ttft_ms=165 output_tps=242.90974436841654 steps=514 proposed_draft_tokens=2046 accepted_draft_tokens=1202 finish_reason=stop",
+        "2026-09-22T09:41:21.297856Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=4 output_tokens=112 input_tokens=6889 cached_tokens=0 reasoning_tokens=33 elapsed_s=0.649813552 ttft_ms=325 output_tps=172.35713175769533 steps=27 proposed_draft_tokens=100 accepted_draft_tokens=86 finish_reason=stop",
+        "2026-09-22T09:41:22.289649Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=5 output_tokens=159 input_tokens=10919 cached_tokens=6272 reasoning_tokens=65 elapsed_s=0.954695915 ttft_ms=256 output_tps=166.54517684827425 steps=43 proposed_draft_tokens=164 accepted_draft_tokens=117 finish_reason=stop",
+        "2026-09-22T09:41:23.563897Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=6 output_tokens=291 input_tokens=12246 cached_tokens=10976 reasoning_tokens=140 elapsed_s=1.238797465 ttft_ms=112 output_tps=234.9052272237254 steps=88 proposed_draft_tokens=344 accepted_draft_tokens=204 finish_reason=stop",
+        "2026-09-22T09:41:25.107544Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=7 output_tokens=180 input_tokens=23721 cached_tokens=11760 reasoning_tokens=89 elapsed_s=1.499657809 ttft_ms=666 output_tps=120.02738152647463 steps=55 proposed_draft_tokens=212 accepted_draft_tokens=126 finish_reason=stop",
+        "2026-09-22T09:41:39.938875Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=8 output_tokens=2301 input_tokens=27478 cached_tokens=23520 reasoning_tokens=97 elapsed_s=14.802652376 ttft_ms=1729 output_tps=155.44511493971734 steps=687 proposed_draft_tokens=2739 accepted_draft_tokens=1615 finish_reason=stop"
+      ],
+      "review": "Both tools completed successfully, but stale README/architecture pending wording caused contradictory status in answers. Corrected in83d77ff and repeated both APIs; retained for provenance."
+    },
+    {
+      "source_commit": "83d77ff77a1413f37b909391f89a91c9c839e52c",
+      "agentic": [
+        {
+          "api": "chat",
+          "run": {
+            "api": "chat",
+            "command": [
+              "/home/dongwu.chen/.local/bin/omp",
+              "--cwd",
+              "/data0/shared/dongwu.chen/oh-my-vllm",
+              "--model",
+              "oh-my-vllm-chat/qwen3.8-27b-fp8",
+              "--thinking",
+              "medium",
+              "--tools",
+              "read,grep,glob",
+              "--no-lsp",
+              "--no-extensions",
+              "--no-skills",
+              "--no-rules",
+              "--no-title",
+              "--no-session",
+              "--mode",
+              "json",
+              "--max-time",
+              "10m",
+              "--print",
+              "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count."
+            ],
+            "exit_code": 0,
+            "elapsed_s": 22.50690236200171,
+            "task": "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count.",
+            "requires_review": "Verify real tool execution, tool-result follow-up requests, grounded final answer, and MTP counters in server logs; exit zero alone is not acceptance."
+          },
+          "tool_starts": 7,
+          "tool_results": 7,
+          "tool_errors": 0,
+          "paths": [
+            "README.md",
+            "docs/architecture.md",
+            "docs/handoff.md",
+            "crates/scheduler/src/lib.rs",
+            "python/oh_my_vllm/worker/model_runner.py",
+            "docs/handoff.md:301",
+            "docs/requirements.md"
+          ],
+          "final_text": "\n\n## Project goals\n\n**What it is:** a Rust-first inference framework for **Qwen3.8-27B-FP8** (`/data0/shared/Qwen3.8-27B-FP8`: 48 GDN/Mamba + 16 full-attention layers, block size 784) on a **single B200 GPU**, deliberately independent of vLLM at runtime (`README.md`, `docs/requirements.md` REQ-RUNNER-002).\n\nKey confirmed goals (`docs/requirements.md`):\n- **REQ-GOAL-001 / REQ-PERF-001/002:** ≥95% of a freshly frozen official-vLLM-main EngineCore baseline throughput and ≤110% TTFT on all 12 rows (ordinary / MTP4 / prefix-hit at in=32768/out=4096, bs 1/2/4; ordinary at in=131072, bs 1/2/4), with spread/median ≤10% (user revised from 5% on 2026-09-22).\n- **REQ-ARCH-001:** Rust owns queues, token budget, KV allocation, prefix cache, preemption; Python owns model/forward/kernels/CUDA graphs; the boundary is a single ZMQ DEALER socket, no tensors crossing, no vLLM scheduler.\n- **REQ-CONTEXT-001:** 262144 total-token context (258048+4096 boundary at bs 1/2/4) without OOM or recompute preemption.\n- **REQ-SERVE-001…005:** local OpenAI-compatible service (Chat Completions + stored Responses), thinking strength, constrained decoding with MTP, real oh-my-pi acceptance.\n- **REQ-KERNEL-001:** all project-owned Triton kernels replaced by TileLang (TileFoundry dev-only fork), all 12 rows must still pass.\n- **REQ-OUT-SCOPE-001:** no multimodal, no multi-GPU/TP, no gRPC, no LoRA, no CPU-offload preemption.\n\n## Architecture\n\nPer `docs/architecture.md`, two processes:\n\n```mermaid\nflowchart LR\n  C[Client HTTP] --> R[Rust zmq-worker: HTTP, CLI, lifecycle]\n  R <-->|ZMQ DEALER + msgpack| P[Python worker: model, kernels, graphs]\n  R --> K[kv-cache crate: hybrid pool, prefix cache]\n  R --> S[scheduler crate: FCFS, chunked prefill, preemption, MTP]\n```\n\n1. Rust normalizes requests; Python `ServingAdapter` applies chat template, tokenizer, sampling, XGrammar masks → prompt IDs.\n2. Rust admits requests, resolves shared prefixes, allocates FA/Mamba tables; scheduler batches prefill/decode/MTP drafts.\n3. Python validates accepted history + physical state addresses, runs the Qwen model, samples with per-draft grammar masks.\n4. Python commits retained outputs, selects recurrent snapshots, saves 784-boundary checkpoints, proposes MTP drafts.\n5. Rust updates history, rolls back rejected drafts, frees finished requests.\n\nRust side (verified in source):\n- `crates/scheduler/src/lib.rs` — self-described port of vLLM v1 scheduling logic: FCFS waiting→running, per-step token budget (chunked prefill via `remaining.min(budget)`), decode-before-prefill continuous batching, prefix lookup/`allocate_slots` through `HybridCoordinator`, recompute preemption, MTP budget accounting (`num_tokens_with_spec`, draft rollback).\n- `crates/kv-cache` — shared logical block pool, chain-hashed (SHA-256→64-bit) LRU prefix cache, aligned Mamba checkpoints, two-phase allocation; independent FA vs GDN pools via `--mamba-blocks` (ADR-007).\n- `crates/zmq-worker` — CLI, OpenAI HTTP APIs, Python process lifecycle, cancellation, ZMQ client.\n\nPython side (`python/oh_my_vllm/`):\n- `worker/model_runner.py` (read; structural summary) — `OhMyVllmWorker` with `RuntimeConfig` (model, `max_model_len`, `num_gpu_blocks`, `speculative_tokens` ∈ {0,4}, optional `mamba_blocks`), plus `init_device`/`load_model`/`initialize_cache`/`register_request`/`prepare_request`/`execute_model`/`shutdown`; persistent per-request history and `RequestSampler` state, orchestrated against `SchedulerOutput`.\n- `worker/batch_plan.py` (host validation, no allocation), `models/qwen.py` (direct safetensors loading, 64-layer target + one MTP head), `worker/sampler.py` (penalties/top-k/top-p, exact greedy verification), `worker/serving.py` (tokenization, XGrammar, incremental decode), `worker/mtp.py`, `worker/decode_graph.py` (≤32 graph shapes per target/proposer), `worker/runtime.py` (dependency-identity audit at start/shutdown).\n- Kernels: project-owned **TileLang** for GDN recurrence, causal convolution, paged split-KV GQA decode, RMS, partial NeoX RoPE (with FP64 phase reduction at max context), fusions; independent FlashInfer TRT-LLM FP8 GEMM (≤32 rows) / CUTLASS above; grouped 5-query verification attention; long-prefill ragged TRT-LLM attention (≥1024-token spans). MTP uses a uniform +1 RoPE shift so draft rows match Rust prefix hashes.\n\n## How to run\n\nFrom `README.md` (env: conda `oh-my-vllm` at `/data0/shared/dongwu.chen/conda-envs/oh-my-vllm`, `PYTHONPATH=…/oh-my-vllm/python`, `CARGO_TARGET_DIR=…/target`; wrappers `scripts/with-env.sh` select env, `scripts/with-gpu.sh` waits for an idle B200 and pins its UUID):\n\n```bash\nuv pip install --python /data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python -r requirements/runtime.txt\nscripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker\n# offline smoke test (add --num-speculative-tokens 4 for MTP)\nscripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64\n# OpenAI service on http://127.0.0.1:8000/v1\nscripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker \\\n  --socket /tmp/oh-my-vllm-serve.ipc --num-gpu-blocks 4200 --mamba-blocks 128 \\\n  --max-model-len 262144 --num-speculative-tokens 4 serve\n```\n\nVerification: `cargo test --workspace`, `cargo fmt --all --check`, `python scripts/check_rust_line_width.py`, `clippy -D warnings`, `ruff format/check`, CPU unittests (all via `scripts/with-env.sh`, `README.md`/`docs/testing.md`).\n\n## Current completion status (2026-09-22)\n\nPer `docs/handoff.md` \"Current\" section and `README.md`:\n- **TileLang migration done and accepted:** all 7 project-owned kernel modules on TileLang, no owned Triton remaining; clean measured run `da75c02` passes **all 12** frozen EngineCore throughput/TTFT rows under the revised 10% stability gate — min throughput ratio **95.3098%**, max TTFT ratio **101.4735%** (evidence in `docs/acceptance.md`, `bench/baseline/2026-09-22-tilelang-*.json`).\n- Correctness suite: full GPU pytest **146 tests + 12 subtests**, no skips; actual-model ordinary/MTP FP64 probes pass at original tolerances; six 262144-total-token boundary rows pass with no OOM/preemption; 12 MTP4 constraint cases, lifecycle, long-prefix reuse (130928 cached tokens) pass.\n- Serving: Chat Completions + stored Responses live at `:8000/v1`; both real oh-my-pi agentic workflows passed with MTP4 and tool calls.\n- The prior nine-row (pre-refresh) matrix passed its original frozen baseline but is historical and does **not** satisfy the new TTFT gate (`README.md`).\n- Remaining per the handoff: the final document readback pass (\"Final document readback is next\") — the acceptance evidence exists; no unresolved performance or correctness blocker is listed.",
+          "log": {
+            "path": "/tmp/oh-my-vllm-tilelang-final-readback-agentic-chat/chat.jsonl",
+            "sha256": "d28f70914db5d1f3e407a62fb12860a8cbb1440b4322cc1a2a9d84c0710bbee5"
+          }
+        },
+        {
+          "api": "responses",
+          "run": {
+            "api": "responses",
+            "command": [
+              "/home/dongwu.chen/.local/bin/omp",
+              "--cwd",
+              "/data0/shared/dongwu.chen/oh-my-vllm",
+              "--model",
+              "oh-my-vllm-responses/qwen3.8-27b-fp8",
+              "--thinking",
+              "medium",
+              "--tools",
+              "read,grep,glob",
+              "--no-lsp",
+              "--no-extensions",
+              "--no-skills",
+              "--no-rules",
+              "--no-title",
+              "--no-session",
+              "--mode",
+              "json",
+              "--max-time",
+              "10m",
+              "--print",
+              "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count."
+            ],
+            "exit_code": 0,
+            "elapsed_s": 34.78025247900223,
+            "task": "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count.",
+            "requires_review": "Verify real tool execution, tool-result follow-up requests, grounded final answer, and MTP counters in server logs; exit zero alone is not acceptance."
+          },
+          "tool_starts": 13,
+          "tool_results": 13,
+          "tool_errors": 0,
+          "paths": [
+            "README.md",
+            "docs/architecture.md",
+            "docs/handoff.md",
+            "crates/scheduler/src/lib.rs",
+            "python/oh_my_vllm/worker/model_runner.py",
+            "docs/requirements.md",
+            "crates/scheduler/src/lib.rs:44-400",
+            "python/oh_my_vllm/worker/model_runner.py:34-400",
+            "docs/acceptance.md",
+            "docs/handoff.md:300-310",
+            ".",
+            "scripts",
+            "crates/scheduler/src/request.rs"
+          ],
+          "final_text": "\n\nI've read the README, architecture doc, requirements, handoff, acceptance evidence, and both required source files in full. Here is the grounded picture.\n\n---\n\n# oh-my-vllm — Project Overview\n\n## 1. Project goals\n\n**Primary objective** (REQ-GOAL-001 in `docs/requirements.md`, echoed in `README.md` and `AGENTS.md`): build a **Rust-first inference framework for Qwen3.8-27B-FP8 on a single B200 GPU** that reaches **≥95% of vLLM EngineCore throughput** and **≤110% of its TTFT** on 12 benchmark rows, with spread/median ≤10% stability. The design is the split itself (REQ-ARCH-001):\n\n- **Rust owns** HTTP serving, request scheduling, accepted-token history, and logical KV allocation.\n- **Python owns** model loading, GPU compute, attention/recurrence kernels, and CUDA graph capture.\n- The boundary is a **single ZMQ DEALER socket with msgpack** — no shared memory, no tensor data crossing, and no vLLM runtime/scheduler/model adapter anywhere (`docs/architecture.md`).\n\nModel/hardware constraints (REQ-MODEL-001, `AGENTS.md`): the model at `/data0/shared/Qwen3.8-27B-FP8` is a 64-layer hybrid with **48 GatedDeltaNet (GDN/Mamba) layers + 16 full-attention layers**; **block size 784 tokens is a hard constraint** from the hybrid architecture; KV groups are FA (`group_id=0`, 16 layers) and Mamba (`group_id=1`, 48 layers, align mode).\n\nAdditional confirmed requirements in `docs/requirements.md`:\n\n- **REQ-CONTEXT-001**: support 262144 total input+output tokens; 258048-in/4096-out boundary runs at batch 1/2/4 must finish **without OOM or recompute preemption**.\n- **REQ-PERF-001/002**: the 12 rows are ordinary/MTP4/prefix-hit at in=32768, out=4096, bs 1/2/4, plus ordinary at in=131072 — with a user-approved baseline refresh on 2026-09-22 (fresh official vLLM main, SHA `e9f169d…`, frozen in `bench/baseline/2026-09-22-refreshed-enginecore.json`).\n- **REQ-SERVE-001/002/004/005**: OpenAI-compatible local service (Chat Completions + Responses, stored responses with `previous_response_id`), five thinking levels, and **MTP4 constrained decoding** with XGrammar token-level masks (JSON object/schema/strict tools, no silent non-MTP fallback).\n- **REQ-KERNEL-001**: replace all project-owned Triton kernels with **TileLang**, no legacy fallback, no Triton-relative gate — only the vLLM ratio gates.\n- **REQ-OUT-SCOPE-001**: no multimodal, no swap preemption, no multi-GPU, no LoRA, no production deployment.\n\n## 2. Architecture\n\nFrom `docs/architecture.md`, `crates/scheduler/src/lib.rs`, and `python/oh_my_vllm/worker/model_runner.py`:\n\n### Execution flow (5 stages, `docs/architecture.md`)\n1. Rust frontend normalizes Chat/Responses; Python's `ServingAdapter` applies the chat template, tokenizer, sampling config, and XGrammar constraints → prompt IDs.\n2. Rust admits requests, resolves shared prefixes, allocates FA/Mamba block tables; the scheduler batches prefill, decode, and MTP draft tokens.\n3. Python validates accepted history and physical addresses, runs the Qwen model, samples with per-draft grammar masks.\n4. Python commits retained outputs, selects recurrent snapshots, saves 784-boundary checkpoints, and proposes new MTP drafts.\n5. Rust updates history, rolls back rejected speculative positions, frees finished requests.\n\n### Rust side (3 crates, `crates/`)\n- **`kv-cache`** — `HybridCoordinator`: shared logical block pool, chain-hashed prefixes (SHA-256 truncated to 64 bits, LRU eviction), aligned Mamba checkpoints, speculative reservations, two-phase allocation (reuse prefixes before allocating new pages). Each logical FA page holds 784 tokens.\n- **`scheduler`** — read in full (`crates/scheduler/src/lib.rs`, `crates/scheduler/src/request.rs`). It is an explicit port of vLLM's V1 scheduling logic:\n  - `Scheduler` holds FCFS `waiting` and `running` `VecDeque`s plus a `HybridCoordinator`.\n  - `schedule()` runs **phase 1** over the running queue (decode/continued prefill never starved) and **phase 2** over waiting (new prefills), each bounded by `max_num_batched_tokens = 32768`.\n  - **Chunked prefill** is `remaining.min(budget)`; `aligned_prefill()` further cuts chunks at 784-token block boundaries so Mamba checkpoints materialize correctly.\n  - **Preemption by recompute**: on allocation failure the running request is freed, reset to `num_computed_tokens = 0`, and re-queued at the *front* of waiting.\n  - **MTP accounting**: `num_tokens_with_spec()` = confirmed + unverified drafts; `update()` asserts the worker accepted no more drafts than were scheduled, advances `num_computed_tokens` by the acceptance count, and truncates/installs the next draft set (max `mtp_draft_len = 4`).\n- **`zmq-worker`** — CLI, OpenAI-compatible HTTP APIs at `:8000/v1`, model-process lifecycle, cancellation, ZMQ transport, correlated logging.\n\n### Python side (`python/oh_my_vllm/`)\n- **`worker/model_runner.py`** (read in full) — `OhMyVllmWorker`, the concrete single-GPU worker:\n  - Capacity: `logical_num_blocks = num_gpu_blocks // 3` (preserving the original scheduler capacity unit without vLLM's physical padding); optional independent GDN pool via `mamba_blocks` (ADR-007, `--mamba-blocks N`).\n  - `initialize_cache()`: FA pages `[blocks, 2, 784, 4, 256]` BF16 per attention layer; GDN state `[mamba_blocks, 48, 128, 128]` (FP32 ordinary, BF16 with MTP) + causal-conv `[mamba_blocks, 10240, 3]` BF16.\n  - `execute_model()`: validates the Rust plan (token budget, computed position, FA/Mamba table bounds, recurrent source slot), builds a flattened batch, picks **CUDA graph replay** for decode shapes (keyed by `(tokens, requests, extent)`, ≤32 graphs, else eager), runs the model, samples (greedy fast path via `verify_rows` for plain greedy, otherwise `RequestSampler` with optional grammar bitmasks), commits accepted tokens, copies crossed 784-boundary state checkpoints, and asks `MTP.propose()` for the next drafts.\n- `worker/batch_plan.py` (host validation, snapshot selection), `models/qwen.py` (direct safetensors load, 64-layer target + one-layer MTP head sharing embedding/output weights), `worker/sampler.py`, `worker/serving.py` (template/tokenizer/XGrammar/incremental decode), `worker/mtp.py` (shifted +1 RoPE MTP cache), `worker/decode_graph.py`, `worker/runtime.py` (startup identity + shutdown audit that mapped libraries/modules contain no legacy dependencies).\n- **Kernels**: all project-owned kernels are **TileLang** (GDN recurrence, causal conv, paged split-KV GQA decode, RMS norm, NeoX RoPE, pointwise fusions); FlashInfer TRT-LLM FP8 GEMM for ≤32 rows, CUTLASS for larger; FlashInfer for long GDN/FA prefill. `3rdparty/TileFoundry` is a development-only pinned fork for kernel analysis — production never imports it.\n\n## 3. How to run\n\nFrom `README.md` \"Quick start\" / \"Local OpenAI service\" and `scripts/`:\n\n```bash\n# Environment: conda oh-my-vllm; wrappers set env vars, PYTHONPATH, build dir\nuv pip install --python /data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python -r requirements/runtime.txt\n\n# Build the Rust binary\nscripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker\n\n# Text smoke test (waits for an idle B200, pins its UUID)\nscripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64\n# add --num-speculative-tokens 4 for MTP4\n\n# Local OpenAI service (Chat + Responses at http://127.0.0.1:8000/v1)\nscripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker \\\n  --socket /tmp/oh-my-vllm-serve.ipc --num-gpu-blocks 4200 --mamba-blocks 128 \\\n  --max-model-len 262144 --num-speculative-tokens 4 serve\n```\n\nVerification commands (`README.md`, `AGENTS.md`): `scripts/with-env.sh cargo test --workspace`, `cargo fmt --all --check`, `python scripts/check_rust_line_width.py`, `cargo clippy --all-targets --all-features -- -D warnings`, `ruff format python/ && ruff check python/`, and `CUDA_VISIBLE_DEVICES='' python -m unittest discover -s tests`. Performance gates: `benchmarks/ttft.py` (current 12-row throughput/TTFT/stability), `benchmarks/baseline/enginecore.py` (isolated reference collector), `benchmarks/compare_vllm.py` (historical comparison).\n\n## 4. Current completion status (as of 2026-09-22)\n\nPer `docs/handoff.md` (\"Current: TileLang acceptance and revised stability\") and `docs/acceptance.md`:\n\n- **TileLang migration: implemented and accepted** (REQ-KERNEL-001, \"implemented and accepted (2026-09-22)\"). Clean implementation `da75c02` replaces all project-owned Triton kernels in seven modules; **all 12 rows pass** throughput ≥95%, TTFT ≤110%, spread/median ≤10% (user revised the stability limit from 5% to 10% on 2026-09-22).\n  - Best: prefix-32768-2 at **123.53%** throughput, 85.17% TTFT.\n  - Tightest: **mtp-32768-4 at 95.31%** throughput (695.40 vs 729.62 tok/s) and **101.47%** TTFT — inside the gates.\n- **Correctness/scale**: full GPU suite passes **146 tests + 12 subtests, no skips**; actual-model ordinary/MTP FP64 probes keep original tolerances; **all six 262144-total-token boundary rows complete without OOM or preemption** (peak reserved memory 134.7 GB ordinary / 137.7 GB MTP); 12 real MTP4 constraint cases, all thinking levels, stored-Responses lifecycle, mixed-batch scheduling, and disconnect release pass.\n- **Serving**: both real oh-my-pi agentic workflows (Chat Completions and Responses) completed with MTP4 — 9 successful tool calls each (17.10 s / 22.06 s), MTP activity on every request; minor answer caveats are retained in the evidence, not corrected.\n- **Runtime independence**: verified — no vLLM installed/imported/linked; startup identity and shutdown module/library audits pass.\n- **Remaining work**: `docs/handoff.md` states one outstanding step — *\"Final document readback is next\"* — i.e., the final agentic documentation readback (this very task, REQ-SERVE-003). Everything else in the current scope is accepted.\n- **Stated caveats** (`docs/acceptance.md`): the 12-row result is a historical comparison across independent runs and framework versions, not a same-source paired experiment; the pinned TileFoundry HIR cannot represent FP64, so FP64/model tests remain the correctness authority; discarded contaminated attempts and prior failed rows are preserved in `bench/baseline/2026-09-22-tilelang-acceptance.json` / `-correctness.json`.\n\n## Supporting files\n\n| Claim | Evidence |\n|---|---|\n| Goals, quick start, layout | `README.md`, `AGENTS.md` |\n| Requirements (goal, perf, context, serving, kernels) | `docs/requirements.md` |\n| Architecture, cache/MTP semantics, kernels, graphs | `docs/architecture.md`, `docs/design.md` |\n| Scheduler implementation | `crates/scheduler/src/lib.rs`, `crates/scheduler/src/request.rs` |\n| Worker implementation | `python/oh_my_vllm/worker/model_runner.py` |\n| Current status and acceptance tables | `docs/handoff.md`, `docs/acceptance.md`, `bench/baseline/2026-09-22-tilelang-*.json` |\n| Run scripts | `scripts/with-env.sh`, `scripts/with-gpu.sh`, `scripts/smoke-text.py` |\n| Decisions | `docs/decisions/` (ADR-006 independent runtime, ADR-007 independent FA/GDN capacities) |\n\nNo files were modified during this task.",
+          "log": {
+            "path": "/tmp/oh-my-vllm-tilelang-final-readback-agentic-responses/responses.jsonl",
+            "sha256": "4d774c623b99dfaca92f341f5ff73d18f8544ccd9e208900ade005ff5fbdab1e"
+          }
+        }
+      ],
+      "server_log": {
+        "path": "/tmp/oh-my-vllm-tilelang-final-readback-service-server.log",
+        "sha256": "07c770137d85693ce2ae6e5b8b6dd98ba024b8d2cbcea778c247fde999b63caf"
+      },
+      "request_counters": [
+        "2026-09-22T09:42:50.667883Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=1 output_tokens=321 input_tokens=6888 cached_tokens=0 reasoning_tokens=106 elapsed_s=6.854673014 ttft_ms=5598 output_tps=46.82936725710896 steps=76 proposed_draft_tokens=296 accepted_draft_tokens=246 finish_reason=stop",
+        "2026-09-22T09:42:52.635907Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=2 output_tokens=263 input_tokens=17539 cached_tokens=6272 reasoning_tokens=176 elapsed_s=1.921392639 ttft_ms=664 output_tps=136.87988319601342 steps=84 proposed_draft_tokens=328 accepted_draft_tokens=180 finish_reason=stop",
+        "2026-09-22T09:43:05.826943Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=3 output_tokens=3321 input_tokens=21379 cached_tokens=17248 reasoning_tokens=1319 elapsed_s=13.162233598 ttft_ms=279 output_tps=252.31279898456032 steps=958 proposed_draft_tokens=3818 accepted_draft_tokens=2364 finish_reason=stop",
+        "2026-09-22T09:43:08.330700Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=4 output_tokens=469 input_tokens=6889 cached_tokens=0 reasoning_tokens=195 elapsed_s=1.980256156 ttft_ms=346 output_tps=236.83804672389059 steps=117 proposed_draft_tokens=456 accepted_draft_tokens=353 finish_reason=stop",
+        "2026-09-22T09:43:11.787997Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=5 output_tokens=661 input_tokens=21051 cached_tokens=7056 reasoning_tokens=432 elapsed_s=3.408936462 ttft_ms=713 output_tps=193.9021179679588 steps=207 proposed_draft_tokens=820 accepted_draft_tokens=455 finish_reason=stop",
+        "2026-09-22T09:43:18.169852Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=6 output_tokens=1339 input_tokens=33963 cached_tokens=21168 reasoning_tokens=1189 elapsed_s=6.334967936 ttft_ms=743 output_tps=211.36649996139775 steps=402 proposed_draft_tokens=1597 accepted_draft_tokens=938 finish_reason=stop",
+        "2026-09-22T09:43:40.637881Z  INFO oh_my_vllm_zmq_worker::serving: request completed request_id=7 output_tokens=5256 input_tokens=37485 cached_tokens=33712 reasoning_tokens=2072 elapsed_s=22.438266438 ttft_ms=351 output_tps=234.24269493024548 steps=1479 proposed_draft_tokens=5900 accepted_draft_tokens=3778 finish_reason=stop"
+      ],
+      "review": "Final readback passes: Chat7/Responses13 successful tool calls, required source reads, tool-result follow-ups and positive MTP proposals/acceptance on all7 model requests. Both answers correctly report all12 rows passing under10%. Limitations: Chat reads structural source summaries, not all implementation bodies, and calls the default :8000 address live although tests use temporary ports and services are now stopped. Responses fully reads the required source files but only300 lines of acceptance.md, so its all-files-in-full claim is too broad; its computed-token update summary omits the scheduled target component/rejected-draft rollback. Responses quotes historical9/9 tools and17.10/22.06s, not current7/13 and22.51/34.78s. Both quote the handoff snapshot pending readback, now completed. No claim of exhaustive source audit or perfect answer accuracy.",
+      "observability": "All7 model requests proposed and accepted drafts. Chat/Responses final requests:252.31/234.24 output tok/s, TTFT279/351ms. First Chat request TTFT5598ms includes cold compilation/capture (logged); this service readback is not a steady-state EngineCore performance row."
+    }
+  ]
 }

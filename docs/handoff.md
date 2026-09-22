@@ -16,7 +16,12 @@ ordinary/MTP FP64 probes, six262144-total-token capacity rows (no OOM/preemption
 text/preemption/prefix, twelve MTP4 constraint cases, lifecycle and long-service
 checks pass. Both real oh-my-pi APIs completed nine successful tool calls each,
 with positive MTP activity. Their answers predate this final acceptance update;
-raw answers and grounding caveats are retained. Final document readback is next.
+raw answers and grounding caveats are retained. Final document readback on83d77ff
+also passes: Chat7 successful tools in22.51s, Responses13 in34.78s; all7 model
+requests have positive proposed/accepted drafts. Final request throughput is
+252.31/234.24tok/s and TTFT279/351ms; the first cold request includes compilation.
+All owned GPU programs exited; ports18025/18026/18027 are released. Independent
+review caveats are recorded in acceptance.md; no pending performance blocker.
 See acceptance.md and bench/baseline/2026-09-22-tilelang-*.json for full evidence.
 
 TileFoundry is development-only, pinned to the personal fork6b1b149. Offline

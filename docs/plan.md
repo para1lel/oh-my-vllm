@@ -9,7 +9,8 @@
 5. Passed unchanged correctness, six262144-token ordinary/MTP4 boundary rows,
    long prefix, constraints, lifecycle and both actual oh-my-pi providers.
 6. Added25 Chinese companions and synchronized final evidence. Final document
-   readback, review, main commit/push and GPU cleanup verification close the task.
+   readback passed on83d77ff; review and GPU cleanup verification are complete.
+   Final evidence is committed/pushed on main.
 
 See acceptance.md and handoff.md for current evidence and answer limitations.
 
