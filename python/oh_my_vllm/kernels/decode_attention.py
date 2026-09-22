@@ -214,6 +214,10 @@ def decode(
     # Keep the reduction traffic bounded for small batches; both kernels are
     # included when selecting split counts, not just the partial attention.
     splits = 64
+    if starts is not None and starts.numel() >= 5 and max_tokens <= 65536:
+        # Verification shares each KV tile among several query rows. Larger
+        # batches fill the GPU with fewer splits and less merge traffic.
+        splits = 16
     block = 64
     partial = torch.empty((requests, heads, splits, dim), device=query.device)
     lse = torch.empty((requests, heads, splits), device=query.device)

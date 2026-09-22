@@ -57,6 +57,12 @@ Graph timing and unchanged FP64 checks. Workflow documentation requires complete
 operator and model revalidation, with no runtime search or repository microtests.
 Actual-model ordinary/MTP FP64 probes pass with complete required coverage.
 The full performance matrix remains in progress.
+Formal MTP on f52a2d4 passes batch1/2 (97.386%/95.351% of baseline), but batch4
+is still92.248%; TTFT and stability pass. Further offline tuning adjusts tile1
+FP8 quantization threads, removes residual-width padding at5120, reduces GDN
+threads for larger batches and reduces verification splits for short extents.
+The full suite again passes146+12; actual batch4 GDN FP64 output/state checks
+pass. Final model/service/boundary and twelve-row acceptance remain required.
 Historical performance figures below describe the pre-TileLang implementation,
 not acceptance for this migration.
 

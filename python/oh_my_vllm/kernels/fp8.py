@@ -17,7 +17,9 @@ def _quantize(width: int, dtype: str, column: bool, silu: bool, tile: int):
         out: T.Tensor((rows, width), "float8_e4m3"),
         scales: T.StridedTensor((rows, width // 128), scale_strides, "float32"),
     ):
-        with T.Kernel(T.ceildiv(rows, tile), width // 128, threads=128) as (br, group):
+        with T.Kernel(
+            T.ceildiv(rows, tile), width // 128, threads=32 if tile == 1 else 128
+        ) as (br, group):
             values = T.alloc_fragment((tile, 128), "float32")
             absolute = T.alloc_fragment((tile, 128), "float32")
             maximum = T.alloc_fragment((tile,), "float32")

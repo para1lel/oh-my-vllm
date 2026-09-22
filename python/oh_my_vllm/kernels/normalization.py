@@ -146,7 +146,8 @@ def rotary(
 @tilelang.jit
 def _add_rms(d: int):
     n = T.dynamic("n")
-    block = 1 << (d - 1).bit_length()
+    # Avoid padding the model's residual width to 8192 reduction elements.
+    block = d if d == 5120 else 1 << (d - 1).bit_length()
 
     @T.prim_func
     def kernel(

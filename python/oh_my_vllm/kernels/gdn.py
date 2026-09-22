@@ -85,7 +85,9 @@ def _recurrent(
         writes: T.Tensor((n,), write_dtype),
         out: T.Tensor((n, hv, 128), "bfloat16"),
     ):
-        with T.Kernel(sequences, hv, 128 // bv, threads=128) as (seq, head, block):
+        with T.Kernel(
+            sequences, hv, 128 // bv, threads=128 if sequences <= 2 else 64
+        ) as (seq, head, block):
             state = T.alloc_fragment((bv, 128), "float32")
             work = T.alloc_fragment((bv, 128), "float32")
             recalled = T.alloc_fragment((bv,), "float32")
