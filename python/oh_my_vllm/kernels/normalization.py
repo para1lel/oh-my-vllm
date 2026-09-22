@@ -17,7 +17,7 @@ def _rms(h: int, d: int, eps: float, gated: bool, xs: tuple, gs: tuple):
         gate: T.StridedTensor((n, h, d), gs, "bfloat16"),
         out: T.Tensor((n, h, d), "bfloat16"),
     ):
-        with T.Kernel(n * h, threads=128) as row:
+        with T.Kernel(n * h, threads=32 if d <= 256 else 128) as row:
             values = T.alloc_fragment((block,), "float32")
             squares = T.alloc_fragment((block,), "float32")
             total = T.alloc_fragment((1,), "float32")

@@ -149,7 +149,7 @@ def _merge(h: int, splits: int):
             logs = T.alloc_fragment((splits,), "float32")
             maximum = T.alloc_fragment((1,), "float32")
             total = T.alloc_fragment((1,), "float32")
-            weighted = T.alloc_fragment((splits, 256), "float32")
+            weights = T.alloc_shared((splits,), "float32")
             result = T.alloc_fragment((256,), "float32")
             for i in T.Parallel(splits):
                 logs[i] = lse[row, head, i]
@@ -157,9 +157,13 @@ def _merge(h: int, splits: int):
             for i in T.Parallel(splits):
                 logs[i] = T.exp2(logs[i] - maximum[0])
             T.reduce_sum(logs, total, dim=0)
-            for i, j in T.Parallel(splits, 256):
-                weighted[i, j] = partial[row, head, i, j] * logs[i]
-            T.reduce_sum(weighted, result, dim=0)
+            # Stream the weighted sum instead of materializing splits*256
+            # registers. Large split counts otherwise spill to local memory.
+            T.copy(logs, weights)
+            T.clear(result)
+            for i in T.serial(splits):
+                for j in T.Parallel(256):
+                    result[j] += partial[row, head, i, j] * weights[i]
             for j in T.Parallel(256):
                 out[row, head, j] = result[j] / total[0]
 
@@ -219,6 +223,8 @@ def decode(
         # batches fill the GPU with fewer splits and less merge traffic.
         splits = 16
     block = 64
+    if starts is None and max_tokens >= 16384:
+        block, splits = 32, 128
     partial = torch.empty((requests, heads, splits, dim), device=query.device)
     lse = torch.empty((requests, heads, splits), device=query.device)
     out = torch.empty_like(query)

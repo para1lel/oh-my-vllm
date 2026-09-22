@@ -63,6 +63,12 @@ FP8 quantization threads, removes residual-width padding at5120, reduces GDN
 threads for larger batches and reduces verification splits for short extents.
 The full suite again passes146+12; actual batch4 GDN FP64 output/state checks
 pass. Final model/service/boundary and twelve-row acceptance remain required.
+The b868c34 formal MTP batch4 row reaches94.6674%, with TTFT/stability passing;
+it remains below95%. The following milestone streams attention merge accumulation
+to avoid a large weighted fragment, enabling128 splits/BK32 for longer ungrouped
+decode. Short-row RMS uses one warp. All146+12 GPU tests and all-file hooks pass;
+temporary long-extent FP64 checks cover absent position0, unequal lengths and
+graph replay with changed lengths/page tables. Final acceptance remains pending.
 Historical performance figures below describe the pre-TileLang implementation,
 not acceptance for this migration.
 
