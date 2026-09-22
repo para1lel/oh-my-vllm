@@ -40,8 +40,35 @@ def _quantize_prefill(
     tl.store(Scales + rows * (Width // 128) + group, scale, rows < Rows)
 
 
+@triton.jit
+def _quantize_silu(
+    X,
+    Q,
+    Scales,
+    Rows: tl.constexpr,
+    Width: tl.constexpr,
+    Column: tl.constexpr,
+    BlockRows: tl.constexpr,
+):
+    rows = tl.program_id(0) * BlockRows + tl.arange(0, BlockRows)
+    group = tl.program_id(1)
+    columns = group * 128 + tl.arange(0, 128)
+    address = rows[:, None] * (2 * Width) + columns[None, :]
+    gate = tl.load(X + address, rows[:, None] < Rows, 0).to(tl.float32)
+    up = tl.load(X + address + Width, rows[:, None] < Rows, 0).to(tl.float32)
+    activated = (gate * tl.sigmoid(gate)).to(tl.bfloat16).to(tl.float32)
+    values = (activated * up).to(tl.bfloat16).to(tl.float32)
+    scale = tl.div_rn(tl.maximum(tl.max(tl.abs(values), 1), 1e-10), 448.0)
+    quantized = tl.minimum(tl.maximum(tl.div_rn(values, scale[:, None]), -448.0), 448.0)
+    tl.store(
+        Q + rows[:, None] * Width + columns[None, :], quantized, rows[:, None] < Rows
+    )
+    offset = group * Rows + rows if Column else rows * (Width // 128) + group
+    tl.store(Scales + offset, scale, rows < Rows)
+
+
 def quantize(
-    x: torch.Tensor, *, column_major: bool = False
+    x: torch.Tensor, *, column_major: bool = False, silu_gate: bool = False
 ) -> tuple[torch.Tensor, torch.Tensor]:
     if x.dtype not in (torch.bfloat16, torch.float16, torch.float32):
         raise ValueError("FP8 input must be BF16, FP16 or FP32")
@@ -56,12 +83,21 @@ def quantize(
             "FP8 requires a contiguous CUDA matrix with K divisible by 128"
         )
     rows, width = x.shape
-    data = torch.empty_like(x, dtype=torch.float8_e4m3fn)
+    if silu_gate:
+        if x.dtype != torch.bfloat16 or width % 256:
+            raise ValueError("fused SiLU quantization requires packed BF16 gate/up")
+        width //= 2
+    data = torch.empty((rows, width), device=x.device, dtype=torch.float8_e4m3fn)
     shape = (width // 128, rows) if column_major else (rows, width // 128)
     scales = torch.empty(shape, dtype=torch.float32, device=x.device)
     if column_major:
         scales = scales.T
-    if rows >= 128 and not column_major:
+    if silu_gate:
+        tile = 16 if rows >= 128 else 1
+        _quantize_silu[(triton.cdiv(rows, tile), width // 128)](
+            x, data, scales, rows, width, column_major, tile
+        )
+    elif rows >= 128 and not column_major:
         # Amortize CTA scheduling across rows for bandwidth-bound long prefills.
         _quantize_prefill[(triton.cdiv(rows, 16), width // 128)](
             x, data, scales, rows, width, 16
@@ -72,14 +108,19 @@ def quantize(
 
 
 def linear(
-    x: torch.Tensor, weight: torch.Tensor, weight_scale: torch.Tensor
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    weight_scale: torch.Tensor,
+    *,
+    silu_gate: bool = False,
 ) -> torch.Tensor:
     """Weight is checkpoint [N,K] FP8; scale is checkpoint [N/128,K/128]."""
     from flashinfer.gemm import gemm_fp8_nt_groupwise
 
     if x.ndim != 2 or weight.ndim != 2 or weight_scale.ndim != 2:
         raise ValueError("FP8 inputs, weights and scales must be matrices")
-    if weight.dtype != torch.float8_e4m3fn or weight.shape[1] != x.shape[1]:
+    input_width = x.shape[1] // 2 if silu_gate else x.shape[1]
+    if weight.dtype != torch.float8_e4m3fn or weight.shape[1] != input_width:
         raise ValueError("FP8 checkpoint weight dtype or input width mismatch")
     if weight.shape[0] % 128 or weight_scale.shape != (
         weight.shape[0] // 128,
@@ -97,7 +138,7 @@ def linear(
     # CUTLASS SM100's nondeterministic 17..32-row low-latency path. Its activation
     # scales are column-major; checkpoint weight scales remain row-major.
     small = x.shape[0] <= 32
-    data, scale = quantize(x, column_major=small)
+    data, scale = quantize(x, column_major=small, silu_gate=silu_gate)
     return gemm_fp8_nt_groupwise(
         data,
         weight,

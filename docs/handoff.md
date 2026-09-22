@@ -82,6 +82,28 @@ improved MTP bs1/2 to305.86/450.65 tok/s, still below their new baseline gates.
 See 2026-09-22-strided-metadata.json. Prefix2 baseline continues to retry after
 variance failures and repeated unrelated GPU entrants; user authorized retries.
 
+Residual RMS/SiLU quantization fusion, independent CuTe-DSL vocabulary projection
+and native target decode via zero-copy 16-token subpage views are implemented.
+The 784-token persistent layout is unchanged; draft position-zero exclusion
+retains its custom kernel. Final GPU suite:138 tests +12 subtests. Actual
+batch2 target/draft graph-warmup FP64 probes pass (separate from the eager GDN
+probe, which also passes). Twelve service constraints, lifecycle and long-prefix
+checks pass; service18018 and its worker exited. Initial MTP diagnostics at
+batch1/2/4 are319.66/473.69/672.44 tok/s; these are NOT formal acceptance, and
+batch4 remains below95%. Larger GDN tiles for four sequences and eight-warp
+residual RMS pass final tests and review; short MTP4 diagnostic674.03 tok/s
+remains below target. All six maximum-context reruns pass with zero preemptions.
+The launch tuning follows boundary worker start; see explicit evidence limits in
+bench/baseline/2026-09-22-native-decode-fusions.json. All owned diagnostic,
+probe, boundary and service workers exited; port18018 is released. Formatting,
+Rust tests/clippy and all hooks pass. Formal collection remains in progress. Review found no blocking static correctness issue and
+explicitly required distinguishing graph-warmup FP64 from eager coverage.
+
+Prefix2 baseline retries110+ temporarily use CPU96 alone to investigate TTFT
+variance. Attempt112 still failed spread37.94%; preserve all attempts. Accepted
+candidates must match the affinity of whichever baseline is finally accepted.
+User again confirmed no exclusive GPU can be reserved: continue waiting/retrying.
+
 ## Previous task: independent runtime
 
 The independent runtime is implemented and all nine performance rows pass the

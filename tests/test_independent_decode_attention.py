@@ -3,6 +3,7 @@
 import pytest
 import torch
 from oh_my_vllm.kernels.decode_attention import decode
+from oh_my_vllm.worker.decode_graph import DecodeAttention
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 
@@ -67,7 +68,8 @@ def test_graph_replay_reads_updated_lengths_and_tables():
 
 
 @pytest.mark.parametrize("first", [0, 1])
-def test_grouped_verification_preserves_ragged_causality(first):
+@pytest.mark.parametrize("native", [False, True])
+def test_grouped_verification_preserves_ragged_causality(first, native):
     torch.manual_seed(91)
     starts = torch.tensor([0, 5, 6, 9], device="cuda", dtype=torch.int32)
     query = torch.randn(9, 24, 256, device="cuda", dtype=torch.bfloat16)
@@ -79,7 +81,13 @@ def test_grouped_verification_preserves_ragged_causality(first):
         [782, 783, 784, 785, 786, 2, 34, 35, 36], device="cuda", dtype=torch.int32
     )
 
+    attention = DecodeAttention(tables, lengths, 1568)
+    attention.first, attention.starts = first, starts
+
     def run():
+        if native:
+            attention.prepare()
+            return attention(query, cache)
         return decode(
             query, cache, tables, lengths, first=first, max_tokens=1568, starts=starts
         )
@@ -129,7 +137,8 @@ def test_single_group_verification(first):
 
 
 @pytest.mark.parametrize("grouped", [False, True])
-def test_cache_addresses_beyond_signed_int32(grouped):
+@pytest.mark.parametrize("native", [False, True])
+def test_cache_addresses_beyond_signed_int32(grouped, native):
     # The last page starts above 2**31 BF16 elements. Casting after multiplication
     # would be too late: both decode kernels must widen the page ID first.
     torch.manual_seed(144)
@@ -149,6 +158,12 @@ def test_cache_addresses_beyond_signed_int32(grouped):
     tables = torch.full((5, 1), 1399, dtype=torch.int32, device="cuda")
     lengths = torch.arange(1, 6, dtype=torch.int32, device="cuda")
     starts = torch.tensor([0, 5], dtype=torch.int32, device="cuda") if grouped else None
-    actual = decode(query, cache, tables, lengths, max_tokens=784, starts=starts)
+    if native:
+        attention = DecodeAttention(tables, lengths, 784)
+        attention.starts = starts
+        attention.prepare()
+        actual = attention(query, cache)
+    else:
+        actual = decode(query, cache, tables, lengths, max_tokens=784, starts=starts)
     expected = reference(query, small, torch.zeros_like(tables), lengths, 0)
     torch.testing.assert_close(actual.cpu().double(), expected, atol=0.03, rtol=0.03)

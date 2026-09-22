@@ -9,14 +9,60 @@ from oh_my_vllm.models.qwen import AttentionBatch, Batch, Qwen
 
 
 class DecodeAttention:
-    def __init__(self, tables: torch.Tensor, lengths: torch.Tensor, extent: int):
+    def __init__(
+        self, tables: torch.Tensor, lengths: torch.Tensor, extent: int, workspace=None
+    ):
         self.tables = tables
         self.lengths = lengths
         self.extent = extent
         self.first = 0
         self.starts = None
+        self.workspace = workspace
+        self.native_metadata = None
+
+    def prepare(self) -> None:
+        """Translate logical 784-token pages once per target model execution."""
+        if self.first:
+            return
+        if self.workspace is None:
+            self.workspace = torch.empty(
+                128 << 20, device=self.tables.device, dtype=torch.uint8
+            )
+        if self.starts is None:
+            tables, lengths = self.tables, self.lengths
+            starts = torch.arange(
+                len(lengths) + 1, device=lengths.device, dtype=torch.int32
+            )
+        else:
+            tables = self.tables.index_select(0, self.starts[:-1])
+            lengths = self.lengths.index_select(0, self.starts[1:] - 1)
+            starts = self.starts.to(torch.int32)
+        offsets = torch.arange(49, device=tables.device, dtype=torch.int32)
+        subpages = (tables[:, :, None] * 98 + offsets).flatten(1).to(torch.int32)
+        self.native_metadata = subpages, lengths.to(torch.int32), starts
 
     def __call__(self, query: torch.Tensor, cache: torch.Tensor) -> torch.Tensor:
+        if self.first == 0 and self.native_metadata is not None:
+            from flashinfer.decode import trtllm_batch_decode_with_kv_cache
+
+            tables, lengths, starts = self.native_metadata
+            # Every logical page stores 49 K subpages followed by 49 V subpages.
+            # Offset views share the same indices; holes are never addressed.
+            blocks = cache.view(-1, 16, *cache.shape[-2:])
+            return trtllm_batch_decode_with_kv_cache(
+                query,
+                (blocks[:-49], blocks[49:]),
+                self.workspace,
+                tables,
+                lengths,
+                self.extent,
+                bmm1_scale=query.shape[-1] ** -0.5,
+                kv_layout="NHD",
+                backend="trtllm-gen",
+                q_len_per_req=None,
+                max_q_len=5 if self.starts is not None else 1,
+                cum_seq_lens_q=starts,
+            )
         return decode(
             query,
             cache,
@@ -51,7 +97,10 @@ class DecodeGraph:
             raise ValueError("decode graphs cannot capture prefill")
         self.tokens = tokens.clone()
         self.attention = DecodeAttention(
-            tables.clone(), batch.positions.clone() + 1, extent
+            tables.clone(),
+            batch.positions.clone() + 1,
+            extent,
+            workspace=getattr(batch.attention, "workspace", None),
         )
         self.batch = Batch(
             **{
@@ -84,6 +133,7 @@ class DecodeGraph:
                     cache[fa_pages, :, fa_offsets] = backup
 
         def run() -> tuple[torch.Tensor, torch.Tensor]:
+            self.attention.prepare()
             hidden = model.forward(self.tokens, self.batch, caches)
             return hidden, model.logits(hidden)
 

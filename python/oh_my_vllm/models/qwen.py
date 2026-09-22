@@ -18,7 +18,7 @@ from oh_my_vllm.kernels import attention, fp8, gdn
 from oh_my_vllm.kernels.convolution import causal_conv
 from oh_my_vllm.kernels.elementwise import delta_gates, silu_mul
 from oh_my_vllm.kernels.mtp_attention import MTPAttention
-from oh_my_vllm.kernels.normalization import rms_norm, rotary
+from oh_my_vllm.kernels.normalization import add_rms_norm, rms_norm, rotary
 
 LayerCache = torch.Tensor | tuple[torch.Tensor, torch.Tensor]
 
@@ -66,6 +66,11 @@ class Linear:
         if self.scale is None:
             return F.linear(x, self.weight)
         return fp8.linear(x, self.weight, self.scale)
+
+    def silu(self, packed: torch.Tensor) -> torch.Tensor:
+        if self.scale is None:
+            return self(silu_mul(packed))
+        return fp8.linear(packed, self.weight, self.scale, silu_gate=True)
 
 
 @dataclass
@@ -182,17 +187,30 @@ class Layer:
         out = rms_norm(out, self.gate_norm, gate=z.reshape(-1, 48, 128))
         return self.out(out.flatten(1))
 
-    def __call__(
-        self, x: torch.Tensor, batch: Batch, cache: LayerCache
-    ) -> torch.Tensor:
-        normalized = rms_norm(x, self.input_norm)
+    def forward_residual(
+        self,
+        x: torch.Tensor,
+        batch: Batch,
+        cache: LayerCache,
+        residual: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if residual is None:
+            residual, normalized = x, rms_norm(x, self.input_norm)
+        else:
+            residual, normalized = add_rms_norm(x, residual, self.input_norm)
         if self.kind == "full_attention":
             result = self.full_attention(normalized, batch, cache)
         else:
             result = self.delta_attention(normalized, batch, cache)
-        x = x + result
-        packed = self.gate_up(rms_norm(x, self.post_norm))
-        return x + self.down(silu_mul(packed))
+        residual, normalized = add_rms_norm(result, residual, self.post_norm)
+        packed = self.gate_up(normalized)
+        return self.down.silu(packed), residual
+
+    def __call__(
+        self, x: torch.Tensor, batch: Batch, cache: LayerCache
+    ) -> torch.Tensor:
+        value, residual = self.forward_residual(x, batch, cache)
+        return value + residual
 
 
 class Qwen:
@@ -262,11 +280,16 @@ class Qwen:
         self, tokens: torch.Tensor, batch: Batch, caches: list[LayerCache]
     ) -> torch.Tensor:
         hidden = F.embedding(tokens, self.embedding)
+        residual = None
         for layer, cache in zip(self.layers, caches, strict=True):
-            hidden = layer(hidden, batch, cache)
-        return rms_norm(hidden, self.norm)
+            hidden, residual = layer.forward_residual(hidden, batch, cache, residual)
+        return add_rms_norm(hidden, residual, self.norm)[1]
 
     def logits(self, hidden: torch.Tensor) -> torch.Tensor:
+        if hidden.shape[0] <= 32:
+            from flashinfer.gemm import mm_bf16
+
+            return mm_bf16(hidden, self.head.T, backend="cute-dsl").float()
         return F.linear(hidden, self.head).float()
 
     def draft(
@@ -281,4 +304,5 @@ class Qwen:
         )
         hidden = rms_norm(hidden, self.mtp_hidden_norm)
         hidden = self.mtp_fc(torch.cat((embedded, hidden), -1))
-        return rms_norm(self.mtp(hidden, batch, cache), self.mtp_norm)
+        hidden, residual = self.mtp.forward_residual(hidden, batch, cache)
+        return add_rms_norm(hidden, residual, self.mtp_norm)[1]

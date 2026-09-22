@@ -149,3 +149,46 @@ def rotary(
         triton.next_power_of_2(x.shape[2]),
     )
     return out
+
+
+@triton.jit
+def _add_rms(X, Residual, Weight, Sum, Out, D: tl.constexpr, Block: tl.constexpr):
+    row = tl.program_id(0)
+    col = tl.arange(0, Block)
+    x = tl.load(X + row * D + col, col < D, 0).to(tl.float32)
+    residual = tl.load(Residual + row * D + col, col < D, 0).to(tl.float32)
+    # Preserve the materialized BF16 residual before computing RMS in FP32.
+    value = (x + residual).to(tl.bfloat16).to(tl.float32)
+    inv = tl.rsqrt(tl.sum(value * value, 0) / D + 1e-6)
+    weight = tl.load(Weight + col, col < D, 0)
+    tl.store(Sum + row * D + col, value, col < D)
+    tl.store(Out + row * D + col, value * inv * weight, col < D)
+
+
+def add_rms_norm(
+    x: torch.Tensor, residual: torch.Tensor, weight: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return the rounded residual sum and its RMS-normalized projection input."""
+    if x.ndim != 2 or x.numel() == 0 or residual.shape != x.shape:
+        raise ValueError("residual RMS requires two nonempty matrices of equal shape")
+    if x.dtype != torch.bfloat16 or residual.dtype != x.dtype:
+        raise ValueError("residual RMS inputs must be BF16")
+    if weight.shape != (x.shape[1],) or weight.dtype != torch.float32:
+        raise ValueError("residual RMS weight must be FP32 and match the row width")
+    if any(
+        not t.is_cuda or not t.is_contiguous() or t.device != x.device
+        for t in (x, residual, weight)
+    ):
+        raise ValueError("residual RMS tensors must be contiguous on one CUDA device")
+    summed, normalized = torch.empty_like(x), torch.empty_like(x)
+    _add_rms[(len(x),)](
+        x,
+        residual,
+        weight,
+        summed,
+        normalized,
+        x.shape[1],
+        triton.next_power_of_2(x.shape[1]),
+        num_warps=8,
+    )
+    return summed, normalized

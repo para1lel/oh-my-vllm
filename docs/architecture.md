@@ -170,3 +170,16 @@ snapshots retain their isolation guarantees. Host integer metadata is copied in
 one buffer per target/draft group, whose device views retain the backing storage.
 Graph inputs still copy into persistent buffers; GDN prefill starts are converted
 once to int32 before layer execution.
+
+Small-batch BF16 vocabulary projections use independent FlashInfer CuTe-DSL GEMM.
+Residual addition and RMS normalization share one kernel, preserving the BF16
+sum before FP32 normalization. MLP SiLU/multiplication and FP8 quantization share
+a kernel while preserving both BF16 rounding points and the original scales.
+GDN recurrence uses 32-value tiles for at least four sequences, 16 otherwise.
+
+Target decode graphs expose existing 784-token pages to native TRT-LLM attention
+as 49 sixteen-token subpages. K/V offset views and `page * 98 + subpage` tables
+avoid KV copies and retain Rust page ownership. Table expansion and query/KV
+length selection occur once per model execution inside graph capture, so replay
+uses current request metadata. Draft attention retains the project kernel to
+exclude its absent position zero. No cache precision or tolerance changes.

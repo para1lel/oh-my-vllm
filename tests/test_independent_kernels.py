@@ -5,6 +5,7 @@ inputs passed to the GPU, matching actual-path probe tolerances.
 """
 
 import math
+from itertools import pairwise
 
 import pytest
 import torch
@@ -65,6 +66,31 @@ def inputs(tokens, strided=False):
     g = -torch.rand(tokens, 48, device="cuda")
     beta = torch.rand_like(g)
     return q, k, v, g, beta
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_four_sequence_gdn_fp64(dtype):
+    torch.manual_seed(71)
+    q, k, v, g, beta = inputs(11, strided=True)
+    pool = torch.randn(16, 48, 128, 128, device="cuda", dtype=dtype) * 0.05
+    before = pool.clone()
+    offsets = [0, 1, 4, 6, 11]
+    starts = torch.tensor(offsets, device="cuda", dtype=torch.int32)
+    reads = torch.arange(4, device="cuda", dtype=torch.int32)
+    writes = torch.arange(4, 15, device="cuda", dtype=torch.int32)
+    out = gdn.recurrent(q, k, v, g, beta, pool, starts, reads, writes)
+    for seq, (left, right) in enumerate(pairwise(offsets)):
+        expected, states = reference(
+            q[left:right],
+            k[left:right],
+            v[left:right],
+            g[left:right],
+            beta[left:right],
+            before[seq],
+        )
+        check(out[left:right], expected)
+        check(pool[4 + left : 4 + right], states, state=True)
+    torch.testing.assert_close(pool[:4], before[:4])
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
@@ -323,3 +349,53 @@ def test_fp8_real_width_tile_boundary_is_deterministic(rows):
     for _ in range(3):
         repeated = fp8.linear(x, weight, scale)
         torch.testing.assert_close(repeated, first, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("rows", [1, 5, 20, 33])
+def test_vocabulary_projection_fp64(rows):
+    from oh_my_vllm.models.qwen import Qwen
+
+    torch.manual_seed(rows)
+    model = object.__new__(Qwen)
+    model.head = torch.randn(248320, 5120, device="cuda", dtype=torch.bfloat16) * 0.01
+    hidden = torch.randn(rows, 5120, device="cuda", dtype=torch.bfloat16)
+    actual = model.logits(hidden)
+    columns = [0, 1, 127, 128, 8191, 16384, 248319]
+    expected = hidden.cpu().double() @ model.head[columns].cpu().double().T
+    check(actual[:, columns], expected)
+    torch.testing.assert_close(
+        actual,
+        torch.nn.functional.linear(hidden, model.head).float(),
+        atol=0.03,
+        rtol=0.03,
+    )
+
+
+@pytest.mark.parametrize("rows", [1, 5, 129])
+def test_residual_normalization_preserves_bf16_sum(rows):
+    from oh_my_vllm.kernels.normalization import add_rms_norm
+
+    torch.manual_seed(rows)
+    x = torch.randn(rows, 5120, device="cuda", dtype=torch.bfloat16)
+    residual = torch.randn_like(x)
+    residual[:, ::3] = -x[:, ::3]
+    weight = torch.randn(5120, device="cuda") + 1
+    summed, normalized = add_rms_norm(x, residual, weight)
+    expected_sum = (x.cpu().double() + residual.cpu().double()).to(torch.bfloat16)
+    torch.testing.assert_close(summed.cpu(), expected_sum, atol=0, rtol=0)
+    ref = expected_sum.double()
+    expected = ref * torch.rsqrt(ref.square().mean(-1, keepdim=True) + 1e-6)
+    check(normalized, expected * weight.cpu().double())
+
+
+@pytest.mark.parametrize("rows", [1, 5, 20, 128, 129])
+def test_fused_silu_quantization_preserves_rounding(rows):
+    from oh_my_vllm.kernels.elementwise import silu_mul
+
+    torch.manual_seed(rows)
+    packed = torch.randn(rows, 34816, device="cuda", dtype=torch.bfloat16) * 5
+    for column_major in (False, True):
+        expected = fp8.quantize(silu_mul(packed), column_major=column_major)
+        actual = fp8.quantize(packed, column_major=column_major, silu_gate=True)
+        for a, b in zip(actual, expected, strict=True):
+            torch.testing.assert_close(a.float(), b.float(), atol=0, rtol=0)

@@ -126,7 +126,8 @@ def recurrent(
     ):
         raise ValueError("GDN tensors must be contiguous on the same CUDA device")
     output = torch.empty(v.shape, device=v.device, dtype=v.dtype)
-    _recurrent[(read_slots.numel(), v.shape[1], 8)](
+    tile = 32 if read_slots.numel() >= 4 else 16
+    _recurrent[(read_slots.numel(), v.shape[1], 128 // tile)](
         q,
         k,
         v,
@@ -140,7 +141,7 @@ def recurrent(
         q.shape[1],
         v.shape[1],
         128,
-        16,
+        tile,
         q.stride(0),
         k.stride(0),
         v.stride(0),
