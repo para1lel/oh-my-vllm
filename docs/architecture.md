@@ -146,7 +146,7 @@ at N slots and FA/MTP attention tensors at FA capacity. IDs are local to their
 cache group and may have equal numeric values. Admission checks both pools, prefix
 lookup reconciles hits across both, and the worker validates each address against
 its own tensor capacity. Omission preserves the shared-capacity configuration.
-See ADR-007 for rationale and the pending long-context acceptance protocol.
+See ADR-007 for rationale and the long-context acceptance protocol.
 
 ### Long prefill attention
 

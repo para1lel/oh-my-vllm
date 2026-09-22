@@ -64,7 +64,7 @@ decode 图使用固定 token/请求 shape，以及动态位置、块表和状态
 
 ### 独立 FA/GDN 容量（2026-09-22）
 
-`--mamba-blocks N` 为 Rust coordinator 提供独立 GDN 池。FA 容量仍由 worker 报告；Python 按 N 槽分配递归 tensor，按 FA 容量分配 FA/MTP 注意力 tensor。ID 在各缓存组内有效，数值可相同。接纳检查两个池，前缀查找协调两者命中，worker 按各自 tensor 容量验证地址。不指定时保留共享容量配置。理由和待完成的长上下文验收协议见 ADR-007。
+`--mamba-blocks N` 为 Rust coordinator 提供独立 GDN 池。FA 容量仍由 worker 报告；Python 按 N 槽分配递归 tensor，按 FA 容量分配 FA/MTP 注意力 tensor。ID 在各缓存组内有效，数值可相同。接纳检查两个池，前缀查找协调两者命中，worker 按各自 tensor 容量验证地址。不指定时保留共享容量配置。理由和长上下文验收协议见 ADR-007。
 
 ### 长 prefill 注意力
 

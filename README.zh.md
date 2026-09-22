@@ -54,4 +54,4 @@ CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests
 - benchmarks/baseline/enginecore.py：明确隔离的参考数据采集器。
 - benchmarks/compare_vllm.py：历史对比和进程管理。
 
-自定义 kernel 使用 TileLang 和仅供开发的 TileFoundry fork。安装和算子语义见[工作流](docs/tilelang-development.zh.md)；迁移的最终性能验收仍待完成。
+自定义 kernel 使用 TileLang 和仅供开发的 TileFoundry fork。安装和算子语义见[工作流](docs/tilelang-development.zh.md)；全部 12 组迁移性能对比已通过[验收文档](docs/acceptance.zh.md)中的当前规则。

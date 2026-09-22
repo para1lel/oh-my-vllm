@@ -81,4 +81,5 @@ measurements. Every milestone requires independent review and a commit.
 
 Custom kernel development uses TileLang and the development-only TileFoundry
 fork. See [the workflow](docs/tilelang-development.md) for installation and
-operator semantics; final migration performance acceptance is still pending.
+operator semantics; all twelve migration performance rows pass the current
+policy recorded in [acceptance](docs/acceptance.md).

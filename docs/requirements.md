@@ -276,7 +276,7 @@ performance evidence. Existing REQ-PERF-001 remains unchanged.
 
 ## REQ-KERNEL-001 — TileLang custom kernels and TileFoundry workflow
 
-**Status:** user-confirmed (2026-09-22)
+**Status:** implemented and accepted (2026-09-22)
 **Priority:** must-have
 
 Replace all project-owned Triton kernels with TileLang, incrementally, retaining

@@ -149,7 +149,7 @@ Responses 支持完整历史、存储型响应的 `previous_response_id`、查�
 
 ## REQ-KERNEL-001 — TileLang 自定义 kernel 与 TileFoundry 工作流
 
-**状态：** 用户已确认（2026-09-22）
+**状态：** 已实现并验收（2026-09-22）
 **优先级：** 必须
 
 逐步将所有项目自有 Triton kernel 替换为 TileLang，保留每个现有功能及数值容差。第三方库内部不在替换范围内。最终生产代码不保留旧自定义 Triton 回退。TileFoundry 是仅供开发的工具，从 3rdparty 下固定的个人 fork/submodule 在现有 conda 环境中源码安装。取消 Transformers 上限，简单兼容问题在 fork 修复，重大修复先讨论。可降级为兼容已发布 TileLang/OR-Tools，但不在本地维护这两个库。
