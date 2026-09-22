@@ -3,11 +3,22 @@
 ## Active: CUDA/PTX custom kernels
 
 User confirmed REQ-KERNEL-002; CUDA migration is in progress, not accepted.
-Frozen TileLang source/dependency identities are recorded. Explicit backend
-selection forbids silent fallback. Initial CUDA FP8/SiLU tests pass14 existing
-cases; the paired statistics CPU tests pass4 cases. Remaining: all other native
-kernels, static maximum-workload matrix, TileFoundry/real metrics, per-case wins
-and unchanged full framework acceptance. Default stays TileLang until complete.
+All owned entries now have native CUDA implementations. After shared attention
+merge-weight optimization, full unchanged GPU suite passes153 tests plus24
+subtests (no skips). Production-entry FP64 packed Q/K, near262144 positions,
+nondefault stream and changed-input graph replay pass. An earlier missing
+convolution factory binding was fixed before these successful full reruns.
+
+Formal static matrix contains173 deduplicated cases from12 workloads, including
+three-sequence dispatch, graph metadata dtypes and eager fallback. Whole frozen
+operations retain snapshot/merge costs. Subsets and dirty-source runs cannot
+pass full acceptance; collector checks reference and dependency-lock hashes.
+TileFoundry twins now explicitly bind frozen TileLang. Native and matrix review
+findings have been addressed. The initial performance diagnostic was invalidated
+by an external GPU entrant; no formal result is claimed. Attention and other
+small shapes still need tuning. Remaining: per-case stable wins, complete metrics,
+actual-model correctness, all12 frozen-vLLM rows and boundary/service/agentic
+acceptance. Default stays TileLang until complete. All test GPU programs exited.
 See cuda-development.md. The following TileLang results are the accepted reference.
 
 

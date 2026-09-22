@@ -1,11 +1,11 @@
-"""Thin TileFoundry adapters calling the production TileLang implementation.
+"""Thin TileFoundry adapters calling the frozen TileLang comparison.
 
 Logical state is made explicit for HIR comparison. Cache/graph safety and the
 full shape/dtype matrix remain covered by the existing project tests.
 """
 
 import torch
-from oh_my_vllm.kernels import (
+from oh_my_vllm.kernels.tilelang_reference import (
     attention,
     convolution,
     decode_attention,

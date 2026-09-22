@@ -33,3 +33,33 @@ class ReferenceTest(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unknown OH_MY_VLLM_KERNEL_BACKEND", result.stderr)
+
+    def test_formal_collector_rejects_changed_reference_or_lock(self):
+        import shutil
+        import tempfile
+
+        from development.kernels.reference import verify_reference
+
+        verify_reference()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative in (
+                "development/kernels/tilelang-reference.json",
+                "requirements/runtime.txt",
+            ):
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ROOT / relative, target)
+            relative = "python/oh_my_vllm/kernels/tilelang_reference"
+            shutil.copytree(ROOT / relative, root / relative)
+            verify_reference(root)
+            for relative in (
+                "requirements/runtime.txt",
+                "python/oh_my_vllm/kernels/tilelang_reference/gdn.py",
+            ):
+                path = root / relative
+                original = path.read_bytes()
+                path.write_bytes(original + b"\n# changed\n")
+                with self.assertRaisesRegex(ValueError, "frozen comparison changed"):
+                    verify_reference(root)
+                path.write_bytes(original)
