@@ -58,6 +58,11 @@ arbitrary macro syntax and its `max_width` is not a hard validation rule.
 
 ## Code standards
 
+Maintain a same-directory `<stem>.zh.md` Chinese translation for every project-owned
+Markdown document. Update it together with the English source, including changed
+requirements, commands, evidence and task status. Agents use the English source
+as authoritative. Third-party submodules and generated dependencies are excluded.
+
 **Rust:** follow `rustfmt.toml` and the hard 100-character line limit (tabs expanded), including macros, strings and comments. Keep JSON fields on separate lines and use `concat!` for long literals. No `#[allow(dead_code)]` or `#[allow(unused)]` without a comment explaining why the item must be kept. All `unsafe` blocks must have a `// SAFETY:` comment stating the invariant being upheld.
 
 **Python:** `ruff` enforces formatting and linting (PEP 8 + selected rules). No bare `except:`. Type hints on all public function signatures.

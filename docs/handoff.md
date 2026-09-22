@@ -1,5 +1,24 @@
 # Handoff — 2026-09-22
 
+## Bilingual documentation (user-requested)
+
+All 25 project-owned Markdown sources now have same-directory `.zh.md`
+companions. Agents continue to read the English originals as authoritative;
+every future Markdown change must update its Chinese companion in the same
+change. AGENTS.md and CONTRIBUTING.md record this rule. Third-party submodules
+and generated dependencies are excluded. Independent translation review, complete companion coverage, local links and
+code-block checks pass. This documentation work does not replace kernel acceptance.
+
+Latest kernel status: clean 874a54a reaches94.9688% on formal MTP batch4, still
+below95%. A pending Q/K RMS+RoPE fusion preserves intermediate BF16 rounding.
+Static review passes. Its full GPU suite rerun passes146 tests +12 subtests;
+the first run failed the process-timeout test because another process entered
+the selected GPU, not because of numerical failure. Actual-model ordinary/MTP probes pass, but a production-entry FP64 check found
+RoPE phase error near position262144. A higher-precision temporary prototype
+passes packed Q/K, int32/int64 positions and graph replay; its performance and
+production integration are pending. Final twelve-row and feature acceptance
+remain required before completion.
+
 ## Active task: TileLang migration and TileFoundry development workflow
 
 User confirmed implementation. Replace all 15 project-owned Triton kernels in

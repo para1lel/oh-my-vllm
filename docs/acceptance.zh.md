@@ -1,0 +1,115 @@
+# 验收证据
+
+## TTFT 与 262144 上下文 — 进行中，2026-09-22
+
+普通/MTP4 batch 1/2/4 的全部六组最大上下文检查完成输入 258048 + 输出 4096 token，无抢占。独立 FA/GDN 容量为 1400/128 槽。发现并修复高页 int32 地址溢出；FP64 回归覆盖两种 decode kernel 和缓存追加。使用 MTP4 及修正后的 Qwen3.8 模型 ID，两 API 的长 strict-JSON 请求及前缀复用通过。[阶段证据](../bench/baseline/2026-09-22-ttft-stage1.json) 保留原始诊断结果，不是正式吞吐/TTFT 重复测量。更新后的 12 组基线已冻结，全部候选在干净 ee2fb63 上完成，十组通过。MTP batch4 吞吐 692.190 tok/s，低于 693.140 门槛（基线的 94.8698%）；prefix batch1 虽达到两项比例门槛，TTFT 稳定性仍失败。整体验收待完成，见[差异与原因](performance-gap-2026-09-22.zh.md)和[完整候选证据](../bench/baseline/2026-09-22-performance-gap-candidates.json)。下列验收属于此前任务。
+
+## 独立运行时 — 2026-09-21
+
+相对原始冻结 EngineCore 基线，全部九组 32768→4096 达到 95%。没有重跑原生基线。每组两次预热、三次测量，block784、原始 CPU 亲和性，并使用独占监控、UUID 固定的 B200。
+
+| 模式 | Batch | 原始基线 tok/s | 独立运行时 tok/s | 比例 |
+|---|---:|---:|---:|---:|
+| ordinary | 1 | 92.21 | 102.51 | 111.17% |
+| ordinary | 2 | 167.87 | 170.36 | 101.48% |
+| ordinary | 4 | 250.96 | 278.80 | 111.09% |
+| mtp | 1 | 269.16 | 285.73 | 106.16% |
+| mtp | 2 | 418.53 | 403.86 | 96.49% |
+| mtp | 4 | 446.61 | 546.98 | 122.47% |
+| prefix | 1 | 95.16 | 109.19 | 114.73% |
+| prefix | 2 | 179.44 | 190.07 | 105.93% |
+| prefix | 4 | 333.32 | 336.16 | 100.85% |
+
+[完整独立运行时证据](../bench/baseline/2026-09-21-independent-acceptance.json) 记录原始重复、hash、运行时身份、正确性和丢弃运行。六组 ordinary/prefix 使用干净 ca5a200；三组最终 MTP 使用干净 5c0848e。后者只改变 MTP 执行并新增 ProposalGraph 类：既有图定义 AST 相同，其他非 MTP 生产模块不变。每组保留实际身份。这是历史比较，不是同源码/同 GPU 配对实验。以前失败和受干扰诊断仍在中间产物中，不替换冻结基线，也不参与最终中位数。GPU 进程轮询不能排除采样之间任意短的干扰。
+
+最终 GPU suite 通过 92 项测试和 12 项子测试，无跳过。Rust 75 项、fmt、100 列硬行宽、clippy、ruff 和全部 hook 通过。原实际模型 GQA/GDN FP64 容差不变：输出 atol/rtol 0.03，状态 NRMSE 1%、相对峰值误差 2%。实际分组 target/draft 注意力也通过。普通/MTP 文本覆盖前缀复用、错峰到达和重计算；真实服务通过 12 组 API/reasoning/约束及取消、存储续接/删除、混合 batch 清理。均使用 conda oh-my-vllm。
+
+最终 oh-my-pi 在 Chat/Responses 上以 MTP4 和 medium 完成回读：成功 read 7/18 次，工具错误零，模型轮次 3/6，端到端 26.27/36.68 秒。两者读取要求的 scheduler/Worker 源码，正确描述目标、架构和独立运行时。Responses 把 ordinary/prefix 六组（每模式三组）说成三组，用方括号表示可选 shell flag，并夸大完整文件阅读程度；这些小缺陷保留在证据中，不静默修正。九组全通过的结论正确。此前误读诊断数值的答案已被后续结果取代，不能声称完全准确。
+
+每请求 MTP proposal/acceptance 均非零。首次冷请求 TTFT 为 6363ms，可由准备 1102ms 和 prefill 4066+1194ms 解释。其后首次 decode 为 1536ms，与图预热/捕获开销相符，但没有独立捕获计时。后续 TTFT 为 652–1917ms。最终回答输出率 158.78/197.25 tok/s。未观察到挂起或无法解释的持续变慢；这些混合冷/热工作流没有严格吞吐门槛。自有服务/worker 退出，nvidia-smi 无计算进程，18013/18014 端口释放。
+
+## 历史 V2 Model Runner 验收 — 2026-09-21
+
+前序实现仅使用 V2，Rust 保留调度/KV 所有权，无 vLLM 源码修改。对冻结的 2026-09-19 EngineCore，九组 32768→4096 均达到 >=95%。仅重跑框架：每组两次预热、三次测量，适用处启用 MTP4，block784、原始逐组 CPU 亲和性，每次一张固定 UUID B200。
+
+| 模式 | Batch | 历史 EngineCore tok/s | V2 框架 tok/s | 比例 |
+|---|---:|---:|---:|---:|
+| ordinary | 1 | 92.21 | 92.16 | 99.94% |
+| ordinary | 2 | 167.87 | 166.96 | 99.46% |
+| ordinary | 4 | 250.96 | 252.26 | 100.52% |
+| mtp | 1 | 269.16 | 286.98 | 106.62% |
+| mtp | 2 | 418.53 | 434.80 | 103.89% |
+| mtp | 4 | 446.61 | 451.12 | 101.01% |
+| prefix | 1 | 95.16 | 95.60 | 100.46% |
+| prefix | 2 | 179.44 | 179.29 | 99.92% |
+| prefix | 4 | 333.32 | 324.07 | 97.22% |
+
+[完整 V2 证据](../bench/baseline/2026-09-21-v2-acceptance.json) 记录各次重复、命令、冻结基线 SHA256、二进制/worker 源码 hash、GPU/CPU 身份及正确性。测量使用干净 `d85c23e`。实际 editable vLLM HEAD 为 `039b2ad67da6d64f7c1835c4738c7fb545ad37fc`，安装元数据仍报告历史 `g6376c601e` 标签。这是历史对比，不是同源码/同 GPU 配对，也不能证明加速仅由 V2 导致。原始基线和历史 2026-09-19 MTP-bs2 补测未变，补测未替代主基线。
+
+独立队列在不同 GPU 上运行，每秒监控进程。检测到外部 GPU 进程后完整丢弃六次尝试，只采用后续无争用结果。Prefix bs2/bs4 最初组内极差为 3.46%/4.47%，因此仅框架补测各两次预热、五次测量：bs2 达到基线 100.02%、极差 0.09%；bs4 为 99.94%、极差 0.07%。产物保留两轮，不替换原矩阵。最慢补测对最快历史基线仍至少 99.69%。轮询不能排除采样间活动。每个测量请求生成 4096 token，无抢占。
+
+真实调度 GQA/GDN FP64 探针在普通/MTP 路径跨 block784 通过，分别 51/40 次检查，无非有限值。最大状态 NRMSE 0.2704%、最大相对误差 0.3916%，低于不变的 1%/2%；输出 atol/rtol 仍为 0.03。双请求文本经普通两次/MTP 三次抢占后保持城市隔离和 1024-token 预算；MTP 还组合前缀复用、错峰到达和 1181 个已接受 draft。
+
+12 组 Chat/Responses × off/medium × JSON object/schema/strict-tool 均通过，实际提出并接受 MTP draft。生命周期检查两次通过，证明混合普通/约束 ID 进入同 batch，断开取消成功经 Worker release RPC 后后续请求成功。五档思考和存储 Responses 查询/续接/删除均通过。
+
+两次真实 oh-my-pi 任务读取 README/架构和 `crates/scheduler/src/lib.rs`、`python/oh_my_vllm/worker/model_runner.py`。Chat 四轮/nine tools，Responses 四轮/eleven tools，工具错误零，全部八个服务请求 MTP 计数为正。早期仅文档运行单独保留为初步证据。回答描述的是最终状态更新前、读取时的文件；Chat 非阻断引用错字 `docs/accepting.md` 保留在产物中。
+
+预热后的短约束案例输出 183.49–283.70 tok/s，TTFT 42–65ms，顺序运行排队为零。首请求约 1.1s 初始化尖峰。这是服务观察，不是配对基准或新增 HTTP 门槛。最终运行没有持续停顿或 worker 错误，自有 GPU 服务/worker 全部停止，18002 端口释放。
+
+75 个 Rust 测试、39 个 Python unittest、rustfmt、100 字符硬限制、clippy deny warnings、ruff 和 pre-commit 通过。独立审查覆盖 V2 适配、缓存清零、回归协议和证据。下面保留更早服务及配对 EngineCore 证据，对应各自原二进制，不是额外 V2 运行。
+
+## 服务验收 — 2026-09-21
+
+真实 Qwen3.8-27B-FP8 服务在 B200 UUID GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad 上通过，四个 MTP draft、block784。[请求、结果和指标记录](../bench/baseline/2026-09-21-serving-acceptance.json) 包含 release 二进制身份、命令、真实工具路径和最终回答。
+
+- Chat/Responses 各完成真实只读 oh-my-pi 仓库任务，含 README/架构/源码读取、工具结果回传及基于文件的答案，均用 medium 和 MTP4。
+- 12 组 API × off/medium × JSON object/JSON Schema/strict-tool 均输出合法内容，实际提出并接受 MTP draft，无回退。
+- 五档思考、存储续接/查询/删除、混合结构化/普通 batch、断开清理和后续请求通过；两 API 的明确指定工具和禁用工具也通过。
+- 首请求初始化后，11 个短约束案例包含准备/prefill 的输出率 202.8–280.1 tok/s。最终 agentic 答案为 Chat 208.1 tok/s、2,005 输出 token，Responses 219.3 tok/s、4,490 token。这是工作负载观察，不是新吞吐门槛或配对 vLLM 比较；顺序运行队列为空。
+
+运行发现并修复两项缺陷：Qwen XML 包装换行进入文件路径；未缓存 tokenizer 长度导致每输出 token 查询词表，约 29ms。缓存后同 GPU 约束运行输出处理降为每步约 0.1ms。DEBUG 阶段计时是主机时长，不是 kernel 时间。初次 Chat 有一次思考循环重试并恢复，保留在证据中。最终答案引用读取时文档，包括早期 GPU 故障；验收后对齐状态文档，再重跑两 API，无工具错误/重试，答案更新且有依据，仓库 diff 未改变。产物保留两轮。GPU 所有权通过快照检查，不能排除短暂外部活动。
+
+下述 EngineCore 矩阵早于服务，不验证 HTTP 路径。
+
+## 配对性能
+
+九组都在单张 B200 达到 >=95% 吞吐。每请求输入/输出 32768/4096。每对使用相同输入 ID、GPU UUID、继承单核 CPU 亲和性、物理 KV 容量 1024、块大小 784、贪心采样及固定输出数。MTP 两端均四 draft 和 BF16 SSM，关闭异步调度。
+
+| 模式 | Batch | vLLM tok/s | 框架 tok/s | 比例 |
+|---|---:|---:|---:|---:|
+| Ordinary | 1 | 92.21 | 93.74 | 101.66% |
+| Ordinary | 2 | 167.87 | 170.03 | 101.29% |
+| Ordinary | 4 | 250.96 | 254.64 | 101.46% |
+| MTP | 1 | 269.16 | 276.27 | 102.64% |
+| MTP | 2 | 418.53 | 434.33 | 103.78% |
+| MTP | 4 | 446.61 | 450.04 | 100.77% |
+| Prefix | 1 | 95.16 | 96.76 | 101.68% |
+| Prefix | 2 | 179.44 | 182.22 | 101.55% |
+| Prefix | 4 | 333.32 | 323.75 | 97.13% |
+
+数值为每引擎预热两次后测量三次的中位数。[原始数据和精确命令](../bench/baseline/2026-09-19-acceptance.json) 保留干净源码 `12d227d`、可执行 SHA256、GPU/CPU 身份、vLLM 版本、配置和每次重复。之后取消及 CLI 改动不归于该测量二进制。
+
+基线用 `LLM.generate` 驱动原生 EngineCore，detokenize=False。两端计时均含提交至完成；Rust 包含注册、调度、传输和最终清理。加载、编译、预热及前缀预填不计时。两引擎每个 prefix 请求恰好 32144 缓存 token。每次 MTP 测量都实际提出和接受 draft，冷组前缀命中为零。
+
+不同组在不同空闲 GPU 并发运行，每对分配一个 CPU 核。结果仅适用于记录配置，不适用于任意 CPU 放置。全程监控 GPU 所有权，未观察同 GPU 外部进程，但轮询不能排除采样间任意短活动。各组最慢框架重复对最快 vLLM 重复仍 >95%，最低 97.10%。
+
+MTP batch2 引擎内时长极差约 2.6%，因此额外进行[三次预热/五次测量配对](../bench/baseline/2026-09-19-mtp-bs2-repeat.json)，98.85% 通过：vLLM 427.32、框架 422.42 tok/s。极差降至 vLLM 0.67%、框架 0.13%。原三次数据保持完整。补测支持 >=95% 门槛，不支持稳定加速 3.78% 的声明。使用同一测量二进制，记录无关 dirty 源码编辑；Python worker 源码在完成前冻结。
+
+## 正确性与功能覆盖
+
+实际路径探针观测推理真实 GQA/GDN 调用，用舍入后的输入/输出对独立 CPU FP64 参考。覆盖 prefill、decode、跨 784-token 边界和全部推测状态前缀。BF16 输出 atol=rtol=0.03，状态 NRMSE <=1%、最大绝对误差 <=参考峰值 2%。这些是 eager 单请求 kernel 检查，不是完整模型 FP8 token 相等保证。见[测试](testing.zh.md)及[交接记录](handoff.zh.md)中的历史探针路径。
+
+普通、MTP 和前缀命中真实中文检查通过。附加[双请求文本证据](../bench/baseline/2026-09-19-batch-text.json) 使用不同北京/东京 prompt、错峰到达，每请求输入 2048/输出 1024 token，开头和尾部均连贯且切题。
+
+- 普通：两次重计算抢占，初始前缀命中为零。
+- MTP 加预填前缀：四次抢占，初始前缀命中 3136，接受 1143 draft。
+
+初始命中不包含抢占后重入命中，累计命中计数则包含。固定输出数有意忽略 EOS，与性能工作负载相同。文本测试验证请求隔离和恢复，不证明与 vLLM 输出精确相同。
+
+Rust 测试覆盖缓存分配/释放、前缀所有权、到达、抢占、推测状态迁移/回滚和取消。仅在已完成步骤间取消，必须向 worker 刷出 finished ID。CPU adapter/bridge 检查覆盖 Python 和原生 Worker 请求状态清理。
+
+## 操作范围
+
+带时间戳的多级日志关联 Rust/Python 运行和步骤；debug 主机计时帮助定位调度、IPC 和 worker 开销，不是 CUDA 计时。历史 GPU 测试脚本等待任意空闲 B200，基线/worker 使用 conda vllm，框架工具使用 conda oh-my-vllm。被忽略的 VSCode 本地设置选择框架环境用于 Python 分析。
+
+多 GPU、CPU KV swap、多模态、LoRA 和生产部署仍不在约定范围。OpenAI 兼容 HTTP 已实现（见 serving.md），有上面独立验收，不被此历史性能证据覆盖；这些测量仍为 EngineCore 级别。

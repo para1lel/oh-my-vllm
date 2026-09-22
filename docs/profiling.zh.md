@@ -1,0 +1,50 @@
+# 性能分析指南
+
+先看带时间戳的日志，再分析导致差距的部分。性能分析与吞吐验收分开进行，禁止提交原始 trace。
+
+## 主机诊断
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh env RUST_LOG=debug OH_MY_VLLM_LOG_LEVEL=DEBUG target/release/oh-my-vllm-zmq-worker --socket /tmp/oh-my-vllm-diagnostic.ipc bench --batch-size 1 --input-len 32768 --output-len 256 --warmup 1 --repetitions 1
+```
+
+关联 run_id 和 step_id，对比 Rust 调度耗时/空闲块数、RPC 往返、Python 解码、主机执行及编码/发送。RPC 与 worker 执行差距大，提示传输/唤醒开销，但不能仅凭此确定哪个线程或 kernel 导致延迟。DEBUG I/O 会改变时延，优化后需恢复普通日志重新验证。
+
+纯 CPU echo worker 可以隔离传输开销，但不能证明模型吞吐。CPU 亲和性实验必须让基线与框架设置一致；记录 CPU 掩码并调查方差。
+
+## Rust 火焰图
+
+如果已有 cargo-flamegraph 和 perf，通过相同包装脚本运行。需要符号时，使用开启 release 调试信息的隔离构建，不要替换其他基准正在使用的二进制。
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh env CARGO_TARGET_DIR=/tmp/oh-my-vllm-profile-target CARGO_PROFILE_RELEASE_DEBUG=1 cargo flamegraph --output /tmp/oh-my-vllm-flamegraph.svg --bin oh-my-vllm-zmq-worker -- --socket /tmp/oh-my-vllm-flamegraph.ipc bench --batch-size 1 --input-len 32768 --output-len 256 --warmup 1 --repetitions 1
+```
+
+检查调度/分配、不必要的 token 历史复制、块表更新、序列化和运行时唤醒。在测量前，任何预期的开销预算都只是待验证假设。
+
+## Python 与 CUDA 性能分析
+
+使用 conda oh-my-vllm Python 以及 GPU/环境包装脚本，在诊断程序中包装选定的 worker 调用。torch.profiler 的 CPU/CUDA activity 可以区分 kernel 工作与主机 launch/等待时间；cProfile 只能解释 Python 和主机调用耗时。通过 OH_MY_VLLM_WORKER_PYTHON 指定的诊断包装器必须接受解释器形式的参数：`-m oh_my_vllm.worker.zmq_bridge --socket URI`。
+
+```python
+from torch.profiler import ProfilerActivity, profile
+
+with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA]) as prof:
+    worker_out = worker.execute_model(sched_out)
+print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20))
+prof.export_chrome_trace("/tmp/oh-my-vllm-trace.json")
+```
+
+结合初始化日志与真实后端配置识别 kernel。当前探针包装独立分页注意力及 GDN prefill/recurrent 调用；不要求历史 FA kernel 名称。检查 FP8 GEMM 分派、CUDAGraph 覆盖、prefill 分块边界、draft 数量和运行时 JIT 警告。不同 kernel 路径需要调查，不能自动认定某个后端名称对所有版本都正确。
+
+## 配对验收
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output /tmp/ordinary.json
+```
+
+对 mtp 和 prefix 重复执行。脚本输出 JSON，含原始重复测量、用于比例计算的中位数、配置及身份；任一组低于 95% 则以失败状态退出。缓存/draft 校验、干扰处理和方差要求见 testing.md。profiling trace 不属于验收运行。
+
+## TileLang kernel
+
+TileFoundry 的静态成本/显存/roofline 分析是开发假设，不是测得的 kernel 时间。分析实际模型以定位吞吐/TTFT 差距。临时算子调优脚本和报告放在仓库外。正式测量除 FlashInfer 和第三方 Triton 缓存外，还审计 TILELANG_CACHE_DIR；并发采集时，各次运行使用独立 TileLang/Triton 根目录，所有编译在正式重复测量前完成。

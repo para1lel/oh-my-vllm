@@ -1,5 +1,8 @@
 # Documentation index
 
+[中文阅读版](README.zh.md). Agents use the English originals; update each
+same-directory `.zh.md` companion whenever its English source changes.
+
 Read [AGENTS.md](../AGENTS.md) and [handoff.md](handoff.md) first. AGENTS.md governs
 project constraints; handoff.md records current evidence, blockers and pending runs.
 

@@ -111,6 +111,14 @@ See `CONTRIBUTING.md` for full rules. Short version:
 
 ## Document update triggers
 
+Project-owned Markdown documents have a Chinese companion named `<stem>.zh.md`
+in the same directory. Create/update the companion in the same change whenever
+the English source changes. Preserve commands, identifiers, numbers and evidence
+limitations; translate prose without treating historical results as current.
+Agents read and maintain the English source as authoritative; Chinese companions
+are for the user's convenience. Exclude third-party submodules and generated or
+vendored dependencies. Do not create companions of existing `.zh.md` files.
+
 | Event | Update these |
 |---|---|
 | Requirements change | `docs/requirements.md` |
