@@ -1,6 +1,6 @@
 # OpenAI 兼容本地服务
 
-**状态（2026-09-22）：** 独立 Qwen Worker 已通过真实 MTP4 JSON/工具约束、所有思考档位、生命周期及两种 oh-my-pi 任务。两种 API 的长 strict-JSON 请求均复用 130928 个缓存 token。当前性能门槛仍待完成，见 [acceptance.md](acceptance.zh.md) 和 [handoff.md](handoff.zh.md)。
+**状态（2026-09-23）：** 默认 CUDA Qwen Worker 通过真实 MTP4 JSON/工具约束、思考档位、生命周期及两种 oh-my-pi 核心任务。两种 API 的长 strict-JSON 请求均复用130928个缓存 token。全部12组性能通过；证据及保留的回答局限见 [acceptance.md](acceptance.zh.md)，当前状态见 [handoff.md](handoff.zh.md)。
 
 ## 运行
 

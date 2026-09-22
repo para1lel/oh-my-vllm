@@ -45,7 +45,16 @@ Real-text ordinary/MTP preemption and prefix checks, twelve MTP4 constraints,
 lifecycle and four long strict-JSON calls pass. Both initial oh-my-pi runs execute
 real tools and follow-up requests with accepted drafts, but their final answers
 misstate current/history counts; Responses also reverses prefill ordering.
-Updated-document factual readback remains pending; default remains TileLang.
+Updated-document readback at clean ef07b2b passes the core task: Chat/Responses
+each execute nine successful reads,5/3 model requests and3297/1943 versus3687/2164
+proposed/accepted drafts. Non-blocking answer inaccuracies remain explicitly in
+the feature artifact; no claim of perfect grounding.
+
+CUDA is now the default. Final verification without backend/CUDA_HOME/TVM arch
+overrides passes174 tests plus31 subtests and repeats twelve real MTP4 constraints
+and lifecycle checks. The final selection/identity change leaves kernel/model/
+dispatch implementation unchanged;147/12 performance provenance remains c36d1c9.
+Cleanup is verified independently of the model answers.
 
 Evidence: `bench/baseline/2026-09-22-cuda-operators.json`,
 `2026-09-22-cuda-framework.json`, and `2026-09-22-cuda-features.json`.

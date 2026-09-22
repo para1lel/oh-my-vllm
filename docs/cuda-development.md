@@ -3,8 +3,10 @@
 ## Current verification
 
 Clean c36d1c9 passes147/147 operator configurations and all12 framework rows.
-Correctness passes173 tests plus28 subtests; six full-context boundaries pass.
-Updated-document agentic readback and the default-CUDA selection remain pending.
+Final default correctness passes174 tests plus31 subtests; six full-context
+boundaries and updated-document agentic readback pass. CUDA is the default;
+`OH_MY_VLLM_KERNEL_BACKEND=tilelang` selects the frozen comparison. Final selection
+and identity checks leave the measured kernel/model/dispatch implementation unchanged.
 See acceptance.md and handoff.md for current status. All milestones below are
 historical; their case/test counts must not be reported as current.
 

@@ -251,6 +251,9 @@ representative HIR checks do not replace any of these acceptance requirements.
 REQ-KERNEL-002 adds formal operator comparisons to existing correctness and
 framework gates. Frozen reference integrity and paired-decision CPU tests are
 in test_kernel_reference.py and test_kernel_comparison.py. Use the same unchanged
-GPU tests with OH_MY_VLLM_KERNEL_BACKEND=cuda; incomplete native coverage fails
-rather than falling back. Initial FP8/SiLU coverage passes14 existing cases; this
-is not complete CUDA acceptance. See cuda-development.md for measurement boundaries.
+GPU tests with the default CUDA backend; incomplete native coverage fails rather
+than falling back. Final default correctness passes174 tests plus31 subtests.
+The earlier explicit-CUDA147 operator and12 framework measurements remain valid
+because kernel/model/dispatch implementations are unchanged; feature gates pass.
+Explicit OH_MY_VLLM_KERNEL_BACKEND=tilelang selects the frozen comparison.
+See acceptance.md for source provenance and cuda-development.md for timing boundaries.

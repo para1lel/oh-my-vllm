@@ -92,8 +92,8 @@ rustfmt.toml 设置稳定 Rust 2024 格式、100 字符宽度、Unix 换行和�
 
 ## TileLang 与 TileFoundry
 
-固定 fork、源码安装、完整算子 HIR、生产 runtime twin 和审查/验证流程见[自定义 kernel 工作流](tilelang-development.zh.md)。启动推理 worker 不需要 TileFoundry。运行时使用 TileLang；独立依赖内部仍可使用 Triton。
+固定 fork、源码安装、完整算子 HIR、生产 runtime twin 和审查/验证流程见[自定义 kernel 工作流](tilelang-development.zh.md)。启动推理 worker 不需要 TileFoundry。运行时默认使用 CUDA，冻结 TileLang 可显式选择作为对照；独立依赖内部仍可使用 Triton。
 
 ## 原生 CUDA 开发
 
-Python 启动前设置 OH_MY_VLLM_KERNEL_BACKEND=cuda 使用阶段性原生后端。scripts/with-env.sh 将 TVM_FFI_CACHE_DIR 隔离到项目运行时缓存下。原生算子编译目标为 SM100a，宿主提供 CUDA13.1 编译器，必要时设置 CUDA_HOME=/usr/local/cuda-13.1。运行时不依赖 TileFoundry。冻结对照和迁移剩余工作见 cuda-development.zh.md。
+默认使用 CUDA。Python 启动前设置 OH_MY_VLLM_KERNEL_BACKEND=tilelang 使用冻结对照。scripts/with-env.sh 将 TVM_FFI_CACHE_DIR 隔离到项目运行时缓存下。原生算子编译目标为 SM100a，宿主提供 CUDA13.1 编译器，必要时设置 CUDA_HOME=/usr/local/cuda-13.1。运行时不依赖 TileFoundry。冻结对照和已验收开发流程见 cuda-development.zh.md。

@@ -86,7 +86,7 @@ row-major scales. FlashInfer 0.6.18's CUTLASS SM100 17..32-row path was nondeter
 at real model widths and is never selected. Actual-width FP64/repetition tests cover
 16/17/20/24/32/33 rows. Quantization preserves per-row 128-element scaling.
 
-Project-owned TileLang kernels implement GDN recurrence, causal convolution, paged
+Project-owned CUDA kernels (with a frozen TileLang comparison) implement GDN recurrence, causal convolution, paged
 split-KV GQA decode, normalization, partial NeoX RoPE and pointwise fusions.
 FlashInfer implements long GDN/FA prefill. GDN prefill explicitly normalizes q/k
 because the selected release's advertised normalization flag is unused.
@@ -177,19 +177,22 @@ Small-batch BF16 vocabulary projections use independent FlashInfer CuTe-DSL GEMM
 Residual addition and RMS normalization share one kernel, preserving the BF16
 sum before FP32 normalization. MLP SiLU/multiplication and FP8 quantization share
 a kernel while preserving both BF16 rounding points and the original scales.
-Q/K RMS normalization and partial NeoX rotation share a TileLang kernel, retaining
+In the frozen reference, Q/K RMS and partial NeoX rotation share a TileLang kernel,
+retaining
 the intermediate BF16 rounding and packed projection strides. Its fixed256-wide
 heads,64 rotary dimensions and theta10000000 match the validated Qwen checkpoint.
 It computes and reduces the phase in FP64 before FP32 sin/cos, avoiding amplified
 frequency/angle rounding error near the maximum context.
-The staged CUDA backend combines the complete full-attention preparation chain:
+The CUDA backend combines the complete full-attention preparation chain:
 Q/K RMS/RoPE, V layout conversion and physical KV writes. Target and MTP call the
 same `attention_prepare.prepare_attention` entry with packed14336 projections.
 The returned Q is contiguous; the gate half of each512-wide Q head is untouched.
 Cache must not alias inputs, and negative slots skip KV writes while retaining Q.
-The default TileLang backend preserves the original complete frozen chain.
+The explicit TileLang comparison backend preserves the original complete frozen chain.
 
-GDN recurrence uses 32-value tiles for at least four sequences, 16 otherwise.
+Frozen TileLang GDN recurrence uses32-value tiles for at least four sequences,16
+otherwise. Native CUDA uses guarded vector state updates for the model layout and
+retains a generic CUDA path for other alignments/layouts.
 
 Target decode graphs expose existing 784-token pages to native TRT-LLM attention
 as 49 sixteen-token subpages. K/V offset views and `page * 98 + subpage` tables
@@ -204,10 +207,12 @@ the native operator's redundant active-row check. GDN prefill normalizes Q/K
 in one strided kernel with FP32 norms, epsilon 1e-6 and BF16 outputs, avoiding
 several large temporary tensors. No cache precision or tolerance changes.
 
-## CUDA migration in progress
+## CUDA backend and frozen comparison
 
 Custom kernel factories have an explicit process-level backend selection. The
 frozen TileLang implementation lives in kernels/tilelang_reference with a source
 manifest. Native CUDA uses independent TVM FFI and the caller CUDA stream; missing
-native entries fail explicitly. TileLang remains the default until all CUDA
-operator and framework acceptance passes. TileFoundry stays development-only.
+native entries fail explicitly. CUDA is the default after operator/framework and
+feature acceptance; select OH_MY_VLLM_KERNEL_BACKEND=tilelang before startup for
+the frozen reference. Runtime identity uses the same process-level selection.
+TileFoundry stays development-only.

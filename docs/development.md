@@ -155,12 +155,13 @@ under GPU validation; they represent 1400 FA slots and 128 independent GDN slots
 See [the custom kernel workflow](tilelang-development.md) for the pinned fork,
 source installation, complete-operator HIR, production runtime twins and the
 review/validation sequence. TileFoundry is not required to start an inference
-worker. Runtime uses TileLang; independent dependencies may still use Triton.
+worker. Runtime defaults to CUDA; frozen TileLang remains selectable for comparison.
+Independent dependencies may still use Triton.
 
 ## Native CUDA development
 
-Set OH_MY_VLLM_KERNEL_BACKEND=cuda before launching Python for the staged native
-backend. scripts/with-env.sh isolates TVM_FFI_CACHE_DIR under the project runtime
+CUDA is the default. Set OH_MY_VLLM_KERNEL_BACKEND=tilelang before launching Python
+for the frozen comparison. scripts/with-env.sh isolates TVM_FFI_CACHE_DIR under the project runtime
 cache. Native kernels compile for SM100a; the host CUDA13.1 compiler is available.
 Use CUDA_HOME=/usr/local/cuda-13.1 when needed. No TileFoundry runtime dependency.
-See cuda-development.md for the frozen comparison and remaining migration work.
+See cuda-development.md for the frozen comparison and accepted development workflow.

@@ -44,7 +44,7 @@ MTP 行 p 组合 target hidden[p-1] 和 input token[p]。统一 +1 RoPE 偏移�
 
 独立 FlashInfer TRT-LLM FP8 GEMM 处理 <=32 行，使用列主序 activation scale 和行主序 checkpoint scale。更大输入使用行主序 scale 的 CUTLASS。FlashInfer 0.6.18 的 CUTLASS SM100 17..32 行路径在真实模型宽度下不确定，因此永不选择。实际宽度 FP64/重复测试覆盖 16/17/20/24/32/33 行。量化保留逐行、每 128 元素的 scale。
 
-项目自有 TileLang kernel 实现 GDN 递归、因果卷积、分页 split-KV GQA decode、归一化、部分 NeoX RoPE 和逐元素融合。长 GDN/FA prefill 由 FlashInfer 实现。GDN prefill 显式归一化 q/k，因为所选版本声明的归一化标志实际未使用。
+项目自有 CUDA kernel（保留冻结 TileLang 对照）实现 GDN 递归、因果卷积、分页 split-KV GQA decode、归一化、部分 NeoX RoPE 和逐元素融合。长 GDN/FA prefill 由 FlashInfer 实现。GDN prefill 显式归一化 q/k，因为所选版本声明的归一化标志实际未使用。
 
 decode 图使用固定 token/请求 shape，以及动态位置、块表和状态地址。预热/捕获保存每个 FA/状态写目的地，正式回放前恢复。target 和 proposer 各保留最多 32 种图 shape；prefill 或超过上限的未缓存 shape 使用 eager。图输出在复用前消耗，递归 MTP 输入复制到独立 buffer。`OH_MY_VLLM_ENFORCE_EAGER=1` 仅用于诊断。最终性能需要测得相关 shape 的覆盖，不能仅凭图捕获成功。
 
@@ -74,12 +74,12 @@ batch 中 query span 至少为 1024 token 时，Python 只收集活跃 FA KV tok
 
 卷积、GDN 递归和 RMS 归一化接受带明确 token/head stride 的 packed 投影视图。输出仍为 dense，递归源快照保持隔离。每个 target/draft 组的主机整数元数据通过一个 buffer 复制，设备视图保留底层存储。图输入仍复制到持久 buffer；GDN prefill start 在执行各层前只转换一次 int32。
 
-小 batch BF16 词表投影使用独立 FlashInfer CuTe-DSL GEMM。残差相加和 RMS 归一化共用一个 kernel，在 FP32 归一化前保留 BF16 求和。MLP SiLU/乘法和 FP8 量化共用一个 kernel，保留两处 BF16 舍入和原 scale。Q/K RMS 归一化与部分 NeoX 旋转融合在 TileLang kernel 中，保留中间 BF16 舍入及 packed 投影 stride。固定 256 维 head、64 维旋转和 theta10000000，与校验后的 Qwen checkpoint 一致。相位先用 FP64 计算并约化，再执行 FP32 sin/cos，避免最大上下文附近频率/角度舍入误差放大。GDN 递归在至少四条序列时使用 32-value tile，否则为 16。
+小 batch BF16 词表投影使用独立 FlashInfer CuTe-DSL GEMM。残差相加和 RMS 归一化共用一个 kernel，在 FP32 归一化前保留 BF16 求和。MLP SiLU/乘法和 FP8 量化共用一个 kernel，保留两处 BF16 舍入和原 scale。冻结对照中，Q/K RMS 归一化与部分 NeoX 旋转融合在 TileLang kernel 中，保留中间 BF16 舍入及 packed 投影 stride。固定 256 维 head、64 维旋转和 theta10000000，与校验后的 Qwen checkpoint 一致。相位先用 FP64 计算并约化，再执行 FP32 sin/cos，避免最大上下文附近频率/角度舍入误差放大。冻结 TileLang 的 GDN 递归在至少四条序列时使用 32-value tile，否则为16。原生 CUDA 为模型布局使用带对齐/别名检查的向量状态更新，其他布局保留通用 CUDA 路径。
 
-迁移中的 CUDA 后端将完整的全注意力准备链融合：Q/K RMS/RoPE、V 布局转换和物理 KV 写入。主模型与 MTP 对 packed14336 投影调用同一 `attention_prepare.prepare_attention` 入口。返回的 Q 连续，每个 512 维 Q head 的 gate 半区不变。缓存不得与输入重叠；负 slot 跳过 KV 写入，但仍产生 Q。默认 TileLang 后端保留原有完整冻结链。
+CUDA 后端将完整的全注意力准备链融合：Q/K RMS/RoPE、V 布局转换和物理 KV 写入。主模型与 MTP 对 packed14336 投影调用同一 `attention_prepare.prepare_attention` 入口。返回的 Q 连续，每个 512 维 Q head 的 gate 半区不变。缓存不得与输入重叠；负 slot 跳过 KV 写入，但仍产生 Q。显式 TileLang 对照后端保留原有完整冻结链。
 
 target decode 图把现有 784-token 页作为 49 个 16-token 子页提供给原生 TRT-LLM 注意力。K/V 偏移视图和 `page * 98 + subpage` 块表避免 KV 复制，并保留 Rust 页所有权。块表展开和 query/KV 长度选择在每次模型执行的图捕获内只做一次，回放使用当前请求元数据。draft 注意力保留项目 kernel，以排除 decode 中不存在的位置零。draft prefill 的 query 至少 128 token 时，从位置一开始收集有效 KV，使用独立 ragged TRT-LLM 注意力及 FP32 softmax；中间 query span 使用 FA2。规划阶段先验证 query 非空连续及 KV 长度，再跳过原生算子的冗余活跃行检查。GDN prefill 用单个 strided kernel 归一化 Q/K，FP32 norm、epsilon 1e-6、BF16 输出，避免多个大临时 tensor。缓存精度和容差均不改变。
 
-## CUDA 迁移进行中
+## CUDA 后端与冻结对照
 
-自有 kernel 工厂支持显式的进程级后端选择。冻结 TileLang 实现位于 kernels/tilelang_reference，并记录源码清单。原生 CUDA 使用独立 TVM FFI 和调用方 CUDA stream，缺失入口明确报错。全部 CUDA 算子和框架验收通过前，默认保持 TileLang。TileFoundry 仍仅用于开发。
+自有 kernel 工厂支持显式的进程级后端选择。冻结 TileLang 实现位于 kernels/tilelang_reference，并记录源码清单。原生 CUDA 使用独立 TVM FFI 和调用方 CUDA stream，缺失入口明确报错。算子、框架和功能验收通过后，默认使用 CUDA；启动前设置 OH_MY_VLLM_KERNEL_BACKEND=tilelang 可选择冻结对照。运行时身份使用同一进程级选择。TileFoundry 仍仅用于开发。

@@ -1,62 +1,63 @@
-# Handoff — 2026-09-22
+# Handoff — 2026-09-23
 
-## Current CUDA migration status
+## Current state: CUDA migration complete
 
-Use this section for current state. Older milestone counts in
-`cuda-development.md` and progress artifacts are historical, not current results.
+CUDA is the default custom-kernel backend on B200. Set
+`OH_MY_VLLM_KERNEL_BACKEND=tilelang` before Python starts for the single frozen
+comparison implementation. Runtime identity reports the actual process selection;
+there is no silent fallback. Rust still owns serving/scheduling/logical KV and
+Python owns GPU computation. No vLLM runtime/source/environment dependency returns.
 
-The native CUDA implementation at clean `c36d1c9` passes all **147** statically
-derived operator configurations against the frozen TileLang reference. Each case
-passes three independent warm rounds of twenty alternating-order pairs and a
-positive one-sided95% paired-bootstrap gain bound. The previous173-case inventory
-predates production full-attention preparation fusion and is no longer the active
-matrix. Frozen TileLang has a single implementation in `kernels/tilelang_reference`.
+Clean `c36d1c9`, explicitly selecting CUDA, passes all **147 operator cases** and
+all **12 framework performance rows**. Each operator passes three rounds of20
+interleaved pairs and a positive one-sided95% bootstrap gain bound. Framework
+throughput is97.52–125.09% and TTFT76.01–97.50% of the frozen vLLM baseline; every
+row meets the unchanged10% stability rule. Preserve earlier failed stability
+sets and three physical-CPU-overlap exclusions. No baseline was rerun.
+The historical173-case inventory predates attention-preparation fusion.
 
-Full CUDA correctness passes **173 tests plus28 subtests**, without relaxed
-references or tolerances. Actual-model ordinary/MTP4 eager FP64 probes pass.
-Ordinary/MTP real-text isolation, prefix reuse and forced recompute preemption pass.
-Six input258048/output4096, ordinary/MTP batch1/2/4 boundary runs finish with exact
-output counts and zero OOM/preemption.
+The12 workloads are ordinary/MTP/prefix input32768 at batch1/2/4, plus
+ordinary-only input131072 at batch1/2/4, all with output4096. Six ordinary/MTP
+input258048/output4096 boundary runs also complete without OOM/preemption.
+Peak PyTorch reserved memory is134.69GB; this is not total-device memory.
 
-The12-row framework matrix uses ordinary/MTP/prefix input32768 at batch1/2/4,
-plus ordinary-only input131072 at batch1/2/4; output is4096 throughout. It compares
-only against frozen vLLM `e9f169d16b9408bb9ae44f75072b91a5521d733c`. No vLLM runtime,
-source/environment dependency or new baseline run was introduced. All12 rows pass
-throughput>=95%, TTFT<=110% and spread/median<=10%.
-Ratios and complete failed/excluded attempts are in the current acceptance artifact.
+Final default-selection correctness passes **174 tests plus31 subtests** without
+relaxed numerical references/tolerances. The measured CUDA kernel/model/dispatch
+implementation is unchanged by the default switch. Actual-model FP64 probes,
+ordinary/MTP real-text isolation, prefix reuse and forced preemption pass.
+MTP4 constraints, lifecycle and long strict-JSON prefix reuse pass. A final
+service run with backend/CUDA_HOME/TVM architecture variables unset verifies the
+actual default and repeats twelve constraints plus lifecycle successfully.
 
-MTP4 service constraints, lifecycle and long strict-JSON prefix reuse pass. Initial
-Chat/Responses oh-my-pi runs have verified real tool calls, follow-up requests and
-accepted drafts, but their final answers confuse historical/current counts; the
-Responses answer also incorrectly says prefill sorts last. Actual batch planning
-sorts prefill first. Updated-document readback remains required before final closeout.
+Updated-document oh-my-pi Chat/Responses readback passes the core task with nine
+successful read calls each,5/3 real model requests and nonzero MTP acceptance.
+Both read the required source files and distinguish current147 cases from history.
+Retain answer limitations: Chat workload wording is imprecise; Responses mixes
+Rust scheduling with Python prefill ordering and includes a historical performance
+command; both repeat an earlier cleanup snapshot while their own service runs.
+Do not claim perfect model grounding or use model answers as cleanup evidence.
 
-TileLang remains the default pending that readback and the final default-selection
-change. Runtime/kernel implementation is frozen during formal collection. See
-`acceptance.md` for current evidence and `cuda-development.md` for CUDA/PTX choices,
-TileFoundry estimates versus measured Nsight observations, and historical tuning.
+## Evidence and provenance
 
-## Remaining work
+See `acceptance.md` and the2026-09-22-cuda-{operators,framework,features}.json
+artifacts in `bench/baseline` (collection date is UTC). Full147/12 timing is from
+clean c36d1c9 with explicit CUDA; readback is from clean ef07b2b. The final change
+only selects CUDA by default, unifies identity and adds selection tests. Default
+suite/service evidence records its working-tree provenance and unchanged CUDA hash.
+Older counts in `cuda-development.md` are historical, not current status.
 
-- Verify updated-document Chat/Responses readback with MTP4 and actual tool results.
-- Switch the default to CUDA and make runtime identity report the same selected
-  backend. Preserve explicit `OH_MY_VLLM_KERNEL_BACKEND=tilelang` comparison.
-- Run final relevant checks, independent review, commit and push on main.
-- Stop every task-owned GPU program and verify its GPU/port resources are released.
+All-file Rust fmt/width/clippy/tests and Ruff checks pass. Independent reviews
+cover numerical code, statistics, feature evidence and final selection behavior.
+No implementation or acceptance work remains in this migration scope.
 
-All collection processes have exited; nvidia-smi has no compute processes and
-port18030 is released. No service was requested to remain running. All-file
-Rust fmt/width/clippy/tests and Ruff checks pass.
+## Cleanup and operating rules
 
-## Operating rules
+The feature artifact records a timestamped cleanup snapshot after tests: no GPU
+compute processes, ports18030/18031/18032 released, no requested running service.
+This is a snapshot, not a live system-status promise.
 
-Use `scripts/with-env.sh` and idle-UUID selection via `scripts/with-gpu.sh`.
-Stay on main, stage only intentional files, keep hooks enabled, maintain Chinese
-Markdown companions and retain the required commit attribution. Do not leave any
-GPU service or child worker running after its task finishes. Temporary operator
-experiments and raw GPU traces stay outside the repository. Formal summarized
-operator/framework acceptance evidence belongs in `bench/baseline`.
-
-Historical work is retained in Git and the dated artifacts. The independent
-runtime and TileLang migration were separately accepted; those results do not
-replace current CUDA acceptance.
+Use `scripts/with-env.sh` and idle UUID selection via `scripts/with-gpu.sh`.
+Develop/commit only on main, stage intentional files, keep hooks enabled, maintain
+Chinese Markdown companions and the required commit attribution. Stop every
+owned GPU program promptly. Temporary tuning and raw GPU traces stay outside
+the repository; formal summarized acceptance evidence belongs in `bench/baseline`.

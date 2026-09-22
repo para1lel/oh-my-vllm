@@ -39,7 +39,14 @@ HIR 估算、单独采集的 Nsight 实测计数和验收时延严格区分。CU
 普通/MTP 真实文本抢占和前缀检查、十二项 MTP4 约束、生命周期、四次长严格
 JSON 调用均通过。首次两种 oh-my-pi 运行都有真实工具、后续请求和接受草稿，
 但最终回答误述了当前/历史数量，Responses 还反转了 prefill 排序。
-更新文档后的事实读回仍待验证；默认后端仍为 TileLang。
+干净 ef07b2b 上更新文档后的读回通过核心任务：Chat/Responses 各九次成功读取、
+5/3次模型请求，草稿 proposed/accepted 分别为3297/1943和3687/2164。
+功能产物明确保留非阻塞的回答误述，不声称回答完全准确。
+
+CUDA 现为默认后端。没有设置后端/CUDA_HOME/TVM 架构变量的最终验证通过174项
+测试及31个子测试，并再次通过十二项真实 MTP4 约束和生命周期检查。最终选择/身份
+改动没有改变 kernel/模型/dispatch 实现；147/12性能来源仍为 c36d1c9。
+清理状态独立核实，不依赖模型回答。
 
 证据：`bench/baseline/2026-09-22-cuda-operators.json`、
 `2026-09-22-cuda-framework.json`、`2026-09-22-cuda-features.json`。

@@ -2,7 +2,7 @@
 
 import os
 
-NAME = os.environ.get("OH_MY_VLLM_KERNEL_BACKEND", "tilelang")
+NAME = os.environ.get("OH_MY_VLLM_KERNEL_BACKEND", "cuda")
 if NAME not in ("tilelang", "cuda"):
     raise ValueError(f"unknown OH_MY_VLLM_KERNEL_BACKEND: {NAME!r}")
 

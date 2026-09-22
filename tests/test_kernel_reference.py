@@ -11,6 +11,33 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ReferenceTest(unittest.TestCase):
+    def test_backend_identity_matches_process_selection(self):
+        import os
+
+        for selected in (None, "cuda", "tilelang"):
+            with self.subTest(selected=selected):
+                environment = dict(os.environ)
+                environment.pop("OH_MY_VLLM_KERNEL_BACKEND", None)
+                if selected is not None:
+                    environment["OH_MY_VLLM_KERNEL_BACKEND"] = selected
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        "-c",
+                        "import json, os; "
+                        "from oh_my_vllm.kernels.backend import NAME; "
+                        "from oh_my_vllm.worker.runtime import identity; "
+                        "os.environ['OH_MY_VLLM_KERNEL_BACKEND'] = 'typo'; "
+                        "print(json.dumps([NAME, identity()['kernel_backend']]))",
+                    ],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                expected = selected or "cuda"
+                self.assertEqual(json.loads(result.stdout), [expected, expected])
+
     def test_reference_sources_match_frozen_hashes(self):
         manifest = json.loads(
             (ROOT / "development/kernels/tilelang-reference.json").read_text()

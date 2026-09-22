@@ -1,4 +1,4 @@
-"""B200 CUDA implementations, selected explicitly during staged migration."""
+"""B200 CUDA implementations, compiled lazily; executed on the caller's CUDA stream."""
 
 from functools import cache
 from pathlib import Path

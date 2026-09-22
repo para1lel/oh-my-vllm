@@ -1,6 +1,6 @@
 # 自定义 kernel 开发
 
-生产自定义 kernel 使用 TileLang 0.1.14。独立库内部仍可使用 Triton。TileFoundry 是 agent 开发工具，不是服务依赖。已有正确性测试和冻结 vLLM 验收门槛继续作为标准，不设置与项目旧 Triton kernel 的对比门槛。
+本页说明冻结的 TileLang0.1.14 对照和开发工具。生产默认使用 CUDA，见 [CUDA 工作流](cuda-development.zh.md)。独立库内部仍可使用 Triton。TileFoundry 仍是 agent 开发工具，不是服务依赖。已有正确性测试和冻结 vLLM 验收门槛继续作为标准，不设置与项目旧 Triton kernel 的对比门槛。
 
 ## 复现工具环境
 

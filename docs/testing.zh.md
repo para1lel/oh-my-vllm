@@ -137,4 +137,4 @@ TileLang 替换保持现有测试和容差不变。运行完整 GPU pytest、实
 
 ## CUDA 迁移验收
 
-REQ-KERNEL-002 在已有正确性与框架门槛上新增正式算子对比。冻结对照完整性和成对判定 CPU 测试位于 test_kernel_reference.py、test_kernel_comparison.py。设置 OH_MY_VLLM_KERNEL_BACKEND=cuda 运行同一套未改动的 GPU 测试，缺失原生覆盖时直接失败，不回退。目前 FP8/SiLU 通过现有 14 项测试，不代表完整 CUDA 验收。测量边界见 cuda-development.zh.md。
+REQ-KERNEL-002 在已有正确性与框架门槛上新增正式算子对比。冻结对照完整性和成对判定 CPU 测试位于 test_kernel_reference.py、test_kernel_comparison.py。使用默认 CUDA 后端运行同一套数值参考不变的 GPU 测试，缺失原生覆盖时直接失败，不回退。最终默认正确性验证通过174项测试及31个子测试。此前显式 CUDA 的147项算子和12组框架性能证据继续适用，因为 kernel/模型/dispatch 实现未变；保留的功能门槛也通过。显式设置 OH_MY_VLLM_KERNEL_BACKEND=tilelang 选择冻结对照。来源见 acceptance.zh.md，测量边界见 cuda-development.zh.md。

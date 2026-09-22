@@ -1,9 +1,10 @@
 # OpenAI-compatible local serving
 
-**Status (2026-09-22):** the independent Qwen Worker passes real MTP4 JSON/tool
-constraints, all thinking levels, lifecycle and both oh-my-pi tasks. Long strict-JSON
-requests through both APIs reuse 130928 cached tokens. Current performance gates
-remain pending; see [acceptance.md](acceptance.md) and [handoff.md](handoff.md).
+**Status (2026-09-23):** the default CUDA Qwen Worker passes real MTP4 JSON/tool
+constraints, thinking levels, lifecycle and both oh-my-pi core tasks. Long strict-JSON
+requests through both APIs reuse130928 cached tokens. All12 performance rows pass;
+see [acceptance.md](acceptance.md) for evidence and retained answer limitations,
+and [handoff.md](handoff.md) for current state.
 
 ## Run
 

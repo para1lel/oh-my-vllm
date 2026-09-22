@@ -12,10 +12,10 @@ The model at `/data0/shared/Qwen3.8-27B-FP8` has 16 full-attention and 48 GDN la
 Block size is 784. See [architecture](docs/architecture.md),
 [wire protocol](docs/design.md) and [decisions](docs/decisions/).
 
-Current CUDA verification:147/147 operator cases, all12 throughput/TTFT rows,
-173 correctness tests plus28 subtests and six full-context boundaries pass.
-The default remains TileLang pending updated-document agentic readback and final
-selection checks. Historical milestone counts are not current status; see
+CUDA is now the default:147/147 operator cases, all12 throughput/TTFT rows,
+174 correctness tests plus31 subtests, six full-context boundaries and updated
+agentic readback pass. Set `OH_MY_VLLM_KERNEL_BACKEND=tilelang` for the frozen
+comparison. Historical milestone counts are not current status; see
 [handoff](docs/handoff.md) and [acceptance](docs/acceptance.md).
 
 ## Quick start

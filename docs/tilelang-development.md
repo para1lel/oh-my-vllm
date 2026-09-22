@@ -1,7 +1,9 @@
 # Custom kernel development
 
-Production custom kernels use TileLang 0.1.14. Independent libraries may use Triton
-internally. TileFoundry is an agent development tool, never a serving dependency.
+This page documents the frozen TileLang0.1.14 comparison and its development tools.
+Production defaults to CUDA; see [the CUDA workflow](cuda-development.md).
+Independent libraries may use Triton internally. TileFoundry remains an agent
+development tool, never a serving dependency.
 The existing correctness tests and frozen vLLM acceptance gates remain authoritative;
 there is no comparison gate against the previous project Triton kernels.
 
