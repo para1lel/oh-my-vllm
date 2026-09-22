@@ -9,39 +9,71 @@ using tvm::ffi::TensorView;
 
 // One warp owns one complete 128-value scaling group. Independent warps share
 // a CTA; reductions do not require shared memory or block-wide synchronization.
-template <typename Input, bool Silu, bool Column>
-__global__ void quantize_kernel(const Input *x, __nv_fp8_e4m3 *out, float *scales, int rows,
-                                int width) {
+template <typename Input> struct alignas(sizeof(Input) * 4) Four {
+  Input values[4];
+};
+template <typename Input> __device__ Four<Input> load_four(const Input *x) {
+  if ((reinterpret_cast<uintptr_t>(x) & (sizeof(Input) * 4 - 1)) == 0)
+    return *reinterpret_cast<const Four<Input> *>(x);
+  Four<Input> values;
+#pragma unroll
+  for (int j = 0; j < 4; ++j)
+    values.values[j] = x[j];
+  return values;
+}
+template <typename Input, bool Silu, bool Column, int RowsPerWarp, bool Flat = false>
+__global__ void quantize_kernel(const Input *__restrict__ x, __nv_fp8_e4m3 *__restrict__ out,
+                                float *__restrict__ scales, int rows, int width) {
   const int lane = threadIdx.x & 31;
-  const int group = (blockIdx.x * blockDim.x + threadIdx.x) / 32;
   const int groups = width / 128;
-  if (group >= rows * groups)
-    return;
-  const int row = group / groups;
-  const int col = (group % groups) * 128;
-  float value[4];
-  float maximum = 0;
+  const int linear_group = blockIdx.x * (blockDim.x / 32) + threadIdx.x / 32;
+  const int group = Flat ? linear_group % groups : blockIdx.y;
+  const int col = group * 128;
 #pragma unroll
-  for (int j = 0; j < 4; ++j) {
-    int offset = row * width * (Silu ? 2 : 1) + col + lane + j * 32;
-    float v = static_cast<float>(x[offset]);
-    if constexpr (Silu) {
-      float activated = __bfloat162float(__float2bfloat16_rn(v / (1.f + expf(-v))));
-      v = __bfloat162float(__float2bfloat16_rn(activated * static_cast<float>(x[offset + width])));
+  for (int r = 0; r < RowsPerWarp; ++r) {
+    const int row =
+        Flat ? linear_group / groups
+             : blockIdx.x * (blockDim.x / 32) * RowsPerWarp + (threadIdx.x / 32) * RowsPerWarp + r;
+    if (row >= rows)
+      continue;
+    float value[4], maximum = 0;
+    int offset = row * width * (Silu ? 2 : 1) + col + lane * 4;
+    Four<Input> packed;
+    if constexpr (Silu)
+      packed = load_four(x + offset);
+    Four<Input> up;
+    if constexpr (Silu)
+      up = load_four(x + offset + width);
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+      float v;
+      if constexpr (Silu)
+        v = static_cast<float>(packed.values[j]);
+      else
+        v = static_cast<float>(x[row * width + col + lane + j * 32]);
+      if constexpr (Silu) {
+        float activated = __bfloat162float(__float2bfloat16_rn(v / (1.f + expf(-v))));
+        v = __bfloat162float(__float2bfloat16_rn(activated * static_cast<float>(up.values[j])));
+      }
+      value[j] = v;
+      maximum = fmaxf(maximum, fabsf(v));
     }
-    value[j] = v;
-    maximum = fmaxf(maximum, fabsf(v));
-  }
+    // Absolute nonnegative FP32 bit patterns preserve unsigned ordering.
+    maximum = __uint_as_float(__reduce_max_sync(0xffffffff, __float_as_uint(maximum)));
+    float scale = __fdiv_rn(fmaxf(maximum, 1e-10f), 448.f);
+    if (lane == 0)
+      scales[Column ? group * rows + row : row * groups + group] = scale;
 #pragma unroll
-  for (int delta = 16; delta; delta /= 2)
-    maximum = fmaxf(maximum, __shfl_xor_sync(0xffffffff, maximum, delta));
-  float scale = __fdiv_rn(fmaxf(maximum, 1e-10f), 448.f);
-  if (lane == 0)
-    scales[Column ? (group % groups) * rows + row : group] = scale;
+    for (int j = 0; j < 4; ++j)
+      value[j] = fminf(448.f, fmaxf(-448.f, __fdiv_rn(value[j], scale)));
+    if constexpr (Silu)
+      reinterpret_cast<__nv_fp8x4_e4m3 *>(out)[(row * width + col) / 4 + lane] =
+          __nv_fp8x4_e4m3(make_float4(value[0], value[1], value[2], value[3]));
+    else {
 #pragma unroll
-  for (int j = 0; j < 4; ++j) {
-    float v = fminf(448.f, fmaxf(-448.f, __fdiv_rn(value[j], scale)));
-    out[row * width + col + lane + j * 32] = __nv_fp8_e4m3(v);
+      for (int j = 0; j < 4; ++j)
+        out[row * width + col + lane + j * 32] = __nv_fp8_e4m3(value[j]);
+    }
   }
 }
 
@@ -49,11 +81,21 @@ template <typename Input>
 void launch_quantize(TensorView x, TensorView out, TensorView scales, bool column, bool silu,
                      cudaStream_t stream) {
   int rows = out.size(0), width = out.size(1);
-  int blocks = (rows * (width / 128) + 3) / 4;
+#define CALL(S, C, R, T)                                                                           \
+  quantize_kernel<Input, S, C, R>                                                                  \
+      <<<dim3((rows + (T / 32) * R - 1) / ((T / 32) * R), width / 128), T, 0, stream>>>(           \
+          static_cast<const Input *>(x.data_ptr()), static_cast<__nv_fp8_e4m3 *>(out.data_ptr()),  \
+          static_cast<float *>(scales.data_ptr()), rows, width)
 #define LAUNCH(S, C)                                                                               \
-  quantize_kernel<Input, S, C><<<blocks, 128, 0, stream>>>(                                        \
-      static_cast<const Input *>(x.data_ptr()), static_cast<__nv_fp8_e4m3 *>(out.data_ptr()),      \
-      static_cast<float *>(scales.data_ptr()), rows, width)
+  if (width / 128 > 65535 || (S && rows >= 4 && rows < 128)) {                                     \
+    quantize_kernel<Input, S, C, 1, true><<<(rows * (width / 128) + 3) / 4, 128, 0, stream>>>(     \
+        static_cast<const Input *>(x.data_ptr()), static_cast<__nv_fp8_e4m3 *>(out.data_ptr()),    \
+        static_cast<float *>(scales.data_ptr()), rows, width);                                     \
+  } else if (rows >= 128) {                                                                        \
+    CALL(S, C, 4, 128);                                                                            \
+  } else {                                                                                         \
+    CALL(S, C, 1, 32);                                                                             \
+  }
   if (silu) {
     if (column) {
       LAUNCH(true, true);
@@ -68,6 +110,7 @@ void launch_quantize(TensorView x, TensorView out, TensorView scales, bool colum
     }
   }
 #undef LAUNCH
+#undef CALL
 }
 
 void quantize(TensorView x, TensorView out, TensorView scales, bool column, bool silu) {
@@ -81,7 +124,8 @@ void quantize(TensorView x, TensorView out, TensorView scales, bool column, bool
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA quantize launch failed";
 }
 
-__global__ void silu_kernel(const __nv_bfloat16 *x, __nv_bfloat16 *out, int rows, int width) {
+__global__ void silu_kernel(const __nv_bfloat16 *__restrict__ x, __nv_bfloat16 *__restrict__ out,
+                            int rows, int width) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i >= rows * width)
     return;
@@ -115,8 +159,9 @@ cudaStream_t stream_for(TensorView x) {
   return static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
 }
 
-__global__ void gates_kernel(const __nv_bfloat16 *ba, const float *log, const float *bias,
-                             float *decay, float *beta, int n) {
+__global__ void gates_kernel(const __nv_bfloat16 *__restrict__ ba, const float *__restrict__ log,
+                             const float *__restrict__ bias, float *__restrict__ decay,
+                             float *__restrict__ beta, int n) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i >= n * 48)
     return;
@@ -135,13 +180,97 @@ void gates(TensorView ba, TensorView log, TensorView bias, TensorView decay, Ten
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA gate launch failed";
 }
 
+template <typename T> struct alignas(sizeof(T) * 4) AlignedFour {
+  T value[4];
+};
+template <typename T> __device__ AlignedFour<T> load_aligned_four(const T *p) {
+  return *reinterpret_cast<const AlignedFour<T> *>(p);
+}
+template <bool Residual, int Threads>
+__global__ void rms5120_kernel(const __nv_bfloat16 *__restrict__ x,
+                               const __nv_bfloat16 *__restrict__ residual,
+                               const float *__restrict__ w, __nv_bfloat16 *__restrict__ out,
+                               __nv_bfloat16 *__restrict__ summed, float eps) {
+  constexpr int Chunks = 5120 / (Threads * 4);
+  int row = blockIdx.x, lane = threadIdx.x & 31;
+  float values[Chunks][4], total = 0;
+#pragma unroll
+  for (int chunk = 0; chunk < Chunks; ++chunk) {
+    int col = chunk * Threads * 4 + threadIdx.x * 4;
+    auto q = load_aligned_four(x + static_cast<int64_t>(row) * 5120 + col);
+    AlignedFour<__nv_bfloat16> r;
+    if constexpr (Residual)
+      r = load_aligned_four(residual + static_cast<int64_t>(row) * 5120 + col);
+    if constexpr (Residual) {
+#pragma unroll
+      for (int j = 0; j < 4; j += 2) {
+        auto pair = __hadd2(__halves2bfloat162(q.value[j], q.value[j + 1]),
+                            __halves2bfloat162(r.value[j], r.value[j + 1]));
+        q.value[j] = __low2bfloat16(pair);
+        q.value[j + 1] = __high2bfloat16(pair);
+      }
+    }
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+      float v = __bfloat162float(q.value[j]);
+      values[chunk][j] = v;
+      total += v * v;
+    }
+    if constexpr (Residual)
+      *reinterpret_cast<AlignedFour<__nv_bfloat16> *>(summed + static_cast<int64_t>(row) * 5120 +
+                                                      col) = q;
+  }
+  total = warp_sum(total);
+  __shared__ float partial[Threads / 32];
+  if (lane == 0)
+    partial[threadIdx.x / 32] = total;
+  __syncthreads();
+  total = warp_sum(lane < Threads / 32 ? partial[lane] : 0.f);
+  float inv = rsqrtf(total * (1.f / 5120.f) + eps);
+#pragma unroll
+  for (int chunk = 0; chunk < Chunks; ++chunk) {
+    int col = chunk * Threads * 4 + threadIdx.x * 4;
+    auto weight = load_aligned_four(w + col);
+    AlignedFour<__nv_bfloat16> value;
+#pragma unroll
+    for (int j = 0; j < 4; ++j)
+      value.value[j] = __float2bfloat16_rn(values[chunk][j] * inv * weight.value[j]);
+    *reinterpret_cast<AlignedFour<__nv_bfloat16> *>(out + static_cast<int64_t>(row) * 5120 + col) =
+        value;
+  }
+}
+
+// Public wrappers allocate both destinations independently. The fast path is
+// entered only for aligned contiguous model-width rows; other layouts use RMS.
+void launch_rms5120(TensorView x, TensorView residual, TensorView weight, TensorView out,
+                    TensorView summed, bool add, float epsilon) {
+  auto stream = stream_for(x);
+#define RMS5120(R)                                                                                 \
+  rms5120_kernel<R, 256><<<x.size(0), 256, 0, stream>>>(                                           \
+      static_cast<const __nv_bfloat16 *>(x.data_ptr()),                                            \
+      static_cast<const __nv_bfloat16 *>(residual.data_ptr()),                                     \
+      static_cast<const float *>(weight.data_ptr()), static_cast<__nv_bfloat16 *>(out.data_ptr()), \
+      static_cast<__nv_bfloat16 *>(summed.data_ptr()), epsilon)
+  if (add) {
+    RMS5120(true);
+  } else {
+    RMS5120(false);
+  }
+#undef RMS5120
+  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA model-width RMS launch failed";
+}
+bool aligned(TensorView tensor, uintptr_t bytes) {
+  return (reinterpret_cast<uintptr_t>(tensor.data_ptr()) & (bytes - 1)) == 0;
+}
+
 struct Strides {
   int64_t token, head, dim;
 };
 template <bool Large, bool Gated, bool Residual>
-__global__ void rms_kernel(const __nv_bfloat16 *x, const float *weight, const __nv_bfloat16 *gate,
-                           __nv_bfloat16 *out, __nv_bfloat16 *summed, int rows, int heads,
-                           int width, Strides xs, Strides gs, float epsilon) {
+__global__ void rms_kernel(const __nv_bfloat16 *__restrict__ x, const float *__restrict__ weight,
+                           const __nv_bfloat16 *__restrict__ gate, __nv_bfloat16 *__restrict__ out,
+                           __nv_bfloat16 *__restrict__ summed, int rows, int heads, int width,
+                           Strides xs, Strides gs, float epsilon) {
   int lane = threadIdx.x & 31;
   int row = Large ? blockIdx.x : blockIdx.x * 4 + threadIdx.x / 32;
   if (row >= rows)
@@ -183,6 +312,11 @@ __global__ void rms_kernel(const __nv_bfloat16 *x, const float *weight, const __
 void rms(TensorView x, TensorView weight, TensorView gate, TensorView out, double epsilon,
          bool gated) {
   int h = x.size(1), d = x.size(2), rows = x.size(0) * h;
+  if (!gated && h == 1 && d == 5120 && x.stride(0) == 5120 && x.stride(1) == 5120 &&
+      x.stride(2) == 1 && aligned(x, 8) && aligned(weight, 16)) {
+    launch_rms5120(x, gate, weight, out, out, false, epsilon);
+    return;
+  }
   Strides xs{x.stride(0), x.stride(1), x.stride(2)};
   Strides gs{gate.stride(0), gate.stride(1), gate.stride(2)};
 #define RMS(L, G)                                                                                  \
@@ -210,6 +344,10 @@ void rms(TensorView x, TensorView weight, TensorView gate, TensorView out, doubl
 void add_rms(TensorView x, TensorView residual, TensorView weight, TensorView summed,
              TensorView out) {
   int d = x.size(1), rows = x.size(0);
+  if (d == 5120 && aligned(x, 8) && aligned(residual, 8) && aligned(weight, 16)) {
+    launch_rms5120(x, residual, weight, out, summed, true, 1e-6f);
+    return;
+  }
   rms_kernel<true, false, true><<<rows, 256, 0, stream_for(x)>>>(
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),
       static_cast<const float *>(weight.data_ptr()),
@@ -224,8 +362,22 @@ __device__ float phase(int64_t position, int channel, int rotary, double theta) 
   constexpr double tau = 6.283185307179586476925286766559;
   return static_cast<float>(a - nearbyint(a / tau) * tau);
 }
-__global__ void rms_rope_kernel(const __nv_bfloat16 *x, const float *weight, const void *positions,
-                                __nv_bfloat16 *out, int rows, int heads, Strides xs, bool wide) {
+// Fixed model frequencies, computed in FP64 as exp(-log(1e7) * channel /32).
+// Global read-only storage avoids divergent constant-memory serialization.
+__device__ const double rotary_frequency[32] = {
+    0x1.0000000000000p+0,  0x1.3566562253c7dp-1,  0x1.75f034d79e964p-2,  0x1.c3f06b4e265cep-3,
+    0x1.111aedafb9a9dp-3,  0x1.4a12ad8379eb6p-4,  0x1.8eec7def5d56dp-5,  0x1.e222ec75094e2p-6,
+    0x1.235a71c5ee5cbp-6,  0x1.6020a364b1285p-7,  0x1.a99428b3d26b0p-8,  0x1.012cfaad0da12p-8,
+    0x1.36d219065ac0dp-9,  0x1.77a7d87ee61aep-10, 0x1.c603c39630445p-11, 0x1.125c04ab2d71cp-11,
+    0x1.4b96be9c2da2ap-12, 0x1.90c181b38fe22p-13, 0x1.e459c57e28a49p-14, 0x1.24b0fd0e890cep-14,
+    0x1.61bea2721385ap-15, 0x1.ab88830de4ad1p-16, 0x1.025b57369650ap-16, 0x1.383f8796f72a9p-17,
+    0x1.7961810874aa1p-18, 0x1.c8198c91f9fc4p-19, 0x1.139e9527f964ap-19, 0x1.4d1c97f4e952dp-20,
+    0x1.9298ace36f12dp-21, 0x1.e69338f8adcd5p-22, 0x1.26091b11c865ep-22, 0x1.635e883bbc810p-23};
+
+__global__ void rms_rope_kernel(const __nv_bfloat16 *__restrict__ x,
+                                const float *__restrict__ weight,
+                                const void *__restrict__ positions, __nv_bfloat16 *__restrict__ out,
+                                int rows, int heads, Strides xs, bool wide) {
   int row = blockIdx.x * 4 + threadIdx.x / 32;
   int lane = threadIdx.x & 31;
   if (row >= rows)
@@ -241,7 +393,10 @@ __global__ void rms_rope_kernel(const __nv_bfloat16 *x, const float *weight, con
 #pragma unroll
   for (int j = 0; j < 8; ++j)
     values[j] = __bfloat162float(__float2bfloat16_rn(values[j] * inv * weight[lane + j * 32]));
-  float a = phase(index_at(positions, wide, row / heads), lane, 64, 10000000.);
+  double angle =
+      static_cast<double>(index_at(positions, wide, row / heads)) * rotary_frequency[lane];
+  constexpr double tau = 6.283185307179586476925286766559;
+  float a = static_cast<float>(angle - nearbyint(angle / tau) * tau);
   float c = cosf(a), s = sinf(a);
   float left = values[0], right = values[1];
   values[0] = left * c - right * s;
@@ -259,8 +414,9 @@ void rms_rope(TensorView x, TensorView weight, TensorView positions, TensorView 
       {x.stride(0), x.stride(1), x.stride(2)}, positions.dtype().bits == 64);
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA RMS/RoPE launch failed";
 }
-__global__ void rope_kernel(const __nv_bfloat16 *x, const void *positions, __nv_bfloat16 *out,
-                            int n, int h, int d, int rotary, double theta, bool wide) {
+__global__ void rope_kernel(const __nv_bfloat16 *__restrict__ x, const void *__restrict__ positions,
+                            __nv_bfloat16 *__restrict__ out, int n, int h, int d, int rotary,
+                            double theta, bool wide) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i >= n * h * d)
     return;
@@ -283,8 +439,9 @@ void rope(TensorView x, TensorView positions, TensorView out, int64_t rotary, do
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA RoPE launch failed";
 }
 
-__global__ void qk_kernel(const __nv_bfloat16 *q, const __nv_bfloat16 *k, __nv_bfloat16 *oq,
-                          __nv_bfloat16 *ok, int rows, int heads, int64_t qs, int64_t ks) {
+__global__ void qk_kernel(const __nv_bfloat16 *__restrict__ q, const __nv_bfloat16 *__restrict__ k,
+                          __nv_bfloat16 *__restrict__ oq, __nv_bfloat16 *__restrict__ ok, int rows,
+                          int heads, int64_t qs, int64_t ks) {
   int row = blockIdx.x * 4 + threadIdx.x / 32, lane = threadIdx.x & 31;
   if (row >= rows)
     return;
@@ -570,11 +727,13 @@ __device__ __forceinline__ void stage_kv(const __nv_bfloat16 *cache, const void 
 }
 
 template <bool ModelShape, bool Grouped, typename Position, int Buffers>
-__global__ void attention_partial_kernel(const __nv_bfloat16 *query, const __nv_bfloat16 *cache,
-                                         const void *tables, const void *lengths,
-                                         const void *starts, float *partial, float *lse,
-                                         int runtime_h, int runtime_hk, int table_width, int splits,
-                                         int first, bool tw, bool lw, bool sw, int query_tiles) {
+__global__ void
+attention_partial_kernel(const __nv_bfloat16 *__restrict__ query,
+                         const __nv_bfloat16 *__restrict__ cache, const void *__restrict__ tables,
+                         const void *__restrict__ lengths, const void *__restrict__ starts,
+                         float *__restrict__ partial, float *__restrict__ lse, int runtime_h,
+                         int runtime_hk, int table_width, int splits, int first, bool tw, bool lw,
+                         bool sw, int query_tiles) {
   constexpr int BQ = Grouped ? 32 : 16, BK = Grouped ? 64 : 32;
   constexpr int RowGroups = BQ / 8, ScoreTiles = BQ * BK / 512, AccTiles = BQ / 2;
   const int h = ModelShape ? 24 : runtime_h, hk = ModelShape ? 4 : runtime_hk;
@@ -813,7 +972,9 @@ void attention_partial(TensorView q, TensorView cache, TensorView tables, Tensor
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA attention partial launch failed";
 }
 template <int Splits>
-__global__ void attention_merge_kernel(const float *partial, const float *lse, __nv_bfloat16 *out) {
+__global__ void attention_merge_kernel(const float *__restrict__ partial,
+                                       const float *__restrict__ lse,
+                                       __nv_bfloat16 *__restrict__ out) {
   constexpr int splits = Splits;
   int row = blockIdx.x, lane = threadIdx.x & 31;
   extern __shared__ float weights[];

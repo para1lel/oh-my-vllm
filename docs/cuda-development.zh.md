@@ -1,5 +1,27 @@
 # CUDA kernel 开发
 
+## 向量算子优化进展
+
+干净提交7437e0f完整测量了173个算子配置，未检测到GPU干扰：48个通过，125个失败。
+后续向量算子诊断覆盖91个归一化/量化配置，其中55个满足速度判据；同一组配置在修改前
+只有23个通过。新测量使用未提交源码且仅覆盖部分配置，因此只能作为诊断。各版本结果
+和配对硬件指标摘要见`bench/baseline/2026-09-22-cuda-vector-progress.json`；CUDA算子
+及框架的完整验收仍未完成。
+
+原生量化按行和缩放组分块，利用非负FP32数值位序做无符号warp REDUX归约，并对融合
+SiLU采用向量加载和FP8打包存储。小尺寸融合路径及超过CUDA grid.y容量的宽度使用
+扁平网格。精确除法和两处BF16舍入保持不变。5120宽度的RMS在寄存器中保留数值，
+对齐条件满足时使用向量加载，其他布局走通用路径；残差先按BF16数对相加并舍入，再归一化。
+融合RoPE采用FP64只读固定频率表，相位归约仍为FP64。仅独立分配输出的kernel声明
+指针不别名，原地状态和缓存kernel不使用该声明。
+
+完整CUDA正确性测试通过160项测试和28项子测试。补充边界检查覆盖非默认RMS epsilon、
+输入/权重的非对齐存储偏移、FP16/FP32量化、分派边界和极宽量化。已有长位置FP64、
+stream/graph检查及全部文件钩子均通过。独立审查发现的量化grid.y宽度限制已修复。
+大尺寸RMS、小尺寸量化、融合SiLU及注意力仍需调优，默认后端继续保持TileLang。
+测试和剖析进程已退出，没有遗留本任务的GPU进程。
+
+
 已验收的对照源码逐字节复制到 `python/oh_my_vllm/kernels/tilelang_reference`，源码 hash、原提交、依赖锁 hash 和 TileFoundry 固定版本记录在 `development/kernels/tilelang-reference.json`。不得调优对照实现。
 
 在 Python 启动前设置 `OH_MY_VLLM_KERNEL_BACKEND=cuda` 选择新后端，未实现的入口直接报错，不回退 TileLang。迁移期间默认仍为 TileLang，全部 CUDA 验收完成后再切换。原生代码使用独立 TVM FFI、调用方当前 CUDA stream 和 SM100a；TileFoundry 不成为原生算子的运行/构建依赖。必须在图捕获和正式测量前完成编译。

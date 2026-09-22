@@ -1,5 +1,33 @@
 # Handoff — 2026-09-22
 
+## Vector-kernel optimization progress
+
+Clean7437e0f completed the full173-case operator matrix without detected GPU
+interference:48 pass and125 fail. The subsequent vector-kernel diagnostic covers
+91 normalization/quantization cases:55 satisfy the speed decision, versus23 of
+those same cases before this change. Dirty source and partial coverage make the
+new collection diagnostic only. Per-source results and paired hardware summaries
+are in `bench/baseline/2026-09-22-cuda-vector-progress.json`; no complete CUDA
+operator or framework acceptance is claimed.
+
+Native quantization now tiles rows and scaling groups, uses unsigned warp REDUX
+on nonnegative FP32 magnitudes, and packs fused SiLU loads/FP8 stores. Small fused
+rows and widths exceeding CUDA grid.y capacity use a flat grid. Exact division
+and both BF16 rounding boundaries remain. Model-width5120 RMS retains values in
+registers and uses aligned vector loads with guarded scalar/general-layout paths;
+residual addition rounds BF16 pairs before normalization. Fixed fused-RoPE
+frequencies use FP64 read-only values; phase reduction remains FP64. Fresh-output
+kernels declare nonaliasing pointers; in-place state/cache kernels do not.
+
+Full CUDA correctness passes160 tests plus28 subtests. Supplementary boundary
+checks cover nondefault RMS epsilon, unaligned input/weight storage, FP16/FP32
+quantization, dispatch boundaries and extremely wide quantization. Existing
+long-position FP64/stream/graph checks and all-file hooks pass. Independent
+review found and fixed the quantization grid.y width limit. Large RMS, small
+quantization, fused SiLU and attention still need tuning; the default stays
+TileLang. Test/profiler workers exited and no task-owned GPU process remains.
+
+
 ## Active: CUDA/PTX custom kernels
 
 User confirmed REQ-KERNEL-002; CUDA migration is in progress, not accepted.
