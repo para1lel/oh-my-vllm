@@ -20,3 +20,7 @@ scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda CUDA_
 静态配置选择和完整验收遵循 REQ-KERNEL-002。硬件指标、编译器资源报告和 TileFoundry HIR 估计分开记录。当前 HIR 缺少 FP64，不能证明长位置 RoPE 相位精度；该边界继续使用未改动的独立参考和完整模型测试。
 
 本里程碑已验证：Nsight Compute 可读取 B200 硬件计数器，过滤 quantize_kernel 的采样成功；TileFoundry analyze 和 Nsight CSV 导入均实际运行。非默认 CUDA stream 和改变输入后的 CUDA Graph 重放通过精确 FP8 比较，TileLang 的 14 项回归亦通过。完整有效的最大配置性能和最终框架验收仍待完成。每次运行后停止本任务 GPU 进程。
+
+TileLang 内核函数体仅保留在 `tilelang_reference/`。生产模块只包含校验、公共封装和显式工厂绑定，不再保存第二份 TileLang DSL。冻结的完整算子封装保留原有快照和分配行为，用于公平比较。
+
+原生注意力使用显式 `mma.sync`/`ldmatrix` BF16 fragment、FP32 寄存器累加、共享内存 sector 置换和保留整数宽度安全边界的位置特化。删除重复函数体后，两个后端测试均通过 154 项和 24 项子测试。注意力性能仍需继续调优，正确性通过和 PTX 编译成功不代表已经提速。

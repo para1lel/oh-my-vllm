@@ -5,50 +5,11 @@ reads its committed state and writes separate candidate states. The scheduler
 chooses the accepted slot later; rejected candidates never mutate a prefix.
 """
 
-import tilelang
-import tilelang.language as T
 import torch
 
 from .backend import kernel
 
-
-@kernel
-def _normalize_qk(h: int, qs: int, ks: int):
-    n = T.dynamic("n")
-
-    @T.prim_func
-    def kernel(
-        q: T.StridedTensor((n, h, 128), (qs, 128, 1), "bfloat16"),
-        k: T.StridedTensor((n, h, 128), (ks, 128, 1), "bfloat16"),
-        oq: T.Tensor((n, h, 128), "bfloat16"),
-        ok: T.Tensor((n, h, 128), "bfloat16"),
-    ):
-        with T.Kernel(T.ceildiv(n * h, 8), threads=128) as bx:
-            qv = T.alloc_fragment((8, 128), "float32")
-            kv = T.alloc_fragment((8, 128), "float32")
-            qq = T.alloc_fragment((8, 128), "float32")
-            kk = T.alloc_fragment((8, 128), "float32")
-            qsum = T.alloc_fragment((8,), "float32")
-            ksum = T.alloc_fragment((8,), "float32")
-            for i, j in T.Parallel(8, 128):
-                row = bx * 8 + i
-                qv[i, j] = T.if_then_else(
-                    row < n * h, q[row // h, row % h, j].astype("float32"), 0
-                )
-                kv[i, j] = T.if_then_else(
-                    row < n * h, k[row // h, row % h, j].astype("float32"), 0
-                )
-                qq[i, j] = qv[i, j] * qv[i, j]
-                kk[i, j] = kv[i, j] * kv[i, j]
-            T.reduce_sum(qq, qsum, dim=1)
-            T.reduce_sum(kk, ksum, dim=1)
-            for i, j in T.Parallel(8, 128):
-                row = bx * 8 + i
-                if row < n * h:
-                    oq[row // h, row % h, j] = qv[i, j] * T.rsqrt(qsum[i] + 1e-6)
-                    ok[row // h, row % h, j] = kv[i, j] * T.rsqrt(ksum[i] + 1e-6)
-
-    return kernel
+_normalize_qk = kernel("gdn", "_normalize_qk")
 
 
 def normalize_qk(q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -59,111 +20,7 @@ def normalize_qk(q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.
     return oq, ok
 
 
-@kernel
-def _recurrent(
-    sequences: int,
-    slots: int,
-    hq: int,
-    hv: int,
-    bv: int,
-    strides: tuple,
-    state_dtype: str,
-    index_types: tuple,
-):
-    n = T.dynamic("n")
-    qs, ks, vs = strides
-    start_dtype, read_dtype, write_dtype = index_types
-
-    @T.prim_func
-    def kernel(
-        q: T.StridedTensor((n, hq, 128), (qs, 128, 1), "bfloat16"),
-        k: T.StridedTensor((n, hq, 128), (ks, 128, 1), "bfloat16"),
-        v: T.StridedTensor((n, hv, 128), (vs, 128, 1), "bfloat16"),
-        decay: T.Tensor((n, hv), "float32"),
-        beta: T.Tensor((n, hv), "float32"),
-        pool: T.Tensor((slots, hv, 128, 128), state_dtype),
-        starts: T.Tensor((sequences + 1,), start_dtype),
-        reads: T.Tensor((sequences,), read_dtype),
-        writes: T.Tensor((n,), write_dtype),
-        out: T.Tensor((n, hv, 128), "bfloat16"),
-    ):
-        with T.Kernel(
-            sequences, hv, 128 // bv, threads=128 if sequences <= 2 else 64
-        ) as (seq, head, block):
-            state = T.alloc_fragment((bv, 128), "float32")
-            work = T.alloc_fragment((bv, 128), "float32")
-            recalled = T.alloc_fragment((bv,), "float32")
-            result = T.alloc_fragment((bv,), "float32")
-            qv = T.alloc_fragment((128,), "float32")
-            kv = T.alloc_fragment((128,), "float32")
-            qq = T.alloc_fragment((128,), "float32")
-            kk = T.alloc_fragment((128,), "float32")
-            qsum = T.alloc_fragment((1,), "float32")
-            ksum = T.alloc_fragment((1,), "float32")
-            # Small batches benefit from warp-local reductions; larger batches
-            # retain the compiler layout for higher state throughput.
-            if sequences <= 2:
-                T.annotate_layout(
-                    {
-                        state: tilelang.layout.Fragment(
-                            (bv, 128),
-                            forward_thread_fn=lambda i, j: (i % 4) * 32 + j % 32,
-                            forward_index_fn=lambda i, j: (i // 4) * 4 + j // 32,
-                        ),
-                        work: tilelang.layout.Fragment(
-                            (bv, 128),
-                            forward_thread_fn=lambda i, j: (i % 4) * 32 + j % 32,
-                            forward_index_fn=lambda i, j: (i // 4) * 4 + j // 32,
-                        ),
-                        qv: tilelang.layout.Fragment(
-                            (128,),
-                            replicate=4,
-                            forward_thread_fn=lambda j, r: r * 32 + j % 32,
-                            forward_index_fn=lambda j: j // 32,
-                        ),
-                        kv: tilelang.layout.Fragment(
-                            (128,),
-                            replicate=4,
-                            forward_thread_fn=lambda j, r: r * 32 + j % 32,
-                            forward_index_fn=lambda j: j // 32,
-                        ),
-                    }
-                )
-            source = reads[seq].astype("int64")
-            qhead = head // (hv // hq)
-            for i, j in T.Parallel(bv, 128):
-                state[i, j] = pool[source, head, block * bv + i, j].astype("float32")
-            # Keep FP32 state across candidates; only snapshots round to pool dtype.
-            for token in T.serial(starts[seq], starts[seq + 1]):
-                for j in T.Parallel(128):
-                    qv[j] = q[token, qhead, j].astype("float32")
-                    kv[j] = k[token, qhead, j].astype("float32")
-                    qq[j] = qv[j] * qv[j]
-                    kk[j] = kv[j] * kv[j]
-                T.reduce_sum(qq, qsum, dim=0)
-                T.reduce_sum(kk, ksum, dim=0)
-                for j in T.Parallel(128):
-                    qv[j] *= T.rsqrt(qsum[0] + 1e-6) * (128**-0.5)
-                    kv[j] *= T.rsqrt(ksum[0] + 1e-6)
-                for i, j in T.Parallel(bv, 128):
-                    state[i, j] *= T.exp(decay[token, head])
-                    work[i, j] = state[i, j] * kv[j]
-                T.reduce_sum(work, recalled, dim=1)
-                for i, j in T.Parallel(bv, 128):
-                    residual = (
-                        v[token, head, block * bv + i].astype("float32") - recalled[i]
-                    ) * beta[token, head]
-                    state[i, j] += residual * kv[j]
-                    work[i, j] = state[i, j] * qv[j]
-                T.reduce_sum(work, result, dim=1)
-                for i in T.Parallel(bv):
-                    out[token, head, block * bv + i] = result[i]
-                target = writes[token].astype("int64")
-                if target >= 0:
-                    for i, j in T.Parallel(bv, 128):
-                        pool[target, head, block * bv + i, j] = state[i, j]
-
-    return kernel
+_recurrent = kernel("gdn", "_recurrent")
 
 
 def _validate_rows(tensor: torch.Tensor) -> None:

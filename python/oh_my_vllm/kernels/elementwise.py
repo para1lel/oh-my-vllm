@@ -1,31 +1,10 @@
 """Fused pointwise model operations with explicit BF16 rounding boundaries."""
 
-import tilelang.language as T
 import torch
 
 from .backend import kernel
 
-
-@kernel
-def _silu_mul(width: int, block: int):
-    rows = T.dynamic("rows")
-
-    @T.prim_func
-    def kernel(
-        x: T.Tensor((rows, 2 * width), "bfloat16"),
-        out: T.Tensor((rows, width), "bfloat16"),
-    ):
-        with T.Kernel(T.ceildiv(rows * width, block), threads=128) as bx:
-            for j in T.Parallel(block):
-                i = bx * block + j
-                if i < rows * width:
-                    row, col = i // width, i % width
-                    gate = x[row, col].astype("float32")
-                    up = x[row, width + col].astype("float32")
-                    activated = (gate / (1 + T.exp(-gate))).astype("bfloat16")
-                    out[row, col] = activated.astype("float32") * up
-
-    return kernel
+_silu_mul = kernel("elementwise", "_silu_mul")
 
 
 def silu_mul(packed: torch.Tensor) -> torch.Tensor:
@@ -40,32 +19,7 @@ def silu_mul(packed: torch.Tensor) -> torch.Tensor:
     return out
 
 
-@kernel
-def _gates():
-    rows = T.dynamic("rows")
-
-    @T.prim_func
-    def kernel(
-        ba: T.Tensor((rows, 96), "bfloat16"),
-        a_log: T.Tensor((48,), "float32"),
-        bias: T.Tensor((48,), "float32"),
-        decay: T.Tensor((rows, 48), "float32"),
-        beta: T.Tensor((rows, 48), "float32"),
-    ):
-        with T.Kernel(T.ceildiv(rows * 48, 128), threads=128) as bx:
-            for j in T.Parallel(128):
-                i = bx * 128 + j
-                if i < rows * 48:
-                    row, head = i // 48, i % 48
-                    b = ba[row, head].astype("float32")
-                    a = ba[row, head + 48].astype("float32") + bias[head]
-                    softplus = T.if_then_else(
-                        a > 20, a, T.call_extern("float32", "log1pf", T.exp(a))
-                    )
-                    decay[row, head] = -T.exp(a_log[head]) * softplus
-                    beta[row, head] = 1 / (1 + T.exp(-b))
-
-    return kernel
+_gates = kernel("elementwise", "_gates")
 
 
 def delta_gates(ba: torch.Tensor, a_log: torch.Tensor, bias: torch.Tensor):

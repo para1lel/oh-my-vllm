@@ -21,6 +21,17 @@ actual-model correctness, all12 frozen-vLLM rows and boundary/service/agentic
 acceptance. Default stays TileLang until complete. All test GPU programs exited.
 See cuda-development.md. The following TileLang results are the accepted reference.
 
+User-requested cleanup removes13 duplicate TileLang factory bodies from the
+seven production modules. Only frozen TileLang contains the DSL; public wrappers
+are AST-identical and bind factories by explicit names. Reference hashes pass.
+Native attention now uses register accumulators, inline PTX MMA/ldmatrix,
+swizzled shared memory and shape/position-type specialization. Both full backend
+reruns pass154 tests plus24 subtests, no skips; independent reviews pass. These
+are still correctness milestones: attention timing diagnostics remain slower
+than TileLang, so no performance acceptance is claimed. Owned GPU runs exited;
+an unrelated GPU process remains and was not stopped.
+
+
 
 ## Current: TileLang acceptance and revised stability
 

@@ -493,9 +493,6 @@ void convolution(TensorView x, TensorView weight, TensorView pool, TensorView id
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA convolution launch failed";
 }
 
-#include <mma.h>
-namespace wmma = nvcuda::wmma;
-
 __device__ float warp_max(float value) {
 #pragma unroll
   for (int offset = 16; offset; offset >>= 1)
@@ -503,53 +500,93 @@ __device__ float warp_max(float value) {
   return __shfl_sync(0xffffffff, value, 0);
 }
 
-// 16 logical query/head rows share a paged KV tile. The first implementation
-// uses ordinary WMMA and explicit asynchronous copies, with independent splits.
+// PTX mma.m16n8k16 BF16 fragment mapping follows the NVIDIA ISA guide.
+// XOR eight-element sectors across rows to avoid shared-memory bank conflicts.
+__device__ __forceinline__ int shared_index(int row, int col, int stride = 256) {
+  return row * stride + (col ^ ((row & 7) * 8));
+}
+__device__ __forceinline__ void load_a(unsigned (&a)[4], const __nv_bfloat16 *data, int inner,
+                                       int lane, int stride = 256) {
+  unsigned address =
+      __cvta_generic_to_shared(data + shared_index(lane % 16, inner + (lane / 16) * 8, stride));
+  asm volatile("ldmatrix.sync.aligned.m8n8.x4.shared.b16 {%0,%1,%2,%3}, [%4];"
+               : "=r"(a[0]), "=r"(a[1]), "=r"(a[2]), "=r"(a[3])
+               : "r"(address));
+}
+__device__ __forceinline__ void load_k(unsigned (&b)[2], const __nv_bfloat16 *data, int inner,
+                                       int warp, int lane) {
+  unsigned address = __cvta_generic_to_shared(
+      data + shared_index(warp * 8 + lane % 8, inner + ((lane / 8) % 2) * 8));
+  asm volatile("ldmatrix.sync.aligned.m8n8.x2.shared.b16 {%0,%1}, [%2];"
+               : "=r"(b[0]), "=r"(b[1])
+               : "r"(address));
+}
+__device__ __forceinline__ void load_v(unsigned (&b)[2], const __nv_bfloat16 *data, int inner,
+                                       int col, int lane) {
+  unsigned address = __cvta_generic_to_shared(data + shared_index(inner + lane % 16, col));
+  asm volatile("ldmatrix.sync.aligned.m8n8.x2.trans.shared.b16 {%0,%1}, [%2];"
+               : "=r"(b[0]), "=r"(b[1])
+               : "r"(address));
+}
+__device__ __forceinline__ void mma_bf16(float (&c)[4], unsigned a0, unsigned a1, unsigned a2,
+                                         unsigned a3, unsigned b0, unsigned b1) {
+  asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 "
+               "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};"
+               : "+f"(c[0]), "+f"(c[1]), "+f"(c[2]), "+f"(c[3])
+               : "r"(a0), "r"(a1), "r"(a2), "r"(a3), "r"(b0), "r"(b1));
+}
+
+// Keep the complete PV accumulator in registers across all KV tiles. Only
+// scores/probabilities and online-softmax statistics cross warp boundaries.
+template <bool ModelShape, bool Grouped, typename Position>
 __global__ void attention_partial_kernel(const __nv_bfloat16 *query, const __nv_bfloat16 *cache,
                                          const void *tables, const void *lengths,
-                                         const void *starts, float *partial, float *lse, int h,
-                                         int hk, int table_width, int splits, int first,
-                                         bool grouped, bool tw, bool lw, bool sw, int query_tiles) {
+                                         const void *starts, float *partial, float *lse,
+                                         int runtime_h, int runtime_hk, int table_width, int splits,
+                                         int first, bool tw, bool lw, bool sw, int query_tiles) {
+  constexpr bool grouped = Grouped;
+  const int h = ModelShape ? 24 : runtime_h;
+  const int hk = ModelShape ? 4 : runtime_hk;
   extern __shared__ __align__(32) unsigned char storage[];
   auto *q = reinterpret_cast<__nv_bfloat16 *>(storage);
   auto *k = q + 16 * 256;
   auto *v = k + 32 * 256;
   auto *p = v + 32 * 256;
-  auto *score = reinterpret_cast<float *>(p + 16 * 32);
-  auto *acc = score + 16 * 32;
-  auto *maximum = acc + 16 * 256;
+  auto *score = reinterpret_cast<float *>(p + 16 * 64);
+  auto *maximum = score + 16 * 32;
   auto *denom = maximum + 16;
   auto *alpha = denom + 16;
   const int warp = threadIdx.x / 32, lane = threadIdx.x & 31;
+  float acc[8][4] = {};
+  const int fragment_row = lane / 4, fragment_col = (lane % 4) * 2;
   const int seq = blockIdx.x / query_tiles, qbase = (blockIdx.x % query_tiles) * 16;
   const int kh = blockIdx.y, split = blockIdx.z, ratio = h / hk;
   const int start = grouped ? index_at(starts, sw, seq) : seq;
   const int end = grouped ? index_at(starts, sw, seq + 1) : seq + 1;
-  const int64_t last = index_at(lengths, lw, end - 1);
-  const int64_t chunk = ((max(last - first, int64_t(0)) + splits * 32 - 1) / (splits * 32)) * 32;
-  const int64_t begin = first + split * chunk;
+  const Position last = index_at(lengths, lw, end - 1);
+  const Position chunk = ((max(last - first, Position(0)) + splits * 32 - 1) / (splits * 32)) * 32;
+  const Position begin = first + split * chunk;
   for (int i = threadIdx.x; i < 16 * 256; i += 128) {
     int row = start + (qbase + i / 256) / ratio;
-    q[i] =
+    q[shared_index(i / 256, i % 256)] =
         row < end
             ? query[(static_cast<int64_t>(row) * h + kh * ratio + (qbase + i / 256) % ratio) * 256 +
                     i % 256]
             : __float2bfloat16(0);
-    acc[i] = 0;
   }
   if (threadIdx.x < 16) {
     maximum[threadIdx.x] = -INFINITY;
     denom[threadIdx.x] = 0;
   }
   __syncthreads();
-  for (int64_t base = begin; base < min(begin + chunk, last); base += 32) {
+  for (Position base = begin; base < min(begin + chunk, last); base += 32) {
     for (int i = threadIdx.x; i < 32 * 32; i += 128) {
-      int64_t pos = base + i / 32;
+      Position pos = base + i / 32;
       int64_t page = index_at(tables, tw,
                               static_cast<int64_t>(start) * table_width + min(pos, last - 1) / 784);
       int64_t offset = ((page * 1568 + pos % 784) * hk + kh) * 256 + (i % 32) * 8;
-      unsigned kd = __cvta_generic_to_shared(k + i * 8);
-      unsigned vd = __cvta_generic_to_shared(v + i * 8);
+      unsigned kd = __cvta_generic_to_shared(k + shared_index(i / 32, (i % 32) * 8));
+      unsigned vd = __cvta_generic_to_shared(v + shared_index(i / 32, (i % 32) * 8));
       int bytes = pos < last ? 16 : 0;
       asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;" ::"r"(kd), "l"(cache + offset),
                    "r"(bytes)
@@ -561,18 +598,17 @@ __global__ void attention_partial_kernel(const __nv_bfloat16 *query, const __nv_
     asm volatile("cp.async.commit_group;" ::: "memory");
     asm volatile("cp.async.wait_group 0;" ::: "memory");
     __syncthreads();
-    if (warp < 2) {
-      wmma::fragment<wmma::accumulator, 16, 16, 16, float> c;
-      wmma::fill_fragment(c, 0.f);
-      for (int inner = 0; inner < 256; inner += 16) {
-        wmma::fragment<wmma::matrix_a, 16, 16, 16, __nv_bfloat16, wmma::row_major> a;
-        wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16, wmma::col_major> b;
-        wmma::load_matrix_sync(a, q + inner, 256);
-        wmma::load_matrix_sync(b, k + warp * 16 * 256 + inner, 256);
-        wmma::mma_sync(c, a, b, c);
-      }
-      wmma::store_matrix_sync(score + warp * 16, c, 32, wmma::mem_row_major);
+    float dots[4] = {};
+#pragma unroll
+    for (int inner = 0; inner < 256; inner += 16) {
+      unsigned qa[4], kb[2];
+      load_a(qa, q, inner, lane);
+      load_k(kb, k, inner, warp, lane);
+      mma_bf16(dots, qa[0], qa[1], qa[2], qa[3], kb[0], kb[1]);
     }
+#pragma unroll
+    for (int j = 0; j < 4; ++j)
+      score[(fragment_row + (j / 2) * 8) * 32 + warp * 8 + fragment_col + j % 2] = dots[j];
     __syncthreads();
     for (int r = warp; r < 16; r += 4) {
       int row = start + (qbase + r) / ratio;
@@ -583,7 +619,7 @@ __global__ void attention_partial_kernel(const __nv_bfloat16 *query, const __nv_
       float safe = m == -INFINITY ? 0.f : m;
       float a = exp2f(maximum[r] - safe), probability = exp2f(value - safe);
       float sum = warp_sum(probability);
-      p[r * 32 + lane] = __float2bfloat16_rn(probability);
+      p[shared_index(r, lane, 64)] = __float2bfloat16_rn(probability);
       if (lane == 0) {
         alpha[r] = a;
         maximum[r] = m;
@@ -591,30 +627,34 @@ __global__ void attention_partial_kernel(const __nv_bfloat16 *query, const __nv_
       }
     }
     __syncthreads();
-    for (int i = threadIdx.x; i < 16 * 256; i += 128)
-      acc[i] *= alpha[i / 256];
-    __syncthreads();
-    for (int tile = warp; tile < 16; tile += 4) {
-      wmma::fragment<wmma::accumulator, 16, 16, 16, float> c;
-      wmma::load_matrix_sync(c, acc + tile * 16, 256, wmma::mem_row_major);
+#pragma unroll
+    for (int tile = 0; tile < 8; ++tile) {
+#pragma unroll
+      for (int j = 0; j < 4; ++j)
+        acc[tile][j] *= alpha[fragment_row + (j / 2) * 8];
+#pragma unroll
       for (int inner = 0; inner < 32; inner += 16) {
-        wmma::fragment<wmma::matrix_a, 16, 16, 16, __nv_bfloat16, wmma::row_major> a;
-        wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16, wmma::row_major> b;
-        wmma::load_matrix_sync(a, p + inner, 32);
-        wmma::load_matrix_sync(b, v + inner * 256 + tile * 16, 256);
-        wmma::mma_sync(c, a, b, c);
+        unsigned pa[4], vb[2];
+        load_a(pa, p, inner, lane, 64);
+        load_v(vb, v, inner, (tile * 4 + warp) * 8, lane);
+        mma_bf16(acc[tile], pa[0], pa[1], pa[2], pa[3], vb[0], vb[1]);
       }
-      wmma::store_matrix_sync(acc + tile * 16, c, 256, wmma::mem_row_major);
     }
     __syncthreads();
   }
-  for (int i = threadIdx.x; i < 16 * 256; i += 128) {
-    int qr = qbase + i / 256, row = start + qr / ratio;
-    if (row < end) {
-      int64_t dst =
-          ((static_cast<int64_t>(row) * h + kh * ratio + qr % ratio) * splits + split) * 256 +
-          i % 256;
-      partial[dst] = acc[i] / (denom[i / 256] > 0 ? denom[i / 256] : 1.f);
+#pragma unroll
+  for (int tile = 0; tile < 8; ++tile) {
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+      int r = fragment_row + (j / 2) * 8;
+      int qr = qbase + r, row = start + qr / ratio;
+      if (row < end) {
+        int col = (tile * 4 + warp) * 8 + fragment_col + j % 2;
+        int64_t dst =
+            ((static_cast<int64_t>(row) * h + kh * ratio + qr % ratio) * splits + split) * 256 +
+            col;
+        partial[dst] = acc[tile][j] / (denom[r] > 0 ? denom[r] : 1.f);
+      }
     }
   }
   if (threadIdx.x < 16) {
@@ -624,23 +664,43 @@ __global__ void attention_partial_kernel(const __nv_bfloat16 *query, const __nv_
           maximum[threadIdx.x] + log2f(denom[threadIdx.x] > 0 ? denom[threadIdx.x] : 1.f);
   }
 }
-void attention_partial(TensorView q, TensorView cache, TensorView tables, TensorView lengths,
-                       TensorView starts, TensorView partial, TensorView lse, int64_t first,
-                       bool grouped) {
+template <typename Position>
+void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorView lengths,
+                      TensorView starts, TensorView partial, TensorView lse, int64_t first,
+                      bool grouped) {
   int h = q.size(1), hk = cache.size(3), splits = lse.size(2);
   int tiles = ((grouped ? 5 : 1) * (h / hk) + 15) / 16;
-  constexpr int shared_bytes =
-      (16 * 256 + 2 * 32 * 256 + 16 * 32) * 2 + (16 * 32 + 16 * 256 + 3 * 16) * 4;
-  TVM_FFI_ICHECK(cudaFuncSetAttribute(attention_partial_kernel,
-                                      cudaFuncAttributeMaxDynamicSharedMemorySize,
-                                      shared_bytes) == cudaSuccess);
+  constexpr int shared_bytes = (16 * 256 + 2 * 32 * 256 + 16 * 64) * 2 + (16 * 32 + 3 * 16) * 4;
   dim3 grid((grouped ? starts.size(0) - 1 : q.size(0)) * tiles, hk, splits);
-  attention_partial_kernel<<<grid, 128, shared_bytes, stream_for(q)>>>(
-      static_cast<const __nv_bfloat16 *>(q.data_ptr()),
-      static_cast<const __nv_bfloat16 *>(cache.data_ptr()), tables.data_ptr(), lengths.data_ptr(),
-      starts.data_ptr(), static_cast<float *>(partial.data_ptr()),
-      static_cast<float *>(lse.data_ptr()), h, hk, tables.size(1), splits, first, grouped,
-      tables.dtype().bits == 64, lengths.dtype().bits == 64, starts.dtype().bits == 64, tiles);
+#define ATTENTION(M, G)                                                                            \
+  attention_partial_kernel<M, G, Position><<<grid, 128, shared_bytes, stream_for(q)>>>(            \
+      static_cast<const __nv_bfloat16 *>(q.data_ptr()),                                            \
+      static_cast<const __nv_bfloat16 *>(cache.data_ptr()), tables.data_ptr(), lengths.data_ptr(), \
+      starts.data_ptr(), static_cast<float *>(partial.data_ptr()),                                 \
+      static_cast<float *>(lse.data_ptr()), h, hk, tables.size(1), splits, first,                  \
+      tables.dtype().bits == 64, lengths.dtype().bits == 64, starts.dtype().bits == 64, tiles)
+  if (h == 24 && hk == 4) {
+    if (grouped) {
+      ATTENTION(true, true);
+    } else {
+      ATTENTION(true, false);
+    }
+  } else {
+    if (grouped) {
+      ATTENTION(false, true);
+    } else {
+      ATTENTION(false, false);
+    }
+  }
+#undef ATTENTION
+}
+void attention_partial(TensorView q, TensorView cache, TensorView tables, TensorView lengths,
+                       TensorView starts, TensorView partial, TensorView lse, int64_t first,
+                       bool grouped, bool position64) {
+  if (position64)
+    launch_attention<int64_t>(q, cache, tables, lengths, starts, partial, lse, first, grouped);
+  else
+    launch_attention<int32_t>(q, cache, tables, lengths, starts, partial, lse, first, grouped);
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA attention partial launch failed";
 }
 __global__ void attention_merge_kernel(const float *partial, const float *lse, __nv_bfloat16 *out,

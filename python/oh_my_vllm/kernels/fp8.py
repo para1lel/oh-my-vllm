@@ -1,61 +1,10 @@
 """Block-scaled FP8 linear operations using independent FlashInfer kernels."""
 
-import tilelang.language as T
 import torch
 
 from .backend import kernel
 
-
-@kernel
-def _quantize(width: int, dtype: str, column: bool, silu: bool, tile: int):
-    rows = T.dynamic("rows")
-    input_width = width * 2 if silu else width
-    scale_strides = (1, rows) if column else (width // 128, 1)
-
-    @T.prim_func
-    def kernel(
-        x: T.Tensor((rows, input_width), dtype),
-        out: T.Tensor((rows, width), "float8_e4m3"),
-        scales: T.StridedTensor((rows, width // 128), scale_strides, "float32"),
-    ):
-        with T.Kernel(
-            T.ceildiv(rows, tile), width // 128, threads=32 if tile == 1 else 128
-        ) as (br, group):
-            values = T.alloc_fragment((tile, 128), "float32")
-            absolute = T.alloc_fragment((tile, 128), "float32")
-            maximum = T.alloc_fragment((tile,), "float32")
-            for i, j in T.Parallel(tile, 128):
-                row, col = br * tile + i, group * 128 + j
-                values[i, j] = 0
-                if row < rows:
-                    value = x[row, col].astype("float32")
-                    if silu:
-                        activated = (value / (1 + T.exp(-value))).astype("bfloat16")
-                        value = (
-                            (
-                                activated.astype("float32")
-                                * x[row, width + col].astype("float32")
-                            )
-                            .astype("bfloat16")
-                            .astype("float32")
-                        )
-                    values[i, j] = value
-                absolute[i, j] = T.abs(values[i, j])
-            T.reduce_max(absolute, maximum, dim=1)
-            for i in T.Parallel(tile):
-                maximum[i] = T.call_extern(
-                    "float32", "__fdiv_rn", T.max(maximum[i], 1e-10), T.float32(448)
-                )
-                if br * tile + i < rows:
-                    scales[br * tile + i, group] = maximum[i]
-            for i, j in T.Parallel(tile, 128):
-                if br * tile + i < rows:
-                    value = T.call_extern(
-                        "float32", "__fdiv_rn", values[i, j], maximum[i]
-                    )
-                    out[br * tile + i, group * 128 + j] = T.min(T.max(value, -448), 448)
-
-    return kernel
+_quantize = kernel("fp8", "_quantize")
 
 
 def quantize(

@@ -56,7 +56,16 @@ def factory_for(module, name):
         ):
             fn = compiled().attention_partial
             return lambda q, cache, tables, lengths, starts, partial, lse: fn(
-                q, cache, tables, lengths, starts, partial, lse, first, grouped
+                q,
+                cache,
+                tables,
+                lengths,
+                starts,
+                partial,
+                lse,
+                first,
+                grouped,
+                position_dtype == "int64",
             )
 
         return partials

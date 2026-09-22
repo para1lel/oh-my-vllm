@@ -1,54 +1,10 @@
 """Width-four depthwise causal convolution with immutable input snapshots."""
 
-import tilelang.language as T
 import torch
 
 from .backend import kernel
 
-
-@kernel
-def _conv(c: int, stride: int, slots: int, sequences: int, index_types: tuple, bt: int):
-    n = T.dynamic("n")
-    seq_dtype, start_dtype, write_dtype = index_types
-
-    @T.prim_func
-    def kernel(
-        x: T.StridedTensor((n, c), (stride, 1), "bfloat16"),
-        weight: T.Tensor((c, 4), "bfloat16"),
-        pool: T.Tensor((slots, c, 3), "bfloat16"),
-        seq_ids: T.Tensor((n,), seq_dtype),
-        starts: T.Tensor((sequences + 1,), start_dtype),
-        sources: T.Tensor((sequences, c, 3), "bfloat16"),
-        writes: T.Tensor((n,), write_dtype),
-        out: T.Tensor((n, c), "bfloat16"),
-    ):
-        with T.Kernel(T.ceildiv(n, bt), T.ceildiv(c, 128), threads=128) as (br, bc):
-            total = T.alloc_fragment((bt, 128), "float32")
-            T.clear(total)
-            for tap in T.unroll(4):
-                for i, j in T.Parallel(bt, 128):
-                    token, channel = br * bt + i, bc * 128 + j
-                    if token < n and channel < c:
-                        seq = seq_ids[token]
-                        first = starts[seq]
-                        pos = token + tap - 3
-                        value = T.if_then_else(
-                            pos >= first,
-                            x[pos, channel],
-                            sources[seq, channel, pos - first + 3],
-                        ).astype("float32")
-                        total[i, j] += value * weight[channel, tap].astype("float32")
-                        if tap > 0:
-                            target = writes[token].astype("int64")
-                            if target >= 0:
-                                pool[target, channel, tap - 1] = value
-            for i, j in T.Parallel(bt, 128):
-                if br * bt + i < n and bc * 128 + j < c:
-                    out[br * bt + i, bc * 128 + j] = total[i, j] / (
-                        1 + T.exp(-total[i, j])
-                    )
-
-    return kernel
+_conv = kernel("convolution", "_conv")
 
 
 def causal_conv(

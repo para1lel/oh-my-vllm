@@ -1,45 +1,10 @@
 """RMS normalization and text-only partial NeoX rotary embedding."""
 
-import math
-
-import tilelang.language as T
 import torch
 
 from .backend import kernel
 
-
-@kernel
-def _rms(h: int, d: int, eps: float, gated: bool, xs: tuple, gs: tuple):
-    n = T.dynamic("n")
-    block = 1 << (d - 1).bit_length()
-
-    @T.prim_func
-    def kernel(
-        x: T.StridedTensor((n, h, d), xs, "bfloat16"),
-        weight: T.Tensor((d,), "float32"),
-        gate: T.StridedTensor((n, h, d), gs, "bfloat16"),
-        out: T.Tensor((n, h, d), "bfloat16"),
-    ):
-        with T.Kernel(n * h, threads=32 if d <= 256 else 128) as row:
-            values = T.alloc_fragment((block,), "float32")
-            squares = T.alloc_fragment((block,), "float32")
-            total = T.alloc_fragment((1,), "float32")
-            for i in T.Parallel(block):
-                values[i] = T.if_then_else(
-                    i < d, x[row // h, row % h, i].astype("float32"), 0
-                )
-                squares[i] = values[i] * values[i]
-            T.reduce_sum(squares, total, dim=0)
-            for i in T.Parallel(block):
-                if i < d:
-                    value = values[i] * T.rsqrt(total[0] / d + eps) * weight[i]
-                    if gated:
-                        g = gate[row // h, row % h, i].astype("float32")
-                        out[row // h, row % h, i] = value * g / (1 + T.exp(-g))
-                    else:
-                        out[row // h, row % h, i] = value
-
-    return kernel
+_rms = kernel("normalization", "_rms")
 
 
 def rms_norm(
@@ -79,36 +44,7 @@ def rms_norm(
     return out
 
 
-@kernel
-def _rope(h: int, d: int, rotary: int, theta: float, index_dtype: str):
-    n = T.dynamic("n")
-    block = 1 << (d - 1).bit_length()
-
-    @T.prim_func
-    def kernel(
-        x: T.Tensor((n, h, d), "bfloat16"),
-        positions: T.Tensor((n,), index_dtype),
-        out: T.Tensor((n, h, d), "bfloat16"),
-    ):
-        with T.Kernel(n * h, threads=128) as row:
-            for i in T.Parallel(block):
-                if i < d:
-                    value = x[row // h, row % h, i].astype("float32")
-                    if i < rotary:
-                        pos = positions[row // h].astype("float32")
-                        freq = T.exp(-T.log(theta) * (i % (rotary // 2)) * 2.0 / rotary)
-                        other_col = T.if_then_else(
-                            i < rotary // 2, i + rotary // 2, i - rotary // 2
-                        )
-                        other = x[row // h, row % h, other_col].astype("float32")
-                        rotated_other = T.if_then_else(i < rotary // 2, -other, other)
-                        out[row // h, row % h, i] = value * T.cos(
-                            pos * freq
-                        ) + rotated_other * T.sin(pos * freq)
-                    else:
-                        out[row // h, row % h, i] = value
-
-    return kernel
+_rope = kernel("normalization", "_rope")
 
 
 def rotary(
@@ -146,60 +82,7 @@ def rotary(
     return out
 
 
-@kernel
-def _rms_rotary(h: int, strides: tuple, index_dtype: str):
-    n = T.dynamic("n")
-
-    @T.prim_func
-    def kernel(
-        x: T.StridedTensor((n, h, 256), strides, "bfloat16"),
-        weight: T.Tensor((256,), "float32"),
-        positions: T.Tensor((n,), index_dtype),
-        out: T.Tensor((n, h, 256), "bfloat16"),
-    ):
-        with T.Kernel(n * h, threads=256) as row:
-            values = T.alloc_fragment((256,), "float32")
-            squares = T.alloc_fragment((256,), "float32")
-            total = T.alloc_fragment((1,), "float32")
-            for i in T.Parallel(256):
-                values[i] = x[row // h, row % h, i].astype("float32")
-                squares[i] = values[i] * values[i]
-            T.reduce_sum(squares, total, dim=0)
-            for i in T.Parallel(256):
-                values[i] = (
-                    (values[i] * T.rsqrt(total[0] / 256 + 1e-6) * weight[i])
-                    .astype("bfloat16")
-                    .astype("float32")
-                )
-            for i in T.Parallel(256):
-                if i < 64:
-                    # Preserve normalization's BF16 boundary before rotation.
-                    other_col = T.if_then_else(i < 32, i + 32, i - 32)
-                    other = (
-                        (
-                            x[row // h, row % h, other_col].astype("float32")
-                            * T.rsqrt(total[0] / 256 + 1e-6)
-                            * weight[other_col]
-                        )
-                        .astype("bfloat16")
-                        .astype("float32")
-                    )
-                    # Reduce the phase in FP64: FP32 frequency/angle error grows
-                    # enough near the maximum context to exceed BF16 tolerances.
-                    angle64 = positions[row // h].astype("float64") * T.exp(
-                        T.float64(-math.log(10000000.0)) * (i % 32) / 32
-                    )
-                    angle = (
-                        angle64
-                        - T.round(angle64 / T.float64(math.tau)) * T.float64(math.tau)
-                    ).astype("float32")
-                    out[row // h, row % h, i] = values[i] * T.cos(
-                        angle
-                    ) + T.if_then_else(i < 32, -other, other) * T.sin(angle)
-                else:
-                    out[row // h, row % h, i] = values[i]
-
-    return kernel
+_rms_rotary = kernel("normalization", "_rms_rotary")
 
 
 def rms_rotary(
@@ -230,39 +113,7 @@ def rms_rotary(
     return out
 
 
-@kernel
-def _add_rms(d: int):
-    n = T.dynamic("n")
-    # Avoid padding the model's residual width to 8192 reduction elements.
-    block = d if d == 5120 else 1 << (d - 1).bit_length()
-
-    @T.prim_func
-    def kernel(
-        x: T.Tensor((n, d), "bfloat16"),
-        residual: T.Tensor((n, d), "bfloat16"),
-        weight: T.Tensor((d,), "float32"),
-        summed: T.Tensor((n, d), "bfloat16"),
-        out: T.Tensor((n, d), "bfloat16"),
-    ):
-        with T.Kernel(n, threads=256) as row:
-            values = T.alloc_fragment((block,), "float32")
-            squares = T.alloc_fragment((block,), "float32")
-            total = T.alloc_fragment((1,), "float32")
-            for i in T.Parallel(block):
-                values[i] = 0
-                if i < d:
-                    value = x[row, i].astype("float32") + residual[row, i].astype(
-                        "float32"
-                    )
-                    values[i] = value.astype("bfloat16").astype("float32")
-                    summed[row, i] = values[i]
-                squares[i] = values[i] * values[i]
-            T.reduce_sum(squares, total, dim=0)
-            for i in T.Parallel(block):
-                if i < d:
-                    out[row, i] = values[i] * T.rsqrt(total[0] / d + 1e-6) * weight[i]
-
-    return kernel
+_add_rms = kernel("normalization", "_add_rms")
 
 
 def add_rms_norm(

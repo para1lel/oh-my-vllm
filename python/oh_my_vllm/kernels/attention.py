@@ -1,35 +1,10 @@
 """Paged GQA over the framework's physical FA pages (784 tokens per page)."""
 
-import tilelang.language as T
 import torch
 
 from .backend import kernel
 
-
-@kernel
-def _append(pages: int, heads: int, dim: int, index_dtype: str):
-    tokens = T.dynamic("tokens")
-    width = heads * dim
-
-    @T.prim_func
-    def kernel(
-        k: T.Tensor((tokens, heads, dim), "bfloat16"),
-        v: T.Tensor((tokens, heads, dim), "bfloat16"),
-        cache: T.Tensor((pages, 2, 784, heads, dim), "bfloat16"),
-        slots: T.Tensor((tokens,), index_dtype),
-    ):
-        with T.Kernel(tokens, threads=128) as token:
-            slot = slots[token].astype("int64")
-            for col in T.Parallel(width):
-                if slot >= 0:
-                    cache[slot // 784, 0, slot % 784, col // dim, col % dim] = k[
-                        token, col // dim, col % dim
-                    ]
-                    cache[slot // 784, 1, slot % 784, col // dim, col % dim] = v[
-                        token, col // dim, col % dim
-                    ]
-
-    return kernel
+_append = kernel("attention", "_append")
 
 
 def append(

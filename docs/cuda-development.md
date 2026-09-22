@@ -56,3 +56,14 @@ filtered quantize_kernel collection succeeds. TileFoundry analyze and Nsight CSV
 import both run. Nondefault CUDA stream and changed-input CUDA Graph replay pass
 exact FP8 comparison; TileLang14-case regression also passes. Complete valid maximum-case performance and final framework acceptance remain
 pending. Stop owned GPU processes after every run.
+
+TileLang kernel bodies exist only in `tilelang_reference/`. Production modules
+contain validation, public wrappers and explicit factory bindings; they do not
+carry a second copy of the TileLang DSL. The frozen whole-operation wrappers
+remain for fair comparison, including their original snapshots and allocations.
+
+Native attention uses explicit `mma.sync`/`ldmatrix` BF16 fragments with FP32
+register accumulation, shared-memory sector swizzling and an integer-width-safe
+position specialization. Both backend suites pass154 tests plus24 subtests after
+the duplicate-body cleanup. Attention performance still requires further tuning;
+correctness and successful PTX compilation do not establish a speedup.
