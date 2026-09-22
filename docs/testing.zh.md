@@ -134,3 +134,7 @@ scripts/with-gpu.sh scripts/with-env.sh env \
 ## TileLang 迁移验收
 
 TileLang 替换保持现有测试和容差不变。运行完整 GPU pytest、实际模型普通/MTP FP64 探针、文本和抢占/前缀检查、MTP 服务/agentic 检查、六组 262144-token 边界，以及冻结吞吐/TTFT 的全部 12 组对比。临时 TileFoundry/算子实验放在仓库外，见 [tilelang-development.md](tilelang-development.zh.md)。TileFoundry 分析或代表性 HIR 检查不能替代这些要求。
+
+## CUDA 迁移验收
+
+REQ-KERNEL-002 在已有正确性与框架门槛上新增正式算子对比。冻结对照完整性和成对判定 CPU 测试位于 test_kernel_reference.py、test_kernel_comparison.py。设置 OH_MY_VLLM_KERNEL_BACKEND=cuda 运行同一套未改动的 GPU 测试，缺失原生覆盖时直接失败，不回退。目前 FP8/SiLU 通过现有 14 项测试，不代表完整 CUDA 验收。测量边界见 cuda-development.zh.md。

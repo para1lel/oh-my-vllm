@@ -36,6 +36,8 @@ def identity() -> dict:
         "flashinfer_workspace": os.environ.get("FLASHINFER_WORKSPACE_BASE"),
         "triton_cache": os.environ.get("TRITON_CACHE_DIR"),
         "tilelang_cache": os.environ.get("TILELANG_CACHE_DIR"),
+        "native_cuda_cache": os.environ.get("TVM_FFI_CACHE_DIR"),
+        "kernel_backend": os.environ.get("OH_MY_VLLM_KERNEL_BACKEND", "tilelang"),
         "vllm_importable": False,
     }
 

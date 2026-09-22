@@ -1,12 +1,11 @@
 """Width-four depthwise causal convolution with immutable input snapshots."""
 
+import tilelang
 import tilelang.language as T
 import torch
 
-from .backend import kernel
 
-
-@kernel
+@tilelang.jit
 def _conv(c: int, stride: int, slots: int, sequences: int, index_types: tuple, bt: int):
     n = T.dynamic("n")
     seq_dtype, start_dtype, write_dtype = index_types

@@ -1,5 +1,16 @@
 # Handoff — 2026-09-22
 
+## Active: CUDA/PTX custom kernels
+
+User confirmed REQ-KERNEL-002; CUDA migration is in progress, not accepted.
+Frozen TileLang source/dependency identities are recorded. Explicit backend
+selection forbids silent fallback. Initial CUDA FP8/SiLU tests pass14 existing
+cases; the paired statistics CPU tests pass4 cases. Remaining: all other native
+kernels, static maximum-workload matrix, TileFoundry/real metrics, per-case wins
+and unchanged full framework acceptance. Default stays TileLang until complete.
+See cuda-development.md. The following TileLang results are the accepted reference.
+
+
 ## Current: TileLang acceptance and revised stability
 
 All seven project-owned custom-kernel modules now use TileLang. Clean measured

@@ -60,6 +60,13 @@ source checkout, or depend on the old vllm conda environment or build caches.
   records outside the repository. Retain only user-required/documented tests and
   formal acceptance evidence. No new Triton-relative acceptance threshold.
 
+- **CUDA migration (current):** User approved REQ-KERNEL-002. Retain the frozen
+  TileLang comparison and migrate owned kernels to B200 CUDA/optional inline PTX.
+  Formal statically derived maximum-shape cases must each stably beat TileLang;
+  existing framework gates remain. No silent fallback. Formal operator harness,
+  case definitions and summarized evidence are now required repository artifacts.
+  Temporary tuning and raw profiling traces remain outside the repository.
+
 ## Forbidden actions
 
 - Do not change `block_size` away from 784

@@ -9,10 +9,8 @@ import tilelang
 import tilelang.language as T
 import torch
 
-from .backend import kernel
 
-
-@kernel
+@tilelang.jit
 def _normalize_qk(h: int, qs: int, ks: int):
     n = T.dynamic("n")
 
@@ -59,7 +57,7 @@ def normalize_qk(q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.
     return oq, ok
 
 
-@kernel
+@tilelang.jit
 def _recurrent(
     sequences: int,
     slots: int,

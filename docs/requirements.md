@@ -296,3 +296,33 @@ and actual-model measurements; explanations do not waive failed performance gate
 Temporary operator tests and their records must
 stay outside the repository. Final retained tests/evidence are the user-required
 and previously documented acceptance checks. See tilelang-development.md.
+
+## REQ-KERNEL-002 — CUDA/PTX migration (2026-09-22)
+
+User authorized implementation after design review. Replace every project-owned
+TileLang kernel with CUDA C++ and optional inline PTX, optimized only for B200.
+CUTLASS is allowed. Keep the accepted TileLang backend frozen as an explicitly
+selectable comparison; never silently fall back during CUDA acceptance.
+Third-party library kernels remain outside scope. Existing independent correctness
+references, tolerances, twelve frozen-vLLM performance rows (95% throughput,
+110% TTFT, 10% spread/median), maximum-context and MTP service/agentic checks remain.
+
+For each distinct implementation path/configuration, statically derive its largest
+legal invocation within each of the twelve workloads and deduplicate identical
+configurations. No dynamic shape tracing. Keep prefill/decode or ordinary/MTP
+separate only where their implementation paths differ. Do not manufacture shapes
+by independently maximizing dimensions that cannot occur together. All resulting
+cases must stably outperform frozen TileLang, without a minimum percentage gain.
+Equivalent fused chains may be compared including every required copy/reduction.
+Use at least three independent rounds of interleaved paired timing, faster CUDA
+medians in every round, and a positive one-sided95% confidence bound on paired
+time saved. Unresolved differences are not passes. No new TileLang-relative
+end-to-end ratio is imposed.
+
+Project development tooling integrates TileFoundry semantics/static analysis,
+CUDA Event/Graph timing and Nsight/compiler metrics, marking estimates separately
+from measurements. Profile separately from acceptance timing. Check counter
+permissions first; retain available evidence and report missing counters without
+waiving performance gates. TileFoundry remains development-only. Retain formal
+case definitions, harness and summarized evidence; temporary tuning and raw traces
+stay outside the repository. See cuda-development.md.

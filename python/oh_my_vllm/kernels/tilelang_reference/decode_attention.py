@@ -5,13 +5,12 @@ zero is absent. Excluding it here keeps prefix cache keys aligned with tokens
 without modifying shared boundary rows or changing the 784-token page size.
 """
 
+import tilelang
 import tilelang.language as T
 import torch
 
-from .backend import kernel
 
-
-@kernel
+@tilelang.jit
 def _partials(
     h: int,
     hk: int,
@@ -136,7 +135,7 @@ def _partials(
     return kernel
 
 
-@kernel
+@tilelang.jit
 def _merge(h: int, splits: int):
     n = T.dynamic("n")
 

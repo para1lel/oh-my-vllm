@@ -1,12 +1,11 @@
 """Fused pointwise model operations with explicit BF16 rounding boundaries."""
 
+import tilelang
 import tilelang.language as T
 import torch
 
-from .backend import kernel
 
-
-@kernel
+@tilelang.jit
 def _silu_mul(width: int, block: int):
     rows = T.dynamic("rows")
 
@@ -40,7 +39,7 @@ def silu_mul(packed: torch.Tensor) -> torch.Tensor:
     return out
 
 
-@kernel
+@tilelang.jit
 def _gates():
     rows = T.dynamic("rows")
 

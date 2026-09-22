@@ -2,13 +2,12 @@
 
 import math
 
+import tilelang
 import tilelang.language as T
 import torch
 
-from .backend import kernel
 
-
-@kernel
+@tilelang.jit
 def _rms(h: int, d: int, eps: float, gated: bool, xs: tuple, gs: tuple):
     n = T.dynamic("n")
     block = 1 << (d - 1).bit_length()
@@ -79,7 +78,7 @@ def rms_norm(
     return out
 
 
-@kernel
+@tilelang.jit
 def _rope(h: int, d: int, rotary: int, theta: float, index_dtype: str):
     n = T.dynamic("n")
     block = 1 << (d - 1).bit_length()
@@ -146,7 +145,7 @@ def rotary(
     return out
 
 
-@kernel
+@tilelang.jit
 def _rms_rotary(h: int, strides: tuple, index_dtype: str):
     n = T.dynamic("n")
 
@@ -230,7 +229,7 @@ def rms_rotary(
     return out
 
 
-@kernel
+@tilelang.jit
 def _add_rms(d: int):
     n = T.dynamic("n")
     # Avoid padding the model's residual width to 8192 reduction elements.

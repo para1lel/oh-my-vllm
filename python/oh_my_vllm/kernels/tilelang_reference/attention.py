@@ -1,12 +1,11 @@
 """Paged GQA over the framework's physical FA pages (784 tokens per page)."""
 
+import tilelang
 import tilelang.language as T
 import torch
 
-from .backend import kernel
 
-
-@kernel
+@tilelang.jit
 def _append(pages: int, heads: int, dim: int, index_dtype: str):
     tokens = T.dynamic("tokens")
     width = heads * dim

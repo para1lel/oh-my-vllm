@@ -1,0 +1,35 @@
+"""The accepted TileLang implementation is an immutable comparison artifact."""
+
+import hashlib
+import json
+import subprocess
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class ReferenceTest(unittest.TestCase):
+    def test_reference_sources_match_frozen_hashes(self):
+        manifest = json.loads(
+            (ROOT / "development/kernels/tilelang-reference.json").read_text()
+        )
+        source = ROOT / "python/oh_my_vllm/kernels/tilelang_reference"
+        for name, digest in manifest["files"].items():
+            self.assertEqual(
+                hashlib.sha256((source / name).read_bytes()).hexdigest(), digest
+            )
+
+    def test_invalid_backend_is_not_silently_accepted(self):
+        import os
+
+        result = subprocess.run(
+            [sys.executable, "-c", "import oh_my_vllm.kernels.backend"],
+            env={**os.environ, "OH_MY_VLLM_KERNEL_BACKEND": "typo"},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unknown OH_MY_VLLM_KERNEL_BACKEND", result.stderr)

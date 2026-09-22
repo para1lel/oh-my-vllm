@@ -155,3 +155,11 @@ Responses 支持完整历史、存储型响应的 `previous_response_id`、查�
 逐步将所有项目自有 Triton kernel 替换为 TileLang，保留每个现有功能及数值容差。第三方库内部不在替换范围内。最终生产代码不保留旧自定义 Triton 回退。TileFoundry 是仅供开发的工具，从 3rdparty 下固定的个人 fork/submodule 在现有 conda 环境中源码安装。取消 Transformers 上限，简单兼容问题在 fork 修复，重大修复先讨论。可降级为兼容已发布 TileLang/OR-Tools，但不在本地维护这两个库。
 
 保持已有正确性和冻结 vLLM 的 12 组验收标准。不设相对旧 Triton kernel 的性能或正确性门槛。全部 12 组必须通过吞吐、TTFT 和稳定性后才算完成。结合 TileFoundry 分析和实际模型测量，在所需多种 shape 上调查并调优；解释不能豁免失败的性能门槛。临时算子测试和记录必须放在仓库外。最终保留测试/证据仅限用户要求和已有文档规定的验收，见 tilelang-development.md。
+
+## REQ-KERNEL-002 — CUDA/PTX 迁移（2026-09-22）
+
+设计讨论后用户授权实施。将全部项目自有 TileLang kernel 替换为 CUDA C++ 和必要的内联 PTX，仅针对 B200 优化，允许使用 CUTLASS。冻结并保留已验收的 TileLang 后端，可显式选择；CUDA 验收禁止静默回退。第三方库算子不在范围内。保持已有独立正确性参考与容差、12 组冻结 vLLM 性能门槛（吞吐 95%、TTFT 110%、极差/中位数 10%）、最大上下文以及 MTP 服务/agentic 检查。
+
+针对不同实现路径/配置，静态推导每个算子在 12 组工作负载中的最大合法调用，合并相同配置，不做动态 shape 采集。仅在实现路径不同时区分 prefill/decode 或普通/MTP；不将实际不能同时出现的各维度最大值拼成测试。所有去重配置均须稳定超过冻结 TileLang，不设最低提速百分比。允许比较等价融合链，包含所有必要复制和归约。至少三轮独立交错成对计时，每轮 CUDA 中位耗时更低，且成对节省耗时的单侧 95% 置信下界为正；无法确定的差异不算通过。不新增相对 TileLang 的端到端性能比例门槛。
+
+项目开发工具集成 TileFoundry 语义/静态分析、CUDA Event/Graph 计时和 Nsight/编译器指标，明确区分估计与实测。硬件分析独立于验收计时。先检查计数器权限，若缺失则保留可用证据并报告，不豁免性能门槛。TileFoundry 仅为开发依赖。正式配置、测试程序和汇总证据入库，临时调优及原始 trace 留在仓库外。见 cuda-development.zh.md。

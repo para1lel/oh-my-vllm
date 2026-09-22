@@ -1,12 +1,11 @@
 """Block-scaled FP8 linear operations using independent FlashInfer kernels."""
 
+import tilelang
 import tilelang.language as T
 import torch
 
-from .backend import kernel
 
-
-@kernel
+@tilelang.jit
 def _quantize(width: int, dtype: str, column: bool, silu: bool, tile: int):
     rows = T.dynamic("rows")
     input_width = width * 2 if silu else width

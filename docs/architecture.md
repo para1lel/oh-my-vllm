@@ -196,3 +196,11 @@ Planning validates nonempty contiguous queries and KV lengths before skipping
 the native operator's redundant active-row check. GDN prefill normalizes Q/K
 in one strided kernel with FP32 norms, epsilon 1e-6 and BF16 outputs, avoiding
 several large temporary tensors. No cache precision or tolerance changes.
+
+## CUDA migration in progress
+
+Custom kernel factories have an explicit process-level backend selection. The
+frozen TileLang implementation lives in kernels/tilelang_reference with a source
+manifest. Native CUDA uses independent TVM FFI and the caller CUDA stream; missing
+native entries fail explicitly. TileLang remains the default until all CUDA
+operator and framework acceptance passes. TileFoundry stays development-only.

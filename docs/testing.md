@@ -245,3 +245,12 @@ boundary rows and all twelve frozen throughput/TTFT comparisons. Temporary
 TileFoundry/operator experiments stay outside the repository; see
 [tilelang-development.md](tilelang-development.md). TileFoundry analysis or
 representative HIR checks do not replace any of these acceptance requirements.
+
+## CUDA migration acceptance
+
+REQ-KERNEL-002 adds formal operator comparisons to existing correctness and
+framework gates. Frozen reference integrity and paired-decision CPU tests are
+in test_kernel_reference.py and test_kernel_comparison.py. Use the same unchanged
+GPU tests with OH_MY_VLLM_KERNEL_BACKEND=cuda; incomplete native coverage fails
+rather than falling back. Initial FP8/SiLU coverage passes14 existing cases; this
+is not complete CUDA acceptance. See cuda-development.md for measurement boundaries.
