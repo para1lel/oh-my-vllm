@@ -20,6 +20,29 @@ less total batch time, was needed. MTP prefill's FA2-to-TRT ragged change then
 measured692.012 tok/s. This still needs formal two-warmup/five-repetition
 verification and is slightly below the gate; no estimated speedup is accepted.
 
+### Formal follow-up on ee2fb63
+
+All12 rows have now completed two full warmups and five measured repetitions
+on the same clean source, with matching baseline CPU affinities and compilation/
+capture audits. Ten pass. MTP batch4 has a stable median of692.190 tok/s,
+94.8698% of baseline, below the693.140 gate. It needs another0.1373% throughput,
+equivalent to32.45ms less time over the complete16384-output-token batch.
+Its TTFT is6.668s,96.998% of baseline, and passes.
+
+All six ordinary rows pass, with throughput108.96–116.53% of baseline. MTP
+batch1/2 pass at98.83/96.97%. Prefix batch2/4 pass both gates and stability;
+their TTFT ratios are81.05/78.04%. Prefix batch1 passes the throughput and
+latency thresholds (116.97/82.44%), but fails the5% TTFT stability requirement.
+The two prefix1 attempts retain their complete repetitions; the latest ranges
+from44.72 to51.16ms (14.20% spread). This is a separate outstanding issue from
+MTP throughput.
+
+Three interrupted MTP4 attempts and one interrupted prefix4 attempt were excluded
+after external GPU processes appeared. Complete results and failure provenance
+are in `bench/baseline/2026-09-22-performance-gap-candidates.json`. All owned GPU
+processes exited after this collection. These results supersede the diagnostic
+gap estimate above; overall12-row acceptance remains incomplete.
+
 ## Matched-shape decode kernel comparison
 
 Both diagnostic profiles execute20 target query tokens for four requests near
@@ -94,8 +117,8 @@ of identical generated tokens.
   operator from6.54ms to1.68ms. The project TTFT diagnostic falls from216ms to
   138ms. Long target prefills retain ragged attention because the native paged
   prototype was slower there.
-- First complete formal measurements of these prefill changes. If the MTP4
-  throughput gate still fails, prioritize the explicitly masked draft attention
+- Formal measurements confirm the MTP4 throughput gate still fails. Prioritize
+  the explicitly masked draft attention
   kernel and accepted-token GPU bookkeeping. Keep prefix isolation, constraint
   decoding, all state snapshots and fixed block784; avoid speculative broad
   rewrites of GEMM or Rust scheduling.

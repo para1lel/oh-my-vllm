@@ -141,5 +141,39 @@
       "sha256": "f553a8b8b5ebff336db62855bba1edfdb5b21556b82db8cfb8358190aa200dad",
       "results": []
     }
-  ]
+  ],
+  "formal_followup": {
+    "artifact": "2026-09-22-performance-gap-candidates.json",
+    "source_commit": "ee2fb63dfb195e2f68c5e43eab24f0bd24a68c66",
+    "passed_rows": 10,
+    "total_rows": 12,
+    "mtp4_comparison": {
+      "baseline": {
+        "ttft_s": {
+          "median": 6.874139541003387,
+          "spread": 0.0072535943878183845
+        },
+        "output_tps": {
+          "median": 729.6212311394553,
+          "spread": 0.02585649200870287
+        }
+      },
+      "candidate": {
+        "ttft_s": {
+          "median": 6.667744513,
+          "spread": 0.002721764753375929
+        },
+        "output_tps": {
+          "median": 692.1898876770596,
+          "spread": 0.0006569296224546817
+        }
+      },
+      "ttft_ratio": 0.9699751471770005,
+      "throughput_ratio": 0.9486975681835096,
+      "stable": true,
+      "passed": false
+    },
+    "mtp4_speedup_needed": 0.0013728630283982302,
+    "mtp4_seconds_to_save": 0.03245085026716055
+  }
 }

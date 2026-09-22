@@ -125,9 +125,20 @@ model FP64, all 12 constraints, lifecycle and long-prefix service checks pass.
 All six maximum-context boundary rows pass without preemption. Ordinary boundary
 checks precede the final MTP-only change; MTP boundaries were rerun afterward.
 See 2026-09-22-prefill-research-verification.json. All owned GPU workers exited,
-nvidia-smi is empty and port18020 is released. Next: commit this milestone and
-rerun all 12 formal candidate rows on the same committed source, preserving
-failed/interrupted attempts; investigate MTP4 further if it still misses its gate.
+nvidia-smi is empty and port18020 is released. Milestone ee2fb63 is pushed.
+
+Formal follow-up on clean ee2fb63 completed all12 rows:10 pass. MTP batch4
+median692.1899 tok/s is94.8698% of baseline versus95% required; stable and TTFT
+passes. It needs0.1373% additional throughput (32.45ms per complete batch).
+Prefix batch1 passes both ratio gates but fails TTFT stability twice; latest
+TTFT44.72–51.16ms (14.20% spread). Prefix batch2/4 and all ordinary/MTP batch1/2
+rows pass.
+See 2026-09-22-performance-gap-candidates.json for complete data and excluded
+external-GPU-interference attempts. All owned GPU workers exited; nvidia-smi is
+empty. Investigation is complete, but overall performance acceptance is not.
+Next implementation priorities are masked draft attention, then GPU-resident
+accepted-token bookkeeping, and a separate investigation of short-prefix timing
+variance. Preserve cache position-zero exclusion and all correctness tolerances.
 
 ## Previous task: independent runtime
 

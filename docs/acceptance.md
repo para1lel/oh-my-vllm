@@ -8,8 +8,14 @@ slots. A high-page int32 address overflow was found and fixed; FP64 regression
 tests cover both decode kernels and cache append. Long strict-JSON requests and
 prefix reuse pass through both APIs with MTP4 and the corrected Qwen3.8 model ID.
 [Stage evidence](../bench/baseline/2026-09-22-ttft-stage1.json) records raw diagnostic
-results. They are not formal throughput/TTFT repetitions. The new 12-row baseline
-and ratio gates remain pending; the following acceptance belongs to the prior task.
+results. They are not formal throughput/TTFT repetitions. The refreshed 12-row
+baseline is now frozen, and all candidate rows have completed on clean ee2fb63.
+Ten pass; MTP batch4 throughput is 692.190 tok/s versus the 693.140 gate
+(94.8698% of baseline), while prefix batch1 fails TTFT stability despite passing
+both ratio gates. Overall acceptance remains pending. See
+[comparison and causes](performance-gap-2026-09-22.md) and
+[complete candidate evidence](../bench/baseline/2026-09-22-performance-gap-candidates.json).
+The following acceptance belongs to the prior task.
 
 ## Independent runtime — 2026-09-21
 
