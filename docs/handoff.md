@@ -1,6 +1,38 @@
 # Handoff — 2026-09-22
 
-## Active task: TTFT and long context
+## Active task: TileLang migration and TileFoundry development workflow
+
+User confirmed implementation. Replace all 15 project-owned Triton kernels in
+seven modules, preserving public behavior and existing correctness tests/tolerances.
+Third-party internal Triton is outside scope. TileFoundry is development-only,
+forked from upstream main into para1lel/TileFoundry on oh-my-vllm-integration,
+and pinned as 3rdparty/TileFoundry. Main project stays on main; no upstream PR.
+Remove the fork's Transformers upper bound and source-install in oh-my-vllm.
+User permits compatible TVM FFI/protobuf downgrades, but no TileLang/OR-Tools fork.
+Simple TileFoundry fixes are authorized; substantial fixes require discussion.
+Temporary operator experiments and records stay outside the repository. Final
+tests/evidence are limited to user-required and already-documented acceptance.
+Keep vLLM ratio gates; do not introduce a Triton-relative gate. Profile, optimize
+and explain remaining performance failures. Current stage: all seven production kernel modules use TileLang, with no owned
+Triton imports or fallback. Token dimensions are dynamic where they do not choose
+an algorithm/layout; existing CUDA graph shape keys remain unchanged.
+TileFoundry fork at 6b1b149 has the dependency and HIR sin/cos adaptations, reviewed
+and pushed. Development-only complete-operator HIR/twins and installation/workflow
+docs are in development/kernels and docs/tilelang-development.md.
+
+Verified: full existing GPU pytest 146 tests +12 subtests, no skips, after dynamic
+length fixes; Rust workspace tests, fmt, hard line-width and clippy pass. Dependency
+closure check and development install dry-run pass. Actual ordinary FP64 probe
+passes. MTP FP64, twelve constraints, lifecycle and long-context prefix service
+passed before the dynamic-length change; final model/agentic/boundary checks and
+formal twelve-row comparison are in progress. No final performance claim yet.
+A diagnostic run overlapped a source edit and failed deferred JIT inspection;
+discarded and rerunning against fixed sources. A temporary MTP probe driver set
+the coverage flag to 4 instead of 1, so its shutdown coverage check failed;
+the corrected driver is rerunning. No numerical tolerance or test was changed.
+Operator experiments and their records remain outside the repository.
+
+## Previous investigation: TTFT and long context
 
 User approved a new 12-row throughput/TTFT baseline on latest official vLLM main,
 plus 262144-total-token ordinary/MTP4 boundary checks at batch 1/2/4. See current

@@ -230,3 +230,13 @@ The baseline-only collector is an explicit isolated exception to the import audi
 range for both ordinary and grouped verification kernels, using FP64 references.
 Coordinator tests run MTP migration/prefix/rejection cases with both shared and
 independent state pools. Final model tests must cover the full 262144-token boundary.
+
+## TileLang migration acceptance
+
+The TileLang replacement keeps the existing tests and tolerances unchanged.
+Run the complete GPU pytest suite, actual-model ordinary/MTP FP64 probes, text
+and preemption/prefix checks, MTP service/agentic checks, all six 262144-token
+boundary rows and all twelve frozen throughput/TTFT comparisons. Temporary
+TileFoundry/operator experiments stay outside the repository; see
+[tilelang-development.md](tilelang-development.md). TileFoundry analysis or
+representative HIR checks do not replace any of these acceptance requirements.

@@ -1,54 +1,53 @@
 """Width-four depthwise causal convolution with immutable input snapshots."""
 
+import tilelang
+import tilelang.language as T
 import torch
-import triton
-import triton.language as tl
 
 
-@triton.jit
-def _conv(
-    X,
-    Weight,
-    Pool,
-    SeqIds,
-    Starts,
-    Sources,
-    Writes,
-    Out,
-    C: tl.constexpr,
-    XStride: tl.constexpr,
-    BC: tl.constexpr,
-    Tokens: tl.constexpr,
-    BT: tl.constexpr,
-):
-    token = tl.program_id(0) * BT + tl.arange(0, BT)[:, None]
-    channels = tl.program_id(1) * BC + tl.arange(0, BC)[None, :]
-    valid = token < Tokens
-    seq = tl.load(SeqIds + token, valid, 0)
-    first = tl.load(Starts + seq)
-    target = tl.load(Writes + token, valid, -1)
-    total = tl.full((BT, BC), 0, tl.float32)
-    for tap in tl.static_range(4):
-        pos = token + tap - 3
-        x = tl.load(
-            X + pos * XStride + channels, valid & (pos >= first) & (channels < C), 0
-        ).to(tl.float32)
-        old = tl.load(
-            Sources + (seq * C + channels) * 3 + pos - first + 3,
-            valid & (pos < first) & (channels < C),
-            0,
-        ).to(tl.float32)
-        value = tl.where(pos >= first, x, old)
-        weight = tl.load(Weight + channels * 4 + tap, channels < C, 0).to(tl.float32)
-        total += value * weight
-        if tap > 0:
-            tl.store(
-                Pool + (target * C + channels) * 3 + tap - 1,
-                value,
-                (target >= 0) & (channels < C),
-            )
-    total = total * tl.sigmoid(total)
-    tl.store(Out + token * C + channels, total, valid & (channels < C))
+@tilelang.jit
+def _conv(c: int, stride: int, slots: int, sequences: int, index_types: tuple, bt: int):
+    n = T.dynamic("n")
+    seq_dtype, start_dtype, write_dtype = index_types
+
+    @T.prim_func
+    def kernel(
+        x: T.StridedTensor((n, c), (stride, 1), "bfloat16"),
+        weight: T.Tensor((c, 4), "bfloat16"),
+        pool: T.Tensor((slots, c, 3), "bfloat16"),
+        seq_ids: T.Tensor((n,), seq_dtype),
+        starts: T.Tensor((sequences + 1,), start_dtype),
+        sources: T.Tensor((sequences, c, 3), "bfloat16"),
+        writes: T.Tensor((n,), write_dtype),
+        out: T.Tensor((n, c), "bfloat16"),
+    ):
+        with T.Kernel(T.ceildiv(n, bt), T.ceildiv(c, 128), threads=128) as (br, bc):
+            total = T.alloc_fragment((bt, 128), "float32")
+            T.clear(total)
+            for tap in T.unroll(4):
+                for i, j in T.Parallel(bt, 128):
+                    token, channel = br * bt + i, bc * 128 + j
+                    if token < n and channel < c:
+                        seq = seq_ids[token]
+                        first = starts[seq]
+                        pos = token + tap - 3
+                        value = T.if_then_else(
+                            pos >= first,
+                            x[pos, channel],
+                            sources[seq, channel, pos - first + 3],
+                        ).astype("float32")
+                        total[i, j] += value * weight[channel, tap].astype("float32")
+                        if tap > 0:
+                            target = writes[token].astype("int64")
+                            if target >= 0:
+                                pool[target, channel, tap - 1] = value
+            for i, j in T.Parallel(bt, 128):
+                if br * bt + i < n and bc * 128 + j < c:
+                    out[br * bt + i, bc * 128 + j] = total[i, j] / (
+                        1 + T.exp(-total[i, j])
+                    )
+
+    return kernel
 
 
 def causal_conv(
@@ -94,19 +93,10 @@ def causal_conv(
     out = torch.empty(x.shape, device=x.device, dtype=x.dtype)
     # Tile long-prefill rows to amortize CTA scheduling; decode retains one row.
     rows = 8 if len(x) >= 128 else 1
-    _conv[(triton.cdiv(len(x), rows), triton.cdiv(x.shape[1], 128))](
-        x,
-        weight,
-        pool,
-        sequence_ids,
-        starts,
-        sources,
-        write_slots,
-        out,
-        x.shape[1],
-        x.stride(0),
-        128,
-        len(x),
-        rows,
+    types = tuple(
+        str(t.dtype).removeprefix("torch.") for t in (sequence_ids, starts, write_slots)
+    )
+    _conv(x.shape[1], x.stride(0), len(pool), len(read_slots), types, rows)(
+        x, weight, pool, sequence_ids, starts, sources, write_slots, out
     )
     return out

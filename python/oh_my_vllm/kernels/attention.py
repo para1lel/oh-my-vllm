@@ -1,23 +1,34 @@
 """Paged GQA over the framework's physical FA pages (784 tokens per page)."""
 
+import tilelang
+import tilelang.language as T
 import torch
-import triton
-import triton.language as tl
 
 
-@triton.jit
-def _append(
-    K, V, Cache, Slots, Width: tl.constexpr, Page: tl.constexpr, Block: tl.constexpr
-):
-    token = tl.program_id(0)
-    columns = tl.arange(0, Block)
-    slot = tl.load(Slots + token).to(tl.int64)
-    page, offset = slot // Page, slot % Page
-    destination = page * 2 * Page * Width + offset * Width + columns
-    key = tl.load(K + token * Width + columns, columns < Width, 0)
-    value = tl.load(V + token * Width + columns, columns < Width, 0)
-    tl.store(Cache + destination, key, (columns < Width) & (slot >= 0))
-    tl.store(Cache + destination + Page * Width, value, (columns < Width) & (slot >= 0))
+@tilelang.jit
+def _append(pages: int, heads: int, dim: int, index_dtype: str):
+    tokens = T.dynamic("tokens")
+    width = heads * dim
+
+    @T.prim_func
+    def kernel(
+        k: T.Tensor((tokens, heads, dim), "bfloat16"),
+        v: T.Tensor((tokens, heads, dim), "bfloat16"),
+        cache: T.Tensor((pages, 2, 784, heads, dim), "bfloat16"),
+        slots: T.Tensor((tokens,), index_dtype),
+    ):
+        with T.Kernel(tokens, threads=128) as token:
+            slot = slots[token].astype("int64")
+            for col in T.Parallel(width):
+                if slot >= 0:
+                    cache[slot // 784, 0, slot % 784, col // dim, col % dim] = k[
+                        token, col // dim, col % dim
+                    ]
+                    cache[slot // 784, 1, slot % 784, col // dim, col % dim] = v[
+                        token, col // dim, col % dim
+                    ]
+
+    return kernel
 
 
 def append(
@@ -41,8 +52,9 @@ def append(
         for t in (cache, k, v, slots)
     ):
         raise ValueError("FA tensors must be contiguous on the same CUDA device")
-    width = k.shape[1] * k.shape[2]
-    _append[(len(k),)](k, v, cache, slots, width, 784, triton.next_power_of_2(width))
+    _append(len(cache), *k.shape[1:], str(slots.dtype).removeprefix("torch."))(
+        k, v, cache, slots
+    )
 
 
 class PagedAttention:

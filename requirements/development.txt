@@ -1,0 +1,14 @@
+# TileFoundry development tools; install after runtime.txt.
+-r runtime.txt
+absl-py==2.5.0
+graphviz==0.21
+immutabledict==4.3.1
+isl-python==0.1.11
+ortools==9.15.6755
+pandas==3.0.6
+python-dateutil==2.9.0.post0
+setuptools-scm==10.2.3
+six==1.17.0
+vcs-versioning==2.4.1
+# Pinned source revision is the parent repository submodule gitlink.
+-e ./3rdparty/TileFoundry

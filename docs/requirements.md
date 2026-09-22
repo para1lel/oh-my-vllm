@@ -269,3 +269,24 @@ performance evidence. Existing REQ-PERF-001 remains unchanged.
 - gRPC server (OpenAI-compatible HTTP is in scope, REQ-SERVE-001)
 - LoRA adapters
 - Production deployment or containerisation
+
+## REQ-KERNEL-001 — TileLang custom kernels and TileFoundry workflow
+
+**Status:** user-confirmed (2026-09-22)
+**Priority:** must-have
+
+Replace all project-owned Triton kernels with TileLang, incrementally, retaining
+every existing feature and numerical tolerance. Third-party library internals are
+outside this replacement scope. Final production code has no legacy custom
+Triton fallback. TileFoundry is a development-only tool, source-installed from a
+pinned personal fork/submodule under 3rdparty in the existing conda environment.
+Remove the Transformers upper bound; fix simple compatibility issues in the fork.
+Discuss substantial fixes first. Compatible released TileLang/OR-Tools versions
+may be downgraded; those libraries will not be maintained locally.
+
+Keep the existing correctness and twelve-row frozen vLLM acceptance criteria.
+There is no performance or correctness gate relative to the former Triton kernels.
+Investigate, optimize and retest performance failures; clearly document measured
+causes when gates remain unmet. Temporary operator tests and their records must
+stay outside the repository. Final retained tests/evidence are the user-required
+and previously documented acceptance checks. See tilelang-development.md.

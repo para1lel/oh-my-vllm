@@ -5,145 +5,150 @@ zero is absent. Excluding it here keeps prefix cache keys aligned with tokens
 without modifying shared boundary rows or changing the 784-token page size.
 """
 
+import tilelang
+import tilelang.language as T
 import torch
-import triton
-import triton.language as tl
 
 
-@triton.jit
+@tilelang.jit
 def _partials(
-    Q,
-    Cache,
-    Tables,
-    Lengths,
-    Partial,
-    LSE,
-    H: tl.constexpr,
-    HK: tl.constexpr,
-    D: tl.constexpr,
-    TableWidth: tl.constexpr,
-    Splits: tl.constexpr,
-    Chunk: tl.constexpr,
-    First: tl.constexpr,
-    BK: tl.constexpr,
+    n: int,
+    h: int,
+    hk: int,
+    pages: int,
+    table_width: int,
+    groups: int,
+    splits: int,
+    chunk: int,
+    first: int,
+    bk: int,
+    bq: int,
+    grouped: bool,
+    index_types: tuple,
 ):
-    req, kv_head, split = tl.program_id(0), tl.program_id(1), tl.program_id(2)
-    heads = kv_head * (H // HK) + tl.arange(0, 16)
-    active_heads = tl.arange(0, 16) < H // HK
-    dims = tl.arange(0, D)
-    q = tl.load(
-        Q + (req * H + heads[:, None]) * D + dims[None, :], active_heads[:, None], 0
-    )
-    length = tl.load(Lengths + req)
-    maximum = tl.full((16,), -float("inf"), tl.float32)
-    denominator = tl.full((16,), 0, tl.float32)
-    accumulator = tl.full((16, D), 0, tl.float32)
-    begin = First + split * Chunk
-    for block in range(begin, tl.minimum(begin + Chunk, length), BK):
-        positions = block + tl.arange(0, BK)
-        valid = positions < length
-        page = tl.load(Tables + req * TableWidth + positions // 784, valid, 0).to(
-            tl.int64
-        )
-        offset = page * (2 * 784 * HK * D) + (positions % 784) * HK * D + kv_head * D
-        k = tl.load(Cache + offset[None, :] + dims[:, None], valid[None, :], 0)
-        v = tl.load(
-            Cache + offset[:, None] + 784 * HK * D + dims[None, :], valid[:, None], 0
-        )
-        score = tl.dot(q, k) * (D**-0.5 * 1.4426950408889634)
-        score = tl.where(valid[None, :], score, -float("inf"))
-        next_max = tl.maximum(maximum, tl.max(score, 1))
-        safe_max = tl.where(next_max == -float("inf"), 0, next_max)
-        alpha = tl.exp2(maximum - safe_max)
-        probability = tl.exp2(score - safe_max[:, None])
-        denominator = denominator * alpha + tl.sum(probability, 1)
-        accumulator = accumulator * alpha[:, None] + tl.dot(probability.to(v.dtype), v)
-        maximum = next_max
-    normalizer = tl.where(denominator > 0, denominator, 1)
-    output = accumulator / normalizer[:, None]
-    logsum = maximum + tl.log2(normalizer)
-    address = (req * H + heads) * Splits + split
-    tl.store(
-        Partial + address[:, None] * D + dims[None, :], output, active_heads[:, None]
-    )
-    tl.store(LSE + address, logsum, active_heads)
+    table_dtype, length_dtype, start_dtype = index_types
+    starts_size = groups + 1 if grouped else n
+    ratio = h // hk
+
+    @T.prim_func
+    def kernel(
+        query: T.Tensor((n, h, 256), "bfloat16"),
+        cache: T.Tensor((pages, 2, 784, hk, 256), "bfloat16"),
+        tables: T.Tensor((n, table_width), table_dtype),
+        lengths: T.Tensor((n,), length_dtype),
+        starts: T.Tensor((starts_size,), start_dtype),
+        partial: T.Tensor((n, h, splits, 256), "float32"),
+        lse: T.Tensor((n, h, splits), "float32"),
+    ):
+        with T.Kernel(groups, hk, splits, threads=128) as (seq, kh, split):
+            q_shared = T.alloc_shared((bq, 256), "bfloat16")
+            k_shared = T.alloc_shared((bk, 256), "bfloat16")
+            v_shared = T.alloc_shared((bk, 256), "bfloat16")
+            p_shared = T.alloc_shared((bq, bk), "bfloat16")
+            score = T.alloc_fragment((bq, bk), "float32")
+            acc = T.alloc_fragment((bq, 256), "float32")
+            maximum = T.alloc_fragment((bq,), "float32")
+            next_max = T.alloc_fragment((bq,), "float32")
+            denom = T.alloc_fragment((bq,), "float32")
+            block_sum = T.alloc_fragment((bq,), "float32")
+            alpha = T.alloc_fragment((bq,), "float32")
+            start = T.if_then_else(grouped, starts[seq], seq)
+            end = T.if_then_else(grouped, starts[seq + 1], seq + 1)
+            last = lengths[end - 1]
+            begin = first + split * chunk
+            T.clear(acc)
+            T.clear(denom)
+            T.fill(maximum, -T.infinity("float32"))
+            for i, j in T.Parallel(bq, 256):
+                row = start + i // ratio
+                q_shared[i, j] = T.if_then_else(
+                    row < end, query[row, kh * ratio + i % ratio, j], 0
+                )
+            for step in T.serial(T.ceildiv(T.max(T.min(chunk, last - begin), 0), bk)):
+                for i, j in T.Parallel(bk, 256):
+                    pos = begin + step * bk + i
+                    if pos < last:
+                        page = tables[start, pos // 784].astype("int64")
+                        k_shared[i, j] = cache[page, 0, pos % 784, kh, j]
+                        v_shared[i, j] = cache[page, 1, pos % 784, kh, j]
+                    else:
+                        k_shared[i, j] = 0
+                        v_shared[i, j] = 0
+                T.gemm(q_shared, k_shared, score, transpose_B=True, clear_accum=True)
+                for i, j in T.Parallel(bq, bk):
+                    row = start + i // ratio
+                    pos = begin + step * bk + j
+                    if row < end:
+                        score[i, j] = T.if_then_else(
+                            pos < lengths[row],
+                            score[i, j] * (256**-0.5 * 1.4426950408889634),
+                            -T.infinity("float32"),
+                        )
+                    else:
+                        score[i, j] = -T.infinity("float32")
+                T.reduce_max(score, next_max, dim=1)
+                for i in T.Parallel(bq):
+                    next_max[i] = T.max(maximum[i], next_max[i])
+                    safe_max = T.if_then_else(
+                        next_max[i] == -T.infinity("float32"), 0, next_max[i]
+                    )
+                    alpha[i] = T.exp2(maximum[i] - safe_max)
+                for i, j in T.Parallel(bq, bk):
+                    safe_max = T.if_then_else(
+                        next_max[i] == -T.infinity("float32"), 0, next_max[i]
+                    )
+                    score[i, j] = T.exp2(score[i, j] - safe_max)
+                    p_shared[i, j] = score[i, j]
+                T.reduce_sum(score, block_sum, dim=1)
+                for i in T.Parallel(bq):
+                    denom[i] = denom[i] * alpha[i] + block_sum[i]
+                    maximum[i] = next_max[i]
+                for i, j in T.Parallel(bq, 256):
+                    acc[i, j] *= alpha[i]
+                T.gemm(p_shared, v_shared, acc)
+            for i, j in T.Parallel(bq, 256):
+                row = start + i // ratio
+                if row < end:
+                    partial[row, kh * ratio + i % ratio, split, j] = acc[
+                        i, j
+                    ] / T.if_then_else(denom[i] > 0, denom[i], 1)
+            for i in T.Parallel(bq):
+                row = start + i // ratio
+                if row < end:
+                    lse[row, kh * ratio + i % ratio, split] = maximum[i] + T.log2(
+                        T.if_then_else(denom[i] > 0, denom[i], 1)
+                    )
+
+    return kernel
 
 
-@triton.jit
-def _grouped_partials(
-    Q,
-    Cache,
-    Tables,
-    Lengths,
-    Starts,
-    Partial,
-    LSE,
-    H: tl.constexpr,
-    HK: tl.constexpr,
-    D: tl.constexpr,
-    TableWidth: tl.constexpr,
-    Splits: tl.constexpr,
-    Chunk: tl.constexpr,
-    First: tl.constexpr,
-    BK: tl.constexpr,
-    BQ: tl.constexpr,
-):
-    req, kh, split = tl.program_id(0), tl.program_id(1), tl.program_id(2)
-    start = tl.load(Starts + req)
-    end = tl.load(Starts + req + 1)
-    lane = tl.arange(0, BQ)
-    row = start + lane // (H // HK)
-    head = kh * (H // HK) + lane % (H // HK)
-    active = row < end
-    dims = tl.arange(0, D)
-    q = tl.load(
-        Q + (row[:, None] * H + head[:, None]) * D + dims[None, :], active[:, None], 0
-    )
-    length = tl.load(Lengths + row, active, 0)
-    last = tl.load(Lengths + end - 1)
-    maximum = tl.full((BQ,), -float("inf"), tl.float32)
-    denominator = tl.full((BQ,), 0, tl.float32)
-    acc = tl.full((BQ, D), 0, tl.float32)
-    begin = First + split * Chunk
-    for block in range(begin, tl.minimum(begin + Chunk, last), BK):
-        pos = block + tl.arange(0, BK)
-        valid = pos < last
-        page = tl.load(Tables + start * TableWidth + pos // 784, valid, 0).to(tl.int64)
-        off = page * 2 * 784 * HK * D + (pos % 784) * HK * D + kh * D
-        k = tl.load(Cache + off[None, :] + dims[:, None], valid[None, :], 0)
-        v = tl.load(
-            Cache + off[:, None] + 784 * HK * D + dims[None, :], valid[:, None], 0
-        )
-        score = tl.dot(q, k) * (D**-0.5 * 1.4426950408889634)
-        score = tl.where(pos[None, :] < length[:, None], score, -float("inf"))
-        nm = tl.maximum(maximum, tl.max(score, 1))
-        safe = tl.where(nm == -float("inf"), 0, nm)
-        alpha = tl.exp2(maximum - safe)
-        p = tl.exp2(score - safe[:, None])
-        denominator = denominator * alpha + tl.sum(p, 1)
-        acc = acc * alpha[:, None] + tl.dot(p.to(v.dtype), v)
-        maximum = nm
-    norm = tl.where(denominator > 0, denominator, 1)
-    address = (row * H + head) * Splits + split
-    tl.store(
-        Partial + address[:, None] * D + dims[None, :],
-        acc / norm[:, None],
-        active[:, None],
-    )
-    tl.store(LSE + address, maximum + tl.log2(norm), active)
+@tilelang.jit
+def _merge(n: int, h: int, splits: int):
+    @T.prim_func
+    def kernel(
+        partial: T.Tensor((n, h, splits, 256), "float32"),
+        lse: T.Tensor((n, h, splits), "float32"),
+        out: T.Tensor((n, h, 256), "bfloat16"),
+    ):
+        with T.Kernel(n, h, threads=128) as (row, head):
+            logs = T.alloc_fragment((splits,), "float32")
+            maximum = T.alloc_fragment((1,), "float32")
+            total = T.alloc_fragment((1,), "float32")
+            weighted = T.alloc_fragment((splits, 256), "float32")
+            result = T.alloc_fragment((256,), "float32")
+            for i in T.Parallel(splits):
+                logs[i] = lse[row, head, i]
+            T.reduce_max(logs, maximum, dim=0)
+            for i in T.Parallel(splits):
+                logs[i] = T.exp2(logs[i] - maximum[0])
+            T.reduce_sum(logs, total, dim=0)
+            for i, j in T.Parallel(splits, 256):
+                weighted[i, j] = partial[row, head, i, j] * logs[i]
+            T.reduce_sum(weighted, result, dim=0)
+            for j in T.Parallel(256):
+                out[row, head, j] = result[j] / total[0]
 
-
-@triton.jit
-def _merge(Partial, LSE, Out, D: tl.constexpr, Splits: tl.constexpr):
-    row = tl.program_id(0)
-    split = tl.arange(0, Splits)
-    dim = tl.arange(0, D)
-    lse = tl.load(LSE + row * Splits + split)
-    maximum = tl.max(lse, 0)
-    weight = tl.exp2(lse - maximum)
-    partial = tl.load(Partial + (row * Splits + split[:, None]) * D + dim[None, :])
-    out = tl.sum(partial * weight[:, None], 0) / tl.sum(weight, 0)
-    tl.store(Out + row * D + dim, out)
+    return kernel
 
 
 def decode(
@@ -197,24 +202,30 @@ def decode(
     partial = torch.empty((requests, heads, splits, dim), device=query.device)
     lse = torch.empty((requests, heads, splits), device=query.device)
     out = torch.empty_like(query)
-    chunk = triton.cdiv(max_tokens, splits * block) * block
-    args = (heads, kv_heads, dim, tables.shape[1], splits, chunk, first, block)
-    if starts is None:
-        _partials[(requests, kv_heads, splits)](
-            query, cache, tables, lengths, partial, lse, *args, num_warps=4
-        )
-    else:
-        _grouped_partials[(groups, kv_heads, splits)](
-            query,
-            cache,
-            tables,
-            lengths,
-            starts,
-            partial,
-            lse,
-            *args,
-            max(16, triton.next_power_of_2(5 * (heads // kv_heads))),
-            num_warps=4,
-        )
-    _merge[(requests * heads,)](partial, lse, out, dim, splits, num_warps=4)
+    chunk = (max_tokens + splits * block - 1) // (splits * block) * block
+    offsets = starts if starts is not None else lengths
+    types = tuple(
+        str(t.dtype).removeprefix("torch.") for t in (tables, lengths, offsets)
+    )
+    query_tile = (
+        max(16, 1 << (5 * (heads // kv_heads) - 1).bit_length())
+        if starts is not None
+        else 16
+    )
+    _partials(
+        requests,
+        heads,
+        kv_heads,
+        len(cache),
+        tables.shape[1],
+        groups,
+        splits,
+        chunk,
+        first,
+        block,
+        query_tile,
+        starts is not None,
+        types,
+    )(query, cache, tables, lengths, offsets, partial, lse)
+    _merge(requests, heads, splits)(partial, lse, out)
     return out

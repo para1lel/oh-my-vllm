@@ -7,18 +7,18 @@ All Rust tools, Python packages, tests and model execution use
 cargo/Python commands. It sets PATH, PYTHONPATH, CARGO_TARGET_DIR and the Worker
 Python. The legacy adapter and old-environment default have been removed.
 
-Install Python dependencies with pip in that environment. Direct dependencies are
+Install Python dependencies with uv targeting that environment. Direct dependencies are
 in python/pyproject.toml; requirements/runtime.txt pins the complete stable
 Linux/Python3.12 closure. Host CUDA13.1/compiler tools build kernels, while Torch2.14
 uses its installed CUDA13.0 runtime libraries. The host supplies the NVIDIA driver.
 
 ```bash
-scripts/with-env.sh python -m pip install -r requirements/runtime.txt
-scripts/with-env.sh python -m pip check
+uv pip install --python /data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python -r requirements/runtime.txt
+uv pip check --python /data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python
 ```
 
-The wrapper selects independent FlashInfer/Triton cache directories under
-`/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent`. Override the common root
+The wrapper selects independent FlashInfer/TileLang/third-party Triton cache directories under
+`/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012`. Override the common root
 with OH_MY_VLLM_RUNTIME_CACHE. FlashInfer may compile kernels or download its own
 versioned NVIDIA GEMM cubins on first use. These are independent library artifacts,
 not old vLLM build outputs. Runtime startup records library versions; shutdown
@@ -149,3 +149,10 @@ exception does not change normal build/test/runtime dependency isolation.
 For long-context runs, use `--max-model-len 262144 --num-gpu-blocks 4200
 --mamba-blocks 128` before the CLI subcommand. These are provisional capacities
 under GPU validation; they represent 1400 FA slots and 128 independent GDN slots.
+
+## TileLang and TileFoundry
+
+See [the custom kernel workflow](tilelang-development.md) for the pinned fork,
+source installation, complete-operator HIR, production runtime twins and the
+review/validation sequence. TileFoundry is not required to start an inference
+worker. Runtime uses TileLang; independent dependencies may still use Triton.

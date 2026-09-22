@@ -1,0 +1,3 @@
+[submodule "3rdparty/TileFoundry"]
+	path = 3rdparty/TileFoundry
+	url = https://github.com/para1lel/TileFoundry.git

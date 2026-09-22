@@ -1,70 +1,58 @@
 """Block-scaled FP8 linear operations using independent FlashInfer kernels."""
 
+import tilelang
+import tilelang.language as T
 import torch
-import triton
-import triton.language as tl
 
 
-@triton.jit
-def _quantize(
-    X, Q, Scales, Rows: tl.constexpr, Width: tl.constexpr, Column: tl.constexpr
-):
-    row = tl.program_id(0)
-    group = tl.program_id(1)
-    columns = group * 128 + tl.arange(0, 128)
-    values = tl.load(X + row * Width + columns).to(tl.float32)
-    scale = tl.div_rn(tl.maximum(tl.max(tl.abs(values), 0), 1e-10), 448.0)
-    quantized = tl.minimum(tl.maximum(tl.div_rn(values, scale), -448.0), 448.0)
-    tl.store(Q + row * Width + columns, quantized)
-    # CUTLASS K-major uses contiguous K groups, despite FlashInfer 0.6.18
-    # describing this argument as column-major. Multi-row FP64 tests cover it.
-    offset = group * Rows + row if Column else row * (Width // 128) + group
-    tl.store(Scales + offset, scale)
+@tilelang.jit
+def _quantize(width: int, dtype: str, column: bool, silu: bool, tile: int):
+    rows = T.dynamic("rows")
+    input_width = width * 2 if silu else width
+    scale_strides = (1, rows) if column else (width // 128, 1)
 
+    @T.prim_func
+    def kernel(
+        x: T.Tensor((rows, input_width), dtype),
+        out: T.Tensor((rows, width), "float8_e4m3"),
+        scales: T.StridedTensor((rows, width // 128), scale_strides, "float32"),
+    ):
+        with T.Kernel(T.ceildiv(rows, tile), width // 128, threads=128) as (br, group):
+            values = T.alloc_fragment((tile, 128), "float32")
+            absolute = T.alloc_fragment((tile, 128), "float32")
+            maximum = T.alloc_fragment((tile,), "float32")
+            for i, j in T.Parallel(tile, 128):
+                row, col = br * tile + i, group * 128 + j
+                values[i, j] = 0
+                if row < rows:
+                    value = x[row, col].astype("float32")
+                    if silu:
+                        activated = (value / (1 + T.exp(-value))).astype("bfloat16")
+                        value = (
+                            (
+                                activated.astype("float32")
+                                * x[row, width + col].astype("float32")
+                            )
+                            .astype("bfloat16")
+                            .astype("float32")
+                        )
+                    values[i, j] = value
+                absolute[i, j] = T.abs(values[i, j])
+            T.reduce_max(absolute, maximum, dim=1)
+            for i in T.Parallel(tile):
+                maximum[i] = T.call_extern(
+                    "float32", "__fdiv_rn", T.max(maximum[i], 1e-10), T.float32(448)
+                )
+                if br * tile + i < rows:
+                    scales[br * tile + i, group] = maximum[i]
+            for i, j in T.Parallel(tile, 128):
+                if br * tile + i < rows:
+                    value = T.call_extern(
+                        "float32", "__fdiv_rn", values[i, j], maximum[i]
+                    )
+                    out[br * tile + i, group * 128 + j] = T.min(T.max(value, -448), 448)
 
-@triton.jit
-def _quantize_prefill(
-    X, Q, Scales, Rows: tl.constexpr, Width: tl.constexpr, BlockRows: tl.constexpr
-):
-    rows = tl.program_id(0) * BlockRows + tl.arange(0, BlockRows)
-    group = tl.program_id(1)
-    columns = group * 128 + tl.arange(0, 128)
-    values = tl.load(
-        X + rows[:, None] * Width + columns[None, :], rows[:, None] < Rows, 0
-    ).to(tl.float32)
-    scale = tl.div_rn(tl.maximum(tl.max(tl.abs(values), 1), 1e-10), 448.0)
-    quantized = tl.minimum(tl.maximum(tl.div_rn(values, scale[:, None]), -448.0), 448.0)
-    tl.store(
-        Q + rows[:, None] * Width + columns[None, :], quantized, rows[:, None] < Rows
-    )
-    tl.store(Scales + rows * (Width // 128) + group, scale, rows < Rows)
-
-
-@triton.jit
-def _quantize_silu(
-    X,
-    Q,
-    Scales,
-    Rows: tl.constexpr,
-    Width: tl.constexpr,
-    Column: tl.constexpr,
-    BlockRows: tl.constexpr,
-):
-    rows = tl.program_id(0) * BlockRows + tl.arange(0, BlockRows)
-    group = tl.program_id(1)
-    columns = group * 128 + tl.arange(0, 128)
-    address = rows[:, None] * (2 * Width) + columns[None, :]
-    gate = tl.load(X + address, rows[:, None] < Rows, 0).to(tl.float32)
-    up = tl.load(X + address + Width, rows[:, None] < Rows, 0).to(tl.float32)
-    activated = (gate * tl.sigmoid(gate)).to(tl.bfloat16).to(tl.float32)
-    values = (activated * up).to(tl.bfloat16).to(tl.float32)
-    scale = tl.div_rn(tl.maximum(tl.max(tl.abs(values), 1), 1e-10), 448.0)
-    quantized = tl.minimum(tl.maximum(tl.div_rn(values, scale[:, None]), -448.0), 448.0)
-    tl.store(
-        Q + rows[:, None] * Width + columns[None, :], quantized, rows[:, None] < Rows
-    )
-    offset = group * Rows + rows if Column else rows * (Width // 128) + group
-    tl.store(Scales + offset, scale, rows < Rows)
+    return kernel
 
 
 def quantize(
@@ -92,18 +80,10 @@ def quantize(
     scales = torch.empty(shape, dtype=torch.float32, device=x.device)
     if column_major:
         scales = scales.T
-    if silu_gate:
-        tile = 16 if rows >= 128 else 1
-        _quantize_silu[(triton.cdiv(rows, tile), width // 128)](
-            x, data, scales, rows, width, column_major, tile
-        )
-    elif rows >= 128 and not column_major:
-        # Amortize CTA scheduling across rows for bandwidth-bound long prefills.
-        _quantize_prefill[(triton.cdiv(rows, 16), width // 128)](
-            x, data, scales, rows, width, 16
-        )
-    else:
-        _quantize[(rows, width // 128)](x, data, scales, rows, width, column_major)
+    tile = 16 if rows >= 128 and (silu_gate or not column_major) else 1
+    _quantize(
+        width, str(x.dtype).removeprefix("torch."), column_major, silu_gate, tile
+    )(x, data, scales)
     return data, scales
 
 

@@ -1,19 +1,30 @@
 """Fused pointwise model operations with explicit BF16 rounding boundaries."""
 
+import tilelang
+import tilelang.language as T
 import torch
-import triton
-import triton.language as tl
-from triton.language.extra.cuda import libdevice
 
 
-@triton.jit
-def _silu_mul(X, Out, Width: tl.constexpr, Total: tl.constexpr, B: tl.constexpr):
-    i = tl.program_id(0) * B + tl.arange(0, B)
-    row, col = i // Width, i % Width
-    gate = tl.load(X + row * 2 * Width + col, i < Total, 0).to(tl.float32)
-    up = tl.load(X + row * 2 * Width + Width + col, i < Total, 0).to(tl.float32)
-    activated = (gate * tl.sigmoid(gate)).to(tl.bfloat16).to(tl.float32)
-    tl.store(Out + i, activated * up, i < Total)
+@tilelang.jit
+def _silu_mul(width: int, block: int):
+    rows = T.dynamic("rows")
+
+    @T.prim_func
+    def kernel(
+        x: T.Tensor((rows, 2 * width), "bfloat16"),
+        out: T.Tensor((rows, width), "bfloat16"),
+    ):
+        with T.Kernel(T.ceildiv(rows * width, block), threads=128) as bx:
+            for j in T.Parallel(block):
+                i = bx * block + j
+                if i < rows * width:
+                    row, col = i // width, i % width
+                    gate = x[row, col].astype("float32")
+                    up = x[row, width + col].astype("float32")
+                    activated = (gate / (1 + T.exp(-gate))).astype("bfloat16")
+                    out[row, col] = activated.astype("float32") * up
+
+    return kernel
 
 
 def silu_mul(packed: torch.Tensor) -> torch.Tensor:
@@ -24,24 +35,36 @@ def silu_mul(packed: torch.Tensor) -> torch.Tensor:
     rows, width = packed.shape[0], packed.shape[1] // 2
     out = torch.empty((rows, width), dtype=packed.dtype, device=packed.device)
     block = 1024 if rows >= 128 else 256
-    _silu_mul[(triton.cdiv(out.numel(), block),)](
-        packed, out, width, out.numel(), block
-    )
+    _silu_mul(width, block)(packed, out)
     return out
 
 
-@triton.jit
-def _gates(BA, ALog, Bias, Decay, Beta, Total: tl.constexpr, B: tl.constexpr):
-    i = tl.program_id(0) * B + tl.arange(0, B)
-    row, head = i // 48, i % 48
-    b = tl.load(BA + row * 96 + head, i < Total, 0).to(tl.float32)
-    a = tl.load(BA + row * 96 + 48 + head, i < Total, 0).to(tl.float32)
-    log = tl.load(ALog + head)
-    bias = tl.load(Bias + head)
-    x = a + bias
-    softplus = tl.where(x > 20, x, libdevice.log1p(tl.exp(x)))
-    tl.store(Decay + i, -tl.exp(log) * softplus, i < Total)
-    tl.store(Beta + i, tl.sigmoid(b), i < Total)
+@tilelang.jit
+def _gates():
+    rows = T.dynamic("rows")
+
+    @T.prim_func
+    def kernel(
+        ba: T.Tensor((rows, 96), "bfloat16"),
+        a_log: T.Tensor((48,), "float32"),
+        bias: T.Tensor((48,), "float32"),
+        decay: T.Tensor((rows, 48), "float32"),
+        beta: T.Tensor((rows, 48), "float32"),
+    ):
+        with T.Kernel(T.ceildiv(rows * 48, 128), threads=128) as bx:
+            for j in T.Parallel(128):
+                i = bx * 128 + j
+                if i < rows * 48:
+                    row, head = i // 48, i % 48
+                    b = ba[row, head].astype("float32")
+                    a = ba[row, head + 48].astype("float32") + bias[head]
+                    softplus = T.if_then_else(
+                        a > 20, a, T.call_extern("float32", "log1pf", T.exp(a))
+                    )
+                    decay[row, head] = -T.exp(a_log[head]) * softplus
+                    beta[row, head] = 1 / (1 + T.exp(-b))
+
+    return kernel
 
 
 def delta_gates(ba: torch.Tensor, a_log: torch.Tensor, bias: torch.Tensor):
@@ -56,7 +79,5 @@ def delta_gates(ba: torch.Tensor, a_log: torch.Tensor, bias: torch.Tensor):
         raise ValueError("GDN gates must be contiguous on one CUDA device")
     decay = torch.empty((len(ba), 48), device=ba.device)
     beta = torch.empty_like(decay)
-    _gates[(triton.cdiv(decay.numel(), 128),)](
-        ba, a_log, bias, decay, beta, decay.numel(), 128
-    )
+    _gates()(ba, a_log, bias, decay, beta)
     return decay, beta

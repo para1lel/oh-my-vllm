@@ -86,7 +86,7 @@ row-major scales. FlashInfer 0.6.18's CUTLASS SM100 17..32-row path was nondeter
 at real model widths and is never selected. Actual-width FP64/repetition tests cover
 16/17/20/24/32/33 rows. Quantization preserves per-row 128-element scaling.
 
-Project-owned Triton kernels implement GDN recurrence, causal convolution, paged
+Project-owned TileLang kernels implement GDN recurrence, causal convolution, paged
 split-KV GQA decode, normalization, partial NeoX RoPE and pointwise fusions.
 FlashInfer implements long GDN/FA prefill. GDN prefill explicitly normalizes q/k
 because the selected release's advertised normalization flag is unused.
@@ -102,7 +102,7 @@ coverage of the relevant shapes, not merely successful graph capture.
 ## Dependencies and future scope
 
 All high-level dependencies and Rust tools are in conda `oh-my-vllm`; host driver,
-CUDA/compiler tools are allowed. Independent FlashInfer/Triton cache roots avoid
+CUDA/compiler tools are allowed. Independent FlashInfer/TileLang/third-party Triton cache roots avoid
 reuse of old framework artifacts. Startup records exact runtime identity, and
 shutdown checks imported modules and mapped libraries for legacy dependencies.
 

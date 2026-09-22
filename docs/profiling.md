@@ -67,3 +67,12 @@ Repeat for mtp and prefix. The script emits JSON with raw repetitions, medians
 through the ratio, configuration and identity; it exits unsuccessfully if any
 row is below95%. Consult testing.md for cache/draft validation, interference
 handling and variance requirements. Profiling traces are not acceptance runs.
+
+## TileLang kernels
+
+TileFoundry static cost/memory/roofline analysis is a development hypothesis,
+not measured kernel time. Profile the actual model to attribute throughput/TTFT
+gaps. Keep temporary operator tuning scripts and reports outside the repository.
+Formal measurements audit TILELANG_CACHE_DIR in addition to FlashInfer and
+third-party Triton caches; use separate per-run TileLang/Triton roots when
+collecting concurrently, and finish all compilation before measured repetitions.

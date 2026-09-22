@@ -22,6 +22,8 @@ def identity() -> dict:
             for name in (
                 "torch",
                 "triton",
+                "tilelang",
+                "apache-tvm-ffi",
                 "flashinfer-python",
                 "transformers",
                 "tokenizers",
@@ -33,6 +35,7 @@ def identity() -> dict:
         },
         "flashinfer_workspace": os.environ.get("FLASHINFER_WORKSPACE_BASE"),
         "triton_cache": os.environ.get("TRITON_CACHE_DIR"),
+        "tilelang_cache": os.environ.get("TILELANG_CACHE_DIR"),
         "vllm_importable": False,
     }
 

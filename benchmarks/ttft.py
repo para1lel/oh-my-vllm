@@ -193,6 +193,7 @@ def main():
             [
                 os.environ.get("FLASHINFER_WORKSPACE_BASE"),
                 os.environ.get("TRITON_CACHE_DIR"),
+                os.environ.get("TILELANG_CACHE_DIR"),
             ],
         ),
         runs=parse_rows(stdout, "BENCH_RESULT "),

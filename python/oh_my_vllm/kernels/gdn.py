@@ -5,83 +5,132 @@ reads its committed state and writes separate candidate states. The scheduler
 chooses the accepted slot later; rejected candidates never mutate a prefix.
 """
 
+import tilelang
+import tilelang.language as T
 import torch
-import triton
-import triton.language as tl
 
 
-@triton.jit
-def _normalize_qk(
-    Q, K, OQ, OK, N: tl.constexpr, H: tl.constexpr, QS: tl.constexpr, KS: tl.constexpr
-):
-    row = tl.program_id(0) * 8 + tl.arange(0, 8)
-    dim = tl.arange(0, 128)
-    head = (row % H)[:, None] * 128 + dim[None, :]
-    valid = row[:, None] < N * H
-    q = tl.load(Q + (row // H)[:, None] * QS + head, valid, 0).to(tl.float32)
-    k = tl.load(K + (row // H)[:, None] * KS + head, valid, 0).to(tl.float32)
-    q *= tl.rsqrt(tl.sum(q * q, 1)[:, None] + 1e-6)
-    k *= tl.rsqrt(tl.sum(k * k, 1)[:, None] + 1e-6)
-    tl.store(OQ + row[:, None] * 128 + dim[None, :], q, valid)
-    tl.store(OK + row[:, None] * 128 + dim[None, :], k, valid)
+@tilelang.jit
+def _normalize_qk(h: int, qs: int, ks: int):
+    n = T.dynamic("n")
+
+    @T.prim_func
+    def kernel(
+        q: T.StridedTensor((n, h, 128), (qs, 128, 1), "bfloat16"),
+        k: T.StridedTensor((n, h, 128), (ks, 128, 1), "bfloat16"),
+        oq: T.Tensor((n, h, 128), "bfloat16"),
+        ok: T.Tensor((n, h, 128), "bfloat16"),
+    ):
+        with T.Kernel(T.ceildiv(n * h, 8), threads=128) as bx:
+            qv = T.alloc_fragment((8, 128), "float32")
+            kv = T.alloc_fragment((8, 128), "float32")
+            qq = T.alloc_fragment((8, 128), "float32")
+            kk = T.alloc_fragment((8, 128), "float32")
+            qsum = T.alloc_fragment((8,), "float32")
+            ksum = T.alloc_fragment((8,), "float32")
+            for i, j in T.Parallel(8, 128):
+                row = bx * 8 + i
+                qv[i, j] = T.if_then_else(
+                    row < n * h, q[row // h, row % h, j].astype("float32"), 0
+                )
+                kv[i, j] = T.if_then_else(
+                    row < n * h, k[row // h, row % h, j].astype("float32"), 0
+                )
+                qq[i, j] = qv[i, j] * qv[i, j]
+                kk[i, j] = kv[i, j] * kv[i, j]
+            T.reduce_sum(qq, qsum, dim=1)
+            T.reduce_sum(kk, ksum, dim=1)
+            for i, j in T.Parallel(8, 128):
+                row = bx * 8 + i
+                if row < n * h:
+                    oq[row // h, row % h, j] = qv[i, j] * T.rsqrt(qsum[i] + 1e-6)
+                    ok[row // h, row % h, j] = kv[i, j] * T.rsqrt(ksum[i] + 1e-6)
+
+    return kernel
 
 
 def normalize_qk(q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """Normalize validated packed GDN inputs without FP32 intermediate tensors."""
     oq = torch.empty(q.shape, device=q.device, dtype=q.dtype)
     ok = torch.empty_like(oq)
-    _normalize_qk[(triton.cdiv(q.shape[0] * q.shape[1], 8),)](
-        q, k, oq, ok, q.shape[0], q.shape[1], q.stride(0), k.stride(0)
-    )
+    _normalize_qk(q.shape[1], q.stride(0), k.stride(0))(q, k, oq, ok)
     return oq, ok
 
 
-@triton.jit
+@tilelang.jit
 def _recurrent(
-    Q,
-    K,
-    V,
-    G,
-    Beta,
-    Pool,
-    Starts,
-    ReadSlots,
-    WriteSlots,
-    Out,
-    HQ: tl.constexpr,
-    HV: tl.constexpr,
-    D: tl.constexpr,
-    BV: tl.constexpr,
-    QS: tl.constexpr,
-    KS: tl.constexpr,
-    VS: tl.constexpr,
+    sequences: int,
+    slots: int,
+    hq: int,
+    hv: int,
+    bv: int,
+    strides: tuple,
+    state_dtype: str,
+    index_types: tuple,
 ):
-    seq = tl.program_id(0)
-    head = tl.program_id(1)
-    vd = tl.program_id(2) * BV + tl.arange(0, BV)
-    kd = tl.arange(0, D)
-    qhead = head // (HV // HQ)
-    first = tl.load(Starts + seq)
-    end = tl.load(Starts + seq + 1)
-    source = tl.load(ReadSlots + seq)
-    offsets = (head * D + vd[:, None]) * D + kd[None, :]
-    state = tl.load(Pool + source * HV * D * D + offsets).to(tl.float32)
-    for token in range(first, end):
-        q = tl.load(Q + token * QS + qhead * D + kd).to(tl.float32)
-        k = tl.load(K + token * KS + qhead * D + kd).to(tl.float32)
-        q *= tl.rsqrt(tl.sum(q * q, 0) + 1e-6) * (D**-0.5)
-        k *= tl.rsqrt(tl.sum(k * k, 0) + 1e-6)
-        v = tl.load(V + token * VS + head * D + vd).to(tl.float32)
-        decay = tl.exp(tl.load(G + token * HV + head))
-        beta = tl.load(Beta + token * HV + head)
-        state *= decay
-        residual = (v - tl.sum(state * k[None, :], 1)) * beta
-        state += residual[:, None] * k[None, :]
-        value = tl.sum(state * q[None, :], 1)
-        tl.store(Out + (token * HV + head) * D + vd, value)
-        target = tl.load(WriteSlots + token)
-        # Negative destinations allow outputs without committing a snapshot.
-        tl.store(Pool + target * HV * D * D + offsets, state, target >= 0)
+    n = T.dynamic("n")
+    qs, ks, vs = strides
+    start_dtype, read_dtype, write_dtype = index_types
+
+    @T.prim_func
+    def kernel(
+        q: T.StridedTensor((n, hq, 128), (qs, 128, 1), "bfloat16"),
+        k: T.StridedTensor((n, hq, 128), (ks, 128, 1), "bfloat16"),
+        v: T.StridedTensor((n, hv, 128), (vs, 128, 1), "bfloat16"),
+        decay: T.Tensor((n, hv), "float32"),
+        beta: T.Tensor((n, hv), "float32"),
+        pool: T.Tensor((slots, hv, 128, 128), state_dtype),
+        starts: T.Tensor((sequences + 1,), start_dtype),
+        reads: T.Tensor((sequences,), read_dtype),
+        writes: T.Tensor((n,), write_dtype),
+        out: T.Tensor((n, hv, 128), "bfloat16"),
+    ):
+        with T.Kernel(sequences, hv, 128 // bv, threads=128) as (seq, head, block):
+            state = T.alloc_fragment((bv, 128), "float32")
+            work = T.alloc_fragment((bv, 128), "float32")
+            recalled = T.alloc_fragment((bv,), "float32")
+            result = T.alloc_fragment((bv,), "float32")
+            qv = T.alloc_fragment((128,), "float32")
+            kv = T.alloc_fragment((128,), "float32")
+            qq = T.alloc_fragment((128,), "float32")
+            kk = T.alloc_fragment((128,), "float32")
+            qsum = T.alloc_fragment((1,), "float32")
+            ksum = T.alloc_fragment((1,), "float32")
+            source = reads[seq].astype("int64")
+            qhead = head // (hv // hq)
+            for i, j in T.Parallel(bv, 128):
+                state[i, j] = pool[source, head, block * bv + i, j].astype("float32")
+            # Keep FP32 state across candidates; only snapshots round to pool dtype.
+            for token in T.serial(starts[seq], starts[seq + 1]):
+                for j in T.Parallel(128):
+                    qv[j] = q[token, qhead, j].astype("float32")
+                    kv[j] = k[token, qhead, j].astype("float32")
+                    qq[j] = qv[j] * qv[j]
+                    kk[j] = kv[j] * kv[j]
+                T.reduce_sum(qq, qsum, dim=0)
+                T.reduce_sum(kk, ksum, dim=0)
+                for j in T.Parallel(128):
+                    qv[j] *= T.rsqrt(qsum[0] + 1e-6) * (128**-0.5)
+                    kv[j] *= T.rsqrt(ksum[0] + 1e-6)
+                for i, j in T.Parallel(bv, 128):
+                    state[i, j] *= T.exp(decay[token, head])
+                    work[i, j] = state[i, j] * kv[j]
+                T.reduce_sum(work, recalled, dim=1)
+                for i, j in T.Parallel(bv, 128):
+                    residual = (
+                        v[token, head, block * bv + i].astype("float32") - recalled[i]
+                    ) * beta[token, head]
+                    state[i, j] += residual * kv[j]
+                    work[i, j] = state[i, j] * qv[j]
+                T.reduce_sum(work, result, dim=1)
+                for i in T.Parallel(bv):
+                    out[token, head, block * bv + i] = result[i]
+                target = writes[token].astype("int64")
+                if target >= 0:
+                    for i, j in T.Parallel(bv, 128):
+                        pool[target, head, block * bv + i, j] = state[i, j]
+
+    return kernel
 
 
 def _validate_rows(tensor: torch.Tensor) -> None:
@@ -153,25 +202,19 @@ def recurrent(
         raise ValueError("GDN tensors must be contiguous on the same CUDA device")
     output = torch.empty(v.shape, device=v.device, dtype=v.dtype)
     tile = 32 if read_slots.numel() >= 4 else 16
-    _recurrent[(read_slots.numel(), v.shape[1], 128 // tile)](
-        q,
-        k,
-        v,
-        log_decay,
-        beta,
-        pool,
-        starts,
-        read_slots,
-        write_slots,
-        output,
+    types = tuple(
+        str(t.dtype).removeprefix("torch.") for t in (starts, read_slots, write_slots)
+    )
+    _recurrent(
+        len(read_slots),
+        len(pool),
         q.shape[1],
         v.shape[1],
-        128,
         tile,
-        q.stride(0),
-        k.stride(0),
-        v.stride(0),
-    )
+        (q.stride(0), k.stride(0), v.stride(0)),
+        str(pool.dtype).removeprefix("torch."),
+        types,
+    )(q, k, v, log_decay, beta, pool, starts, read_slots, write_slots, output)
     return output
 
 

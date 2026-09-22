@@ -1,40 +1,42 @@
 """RMS normalization and text-only partial NeoX rotary embedding."""
 
+import tilelang
+import tilelang.language as T
 import torch
-import triton
-import triton.language as tl
 
 
-@triton.jit
-def _rms(
-    X,
-    Weight,
-    Gate,
-    Out,
-    D: tl.constexpr,
-    Eps: tl.constexpr,
-    Gated: tl.constexpr,
-    Block: tl.constexpr,
-    Heads: tl.constexpr,
-    XS: tl.constexpr,
-    XH: tl.constexpr,
-    XD: tl.constexpr,
-    GS: tl.constexpr,
-    GH: tl.constexpr,
-    GD: tl.constexpr,
-):
-    row = tl.program_id(0)
-    col = tl.arange(0, Block)
-    offset = row // Heads * XS + row % Heads * XH + col * XD
-    x = tl.load(X + offset, col < D, 0).to(tl.float32)
-    inv = tl.rsqrt(tl.sum(x * x, 0) / D + Eps)
-    w = tl.load(Weight + col, col < D, 0).to(tl.float32)
-    value = x * inv * w
-    if Gated:
-        offset_gate = row // Heads * GS + row % Heads * GH + col * GD
-        gate = tl.load(Gate + offset_gate, col < D, 0).to(tl.float32)
-        value *= gate * tl.sigmoid(gate)
-    tl.store(Out + row * D + col, value, col < D)
+@tilelang.jit
+def _rms(h: int, d: int, eps: float, gated: bool, xs: tuple, gs: tuple):
+    n = T.dynamic("n")
+    block = 1 << (d - 1).bit_length()
+
+    @T.prim_func
+    def kernel(
+        x: T.StridedTensor((n, h, d), xs, "bfloat16"),
+        weight: T.Tensor((d,), "float32"),
+        gate: T.StridedTensor((n, h, d), gs, "bfloat16"),
+        out: T.Tensor((n, h, d), "bfloat16"),
+    ):
+        with T.Kernel(n * h, threads=128) as row:
+            values = T.alloc_fragment((block,), "float32")
+            squares = T.alloc_fragment((block,), "float32")
+            total = T.alloc_fragment((1,), "float32")
+            for i in T.Parallel(block):
+                values[i] = T.if_then_else(
+                    i < d, x[row // h, row % h, i].astype("float32"), 0
+                )
+                squares[i] = values[i] * values[i]
+            T.reduce_sum(squares, total, dim=0)
+            for i in T.Parallel(block):
+                if i < d:
+                    value = values[i] * T.rsqrt(total[0] / d + eps) * weight[i]
+                    if gated:
+                        g = gate[row // h, row % h, i].astype("float32")
+                        out[row // h, row % h, i] = value * g / (1 + T.exp(-g))
+                    else:
+                        out[row // h, row % h, i] = value
+
+    return kernel
 
 
 def rms_norm(
@@ -67,46 +69,43 @@ def rms_norm(
 
     x = rows(x)
     gate = rows(gate) if gate is not None else None
-    gs = gate.stride() if gate is not None else (0, 0, 0)
-    _rms[(x.numel() // x.shape[-1],)](
-        x,
-        weight,
-        gate if gate is not None else x,
-        out,
-        x.shape[-1],
-        epsilon,
-        gate is not None,
-        triton.next_power_of_2(x.shape[-1]),
-        x.shape[1],
-        *x.stride(),
-        *gs,
+    gs = gate.stride() if gate is not None else x.stride()
+    _rms(*x.shape[1:], epsilon, gate is not None, x.stride(), gs)(
+        x, weight, gate if gate is not None else x, out.view(x.shape)
     )
     return out
 
 
-@triton.jit
-def _rope(
-    X,
-    Positions,
-    Out,
-    Heads: tl.constexpr,
-    D: tl.constexpr,
-    Rotary: tl.constexpr,
-    Theta: tl.constexpr,
-    Block: tl.constexpr,
-):
-    row = tl.program_id(0)
-    col = tl.arange(0, Block)
-    pos = tl.load(Positions + row // Heads).to(tl.float32)
-    frequency = tl.exp(-tl.log(Theta) * (col % (Rotary // 2)) * 2.0 / Rotary)
-    angle = pos * frequency
-    x = tl.load(X + row * D + col, col < D, 0)
-    other_col = tl.where(col < Rotary // 2, col + Rotary // 2, col - Rotary // 2)
-    other = tl.load(X + row * D + other_col, col < Rotary, 0)
-    rotated = x.to(tl.float32) * tl.cos(angle) + tl.where(
-        col < Rotary // 2, -other, other
-    ) * tl.sin(angle)
-    tl.store(Out + row * D + col, tl.where(col < Rotary, rotated, x), col < D)
+@tilelang.jit
+def _rope(h: int, d: int, rotary: int, theta: float, index_dtype: str):
+    n = T.dynamic("n")
+    block = 1 << (d - 1).bit_length()
+
+    @T.prim_func
+    def kernel(
+        x: T.Tensor((n, h, d), "bfloat16"),
+        positions: T.Tensor((n,), index_dtype),
+        out: T.Tensor((n, h, d), "bfloat16"),
+    ):
+        with T.Kernel(n * h, threads=128) as row:
+            for i in T.Parallel(block):
+                if i < d:
+                    value = x[row // h, row % h, i].astype("float32")
+                    if i < rotary:
+                        pos = positions[row // h].astype("float32")
+                        freq = T.exp(-T.log(theta) * (i % (rotary // 2)) * 2.0 / rotary)
+                        other_col = T.if_then_else(
+                            i < rotary // 2, i + rotary // 2, i - rotary // 2
+                        )
+                        other = x[row // h, row % h, other_col].astype("float32")
+                        rotated_other = T.if_then_else(i < rotary // 2, -other, other)
+                        out[row // h, row % h, i] = value * T.cos(
+                            pos * freq
+                        ) + rotated_other * T.sin(pos * freq)
+                    else:
+                        out[row // h, row % h, i] = value
+
+    return kernel
 
 
 def rotary(
@@ -138,31 +137,44 @@ def rotary(
         raise ValueError("rotary theta must be finite and greater than one")
     x = x.contiguous()
     out = torch.empty_like(x)
-    _rope[(x.shape[0] * x.shape[1],)](
-        x,
-        positions,
-        out,
-        x.shape[1],
-        x.shape[2],
-        rotary_dim,
-        theta,
-        triton.next_power_of_2(x.shape[2]),
+    _rope(*x.shape[1:], rotary_dim, theta, str(positions.dtype).removeprefix("torch."))(
+        x, positions, out
     )
     return out
 
 
-@triton.jit
-def _add_rms(X, Residual, Weight, Sum, Out, D: tl.constexpr, Block: tl.constexpr):
-    row = tl.program_id(0)
-    col = tl.arange(0, Block)
-    x = tl.load(X + row * D + col, col < D, 0).to(tl.float32)
-    residual = tl.load(Residual + row * D + col, col < D, 0).to(tl.float32)
-    # Preserve the materialized BF16 residual before computing RMS in FP32.
-    value = (x + residual).to(tl.bfloat16).to(tl.float32)
-    inv = tl.rsqrt(tl.sum(value * value, 0) / D + 1e-6)
-    weight = tl.load(Weight + col, col < D, 0)
-    tl.store(Sum + row * D + col, value, col < D)
-    tl.store(Out + row * D + col, value * inv * weight, col < D)
+@tilelang.jit
+def _add_rms(d: int):
+    n = T.dynamic("n")
+    block = 1 << (d - 1).bit_length()
+
+    @T.prim_func
+    def kernel(
+        x: T.Tensor((n, d), "bfloat16"),
+        residual: T.Tensor((n, d), "bfloat16"),
+        weight: T.Tensor((d,), "float32"),
+        summed: T.Tensor((n, d), "bfloat16"),
+        out: T.Tensor((n, d), "bfloat16"),
+    ):
+        with T.Kernel(n, threads=256) as row:
+            values = T.alloc_fragment((block,), "float32")
+            squares = T.alloc_fragment((block,), "float32")
+            total = T.alloc_fragment((1,), "float32")
+            for i in T.Parallel(block):
+                values[i] = 0
+                if i < d:
+                    value = x[row, i].astype("float32") + residual[row, i].astype(
+                        "float32"
+                    )
+                    values[i] = value.astype("bfloat16").astype("float32")
+                    summed[row, i] = values[i]
+                squares[i] = values[i] * values[i]
+            T.reduce_sum(squares, total, dim=0)
+            for i in T.Parallel(block):
+                if i < d:
+                    out[row, i] = values[i] * T.rsqrt(total[0] / d + 1e-6) * weight[i]
+
+    return kernel
 
 
 def add_rms_norm(
@@ -181,14 +193,5 @@ def add_rms_norm(
     ):
         raise ValueError("residual RMS tensors must be contiguous on one CUDA device")
     summed, normalized = torch.empty_like(x), torch.empty_like(x)
-    _add_rms[(len(x),)](
-        x,
-        residual,
-        weight,
-        summed,
-        normalized,
-        x.shape[1],
-        triton.next_power_of_2(x.shape[1]),
-        num_warps=8,
-    )
+    _add_rms(x.shape[1])(x, residual, weight, summed, normalized)
     return summed, normalized

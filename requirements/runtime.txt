@@ -1,12 +1,13 @@
-# Candidate stable runtime set; full GPU/model validation in progress.
-# Linux x86_64 / Python 3.12; includes transitive dependencies and CUDA extras.
+# Verified imports; full TileLang GPU/model validation in progress.
+# Linux x86_64 / Python 3.12; runtime and transitive CUDA dependencies.
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
-apache-tvm-ffi==0.1.14.post0
+apache-tvm-ffi==0.1.12
 certifi==2026.7.22
 charset-normalizer==3.5.1
 click==8.5.0
+cloudpickle==3.1.2
 cuda-bindings==13.4.2
 cuda-core==1.2.0
 cuda-pathfinder==1.8.2
@@ -27,6 +28,7 @@ jinja2==3.1.6
 markdown-it-py==4.2.0
 markupsafe==3.0.3
 mdurl==0.1.2
+ml-dtypes==0.6.0
 mpmath==1.3.0
 msgpack==1.2.2
 nccl4py==0.5.0
@@ -45,20 +47,21 @@ nvidia-curand==10.4.0.35
 nvidia-cusolver==12.0.4.66
 nvidia-cusparse==12.6.3.3
 nvidia-cusparselt-cu13==0.8.1
-nvidia-cutlass-dsl==4.8.0
 nvidia-cutlass-dsl-libs-base==4.8.0
 nvidia-cutlass-dsl-libs-core==4.8.0
 nvidia-cutlass-dsl-libs-cu12==4.8.0
 nvidia-cutlass-dsl-libs-cu13==4.8.0
+nvidia-cutlass-dsl==4.8.0
 nvidia-ml-py==13.610.43
 nvidia-nccl-cu13==2.30.7
 nvidia-nvjitlink==13.4.92
 nvidia-nvshmem-cu13==3.4.5
 nvidia-nvtx==13.0.85
 packaging==26.3
-protobuf==7.36.2
-pydantic==2.13.5
+protobuf==6.33.6
+psutil==7.2.2
 pydantic-core==2.46.5
+pydantic==2.13.5
 pygments==2.21.0
 pyyaml==6.0.3
 pyzmq==27.2.0
@@ -70,7 +73,9 @@ setuptools==83.0.0
 shellingham==1.5.4
 sympy==1.14.0
 tabulate==0.10.0
+tilelang==0.1.14
 tokenizers==0.23.2
+torch-c-dlpack-ext==0.1.5
 torch==2.14.0
 tqdm==4.70.1
 transformers==5.17.0
@@ -80,3 +85,4 @@ typing-extensions==4.16.0
 typing-inspection==0.4.4
 urllib3==2.8.0
 xgrammar==0.2.7
+z3-solver==4.15.4.0

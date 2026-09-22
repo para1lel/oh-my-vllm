@@ -49,6 +49,16 @@ source checkout, or depend on the old vllm conda environment or build caches.
 - **Reply language:** Chinese when user writes Chinese, English otherwise
 - **Branch policy:** Develop and commit only on `main`. Do not create new local
   or remote branches, including feature branches and branch-backed worktrees.
+  User-authorized exception: the TileFoundry fork uses an adaptation branch,
+  pinned as `3rdparty/TileFoundry`; never open an upstream pull request.
+- **Kernel migration:** Replace all project-owned Triton kernels with TileLang,
+  preserving existing correctness tests/tolerances. Third-party implementations
+  are outside this migration. TileFoundry is a development-only source dependency
+  in the same conda environment. Fix simple fork incompatibilities directly;
+  discuss substantial fixes with the user before implementing them.
+- **Temporary kernel experiments:** Keep microbenchmark/test scripts and their
+  records outside the repository. Retain only user-required/documented tests and
+  formal acceptance evidence. No new Triton-relative acceptance threshold.
 
 ## Forbidden actions
 

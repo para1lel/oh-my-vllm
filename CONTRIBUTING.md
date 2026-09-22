@@ -5,6 +5,8 @@
 Develop and commit directly on `main`. Do not create local or remote feature
 branches or branch-backed worktrees. Confirm `main` is checked out before editing.
 Pushing and opening PRs still require explicit user instructions (AGENTS.md).
+The user-approved TileFoundry submodule fork is the sole branch exception: its
+adaptation branch belongs to para1lel/TileFoundry; do not open upstream PRs.
 
 ## Commit conventions
 
