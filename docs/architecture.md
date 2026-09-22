@@ -177,6 +177,11 @@ Small-batch BF16 vocabulary projections use independent FlashInfer CuTe-DSL GEMM
 Residual addition and RMS normalization share one kernel, preserving the BF16
 sum before FP32 normalization. MLP SiLU/multiplication and FP8 quantization share
 a kernel while preserving both BF16 rounding points and the original scales.
+Q/K RMS normalization and partial NeoX rotation share a TileLang kernel, retaining
+the intermediate BF16 rounding and packed projection strides. Its fixed256-wide
+heads,64 rotary dimensions and theta10000000 match the validated Qwen checkpoint.
+It computes and reduces the phase in FP64 before FP32 sin/cos, avoiding amplified
+frequency/angle rounding error near the maximum context.
 GDN recurrence uses 32-value tiles for at least four sequences, 16 otherwise.
 
 Target decode graphs expose existing 784-token pages to native TRT-LLM attention

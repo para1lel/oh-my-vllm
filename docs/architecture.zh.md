@@ -74,6 +74,6 @@ batch 中 query span 至少为 1024 token 时，Python 只收集活跃 FA KV tok
 
 卷积、GDN 递归和 RMS 归一化接受带明确 token/head stride 的 packed 投影视图。输出仍为 dense，递归源快照保持隔离。每个 target/draft 组的主机整数元数据通过一个 buffer 复制，设备视图保留底层存储。图输入仍复制到持久 buffer；GDN prefill start 在执行各层前只转换一次 int32。
 
-小 batch BF16 词表投影使用独立 FlashInfer CuTe-DSL GEMM。残差相加和 RMS 归一化共用一个 kernel，在 FP32 归一化前保留 BF16 求和。MLP SiLU/乘法和 FP8 量化共用一个 kernel，保留两处 BF16 舍入和原 scale。GDN 递归在至少四条序列时使用 32-value tile，否则为 16。
+小 batch BF16 词表投影使用独立 FlashInfer CuTe-DSL GEMM。残差相加和 RMS 归一化共用一个 kernel，在 FP32 归一化前保留 BF16 求和。MLP SiLU/乘法和 FP8 量化共用一个 kernel，保留两处 BF16 舍入和原 scale。Q/K RMS 归一化与部分 NeoX 旋转融合在 TileLang kernel 中，保留中间 BF16 舍入及 packed 投影 stride。固定 256 维 head、64 维旋转和 theta10000000，与校验后的 Qwen checkpoint 一致。相位先用 FP64 计算并约化，再执行 FP32 sin/cos，避免最大上下文附近频率/角度舍入误差放大。GDN 递归在至少四条序列时使用 32-value tile，否则为 16。
 
 target decode 图把现有 784-token 页作为 49 个 16-token 子页提供给原生 TRT-LLM 注意力。K/V 偏移视图和 `page * 98 + subpage` 块表避免 KV 复制，并保留 Rust 页所有权。块表展开和 query/KV 长度选择在每次模型执行的图捕获内只做一次，回放使用当前请求元数据。draft 注意力保留项目 kernel，以排除 decode 中不存在的位置零。draft prefill 的 query 至少 128 token 时，从位置一开始收集有效 KV，使用独立 ragged TRT-LLM 注意力及 FP32 softmax；中间 query span 使用 FA2。规划阶段先验证 query 非空连续及 KV 长度，再跳过原生算子的冗余活跃行检查。GDN prefill 用单个 strided kernel 归一化 Q/K，FP32 norm、epsilon 1e-6、BF16 输出，避免多个大临时 tensor。缓存精度和容差均不改变。

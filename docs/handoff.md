@@ -10,13 +10,15 @@ and generated dependencies are excluded. Independent translation review, complet
 code-block checks pass. This documentation work does not replace kernel acceptance.
 
 Latest kernel status: clean 874a54a reaches94.9688% on formal MTP batch4, still
-below95%. A pending Q/K RMS+RoPE fusion preserves intermediate BF16 rounding.
+below95%. The Q/K RMS+RoPE fusion preserves intermediate BF16 rounding.
 Static review passes. Its full GPU suite rerun passes146 tests +12 subtests;
 the first run failed the process-timeout test because another process entered
 the selected GPU, not because of numerical failure. Actual-model ordinary/MTP probes pass, but a production-entry FP64 check found
-RoPE phase error near position262144. A higher-precision temporary prototype
-passes packed Q/K, int32/int64 positions and graph replay; its performance and
-production integration are pending. Final twelve-row and feature acceptance
+RoPE phase error near position262144. The production fix computes/reduces phase in FP64 and passes packed Q/K,
+int32/int64 positions and graph replay at the original tolerances. After this
+fix, the complete146+12 suite and actual ordinary/MTP FP64 coverage pass.
+TileFoundry analysis and the representative twin check pass; its lack of FP64
+phase representation is explicitly documented and cannot validate this boundary. Final twelve-row and feature acceptance
 remain required before completion.
 
 ## Active task: TileLang migration and TileFoundry development workflow

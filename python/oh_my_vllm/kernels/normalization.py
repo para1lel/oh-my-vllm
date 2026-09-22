@@ -1,5 +1,7 @@
 """RMS normalization and text-only partial NeoX rotary embedding."""
 
+import math
+
 import tilelang
 import tilelang.language as T
 import torch
@@ -139,6 +141,90 @@ def rotary(
     out = torch.empty_like(x)
     _rope(*x.shape[1:], rotary_dim, theta, str(positions.dtype).removeprefix("torch."))(
         x, positions, out
+    )
+    return out
+
+
+@tilelang.jit
+def _rms_rotary(h: int, strides: tuple, index_dtype: str):
+    n = T.dynamic("n")
+
+    @T.prim_func
+    def kernel(
+        x: T.StridedTensor((n, h, 256), strides, "bfloat16"),
+        weight: T.Tensor((256,), "float32"),
+        positions: T.Tensor((n,), index_dtype),
+        out: T.Tensor((n, h, 256), "bfloat16"),
+    ):
+        with T.Kernel(n * h, threads=256) as row:
+            values = T.alloc_fragment((256,), "float32")
+            squares = T.alloc_fragment((256,), "float32")
+            total = T.alloc_fragment((1,), "float32")
+            for i in T.Parallel(256):
+                values[i] = x[row // h, row % h, i].astype("float32")
+                squares[i] = values[i] * values[i]
+            T.reduce_sum(squares, total, dim=0)
+            for i in T.Parallel(256):
+                values[i] = (
+                    (values[i] * T.rsqrt(total[0] / 256 + 1e-6) * weight[i])
+                    .astype("bfloat16")
+                    .astype("float32")
+                )
+            for i in T.Parallel(256):
+                if i < 64:
+                    # Preserve normalization's BF16 boundary before rotation.
+                    other_col = T.if_then_else(i < 32, i + 32, i - 32)
+                    other = (
+                        (
+                            x[row // h, row % h, other_col].astype("float32")
+                            * T.rsqrt(total[0] / 256 + 1e-6)
+                            * weight[other_col]
+                        )
+                        .astype("bfloat16")
+                        .astype("float32")
+                    )
+                    # Reduce the phase in FP64: FP32 frequency/angle error grows
+                    # enough near the maximum context to exceed BF16 tolerances.
+                    angle64 = positions[row // h].astype("float64") * T.exp(
+                        T.float64(-math.log(10000000.0)) * (i % 32) / 32
+                    )
+                    angle = (
+                        angle64
+                        - T.round(angle64 / T.float64(math.tau)) * T.float64(math.tau)
+                    ).astype("float32")
+                    out[row // h, row % h, i] = values[i] * T.cos(
+                        angle
+                    ) + T.if_then_else(i < 32, -other, other) * T.sin(angle)
+                else:
+                    out[row // h, row % h, i] = values[i]
+
+    return kernel
+
+
+def rms_rotary(
+    x: torch.Tensor, weight: torch.Tensor, positions: torch.Tensor
+) -> torch.Tensor:
+    """Fuse Qwen's 256-wide Q/K RMS and 64-wide partial NeoX rotation."""
+    if x.ndim != 3 or x.shape[-1] != 256 or x.numel() == 0:
+        raise ValueError("fused Q/K normalization requires [tokens,heads,256]")
+    if x.dtype != torch.bfloat16 or weight.dtype != torch.float32:
+        raise ValueError("fused Q/K normalization requires BF16 data/FP32 weight")
+    if weight.shape != (256,) or not weight.is_contiguous():
+        raise ValueError("fused Q/K normalization requires a contiguous256 weight")
+    if positions.shape != (x.shape[0],) or positions.dtype not in (
+        torch.int32,
+        torch.int64,
+    ):
+        raise ValueError(
+            "fused Q/K normalization requires one integer position per row"
+        )
+    if not positions.is_contiguous() or any(
+        not t.is_cuda or t.device != x.device for t in (x, weight, positions)
+    ):
+        raise ValueError("fused Q/K tensors must share a GPU with contiguous positions")
+    out = torch.empty(x.shape, device=x.device, dtype=x.dtype)
+    _rms_rotary(x.shape[1], x.stride(), str(positions.dtype).removeprefix("torch."))(
+        x, weight, positions, out
     )
     return out
 

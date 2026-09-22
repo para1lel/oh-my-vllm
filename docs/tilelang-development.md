@@ -90,6 +90,13 @@ FP64 references, irregular metadata, packed views, graph replay, page isolation,
 maximum context or actual model checks. Do not relax existing tolerances to match
 either TileLang or the previous Triton implementation.
 
+The pinned TileFoundry HIR has no FP64 dtype. `norm_rope` therefore expresses
+the complete normalization/rotation operation with an FP32 phase approximation;
+production computes and reduces its phase in FP64 before FP32 sin/cos. Do not use
+this HIR's short-shape check to validate maximum-context phase accuracy, or its
+cost estimate as a model of the production FP64 instructions. The independent
+CPU FP64 reference and actual-model checks remain authoritative for that boundary.
+
 ## Acceptance and performance
 
 Retain all documented service, agentic, maximum-context and correctness checks.

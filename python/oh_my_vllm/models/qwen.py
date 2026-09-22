@@ -18,7 +18,7 @@ from oh_my_vllm.kernels import attention, fp8, gdn
 from oh_my_vllm.kernels.convolution import causal_conv
 from oh_my_vllm.kernels.elementwise import delta_gates, silu_mul
 from oh_my_vllm.kernels.mtp_attention import MTPAttention
-from oh_my_vllm.kernels.normalization import add_rms_norm, rms_norm, rotary
+from oh_my_vllm.kernels.normalization import add_rms_norm, rms_norm, rms_rotary
 
 LayerCache = torch.Tensor | tuple[torch.Tensor, torch.Tensor]
 
@@ -155,8 +155,8 @@ class Layer:
     ) -> torch.Tensor:
         qg, k, v = self.qkv(x).split([12288, 1024, 1024], -1)
         q, gate = qg.reshape(-1, 24, 512).chunk(2, -1)
-        q = rotary(rms_norm(q, self.q_norm), batch.positions)
-        k = rotary(rms_norm(k.reshape(-1, 4, 256), self.k_norm), batch.positions)
+        q = rms_rotary(q, self.q_norm, batch.positions)
+        k = rms_rotary(k.reshape(-1, 4, 256), self.k_norm, batch.positions)
         v = v.reshape(-1, 4, 256).contiguous()
         attention.append(cache, k, v, batch.fa_slots)
         out = batch.attention(q, cache)

@@ -57,6 +57,10 @@ class TileLang:
         return normalization.rotary(x, positions)
 
     @runtime_func
+    def norm_rope(self, x, weight, positions):
+        return normalization.rms_rotary(x, weight, positions)
+
+    @runtime_func
     def quant(self, x):
         return fp8.quantize(x)
 

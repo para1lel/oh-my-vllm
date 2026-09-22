@@ -80,6 +80,21 @@ class Operators:
         return tf.concat([a, b, x[:, :, 64:]], axis=2)
 
     @func
+    def norm_rope(
+        x: Tensor[(2, 24, 256), DType.bf16],
+        weight: Tensor[(256,), DType.f32],
+        positions: Tensor[(2,), DType.i64],
+    ):
+        # TileFoundry has no f64 dtype. This HIR expresses the logical operator
+        # with f32 phase arithmetic, not production's precise phase reduction.
+        # Its cost/check results cannot validate maximum-context phase accuracy;
+        # use the independent FP64 reference for that numerical boundary.
+        values = tf.cast(x, "f32")
+        mean = tf.reduce(tf.square(values), (-1,), True, "mean")
+        normalized = tf.cast(values * tf.rsqrt(mean + 1e-6) * weight, "bf16")
+        return rope(normalized, positions)  # noqa: F821
+
+    @func
     def quant(x: Tensor[(2, 256), DType.bf16]):
         values = tf.reshape(tf.cast(x, "f32"), (2, 2, 128))
         maximum = tf.reduce(values, (-1,), True, "abs_max")

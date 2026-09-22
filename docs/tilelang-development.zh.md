@@ -45,6 +45,8 @@ scripts/with-gpu.sh scripts/with-env.sh pytest -q tests
 
 检查 tuple 输出时，为每个返回 tensor 选择明确判定条件。代表性 HIR shape 有助于研究语义，但不能替代已有 FP64 参考、不规则元数据、packed 视图、图回放、页隔离、最大上下文或实际模型检查。不能为适应 TileLang 或旧 Triton 实现而放宽容差。
 
+固定版本的 TileFoundry HIR 没有 FP64 dtype，因此 `norm_rope` 用 FP32 相位近似表达完整归一化/旋转算子；生产实现先用 FP64 计算并约化相位，再执行 FP32 sin/cos。不能用该 HIR 的短 shape 检查验证最大上下文相位精度，也不能将其成本估计当作生产 FP64 指令模型。该边界仍以独立 CPU FP64 参考和实际模型检查为准。
+
 ## 验收与性能
 
 保留文档规定的全部服务、agentic、最大上下文和正确性检查。使用冻结 EngineCore 的 12 组对比：吞吐至少 95%、TTFT 至多 1.1 倍，并满足既有稳定性和来源审计。捕获/测量前预热所有待测 shape。逐运行的 TileLang 和第三方 Triton 缓存根目录防止并发编译污染审计；FlashInfer 也必须完整预热，正式重复期间保持不变。
