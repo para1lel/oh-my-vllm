@@ -147,3 +147,14 @@ cache group and may have equal numeric values. Admission checks both pools, pref
 lookup reconciles hits across both, and the worker validates each address against
 its own tensor capacity. Omission preserves the shared-capacity configuration.
 See ADR-007 for rationale and the pending long-context acceptance protocol.
+
+### Long prefill attention
+
+For batches with a query span of at least 1024 tokens, Python gathers only active
+FA KV tokens into temporary contiguous tensors and invokes independent FlashInfer
+ragged TRT-LLM attention with FP32 softmax. Rust allocations and persistent
+`[page,2,784,heads,dim]` tensors are unchanged. Small query spans use paged FA2 to
+avoid gathering an entire long prefix for a small amount of work. Mixed batches
+share this decision, so a long prefill also gathers active decode sequences.
+The maximum-context batch4 correctness check includes the resulting temporary
+memory; neither Mamba cache precision nor numerical tolerances change.

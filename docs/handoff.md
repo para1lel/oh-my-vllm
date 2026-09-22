@@ -45,9 +45,21 @@ tests: 14 pass. See 2026-09-22-prefill-quantization.json for limitations and has
 Post-optimization ordinary/MTP actual-model FP64 checks also pass. Four initial
 baseline attempts were aborted because an external TP4 job entered their GPUs;
 see 2026-09-22-ttft-discarded.json. Those results are excluded. The collector now
-streams to disk so interference/timeout retains child output. Ordinary batch 1/2
-baseline runs are active on separate exclusive GPUs, all other owned GPU work
-has exited. No formal baseline or 12-row performance result exists yet. Finish baseline
+streams to disk so interference/timeout retains child output. Seven baseline rows have passed collection audits; remaining
+rows are collecting/retrying in /tmp/oh-my-vllm-ttft-final. Prefix4 attempt103
+was rejected for TTFT spread 13.94% despite stable throughput. User confirmed to
+keep waiting/retrying when external GPU interference occurs. No complete 12-row
+comparison exists yet. Candidate MTP attempt0 was canceled during first warmup
+because copying FlashInfer caches caused expensive recompilation; no measured
+result from that attempt is used. Future candidates use the existing independent
+FlashInfer cache and auditable per-run Triton cache.
+
+Long-prefill attention now compacts active KV for independent ragged TRT-LLM
+attention, retaining persistent 784-token pages and small-query FA2. Full suite
+110 tests +12 subtests and both actual-model FP64 paths pass. Ordinary/MTP4 bs4
+maximum-context reruns pass without preemption, with unchanged peak reserved
+memory. See 2026-09-22-ragged-prefill.json. Final numerical checks, including
+mixed long-decode isolation, pass (3 tests). Finish baseline
 collection, performance fixes and reviews before claiming completion.
 
 ## Previous task: independent runtime

@@ -153,26 +153,26 @@ def test_fp8_block_scales(rows):
     check(out, expected)
 
 
-def test_paged_gqa_crosses_784_with_prefix():
+@pytest.mark.parametrize("total,query_length", [(789, 5), (1553, 1025)])
+def test_paged_gqa_crosses_784_with_prefix(total, query_length):
     from oh_my_vllm.kernels.attention import PagedAttention, append
 
     torch.manual_seed(784)
-    total, query_length = 789, 5
     q = torch.randn(query_length, 24, 256, device="cuda", dtype=torch.bfloat16)
     k = torch.randn(total, 4, 256, device="cuda", dtype=torch.bfloat16)
     v = torch.randn_like(k)
     cache = torch.zeros(4, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
     # Noncontiguous pages: 2 then 1. Leave pages 0 and 3 untouched.
-    slots = torch.cat((torch.arange(784) + 2 * 784, torch.arange(5) + 784)).to(
-        device="cuda", dtype=torch.int64
-    )
+    slots = torch.cat(
+        (torch.arange(784) + 2 * 784, torch.arange(total - 784) + 784)
+    ).to(device="cuda", dtype=torch.int64)
     append(cache, k, v, slots)
     plan = PagedAttention()
     plan.plan(
         torch.tensor([0, query_length], dtype=torch.int32),
         torch.tensor([0, 2], dtype=torch.int32),
         torch.tensor([2, 1], dtype=torch.int32),
-        torch.tensor([5], dtype=torch.int32),
+        torch.tensor([total - 784], dtype=torch.int32),
         24,
         4,
         256,
@@ -187,6 +187,37 @@ def test_paged_gqa_crosses_784_with_prefix():
     expected = torch.einsum("hts,shd->thd", scores.softmax(-1), vc)
     check(out, expected)
     assert torch.count_nonzero(cache[[0, 3]]) == 0
+
+
+def test_long_prefill_keeps_ragged_requests_isolated():
+    from oh_my_vllm.kernels.attention import PagedAttention, append
+
+    cache = torch.zeros(9, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
+    slots = torch.cat(
+        (
+            torch.arange(784) + 3 * 784,
+            torch.arange(516) + 784,
+            torch.arange(3920) + 4 * 784,
+        )
+    ).cuda()
+    k = torch.randn(5220, 4, 256, device="cuda", dtype=torch.bfloat16)
+    v = torch.full_like(k, 0.5)
+    v[1300:] = -0.75
+    append(cache, k, v, slots)
+    plan = PagedAttention()
+    plan.plan(
+        torch.tensor([0, 1024, 1025], dtype=torch.int32),
+        torch.tensor([0, 2, 7], dtype=torch.int32),
+        torch.tensor([3, 1, 4, 5, 6, 7, 8], dtype=torch.int32),
+        torch.tensor([516, 784], dtype=torch.int32),
+        24,
+        4,
+        256,
+    )
+    query = torch.randn(1025, 24, 256, device="cuda", dtype=torch.bfloat16)
+    expected = torch.full(query.shape, 0.5, dtype=torch.float64)
+    expected[1024:] = -0.75
+    check(plan(query, cache), expected)
 
 
 def test_convolution_ragged_snapshots():

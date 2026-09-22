@@ -202,6 +202,7 @@ def main():
     candidate["comparison"] = compare(baseline, candidate)
     args.output.write_text(json.dumps(candidate, indent=2) + "\n")
     print(json.dumps(candidate["comparison"], indent=2))
+    raise SystemExit(0 if candidate["comparison"]["passed"] else 1)
 
 
 if __name__ == "__main__":
