@@ -148,7 +148,9 @@ def main():
         )
         start = time.monotonic()
         for prompt in prompts:
-            rid = engine.add_request(str(counter), {"prompt_token_ids": prompt}, params)
+            # Outputs use the external ID, not add_request's randomized internal ID.
+            rid = str(counter)
+            engine.add_request(rid, {"prompt_token_ids": prompt}, params)
             counter += 1
             request_ids.append(rid)
         while engine.has_unfinished_requests():

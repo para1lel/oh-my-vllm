@@ -19,33 +19,34 @@ independent kernel caches. GPU tests wait for an idle B200 and pin its UUID.
 scripts/with-env.sh python -m pip install -r requirements/runtime.txt
 scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
 scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64
-scripts/with-gpu.sh scripts/with-env.sh python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --warmup 2 --output /tmp/ordinary.json
 ```
 
 Use unique sockets. Add `--num-speculative-tokens 4` to the text script for MTP.
-Benchmark modes are ordinary, mtp and prefix. Defaults retain the capacity unit
-1024 (341 logical blocks), input 32768, output 4096, two warmups and three measured
-repetitions. Only framework measurements run; the original EngineCore data is frozen.
+Current regression uses ordinary, MTP4 and prefix-hit modes, with two full warmups
+and at least five measured repetitions. The new 12-row throughput/TTFT baseline
+is being collected; see [testing](docs/testing.md). `benchmarks/compare_vllm.py`
+retains the prior nine-row historical comparison and its original configuration.
 
 ## Local OpenAI service
 
 ```bash
-scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/oh-my-vllm-serve.ipc --num-speculative-tokens 4 serve
+scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/oh-my-vllm-serve.ipc --num-gpu-blocks 4200 --mamba-blocks 128 --max-model-len 262144 --num-speculative-tokens 4 serve
 ```
 
 Chat Completions and Responses are served at `http://127.0.0.1:8000/v1`, with
 thinking, tools, JSON constraints and stored Responses. See [serving](docs/serving.md)
 for supported schemas, OMP configuration and acceptance commands. CPU/client tests
-pass. The independent Worker has passed real MTP4 constraint/lifecycle checks;
-all nine independent performance rows pass. Both final oh-my-pi workflows completed with MTP4 and real tool calls;
-answer-review caveats and timing evidence are recorded in acceptance.md.
+pass. Real MTP4 constraints, lifecycle, long prefix reuse and both oh-my-pi
+workflows have passed. Six 262144-total-token boundary checks pass without
+preemption; formal 12-row throughput/TTFT acceptance remains pending.
 See [handoff](docs/handoff.md) for current results.
 
 ## Verification and performance
 
-The target is at least 95% of the original EngineCore throughput for batch 1/2/4
-in ordinary, MTP and controlled prefix-hit modes. The independent matrix passes all nine rows. Historical V2 measurements remain
-separate evidence.
+The target is at least 95% of the refreshed vLLM EngineCore throughput and at most
+110% of its TTFT on all 12 rows. The prior nine-row independent-runtime matrix
+passed against its original frozen baseline; those historical results do not
+satisfy the new TTFT gate.
 [Acceptance evidence](docs/acceptance.md) separates current and historical results.
 
 ```bash
@@ -71,4 +72,6 @@ measurements. Every milestone requires independent review and a commit.
 - python/oh_my_vllm/worker: execution, MTP, sampling, graphs and bridge.
 - python/oh_my_vllm/models and kernels: concrete model and independent GPU operators.
 - tests/probe_worker.py: actual-model FP64 diagnostic, never for throughput.
-- benchmarks/compare_vllm.py: framework measurements against original frozen data.
+- benchmarks/ttft.py: independent measurements and current TTFT/throughput gates.
+- benchmarks/baseline/enginecore.py: explicitly isolated reference collector.
+- benchmarks/compare_vllm.py: historical comparison and process supervision.

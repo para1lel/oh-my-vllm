@@ -25,7 +25,8 @@ not old vLLM build outputs. Runtime startup records library versions; shutdown
 checks imported modules and mapped libraries. No vLLM package may be installed.
 
 `OH_MY_VLLM_ENFORCE_EAGER=1` disables target and MTP graphs for diagnostics only.
-Do not regenerate the frozen EngineCore baseline or enable probes during acceptance.
+Only the explicitly authorized isolated collector may refresh the EngineCore
+baseline. Never enable correctness probes during performance acceptance.
 
 ## Build and checks
 

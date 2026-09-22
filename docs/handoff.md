@@ -29,6 +29,11 @@ Twelve MTP constraint cases, service lifecycle and both APIs with 131099 input
 tokens pass; repeat requests reuse 130928 cached tokens. All owned boundary/probe/
 service workers exited and port 18015 is released. See
 bench/baseline/2026-09-22-ttft-stage1.json for raw boundary results and log hashes.
+Both oh-my-pi APIs reran with Qwen3.8 model ID and MTP4: Chat/Responses made
+10/8 successful reads, including both required source files, with zero tool errors.
+Elapsed times were 28.02/22.16 seconds. Their GB/GiB unit error and other answer
+caveats are retained in bench/baseline/2026-09-22-ttft-agentic.json. Server/worker
+exited and port 18016 is released; unrelated GPU processes remain untouched.
 No formal baseline or 12-row performance result exists yet. Finish baseline
 collection, performance fixes and reviews before claiming completion.
 

@@ -1,9 +1,9 @@
 # OpenAI-compatible local serving
 
-**Status (2026-09-21):** the independent Qwen Worker has passed real MTP4 JSON/tool
-constraints, all thinking levels and lifecycle checks. Both oh-my-pi tasks still
-need final independent-runtime acceptance. Historical V2 results remain in
-[acceptance.md](acceptance.md); current progress is in [handoff.md](handoff.md).
+**Status (2026-09-22):** the independent Qwen Worker passes real MTP4 JSON/tool
+constraints, all thinking levels, lifecycle and both oh-my-pi tasks. Long strict-JSON
+requests through both APIs reuse 130928 cached tokens. Current performance gates
+remain pending; see [acceptance.md](acceptance.md) and [handoff.md](handoff.md).
 
 ## Run
 
