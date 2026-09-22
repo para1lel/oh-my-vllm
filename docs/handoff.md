@@ -46,6 +46,17 @@ batch 1/2/4, and prefix TTFT stability failed at batch 1/2. These are incomplete
 results, not final acceptance. The subsequent two-sequence GDN layout passes the
 full 146-test suite plus 12 subtests; final model and performance reruns remain
 pending while attention shape tuning continues.
+The next attention milestone uses predicated asynchronous global-to-shared
+copies, 128 threads and 64 splits. Logical positions use int32 only with enough
+ceildiv headroom; physical cache offsets remain int64. Review verified shared
+memory barriers and tail zero-fill. All 146 GPU tests plus 12 subtests pass on
+the rerun; an earlier run had a GPU-contention failure in the process-timeout
+test, not a numerical failure. All-file formatting, Rust checks and hooks pass.
+TileLang AutoTuner is now exercised offline with explicit legal metadata, CUDA
+Graph timing and unchanged FP64 checks. Workflow documentation requires complete
+operator and model revalidation, with no runtime search or repository microtests.
+Actual-model ordinary/MTP FP64 probes pass with complete required coverage.
+The full performance matrix remains in progress.
 Historical performance figures below describe the pre-TileLang implementation,
 not acceptance for this migration.
 

@@ -22,18 +22,13 @@ def _partials(
     bq: int,
     grouped: bool,
     index_types: tuple,
+    position_dtype: str,
 ):
     table_dtype, length_dtype, start_dtype = index_types
     n = T.dynamic("n")
     groups = T.dynamic("groups") if grouped else n
     starts_size = groups + 1 if grouped else n
     ratio = h // hk
-    # Read multiple KV rows per warp group with coalesced eight-element vectors.
-    gather_layout = tilelang.layout.Fragment(
-        (bk, 256),
-        forward_thread_fn=lambda i, j: (i % 8) * 32 + j // 8,
-        forward_index_fn=lambda i, j: (i // 8) * 8 + j % 8,
-    )
 
     @T.prim_func
     def kernel(
@@ -45,7 +40,7 @@ def _partials(
         partial: T.Tensor((n, h, splits, 256), "float32"),
         lse: T.Tensor((n, h, splits), "float32"),
     ):
-        with T.Kernel(groups, hk, splits, threads=256) as (seq, kh, split):
+        with T.Kernel(groups, hk, splits, threads=128) as (seq, kh, split):
             q_shared = T.alloc_shared((bq, 256), "bfloat16")
             k_shared = T.alloc_shared((bk, 256), "bfloat16")
             v_shared = T.alloc_shared((bk, 256), "bfloat16")
@@ -59,7 +54,7 @@ def _partials(
             alpha = T.alloc_fragment((bq,), "float32")
             start = T.if_then_else(grouped, starts[seq], seq)
             end = T.if_then_else(grouped, starts[seq + 1], seq + 1)
-            last = lengths[end - 1]
+            last = lengths[end - 1].astype(position_dtype)
             # Partition the live extent on device; graph replay can change lengths.
             chunk = T.ceildiv(T.max(last - first, 0), splits * bk) * bk
             begin = first + split * chunk
@@ -72,22 +67,33 @@ def _partials(
                     row < end, query[row, kh * ratio + i % ratio, j], 0
                 )
             for step in T.serial(T.ceildiv(T.max(T.min(chunk, last - begin), 0), bk)):
-                for i, j in T.Parallel(bk, 256, loop_layout=gather_layout):
+                # Eight BF16 elements per lane go directly to shared memory.
+                # Clamp only the metadata lookup for masked tail rows; cp.async
+                # zero-fills their data without reading the cache.
+                for i, j in T.Parallel(bk, 32):
                     pos = begin + step * bk + i
-                    if pos < last:
-                        page = tables[start, pos // 784].astype("int64")
-                        k_shared[i, j] = cache[page, 0, pos % 784, kh, j]
-                        v_shared[i, j] = cache[page, 1, pos % 784, kh, j]
-                    else:
-                        k_shared[i, j] = 0
-                        v_shared[i, j] = 0
+                    page = tables[start, T.min(pos, last - 1) // 784].astype("int64")
+                    T.ptx_cp_async(
+                        T.access_ptr(k_shared[i, j * 8], "w", 8),
+                        T.access_ptr(cache[page, 0, pos % 784, kh, j * 8], "r", 8),
+                        8,
+                        pos < last,
+                    )
+                    T.ptx_cp_async(
+                        T.access_ptr(v_shared[i, j * 8], "w", 8),
+                        T.access_ptr(cache[page, 1, pos % 784, kh, j * 8], "r", 8),
+                        8,
+                        pos < last,
+                    )
+                T.ptx_commit_group()
+                T.ptx_wait_group(0)
                 T.gemm(q_shared, k_shared, score, transpose_B=True, clear_accum=True)
                 for i, j in T.Parallel(bq, bk):
                     row = start + i // ratio
                     pos = begin + step * bk + j
                     if row < end:
                         score[i, j] = T.if_then_else(
-                            pos < lengths[row],
+                            pos < lengths[row].astype(position_dtype),
                             score[i, j] * (256**-0.5 * 1.4426950408889634),
                             -T.infinity("float32"),
                         )
@@ -205,7 +211,9 @@ def decode(
         or not starts.is_contiguous()
     ):
         raise ValueError("grouped decode starts must be contiguous CUDA integers")
-    splits = 64 if starts is not None else 128
+    # Keep the reduction traffic bounded for small batches; both kernels are
+    # included when selecting split counts, not just the partial attention.
+    splits = 64
     block = 64
     partial = torch.empty((requests, heads, splits, dim), device=query.device)
     lse = torch.empty((requests, heads, splits), device=query.device)
@@ -230,6 +238,7 @@ def decode(
         query_tile,
         starts is not None,
         types,
+        "int32" if max_tokens <= 2**31 - splits * block else "int64",
     )(query, cache, tables, lengths, offsets, partial, lse)
     _merge(heads, splits)(partial, lse, out)
     return out

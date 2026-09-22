@@ -57,6 +57,25 @@ The source tree must remain available for the editable installation.
 6. Review each milestone, fix findings, then commit on main. Push fork changes
    before advancing the main repository's submodule gitlink.
 
+Use TileLang's development-time `AutoTuner` after TileFoundry analysis narrows
+the search space. Supply valid page tables, lengths, packed strides and recurrent
+states explicitly; random integer metadata is not a valid input generator.
+Select the `cudagraph` profiling backend explicitly for graph-replayed paths.
+Preserve existing reference tolerances and permit no mismatched-element waiver.
+For stateful kernels, reset state for each correctness trial and ensure timing
+does not benchmark an ever-changing recurrence. Search representative batches,
+context ranges and ordinary/MTP shapes, including boundary and ragged cases.
+Consider tile size, threads, split count, layout and pipeline choices; autotuning
+parameters does not replace designing a better memory-access or fusion strategy.
+
+Recheck shortlisted candidates as complete operators: include split reduction,
+temporary allocation and launch overhead, and account for repeated-input cache
+effects. Then validate actual-model correctness and the full performance matrix.
+Install deterministic, verified shape dispatch in production; do not run an
+autotuning search during service startup or inference. Temporary tuning scripts,
+cache artifacts and operator-level results remain outside this repository.
+See the [TileLang autotuning guide](https://www.tilelang.com/programming_guides/autotuning.html).
+
 Examples (analysis outputs deliberately go to /tmp):
 
 ```bash
