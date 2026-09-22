@@ -67,3 +67,26 @@ register accumulation, shared-memory sector swizzling and an integer-width-safe
 position specialization. Both backend suites pass154 tests plus24 subtests after
 the duplicate-body cleanup. Attention performance still requires further tuning;
 correctness and successful PTX compilation do not establish a speedup.
+
+For development observations, select an ID from `benchmarks/kernels.py --list`:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh env CUDA_HOME=/usr/local/cuda-13.1 TVM_FFI_CUDA_ARCH_LIST=10.0a python -m development.kernels.observations --case attention-c426ebd5d5 --output /tmp/kernel-observations.json
+```
+
+This runs TileFoundry HIR analysis and separate Nsight Compute replays of both
+complete backend operations. Warmup/JIT stays outside the NVTX range. Each launch
+must contain every requested finite counter; unavailable metrics are reported
+explicitly and produce a failing exit status. The report distinguishes static
+estimates from measured counters, includes register/shared-memory resources,
+source hashes and hardware identity, and cannot pass any performance gate.
+Temporary raw CSV files are removed. Cancellation terminates the owned profiler
+process group, including GPU workers. CPU tests cover incomplete/nonfinite
+metrics and cancellation cleanup; actual paired attention profiling succeeds.
+
+Contiguous BF16 inputs may have an unaligned storage offset. Native attention
+handles Q scalar loads in that case; the production wrapper aligns KV for both
+backends and Q for frozen TileLang without modifying its frozen source. Existing
+numerical tolerances apply to the added Q/KV alignment regression cases. Latest
+CUDA full-suite result is160 tests plus28 subtests; TileLang attention passes16.
+Register softmax and shape-specific KV prefetch remain under performance tuning.

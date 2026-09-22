@@ -22,3 +22,18 @@ def verify_reference(root=ROOT):
         if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise ValueError(f"frozen comparison changed: {path.relative_to(root)}")
     return manifest
+
+
+def source_hashes(root=ROOT):
+    paths = [
+        *root.glob("python/oh_my_vllm/kernels/**/*.py"),
+        *root.glob("python/oh_my_vllm/kernels/**/*.cu"),
+        *root.glob("development/kernels/*.py"),
+        root / "development/kernels/tilelang-reference.json",
+        root / "requirements/runtime.txt",
+        root / "benchmarks/kernels.py",
+    ]
+    return {
+        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(paths)
+    }

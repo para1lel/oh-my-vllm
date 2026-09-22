@@ -24,3 +24,13 @@ scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda CUDA_
 TileLang 内核函数体仅保留在 `tilelang_reference/`。生产模块只包含校验、公共封装和显式工厂绑定，不再保存第二份 TileLang DSL。冻结的完整算子封装保留原有快照和分配行为，用于公平比较。
 
 原生注意力使用显式 `mma.sync`/`ldmatrix` BF16 fragment、FP32 寄存器累加、共享内存 sector 置换和保留整数宽度安全边界的位置特化。删除重复函数体后，两个后端测试均通过 154 项和 24 项子测试。注意力性能仍需继续调优，正确性通过和 PTX 编译成功不代表已经提速。
+
+采集开发观测指标时，从 `benchmarks/kernels.py --list` 中选择 ID：
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh env CUDA_HOME=/usr/local/cuda-13.1 TVM_FFI_CUDA_ARCH_LIST=10.0a python -m development.kernels.observations --case attention-c426ebd5d5 --output /tmp/kernel-observations.json
+```
+
+该命令运行 TileFoundry HIR 分析，并分别用 Nsight Compute 重放两个后端的完整算子。预热/JIT 位于 NVTX 范围外。每次 kernel 启动必须包含全部请求的有限值指标；不可用指标明确记录，并返回失败退出码。报告区分静态估计与实测计数器，包含寄存器/共享内存资源、源码哈希和硬件身份，不用于判定任何性能门槛。临时原始 CSV 会删除；取消时终止自有 profiler 进程组，包括 GPU worker。CPU 测试覆盖不完整/非有限指标和取消清理，实际双后端注意力 profiling 已成功。
+
+连续 BF16 输入也可能因 storage offset 而未对齐。原生注意力为此使用 Q 标量加载；生产封装为两个后端对齐 KV，并为冻结 TileLang 对齐 Q，不修改冻结源码。新增 Q/KV 对齐回归继续使用现有数值容差。最新 CUDA 完整测试通过 160 项和 28 项子测试，TileLang 注意力通过 16 项。寄存器 softmax 和按形状选择的 KV 预取仍在性能调优中。

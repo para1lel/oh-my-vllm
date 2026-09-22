@@ -76,3 +76,13 @@ gaps. Keep temporary operator tuning scripts and reports outside the repository.
 Formal measurements audit TILELANG_CACHE_DIR in addition to FlashInfer and
 third-party Triton caches; use separate per-run TileLang/Triton roots when
 collecting concurrently, and finish all compilation before measured repetitions.
+
+## CUDA/TileLang operator observations
+
+Use `python -m development.kernels.observations` through the GPU/environment
+wrappers to collect a formal case's two complete backend operations. See
+cuda-development.md for the command. The report combines separately labeled
+TileFoundry HIR estimates and Nsight counters/resources. It verifies immutable
+reference/source identity and counter completeness. This profiler workflow is
+separate from `benchmarks/kernels.py` CUDA Event/Graph timing and never supplies
+performance acceptance samples. Raw profiler CSV remains temporary outside Git.

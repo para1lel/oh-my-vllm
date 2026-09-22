@@ -7,7 +7,7 @@ without modifying shared boundary rows or changing the 784-token page size.
 
 import torch
 
-from .backend import kernel
+from .backend import NAME, kernel
 
 _partials = kernel("decode_attention", "_partials")
 
@@ -60,6 +60,14 @@ def decode(
         or not starts.is_contiguous()
     ):
         raise ValueError("grouped decode starts must be contiguous CUDA integers")
+    # Both backends issue16-byte KV copies. Preserve support for contiguous
+    # views that start at an unaligned BF16 storage offset.
+    if cache.data_ptr() % 16:
+        cache = cache.clone()
+    # The frozen TileLang code vector-loads Q. Contiguous BF16 storage-offset
+    # views need an aligned copy; native CUDA handles their scalar load directly.
+    if NAME == "tilelang" and query.data_ptr() % 16:
+        query = query.clone()
     # Keep the reduction traffic bounded for small batches; both kernels are
     # included when selecting split counts, not just the partial attention.
     splits = 64

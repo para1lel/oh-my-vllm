@@ -32,6 +32,19 @@ than TileLang, so no performance acceptance is claimed. Owned GPU runs exited;
 an unrelated GPU process remains and was not stopped.
 
 
+Latest attention tuning keeps score/softmax state in registers, shares grouped
+32-query/64-key tiles, and overlaps KV prefetch for larger ungrouped batches.
+Review found unaligned contiguous BF16 storage-offset inputs: native Q now has
+safe scalar loads; the production wrapper aligns KV for both backends and Q for
+frozen TileLang. The frozen source remains unchanged. CUDA full suite passes160
+tests plus28 subtests; TileLang attention passes16, including all three new
+alignment cases. Hardware-observation CLI now profiles both complete operations
+with TileFoundry estimates separate, validates counter/source identity and reaps
+owned process groups on cancellation. Real paired Nsight collection and CPU
+validation pass. Performance diagnostics still fail TileLang-relative gates;
+formal per-case and full-framework CUDA acceptance remain outstanding.
+
+
 
 ## Current: TileLang acceptance and revised stability
 

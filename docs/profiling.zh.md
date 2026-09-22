@@ -48,3 +48,7 @@ scripts/with-gpu.sh scripts/with-env.sh python benchmarks/compare_vllm.py --mode
 ## TileLang kernel
 
 TileFoundry 的静态成本/显存/roofline 分析是开发假设，不是测得的 kernel 时间。分析实际模型以定位吞吐/TTFT 差距。临时算子调优脚本和报告放在仓库外。正式测量除 FlashInfer 和第三方 Triton 缓存外，还审计 TILELANG_CACHE_DIR；并发采集时，各次运行使用独立 TileLang/Triton 根目录，所有编译在正式重复测量前完成。
+
+## CUDA/TileLang 算子观测
+
+通过 GPU/环境包装脚本运行 `python -m development.kernels.observations`，采集正式配置下两个后端的完整算子，命令见 cuda-development.zh.md。报告分别标注 TileFoundry HIR 估计和 Nsight 计数器/资源指标，核验冻结对照/源码身份和指标完整性。该 profiling 流程独立于 `benchmarks/kernels.py` 的 CUDA Event/Graph 计时，不提供性能验收样本。原始 profiler CSV 仅临时保存在 Git 仓库外。

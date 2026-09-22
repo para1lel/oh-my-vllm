@@ -1,7 +1,6 @@
 """Formal static-shape CUDA versus frozen TileLang performance collection."""
 
 import argparse
-import hashlib
 import json
 import os
 import subprocess
@@ -17,22 +16,9 @@ from measurement import hardware_identity  # noqa: E402
 
 from development.kernels.cases import UNUSED, cases  # noqa: E402
 from development.kernels.comparison import compare  # noqa: E402
-from development.kernels.reference import verify_reference  # noqa: E402
+from development.kernels.reference import source_hashes, verify_reference  # noqa: E402
 
-
-def sources():
-    paths = [
-        *ROOT.glob("python/oh_my_vllm/kernels/**/*.py"),
-        *ROOT.glob("python/oh_my_vllm/kernels/**/*.cu"),
-        *ROOT.glob("development/kernels/*.py"),
-        ROOT / "development/kernels/tilelang-reference.json",
-        ROOT / "requirements/runtime.txt",
-        Path(__file__),
-    ]
-    return {
-        str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in sorted(paths)
-    }
+sources = source_hashes
 
 
 def main():

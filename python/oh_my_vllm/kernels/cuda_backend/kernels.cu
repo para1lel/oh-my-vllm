@@ -500,6 +500,14 @@ __device__ float warp_max(float value) {
   return __shfl_sync(0xffffffff, value, 0);
 }
 
+// Softmax uses the same hardware base-two exponential family as the frozen
+// TileLang path. Keep approximation local: RoPE and FP8 retain their math rules.
+__device__ __forceinline__ float softmax_exp2(float value) {
+  float result;
+  asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(result) : "f"(value));
+  return result;
+}
+
 // PTX mma.m16n8k16 BF16 fragment mapping follows the NVIDIA ISA guide.
 // XOR eight-element sectors across rows to avoid shared-memory bank conflicts.
 __device__ __forceinline__ int shared_index(int row, int col, int stride = 256) {
@@ -538,130 +546,217 @@ __device__ __forceinline__ void mma_bf16(float (&c)[4], unsigned a0, unsigned a1
 
 // Keep the complete PV accumulator in registers across all KV tiles. Only
 // scores/probabilities and online-softmax statistics cross warp boundaries.
-template <bool ModelShape, bool Grouped, typename Position>
+template <int BK, typename Position>
+__device__ __forceinline__ void stage_kv(const __nv_bfloat16 *cache, const void *tables, int start,
+                                         int table_width, Position base, Position last, int hk,
+                                         int kh, bool tw, __nv_bfloat16 *k, __nv_bfloat16 *v) {
+#pragma unroll
+  for (int i = threadIdx.x; i < BK * 32; i += 128) {
+    Position pos = base + i / 32;
+    int64_t page =
+        index_at(tables, tw, static_cast<int64_t>(start) * table_width + min(pos, last - 1) / 784);
+    int64_t offset = ((page * 1568 + pos % 784) * hk + kh) * 256 + (i % 32) * 8;
+    unsigned kd = __cvta_generic_to_shared(k + shared_index(i / 32, (i % 32) * 8));
+    unsigned vd = __cvta_generic_to_shared(v + shared_index(i / 32, (i % 32) * 8));
+    int bytes = pos < last ? 16 : 0;
+    asm volatile("cp.async.cg.shared.global.L2::128B [%0], [%1], 16, %2;" ::"r"(kd),
+                 "l"(cache + offset), "r"(bytes)
+                 : "memory");
+    asm volatile("cp.async.cg.shared.global.L2::128B [%0], [%1], 16, %2;" ::"r"(vd),
+                 "l"(cache + offset + 784 * hk * 256), "r"(bytes)
+                 : "memory");
+  }
+  asm volatile("cp.async.commit_group;" ::: "memory");
+}
+
+template <bool ModelShape, bool Grouped, typename Position, int Buffers>
 __global__ void attention_partial_kernel(const __nv_bfloat16 *query, const __nv_bfloat16 *cache,
                                          const void *tables, const void *lengths,
                                          const void *starts, float *partial, float *lse,
                                          int runtime_h, int runtime_hk, int table_width, int splits,
                                          int first, bool tw, bool lw, bool sw, int query_tiles) {
-  constexpr bool grouped = Grouped;
-  const int h = ModelShape ? 24 : runtime_h;
-  const int hk = ModelShape ? 4 : runtime_hk;
+  constexpr int BQ = Grouped ? 32 : 16, BK = Grouped ? 64 : 32;
+  constexpr int RowGroups = BQ / 8, ScoreTiles = BQ * BK / 512, AccTiles = BQ / 2;
+  const int h = ModelShape ? 24 : runtime_h, hk = ModelShape ? 4 : runtime_hk;
   extern __shared__ __align__(32) unsigned char storage[];
   auto *q = reinterpret_cast<__nv_bfloat16 *>(storage);
-  auto *k = q + 16 * 256;
-  auto *v = k + 32 * 256;
-  auto *p = v + 32 * 256;
-  auto *score = reinterpret_cast<float *>(p + 16 * 64);
-  auto *maximum = score + 16 * 32;
-  auto *denom = maximum + 16;
-  auto *alpha = denom + 16;
+  auto *key_buffers = q + BQ * 256;
+  auto *value_buffers = key_buffers + Buffers * BK * 256;
+  auto *p = value_buffers + Buffers * BK * 256;
+  auto *maxima = reinterpret_cast<float *>(p + BQ * 64);
+  auto *sums = maxima + 4 * BQ;
   const int warp = threadIdx.x / 32, lane = threadIdx.x & 31;
-  float acc[8][4] = {};
-  const int fragment_row = lane / 4, fragment_col = (lane % 4) * 2;
-  const int seq = blockIdx.x / query_tiles, qbase = (blockIdx.x % query_tiles) * 16;
+  const int fr = lane / 4, fc = (lane % 4) * 2;
+  const int seq = blockIdx.x / query_tiles, qbase = (blockIdx.x % query_tiles) * BQ;
   const int kh = blockIdx.y, split = blockIdx.z, ratio = h / hk;
-  const int start = grouped ? index_at(starts, sw, seq) : seq;
-  const int end = grouped ? index_at(starts, sw, seq + 1) : seq + 1;
+  const int start = Grouped ? index_at(starts, sw, seq) : seq;
+  const int end = Grouped ? index_at(starts, sw, seq + 1) : seq + 1;
   const Position last = index_at(lengths, lw, end - 1);
-  const Position chunk = ((max(last - first, Position(0)) + splits * 32 - 1) / (splits * 32)) * 32;
+  const Position chunk = ((max(last - first, Position(0)) + splits * BK - 1) / (splits * BK)) * BK;
   const Position begin = first + split * chunk;
-  for (int i = threadIdx.x; i < 16 * 256; i += 128) {
-    int row = start + (qbase + i / 256) / ratio;
-    q[shared_index(i / 256, i % 256)] =
-        row < end
-            ? query[(static_cast<int64_t>(row) * h + kh * ratio + (qbase + i / 256) % ratio) * 256 +
-                    i % 256]
-            : __float2bfloat16(0);
-  }
-  if (threadIdx.x < 16) {
-    maximum[threadIdx.x] = -INFINITY;
-    denom[threadIdx.x] = 0;
+  float acc[AccTiles][4] = {}, denominator[RowGroups] = {}, maximum[RowGroups];
+#pragma unroll
+  for (int rg = 0; rg < RowGroups; ++rg)
+    maximum[rg] = -INFINITY;
+#pragma unroll
+  for (int i = threadIdx.x; i < BQ * 32; i += 128) {
+    int r = i / 32, col = (i % 32) * 8;
+    int row = start + (qbase + r) / ratio;
+    auto *destination = q + shared_index(r, col);
+    int64_t offset = (static_cast<int64_t>(row) * h + kh * ratio + (qbase + r) % ratio) * 256 + col;
+    if ((reinterpret_cast<uintptr_t>(query) & 15) == 0) {
+      uint4 values =
+          row < end ? *reinterpret_cast<const uint4 *>(query + offset) : make_uint4(0, 0, 0, 0);
+      *reinterpret_cast<uint4 *>(destination) = values;
+    } else {
+      // A contiguous tensor may begin at a BF16 storage offset, not a16B boundary.
+#pragma unroll
+      for (int j = 0; j < 8; ++j)
+        destination[j] = row < end ? query[offset + j] : __float2bfloat16(0);
+    }
   }
   __syncthreads();
-  for (Position base = begin; base < min(begin + chunk, last); base += 32) {
-    for (int i = threadIdx.x; i < 32 * 32; i += 128) {
-      Position pos = base + i / 32;
-      int64_t page = index_at(tables, tw,
-                              static_cast<int64_t>(start) * table_width + min(pos, last - 1) / 784);
-      int64_t offset = ((page * 1568 + pos % 784) * hk + kh) * 256 + (i % 32) * 8;
-      unsigned kd = __cvta_generic_to_shared(k + shared_index(i / 32, (i % 32) * 8));
-      unsigned vd = __cvta_generic_to_shared(v + shared_index(i / 32, (i % 32) * 8));
-      int bytes = pos < last ? 16 : 0;
-      asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;" ::"r"(kd), "l"(cache + offset),
-                   "r"(bytes)
-                   : "memory");
-      asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;" ::"r"(vd),
-                   "l"(cache + offset + 784 * hk * 256), "r"(bytes)
-                   : "memory");
-    }
-    asm volatile("cp.async.commit_group;" ::: "memory");
+  const Position limit = min(begin + chunk, last);
+  if (begin < limit)
+    stage_kv<BK>(cache, tables, start, table_width, begin, last, hk, kh, tw, key_buffers,
+                 value_buffers);
+  int step = 0;
+  for (Position base = begin; base < limit; base += BK, ++step) {
+    auto *k = key_buffers + (step % Buffers) * BK * 256;
+    auto *v = value_buffers + (step % Buffers) * BK * 256;
     asm volatile("cp.async.wait_group 0;" ::: "memory");
     __syncthreads();
-    float dots[4] = {};
-#pragma unroll
-    for (int inner = 0; inner < 256; inner += 16) {
-      unsigned qa[4], kb[2];
-      load_a(qa, q, inner, lane);
-      load_k(kb, k, inner, warp, lane);
-      mma_bf16(dots, qa[0], qa[1], qa[2], qa[3], kb[0], kb[1]);
+    if constexpr (Buffers == 2) {
+      if (base + BK < limit)
+        stage_kv<BK>(cache, tables, start, table_width, base + BK, last, hk, kh, tw,
+                     key_buffers + ((step + 1) % Buffers) * BK * 256,
+                     value_buffers + ((step + 1) % Buffers) * BK * 256);
     }
+    float score[ScoreTiles][4] = {};
 #pragma unroll
-    for (int j = 0; j < 4; ++j)
-      score[(fragment_row + (j / 2) * 8) * 32 + warp * 8 + fragment_col + j % 2] = dots[j];
-    __syncthreads();
-    for (int r = warp; r < 16; r += 4) {
-      int row = start + (qbase + r) / ratio;
-      float value = row < end && base + lane < index_at(lengths, lw, row)
-                        ? score[r * 32 + lane] * 0.09016844005556021f
-                        : -INFINITY;
-      float m = fmaxf(maximum[r], warp_max(value));
-      float safe = m == -INFINITY ? 0.f : m;
-      float a = exp2f(maximum[r] - safe), probability = exp2f(value - safe);
-      float sum = warp_sum(probability);
-      p[shared_index(r, lane, 64)] = __float2bfloat16_rn(probability);
-      if (lane == 0) {
-        alpha[r] = a;
-        maximum[r] = m;
-        denom[r] = denom[r] * a + sum;
+    for (int tile = 0; tile < ScoreTiles; ++tile) {
+      int column_tile = (tile * 4 + warp) % (BK / 8);
+      int row_base = (tile * 4 + warp) / (BK / 8) * 16;
+#pragma unroll 1
+      for (int inner = 0; inner < 256; inner += 16) {
+        unsigned qa[4], kb[2];
+        load_a(qa, q + row_base * 256, inner, lane);
+        load_k(kb, k, inner, column_tile, lane);
+        mma_bf16(score[tile], qa[0], qa[1], qa[2], qa[3], kb[0], kb[1]);
       }
     }
+#pragma unroll
+    for (int rg = 0; rg < RowGroups; ++rg) {
+      int r = (rg / 2) * 16 + fr + (rg % 2) * 8;
+      int row = start + (qbase + r) / ratio;
+      Position length = row < end ? index_at(lengths, lw, row) : 0;
+      float m = -INFINITY;
+#pragma unroll
+      for (int kt = 0; kt < BK / 32; ++kt) {
+        int tile = (rg / 2) * (BK / 32) + kt;
+#pragma unroll
+        for (int j = 0; j < 2; ++j) {
+          int col = (kt * 4 + warp) * 8 + fc + j;
+          float value = row < end && base + col < length
+                            ? score[tile][(rg % 2) * 2 + j] * 0.09016844005556021f
+                            : -INFINITY;
+          score[tile][(rg % 2) * 2 + j] = value;
+          m = fmaxf(m, value);
+        }
+      }
+      m = fmaxf(m, __shfl_xor_sync(0xffffffff, m, 1));
+      m = fmaxf(m, __shfl_xor_sync(0xffffffff, m, 2));
+      if (lane % 4 == 0)
+        maxima[warp * BQ + r] = m;
+    }
+    __syncthreads();
+    float alpha[RowGroups];
+#pragma unroll
+    for (int rg = 0; rg < RowGroups; ++rg) {
+      int r = (rg / 2) * 16 + fr + (rg % 2) * 8;
+      float m = maximum[rg];
+#pragma unroll
+      for (int w = 0; w < 4; ++w)
+        m = fmaxf(m, maxima[w * BQ + r]);
+      float safe = m == -INFINITY ? 0.f : m;
+      alpha[rg] = softmax_exp2(maximum[rg] - safe);
+      maximum[rg] = m;
+      float sum = 0;
+#pragma unroll
+      for (int kt = 0; kt < BK / 32; ++kt) {
+        int tile = (rg / 2) * (BK / 32) + kt;
+#pragma unroll
+        for (int j = 0; j < 2; ++j) {
+          int col = (kt * 4 + warp) * 8 + fc + j;
+          float probability = softmax_exp2(score[tile][(rg % 2) * 2 + j] - safe);
+          sum += probability;
+          p[shared_index(r, col, 64)] = __float2bfloat16_rn(probability);
+        }
+      }
+      sum += __shfl_xor_sync(0xffffffff, sum, 1);
+      sum += __shfl_xor_sync(0xffffffff, sum, 2);
+      if (lane % 4 == 0)
+        sums[warp * BQ + r] = sum;
+    }
     __syncthreads();
 #pragma unroll
-    for (int tile = 0; tile < 8; ++tile) {
+    for (int rg = 0; rg < RowGroups; ++rg) {
+      int r = (rg / 2) * 16 + fr + (rg % 2) * 8;
+      float sum = 0;
+#pragma unroll
+      for (int w = 0; w < 4; ++w)
+        sum += sums[w * BQ + r];
+      denominator[rg] = denominator[rg] * alpha[rg] + sum;
+    }
+#pragma unroll
+    for (int tile = 0; tile < AccTiles; ++tile) {
+      int row_base = (tile * 4 + warp) / 32 * 16;
 #pragma unroll
       for (int j = 0; j < 4; ++j)
-        acc[tile][j] *= alpha[fragment_row + (j / 2) * 8];
+        acc[tile][j] *= alpha[row_base / 8 + j / 2];
 #pragma unroll
-      for (int inner = 0; inner < 32; inner += 16) {
+      for (int inner = 0; inner < BK; inner += 16) {
         unsigned pa[4], vb[2];
-        load_a(pa, p, inner, lane, 64);
-        load_v(vb, v, inner, (tile * 4 + warp) * 8, lane);
+        load_a(pa, p + row_base * 64, inner, lane, 64);
+        load_v(vb, v, inner, ((tile * 4 + warp) % 32) * 8, lane);
         mma_bf16(acc[tile], pa[0], pa[1], pa[2], pa[3], vb[0], vb[1]);
       }
     }
     __syncthreads();
+    if constexpr (Buffers == 1) {
+      if (base + BK < limit)
+        stage_kv<BK>(cache, tables, start, table_width, base + BK, last, hk, kh, tw, key_buffers,
+                     value_buffers);
+    }
   }
 #pragma unroll
-  for (int tile = 0; tile < 8; ++tile) {
+  for (int rg = 0; rg < RowGroups; ++rg)
+    denominator[rg] = 1.f / (denominator[rg] > 0 ? denominator[rg] : 1.f);
+#pragma unroll
+  for (int tile = 0; tile < AccTiles; ++tile) {
 #pragma unroll
     for (int j = 0; j < 4; ++j) {
-      int r = fragment_row + (j / 2) * 8;
+      int rg = (tile * 4 + warp) / 32 * 2 + j / 2;
+      int r = (rg / 2) * 16 + fr + (rg % 2) * 8;
       int qr = qbase + r, row = start + qr / ratio;
       if (row < end) {
-        int col = (tile * 4 + warp) * 8 + fragment_col + j % 2;
+        int col = ((tile * 4 + warp) % 32) * 8 + fc + j % 2;
         int64_t dst =
             ((static_cast<int64_t>(row) * h + kh * ratio + qr % ratio) * splits + split) * 256 +
             col;
-        partial[dst] = acc[tile][j] / (denom[r] > 0 ? denom[r] : 1.f);
+        partial[dst] = acc[tile][j] * denominator[rg];
       }
     }
   }
-  if (threadIdx.x < 16) {
-    int qr = qbase + threadIdx.x, row = start + qr / ratio;
-    if (row < end)
-      lse[(static_cast<int64_t>(row) * h + kh * ratio + qr % ratio) * splits + split] =
-          maximum[threadIdx.x] + log2f(denom[threadIdx.x] > 0 ? denom[threadIdx.x] : 1.f);
+  if (warp == 0 && lane % 4 == 0) {
+#pragma unroll
+    for (int rg = 0; rg < RowGroups; ++rg) {
+      int r = (rg / 2) * 16 + fr + (rg % 2) * 8;
+      int qr = qbase + r, row = start + qr / ratio;
+      if (row < end)
+        lse[(static_cast<int64_t>(row) * h + kh * ratio + qr % ratio) * splits + split] =
+            maximum[rg] - log2f(denominator[rg]);
+    }
   }
 }
 template <typename Position>
@@ -669,11 +764,17 @@ void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorV
                       TensorView starts, TensorView partial, TensorView lse, int64_t first,
                       bool grouped) {
   int h = q.size(1), hk = cache.size(3), splits = lse.size(2);
-  int tiles = ((grouped ? 5 : 1) * (h / hk) + 15) / 16;
-  constexpr int shared_bytes = (16 * 256 + 2 * 32 * 256 + 16 * 64) * 2 + (16 * 32 + 3 * 16) * 4;
+  int bq = grouped ? 32 : 16, bk = grouped ? 64 : 32;
+  int tiles = ((grouped ? 5 : 1) * (h / hk) + bq - 1) / bq;
+  int shared_bytes =
+      (bq * 256 + 2 * ((!grouped && q.size(0) > 2) ? 2 : 1) * bk * 256 + bq * 64) * 2 +
+      (8 * bq) * 4;
   dim3 grid((grouped ? starts.size(0) - 1 : q.size(0)) * tiles, hk, splits);
-#define ATTENTION(M, G)                                                                            \
-  attention_partial_kernel<M, G, Position><<<grid, 128, shared_bytes, stream_for(q)>>>(            \
+#define ATTENTION(M, G, B)                                                                         \
+  TVM_FFI_ICHECK(cudaFuncSetAttribute(attention_partial_kernel<M, G, Position, B>,                 \
+                                      cudaFuncAttributeMaxDynamicSharedMemorySize,                 \
+                                      shared_bytes) == cudaSuccess);                               \
+  attention_partial_kernel<M, G, Position, B><<<grid, 128, shared_bytes, stream_for(q)>>>(         \
       static_cast<const __nv_bfloat16 *>(q.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(cache.data_ptr()), tables.data_ptr(), lengths.data_ptr(), \
       starts.data_ptr(), static_cast<float *>(partial.data_ptr()),                                 \
@@ -681,15 +782,23 @@ void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorV
       tables.dtype().bits == 64, lengths.dtype().bits == 64, starts.dtype().bits == 64, tiles)
   if (h == 24 && hk == 4) {
     if (grouped) {
-      ATTENTION(true, true);
+      ATTENTION(true, true, 1);
     } else {
-      ATTENTION(true, false);
+      if (q.size(0) > 2) {
+        ATTENTION(true, false, 2);
+      } else {
+        ATTENTION(true, false, 1);
+      }
     }
   } else {
     if (grouped) {
-      ATTENTION(false, true);
+      ATTENTION(false, true, 1);
     } else {
-      ATTENTION(false, false);
+      if (q.size(0) > 2) {
+        ATTENTION(false, false, 2);
+      } else {
+        ATTENTION(false, false, 1);
+      }
     }
   }
 #undef ATTENTION
@@ -703,8 +812,9 @@ void attention_partial(TensorView q, TensorView cache, TensorView tables, Tensor
     launch_attention<int32_t>(q, cache, tables, lengths, starts, partial, lse, first, grouped);
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA attention partial launch failed";
 }
-__global__ void attention_merge_kernel(const float *partial, const float *lse, __nv_bfloat16 *out,
-                                       int splits) {
+template <int Splits>
+__global__ void attention_merge_kernel(const float *partial, const float *lse, __nv_bfloat16 *out) {
+  constexpr int splits = Splits;
   int row = blockIdx.x, lane = threadIdx.x & 31;
   extern __shared__ float weights[];
   // Compute each split weight once, shared by all256 output columns.
@@ -715,7 +825,7 @@ __global__ void attention_merge_kernel(const float *partial, const float *lse, _
     maximum = warp_max(maximum);
     float total = 0;
     for (int i = lane; i < splits; i += 32) {
-      float weight = exp2f(lse[row * splits + i] - maximum);
+      float weight = softmax_exp2(lse[row * splits + i] - maximum);
       weights[i] = weight;
       total += weight;
     }
@@ -724,17 +834,45 @@ __global__ void attention_merge_kernel(const float *partial, const float *lse, _
       weights[splits] = total;
   }
   __syncthreads();
-  for (int col = threadIdx.x; col < 256; col += 128) {
+  float accumulators[2][8] = {};
+#pragma unroll 1
+  for (int base = 0; base < splits; base += 8) {
+#pragma unroll
+    for (int j = 0; j < 8; ++j) {
+      float weight = weights[base + j];
+#pragma unroll
+      for (int half = 0; half < 2; ++half) {
+        int col = threadIdx.x + half * 128;
+        accumulators[half][j] +=
+            partial[(static_cast<int64_t>(row) * splits + base + j) * 256 + col] * weight;
+      }
+    }
+  }
+#pragma unroll
+  for (int half = 0; half < 2; ++half) {
     float value = 0;
-    for (int i = 0; i < splits; ++i)
-      value += partial[(static_cast<int64_t>(row) * splits + i) * 256 + col] * weights[i];
-    out[static_cast<int64_t>(row) * 256 + col] = __float2bfloat16_rn(value / weights[splits]);
+#pragma unroll
+    for (int j = 0; j < 8; ++j)
+      value += accumulators[half][j];
+    out[static_cast<int64_t>(row) * 256 + threadIdx.x + half * 128] =
+        __float2bfloat16_rn(value / weights[splits]);
   }
 }
 void attention_merge(TensorView partial, TensorView lse, TensorView out) {
-  attention_merge_kernel<<<lse.size(0) * lse.size(1), 128, (lse.size(2) + 1) * sizeof(float),
-                           stream_for(out)>>>(
-      static_cast<const float *>(partial.data_ptr()), static_cast<const float *>(lse.data_ptr()),
-      static_cast<__nv_bfloat16 *>(out.data_ptr()), lse.size(2));
+#define MERGE(S)                                                                                   \
+  attention_merge_kernel<S>                                                                        \
+      <<<lse.size(0) * lse.size(1), 128, (S + 1) * sizeof(float), stream_for(out)>>>(              \
+          static_cast<const float *>(partial.data_ptr()),                                          \
+          static_cast<const float *>(lse.data_ptr()),                                              \
+          static_cast<__nv_bfloat16 *>(out.data_ptr()))
+  if (lse.size(2) == 16) {
+    MERGE(16);
+  } else if (lse.size(2) == 64) {
+    MERGE(64);
+  } else {
+    TVM_FFI_ICHECK(lse.size(2) == 128);
+    MERGE(128);
+  }
+#undef MERGE
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA attention merge launch failed";
 }

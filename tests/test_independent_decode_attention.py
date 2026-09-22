@@ -167,3 +167,26 @@ def test_cache_addresses_beyond_signed_int32(grouped, native):
         actual = decode(query, cache, tables, lengths, max_tokens=784, starts=starts)
     expected = reference(query, small, torch.zeros_like(tables), lengths, 0)
     torch.testing.assert_close(actual.cpu().double(), expected, atol=0.03, rtol=0.03)
+
+
+@pytest.mark.parametrize("unaligned", [(True, False), (False, True), (True, True)])
+def test_contiguous_inputs_with_unaligned_storage_offset(unaligned):
+    query, cache, tables, lengths = inputs()
+    tensors = [query, cache]
+    for index, enabled in enumerate(unaligned):
+        if enabled:
+            original = tensors[index]
+            storage = torch.empty(
+                original.numel() + 1, device=original.device, dtype=original.dtype
+            )
+            tensors[index] = storage[1:].view_as(original).copy_(original)
+            assert (
+                tensors[index].is_contiguous() and tensors[index].data_ptr() % 16 != 0
+            )
+    actual = decode(*tensors, tables, lengths, first=1, max_tokens=1568)
+    torch.testing.assert_close(
+        actual.cpu().double(),
+        reference(query, cache, tables, lengths, 1),
+        rtol=0.03,
+        atol=0.03,
+    )
