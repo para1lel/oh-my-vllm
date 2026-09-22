@@ -1,0 +1,23 @@
+{
+  "status": "discarded; external GPU interference",
+  "reason": "A non-cooperating external TP4 job entered four selected GPUs. Exclusivity checks aborted our process groups; external jobs were not stopped.",
+  "limitation": "These attempts used the previous pipe collector and retain driver rejection traces only, not full child stdout. No data from these attempts enters acceptance. File-backed capture now preserves child logs even on interference.",
+  "logs": {
+    "/tmp/oh-my-vllm-baseline-first-driver.log": {
+      "sha256": "7ed7486c7b4f911c01ead9ab797227dc9d9931caf4b0895e31944c300ad9cec6",
+      "text": "2026-09-22T02:33:55Z run=20260922T023355-1103983 gpu=GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad\nTraceback (most recent call last):\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/baseline/enginecore.py\", line 217, in <module>\n    main()\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/baseline/enginecore.py\", line 59, in main\n    stdout = run_engine(\n             ^^^^^^^^^^^\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/compare_vllm.py\", line 133, in run_engine\n    assert_gpu_exclusive(gpu, process.pid)\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/compare_vllm.py\", line 116, in assert_gpu_exclusive\n    raise RuntimeError(f\"GPU contention on {gpu}: external process {pid}\")\nRuntimeError: GPU contention on GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad: external process 1126535\n"
+    },
+    "/tmp/oh-my-vllm-baseline-mtp1-driver.log": {
+      "sha256": "d441f97ccd4057bc06d0975dcaddd9fd34a729277b326df8d0ff15993c2d93a0",
+      "text": "2026-09-22T02:35:36Z run=20260922T023536-1112265 gpu=GPU-1b174534-ebba-826f-b452-8e7f3c05c301\nTraceback (most recent call last):\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/baseline/enginecore.py\", line 217, in <module>\n    main()\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/baseline/enginecore.py\", line 59, in main\n    stdout = run_engine(\n             ^^^^^^^^^^^\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/compare_vllm.py\", line 133, in run_engine\n    assert_gpu_exclusive(gpu, process.pid)\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/compare_vllm.py\", line 116, in assert_gpu_exclusive\n    raise RuntimeError(f\"GPU contention on {gpu}: external process {pid}\")\nRuntimeError: GPU contention on GPU-1b174534-ebba-826f-b452-8e7f3c05c301: external process 1126560\n"
+    },
+    "/tmp/oh-my-vllm-baseline-long4-driver.log": {
+      "sha256": "05ae56769180011324d5e20a7eb4d3d9bcaa4a9e3e0f0714b4b14754a3db7582",
+      "text": "2026-09-22T02:38:32Z run=20260922T023832-1124823 gpu=GPU-b0da5a7e-8dcf-e7dd-9836-a29a45d01b45\nTraceback (most recent call last):\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/baseline/enginecore.py\", line 217, in <module>\n    main()\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/baseline/enginecore.py\", line 59, in main\n    stdout = run_engine(\n             ^^^^^^^^^^^\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/compare_vllm.py\", line 133, in run_engine\n    assert_gpu_exclusive(gpu, process.pid)\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/compare_vllm.py\", line 116, in assert_gpu_exclusive\n    raise RuntimeError(f\"GPU contention on {gpu}: external process {pid}\")\nRuntimeError: GPU contention on GPU-b0da5a7e-8dcf-e7dd-9836-a29a45d01b45: external process 1126580\n"
+    },
+    "/tmp/oh-my-vllm-baseline-prefix4-driver.log": {
+      "sha256": "108e357822cd6353d36a431bf975754ac92262802db694691f49e5cfd5a6b6f2",
+      "text": "2026-09-22T02:38:34Z run=20260922T023834-1124913 gpu=GPU-427d2866-8615-6524-b2db-2333b40b0c5e\nTraceback (most recent call last):\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/baseline/enginecore.py\", line 217, in <module>\n    main()\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/baseline/enginecore.py\", line 59, in main\n    stdout = run_engine(\n             ^^^^^^^^^^^\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/compare_vllm.py\", line 133, in run_engine\n    assert_gpu_exclusive(gpu, process.pid)\n  File \"/data0/shared/dongwu.chen/oh-my-vllm/benchmarks/compare_vllm.py\", line 116, in assert_gpu_exclusive\n    raise RuntimeError(f\"GPU contention on {gpu}: external process {pid}\")\nRuntimeError: GPU contention on GPU-427d2866-8615-6524-b2db-2333b40b0c5e: external process 1126603\n"
+    }
+  }
+}

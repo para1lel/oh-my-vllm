@@ -8,12 +8,13 @@ requirements. New acceptance is pending; the results below describe the prior ta
 Frozen upstream SHA: e9f169d16b9408bb9ae44f75072b91a5521d733c.
 The prior local vLLM telemetry commit was preserved in
 /data0/shared/dongwu.chen/vllm-before-ttft-20260922.bundle before updating main.
-Baseline environment adaptation is in progress. The exact cu130 wheel metadata
+Baseline environment adaptation is complete. The exact cu130 wheel metadata
 was initially unavailable, so a source build began. Official wheel publication
 completed at 02:13 UTC; rechecking metadata succeeded and the owned source build
-was stopped before compilation. Installing the official frozen-commit wheel via
-upstream editable mode now; log /tmp/oh-my-vllm-baseline-install-official.log.
-Do not use stale metadata until installation/import checks finish.
+was stopped before compilation. Installed the official frozen-commit wheel via upstream editable mode: version
+0.29.1rc1.dev505+ge9f169d16.precompiled, Torch2.13.0+cu130. pip check and
+vllm._custom_ops imports pass. See /tmp/oh-my-vllm-baseline-install-official.log
+and /tmp/oh-my-vllm-ttft-final/baseline-environment.json for extension hashes.
 
 Implemented, not yet accepted: per-request TTFT, optional independent GDN pool,
 formal measurement/provenance checks, and corrected Qwen3.8 naming. 77 Rust tests
@@ -41,7 +42,12 @@ reduces observed quantization GPU time from 295 to 51 ms in a diagnostic model
 run. Arithmetic is unchanged; small/decode shapes retain the old kernel. Complete
 suite before final threshold tuning: 103 tests + 12 subtests; final boundary/FP8
 tests: 14 pass. See 2026-09-22-prefill-quantization.json for limitations and hashes.
-No formal baseline or 12-row performance result exists yet. Finish baseline
+Post-optimization ordinary/MTP actual-model FP64 checks also pass. Four initial
+baseline attempts were aborted because an external TP4 job entered their GPUs;
+see 2026-09-22-ttft-discarded.json. Those results are excluded. The collector now
+streams to disk so interference/timeout retains child output. Ordinary batch 1/2
+baseline runs are active on separate exclusive GPUs, all other owned GPU work
+has exited. No formal baseline or 12-row performance result exists yet. Finish baseline
 collection, performance fixes and reviews before claiming completion.
 
 ## Previous task: independent runtime

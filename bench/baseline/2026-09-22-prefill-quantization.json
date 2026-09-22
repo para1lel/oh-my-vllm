@@ -13,7 +13,8 @@
   "tests": {
     "full_suite_before_final_threshold_change": "103 passed and 12 subtests",
     "after_final_threshold_change": "14 FP8 tests passed; 8 unrelated tests deselected",
-    "independent_review": "passed"
+    "independent_review": "passed",
+    "actual_model": "ordinary and MTP4 FP64 coverage passed after final threshold tuning"
   },
   "logs": {
     "/tmp/oh-my-vllm-prefill-profile.log": "4b2fececfc90d8b0663cf2c0b6f37703c262857c100ca6831ab82f27e3cfb8bb",
@@ -21,7 +22,9 @@
     "/tmp/oh-my-vllm-quant-prototype.log": "3700c2086306c36018b4d9021b2e7d1a782f744152ef16e9b62a6ff9c8d10dcc",
     "/tmp/oh-my-vllm-quant-shapes2.log": "2937e94464ef64a5bbd6743f2757d494e674e61ea57a00e027c54e423ff4d106",
     "/tmp/oh-my-vllm-quant-tests.log": "a40f224a7ac1952af7e9a04a8fc49405b97682f22c43f58bc6ec7f5c5e35f3ce",
-    "/tmp/oh-my-vllm-quant-threshold-tests.log": "05914443174392b81f4721ebf596f46b6af075b47c2bcdaa10c7874b6176c6cf"
+    "/tmp/oh-my-vllm-quant-threshold-tests.log": "05914443174392b81f4721ebf596f46b6af075b47c2bcdaa10c7874b6176c6cf",
+    "/tmp/oh-my-vllm-quant-probe.log": "e74924795cc696f4608be5f1f6c1a4b70877b39ef36989ddaedd434a4df14eee",
+    "/tmp/oh-my-vllm-quant-probe-mtp.log": "ac27a278c2b504c6db5f3ac833ed8375846d94170bc1665c600cea03cdca3647"
   },
   "cleanup": "All owned profiler and microbenchmark GPU processes exited."
 }

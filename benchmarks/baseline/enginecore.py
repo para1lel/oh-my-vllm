@@ -55,16 +55,12 @@ def main():
             "TRITON_CACHE_DIR", os.environ["VLLM_CACHE_ROOT"] + "/triton"
         )
         log = args.output.with_suffix(".log")
-        try:
-            stdout = run_engine(
-                [sys.executable, __file__, *sys.argv[1:], "--worker"],
-                timeout=14400,
-                stderr=subprocess.STDOUT,
-            )
-        except subprocess.CalledProcessError as exc:
-            log.write_text(exc.output or "")
-            raise
-        log.write_text(stdout)
+        run_engine(
+            [sys.executable, __file__, *sys.argv[1:], "--worker"],
+            timeout=14400,
+            stderr=subprocess.STDOUT,
+            log_path=log,
+        )
         artifact = json.loads(args.output.read_text())
         artifact["measurement_audit"] = audit(
             log,

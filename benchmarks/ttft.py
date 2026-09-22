@@ -156,14 +156,14 @@ def main():
     if workload["mode"] == "prefix":
         command.append("--prefix-hit")
     identity = runtime_identity()
+    log = args.output.with_suffix(".log")
     with tempfile.TemporaryDirectory(prefix="oh-my-vllm-ttft-") as temporary:
         snapshot = Path(temporary) / binary.name
         shutil.copy2(binary, snapshot)
         source = source_identity(snapshot)
         command[0] = str(snapshot)
-        stdout = run_engine(command, timeout=14400, stderr=subprocess.STDOUT)
-    log = args.output.with_suffix(".log")
-    log.write_text(stdout)
+        run_engine(command, timeout=14400, stderr=subprocess.STDOUT, log_path=log)
+    stdout = log.read_text()
     candidate = dict(
         schema=1,
         engine="oh-my-vllm",

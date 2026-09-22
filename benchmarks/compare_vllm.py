@@ -18,7 +18,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from contextlib import suppress
+from contextlib import ExitStack, suppress
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -116,12 +116,18 @@ def assert_gpu_exclusive(gpu, process_group):
             raise RuntimeError(f"GPU contention on {gpu}: external process {pid}")
 
 
-def run_engine(command, timeout=3600, stderr=None):
+def run_engine(command, timeout=3600, stderr=None, log_path=None):
     """Own the entire engine process group, including model-worker children."""
+    with ExitStack() as stack:
+        output = stack.enter_context(Path(log_path).open("w")) if log_path else None
+        return _run_engine(command, timeout, stderr, output, log_path)
+
+
+def _run_engine(command, timeout, stderr, output, log_path):
     process = subprocess.Popen(
         command,
         text=True,
-        stdout=subprocess.PIPE,
+        stdout=output if output is not None else subprocess.PIPE,
         stderr=stderr,
         start_new_session=True,
     )
@@ -135,7 +141,11 @@ def run_engine(command, timeout=3600, stderr=None):
             if remaining <= 0:
                 raise subprocess.TimeoutExpired(command, timeout)
             try:
-                stdout, _ = process.communicate(timeout=min(1, remaining))
+                if output is not None:
+                    process.wait(timeout=min(1, remaining))
+                    stdout = Path(log_path).read_text()
+                else:
+                    stdout, _ = process.communicate(timeout=min(1, remaining))
                 break
             except subprocess.TimeoutExpired:
                 continue
@@ -153,7 +163,8 @@ def run_engine(command, timeout=3600, stderr=None):
         with suppress(ProcessLookupError):
             os.killpg(process.pid, signal.SIGKILL)
         process.wait()
-        process.stdout.close()
+        if process.stdout is not None:
+            process.stdout.close()
 
 
 def source_identity(binary):
