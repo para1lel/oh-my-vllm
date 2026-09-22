@@ -68,6 +68,79 @@ def inputs(tokens, strided=False):
     return q, k, v, g, beta
 
 
+@pytest.mark.parametrize("tokens", [1, 7, 129])
+@pytest.mark.parametrize("strided", [False, True])
+def test_prefill_qk_normalization_fp64(tokens, strided):
+    q, k, *_ = inputs(tokens, strided)
+    q[0, 0] = 0
+    k[0, 0] *= 1e-5
+    for actual, source in zip(gdn.normalize_qk(q, k), (q, k), strict=True):
+        source = source.cpu().double()
+        expected = source * torch.rsqrt(source.square().sum(-1, keepdim=True) + 1e-6)
+        torch.testing.assert_close(
+            actual.cpu().double(), expected, atol=0.002, rtol=0.004
+        )
+
+
+def test_native_prefix_attention_fp64_and_mixed_lengths():
+    from oh_my_vllm.kernels.attention import PagedAttention
+
+    torch.manual_seed(89)
+    cache = torch.randn(10, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
+    plan = PagedAttention()
+    plan.plan(
+        torch.tensor([0, 128, 129], dtype=torch.int32),
+        torch.tensor([0, 6, 8], dtype=torch.int32),
+        torch.tensor([7, 1, 4, 2, 6, 3, 8, 0], dtype=torch.int32),
+        torch.tensor([317, 6], dtype=torch.int32),
+        24,
+        4,
+        256,
+    )
+    assert plan.native
+    query = torch.randn(129, 24, 256, device="cuda", dtype=torch.bfloat16)
+    out = plan(query, cache)
+    for rows, pages, length in [
+        (slice(0, 128), [7, 1, 4, 2, 6, 3], 4237),
+        (slice(128, 129), [8, 0], 790),
+    ]:
+        q = query[rows].cpu().double()
+        kv = cache[pages].transpose(0, 1).flatten(1, 2)[:, :length].cpu().double()
+        k, v = kv.repeat_interleave(6, dim=2)
+        score = torch.einsum("thd,shd->hts", q, k) / 16
+        positions = torch.arange(length - len(q), length)
+        score.masked_fill_(
+            torch.arange(length)[None, :] > positions[:, None], -float("inf")
+        )
+        expected = torch.einsum("hts,shd->thd", score.softmax(-1), v)
+        check(out[rows], expected)
+
+
+def test_mtp_native_prefill_excludes_zero_and_isolates_requests():
+    from oh_my_vllm.kernels.mtp_attention import MTPAttention
+
+    torch.manual_seed(91)
+    cache = torch.randn(6, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
+    # Poison absent row zero: accidentally reading it must fail, not dilute attention.
+    cache[[3, 5], :, 0] = float("nan")
+    plan = MTPAttention(4096)
+    positions = [*range(673, 801), 900]
+    plan.plan([0, 128, 129], [[3, 1], [5, 2]], positions)
+    query = torch.randn(129, 24, 256, device="cuda", dtype=torch.bfloat16)
+    out = plan(query, cache)
+    for left, right, table in [(0, 128, [3, 1]), (128, 129, [5, 2])]:
+        end = positions[right - 1] + 1
+        kv = cache[table].transpose(0, 1).flatten(1, 2)[:, 1:end].cpu().double()
+        k, v = kv.repeat_interleave(6, dim=2)
+        q = query[left:right].cpu().double()
+        score = torch.einsum("thd,shd->hts", q, k) / 16
+        mask = (
+            torch.arange(1, end)[None, :] > torch.tensor(positions[left:right])[:, None]
+        )
+        score.masked_fill_(mask, -float("inf"))
+        check(out[left:right], torch.einsum("hts,shd->thd", score.softmax(-1), v))
+
+
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
 def test_four_sequence_gdn_fp64(dtype):
     torch.manual_seed(71)

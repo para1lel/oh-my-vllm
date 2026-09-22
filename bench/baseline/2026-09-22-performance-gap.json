@@ -1,0 +1,145 @@
+{
+  "schema": 1,
+  "status": "Research diagnostics, not performance acceptance",
+  "baseline_commit": "e9f169d16b9408bb9ae44f75072b91a5521d733c",
+  "current_base_commit": "5166885b5ae20c4e4646d8b0176142c903d5ce66",
+  "pending_changes": [
+    "GDN prefill QK normalization",
+    "native short-prefix context attention",
+    "MTP prefill independent TRT ragged attention, excluding position zero"
+  ],
+  "workload": {
+    "mode": "mtp4",
+    "batch": 4,
+    "input": 32768,
+    "profile_output": 512,
+    "profile_step": 30,
+    "threshold_output": 4096
+  },
+  "gap": {
+    "baseline_tps": 729.6212311394553,
+    "gate_tps": 693.1401695824825,
+    "diagnostic_tps": 689.3460618376308,
+    "speedup_needed": 0.005503923145274037,
+    "seconds_to_save": 0.13009818326715816
+  },
+  "profiles": {
+    "ours": {
+      "path": "/tmp/oh-my-vllm-current-profile4-trace.json",
+      "sha256": "47c8db15c44e8f9a2d170d812d6c489273e189228211c38d03d378e7eeb94743",
+      "kernel_count": 1349,
+      "kernel_sum_ms": 14.279183999999999,
+      "target_attention_ms": 1.396653,
+      "draft_attention_ms": 0.964467,
+      "fp8_gemm_ms": 6.94374,
+      "vocabulary_ms": 1.761095,
+      "annotations": [
+        {
+          "name": "worker_execute_model",
+          "duration_ms": 18.418271
+        },
+        {
+          "name": "target_graph",
+          "duration_ms": 1.323074
+        },
+        {
+          "name": "target_greedy_to_cpu",
+          "duration_ms": 11.118975
+        },
+        {
+          "name": "mtp_propose",
+          "duration_ms": 3.94408
+        },
+        {
+          "name": "draft_catchup_graph",
+          "duration_ms": 0.15984399999999999
+        },
+        {
+          "name": "proposal_chain_graph",
+          "duration_ms": 0.195402
+        }
+      ]
+    },
+    "vllm": {
+      "path": "/tmp/oh-my-vllm-baseline-profile4/rank0.1790051241846941458.pt.trace.json.gz",
+      "sha256": "3cd8b5fb5e34a31195b07ddd2fb96894de32c6c1fc91df6abcb707505dbffe91",
+      "kernel_count": 1125,
+      "kernel_sum_ms": 14.095404,
+      "target_attention_ms": 1.386352,
+      "draft_attention_ms": 0.337565,
+      "fp8_gemm_ms": 7.175578000000001,
+      "vocabulary_ms": 1.868781,
+      "annotations": [
+        {
+          "name": "execute_context_0(0)_generation_4(20)",
+          "duration_ms": 5.958095
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "Profiles are individual kernel diagnostics on separate B200s/CPU affinities and do not establish formal performance",
+    "Profiler overhead makes CPU annotation duration and GPU span unsuitable for direct end-to-end prediction",
+    "greedy_to_cpu includes waiting for target GPU compute; its full duration is not CPU overhead",
+    "Different stable Torch releases: project2.14.0 versus official baseline wheel2.13.0+cu130"
+  ],
+  "controls": {
+    "layout_only": "NHD/HND bs4 q1:0.25625/0.25510ms; bs4 q5:0.21202/0.21999ms; no material gain",
+    "mtp_prefill": "same first-position exclusion: FA2/TRT 32k\u219232k35.18/9.55ms,32k\u2192131k241.40/71.90ms"
+  },
+  "latest_diagnostic": {
+    "output_tps": 692.0123417833142,
+    "gate_tps": 693.1401695824825,
+    "speedup_needed": 0.0016297798912976447,
+    "seconds_to_save": 0.038523685267158214,
+    "formal_acceptance": false
+  },
+  "diagnostic_evidence": [
+    {
+      "path": "/tmp/oh-my-vllm-mtp-prefill-model4.log",
+      "sha256": "b8dde32d2de87ee541a1b6ac49205913d4586cb0aee750736521a75d79e6332e",
+      "results": [
+        {
+          "batch_size": 4,
+          "input_len": 32768,
+          "output_len": 4096,
+          "output_tokens": 16384,
+          "elapsed_s": 23.67587832,
+          "output_tps": 692.0123417833142,
+          "steps": 1117,
+          "prefix_hit_tokens": 0,
+          "initial_prefix_hit_tokens": 0,
+          "preemptions": 0,
+          "proposed_draft_tokens": 16375,
+          "accepted_draft_tokens": 12280,
+          "ttft_s": [
+            3.268506495,
+            4.882533815,
+            6.632702085,
+            6.711472104
+          ]
+        },
+        {
+          "timestamp": "2026-09-22T04:35:10.902435+00:00",
+          "level": "INFO",
+          "run_id": "20260922T043353-1758130",
+          "pid": 1758145,
+          "component": "oh_my_vllm.worker.model_runner",
+          "message": "GPU memory high water",
+          "max_allocated_bytes": 122658778112,
+          "max_reserved_bytes": 129446707200
+        }
+      ]
+    },
+    {
+      "path": "/tmp/oh-my-vllm-mtp-prefill-prototype1.log",
+      "sha256": "6ef11858fc6b05fa43afd8e223fec1737b2cb5a8218c6725269136f6e219ce03",
+      "results": []
+    },
+    {
+      "path": "/tmp/oh-my-vllm-layout-prototype.log",
+      "sha256": "f553a8b8b5ebff336db62855bba1edfdb5b21556b82db8cfb8358190aa200dad",
+      "results": []
+    }
+  ]
+}

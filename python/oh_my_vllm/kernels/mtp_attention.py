@@ -54,6 +54,16 @@ class MTPAttention:
                 slots.extend(table[p // 784] * 784 + p % 784 for p in range(1, end))
                 offsets.append(len(slots))
             self.slots = torch.tensor(slots, device="cuda")
+            self.native = max(counts) >= 128
+            if self.native:
+                self.query_starts = torch.tensor(
+                    starts, dtype=torch.int32, device="cuda"
+                )
+                self.kv_starts = torch.tensor(offsets, dtype=torch.int32, device="cuda")
+                self.lengths = self.kv_starts[1:] - self.kv_starts[:-1]
+                self.max_query = max(counts)
+                self.max_kv = max(ends) - 1
+                return
             self.wrapper.plan(
                 torch.tensor(starts, dtype=torch.int32),
                 torch.tensor(offsets, dtype=torch.int32),
@@ -76,6 +86,29 @@ class MTPAttention:
                 max_tokens=self.max_tokens,
             )
         pages, offsets = self.slots // 784, self.slots % 784
-        return self.wrapper.run(
-            query, cache[pages, 0, offsets], cache[pages, 1, offsets]
-        )
+        k, v = cache[pages, 0, offsets], cache[pages, 1, offsets]
+        if self.native:
+            from flashinfer.prefill import trtllm_ragged_attention_deepseek
+
+            return trtllm_ragged_attention_deepseek(
+                query,
+                k,
+                v,
+                self.workspace,
+                seq_lens=self.lengths,
+                max_q_len=self.max_query,
+                max_kv_len=self.max_kv,
+                bmm1_scale=256**-0.5,
+                bmm2_scale=1.0,
+                o_sf_scale=1.0,
+                batch_size=len(self.lengths),
+                window_left=-1,
+                cum_seq_lens_q=self.query_starts,
+                cum_seq_lens_kv=self.kv_starts,
+                enable_pdl=False,
+                is_causal=True,
+                return_lse=False,
+                skip_all_rows_active_check=True,
+                use_fp16_softmax=False,
+            )
+        return self.wrapper.run(query, k, v)

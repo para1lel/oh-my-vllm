@@ -104,6 +104,31 @@ variance. Attempt112 still failed spread37.94%; preserve all attempts. Accepted
 candidates must match the affinity of whichever baseline is finally accepted.
 User again confirmed no exclusive GPU can be reserved: continue waiting/retrying.
 
+All 12 refreshed baseline rows are now collected and frozen in
+bench/baseline/2026-09-22-refreshed-enginecore.json. Prefix2 attempt114 passed
+with CPU96 alone; its candidates must use that affinity. Duplicate attempt201
+was canceled after acceptance and its worker exited. On 5166885, six ordinary
+and MTP batch1/2 rows pass both formal gates. Three prefix rows fail TTFT;
+MTP batch4 attempts were interrupted by external GPU arrivals. No complete
+final acceptance is claimed. Retained attempts remain in /tmp/oh-my-vllm-ttft-final.
+
+The requested implementation/performance comparison is documented in
+docs/performance-gap-2026-09-22.md with frozen upstream source links and profile
+hashes. Draft attention is the clearest isolated unfavorable kernel difference;
+FP8 GEMM, vocabulary projection and target attention are competitive. CPU
+sampling annotations include GPU waits and must not be labeled ZMQ overhead.
+Fused GDN prefill Q/K normalization, native short-prefix target context attention
+and independent TRT ragged MTP prefill are implemented and reviewed. Latest
+MTP batch4 diagnostic is 692.012 tok/s versus the 693.140 gate, still short and
+not a formal result. GPU suite passes 146 tests +12 subtests, no skips. Actual
+model FP64, all 12 constraints, lifecycle and long-prefix service checks pass.
+All six maximum-context boundary rows pass without preemption. Ordinary boundary
+checks precede the final MTP-only change; MTP boundaries were rerun afterward.
+See 2026-09-22-prefill-research-verification.json. All owned GPU workers exited,
+nvidia-smi is empty and port18020 is released. Next: commit this milestone and
+rerun all 12 formal candidate rows on the same committed source, preserving
+failed/interrupted attempts; investigate MTP4 further if it still misses its gate.
+
 ## Previous task: independent runtime
 
 The independent runtime is implemented and all nine performance rows pass the

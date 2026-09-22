@@ -11,6 +11,32 @@ import triton.language as tl
 
 
 @triton.jit
+def _normalize_qk(
+    Q, K, OQ, OK, N: tl.constexpr, H: tl.constexpr, QS: tl.constexpr, KS: tl.constexpr
+):
+    row = tl.program_id(0) * 8 + tl.arange(0, 8)
+    dim = tl.arange(0, 128)
+    head = (row % H)[:, None] * 128 + dim[None, :]
+    valid = row[:, None] < N * H
+    q = tl.load(Q + (row // H)[:, None] * QS + head, valid, 0).to(tl.float32)
+    k = tl.load(K + (row // H)[:, None] * KS + head, valid, 0).to(tl.float32)
+    q *= tl.rsqrt(tl.sum(q * q, 1)[:, None] + 1e-6)
+    k *= tl.rsqrt(tl.sum(k * k, 1)[:, None] + 1e-6)
+    tl.store(OQ + row[:, None] * 128 + dim[None, :], q, valid)
+    tl.store(OK + row[:, None] * 128 + dim[None, :], k, valid)
+
+
+def normalize_qk(q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Normalize validated packed GDN inputs without FP32 intermediate tensors."""
+    oq = torch.empty(q.shape, device=q.device, dtype=q.dtype)
+    ok = torch.empty_like(oq)
+    _normalize_qk[(triton.cdiv(q.shape[0] * q.shape[1], 8),)](
+        q, k, oq, ok, q.shape[0], q.shape[1], q.stride(0), k.stride(0)
+    )
+    return oq, ok
+
+
+@triton.jit
 def _recurrent(
     Q,
     K,
@@ -197,12 +223,7 @@ def prefill(
 
     # FlashInfer 0.6.18 exposes use_qk_l2norm_in_kernel but its prefill body
     # does not implement it. Normalize explicitly, including the model epsilon.
-    q = (q.float() * torch.rsqrt(q.float().square().sum(-1, keepdim=True) + 1e-6)).to(
-        q.dtype
-    )
-    k = (k.float() * torch.rsqrt(k.float().square().sum(-1, keepdim=True) + 1e-6)).to(
-        k.dtype
-    )
+    q, k = normalize_qk(q, k)
     # FlashInfer uses multiplicative decay rather than log-decay.
     return chunk_gated_delta_rule(
         q=q.contiguous(),

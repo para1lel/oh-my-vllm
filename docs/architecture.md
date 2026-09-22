@@ -153,8 +153,10 @@ See ADR-007 for rationale and the pending long-context acceptance protocol.
 For batches with a query span of at least 1024 tokens, Python gathers only active
 FA KV tokens into temporary contiguous tensors and invokes independent FlashInfer
 ragged TRT-LLM attention with FP32 softmax. Rust allocations and persistent
-`[page,2,784,heads,dim]` tensors are unchanged. Small query spans use paged FA2 to
-avoid gathering an entire long prefix for a small amount of work. Mixed batches
+`[page,2,784,heads,dim]` tensors are unchanged. Query spans from 128 through 1023
+with at least 4096 KV tokens use native paged context attention and the same
+zero-copy subpage views as target decode, with FP32 softmax. Other small query
+spans use paged FA2. Mixed batches
 share this decision, so a long prefill also gathers active decode sequences.
 The maximum-context batch4 correctness check includes the resulting temporary
 memory; neither Mamba cache precision nor numerical tolerances change.
@@ -182,4 +184,10 @@ as 49 sixteen-token subpages. K/V offset views and `page * 98 + subpage` tables
 avoid KV copies and retain Rust page ownership. Table expansion and query/KV
 length selection occur once per model execution inside graph capture, so replay
 uses current request metadata. Draft attention retains the project kernel to
-exclude its absent position zero. No cache precision or tolerance changes.
+exclude its absent position zero during decode. Draft prefill with at least 128
+query tokens gathers valid KV starting at position one and uses independent
+ragged TRT-LLM attention with FP32 softmax; intermediate query spans use FA2.
+Planning validates nonempty contiguous queries and KV lengths before skipping
+the native operator's redundant active-row check. GDN prefill normalizes Q/K
+in one strided kernel with FP32 norms, epsilon 1e-6 and BF16 outputs, avoiding
+several large temporary tensors. No cache precision or tolerance changes.
