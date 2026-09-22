@@ -1,5 +1,29 @@
 # CUDA kernel development
 
+## Vector FP8 quantization and reciprocal refinement
+
+Plain quantization now uses four-element input/output vectors. Host dispatch
+checks input alignment once, retaining scalar loads for storage-offset views.
+Rows4–127 flatten independent scaling groups into four-warp blocks. BF16 finite
+maxima use an approximate reciprocal plus one FMA residual correction; scales
+still use exact division. FP16/FP32 and nonfinite maxima retain exact division.
+Both BF16 SiLU rounding boundaries remain. This is not FP32 division equivalence.
+
+Temporary SM100/CUDA13.1 exhaustive checks over finite BF16 input/max pairs
+with abs(input)<=maximum find
+zero FP8 differences after refinement for both signs, whereas direct reciprocal
+multiplication differs. Entry checks cover all BF16 encodings in groups, all
+supported dtypes, both scale layouts, aligned/offset views, generic/model widths,
+3/4/127/128-row boundaries and NaN/Inf groups. FP8 bits and scales match the old
+native entry exactly in those checks; they do not prove every possible tensor.
+
+Both the original and final formatted39-case quantization/SiLU subsets pass.
+Final results and separate TileFoundry/Nsight observations are recorded in
+`bench/baseline/2026-09-22-cuda-quant-vector-progress.json`. Full correctness and
+ordinary/MTP4 eager FP64 probes pass without tolerance changes. Forced64-token
+text includes control tokens/repetition and does not establish agentic acceptance.
+Full147-case and framework acceptance remain pending; default stays TileLang.
+
 ## Full-attention preparation fusion
 
 Target and MTP now share a production preparation entry that fuses Q/K RMS/RoPE,

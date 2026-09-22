@@ -1,0 +1,3928 @@
+{
+  "accepted": false,
+  "limitation": "Both39-case dirty subsets pass; complete147-case and all framework acceptance outstanding. Default remains TileLang. No bitwise FP32 division equivalence claim.",
+  "collection": {
+    "source_commit": "c9d80dea4577a5ac4a4ba463cd3883f8530004f4",
+    "source_status": " M python/oh_my_vllm/kernels/cuda_backend/kernels.cu\n",
+    "sources_sha256": {
+      "benchmarks/kernels.py": "98ffe4ec7ed3e444f60261bb44d584b9f2e6b61cf0bcf3073a401744070d31bf",
+      "development/kernels/cases.py": "13a71e3253d20e7b2e26ad0764885bb8cd8cb5bb1260c263a92a4669b63c5e19",
+      "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+      "development/kernels/fixtures.py": "bd346bf0acbd0218fa3a59e6c572790307ebfb19467e5d0a7ccdaf4a40cf5595",
+      "development/kernels/observations.py": "838276bb4def11e107c4eac84b43b42c8332e76a5e03d3ea72b404abc80db660",
+      "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+      "development/kernels/reference.py": "ddf5a63e286e975a81e74982d24ebd575e94a0208c0a013ff3b20eb0f06adf12",
+      "development/kernels/semantics.py": "96be066b579b829f9179ec87bb39f70ceebcdcd6aa5c7845482ce1614e79cd99",
+      "development/kernels/tilelang-reference.json": "14c3df434dedf6d60629eba25c267df888d1a83f1e35cf868fc29a4b1e0945e0",
+      "development/kernels/timing.py": "1f8afa6dde7cf2bc31256f4a5bbd58e7bf7a5da1b30cabba00e0b200355d8006",
+      "development/kernels/twins.py": "608ac3edd7d08e6e47a1ccdefb5c4d7c891b3080d8e3cb05d05a0b8be121117b",
+      "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+      "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+      "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+      "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+      "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+      "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+      "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "b0b0ebeda1546e0d571869c4d6dc2d9d9b6f3334890697aef9463c61fa432216",
+      "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+      "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+      "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+      "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+      "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+      "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+      "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+      "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+      "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+      "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+      "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+      "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+      "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+      "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+      "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+      "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+    },
+    "hardware": {
+      "gpu": "GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad",
+      "cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+        109,
+        110,
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123,
+        124,
+        125,
+        126,
+        127,
+        128,
+        129,
+        130,
+        131,
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        153,
+        154,
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        164,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175,
+        176,
+        177,
+        178,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        186,
+        187,
+        188,
+        189,
+        190,
+        191
+      ],
+      "gpu_info": "GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad, NVIDIA B200, 183359 MiB, 590.48.01"
+    },
+    "reference": {
+      "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+      "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+      "files": {
+        "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+      },
+      "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+      "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690"
+    },
+    "protocol": "Complete static maximum-shape operations; three independent warm rounds, twenty alternating-order pairs/round,100 graph repetitions/sample. No profiler during timing. Fixtures use immutable sources and isolated repeatable destinations.",
+    "coverage": {
+      "complete": false,
+      "required": [
+        "norm-8f0939a3eb",
+        "add_norm-1cd0b34f33",
+        "gated_norm-cf3f37cb9e",
+        "prepare_attention-2123658257",
+        "quant-a83ee98240",
+        "quant-7a2c2961c3",
+        "silu_quant-bdb6037d89",
+        "gates-20dd53c898",
+        "convolution-c4c3ff2aef",
+        "qk-12fc3a9e63",
+        "norm-effe245bd2",
+        "add_norm-27c6f00266",
+        "gated_norm-526cd44715",
+        "prepare_attention-831ee3469c",
+        "quant-cba5ed9729",
+        "quant-14b2b04fc3",
+        "silu_quant-7e22ac4193",
+        "gates-9710bbc960",
+        "convolution-0febb0c2f0",
+        "recurrent-5a418230e1",
+        "norm-c2c1f928be",
+        "add_norm-d38e95acda",
+        "gated_norm-730a8e2832",
+        "prepare_attention-7eb9ea324c",
+        "quant-ab0ac5c4e5",
+        "quant-0e5f3a0b2e",
+        "silu_quant-ab0edc82bb",
+        "gates-cae0b44add",
+        "convolution-2e3c4391cd",
+        "qk-f930cef0b5",
+        "norm-b75ec1a7a2",
+        "add_norm-c7cb824ce7",
+        "gated_norm-bdec59c631",
+        "prepare_attention-e2b930a517",
+        "quant-5b659364da",
+        "quant-cb18873355",
+        "silu_quant-71ac03b9bc",
+        "gates-c72bdad5d4",
+        "convolution-ff7930b7b7",
+        "recurrent-2a62969158",
+        "norm-7d0299aa63",
+        "add_norm-0c6631a889",
+        "gated_norm-cdfb1224cc",
+        "prepare_attention-50d5f5fd1d",
+        "quant-cacaef771f",
+        "quant-0ab771f274",
+        "silu_quant-7ed9c30e04",
+        "gates-ee30f1b859",
+        "convolution-647f178fc3",
+        "recurrent-041544e32f",
+        "recurrent-36a6d98675",
+        "norm-9690ce8dc3",
+        "add_norm-c3003e1746",
+        "gated_norm-c04fc8e4ea",
+        "prepare_attention-e3ad7889b2",
+        "quant-317bf37c2b",
+        "quant-0eea55c864",
+        "silu_quant-a089c70b05",
+        "gates-eb9ecb7e6b",
+        "convolution-669242bf59",
+        "recurrent-38fd6bd99e",
+        "attention-c426ebd5d5",
+        "attention-d3973698ea",
+        "attention-e3bf2f1708",
+        "attention-6ee6a06e37",
+        "norm-214c77fddf",
+        "add_norm-17cf75a750",
+        "gated_norm-a20f3afb37",
+        "prepare_attention-15fddb117a",
+        "quant-c7c5a33dd2",
+        "quant-c908ceb94f",
+        "silu_quant-6ddda81d2c",
+        "gates-db0ed2a574",
+        "convolution-acc1f1fa4a",
+        "recurrent-e73333aa6f",
+        "attention-4fbadf5691",
+        "attention-80f93685bd",
+        "attention-39a3371fd0",
+        "attention-4705faca24",
+        "norm-82d8a65dcf",
+        "add_norm-28b801aed5",
+        "gated_norm-d88b128193",
+        "prepare_attention-53663d6020",
+        "quant-78967ef6bb",
+        "quant-b6aca61c7f",
+        "silu_quant-fbdf53e4ed",
+        "gates-7c7a082031",
+        "convolution-ea757c8cde",
+        "recurrent-4b9de1f8fa",
+        "recurrent-fe8f9e7511",
+        "attention-86c02993e7",
+        "attention-302aa28608",
+        "attention-5d1d8dd9c4",
+        "attention-2b7ac478c8",
+        "attention-0ebf3559b6",
+        "attention-764772a69f",
+        "attention-166a4bce77",
+        "attention-a6899c8eba",
+        "norm-1953a6389d",
+        "add_norm-a8eca15b2f",
+        "gated_norm-37b6f09e50",
+        "prepare_attention-857fc001ea",
+        "quant-38a4f3d421",
+        "quant-6b2b789e0f",
+        "silu_quant-a828b90cc9",
+        "gates-230b55c57b",
+        "convolution-accdf72929",
+        "qk-2fdf585888",
+        "norm-3f7d78bda0",
+        "add_norm-ea3a42f942",
+        "gated_norm-cf90127954",
+        "prepare_attention-396e3971a6",
+        "quant-6f964d5026",
+        "quant-31fe1ff1c4",
+        "silu_quant-e81d00f9c2",
+        "gates-414c933c7a",
+        "convolution-8f95316330",
+        "qk-2bc130d5f3",
+        "norm-80dce647f9",
+        "add_norm-6c841c61cc",
+        "gated_norm-fc1b4f5fca",
+        "prepare_attention-c7a5f6c559",
+        "quant-9c9c4ad938",
+        "quant-effc981768",
+        "silu_quant-07d0318c78",
+        "gates-032c38d108",
+        "convolution-cdeba28a40",
+        "qk-ee1062c676",
+        "norm-ea1e7c720d",
+        "add_norm-8fa7f5b472",
+        "gated_norm-a3ae6d7d9e",
+        "prepare_attention-409a17bee0",
+        "quant-0413ce3ad4",
+        "quant-f70208e990",
+        "silu_quant-6e2b085b5c",
+        "gates-fe0ffa9ef4",
+        "convolution-75d71689d9",
+        "qk-df607783e7",
+        "norm-1e2a1a065f",
+        "add_norm-16c7eea28c",
+        "gated_norm-bf1c454402",
+        "prepare_attention-70856729ec",
+        "quant-0a7394ccef",
+        "quant-4e026ac5b2",
+        "silu_quant-3d777559ac",
+        "gates-7f196271c1",
+        "convolution-445867aff2"
+      ],
+      "selected": [
+        "quant-a83ee98240",
+        "quant-7a2c2961c3",
+        "silu_quant-bdb6037d89",
+        "quant-cba5ed9729",
+        "quant-14b2b04fc3",
+        "silu_quant-7e22ac4193",
+        "quant-ab0ac5c4e5",
+        "quant-0e5f3a0b2e",
+        "silu_quant-ab0edc82bb",
+        "quant-5b659364da",
+        "quant-cb18873355",
+        "silu_quant-71ac03b9bc",
+        "quant-cacaef771f",
+        "quant-0ab771f274",
+        "silu_quant-7ed9c30e04",
+        "quant-317bf37c2b",
+        "quant-0eea55c864",
+        "silu_quant-a089c70b05",
+        "quant-c7c5a33dd2",
+        "quant-c908ceb94f",
+        "silu_quant-6ddda81d2c",
+        "quant-78967ef6bb",
+        "quant-b6aca61c7f",
+        "silu_quant-fbdf53e4ed",
+        "quant-38a4f3d421",
+        "quant-6b2b789e0f",
+        "silu_quant-a828b90cc9",
+        "quant-6f964d5026",
+        "quant-31fe1ff1c4",
+        "silu_quant-e81d00f9c2",
+        "quant-9c9c4ad938",
+        "quant-effc981768",
+        "silu_quant-07d0318c78",
+        "quant-0413ce3ad4",
+        "quant-f70208e990",
+        "silu_quant-6e2b085b5c",
+        "quant-0a7394ccef",
+        "quant-4e026ac5b2",
+        "silu_quant-3d777559ac"
+      ]
+    },
+    "diagnostic": true,
+    "rows": [
+      {
+        "id": "quant-a83ee98240",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32144,
+          "width": 5120,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "mtp-32768-1",
+          "ordinary-131072-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.20140192031860352,
+              "cuda_ms": 0.1315231990814209
+            },
+            {
+              "tilelang_ms": 0.2013929557800293,
+              "cuda_ms": 0.13152112007141115
+            },
+            {
+              "tilelang_ms": 0.2014094352722168,
+              "cuda_ms": 0.13153136253356934
+            }
+          ],
+          "paired_mean_gain_ms": 0.06986042086283366,
+          "gain_lower_95_ms": 0.06984245761235554,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-7a2c2961c3",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32144,
+          "width": 6144,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "mtp-32768-1",
+          "ordinary-131072-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.24195536613464355,
+              "cuda_ms": 0.15804527759552
+            },
+            {
+              "tilelang_ms": 0.24196352005004884,
+              "cuda_ms": 0.1580456018447876
+            },
+            {
+              "tilelang_ms": 0.24195951461791992,
+              "cuda_ms": 0.15803951740264893
+            }
+          ],
+          "paired_mean_gain_ms": 0.08421916643778483,
+          "gain_lower_95_ms": 0.08392126146952311,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-bdb6037d89",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 32144,
+          "width": 17408,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "mtp-32768-1",
+          "ordinary-131072-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 1.00345890045166,
+              "cuda_ms": 0.7763667297363281
+            },
+            {
+              "tilelang_ms": 1.005552635192871,
+              "cuda_ms": 0.7763531112670898
+            },
+            {
+              "tilelang_ms": 1.0060083389282228,
+              "cuda_ms": 0.776363525390625
+            }
+          ],
+          "paired_mean_gain_ms": 0.2292235717773438,
+          "gain_lower_95_ms": 0.22790378316243493,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-cba5ed9729",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 1,
+          "width": 5120,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "prefix-32768-1",
+          "ordinary-131072-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0012737599760293962,
+              "cuda_ms": 0.0012652799487113953
+            },
+            {
+              "tilelang_ms": 0.0012715200334787369,
+              "cuda_ms": 0.0012643200159072876
+            },
+            {
+              "tilelang_ms": 0.0012694399803876877,
+              "cuda_ms": 0.0012611199915409088
+            }
+          ],
+          "paired_mean_gain_ms": 1.2192008395989752e-05,
+          "gain_lower_95_ms": 9.861340125401811e-06,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-14b2b04fc3",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 1,
+          "width": 6144,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "prefix-32768-1",
+          "ordinary-131072-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0012699200212955475,
+              "cuda_ms": 0.0012471999973058699
+            },
+            {
+              "tilelang_ms": 0.0012675200402736664,
+              "cuda_ms": 0.001247200034558773
+            },
+            {
+              "tilelang_ms": 0.0012665599584579467,
+              "cuda_ms": 0.0012494399771094322
+            }
+          ],
+          "paired_mean_gain_ms": 1.8714666366577136e-05,
+          "gain_lower_95_ms": 1.6709333906571072e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-7e22ac4193",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 1,
+          "width": 17408,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "prefix-32768-1",
+          "ordinary-131072-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0017017599940299987,
+              "cuda_ms": 0.001552320048213005
+            },
+            {
+              "tilelang_ms": 0.0016990400105714799,
+              "cuda_ms": 0.0015532800555229187
+            },
+            {
+              "tilelang_ms": 0.0016974399983882905,
+              "cuda_ms": 0.0015448000282049178
+            }
+          ],
+          "paired_mean_gain_ms": 0.0001503359948595365,
+          "gain_lower_95_ms": 0.00014806398252646132,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-ab0ac5c4e5",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32768,
+          "width": 5120,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "ordinary-32768-4",
+          "mtp-32768-2",
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.20532015800476075,
+              "cuda_ms": 0.13403327941894533
+            },
+            {
+              "tilelang_ms": 0.20522527694702147,
+              "cuda_ms": 0.13399440288543701
+            },
+            {
+              "tilelang_ms": 0.20521631240844726,
+              "cuda_ms": 0.13398591995239256
+            }
+          ],
+          "paired_mean_gain_ms": 0.0712497018178304,
+          "gain_lower_95_ms": 0.07122855981191,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-0e5f3a0b2e",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32768,
+          "width": 6144,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "ordinary-32768-4",
+          "mtp-32768-2",
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.24658976554870604,
+              "cuda_ms": 0.16105792045593262
+            },
+            {
+              "tilelang_ms": 0.24647968292236327,
+              "cuda_ms": 0.16100768089294432
+            },
+            {
+              "tilelang_ms": 0.24649567604064943,
+              "cuda_ms": 0.16101247787475587
+            }
+          ],
+          "paired_mean_gain_ms": 0.08548991362253824,
+          "gain_lower_95_ms": 0.08546555550893148,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-ab0edc82bb",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 32768,
+          "width": 17408,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "ordinary-32768-4",
+          "mtp-32768-2",
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 1.0252510070800782,
+              "cuda_ms": 0.7913955307006836
+            },
+            {
+              "tilelang_ms": 1.0262006378173827,
+              "cuda_ms": 0.7915716934204101
+            },
+            {
+              "tilelang_ms": 1.0256094360351562,
+              "cuda_ms": 0.7915918350219726
+            }
+          ],
+          "paired_mean_gain_ms": 0.2340392990112305,
+          "gain_lower_95_ms": 0.23381831105550133,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-5b659364da",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 2,
+          "width": 5120,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "prefix-32768-2",
+          "ordinary-131072-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.001287840008735657,
+              "cuda_ms": 0.001268320009112358
+            },
+            {
+              "tilelang_ms": 0.001292160004377365,
+              "cuda_ms": 0.0012678399682044983
+            },
+            {
+              "tilelang_ms": 0.0012889599800109863,
+              "cuda_ms": 0.0012707199901342394
+            }
+          ],
+          "paired_mean_gain_ms": 2.0229334632555646e-05,
+          "gain_lower_95_ms": 1.808000355958939e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-cb18873355",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 2,
+          "width": 6144,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "prefix-32768-2",
+          "ordinary-131072-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0013087999820709229,
+              "cuda_ms": 0.001286880001425743
+            },
+            {
+              "tilelang_ms": 0.001310720071196556,
+              "cuda_ms": 0.001287360042333603
+            },
+            {
+              "tilelang_ms": 0.0013121599704027176,
+              "cuda_ms": 0.0012863999605178832
+            }
+          ],
+          "paired_mean_gain_ms": 2.4261345465977992e-05,
+          "gain_lower_95_ms": 2.2570662200450875e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-71ac03b9bc",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 2,
+          "width": 17408,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "prefix-32768-2",
+          "ordinary-131072-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0017350399494171142,
+              "cuda_ms": 0.0015579199790954588
+            },
+            {
+              "tilelang_ms": 0.0017313599586486817,
+              "cuda_ms": 0.0015544000267982481
+            },
+            {
+              "tilelang_ms": 0.001737920045852661,
+              "cuda_ms": 0.0015537600219249726
+            }
+          ],
+          "paired_mean_gain_ms": 0.00017663999398549398,
+          "gain_lower_95_ms": 0.00017389331758022305,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-cacaef771f",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 4,
+          "width": 5120,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-4",
+          "prefix-32768-4",
+          "ordinary-131072-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0013100799918174743,
+              "cuda_ms": 0.0012631999701261522
+            },
+            {
+              "tilelang_ms": 0.0013100799918174743,
+              "cuda_ms": 0.0012622400373220443
+            },
+            {
+              "tilelang_ms": 0.0013100799918174743,
+              "cuda_ms": 0.0012646399438381196
+            }
+          ],
+          "paired_mean_gain_ms": 5.2901352445284526e-05,
+          "gain_lower_95_ms": 5.062934259573618e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-0ab771f274",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 4,
+          "width": 6144,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-4",
+          "prefix-32768-4",
+          "ordinary-131072-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0013289600610733032,
+              "cuda_ms": 0.0012489599734544755
+            },
+            {
+              "tilelang_ms": 0.0013334400206804274,
+              "cuda_ms": 0.0012460800260305405
+            },
+            {
+              "tilelang_ms": 0.0013288000226020814,
+              "cuda_ms": 0.0012459200248122215
+            }
+          ],
+          "paired_mean_gain_ms": 8.310934032003088e-05,
+          "gain_lower_95_ms": 8.10666804512342e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-7ed9c30e04",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 4,
+          "width": 17408,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-4",
+          "prefix-32768-4",
+          "ordinary-131072-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0017976000159978867,
+              "cuda_ms": 0.0015430399775505066
+            },
+            {
+              "tilelang_ms": 0.001796640008687973,
+              "cuda_ms": 0.001551999971270561
+            },
+            {
+              "tilelang_ms": 0.0017984000593423842,
+              "cuda_ms": 0.0015508799999952316
+            }
+          ],
+          "paired_mean_gain_ms": 0.00024709865699211757,
+          "gain_lower_95_ms": 0.00024374931553999585,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-317bf37c2b",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 5,
+          "width": 5120,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.001329440027475357,
+              "cuda_ms": 0.0012505600601434709
+            },
+            {
+              "tilelang_ms": 0.0013305599987506866,
+              "cuda_ms": 0.0012483199685811997
+            },
+            {
+              "tilelang_ms": 0.0013288000226020812,
+              "cuda_ms": 0.0012478400021791458
+            }
+          ],
+          "paired_mean_gain_ms": 7.989864920576413e-05,
+          "gain_lower_95_ms": 7.762666046619414e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-0eea55c864",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 5,
+          "width": 6144,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.001353280022740364,
+              "cuda_ms": 0.0012543999403715135
+            },
+            {
+              "tilelang_ms": 0.001348640024662018,
+              "cuda_ms": 0.0012652800232172013
+            },
+            {
+              "tilelang_ms": 0.0013494400680065155,
+              "cuda_ms": 0.0012636799365282059
+            }
+          ],
+          "paired_mean_gain_ms": 9.280001744627952e-05,
+          "gain_lower_95_ms": 8.904000744223594e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-a089c70b05",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 5,
+          "width": 17408,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0018577600270509719,
+              "cuda_ms": 0.0015484799444675445
+            },
+            {
+              "tilelang_ms": 0.0018601600080728532,
+              "cuda_ms": 0.001552319973707199
+            },
+            {
+              "tilelang_ms": 0.0018593599647283555,
+              "cuda_ms": 0.0015532800555229187
+            }
+          ],
+          "paired_mean_gain_ms": 0.00030973334362109504,
+          "gain_lower_95_ms": 0.00030597867568333946,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-c7c5a33dd2",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 10,
+          "width": 5120,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0013891199976205828,
+              "cuda_ms": 0.001287840008735657
+            },
+            {
+              "tilelang_ms": 0.0013900799304246902,
+              "cuda_ms": 0.0012883200496435166
+            },
+            {
+              "tilelang_ms": 0.0013876800239086152,
+              "cuda_ms": 0.001289440020918846
+            }
+          ],
+          "paired_mean_gain_ms": 9.763199587663017e-05,
+          "gain_lower_95_ms": 9.570133437712989e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-c908ceb94f",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 10,
+          "width": 6144,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0014072000235319138,
+              "cuda_ms": 0.0012910400331020357
+            },
+            {
+              "tilelang_ms": 0.0013985599577426909,
+              "cuda_ms": 0.001292639970779419
+            },
+            {
+              "tilelang_ms": 0.0013953600078821181,
+              "cuda_ms": 0.0012881600111722946
+            }
+          ],
+          "paired_mean_gain_ms": 0.00011119465529918669,
+          "gain_lower_95_ms": 0.00010785598307847972,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-6ddda81d2c",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 10,
+          "width": 17408,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.002045759931206703,
+              "cuda_ms": 0.0016176000237464905
+            },
+            {
+              "tilelang_ms": 0.0020446400344371796,
+              "cuda_ms": 0.0016151999682188034
+            },
+            {
+              "tilelang_ms": 0.002043519988656044,
+              "cuda_ms": 0.0016156800091266632
+            }
+          ],
+          "paired_mean_gain_ms": 0.00042894934862852094,
+          "gain_lower_95_ms": 0.000426394688586394,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-78967ef6bb",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 20,
+          "width": 5120,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0015038400143384933,
+              "cuda_ms": 0.0013332799822092056
+            },
+            {
+              "tilelang_ms": 0.001504640057682991,
+              "cuda_ms": 0.0013251200318336487
+            },
+            {
+              "tilelang_ms": 0.0015044800192117692,
+              "cuda_ms": 0.001322079971432686
+            }
+          ],
+          "paired_mean_gain_ms": 0.00017655467242002484,
+          "gain_lower_95_ms": 0.00017280533909797666,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-b6aca61c7f",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 20,
+          "width": 6144,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0015726400166749955,
+              "cuda_ms": 0.0013451199978590012
+            },
+            {
+              "tilelang_ms": 0.001571040004491806,
+              "cuda_ms": 0.0013462400436401367
+            },
+            {
+              "tilelang_ms": 0.0015726400166749955,
+              "cuda_ms": 0.001345920041203499
+            }
+          ],
+          "paired_mean_gain_ms": 0.00022532267371813458,
+          "gain_lower_95_ms": 0.00022330133120218918,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-fbdf53e4ed",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 20,
+          "width": 17408,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0026659199595451353,
+              "cuda_ms": 0.001801920011639595
+            },
+            {
+              "tilelang_ms": 0.0026670399308204654,
+              "cuda_ms": 0.001804639995098114
+            },
+            {
+              "tilelang_ms": 0.0026681600511074067,
+              "cuda_ms": 0.0018043199926614762
+            }
+          ],
+          "paired_mean_gain_ms": 0.0008649119908610979,
+          "gain_lower_95_ms": 0.0008629440118869146,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-38a4f3d421",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 624,
+          "width": 5120,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0057495999336242675,
+              "cuda_ms": 0.0037305599451065066
+            },
+            {
+              "tilelang_ms": 0.005747200250625611,
+              "cuda_ms": 0.0037243199348449708
+            },
+            {
+              "tilelang_ms": 0.005747359991073609,
+              "cuda_ms": 0.0037233600020408633
+            }
+          ],
+          "paired_mean_gain_ms": 0.0020210826843976974,
+          "gain_lower_95_ms": 0.0020179627140363057,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-6b2b789e0f",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 624,
+          "width": 6144,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.00655023992061615,
+              "cuda_ms": 0.004284480065107346
+            },
+            {
+              "tilelang_ms": 0.006549600064754486,
+              "cuda_ms": 0.004284640103578567
+            },
+            {
+              "tilelang_ms": 0.0065508800745010375,
+              "cuda_ms": 0.004285120069980622
+            }
+          ],
+          "paired_mean_gain_ms": 0.00226481598118941,
+          "gain_lower_95_ms": 0.0022613172978162765,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-a828b90cc9",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 624,
+          "width": 17408,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.020412960052490235,
+              "cuda_ms": 0.01528607964515686
+            },
+            {
+              "tilelang_ms": 0.020408320426940917,
+              "cuda_ms": 0.015277600288391114
+            },
+            {
+              "tilelang_ms": 0.02041167974472046,
+              "cuda_ms": 0.01527520000934601
+            }
+          ],
+          "paired_mean_gain_ms": 0.00512994658946991,
+          "gain_lower_95_ms": 0.005125850637753805,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-6f964d5026",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 1248,
+          "width": 5120,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.009752639830112458,
+              "cuda_ms": 0.005885280072689056
+            },
+            {
+              "tilelang_ms": 0.00974703997373581,
+              "cuda_ms": 0.005884639918804169
+            },
+            {
+              "tilelang_ms": 0.009747839868068695,
+              "cuda_ms": 0.005874399840831756
+            }
+          ],
+          "paired_mean_gain_ms": 0.0038697386582692466,
+          "gain_lower_95_ms": 0.0038657226463158926,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-31fe1ff1c4",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 1248,
+          "width": 6144,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.011190400123596192,
+              "cuda_ms": 0.006579200029373169
+            },
+            {
+              "tilelang_ms": 0.011192800402641296,
+              "cuda_ms": 0.006586720049381256
+            },
+            {
+              "tilelang_ms": 0.011178879737854005,
+              "cuda_ms": 0.006582239866256714
+            }
+          ],
+          "paired_mean_gain_ms": 0.004608112007379532,
+          "gain_lower_95_ms": 0.004603589236736298,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-e81d00f9c2",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 1248,
+          "width": 17408,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.043560321331024165,
+              "cuda_ms": 0.03193056106567383
+            },
+            {
+              "tilelang_ms": 0.043554558753967285,
+              "cuda_ms": 0.031920320987701416
+            },
+            {
+              "tilelang_ms": 0.04356639862060547,
+              "cuda_ms": 0.031925120353698724
+            }
+          ],
+          "paired_mean_gain_ms": 0.0116386239528656,
+          "gain_lower_95_ms": 0.011633930722872415,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-9c9c4ad938",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 2496,
+          "width": 5120,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.017653279900550843,
+              "cuda_ms": 0.009810080230236053
+            },
+            {
+              "tilelang_ms": 0.01766543984413147,
+              "cuda_ms": 0.009799520075321198
+            },
+            {
+              "tilelang_ms": 0.017663360238075257,
+              "cuda_ms": 0.00979775995016098
+            }
+          ],
+          "paired_mean_gain_ms": 0.007854554643233617,
+          "gain_lower_95_ms": 0.007847151825825373,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-effc981768",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 2496,
+          "width": 6144,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.020771840810775755,
+              "cuda_ms": 0.011626399755477905
+            },
+            {
+              "tilelang_ms": 0.02076192021369934,
+              "cuda_ms": 0.011615999937057496
+            },
+            {
+              "tilelang_ms": 0.02077008008956909,
+              "cuda_ms": 0.011612640023231507
+            }
+          ],
+          "paired_mean_gain_ms": 0.00915477341413498,
+          "gain_lower_95_ms": 0.009146064122517903,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-07d0318c78",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 2496,
+          "width": 17408,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.08278175830841064,
+              "cuda_ms": 0.06202816009521484
+            },
+            {
+              "tilelang_ms": 0.08276944160461426,
+              "cuda_ms": 0.0620302414894104
+            },
+            {
+              "tilelang_ms": 0.08277376174926757,
+              "cuda_ms": 0.06203184127807618
+            }
+          ],
+          "paired_mean_gain_ms": 0.020743337949117025,
+          "gain_lower_95_ms": 0.020738341013590494,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-0413ce3ad4",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32288,
+          "width": 5120,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-131072-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.20237567901611328,
+              "cuda_ms": 0.13208256244659422
+            },
+            {
+              "tilelang_ms": 0.2023680019378662,
+              "cuda_ms": 0.13209039688110352
+            },
+            {
+              "tilelang_ms": 0.20239215850830078,
+              "cuda_ms": 0.13209231853485107
+            }
+          ],
+          "paired_mean_gain_ms": 0.07028309933344523,
+          "gain_lower_95_ms": 0.07027427657445272,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-f70208e990",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32288,
+          "width": 6144,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-131072-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.2430900764465332,
+              "cuda_ms": 0.15874576091766357
+            },
+            {
+              "tilelang_ms": 0.2430787181854248,
+              "cuda_ms": 0.1587455987930298
+            },
+            {
+              "tilelang_ms": 0.2430527973175049,
+              "cuda_ms": 0.15872575759887694
+            }
+          ],
+          "paired_mean_gain_ms": 0.08433342933654785,
+          "gain_lower_95_ms": 0.08432213433583577,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-6e2b085b5c",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 32288,
+          "width": 17408,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-131072-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 1.0101788711547852,
+              "cuda_ms": 0.7798764801025391
+            },
+            {
+              "tilelang_ms": 1.010828971862793,
+              "cuda_ms": 0.7801161575317384
+            },
+            {
+              "tilelang_ms": 1.0108223724365235,
+              "cuda_ms": 0.780105438232422
+            }
+          ],
+          "paired_mean_gain_ms": 0.23046867879231772,
+          "gain_lower_95_ms": 0.23011159006754558,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-0a7394ccef",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32290,
+          "width": 5120,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-131072-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.20230191230773925,
+              "cuda_ms": 0.1320681619644165
+            },
+            {
+              "tilelang_ms": 0.20228976249694824,
+              "cuda_ms": 0.13205567836761475
+            },
+            {
+              "tilelang_ms": 0.20228384017944337,
+              "cuda_ms": 0.132053279876709
+            }
+          ],
+          "paired_mean_gain_ms": 0.07023846975962321,
+          "gain_lower_95_ms": 0.07022923707962037,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-4e026ac5b2",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32290,
+          "width": 6144,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-131072-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.24297920227050782,
+              "cuda_ms": 0.158723201751709
+            },
+            {
+              "tilelang_ms": 0.24297552108764647,
+              "cuda_ms": 0.1587070417404175
+            },
+            {
+              "tilelang_ms": 0.24298064231872557,
+              "cuda_ms": 0.15870464324951172
+            }
+          ],
+          "paired_mean_gain_ms": 0.0842694460550944,
+          "gain_lower_95_ms": 0.08425731484095256,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-3d777559ac",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 32290,
+          "width": 17408,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-131072-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 1.010903663635254,
+              "cuda_ms": 0.7798987197875977
+            },
+            {
+              "tilelang_ms": 1.0115814208984375,
+              "cuda_ms": 0.7801095962524414
+            },
+            {
+              "tilelang_ms": 1.012017593383789,
+              "cuda_ms": 0.7801230239868164
+            }
+          ],
+          "paired_mean_gain_ms": 0.23133159764607747,
+          "gain_lower_95_ms": 0.2309044100443522,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      }
+    ],
+    "estimates": {
+      "quant": {
+        "kind": "estimated",
+        "source": "TileFoundry HIR",
+        "symbol": "quant",
+        "report": "# analysis target=nvidia.b200_sxm module=Operators function=quant topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=f32:2056@logical,2056@total,2056@cta;fp8e4m3:512@logical,512@total,512@cta\n# traffic traffic=gmem:r9264/w6704@total,r9264/w6704@cta;rmem:r4/w0@total,r4/w0@cta\n# peak-footprint=gmem:5136;rmem:0\n# roofline ideal-ns=3 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef quant(\n    x: Tensor[(2, 256), \"bf16\"]\n):\n    v0 = cast(x, dtype=\"f32\")  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v1 = reshape(v0, new_shape=(2, 2, 128))  # Tensor[(2, 2, 128), \"f32\"]; compute-cost; traffic; roofline\n    v2 = reduce(v1, axes=(-1,), keepdim=True, kind=\"abs_max\")  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w16@total,r2048/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v3 = clamp(v2, min_val=1e-10, max_val=1e999)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v0_2 = 448.0  # Tensor[(), \"f32\", \"umat\"]\n    v4 = div(v3, v0_2)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v5 = div(v1, v4)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2064/w2048@total,r2064/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v6 = clamp(v5, min_val=-448.0, max_val=448.0)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w2048@total,r2048/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v7 = cast(v6, dtype=\"fp8e4m3\")  # Tensor[(2, 2, 128), \"fp8e4m3\"]; compute-cost flops=fp8e4m3:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w512@total,r2048/w512@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = reshape(v7, new_shape=(2, 256))  # Tensor[(2, 256), \"fp8e4m3\"]; compute-cost; traffic; roofline\n    v9 = reshape(v4, new_shape=(2, 2))  # Tensor[(2, 2), \"f32\"]; compute-cost; traffic; roofline\n    return (v8, v9)\n",
+        "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+      },
+      "silu_quant": {
+        "kind": "estimated",
+        "source": "TileFoundry HIR",
+        "symbol": "silu_quant",
+        "report": "# analysis target=nvidia.b200_sxm module=Operators function=silu_quant topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:1024@logical,1024@total,1024@cta;f32:4616@logical,4616@total,4616@cta;fp8e4m3:512@logical,512@total,512@cta\n# traffic traffic=gmem:r22576/w18992@total,r22576/w18992@cta;rmem:r36/w0@total,r36/w0@cta\n# peak-footprint=gmem:7168;rmem:0\n# roofline ideal-ns=6 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\nfrom tilefoundry.ir.types.shard import Layout\n\n@func\ndef silu_quant(\n    x: Tensor[(2, 512), \"bf16\"]\n):\n    v0 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v1 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v0_2 = x[:, 0:256]  # Tensor[(2, 256), \"bf16\"]; compute-cost; traffic traffic=rmem:r16/w0@total,r16/w0@cta; roofline\n    v1_2 = cast(v0_2, dtype=\"f32\")  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v2_2 = silu(v1_2)  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w2048@total,r2048/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v3 = cast(v2_2, dtype=\"bf16\")  # Tensor[(2, 256), \"bf16\"]; compute-cost flops=bf16:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w1024@total,r2048/w1024@cta; roofline ideal-ns=1 bound-by=balanced\n    v4 = cast(v3, dtype=\"f32\")  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v3_2 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v4_2 = 256  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v5_2 = x[:, 256:512]  # Tensor[(2, 256), \"bf16\"]; compute-cost; traffic traffic=rmem:r16/w0@total,r16/w0@cta; roofline\n    v6 = cast(v5_2, dtype=\"f32\")  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v7 = mul(v4, v6)  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r4096/w2048@total,r4096/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = cast(v7, dtype=\"bf16\")  # Tensor[(2, 256), \"bf16\"]; compute-cost flops=bf16:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w1024@total,r2048/w1024@cta; roofline ideal-ns=1 bound-by=balanced\n    v9 = cast(v8, dtype=\"f32\")  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v10 = reshape(v9, new_shape=(2, 2, 128))  # Tensor[(2, 2, 128), \"f32\"]; compute-cost; traffic; roofline\n    v11 = reduce(v10, axes=(-1,), keepdim=True, kind=\"abs_max\")  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w16@total,r2048/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v12 = clamp(v11, min_val=1e-10, max_val=1e999)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v6_2 = 448.0  # Tensor[(), \"f32\", \"umat\"]\n    v13 = div(v12, v6_2)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v14 = div(v10, v13)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2064/w2048@total,r2064/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v15 = clamp(v14, min_val=-448.0, max_val=448.0)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w2048@total,r2048/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v16 = cast(v15, dtype=\"fp8e4m3\")  # Tensor[(2, 2, 128), \"fp8e4m3\"]; compute-cost flops=fp8e4m3:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w512@total,r2048/w512@cta; roofline ideal-ns=1 bound-by=balanced\n    v17 = reshape(v16, new_shape=(2, 256))  # Tensor[(2, 256), \"fp8e4m3\"]; compute-cost; traffic; roofline\n    v18 = reshape(v13, new_shape=(2, 2))  # Tensor[(2, 2), \"f32\"]; compute-cost; traffic; roofline\n    return (v17, v18)\n",
+        "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+      }
+    },
+    "passed": false,
+    "selected_passed": true,
+    "interference": [],
+    "raw_report_sha256": "20a1b66246fb6f8030fa3c695c211f8d3e52a2f3293dffe0130e2e179935f72a"
+  },
+  "before_formatting": {
+    "source_commit": "c9d80dea4577a5ac4a4ba463cd3883f8530004f4",
+    "source_status": " M python/oh_my_vllm/kernels/cuda_backend/kernels.cu\n",
+    "sources_sha256": {
+      "benchmarks/kernels.py": "98ffe4ec7ed3e444f60261bb44d584b9f2e6b61cf0bcf3073a401744070d31bf",
+      "development/kernels/cases.py": "13a71e3253d20e7b2e26ad0764885bb8cd8cb5bb1260c263a92a4669b63c5e19",
+      "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+      "development/kernels/fixtures.py": "bd346bf0acbd0218fa3a59e6c572790307ebfb19467e5d0a7ccdaf4a40cf5595",
+      "development/kernels/observations.py": "838276bb4def11e107c4eac84b43b42c8332e76a5e03d3ea72b404abc80db660",
+      "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+      "development/kernels/reference.py": "ddf5a63e286e975a81e74982d24ebd575e94a0208c0a013ff3b20eb0f06adf12",
+      "development/kernels/semantics.py": "96be066b579b829f9179ec87bb39f70ceebcdcd6aa5c7845482ce1614e79cd99",
+      "development/kernels/tilelang-reference.json": "14c3df434dedf6d60629eba25c267df888d1a83f1e35cf868fc29a4b1e0945e0",
+      "development/kernels/timing.py": "1f8afa6dde7cf2bc31256f4a5bbd58e7bf7a5da1b30cabba00e0b200355d8006",
+      "development/kernels/twins.py": "608ac3edd7d08e6e47a1ccdefb5c4d7c891b3080d8e3cb05d05a0b8be121117b",
+      "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+      "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+      "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+      "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+      "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+      "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+      "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "4e39a1b6c4274149401055a618fc8c9b6bdecb25671e361430421346777ba5c0",
+      "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+      "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+      "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+      "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+      "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+      "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+      "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+      "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+      "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+      "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+      "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+      "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+      "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+      "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+      "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+      "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+    },
+    "hardware": {
+      "gpu": "GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad",
+      "cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+        109,
+        110,
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123,
+        124,
+        125,
+        126,
+        127,
+        128,
+        129,
+        130,
+        131,
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        153,
+        154,
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        164,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175,
+        176,
+        177,
+        178,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        186,
+        187,
+        188,
+        189,
+        190,
+        191
+      ],
+      "gpu_info": "GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad, NVIDIA B200, 183359 MiB, 590.48.01"
+    },
+    "reference": {
+      "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+      "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+      "files": {
+        "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+      },
+      "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+      "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690"
+    },
+    "protocol": "Complete static maximum-shape operations; three independent warm rounds, twenty alternating-order pairs/round,100 graph repetitions/sample. No profiler during timing. Fixtures use immutable sources and isolated repeatable destinations.",
+    "coverage": {
+      "complete": false,
+      "required": [
+        "norm-8f0939a3eb",
+        "add_norm-1cd0b34f33",
+        "gated_norm-cf3f37cb9e",
+        "prepare_attention-2123658257",
+        "quant-a83ee98240",
+        "quant-7a2c2961c3",
+        "silu_quant-bdb6037d89",
+        "gates-20dd53c898",
+        "convolution-c4c3ff2aef",
+        "qk-12fc3a9e63",
+        "norm-effe245bd2",
+        "add_norm-27c6f00266",
+        "gated_norm-526cd44715",
+        "prepare_attention-831ee3469c",
+        "quant-cba5ed9729",
+        "quant-14b2b04fc3",
+        "silu_quant-7e22ac4193",
+        "gates-9710bbc960",
+        "convolution-0febb0c2f0",
+        "recurrent-5a418230e1",
+        "norm-c2c1f928be",
+        "add_norm-d38e95acda",
+        "gated_norm-730a8e2832",
+        "prepare_attention-7eb9ea324c",
+        "quant-ab0ac5c4e5",
+        "quant-0e5f3a0b2e",
+        "silu_quant-ab0edc82bb",
+        "gates-cae0b44add",
+        "convolution-2e3c4391cd",
+        "qk-f930cef0b5",
+        "norm-b75ec1a7a2",
+        "add_norm-c7cb824ce7",
+        "gated_norm-bdec59c631",
+        "prepare_attention-e2b930a517",
+        "quant-5b659364da",
+        "quant-cb18873355",
+        "silu_quant-71ac03b9bc",
+        "gates-c72bdad5d4",
+        "convolution-ff7930b7b7",
+        "recurrent-2a62969158",
+        "norm-7d0299aa63",
+        "add_norm-0c6631a889",
+        "gated_norm-cdfb1224cc",
+        "prepare_attention-50d5f5fd1d",
+        "quant-cacaef771f",
+        "quant-0ab771f274",
+        "silu_quant-7ed9c30e04",
+        "gates-ee30f1b859",
+        "convolution-647f178fc3",
+        "recurrent-041544e32f",
+        "recurrent-36a6d98675",
+        "norm-9690ce8dc3",
+        "add_norm-c3003e1746",
+        "gated_norm-c04fc8e4ea",
+        "prepare_attention-e3ad7889b2",
+        "quant-317bf37c2b",
+        "quant-0eea55c864",
+        "silu_quant-a089c70b05",
+        "gates-eb9ecb7e6b",
+        "convolution-669242bf59",
+        "recurrent-38fd6bd99e",
+        "attention-c426ebd5d5",
+        "attention-d3973698ea",
+        "attention-e3bf2f1708",
+        "attention-6ee6a06e37",
+        "norm-214c77fddf",
+        "add_norm-17cf75a750",
+        "gated_norm-a20f3afb37",
+        "prepare_attention-15fddb117a",
+        "quant-c7c5a33dd2",
+        "quant-c908ceb94f",
+        "silu_quant-6ddda81d2c",
+        "gates-db0ed2a574",
+        "convolution-acc1f1fa4a",
+        "recurrent-e73333aa6f",
+        "attention-4fbadf5691",
+        "attention-80f93685bd",
+        "attention-39a3371fd0",
+        "attention-4705faca24",
+        "norm-82d8a65dcf",
+        "add_norm-28b801aed5",
+        "gated_norm-d88b128193",
+        "prepare_attention-53663d6020",
+        "quant-78967ef6bb",
+        "quant-b6aca61c7f",
+        "silu_quant-fbdf53e4ed",
+        "gates-7c7a082031",
+        "convolution-ea757c8cde",
+        "recurrent-4b9de1f8fa",
+        "recurrent-fe8f9e7511",
+        "attention-86c02993e7",
+        "attention-302aa28608",
+        "attention-5d1d8dd9c4",
+        "attention-2b7ac478c8",
+        "attention-0ebf3559b6",
+        "attention-764772a69f",
+        "attention-166a4bce77",
+        "attention-a6899c8eba",
+        "norm-1953a6389d",
+        "add_norm-a8eca15b2f",
+        "gated_norm-37b6f09e50",
+        "prepare_attention-857fc001ea",
+        "quant-38a4f3d421",
+        "quant-6b2b789e0f",
+        "silu_quant-a828b90cc9",
+        "gates-230b55c57b",
+        "convolution-accdf72929",
+        "qk-2fdf585888",
+        "norm-3f7d78bda0",
+        "add_norm-ea3a42f942",
+        "gated_norm-cf90127954",
+        "prepare_attention-396e3971a6",
+        "quant-6f964d5026",
+        "quant-31fe1ff1c4",
+        "silu_quant-e81d00f9c2",
+        "gates-414c933c7a",
+        "convolution-8f95316330",
+        "qk-2bc130d5f3",
+        "norm-80dce647f9",
+        "add_norm-6c841c61cc",
+        "gated_norm-fc1b4f5fca",
+        "prepare_attention-c7a5f6c559",
+        "quant-9c9c4ad938",
+        "quant-effc981768",
+        "silu_quant-07d0318c78",
+        "gates-032c38d108",
+        "convolution-cdeba28a40",
+        "qk-ee1062c676",
+        "norm-ea1e7c720d",
+        "add_norm-8fa7f5b472",
+        "gated_norm-a3ae6d7d9e",
+        "prepare_attention-409a17bee0",
+        "quant-0413ce3ad4",
+        "quant-f70208e990",
+        "silu_quant-6e2b085b5c",
+        "gates-fe0ffa9ef4",
+        "convolution-75d71689d9",
+        "qk-df607783e7",
+        "norm-1e2a1a065f",
+        "add_norm-16c7eea28c",
+        "gated_norm-bf1c454402",
+        "prepare_attention-70856729ec",
+        "quant-0a7394ccef",
+        "quant-4e026ac5b2",
+        "silu_quant-3d777559ac",
+        "gates-7f196271c1",
+        "convolution-445867aff2"
+      ],
+      "selected": [
+        "quant-a83ee98240",
+        "quant-7a2c2961c3",
+        "silu_quant-bdb6037d89",
+        "quant-cba5ed9729",
+        "quant-14b2b04fc3",
+        "silu_quant-7e22ac4193",
+        "quant-ab0ac5c4e5",
+        "quant-0e5f3a0b2e",
+        "silu_quant-ab0edc82bb",
+        "quant-5b659364da",
+        "quant-cb18873355",
+        "silu_quant-71ac03b9bc",
+        "quant-cacaef771f",
+        "quant-0ab771f274",
+        "silu_quant-7ed9c30e04",
+        "quant-317bf37c2b",
+        "quant-0eea55c864",
+        "silu_quant-a089c70b05",
+        "quant-c7c5a33dd2",
+        "quant-c908ceb94f",
+        "silu_quant-6ddda81d2c",
+        "quant-78967ef6bb",
+        "quant-b6aca61c7f",
+        "silu_quant-fbdf53e4ed",
+        "quant-38a4f3d421",
+        "quant-6b2b789e0f",
+        "silu_quant-a828b90cc9",
+        "quant-6f964d5026",
+        "quant-31fe1ff1c4",
+        "silu_quant-e81d00f9c2",
+        "quant-9c9c4ad938",
+        "quant-effc981768",
+        "silu_quant-07d0318c78",
+        "quant-0413ce3ad4",
+        "quant-f70208e990",
+        "silu_quant-6e2b085b5c",
+        "quant-0a7394ccef",
+        "quant-4e026ac5b2",
+        "silu_quant-3d777559ac"
+      ]
+    },
+    "diagnostic": true,
+    "rows": [
+      {
+        "id": "quant-a83ee98240",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32144,
+          "width": 5120,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "mtp-32768-1",
+          "ordinary-131072-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.20138784408569338,
+              "cuda_ms": 0.1315171241760254
+            },
+            {
+              "tilelang_ms": 0.2013967990875244,
+              "cuda_ms": 0.13151776313781738
+            },
+            {
+              "tilelang_ms": 0.20140095710754397,
+              "cuda_ms": 0.13153055667877198
+            }
+          ],
+          "paired_mean_gain_ms": 0.06989564832051595,
+          "gain_lower_95_ms": 0.06986662562688191,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-7a2c2961c3",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32144,
+          "width": 6144,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "mtp-32768-1",
+          "ordinary-131072-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.2419705581665039,
+              "cuda_ms": 0.1580467176437378
+            },
+            {
+              "tilelang_ms": 0.24195968627929687,
+              "cuda_ms": 0.15803391933441163
+            },
+            {
+              "tilelang_ms": 0.24195695877075196,
+              "cuda_ms": 0.15803728103637696
+            }
+          ],
+          "paired_mean_gain_ms": 0.0839218069712321,
+          "gain_lower_95_ms": 0.08389950688680013,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-bdb6037d89",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 32144,
+          "width": 17408,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "mtp-32768-1",
+          "ordinary-131072-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 1.0035128021240234,
+              "cuda_ms": 0.7763836669921875
+            },
+            {
+              "tilelang_ms": 1.0057620620727539,
+              "cuda_ms": 0.7763848114013672
+            },
+            {
+              "tilelang_ms": 1.0057836532592774,
+              "cuda_ms": 0.7763531112670898
+            }
+          ],
+          "paired_mean_gain_ms": 0.22857477696736653,
+          "gain_lower_95_ms": 0.2276942621866862,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-cba5ed9729",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 1,
+          "width": 5120,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "prefix-32768-1",
+          "ordinary-131072-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0012708800286054612,
+              "cuda_ms": 0.0012620799988508225
+            },
+            {
+              "tilelang_ms": 0.0012694400548934935,
+              "cuda_ms": 0.0012631999701261522
+            },
+            {
+              "tilelang_ms": 0.0012723200023174285,
+              "cuda_ms": 0.001263680011034012
+            }
+          ],
+          "paired_mean_gain_ms": 1.052265862623851e-05,
+          "gain_lower_95_ms": 8.320001264413216e-06,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-14b2b04fc3",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 1,
+          "width": 6144,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "prefix-32768-1",
+          "ordinary-131072-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0012699200212955475,
+              "cuda_ms": 0.0012516800314188003
+            },
+            {
+              "tilelang_ms": 0.0012671999633312226,
+              "cuda_ms": 0.0012486399710178375
+            },
+            {
+              "tilelang_ms": 0.0012672000378370287,
+              "cuda_ms": 0.001250240057706833
+            }
+          ],
+          "paired_mean_gain_ms": 1.9199997186660784e-05,
+          "gain_lower_95_ms": 1.689066737890244e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-7e22ac4193",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 1,
+          "width": 17408,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "prefix-32768-1",
+          "ordinary-131072-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.001701280027627945,
+              "cuda_ms": 0.0015460799634456634
+            },
+            {
+              "tilelang_ms": 0.0016974399983882902,
+              "cuda_ms": 0.0015521600097417832
+            },
+            {
+              "tilelang_ms": 0.0016993600130081176,
+              "cuda_ms": 0.0015515200048685073
+            }
+          ],
+          "paired_mean_gain_ms": 0.00015229864418506622,
+          "gain_lower_95_ms": 0.00014918930828571318,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-ab0ac5c4e5",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32768,
+          "width": 5120,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "ordinary-32768-4",
+          "mtp-32768-2",
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.20532015800476072,
+              "cuda_ms": 0.13403807640075682
+            },
+            {
+              "tilelang_ms": 0.20529791831970215,
+              "cuda_ms": 0.1340235185623169
+            },
+            {
+              "tilelang_ms": 0.20522799491882326,
+              "cuda_ms": 0.13399328231811525
+            }
+          ],
+          "paired_mean_gain_ms": 0.07154252290725709,
+          "gain_lower_95_ms": 0.07124333381652832,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-0e5f3a0b2e",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32768,
+          "width": 6144,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "ordinary-32768-4",
+          "mtp-32768-2",
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.24657055854797363,
+              "cuda_ms": 0.16105792045593262
+            },
+            {
+              "tilelang_ms": 0.24649008750915527,
+              "cuda_ms": 0.16101359367370605
+            },
+            {
+              "tilelang_ms": 0.24649584770202637,
+              "cuda_ms": 0.16101408004760742
+            }
+          ],
+          "paired_mean_gain_ms": 0.08548562304178874,
+          "gain_lower_95_ms": 0.08547371896107991,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-ab0edc82bb",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 32768,
+          "width": 17408,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "ordinary-32768-4",
+          "mtp-32768-2",
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 1.0255240249633788,
+              "cuda_ms": 0.7914041519165038
+            },
+            {
+              "tilelang_ms": 1.025652961730957,
+              "cuda_ms": 0.79158447265625
+            },
+            {
+              "tilelang_ms": 1.025766258239746,
+              "cuda_ms": 0.7915550231933595
+            }
+          ],
+          "paired_mean_gain_ms": 0.2345775909423828,
+          "gain_lower_95_ms": 0.23397003173828126,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-5b659364da",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 2,
+          "width": 5120,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "prefix-32768-2",
+          "ordinary-131072-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0012910399585962296,
+              "cuda_ms": 0.0012675200402736664
+            },
+            {
+              "tilelang_ms": 0.0012904000282287597,
+              "cuda_ms": 0.0012692800164222718
+            },
+            {
+              "tilelang_ms": 0.0012891200184822083,
+              "cuda_ms": 0.0012670399993658067
+            }
+          ],
+          "paired_mean_gain_ms": 2.2970668971538557e-05,
+          "gain_lower_95_ms": 2.047467976808548e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-cb18873355",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 2,
+          "width": 6144,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "prefix-32768-2",
+          "ordinary-131072-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0013091199845075606,
+              "cuda_ms": 0.001287039965391159
+            },
+            {
+              "tilelang_ms": 0.0013081599771976472,
+              "cuda_ms": 0.001286559998989105
+            },
+            {
+              "tilelang_ms": 0.0013076800107955932,
+              "cuda_ms": 0.001286880001425743
+            }
+          ],
+          "paired_mean_gain_ms": 2.2378668189048754e-05,
+          "gain_lower_95_ms": 2.0698659121990193e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-71ac03b9bc",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 2,
+          "width": 17408,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "prefix-32768-2",
+          "ordinary-131072-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0017347200214862823,
+              "cuda_ms": 0.0015569599717855454
+            },
+            {
+              "tilelang_ms": 0.0017342399805784225,
+              "cuda_ms": 0.0015572799742221833
+            },
+            {
+              "tilelang_ms": 0.00173567995429039,
+              "cuda_ms": 0.001557759940624237
+            }
+          ],
+          "paired_mean_gain_ms": 0.00017473066598176957,
+          "gain_lower_95_ms": 0.000172858660419782,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-cacaef771f",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 4,
+          "width": 5120,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-4",
+          "prefix-32768-4",
+          "ordinary-131072-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.001311519965529442,
+              "cuda_ms": 0.0012611199915409088
+            },
+            {
+              "tilelang_ms": 0.001311039999127388,
+              "cuda_ms": 0.0012537599354982376
+            },
+            {
+              "tilelang_ms": 0.0013142399489879607,
+              "cuda_ms": 0.001254720017313957
+            }
+          ],
+          "paired_mean_gain_ms": 5.5264011025428764e-05,
+          "gain_lower_95_ms": 5.316799879074095e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-0ab771f274",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 4,
+          "width": 6144,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-4",
+          "prefix-32768-4",
+          "ordinary-131072-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0013308800011873245,
+              "cuda_ms": 0.0012481600046157838
+            },
+            {
+              "tilelang_ms": 0.0013307199627161025,
+              "cuda_ms": 0.0012460800260305405
+            },
+            {
+              "tilelang_ms": 0.0013316799700260162,
+              "cuda_ms": 0.0012476799637079238
+            }
+          ],
+          "paired_mean_gain_ms": 8.168533071875574e-05,
+          "gain_lower_95_ms": 7.911466186245285e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-7ed9c30e04",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 4,
+          "width": 17408,
+          "column": true
+        },
+        "workloads": [
+          "ordinary-32768-4",
+          "prefix-32768-4",
+          "ordinary-131072-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0017977600544691087,
+              "cuda_ms": 0.001541920006275177
+            },
+            {
+              "tilelang_ms": 0.0017892800271511076,
+              "cuda_ms": 0.0015409599989652633
+            },
+            {
+              "tilelang_ms": 0.0017979200184345245,
+              "cuda_ms": 0.001552640050649643
+            }
+          ],
+          "paired_mean_gain_ms": 0.0002479893366495768,
+          "gain_lower_95_ms": 0.0002456586758295695,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-317bf37c2b",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 5,
+          "width": 5120,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0013307200372219086,
+              "cuda_ms": 0.0012491199746727942
+            },
+            {
+              "tilelang_ms": 0.0013299200683832167,
+              "cuda_ms": 0.0012489599734544755
+            },
+            {
+              "tilelang_ms": 0.0013300800323486329,
+              "cuda_ms": 0.0012515200674533843
+            }
+          ],
+          "paired_mean_gain_ms": 7.96693377196789e-05,
+          "gain_lower_95_ms": 7.78080001473427e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-0eea55c864",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 5,
+          "width": 6144,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0013526400178670885,
+              "cuda_ms": 0.0012604799866676331
+            },
+            {
+              "tilelang_ms": 0.0013504000008106231,
+              "cuda_ms": 0.0012640000134706499
+            },
+            {
+              "tilelang_ms": 0.0013519999384880065,
+              "cuda_ms": 0.0012612800300121308
+            }
+          ],
+          "paired_mean_gain_ms": 9.20000063876311e-05,
+          "gain_lower_95_ms": 8.947732547918955e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-a089c70b05",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 5,
+          "width": 17408,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0018599999696016312,
+              "cuda_ms": 0.0015520000457763673
+            },
+            {
+              "tilelang_ms": 0.001857600063085556,
+              "cuda_ms": 0.0015508799999952316
+            },
+            {
+              "tilelang_ms": 0.0018585599958896638,
+              "cuda_ms": 0.001552800014615059
+            }
+          ],
+          "paired_mean_gain_ms": 0.000307445339858532,
+          "gain_lower_95_ms": 0.00030516267071167635,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-c7c5a33dd2",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 10,
+          "width": 5120,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.00139055997133255,
+              "cuda_ms": 0.0012876800447702407
+            },
+            {
+              "tilelang_ms": 0.001387839987874031,
+              "cuda_ms": 0.0012904000282287597
+            },
+            {
+              "tilelang_ms": 0.0013860800117254258,
+              "cuda_ms": 0.001287520006299019
+            }
+          ],
+          "paired_mean_gain_ms": 9.899200499057771e-05,
+          "gain_lower_95_ms": 9.603733817736308e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-c908ceb94f",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 10,
+          "width": 6144,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.001407039985060692,
+              "cuda_ms": 0.001290239989757538
+            },
+            {
+              "tilelang_ms": 0.0014059200137853623,
+              "cuda_ms": 0.0012905599921941757
+            },
+            {
+              "tilelang_ms": 0.0014081600308418272,
+              "cuda_ms": 0.001289440020918846
+            }
+          ],
+          "paired_mean_gain_ms": 0.00011018666625022887,
+          "gain_lower_95_ms": 0.00010776532938083012,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-6ddda81d2c",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 10,
+          "width": 17408,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.002046559974551201,
+              "cuda_ms": 0.001610400006175041
+            },
+            {
+              "tilelang_ms": 0.0020416000485420226,
+              "cuda_ms": 0.0016166399419307708
+            },
+            {
+              "tilelang_ms": 0.0020448000729084014,
+              "cuda_ms": 0.00161360003054142
+            }
+          ],
+          "paired_mean_gain_ms": 0.0004310880154371261,
+          "gain_lower_95_ms": 0.0004262773469090461,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-78967ef6bb",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 20,
+          "width": 5120,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0014961600303649903,
+              "cuda_ms": 0.0013264000415802002
+            },
+            {
+              "tilelang_ms": 0.00149664007127285,
+              "cuda_ms": 0.0013292799890041351
+            },
+            {
+              "tilelang_ms": 0.0014924800395965576,
+              "cuda_ms": 0.0013286400586366653
+            }
+          ],
+          "paired_mean_gain_ms": 0.0001681386704246203,
+          "gain_lower_95_ms": 0.00016590933750073117,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-b6aca61c7f",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 20,
+          "width": 6144,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.001571200042963028,
+              "cuda_ms": 0.001344960033893585
+            },
+            {
+              "tilelang_ms": 0.0015697599947452545,
+              "cuda_ms": 0.0013404799997806549
+            },
+            {
+              "tilelang_ms": 0.0015720000118017196,
+              "cuda_ms": 0.0013467200100421906
+            }
+          ],
+          "paired_mean_gain_ms": 0.00022630934417247774,
+          "gain_lower_95_ms": 0.0002243680035074552,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-fbdf53e4ed",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 20,
+          "width": 17408,
+          "column": true
+        },
+        "workloads": [
+          "mtp-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0026662400364875793,
+              "cuda_ms": 0.0018033599853515625
+            },
+            {
+              "tilelang_ms": 0.0026687999069690705,
+              "cuda_ms": 0.0018056000024080276
+            },
+            {
+              "tilelang_ms": 0.002663680016994476,
+              "cuda_ms": 0.0018038400262594223
+            }
+          ],
+          "paired_mean_gain_ms": 0.0008642826676368713,
+          "gain_lower_95_ms": 0.0008624106347560883,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-38a4f3d421",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 624,
+          "width": 5120,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0057556799054145815,
+              "cuda_ms": 0.0037268799543380736
+            },
+            {
+              "tilelang_ms": 0.005751680135726928,
+              "cuda_ms": 0.003726080060005188
+            },
+            {
+              "tilelang_ms": 0.005751200020313263,
+              "cuda_ms": 0.003724000006914139
+            }
+          ],
+          "paired_mean_gain_ms": 0.002025146648287773,
+          "gain_lower_95_ms": 0.002022783969839414,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-6b2b789e0f",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 624,
+          "width": 6144,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.006548799872398377,
+              "cuda_ms": 0.004288959950208664
+            },
+            {
+              "tilelang_ms": 0.006545920073986054,
+              "cuda_ms": 0.004287039935588837
+            },
+            {
+              "tilelang_ms": 0.006540800034999848,
+              "cuda_ms": 0.004280959963798523
+            }
+          ],
+          "paired_mean_gain_ms": 0.002258800019820531,
+          "gain_lower_95_ms": 0.00225536539653937,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-a828b90cc9",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 624,
+          "width": 17408,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-1"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0204203200340271,
+              "cuda_ms": 0.015289120078086853
+            },
+            {
+              "tilelang_ms": 0.02040816068649292,
+              "cuda_ms": 0.015275039672851563
+            },
+            {
+              "tilelang_ms": 0.02041183948516846,
+              "cuda_ms": 0.015273280143737793
+            }
+          ],
+          "paired_mean_gain_ms": 0.0051350825428962705,
+          "gain_lower_95_ms": 0.005130799949169159,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-6f964d5026",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 1248,
+          "width": 5120,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.009745120108127593,
+              "cuda_ms": 0.005874240100383759
+            },
+            {
+              "tilelang_ms": 0.009742720127105713,
+              "cuda_ms": 0.005886399745941162
+            },
+            {
+              "tilelang_ms": 0.009749280214309692,
+              "cuda_ms": 0.005873600244522095
+            }
+          ],
+          "paired_mean_gain_ms": 0.0038638720015684762,
+          "gain_lower_95_ms": 0.00385779736439387,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-31fe1ff1c4",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 1248,
+          "width": 6144,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.011187840104103088,
+              "cuda_ms": 0.00658592015504837
+            },
+            {
+              "tilelang_ms": 0.011192159652709961,
+              "cuda_ms": 0.006576640009880065
+            },
+            {
+              "tilelang_ms": 0.01118831992149353,
+              "cuda_ms": 0.006584320068359375
+            }
+          ],
+          "paired_mean_gain_ms": 0.004607077380021413,
+          "gain_lower_95_ms": 0.0046028000712394716,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-e81d00f9c2",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 1248,
+          "width": 17408,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.04355632066726685,
+              "cuda_ms": 0.031927839517593384
+            },
+            {
+              "tilelang_ms": 0.043558077812194826,
+              "cuda_ms": 0.03191616058349609
+            },
+            {
+              "tilelang_ms": 0.043553118705749516,
+              "cuda_ms": 0.03191168069839478
+            }
+          ],
+          "paired_mean_gain_ms": 0.011638474623362222,
+          "gain_lower_95_ms": 0.011632495721181234,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-9c9c4ad938",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 2496,
+          "width": 5120,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.017671040296554565,
+              "cuda_ms": 0.009809919893741607
+            },
+            {
+              "tilelang_ms": 0.017664000391960144,
+              "cuda_ms": 0.009802239835262298
+            },
+            {
+              "tilelang_ms": 0.01765439987182617,
+              "cuda_ms": 0.009796800017356872
+            }
+          ],
+          "paired_mean_gain_ms": 0.007858928094307582,
+          "gain_lower_95_ms": 0.00785403753320376,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-effc981768",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 2496,
+          "width": 6144,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.020779520273208618,
+              "cuda_ms": 0.011632159948349
+            },
+            {
+              "tilelang_ms": 0.02076464056968689,
+              "cuda_ms": 0.011609280109405519
+            },
+            {
+              "tilelang_ms": 0.020774240493774413,
+              "cuda_ms": 0.0116212797164917
+            }
+          ],
+          "paired_mean_gain_ms": 0.009155994613965353,
+          "gain_lower_95_ms": 0.009149087746938069,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-07d0318c78",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 2496,
+          "width": 17408,
+          "column": false
+        },
+        "workloads": [
+          "prefix-32768-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.08276783943176269,
+              "cuda_ms": 0.0620307207107544
+            },
+            {
+              "tilelang_ms": 0.08277071952819824,
+              "cuda_ms": 0.06202895879745483
+            },
+            {
+              "tilelang_ms": 0.08277984142303467,
+              "cuda_ms": 0.06202912092208862
+            }
+          ],
+          "paired_mean_gain_ms": 0.020744842211405438,
+          "gain_lower_95_ms": 0.020740639527638754,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-0413ce3ad4",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32288,
+          "width": 5120,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-131072-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.20236544609069823,
+              "cuda_ms": 0.1320911979675293
+            },
+            {
+              "tilelang_ms": 0.20237919807434082,
+              "cuda_ms": 0.13209136009216307
+            },
+            {
+              "tilelang_ms": 0.20236896514892577,
+              "cuda_ms": 0.13209152221679688
+            }
+          ],
+          "paired_mean_gain_ms": 0.07028502543767293,
+          "gain_lower_95_ms": 0.07027687676747639,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-f70208e990",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32288,
+          "width": 6144,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-131072-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.24308352470397948,
+              "cuda_ms": 0.15874063968658447
+            },
+            {
+              "tilelang_ms": 0.24306511878967285,
+              "cuda_ms": 0.15873663902282714
+            },
+            {
+              "tilelang_ms": 0.2429800033569336,
+              "cuda_ms": 0.15868896007537842
+            }
+          ],
+          "paired_mean_gain_ms": 0.08432150411605835,
+          "gain_lower_95_ms": 0.08430006869633992,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-6e2b085b5c",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 32288,
+          "width": 17408,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-131072-2"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 1.0101200103759767,
+              "cuda_ms": 0.7798371124267578
+            },
+            {
+              "tilelang_ms": 1.0103905868530272,
+              "cuda_ms": 0.7800075531005859
+            },
+            {
+              "tilelang_ms": 1.0107753372192383,
+              "cuda_ms": 0.7800273513793945
+            }
+          ],
+          "paired_mean_gain_ms": 0.23049862162272136,
+          "gain_lower_95_ms": 0.23014692815144858,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-0a7394ccef",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32290,
+          "width": 5120,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-131072-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.20230016708374024,
+              "cuda_ms": 0.13207295894622803
+            },
+            {
+              "tilelang_ms": 0.20229008674621582,
+              "cuda_ms": 0.1320576000213623
+            },
+            {
+              "tilelang_ms": 0.20230064392089842,
+              "cuda_ms": 0.13205039978027344
+            }
+          ],
+          "paired_mean_gain_ms": 0.07024036359786988,
+          "gain_lower_95_ms": 0.07023284784952799,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "quant-4e026ac5b2",
+        "configuration": {
+          "operation": "quant",
+          "tokens": 32290,
+          "width": 6144,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-131072-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.24298079490661623,
+              "cuda_ms": 0.15871887683868408
+            },
+            {
+              "tilelang_ms": 0.2429841613769531,
+              "cuda_ms": 0.1587057638168335
+            },
+            {
+              "tilelang_ms": 0.24297904014587401,
+              "cuda_ms": 0.1587062406539917
+            }
+          ],
+          "paired_mean_gain_ms": 0.08427423604329427,
+          "gain_lower_95_ms": 0.08426661364237467,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "silu_quant-3d777559ac",
+        "configuration": {
+          "operation": "silu_quant",
+          "tokens": 32290,
+          "width": 17408,
+          "column": false
+        },
+        "workloads": [
+          "ordinary-131072-4"
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 1.0107459259033202,
+              "cuda_ms": 0.7800820922851563
+            },
+            {
+              "tilelang_ms": 1.0111043548583984,
+              "cuda_ms": 0.7802524948120118
+            },
+            {
+              "tilelang_ms": 1.0111769485473632,
+              "cuda_ms": 0.7801063919067383
+            }
+          ],
+          "paired_mean_gain_ms": 0.23061623255411784,
+          "gain_lower_95_ms": 0.2298675028483073,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      }
+    ],
+    "estimates": {
+      "quant": {
+        "kind": "estimated",
+        "source": "TileFoundry HIR",
+        "symbol": "quant",
+        "report": "# analysis target=nvidia.b200_sxm module=Operators function=quant topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=f32:2056@logical,2056@total,2056@cta;fp8e4m3:512@logical,512@total,512@cta\n# traffic traffic=gmem:r9264/w6704@total,r9264/w6704@cta;rmem:r4/w0@total,r4/w0@cta\n# peak-footprint=gmem:5136;rmem:0\n# roofline ideal-ns=3 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef quant(\n    x: Tensor[(2, 256), \"bf16\"]\n):\n    v0 = cast(x, dtype=\"f32\")  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v1 = reshape(v0, new_shape=(2, 2, 128))  # Tensor[(2, 2, 128), \"f32\"]; compute-cost; traffic; roofline\n    v2 = reduce(v1, axes=(-1,), keepdim=True, kind=\"abs_max\")  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w16@total,r2048/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v3 = clamp(v2, min_val=1e-10, max_val=1e999)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v0_2 = 448.0  # Tensor[(), \"f32\", \"umat\"]\n    v4 = div(v3, v0_2)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v5 = div(v1, v4)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2064/w2048@total,r2064/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v6 = clamp(v5, min_val=-448.0, max_val=448.0)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w2048@total,r2048/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v7 = cast(v6, dtype=\"fp8e4m3\")  # Tensor[(2, 2, 128), \"fp8e4m3\"]; compute-cost flops=fp8e4m3:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w512@total,r2048/w512@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = reshape(v7, new_shape=(2, 256))  # Tensor[(2, 256), \"fp8e4m3\"]; compute-cost; traffic; roofline\n    v9 = reshape(v4, new_shape=(2, 2))  # Tensor[(2, 2), \"f32\"]; compute-cost; traffic; roofline\n    return (v8, v9)\n",
+        "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+      },
+      "silu_quant": {
+        "kind": "estimated",
+        "source": "TileFoundry HIR",
+        "symbol": "silu_quant",
+        "report": "# analysis target=nvidia.b200_sxm module=Operators function=silu_quant topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:1024@logical,1024@total,1024@cta;f32:4616@logical,4616@total,4616@cta;fp8e4m3:512@logical,512@total,512@cta\n# traffic traffic=gmem:r22576/w18992@total,r22576/w18992@cta;rmem:r36/w0@total,r36/w0@cta\n# peak-footprint=gmem:7168;rmem:0\n# roofline ideal-ns=6 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\nfrom tilefoundry.ir.types.shard import Layout\n\n@func\ndef silu_quant(\n    x: Tensor[(2, 512), \"bf16\"]\n):\n    v0 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v1 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v0_2 = x[:, 0:256]  # Tensor[(2, 256), \"bf16\"]; compute-cost; traffic traffic=rmem:r16/w0@total,r16/w0@cta; roofline\n    v1_2 = cast(v0_2, dtype=\"f32\")  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v2_2 = silu(v1_2)  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w2048@total,r2048/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v3 = cast(v2_2, dtype=\"bf16\")  # Tensor[(2, 256), \"bf16\"]; compute-cost flops=bf16:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w1024@total,r2048/w1024@cta; roofline ideal-ns=1 bound-by=balanced\n    v4 = cast(v3, dtype=\"f32\")  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v3_2 = 0  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v4_2 = 256  # Tensor[(), \"i64\", Layout((), ()), \"umat\"]\n    v5_2 = x[:, 256:512]  # Tensor[(2, 256), \"bf16\"]; compute-cost; traffic traffic=rmem:r16/w0@total,r16/w0@cta; roofline\n    v6 = cast(v5_2, dtype=\"f32\")  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v7 = mul(v4, v6)  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r4096/w2048@total,r4096/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = cast(v7, dtype=\"bf16\")  # Tensor[(2, 256), \"bf16\"]; compute-cost flops=bf16:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w1024@total,r2048/w1024@cta; roofline ideal-ns=1 bound-by=balanced\n    v9 = cast(v8, dtype=\"f32\")  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v10 = reshape(v9, new_shape=(2, 2, 128))  # Tensor[(2, 2, 128), \"f32\"]; compute-cost; traffic; roofline\n    v11 = reduce(v10, axes=(-1,), keepdim=True, kind=\"abs_max\")  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w16@total,r2048/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v12 = clamp(v11, min_val=1e-10, max_val=1e999)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v6_2 = 448.0  # Tensor[(), \"f32\", \"umat\"]\n    v13 = div(v12, v6_2)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v14 = div(v10, v13)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2064/w2048@total,r2064/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v15 = clamp(v14, min_val=-448.0, max_val=448.0)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w2048@total,r2048/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v16 = cast(v15, dtype=\"fp8e4m3\")  # Tensor[(2, 2, 128), \"fp8e4m3\"]; compute-cost flops=fp8e4m3:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w512@total,r2048/w512@cta; roofline ideal-ns=1 bound-by=balanced\n    v17 = reshape(v16, new_shape=(2, 256))  # Tensor[(2, 256), \"fp8e4m3\"]; compute-cost; traffic; roofline\n    v18 = reshape(v13, new_shape=(2, 2))  # Tensor[(2, 2), \"f32\"]; compute-cost; traffic; roofline\n    return (v17, v18)\n",
+        "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+      }
+    },
+    "passed": false,
+    "selected_passed": true,
+    "interference": [],
+    "raw_report_sha256": "198ccfe6e4cedcf96b30d378583fc32fc04a2c5bee03d32855f842939854665a"
+  },
+  "observations": {
+    "sources_sha256": {
+      "benchmarks/kernels.py": "98ffe4ec7ed3e444f60261bb44d584b9f2e6b61cf0bcf3073a401744070d31bf",
+      "development/kernels/cases.py": "13a71e3253d20e7b2e26ad0764885bb8cd8cb5bb1260c263a92a4669b63c5e19",
+      "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+      "development/kernels/fixtures.py": "bd346bf0acbd0218fa3a59e6c572790307ebfb19467e5d0a7ccdaf4a40cf5595",
+      "development/kernels/observations.py": "838276bb4def11e107c4eac84b43b42c8332e76a5e03d3ea72b404abc80db660",
+      "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+      "development/kernels/reference.py": "ddf5a63e286e975a81e74982d24ebd575e94a0208c0a013ff3b20eb0f06adf12",
+      "development/kernels/semantics.py": "96be066b579b829f9179ec87bb39f70ceebcdcd6aa5c7845482ce1614e79cd99",
+      "development/kernels/tilelang-reference.json": "14c3df434dedf6d60629eba25c267df888d1a83f1e35cf868fc29a4b1e0945e0",
+      "development/kernels/timing.py": "1f8afa6dde7cf2bc31256f4a5bbd58e7bf7a5da1b30cabba00e0b200355d8006",
+      "development/kernels/twins.py": "608ac3edd7d08e6e47a1ccdefb5c4d7c891b3080d8e3cb05d05a0b8be121117b",
+      "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+      "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+      "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+      "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+      "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+      "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+      "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "b0b0ebeda1546e0d571869c4d6dc2d9d9b6f3334890697aef9463c61fa432216",
+      "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+      "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+      "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+      "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+      "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+      "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+      "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+      "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+      "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+      "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+      "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+      "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+      "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+      "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+      "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+      "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+    },
+    "case": {
+      "id": "quant-cba5ed9729",
+      "configuration": {
+        "operation": "quant",
+        "tokens": 1,
+        "width": 5120,
+        "column": true
+      },
+      "workloads": [
+        "ordinary-32768-1",
+        "prefix-32768-1",
+        "ordinary-131072-1"
+      ]
+    },
+    "hardware": {
+      "gpu": "GPU-1b174534-ebba-826f-b452-8e7f3c05c301",
+      "cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+        109,
+        110,
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120,
+        121,
+        122,
+        123,
+        124,
+        125,
+        126,
+        127,
+        128,
+        129,
+        130,
+        131,
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        153,
+        154,
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        164,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175,
+        176,
+        177,
+        178,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        186,
+        187,
+        188,
+        189,
+        190,
+        191
+      ],
+      "gpu_info": "GPU-1b174534-ebba-826f-b452-8e7f3c05c301, NVIDIA B200, 183359 MiB, 590.48.01"
+    },
+    "reference": {
+      "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+      "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+      "files": {
+        "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+      },
+      "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+      "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690"
+    },
+    "source_commit": "c9d80dea4577a5ac4a4ba463cd3883f8530004f4",
+    "source_status": " M python/oh_my_vllm/kernels/cuda_backend/kernels.cu\n",
+    "estimated": {
+      "kind": "estimated",
+      "source": "TileFoundry HIR",
+      "symbol": "quant",
+      "report": "# analysis target=nvidia.b200_sxm module=Operators function=quant topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=f32:2056@logical,2056@total,2056@cta;fp8e4m3:512@logical,512@total,512@cta\n# traffic traffic=gmem:r9264/w6704@total,r9264/w6704@cta;rmem:r4/w0@total,r4/w0@cta\n# peak-footprint=gmem:5136;rmem:0\n# roofline ideal-ns=3 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef quant(\n    x: Tensor[(2, 256), \"bf16\"]\n):\n    v0 = cast(x, dtype=\"f32\")  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v1 = reshape(v0, new_shape=(2, 2, 128))  # Tensor[(2, 2, 128), \"f32\"]; compute-cost; traffic; roofline\n    v2 = reduce(v1, axes=(-1,), keepdim=True, kind=\"abs_max\")  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w16@total,r2048/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v3 = clamp(v2, min_val=1e-10, max_val=1e999)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v0_2 = 448.0  # Tensor[(), \"f32\", \"umat\"]\n    v4 = div(v3, v0_2)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v5 = div(v1, v4)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2064/w2048@total,r2064/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v6 = clamp(v5, min_val=-448.0, max_val=448.0)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w2048@total,r2048/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v7 = cast(v6, dtype=\"fp8e4m3\")  # Tensor[(2, 2, 128), \"fp8e4m3\"]; compute-cost flops=fp8e4m3:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w512@total,r2048/w512@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = reshape(v7, new_shape=(2, 256))  # Tensor[(2, 256), \"fp8e4m3\"]; compute-cost; traffic; roofline\n    v9 = reshape(v4, new_shape=(2, 2))  # Tensor[(2, 2), \"f32\"]; compute-cost; traffic; roofline\n    return (v8, v9)\n",
+      "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+    },
+    "measured": {
+      "tilelang": {
+        "kind": "measured",
+        "source": "Nsight Compute (separate replay)",
+        "launches": [
+          {
+            "launch_id": "0",
+            "kernel": "kernel_kernel",
+            "metrics": {
+              "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "0.04",
+                "unit": "%"
+              },
+              "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+                "value": "0",
+                "unit": ""
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "launch__registers_per_thread": {
+                "value": "20",
+                "unit": "register/thread"
+              },
+              "launch__shared_mem_per_block_dynamic": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "launch__shared_mem_per_block_static": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "0.12",
+                "unit": "%"
+              },
+              "smsp__inst_executed.sum": {
+                "value": "4720",
+                "unit": "inst"
+              },
+              "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+                "value": "34.37",
+                "unit": "%"
+              },
+              "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+                "value": "13.42",
+                "unit": "%"
+              }
+            }
+          }
+        ]
+      },
+      "cuda": {
+        "kind": "measured",
+        "source": "Nsight Compute (separate replay)",
+        "launches": [
+          {
+            "launch_id": "0",
+            "kernel": "void quantize_kernel<__nv_bfloat16, 0, 1, 1, 0, 5120, 1>(const T1 *, __nv_fp8_e4m3 *, float *, int, int)",
+            "metrics": {
+              "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "0.04",
+                "unit": "%"
+              },
+              "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+                "value": "0",
+                "unit": ""
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": {
+                "value": "0",
+                "unit": "sector"
+              },
+              "launch__registers_per_thread": {
+                "value": "24",
+                "unit": "register/thread"
+              },
+              "launch__shared_mem_per_block_dynamic": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "launch__shared_mem_per_block_static": {
+                "value": "0",
+                "unit": "byte/block"
+              },
+              "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+                "value": "0.09",
+                "unit": "%"
+              },
+              "smsp__inst_executed.sum": {
+                "value": "3400",
+                "unit": "inst"
+              },
+              "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+                "value": "38.99",
+                "unit": "%"
+              },
+              "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+                "value": "19.23",
+                "unit": "%"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "limitation": "Profiler replay only; not timing or performance acceptance",
+    "raw_report_sha256": "3070febce376c2b89a433f7015297cf9c9a98647dbbe0cf79d63f3ec76f98745"
+  },
+  "validation": {
+    "quant-final-tests": {
+      "result": "168 passed;28 subtests; before formatting",
+      "sha256": "3fa17e33036d1b5b8e668501e3e93349865d08766430ff3b27fafacc2b73c005"
+    },
+    "quant-formatted-tests": {
+      "result": "168 passed;28 subtests; final formatted source",
+      "sha256": "d37f84913982548b62015bea39939b5d237d3b58f034e8e94c89fb146837409b"
+    },
+    "quant-entry-proof": {
+      "result": "All three input dtypes,both scale layouts,aligned/offset,plain/SiLU,NaN/Inf groups,all grouped BF16 encodings: exact old CUDA FP8 bits/scales. Before formatting.",
+      "sha256": "a0f1e0c270ab86311a0504d75d9ee3bf44eae681daab2fcf7a5207b979efca5d"
+    },
+    "quant-division-sign-proof": {
+      "result": "All positive finite BF16 input<=maximum pairs: direct reciprocal25474 mismatches; FMA refinement0 positive and0 negative FP8 mismatches. Current SM100/CUDA13.1; not FP32 division equivalence.",
+      "sha256": "6c6b8a8ebf0833213de89ee47ad6e0a9ccb85f793c8232c74f3790bd8a2ab2f6"
+    },
+    "quant-ordinary-fp64": {
+      "result": "Actual-model eager ordinary independent FP64 probes pass; forced64-token output includes repetition/control tokens, not agentic acceptance",
+      "sha256": "3e233ec9e80872d8d2daad5dcaad6718dd34c0dbbb5c365cf4f80e1c79f4e00d"
+    },
+    "quant-mtp-fp64": {
+      "result": "Actual-model eager MTP4 independent FP64 probes pass; forced64-token output includes control tokens and irrelevant continuation, not agentic acceptance",
+      "sha256": "5d7fc552bc3bd401da93d9757dc1d550b725479f48dd83a604704dfa5149a636"
+    },
+    "quant-hooks": {
+      "result": "All-file Rust fmt/width/clippy/tests and Ruff pass",
+      "sha256": "f3e55f7f9832bec68142bbdf0c7408e40148ee73f45759bc29a8788189aeb010"
+    }
+  },
+  "review": "Independent review passed; alignment, special-value and dispatch-boundary supplements completed; macro formatting fixed.",
+  "implementation": "Four-element input/FP8 output vectors, host alignment dispatch,flat4..127-row group schedule; BF16 finite-max reciprocal with FMA residual correction, exact scales and FP16/FP32/nonfinite division."
+}

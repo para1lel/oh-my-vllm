@@ -4,6 +4,7 @@
 #include <cuda_runtime.h>
 #include <tvm/ffi/container/tensor.h>
 #include <tvm/ffi/extra/c_env_api.h>
+#include <type_traits>
 
 using tvm::ffi::TensorView;
 
@@ -14,8 +15,8 @@ using tvm::ffi::TensorView;
 template <typename Input> struct alignas(sizeof(Input) * 4) Four {
   Input values[4];
 };
-template <typename Input> __device__ Four<Input> load_four(const Input *x) {
-  if ((reinterpret_cast<uintptr_t>(x) & (sizeof(Input) * 4 - 1)) == 0)
+template <typename Input, bool Aligned> __device__ Four<Input> load_four(const Input *x) {
+  if constexpr (Aligned)
     return *reinterpret_cast<const Four<Input> *>(x);
   Four<Input> values;
 #pragma unroll
@@ -23,7 +24,8 @@ template <typename Input> __device__ Four<Input> load_four(const Input *x) {
     values.values[j] = x[j];
   return values;
 }
-template <typename Input, bool Silu, bool Column, int RowsPerWarp, bool Flat = false, int Width = 0>
+template <typename Input, bool Silu, bool Column, int RowsPerWarp, bool Flat = false, int Width = 0,
+          bool Aligned = false>
 __global__ void quantize_kernel(const Input *__restrict__ x, __nv_fp8_e4m3 *__restrict__ out,
                                 float *__restrict__ scales, int rows, int runtime_width) {
   const int width = Width ? Width : runtime_width;
@@ -42,11 +44,10 @@ __global__ void quantize_kernel(const Input *__restrict__ x, __nv_fp8_e4m3 *__re
     float value[4], maximum = 0;
     int offset = row * width * (Silu ? 2 : 1) + col + lane * 4;
     Four<Input> packed;
-    if constexpr (Silu)
-      packed = load_four(x + offset);
+    packed = load_four<Input, Aligned>(x + offset);
     Four<Input> up;
     if constexpr (Silu)
-      up = load_four(x + offset + width);
+      up = load_four<Input, Aligned>(x + offset + width);
     if constexpr (Silu) {
 #pragma unroll
       for (int j = 0; j < 4; j += 2) {
@@ -65,7 +66,7 @@ __global__ void quantize_kernel(const Input *__restrict__ x, __nv_fp8_e4m3 *__re
     } else {
 #pragma unroll
       for (int j = 0; j < 4; ++j) {
-        float v = static_cast<float>(x[row * width + col + lane + j * 32]);
+        float v = static_cast<float>(packed.values[j]);
         value[j] = v;
         maximum = fmaxf(maximum, fabsf(v));
       }
@@ -75,32 +76,46 @@ __global__ void quantize_kernel(const Input *__restrict__ x, __nv_fp8_e4m3 *__re
     float scale = __fdiv_rn(fmaxf(maximum, 1e-10f), 448.f);
     if (lane == 0)
       scales[Column ? group * rows + row : row * groups + group] = scale;
+    // BF16 scale and reciprocal stay normal throughout the finite domain.
+    // One FMA residual correction preserves FP8 rounding; FP16/FP32 and
+    // nonfinite maxima retain exact division. This is not FP32 equivalence.
+    float inverse = 0.f;
+    if constexpr (std::is_same_v<Input, __nv_bfloat16>)
+      asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(inverse) : "f"(scale));
 #pragma unroll
-    for (int j = 0; j < 4; ++j)
-      value[j] = fminf(448.f, fmaxf(-448.f, __fdiv_rn(value[j], scale)));
-    if constexpr (Silu)
-      reinterpret_cast<__nv_fp8x4_e4m3 *>(out)[(row * width + col) / 4 + lane] =
-          __nv_fp8x4_e4m3(make_float4(value[0], value[1], value[2], value[3]));
-    else {
-#pragma unroll
-      for (int j = 0; j < 4; ++j)
-        out[row * width + col + lane + j * 32] = __nv_fp8_e4m3(value[j]);
+    for (int j = 0; j < 4; ++j) {
+      float divided;
+      if constexpr (std::is_same_v<Input, __nv_bfloat16>) {
+        if (isfinite(maximum)) {
+          float magnitude = fabsf(value[j]);
+          float initial = magnitude * inverse;
+          float corrected = __fmaf_rn(__fmaf_rn(-initial, scale, magnitude), inverse, initial);
+          divided = copysignf(corrected, value[j]);
+        } else {
+          divided = __fdiv_rn(value[j], scale);
+        }
+      } else {
+        divided = __fdiv_rn(value[j], scale);
+      }
+      value[j] = fminf(448.f, fmaxf(-448.f, divided));
     }
+    reinterpret_cast<__nv_fp8x4_e4m3 *>(out)[(row * width + col) / 4 + lane] =
+        __nv_fp8x4_e4m3(make_float4(value[0], value[1], value[2], value[3]));
   }
 }
 
-template <typename Input, int Width>
+template <typename Input, int Width, bool Aligned>
 void launch_quantize(TensorView x, TensorView out, TensorView scales, bool column, bool silu,
                      cudaStream_t stream) {
   int rows = out.size(0), width = out.size(1);
 #define CALL(S, C, R, T)                                                                           \
-  quantize_kernel<Input, S, C, R, false, Width>                                                    \
+  quantize_kernel<Input, S, C, R, false, Width, Aligned>                                           \
       <<<dim3((rows + (T / 32) * R - 1) / ((T / 32) * R), width / 128), T, 0, stream>>>(           \
           static_cast<const Input *>(x.data_ptr()), static_cast<__nv_fp8_e4m3 *>(out.data_ptr()),  \
           static_cast<float *>(scales.data_ptr()), rows, width)
 #define LAUNCH(S, C)                                                                               \
-  if (width / 128 > 65535 || (S && rows >= 4 && rows < 128)) {                                     \
-    quantize_kernel<Input, S, C, 1, true, Width>                                                   \
+  if (width / 128 > 65535 || (rows >= 4 && rows < 128)) {                                          \
+    quantize_kernel<Input, S, C, 1, true, Width, Aligned>                                          \
         <<<(rows * (width / 128) + 3) / 4, 128, 0, stream>>>(                                      \
             static_cast<const Input *>(x.data_ptr()),                                              \
             static_cast<__nv_fp8_e4m3 *>(out.data_ptr()), static_cast<float *>(scales.data_ptr()), \
@@ -129,34 +144,43 @@ void launch_quantize(TensorView x, TensorView out, TensorView scales, bool colum
 #undef CALL
 }
 
-template <typename Input>
+template <typename Input, bool Aligned>
 void dispatch(TensorView x, TensorView out, TensorView scales, bool column, bool silu,
               cudaStream_t stream) {
   switch (out.size(1)) {
   case 5120:
-    launch_quantize<Input, 5120>(x, out, scales, column, silu, stream);
+    launch_quantize<Input, 5120, Aligned>(x, out, scales, column, silu, stream);
     break;
   case 6144:
-    launch_quantize<Input, 6144>(x, out, scales, column, silu, stream);
+    launch_quantize<Input, 6144, Aligned>(x, out, scales, column, silu, stream);
     break;
   case 17408:
-    launch_quantize<Input, 17408>(x, out, scales, column, silu, stream);
+    launch_quantize<Input, 17408, Aligned>(x, out, scales, column, silu, stream);
     break;
   default:
-    launch_quantize<Input, 0>(x, out, scales, column, silu, stream);
+    launch_quantize<Input, 0, Aligned>(x, out, scales, column, silu, stream);
   }
+}
+template <typename Input>
+void dispatch_alignment(TensorView x, TensorView out, TensorView scales, bool column, bool silu,
+                        cudaStream_t stream) {
+  // Contiguous rows and128-value groups keep every four-element load aligned
+  // whenever the input base is aligned. Storage-offset views retain scalar loads.
+  if ((reinterpret_cast<uintptr_t>(x.data_ptr()) & (sizeof(Input) * 4 - 1)) == 0)
+    dispatch<Input, true>(x, out, scales, column, silu, stream);
+  else
+    dispatch<Input, false>(x, out, scales, column, silu, stream);
 }
 void quantize(TensorView x, TensorView out, TensorView scales, bool column, bool silu) {
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
   if (x.dtype().code == kDLBfloat)
-    dispatch<__nv_bfloat16>(x, out, scales, column, silu, stream);
+    dispatch_alignment<__nv_bfloat16>(x, out, scales, column, silu, stream);
   else if (x.dtype().bits == 16)
-    dispatch<__half>(x, out, scales, column, silu, stream);
+    dispatch_alignment<__half>(x, out, scales, column, silu, stream);
   else
-    dispatch<float>(x, out, scales, column, silu, stream);
+    dispatch_alignment<float>(x, out, scales, column, silu, stream);
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA quantize launch failed";
 }
-
 __global__ void silu_kernel(const __nv_bfloat16 *__restrict__ x, __nv_bfloat16 *__restrict__ out,
                             int rows, int width) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
