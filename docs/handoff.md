@@ -32,6 +32,15 @@ the coverage flag to 4 instead of 1, so its shutdown coverage check failed;
 the corrected driver is rerunning. No numerical tolerance or test was changed.
 Operator experiments and their records remain outside the repository.
 
+The migration optimization keeps dynamic token/batch dimensions and computes
+attention split extents on device. KV gather uses explicit coalesced placement;
+single-sequence GDN uses warp-local reductions. Review found no correctness
+blockers. Optimized full suite again passes146+12 with no skips, and both actual
+ordinary/MTP FP64 probes pass. Six boundary rows passed before this optimization;
+their optimized reruns plus service/agentic and formal performance remain active.
+Historical performance figures below describe the pre-TileLang implementation,
+not acceptance for this migration.
+
 ## Previous investigation: TTFT and long context
 
 User approved a new 12-row throughput/TTFT baseline on latest official vLLM main,

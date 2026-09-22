@@ -12,14 +12,11 @@ import torch
 
 @tilelang.jit
 def _partials(
-    n: int,
     h: int,
     hk: int,
     pages: int,
     table_width: int,
-    groups: int,
     splits: int,
-    chunk: int,
     first: int,
     bk: int,
     bq: int,
@@ -27,8 +24,16 @@ def _partials(
     index_types: tuple,
 ):
     table_dtype, length_dtype, start_dtype = index_types
+    n = T.dynamic("n")
+    groups = T.dynamic("groups") if grouped else n
     starts_size = groups + 1 if grouped else n
     ratio = h // hk
+    # Read multiple KV rows per warp group with coalesced eight-element vectors.
+    gather_layout = tilelang.layout.Fragment(
+        (bk, 256),
+        forward_thread_fn=lambda i, j: (i % 8) * 32 + j // 8,
+        forward_index_fn=lambda i, j: (i // 8) * 8 + j % 8,
+    )
 
     @T.prim_func
     def kernel(
@@ -40,7 +45,7 @@ def _partials(
         partial: T.Tensor((n, h, splits, 256), "float32"),
         lse: T.Tensor((n, h, splits), "float32"),
     ):
-        with T.Kernel(groups, hk, splits, threads=128) as (seq, kh, split):
+        with T.Kernel(groups, hk, splits, threads=256) as (seq, kh, split):
             q_shared = T.alloc_shared((bq, 256), "bfloat16")
             k_shared = T.alloc_shared((bk, 256), "bfloat16")
             v_shared = T.alloc_shared((bk, 256), "bfloat16")
@@ -55,6 +60,8 @@ def _partials(
             start = T.if_then_else(grouped, starts[seq], seq)
             end = T.if_then_else(grouped, starts[seq + 1], seq + 1)
             last = lengths[end - 1]
+            # Partition the live extent on device; graph replay can change lengths.
+            chunk = T.ceildiv(T.max(last - first, 0), splits * bk) * bk
             begin = first + split * chunk
             T.clear(acc)
             T.clear(denom)
@@ -65,7 +72,7 @@ def _partials(
                     row < end, query[row, kh * ratio + i % ratio, j], 0
                 )
             for step in T.serial(T.ceildiv(T.max(T.min(chunk, last - begin), 0), bk)):
-                for i, j in T.Parallel(bk, 256):
+                for i, j in T.Parallel(bk, 256, loop_layout=gather_layout):
                     pos = begin + step * bk + i
                     if pos < last:
                         page = tables[start, pos // 784].astype("int64")
@@ -123,7 +130,9 @@ def _partials(
 
 
 @tilelang.jit
-def _merge(n: int, h: int, splits: int):
+def _merge(h: int, splits: int):
+    n = T.dynamic("n")
+
     @T.prim_func
     def kernel(
         partial: T.Tensor((n, h, splits, 256), "float32"),
@@ -196,13 +205,11 @@ def decode(
         or not starts.is_contiguous()
     ):
         raise ValueError("grouped decode starts must be contiguous CUDA integers")
-    groups = starts.numel() - 1 if starts is not None else requests
-    splits = 64 if starts is not None and groups == 1 else 32
-    block = 64 if starts is not None else 128
+    splits = 64 if starts is not None else 128
+    block = 64
     partial = torch.empty((requests, heads, splits, dim), device=query.device)
     lse = torch.empty((requests, heads, splits), device=query.device)
     out = torch.empty_like(query)
-    chunk = (max_tokens + splits * block - 1) // (splits * block) * block
     offsets = starts if starts is not None else lengths
     types = tuple(
         str(t.dtype).removeprefix("torch.") for t in (tables, lengths, offsets)
@@ -213,19 +220,16 @@ def decode(
         else 16
     )
     _partials(
-        requests,
         heads,
         kv_heads,
         len(cache),
         tables.shape[1],
-        groups,
         splits,
-        chunk,
         first,
         block,
         query_tile,
         starts is not None,
         types,
     )(query, cache, tables, lengths, offsets, partial, lse)
-    _merge(requests, heads, splits)(partial, lse, out)
+    _merge(heads, splits)(partial, lse, out)
     return out

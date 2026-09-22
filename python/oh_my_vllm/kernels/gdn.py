@@ -96,6 +96,35 @@ def _recurrent(
             kk = T.alloc_fragment((128,), "float32")
             qsum = T.alloc_fragment((1,), "float32")
             ksum = T.alloc_fragment((1,), "float32")
+            # One sequence benefits from warp-local reductions; larger batches
+            # retain the compiler layout for higher state throughput.
+            if sequences == 1:
+                T.annotate_layout(
+                    {
+                        state: tilelang.layout.Fragment(
+                            (bv, 128),
+                            forward_thread_fn=lambda i, j: (i % 4) * 32 + j % 32,
+                            forward_index_fn=lambda i, j: (i // 4) * 4 + j // 32,
+                        ),
+                        work: tilelang.layout.Fragment(
+                            (bv, 128),
+                            forward_thread_fn=lambda i, j: (i % 4) * 32 + j % 32,
+                            forward_index_fn=lambda i, j: (i // 4) * 4 + j // 32,
+                        ),
+                        qv: tilelang.layout.Fragment(
+                            (128,),
+                            replicate=4,
+                            forward_thread_fn=lambda j, r: r * 32 + j % 32,
+                            forward_index_fn=lambda j: j // 32,
+                        ),
+                        kv: tilelang.layout.Fragment(
+                            (128,),
+                            replicate=4,
+                            forward_thread_fn=lambda j, r: r * 32 + j % 32,
+                            forward_index_fn=lambda j: j // 32,
+                        ),
+                    }
+                )
             source = reads[seq].astype("int64")
             qhead = head // (hv // hq)
             for i, j in T.Parallel(bv, 128):

@@ -16,7 +16,7 @@ The wrappers select the framework environment, Python path, build directory and
 independent kernel caches. GPU tests wait for an idle B200 and pin its UUID.
 
 ```bash
-scripts/with-env.sh python -m pip install -r requirements/runtime.txt
+uv pip install --python /data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python -r requirements/runtime.txt
 scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
 scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64
 ```
@@ -75,3 +75,7 @@ measurements. Every milestone requires independent review and a commit.
 - benchmarks/ttft.py: independent measurements and current TTFT/throughput gates.
 - benchmarks/baseline/enginecore.py: explicitly isolated reference collector.
 - benchmarks/compare_vllm.py: historical comparison and process supervision.
+
+Custom kernel development uses TileLang and the development-only TileFoundry
+fork. See [the workflow](docs/tilelang-development.md) for installation and
+operator semantics; final migration performance acceptance is still pending.
