@@ -1,5 +1,27 @@
 # Handoff — 2026-09-22
 
+## Gated RMS specialization and complete-matrix update
+
+Clean d45c4f2 completes all173 cases:111 pass,62 fail, with no detected GPU
+interference. All16 attention cases pass. The2496-row residual RMS case fails
+this complete collection despite earlier subset wins; its advantage is not yet
+reliable. Remaining failures include append, small quantization/rotary, Q/K
+normalization, recurrent updates, gates and convolution. Full acceptance is pending.
+
+A new48-head/128-wide gated RMS path retains values in registers and uses a stable
+sigmoid with denominator in[1,2]. It keeps FP32 gating without intermediate BF16
+rounding and supports the original strides/epsilon. The dirty-source gated RMS
+subset passes13/13 cases. Full CUDA correctness passes160 tests plus28 subtests.
+Independent review, extra FP64 packed/nonunit-stride and large-weight/negative-gate
+checks pass. All finite BF16 gate encodings were also checked with fixed input1
+and weight0.25; this is not exhaustive over input/weight combinations or bitwise
+proof. No original tolerances change. Separate TileFoundry/Nsight observations,
+complete-matrix decisions and subset evidence are summarized in
+`bench/baseline/2026-09-22-cuda-gated-rms-progress.json`.
+
+All-file checks pass and all task-owned GPU programs exited. Default stays
+TileLang; further kernel tuning and complete framework acceptance remain.
+
 ## RMS launch and vector-width tuning
 
 Model-width RMS now selects 128 threads for medium batches, 160 for large plain

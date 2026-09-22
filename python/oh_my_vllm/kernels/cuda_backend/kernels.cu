@@ -328,6 +328,38 @@ void launch_rms5120(TensorView x, TensorView residual, TensorView weight,
 struct Strides {
   int64_t token, head, dim;
 };
+// Fixed model head width retains the input values across the reduction.
+// The stable sigmoid keeps the fast division denominator in [1, 2], including
+// extreme finite BF16 gates; it does not round the gate activation to BF16.
+__global__ void gated_rms128_kernel(const __nv_bfloat16 *__restrict__ x,
+                                    const float *__restrict__ weight,
+                                    const __nv_bfloat16 *__restrict__ gate,
+                                    __nv_bfloat16 *__restrict__ out, int rows,
+                                    Strides xs, Strides gs, float epsilon) {
+  int lane = threadIdx.x & 31, row = blockIdx.x * 4 + threadIdx.x / 32;
+  if (row >= rows)
+    return;
+  int64_t offset = (row / 48) * xs.token + (row % 48) * xs.head;
+  int64_t goffset = (row / 48) * gs.token + (row % 48) * gs.head;
+  float values[4], total = 0;
+#pragma unroll
+  for (int j = 0; j < 4; ++j) {
+    float v = __bfloat162float(x[offset + (lane + j * 32) * xs.dim]);
+    values[j] = v;
+    total += v * v;
+  }
+  float inv = rsqrtf(warp_sum(total) * (1.f / 128.f) + epsilon);
+#pragma unroll
+  for (int j = 0; j < 4; ++j) {
+    int col = lane + j * 32;
+    float g = __bfloat162float(gate[goffset + col * gs.dim]);
+    float e = __expf(-fabsf(g));
+    float sigmoid = __fdividef(g >= 0.f ? 1.f : e, 1.f + e);
+    float v = values[j] * inv * weight[col];
+    out[static_cast<int64_t>(row) * 128 + col] = __float2bfloat16_rn(v * (g * sigmoid));
+  }
+}
+
 template <bool Large, bool Gated, bool Residual>
 __global__ void rms_kernel(const __nv_bfloat16 *__restrict__ x,
                            const float *__restrict__ weight,
@@ -384,6 +416,15 @@ void rms(TensorView x, TensorView weight, TensorView gate, TensorView out, doubl
   }
   Strides xs{x.stride(0), x.stride(1), x.stride(2)};
   Strides gs{gate.stride(0), gate.stride(1), gate.stride(2)};
+  if (gated && h == 48 && d == 128) {
+    gated_rms128_kernel<<<(rows + 3) / 4, 128, 0, stream_for(x)>>>(
+        static_cast<const __nv_bfloat16 *>(x.data_ptr()),
+        static_cast<const float *>(weight.data_ptr()),
+        static_cast<const __nv_bfloat16 *>(gate.data_ptr()),
+        static_cast<__nv_bfloat16 *>(out.data_ptr()), rows, xs, gs, epsilon);
+    TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA gated RMS launch failed";
+    return;
+  }
 #define RMS(L, G)                                                                                  \
   rms_kernel<L, G, false><<<L ? rows : (rows + 3) / 4, L ? 256 : 128, 0, stream_for(x)>>>(         \
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),                                            \
