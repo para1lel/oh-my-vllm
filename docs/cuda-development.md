@@ -1,5 +1,28 @@
 # CUDA kernel development
 
+## Packed SiLU follow-up
+
+Cleancb867d4 completed all173 operator cases without detected GPU interference:
+80 pass,93 fail. The next diagnostic uses width-specialized FP8 kernels and
+paired BF16 SiLU multiplication. All13 fused-SiLU cases satisfy the existing
+three-round speed decision, including the previously failing medium shape;
+this dirty-source subset is not full acceptance. Full CUDA correctness remains
+160 tests plus28 subtests. Independent review, layout/dtype boundary checks and
+all-file hooks pass. Separate TileFoundry/Nsight summaries and source identities
+are recorded in `bench/baseline/2026-09-22-cuda-silu-progress.json`.
+
+The fast exponential and paired multiply preserve both BF16 rounding boundaries.
+Temporary SM100/CUDA13.1 exhaustive checks found zero differences for rounded
+SiLU over every finite BF16 input and for BF16-pair multiplication versus FP32
+multiplication followed by BF16 rounding over all finite BF16 operand pairs.
+These checks include signed zero, subnormals, overflow and underflow; they do not
+establish equivalence for other architectures/toolchains or arbitrary FP32 SiLU.
+No temporary tuning scripts or raw traces are retained in the repository.
+Attention, Q/K normalization, KV append and other failed cases remain to be tuned;
+no final CUDA model/performance/service acceptance is claimed. Default remains
+TileLang. All task-owned GPU programs have exited.
+
+
 ## Vector-kernel optimization progress
 
 Clean7437e0f completed the full173-case operator matrix without detected GPU
