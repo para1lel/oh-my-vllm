@@ -39,3 +39,9 @@ real independent oh-my-pi tasks and final monitored nine-row matrix remain pendi
 `2026-09-21-independent-stage3.json` records removal of legacy runtime/test
 dependencies, full target-environment GPU/CPU tests and real file/module/library
 independence audits. Final workload acceptance is recorded separately.
+
+Model naming correction (2026-09-22): the target is **Qwen3.8-27B-FP8**.
+Older raw logs and frozen JSON may contain the erroneous Qwen3.5 label or the
+previous `qwen3.5-27b-fp8` service ID. Those are preserved as records of the actual
+historical executions, not current model naming. Current code/docs/service IDs use
+Qwen3.8. New measurements must use the corrected name.

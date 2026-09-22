@@ -1,5 +1,16 @@
 # Acceptance evidence
 
+## TTFT and 262144 context — in progress, 2026-09-22
+
+All six ordinary/MTP4 batch 1/2/4 maximum-context checks complete 258048 input +
+4096 output tokens without preemption. Separate FA/GDN capacities use 1400/128
+slots. A high-page int32 address overflow was found and fixed; FP64 regression
+tests cover both decode kernels and cache append. Long strict-JSON requests and
+prefix reuse pass through both APIs with MTP4 and the corrected Qwen3.8 model ID.
+[Stage evidence](../bench/baseline/2026-09-22-ttft-stage1.json) records raw diagnostic
+results. They are not formal throughput/TTFT repetitions. The new 12-row baseline
+and ratio gates remain pending; the following acceptance belongs to the prior task.
+
 ## Independent runtime — 2026-09-21
 
 All nine 32768→4096 rows pass 95% against the original frozen EngineCore baseline.
@@ -132,7 +143,7 @@ they describe their original binaries, not additional V2 runs.
 
 ## Serving acceptance — 2026-09-21
 
-Real Qwen3.5-27B-FP8 serving passed on B200 UUID
+Real Qwen3.8-27B-FP8 serving passed on B200 UUID
 GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad with four MTP drafts and block 784.
 [Recorded requests, results and metrics](../bench/baseline/2026-09-21-serving-acceptance.json)
 include the release-binary identity, commands, actual tool paths and final answers.

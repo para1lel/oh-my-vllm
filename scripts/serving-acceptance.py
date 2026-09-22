@@ -34,7 +34,7 @@ for api in ["chat", "responses"]:
                 "Return JSON with n=123 and label=verified. "
                 "For tool use, call report with those arguments."
             )
-            body = {"model": "qwen3.5-27b-fp8", "temperature": 0}
+            body = {"model": "qwen3.8-27b-fp8", "temperature": 0}
             if api == "chat":
                 path = "chat/completions"
                 body.update(

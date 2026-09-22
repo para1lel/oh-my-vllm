@@ -25,6 +25,7 @@ class RuntimeConfig:
     max_model_len: int = 65536
     num_gpu_blocks: int = 1024
     speculative_tokens: int = 0
+    mamba_blocks: int | None = None
 
 
 class OhMyVllmWorker:
@@ -36,6 +37,13 @@ class OhMyVllmWorker:
         self.config = config
         # Preserve the original scheduler capacity, without vLLM's physical padding.
         self.logical_num_blocks = config.num_gpu_blocks // 3
+        self.mamba_blocks = (
+            self.logical_num_blocks
+            if config.mamba_blocks is None
+            else config.mamba_blocks
+        )
+        if self.mamba_blocks < 2:
+            raise ValueError("Mamba capacity needs a null and a writable slot")
         self.histories: dict[int, list[int]] = {}
         self.samplers: dict[int, RequestSampler] = {}
         self.sources: dict[int, int] = {}
@@ -67,14 +75,14 @@ class OhMyVllmWorker:
             else:
                 cache = (
                     torch.zeros(
-                        self.logical_num_blocks,
+                        self.mamba_blocks,
                         10240,
                         3,
                         dtype=torch.bfloat16,
                         device="cuda",
                     ),
                     torch.zeros(
-                        self.logical_num_blocks,
+                        self.mamba_blocks,
                         48,
                         128,
                         128,
@@ -156,12 +164,20 @@ class OhMyVllmWorker:
                 > self.config.max_model_len
             ):
                 raise ValueError("scheduled input exceeds the model context")
+            if any(
+                p <= 0 or p >= self.logical_num_blocks for p in request.fa_block_table
+            ):
+                raise ValueError("FA table exceeds page capacity")
+            if any(p < 0 or p >= self.mamba_blocks for p in request.mamba_block_table):
+                raise ValueError("Mamba table exceeds state capacity")
+            if rid in self.sources and not 0 <= self.sources[rid] < self.mamba_blocks:
+                raise ValueError("recurrent source exceeds state capacity")
             plans.append(
                 plan_request(
                     request,
                     self.histories[rid],
                     self.sources.get(rid),
-                    self.logical_num_blocks,
+                    max(self.logical_num_blocks, self.mamba_blocks),
                     self.config.speculative_tokens,
                 )
             )
@@ -240,7 +256,7 @@ class OhMyVllmWorker:
                 device="cuda",
             )
             if key not in self.graphs:
-                logger.debug(
+                logger.info(
                     "Capture target graph: tokens=%d requests=%d extent=%d", *key
                 )
                 self.graphs[key] = DecodeGraph(
@@ -350,6 +366,15 @@ class OhMyVllmWorker:
         return WorkerOutput(results)
 
     def shutdown(self) -> None:
+        logger.info(
+            "GPU memory high water",
+            extra={
+                "fields": {
+                    "max_allocated_bytes": torch.cuda.max_memory_allocated(),
+                    "max_reserved_bytes": torch.cuda.max_memory_reserved(),
+                }
+            },
+        )
         verify_loaded_modules()
         logger.info("Independent runtime module/library audit passed")
         self.histories.clear()

@@ -1,4 +1,4 @@
-"""Single-device, text-only Qwen3.5 FP8 model and its MTP head.
+"""Single-device, text-only Qwen3.8 FP8 model and its MTP head.
 
 Architecture equations follow the Qwen checkpoint and its published model
 implementation. No vLLM model classes, weight loaders or operators are used.
@@ -224,7 +224,7 @@ class Qwen:
             "attn_output_gate": True,
         }
         if any(text.get(k) != v for k, v in expected.items()):
-            raise ValueError("model is not the supported Qwen3.5-27B architecture")
+            raise ValueError("model is not the supported Qwen3.8-27B architecture")
         rope = text.get("rope_parameters", {})
         if any(
             rope.get(k) != v

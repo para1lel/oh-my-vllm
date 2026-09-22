@@ -42,7 +42,9 @@ def _partials(
     for block in range(begin, tl.minimum(begin + Chunk, length), BK):
         positions = block + tl.arange(0, BK)
         valid = positions < length
-        page = tl.load(Tables + req * TableWidth + positions // 784, valid, 0)
+        page = tl.load(Tables + req * TableWidth + positions // 784, valid, 0).to(
+            tl.int64
+        )
         offset = page * (2 * 784 * HK * D) + (positions % 784) * HK * D + kv_head * D
         k = tl.load(Cache + offset[None, :] + dims[:, None], valid[None, :], 0)
         v = tl.load(
@@ -106,7 +108,7 @@ def _grouped_partials(
     for block in range(begin, tl.minimum(begin + Chunk, last), BK):
         pos = block + tl.arange(0, BK)
         valid = pos < last
-        page = tl.load(Tables + start * TableWidth + pos // 784, valid, 0)
+        page = tl.load(Tables + start * TableWidth + pos // 784, valid, 0).to(tl.int64)
         off = page * 2 * 784 * HK * D + (pos % 784) * HK * D + kh * D
         k = tl.load(Cache + off[None, :] + dims[:, None], valid[None, :], 0)
         v = tl.load(

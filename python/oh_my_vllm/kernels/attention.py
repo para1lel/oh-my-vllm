@@ -11,7 +11,7 @@ def _append(
 ):
     token = tl.program_id(0)
     columns = tl.arange(0, Block)
-    slot = tl.load(Slots + token)
+    slot = tl.load(Slots + token).to(tl.int64)
     page, offset = slot // Page, slot % Page
     destination = page * 2 * Page * Width + offset * Width + columns
     key = tl.load(K + token * Width + columns, columns < Width, 0)

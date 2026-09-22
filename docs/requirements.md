@@ -1,6 +1,6 @@
 # Requirements — oh-my-vllm
 
-_Confirmed status: user-confirmed unless noted. Last reviewed: 2026-09-21._
+_Confirmed status: user-confirmed unless noted. Last reviewed: 2026-09-22._
 
 ---
 
@@ -9,7 +9,7 @@ _Confirmed status: user-confirmed unless noted. Last reviewed: 2026-09-21._
 **Status:** user-confirmed
 **Priority:** must-have
 
-Build a Rust-first inference framework for Qwen3.5-27B-FP8 on a single B200 GPU
+Build a Rust-first inference framework for Qwen3.8-27B-FP8 on a single B200 GPU
 that reaches at least 95% of vLLM EngineCore throughput on the benchmark workloads
 below. Rust owns serving, scheduling and logical KV; Python owns GPU computation.
 
@@ -36,7 +36,7 @@ scheduler. The split is the design, not an implementation convenience.
 **Status:** user-confirmed
 **Priority:** must-have
 
-Model: `/data0/shared/Qwen3.8-27B-FP8` (Qwen3.5-27B, FP8 quantised)
+Model: `/data0/shared/Qwen3.8-27B-FP8` (Qwen3.8-27B, FP8 quantised)
 Architecture: 48 GatedDeltaNet (Mamba) layers + 16 full-attention layers
 Block size: **784 tokens** — this is a hard constraint from the hybrid architecture.
 KV groups: FA group (`group_id=0`, 16 layers) + Mamba group (`group_id=1`, 48 layers,
@@ -52,18 +52,42 @@ values is fine, but the default and all production paths use 784.
 **Status:** user-confirmed
 **Priority:** must-have
 
-| bs | input tokens | output tokens | metric | target |
-|---|---|---|---|---|
-| 1 | 32768 | 4096 | output tok/s | >=95% of matched vLLM |
-| 2 | 32768 | 4096 | output tok/s | >=95% of matched vLLM |
-| 4 | 32768 | 4096 | output tok/s | >=95% of matched vLLM |
+| mode | input tokens | output tokens | batches |
+|---|---|---|---|
+| ordinary / MTP4 / prefix-hit | 32768 | 4096 | 1, 2, 4 |
+| ordinary | 131072 | 4096 | 1, 2, 4 |
 
-Run each row in ordinary decoding, MTP, and controlled prefix-hit modes against
-matching vLLM modes. Identical token inputs, fixed output counts, sampling,
-execution settings, memory budgets and timing boundaries are required. Exclude
-loading, compilation and warmup; include scheduling and transport. Report at
-least three measurements and their median, rerunning if variance is material.
-Faster than 105% is a pass. All nine required rows passed; raw measurements and configuration are linked in acceptance.md.
+All 12 rows require throughput >=95% of the newly frozen official vLLM main
+baseline. User authorized refreshing its isolated checkout and environment and
+remeasuring all rows on 2026-09-22. Old baseline artifacts remain historical.
+Use identical token inputs, sampling, output counts and comparable effective cache
+capacities, with explicit configuration and source/environment identities.
+
+## REQ-PERF-002 — EngineCore TTFT
+
+All 12 rows also require TTFT <=110% of the new baseline. Start the monotonic clock
+at common batch submission with pretokenized inputs, before request registration;
+stop per request when the caller receives its first retained output token. Include
+in-engine queueing, scheduling, transport and sampling; exclude HTTP, tokenization,
+model loading and warmup. Preserve each request's TTFT. The row statistic is the
+median of per-repetition maximum request TTFTs. Pure GPU prefill timing is diagnostic.
+
+At least two full warmups and five measured repetitions are required. Ordinary/MTP
+measurements reset prefix reuse; prefix mode explicitly seeds the controlled hit.
+Compilation/new graph capture invalidates a measured run. If TTFT or throughput
+(max-min)/median exceeds 5%, investigate and repeat the complete measurement set;
+retain every attempt and reason for exclusion. No cherry-picked repetitions.
+Cold latency is reported separately with no hard gate. Fix failures rather than
+relaxing thresholds. Final acceptance of the new matrix is pending.
+
+## REQ-CONTEXT-001 — Maximum context and memory
+
+Support 262144 total input/output tokens. Boundary workload is 258048 input plus
+4096 output in ordinary and MTP4 at batches 1/2/4, without OOM or recompute
+preemption. Record performance and peak GPU memory, without adding ratio gates
+beyond the 12-row matrix. Cover long-context prefix restoration and constrained
+decoding. Keep the 32768 per-step token budget and block size 784; optimize memory
+layout/workspaces as necessary, preserving numerical tolerances and functionality.
 
 ---
 

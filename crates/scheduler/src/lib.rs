@@ -2,7 +2,7 @@
 //!
 //! A port of the core scheduling logic from vLLM's
 //! `vllm/v1/core/sched/scheduler.py`, focused on the paths that matter for
-//! Qwen3.5 on a single B200:
+//! Qwen3.8 on a single B200:
 //!
 //! - FCFS waiting queue → running queue.
 //! - Per-step token budget; chunked prefill is a natural consequence of

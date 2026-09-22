@@ -92,7 +92,7 @@ class HttpTests(unittest.TestCase):
 
     def base(self, responses=False, **extra):
         return {
-            "model": "qwen3.5-27b-fp8",
+            "model": "qwen3.8-27b-fp8",
             **(
                 {"input": "Hello"}
                 if responses

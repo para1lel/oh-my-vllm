@@ -21,7 +21,7 @@ pub struct BlockHash(pub u64);
 
 /// A block hash qualified by KV cache group.
 ///
-/// Hybrid models (Qwen3.5: GatedDeltaNet + full attention) have several KV cache
+/// Hybrid models (Qwen3.8: GatedDeltaNet + full attention) have several KV cache
 /// groups with different block layouts, so the same token prefix maps to a
 /// different physical block per group. The group id keeps those entries distinct
 /// in one shared map.

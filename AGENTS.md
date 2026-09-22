@@ -2,7 +2,7 @@
 
 ## Project goal (user-confirmed)
 
-Build a Rust-first inference framework for **Qwen3.5-27B-FP8 on a single B200 GPU**
+Build a Rust-first inference framework for **Qwen3.8-27B-FP8 on a single B200 GPU**
 that matches vLLM EngineCore throughput at least **95%** on the workloads in
 `docs/requirements.md`. Rust owns serving, scheduling and logical KV cache;
 Python owns GPU computation. The two sides use ZMQ DEALER and msgpack.
@@ -13,7 +13,7 @@ source checkout, or depend on the old vllm conda environment or build caches.
 
 ## Non-negotiable constraints
 
-- **Target model:** `/data0/shared/Qwen3.8-27B-FP8` (Qwen3.5-27B, 48 GDN + 16 FA layers)
+- **Target model:** `/data0/shared/Qwen3.8-27B-FP8` (Qwen3.8-27B, 48 GDN + 16 FA layers)
 - **Target hardware:** single B200 GPU, wait for any idle B200 with `scripts/with-gpu.sh`; pin the selected GPU UUID
 - **GPU cleanup:** Promptly stop GPU programs started for the task as soon as
   their tests/runs finish, including inference servers and child workers. Do not
@@ -30,13 +30,19 @@ source checkout, or depend on the old vllm conda environment or build caches.
 - **Scope:** Keep all existing features. Future model architectures, single-node
   multi-GPU, other NVIDIA backends and the local DSpark checkpoint need brief
   extension documentation only, not empty interfaces or untested support claims.
-- **Regression baseline:** Only compare against the original frozen EngineCore
-  artifact; do not rerun it or impose a new V2-relative performance threshold.
-  Intermediate stages require relevant correctness tests and review; incomplete
-  performance work must be explicit. Final acceptance requires all nine rows.
+- **Regression baseline (2026-09-22):** User authorized updating the isolated vLLM
+  checkout/environment to official main and freezing its SHA, then remeasuring
+  all 12 workloads for TTFT and throughput. Preserve old artifacts as history.
+  Baseline-only tooling may use the isolated vLLM environment; project builds,
+  tests and inference must remain independent. Every row requires throughput
+  >=95% and TTFT <=110% of the new baseline. Use at least two complete warmups
+  and five measured repetitions; investigate and repeat if spread/median >5%.
+- **Context:** Support input plus output up to 262144 tokens. Ordinary and MTP4
+  boundary runs at batch 1/2/4 must finish without OOM or recompute preemption.
+  Optimize memory layout as needed; retain block784 and existing correctness.
 - **Rust env:** `/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/cargo`
   (`CARGO_TARGET_DIR=/data0/shared/dongwu.chen/oh-my-vllm/target`)
-- **Block size:** 784 tokens (Qwen3.5 hybrid requirement — do not change)
+- **Block size:** 784 tokens (Qwen3.8 hybrid requirement — do not change)
 - **KV groups:** FA group (16 layers) + Mamba group (48 layers, `mamba_cache_mode="align"`)
 - **Attribution line on every commit:**
   `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`

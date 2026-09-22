@@ -6,6 +6,7 @@ is absent. This aligns every cached row with the token represented by Rust's
 prefix hash; boundary rows no longer depend on a token outside that prefix.
 """
 
+import logging
 import os
 from itertools import pairwise
 
@@ -16,6 +17,8 @@ from oh_my_vllm.models.qwen import AttentionBatch, Qwen
 from oh_my_vllm.worker.batch_plan import BLOCK, PlannedRequest
 from oh_my_vllm.worker.protocol import RequestOutput
 from oh_my_vllm.worker.tensors import device_tensor
+
+logger = logging.getLogger(__name__)
 
 
 class MTP:
@@ -81,6 +84,7 @@ class MTP:
                     else None
                 )
                 if key not in self.graphs:
+                    logger.info("Capture draft graph: %s", key)
                     self.graphs[key] = DraftGraph(
                         self.model,
                         self.cache,
@@ -121,6 +125,7 @@ class MTP:
         )
         positions = device_tensor([p for _, _, p, _ in eligible], device=self.device)
         if key not in self.chains:
+            logger.info("Capture proposal graph: %s", key)
             self.chains[key] = ProposalGraph(
                 self.model, self.cache, hidden, positions, tables, extent
             )

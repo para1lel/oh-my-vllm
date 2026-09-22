@@ -41,7 +41,7 @@ def main():
         result = request(
             "/chat/completions",
             {
-                "model": "qwen3.5-27b-fp8",
+                "model": "qwen3.8-27b-fp8",
                 "messages": [{"role": "user", "content": "计算 12+13,只回答结果。"}],
                 "reasoning_effort": effort,
                 "max_tokens": 1024,
@@ -53,7 +53,7 @@ def main():
     first = request(
         "/responses",
         {
-            "model": "qwen3.5-27b-fp8",
+            "model": "qwen3.8-27b-fp8",
             "input": "Remember the number 731. Reply OK.",
             "reasoning": {"effort": "off"},
             "max_output_tokens": 128,
@@ -63,7 +63,7 @@ def main():
     second = request(
         "/responses",
         {
-            "model": "qwen3.5-27b-fp8",
+            "model": "qwen3.8-27b-fp8",
             "previous_response_id": first["id"],
             "input": "What number did I ask you to remember?",
             "reasoning": {"effort": "off"},
@@ -82,7 +82,7 @@ def main():
 
     def mixed(constrained):
         body = {
-            "model": "qwen3.5-27b-fp8",
+            "model": "qwen3.8-27b-fp8",
             "messages": [
                 {
                     "role": "user",
@@ -111,7 +111,7 @@ def main():
         args.base_url + "/chat/completions",
         data=json.dumps(
             {
-                "model": "qwen3.5-27b-fp8",
+                "model": "qwen3.8-27b-fp8",
                 "messages": [
                     {
                         "role": "user",

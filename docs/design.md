@@ -22,7 +22,7 @@ All messages are msgpack dicts with a `"type"` key.
 {"type": "init",
  "model_path": str,
  "num_gpu_blocks": int,
- "block_size": int,            # 784 for Qwen3.5
+ "block_size": int,            # 784 for Qwen3.8
  "tensor_parallel_size": int,
  "max_model_len": int,
  "num_speculative_tokens": int}  # 0 = MTP disabled
@@ -76,7 +76,7 @@ uses the same finished-only path without a reply; it does not change Rust state.
 
 ### Block layout
 
-Qwen3.5-27B has two attention groups requiring separate block tables:
+Qwen3.8-27B has two attention groups requiring separate block tables:
 
 - **Group 0 (full attention):** 16 layers, standard block layout,
   `block_size=784` tokens per block. Prefix cache enabled.
@@ -108,7 +108,7 @@ earlier blocks are still resident. The FA finder requires a contiguous resident
 prefix, which is then reconciled with an available Mamba checkpoint.
 
 The coordinator's `find_longest_cache_hit` returns the longest consistent prefix
-hit across both groups. For the `is_simple_hybrid=True` case (Qwen3.5):
+hit across both groups. For the `is_simple_hybrid=True` case (Qwen3.8):
 full-attention hit length is computed first, then Mamba hit is bounded by that
 value, and the reconciled length is `min(fa_len, mb_len)`.
 

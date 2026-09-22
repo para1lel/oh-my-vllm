@@ -1,6 +1,6 @@
-//! Hybrid KV cache coordinator for Qwen3.5's two-group layout.
+//! Hybrid KV cache coordinator for Qwen3.8's two-group layout.
 //!
-//! Qwen3.5 has two KV cache groups:
+//! Qwen3.8 has two KV cache groups:
 //! - Group 0: 16 full-attention layers, one block per request per 784 tokens.
 //! - Group 1: 48 GatedDeltaNet layers in `mamba_cache_mode = "align"`, at most
 //!   one live block per request (the state checkpoint after the last token).
@@ -24,7 +24,7 @@
 //!
 //! # Block-size invariant
 //!
-//! `scheduler_block_size == hash_block_size == block_size == 784` for Qwen3.5.
+//! `scheduler_block_size == hash_block_size == block_size == 784` for Qwen3.8.
 //! This is asserted at construction time and relied upon throughout:
 //! `_align_cacheable(n) = round_down(n, 784)` with no partial-hit branches.
 
@@ -41,7 +41,7 @@ pub use crate::pool::NULL_BLOCK_ID;
 /// is safe and matches a freshly constructed pool.
 pub const DEFAULT_WATERMARK_BLOCKS: usize = 0;
 
-/// The two-group KV cache coordinator for Qwen3.5.
+/// The two-group KV cache coordinator for Qwen3.8.
 ///
 /// Owns one [`GroupManager`] per KV cache group and the shared [`BlockPool`].
 pub struct HybridCoordinator {
@@ -50,6 +50,7 @@ pub struct HybridCoordinator {
     /// Group 1 — GatedDeltaNet in align mode.
     mamba: GroupManager,
     pool: BlockPool,
+    mamba_pool: Option<BlockPool>,
     /// Token-aligned boundary for caching: always a multiple of `block_size`.
     block_size: usize,
     /// Blocks reserved for already-running requests.
@@ -59,7 +60,7 @@ pub struct HybridCoordinator {
 impl HybridCoordinator {
     /// Create a coordinator for a pool of `num_blocks` blocks.
     ///
-    /// `block_size` must be the same for both groups (Qwen3.5: 784).
+    /// `block_size` must be the same for both groups (Qwen3.8: 784).
     pub fn new(
         num_blocks: u32,
         block_size: usize,
@@ -71,9 +72,23 @@ impl HybridCoordinator {
             full_attn: GroupManager::new(GroupKind::FullAttention, 0, block_size, enable_caching),
             mamba: GroupManager::new(GroupKind::MambaAlign, 1, block_size, enable_caching),
             pool: BlockPool::new(num_blocks, enable_caching),
+            mamba_pool: None,
             block_size,
             watermark_blocks,
         }
+    }
+
+    /// Allocate GDN checkpoints independently from token-proportional FA pages.
+    pub fn with_mamba_capacity(mut self, blocks: u32) -> Self {
+        assert!(blocks > 1, "Mamba pool needs a null and a writable slot");
+        assert!(
+            self.pool.num_free_blocks() + 1 == self.pool.num_blocks() as usize
+                && self.pool.num_cached_entries() == 0
+                && self.mamba_pool.is_none(),
+            "configure Mamba capacity only on a fresh coordinator"
+        );
+        self.mamba_pool = Some(BlockPool::new(blocks, self.pool.enable_caching()));
+        self
     }
 
     // ── public accessors ────────────────────────────────────────────────────
@@ -109,7 +124,11 @@ impl HybridCoordinator {
 
     /// Fresh logical blocks requiring worker-side zeroing before their first use.
     pub fn take_newly_allocated(&mut self) -> Vec<u32> {
-        self.pool.take_newly_allocated()
+        let mut blocks = self.pool.take_newly_allocated();
+        if let Some(pool) = &mut self.mamba_pool {
+            blocks.extend(pool.take_newly_allocated());
+        }
+        blocks
     }
 
     // ── prefix cache lookup ─────────────────────────────────────────────────
@@ -135,9 +154,11 @@ impl HybridCoordinator {
                 .find_longest_cache_hit(block_hashes, max_cache_hit_length, &self.pool);
 
         // Mamba: right-to-left checkpoint scan, bounded by the full-attention hit.
-        let (mb_blocks, mb_len) =
-            self.mamba
-                .find_longest_cache_hit(block_hashes, fa_len, &self.pool);
+        let (mb_blocks, mb_len) = self.mamba.find_longest_cache_hit(
+            block_hashes,
+            fa_len,
+            self.mamba_pool.as_ref().unwrap_or(&self.pool),
+        );
 
         // Reconcile: is_simple_hybrid means one iteration is sufficient.
         // Full attention is downward-closed, so we trim it to the Mamba hit.
@@ -196,8 +217,11 @@ impl HybridCoordinator {
         let processed = total_computed.saturating_sub(request.num_in_flight_tokens());
         self.full_attn
             .remove_skipped_blocks(rid, processed, &mut self.pool);
-        self.mamba
-            .remove_skipped_blocks(rid, processed, &mut self.pool);
+        self.mamba.remove_skipped_blocks(
+            rid,
+            processed,
+            self.mamba_pool.as_mut().unwrap_or(&mut self.pool),
+        );
 
         // Phase 1: count what each group needs.
         let fa_needed = self.full_attn.get_num_blocks_to_allocate(
@@ -214,7 +238,7 @@ impl HybridCoordinator {
             &new_computed_blocks.1,
             total_computed,
             num_tokens_main_model,
-            &self.pool,
+            self.mamba_pool.as_ref().unwrap_or(&self.pool),
         );
 
         // A `DeferToNextStep` sentinel from Mamba means the hit block was
@@ -230,7 +254,12 @@ impl HybridCoordinator {
         };
 
         let required = fa_count + mb_count + watermark;
-        if required > self.pool.num_free_blocks() {
+        let insufficient = if let Some(pool) = &self.mamba_pool {
+            fa_count + watermark > self.pool.num_free_blocks() || mb_count > pool.num_free_blocks()
+        } else {
+            required > self.pool.num_free_blocks()
+        };
+        if insufficient {
             return None;
         }
 
@@ -259,7 +288,7 @@ impl HybridCoordinator {
                     rid,
                     &mb_hits,
                     local_computed_tokens,
-                    &mut self.pool,
+                    self.mamba_pool.as_mut().unwrap_or(&mut self.pool),
                 );
             }
         }
@@ -275,7 +304,7 @@ impl HybridCoordinator {
             rid,
             num_tokens_need_slot,
             num_tokens_main_model,
-            &mut self.pool,
+            self.mamba_pool.as_mut().unwrap_or(&mut self.pool),
         );
 
         // Phase 3: register newly-full blocks in the prefix cache. Cap at
@@ -284,7 +313,11 @@ impl HybridCoordinator {
         let cacheable = align_down(num_tokens_to_cache, self.block_size);
         self.full_attn
             .cache_blocks(request, cacheable, &mut self.pool);
-        self.mamba.cache_blocks(request, cacheable, &mut self.pool);
+        self.mamba.cache_blocks(
+            request,
+            cacheable,
+            self.mamba_pool.as_mut().unwrap_or(&mut self.pool),
+        );
 
         Some((new_fa, new_mb))
     }
@@ -294,7 +327,10 @@ impl HybridCoordinator {
     /// Free all blocks held for `request_id`.
     pub fn free(&mut self, request_id: RequestId) {
         self.full_attn.free(request_id, &mut self.pool);
-        self.mamba.free(request_id, &mut self.pool);
+        self.mamba.free(
+            request_id,
+            self.mamba_pool.as_mut().unwrap_or(&mut self.pool),
+        );
     }
 
     /// Reset the prefix cache, releasing all cached block entries.
@@ -302,7 +338,12 @@ impl HybridCoordinator {
     /// Returns `false` if there are any in-flight requests (matching vLLM's
     /// guard: resetting while requests hold blocks would corrupt their tables).
     pub fn reset_prefix_cache(&mut self) -> bool {
-        self.pool.reset_prefix_cache()
+        let fa = self.pool.reset_prefix_cache();
+        let mamba = self
+            .mamba_pool
+            .as_mut()
+            .is_none_or(BlockPool::reset_prefix_cache);
+        fa && mamba
     }
 
     // ── hash helpers ────────────────────────────────────────────────────────

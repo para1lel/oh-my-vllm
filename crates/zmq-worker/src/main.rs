@@ -19,6 +19,9 @@ struct Cli {
     socket: PathBuf,
     #[arg(long, default_value_t = 1024)]
     num_gpu_blocks: u32,
+    /// Optional independent GDN-state capacity (including immutable zero slot).
+    #[arg(long)]
+    mamba_blocks: Option<u32>,
     #[arg(long, default_value_t = 784)]
     block_size: u32,
     #[arg(long, default_value_t = 1)]
@@ -134,6 +137,7 @@ async fn run() -> Result<()> {
         model_path: cli.model,
         socket_path: cli.socket,
         num_gpu_blocks: cli.num_gpu_blocks,
+        mamba_blocks: cli.mamba_blocks,
         block_size: cli.block_size,
         tensor_parallel_size: cli.tp,
         max_model_len: cli.max_model_len,
@@ -148,6 +152,9 @@ async fn run() -> Result<()> {
         "invalid scheduler pool capacity"
     );
     let mut kv = HybridCoordinator::new(blocks, 784, true, 0);
+    if let Some(capacity) = cli.mamba_blocks {
+        kv = kv.with_mamba_capacity(capacity);
+    }
     kv.set_speculative_blocks(cli.num_speculative_tokens);
     let mut scheduler = Scheduler::new(
         SchedulerConfig {
@@ -232,6 +239,11 @@ async fn run() -> Result<()> {
                 })
                 .collect();
             for iteration in 0..args.warmup + args.repetitions {
+                info!(
+                    iteration,
+                    measured = iteration >= args.warmup,
+                    "BENCH_PHASE"
+                );
                 ensure!(
                     scheduler.reset_prefix_cache(),
                     "cache reset with live requests"
@@ -249,16 +261,22 @@ async fn run() -> Result<()> {
                     args.arrival_interval,
                 )
                 .await?;
-                if iteration >= args.warmup {
+                {
                     let count: usize = result.outputs.values().map(Vec::len).sum();
                     println!(
                         concat!(
-                            "BENCH_RESULT {{\"batch_size\":{},\"input_len\":{},",
+                            "{} {{\"batch_size\":{},\"input_len\":{},",
                             "\"output_len\":{},\"output_tokens\":{},\"elapsed_s\":{},",
                             "\"output_tps\":{},\"steps\":{},\"prefix_hit_tokens\":{},",
                             "\"initial_prefix_hit_tokens\":{},\"preemptions\":{},",
-                            "\"proposed_draft_tokens\":{},\"accepted_draft_tokens\":{}}}"
+                            "\"proposed_draft_tokens\":{},\"accepted_draft_tokens\":{},",
+                            "\"ttft_s\":{:?}}}"
                         ),
+                        if iteration >= args.warmup {
+                            "BENCH_RESULT"
+                        } else {
+                            "WARMUP_RESULT"
+                        },
                         args.batch_size,
                         args.input_len,
                         args.output_len,
@@ -270,7 +288,8 @@ async fn run() -> Result<()> {
                         result.initial_prefix_hit_tokens,
                         result.preemptions,
                         result.proposed_draft_tokens,
-                        result.accepted_draft_tokens
+                        result.accepted_draft_tokens,
+                        result.ttft_s
                     );
                 }
             }
@@ -283,6 +302,7 @@ async fn run() -> Result<()> {
 struct BatchResult {
     outputs: BTreeMap<u64, Vec<u32>>,
     elapsed: f64,
+    ttft_s: Vec<f64>,
     steps: usize,
     prefix_hit_tokens: usize,
     initial_prefix_hit_tokens: usize,
@@ -301,6 +321,7 @@ async fn execute_batch(
 ) -> Result<BatchResult> {
     let started = Instant::now();
     let mut outputs = BTreeMap::<u64, Vec<u32>>::new();
+    let mut first_tokens = BTreeMap::<u64, f64>::new();
     let mut pending = prompts.iter().peekable();
     let mut steps: usize = 0;
     let mut prefix_hit_tokens = 0;
@@ -356,6 +377,11 @@ async fn execute_batch(
             }
             let result = scheduler.update(result);
             for output in result.outputs {
+                if !output.token_ids.is_empty() {
+                    first_tokens
+                        .entry(output.request_id)
+                        .or_insert_with(|| started.elapsed().as_secs_f64());
+                }
                 outputs
                     .get_mut(&output.request_id)
                     .context("unexpected request ID")?
@@ -379,7 +405,12 @@ async fn execute_batch(
         steps,
         elapsed, prefix_hit_tokens, initial_prefix_hit_tokens, preemptions, "batch_complete"
     );
+    ensure!(
+        first_tokens.len() == outputs.len(),
+        "missing first-token timestamp"
+    );
     Ok(BatchResult {
+        ttft_s: first_tokens.into_values().collect(),
         outputs,
         elapsed,
         steps,

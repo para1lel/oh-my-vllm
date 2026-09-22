@@ -1,8 +1,8 @@
 //! Per-group KV cache managers — the port of vLLM's `SingleTypeKVCacheManager`
-//! subclasses, specialized to the two groups Qwen3.5 actually has.
+//! subclasses, specialized to the two groups Qwen3.8 actually has.
 //!
 //! vLLM dispatches one manager per KV cache group through a class hierarchy
-//! (`FullAttentionManager`, `MambaManager`, `SlidingWindowManager`, …). Qwen3.5
+//! (`FullAttentionManager`, `MambaManager`, `SlidingWindowManager`, …). Qwen3.8
 //! has exactly two groups — 16 full-attention layers and 48 GatedDeltaNet layers
 //! in `mamba_cache_mode == "align"` — so this is an enum, not a trait object:
 //! [`GroupKind`] selects between the two behaviours and the shared bookkeeping
@@ -10,7 +10,7 @@
 //!
 //! # What this port leaves out, and why
 //!
-//! The decisive fact is that for Qwen3.5 the scheduler block size, the hash block
+//! The decisive fact is that for Qwen3.8 the scheduler block size, the hash block
 //! size and both groups' block sizes are all 784 tokens. `mamba_cache_mode` is
 //! `align`, so `Platform.check_and_update_config` copies `cache_config.block_size`
 //! into `cache_config.mamba_block_size`; `resolve_kv_cache_block_sizes` then takes
@@ -79,7 +79,7 @@ pub trait CacheRequest {
     fn is_waiting_or_preempted(&self) -> bool;
 }
 
-/// Which of Qwen3.5's two KV cache layouts a group holds.
+/// Which of Qwen3.8's two KV cache layouts a group holds.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum GroupKind {
     /// Full attention: every token's KV is kept until the request finishes, and a

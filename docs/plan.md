@@ -1,3 +1,14 @@
+# Active plan — TTFT and long context
+
+1. Freeze updated official vLLM main and adapt its isolated baseline environment.
+2. Add per-request TTFT and independent FA/GDN capacities; test cache ownership.
+3. Establish the 12-row baseline and measure the independent runtime.
+4. Optimize until TTFT <=110% and throughput >=95% on every row.
+5. Verify 262144-total-context ordinary/MTP4 batch 1/2/4, long prefix and constraints.
+6. Review, reconcile docs/evidence, commit/push main and verify GPU cleanup.
+
+Current work is in steps 1–2. No new acceptance result is claimed.
+
 # Implementation status
 
 The independent runtime migration (ADR-006) is implemented: stable dependencies

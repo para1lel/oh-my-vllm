@@ -136,3 +136,15 @@ macros, comments and string literals; tabs expand using rustfmt's tab size.
 `rustfmt` alone may leave `json!` bodies beyond max_width untouched. Split their
 fields manually and use `concat!` to wrap long literals without changing values.
 Configuration and hook changes trigger both Rust style hooks.
+
+## Isolated reference collection (authorized 2026-09-22)
+
+`benchmarks/baseline/enginecore.py` is baseline-only tooling. Execute it with the
+separately maintained vllm environment, never install vLLM into oh-my-vllm. It
+requires official upstream SHA e9f169d16b9408bb9ae44f75072b91a5521d733c. The independent
+`benchmarks/ttft.py` consumes its JSON and launches only our own worker. This explicit
+exception does not change normal build/test/runtime dependency isolation.
+
+For long-context runs, use `--max-model-len 262144 --num-gpu-blocks 4200
+--mamba-blocks 128` before the CLI subcommand. These are provisional capacities
+under GPU validation; they represent 1400 FA slots and 128 independent GDN slots.

@@ -219,3 +219,14 @@ delta recurrence, causal convolution, RMS normalization and partial rotary
 embedding. They include multiple FP8 rows, non-contiguous logical attention
 pages, 784/785-token boundaries and per-candidate MTP state snapshots. They do
 not replace the actual-model FP64 probes or final service/performance acceptance.
+
+## TTFT and long-context regression (2026-09-22)
+
+The new 12-row protocol is in REQ-PERF-002; acceptance remains pending. Tests in
+`test_ttft_metrics.py` reject tail-latency failures, missing warmups, invalid output
+counts, unexpected cache hits, incorrect provenance and unverified compilation.
+The baseline-only collector is an explicit isolated exception to the import audit.
+`test_independent_decode_attention.py` covers page addresses beyond signed 32-bit
+range for both ordinary and grouped verification kernels, using FP64 references.
+Coordinator tests run MTP migration/prefix/rejection cases with both shared and
+independent state pools. Final model tests must cover the full 262144-token boundary.

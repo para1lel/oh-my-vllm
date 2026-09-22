@@ -87,7 +87,7 @@ def gqa_gpu(
 @pytest.mark.parametrize(
     "batch,num_heads,num_kv_heads,seq_len,head_dim",
     [
-        # Qwen3.5-27B full-attention layer shape:
+        # Qwen3.8-27B full-attention layer shape:
         #   24 query heads, 4 KV heads, head_dim=256.
         (1, 24, 4, 128, 256),
         # Smaller shape for faster CI runs.

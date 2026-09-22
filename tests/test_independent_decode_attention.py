@@ -126,3 +126,29 @@ def test_single_group_verification(first):
         rtol=0.03,
         atol=0.03,
     )
+
+
+@pytest.mark.parametrize("grouped", [False, True])
+def test_cache_addresses_beyond_signed_int32(grouped):
+    # The last page starts above 2**31 BF16 elements. Casting after multiplication
+    # would be too late: both decode kernels must widen the page ID first.
+    torch.manual_seed(144)
+    cache = torch.empty(1400, 2, 784, 4, 256, dtype=torch.bfloat16, device="cuda")
+    small = torch.randn(1, 2, 784, 4, 256, dtype=torch.bfloat16, device="cuda")
+    cache[1399].copy_(small[0])
+    from oh_my_vllm.kernels.attention import append
+
+    # Also cover int32 slot inputs: multiplication must widen before addressing.
+    keys = torch.randn(5, 4, 256, dtype=torch.bfloat16, device="cuda")
+    values = torch.randn_like(keys)
+    slots = 1399 * 784 + torch.arange(5, dtype=torch.int32, device="cuda")
+    append(cache, keys, values, slots)
+    small[0, 0, :5].copy_(keys)
+    small[0, 1, :5].copy_(values)
+    query = torch.randn(5, 24, 256, dtype=torch.bfloat16, device="cuda")
+    tables = torch.full((5, 1), 1399, dtype=torch.int32, device="cuda")
+    lengths = torch.arange(1, 6, dtype=torch.int32, device="cuda")
+    starts = torch.tensor([0, 5], dtype=torch.int32, device="cuda") if grouped else None
+    actual = decode(query, cache, tables, lengths, max_tokens=784, starts=starts)
+    expected = reference(query, small, torch.zeros_like(tables), lengths, 0)
+    torch.testing.assert_close(actual.cpu().double(), expected, atol=0.03, rtol=0.03)

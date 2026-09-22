@@ -1,6 +1,6 @@
 //! Integration tests for the Scheduler.
 //!
-//! These tests cover the paths that matter for Qwen3.5 on a single B200:
+//! These tests cover the paths that matter for Qwen3.8 on a single B200:
 //! - Cold prefill: new request admitted from waiting, KV blocks allocated.
 //! - Continuous batching: decode steps interleaved with new prefills.
 //! - Chunked prefill: token budget forces a long prompt to be split.

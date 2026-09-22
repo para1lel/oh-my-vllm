@@ -22,6 +22,7 @@ pub enum RustMessage {
 pub struct InitMsg {
     pub model_path: String,
     pub num_gpu_blocks: u32,
+    pub mamba_blocks: Option<u32>,
     pub block_size: u32,
     pub tensor_parallel_size: u32,
     pub max_model_len: u32,

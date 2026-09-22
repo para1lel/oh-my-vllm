@@ -12,7 +12,7 @@ scripts/with-env.sh cargo build --release
 scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/oh-my-vllm-serve.ipc --num-speculative-tokens 4 serve
 ```
 
-Defaults: `127.0.0.1:8000`, model ID `qwen3.5-27b-fp8`, no authentication for the
+Defaults: `127.0.0.1:8000`, model ID `qwen3.8-27b-fp8`, no authentication for the
 local workflow. Set `serve --listen` and `--served-model-name` as needed. Rust
 owns HTTP (Axum), protocol adaptation, response state, online admission,
 cancellation, scheduling and KV. Python owns tokenizer/template application,

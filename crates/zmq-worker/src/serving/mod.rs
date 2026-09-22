@@ -39,7 +39,7 @@ use tracing::{debug, info, warn};
 pub struct ServeArgs {
     #[arg(long, default_value = "127.0.0.1:8000")]
     pub listen: SocketAddr,
-    #[arg(long, default_value = "qwen3.5-27b-fp8")]
+    #[arg(long, default_value = "qwen3.8-27b-fp8")]
     pub served_model_name: String,
     #[arg(long, default_value_t = 3600)]
     pub response_ttl_seconds: u64,

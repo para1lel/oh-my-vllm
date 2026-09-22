@@ -116,10 +116,14 @@ def assert_gpu_exclusive(gpu, process_group):
             raise RuntimeError(f"GPU contention on {gpu}: external process {pid}")
 
 
-def run_engine(command, timeout=3600):
+def run_engine(command, timeout=3600, stderr=None):
     """Own the entire engine process group, including model-worker children."""
     process = subprocess.Popen(
-        command, text=True, stdout=subprocess.PIPE, start_new_session=True
+        command,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=stderr,
+        start_new_session=True,
     )
     try:
         deadline = time.monotonic() + timeout

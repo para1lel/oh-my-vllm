@@ -27,7 +27,8 @@ pub struct WorkerConfig {
     pub socket_path: PathBuf,
     /// Number of KV cache blocks pre-allocated on the GPU.
     pub num_gpu_blocks: u32,
-    /// Block size in tokens (Qwen3.5: 784).
+    pub mamba_blocks: Option<u32>,
+    /// Block size in tokens (Qwen3.8: 784).
     pub block_size: u32,
     /// Tensor parallel size (1 for single-GPU B200).
     pub tensor_parallel_size: u32,
@@ -46,6 +47,7 @@ impl Default for WorkerConfig {
             model_path: PathBuf::from("/data0/shared/Qwen3.8-27B-FP8"),
             socket_path: PathBuf::from("/tmp/oh-my-vllm.ipc"),
             num_gpu_blocks: 1024,
+            mamba_blocks: None,
             block_size: 784,
             tensor_parallel_size: 1,
             max_model_len: 65536,
@@ -109,6 +111,7 @@ impl WorkerClient {
         let init = RustMessage::Init(InitMsg {
             model_path: config.model_path.to_string_lossy().into_owned(),
             num_gpu_blocks: config.num_gpu_blocks,
+            mamba_blocks: config.mamba_blocks,
             block_size: config.block_size,
             tensor_parallel_size: config.tensor_parallel_size,
             max_model_len: config.max_model_len,

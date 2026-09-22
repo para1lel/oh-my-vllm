@@ -36,8 +36,8 @@ def configuration(base_url):
             "apiKey": "local-test-only",
             "models": [
                 {
-                    "id": "qwen3.5-27b-fp8",
-                    "name": "Local Qwen3.5 27B FP8",
+                    "id": "qwen3.8-27b-fp8",
+                    "name": "Local Qwen3.8 27B FP8",
                     "reasoning": True,
                     "input": ["text"],
                     "contextWindow": 65536,
@@ -102,7 +102,7 @@ def main():
         "--cwd",
         str(root),
         "--model",
-        f"oh-my-vllm-{args.api}/qwen3.5-27b-fp8",
+        f"oh-my-vllm-{args.api}/qwen3.8-27b-fp8",
         "--thinking",
         args.thinking,
         "--tools",

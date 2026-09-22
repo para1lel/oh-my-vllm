@@ -31,7 +31,7 @@ See [design.md](design.md) for message fields and scheduler/KV data structures.
 - `crates/zmq-worker`: CLI, OpenAI-compatible HTTP APIs, model process lifecycle,
   cancellation, ZMQ transport and correlated logs.
 
-The target is one B200 and Qwen3.5-27B-FP8 at
+The target is one B200 and Qwen3.8-27B-FP8 at
 `/data0/shared/Qwen3.8-27B-FP8`. Each logical FA page contains 784 tokens. There are
 16 FA layers and 48 GDN layers. The CLI's existing `num_gpu_blocks` capacity unit
 is preserved for frozen-baseline compatibility: ready reports floor(value/3)
@@ -137,3 +137,13 @@ the active set and proposal count. Warmup/capture restores all three speculative
 FA destinations; persistent row indices, positions, tables, hidden inputs, model
 and cache references remain alive for replay. Both proposer graph families share
 the existing32-shape budget.
+
+### Independent FA/GDN capacities (2026-09-22)
+
+`--mamba-blocks N` gives the Rust coordinator an independent GDN pool. FA capacity
+remains the worker-reported logical capacity; Python allocates recurrent tensors
+at N slots and FA/MTP attention tensors at FA capacity. IDs are local to their
+cache group and may have equal numeric values. Admission checks both pools, prefix
+lookup reconciles hits across both, and the worker validates each address against
+its own tensor capacity. Omission preserves the shared-capacity configuration.
+See ADR-007 for rationale and the pending long-context acceptance protocol.

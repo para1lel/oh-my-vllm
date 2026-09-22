@@ -234,6 +234,7 @@ def _handle_init(msg: dict) -> OhMyVllmWorker:
             msg.get("max_model_len", 65536),
             msg["num_gpu_blocks"],
             msg.get("num_speculative_tokens", 0),
+            msg.get("mamba_blocks"),
         )
     )
     worker.init_device()

@@ -1,6 +1,6 @@
 # oh-my-vllm
 
-A Rust-first inference framework for Qwen3.5-27B-FP8 on a single B200 GPU.
+A Rust-first inference framework for Qwen3.8-27B-FP8 on a single B200 GPU.
 Rust owns HTTP serving, scheduling and logical KV cache. Python runs the
 project-owned Qwen model and GPU state/compute kernels using independent libraries.
 They exchange msgpack over ZMQ DEALER. Runtime, builds and tests use conda
