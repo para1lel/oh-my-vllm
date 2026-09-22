@@ -118,7 +118,7 @@ def test_prefill_state(length):
     check(state[0], states[-1], state=True)
 
 
-@pytest.mark.parametrize("rows", [1, 4, 33])
+@pytest.mark.parametrize("rows", [1, 4, 33, 127, 128, 129, 784, 785])
 def test_fp8_block_scales(rows):
     torch.manual_seed(rows)
     x = torch.randn(rows, 512, device="cuda", dtype=torch.bfloat16)

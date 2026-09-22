@@ -22,6 +22,24 @@ def _quantize(
     tl.store(Scales + offset, scale)
 
 
+@triton.jit
+def _quantize_prefill(
+    X, Q, Scales, Rows: tl.constexpr, Width: tl.constexpr, BlockRows: tl.constexpr
+):
+    rows = tl.program_id(0) * BlockRows + tl.arange(0, BlockRows)
+    group = tl.program_id(1)
+    columns = group * 128 + tl.arange(0, 128)
+    values = tl.load(
+        X + rows[:, None] * Width + columns[None, :], rows[:, None] < Rows, 0
+    ).to(tl.float32)
+    scale = tl.div_rn(tl.maximum(tl.max(tl.abs(values), 1), 1e-10), 448.0)
+    quantized = tl.minimum(tl.maximum(tl.div_rn(values, scale[:, None]), -448.0), 448.0)
+    tl.store(
+        Q + rows[:, None] * Width + columns[None, :], quantized, rows[:, None] < Rows
+    )
+    tl.store(Scales + rows * (Width // 128) + group, scale, rows < Rows)
+
+
 def quantize(
     x: torch.Tensor, *, column_major: bool = False
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -43,7 +61,13 @@ def quantize(
     scales = torch.empty(shape, dtype=torch.float32, device=x.device)
     if column_major:
         scales = scales.T
-    _quantize[(rows, width // 128)](x, data, scales, rows, width, column_major)
+    if rows >= 128 and not column_major:
+        # Amortize CTA scheduling across rows for bandwidth-bound long prefills.
+        _quantize_prefill[(triton.cdiv(rows, 16), width // 128)](
+            x, data, scales, rows, width, 16
+        )
+    else:
+        _quantize[(rows, width // 128)](x, data, scales, rows, width, column_major)
     return data, scales
 
 

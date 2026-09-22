@@ -8,10 +8,12 @@ requirements. New acceptance is pending; the results below describe the prior ta
 Frozen upstream SHA: e9f169d16b9408bb9ae44f75072b91a5521d733c.
 The prior local vLLM telemetry commit was preserved in
 /data0/shared/dongwu.chen/vllm-before-ttft-20260922.bundle before updating main.
-Baseline environment adaptation is in progress: exact cu130 precompiled wheel is
-unavailable, so pip is building the frozen source with host CUDA13.1. Logs:
-/tmp/oh-my-vllm-baseline-source-build.log. Do not use stale installed metadata as
-proof of the new compiled runtime until installation and import checks finish.
+Baseline environment adaptation is in progress. The exact cu130 wheel metadata
+was initially unavailable, so a source build began. Official wheel publication
+completed at 02:13 UTC; rechecking metadata succeeded and the owned source build
+was stopped before compilation. Installing the official frozen-commit wheel via
+upstream editable mode now; log /tmp/oh-my-vllm-baseline-install-official.log.
+Do not use stale metadata until installation/import checks finish.
 
 Implemented, not yet accepted: per-request TTFT, optional independent GDN pool,
 formal measurement/provenance checks, and corrected Qwen3.8 naming. 77 Rust tests
@@ -34,6 +36,11 @@ Both oh-my-pi APIs reran with Qwen3.8 model ID and MTP4: Chat/Responses made
 Elapsed times were 28.02/22.16 seconds. Their GB/GiB unit error and other answer
 caveats are retained in bench/baseline/2026-09-22-ttft-agentic.json. Server/worker
 exited and port 18016 is released; unrelated GPU processes remain untouched.
+Prefill profiling found inefficient per-row FP8 quantization. A 16-row tile
+reduces observed quantization GPU time from 295 to 51 ms in a diagnostic model
+run. Arithmetic is unchanged; small/decode shapes retain the old kernel. Complete
+suite before final threshold tuning: 103 tests + 12 subtests; final boundary/FP8
+tests: 14 pass. See 2026-09-22-prefill-quantization.json for limitations and hashes.
 No formal baseline or 12-row performance result exists yet. Finish baseline
 collection, performance fixes and reviews before claiming completion.
 

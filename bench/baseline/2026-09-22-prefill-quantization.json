@@ -1,0 +1,27 @@
+{
+  "status": "diagnostics only; formal TTFT/throughput acceptance pending",
+  "change": "16 rows per quantization CTA for row-major inputs with at least 128 rows; unchanged arithmetic and small/decode paths",
+  "profile": {
+    "input_tokens": 32768,
+    "output_tokens": 16,
+    "quantize_before_ms": 295.113,
+    "quantize_after_ms": 51.199,
+    "total_self_cuda_before_ms": 2398,
+    "total_self_cuda_after_ms": 2235,
+    "limitations": "Single profiling run per version, profiler overhead and separate GPU selection. Not formal paired regression."
+  },
+  "tests": {
+    "full_suite_before_final_threshold_change": "103 passed and 12 subtests",
+    "after_final_threshold_change": "14 FP8 tests passed; 8 unrelated tests deselected",
+    "independent_review": "passed"
+  },
+  "logs": {
+    "/tmp/oh-my-vllm-prefill-profile.log": "4b2fececfc90d8b0663cf2c0b6f37703c262857c100ca6831ab82f27e3cfb8bb",
+    "/tmp/oh-my-vllm-prefill-profile2.log": "564287ba2a7d57fe274f7aa970048f2aa9c1e5639f231bdc12b9d003bc0fd099",
+    "/tmp/oh-my-vllm-quant-prototype.log": "3700c2086306c36018b4d9021b2e7d1a782f744152ef16e9b62a6ff9c8d10dcc",
+    "/tmp/oh-my-vllm-quant-shapes2.log": "2937e94464ef64a5bbd6743f2757d494e674e61ea57a00e027c54e423ff4d106",
+    "/tmp/oh-my-vllm-quant-tests.log": "a40f224a7ac1952af7e9a04a8fc49405b97682f22c43f58bc6ec7f5c5e35f3ce",
+    "/tmp/oh-my-vllm-quant-threshold-tests.log": "05914443174392b81f4721ebf596f46b6af075b47c2bcdaa10c7874b6176c6cf"
+  },
+  "cleanup": "All owned profiler and microbenchmark GPU processes exited."
+}
