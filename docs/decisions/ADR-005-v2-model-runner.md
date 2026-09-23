@@ -1,6 +1,8 @@
 # ADR-005: Use V2 Model Runner exclusively
 
-Date: 2026-09-21. Status: accepted, implemented and verified.
+Date: 2026-09-21. Status: **superseded** by ADR-006 (independent runtime, same day).
+The V2 runner and its `new_block_ids_to_zero` zeroing path are removed; the field is
+now an unused hint (ADR-007, audit MNT-04). Retained as history.
 
 ## Decision
 

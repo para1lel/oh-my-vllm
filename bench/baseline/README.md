@@ -1,57 +1,47 @@
 # Benchmark evidence
 
-`2026-09-22-tilelang-acceptance.json` preserves all twelve final raw candidate
-and frozen baseline sets, prior failed attempts and interference exclusions.
-The clean measured implementation is da75c02. On user instruction, stability
-changed from5% to10% for both metrics and both engines. Original embedded
-`candidate.comparison` decisions remain unchanged; use each row
-`comparison_under_current_policy` for the new verdict. All twelve pass.
-`2026-09-22-tilelang-correctness.json` records the unchanged full GPU suite,
-actual-model probes, six boundaries, text/preemption and real MTP service/agentic
-evidence with generated-answer limitations. Temporary operator records are omitted.
+This directory holds formal, summarized acceptance evidence. Do not add GPU profiling
+traces or temporary tuning records. See [docs/acceptance.md](../../docs/acceptance.md)
+for interpretation and a dated index of every artifact.
 
-The historical baseline_*, clean_* and mtp_* JSON files are existing vLLM serving
-captures (OpenAI endpoint). Their settings, input data, timing boundary and MTP
-configuration differ from the current matched EngineCore protocol. Preserve them
-as historical data; do not use them as the denominator for current acceptance.
+## Current
 
-2026-09-19-paired-investigation.json preserves completed matched pairs from this
-session, including failed ratios, actual repetitions and executable/source identity.
-It is explicitly not a final acceptance matrix. At that historical stage ordinary
-bs1 needed a variance repeat and several modes/batches were missing or below95%.
-The complete acceptance artifact below supersedes that status. Some early rows lack a
-captured CPU affinity mask, represented by null. Later contaminated/incomplete
-pairs are excluded rather than assigned performance numbers.
+- `2026-09-22-refreshed-enginecore.json` is the frozen 12-row official vLLM
+  EngineCore baseline, collected at upstream `e9f169d16b9408bb9ae44f75072b91a5521d733c`.
+  - Each `rows[].artifact` is the exact input `benchmarks/ttft.py` expects.
+  - Serialize a row as `json.dumps(artifact, indent=2)` plus a newline to
+    reproduce its `rows[].sha256`.
+  - Do not regenerate this file without explicit user authorization.
+- `2026-09-22-cuda-framework.json` contains the 12 accepted CUDA rows from clean
+  `c36d1c9`.
+  - Every row includes the candidate's raw repetitions and a `baseline_sha256`
+    linking it to the frozen row.
+  - It also keeps all prior, failed and excluded attempts.
+- `2026-09-22-cuda-operators.json` contains all 147 formal operator decisions.
+- `2026-09-22-cuda-features.json` contains:
+  - Default-selection correctness
+  - Boundary runs
+  - Service constraints and lifecycle checks
+  - Agentic readback, with generated-answer limitations
+  - The cleanup snapshot
 
-Use benchmarks/compare_vllm.py and docs/testing.md for new measurements. No GPU
-profiling traces should be added here. docs/handoff.md tracks the current work.
+## Historical
 
-2026-09-19-acceptance.json is the complete nine-row matrix on clean 12d227d:
-two warmups, three measurements, identical single-core affinity within each
-pair. All rows pass. It includes exact commands, protocol settings and original
-result rows. The MTP batch-2 variance repeat is preserved separately rather than
-replacing its original measurements. See docs/acceptance.md for interpretation.
+The remaining JSON files record earlier stages, listed in the acceptance index:
 
-2026-09-19-batch-text.json preserves full generated text and observed counters
-for ordinary and MTP/prefix two-request preemption checks. Its dirty build
-identity is explicit; these are semantic smoke results, not throughput data.
+- The 2026-09-19 adapter
+- The 2026-09-21 serving, V2 and independent-runtime stages
+- The 2026-09-22 TTFT, performance-gap and TileLang stages
+- The CUDA milestone subsets
 
-`2026-09-21-independent-stage1.json` records the first independent-runtime
-milestone: new-environment operator/CPU tests, short eager model output and the
-transitional adapter's MTP4 service checks. It is not the final migration
-acceptance or a replacement performance baseline.
+These results were correct for the implementation measured at the time.
+Pre-2026-09-22 rows use the original baseline and a 3-repetition protocol, so
+they are not current acceptance.
 
-`2026-09-21-independent-stage2.json` records independent Worker/MTP/graph
-correctness, the FP8 backend defect and fix, final real service/probe results and
-one explicitly non-acceptance throughput diagnostic. The default adapter removal,
-real independent oh-my-pi tasks and final monitored nine-row matrix remain pending.
+The `baseline_*`, `clean_*` and `mtp_*` files and `logs/` are early captures from
+the vLLM HTTP serving endpoint. Their settings, inputs and timing boundary differ
+from the EngineCore protocol. Never use them as a denominator.
 
-`2026-09-21-independent-stage3.json` records removal of legacy runtime/test
-dependencies, full target-environment GPU/CPU tests and real file/module/library
-independence audits. Final workload acceptance is recorded separately.
-
-Model naming correction (2026-09-22): the target is **Qwen3.8-27B-FP8**.
-Older raw logs and frozen JSON may contain the erroneous Qwen3.5 label or the
-previous `qwen3.5-27b-fp8` service ID. Those are preserved as records of the actual
-historical executions, not current model naming. Current code/docs/service IDs use
-Qwen3.8. New measurements must use the corrected name.
+Some older artifacts use the erroneous "Qwen3.5" label or the
+`qwen3.5-27b-fp8` service ID. They are kept as-is because they record the actual
+executions. The model is Qwen3.8-27B-FP8.

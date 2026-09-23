@@ -30,10 +30,9 @@ scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /t
 ```
 
 Use unique sockets. Add `--num-speculative-tokens 4` to the text script for MTP.
-Current regression uses ordinary, MTP4 and prefix-hit modes, with two full warmups
-and at least five measured repetitions. All twelve TileLang throughput/TTFT
-comparisons pass with the user-approved10% stability limit; see [testing](docs/testing.md). `benchmarks/compare_vllm.py`
-retains the prior nine-row historical comparison and its original configuration.
+Performance acceptance uses `benchmarks/ttft.py` against the frozen baseline (two
+full warmups, five measured repetitions); see [testing](docs/testing.md).
+`benchmarks/compare_vllm.py` is the historical nine-row tool and is not acceptance.
 
 ## Local OpenAI service
 
@@ -53,10 +52,10 @@ See [handoff](docs/handoff.md) for current results.
 
 The target is at least 95% of the refreshed vLLM EngineCore throughput and at most
 110% of its TTFT on all 12 rows, with spread/median <=10% for both metrics.
-The TileLang implementation passes these gates; see the current acceptance table. The prior nine-row independent-runtime matrix
-passed against its original frozen baseline; those historical results do not
-satisfy the new TTFT gate.
-[Acceptance evidence](docs/acceptance.md) separates current and historical results.
+The default CUDA implementation passes these gates; see
+[acceptance evidence](docs/acceptance.md). Open code-audit findings (serving
+availability, latent kernel/scheduler contracts, evidence gaps) are tracked in
+[the audit](docs/audit-2026-09-23.md).
 
 ```bash
 scripts/with-env.sh cargo test --workspace
@@ -66,6 +65,7 @@ scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
 CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p 'test_*.py'
+scripts/with-gpu.sh scripts/with-env.sh python -m pytest tests -q
 ```
 
 [Testing](docs/testing.md) covers actual-model FP64 probes, prefix/MTP/preemption,
@@ -83,9 +83,9 @@ measurements. Every milestone requires independent review and a commit.
 - tests/probe_worker.py: actual-model FP64 diagnostic, never for throughput.
 - benchmarks/ttft.py: independent measurements and current TTFT/throughput gates.
 - benchmarks/baseline/enginecore.py: explicitly isolated reference collector.
-- benchmarks/compare_vllm.py: historical comparison and process supervision.
+- benchmarks/compare_vllm.py: historical nine-row comparison; shared process supervision.
+- benchmarks/kernels.py: formal CUDA-versus-frozen-TileLang operator comparison.
 
-Custom kernel development uses TileLang and the development-only TileFoundry
-fork. See [the workflow](docs/tilelang-development.md) for installation and
-operator semantics; all twelve migration performance rows pass the current
-policy recorded in [acceptance](docs/acceptance.md).
+Custom kernels are B200 CUDA C++/PTX ([CUDA workflow](docs/cuda-development.md)),
+with a frozen TileLang comparison and development-only TileFoundry tools
+([TileLang workflow](docs/tilelang-development.md)).

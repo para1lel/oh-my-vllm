@@ -6,16 +6,18 @@ Rust 负责 HTTP 服务、请求调度、已接受 token 历史及逻辑 KV 分�
 
 1. Rust 前端归一化 Chat/Responses 请求。Python ServingAdapter 应用 checkpoint 的 chat template、tokenizer、采样配置和 XGrammar 约束，返回 prompt ID。
 2. Rust 接纳请求、解析共享前缀并分配 FA/Mamba 表。调度器将 prefill、decode 和实际 MTP draft ID 组成 batch。
-3. Python 验证已接受历史及物理状态地址，执行 Qwen 模型，并在逐 draft grammar mask 下从 target 分布采样。
+3. Python 验证已接受历史，并按各 tensor 容量验证物理地址（同时检查递归状态别名；不检查 FA 页共享——审计 PY-01），执行 Qwen 模型，并在逐 draft grammar mask 下从 target 分布采样。
 4. Python 只提交保留的输出，选择被接受的递归快照，保存跨块 checkpoint，再生成新的 MTP proposal。
 5. Rust 更新已接受历史、回滚被拒绝的推测位置并释放已完成请求。即使没有请求被调度，仅包含完成信息的通知也会释放 Python 状态。
 
 消息字段和调度器/KV 数据结构见 [design.md](design.zh.md)。
 
+错误处理：目前任何 worker 异常或 RPC 超时对服务循环都是致命的（审计 SRV-01）；Rust 进程尚不能保证在 SIGTERM/SIGKILL 时清理 worker（审计 SRV-02）。
+
 ## Rust 模块
 
 - `crates/kv-cache`：共享逻辑块池、链式 hash 前缀、对齐 Mamba checkpoint 和推测预留。两阶段分配在分配新页前先触达复用前缀。
-- `crates/scheduler`：FCFS 等待/运行队列、分块 prefill、token 预算、错峰接纳、重计算抢占和已接受 draft 计数。
+- `crates/scheduler`：FCFS 等待/运行队列、分块 prefill、token 预算、错峰接纳、重计算抢占和已接受 draft 计数。kv-cache crate 默认使用一个共享池，指定 `--mamba-blocks` 时 FA/GDN 使用独立池（ADR-007）。
 - `crates/zmq-worker`：CLI、OpenAI 兼容 HTTP API、模型进程生命周期、取消、ZMQ 传输和关联日志。
 
 目标是在一张 B200 上运行 `/data0/shared/Qwen3.8-27B-FP8`。每个逻辑 FA 页包含 784 token，共 16 层 FA、48 层 GDN。保留 CLI 的 `num_gpu_blocks` 容量单位以兼容冻结基线：ready 报告 floor(value/3) 个逻辑块。Python 现在直接按逻辑容量为每层分配 tensor，不再有旧三路物理 stride 或混合布局存储。

@@ -141,7 +141,8 @@ vendored dependencies. Do not create companions of existing `.zh.md` files.
 |---|---|
 | Any task | This file + `docs/handoff.md` |
 | Rust scheduler/KV cache | `docs/architecture.md` + `docs/decisions/` |
-| Python model runner | `docs/architecture.md` section "Python side" |
-| Performance work | `docs/requirements.md` (REQ-PERF-*) + `docs/profiling.md` |
+| Python model runner | `docs/architecture.md` section "Python modules" |
+| Performance work | `docs/requirements.md` (REQ-PERF-*) + `docs/profiling.md` + `docs/testing.md` |
 | New feature | `docs/requirements.md` + `docs/architecture.md` |
-| Debug a failure | `docs/handoff.md` "Known issues" + `docs/testing.md` |
+| Debug a failure | `docs/handoff.md` "Open work" + `docs/testing.md` |
+| Fix an audit finding | `docs/audit-2026-09-23.md` (finding + its remediation batch) |

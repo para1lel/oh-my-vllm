@@ -73,7 +73,9 @@ A task is done when:
 1. The code change is committed and the pre-commit hooks pass.
 2. Affected tests pass (Rust unit tests for scheduler/kv-cache changes; actual-path GQA/GDN FP64 probes for attention/state changes, including MTP when affected).
 3. The end-to-end smoke test passes if the change touches `zmq_bridge.py`, `model_runner.py`, or `client.rs`.
-4. `docs/plan.md` and `docs/handoff.md` are updated to reflect the new task status.
+4. `docs/handoff.md` (and `docs/plan.md` when a stage completes) reflect the new
+   task status; when fixing an audit finding, update its status in
+   `docs/audit-2026-09-23.md`.
 5. Task-owned GPU servers and workers are stopped promptly after their runs,
    including on failure or cancellation. Verify their processes, GPU allocations
    and temporary service ports are gone. Leave a service running only when the
@@ -103,7 +105,7 @@ scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /t
 
 ## What not to do
 
-- Do not add swap-based preemption, multi-GPU, gRPC serving, LoRA, or multimodal inputs — these are explicitly out of scope (REQ-OUT-SCOPE-001). Open a discussion first if scope needs to change. OpenAI-compatible HTTP serving is implemented (REQ-SERVE-001); its real GPU/agentic acceptance is still required.
+- Do not add swap-based preemption, multi-GPU, gRPC serving, LoRA, or multimodal inputs — these are explicitly out of scope (REQ-OUT-SCOPE-001). Open a discussion first if scope needs to change. OpenAI-compatible HTTP serving is implemented and accepted (REQ-SERVE-001); serving changes must re-run its real GPU/agentic checks.
 - Do not commit secrets, tokens, `.env` values, or production credentials.
 - Do not force-push to any branch without explicit confirmation from the project owner.
 - Do not upgrade the `zeromq` Rust crate without checking that `DealerSocket` and `ipc-transport` still work correctly — see `docs/decisions/ADR-001-zmq-socket-type.md`.

@@ -1,6 +1,8 @@
 # OpenAI 兼容本地服务
 
-**状态（2026-09-23）：** 默认 CUDA Qwen Worker 通过真实 MTP4 JSON/工具约束、思考档位、生命周期及两种 oh-my-pi 核心任务。两种 API 的长 strict-JSON 请求均复用130928个缓存 token。全部12组性能通过；证据及保留的回答局限见 [acceptance.md](acceptance.zh.md)，当前状态见 [handoff.md](handoff.zh.md)。
+**状态（2026-09-23）：** 默认 CUDA Qwen Worker 通过真实 MTP4 JSON/工具约束、思考档位、生命周期及两种 oh-my-pi 核心任务。两种 API 的长 strict-JSON 请求均复用 130928 个缓存 token。证据及保留的回答局限见 [acceptance.zh.md](acceptance.zh.md)。
+
+**已知服务缺陷**（详情与修复方案见 [audit-2026-09-23.zh.md](audit-2026-09-23.zh.md)）：单个请求的 worker 侧错误（例如接近零的 `temperature`、grammar 违例或超过 120 秒的 prepare）会使所有活跃请求失败，并使服务在重启前不可用（SRV-01）；Rust 进程被 SIGTERM/SIGKILL 后 Python worker 成为孤儿进程并继续占用 GPU（SRV-02）；容量和内部错误以 400 返回（SRV-03）；`length` 结束可能丢失最后几个被暂扣的字节（SRV-04）。
 
 ## 运行
 
@@ -47,7 +49,7 @@ XGrammar 构造 Qwen 原生 XML 工具 grammar 和 JSON 答案 grammar。MTP 中
 
 Responses 默认 store=true，OMP 通常发送 store=false。存储响应及解析后的对话快照在完成一小时后过期。限制 1,000 条记录和 256 MiB 序列化响应/历史载荷，可用 response-ttl-seconds、response-capacity、response-max-bytes 配置。对象/分配额外开销不计入序列化字节预算。达到容量时淘汰最旧记录；超大记录显式失败。未知/已删除/过期 ID 返回 404，重启使 ID 失效。并发续接复制快照；删除祖先不影响已开始请求或已保存子响应。
 
-HTTP body 上限 8 MiB；接纳 channel 和活跃请求上限各 64；Rust 最多调度 32 并发序列。每个 stream 有 256 事件 buffer。客户端断开或过慢时只取消其请求，不取消引擎。默认请求超时 600 秒（可配置）；准备/步骤 RPC 的 deadline 为 120 秒并检测 worker 退出。worker 致命错误使待处理请求失败，后续提交在重启前返回 unavailable。Ctrl-C 停止自有 worker 并关闭 stream，不单独抢占正在执行的 kernel。
+HTTP body 上限 8 MiB；接纳 channel 和活跃请求上限各 64；Rust 最多调度 32 并发序列。每个 stream 有 256 事件 buffer。客户端断开或过慢时只取消其请求，不取消引擎。默认请求超时 600 秒（可配置）；准备/步骤 RPC 的 deadline 为 120 秒并检测 worker 退出。worker 致命错误使待处理请求失败，后续提交在重启前返回 unavailable。目前所有 worker 异常都被视为致命错误（审计 SRV-01）。Ctrl-C 停止自有 worker（通过 drop 发送 SIGKILL，不执行 Python 的正常关闭流程）并关闭 stream；未处理 SIGTERM（审计 SRV-02）。不单独抢占正在执行的 kernel。
 
 ## OMP 任务与验证
 

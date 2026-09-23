@@ -35,20 +35,21 @@ hook 是 .pre-commit-config.yaml 中的本地/system hook。只暂存有意修�
 
 ```bash
 scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64
-scripts/with-gpu.sh scripts/with-env.sh python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output /tmp/ordinary.json
 ```
+
+性能验收使用 `benchmarks/ttft.py`；基线提取、CPU 亲和性和门槛见 testing.md。
 
 多条真实 prompt 可用 `run --prompt-file PATH`：每行是一条以空白分隔的 token ID 序列，最多 32 个请求。`--arrival-interval N` 按调度步骤错峰接纳；`--prefix-hit` 先预填 prompt 并要求初始命中。输出包含有序 token batch 和功能计数。带显存压力的双请求 `scripts/smoke-batch.py` 及抢占后文本检查见 testing.md。
 
-GPU 包装脚本等待空闲 B200：无计算进程、显存使用不超过 64 MiB、报告利用率为零。选择 UUID 并持有协作 flock；无关程序不一定遵守该锁。基准在引擎运行期间额外检测同 GPU 外部客户端，使受影响测量失效。不得中断无关任务。使用唯一 socket；仅确认所有者退出后才删除遗留 socket。
+GPU 包装脚本等待空闲 B200：无计算进程、显存使用不超过 64 MiB、报告利用率为零。选择 UUID 并持有协作 flock；无关程序不一定遵守该锁。锁 fd 会被子进程继承，孤儿 worker 会继续持有它（审计 SRV-02）。基准在引擎运行期间额外检测同 GPU 外部客户端，使受影响测量失效。不得中断无关任务。使用唯一 socket；仅确认所有者退出后才删除遗留 socket。
 
-历史 benchmark 默认输入 32768/输出 4096、容量单位 1024、预热两次和测量三次。运行 ordinary、mtp、prefix 模式。精度探针、组合和验收详见 testing.md。验收不启用 eager/probe。--binary 支持隔离构建，driver 执行经过 hash 校验的私有副本。运行中不修改 Python 源码。
+`benchmarks/ttft.py` 默认使用 4200 容量单位、128 个 GDN 槽、预热两次和测量五次，并运行 release 二进制的私有副本。验收不启用 eager/probe。运行中不修改源码。
 
 ## 日志与诊断
 
 日志写 stderr，结果写 stdout。Rust tracing 和 Python JSON 行使用 UTC 时间戳。OH_MY_VLLM_RUN_ID 关联两端，step_id 关联 RPC。INFO 记录初始化、容量和 batch 摘要。RUST_LOG=debug 与 OH_MY_VLLM_LOG_LEVEL=DEBUG 开启调度时间/空闲块、RPC 耗时、Python 消息解码、主机执行和编码/发送计时。
 
-主机耗时不是 CUDA kernel 耗时。GPU 计时单独运行 profiling，trace 留在仓库外。默认 INFO 避免逐步骤 I/O。控制器对串行调度/RPC 流使用一个 Tokio 线程。CPU 亲和性实验需给两引擎相同的继承掩码并记录；taskset 可放在 benchmark Python 命令前。实测结果、失败情况和待完成验收见 handoff.md。
+主机耗时不是 CUDA kernel 耗时。GPU 计时单独运行 profiling，trace 留在仓库外。默认 INFO 避免逐步骤 I/O。控制器对串行调度/RPC 流使用一个 Tokio 线程。CPU 亲和性实验需给两引擎相同的继承掩码并记录；taskset 可放在 benchmark Python 命令前。实测结果见 acceptance.md。
 
 ## 故障排查
 
@@ -88,7 +89,7 @@ rustfmt.toml 设置稳定 Rust 2024 格式、100 字符宽度、Unix 换行和�
 
 `benchmarks/baseline/enginecore.py` 仅用于基线，用单独维护的 vllm 环境运行，不向 oh-my-vllm 安装 vLLM。要求官方上游 SHA e9f169d16b9408bb9ae44f75072b91a5521d733c。独立 `benchmarks/ttft.py` 读取该 JSON，只启动自有 worker。此明确例外不改变日常构建/测试/运行依赖隔离。
 
-长上下文运行在 CLI 子命令前添加 `--max-model-len 262144 --num-gpu-blocks 4200 --mamba-blocks 128`。这些是 GPU 验证中的暂定容量，代表 1400 个 FA 槽和 128 个独立 GDN 槽。
+长上下文和验收运行在 CLI 子命令前添加 `--max-model-len 262144 --num-gpu-blocks 4200 --mamba-blocks 128`：代表 1400 个 FA 槽和 128 个独立 GDN 槽，已由六组 262144 token 边界运行验证。
 
 ## TileLang 与 TileFoundry
 

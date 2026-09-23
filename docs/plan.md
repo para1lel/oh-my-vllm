@@ -1,36 +1,48 @@
-# Completed plan — TileLang, TTFT and long context
+# Plan
 
-1. Updated and froze the isolated official vLLM main baseline and its environment.
-2. Implemented per-request TTFT and independent FA/GDN cache capacities.
-3. Replaced all seven owned Triton kernel modules with TileLang; integrated the
-   development-only personal TileFoundry fork and offline autotuning workflow.
-4. Tuned required shapes until all twelve rows passed throughput >=95%, TTFT
-   <=110%, and the user-revised10% stability gate. Preserved original raw sets.
-5. Passed unchanged correctness, six262144-token ordinary/MTP4 boundary rows,
-   long prefix, constraints, lifecycle and both actual oh-my-pi providers.
-6. Added25 Chinese companions and synchronized final evidence. Final document
-   readback passed on83d77ff; review and GPU cleanup verification are complete.
-   Final evidence is committed/pushed on main.
+## Completed
 
-See acceptance.md and handoff.md for current evidence and answer limitations.
+1. **2026-09-19 — Adapter.** Rust scheduling and logical KV cache, with an
+   adapter to the installed vLLM GPUWorker (ADR-001–003). All 9 EngineCore rows
+   passed.
+2. **2026-09-21 — Serving and V2 runner.**
+   - OpenAI-compatible Chat/Responses serving, with real MTP4 and oh-my-pi
+     acceptance (ADR-004).
+   - V2 Model Runner (ADR-005).
+3. **2026-09-21 — Independent runtime.** Project-owned model, state and kernels
+   built on independent libraries. vLLM is removed from builds, tests and
+   inference (ADR-006).
+4. **2026-09-22 — TTFT, long context and TileLang.**
+   - Refreshed and froze the official vLLM baseline.
+   - Added a per-request TTFT gate and separate FA/GDN capacities (ADR-007).
+   - Added 262144-token context support.
+   - Migrated all owned Triton kernels to TileLang.
+5. **2026-09-22/23 — CUDA migration.**
+   - Migrated all owned kernels to B200 CUDA C++ and inline PTX, keeping a
+     frozen TileLang comparison.
+   - All 147 operator cases and all 12 framework rows pass.
+   - CUDA is now the default (REQ-KERNEL-002).
 
-# Implementation status
+Evidence for each stage is indexed in [acceptance.md](acceptance.md).
 
-The independent runtime migration (ADR-006) is implemented: stable dependencies
-are pinned in conda oh-my-vllm; model loading, GPU state and required kernels are
-owned by this project or independent libraries. The old adapter and all vLLM
-runtime/build/test dependencies are removed. Rust retains serving, scheduling
-and logical KV ownership; the ZMQ protocol and block 784 remain unchanged.
+## Next
 
-FP64 operators and actual-model probes, ordinary/MTP text, prefix/preemption,
-constraints, lifecycle and CUDA Graph regressions pass. All nine original-baseline
-performance rows pass. Both final oh-my-pi workflows completed after documentation reconciliation;
-results and generated-answer caveats are recorded in acceptance.md and handoff.md.
+Fix the findings in the [2026-09-23 code audit](audit-2026-09-23.md), batch by
+batch:
 
-Earlier GPUWorker/V2 stages are historical milestones, not active implementations.
-Their evidence and decisions remain under bench/baseline and docs/decisions.
-Future architectures, NVIDIA backends, single-node multi-GPU and local DSpark
-extensions are described in ADR-006, without placeholder interfaces or claims of
-current support. CPU KV swap, PD/multi-node, LoRA and multimodal execution remain
-out of scope. Continue independent reviews, local pre-commit checks, main-only
-commits and prompt cleanup of task-owned GPU programs.
+1. Serving availability
+2. Evidence integrity
+3. Kernel and worker contracts
+4. Scheduler hardening
+5. Measured performance
+6. Cleanup
+
+Every batch must keep the 12-row performance gates, the numerical tolerances,
+block size 784 and the Rust/Python ownership split.
+
+## Not planned
+
+- **Out of scope:** CPU KV swap, PD/multi-node, LoRA and multimodal execution.
+- **Documentation only (ADR-006):** future model architectures, other NVIDIA
+  backends, single-node multi-GPU and the local DSpark draft model. They are
+  described there without placeholder interfaces.

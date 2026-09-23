@@ -1,13 +1,17 @@
 # Acceptance evidence
 
-## CUDA verification — current, 2026-09-22
+## Current — CUDA default, 2026-09-22/23
 
-Clean `c36d1c9` passes all147 static operator cases against frozen TileLang,
-all12 frozen-vLLM throughput/TTFT/stability comparisons, and six262144-token
-boundary runs. The active inventory is147;173 was the pre-fusion inventory.
-Full CUDA correctness passes173 tests plus28 subtests without relaxed tolerances.
-The12 workloads are32768 input ordinary/MTP/prefix × batch1/2/4, plus131072
-input ordinary-only × batch1/2/4; every output is4096 tokens.
+**Performance.** Clean `c36d1c9`, with CUDA explicitly selected, passes all 12
+frozen-vLLM comparisons.
+
+- **Workloads:** ordinary, MTP4 and prefix at 32768 input, batch 1/2/4, plus
+  ordinary-only at 131072 input, batch 1/2/4. Every output is 4096 tokens.
+- **Protocol:**
+  - `benchmarks/ttft.py` with 2 complete warmups and 5 measured repetitions.
+  - The frozen baseline's CPU affinity.
+  - A UUID-pinned B200 with process monitoring.
+  - A steady-state compilation/capture audit.
 
 | Workload | Baseline tok/s | CUDA tok/s | Throughput ratio | TTFT ratio |
 |---|---:|---:|---:|---:|
@@ -24,402 +28,119 @@ input ordinary-only × batch1/2/4; every output is4096 tokens.
 | ordinary-131072-2 | 114.06 | 129.45 | 113.49% | 91.54% |
 | ordinary-131072-4 | 162.85 | 178.82 | 109.80% | 93.82% |
 
-All rows use two complete warmups and five measured repetitions, matching the
-frozen baseline CPU affinity and UUID-pinned B200 process monitoring. No vLLM
-baseline was rerun. Prefix1 initially failed stability twice and prefix2 once;
-complete uninstrumented repeats pass with10% stability unchanged. A temporary
-GC diagnostic found no collection in measured intervals, but did not establish
-the precise jitter cause and is not acceptance. Three passing sets shared
-physical CPU cores with other task runs and were conservatively replaced by
-complete repeats without that overlap. All previous attempts are preserved.
+- **Stability:** every row meets throughput ≥ 95%, TTFT ≤ 110% and
+  `(max-min)/median` ≤ 10% for both metrics on both engines. Process polling
+  cannot exclude arbitrarily short interference between samples.
+- **Prior attempts:**
+  - Prefix batch 1 failed stability twice and prefix batch 2 once. Complete
+    repeats pass with the stability rule unchanged.
+  - Three passing sets shared physical CPU cores with other runs. They were
+    conservatively replaced by complete repeats.
+  - The cause of the prefix TTFT jitter was not established; a temporary GC
+    diagnostic found no collections in measured intervals and is not acceptance.
+  - All attempts are preserved.
+- **Baseline:** the vLLM baseline was not rerun.
+- **Nature of the comparison:** this compares independent runs and framework
+  versions, not a same-source paired experiment.
+- **Margins:** the MTP rows have the smallest margins. MTP batch 4 is 2.52
+  points above the gate.
 
-The147 operator cases each pass three warm rounds of20 interleaved pairs and a
-positive one-sided95% bootstrap gain bound. Small gains can be only nanoseconds;
-no larger minimum margin is claimed. TileFoundry HIR estimates and separately
-measured Nsight counters remain distinct from acceptance latency. CUDA C++ handles
-vector loads/stores, normalization, quantization, convolution and recurrence;
-inline PTX supplies selected reciprocal/cache controls and tensor-core
-attention instructions. Frozen TileLang remains available as the comparison.
+**Operators (REQ-KERNEL-002).** All 147 formal static cases beat the frozen
+TileLang implementation.
 
-Real-text ordinary/MTP preemption and prefix checks, twelve MTP4 constraints,
-lifecycle and four long strict-JSON calls pass. Both initial oh-my-pi runs execute
-real tools and follow-up requests with accepted drafts, but their final answers
-misstate current/history counts; Responses also reverses prefill ordering.
-Updated-document readback at clean ef07b2b passes the core task: Chat/Responses
-each execute nine successful reads,5/3 model requests and3297/1943 versus3687/2164
-proposed/accepted drafts. Non-blocking answer inaccuracies remain explicitly in
-the feature artifact; no claim of perfect grounding.
+- **Rule:** three warm rounds of 20 interleaved pairs, a faster CUDA median in
+  every round, and a positive one-sided 95% bootstrap bound on time saved.
+- **Margins:** small gains can be nanoseconds; no minimum margin is claimed.
+- **Separate from latency:** TileFoundry HIR estimates and Nsight counters are
+  kept separate from acceptance latency.
 
-CUDA is now the default. Final verification without backend/CUDA_HOME/TVM arch
-overrides passes174 tests plus31 subtests and repeats twelve real MTP4 constraints
-and lifecycle checks. The final selection/identity change leaves kernel/model/
-dispatch implementation unchanged;147/12 performance provenance remains c36d1c9.
-Cleanup is verified independently of the model answers.
+**Correctness and features.**
 
-Evidence: `bench/baseline/2026-09-22-cuda-operators.json`,
-`2026-09-22-cuda-framework.json`, and `2026-09-22-cuda-features.json`.
-The feature artifact distinguishes successful protocol behavior from incomplete
-answer grounding and retains harness setup failures. Historical sections below
-are not current CUDA status.
+- **Test suite:** with CUDA as the default and no backend/CUDA_HOME/TVM overrides,
+  the suite passes 174 tests plus 31 subtests. There are no skips and no relaxed
+  tolerances.
+- **FP64 probes:** actual-model ordinary and MTP4 probes pass.
+- **Real text:**
+  - Ordinary and MTP4 real-text checks pass, including forced preemption and
+    prefix reuse.
+  - Twelve MTP4 constraint cases, the thinking levels and the lifecycle checks
+    pass.
+  - Four long strict-JSON calls pass.
+- **Boundary runs:** six 258048-input, 4096-output runs complete without OOM or
+  recompute preemption:
 
-## TileLang migration — 2026-09-22
+  | Mode | Batch | Output tok/s | Proposed / accepted drafts |
+  |---|---:|---:|---|
+  | ordinary | 1 | 56.25 | — |
+  | ordinary | 2 | 78.58 | — |
+  | ordinary | 4 | 96.65 | — |
+  | MTP4 | 1 | 89.40 | 5010 / 2842 |
+  | MTP4 | 2 | 111.66 | 8989 / 5939 |
+  | MTP4 | 4 | 126.06 | 16272 / 12306 |
 
-Implementation `da75c02` replaces all project-owned Triton kernels in seven
-modules with TileLang. Independent libraries may still use Triton internally.
-TileFoundry is a development-only personal fork/submodule; production does not
-import it. Runtime/build/test independence from vLLM is retained.
+  Peak PyTorch reserved memory is 134.69 GB. This is not whole-device usage, and
+  these runs are capacity diagnostics, not throughput gates.
+- **oh-my-pi readback (clean `ef07b2b`):** both APIs pass the core task.
+  - Chat and Responses each made nine successful reads, with 5 and 3 model
+    requests respectively.
+  - Proposed/accepted drafts were 3297/1943 (Chat) and 3687/2164 (Responses).
+  - Some answer inaccuracies are recorded in the feature artifact. There is no
+    claim of perfect grounding.
+- **Cleanup:** cleanup is verified independently of the model answers.
 
-All12 rows pass throughput>=95%, TTFT<=110% and spread/median<=10%.
+**Provenance.**
 
-| Mode / input / batch | Baseline tok/s | TileLang tok/s | Throughput ratio | TTFT ratio |
-|---|---:|---:|---:|---:|
-| ordinary-32768-1 | 90.10 | 104.58 | 116.06% | 98.57% |
-| ordinary-32768-2 | 163.50 | 190.17 | 116.31% | 100.31% |
-| ordinary-32768-4 | 288.41 | 327.68 | 113.62% | 98.67% |
-| mtp-32768-1 | 329.36 | 316.30 | 96.03% | 98.63% |
-| mtp-32768-2 | 497.37 | 480.03 | 96.51% | 100.72% |
-| mtp-32768-4 | 729.62 | 695.40 | 95.31% | 101.47% |
-| prefix-32768-1 | 93.01 | 109.00 | 117.20% | 82.33% |
-| prefix-32768-2 | 173.52 | 214.35 | 123.53% | 85.17% |
-| prefix-32768-4 | 325.31 | 376.40 | 115.71% | 80.06% |
-| ordinary-131072-1 | 72.35 | 81.79 | 113.05% | 96.45% |
-| ordinary-131072-2 | 114.06 | 127.04 | 111.38% | 95.70% |
-| ordinary-131072-4 | 162.85 | 176.23 | 108.21% | 96.52% |
+- The 147/12 timing comes from `c36d1c9`.
+- `030f60f` only changes the default selection and identity reporting. The
+  kernel, model and dispatch implementations are unchanged.
+- The default-selection suite and service runs used the working tree after
+  `ef07b2b` (recorded with its diff hash in the feature artifact), which became
+  `030f60f`; they were not rerun on the commit itself.
 
-See [performance evidence](../bench/baseline/2026-09-22-tilelang-acceptance.json) for complete repetitions, provenance, prior failures and interference exclusions, and [correctness evidence](../bench/baseline/2026-09-22-tilelang-correctness.json) for functional and real-service records.
+**Evidence files** (in `bench/baseline/`):
 
-On 2026-09-22 the user revised stability from 5% to 10%, leaving throughput
-and TTFT ratio gates unchanged. Complete raw sets were re-evaluated under the
-new policy; original decisions remain intact. Prefix batch1 has5.97% TTFT
-spread/median: it failed only the old5% gate and passes the new policy.
+- `2026-09-22-cuda-operators.json`
+- `2026-09-22-cuda-framework.json`, whose rows carry `baseline_sha256` values
+  matching the embedded artifacts in `2026-09-22-refreshed-enginecore.json`
+- `2026-09-22-cuda-features.json`
 
-Every final row uses this same clean implementation, two full warmups and five
-measured repetitions, the frozen baseline's CPU affinity, a UUID-pinned B200 and
-compilation/capture/cache/interference audits. The refreshed official EngineCore
-baseline is unchanged; vLLM was not rerun for this migration. This is a historical
-comparison across independent runs and framework versions, not a same-source
-paired experiment. Discarded external-GPU attempts and prior failed/unstable
-candidates remain in the evidence; no repetitions are selected individually.
+**Scope limits.**
 
-The complete existing GPU suite passes146 tests and12 subtests, without skips.
-Actual ordinary/MTP FP64 probes retain the original output/state tolerances.
-Packed views, candidate snapshots, graph replay and long positions remain covered.
-The fused Q/K normalization preserves its BF16 boundary; FP64 phase reduction
-fixes amplified rotary error near262144 before FP32 sin/cos. Rust workspace,
-fmt, hard100-column checks, clippy, Ruff and all-file hooks pass.
+- The 2026-09-23 [code audit](audit-2026-09-23.md) found no wrong-token defect
+  on this path.
+- It did record serving-availability and evidence-integrity gaps. Two in
+  particular:
+  - The harness sets the candidate configuration it compares, instead of
+    observing it (EVD-02).
+  - No automated test covers the boundary runs (EVD-07).
+- Those limitations apply to the evidence above.
 
-All six258048-input/4096-output boundary rows complete without OOM or recompute
-preemption. Peak reserved memory is134687490048 bytes for ordinary and
-137703194624 bytes for MTP. These are cold capacity diagnostics, not throughput
-comparisons; ordinary batch4 also encountered an unrelated GPU process.
-Ordinary/MTP two-request text checks retain distinct Beijing/Tokyo subjects,
-1024-token outputs, and2/3 recompute preemptions. MTP uses3136 initial prefix-hit
-tokens and1176 accepted drafts. Fixed-length text probes ignore EOS; their trailing
-role markers are not EOS-aware service output.
+## Historical evidence index
 
-Twelve real MTP4 constraint cases, all thinking levels, stored-response lifecycle,
-mixed-batch scheduling and disconnect release pass. Both APIs accept131099-input
-strict JSON and reuse130928 cached tokens. The real oh-my-pi workflows read both
-required source files and send tool results back to the model; request logs show
-actual MTP proposals/acceptance. Final answer caveats are retained with raw text.
-Chat/Responses each completed9 successful tool calls in17.10/22.06s, with MTP activity on every request. Their answers correctly distinguish pending acceptance at read time, but reuse older gap estimates; Chat abbreviates the install path and Responses quotes historical memory. Complete text and these caveats are retained; successful tool execution is not perfect answer grounding.
+Earlier stages are superseded. Their raw artifacts remain in `bench/baseline/` as
+records of what was measured at the time. Do not cite them as current status, and
+do not use pre-2026-09-22 baselines as the current denominator.
 
-The final document readback on83d77ff completed Chat7/Responses13 successful
-tool calls in22.51/34.78s. Both read the required sources and sent tool results
-back; all7 model requests proposed and accepted MTP drafts. Final requests run
-at252.31/234.24tok/s with TTFT279/351ms. The first cold Chat request includes
-compilation/capture; these timings are service diagnostics, not EngineCore gates.
-Both answers correctly report all12 rows and10% stability. Review limitations:
-Chat reads structural source summaries and calls the default8000 address live;
-Responses overstates reading all documents in full (acceptance read stops at300
-lines), simplifies scheduler computed-token accounting, and quotes the prior9/9
-tool round. Both retain the handoff snapshot's pending-readback wording. These
-are generated-answer caveats, not current blockers. Full text and both readback
-rounds are retained. All task-owned GPU programs exited, and temporary service
-ports18025/18026/18027 were verified released; unrelated clients were untouched.
+| Date | Stage | Result at the time | Artifacts |
+|---|---|---|---|
+| 2026-09-19 | Original GPUWorker adapter, 9 rows vs original EngineCore baseline (2 warmups/3 reps) | 9/9 ≥ 95% | `2026-09-19-acceptance.json`, `2026-09-19-mtp-bs2-repeat.json`, `2026-09-19-batch-text.json`, `2026-09-19-paired-investigation.json` |
+| 2026-09-21 | Serving extension (real MTP4 constraints, lifecycle, oh-my-pi) | passed | `2026-09-21-serving-acceptance.json` |
+| 2026-09-21 | V2 Model Runner, 9 rows vs original baseline | 9/9 ≥ 95% | `2026-09-21-v2-acceptance.json` |
+| 2026-09-21 | Independent runtime (vLLM removed), 9 rows vs original baseline | 9/9 ≥ 95% | `2026-09-21-independent-{stage1,stage2,stage3,acceptance,batched-sampling,grouped-decode,proposal-graph}.json` |
+| 2026-09-22 | Refreshed official vLLM baseline `e9f169d1…`, 12 rows | frozen denominator | `2026-09-22-refreshed-enginecore.json` |
+| 2026-09-22 | TTFT/long-context investigation and MTP-gap diagnosis | 10/12; MTP bs4 at 94.87% | `2026-09-22-ttft-{stage1,agentic,discarded}.json`, `2026-09-22-performance-gap{,-candidates}.json`, `2026-09-22-{native-decode-fusions,prefill-*,ragged-prefill,strided-metadata}.json` |
+| 2026-09-22 | TileLang migration (`da75c02`), 12 rows | 12/12 under 10% stability | `2026-09-22-tilelang-{acceptance,correctness}.json` |
+| 2026-09-22 | CUDA milestone subsets (dirty source, diagnostic) | partial | `2026-09-22-cuda-*-progress.json` |
 
-Offline TileLang AutoTuner searches use legal metadata, explicit CUDA Graph timing
-and independent references with no mismatch waiver. TileFoundry cost/memory
-analysis guides hypotheses; complete-operator and actual-model results decide
-production dispatch. Main improvements include asynchronous/coalesced KV access,
-shape-specific split/merge layouts, recurrent-state tiling, quantization/RMS launch
-choices and Q/K normalization/rotation fusion. Production never searches online.
-Temporary operator tests, tuning records and GPU traces remain outside the repo.
-The pinned HIR lacks FP64 and cannot certify the fused long-position phase path;
-its explicitly documented approximation does not replace FP64/model acceptance.
-
-All25 project-owned Markdown documents have Chinese companions. Agents use the
-English originals; future edits update both languages in the same change.
-
-
-## Historical TTFT and 262144-context investigation — 2026-09-22
-
-All six ordinary/MTP4 batch 1/2/4 maximum-context checks complete 258048 input +
-4096 output tokens without preemption. Separate FA/GDN capacities use 1400/128
-slots. A high-page int32 address overflow was found and fixed; FP64 regression
-tests cover both decode kernels and cache append. Long strict-JSON requests and
-prefix reuse pass through both APIs with MTP4 and the corrected Qwen3.8 model ID.
-[Stage evidence](../bench/baseline/2026-09-22-ttft-stage1.json) records raw diagnostic
-results. They are not formal throughput/TTFT repetitions. The refreshed 12-row
-baseline is now frozen, and all candidate rows have completed on clean ee2fb63.
-Ten pass; MTP batch4 throughput is 692.190 tok/s versus the 693.140 gate
-(94.8698% of baseline), while prefix batch1 fails TTFT stability despite passing
-both ratio gates. Overall acceptance remains pending. See
-[comparison and causes](performance-gap-2026-09-22.md) and
-[complete candidate evidence](../bench/baseline/2026-09-22-performance-gap-candidates.json).
-The following acceptance belongs to the prior task.
-
-## Independent runtime — 2026-09-21
-
-All nine 32768→4096 rows pass 95% against the original frozen EngineCore baseline.
-No native baseline was rerun. Each row used two warmups and three measurements,
-block 784, the original CPU affinity, and an exclusively monitored UUID-pinned B200.
-
-| Mode | Batch | Original baseline tok/s | Independent tok/s | Ratio |
-|---|---:|---:|---:|---:|
-| ordinary | 1 | 92.21 | 102.51 | 111.17% |
-| ordinary | 2 | 167.87 | 170.36 | 101.48% |
-| ordinary | 4 | 250.96 | 278.80 | 111.09% |
-| mtp | 1 | 269.16 | 285.73 | 106.16% |
-| mtp | 2 | 418.53 | 403.86 | 96.49% |
-| mtp | 4 | 446.61 | 546.98 | 122.47% |
-| prefix | 1 | 95.16 | 109.19 | 114.73% |
-| prefix | 2 | 179.44 | 190.07 | 105.93% |
-| prefix | 4 | 333.32 | 336.16 | 100.85% |
-
-[Full independent evidence](../bench/baseline/2026-09-21-independent-acceptance.json)
-records raw repetitions, hashes, runtime identity, correctness and discarded runs.
-The six ordinary/prefix rows used clean commit ca5a200; the three final MTP rows
-used clean commit 5c0848e. The latter changes only MTP execution and adds a new
-ProposalGraph class: existing graph definitions are AST-identical, and other
-non-MTP production modules are unchanged. Each row retains its actual identity.
-This is a historical comparison, not a same-source/same-GPU paired experiment.
-Prior failed measurements and contaminated diagnostics remain in the intermediate
-artifacts; none replace the frozen baseline or contribute to the final medians.
-GPU-process polling cannot exclude arbitrarily short interference between samples.
-
-The final GPU suite passes 92 tests and 12 subtests, without skips. Rust 75 tests,
-fmt, hard 100-column Rust checks, clippy, ruff and all hooks pass. Original actual-
-model GQA/GDN FP64 tolerances remain unchanged (output atol/rtol 0.03, state NRMSE
-1% and relative-peak error 2%). Actual grouped target and draft attention also pass.
-Ordinary and MTP text tests cover prefix reuse, staggered arrivals and recompute;
-real service tests pass 12 API/reasoning/constraint combinations and cancellation,
-stored continuation/deletion and mixed-batch cleanup. All use conda oh-my-vllm.
-
-Final oh-my-pi readback completed on Chat and Responses with MTP4 and medium
-reasoning: 7 and 18 successful read calls, zero tool errors, 3 and 6 model turns,
-and 26.27 / 36.68 seconds end to end. Both read the required scheduler and Worker
-source and correctly described the goal, architecture and independent runtime.
-Responses says three ordinary/prefix rows rather than six (three per mode), uses
-brackets to denote an optional shell flag, and overstates full-file reading; these
-minor answer defects are retained in the evidence, not silently corrected. Its
-nine-row all-pass conclusion is correct. The earlier diagnostic-number
-misinterpretation is superseded, not claimed as perfectly grounded.
-
-Every request has nonzero MTP proposal/acceptance counts. Cold first-request TTFT
-is 6363 ms, explained by preparation (1102 ms) and prefill (4066 + 1194 ms).
-The first subsequent decode takes 1536 ms, consistent with graph warmup/capture
-overhead but without a separate capture timer. Later TTFT is 652–1917 ms.
-Final-answer output rates are 158.78 / 197.25 tok/s. No hang or unexplained sustained
-slowdown was observed; these mixed cold/warm workflows have no strict throughput
-gate. Owned server/worker processes exited, nvidia-smi shows no compute processes,
-and ports 18013/18014 are released.
-
-## Historical V2 Model Runner acceptance — 2026-09-21
-
-The predecessor implementation used V2 exclusively, with Rust scheduling/KV ownership and no
-vLLM source changes. All nine 32768→4096 rows pass the >=95% gate against the frozen
-2026-09-19 EngineCore measurements. Only the framework was rerun: two warmups and
-three measured repetitions per row, MTP4 where applicable, block 784, original
-per-row CPU affinity, and one UUID-pinned B200 per run.
-
-| Mode | Batch | Historical EngineCore tok/s | V2 framework tok/s | Ratio |
-|---|---:|---:|---:|---:|
-| ordinary | 1 | 92.21 | 92.16 | 99.94% |
-| ordinary | 2 | 167.87 | 166.96 | 99.46% |
-| ordinary | 4 | 250.96 | 252.26 | 100.52% |
-| mtp | 1 | 269.16 | 286.98 | 106.62% |
-| mtp | 2 | 418.53 | 434.80 | 103.89% |
-| mtp | 4 | 446.61 | 451.12 | 101.01% |
-| prefix | 1 | 95.16 | 95.60 | 100.46% |
-| prefix | 2 | 179.44 | 179.29 | 99.92% |
-| prefix | 4 | 333.32 | 324.07 | 97.22% |
-
-[Full V2 evidence](../bench/baseline/2026-09-21-v2-acceptance.json) records every
-repetition, commands, frozen-baseline SHA256, binary/worker source hashes, GPU/CPU
-identity and correctness results. Measurements used clean implementation commit
-`d85c23e`. Actual editable vLLM HEAD is `039b2ad67da6d64f7c1835c4738c7fb545ad37fc`;
-installed package metadata still reports the historical `g6376c601e` build label.
-This is a historical comparison, not a same-source or same-GPU paired benchmark,
-and does not establish that V2 alone caused any speedup. The original baseline
-and historical 2026-09-19 MTP-bs2 supplemental repeat are unchanged; that historical
-repeat was not substituted for the main baseline.
-
-Independent queues ran on distinct GPUs with process monitoring every second.
-6 attempts were discarded in full after detecting outside GPU processes; only
-subsequent uncontended runs contribute numbers. Prefix bs2/bs4 originally showed
-3.46%/4.47% within-run spread, so framework-only follow-ups used two warmups and
-five measurements each: bs2 reaches 100.02% of baseline with 0.09% spread; bs4
-reaches 99.94% with 0.07% spread. The artifact preserves both rounds;
-the original matrix is not replaced. Even the slowest follow-up measurement
-over the fastest historical baseline reaches at least 99.69%.
-Polling cannot exclude activity between samples. Every measured request generated 4096 tokens with no preemption.
-
-Actual scheduled GQA/GDN FP64 probes pass ordinary and MTP paths across block 784:
-51 and 40 checks respectively, zero nonfinite values. Maximum state NRMSE is
-0.2704% and maximum relative error is 0.3916%, below unchanged 1%/2% limits;
-output atol/rtol remain 0.03. Two-request text tests preserve city isolation and
-1024-token budgets through two ordinary and three MTP preemptions. The latter
-combines prefix reuse, staggered arrivals and 1181 accepted drafts.
-
-All 12 Chat/Responses × off/medium × JSON object/schema/strict-tool cases pass
-with actual proposed and accepted MTP drafts. Lifecycle checks pass twice and
-prove mixed plain/constrained request IDs entered the same batch, and disconnect
-cancellation reached a successful Worker release RPC before follow-up success.
-All five thinking levels and stored Responses retrieve/continue/delete pass.
-
-Both real oh-my-pi tasks read README/architecture and implementation files
-`crates/scheduler/src/lib.rs` and `python/oh_my_vllm/worker/model_runner.py`.
-Chat used four assistant turns/nine tools, Responses four turns/eleven tools,
-with zero tool errors and positive MTP counters on all eight server requests.
-Earlier documentation-only runs are retained separately as preliminary evidence.
-Answers describe files at read time, before this final status update; Chat has a
-nonblocking `docs/accepting.md` citation typo preserved in the artifact.
-
-Warm short constraint cases report 183.49–283.70 output tok/s and 42–65 ms TTFT,
-with zero queue wait in sequential runs. The first request has a roughly 1.1 s
-initialization spike. These are serving observations, not a matched benchmark or
-new HTTP performance gate. No persistent stall or worker error was observed in
-the final runs. All task-owned GPU workers/services stopped and port18002 released.
-
-Checks pass: 75 Rust tests, 39 Python unittest tests, rustfmt, hard 100-character
-Rust limit, clippy with warnings denied, ruff and pre-commit hooks. Independent
-reviews cover V2 adaptation, cache zeroing, regression protocol and evidence.
-
-The sections below preserve earlier serving and matched EngineCore evidence;
-they describe their original binaries, not additional V2 runs.
-
-## Serving acceptance — 2026-09-21
-
-Real Qwen3.8-27B-FP8 serving passed on B200 UUID
-GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad with four MTP drafts and block 784.
-[Recorded requests, results and metrics](../bench/baseline/2026-09-21-serving-acceptance.json)
-include the release-binary identity, commands, actual tool paths and final answers.
-
-- Chat and Responses each completed the real read-only oh-my-pi repository task,
-  including README, architecture and source reads, tool-result follow-ups and
-  a file-grounded final answer. Both used medium thinking and MTP4.
-- All 12 API × off/medium × JSON object/JSON Schema/strict-tool cases completed
-  valid output with real proposed and accepted MTP drafts, without fallback.
-- All five thinking levels, stored continuation/retrieve/delete, mixed structured
-  and ordinary batches, disconnect cleanup and a subsequent request passed.
-  Explicit named-tool and no-tool choices passed on both APIs as well.
-- After first-request initialization, the 11 short constraint cases reported
-  202.8–280.1 output tok/s including request preparation and prefill. Final agentic
-  answers reported 208.1 tok/s (Chat, 2,005 output tokens) and 219.3 tok/s
-  (Responses, 4,490 tokens). These are workload observations, not a new throughput
-  gate or a matched vLLM comparison. Queues were empty in these sequential runs.
-
-The runs found and fixed two defects: Qwen XML wrapping newlines had entered file
-paths; uncached tokenizer length queried the vocabulary on every output token
-(~29 ms each). Same-GPU constrained runs after caching reduced output processing
-to ~0.1 ms per step. DEBUG phase timings are host durations, not kernel timings.
-One initial Chat thinking-loop retry recovered; it remains in the saved evidence.
-The final answers cite docs as they existed at read time, including the earlier
-GPU outage; those status docs were reconciled after acceptance. Both API tasks
-were then repeated with updated docs: no tool errors or retries, updated grounded
-answers, and no repository diff changes. The artifact retains both rounds.
-GPU ownership was
-checked with snapshots; this does not exclude brief outside activity.
-
-The EngineCore matrix below predates serving and does not validate the HTTP paths.
-
-## Matched performance
-
-All nine required rows passed the >=95% throughput gate on single B200 GPUs.
-Input/output lengths are 32768/4096 per request. Each pair uses identical input
-IDs, GPU UUID, inherited single-core CPU affinity, physical KV capacity (1024),
-block size (784), greedy sampling and fixed output counts. MTP uses four drafts
-and BF16 SSM on both sides. Async scheduling is disabled.
-
-| Mode | Batch | vLLM tok/s | Framework tok/s | Ratio |
-|---|---:|---:|---:|---:|
-| Ordinary | 1 | 92.21 | 93.74 | 101.66% |
-| Ordinary | 2 | 167.87 | 170.03 | 101.29% |
-| Ordinary | 4 | 250.96 | 254.64 | 101.46% |
-| MTP | 1 | 269.16 | 276.27 | 102.64% |
-| MTP | 2 | 418.53 | 434.33 | 103.78% |
-| MTP | 4 | 446.61 | 450.04 | 100.77% |
-| Prefix | 1 | 95.16 | 96.76 | 101.68% |
-| Prefix | 2 | 179.44 | 182.22 | 101.55% |
-| Prefix | 4 | 333.32 | 323.75 | 97.13% |
-
-These are medians of three measurements after two warmups per engine.
-[Raw data and exact commands](../bench/baseline/2026-09-19-acceptance.json)
-preserve clean source commit `12d227d`, executable SHA256, GPU/CPU identity,
-vLLM version, configuration and every repetition. Later cancellation and CLI
-changes are not attributed to this measured executable.
-
-The baseline uses `LLM.generate` to drive native EngineCore with detokenize=False.
-Both timers include request submission through completion; Rust includes
-registration, scheduling, transport and final cleanup. Loading, compilation,
-warmup and prefix seeding are outside the timer. Each prefix request reports
-exactly 32144 cached tokens in both engines. Every MTP measurement proposes and
-accepts real drafts. Cold rows report zero prefix hits.
-
-Cases ran concurrently on different idle GPUs, with one CPU core assigned per
-pair. These results apply to that recorded configuration, not arbitrary CPU
-placement. GPU ownership was monitored during each engine run; no external
-same-GPU process was observed. Polling cannot exclude arbitrarily short activity
-between samples. Even comparing each row's slowest framework repetition with
-its fastest vLLM repetition exceeds 95% (minimum 97.10%).
-
-MTP batch 2 had approximately 2.6% within-engine timing spread, so an additional
-[pair with three warmups and five measurements](../bench/baseline/2026-09-19-mtp-bs2-repeat.json)
-passed at 98.85% (vLLM 427.32 tok/s, framework 422.42 tok/s). Within-engine
-spread fell to 0.67% for vLLM and 0.13% for the framework. The original three
-measurements remain intact. This follow-up supports the >=95% gate, not a stable
-3.78% speedup claim. It uses the same measured executable with unrelated dirty
-source edits recorded; Python worker sources were frozen until it completed.
-
-## Correctness and feature coverage
-
-Actual-path probes instrument real GQA and GDN calls during inference and compare
-their rounded inputs/outputs with independent CPU FP64 references. Coverage
-includes prefill, decode, crossing 784-token boundaries and all speculative
-state prefixes. BF16 outputs use atol=rtol=0.03; recurrent states require NRMSE
-<=1% and maximum absolute error <=2% of reference peak. These are eager,
-single-request kernel checks, not full-model FP8 token-equality claims.
-See [testing](testing.md) and the historical probe paths in [handoff](handoff.md).
-
-Ordinary, MTP and prefix-hit real Chinese text checks passed. The additional
-[two-request text evidence](../bench/baseline/2026-09-19-batch-text.json) uses
-distinct Beijing/Tokyo prompts, staggered arrivals, 2048 input tokens and 1024
-output tokens each. Both beginnings and tails remain coherent and on topic.
-
-- Ordinary: 2 recompute preemptions, zero initial prefix hits.
-- MTP plus seeded prefix: 4 preemptions, 3136 initial prefix-hit tokens,
-  1143 accepted drafts.
-
-Initial prefix hits exclude hits on re-entry after preemption. The aggregate
-hit counter also reports those recompute hits. Fixed output counts deliberately
-ignore EOS, matching the performance workload. Text checks test request isolation
-and recovery; they do not establish exact output equality with vLLM.
-
-Rust tests cover cache allocation/release, prefix ownership, arrivals, preemption,
-speculative state migration/rollback and cancellation. Cancellation is allowed
-between completed steps and must flush finished IDs to the worker. CPU adapter
-and bridge checks cover cleanup of Python and native Worker request state.
+The `baseline_*`, `clean_*` and `mtp_*` files and `logs/` are early vLLM HTTP
+serving captures. Their settings, inputs, timing boundaries and MTP configuration
+differ from the EngineCore protocol, so they are not comparable with it. Some
+older artifacts carry the erroneous "Qwen3.5" label. The model has always been
+Qwen3.8-27B-FP8.
 
 ## Operational scope
 
-Timestamped multilevel logs correlate Rust/Python runs and steps; debug host
-timers help locate scheduler, IPC and worker overhead. They are not CUDA timings.
-GPU test scripts wait for any idle B200, and baseline/worker use conda vllm while
-framework tools use conda oh-my-vllm. VSCode's ignored local settings select the
-framework environment for Python analysis.
-
-Multi-GPU execution, CPU KV swap, multimodal inputs, LoRA and production
-deployment remain outside the agreed scope. OpenAI-compatible HTTP serving is
-implemented (see serving.md), with its own acceptance above; it is not covered by
-this historical performance evidence. These measurements remain EngineCore-level.
+Multi-GPU, CPU KV swap, multimodal input, LoRA and production deployment are out
+of scope. The OpenAI-compatible HTTP service is implemented. Its acceptance
+consists of the functional and agentic checks above, not an HTTP throughput gate.
+EngineCore measurements do not validate HTTP-path performance.

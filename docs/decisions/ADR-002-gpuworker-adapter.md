@@ -1,6 +1,8 @@
 # ADR-002: Adapt the installed GPUWorker without importing its scheduler
 
 Accepted 2026-09-19 under the approved Rust scheduling/Python runner boundary.
+**Superseded** by ADR-005 and then ADR-006 (2026-09-21): the vLLM adapter and
+physical-stride remapping no longer exist. Retained as history.
 
 The installed vLLM is an editable checkout at `/data0/shared/dongwu.chen/vllm`
 (version metadata: 0.28.1rc1.dev691+g6376c601e.cu131). Its worker class is `Worker`;

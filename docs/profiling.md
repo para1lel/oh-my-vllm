@@ -59,23 +59,20 @@ that one named backend is correct for every version.
 
 ## Matched acceptance
 
-```bash
-scripts/with-gpu.sh scripts/with-env.sh python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output /tmp/ordinary.json
-```
+Use `benchmarks/ttft.py` as documented in testing.md. It emits raw repetitions,
+medians, ratios, stability, configuration and identity, and exits unsuccessfully
+if any gate fails. Profiling traces are not acceptance runs.
 
-Repeat for mtp and prefix. The script emits JSON with raw repetitions, medians
-through the ratio, configuration and identity; it exits unsuccessfully if any
-row is below95%. Consult testing.md for cache/draft validation, interference
-handling and variance requirements. Profiling traces are not acceptance runs.
-
-## TileLang kernels
+## Custom kernels
 
 TileFoundry static cost/memory/roofline analysis is a development hypothesis,
 not measured kernel time. Profile the actual model to attribute throughput/TTFT
 gaps. Keep temporary operator tuning scripts and reports outside the repository.
-Formal measurements audit TILELANG_CACHE_DIR in addition to FlashInfer and
-third-party Triton caches; use separate per-run TileLang/Triton roots when
-collecting concurrently, and finish all compilation before measured repetitions.
+Formal measurements audit FlashInfer, Triton and TileLang cache roots; the audit
+does not yet cover `TVM_FFI_CACHE_DIR` text artifacts or fail on unset roots
+(audit EVD-11). Finish all compilation before measured repetitions. Kernel faults
+surface at the next host sync; use `compute-sanitizer` on a reduced case to
+attribute them (audit KRN-09).
 
 ## CUDA/TileLang operator observations
 

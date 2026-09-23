@@ -22,6 +22,7 @@ All messages are msgpack dicts with a `"type"` key.
 {"type": "init",
  "model_path": str,
  "num_gpu_blocks": int,
+ "mamba_blocks": int | null,   # separate GDN pool capacity (ADR-007)
  "block_size": int,            # 784 for Qwen3.8
  "tensor_parallel_size": int,
  "max_model_len": int,
@@ -38,7 +39,7 @@ All messages are msgpack dicts with a `"type"` key.
     "token_ids": list[int],
     "num_computed_tokens": int,
     "prefill_token_ids": [int],  // admission/resumption only: full accepted history
-    "new_block_ids_to_zero": [int],  // fresh logical allocations; excludes cache hits
+    "new_block_ids_to_zero": [int],  // unused hint; merges FA/GDN namespaces (audit MNT-04)
     "fa_block_table": list[int],
     "mamba_block_table": list[int]}
  ],
@@ -46,9 +47,14 @@ All messages are msgpack dicts with a `"type"` key.
  "preempted_request_ids": list[int],
  "num_batched_tokens": int}
 
-{"type": "abort",  "request_id": int}
+{"type": "prepare", "request_id": int, "request": {...}}   # serving only; see below
+{"type": "abort",  "request_id": int}   # no reply; no Rust caller (audit MNT-04)
 {"type": "shutdown"}
 ```
+
+`register` and `abort` have no reply; an exception in their Python handlers
+currently terminates the worker (audit SRV-06). `step_id` is not echoed in the
+reply, so replies are matched only by ordering (audit SRV-05).
 
 Cancel requests only between completed execution steps. `Scheduler::abort`
 releases Rust ownership and queues a `finished_request_ids` notification for the
@@ -61,12 +67,17 @@ uses the same finished-only path without a reply; it does not change Rust state.
 ```
 {"type": "ready", "logical_num_blocks": int}
 
+{"type": "prepared", "prompt_token_ids": list[int]}
+
 {"type": "execute_result",
  "outputs": [
    {"request_id": int,
     "token_ids": list[int],  # empty prefill, one normal token, or accepted MTP outputs
     "num_accepted_draft_tokens": int,  # MTP: accepted draft count
-    "new_draft_token_ids": list[int]}  # actual next drafts from the project MTP proposer
+    "new_draft_token_ids": list[int],  # actual next drafts from the project MTP proposer
+    "text": str,                  # serving only, optional: incremental decoded text
+    "finish_reason": str | null,  # serving only, optional: stop/length
+    "reasoning_tokens": int}      # serving only, optional: cumulative
  ]}
 
 {"type": "error", "message": str}
@@ -85,12 +96,14 @@ Qwen3.8-27B has two attention groups requiring separate block tables:
   speculative state slots in MTP mode. Null placeholders preserve block positions.
   Cached checkpoints may outlive requests until the shared pool evicts them.
 
-Both groups draw from a single shared `BlockPool`. This means a request that
-holds many full-attention blocks and a Mamba checkpoint all compete for the same
-logical pool. Python allocates separate per-layer tensors at logical capacity;
-block IDs directly address their slots. The historical CLI capacity unit is kept:
-ready exposes floor(num_gpu_blocks/3), matching the frozen baseline. There is no
-vLLM physical-stride remapping; ADR002 describes that superseded implementation.
+By default both groups draw from a single shared `BlockPool`, so full-attention
+blocks and Mamba checkpoints compete for the same logical pool. With
+`--mamba-blocks N` (used by all current acceptance runs) the GDN group has its own
+pool of N slots and IDs are local to each group (ADR-007). Python allocates
+separate per-layer tensors at each capacity; block IDs directly address their
+slots. The historical CLI capacity unit is kept: ready exposes
+floor(num_gpu_blocks/3). There is no physical-stride remapping; ADR-002 describes
+that superseded implementation.
 
 ### BlockPool
 
@@ -141,8 +154,10 @@ per step:
    followed by explicit Mamba-aligned prefill splitting so checkpoints are
    materialized at reusable boundaries.
 
-Preemption is by recompute only (no CPU swap). The last-admitted running request
-is the first evicted.
+Preemption is by recompute only (no CPU swap). The current code preempts the
+request whose allocation failed, not the last-admitted one, and re-queues
+multiple victims in reverse priority order (audit SCH-06). `update()` trusts the
+worker's accepted counts and token lists (audit SCH-01).
 
 ## MTP speculative decoding
 
@@ -177,7 +192,8 @@ prompt_token_ids, or `error` before Rust admission. Legacy `register` remains
 fixed-length greedy for Run/Bench.
 
 Serving execute outputs optionally add text (incremental decoded text), finish_reason
-(stop/length or null), and cumulative reasoning_tokens. Token IDs remain the
+(stop/length or null), and cumulative reasoning_tokens; Rust stores them in a
+per-step side map (`serving_outputs`, audit SRV-07). Token IDs remain the
 authoritative Rust scheduling/KV input. Grammar masks stay entirely in Python and
 are applied by the owned target sampler, including speculative verification rows.
 Rust detects worker process exit while awaiting replies and uses the existing

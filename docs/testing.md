@@ -1,180 +1,280 @@
 # Testing Guide — oh-my-vllm
 
-Current EngineCore comparisons require throughput >=95%, TTFT <=110%, and
-(max-min)/median <=10% for both metrics in both baseline and candidate. The
-user revised stability from 5% on 2026-09-22. Re-evaluation must preserve the
-original artifacts and all raw repetitions, and identify the new policy.
+All commands go through `scripts/with-env.sh`, which sets the conda environment,
+`PYTHONPATH`, `CARGO_TARGET_DIR` and independent kernel cache roots. GPU commands also
+go through `scripts/with-gpu.sh`, which waits for an idle B200 and pins its UUID.
+Use a unique socket per run. Stop every GPU process you own when the run ends.
 
-## Independent migration checks
+Known test gaps are tracked in [audit-2026-09-23.md](audit-2026-09-23.md)
+(EVD-03…EVD-11). Do not cite a check listed there as evidence for the property it
+fails to cover.
 
-Use the independent environment/cache settings in development.md. CPU tests cover
-`test_batch_plan.py`, `test_mtp_plan.py` and `test_independent_sampler.py`; CUDA tests
-cover `test_independent_kernels.py`, `test_independent_decode_attention.py`,
-`test_decode_graph.py` and `test_elementwise.py`. Actual-model probes use
-`tests/probe_worker.py` as `OH_MY_VLLM_WORKER_PYTHON`, together with
-`OH_MY_VLLM_ENFORCE_EAGER=1`; MTP adds `OH_MY_VLLM_PROBE_MTP=1` and
-`--num-speculative-tokens 4`. Probe tolerances below are unchanged.
-
-The independent path has passed ordinary/MTP text, MTP prefix/preemption batches,
-12 Chat/Responses constraint cases and service lifecycle. The independent nine-row
-frozen-baseline matrix passes. Both final oh-my-pi workflows completed with MTP4,
-real source reads and tool-result follow-ups. See acceptance.md for answer-review caveats and timings.
-
-## Environments and CPU checks
-
-All commands use scripts/with-env.sh to set PYTHONPATH and CARGO_TARGET_DIR.
-All tests and the model Worker use conda oh-my-vllm. Baseline data is frozen
-and must not be regenerated. The old adapter and its tests have been removed.
+## Static and CPU checks
 
 ```bash
 scripts/with-env.sh cargo test --workspace
+scripts/with-env.sh cargo fmt --all --check
+scripts/with-env.sh python scripts/check_rust_line_width.py
 scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
-scripts/with-env.sh python -m unittest discover -s tests -p test_runtime_tools.py
-scripts/with-env.sh python -m unittest discover -s tests -p test_benchmark_tools.py
 CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p 'test_*.py'
-scripts/with-env.sh python -m unittest discover -s tests -p test_bridge_logging.py
-scripts/with-env.sh python -m unittest discover -s tests -p test_bridge_abort.py
 ```
 
-Rust tests cover pool/free/hash/prefix accounting, chunked prefill, arrivals,
-recompute preemption, MTP acceptance/rejection, private prefix-hit states,
-speculative slot migration over multiple blocks, and complete release.
-CPU benchmark tests check invalid MTP configuration and descendant cleanup.
+The `unittest` command runs only `TestCase` modules. It imports the pytest-style
+modules without running them:
 
-## GPU selection and real text
+- `test_independent_kernels.py`
+- `test_independent_decode_attention.py`
+- `test_elementwise.py`
+- `test_greedy_batch.py`
+- `test_proposal_graph.py`
+- `test_gqa_accuracy.py`
 
-Every single-GPU command waits for any idle B200 using scripts/with-gpu.sh.
-Use a unique socket per run. Do not terminate unrelated GPU processes.
+A passing `unittest` run therefore says nothing about those modules. The full
+suite is below.
+
+Rust tests cover:
+
+- Pool, free-list, hash and prefix accounting
+- Chunked prefill and arrivals
+- Recompute preemption
+- MTP acceptance and rejection
+- Private prefix-hit states
+- Speculative-slot migration
+- Separate FA/GDN pools
+- Complete release
+
+The CPU Python tests cover:
+
+- Batch planning and the sampler
+- Serving preparation (real tokenizer/XGrammar)
+- The HTTP server with a scripted worker
+- The bridge
+- Benchmark and measurement tooling
+- The operator-comparison statistics and frozen-reference integrity
+
+The scripted worker (`tests/fixtures/serving_worker.py`) produces fake output. It
+is never model or performance evidence.
+
+## Full GPU suite
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 MAX_JOBS=8 \
+  python -m pytest tests -q
+```
+
+This collects all 174 tests. The accepted default-CUDA run passes 174 tests plus
+31 subtests with no skips (`bench/baseline/2026-09-22-cuda-features.json`).
+
+The operator tests compare each kernel with CPU FP64 references. They cover:
+
+- Block-scaled FP8 and paged/grouped GQA
+- Gated delta recurrence, causal convolution, RMS and partial rotary
+- Fused attention preparation
+- Non-contiguous pages
+- 784/785-token boundaries
+- Page addresses beyond int32
+- Per-candidate MTP snapshots
+- Graph replay
+
+Set `OH_MY_VLLM_KERNEL_BACKEND=tilelang` to run the same suite against the frozen
+comparison backend. `test_gqa_accuracy.py` tests PyTorch SDPA only and is not
+actual-path evidence (EVD-04).
+
+## Real text and actual-path FP64 probes
 
 ```bash
 scripts/with-env.sh cargo build --release -p oh-my-vllm-zmq-worker
 scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/text-check.ipc --max-tokens 64
 ```
 
-Add --num-speculative-tokens 4 for MTP; add --context-repeats 100 to cross a
-784-token boundary. Combine --prefix-hit with --context-repeats 100 to seed the
-prompt first and require a nonzero cache hit before decoding the real answer.
---binary selects an isolated build for this text smoke. Both ordinary and MTP paths have produced coherent Chinese.
-Fixed output limits deliberately ignore EOS, as does the throughput baseline.
+Options:
 
-## Actual-path FP64 reference probe
+- `--num-speculative-tokens 4`: enable MTP.
+- `--context-repeats 100`: cross a 784-token boundary.
+- `--prefix-hit` together with `--context-repeats 100`: seed the prompt, and
+  require a cache hit.
+- `--binary`: select an isolated build.
 
-Add these environment variables to the real-text command (after with-env.sh):
+Fixed output limits ignore EOS, as the throughput workload does.
+
+To add FP64 probes of the real kernel calls, append these variables after
+`with-env.sh`:
 
 ```bash
 env OH_MY_VLLM_ENFORCE_EAGER=1 OH_MY_VLLM_WORKER_PYTHON=/data0/shared/dongwu.chen/oh-my-vllm/tests/probe_worker.py
 ```
 
-For MTP also set OH_MY_VLLM_PROBE_MTP=1 and pass --num-speculative-tokens 4.
-The probe instruments a selected real FlashInfer GQA layer and target GDN
-prefill/recurrent verification calls and MTP paged decode. It never substitutes production kernels.
-It checks outputs and recurrent states, including each speculative state.
-Required coverage categories must appear before shutdown can succeed. This is
-single-request, eager diagnostic coverage; never enable it in throughput runs.
-Graph capture is disabled, so diagnostic CPU copies observe real requests only.
+For MTP, also set `OH_MY_VLLM_PROBE_MTP=1` and pass `--num-speculative-tokens 4`.
+`scripts/probe-independent-model.py` runs the same short eager model probe.
 
-References use actual rounded inputs in CPU FP64. BF16 output checks use
-atol=rtol=0.03. Recurrent state checks require normalized RMS error <=1% and
-maximum absolute error <=2% of the reference peak; both metrics are logged.
-Near-zero elementwise state relative errors are unstable. These checks diagnose
-individual kernel/state paths, not full-model FP8 token equality. The historical
-standalone SDPA test is supplementary and does not establish actual-path coverage.
+- **What the probe instruments:** real GQA, GDN prefill and recurrent
+  verification, and MTP paged decode. It never substitutes production kernels.
+- **References:** CPU FP64 references on the actual rounded inputs.
+- **Tolerances:** BF16 outputs use atol=rtol=0.03. Recurrent states require
+  NRMSE ≤ 1% and maximum absolute error ≤ 2% of the reference peak.
+- **Coverage requirement:** the required coverage categories must appear before
+  shutdown succeeds.
+- **Scope:** these are eager, single-request diagnostics, not a full-model token
+  equality claim. Graph capture is disabled, so diagnostic CPU copies observe real
+  requests only. Near-zero elementwise state relative errors are unstable and are
+  not a criterion.
+
+Never enable probes or eager mode in performance runs.
 
 ## Feature combinations and preemption
 
-The Rust bench command accepts --arrival-interval (steps between arrivals),
---prefix-hit (seed before timed batch), --warmup and --repetitions. Global
---scheduler-blocks can shrink the Rust pool for deterministic memory pressure
-without changing physical GPU allocation. Verify preemptions >0 in its result;
-a constrained pool alone does not prove that preemption happened.
-
-Examples with 256 physical blocks and max-model-len 8192:
-
-- Ordinary: scheduler-blocks 10, batch-size 2, input-len 2048, output-len 1024.
-- MTP/prefix/arrivals: num-speculative-tokens 4, batch-size 2, input-len 2048,
-  output-len 128, prefix-hit, arrival-interval 3.
-
-Results report exact output counts, cache hits, preemptions, proposed and accepted
-drafts. Feature smoke runs may use warmup 0/repetitions 1; they are not performance
-acceptance measurements.
-
-For request isolation through recompute, run two distinct real Chinese prompts
-with staggered arrivals and a constrained pool:
+The Rust `bench` command accepts `--arrival-interval`, `--prefix-hit`, `--warmup`
+and `--repetitions`. The global `--scheduler-blocks` option shrinks the Rust pool
+to force preemption. Check `preemptions > 0` in the result, because a small pool
+alone does not prove preemption happened.
 
 ```bash
 scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-batch.py --socket /tmp/batch-text.ipc --scheduler-blocks 10
 scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-batch.py --socket /tmp/batch-mtp-text.ipc --scheduler-blocks 18 --num-speculative-tokens 4 --prefix-hit
 ```
 
-Each request has 2048 input and 1024 output tokens. The script requires observed
-preemptions, checks the beginning and tail for the correct city, and prints full
-text for inspection. MTP additionally requires accepted drafts; prefix mode
-requires `initial_prefix_hit_tokens > 0`, which excludes cache hits from recompute
-after preemption. These are semantic smoke checks, not full-model equivalence.
-Rust `run --prompt-file PATH` accepts one whitespace-separated token-ID request
-per line; `--arrival-interval 3` admits the next request three steps later.
-CPU cancellation tests cover running, waiting and preempted requests and the
-finished-only notification that clears Python registration, sampling, MTP and Worker state.
+Each command runs two distinct Chinese prompts with staggered arrivals. Each
+request has 2048 input and 1024 output tokens.
 
-## Frozen-baseline performance acceptance
+The script checks:
 
-The benchmark launches only the framework and validates an exact workload match
-against `bench/baseline/2026-09-19-acceptance.json`, including its fixed SHA256.
-An identical copy is allowed; changed or substitute data is rejected. There is no baseline execution
-code path. Use two warmups and three measured repetitions per row:
+- Observed preemptions.
+- The correct city at both the beginning and the tail of each output.
+- Accepted drafts (MTP).
+- `initial_prefix_hit_tokens > 0` (prefix mode).
+
+It also prints the full generated text for inspection. These are semantic smoke
+checks.
+
+`run --prompt-file PATH` reads one token-ID request per line.
+
+## Frozen-baseline performance acceptance (REQ-PERF-001/002)
+
+**Tool.** `benchmarks/ttft.py` is the acceptance tool. It launches only this
+project's worker, and on every call it enforces:
+
+- At least 2 warmups and 5 repetitions.
+- 4096 outputs per request and zero preemptions.
+- Exact prefix-hit counts.
+- Matching CPU affinity, GPU model and driver.
+- The frozen baseline SHA.
+- A steady-state compilation/capture audit.
+- A throughput ratio ≥ 0.95, a TTFT ratio ≤ 1.10, and `(max-min)/median` ≤ 10%
+  for both metrics on both engines.
+
+Its configuration comparison is weaker than it looks: the candidate side is
+filled in by the harness, not reported by the worker (EVD-02). Do not use
+`benchmarks/compare_vllm.py` for acceptance. It keeps the historical nine-row
+protocol and does not enforce these gates (EVD-01).
+
+**Baseline input.** The frozen baseline rows are embedded in
+`bench/baseline/2026-09-22-refreshed-enginecore.json` under `rows[].artifact`.
+Extract a row byte-identically, formatted as `json.dumps(artifact, indent=2)`
+plus a trailing newline. Its SHA-256 must equal `rows[].sha256`. Then run the
+row under the CPU cores recorded in `artifact.hardware.cpu_affinity`:
 
 ```bash
-scripts/with-gpu.sh scripts/with-env.sh taskset -c 8 python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 --warmup 2 --repetitions 3 --output /tmp/independent-ordinary-bs1.json
+scripts/with-env.sh python - <<'EOF'
+import hashlib, json
+rows = json.load(open("bench/baseline/2026-09-22-refreshed-enginecore.json"))["rows"]
+for row in rows:
+    text = json.dumps(row["artifact"], indent=2) + "\n"
+    assert hashlib.sha256(text.encode()).hexdigest() == row["sha256"]
+    open(f"/tmp/baseline-{row['label']}.json", "w").write(text)
+    print(row["label"], ",".join(map(str, row["artifact"]["hardware"]["cpu_affinity"])))
+EOF
+scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
+scripts/with-gpu.sh scripts/with-env.sh taskset -c 8-15 \
+  python benchmarks/ttft.py --baseline /tmp/baseline-ordinary-32768-1.json \
+  --output /tmp/candidate-ordinary-32768-1.json
 ```
 
-Run ordinary, mtp and prefix for bs1/2/4. The original rows used CPU cores8..16 in
-that order; use each row's original mask and record it. Defaults are32768 input,
-4096 output and1024 capacity units (341 logical blocks). MTP uses four proposals
-and BF16 GDN state; ordinary/prefix use FP32 GDN state. Controlled prefix hits must
-be exactly batch_size*32144. Prefix seeding occurs outside the timer. The timer
-includes registration through completion notification. The deterministic token-ID
-workload, sampling, cache policy and context limits must match frozen metadata.
+The defaults are `--num-gpu-blocks 4200`, `--mamba-blocks 128`, 2 warmups and
+5 repetitions. The script exits nonzero if any gate fails. It runs
+`target/release/oh-my-vllm-zmq-worker` under the repository root, so a custom
+`CARGO_TARGET_DIR` is not supported. Prefix rows must report exactly
+`batch_size * 32144` hit tokens (`(32768-1)//784*784` per request).
 
-The driver records original artifact hash, source HEAD/status/diff, every Python
-source hash, executable hash, current independent runtime versions, GPU UUID,
-CPU mask and raw measurements. It executes a hash-verified private binary copy.
-Do not edit Python sources during a measurement. Final acceptance requires a clean
-implementation commit; diagnostics are explicitly separate. Median throughput must
-be >=95% in each of all nine rows, with follow-up measurements for material variance.
+**Rules for a row to count as acceptance:**
 
-GPU clients are monitored throughout each run. External same-GPU processes invalidate
-that run and trigger cleanup of the owned process group; unrelated users are never
-killed. UUID pinning and cooperative locking do not replace this monitoring. Polling
-cannot exclude arbitrarily short interference, so investigate unexplained variance.
-Timeout cleanup includes child workers. CPU tests cover these ownership rules and
-reject numeric GPU IDs, invalid MTP settings and accidental legacy interpreters.
+- Build from a clean commit, and do not edit sources while a run is in progress.
+- Retain every attempt. If an external GPU process appears, the run is invalid.
+  Investigate any spread failure, then repeat the complete set.
+- Never select individual repetitions.
+- Never rerun the vLLM baseline without explicit user authorization.
 
-## Serving CPU, client and GPU coverage
+**Where results go.** Record accepted matrices in `bench/baseline`, following
+`2026-09-22-cuda-framework.json`.
+
+## Maximum context (REQ-CONTEXT-001)
+
+Run the six boundary rows (ordinary and MTP4, batch 1/2/4, 258048 input plus 4096
+output). Global options go before the `bench` subcommand; use `--num-speculative-tokens 0`
+for ordinary and `4` for MTP:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker \
+  --socket /tmp/boundary-mtp-4.ipc --num-gpu-blocks 4200 --mamba-blocks 128 \
+  --max-model-len 262144 --num-speculative-tokens 4 \
+  bench --batch-size 4 --input-len 258048 --output-len 4096 --warmup 0 --repetitions 1
+```
+
+Each run must show:
+
+- No OOM.
+- `preemptions == 0`.
+- Recorded peak memory: the worker logs `max_reserved_bytes` at shutdown
+  (`worker/model_runner.py:380-385`).
+
+No automated test covers this yet (EVD-07).
+
+`scripts/long-context-acceptance.py` exercises 131072-token strict-JSON requests
+and prefix reuse against a running MTP4 service. Confirm MTP activity from the
+server log.
+
+## Serving
 
 ```bash
 scripts/with-env.sh cargo build
 CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p 'test_serving*.py'
 ```
 
-Rust tests cover incremental reasoning/XML, literal strings, request mapping and
-response state. test_serving_worker.py uses the real tokenizer/XGrammar for
-strict constraints, valid/invalid speculative-prefix rollback, reasoning-end
-crossings, EOS, stop and UTF-8. test_serving_http.py starts the real Rust server
-and a scripted CPU ZMQ worker: both API representations, usage, tool history,
-stored continuation/deletion/expiry, length truncation, cancellation, concurrency,
-bad requests and fatal worker errors. These are not GPU/model evidence.
+These tests cover:
 
-See serving.md for scripts/agentic-acceptance.py. With a real UUID-pinned B200 and
-MTP4 service, both OMP providers must independently execute the documented task,
-return tool results and produce a file-grounded answer. Also exercise strict JSON
-and tool constraints with MTP, check nonzero actual draft proposals, inspect
-acceptance and latency/throughput logs, and check cleanup after cancellation.
-Historical V2 acceptance is recorded in acceptance.md; current independent
-acceptance status is in handoff.md. Reproduce constrained cases with scripts/serving-acceptance.py and
-inspect per-request MTP counters alongside saved responses. Scripted output alone
-is never GPU evidence.
+- Rust unit tests for the reasoning/XML parser, request mapping and response
+  state.
+- `test_serving_worker.py`: strict constraints, speculative-prefix rollback,
+  reasoning-end crossings, EOS, stop and UTF-8, using the real tokenizer and
+  XGrammar.
+- `test_serving_http.py`: the real Rust server with the scripted CPU worker,
+  covering both APIs, usage, tool history, stored responses, truncation,
+  cancellation, concurrency and error handling.
+
+Real GPU acceptance against an MTP4 service uses these scripts. See
+[serving.md](serving.md) for their commands and required log inspection.
+
+- `scripts/serving-acceptance.py`: 12 constraint cases.
+- `scripts/serving-lifecycle.py`: thinking levels, stored responses, mixed
+  batches and disconnect.
+- `scripts/agentic-acceptance.py`: oh-my-pi on both APIs.
+
+Scripted output is never GPU evidence.
+
+## Operator comparison (REQ-KERNEL-002)
+
+`benchmarks/kernels.py` runs the formal static cases defined in
+`development/kernels/cases.py`. It compares CUDA with frozen TileLang using
+paired, interleaved timing. See [cuda-development.md](cuda-development.md) for
+commands and the decision rule.
+
+`test_kernel_comparison.py` tests the decision statistics.
+`test_kernel_reference.py` tests the frozen-reference hashes and backend
+selection.
+
+The comparison measures time only. Output agreement between backends comes from
+the FP64 suite (EVD-09).
 
 ## Strict Rust formatting
 
@@ -187,73 +287,13 @@ scripts/with-env.sh pre-commit run cargo-fmt --all-files
 scripts/with-env.sh pre-commit run rust-line-width --all-files
 ```
 
-`rustfmt.toml` sets stable Rust 2024 formatting, 100-character width, Unix
-newlines and multiline if/else and let/else expressions. Pre-commit checks
-formatting instead of silently rewriting it. A separate hard-width hook reads
-the same configuration and checks tracked/unignored new `.rs` files, including
-macros, comments and string literals; tabs expand using rustfmt's tab size.
-`rustfmt` alone may leave `json!` bodies beyond max_width untouched. Split their
-fields manually and use `concat!` to wrap long literals without changing values.
-Configuration and hook changes trigger both Rust style hooks.
+`rustfmt.toml` sets:
 
-## Independent operator and model probes
+- Stable Rust 2024 formatting
+- A 100-character width
+- Unix newlines
+- Multiline if/else and let/else expressions
 
-Run these in the new conda environment. Separate FlashInfer/Triton cache roots
-prevent a successful run from silently reusing artifacts compiled in the old
-environment. The model probe is a short eager diagnostic, not a service or
-performance acceptance run. The independent Worker is the only execution path;
-the complete performance matrix passes. See acceptance.md for final service and
-agentic evidence.
-
-```bash
-CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p test_independent_sampler.py
-CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p test_serving_worker.py
-scripts/with-gpu.sh scripts/with-env.sh env \
-  FLASHINFER_WORKSPACE_BASE=/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent \
-  TRITON_CACHE_DIR=/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent/triton \
-  PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 OMP_NUM_THREADS=1 MAX_JOBS=8 \
-  python -m pytest tests/test_independent_kernels.py -x -q
-scripts/with-gpu.sh scripts/with-env.sh env \
-  FLASHINFER_WORKSPACE_BASE=/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent \
-  TRITON_CACHE_DIR=/data0/shared/dongwu.chen/.cache/oh-my-vllm/independent/triton \
-  OMP_NUM_THREADS=1 MAX_JOBS=8 python scripts/probe-independent-model.py
-```
-
-The operator tests use CPU references for block-scaled FP8, paged GQA, gated
-delta recurrence, causal convolution, RMS normalization and partial rotary
-embedding. They include multiple FP8 rows, non-contiguous logical attention
-pages, 784/785-token boundaries and per-candidate MTP state snapshots. They do
-not replace the actual-model FP64 probes or final service/performance acceptance.
-
-## TTFT and long-context regression (2026-09-22)
-
-The new 12-row protocol is in REQ-PERF-002; acceptance remains pending. Tests in
-`test_ttft_metrics.py` reject tail-latency failures, missing warmups, invalid output
-counts, unexpected cache hits, incorrect provenance and unverified compilation.
-The baseline-only collector is an explicit isolated exception to the import audit.
-`test_independent_decode_attention.py` covers page addresses beyond signed 32-bit
-range for both ordinary and grouped verification kernels, using FP64 references.
-Coordinator tests run MTP migration/prefix/rejection cases with both shared and
-independent state pools. Final model tests must cover the full 262144-token boundary.
-
-## TileLang migration acceptance
-
-The TileLang replacement keeps the existing tests and tolerances unchanged.
-Run the complete GPU pytest suite, actual-model ordinary/MTP FP64 probes, text
-and preemption/prefix checks, MTP service/agentic checks, all six 262144-token
-boundary rows and all twelve frozen throughput/TTFT comparisons. Temporary
-TileFoundry/operator experiments stay outside the repository; see
-[tilelang-development.md](tilelang-development.md). TileFoundry analysis or
-representative HIR checks do not replace any of these acceptance requirements.
-
-## CUDA migration acceptance
-
-REQ-KERNEL-002 adds formal operator comparisons to existing correctness and
-framework gates. Frozen reference integrity and paired-decision CPU tests are
-in test_kernel_reference.py and test_kernel_comparison.py. Use the same unchanged
-GPU tests with the default CUDA backend; incomplete native coverage fails rather
-than falling back. Final default correctness passes174 tests plus31 subtests.
-The earlier explicit-CUDA147 operator and12 framework measurements remain valid
-because kernel/model/dispatch implementations are unchanged; feature gates pass.
-Explicit OH_MY_VLLM_KERNEL_BACKEND=tilelang selects the frozen comparison.
-See acceptance.md for source provenance and cuda-development.md for timing boundaries.
+A separate hard-width hook applies the same limit, with tabs expanded, to
+macros, comments and string literals, which rustfmt may leave long. Split `json!`
+bodies into fields and use `concat!` for long literals.

@@ -11,8 +11,10 @@ through ZMQ DEALER and msgpack; there is no vLLM runtime, scheduler or model ada
    XGrammar constraints, returning prompt IDs.
 2. Rust admits requests, resolves shared prefixes and allocates FA/Mamba tables.
    The scheduler batches prefill, decode and actual MTP draft IDs.
-3. Python validates accepted history and physical state addresses, executes the
-   Qwen model and samples from target distributions with per-draft grammar masks.
+3. Python validates accepted history and physical addresses against each tensor's
+   capacity (recurrent-state aliasing is also checked; FA page sharing is not —
+   audit PY-01), executes the Qwen model and samples from target distributions
+   with per-draft grammar masks.
 4. Python commits only retained outputs, selects accepted recurrent snapshots,
    saves crossed block checkpoints and generates new MTP proposals.
 5. Rust updates accepted history, rolls back rejected speculative positions and
@@ -21,6 +23,10 @@ through ZMQ DEALER and msgpack; there is no vLLM runtime, scheduler or model ada
 
 See [design.md](design.md) for message fields and scheduler/KV data structures.
 
+Error handling: any worker exception or RPC timeout is currently engine-fatal
+for the serving loop (audit SRV-01); the Rust process does not yet guarantee
+worker cleanup on SIGTERM/SIGKILL (audit SRV-02).
+
 ## Rust modules
 
 - `crates/kv-cache`: shared logical block pool, chain-hashed prefixes, aligned
@@ -28,6 +34,8 @@ See [design.md](design.md) for message fields and scheduler/KV data structures.
   reused prefixes before allocating new pages.
 - `crates/scheduler`: FCFS waiting/running queues, chunked prefill, token budgets,
   staggered admission, recompute preemption and accepted-draft accounting.
+  The kv-cache crate uses one shared pool by default, or separate FA/GDN pools
+  with `--mamba-blocks` (ADR-007).
 - `crates/zmq-worker`: CLI, OpenAI-compatible HTTP APIs, model process lifecycle,
   cancellation, ZMQ transport and correlated logs.
 

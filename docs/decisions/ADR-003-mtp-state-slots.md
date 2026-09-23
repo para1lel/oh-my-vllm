@@ -1,6 +1,8 @@
 # ADR-003: MTP target-state slots and precision
 
 Accepted 2026-09-19 within the authorized module/precision implementation scope.
+Still in force under the independent runtime: MTP uses BF16 GDN state, ordinary FP32.
+References below to vLLM platform sizing describe the original motivation.
 
 The draft model does not contain GDN layers, but target verification of K draft
 tokens needs K additional recurrent-state slots. Rust reserves these slots,

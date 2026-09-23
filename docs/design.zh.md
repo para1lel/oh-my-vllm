@@ -16,6 +16,7 @@ oh-my-vllm 按清晰边界分工：Rust 拥有调度策略和 KV 缓存记账，
 {"type": "init",
  "model_path": str,
  "num_gpu_blocks": int,
+ "mamba_blocks": int | null,   # 独立 GDN 池容量（ADR-007）
  "block_size": int,            # Qwen3.8 为 784
  "tensor_parallel_size": int,
  "max_model_len": int,
@@ -32,7 +33,7 @@ oh-my-vllm 按清晰边界分工：Rust 拥有调度策略和 KV 缓存记账，
     "token_ids": list[int],
     "num_computed_tokens": int,
     "prefill_token_ids": [int],  // 仅接纳/恢复时：完整已接受历史
-    "new_block_ids_to_zero": [int],  // 新逻辑分配，不含缓存命中
+    "new_block_ids_to_zero": [int],  // 未使用的提示；混合了 FA/GDN 两个命名空间（审计 MNT-04）
     "fa_block_table": list[int],
     "mamba_block_table": list[int]}
  ],
@@ -40,9 +41,12 @@ oh-my-vllm 按清晰边界分工：Rust 拥有调度策略和 KV 缓存记账，
  "preempted_request_ids": list[int],
  "num_batched_tokens": int}
 
-{"type": "abort",  "request_id": int}
+{"type": "prepare", "request_id": int, "request": {...}}   # 仅服务模式；见下文
+{"type": "abort",  "request_id": int}   # 无回复；Rust 端没有调用方（审计 MNT-04）
 {"type": "shutdown"}
 ```
+
+`register` 和 `abort` 没有回复；它们的 Python 处理函数一旦抛出异常，目前会使 worker 退出（审计 SRV-06）。回复中不回显 `step_id`，因此回复只按顺序匹配（审计 SRV-05）。
 
 只在已完成执行步骤之间取消请求。`Scheduler::abort` 释放 Rust 所有权，并将 `finished_request_ids` 通知排入下次 execute；即使已无调度请求，也需发送。driver 必须刷出最后通知。Python 清理注册、采样、已接受状态和 MTP 进度。旧独立 `abort` 消息使用相同的 finished-only 路径，不回复，也不改变 Rust 状态。
 
@@ -51,12 +55,17 @@ oh-my-vllm 按清晰边界分工：Rust 拥有调度策略和 KV 缓存记账，
 ```
 {"type": "ready", "logical_num_blocks": int}
 
+{"type": "prepared", "prompt_token_ids": list[int]}
+
 {"type": "execute_result",
  "outputs": [
    {"request_id": int,
     "token_ids": list[int],  # prefill 为空、普通为单 token、MTP 为被接受输出
     "num_accepted_draft_tokens": int,  # MTP 接受的 draft 数量
-    "new_draft_token_ids": list[int]}  # 项目 MTP proposer 生成的实际下一批 draft
+    "new_draft_token_ids": list[int],  # 项目 MTP proposer 生成的实际下一批 draft
+    "text": str,                  # 仅服务模式，可选：增量解码文本
+    "finish_reason": str | null,  # 仅服务模式，可选：stop/length
+    "reasoning_tokens": int}      # 仅服务模式，可选：累计值
  ]}
 
 {"type": "error", "message": str}
@@ -71,7 +80,7 @@ Qwen3.8-27B 有两种注意力组，需要独立块表：
 - **组 0（全注意力）：** 16 层，标准块布局，每块 `block_size=784` token，启用前缀缓存。
 - **组 1（GatedDeltaNet / Mamba）：** 48 层，`mamba_cache_mode="align"`。包含运行/checkpoint 状态、临时保护的前一状态，以及 MTP 模式的 K 个推测槽。null 占位保留块位置。缓存 checkpoint 可在请求结束后继续存活，直到共享池淘汰。
 
-两组从一个共享 `BlockPool` 取块。因此一个请求持有的大量 FA 块和 Mamba checkpoint 竞争同一逻辑池。Python 按逻辑容量分配独立逐层 tensor，块 ID 直接寻址槽。保留历史 CLI 容量单位：ready 暴露 floor(num_gpu_blocks/3)，与冻结基线一致。不存在 vLLM 物理 stride 重映射；ADR002 描述的是已被替代的实现。
+默认两组从一个共享 `BlockPool` 取块，因此 FA 块和 Mamba checkpoint 竞争同一逻辑池。使用 `--mamba-blocks N`（当前所有验收运行均使用）时，GDN 组拥有独立的 N 槽池，ID 在各组内局部有效（ADR-007）。Python 按各自容量分配独立逐层 tensor，块 ID 直接寻址槽。保留历史 CLI 容量单位：ready 暴露 floor(num_gpu_blocks/3)。不存在物理 stride 重映射；ADR-002 描述的是已被替代的实现。
 
 ### BlockPool
 
@@ -101,7 +110,7 @@ coordinator 的 `find_longest_cache_hit` 返回两组一致的最长前缀。对
 1. **运行队列：** 遍历已有请求，为后续 token 分配槽。`allocate_slots` 返回 `None` 时，通过重计算抢占：释放块，重置 `num_computed_tokens=0`，移至等待队列头。
 2. **等待队列：** 在 `max_num_seqs` 和 `max_num_batched_tokens` 限制内接纳新请求。每步预算来自 `max_num_batched_tokens`，每请求取 `min(remaining, budget)` token，然后显式按 Mamba 对齐拆分 prefill，使 checkpoint 在可复用边界处生成。
 
-仅支持重计算抢占，不做 CPU swap。最后接纳的运行请求优先被淘汰。
+仅支持重计算抢占，不做 CPU swap。当前代码抢占的是分配失败的请求，而非最后接纳的请求；多个被抢占请求以相反优先级顺序重新入队（审计 SCH-06）。`update()` 信任 worker 返回的接受数和 token 列表（审计 SCH-01）。
 
 ## MTP 推测解码
 
@@ -115,4 +124,4 @@ MTP 缓存按输入 token 索引，首个有效位置为 1；边界 hidden featu
 
 `prepare` 携带 request_id 和归一化请求对象（messages、tools、effort/template 选项、输出格式、max_tokens、sampling、stop）。Python 校验、编译约束并注册请求，在 Rust 接纳前回复带 prompt_token_ids 的 `prepared` 或 `error`。旧 `register` 仍用于 Run/Bench 的固定长度贪心模式。
 
-服务 execute 输出可额外包含 text（增量解码文本）、finish_reason（stop/length 或 null）及累计 reasoning_tokens。token ID 仍是 Rust 调度/KV 的权威输入。grammar mask 完全保留在 Python，由自有 target sampler 应用，包括推测验证行。Rust 等待回复时检测 worker 退出，并为 EOS、长度和取消使用现有 finished_request_ids 清理路径。
+服务 execute 输出可额外包含 text（增量解码文本）、finish_reason（stop/length 或 null）及累计 reasoning_tokens；Rust 把它们存在每步覆盖的旁路映射 `serving_outputs` 中（审计 SRV-07）。token ID 仍是 Rust 调度/KV 的权威输入。grammar mask 完全保留在 Python，由自有 target sampler 应用，包括推测验证行。Rust 等待回复时检测 worker 退出，并为 EOS、长度和取消使用现有 finished_request_ids 清理路径。

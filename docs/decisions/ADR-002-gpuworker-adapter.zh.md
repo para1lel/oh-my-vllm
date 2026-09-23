@@ -1,6 +1,7 @@
 # ADR-002：适配已安装的 GPUWorker，不导入其调度器
 
 2026-09-19 接受，遵循已批准的 Rust 调度/Python runner 边界。
+**已被取代**：先后被 ADR-005 和 ADR-006（2026-09-21）取代；vLLM 适配器和物理 stride 重映射已不存在。保留作为历史记录。
 
 当时安装的 vLLM 是 `/data0/shared/dongwu.chen/vllm` 的 editable checkout，版本元数据为 0.28.1rc1.dev691+g6376c601e.cu131。worker 类名为 `Worker`；初始化使用当前 VllmConfig 上下文，依次进行设备/加载、显存分析、KV 配置、initialize_from_config 和 compile_or_warm_up_model。EngineArgs 只做配置归一化，不实例化 vLLM 调度器。纯文本模式避免初始化范围外的视觉编码器。
 

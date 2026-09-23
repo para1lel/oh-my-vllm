@@ -1,6 +1,7 @@
 # ADR-003：MTP target 状态槽与精度
 
 2026-09-19 接受，属于已授权的模块/精度实现范围。
+在独立运行时下仍然有效：MTP 使用 BF16 GDN 状态，ordinary 使用 FP32。下文关于 vLLM 平台容量计算的内容描述的是最初动机。
 
 draft 模型不含 GDN 层，但 target 验证 K 个 draft token 需要额外 K 个递归状态槽。Rust 预留这些槽，在 draft 被拒绝后复用，在大 prefill 分块后迁移，并保留此前已接受状态，直到下一次执行消耗它。worker 接收实际调度的 draft，返回实际被接受的输出和下一批 draft token ID。Rust 只回滚已调度且被拒绝的 draft。
 

@@ -22,8 +22,9 @@ state, sampling, graph execution and service utilities. Migrate FP64 observation
 points alongside their actual execution paths, retaining independent references.
 
 Relevant correctness tests and independent review gate each milestone. Targeted
-performance checks accompany hot-path changes; full nine-row acceptance is needed
-at execution-chain completion and final acceptance. Intermediate performance gaps
+performance checks accompany hot-path changes; full nine-row acceptance was needed
+at execution-chain completion and final acceptance (met 2026-09-21; the current gate
+is the twelve-row REQ-PERF-001/002 matrix). Intermediate performance gaps
 must be recorded. Compare only with the original 2026-09-19 frozen EngineCore
 baseline at >=95%; do not rerun native vLLM or add a V2-relative gate.
 

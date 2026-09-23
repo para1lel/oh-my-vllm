@@ -2,9 +2,15 @@
 
 **Status (2026-09-23):** the default CUDA Qwen Worker passes real MTP4 JSON/tool
 constraints, thinking levels, lifecycle and both oh-my-pi core tasks. Long strict-JSON
-requests through both APIs reuse130928 cached tokens. All12 performance rows pass;
-see [acceptance.md](acceptance.md) for evidence and retained answer limitations,
-and [handoff.md](handoff.md) for current state.
+requests through both APIs reuse 130928 cached tokens. See
+[acceptance.md](acceptance.md) for evidence and retained answer limitations.
+
+**Known serving defects** (details and fixes in [audit-2026-09-23.md](audit-2026-09-23.md)):
+one request's worker-side error (for example `temperature` near zero, a grammar
+violation, or a 120 s prepare) fails every active request and makes the service
+unavailable until restart (SRV-01); SIGTERM/SIGKILL of the Rust process orphans the
+Python worker on the GPU (SRV-02); capacity and internal errors are returned as 400
+(SRV-03); a `length` finish can drop the last few held-back bytes (SRV-04).
 
 ## Run
 
@@ -119,8 +125,10 @@ HTTP bodies are limited to 8 MiB; admission channel and active request limit are
 buffer. A disconnected or slow client cancels its request, not the engine.
 The default request timeout is 600 seconds (configurable); preparation/step RPCs
 have 120-second deadlines and detect worker exit. Fatal worker errors fail pending
-requests; later submissions return unavailable until restart. Ctrl-C stops the
-owned worker and closes streams. In-flight kernels are not individually preempted.
+requests; later submissions return unavailable until restart. Currently every
+worker exception is treated as fatal (audit SRV-01). Ctrl-C stops the owned worker
+(SIGKILL via drop, without Python's graceful shutdown) and closes streams; SIGTERM
+is not handled (audit SRV-02). In-flight kernels are not individually preempted.
 
 ## OMP task and verification
 

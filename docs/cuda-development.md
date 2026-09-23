@@ -1,367 +1,178 @@
 # CUDA kernel development
 
-## Current verification
+## Status
 
-Clean c36d1c9 passes147/147 operator configurations and all12 framework rows.
-Final default correctness passes174 tests plus31 subtests; six full-context
-boundaries and updated-document agentic readback pass. CUDA is the default;
-`OH_MY_VLLM_KERNEL_BACKEND=tilelang` selects the frozen comparison. Final selection
-and identity checks leave the measured kernel/model/dispatch implementation unchanged.
-See acceptance.md and handoff.md for current status. All milestones below are
-historical; their case/test counts must not be reported as current.
+CUDA is the default custom-kernel backend on B200. Current acceptance evidence (147/147
+operator cases, 12/12 framework rows) is in [acceptance.md](acceptance.md). Known
+kernel-contract and observability issues are listed in
+[audit-2026-09-23.md](audit-2026-09-23.md), under the `KRN-*`, `MNT-*` and `EVD-09`
+entries. Read those before changing a kernel.
 
-## Paired FP32 Q/K normalization
+## Backend selection and frozen reference
 
-The packed16-head/10240-stride path now uses aligned eight-element loads and
-B200 paired FP32 arithmetic for square accumulation, normalization and selected
-joint Q/K reductions. Fixed128/256-thread geometry covers whole head groups;
-64-bit addresses and explicit layout/alignment checks protect indexing. Other
-layouts retain the generic CUDA kernel. Half-warp recurrence code is unchanged.
+- **Selecting the backend.** The backend is chosen once per process, at import.
+  Setting `OH_MY_VLLM_KERNEL_BACKEND=tilelang` before Python starts selects the
+  frozen comparison. An invalid name raises an error. Runtime identity reports
+  the backend that was actually selected.
+- **No silent fallback.** A missing CUDA entry raises `NotImplementedError`. It
+  never falls back to TileLang.
+- **Frozen sources.** The accepted TileLang sources are copied byte for byte into
+  `python/oh_my_vllm/kernels/tilelang_reference`. The following are recorded in
+  `development/kernels/tilelang-reference.json`:
+  - their hashes
+  - the original commit
+  - the dependency lock hash
+  - the TileFoundry pin
 
-All six dirty-source Q/K configurations pass the formal speed decision. The
-first build failed because an obsolete launch argument survived signature cleanup;
-that run failed compilation and its test process was stopped. All following
-validation uses the corrected source. Full correctness passes173 tests plus28
-subtests, including2048/4096 rows added to the existing FP64 normalization test.
-Temporary original-tolerance checks also cover2047/2048 and4095/4096 boundaries,
-Q/K offsets, different strides, generic heads and separate aligned allocations.
-Ordinary/MTP4 eager model FP64 probes pass. Forced-length outputs with whitespace,
-control tokens or repetition do not establish agentic acceptance.
+  Never tune the reference.
+- **Where the kernels live.** Production modules hold validation, the public
+  wrappers and explicit factory bindings. TileLang kernel bodies live only in
+  `tilelang_reference/`.
+- **Native build.**
+  - Native code is `python/oh_my_vllm/kernels/cuda_backend/kernels.cu`. It is
+    compiled lazily through independent TVM FFI `load_inline` for `sm_100a`, and
+    runs on the caller's current CUDA stream.
+  - `scripts/with-env.sh` isolates `TVM_FFI_CACHE_DIR`.
+  - Host CUDA 13.1 compiles it. Use `CUDA_HOME=/usr/local/cuda-13.1` when needed.
+  - All compilation must finish before CUDA Graph capture and before formal
+    measurement.
+  - TileFoundry is not a runtime or build dependency.
 
-Independent TileFoundry/Nsight observations include a1248-token case with fewer
-executed warp instructions (1078272 versus1317888) and32 versus30 registers/thread.
-These observations are separate from latency acceptance. See
-`bench/baseline/2026-09-22-cuda-qk-progress.json` for source identities, failed-build
-history and formal summaries. Full147-case and framework acceptance remain pending;
-the default backend stays TileLang until complete acceptance.
+## Implementation notes
 
-## Model convolution layout specialization
+These describe the current code and the numerical properties it relies on.
 
-The CUDA model convolution specializes 10240 channels with token stride16384.
-It loads four BF16 weights together, uses a stable sigmoid for FP32 accumulations,
-and chooses four rows per block for medium inputs and eight for large inputs.
-Weight alignment and conservative disjoint pool/input spans guard the optimized
-path; other layouts or possible aliases retain the generic CUDA implementation.
-Source states are still snapshotted before candidate writes, including writes
-that overwrite another sequence's original source slot.
+- **FP8 quantization.**
+  - Rows and scaling groups are tiled. The kernel uses four-element vectors and
+    an unsigned warp REDUX over nonnegative FP32 magnitudes.
+  - Loads for fused SiLU are packed, and FP8 stores are packed.
+  - A flat grid handles small fused rows and widths too wide for `grid.y`.
+  - For finite BF16 maxima, the scale reciprocal uses `rcp.approx` plus one FMA
+    residual correction. Scales themselves still use exact division.
+  - Temporary SM100/CUDA 13.1 exhaustive checks over finite BF16 input/max pairs
+    found zero FP8 differences. An exact-arithmetic review in the 2026-09-23
+    audit agrees, assuming the `rcp.approx` error is at most 1 ulp.
+- **SiLU and multiply.**
+  - Uses a fast exponential and paired BF16 multiplication. Both BF16 rounding
+    points are kept.
+  - Exhaustive checks over every finite BF16 input, and over all finite operand
+    pairs, found zero differences on SM100/CUDA 13.1.
+  - Flat offsets are 32-bit (audit KRN-04).
+- **RMS normalization.**
+  - The model width is 5120. Values stay in registers, and loads are aligned
+    vectors of width 4 or 8.
+  - The thread count depends on row count and on whether a residual is added:
+    ≥ 4096 rows use 320 (residual) or 160 threads; 2048–4095 rows use 128;
+    fewer rows use 256.
+  - Residual RMS with 2048–4095 rows uses a streaming store hint.
+  - Misaligned or other layouts use the generic kernel.
+  - Reduction order therefore varies with row count and alignment (audit
+    MNT-03).
+- **Gated RMS.**
+  - Specialized for 48 heads × 128 width. Values stay in registers.
+  - Uses a stable sigmoid with the denominator in [1,2], and FP32 gating with no
+    intermediate BF16 rounding.
+- **Q/K normalization.**
+  - The packed 16-head, 10240-stride path uses aligned eight-element loads and
+    paired FP32 arithmetic.
+  - Other layouts use the generic kernel.
+- **Convolution.**
+  - Specialized for 10240 channels with token stride 16384. It uses four-element
+    weight loads and a stable sigmoid.
+  - Uses 4 rows per block for medium inputs and 8 for large ones.
+  - Weight alignment and a conservative disjoint pool/input span check guard the
+    specialized path.
+  - Source states are snapshotted before candidate writes.
+- **GDN recurrence.**
+  - The model layout gives each of 16 lanes eight contiguous key values, uses four
+    warps with two value rows per half-warp, and keeps FP32 persistent state.
+  - Head, base/row alignment and disjoint-storage checks guard the restricted
+    pointers. Otherwise the generic kernel runs. An in-place update of the
+    request's own source is valid.
+- **Full-attention preparation.**
+  - One entry fuses Q/K RMS and RoPE, V layout conversion and the KV write, shared
+    by the target model and MTP.
+  - It keeps both BF16 rounding points and reduces the phase in FP64 before FP32
+    sin/cos.
+  - Negative slots skip only the KV write. Out-of-range slots are also skipped
+    silently (audit KRN-02).
+- **Paged decode attention.**
+  - Uses explicit `mma.sync`/`ldmatrix` BF16 fragments with FP32 accumulation,
+    shared-memory sector swizzling and split-KV with a separate merge.
+  - Q/K and P/V fragments are reused across output tiles. There are no
+    local-memory spills.
+  - Ungrouped KV double buffering is limited to four queries.
+  - Grouped verification assumes at most five query rows per request (audit
+    KRN-01).
+- **Other properties.**
+  - Fresh-output kernels declare non-aliasing (`__restrict__`) pointers;
+    in-place state/cache kernels do not.
+  - Contiguous BF16 views may start at an unaligned storage offset. Native
+    attention handles scalar Q loads; the production wrapper aligns KV for both
+    backends and Q only for frozen TileLang (KRN-07 covers the KV clone).
+  - The attention merge's reduction order changed during tuning; results meet
+    the tolerances but are not bitwise-equal to earlier versions.
+  - The gated-RMS gate sweep covered every finite BF16 gate with fixed input 1
+    and weight 0.25; it is not exhaustive over input/weight combinations.
+  - The TileFoundry `TileLang` twin always binds the frozen implementation,
+    regardless of the selected production backend.
 
-The13-case dirty-source convolution subset passes all speed decisions. Full
-correctness passes169 tests plus28 subtests; the existing ragged convolution test
-now includes the real16384 stride alongside10240/20480 without changing references
-or tolerances. Extra FP64 checks cover127/128 and4095/4096 rows, weight offsets,
-pool/weight aliases, cancellation, near-zero and large signed values, and negative
-values near exponential underflow. Written snapshots and untouched slots remain
-exact. The initial temporary checker had a CPU/GPU reference-device mismatch;
-that harness issue was corrected before the successful supplemental run.
+## Formal operator comparison
 
-Ordinary/MTP4 eager model FP64 probes pass. Forced-length text with control tokens
-and repetition does not establish agentic acceptance. Independent review and
-separate TileFoundry/Nsight observations are summarized in
-`bench/baseline/2026-09-22-cuda-convolution-progress.json`.
-Full operator/framework acceptance remains pending; default stays TileLang.
-
-## Vector GDN recurrence
-
-The clean c40cd5c matrix passes 129/147 cases, with no detected GPU interference.
-The remaining 18 failures are recurrent (7), Q/K normalization (6) and convolution
-(5). This complete result is separate from subsequent subset improvements.
-
-The model recurrence now assigns eight contiguous key values to each of 16 lanes,
-uses vector state/Q/K loads and paired BF16 snapshot conversions, and keeps the
-persistent state in FP32 throughout verification. Model heads, base/row alignment
-and conservative disjoint storage spans guard restricted pointers. Generic heads,
-unaligned views and possible pool/input overlap use the existing generic CUDA
-path. Own-source in-place updates remain valid; no TileLang fallback is introduced.
-
-The first two formal subsets pass 7/8; FP32 batch3 fails. Four warps with two
-value rows per half warp resolve that case, and the final subset passes 8/8.
-Full correctness passes 168 tests plus 28 subtests. Extra FP64 checks cover generic
-heads, input/pool offsets, odd token strides, source aliasing, padding-span overlap,
-mixed metadata widths, three sequences and same-source writes, without changing
-original tolerances. Ordinary/MTP4 eager model probe results and independent
-TileFoundry/Nsight observations are recorded in
-`bench/baseline/2026-09-22-cuda-recurrent-progress.json`.
-
-Independent review passes. This is partial migration evidence: full operator and
-framework acceptance remain pending, and the default backend stays TileLang.
-
-## Vector FP8 quantization and reciprocal refinement
-
-Plain quantization now uses four-element input/output vectors. Host dispatch
-checks input alignment once, retaining scalar loads for storage-offset views.
-Rows4–127 flatten independent scaling groups into four-warp blocks. BF16 finite
-maxima use an approximate reciprocal plus one FMA residual correction; scales
-still use exact division. FP16/FP32 and nonfinite maxima retain exact division.
-Both BF16 SiLU rounding boundaries remain. This is not FP32 division equivalence.
-
-Temporary SM100/CUDA13.1 exhaustive checks over finite BF16 input/max pairs
-with abs(input)<=maximum find
-zero FP8 differences after refinement for both signs, whereas direct reciprocal
-multiplication differs. Entry checks cover all BF16 encodings in groups, all
-supported dtypes, both scale layouts, aligned/offset views, generic/model widths,
-3/4/127/128-row boundaries and NaN/Inf groups. FP8 bits and scales match the old
-native entry exactly in those checks; they do not prove every possible tensor.
-
-Both the original and final formatted39-case quantization/SiLU subsets pass.
-Final results and separate TileFoundry/Nsight observations are recorded in
-`bench/baseline/2026-09-22-cuda-quant-vector-progress.json`. Full correctness and
-ordinary/MTP4 eager FP64 probes pass without tolerance changes. Forced64-token
-text includes control tokens/repetition and does not establish agentic acceptance.
-Full147-case and framework acceptance remain pending; default stays TileLang.
-
-## Full-attention preparation fusion
-
-Target and MTP now share a production preparation entry that fuses Q/K RMS/RoPE,
-V layout conversion and KV append on CUDA. It returns Q and writes the same K/V
-cache rows; packed gate values remain untouched. Both BF16 rounding points and
-FP64 phase reduction remain. Negative slots skip only KV writes. The TileLang
-backend executes the original complete frozen chain, preserving V.contiguous()
-as a no-op for already-contiguous views rather than forcing a copy.
-
-Static cases are re-derived from the changed production call graph:13 fused
-configurations replace26 independent RMS/RoPE and13 append invocations, giving
-147 cases. Target Batch and MTP/DraftGraph positions/slots are int64; attention's
-int32 tables/lengths are unrelated. Existing standalone APIs remain covered by
-correctness tests and are explicitly unused in the performance workloads. The
-old173-case111-pass/62-fail collection is retained, not reclassified as passing.
-
-The dirty-source fused subset passes13/13 speed decisions. Full CUDA tests pass
-168 plus28 subtests; eight new checks also pass with frozen TileLang. They cover
-single/five tokens, all positions/slots dtype combinations, near262144 positions,
-page boundaries/scattered slots, exact V/untouched cache, both BF16 roundings,
-nondefault stream and graph replay after changing inputs and write destinations.
-Actual-model ordinary/MTP4 eager FP64 probes pass. Their forced-length text does
-not establish semantic/agentic acceptance. TileFoundry's representative logical
-chain check and separate Nsight collection pass; HIR cache concatenation and
-FP32 phase are estimates, not native traffic or precise phase validation.
-
-See `bench/baseline/2026-09-22-cuda-attention-prepare-progress.json`. Independent
-review and all-file checks pass, and all owned GPU programs exited. Full147-case
-and framework acceptance remain outstanding; default stays TileLang.
-
-## Medium residual RMS cache policy
-
-Only2048–4095-row residual RMS now uses a streaming store cache hint for its two
-outputs. This preserves the stored BF16 bits and stream visibility while reducing
-input eviction in the operator workload. The26-case dirty-source RMS diagnostic
-passes all decisions; the previously failing2496-row case saves about1.30us in
-paired mean latency. This is not complete operator/framework acceptance, and
-possible downstream cache misses still require the final end-to-end gates.
-
-Full CUDA correctness passes160 tests plus28 subtests, and FP64 boundary checks
-at2047/2048/4095/4096 rows pass with exact residual sums. A compiler incompatibility
-in the first packing intrinsic was fixed before these successful reruns; its test
-process was stopped. Independent review, separate TileFoundry/Nsight observations
-and all-file checks pass. Evidence is in
-`bench/baseline/2026-09-22-cuda-rms-stream-progress.json`.
-All owned GPU programs exited. Default remains TileLang; migration continues.
-
-## Gated RMS specialization and complete-matrix update
-
-Clean d45c4f2 completes all173 cases:111 pass,62 fail, with no detected GPU
-interference. All16 attention cases pass. The2496-row residual RMS case fails
-this complete collection despite earlier subset wins; its advantage is not yet
-reliable. Remaining failures include append, small quantization/rotary, Q/K
-normalization, recurrent updates, gates and convolution. Full acceptance is pending.
-
-A new48-head/128-wide gated RMS path retains values in registers and uses a stable
-sigmoid with denominator in[1,2]. It keeps FP32 gating without intermediate BF16
-rounding and supports the original strides/epsilon. The dirty-source gated RMS
-subset passes13/13 cases. Full CUDA correctness passes160 tests plus28 subtests.
-Independent review, extra FP64 packed/nonunit-stride and large-weight/negative-gate
-checks pass. All finite BF16 gate encodings were also checked with fixed input1
-and weight0.25; this is not exhaustive over input/weight combinations or bitwise
-proof. No original tolerances change. Separate TileFoundry/Nsight observations,
-complete-matrix decisions and subset evidence are summarized in
-`bench/baseline/2026-09-22-cuda-gated-rms-progress.json`.
-
-All-file checks pass and all task-owned GPU programs exited. Default stays
-TileLang; further kernel tuning and complete framework acceptance remain.
-
-## RMS launch and vector-width tuning
-
-Model-width RMS now selects 128 threads for medium batches, 160 for large plain
-RMS and 320 for large residual RMS. Large residuals use eight-element vectors
-only when input/residual are16-byte and weights32-byte aligned; otherwise the
-four-element or generic path remains. Compile-time divisibility checks ensure
-complete row coverage. Reduction order changes; existing tolerances are retained.
-
-The final unchanged-source diagnostic passes26/26 RMS cases. Earlier diagnostics
-pass24/26 then25/26; the latter has one unusually slow CUDA sample and fails the
-confidence bound despite faster medians in all three rounds. No samples were
-excluded and no interference was detected; its exact cause remains unresolved.
-All attempts are summarized in `bench/baseline/2026-09-22-cuda-rms-progress.json`,
-with separate TileFoundry/Nsight observations. These are dirty-source subsets,
-not full operator or framework acceptance.
-
-The full CUDA suite passes160 tests plus28 subtests. Temporary FP64 checks cover
-2047/2048/4095/4096-row dispatch boundaries, nondefault epsilon, and both alignment
-fallbacks at4096 rows; residual sums remain bitwise equal to the reference.
-Independent review and all-file checks pass. All owned GPU programs exited.
-Default remains TileLang; remaining operator tuning and full acceptance continue.
-
-## Attention fragment reuse and merge optimization
-
-The attention diagnostic now passes the speed decision for all 16 static cases,
-with three rounds of 20 interleaved pairs and no detected GPU interference.
-This dirty-source subset is not full acceptance. Q/K and probability/value MMA
-fragments are reused across output tiles; static register indices eliminate
-local-memory spills. The merge uses shared split weights and vector output.
-Ungrouped KV double buffering is limited to four queries to preserve occupancy
-for larger eager batches. The sampled final eager profile reports zero local
-loads/stores; TileFoundry estimates remain separate from measured counters.
-
-The unchanged full CUDA suite passes 160 tests plus 28 subtests. Actual-model
-ordinary and MTP4 eager FP64 probes pass, including recurrent states and draft
-attention. Forced-length probe text is not semantic or agentic acceptance.
-Merge reduction order changes, so numerical tolerance results do not establish
-bitwise equivalence. Independent review and all-file checks pass. Summarized
-source identities, timings, hardware observations and probe coverage are in
-`bench/baseline/2026-09-22-cuda-attention-progress.json`.
-
-RMS, Q/K normalization, KV append and other failed cases still need tuning.
-The latest complete clean matrix remains 80/173; do not add subset pass counts.
-Full operator and framework performance acceptance remain outstanding; default
-backend stays TileLang. All task-owned GPU programs have exited.
-
-## Packed SiLU follow-up
-
-Cleancb867d4 completed all173 operator cases without detected GPU interference:
-80 pass,93 fail. The next diagnostic uses width-specialized FP8 kernels and
-paired BF16 SiLU multiplication. All13 fused-SiLU cases satisfy the existing
-three-round speed decision, including the previously failing medium shape;
-this dirty-source subset is not full acceptance. Full CUDA correctness remains
-160 tests plus28 subtests. Independent review, layout/dtype boundary checks and
-all-file hooks pass. Separate TileFoundry/Nsight summaries and source identities
-are recorded in `bench/baseline/2026-09-22-cuda-silu-progress.json`.
-
-The fast exponential and paired multiply preserve both BF16 rounding boundaries.
-Temporary SM100/CUDA13.1 exhaustive checks found zero differences for rounded
-SiLU over every finite BF16 input and for BF16-pair multiplication versus FP32
-multiplication followed by BF16 rounding over all finite BF16 operand pairs.
-These checks include signed zero, subnormals, overflow and underflow; they do not
-establish equivalence for other architectures/toolchains or arbitrary FP32 SiLU.
-No temporary tuning scripts or raw traces are retained in the repository.
-Attention, Q/K normalization, KV append and other failed cases remain to be tuned;
-no final CUDA model/performance/service acceptance is claimed. Default remains
-TileLang. All task-owned GPU programs have exited.
-
-
-## Vector-kernel optimization progress
-
-Clean7437e0f completed the full173-case operator matrix without detected GPU
-interference:48 pass and125 fail. The subsequent vector-kernel diagnostic covers
-91 normalization/quantization cases:55 satisfy the speed decision, versus23 of
-those same cases before this change. Dirty source and partial coverage make the
-new collection diagnostic only. Per-source results and paired hardware summaries
-are in `bench/baseline/2026-09-22-cuda-vector-progress.json`; no complete CUDA
-operator or framework acceptance is claimed.
-
-Native quantization now tiles rows and scaling groups, uses unsigned warp REDUX
-on nonnegative FP32 magnitudes, and packs fused SiLU loads/FP8 stores. Small fused
-rows and widths exceeding CUDA grid.y capacity use a flat grid. Exact division
-and both BF16 rounding boundaries remain. Model-width5120 RMS retains values in
-registers and uses aligned vector loads with guarded scalar/general-layout paths;
-residual addition rounds BF16 pairs before normalization. Fixed fused-RoPE
-frequencies use FP64 read-only values; phase reduction remains FP64. Fresh-output
-kernels declare nonaliasing pointers; in-place state/cache kernels do not.
-
-Full CUDA correctness passes160 tests plus28 subtests. Supplementary boundary
-checks cover nondefault RMS epsilon, unaligned input/weight storage, FP16/FP32
-quantization, dispatch boundaries and extremely wide quantization. Existing
-long-position FP64/stream/graph checks and all-file hooks pass. Independent
-review found and fixed the quantization grid.y width limit. Large RMS, small
-quantization, fused SiLU and attention still need tuning; the default stays
-TileLang. Test/profiler workers exited and no task-owned GPU process remains.
-
-
-The accepted comparison sources are copied byte-for-byte into
-`python/oh_my_vllm/kernels/tilelang_reference`. Their source hashes, original
-commit, dependency lock hash and TileFoundry pin are recorded in
-`development/kernels/tilelang-reference.json`. Do not tune the reference.
-
-Set `OH_MY_VLLM_KERNEL_BACKEND=cuda` before Python starts to select the new
-backend. Unsupported entries raise instead of using TileLang. During migration,
-the default remains TileLang; change it only after complete CUDA acceptance.
-Native code uses independent TVM FFI, the caller's current CUDA stream and SM100a.
-TileFoundry is not a runtime/build dependency of native kernels. All compilation
-must finish before CUDA Graph capture and formal measurement.
-
-Current milestone: all owned kernel entries have native CUDA implementations,
-including FP64-phase fused RMS/RoPE, FP32 recurrent GDN, convolution and paged
-attention. The existing full CUDA suite passes153 tests plus24 subtests after
-the attention-merge optimization. Independent
-production-entry FP64 packed Q/K, int32/int64 positions near262144, nondefault
-stream and changed-input graph replay checks pass. These are correctness results,
-not model or performance acceptance. Default remains TileLang.
-
-The formal static matrix is in `development/kernels/cases.py`; full-operation
-fixtures retain required snapshots and merge operations. It includes distinct
-three-sequence dispatch, proposal/catch-up metadata and eager graph-cache fallback.
-Valid FA pages exclude null page0. No dynamic shape extraction is used. Run:
+The formal static matrix is `development/kernels/cases.py`. It derives each
+distinct implementation path's largest legal invocation per workload, statically
+and deduplicated, as REQ-KERNEL-002 requires. Full-operation fixtures keep the
+required snapshots and merges. Valid FA pages exclude null page 0.
 
 ```bash
 scripts/with-env.sh python benchmarks/kernels.py --list
 scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda CUDA_HOME=/usr/local/cuda-13.1 TVM_FFI_CUDA_ARCH_LIST=10.0a python benchmarks/kernels.py --output /tmp/cuda-kernels.json
 ```
 
-`--operations` selects diagnostic subsets; partial coverage cannot pass the full
-matrix gate. Dirty source runs are diagnostic only. The collector records source
-hashes, GPU identity, all paired samples, confidence decisions and separate
-TileFoundry estimates. GPU contention or changing sources invalidates collection.
-An initial diagnostic was invalidated by an external GPU entrant; it establishes
-no acceptance result. Attention and other small-shape paths need further tuning.
-The TileFoundry `TileLang` twin always binds the frozen implementation, regardless
-of the selected production backend.
+- **Subsets.** `--operations` selects diagnostic subsets. Partial coverage and
+  dirty-source runs cannot pass the full-matrix gate.
+- **What the collector records:** source hashes, GPU identity, all paired
+  samples, the decisions, and separately labelled TileFoundry estimates.
+- **Invalidation.** GPU contention or a source change invalidates a collection.
+- **Decision rule** (`development/kernels/comparison.py`):
+  - At least three rounds of 20 pairs, with interleaved backend order.
+  - Both paths warmed, and mutable state restored between runs.
+  - A faster CUDA median in every round.
+  - A one-sided 95% hierarchical-bootstrap lower bound on mean time saved that
+    is greater than zero.
+- **What the harness compares.** It compares time only (audit EVD-09).
+  Numerical agreement comes from the FP64 test suite.
 
-`development/kernels/comparison.py` requires at least three rounds and20 paired
-samples per round. It uses a reproducible hierarchical bootstrap: resample rounds,
-then pairs within a round, and require the one-sided95% lower bound of mean time
-saved to exceed zero. Every round must also have a lower CUDA median. Formal
-harness runs must alternate backend order, warm both paths, restore mutable state,
-and retain complete raw timing pairs; profiling runs cannot supply these times.
-
-Follow REQ-KERNEL-002 for static case selection and complete acceptance. Keep
-hardware metrics, compiler resource reports and TileFoundry HIR estimates distinct.
-The HIR currently lacks FP64; it cannot certify long-position RoPE phase accuracy.
-Use unchanged independent references and full model tests for that boundary.
-
-Verified this milestone: Nsight Compute can read B200 hardware counters;
-filtered quantize_kernel collection succeeds. TileFoundry analyze and Nsight CSV
-import both run. Nondefault CUDA stream and changed-input CUDA Graph replay pass
-exact FP8 comparison; TileLang14-case regression also passes. Complete valid maximum-case performance and final framework acceptance remain
-pending. Stop owned GPU processes after every run.
-
-TileLang kernel bodies exist only in `tilelang_reference/`. Production modules
-contain validation, public wrappers and explicit factory bindings; they do not
-carry a second copy of the TileLang DSL. The frozen whole-operation wrappers
-remain for fair comparison, including their original snapshots and allocations.
-
-Native attention uses explicit `mma.sync`/`ldmatrix` BF16 fragments with FP32
-register accumulation, shared-memory sector swizzling and an integer-width-safe
-position specialization. Both backend suites pass154 tests plus24 subtests after
-the duplicate-body cleanup. Attention performance still requires further tuning;
-correctness and successful PTX compilation do not establish a speedup.
-
-For development observations, select an ID from `benchmarks/kernels.py --list`:
+## Development observations
 
 ```bash
 scripts/with-gpu.sh scripts/with-env.sh env CUDA_HOME=/usr/local/cuda-13.1 TVM_FFI_CUDA_ARCH_LIST=10.0a python -m development.kernels.observations --case attention-c426ebd5d5 --output /tmp/kernel-observations.json
 ```
 
-This runs TileFoundry HIR analysis and separate Nsight Compute replays of both
-complete backend operations. Warmup/JIT stays outside the NVTX range. Each launch
-must contain every requested finite counter; unavailable metrics are reported
-explicitly and produce a failing exit status. The report distinguishes static
-estimates from measured counters, includes register/shared-memory resources,
-source hashes and hardware identity, and cannot pass any performance gate.
-Temporary raw CSV files are removed. Cancellation terminates the owned profiler
-process group, including GPU workers. CPU tests cover incomplete/nonfinite
-metrics and cancellation cleanup; actual paired attention profiling succeeds.
+- **What it runs:** TileFoundry HIR analysis, plus separate Nsight Compute replays
+  of both complete backend operations. Warmup and JIT stay outside the NVTX range.
+- **Required counters:** missing or nonfinite requested counters fail the run.
+- **Report contents:**
+  - HIR estimates and measured counters, labelled separately
+  - register and shared-memory resources
+  - source hashes and hardware identity
+- **Not a performance gate:** the report cannot pass any performance gate.
+- **Cleanup:** raw CSV files are temporary. Cancellation terminates the owned
+  profiler process group.
+- **HIR limitation:** the pinned HIR has no FP64. It cannot certify the precision
+  of the long-position RoPE phase. Use the FP64 references and full model tests
+  for that.
 
-Contiguous BF16 inputs may have an unaligned storage offset. Native attention
-handles Q scalar loads in that case; the production wrapper aligns KV for both
-backends and Q for frozen TileLang without modifying its frozen source. Existing
-numerical tolerances apply to the added Q/KV alignment regression cases. Latest
-CUDA full-suite result is160 tests plus28 subtests; TileLang attention passes16.
-Register softmax and shape-specific KV prefetch remain under performance tuning.
+## Change checklist
+
+1. Preserve the wrapper contracts and the documented rounding points. Put new
+   preconditions in the wrapper or in a C++ `ICHECK`, not only in upstream
+   callers.
+2. Run the full GPU suite with its tolerances unchanged, plus the actual-model
+   ordinary/MTP4 FP64 probes.
+3. Re-run every formal operator case whose implementation changed. Report
+   dirty-source subsets only as diagnostics.
+4. Re-check the framework rows affected by the hot path before claiming that the
+   12-row result still holds.
+5. Record summarized evidence in `bench/baseline`. Keep temporary scripts and
+   raw traces outside the repository. Stop all GPU programs you started.

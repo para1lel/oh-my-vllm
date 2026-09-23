@@ -1,18 +1,43 @@
-# 已完成计划：TileLang、TTFT 和长上下文
+# 计划
 
-1. 更新并冻结隔离的官方 vLLM main 基线及其环境。
-2. 实现逐请求 TTFT 和独立 FA/GDN 缓存容量。
-3. 将七个项目自有 Triton kernel 模块替换为 TileLang，集成仅开发使用的个人 TileFoundry fork 和离线自动调优流程。
-4. 调优所需 shape，全部 12 组达到吞吐 >=95%、TTFT <=110% 和用户修订后的 10% 稳定性门槛，保留完整原始测量。
-5. 通过未改动的正确性检查、六组 262144-token 普通/MTP4 边界、长前缀、约束、生命周期及真实 oh-my-pi 两种接口。
-6. 添加 25 份中文配套文档并同步最终证据。83d77ff 上的最终文档读取复核通过，审查和 GPU 释放核查已完成。最终证据在 main 提交并推送。
+[English](plan.md)。agent 以英文原文为准。
 
-当前证据和回答局限见 acceptance.zh.md、handoff.zh.md。
+## 已完成
 
-# 实现状态
+1. **2026-09-19 — 适配器。** Rust 负责调度和逻辑 KV 缓存，通过适配器对接已安装的 vLLM
+   GPUWorker（ADR-001–003）。全部 9 组 EngineCore 测试通过。
+2. **2026-09-21 — 服务与 V2 runner。**
+   - OpenAI 兼容的 Chat/Responses 服务，通过真实 MTP4 和 oh-my-pi 验收（ADR-004）。
+   - V2 Model Runner（ADR-005）。
+3. **2026-09-21 — 独立运行时。** 模型、状态和 kernel 由项目自有，并基于独立库实现。构建、
+   测试和推理均已移除 vLLM（ADR-006）。
+4. **2026-09-22 — TTFT、长上下文和 TileLang。**
+   - 刷新并冻结官方 vLLM 基线。
+   - 新增按请求计的 TTFT 门槛，FA/GDN 容量分开配置（ADR-007）。
+   - 支持 262144 token 上下文。
+   - 把全部自有 Triton kernel 迁移到 TileLang。
+5. **2026-09-22/23 — CUDA 迁移。**
+   - 把全部自有 kernel 迁移到 B200 CUDA C++ 和内联 PTX，保留冻结的 TileLang 对照。
+   - 全部 147 项算子用例和全部 12 组框架测试通过。
+   - CUDA 现为默认后端（REQ-KERNEL-002）。
 
-独立运行时迁移（ADR-006）已实现：稳定依赖固定在 conda oh-my-vllm 中；模型加载、GPU 状态和所需 kernel 由项目或独立库拥有。旧适配器及全部 vLLM 运行/构建/测试依赖已移除。Rust 继续拥有服务、调度和逻辑 KV；ZMQ 协议及 block784 不变。
+各阶段的证据索引见 [acceptance.zh.md](acceptance.zh.md)。
 
-FP64 算子与实际模型探针、普通/MTP 文本、前缀/抢占、约束、生命周期及 CUDA Graph 回归通过。相对原始基线的九组性能全部通过。文档对齐后，两种最终 oh-my-pi 工作流均已完成；结果和生成回答的局限记录在 acceptance.md 和 handoff.md。
+## 下一步
 
-此前 GPUWorker/V2 阶段是历史里程碑，不是现行实现。其证据和决策保留在 bench/baseline 和 docs/decisions 下。未来架构、NVIDIA 后端、单机多 GPU 及本地 DSpark 扩展见 ADR-006，不提供占位接口，也不声称已经支持。CPU KV swap、PD/多机、LoRA 和多模态执行仍不在范围内。继续独立审查、本地 pre-commit 检查、仅 main 提交，以及及时清理任务自有 GPU 程序。
+按批次修复 [2026-09-23 代码审计](audit-2026-09-23.zh.md) 发现的问题：
+
+1. 服务可用性
+2. 证据完整性
+3. Kernel 与 worker 契约
+4. 调度器加固
+5. 经测量的性能改进
+6. 清理
+
+每个批次都必须保持 12 组性能门槛、数值容差、块大小 784，以及 Rust/Python 的职责划分。
+
+## 不在计划内
+
+- **超出范围：** CPU KV swap、PD/多节点、LoRA 和多模态执行。
+- **只写文档（ADR-006）：** 未来的模型架构、其他 NVIDIA 后端、单机多卡和本地 DSpark
+  草稿模型。ADR-006 描述了这些扩展，没有预留空接口。

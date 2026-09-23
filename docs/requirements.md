@@ -1,6 +1,9 @@
 # Requirements — oh-my-vllm
 
-_Confirmed status: user-confirmed unless noted. Last reviewed: 2026-09-22._
+_Confirmed status: user-confirmed unless noted. Last reviewed: 2026-09-23._
+
+Current acceptance status is in acceptance.md; open code-audit findings that
+qualify some "implemented" statements below are in audit-2026-09-23.md.
 
 ---
 
@@ -13,7 +16,8 @@ Build a Rust-first inference framework for Qwen3.8-27B-FP8 on a single B200 GPU
 that reaches at least 95% of vLLM EngineCore throughput on the benchmark workloads
 below. Rust owns serving, scheduling and logical KV; Python owns GPU computation.
 
-**Acceptance:** `benchmarks/compare_vllm.py` records passed=true for every required mode/workload row.
+**Acceptance:** `benchmarks/ttft.py` records passed=true for every REQ-PERF-001 row
+against the frozen baseline (REQ-PERF-002 protocol).
 
 ---
 
@@ -81,8 +85,8 @@ The user revised the stability limit from 5% to 10% on 2026-09-22 for both
 metrics and both engines. Preserve original artifacts and record the new policy
 when re-evaluating complete raw measurement sets. Throughput/TTFT ratio gates
 remain unchanged. Cold latency is reported separately with no hard gate. Fix failures rather than
-relaxing thresholds without user authorization. All twelve TileLang rows pass
-the revised policy; see acceptance.md and the preserved raw evidence.
+relaxing thresholds without user authorization. All twelve rows pass with the
+default CUDA backend; see acceptance.md and the preserved raw evidence.
 
 ## REQ-CONTEXT-001 — Maximum context and memory
 
@@ -127,9 +131,11 @@ Coordinated across both KV groups. See `crates/kv-cache/src/`.
 
 **Status:** user-confirmed; **implemented** (code-observed)
 
-When the block pool is exhausted during scheduling, the last-admitted running
-request is evicted back to the waiting queue with `num_computed_tokens=0`.
-See the schedule/update lifecycle in `crates/scheduler/src/lib.rs`.
+When the block pool is exhausted during scheduling, a running request is evicted
+back to the front of the waiting queue with `num_computed_tokens=0`. The intended
+policy evicts the lowest-priority (last-admitted) request; the current code evicts
+the request whose allocation failed (audit SCH-06). See
+`crates/scheduler/src/lib.rs`.
 
 **Explicitly deferred:** swap-based preemption (CPU KV offload). Not planned for
 the current scope because it requires Python-side CPU tensor management.
@@ -163,8 +169,8 @@ Replace the vLLM implementation dependency with code maintained in this reposito
 and independent libraries. Preserve Rust serving/scheduling/logical KV and Python
 GPU execution. Final builds, tests and services must neither install/import/link
 vLLM nor depend on its source, conda environment or cached compiled artifacts.
-The V2 adapter is removed. Runtime independence, correctness and all nine
-performance rows pass; final agentic readback is recorded in acceptance.md.
+The V2 adapter is removed. Runtime independence and correctness pass; current
+performance acceptance is the twelve-row REQ-PERF-001/002 matrix.
 
 Use recent compatible stable dependencies selected in dependency order, with the
 verified versions pinned. Higher-level dependencies live in conda oh-my-vllm;
@@ -172,8 +178,8 @@ working system CUDA/compiler tools are allowed. Selected code may be ported with
 provenance and licensing, but copying the framework wholesale is not acceptable.
 
 Keep all existing functionality and FP64 tolerances. Run targeted regressions at
-each milestone and all nine original-baseline >=95% checks at final acceptance.
-Do not rerun native vLLM or require a new V2-relative threshold. Future model
+each milestone. (The original nine-row gate against the 2026-09-19 baseline was
+met on 2026-09-21 and is superseded by REQ-PERF-001/002.) Future model
 architectures, single-node multi-GPU, other NVIDIA GPUs and local DSpark need brief
 extension documentation only. See ADR-006 for the user-confirmed boundaries.
 
@@ -276,7 +282,7 @@ performance evidence. Existing REQ-PERF-001 remains unchanged.
 
 ## REQ-KERNEL-001 — TileLang custom kernels and TileFoundry workflow
 
-**Status:** implemented and accepted (2026-09-22)
+**Status:** implemented and accepted (2026-09-22); now the frozen comparison for REQ-KERNEL-002
 **Priority:** must-have
 
 Replace all project-owned Triton kernels with TileLang, incrementally, retaining
@@ -298,6 +304,8 @@ stay outside the repository. Final retained tests/evidence are the user-required
 and previously documented acceptance checks. See tilelang-development.md.
 
 ## REQ-KERNEL-002 — CUDA/PTX migration (2026-09-22)
+
+**Status:** implemented and accepted; CUDA is the default (2026-09-23).
 
 User authorized implementation after design review. Replace every project-owned
 TileLang kernel with CUDA C++ and optional inline PTX, optimized only for B200.

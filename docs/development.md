@@ -50,8 +50,10 @@ conflict with pre-commit's temporary stash. Never disable hooks or use git add .
 
 ```bash
 scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64
-scripts/with-gpu.sh scripts/with-env.sh python benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output /tmp/ordinary.json
 ```
+
+Performance acceptance uses `benchmarks/ttft.py`; see testing.md for baseline
+extraction, CPU affinity and gates.
 
 For multiple real prompts, `run --prompt-file PATH` reads one whitespace-separated
 token-ID sequence per line (up to 32 requests). `--arrival-interval N` staggers
@@ -62,16 +64,15 @@ pressure and inspection of generated text after preemption.
 
 The GPU wrapper waits for an idle B200: no compute processes, at most64MiB used
 and zero reported utilization. It selects a UUID and holds a cooperative flock.
-Unrelated programs need not honor the lock. The benchmark additionally detects
+Unrelated programs need not honor the lock. The lock fd is inherited by child
+processes; an orphaned worker keeps it (audit SRV-02). The benchmark additionally detects
 external same-GPU clients while engines run, invalidating affected measurements.
 Do not interrupt unrelated jobs. Use unique sockets; only remove a stale socket
 after confirming its owner has exited.
 
-The benchmark defaults to input32768/output4096,1024 capacity units, two warmups
-and three measurements. Run ordinary, mtp and prefix modes. See testing.md for
-accuracy probes, combinations and acceptance details. Never enable eager/probe
-execution in acceptance runs. --binary supports isolated builds; the driver
-executes a hash-verified private copy. Do not edit Python sources during a run.
+`benchmarks/ttft.py` defaults to 4200 capacity units, 128 GDN slots, two warmups
+and five measurements, and runs a private copy of the release binary. Never
+enable eager/probe execution in acceptance runs. Do not edit sources during a run.
 
 ## Logs and diagnostics
 
@@ -85,8 +86,8 @@ Host duration is not CUDA kernel duration. Use a separate profiling run for GPU
 timing; keep traces outside the repository. Default INFO avoids per-step I/O.
 The controller uses one Tokio thread for its serial scheduler/RPC stream. CPU
 affinity experiments must apply the same inherited mask to both engines and record
-it; taskset can be placed before the benchmark Python command. See handoff.md for
-measured results, including failed cases and pending acceptance.
+it; taskset can be placed before the benchmark Python command. See acceptance.md
+for measured results.
 
 ## Troubleshooting
 
@@ -146,9 +147,9 @@ requires official upstream SHA e9f169d16b9408bb9ae44f75072b91a5521d733c. The ind
 `benchmarks/ttft.py` consumes its JSON and launches only our own worker. This explicit
 exception does not change normal build/test/runtime dependency isolation.
 
-For long-context runs, use `--max-model-len 262144 --num-gpu-blocks 4200
---mamba-blocks 128` before the CLI subcommand. These are provisional capacities
-under GPU validation; they represent 1400 FA slots and 128 independent GDN slots.
+For long-context and acceptance runs, use `--max-model-len 262144 --num-gpu-blocks 4200
+--mamba-blocks 128` before the CLI subcommand: 1400 FA slots and 128 independent GDN
+slots, validated by the six 262144-token boundary runs.
 
 ## TileLang and TileFoundry
 

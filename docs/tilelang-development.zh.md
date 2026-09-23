@@ -27,7 +27,7 @@ gitlink 固定我们的 para1lel/TileFoundry fork，基于上游 main b5aaa44216
 1. 选择算子前阅读生产包装器和已有测试。保留支持的 shape、packed stride、dtype、返回状态、别名规则和数值舍入边界。
 2. 在 development/kernels/semantics.py 表达完整逻辑行为。development/kernels/twins.py 通过薄适配层调用冻结的 TileLang 算子。注意力准备 twin 组合完整的融合前生产执行链。快照和更新后的逻辑缓存是输出，不隐藏为副作用。
 3. 用 TileFoundry 分析算术量、显存和 roofline 假设。提供的单个逻辑 CTA 是分析拓扑，不是实际 TileLang 放置方式。HIR 成本估计不是实测 GPU 时延。
-4. 实现并调优 TileLang kernel。保留公开 Python 接口、调度器所有权、持久 784-token 页及 MTP 排除位置零的契约。可改变内部 tile、融合及临时布局。长度不决定算法/布局时采用动态 token 维度。
+4. 实现并调优 TileLang kernel（历史工作流；`tilelang_reference/` 下的冻结源码不得修改）。保留公开 Python 接口、调度器所有权、持久 784-token 页及 MTP 排除位置零的契约。可改变内部 tile、融合及临时布局。长度不决定算法/布局时采用动态 token 维度。
 5. 临时算子实验放在仓库外，随后运行已有必需测试和实际模型验收。及时停止任务自有 GPU 程序。不提交微基准脚本、生成 kernel、报告、缓存内容或实验记录。
 6. 每个里程碑审查并修复问题，然后在 main 提交。主仓库更新 submodule gitlink 前先推送 fork 改动。
 
@@ -49,6 +49,6 @@ scripts/with-gpu.sh scripts/with-env.sh pytest -q tests
 
 ## 验收与性能
 
-保留文档规定的全部服务、agentic、最大上下文和正确性检查。使用冻结 EngineCore 的 12 组对比：吞吐至少 95%、TTFT 至多 1.1 倍，两种指标、两个引擎的极差/中位数均至多 10%，并满足既有来源审计。捕获/测量前预热所有待测 shape。逐运行的 TileLang 和第三方 Triton 缓存根目录防止并发编译污染审计；FlashInfer 也必须完整预热，正式重复期间保持不变。
+TileLang 后端现为冻结对照，不要调优（见 cuda-development.zh.md）。以下规则是 TileLang 迁移时的验收标准，仍适用于评估未来的 TileLang 修改。保留文档规定的全部服务、agentic、最大上下文和正确性检查。使用冻结 EngineCore 的 12 组对比：吞吐至少 95%、TTFT 至多 1.1 倍，两种指标、两个引擎的极差/中位数均至多 10%，并满足既有来源审计。捕获/测量前预热所有待测 shape。逐运行的 TileLang 和第三方 Triton 缓存根目录防止并发编译污染审计；FlashInfer 也必须完整预热，正式重复期间保持不变。
 
 任一组失败时，分析实际模型、定位主导开销、跨所需 shape 做针对性优化后重测。用 TileFoundry 成本/显存分析指导实验，再在实际模型运行中验证收益。完成前全部 12 组必须通过吞吐、TTFT 和稳定性门槛；性能或正确性失败都不能仅凭解释豁免。未来模型/后端可添加语义模块和 TileLang 特化，无需改变 Rust 调度；多 GPU 和本地 DSpark 仍属未来架构工作。

@@ -1,6 +1,6 @@
 # ADR-007: EngineCore TTFT and independent hybrid cache capacities
 
-Status: implementing; user-confirmed 2026-09-22. Final GPU acceptance pending.
+Status: user-confirmed 2026-09-22; implemented and accepted (see acceptance.md).
 
 ## Decision
 
@@ -35,8 +35,9 @@ heterogeneous-memory allocator. Future automatic sizing must preserve admission 
 prefix ownership invariants, and cannot move logical allocation into Python.
 
 Rust tests cover separate-pool exhaustion, prefix restoration, MTP crossing,
-rejection reuse and migration across prefill chunks. GPU/model tests and complete
-long-context/12-row evidence are required before final acceptance.
+rejection reuse and migration across prefill chunks. GPU/model tests, the six
+boundary runs and the 12-row matrix have passed (acceptance.md). Admission does not
+yet reject requests exceeding either pool's capacity (audit SCH-04).
 
 For the comparison, both engines must keep the full workload resident, with zero
 preemptions and the prescribed prefix-hit counts. Raw cache configuration, GPU

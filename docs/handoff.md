@@ -1,63 +1,102 @@
 # Handoff — 2026-09-23
 
-## Current state: CUDA migration complete
+## Current state
 
-CUDA is the default custom-kernel backend on B200. Set
-`OH_MY_VLLM_KERNEL_BACKEND=tilelang` before Python starts for the single frozen
-comparison implementation. Runtime identity reports the actual process selection;
-there is no silent fallback. Rust still owns serving/scheduling/logical KV and
-Python owns GPU computation. No vLLM runtime/source/environment dependency returns.
+The CUDA migration is complete and accepted. The next task is to fix the findings of
+the whole-repository code audit.
 
-Clean `c36d1c9`, explicitly selecting CUDA, passes all **147 operator cases** and
-all **12 framework performance rows**. Each operator passes three rounds of20
-interleaved pairs and a positive one-sided95% bootstrap gain bound. Framework
-throughput is97.52–125.09% and TTFT76.01–97.50% of the frozen vLLM baseline; every
-row meets the unchanged10% stability rule. Preserve earlier failed stability
-sets and three physical-CPU-overlap exclusions. No baseline was rerun.
-The historical173-case inventory predates attention-preparation fusion.
+- **Kernel backend:** CUDA is the default on B200. Setting
+  `OH_MY_VLLM_KERNEL_BACKEND=tilelang` before Python starts selects the frozen
+  TileLang comparison instead. Runtime identity reports the selection actually
+  used, and nothing falls back silently to TileLang.
+- **Ownership:** Rust owns serving, scheduling and the logical KV cache. Python
+  owns GPU computation. No vLLM runtime, source or environment dependency is used.
+- **Operator cases (clean `c36d1c9`, explicit CUDA):** all 147 formal cases pass.
+  Each passes three rounds of 20 interleaved pairs with a positive one-sided 95%
+  bootstrap bound.
+- **Framework rows (same commit):** all 12 rows pass.
+  - Throughput is 97.52–125.09% of the frozen vLLM baseline.
+  - TTFT is 76.01–97.50% of the baseline.
+  - Every row meets the 10% spread rule.
+  - The narrowest margin is MTP batch 4, at 97.52% throughput.
+- **Default-selection change (`030f60f`):** only changes backend selection and
+  identity. The 174-test plus 31-subtest suite and the MTP4 service constraint
+  and lifecycle checks passed on the working tree after `ef07b2b` that became
+  this commit (CUDA source unchanged), not on a separate run of `030f60f`.
+- **Other passing checks:**
+  - Six 258048+4096 boundary runs finish without OOM or preemption.
+  - Real-text preemption and prefix checks.
+  - Both oh-my-pi APIs.
 
-The12 workloads are ordinary/MTP/prefix input32768 at batch1/2/4, plus
-ordinary-only input131072 at batch1/2/4, all with output4096. Six ordinary/MTP
-input258048/output4096 boundary runs also complete without OOM/preemption.
-Peak PyTorch reserved memory is134.69GB; this is not total-device memory.
+Evidence is in [acceptance.md](acceptance.md) and in the
+`bench/baseline/2026-09-22-cuda-{operators,framework,features}.json` artifacts.
 
-Final default-selection correctness passes **174 tests plus31 subtests** without
-relaxed numerical references/tolerances. The measured CUDA kernel/model/dispatch
-implementation is unchanged by the default switch. Actual-model FP64 probes,
-ordinary/MTP real-text isolation, prefix reuse and forced preemption pass.
-MTP4 constraints, lifecycle and long strict-JSON prefix reuse pass. A final
-service run with backend/CUDA_HOME/TVM architecture variables unset verifies the
-actual default and repeats twelve constraints plus lifecycle successfully.
+## Open work: code audit remediation
 
-Updated-document oh-my-pi Chat/Responses readback passes the core task with nine
-successful read calls each,5/3 real model requests and nonzero MTP acceptance.
-Both read the required source files and distinguish current147 cases from history.
-Retain answer limitations: Chat workload wording is imprecise; Responses mixes
-Rust scheduling with Python prefill ordering and includes a historical performance
-command; both repeat an earlier cleanup snapshot while their own service runs.
-Do not claim perfect model grounding or use model answers as cleanup evidence.
+The audit of `030f60f` is recorded in
+[audit-2026-09-23.md](audit-2026-09-23.md). It contains:
 
-## Evidence and provenance
+- 4 P0 findings, all in serving availability.
+- 17 P1 latent silent-wrong or unsafe contracts.
+- 16 P2 performance, robustness or evidence findings.
+- 14 P3 findings in tests, evidence and maintainability.
 
-See `acceptance.md` and the2026-09-22-cuda-{operators,framework,features}.json
-artifacts in `bench/baseline` (collection date is UTC). Full147/12 timing is from
-clean c36d1c9 with explicit CUDA; readback is from clean ef07b2b. The final change
-only selects CUDA by default, unifies identity and adds selection tests. Default
-suite/service evidence records its working-tree provenance and unchanged CUDA hash.
-Older counts in `cuda-development.md` are historical, not current status.
+The audit found no wrong-token defect on the default path, and the accepted
+evidence above stands.
 
-All-file Rust fmt/width/clippy/tests and Ruff checks pass. Independent reviews
-cover numerical code, statistics, feature evidence and final selection behavior.
-No implementation or acceptance work remains in this migration scope.
+Work through the batches in the order given in the audit, and mark each finding's
+status in its index:
 
-## Cleanup and operating rules
+1. Serving availability
+2. Evidence integrity
+3. Kernel and worker contracts
+4. Scheduler hardening
+5. Measured performance
+6. Cleanup
 
-The feature artifact records a timestamped cleanup snapshot after tests: no GPU
-compute processes, ports18030/18031/18032 released, no requested running service.
-This is a snapshot, not a live system-status promise.
+Two rules apply to every batch:
 
-Use `scripts/with-env.sh` and idle UUID selection via `scripts/with-gpu.sh`.
-Develop/commit only on main, stage intentional files, keep hooks enabled, maintain
-Chinese Markdown companions and the required commit attribution. Stop every
-owned GPU program promptly. Temporary tuning and raw GPU traces stay outside
-the repository; formal summarized acceptance evidence belongs in `bench/baseline`.
+- A change to `kernels.cu` device code requires re-running its formal operator
+  cases.
+- A change to the hot path requires re-checking the framework rows before
+  claiming the 12-row result still holds.
+
+Known issues that affect operators today (details in the audit):
+
+- A single request's sampling, grammar or prepare error stops the serving
+  engine. Every later request then gets 503 until restart (SRV-01).
+- Killing the Rust process with SIGTERM or SIGKILL orphans the Python worker. The
+  orphan keeps holding the GPU and its `with-gpu.sh` lock (SRV-02). After an
+  abnormal exit, check `nvidia-smi` and stop only the processes you own.
+- `benchmarks/compare_vllm.py` is a historical nine-row tool. It does not enforce
+  current gates, so use `benchmarks/ttft.py` (EVD-01).
+
+## Documentation cleanup (this change)
+
+- Added the audit document.
+- Removed superseded milestone narratives from `acceptance.md`,
+  `cuda-development.md`, `plan.md` and `bench/baseline/README.md`. The raw
+  artifacts remain, and a history table in `acceptance.md` indexes them.
+- Deleted `performance-gap-2026-09-22.md`. It described an MTP gap that later
+  work closed, and its summary data remains in
+  `bench/baseline/2026-09-22-performance-gap.json`.
+- Corrected stale content:
+  - Commands now name `ttft.py` and the full pytest suite.
+  - The protocol and preemption descriptions match the current code.
+  - ADR statuses are current.
+- Updated Chinese companions to match.
+
+## Operating rules
+
+- **Environment:** use `scripts/with-env.sh`.
+- **GPU selection:** pick an idle GPU by UUID with `scripts/with-gpu.sh`.
+- **Git:**
+  - Develop and commit only on `main`.
+  - Stage only the files you intended to change.
+  - Keep hooks enabled.
+  - Maintain the Chinese Markdown companions.
+  - Include the required commit attribution.
+- **GPU cleanup:** stop every GPU program you own promptly, and verify ports and
+  GPU memory are released.
+- **What stays out of the repository:** temporary tuning and raw GPU traces.
+  Formal summarized evidence goes in `bench/baseline`.

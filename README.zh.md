@@ -21,7 +21,7 @@ scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
 scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64
 ```
 
-请使用唯一的 socket 路径。文本脚本加上 `--num-speculative-tokens 4` 即启用 MTP。当前回归包含普通、MTP4 和前缀命中模式，每组完整预热两次、正式测量至少五次。全部 12 组 TileLang 吞吐/TTFT 对比已通过，稳定性采用用户批准的 10% 上限，详见[测试](docs/testing.zh.md)。`benchmarks/compare_vllm.py` 保留此前九组历史对比及其原始配置。
+请使用唯一的 socket 路径。文本脚本加上 `--num-speculative-tokens 4` 即启用 MTP。性能验收使用 `benchmarks/ttft.py` 对比冻结基线（完整预热两次、正式测量五次），详见[测试](docs/testing.zh.md)。`benchmarks/compare_vllm.py` 是历史九组工具，不用于验收。
 
 ## 本地 OpenAI 服务
 
@@ -33,7 +33,7 @@ Chat Completions 和 Responses 地址为 `http://127.0.0.1:8000/v1`，支持思�
 
 ## 验证与性能
 
-全部 12 组要求吞吐至少达到更新后 vLLM EngineCore 的 95%，TTFT 不超过其 110%，两种指标的极差/中位数均 <=10%。TileLang 实现已通过这些门槛，详见当前验收表。此前独立运行时的九组测试已通过原始冻结基线门槛；这些历史结果不满足新的 TTFT 验收要求。[验收证据](docs/acceptance.zh.md)分别说明当前与历史结果。
+全部 12 组要求吞吐至少达到更新后 vLLM EngineCore 的 95%，TTFT 不超过其 110%，两种指标的极差/中位数均 <=10%。默认 CUDA 实现已通过这些门槛，见[验收证据](docs/acceptance.zh.md)。尚未修复的代码审计问题（服务可用性、潜在的 kernel/调度契约、证据缺口）记录在[审计文档](docs/audit-2026-09-23.zh.md)。
 
 ```bash
 scripts/with-env.sh cargo test --workspace
@@ -43,6 +43,7 @@ scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
 CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p 'test_*.py'
+scripts/with-gpu.sh scripts/with-env.sh python -m pytest tests -q
 ```
 
 [测试文档](docs/testing.zh.md)覆盖实际模型 FP64 探针、前缀/MTP/抢占、服务和性能检查。[开发文档](docs/development.zh.md)说明固定环境及日志；[性能分析文档](docs/profiling.zh.md)区分主机与 GPU 测量。每个里程碑都需要独立审查并提交。
@@ -57,6 +58,7 @@ CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests
 - tests/probe_worker.py：实际模型 FP64 诊断，不用于吞吐测试。
 - benchmarks/ttft.py：独立测量及当前 TTFT/吞吐门槛。
 - benchmarks/baseline/enginecore.py：明确隔离的参考数据采集器。
-- benchmarks/compare_vllm.py：历史对比和进程管理。
+- benchmarks/compare_vllm.py：历史九组对比；共用的进程管理。
+- benchmarks/kernels.py：CUDA 与冻结 TileLang 的正式算子对比。
 
-自定义 kernel 使用 TileLang 和仅供开发的 TileFoundry fork。安装和算子语义见[工作流](docs/tilelang-development.zh.md)；全部 12 组迁移性能对比已通过[验收文档](docs/acceptance.zh.md)中的当前规则。
+自定义 kernel 为 B200 CUDA C++/PTX（[CUDA 工作流](docs/cuda-development.zh.md)），保留冻结的 TileLang 对照及仅供开发的 TileFoundry 工具（[TileLang 工作流](docs/tilelang-development.zh.md)）。

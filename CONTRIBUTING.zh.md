@@ -63,7 +63,7 @@ hook 失败时修复所报问题并重新暂存，不要使用 `--no-verify`。�
 1. 代码已提交，pre-commit hook 全部通过。
 2. 受影响测试通过：调度器/KV 缓存修改运行 Rust 单元测试；注意力/状态修改运行实际路径 GQA/GDN FP64 探针，涉及 MTP 时也覆盖 MTP。
 3. 改动涉及 `zmq_bridge.py`、`model_runner.py` 或 `client.rs` 时，端到端冒烟测试通过。
-4. `docs/plan.md` 和 `docs/handoff.md` 已反映新任务状态。
+4. `docs/handoff.md`（阶段完成时还有 `docs/plan.md`）已反映新任务状态；修复审计问题时，同时在 `docs/audit-2026-09-23.md` 中更新其状态。
 5. 运行结束后及时停止任务自有 GPU 服务器和 worker，失败或取消时同样如此。确认进程、GPU 分配和临时服务端口均已释放。只有用户明确要求时才保留服务，并在交接记录中注明例外。
 
 ## 添加新功能
@@ -89,7 +89,7 @@ scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /t
 
 ## 不要做的事情
 
-- 不要添加基于 swap 的抢占、多 GPU、gRPC 服务、LoRA 或多模态输入；它们明确不在范围内（REQ-OUT-SCOPE-001）。需要调整范围时先讨论。OpenAI 兼容 HTTP 服务已实现（REQ-SERVE-001），仍需要真实 GPU/agentic 验收。
+- 不要添加基于 swap 的抢占、多 GPU、gRPC 服务、LoRA 或多模态输入；它们明确不在范围内（REQ-OUT-SCOPE-001）。需要调整范围时先讨论。OpenAI 兼容 HTTP 服务已实现并通过验收（REQ-SERVE-001）；修改服务时须重跑其真实 GPU/agentic 检查。
 - 不得提交秘密信息、token、`.env` 值或生产凭据。
 - 未获项目负责人明确确认，不得向任何分支强制推送。
 - 升级 Rust `zeromq` crate 前，检查 `DealerSocket` 和 `ipc-transport` 是否仍正常，见 `docs/decisions/ADR-001-zmq-socket-type.md`。

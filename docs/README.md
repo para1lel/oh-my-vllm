@@ -4,25 +4,25 @@
 same-directory `.zh.md` companion whenever its English source changes.
 
 Read [AGENTS.md](../AGENTS.md) and [handoff.md](handoff.md) first. AGENTS.md governs
-project constraints; handoff.md records current evidence, blockers and pending runs.
+project constraints; handoff.md records current state and open work.
 
 - [Requirements](requirements.md): model, ownership, functionality and acceptance.
 - [Architecture](architecture.md): current runtime and module responsibilities.
-- [Design](design.md): wire messages, logical/physical cache and scheduler lifecycle.
+- [Design](design.md): wire messages, logical cache and scheduler lifecycle.
 - [Development](development.md): conda wrappers, build and timestamped logging.
-- [Testing](testing.md): actual-path FP64, text, feature and performance commands.
-- [Acceptance](acceptance.md): complete matrix, raw evidence and coverage limits.
-- [Profiling](profiling.md): host timings and optional kernel diagnostics.
-- [Plan](plan.md): completed milestones and remaining work.
-- [Serving](serving.md): implemented OpenAI-compatible subset, client commands and real GPU acceptance evidence.
+- [Testing](testing.md): CPU/GPU suites, FP64 probes, features and performance commands.
+- [Acceptance](acceptance.md): current evidence and a dated index of historical artifacts.
+- [Code audit 2026-09-23](audit-2026-09-23.md): open findings and remediation batches.
+- [Plan](plan.md): completed stages and next work.
+- [CUDA development](cuda-development.md): native kernels, frozen comparison, operator gates.
+- [TileLang development](tilelang-development.md): frozen reference and TileFoundry tools.
+- [Profiling](profiling.md): host timings and kernel diagnostics.
+- [Serving](serving.md): OpenAI-compatible subset, client commands and service checks.
 - [Contributing](../CONTRIBUTING.md): reviews, checks and commits.
-- [ADR001](decisions/ADR-001-zmq-socket-type.md): DEALER socket choice.
-- [ADR002](decisions/ADR-002-gpuworker-adapter.md): installed Worker and physical IDs.
-- [ADR003](decisions/ADR-003-mtp-state-slots.md): speculative states and BF16 SSM.
-- [ADR004](decisions/ADR-004-openai-serving.md): Rust-first dual-API serving direction.
-
-Ordinary/MTP text, actual-path probes and feature combinations have passed checks.
-All twelve TileLang throughput/TTFT rows pass with the user-approved10% stability
-limit. [TileLang development](tilelang-development.md) covers offline autotuning
-and the development-only TileFoundry fork. Consult acceptance.md for exact configuration
-and handoff.md for history rather than relying on old commit-time status entries.
+- Decisions: [ADR-001](decisions/ADR-001-zmq-socket-type.md) DEALER socket;
+  [ADR-002](decisions/ADR-002-gpuworker-adapter.md) GPUWorker adapter (superseded);
+  [ADR-003](decisions/ADR-003-mtp-state-slots.md) MTP state slots and BF16 SSM;
+  [ADR-004](decisions/ADR-004-openai-serving.md) Rust-first serving;
+  [ADR-005](decisions/ADR-005-v2-model-runner.md) V2 runner (superseded);
+  [ADR-006](decisions/ADR-006-independent-runtime.md) independent runtime;
+  [ADR-007](decisions/ADR-007-ttft-and-cache-capacities.md) TTFT gate and separate capacities.

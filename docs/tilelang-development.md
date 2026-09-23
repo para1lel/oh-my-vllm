@@ -49,7 +49,8 @@ The source tree must remain available for the editable installation.
 3. Use TileFoundry analysis to inspect arithmetic, memory and roofline hypotheses.
    The supplied single logical CTA is an analysis topology, not the actual
    TileLang placement. HIR cost estimates are not measured GPU latency.
-4. Implement and tune the TileLang kernel. Keep public Python interfaces,
+4. Implement and tune the TileLang kernel (historical workflow; frozen sources
+   under `tilelang_reference/` must not change). Keep public Python interfaces,
    scheduler ownership, persistent 784-token pages and the MTP position-zero
    exclusion contract. Internal tiling, fusion and temporary layouts may change.
    Use dynamic token dimensions when lengths do not determine algorithm/layout.
@@ -102,6 +103,9 @@ CPU FP64 reference and actual-model checks remain authoritative for that boundar
 
 ## Acceptance and performance
 
+The TileLang backend is now the frozen comparison; do not tune it
+(cuda-development.md). The rules below were the TileLang migration's acceptance
+criteria and still describe how a future TileLang change would be evaluated.
 Retain all documented service, agentic, maximum-context and correctness checks.
 Use the twelve frozen EngineCore comparison rows: throughput at least95%, TTFT at
 most1.1x, spread/median at most10% for both metrics and both engines, and

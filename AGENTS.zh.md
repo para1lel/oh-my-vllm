@@ -90,7 +90,8 @@
 |---|---|
 | 任意任务 | 本文件 + `docs/handoff.md` |
 | Rust 调度器/KV 缓存 | `docs/architecture.md` + `docs/decisions/` |
-| Python 模型 runner | `docs/architecture.md` 的 “Python side” |
-| 性能工作 | `docs/requirements.md` 的 REQ-PERF-* + `docs/profiling.md` |
+| Python 模型 runner | `docs/architecture.md` 的 “Python modules” |
+| 性能工作 | `docs/requirements.md` 的 REQ-PERF-* + `docs/profiling.md` + `docs/testing.md` |
 | 新功能 | `docs/requirements.md` + `docs/architecture.md` |
-| 排查失败 | `docs/handoff.md` 的 “Known issues” + `docs/testing.md` |
+| 排查失败 | `docs/handoff.md` 的 “Open work” + `docs/testing.md` |
+| 修复审计问题 | `docs/audit-2026-09-23.md`（对应问题及其修复批次） |
