@@ -17,6 +17,30 @@ from measurement import FROZEN_SHA, audit, hardware_identity
 MAX_SPREAD = 0.10
 
 
+def _parse_bench_config(stdout: str, key: str, cast):
+    """Parse a structured-log BENCH_CONFIG line emitted by the worker.
+
+    The worker logs one line of the form:
+        ... INFO BENCH_CONFIG key1=value1 key2=value2 ...
+    This extracts the value for *key* and casts it with *cast*.  Raises
+    ValueError if the line is absent or the key is missing, so a binary
+    rebuilt with different defaults causes an immediate failure rather than
+    a silent config mismatch.
+    """
+    import re
+
+    for line in stdout.splitlines():
+        if "BENCH_CONFIG" not in line:
+            continue
+        match = re.search(rf"\b{re.escape(key)}=(\S+)", line)
+        if match:
+            return cast(match.group(1))
+    raise ValueError(
+        f"BENCH_CONFIG line not found or missing key '{key}' — "
+        "worker must be rebuilt from this commit"
+    )
+
+
 def summarize(runs, batch_size, output_len, minimum=5):
     if len(runs) < minimum:
         raise ValueError("at least five repetitions required")
@@ -180,9 +204,11 @@ def main():
         config={
             "model": "/data0/shared/Qwen3.8-27B-FP8",
             "max_model_len": baseline["config"]["max_model_len"],
-            "max_num_seqs": 32,
-            "max_num_batched_tokens": 32768,
-            "block_size": 784,
+            "max_num_seqs": _parse_bench_config(stdout, "max_num_seqs", int),
+            "max_num_batched_tokens": _parse_bench_config(
+                stdout, "max_num_batched_tokens", int
+            ),
+            "block_size": _parse_bench_config(stdout, "block_size", int),
             "enable_prefix_caching": True,
             "enable_chunked_prefill": True,
             "async_scheduling": False,
@@ -199,6 +225,7 @@ def main():
                 os.environ.get("FLASHINFER_WORKSPACE_BASE"),
                 os.environ.get("TRITON_CACHE_DIR"),
                 os.environ.get("TILELANG_CACHE_DIR"),
+                os.environ.get("TVM_FFI_CACHE_DIR"),
             ],
         ),
         runs=parse_rows(stdout, "BENCH_RESULT "),

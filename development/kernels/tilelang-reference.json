@@ -2,6 +2,7 @@
   "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
   "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
   "files": {
+    "__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
     "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
     "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
     "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",

@@ -266,6 +266,16 @@ def compare(args):
             raise RuntimeError("MTP did not produce draft tokens")
         base_median = statistics.median(row["output_tps"] for row in base)
         ours_median = statistics.median(row["output_tps"] for row in ours)
+        for label, runs in (("baseline", base), ("candidate", ours)):
+            values = [row["output_tps"] for row in runs]
+            med = statistics.median(values)
+            spread = (max(values) - min(values)) / med if med > 0 else 0
+            if spread > 0.10:
+                print(
+                    f"WARNING: {label} batch={batch} spread={spread:.3f} > 0.10"
+                    " — run is unstable, results are unreliable",
+                    file=sys.stderr,
+                )
         result = {
             "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
             "gpu": selected_gpu,
@@ -303,7 +313,7 @@ def main():
     parser.add_argument("--input-len", type=int, default=32768)
     parser.add_argument("--output-len", type=int, default=4096)
     parser.add_argument("--warmup", type=int, default=2)
-    parser.add_argument("--repetitions", type=int, default=3)
+    parser.add_argument("--repetitions", type=int, default=5)
     parser.add_argument(
         "--mode", choices=["ordinary", "mtp", "prefix"], default="ordinary"
     )
@@ -319,8 +329,8 @@ def main():
         help="Use frozen workload rows; run only the framework, never vLLM baseline",
     )
     args = parser.parse_args()
-    if args.repetitions < 3 or args.warmup < 1:
-        parser.error("acceptance requires >=3 measurements and >=1 warmup")
+    if args.repetitions < 5 or args.warmup < 2:
+        parser.error("acceptance requires >=5 measurements and >=2 warmups")
     if args.mode == "mtp" and args.speculative_tokens <= 0:
         parser.error("MTP requires positive --speculative-tokens")
     if min(args.batch_sizes) <= 0 or min(args.input_len, args.output_len) <= 0:

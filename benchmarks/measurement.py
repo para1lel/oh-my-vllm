@@ -51,6 +51,7 @@ def audit(log, cache_roots):
     else:
         for root in cache_roots:
             if not root:
+                problems.append("cache root is unset — steady-state cannot be verified")
                 continue
             for path in Path(root).rglob("*"):
                 if (

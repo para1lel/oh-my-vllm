@@ -39,10 +39,37 @@ class ReferenceTest(unittest.TestCase):
                 self.assertEqual(json.loads(result.stdout), [expected, expected])
 
     def test_reference_sources_match_frozen_hashes(self):
+        # The expected set is fixed here so that removing an entry from the
+        # manifest does not silently drop it from the check (EVD-06).
+        expected_files = {
+            "__init__.py",
+            "attention.py",
+            "convolution.py",
+            "decode_attention.py",
+            "elementwise.py",
+            "fp8.py",
+            "gdn.py",
+            "normalization.py",
+        }
         manifest = json.loads(
             (ROOT / "development/kernels/tilelang-reference.json").read_text()
         )
         source = ROOT / "python/oh_my_vllm/kernels/tilelang_reference"
+        manifest_files = set(manifest["files"].keys())
+        # Every expected file must appear in the manifest.
+        missing_from_manifest = expected_files - manifest_files
+        self.assertEqual(
+            missing_from_manifest,
+            set(),
+            f"expected files absent from manifest: {missing_from_manifest}",
+        )
+        # Every file in the manifest must be in the expected set.
+        extra_in_manifest = manifest_files - expected_files
+        self.assertEqual(
+            extra_in_manifest,
+            set(),
+            f"unexpected files in manifest: {extra_in_manifest}",
+        )
         for name, digest in manifest["files"].items():
             self.assertEqual(
                 hashlib.sha256((source / name).read_bytes()).hexdigest(), digest

@@ -15,7 +15,7 @@ def identity() -> dict:
     forbidden = [path for path in sys.path if path and "vllm" in Path(path).parts]
     if forbidden:
         raise RuntimeError(f"legacy source/environment on Python path: {forbidden}")
-    return {
+    identity: dict = {
         "python": sys.executable,
         "python_version": sys.version,
         "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
@@ -42,6 +42,11 @@ def identity() -> dict:
         "kernel_backend": NAME,
         "vllm_importable": False,
     }
+    if NAME == "cuda":
+        from oh_my_vllm.kernels.cuda_backend import provenance
+
+        identity["cuda_build_provenance"] = provenance()
+    return identity
 
 
 def verify_loaded_modules() -> None:

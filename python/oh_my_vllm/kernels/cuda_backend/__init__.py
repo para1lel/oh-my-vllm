@@ -1,7 +1,45 @@
 """B200 CUDA implementations, compiled lazily; executed on the caller's CUDA stream."""
 
+import hashlib
+import subprocess
 from functools import cache
 from pathlib import Path
+
+
+def _nvcc_version() -> str:
+    """Return the last line of `nvcc --version`, e.g. 'V12.4.131'."""
+    try:
+        return (
+            subprocess.check_output(["nvcc", "--version"], text=True)
+            .strip()
+            .splitlines()[-1]
+        )
+    except Exception as exc:
+        return f"nvcc-unavailable: {exc}"
+
+
+def provenance() -> dict:
+    """Return CUDA build provenance: nvcc version and compiled .so hash (once built)."""
+    import glob
+    import os
+
+    info: dict = {"nvcc_version": _nvcc_version()}
+    # The TVM FFI cache dir is set by scripts/with-env.sh.
+    cache_dir = os.environ.get("TVM_FFI_CACHE_DIR", "")
+    if cache_dir:
+        so_paths = sorted(
+            glob.glob(f"{cache_dir}/**/oh_my_vllm_cuda*.so", recursive=True)
+        )
+        if so_paths:
+            # Hash the most recently modified .so; there is normally only one.
+            so_path = max(so_paths, key=lambda p: Path(p).stat().st_mtime)
+            info["so_sha256"] = hashlib.sha256(Path(so_path).read_bytes()).hexdigest()
+            info["so_path"] = so_path
+        else:
+            info["so_sha256"] = None
+    else:
+        info["so_sha256"] = None
+    return info
 
 
 @cache
