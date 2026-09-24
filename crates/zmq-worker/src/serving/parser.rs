@@ -559,4 +559,20 @@ mod tests {
             ""
         );
     }
+
+    #[test]
+    fn length_finish_flushes_pending_marker_prefix() {
+        // SRV-04 regression: reasoning ends in a prefix of </think> while
+        // max_tokens is exhausted (reason.is_some() but reason != "stop").
+        // The pending bytes must not be silently dropped.
+        let mut parser = Parser::new(true, vec![]);
+        let events = parser.feed("hello</th", true).unwrap();
+        let mut reasoning = String::new();
+        for e in events {
+            if let Delta::Reasoning(t) = e {
+                reasoning.push_str(&t);
+            }
+        }
+        assert_eq!(reasoning, "hello</th");
+    }
 }

@@ -13,6 +13,12 @@ def silu_mul(packed: torch.Tensor) -> torch.Tensor:
     if not packed.is_cuda or not packed.is_contiguous():
         raise ValueError("packed gate/up must be contiguous CUDA data")
     rows, width = packed.shape[0], packed.shape[1] // 2
+    if rows == 0:
+        return torch.empty((0, width), dtype=packed.dtype, device=packed.device)
+    if rows * width * 2 >= 2**31:
+        raise ValueError(
+            f"tensor size {rows} * {packed.shape[1]} exceeds int32 flat offset range"
+        )
     out = torch.empty((rows, width), dtype=packed.dtype, device=packed.device)
     block = 1024 if rows >= 128 else 256
     _silu_mul(width, block)(packed, out)
@@ -32,6 +38,9 @@ def delta_gates(ba: torch.Tensor, a_log: torch.Tensor, bias: torch.Tensor):
         for t in (ba, a_log, bias)
     ):
         raise ValueError("GDN gates must be contiguous on one CUDA device")
+    if len(ba) == 0:
+        empty = torch.empty((0, 48), device=ba.device, dtype=torch.float32)
+        return empty, empty.clone()
     decay = torch.empty((len(ba), 48), device=ba.device)
     beta = torch.empty_like(decay)
     _gates()(ba, a_log, bias, decay, beta)

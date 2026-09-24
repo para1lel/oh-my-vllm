@@ -6,11 +6,10 @@ from oh_my_vllm.worker.batch_plan import plan_request, validate_batch
 from oh_my_vllm.worker.protocol import ScheduledRequest
 
 
-def request(start, tokens, mamba, history=None, rid=1):
+def request(start, tokens, mamba, history=None, rid=1, fa_table=None):
     pages = (start + len(tokens) + 783) // 784
-    return ScheduledRequest(
-        rid, tokens, start, list(range(1, pages + 1)), mamba, history
-    )
+    fa = fa_table if fa_table is not None else list(range(1, pages + 1))
+    return ScheduledRequest(rid, tokens, start, fa, mamba, history)
 
 
 class BatchPlanTest(unittest.TestCase):
@@ -51,18 +50,28 @@ class BatchPlanTest(unittest.TestCase):
     def test_shared_reads_and_checkpoint_write_conflicts(self):
         history = list(range(785))
         a = plan_request(
-            request(784, [784], [10, 20], history, 1), history, None, 128, 0
+            request(784, [784], [10, 20], history, 1, fa_table=[1, 2]),
+            history,
+            None,
+            128,
+            0,
         )
         b = plan_request(
-            request(784, [784], [10, 30], history, 2), history, None, 128, 0
+            request(784, [784], [10, 30], history, 2, fa_table=[1, 3]),
+            history,
+            None,
+            128,
+            0,
         )
         validate_batch([a, b])
         b.source = 20
         with self.assertRaisesRegex(ValueError, "another request"):
             validate_batch([a, b])
         # A checkpoint copy is also a write, separate from candidate destinations.
+        # Give crossing a distinct FA tail page (page 5) so it doesn't conflict
+        # with request a's tail page (page 2) before the recurrent-state check.
         crossing = plan_request(
-            request(782, [782, 1000, 1001], [10, 40, 41, 42], rid=3),
+            request(782, [782, 1000, 1001], [10, 40, 41, 42], rid=3, fa_table=[1, 5]),
             list(range(783)),
             50,
             128,
@@ -85,6 +94,26 @@ class BatchPlanTest(unittest.TestCase):
         req = request(784, [784], [], list(range(785)))
         with self.assertRaisesRegex(ValueError, "prefix checkpoint"):
             plan_request(req, list(range(785)), None, 128, 4)
+
+    def test_fa_page_sharing_detected_by_debug_assertion(self):
+        # PY-01: two requests with the same writable FA tail page must raise.
+        history = list(range(785))
+        a = plan_request(
+            request(784, [784], [10, 20], history, 1, fa_table=[1, 99]),
+            history,
+            None,
+            128,
+            0,
+        )
+        b = plan_request(
+            request(784, [784], [10, 30], history, 2, fa_table=[1, 99]),
+            history,
+            None,
+            128,
+            0,
+        )
+        with self.assertRaises(AssertionError):
+            validate_batch([a, b])
 
     def test_retained_output_count_is_bounded(self):
         history = [1]

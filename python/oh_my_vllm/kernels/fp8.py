@@ -23,6 +23,10 @@ def quantize(
             "FP8 requires a contiguous CUDA matrix with K divisible by 128"
         )
     rows, width = x.shape
+    if x.shape[0] * x.shape[1] * (2 if silu_gate else 1) >= 2**31:
+        raise ValueError(
+            f"tensor size {x.shape[0]} * {x.shape[1]} exceeds int32 flat offset range"
+        )
     if silu_gate:
         if x.dtype != torch.bfloat16 or width % 256:
             raise ValueError("fused SiLU quantization requires packed BF16 gate/up")

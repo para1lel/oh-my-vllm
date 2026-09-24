@@ -1,4 +1,4 @@
-# Handoff — 2026-09-23
+# Handoff — 2026-09-24
 
 ## Current state
 
@@ -34,42 +34,72 @@ Evidence is in [acceptance.md](acceptance.md) and in the
 ## Open work: code audit remediation
 
 The audit of `030f60f` is recorded in
-[audit-2026-09-23.md](audit-2026-09-23.md). It contains:
+[audit-2026-09-23.md](audit-2026-09-23.md). It contains 51 findings across 6 batches.
+Remediation started 2026-09-24 and is in progress.
 
-- 4 P0 findings, all in serving availability.
-- 17 P1 latent silent-wrong or unsafe contracts.
-- 16 P2 performance, robustness or evidence findings.
-- 14 P3 findings in tests, evidence and maintainability.
+### Completed batches
 
-The audit found no wrong-token defect on the default path, and the accepted
-evidence above stands.
+**Batch 1 — Serving availability** (`d0d286a`, 2026-09-24): SRV-01/02/03/04/06 fixed.
+- SRV-01: temperature < 1e-5 clamped to 0 in both `request.rs` and `sampling.py`.
+- SRV-02: `prctl(PR_SET_PDEATHSIG, SIGKILL)` in child pre-exec; Python watchdog polls
+  parent PID every 5 s and exits if it is gone; `sock.recv` gets 5 s timeout.
+- SRV-03: HTTP ready channel carries `(StatusCode, String)`; non-200 errors propagate.
+- SRV-04: `Parser::feed` flushes pending bytes on `LengthFinish`; test added.
+- SRV-06: `register_request`/`abort_request` demoted to fire-and-forget `()`.
 
-Work through the batches in the order given in the audit, and mark each finding's
-status in its index:
+### In progress — uncommitted working-tree changes
 
-1. Serving availability
-2. Evidence integrity
-3. Kernel and worker contracts
-4. Scheduler hardening
-5. Measured performance
-6. Cleanup
+The following files have partial Batch 2/3 fixes applied by subagents that were
+stopped mid-task. They have been verified to compile and pass ruff, but have NOT
+been committed. The new session must verify, complete, and commit them.
+
+**Batch 2 — Evidence integrity (partial):**
+- `benchmarks/compare_vllm.py` — EVD-01: default reps→5, warmup→2, spread warning.
+- `benchmarks/measurement.py` — EVD-11: missing cache root now appends to `problems`.
+- `benchmarks/ttft.py` — EVD-02: `_parse_bench_config()` reads BENCH_CONFIG log line;
+  EVD-13: `TVM_FFI_CACHE_DIR` added as fourth cache root.
+- `crates/zmq-worker/src/main.rs` — EVD-02: `info!("BENCH_CONFIG", …)` at startup.
+- `tests/test_kernel_reference.py` — EVD-06: test asserts fixed expected file set.
+- `tests/test_context_boundary.py` (untracked) — EVD-07: six skip-placeholder tests.
+
+  **Blocker:** `tilelang-reference.json` is missing the `__init__.py` entry
+  (SHA256: `601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3`).
+  Add it before the EVD-06 test will pass.
+
+  **Incomplete:** EVD-12 not started.
+
+**Batch 3 — Kernel/worker contracts (host-only, KRN-01/04/05 PY-01/02 MNT-02):**
+- `python/oh_my_vllm/kernels/decode_attention.py` — KRN-01: assert group_size ≤ 5
+  in `decode()` when `starts` is supplied.
+- `python/oh_my_vllm/kernels/elementwise.py` — KRN-04: int32 overflow guard in
+  `silu_mul`; MNT-02: empty-tensor early return in `silu_mul` and `delta_gates`.
+- `python/oh_my_vllm/kernels/fp8.py` — KRN-04: int32 overflow guard in `quantize`.
+- `python/oh_my_vllm/kernels/gdn.py` — KRN-05: dtype, shape, and stride validation
+  moved into `normalize_qk` (previously only in `prefill`).
+- `python/oh_my_vllm/models/qwen.py` — PY-02: assert `w.shape[0] % 128 == 0` for
+  every FP8-scaled projection part in `Checkpoint.linear`.
+- `python/oh_my_vllm/worker/batch_plan.py` — PY-01: debug-mode assertion that
+  writable FA tail pages are disjoint across requests in `validate_batch`.
+- `tests/test_batch_plan.py` — tests for KRN-01 host guard and PY-01 FA sharing.
+- `tests/test_validation_guards.py` — standalone guard tests for KRN-04/05 PY-02
+  MNT-02; 23 tests pass, ruff clean.
+- KRN-02/03 deferred (device code; require GPU re-run).
+
+### Remaining batches (not started)
+
+**Batch 4 — Scheduler hardening:** SCH-01/02/03/04/05, SRV-05/07.
+**Batch 5 — Measured performance:** PY-03/04/05/06/07, SRV-08/09/10, SCH-06/07,
+  KRN-06/07/08/09/10. Measure before keeping each.
+**Batch 6 — Cleanup:** EVD-04/05/08/09/10, MNT-01/03/04.
+
+After all batches: update `audit-2026-09-23.md` (and `.zh.md`) status fields to
+`fixed <sha>`, then `git push origin main`.
 
 Two rules apply to every batch:
 
-- A change to `kernels.cu` device code requires re-running its formal operator
-  cases.
-- A change to the hot path requires re-checking the framework rows before
-  claiming the 12-row result still holds.
-
-Known issues that affect operators today (details in the audit):
-
-- A single request's sampling, grammar or prepare error stops the serving
-  engine. Every later request then gets 503 until restart (SRV-01).
-- Killing the Rust process with SIGTERM or SIGKILL orphans the Python worker. The
-  orphan keeps holding the GPU and its `with-gpu.sh` lock (SRV-02). After an
-  abnormal exit, check `nvidia-smi` and stop only the processes you own.
-- `benchmarks/compare_vllm.py` is a historical nine-row tool. It does not enforce
-  current gates, so use `benchmarks/ttft.py` (EVD-01).
+- A change to `kernels.cu` device code requires re-running its formal operator cases.
+- A change to the hot path requires re-checking the framework rows before claiming
+  the 12-row result still holds.
 
 ## Documentation cleanup (this change)
 

@@ -52,6 +52,13 @@ class Checkpoint:
         ]
         if scales and len(scales) != len(weights):
             raise ValueError("cannot pack mixed quantized/unquantized projections")
+        if scales:
+            for name, w in zip(names, weights, strict=True):
+                if w.shape[0] % 128:
+                    raise ValueError(
+                        f"FP8 projection {name!r} has {w.shape[0]} rows, "
+                        "which is not divisible by 128 (scale block alignment)"
+                    )
         return Linear(
             torch.cat(weights, 0) if len(weights) > 1 else weights[0],
             torch.cat(scales, 0) if len(scales) > 1 else scales[0] if scales else None,

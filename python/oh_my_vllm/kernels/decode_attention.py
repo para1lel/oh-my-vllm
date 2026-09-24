@@ -60,6 +60,11 @@ def decode(
         or not starts.is_contiguous()
     ):
         raise ValueError("grouped decode starts must be contiguous CUDA integers")
+    if starts is not None and heads // kv_heads > 5:
+        raise ValueError(
+            f"grouped decode supports at most 5 query rows per group, "
+            f"got {heads // kv_heads}"
+        )
     # Both backends issue16-byte KV copies. Preserve support for contiguous
     # views that start at an unaligned BF16 storage offset.
     if cache.data_ptr() % 16:

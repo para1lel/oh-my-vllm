@@ -8,6 +8,27 @@ from oh_my_vllm.worker.decode_graph import DecodeAttention
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 
 
+def test_grouped_decode_rejects_group_size_above_5():
+    """KRN-01 host guard: group_size > 5 must raise before touching the GPU."""
+    # heads=24, kv_heads=4 → group_size=6. We only need a starts tensor to
+    # trigger the grouped path; actual tensor content is irrelevant.
+    query = torch.zeros(1, 24, 256, dtype=torch.bfloat16, device="cpu")
+    cache = torch.zeros(2, 2, 784, 4, 256, dtype=torch.bfloat16, device="cpu")
+    tables = torch.zeros(1, 2, dtype=torch.int32, device="cpu")
+    lengths = torch.zeros(1, dtype=torch.int32, device="cpu")
+    starts = torch.zeros(2, dtype=torch.int32, device="cpu")
+    # Move to cuda if available so the earlier CUDA checks pass; if not, the
+    # group-size check must still fire because it happens before any kernel.
+    if torch.cuda.is_available():
+        query = query.cuda()
+        cache = cache.cuda()
+        tables = tables.cuda()
+        lengths = lengths.cuda()
+        starts = starts.cuda()
+    with pytest.raises(ValueError, match="5 query rows"):
+        decode(query, cache, tables, lengths, max_tokens=1568, starts=starts)
+
+
 def reference(query, cache, tables, lengths, first):
     q, pool = query.cpu().double(), cache.cpu().double()
     out = []
