@@ -17,7 +17,7 @@ use zeromq::{DealerSocket, ZmqMessage};
 
 use crate::error::{Error, Result};
 use crate::protocol::{
-    AbortMsg, ExecuteMsg, InitMsg, RegisterMsg, RustMessage, ScheduledRequestMsg, decode, encode,
+    ExecuteMsg, InitMsg, RegisterMsg, RustMessage, ScheduledRequestMsg, decode, encode,
 };
 
 /// Configuration for launching the Python worker.
@@ -223,15 +223,6 @@ impl WorkerClient {
             crate::protocol::PythonMessage::Prepared { prompt_token_ids } => Ok(prompt_token_ids),
             crate::protocol::PythonMessage::Error(e) => Err(Error::WorkerError(e.message)),
             other => Err(Error::UnexpectedMessageType(format!("{other:?}"))),
-        }
-    }
-
-    /// Tell the Python worker to drop a request (aborted or evicted permanently).
-    /// Send failures are non-fatal: the worker may have already exited.
-    pub async fn abort_request(&mut self, request_id: u64) {
-        let msg = RustMessage::Abort(AbortMsg { request_id });
-        if let Err(e) = Self::send_raw(&mut self.sock, &msg).await {
-            warn!(request_id, "abort send failed: {e}");
         }
     }
 

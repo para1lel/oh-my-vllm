@@ -9,20 +9,32 @@ Message envelope (msgpack dict):
 
   Rust → Python:
     {"type": "init", "model_path": str, "num_gpu_blocks": int,
-     "block_size": int, "tensor_parallel_size": int}
-    {"type": "register", "request_id": int, "prompt_token_ids": list[int],
-     "max_tokens": int}
-    {"type": "execute", "scheduled": [...], "finished_request_ids": [...],
-     "preempted_request_ids": [...], "num_batched_tokens": int}
+     "block_size": int, "tensor_parallel_size": int, "max_model_len": int,
+     "num_speculative_tokens": int}
+    {"type": "register", "request_id": int, "prompt_token_ids": list[int]}
+    {"type": "prepare", "request_id": int, "request": dict}
+    {"type": "execute", "step_id": int, "scheduled": [
+       {"request_id": int, "token_ids": list[int],
+        "num_computed_tokens": int,
+        "fa_block_table": list[int], "mamba_block_table": list[int],
+        "prefill_token_ids": list[int] | None,
+        "new_block_ids_to_zero": list[int]}],
+     "finished_request_ids": list[int],
+     "preempted_request_ids": list[int],
+     "num_batched_tokens": int}
     {"type": "abort", "request_id": int}
     {"type": "shutdown"}
 
   Python → Rust:
-    {"type": "ready"}                          # after init completes
+    {"type": "ready", "logical_num_blocks": int}   # after init completes
+    {"type": "prepared", "prompt_token_ids": list[int]}  # after prepare
     {"type": "execute_result",
-     "outputs": [{"request_id": int, "token_ids": [int],
+     "outputs": [{"request_id": int, "token_ids": list[int],
                   "num_accepted_draft_tokens": int,
-                  "new_draft_token_ids": list[int]}, ...]}
+                  "new_draft_token_ids": list[int],
+                  "text": str | None,
+                  "finish_reason": str | None,
+                  "reasoning_tokens": int}, ...]}
     {"type": "error", "message": str}
 
 Run with::
