@@ -99,7 +99,14 @@ impl Scheduler {
                 end = stop;
             }
         }
-        end.saturating_sub(start)
+        // Guard: rounding down must not produce 0 tokens — that would stall the
+        // request forever. Clamp to at least 1 token so the request always
+        // makes progress on every schedule call.
+        end.saturating_sub(start).max(if count > 0 {
+            1
+        } else {
+            0
+        })
     }
     pub fn new(config: SchedulerConfig, kv: HybridCoordinator) -> Self {
         Self {
@@ -113,9 +120,27 @@ impl Scheduler {
     }
 
     /// Add a new request to the waiting queue.
-    pub fn add_request(&mut self, mut req: Request) {
+    ///
+    /// Returns `true` if the request was admitted. Returns `false` and drops
+    /// the request if it is impossible to serve even with an empty pool: a
+    /// request whose prompt + max_tokens requires more FA blocks than the pool
+    /// holds would preempt itself indefinitely (SCH-04).
+    pub fn add_request(&mut self, mut req: Request) -> bool {
+        let block = self.kv.block_size();
+        let fa_blocks_needed = req.num_tokens_with_spec().div_ceil(block);
+        let fa_pool_capacity = self.kv.pool().num_blocks() as usize;
+        if fa_blocks_needed > fa_pool_capacity {
+            tracing::warn!(
+                request_id = req.id,
+                fa_blocks_needed,
+                fa_pool_capacity,
+                "request rejected: requires more FA blocks than the pool holds"
+            );
+            return false;
+        }
         req.block_hashes = self.kv.compute_block_hashes(&req.token_ids);
         self.waiting.push_back(req);
+        true
     }
 
     /// Number of requests currently in the waiting queue.
@@ -307,8 +332,8 @@ impl Scheduler {
     ///   of accepted draft tokens and sets new drafts for the next step.
     /// - Marks finished requests and removes them from the running queue.
     ///
-    /// Panics if `worker.outputs` has a different length than the number of
-    /// running requests that were scheduled, or references an unknown id.
+    /// Panics if `worker.outputs` references an unknown id, or if token counts
+    /// from the worker are inconsistent with what was scheduled.
     pub fn update(&mut self, mut worker: WorkerOutput) -> WorkerOutput {
         let mut finished_ids = Vec::new();
 
@@ -321,10 +346,25 @@ impl Scheduler {
             // Only drafts actually scheduled in this step can be rejected.
             let scheduled_end = req.num_computed_tokens + req.num_in_flight_tokens;
             let scheduled_drafts = scheduled_end.saturating_sub(req.token_ids.len());
+
+            // Validate worker output lengths before mutating any state.
             assert!(
                 result.num_accepted_draft_tokens <= scheduled_drafts,
-                "worker accepted unscheduled drafts"
+                "worker accepted {} unscheduled drafts (max {})",
+                result.num_accepted_draft_tokens,
+                scheduled_drafts,
             );
+            // The worker must return exactly 1 verified token once all prompt
+            // tokens have been processed. For a partial-prefill chunk (there are
+            // still prompt tokens left), 0 is correct.
+            let is_final_chunk = scheduled_end >= req.token_ids.len().max(req.prompt_len);
+            if is_final_chunk {
+                assert!(
+                    !result.token_ids.is_empty(),
+                    "worker returned 0 tokens for request {} after final prefill chunk",
+                    result.request_id,
+                );
+            }
             req.num_computed_tokens =
                 scheduled_end - scheduled_drafts + result.num_accepted_draft_tokens;
             req.num_in_flight_tokens = 0;

@@ -347,7 +347,10 @@ async fn execute_batch(
                 let id = *next_id;
                 *next_id += 1;
                 client.register_request(id, prompt.clone()).await;
-                scheduler.add_request(Request::new(id, prompt.clone(), max_tokens, vec![]));
+                if !scheduler.add_request(Request::new(id, prompt.clone(), max_tokens, vec![])) {
+                    tracing::error!(id, "prompt rejected: exceeds pool capacity");
+                    continue;
+                }
                 outputs.insert(id, vec![]);
                 awaiting_first_schedule.insert(id);
                 if arrival_interval > 0 {

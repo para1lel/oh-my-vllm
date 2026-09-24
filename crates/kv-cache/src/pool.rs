@@ -152,7 +152,7 @@ impl BlockPool {
                 self.maybe_evict_cached_block(id);
             }
             let block = self.free_queue.block_mut(id);
-            debug_assert_eq!(block.ref_cnt, 0, "allocated a block that was still in use");
+            assert_eq!(block.ref_cnt, 0, "allocated a block that was still in use");
             block.ref_cnt = 1;
         }
         self.newly_allocated.extend_from_slice(&ids);
@@ -213,7 +213,7 @@ impl BlockPool {
             if block.is_null {
                 continue;
             }
-            debug_assert!(block.ref_cnt > 0, "freeing block {id} with ref_cnt 0");
+            assert!(block.ref_cnt > 0, "freeing block {id} with ref_cnt 0");
             block.ref_cnt -= 1;
             if block.ref_cnt == 0 {
                 if block.block_hash().is_none() || !self.enable_caching {

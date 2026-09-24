@@ -442,7 +442,13 @@ async fn admit(
         proposed: 0,
         accepted: 0,
     };
-    scheduler.add_request(EngineRequest::new(id, tokens, max_tokens, vec![]));
+    if !scheduler.add_request(EngineRequest::new(id, tokens, max_tokens, vec![])) {
+        let _ = ready.send(Err((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "prompt exceeds KV pool capacity".to_owned(),
+        )));
+        return Ok(());
+    }
     if ready.send(Ok(())).is_err() || send_events(&running, start_events).is_err() {
         scheduler.abort(id);
         return Ok(());

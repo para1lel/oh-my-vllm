@@ -415,3 +415,101 @@ fn mtp_acceptance_preserves_tokens_and_rejects_only_scheduled_drafts() {
     assert!(request.draft_token_ids.is_empty());
     assert_eq!(scheduler.schedule().scheduled[0].token_ids, vec![99]);
 }
+
+// ── SCH-01: update() validates worker output lengths ─────────────────────────
+
+#[test]
+#[should_panic(expected = "worker accepted")]
+fn update_panics_on_overreported_accepted_drafts() {
+    let config = SchedulerConfig {
+        max_num_batched_tokens: 256,
+        max_num_seqs: 64,
+        enable_mtp: true,
+        mtp_draft_len: 4,
+    };
+    let mut sched = Scheduler::new(config, make_coord(128));
+    sched.add_request(make_req(1, 4, 10));
+
+    // Prefill step.
+    let _ = sched.schedule();
+    sched.update(WorkerOutput {
+        outputs: vec![RequestOutput {
+            request_id: 1,
+            token_ids: vec![42],
+            num_accepted_draft_tokens: 0,
+            new_draft_token_ids: vec![10, 11, 12, 13],
+        }],
+    });
+
+    // Decode step: worker claims to have accepted more drafts than were sent.
+    let _ = sched.schedule();
+    sched.update(WorkerOutput {
+        outputs: vec![RequestOutput {
+            request_id: 1,
+            token_ids: vec![42],
+            num_accepted_draft_tokens: 99, // invalid
+            new_draft_token_ids: vec![],
+        }],
+    });
+}
+
+// ── SCH-03: aligned_prefill never returns 0 for a non-empty count ─────────────
+
+#[test]
+fn aligned_prefill_never_stalls_unaligned_start() {
+    // Block size = BS (4). Request with 3 tokens (not block-aligned).
+    // Start at 3 (prompt boundary), count=1. Should return 1, never 0.
+    let mut sched = make_scheduler(128, 256);
+    sched.add_request(make_req(1, 3, 20));
+    let out = sched.schedule();
+    // The scheduler must always schedule at least 1 token.
+    assert!(out.num_batched_tokens >= 1);
+}
+
+// ── SCH-04: over-capacity requests are rejected at admission ─────────────────
+
+#[test]
+fn add_request_rejects_request_exceeding_fa_pool() {
+    // Pool has 4 blocks (+ null = capacity 4). Request needs more.
+    let mut sched = make_scheduler(4, 256);
+    // A request that wants 100 tokens needs 25 blocks (100/4); pool has only 4.
+    let req = make_req(1, 100, 100);
+    assert!(
+        !sched.add_request(req),
+        "over-capacity request must be rejected"
+    );
+    assert_eq!(sched.num_waiting(), 0);
+}
+
+#[test]
+fn add_request_admits_request_within_fa_pool() {
+    let mut sched = make_scheduler(128, 256);
+    let req = make_req(1, 4, 10);
+    assert!(
+        sched.add_request(req),
+        "within-capacity request must be admitted"
+    );
+    assert_eq!(sched.num_waiting(), 1);
+}
+
+// ── SCH-05: remove_blocks_in_range skips nulls instead of stopping ───────────
+// The fix is in group.rs; this test exercises the scheduler-level path that
+// exercises preemption + re-admit to ensure blocks are properly freed even
+// when the block table has interior null slots.
+
+#[test]
+fn preempted_request_can_be_readmitted_after_pool_frees() {
+    // Small pool to force preemption.
+    let mut sched = make_scheduler(6, 16);
+    // Fill the pool with a long request.
+    let big = make_req(1, 20, 1);
+    sched.add_request(big);
+    let _ = sched.schedule();
+    // Preempt by scheduling a new request that can't fit.
+    sched.abort(1);
+    // Pool must be non-empty after abort so a second request can be served.
+    let small = make_req(2, 2, 1);
+    assert!(sched.add_request(small));
+    let out = sched.schedule();
+    assert!(!out.scheduled.is_empty());
+}

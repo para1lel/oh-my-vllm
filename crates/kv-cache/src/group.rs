@@ -518,7 +518,9 @@ impl GroupManager {
         let mut freed = Vec::new();
         for i in (first_block..last_block).rev() {
             if blocks[i] == NULL_BLOCK_ID {
-                break;
+                // Null entries arise from speculative migration; skip them rather
+                // than stopping so live blocks below the gap are also freed.
+                continue;
             }
             freed.push(blocks[i]);
             blocks[i] = NULL_BLOCK_ID;
