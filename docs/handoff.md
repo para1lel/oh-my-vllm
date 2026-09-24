@@ -47,53 +47,55 @@ Remediation started 2026-09-24 and is in progress.
 - SRV-04: `Parser::feed` flushes pending bytes on `LengthFinish`; test added.
 - SRV-06: `register_request`/`abort_request` demoted to fire-and-forget `()`.
 
-### In progress — uncommitted working-tree changes
+**Batch 3 — Kernel/worker contracts, host-side** (`eb5ff62`, 2026-09-24):
+  KRN-01/04/05, PY-01/02, MNT-02 fixed. KRN-02/03 deferred (device code; require GPU re-run).
+- KRN-01: `decode_attention.py` asserts `group_size ≤ 5` when `starts` is supplied.
+- KRN-04: `elementwise.py` and `fp8.py` guard against int32 overflow.
+- KRN-05: `gdn.py` moves dtype/shape/stride validation into `normalize_qk`.
+- PY-01: `batch_plan.py` debug-asserts FA tail pages are disjoint across requests.
+- PY-02: `qwen.py` asserts `w.shape[0] % 128 == 0` for every FP8-scaled projection.
+- MNT-02: `elementwise.py` early-returns on empty tensors in `silu_mul`/`delta_gates`.
+- Tests added: `tests/test_validation_guards.py`, `tests/test_batch_plan.py`,
+  `tests/test_independent_decode_attention.py`.
 
-The following files have partial Batch 2/3 fixes applied by subagents that were
-stopped mid-task. They have been verified to compile and pass ruff, but have NOT
-been committed. The new session must verify, complete, and commit them.
+**Batch 2 — Evidence integrity** (`895d57b`, 2026-09-24): EVD-01/02/06/07/11/12/13 fixed.
+- EVD-01: `compare_vllm.py` defaults to reps=5, warmup=2; emits a spread warning.
+- EVD-02: `ttft.py` reads the actual BENCH_CONFIG log line from the worker via
+  `_parse_bench_config()`; `zmq-worker/src/main.rs` emits `info!("BENCH_CONFIG", …)` at startup.
+- EVD-06: `test_kernel_reference.py` asserts the exact expected file set in the
+  frozen reference JSON.
+- EVD-07: `tests/test_context_boundary.py` (six skip-placeholder tests for
+  REQ-CONTEXT-001 boundary runs).
+- EVD-11: `measurement.py` appends to `problems` when a cache root is missing.
+- EVD-12: `cuda_backend/__init__.py` gains `provenance()` returning nvcc version
+  and the compiled `.so` SHA-256.
+- EVD-13: `TVM_FFI_CACHE_DIR` added as a fourth cache root in the steady-state audit.
 
-**Batch 2 — Evidence integrity (partial):**
-- `benchmarks/compare_vllm.py` — EVD-01: default reps→5, warmup→2, spread warning.
-- `benchmarks/measurement.py` — EVD-11: missing cache root now appends to `problems`.
-- `benchmarks/ttft.py` — EVD-02: `_parse_bench_config()` reads BENCH_CONFIG log line;
-  EVD-13: `TVM_FFI_CACHE_DIR` added as fourth cache root.
-- `crates/zmq-worker/src/main.rs` — EVD-02: `info!("BENCH_CONFIG", …)` at startup.
-- `tests/test_kernel_reference.py` — EVD-06: test asserts fixed expected file set.
-- `tests/test_context_boundary.py` (untracked) — EVD-07: six skip-placeholder tests.
+**Batch 4 — Scheduler hardening** (`42197f7`, 2026-09-24): SCH-01/02/03/04/05 fixed.
+- SCH-01: `update()` validates token counts and the `is_final_chunk` flag before
+  mutating state.
+- SCH-02: `debug_assert!` → `assert!` for refcount/free-list invariants in `pool.rs`.
+- SCH-03: `aligned_prefill` clamps to at least 1 when `count > 0`.
+- SCH-04: `add_request()` returns `bool`; rejects over-capacity requests at admission
+  (HTTP 413 from the serving layer).
+- SCH-05: `remove_blocks_in_range` uses `continue` instead of `break` on NULL_BLOCK_ID.
+- SRV-05/07 remain open (cancellation safety and side-channel overwrite require
+  larger changes; tracked in audit).
 
-  **Blocker:** `tilelang-reference.json` is missing the `__init__.py` entry
-  (SHA256: `601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3`).
-  Add it before the EVD-06 test will pass.
+**Batch 6 partial — Cleanup** (`62101a3`, 2026-09-24): MNT-04 fixed.
+- Removed dead `abort_request()` method and `AbortMsg` import from `client.rs`.
+- Updated protocol doc comment in `lib.rs` to match the live wire format.
 
-  **Incomplete:** EVD-12 not started.
+### Remaining open findings
 
-**Batch 3 — Kernel/worker contracts (host-only, KRN-01/04/05 PY-01/02 MNT-02):**
-- `python/oh_my_vllm/kernels/decode_attention.py` — KRN-01: assert group_size ≤ 5
-  in `decode()` when `starts` is supplied.
-- `python/oh_my_vllm/kernels/elementwise.py` — KRN-04: int32 overflow guard in
-  `silu_mul`; MNT-02: empty-tensor early return in `silu_mul` and `delta_gates`.
-- `python/oh_my_vllm/kernels/fp8.py` — KRN-04: int32 overflow guard in `quantize`.
-- `python/oh_my_vllm/kernels/gdn.py` — KRN-05: dtype, shape, and stride validation
-  moved into `normalize_qk` (previously only in `prefill`).
-- `python/oh_my_vllm/models/qwen.py` — PY-02: assert `w.shape[0] % 128 == 0` for
-  every FP8-scaled projection part in `Checkpoint.linear`.
-- `python/oh_my_vllm/worker/batch_plan.py` — PY-01: debug-mode assertion that
-  writable FA tail pages are disjoint across requests in `validate_batch`.
-- `tests/test_batch_plan.py` — tests for KRN-01 host guard and PY-01 FA sharing.
-- `tests/test_validation_guards.py` — standalone guard tests for KRN-04/05 PY-02
-  MNT-02; 23 tests pass, ruff clean.
-- KRN-02/03 deferred (device code; require GPU re-run).
+The following findings were either deferred (device-code changes require a GPU
+re-run) or are P2/P3 work accepted for later:
 
-### Remaining batches (not started)
-
-**Batch 4 — Scheduler hardening:** SCH-01/02/03/04/05, SRV-05/07.
-**Batch 5 — Measured performance:** PY-03/04/05/06/07, SRV-08/09/10, SCH-06/07,
-  KRN-06/07/08/09/10. Measure before keeping each.
-**Batch 6 — Cleanup:** EVD-04/05/08/09/10, MNT-01/03/04.
-
-After all batches: update `audit-2026-09-23.md` (and `.zh.md`) status fields to
-`fixed <sha>`, then `git push origin main`.
+- **KRN-02/03** (P1): device-code fixes require re-running formal operator cases on B200.
+- **SRV-05/07** (P1): RPC cancellation safety and `serving_outputs` side-channel.
+- **P2 performance findings:** PY-03/04/05/06/07, SRV-08/09/10, SCH-06/07,
+  KRN-06/07/08/09/10. Each requires measuring before keeping.
+- **P3 cleanup/test findings:** EVD-03/04/05/08/09/10, MNT-01/03.
 
 Two rules apply to every batch:
 
