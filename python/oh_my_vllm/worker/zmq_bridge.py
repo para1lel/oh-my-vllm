@@ -110,12 +110,23 @@ def serve(socket_addr: str) -> None:
     ctx = zmq.Context()
     sock = ctx.socket(zmq.DEALER)
     sock.connect(socket_addr)
+    # 5-second receive timeout so we can check if the parent process is still
+    # alive and exit cleanly instead of blocking forever when the Rust side
+    # crashes without sending a shutdown message.
+    sock.RCVTIMEO = 5000
+    parent_pid = os.getppid()
 
     worker: OhMyVllmWorker | None = None
 
     try:
         while True:
-            raw = sock.recv()
+            try:
+                raw = sock.recv()
+            except zmq.Again:
+                if os.getppid() != parent_pid:
+                    logger.info("Parent process died, exiting")
+                    break
+                continue
             msg = msgpack.unpackb(raw, raw=False)
             msg_type = msg.get("type")
 
@@ -145,10 +156,13 @@ def serve(socket_addr: str) -> None:
                 try:
                     if worker is None:
                         raise RuntimeError("worker not initialised")
-                    ids = worker.prepare_request(msg["request_id"], msg["request"])
-                    reply = {"type": "prepared", "prompt_token_ids": ids}
+                    if msg["request_id"] in worker.histories:
+                        reply = {"type": "error", "message": "duplicate request_id"}
+                    else:
+                        ids = worker.prepare_request(msg["request_id"], msg["request"])
+                        reply = {"type": "prepared", "prompt_token_ids": ids}
                 except Exception as exc:
-                    if worker is not None:
+                    if worker is not None and msg["request_id"] in worker.histories:
                         worker.unregister_request(msg["request_id"])
                     reply = {"type": "error", "message": str(exc)}
                 sock.send(msgpack.packb(reply, use_bin_type=True))

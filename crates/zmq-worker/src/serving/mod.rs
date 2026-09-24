@@ -121,7 +121,7 @@ struct Submission {
     enqueued: Instant,
     events: mpsc::Sender<Value>,
     done: oneshot::Sender<std::result::Result<Value, String>>,
-    ready: oneshot::Sender<std::result::Result<(), String>>,
+    ready: oneshot::Sender<std::result::Result<(), (StatusCode, String)>>,
 }
 struct Active {
     output: Output,
@@ -170,7 +170,7 @@ async fn generate(
 ) -> Response {
     let body = match body {
         Ok(Json(v)) => v,
-        Err(e) => return error(StatusCode::BAD_REQUEST, e.body_text()),
+        Err(e) => return error(e.status(), e.body_text()),
     };
     let previous = if let Some(id) = body.get("previous_response_id").filter(|v| !v.is_null()) {
         if !responses {
@@ -217,7 +217,7 @@ async fn generate(
     }
     match prepared.await {
         Ok(Ok(())) => {}
-        Ok(Err(e)) => return error(StatusCode::BAD_REQUEST, e),
+        Ok(Err((status, e))) => return error(status, e),
         Err(_) => return error(StatusCode::SERVICE_UNAVAILABLE, "worker unavailable"),
     }
     if !streaming {
@@ -325,7 +325,22 @@ pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) 
     let abort_engine = engine.abort_handle();
     let result = axum::serve(listener, router)
         .with_graceful_shutdown(async move {
-            let _ = tokio::signal::ctrl_c().await;
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {}
+                _ = async {
+                    #[cfg(unix)]
+                    {
+                        let _ = tokio::signal::unix::signal(
+                            tokio::signal::unix::SignalKind::terminate(),
+                        )
+                        .unwrap()
+                        .recv()
+                        .await;
+                    }
+                    #[cfg(not(unix))]
+                    std::future::pending::<()>().await;
+                } => {}
+            }
             abort_engine.abort();
         })
         .await;
@@ -363,23 +378,32 @@ async fn admit(
         return Ok(());
     }
     if active.len() >= 64 {
-        let _ = ready.send(Err("active request limit exceeded".to_owned()));
+        let _ = ready.send(Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "active request limit exceeded".to_owned(),
+        )));
         return Ok(());
     }
     let id = IDS.fetch_add(1, Ordering::Relaxed);
     let started = Instant::now();
-    let prepared = tokio::time::timeout(
+    let prepare_result = tokio::time::timeout(
         Duration::from_secs(120),
         client.prepare_request(id, request.normalized.clone()),
     )
-    .await
-    .context("worker preparation timeout")?;
-    let tokens = match prepared {
-        Ok(tokens) => tokens,
-        Err(e) => {
-            let _ = ready.send(Err(e.to_string()));
+    .await;
+    let tokens = match prepare_result {
+        Err(_) => {
+            let _ = ready.send(Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "worker preparation timeout".to_owned(),
+            )));
             return Ok(());
         }
+        Ok(Err(e)) => {
+            let _ = ready.send(Err((StatusCode::BAD_REQUEST, e.to_string())));
+            return Ok(());
+        }
+        Ok(Ok(tokens)) => tokens,
     };
     let max_tokens = request.normalized["max_tokens"].as_u64().unwrap() as usize;
     let parser = Parser::new(
@@ -570,9 +594,7 @@ async fn run_engine(
             }
             // Length truncation may leave an incomplete call. Never deliver that call
             // to a tool executor; retain length/incomplete rather than reporting 500.
-            let parsed = request
-                .parser
-                .feed(&text, reason.as_deref() == Some("stop"));
+            let parsed = request.parser.feed(&text, reason.is_some());
             let events = parsed.map(|deltas| {
                 deltas
                     .into_iter()

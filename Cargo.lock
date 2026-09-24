@@ -686,6 +686,7 @@ dependencies = [
  "anyhow",
  "axum",
  "clap",
+ "libc",
  "oh-my-vllm-kv-cache",
  "oh-my-vllm-scheduler",
  "rmp-serde",

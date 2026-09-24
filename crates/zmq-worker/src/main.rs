@@ -156,9 +156,19 @@ async fn run() -> Result<()> {
         kv = kv.with_mamba_capacity(capacity);
     }
     kv.set_speculative_blocks(cli.num_speculative_tokens);
+    let sched_max_num_seqs = 32.min((cli.num_gpu_blocks - 1) as usize);
+    let sched_max_batched: usize = SchedulerConfig::default().max_num_batched_tokens;
+    info!(
+        max_num_seqs = sched_max_num_seqs,
+        max_num_batched_tokens = sched_max_batched,
+        block_size = cli.block_size,
+        max_model_len = cli.max_model_len,
+        num_speculative_tokens = cli.num_speculative_tokens,
+        "BENCH_CONFIG"
+    );
     let mut scheduler = Scheduler::new(
         SchedulerConfig {
-            max_num_seqs: 32.min((cli.num_gpu_blocks - 1) as usize),
+            max_num_seqs: sched_max_num_seqs,
             enable_mtp: cli.num_speculative_tokens > 0,
             mtp_draft_len: cli.num_speculative_tokens,
             ..SchedulerConfig::default()
@@ -336,7 +346,7 @@ async fn execute_batch(
             for prompt in pending.by_ref() {
                 let id = *next_id;
                 *next_id += 1;
-                client.register_request(id, prompt.clone()).await?;
+                client.register_request(id, prompt.clone()).await;
                 scheduler.add_request(Request::new(id, prompt.clone(), max_tokens, vec![]));
                 outputs.insert(id, vec![]);
                 awaiting_first_schedule.insert(id);

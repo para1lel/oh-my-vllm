@@ -11,6 +11,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 axum = "0.8"
+libc = "0.2"
 clap.workspace = true
 oh-my-vllm-kv-cache.workspace = true
 oh-my-vllm-scheduler.workspace = true

@@ -411,6 +411,13 @@ pub fn normalize(
             sampling[key] = value.clone();
         }
     }
+    // A temperature in (0, 1e-5) causes NaN in softmax; treat it as greedy.
+    if sampling["temperature"]
+        .as_f64()
+        .is_some_and(|t| t > 0.0 && t < 1e-5)
+    {
+        sampling["temperature"] = json!(0.0);
+    }
     let stop = match body.get("stop") {
         None | Some(Value::Null) => vec![],
         Some(Value::String(s)) => vec![s.clone()],

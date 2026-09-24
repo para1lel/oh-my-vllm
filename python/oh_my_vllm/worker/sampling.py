@@ -23,6 +23,9 @@ class SamplingParams:
             raise ValueError("max_tokens must be a positive integer")
         if not math.isfinite(self.temperature) or self.temperature < 0:
             raise ValueError("temperature must be finite and nonnegative")
+        # A temperature in (0, 1e-5) causes NaN in softmax; clamp to greedy.
+        if 0 < self.temperature < 1e-5:
+            object.__setattr__(self, "temperature", 0.0)
         if not 0 < self.top_p <= 1:
             raise ValueError("top_p must be in (0,1]")
         if type(self.top_k) is not int or self.top_k < -1:

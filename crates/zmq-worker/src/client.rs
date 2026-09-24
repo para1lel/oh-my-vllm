@@ -3,6 +3,8 @@
 //! `WorkerClient` owns the ZMQ DEALER socket and the Python child process.
 //! The scheduler calls `execute_one_step` once per inference step.
 
+#[cfg(target_os = "linux")]
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
@@ -93,16 +95,32 @@ impl WorkerClient {
         info!("ZMQ DEALER socket bound at {addr}");
 
         // Fork the Python worker process.
-        let mut child = ManagedChild(
-            Command::new(&config.python_executable)
-                .args(["-m", "oh_my_vllm.worker.zmq_bridge", "--socket", &addr])
+        let mut child = ManagedChild({
+            let mut cmd = Command::new(&config.python_executable);
+            cmd.args(["-m", "oh_my_vllm.worker.zmq_bridge", "--socket", &addr])
                 .env(
                     "OH_MY_VLLM_RUN_ID",
                     std::env::var("OH_MY_VLLM_RUN_ID")
                         .unwrap_or_else(|_| format!("pid-{}", std::process::id())),
-                )
-                .spawn()?,
-        );
+                );
+            // SAFETY: prctl is async-signal-safe; no Rust objects are touched.
+            // The child receives SIGKILL when the Rust parent exits, preventing
+            // orphaned GPU worker processes.
+            #[cfg(target_os = "linux")]
+            unsafe {
+                cmd.pre_exec(|| {
+                    libc::prctl(
+                        libc::PR_SET_PDEATHSIG,
+                        libc::SIGKILL as libc::c_ulong,
+                        0,
+                        0,
+                        0,
+                    );
+                    Ok(())
+                });
+            }
+            cmd.spawn()?
+        });
         info!("Python worker launched (pid {})", child.0.id());
 
         // Send the init message.  The Python process needs a moment to import
@@ -168,11 +186,9 @@ impl WorkerClient {
     }
 
     /// Tell the Python worker about a new request before it is first scheduled.
-    pub async fn register_request(
-        &mut self,
-        request_id: u64,
-        prompt_token_ids: Vec<u32>,
-    ) -> Result<()> {
+    /// Send failures are non-fatal: the worker may have already exited, and the
+    /// next `execute_one_step` will detect the dead worker via `recv_with_child`.
+    pub async fn register_request(&mut self, request_id: u64, prompt_token_ids: Vec<u32>) {
         debug!(
             request_id,
             input_tokens = prompt_token_ids.len(),
@@ -182,7 +198,9 @@ impl WorkerClient {
             request_id,
             prompt_token_ids,
         });
-        Self::send_raw(&mut self.sock, &msg).await
+        if let Err(e) = Self::send_raw(&mut self.sock, &msg).await {
+            warn!(request_id, "register send failed: {e}");
+        }
     }
 
     /// Prepare model input and sampling before Rust admission. The reply is correlated
@@ -209,9 +227,12 @@ impl WorkerClient {
     }
 
     /// Tell the Python worker to drop a request (aborted or evicted permanently).
-    pub async fn abort_request(&mut self, request_id: u64) -> Result<()> {
+    /// Send failures are non-fatal: the worker may have already exited.
+    pub async fn abort_request(&mut self, request_id: u64) {
         let msg = RustMessage::Abort(AbortMsg { request_id });
-        Self::send_raw(&mut self.sock, &msg).await
+        if let Err(e) = Self::send_raw(&mut self.sock, &msg).await {
+            warn!(request_id, "abort send failed: {e}");
+        }
     }
 
     /// Execute one inference step and return per-request next tokens.
