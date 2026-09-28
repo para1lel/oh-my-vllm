@@ -4,6 +4,16 @@
 
 ## 当前修复证据 — 2026-09-28
 
+干净提交 `40e3e57` 在 B200 UUID `GPU-1b174534-ebba-826f-b452-8e7f3c05c301`
+上通过全部 66 项选中的 KRN-08 受影响正式用例：`norm`、`add_norm`、
+`gated_norm`、`convolution` 各 13 项，`recurrent` 8 项，`qk` 6 项。每项均通过
+输出验证，记录 CUDA 主机分派快路径恰好一次、通用路径零次，并在三轮、每轮 20 对
+交替测量中快于冻结 TileLang。最小的单侧 95% 正收益下界为
+0.000000213335 ms，三轮最大 spread/median 为 1.695%。
+[正式子集](../bench/baseline/2026-09-28-audit-krn08-operators.json) 源码身份干净，
+`selected_passed=true`；`passed=false` 表示未覆盖全部 147 项。自有 GPU 进程
+已退出。当前完整 GPU 和 12 行框架门槛仍待执行。
+
 干净提交 `96e4ecc` 在固定 UUID 的 B200 上通过全部 29 项选中的受影响正式算子
 用例：13 项 `prepare_attention` 和 16 项 `attention`。最小的单侧 95% 正收益
 下界为 0.000796 ms。[汇总产物](../bench/baseline/2026-09-28-audit-p1-operators.json)

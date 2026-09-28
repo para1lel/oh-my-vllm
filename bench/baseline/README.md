@@ -6,6 +6,10 @@ for interpretation and a dated index of every artifact.
 
 ## Current
 
+- `2026-09-28-audit-krn08-operators.json` records clean `40e3e57` affected
+  formal evidence: all 66 selected normalization, Q/K, recurrent, and
+  convolution cases pass the frozen TileLang comparison and record one fast,
+  zero generic CUDA host dispatches. It is not a new 147-case decision.
 - `2026-09-28-audit-mnt03-recurrent-operators.json` contains clean `0394727`
   affected formal evidence: all 8 selected recurrent cases pass output and
   frozen TileLang gates on a pinned B200. It is not a new 147-case decision.

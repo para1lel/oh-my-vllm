@@ -2,6 +2,18 @@
 
 ## Current remediation evidence — 2026-09-28
 
+Clean `40e3e57` passes all 66 selected KRN-08 affected formal cases on B200
+UUID `GPU-1b174534-ebba-826f-b452-8e7f3c05c301`: 13 each for `norm`,
+`add_norm`, `gated_norm`, and `convolution`; 8 `recurrent`; and 6 `qk`.
+Every row passes output verification, records exactly one fast and zero generic
+CUDA host dispatches, and beats frozen TileLang across three rounds of 20
+interleaved pairs. The smallest positive one-sided 95% gain bound is
+0.000000213335 ms. The largest three-round spread/median is 1.695%.
+The [formal subset](../bench/baseline/2026-09-28-audit-krn08-operators.json)
+has clean source identity and `selected_passed=true`; `passed=false` means it
+does not cover all 147 cases. The owned GPU process exited. Current full GPU
+and 12-row framework gates remain pending.
+
 Clean `96e4ecc` passes all 29 selected affected formal operator cases on a
 UUID-pinned B200: 13 `prepare_attention` and 16 `attention`. The smallest
 positive one-sided 95% gain bound is 0.000796 ms. The summarized

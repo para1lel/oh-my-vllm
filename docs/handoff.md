@@ -265,8 +265,24 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   passed 203 tests and 67 subtests (182 GPU cases deselected); Rust workspace
   58/38/26, fmt, line width, Ruff, Clippy, and hooks passed. Current full
   GPU/formal operator and 12-row framework gates remain pending.
+- Independently reviewed `40e3e57` closes KRN-08's unobservable CUDA
+  fast/generic dispatch choices. Thread-safe host submission counters cover
+  `norm`, `add_norm`, `gated_norm`, `qk`, `recurrent`, `append`, and
+  `convolution`; the formal collector requires one fast and zero generic
+  submissions during output verification for its six listed operations.
+  Focused B200 tests cover both variants of all seven. Clean
+  [affected formal evidence](../bench/baseline/2026-09-28-audit-krn08-operators.json)
+  passes 66/66 selected cases (3 × 20 interleaved pairs per case) on UUID
+  `GPU-1b174534-ebba-826f-b452-8e7f3c05c301`; each row records fast=1,
+  generic=0 and a positive one-sided 95% gain bound. The smallest bound is
+  0.000000213335 ms; the maximum three-round spread/median is 1.695%.
+  `scripts/test.sh cpu` passed 210 tests and 67 subtests (183 GPU cases
+  deselected); Rust workspace, fmt, line width, Ruff, Clippy, and hooks
+  passed. The owned GPU process exited. This is an affected subset, not a
+  full 147-case result or a measured framework speed gain; the full GPU suite
+  and current 12-row framework gates remain pending.
 
-Remaining work: PY-03..07, SRV-08, KRN-06 and KRN-08..10,
+Remaining work: PY-03..07, SRV-08, KRN-06 and KRN-09/10,
 EVD-07, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.

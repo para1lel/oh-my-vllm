@@ -200,8 +200,20 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   CPU pytest 通过 203 项测试及 67 个 subtest（排除 182 项 GPU 用例）；Rust
   workspace 58/38/26，fmt、行宽、Ruff、Clippy 和 hooks 均通过。当前完整 GPU/
   正式算子及 12 行框架门槛仍待验证。
+- 已独立复审的 `40e3e57` 关闭 KRN-08 的 CUDA 快/通用分派选择不可观测问题。
+  线程安全的主机提交计数器覆盖 `norm`、`add_norm`、`gated_norm`、`qk`、
+  `recurrent`、`append`、`convolution`；正式采集器在输出验证阶段要求矩阵内
+  六种操作各发生快路径一次、通用路径零次。聚焦 B200 测试覆盖全部七组的两个
+  变体。干净[受影响正式证据](../bench/baseline/2026-09-28-audit-krn08-operators.json)
+  在 UUID `GPU-1b174534-ebba-826f-b452-8e7f3c05c301` 上通过 66/66 项选中
+  用例（每项 3 × 20 对交替测量）；每行记录快路径=1、通用路径=0，且单侧 95%
+  收益下界为正。最小下界为 0.000000213335 ms；三轮最大 spread/median 为
+  1.695%。`scripts/test.sh cpu` 通过 210 项及 67 个 subtest（排除 183 项 GPU
+  用例）；Rust workspace、fmt、行宽、Ruff、Clippy 和 hooks 均通过。自有 GPU
+  进程已退出。这是受影响子集，不是完整 147 项结果或框架提速实测；完整 GPU
+  套件和当前 12 行框架门槛仍待验证。
 
-后续工作：PY-03..07、SRV-08、KRN-06 与 KRN-08..10、
+后续工作：PY-03..07、SRV-08、KRN-06 与 KRN-09/10、
 EVD-07、四项未验证风险，以及当前完整算子/GPU 套件
 和 12 组框架验收。
 逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。
