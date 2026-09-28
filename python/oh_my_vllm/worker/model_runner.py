@@ -154,8 +154,9 @@ class OhMyVllmWorker:
         params = sampling_params or SamplingParams(
             self.config.max_model_len, temperature=0, ignore_eos=True
         )
+        sampler = RequestSampler(params, prompt_token_ids, "cuda", vocab_size=248320)
         self.histories[request_id] = list(prompt_token_ids)
-        self.samplers[request_id] = RequestSampler(params, prompt_token_ids, "cuda")
+        self.samplers[request_id] = sampler
 
     def prepare_request(self, request_id: int, request: dict) -> list[int]:
         if self.serving is None:

@@ -9,9 +9,25 @@ import torch
 from oh_my_vllm.worker.model_runner import OhMyVllmWorker
 from oh_my_vllm.worker.mtp import MTP
 from oh_my_vllm.worker.protocol import ScheduledRequest, SchedulerOutput
+from oh_my_vllm.worker.sampling import SamplingParams
 
 
 class CommitTests(unittest.TestCase):
+    def test_registration_sampler_failure_does_not_leave_history(self):
+        worker = OhMyVllmWorker.__new__(OhMyVllmWorker)
+        worker.histories = {}
+        worker.samplers = {}
+        with (
+            patch(
+                "oh_my_vllm.worker.model_runner.RequestSampler",
+                side_effect=ValueError("sampler initialization failed"),
+            ),
+            self.assertRaisesRegex(ValueError, "sampler initialization failed"),
+        ):
+            worker.register_request(7, [1, 2], SamplingParams(10))
+        self.assertEqual(worker.histories, {})
+        self.assertEqual(worker.samplers, {})
+
     def test_reported_cache_capacities_come_from_allocated_tensors(self):
         worker = OhMyVllmWorker.__new__(OhMyVllmWorker)
         worker.model = SimpleNamespace(
