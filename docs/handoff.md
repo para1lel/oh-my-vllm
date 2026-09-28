@@ -66,11 +66,37 @@ The `2026-09-22-cuda-{operators,framework,features}.json` artifacts remain histo
   were removed. The worktree is changing only for these reviewed docs/evidence.
 - PY-03's bounded graph policy is closed for tested Serve workset shifts and
   framework rows. Six 258048+4096 boundary cases completed on their earlier
-  clean source; they do not test repeated shape churn at 262144. PY-04 is
-  **partial/open** because physical near-4-GiB late capture is untested;
+  clean source; they do not test repeated shape churn at 262144. A separate
+  physical <4-GiB first-miss probe passes, but PY-04 is **partial/open**
+  because resident-graph late shape churn near that limit remains untested;
   PY-06 is **partial/open** because whole-step host/GPU overlap benefit is
   unverified; KRN-06 remains **open/no-go** after its safe candidate had no
   stable full-call gain. See the current [audit index](audit-2026-09-23.md).
+
+## Physical low-headroom checkpoint (2026-09-29)
+
+- An external-only, independently reviewed shim ran on clean HEAD `8111c19`
+  and B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`, using the
+  unchanged release binary SHA-256
+  `90038fc7f9598e1e42f7beb8f04370463f3d1a33fb83b33a91f6698e3f0af888`.
+  The CLI FA capacity 7000 mapped to 2333 actual FA blocks; GDN capacity was
+  128. After cache initialization, 68 retained allocations of at most 256 MiB
+  reduced real free memory from 22,479,568,896 to 4,225,957,888 bytes
+  (3.936 GiB) for an MTP4 batch-1, 32-input, 32-output bench. Target, draft
+  and proposal `headroom_eager` counts were 26/110/28, with zero captures.
+  The run completed 32 output tokens, proposed/accepted 56/18 MTP drafts,
+  and reported zero preemptions.
+- Raw `/tmp/oh-my-vllm-py04-physical/probe-141183.log` has SHA-256
+  `09c2513114c4f2a5f7700023d2d49e07ca236bfbc2a4856a880110b2d810d17a`;
+  result `/tmp/oh-my-vllm-py04-physical/probe-result-141183.json` has SHA-256
+  `ce0fb9ed75ddad08b5b4647f3a41796eb41c75bbba73263e4ae68a835ecb2a49`.
+  Owner PID 141183, child PGID 141218 and worker PID 141220 exited; selected
+  GPU returned to 0 MiB/0%, and the owned IPC socket/listener was absent.
+  The first attempt failed closed before reservation because its 20 GiB
+  precondition was lower than actual 20.94 GiB free. This diagnostic proves
+  fresh graph misses become eager under the physical guard for this one
+  configuration. Existing-graph late shape changes and repeated 262144-token
+  churn remain unverified, so PY-04 remains **partial/open**.
 
 ## Earlier remediation checkpoint (2026-09-28)
 

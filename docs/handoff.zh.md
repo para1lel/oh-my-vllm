@@ -61,10 +61,32 @@ CUDA 迁移在 `c36d1c9` 的原始验收属于历史结果。整库审计修复�
   为本批已复审文档/证据修改。
 - PY-03 的有界 graph 策略在所测 Serve 工作集变形与框架行上关闭。较早干净
   源码的六项 258048+4096 边界用例已完成，但未覆盖 262144 处反复 shape
-  churn。PY-04 因物理接近 4 GiB 余量时的后期捕获未实测，仍为
+  churn。另一次物理 <4 GiB 的首次 miss 诊断通过，但 PY-04 因已有 graph 后
+  接近该余量的晚期变形仍未实测，继续为
   **partial/open**；PY-06 因整步 host/GPU overlap 净收益未证实，仍为
   **partial/open**；KRN-06 的安全候选没有稳定完整调用收益，仍为
   **open/no-go**。详见当前[审计索引](audit-2026-09-23.zh.md)。
+
+## 物理低显存余量检查点（2026-09-29）
+
+- 经独立复核的仓库外 shim 在干净 HEAD `8111c19`、B200 UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上运行；release 二进制
+  SHA-256 为 `90038fc7f9598e1e42f7beb8f04370463f3d1a33fb83b33a91f6698e3f0af888`。
+  CLI FA 容量 7000 映射为实际 FA 2333 块，GDN 容量 128。cache 初始化后
+  保留 68 个各不超过 256 MiB 的分配，真实空闲显存从 22,479,568,896 降至
+  4,225,957,888 字节（3.936 GiB），贯穿 MTP4 batch 1、输入 32、输出
+  32 的 bench。target、draft、proposal 的 `headroom_eager` 分别为
+  26/110/28，捕获均为 0。运行完成 32 个输出 token，MTP proposed/accepted
+  为 56/18，无抢占。
+- 原始 `/tmp/oh-my-vllm-py04-physical/probe-141183.log` 的 SHA-256 为
+  `09c2513114c4f2a5f7700023d2d49e07ca236bfbc2a4856a880110b2d810d17a`；
+  结果 `/tmp/oh-my-vllm-py04-physical/probe-result-141183.json` 的 SHA-256
+  为 `ce0fb9ed75ddad08b5b4647f3a41796eb41c75bbba73263e4ae68a835ecb2a49`。
+  owner PID 141183、子 PGID 141218、worker PID 141220 均退出，所选
+  GPU 恢复 0 MiB/0%，自有 IPC socket/监听不存在。首轮因真实空闲 20.94 GiB
+  超过旧的 20 GiB 前置上限而在分配前拒收。该诊断只证明本配置中低于 4 GiB
+  时首次 graph miss 转 eager；不覆盖已有 graph 后的晚期新形状或 262144
+  token 处反复变形。因此 PY-04 仍为 **partial/open**。
 
 ## 较早修复检查点（2026-09-28）
 
