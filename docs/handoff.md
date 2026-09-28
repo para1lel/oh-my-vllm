@@ -5,7 +5,8 @@
 The CUDA migration's original acceptance is historical. The whole-repository
 audit remediation is in progress. `96e4ecc` has affected-operator evidence;
 later fixed-status review found additional P0/P1 and evidence gaps, repaired
-in reviewed source commit `487f8de`. Current 12-row gates are unmeasured.
+in reviewed source commit `487f8de`. Current 12-row acceptance is pending;
+partial later attempts are diagnostic only.
 
 - **Kernel backend:** CUDA is the default on B200. Setting
   `OH_MY_VLLM_KERNEL_BACKEND=tilelang` before Python starts selects the frozen
@@ -514,6 +515,35 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   log `/tmp/oh-my-vllm-py03-nearfull-final-candidate.log`. All owned GPU
   processes exited. PY-03 remains **open/candidate** pending shape-churn,
   262k, low-headroom and 12-row framework evidence.
+- Reviewed `2837c49` adds a shared MTP graph-capture cooldown to both Serve and
+  Bench after a recent draft/proposal recapture; resident graph hits continue,
+  new misses run eagerly for 32768 decisions, then admission resumes. CPU
+  regressions cover boundaries, both family floors and hot-workset recovery.
+  `scripts/test.sh cpu` passed 266 tests/70 subtests (225 GPU deselected), log
+  `/tmp/oh-my-vllm-py03-churn-cpu-full.log`; B200 focused GraphCache passed
+  4/4 on `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`, log
+  `/tmp/oh-my-vllm-py03-churn-graph-gpu4.log`. Rust workspace, fmt, line width,
+  Ruff and Clippy passed before the identical source/test commit; hooks passed
+  at commit. Independent final source and Serve evidence review found no
+  correctness blocker.
+  The dirty-candidate MTP batch-4 row passed its local capture and comparison
+  audit at 99.60% baseline throughput and 96.09% baseline maximum TTFT; raw
+  `/tmp/oh-my-vllm-py03-churn-bs4-candidate.json`. Same-B200 real Serve A/B
+  ran 12 workload waves/36 requests/36864 output tokens per side against
+  clean `ed63177`, with identical response hashes; candidate versus old
+  draft/proposal captures were 31/10 versus 40/11. Excluding the cold first
+  wave, summed wave-maximum latency was 33.409 versus 33.483 s, a single
+  diagnostic pair with no stable speed conclusion. The original A/B owner is
+  `/tmp/oh-my-vllm-py03-serve-ab-original.py` (SHA-256 `7d23377d282b0323d6eaf5ecde99c5d95a8793f35e25a0e2613a0757a41ca971`);
+  A/B artifacts/logs are `/tmp/oh-my-vllm-py03-serve-{candidate,old}-shift.*`.
+  A separate candidate Serve run completed 88 waves/264 requests/270336 output
+  tokens, observed two cooldowns, captured new draft/proposal shapes after
+  expiry, and retained 20/12 family graphs; artifact/log
+  `/tmp/oh-my-vllm-py03-serve-candidate-recovery.*`. All owned workers, GPU
+  processes and IPC listeners exited. Those Serve inputs reached about 21k
+  tokens with 1024 output, and the long run has no old comparison. PY-03 stays
+  **open/candidate** until the clean final 12-row gate; 262k and physical
+  low-headroom capture remain separate limits.
 - Independently reviewed `3bbf926` is a PY-06 non-greedy readback
   **candidate**. The runner draws per request on the GPU, then combines
   rows for one final host transfer before request-local verify/commit;

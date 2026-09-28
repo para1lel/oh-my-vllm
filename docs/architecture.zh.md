@@ -52,7 +52,7 @@ MTP 行 p 组合 target hidden[p-1] 和 input token[p]。统一 +1 RoPE 偏移�
 
 项目自有 CUDA kernel（保留冻结 TileLang 对照）实现 GDN 递归、因果卷积、分页 split-KV GQA decode、归一化、部分 NeoX RoPE 和逐元素融合。长 GDN/FA prefill 由 FlashInfer 实现。GDN prefill 显式归一化 q/k，因为所选版本声明的归一化标志实际未使用。
 
-decode 图使用固定 token/请求 shape，以及动态位置、块表和状态地址。预热/捕获保存每个 FA/状态写目的地，正式回放前恢复。target 有独立的 32-shape 缓存；draft 与 proposal 共享另一份 32-shape 预算，分别将已驻留图的逐出下限设为 16 和 4。预算满时，新 shape 先 eager 执行；观察至少 4 次且衰减后的访问次数超过最冷可逐出图的两倍，才尝试捕获。访问次数每 512 次衰减，试用区和近期捕获历史有界。任何新捕获前若 CUDA 报告空闲显存低于 4 GiB，包括接纳后余量下降，改走 eager；捕获失败保留旧图并延后 64 次访问再试。prefill 保持 eager。图输出在复用前消耗，递归 MTP 输入复制到独立 buffer。target、draft、proposal 各自在同类捕获之间共享一个私有池，三类池彼此分离；图回放不重叠。draft 输出在下一图回放前，沿同一 CUDA stream 复制到下一图的静态输入；proposal 输出在下一次 proposal 回放前传回主机。不假定前一个图的静态输出在另一图回放后仍保持不变。旧图在替换捕获成功前维持本类池所有权；首次捕获失败会丢弃无 owner 的池句柄。缓存 tensor 在捕获前分配，以保持图绑定地址有效；后期捕获仍需显存余量。`OH_MY_VLLM_ENFORCE_EAGER=1` 仅用于诊断。最终性能需要测得相关 shape 的覆盖，不能仅凭图捕获成功。
+decode 图使用固定 token/请求 shape，以及动态位置、块表和状态地址。预热/捕获保存每个 FA/状态写目的地，正式回放前恢复。target 有独立的 32-shape 缓存；draft 与 proposal 共享另一份 32-shape 预算，分别将已驻留图的逐出下限设为 16 和 4。预算满时，新 shape 先 eager 执行；观察至少 4 次且衰减后的访问次数超过最冷可逐出图的两倍，才尝试捕获。访问次数每 512 次衰减，试用区和近期捕获历史有界。任何新捕获前若 CUDA 报告空闲显存低于 4 GiB，包括接纳后余量下降，改走 eager；捕获失败保留旧图并延后 64 次访问再试。prefill 保持 eager。图输出在复用前消耗，递归 MTP 输入复制到独立 buffer。Serve 和 Bench 共用策略：draft 或 proposal 形状若在 4096 次 MTP 缓存决策内重新捕获，就启动两类共用的 32768 次决策捕获冷却。已驻留图照常 replay；非驻留形状在冷却结束前走 eager，之后恢复正常接纳。冷却可暂时延迟任一类增至其逐出保底数；target 图缓存不受影响。target、draft、proposal 各自在同类捕获之间共享一个私有池，三类池彼此分离；图回放不重叠。draft 输出在下一图回放前，沿同一 CUDA stream 复制到下一图的静态输入；proposal 输出在下一次 proposal 回放前传回主机。不假定前一个图的静态输出在另一图回放后仍保持不变。旧图在替换捕获成功前维持本类池所有权；首次捕获失败会丢弃无 owner 的池句柄。缓存 tensor 在捕获前分配，以保持图绑定地址有效；后期捕获仍需显存余量。`OH_MY_VLLM_ENFORCE_EAGER=1` 仅用于诊断。最终性能需要测得相关 shape 的覆盖，不能仅凭图捕获成功。
 
 ## 依赖与未来范围
 

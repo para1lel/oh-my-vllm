@@ -7,7 +7,7 @@
 CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。`96e4ecc` 已有受影响算子
 证据；后续 fixed 状态复核又发现 P0/P1 和证据缺口，已复审的源码提交 `487f8de`
 修复了这些问题。
-当前 12 行门槛尚未重新测量。
+当前 12 行整体验收仍待完成；后续部分轮次仅作诊断。
 
 - **Kernel 后端：** B200 上默认使用 CUDA。在 Python 启动前设置
   `OH_MY_VLLM_KERNEL_BACKEND=tilelang` 则改用冻结的 TileLang 对照。运行时身份报告实际使用的
@@ -406,6 +406,32 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   `/tmp/oh-my-vllm-py03-nearfull-final-candidate.log`。自有 GPU 进程均已退出。
   PY-03 保持 **open/candidate**，待 shape churn、262k、低余量及 12 行
   框架证据。
+- 经复审的 `2837c49` 在 Serve 与 Bench 的 MTP 图缓存中加入共用捕获冷却：
+  draft/proposal 形状近期重捕获后，已驻留图继续命中，非驻留形状在 32768 次
+  决策内走 eager，到期恢复接纳。CPU 回归覆盖边界、两类图的逐出保底和
+  热点工作集恢复。`scripts/test.sh cpu` 通过 266 项测试、70 个 subtest
+  （排除 225 项 GPU），日志为 `/tmp/oh-my-vllm-py03-churn-cpu-full.log`；
+  B200 聚焦 GraphCache 测试在
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 通过 4/4，日志为
+  `/tmp/oh-my-vllm-py03-churn-graph-gpu4.log`。相同源码/测试提交前 Rust
+  workspace、fmt、行宽、Ruff、Clippy 通过，提交时 hooks 通过；独立最终
+  源码与 Serve 证据复审无正确性阻塞。
+  dirty 候选 MTP batch4 单行通过本地捕获与比较审计，吞吐为基线的
+  99.60%，最大 TTFT 为基线的 96.09%，原始记录为
+  `/tmp/oh-my-vllm-py03-churn-bs4-candidate.json`。同一 B200 的真实
+  Serve A/B 对照干净 `ed63177`，双方各完成 12 波/36 请求/36864 输出
+  token，响应 hash 一致；候选与旧版的 draft/proposal 捕获为 31/10
+  对 40/11。去掉首个冷启动波，逐波最大耗时之和为 33.409 对
+  33.483 s；单组诊断不能证明稳定性能改善。A/B 原版 owner 为
+  `/tmp/oh-my-vllm-py03-serve-ab-original.py`（SHA-256
+  `7d23377d282b0323d6eaf5ecde99c5d95a8793f35e25a0e2613a0757a41ca971`），
+  原始 artifact/日志为 `/tmp/oh-my-vllm-py03-serve-{candidate,old}-shift.*`。
+  独立候选 Serve 长跑完成 88 波/264 请求/270336 输出 token，观察到两次
+  冷却、到期后新 draft/proposal 形状捕获，退出时两类图驻留 20/12；记录为
+  `/tmp/oh-my-vllm-py03-serve-candidate-recovery.*`。自有 worker、GPU
+  进程与 IPC listener 均已退出。Serve 输入最高约 21k token、输出 1024，
+  长跑没有旧版对照。PY-03 仍为 **open/candidate**，待干净最终 12 行
+  门槛；262k 与物理低显存余量捕获是另两个证据限制。
 - 经独立复审的 `3bbf926` 是 PY-06 非 greedy 读回**候选**。runner 先逐请求
   在 GPU 上抽样，再合并行做一次最终主机传输，之后逐请求验证和提交；同批重复
   request ID 在前向或 RNG 抽样前即被拒绝。纯 greedy 路径未变。干净

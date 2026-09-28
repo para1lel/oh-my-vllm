@@ -123,6 +123,12 @@ including if headroom falls after admission. A failed capture retains the old
 resident graph and delays another attempt for 64 accesses. Prefill remains
 eager. Graph outputs are consumed before reuse, and recurrent MTP inputs are
 copied into separate buffers.
+For both Serve and Bench, a draft or proposal shape recaptured within 4096
+MTP cache decisions starts a shared 32768-decision capture cooldown. Resident
+draft/proposal graphs keep replaying; nonresident shapes execute eagerly until
+the cooldown expires, then normal admission resumes. The cooldown can
+temporarily delay either family's growth even below its eviction floor; the
+target graph cache is unaffected.
 Captures share one CUDA graph memory pool within each of the target, draft and
 proposal families, and each family owns a distinct pool. Their replays never
 overlap. A draft output is copied to the next graph's static input on the same
