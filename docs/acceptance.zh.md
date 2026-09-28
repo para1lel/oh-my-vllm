@@ -10,7 +10,12 @@
 MTP4 提议/接受草稿总数依次为 5010/2842、9075/5917、16219/12318。
 worker 最大峰值 reserved 为 132441440256 字节。收集器记录干净源码、
 release 二进制哈希、前后相同的身份与 UUID，以及 worker 清理成功。
-六行边界证据缺口已关闭；真实 131072-token MTP HTTP smoke 和当前完整 GPU、
+干净提交 `8dfc97b` 的 [MTP HTTP 证据](../bench/baseline/2026-09-28-audit-evd07-long-context-http.json)
+增加四条真实 strict-JSON 请求：chat/completions 与 responses 各两次。
+每个 prompt 为 131099 token，每个响应均验证为
+`{"n":123,"label":"verified"}`，每条请求提议 20 个 MTP 草稿。
+重复请求命中 130928 个缓存 token。专用服务退出，listener 与 IPC 路径关闭，
+所选 GPU 无计算进程。EVD-07 要求的边界与 HTTP 证据已齐；当前完整 GPU、
 147 项正式算子及 12 行框架门槛仍待完成。
 
 KRN-10 修改前干净提交 `6ba9046` 和修改后干净提交 `231f066`，均在 B200 UUID

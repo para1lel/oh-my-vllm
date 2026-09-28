@@ -51,7 +51,7 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   通过。SRV-03 的聚焦 Rust/Python 测试和静态检查也通过。
 - 热路径改动后的当前 12 组框架吞吐和 TTFT **尚未验证**。下文的 2026-09-22
   数值只适用于干净提交 `c36d1c9`。P2 性能决策结束后需重跑全部 12 组。
-  EVD-07 在 `bd8e21e` 的干净六行边界已通过；真实 MTP HTTP smoke 仍待完成。
+  EVD-07 在 `bd8e21e` 的干净六行边界与 `8dfc97b` 的真实 MTP HTTP smoke 均已通过。
   审计中原先四项 “Not verified” 风险现均有明确范围的证据：Rust MTP GDN 槽位由
   `7e93c18` 验证，所测 FlashInfer workspace/陈旧尾部路径由 `6b378d5`
   验证，有限 BF16 倒数上界由下文 `32cdc2b` 验证。
@@ -164,8 +164,14 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   16219/12318；worker 最高峰值 reserved 为 132441440256 字节。前后源码、
   release 二进制哈希与每行 UUID 一致，Git 状态干净。原始日志在
   `/tmp/oh-my-vllm-evd07-context-bd8e21e*`；所有自有 GPU worker 均已退出，
-  后续 `nvidia-smi` 没有计算进程。真实 131072-token MTP HTTP smoke 仍待完成，
-  EVD-07 因此保持 open。
+  后续 `nvidia-smi` 没有计算进程。随后干净提交 `8dfc97b` 的
+  [汇总证据](../bench/baseline/2026-09-28-audit-evd07-long-context-http.json)
+  记录 chat/completions 与 responses 各首次/重复两条、四个已校验 strict-JSON
+  答案、每请求 131099 prompt token、重复时 130928 个缓存 token、每请求 20 个
+  MTP 草稿提议。前后干净源码、二进制 SHA-256 与 UUID 一致；专用服务退出码 0，
+  listener/IPC 已关闭，所选 GPU 没有计算进程。日志/来源记录在
+  `/tmp/oh-my-vllm-evd07-http*`。EVD-07 的要求证据已修复；当前完整 GPU、
+  147 项正式算子和 12 行框架门槛仍待验证。
 - 已独立复审的 `5a3b703` 关闭 SCH-07 的全历史重复 SHA-256 计算。只追加的哈希链
   在 262144 token 内与全量重算一致，生成输出填满块后下一请求仍能真实命中前缀。
   100 次 CPU 微基准中，旧路径 42/334 满块的中位数为 98.373/786.007 微秒，
@@ -435,9 +441,8 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   `/tmp/oh-my-vllm-krn06-wrapper-trio-dirty.log`。补丁已回退，没有提交
   源码/测试；自有 B200 进程均已退出。
 
-后续工作：PY-03/04/06、SRV-08、PY-05/07 与 KRN-10 验收、
-EVD-07，以及当前完整算子/GPU 套件
-和 12 组框架验收。
+后续工作：PY-03/04/06、SRV-08、PY-05/07 与 KRN-10 验收，以及当前完整算子/GPU
+套件和 12 组框架验收。
 KRN-06 保持 open/no-go，只有另一安全优化证明完整调用收益才应重启；
 如果 1248 行波动再次出现，还需调查。
 逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。

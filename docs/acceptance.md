@@ -9,9 +9,15 @@ tokens with zero preemptions and no OOM; MTP4 proposed/accepted draft totals
 are 5010/2842, 9075/5917, and 16219/12318. The largest worker peak
 reserved memory is 132441440256 bytes. The collector recorded clean source,
 release binary hash, matching start/end identities and UUID, and successful
-worker cleanup. This closes the six-row boundary evidence gap; the real
-131072-token MTP HTTP smoke and current full GPU, 147-case formal, and 12-row
-framework gates remain pending.
+worker cleanup. Clean `8dfc97b`
+[MTP HTTP evidence](../bench/baseline/2026-09-28-audit-evd07-long-context-http.json)
+adds four real strict-JSON requests: chat/completions and responses, each
+twice. Every prompt uses 131099 tokens, every response validates to
+`{"n":123,"label":"verified"}`, and each request proposes 20 MTP drafts.
+Repeat requests have 130928 cached tokens. The dedicated server exits, its
+listener and IPC path close, and the selected GPU has no compute process.
+EVD-07's requested boundary and HTTP evidence are complete; current full
+GPU, 147-case formal, and 12-row framework gates remain pending.
 
 Clean `6ba9046` and `231f066` passed all 16 selected attention cases before
 and after KRN-10 on B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`.

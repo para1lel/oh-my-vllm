@@ -57,7 +57,7 @@ Evidence is in [acceptance.md](acceptance.md) and in the
 - Current 12-row framework throughput and TTFT remain **unverified** after
   hot-path changes. The 2026-09-22 values below apply to clean `c36d1c9`.
   Re-run all 12 rows after P2 performance decisions. EVD-07's clean six-row
-  boundary passed on `bd8e21e`; its real MTP HTTP smoke remains pending.
+  boundary and real MTP HTTP smoke passed on `bd8e21e` and `8dfc97b`.
   The four risks originally marked "Not verified" now have scoped evidence:
   Rust MTP GDN placement in `7e93c18`, tested FlashInfer workspace/stale-tail
   paths in `6b378d5`, and the BF16 reciprocal bound in `32cdc2b` below.
@@ -215,7 +215,15 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   release binary hash and row UUIDs matched, with clean Git status. Raw logs
   are under `/tmp/oh-my-vllm-evd07-context-bd8e21e*`. All owned GPU workers
   exited and `nvidia-smi` reported no compute processes afterward. The real
-  131072-token MTP HTTP smoke remains pending, so EVD-07 stays open.
+  131072-token MTP HTTP smoke then passed on clean `8dfc97b`:
+  [summarized evidence](../bench/baseline/2026-09-28-audit-evd07-long-context-http.json)
+  records chat/completions and responses, first/repeat each, four validated
+  strict-JSON answers, 131099 prompt tokens per request, 130928 cached tokens
+  on repeats and 20 MTP draft proposals per request. Start/end clean source,
+  binary SHA-256 and UUID match; dedicated server exit=0, listener/IPC closed,
+  selected GPU compute apps empty. Logs/provenance:
+  `/tmp/oh-my-vllm-evd07-http*`. EVD-07 is fixed for the requested evidence;
+  full current GPU, 147-case formal and 12-row framework gates remain pending.
 - Independently reviewed `5a3b703` closes SCH-07's repeated whole-history
   SHA-256 work. The append-only hash chain matches full recomputation through
   262144 tokens and still yields a real prefix hit after generated output
@@ -549,7 +557,7 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   no source/test commit was made, and all owned B200 processes exited.
 
 Remaining work: PY-03/04/06, SRV-08, PY-05/07 and KRN-10 acceptance,
-EVD-07, the current full operator/GPU suite, and 12-row framework acceptance.
+the current full operator/GPU suite, and 12-row framework acceptance.
 KRN-06 stays open/no-go unless a different safe optimization has measured
 whole-call benefit; the 1248-row variance needs attention if it recurs.
 See the [audit index](audit-2026-09-23.md)

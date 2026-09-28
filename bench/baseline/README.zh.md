@@ -9,8 +9,10 @@
 
 - `2026-09-28-audit-evd07-context-boundary.json` 记录干净提交 `bd8e21e`
   在一张 B200 上的六项普通/MTP4、batch 1/2/4、258048+4096 边界运行。
-  全部无 OOM 或抢占地完成，MTP4 草稿提议非零。独立的长上下文 HTTP smoke、
-  完整 GPU/147 项/12 行门槛仍待完成。
+  全部无 OOM 或抢占地完成，MTP4 草稿提议非零。
+- `2026-09-28-audit-evd07-long-context-http.json` 记录干净提交 `8dfc97b`
+  超过 131072 prompt token 的四请求 MTP4 strict-JSON 服务 smoke，包含前缀复用
+  与 listener/worker 清理。当前完整 GPU/147 项/12 行门槛仍待完成。
 - `2026-09-28-audit-krn10-attention-before.json` 与
   `2026-09-28-audit-krn10-attention-after.json` 分别汇总干净提交 `6ba9046` 与
   `231f066` 的 16 项选中 attention 用例。修改后全部用例通过输出与冻结 TileLang
