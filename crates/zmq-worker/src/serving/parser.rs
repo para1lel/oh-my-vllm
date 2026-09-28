@@ -16,10 +16,258 @@ pub enum Delta {
     },
 }
 
+#[derive(Clone, Copy)]
+enum ToolStage {
+    FunctionTag,
+    FunctionName {
+        start: usize,
+    },
+    Body,
+    ParameterName {
+        start: usize,
+    },
+    ParameterValue {
+        start: usize,
+        is_string: bool,
+        in_quotes: bool,
+        escaped: bool,
+        matched: usize,
+    },
+    ToolClose,
+}
+
+/// Byte offsets always point to an ASCII tag boundary or the end of a UTF-8 chunk.
+struct ToolProgress {
+    cursor: usize,
+    stage: ToolStage,
+    tool_index: Option<usize>,
+    parameter_name: Option<(usize, usize)>,
+    #[cfg(test)]
+    bytes_inspected: usize,
+}
+
+impl ToolProgress {
+    fn new() -> Self {
+        Self {
+            cursor: "<tool_call>".len(),
+            stage: ToolStage::FunctionTag,
+            tool_index: None,
+            parameter_name: None,
+            #[cfg(test)]
+            bytes_inspected: 0,
+        }
+    }
+
+    fn skip_whitespace(&mut self, raw: &str) {
+        while let Some(character) = raw[self.cursor..].chars().next() {
+            #[cfg(test)]
+            {
+                self.bytes_inspected += character.len_utf8();
+            }
+            if !character.is_whitespace() {
+                break;
+            }
+            self.cursor += character.len_utf8();
+        }
+    }
+
+    fn scan_name(&mut self, raw: &str) -> Option<usize> {
+        let tail = &raw[self.cursor..];
+        #[cfg(test)]
+        {
+            self.bytes_inspected += tail.len();
+        }
+        if let Some(relative) = tail.find('>') {
+            let end = self.cursor + relative;
+            self.cursor = end + 1;
+            Some(end)
+        } else {
+            self.cursor = raw.len();
+            None
+        }
+    }
+
+    fn advance(&mut self, raw: &str, tools: &[Value]) -> Result<Option<usize>> {
+        const CLOSE_PARAMETER: &[u8] = b"</parameter>";
+        loop {
+            match self.stage {
+                ToolStage::FunctionTag => {
+                    self.skip_whitespace(raw);
+                    let rest = &raw[self.cursor..];
+                    #[cfg(test)]
+                    {
+                        self.bytes_inspected += rest.len().min("<function=".len());
+                    }
+                    if !rest.starts_with("<function=") {
+                        ensure!("<function=".starts_with(rest), "invalid function tag");
+                        return Ok(None);
+                    }
+                    self.cursor += "<function=".len();
+                    self.stage = ToolStage::FunctionName { start: self.cursor };
+                }
+                ToolStage::FunctionName { start } => {
+                    let Some(end) = self.scan_name(raw) else {
+                        return Ok(None);
+                    };
+                    let name = &raw[start..end];
+                    self.tool_index = Some(
+                        tools
+                            .iter()
+                            .position(|tool| tool["function"]["name"] == name)
+                            .ok_or_else(|| anyhow::anyhow!("unknown generated function: {name}"))?,
+                    );
+                    self.stage = ToolStage::Body;
+                }
+                ToolStage::Body => {
+                    self.skip_whitespace(raw);
+                    let rest = &raw[self.cursor..];
+                    #[cfg(test)]
+                    {
+                        self.bytes_inspected += rest.len().min("</function>".len());
+                        self.bytes_inspected += rest.len().min("<parameter=".len());
+                    }
+                    if rest.starts_with("</function>") {
+                        self.cursor += "</function>".len();
+                        self.stage = ToolStage::ToolClose;
+                    } else if rest.starts_with("<parameter=") {
+                        self.cursor += "<parameter=".len();
+                        self.stage = ToolStage::ParameterName { start: self.cursor };
+                    } else {
+                        ensure!(
+                            "<parameter=".starts_with(rest) || "</function>".starts_with(rest),
+                            "invalid parameter tag"
+                        );
+                        return Ok(None);
+                    }
+                }
+                ToolStage::ParameterName { start } => {
+                    let Some(end) = self.scan_name(raw) else {
+                        return Ok(None);
+                    };
+                    let key = &raw[start..end];
+                    self.parameter_name = Some((start, end));
+                    let tool = &tools[self.tool_index.expect("function name was resolved")];
+                    let schema = &tool["function"]["parameters"];
+                    let is_string = string_schema(&schema["properties"][key], schema, 0)?;
+                    self.stage = ToolStage::ParameterValue {
+                        start: self.cursor,
+                        is_string,
+                        in_quotes: false,
+                        escaped: false,
+                        matched: 0,
+                    };
+                }
+                ToolStage::ParameterValue {
+                    start,
+                    is_string,
+                    mut in_quotes,
+                    mut escaped,
+                    mut matched,
+                } => {
+                    let mut closed = false;
+                    while self.cursor < raw.len() {
+                        let byte = raw.as_bytes()[self.cursor];
+                        self.cursor += 1;
+                        #[cfg(test)]
+                        {
+                            self.bytes_inspected += 1;
+                        }
+                        if !is_string {
+                            if in_quotes {
+                                if escaped {
+                                    escaped = false;
+                                } else if byte == b'\\' {
+                                    escaped = true;
+                                } else if byte == b'"' {
+                                    in_quotes = false;
+                                }
+                                continue;
+                            }
+                            if byte == b'"' {
+                                in_quotes = true;
+                                matched = 0;
+                                continue;
+                            }
+                        }
+                        matched = if byte == CLOSE_PARAMETER[matched] {
+                            matched + 1
+                        } else {
+                            usize::from(byte == CLOSE_PARAMETER[0])
+                        };
+                        if matched == CLOSE_PARAMETER.len() {
+                            closed = true;
+                            break;
+                        }
+                    }
+                    if closed {
+                        if !is_string {
+                            #[cfg(test)]
+                            {
+                                self.bytes_inspected += self.cursor - start;
+                            }
+                            ensure!(
+                                self.validate_non_string_value(&raw[..self.cursor], tools)?,
+                                "invalid parameter closing tag"
+                            );
+                        }
+                        self.stage = ToolStage::Body;
+                    } else {
+                        self.stage = ToolStage::ParameterValue {
+                            start,
+                            is_string,
+                            in_quotes,
+                            escaped,
+                            matched,
+                        };
+                        return Ok(None);
+                    }
+                }
+                ToolStage::ToolClose => {
+                    self.skip_whitespace(raw);
+                    let rest = &raw[self.cursor..];
+                    #[cfg(test)]
+                    {
+                        self.bytes_inspected += rest.len().min("</tool_call>".len());
+                    }
+                    if !rest.starts_with("</tool_call>") {
+                        ensure!("</tool_call>".starts_with(rest), "invalid tool closing tag");
+                        return Ok(None);
+                    }
+                    self.cursor += "</tool_call>".len();
+                    return Ok(Some(self.cursor));
+                }
+            }
+        }
+    }
+
+    fn validate_non_string_value(&self, raw: &str, tools: &[Value]) -> Result<bool> {
+        let ToolStage::ParameterValue {
+            start,
+            is_string: false,
+            ..
+        } = self.stage
+        else {
+            return Ok(false);
+        };
+        let (name_start, name_end) = self.parameter_name.expect("parameter name was scanned");
+        let schema =
+            &tools[self.tool_index.expect("function name was resolved")]["function"]["parameters"];
+        let parsed = parameter_value(
+            &raw[start..],
+            &schema["properties"][&raw[name_start..name_end]],
+            schema,
+        )?;
+        Ok(parsed.is_some())
+    }
+}
+
 pub struct Parser {
     pending: String,
     thinking: bool,
     tools: Vec<Value>,
+    tool_progress: Option<ToolProgress>,
+    #[cfg(test)]
+    completed_tool_scan_bytes: usize,
     pub calls: usize,
 }
 
@@ -29,6 +277,9 @@ impl Parser {
             pending: String::new(),
             thinking,
             tools,
+            tool_progress: None,
+            #[cfg(test)]
+            completed_tool_scan_bytes: 0,
             calls: 0,
         }
     }
@@ -74,16 +325,24 @@ impl Parser {
                 break;
             }
             if self.pending.starts_with("<tool_call>") {
-                let Some(end) = tool_end(&self.pending, &self.tools)? else {
+                let progress = self.tool_progress.get_or_insert_with(ToolProgress::new);
+                let Some(end) = progress.advance(&self.pending, &self.tools)? else {
                     if finished {
                         if allow_incomplete_tool {
+                            progress.validate_non_string_value(&self.pending, &self.tools)?;
                             self.pending.clear();
+                            self.tool_progress = None;
                             break;
                         }
                         bail!("incomplete tool call at generation end");
                     }
                     break;
                 };
+                #[cfg(test)]
+                {
+                    self.completed_tool_scan_bytes += progress.bytes_inspected;
+                }
+                self.tool_progress = None;
                 let raw: String = self.pending.drain(..end).collect();
                 let (name, arguments) = self.parse_tool(&raw)?;
                 events.push(Delta::Tool {
@@ -147,46 +406,6 @@ impl Parser {
             rest = tail.trim();
         }
         Ok((name.to_owned(), Value::Object(args).to_string()))
-    }
-}
-
-// Close tags inside a raw parameter are ordinary string content. Only recognize
-// function/tool boundaries after the corresponding parameter has ended.
-fn tool_end(raw: &str, tools: &[Value]) -> Result<Option<usize>> {
-    let mut rest = raw.strip_prefix("<tool_call>").unwrap_or(raw).trim_start();
-    if "<function=".starts_with(rest) {
-        return Ok(None);
-    }
-    ensure!(rest.starts_with("<function="), "invalid function tag");
-    let Some((name, tail)) = rest[10..].split_once('>') else {
-        return Ok(None);
-    };
-    let tool = tools
-        .iter()
-        .find(|tool| tool["function"]["name"] == name)
-        .ok_or_else(|| anyhow::anyhow!("unknown generated function: {name}"))?;
-    let schema = &tool["function"]["parameters"];
-    rest = tail.trim_start();
-    loop {
-        if rest.starts_with("</function>") {
-            rest = rest[11..].trim_start();
-            if rest.starts_with("</tool_call>") {
-                return Ok(Some(raw.len() - rest.len() + 12));
-            }
-            ensure!("</tool_call>".starts_with(rest), "invalid tool closing tag");
-            return Ok(None);
-        }
-        if "<parameter=".starts_with(rest) || "</function>".starts_with(rest) {
-            return Ok(None);
-        }
-        ensure!(rest.starts_with("<parameter="), "invalid parameter tag");
-        let Some((key, value)) = rest[11..].split_once('>') else {
-            return Ok(None);
-        };
-        let Some((_, tail)) = parameter_value(value, &schema["properties"][key], schema)? else {
-            return Ok(None);
-        };
-        rest = tail.trim_start();
     }
 }
 
@@ -491,6 +710,139 @@ mod tests {
             })
         );
         assert_eq!(events.len(), 1);
+    }
+
+    #[test]
+    fn tool_scan_is_linear_for_all_fragment_sizes() {
+        let tools = vec![json!({
+            "function": {
+                "name": "test",
+                "parameters": {
+                    "properties": {
+                        "object": {"type": "object"},
+                        "tail": {"type": "string"},
+                    },
+                },
+            },
+        })];
+        let object = json!({
+            "text": format!("{} </parameter> \\ \"", "é中".repeat(2048)),
+        });
+        let raw = format!(
+            "<tool_call>\n<function=test><parameter=object>{object}</parameter>\n\
+             <parameter=tail>done</parameter></function>\n</tool_call>"
+        );
+        let characters: Vec<char> = raw.chars().collect();
+        for chunk_size in [1, 2, 3, 7, 16, 127, usize::MAX] {
+            let mut parser = Parser::new(false, tools.clone());
+            let mut events = Vec::new();
+            for chunk in characters.chunks(chunk_size) {
+                let fragment: String = chunk.iter().collect();
+                events.extend(parser.feed(&fragment, false).unwrap());
+            }
+            assert!(
+                parser.completed_tool_scan_bytes <= raw.len() * 6,
+                "chunk_size={chunk_size}, bytes_inspected={}, input_bytes={}",
+                parser.completed_tool_scan_bytes,
+                raw.len()
+            );
+            assert!(parser.tool_progress.is_none());
+            assert_eq!(events.len(), 1, "chunk_size={chunk_size}");
+            let Delta::Tool {
+                index,
+                name,
+                arguments,
+            } = &events[0]
+            else {
+                panic!("expected a tool call")
+            };
+            assert_eq!((*index, name.as_str()), (0, "test"));
+            assert_eq!(
+                serde_json::from_str::<Value>(arguments).unwrap(),
+                json!({"object": object, "tail": "done"})
+            );
+        }
+    }
+
+    #[test]
+    fn fragmented_incomplete_tool_markers_preserve_finish_contract() {
+        let tools = vec![json!({"function": {"name": "read"}})];
+        for marker in ["<tool_", "<tool_call><funct", "<tool_call><function=rea"] {
+            let mut parser = Parser::new(false, tools.clone());
+            for character in marker.chars() {
+                parser.feed(&character.to_string(), false).unwrap();
+            }
+            let mut length_parser = Parser::new(false, tools.clone());
+            for character in marker.chars() {
+                length_parser.feed(&character.to_string(), false).unwrap();
+            }
+            if marker == "<tool_" {
+                assert!(matches!(
+                    &parser.feed("", true).unwrap()[..],
+                    [Delta::Text(text)] if text == marker
+                ));
+            } else {
+                assert!(parser.feed("", true).is_err(), "marker={marker}");
+            }
+            length_parser.feed_length("").unwrap();
+            assert!(length_parser.pending.is_empty());
+            assert!(length_parser.tool_progress.is_none());
+        }
+    }
+
+    #[test]
+    fn length_finish_rejects_invalid_partial_json_parameter() {
+        let tools = vec![json!({
+            "function": {
+                "name": "read",
+                "parameters": {"properties": {"count": {"type": "integer"}}},
+            },
+        })];
+        for (value, invalid) in [
+            ("truX", true),
+            ("1x", true),
+            ("{\"x\": }", true),
+            ("tru", false),
+            ("1</para", false),
+        ] {
+            let mut parser = Parser::new(false, tools.clone());
+            let raw = format!("<tool_call><function=read><parameter=count>{value}");
+            for character in raw.chars() {
+                parser.feed(&character.to_string(), false).unwrap();
+            }
+            assert_eq!(parser.feed_length("").is_err(), invalid, "value={value}");
+        }
+    }
+
+    #[test]
+    fn closed_parameter_is_validated_before_incomplete_tool_is_discarded() {
+        let tools = vec![json!({
+            "function": {
+                "name": "read",
+                "parameters": {"properties": {"count": {"type": "integer"}}},
+            },
+        })];
+        for value in ["truX", "1x", "{\"x\": }"] {
+            let raw = format!(
+                "<tool_call><function=read><parameter=count>{value}</parameter></function>"
+            );
+            for chunk_size in [1, 3, usize::MAX] {
+                let mut parser = Parser::new(false, tools.clone());
+                let characters: Vec<char> = raw.chars().collect();
+                let mut error = false;
+                for chunk in characters.chunks(chunk_size) {
+                    let fragment: String = chunk.iter().collect();
+                    if parser.feed(&fragment, false).is_err() {
+                        error = true;
+                        break;
+                    }
+                }
+                if !error {
+                    error = parser.feed_length("").is_err();
+                }
+                assert!(error, "value={value}, chunk_size={chunk_size}");
+            }
+        }
     }
 
     #[test]
