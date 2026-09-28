@@ -75,6 +75,12 @@ Finish all compilation before measured repetitions. Kernel faults
 surface at the next host sync; use `compute-sanitizer` on a reduced case to
 attribute them (audit KRN-09).
 
+Paged decode preserves contiguous BF16 cache views with an unaligned storage
+offset by cloning them. The per-process
+`oh_my_vllm.kernels.decode_attention.unaligned_cache_clone_count()` reports
+clone fallback calls; a warning with the copied byte count is emitted at counts
+1, 2, 4, 8 and subsequent powers of two. An aligned cache takes no clone path.
+
 ## CUDA/TileLang operator observations
 
 Use `python -m development.kernels.observations` through the GPU/environment

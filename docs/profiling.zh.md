@@ -45,6 +45,11 @@ prof.export_chrome_trace("/tmp/oh-my-vllm-trace.json")
 
 TileFoundry 的静态成本/显存/roofline 分析是开发假设，不是测得的 kernel 时间。分析实际模型以定位吞吐/TTFT 差距。临时算子调优脚本和报告放在仓库外。正式测量审计 FlashInfer、Triton、TileLang 和 `TVM_FFI_CACHE_DIR` 的完整缓存树，包括文本产物；根目录未设置或不存在会令审计失败。修复后的审计尚未经新的完整 12 行采集验证。所有编译在正式重复测量前完成。kernel 故障在下一次主机同步时才暴露；用 `compute-sanitizer` 在缩小的用例上定位（审计 KRN-09）。
 
+分页 decode 对 storage offset 未按 16 字节对齐的连续 BF16 cache view 通过克隆维持支持。
+每个进程的 `oh_my_vllm.kernels.decode_attention.unaligned_cache_clone_count()`
+报告触发克隆回退的调用次数；在第 1、2、4、8 次及之后的 2 的幂次发出附带复制字节数的警告。
+对齐 cache 不会进入克隆路径。
+
 ## CUDA/TileLang 算子观测
 
 通过 GPU/环境包装脚本运行 `python -m development.kernels.observations`，采集正式配置下两个后端的完整算子，命令见 cuda-development.zh.md。报告分别标注 TileFoundry HIR 估计和 Nsight 计数器/资源指标，核验冻结对照/源码身份和指标完整性。该 profiling 流程独立于 `benchmarks/kernels.py` 的 CUDA Event/Graph 计时，不提供性能验收样本。原始 profiler CSV 仅临时保存在 Git 仓库外。

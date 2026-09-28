@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 
+import oh_my_vllm.kernels.decode_attention as decode_attention
 import pytest
 import torch
 from oh_my_vllm.kernels.decode_attention import decode
@@ -219,7 +220,10 @@ def test_cache_addresses_beyond_signed_int32(grouped, native):
 
 
 @pytest.mark.parametrize("unaligned", [(True, False), (False, True), (True, True)])
-def test_contiguous_inputs_with_unaligned_storage_offset(unaligned):
+def test_contiguous_inputs_with_unaligned_storage_offset(
+    unaligned, caplog, monkeypatch
+):
+    monkeypatch.setattr(decode_attention, "_unaligned_cache_clone_count", 0)
     query, cache, tables, lengths = inputs()
     tensors = [query, cache]
     for index, enabled in enumerate(unaligned):
@@ -233,9 +237,32 @@ def test_contiguous_inputs_with_unaligned_storage_offset(unaligned):
                 tensors[index].is_contiguous() and tensors[index].data_ptr() % 16 != 0
             )
     actual = decode(*tensors, tables, lengths, first=1, max_tokens=1568)
+    copied_cache = unaligned[1]
+    assert decode_attention.unaligned_cache_clone_count() == int(copied_cache)
+    assert ("unaligned FA cache clone" in caplog.text) == copied_cache
     torch.testing.assert_close(
         actual.cpu().double(),
         reference(query, cache, tables, lengths, 1),
         rtol=0.03,
         atol=0.03,
     )
+
+
+def test_unaligned_cache_clone_warning_and_count_accumulate(caplog, monkeypatch):
+    monkeypatch.setattr(decode_attention, "_unaligned_cache_clone_count", 0)
+    query, cache, tables, lengths = inputs()
+    storage = torch.empty(cache.numel() + 1, device="cuda", dtype=cache.dtype)
+    unaligned_cache = storage[1:].view_as(cache).copy_(cache)
+    assert unaligned_cache.data_ptr() % 16 != 0
+    for expected_count, warnings in ((1, 1), (2, 2), (3, 2), (4, 3)):
+        actual = decode(
+            query, unaligned_cache, tables, lengths, first=1, max_tokens=1568
+        )
+        torch.testing.assert_close(
+            actual.cpu().double(),
+            reference(query, cache, tables, lengths, 1),
+            rtol=0.03,
+            atol=0.03,
+        )
+        assert decode_attention.unaligned_cache_clone_count() == expected_count
+        assert caplog.text.count("unaligned FA cache clone") == warnings

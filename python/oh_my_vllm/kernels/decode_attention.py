@@ -5,6 +5,9 @@ zero is absent. Excluding it here keeps prefix cache keys aligned with tokens
 without modifying shared boundary rows or changing the 784-token page size.
 """
 
+import logging
+import threading
+
 import torch
 
 from .backend import NAME, kernel
@@ -13,6 +16,16 @@ _partials = kernel("decode_attention", "_partials")
 
 
 _merge = kernel("decode_attention", "_merge")
+
+_logger = logging.getLogger(__name__)
+_unaligned_cache_clone_count = 0
+_unaligned_cache_clone_lock = threading.Lock()
+
+
+def unaligned_cache_clone_count() -> int:
+    """Number of decode calls that took the misaligned-cache clone fallback."""
+    with _unaligned_cache_clone_lock:
+        return _unaligned_cache_clone_count
 
 
 def decode(
@@ -73,6 +86,16 @@ def decode(
     # views that start at an unaligned BF16 storage offset.
     if cache.data_ptr() % 16:
         cache = cache.clone()
+        global _unaligned_cache_clone_count
+        with _unaligned_cache_clone_lock:
+            _unaligned_cache_clone_count += 1
+            count = _unaligned_cache_clone_count
+        if count & (count - 1) == 0:
+            _logger.warning(
+                "unaligned FA cache clone: count=%d bytes=%d; decode may be slow",
+                count,
+                cache.numel() * cache.element_size(),
+            )
     # The frozen TileLang code vector-loads Q. Contiguous BF16 storage-offset
     # views need an aligned copy; native CUDA handles their scalar load directly.
     if NAME == "tilelang" and query.data_ptr() % 16:
