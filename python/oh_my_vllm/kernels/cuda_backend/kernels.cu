@@ -8,6 +8,22 @@
 
 using tvm::ffi::TensorView;
 
+bool has_dtype(TensorView tensor, int code, int bits) {
+  auto dtype = tensor.dtype();
+  return dtype.code == code && dtype.bits == bits && dtype.lanes == 1;
+}
+bool same_cuda_device(TensorView tensor, TensorView source) {
+  auto device = tensor.device();
+  auto expected = source.device();
+  return device.device_type == kDLCUDA && expected.device_type == kDLCUDA &&
+         device.device_id == expected.device_id;
+}
+bool is_index_dtype(TensorView tensor) {
+  auto dtype = tensor.dtype();
+  return dtype.code == kDLInt && (dtype.bits == 32 || dtype.bits == 64) &&
+         dtype.lanes == 1;
+}
+
 // BF16 SiLU keeps both rounding boundaries. The fast exponential produces
 // identical rounded SiLU for every finite BF16 input on the required SM100.
 // One warp owns one complete 128-value scaling group. Independent warps share
@@ -172,10 +188,32 @@ void dispatch_alignment(TensorView x, TensorView out, TensorView scales, bool co
     dispatch<Input, false>(x, out, scales, column, silu, stream);
 }
 void quantize(TensorView x, TensorView out, TensorView scales, bool column, bool silu) {
+  TVM_FFI_ICHECK(same_cuda_device(x, x) && same_cuda_device(out, x) &&
+                 same_cuda_device(scales, x))
+      << "CUDA quantize tensors must share one CUDA device";
+  const auto dtype = x.dtype();
+  TVM_FFI_ICHECK(dtype.lanes == 1 &&
+                 ((dtype.code == kDLBfloat && dtype.bits == 16) ||
+                  (dtype.code == kDLFloat && (dtype.bits == 16 || dtype.bits == 32))))
+      << "CUDA quantize requires BF16, FP16, or FP32 input";
+  TVM_FFI_ICHECK(!silu || has_dtype(x, kDLBfloat, 16))
+      << "CUDA fused SiLU quantize requires BF16 input";
+  TVM_FFI_ICHECK(has_dtype(out, kDLFloat8_e4m3fn, 8) && has_dtype(scales, kDLFloat, 32))
+      << "CUDA quantize requires FP8 output and FP32 scales";
+  TVM_FFI_ICHECK(x.ndim() == 2 && out.ndim() == 2 && scales.ndim() == 2 &&
+                 out.size(0) == x.size(0) && out.size(0) > 0 &&
+                 out.size(1) > 0 && out.size(1) % 128 == 0 &&
+                 x.size(1) == out.size(1) * (silu ? 2 : 1) &&
+                 scales.size(0) == out.size(0) && scales.size(1) == out.size(1) / 128 &&
+                 x.stride(1) == 1 && x.stride(0) == x.size(1) &&
+                 out.stride(1) == 1 && out.stride(0) == out.size(1) &&
+                 scales.stride(0) == (column ? 1 : scales.size(1)) &&
+                 scales.stride(1) == (column ? out.size(0) : 1))
+      << "CUDA quantize output shape or layout is invalid";
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
-  if (x.dtype().code == kDLBfloat)
+  if (dtype.code == kDLBfloat)
     dispatch_alignment<__nv_bfloat16>(x, out, scales, column, silu, stream);
-  else if (x.dtype().bits == 16)
+  else if (dtype.bits == 16)
     dispatch_alignment<__half>(x, out, scales, column, silu, stream);
   else
     dispatch_alignment<float>(x, out, scales, column, silu, stream);
@@ -231,6 +269,25 @@ __global__ void gates_kernel(const __nv_bfloat16 *__restrict__ ba, const float *
   beta[i] = __fdividef(b >= 0.f ? 1.f : e, 1.f + e);
 }
 void gates(TensorView ba, TensorView log, TensorView bias, TensorView decay, TensorView beta) {
+  TVM_FFI_ICHECK(same_cuda_device(ba, ba) && same_cuda_device(log, ba) &&
+                 same_cuda_device(bias, ba) && same_cuda_device(decay, ba) &&
+                 same_cuda_device(beta, ba))
+      << "CUDA gates tensors must share one CUDA device";
+  TVM_FFI_ICHECK(ba.ndim() == 2 && ba.size(1) == 96 &&
+                 log.ndim() == 1 && log.size(0) == 48 &&
+                 bias.ndim() == 1 && bias.size(0) == 48 &&
+                 decay.ndim() == 2 && decay.size(0) == ba.size(0) && decay.size(1) == 48 &&
+                 beta.ndim() == 2 && beta.size(0) == ba.size(0) && beta.size(1) == 48 &&
+                 has_dtype(ba, kDLBfloat, 16) && has_dtype(log, kDLFloat, 32) &&
+                 has_dtype(bias, kDLFloat, 32) && has_dtype(decay, kDLFloat, 32) &&
+                 has_dtype(beta, kDLFloat, 32) &&
+                 ba.stride(1) == 1 && ba.stride(0) == 96 &&
+                 log.stride(0) == 1 && bias.stride(0) == 1 &&
+                 decay.stride(1) == 1 && decay.stride(0) == 48 &&
+                 beta.stride(1) == 1 && beta.stride(0) == 48)
+      << "CUDA gates requires BF16 projection and FP32 [rows,48] outputs";
+  if (ba.size(0) == 0)
+    return;
   gates_kernel<<<(ba.size(0) * 48 + 255) / 256, 256, 0, stream_for(ba)>>>(
       static_cast<const __nv_bfloat16 *>(ba.data_ptr()), static_cast<const float *>(log.data_ptr()),
       static_cast<const float *>(bias.data_ptr()), static_cast<float *>(decay.data_ptr()),
@@ -906,10 +963,63 @@ __global__ void recurrent_kernel(const __nv_bfloat16 *q, const __nv_bfloat16 *k,
 void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, TensorView beta,
                TensorView pool, TensorView starts, TensorView reads, TensorView writes,
                TensorView out) {
+  // Caller guarantees starts=[0,...,q.size(0)] is monotone, reads are in
+  // [0,pool.size(0)), and writes are -1 (skip) or in that range. Their values
+  // stay on GPU to avoid a hot-path sync.
+  TVM_FFI_ICHECK(same_cuda_device(q, q) && same_cuda_device(k, q) &&
+                 same_cuda_device(v, q) && same_cuda_device(decay, q) &&
+                 same_cuda_device(beta, q) && same_cuda_device(pool, q) &&
+                 same_cuda_device(starts, q) && same_cuda_device(reads, q) &&
+                 same_cuda_device(writes, q) && same_cuda_device(out, q))
+      << "CUDA recurrence tensors must share one CUDA device";
+  TVM_FFI_ICHECK(q.ndim() == 3 && k.ndim() == 3 && v.ndim() == 3 &&
+                 q.size(0) > 0 && q.size(1) > 0 && q.size(2) == 128 &&
+                 k.size(0) == q.size(0) && k.size(1) == q.size(1) && k.size(2) == 128 &&
+                 v.size(0) == q.size(0) && v.size(1) > 0 && v.size(2) == 128 &&
+                 v.size(1) % q.size(1) == 0 &&
+                 has_dtype(q, kDLBfloat, 16) && has_dtype(k, kDLBfloat, 16) &&
+                 has_dtype(v, kDLBfloat, 16) &&
+                 q.stride(2) == 1 && q.stride(1) == 128 &&
+                 k.stride(2) == 1 && k.stride(1) == 128 &&
+                 v.stride(2) == 1 && v.stride(1) == 128 &&
+                 q.stride(0) >= q.size(1) * 128 && k.stride(0) >= k.size(1) * 128 &&
+                 v.stride(0) >= v.size(1) * 128)
+      << "CUDA recurrence requires nonempty BF16 q/k/v rows";
+  TVM_FFI_ICHECK(decay.ndim() == 2 && beta.ndim() == 2 &&
+                 decay.size(0) == q.size(0) && decay.size(1) == v.size(1) &&
+                 beta.size(0) == q.size(0) && beta.size(1) == v.size(1) &&
+                 has_dtype(decay, kDLFloat, 32) && has_dtype(beta, kDLFloat, 32) &&
+                 decay.stride(1) == 1 && decay.stride(0) == v.size(1) &&
+                 beta.stride(1) == 1 && beta.stride(0) == v.size(1))
+      << "CUDA recurrence requires contiguous FP32 gates";
+  TVM_FFI_ICHECK(starts.ndim() == 1 && reads.ndim() == 1 && writes.ndim() == 1 &&
+                 reads.size(0) > 0 && starts.size(0) == reads.size(0) + 1 &&
+                 writes.size(0) == q.size(0) &&
+                 is_index_dtype(starts) && is_index_dtype(reads) &&
+                 is_index_dtype(writes) && starts.stride(0) == 1 &&
+                 reads.stride(0) == 1 && writes.stride(0) == 1)
+      << "CUDA recurrence requires nonempty int32/int64 metadata";
+  const auto state_dtype = pool.dtype();
+  const bool bf16_state = state_dtype.code == kDLBfloat && state_dtype.bits == 16 &&
+                          state_dtype.lanes == 1;
+  const bool fp32_state = state_dtype.code == kDLFloat && state_dtype.bits == 32 &&
+                          state_dtype.lanes == 1;
+  TVM_FFI_ICHECK(bf16_state || fp32_state) << "CUDA recurrence state requires BF16 or FP32";
+  TVM_FFI_ICHECK(pool.ndim() == 4 && pool.size(0) > 0 &&
+                 pool.size(1) == v.size(1) && pool.size(2) == 128 && pool.size(3) == 128 &&
+                 pool.stride(3) == 1 && pool.stride(2) == 128 &&
+                 pool.stride(1) == 128 * 128 &&
+                 pool.stride(0) == v.size(1) * 128 * 128)
+      << "CUDA recurrence state shape or layout is invalid";
+  TVM_FFI_ICHECK(out.ndim() == 3 && out.size(0) == v.size(0) && out.size(1) == v.size(1) &&
+                 out.size(2) == 128 && has_dtype(out, kDLBfloat, 16) &&
+                 out.stride(2) == 1 && out.stride(1) == 128 &&
+                 out.stride(0) == v.size(1) * 128)
+      << "CUDA recurrence output requires contiguous BF16 value shape";
   bool vector = q.size(1) == 16 && v.size(1) == 48 && q.stride(0) % 8 == 0 &&
                 k.stride(0) % 8 == 0 && reinterpret_cast<uintptr_t>(q.data_ptr()) % 16 == 0 &&
                 reinterpret_cast<uintptr_t>(k.data_ptr()) % 16 == 0 &&
-                reinterpret_cast<uintptr_t>(pool.data_ptr()) % (pool.dtype().bits) == 0;
+                reinterpret_cast<uintptr_t>(pool.data_ptr()) % state_dtype.bits == 0;
   for (auto input : {q, k, v, decay, beta, starts, reads, writes})
     vector = vector && disjoint_storage(pool, input);
   if (vector) {
@@ -924,7 +1034,7 @@ void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, Tenso
           starts.data_ptr(), reads.data_ptr(), writes.data_ptr(), starts.dtype().bits == 64,       \
           reads.dtype().bits == 64, writes.dtype().bits == 64,                                     \
           static_cast<__nv_bfloat16 *>(out.data_ptr()), q.stride(0), k.stride(0), v.stride(0))
-    if (pool.dtype().code == kDLBfloat) {
+    if (bf16_state) {
       if (reads.size(0) == 1) {
         VECTOR_REC(__nv_bfloat16, 2, 2);
       } else {
@@ -954,7 +1064,7 @@ void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, Tenso
       starts.dtype().bits == 64, reads.dtype().bits == 64, writes.dtype().bits == 64,              \
       static_cast<__nv_bfloat16 *>(out.data_ptr()), q.size(1), v.size(1), q.stride(0),             \
       k.stride(0), v.stride(0))
-  if (pool.dtype().code == kDLBfloat) {
+  if (bf16_state) {
     REC(__nv_bfloat16);
   } else {
     REC(float);

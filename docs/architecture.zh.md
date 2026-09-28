@@ -76,7 +76,7 @@ batch 中 query span 至少为 1024 token 时，Python 只收集活跃 FA KV tok
 
 卷积、GDN 递归和 RMS 归一化接受带明确 token/head stride 的 packed 投影视图。输出仍为 dense，递归源快照保持隔离。每个 target/draft 组的主机整数元数据通过一个 buffer 复制，设备视图保留底层存储。图输入仍复制到持久 buffer；GDN prefill start 在执行各层前只转换一次 int32。
 
-小 batch BF16 词表投影使用独立 FlashInfer CuTe-DSL GEMM。残差相加和 RMS 归一化共用一个 kernel，在 FP32 归一化前保留 BF16 求和。MLP SiLU/乘法和 FP8 量化共用一个 kernel，保留两处 BF16 舍入和原 scale。冻结对照中，Q/K RMS 归一化与部分 NeoX 旋转融合在 TileLang kernel 中，保留中间 BF16 舍入及 packed 投影 stride。固定 256 维 head、64 维旋转和 theta10000000，与校验后的 Qwen checkpoint 一致。相位先用 FP64 计算并约化，再执行 FP32 sin/cos，避免最大上下文附近频率/角度舍入误差放大。冻结 TileLang 的 GDN 递归在至少四条序列时使用 32-value tile，否则为16。原生 CUDA 为模型布局使用带对齐/别名检查的向量状态更新，其他布局保留通用 CUDA 路径。
+小 batch BF16 词表投影使用独立 FlashInfer CuTe-DSL GEMM。残差相加和 RMS 归一化共用一个 kernel，在 FP32 归一化前保留 BF16 求和。MLP SiLU/乘法和 FP8 量化共用一个 kernel，保留两处 BF16 舍入和原 scale。融合 RMS 与注意力准备 kernel 使用 epsilon `1e-6`；Qwen loader 在加载权重前验证 checkpoint 的该配置。支持其他 epsilon 需要相应修改 kernel 契约。冻结对照中，Q/K RMS 归一化与部分 NeoX 旋转融合在 TileLang kernel 中，保留中间 BF16 舍入及 packed 投影 stride。固定 256 维 head、64 维旋转和 theta10000000，与校验后的 Qwen checkpoint 一致。相位先用 FP64 计算并约化，再执行 FP32 sin/cos，避免最大上下文附近频率/角度舍入误差放大。冻结 TileLang 的 GDN 递归在至少四条序列时使用 32-value tile，否则为16。原生 CUDA 为模型布局使用带对齐/别名检查的向量状态更新，其他布局保留通用 CUDA 路径。
 
 CUDA 后端将完整的全注意力准备链融合：Q/K RMS/RoPE、V 布局转换和物理 KV 写入。主模型与 MTP 对 packed14336 投影调用同一 `attention_prepare.prepare_attention` 入口。返回的 Q 连续，每个 512 维 Q head 的 gate 半区不变。缓存不得与输入重叠；负 slot 跳过 KV 写入，但仍产生 Q。显式 TileLang 对照后端保留原有完整冻结链。
 

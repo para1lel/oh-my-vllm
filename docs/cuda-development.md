@@ -65,6 +65,9 @@ These describe the current code and the numerical properties it relies on.
     pairs, found zero differences on SM100/CUDA 13.1.
   - Flat offsets are 32-bit (audit KRN-04).
 - **RMS normalization.**
+  - The fused residual RMS and attention-preparation kernels use epsilon `1e-6`.
+    The `Qwen` loader validates `rms_norm_eps == 1e-6` before loading weights; this is
+    the contract for the sole supported checkpoint, not a configurable epsilon.
   - The model width is 5120. Values stay in registers, and loads are aligned
     vectors of width 4 or 8.
   - The thread count depends on row count and on whether a residual is added:
@@ -90,6 +93,12 @@ These describe the current code and the numerical properties it relies on.
     specialized path.
   - Source states are snapshotted before candidate writes.
 - **GDN recurrence.**
+  - The Rust/Python batch plan validates recurrent source and destination slots
+    against the reported pool capacity. The direct CUDA FFI accepts only int32
+    or int64 contiguous index tensors; its caller must supply monotone `starts`
+    from zero through all token rows, in-range `reads`, and `writes` that are
+    either `-1` (skip snapshot) or in range. Index values
+    stay on GPU and are not read back on each launch.
   - The model layout gives each of 16 lanes eight contiguous key values, uses four
     warps with two value rows per half-warp, and keeps FP32 persistent state.
   - Head, base/row alignment and disjoint-storage checks guard the restricted

@@ -188,6 +188,9 @@ Small-batch BF16 vocabulary projections use independent FlashInfer CuTe-DSL GEMM
 Residual addition and RMS normalization share one kernel, preserving the BF16
 sum before FP32 normalization. MLP SiLU/multiplication and FP8 quantization share
 a kernel while preserving both BF16 rounding points and the original scales.
+The fused RMS and attention-preparation kernels use epsilon `1e-6`, which the
+Qwen loader validates against the checkpoint before loading weights. Supporting
+a different epsilon requires a corresponding kernel contract change.
 In the frozen reference, Q/K RMS and partial NeoX rotation share a TileLang kernel,
 retaining
 the intermediate BF16 rounding and packed projection strides. Its fixed256-wide

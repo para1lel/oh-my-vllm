@@ -73,7 +73,11 @@ def recurrent(
 
     Slot allocation is the caller's responsibility: destinations must be unique,
     must not overwrite another sequence's source, and must not be shared prefixes.
-    Index tensors stay on GPU; this function performs no device-to-host reads.
+    `starts` must begin at zero, increase monotonically and end at the number
+    of token rows. Read slots must be within the pool capacity; write slots may
+    be -1 to skip a snapshot or within the pool capacity.
+    The Rust allocation plan is validated on CPU before index tensors are copied
+    to GPU; this function performs no device-to-host reads of their values.
     """
     if q.shape != k.shape or q.ndim != 3 or q.shape[-1] != 128:
         raise ValueError("GDN requires matching [tokens, heads, 128] q/k")
