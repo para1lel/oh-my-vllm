@@ -52,7 +52,8 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
 - 热路径改动后的当前 12 组框架吞吐和 TTFT **尚未验证**。下文的 2026-09-22
   数值只适用于干净提交 `c36d1c9`。P2 性能决策结束后需重跑全部 12 组。
   EVD-07 仍为 open，等待完整、无干扰的六行运行；六项测试已不再跳过。审计中原先四项
-  “Not verified”风险还有三项未关闭；Rust MTP GDN 槽位另由下文 `7e93c18` 验证。
+  “Not verified”风险只剩倒数误差上界未关闭；Rust MTP GDN 槽位由下文
+  `7e93c18` 验证，所测 FlashInfer workspace 和陈旧尾部路径由 `6b378d5` 验证。
 - 后续 fixed 状态复核重新打开 SRV-02、KRN-05、PY-01、SCH-01/02/04、
   EVD-01/02/11/12/13 和 MNT-04。已复审的提交 `487f8de` 修复 SRV-02、KRN-05、PY-01、
   SCH-01/02/04 及 EVD-01/02/11。EVD-01 拒绝三次重复或高离散度证据；
@@ -306,9 +307,23 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   日志为 `/tmp/oh-my-vllm-mtp-slot-cpu.log`；Rust workspace 58/39/26、
   fmt、行宽、Ruff、Clippy 与 hooks 均通过。这不代表 GPU 数值或当前 MTP
   框架验收通过。
+- 经独立复审的 `6b378d5` 在 FlashInfer 0.6.18.post1、B200 的真实
+  TRT-LLM gen decode 和 context prefill 路径上验证两项 FlashInfer 风险。
+  每个零值或 `0xA5` workspace 都在独立新 plan 首次调用真实后端之前写入，
+  并与零值/128 陈旧 KV 尾部交叉；后端 spy 每例观察到八次真实调用。decode
+  覆盖九个短长度及页边界、batch 4 的 32769、五个分组 draft 的 785、
+  单条 131073；prefill 覆盖 4097/4237/4703。15 项聚焦 GPU 用例全部通过，
+  污染对照输出以零容差数值一致，小型 decode 用例还与 CPU FP64 参考吻合。UUID 为
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`，原始日志为
+  `/tmp/oh-my-vllm-flashinfer-poison-tests-r2.log`。`scripts/test.sh cpu`
+  通过 237 项、70 个 subtest（排除 214 项 GPU 用例），日志为
+  `/tmp/oh-my-vllm-flashinfer-cpu.log`；Rust workspace 58/39/26、fmt、
+  行宽、Ruff、Clippy 与 hooks 均通过。自有 GPU 和 CPU worker 已退出。
+  FlashInfer 文档要求的清零针对生产未调用的 XQA。本结论不覆盖 XQA、FA2
+  或全部 262144-token 布局；当前完整 GPU 与框架门槛仍待完成。
 
 后续工作：PY-03/04/06、SRV-08、KRN-06、PY-05/07 与 KRN-10 验收、
-EVD-07、其余三项未验证风险，以及当前完整算子/GPU 套件
+EVD-07、剩余的倒数误差上界风险，以及当前完整算子/GPU 套件
 和 12 组框架验收。
 逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。
 

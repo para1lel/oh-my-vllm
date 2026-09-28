@@ -58,8 +58,9 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   hot-path changes. The 2026-09-22 values below apply to clean `c36d1c9`.
   Re-run all 12 rows after P2 performance decisions. EVD-07 remains open
   pending a clean, uninterrupted six-row run; its six tests no longer skip.
-  Of the four risks originally marked "Not verified", three remain open;
-  Rust MTP GDN slot placement was verified separately in `7e93c18` below.
+  Of the four risks originally marked "Not verified", only the reciprocal
+  bound remains open. Rust MTP GDN placement was verified in `7e93c18`, and
+  the tested FlashInfer workspace and stale-tail paths in `6b378d5` below.
 - Later fixed-status review reopened SRV-02, KRN-05, PY-01, SCH-01/02/04,
   EVD-01/02/11/12/13 and MNT-04. Reviewed commit `487f8de` repairs SRV-02,
   KRN-05, PY-01, SCH-01/02/04 and EVD-01/02/11. EVD-01 rejects three-run
@@ -394,9 +395,27 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   `/tmp/oh-my-vllm-mtp-slot-cpu.log`; Rust workspace 58/39/26, fmt, line
   width, Ruff, Clippy and hooks passed. This is not GPU numerical or current
   MTP framework acceptance.
+- Independently reviewed `6b378d5` verifies the two FlashInfer risks for
+  version 0.6.18.post1 on B200's actual TRT-LLM gen decode and context
+  prefill paths. Each zeroed or `0xA5` workspace was set on a separate fresh
+  plan before its first backend call, crossed with zero/128 stale KV tails;
+  a backend spy saw eight actual calls per case. Decode covers nine short
+  and page-boundary lengths, batch 4 at 32769, grouped five drafts at 785,
+  and single 131073; prefill covers 4097/4237/4703. All 15 focused GPU
+  cases passed with zero-tolerance numerical equality across contamination
+  variants; the small decode cases
+  also matched CPU FP64. UUID:
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`; raw log:
+  `/tmp/oh-my-vllm-flashinfer-poison-tests-r2.log`. `scripts/test.sh cpu`
+  passed 237 tests and 70 subtests (214 GPU deselected), logged at
+  `/tmp/oh-my-vllm-flashinfer-cpu.log`; Rust workspace 58/39/26, fmt,
+  line width, Ruff, Clippy and hooks passed. The owned GPU and CPU workers
+  exited. FlashInfer's documented zeroing requirement applies to XQA, which
+  production does not call. The result does not cover XQA, FA2, or all
+  262144-token layouts; full current GPU and framework gates remain pending.
 
 Remaining work: PY-03/04/06, SRV-08, KRN-06, PY-05/07 and KRN-10 acceptance,
-EVD-07, the three remaining unverified risks, and current
+EVD-07, the remaining reciprocal-bound risk, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
 
