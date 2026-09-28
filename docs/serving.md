@@ -122,7 +122,16 @@ deleting an ancestor does not invalidate already-started requests or saved child
 
 HTTP bodies are limited to 8 MiB; admission channel and active request limit are
 64 each; Rust schedules up to 32 concurrent sequences. Each stream has a 256-event
-buffer. A disconnected or slow client cancels its request, not the engine.
+channel and a pending queue limited to 1,024 events or 8 MiB of serialized
+events. A full channel pauses that request's generation and starts a monotonic
+30-second grace period. Pending events retain their order, including final
+events. Generation resumes when the pending queue is empty and at least 128
+channel slots are free. Intermittently reading one event cannot reset the grace
+period. Disconnect cancels immediately; a stream still blocked after the grace
+period is cancelled without stopping other requests. The check runs between
+engine operations; one in-flight preparation or execution RPC can delay the
+actual cancellation. A paused request retains its KV state when capacity allows;
+normal priority-based preemption can still evict it under pool pressure.
 The default request timeout is 600 seconds (configurable); preparation/step RPCs
 have 120-second deadlines and detect worker exit. Request-local validation and
 generation errors fail only that request; CUDA/device and worker-fatal errors

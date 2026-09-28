@@ -49,7 +49,7 @@ XGrammar 构造 Qwen 原生 XML 工具 grammar 和 JSON 答案 grammar。MTP 中
 
 Responses 默认 store=true，OMP 通常发送 store=false。存储响应及解析后的对话快照在完成一小时后过期。限制 1,000 条记录和 256 MiB 序列化响应/历史载荷，可用 response-ttl-seconds、response-capacity、response-max-bytes 配置。对象/分配额外开销不计入序列化字节预算。达到容量时淘汰最旧记录；超大记录显式失败。未知/已删除/过期 ID 返回 404，重启使 ID 失效。并发续接复制快照；删除祖先不影响已开始请求或已保存子响应。
 
-HTTP body 上限 8 MiB；接纳 channel 和活跃请求上限各 64；Rust 最多调度 32 并发序列。每个 stream 有 256 事件 buffer。客户端断开或过慢时只取消其请求，不取消引擎。默认请求超时 600 秒（可配置）；准备/步骤 RPC 的 deadline 为 120 秒并检测 worker 退出。请求局部的校验或生成错误只让该请求失败；CUDA/设备及 worker 致命错误使待处理请求失败，后续提交在重启前返回 unavailable。Ctrl-C 和 SIGTERM 关闭活跃 stream，并请求 Python 正常关闭。HTTP 连接排空和 worker 清理共用有界关闭期限（默认 35 秒，可用 `--shutdown-grace-seconds` 配置）；停读的 HTTP 客户端在到期时被强制断开。不单独抢占正在执行的 kernel。
+HTTP body 上限 8 MiB；接纳 channel 和活跃请求上限各 64；Rust 最多调度 32 并发序列。每个 stream 有 256 事件 channel，以及最多 1,024 个事件或 8 MiB 序列化事件的待发队列。channel 满时暂停该请求的生成，并从首次满载开始计算单调时钟 30 秒宽限。待发事件保持顺序，包括最终事件；待发队列清空且 channel 至少空出 128 个槽位时恢复生成。客户端每次只读取一个事件不会重置宽限。断连立即取消；超过宽限仍阻塞的流只取消自身，不影响其他请求。检查在 engine 操作之间进行；单次正在执行的准备或执行 RPC 可能延迟实际取消。暂停请求在容量允许时保留 KV 状态；池容量紧张时正常的按优先级抢占仍可能将其逐出。默认请求超时 600 秒（可配置）；准备/步骤 RPC 的 deadline 为 120 秒并检测 worker 退出。请求局部的校验或生成错误只让该请求失败；CUDA/设备及 worker 致命错误使待处理请求失败，后续提交在重启前返回 unavailable。Ctrl-C 和 SIGTERM 关闭活跃 stream，并请求 Python 正常关闭。HTTP 连接排空和 worker 清理共用有界关闭期限（默认 35 秒，可用 `--shutdown-grace-seconds` 配置）；停读的 HTTP 客户端在到期时被强制断开。不单独抢占正在执行的 kernel。
 
 ## OMP 任务与验证
 

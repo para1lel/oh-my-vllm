@@ -66,6 +66,8 @@ pub struct Scheduler {
     waiting: VecDeque<Request>,
     /// Requests with live KV blocks, currently being executed.
     running: VecDeque<Request>,
+    /// Backpressured streams stop stepping; lower-priority ones may still be preempted.
+    paused: rustc_hash::FxHashSet<RequestId>,
     kv: HybridCoordinator,
     finished_ids: Vec<u64>,
 }
@@ -115,6 +117,7 @@ impl Scheduler {
             config,
             waiting: VecDeque::new(),
             running: VecDeque::new(),
+            paused: rustc_hash::FxHashSet::default(),
             kv,
             finished_ids: Vec::new(),
         }
@@ -187,6 +190,19 @@ impl Scheduler {
         self.running.len()
     }
 
+    /// Suspend a stream without immediately releasing KV; pool pressure may preempt it.
+    pub fn pause(&mut self, request_id: RequestId) {
+        if self.running.iter().any(|req| req.id == request_id)
+            || self.waiting.iter().any(|req| req.id == request_id)
+        {
+            self.paused.insert(request_id);
+        }
+    }
+
+    pub fn resume(&mut self, request_id: RequestId) {
+        self.paused.remove(&request_id);
+    }
+
     fn preempt_request(&mut self, mut req: Request, output: &mut SchedulerOutput) {
         self.kv.free(req.id);
         req.num_computed_tokens = 0;
@@ -221,6 +237,10 @@ impl Scheduler {
         // starved by new arrivals. Preempt from the tail if the pool is full.
         let mut still_running: VecDeque<Request> = VecDeque::new();
         while let Some(mut req) = self.running.pop_front() {
+            if self.paused.contains(&req.id) {
+                still_running.push_back(req);
+                continue;
+            }
             let tokens_needed = req.num_tokens_with_spec() - req.num_computed_tokens;
             let to_schedule = self.aligned_prefill(
                 &req,
@@ -288,7 +308,12 @@ impl Scheduler {
         self.running = still_running;
 
         // ── phase 2: waiting requests (new prefills) ──────────────────────────
+        let mut paused_waiting = VecDeque::new();
         while let Some(mut req) = self.waiting.pop_front() {
+            if self.paused.contains(&req.id) {
+                paused_waiting.push_back(req);
+                continue;
+            }
             if self.running.len() >= self.config.max_num_seqs {
                 self.waiting.push_front(req);
                 break;
@@ -347,6 +372,8 @@ impl Scheduler {
                 }
             }
         }
+        paused_waiting.append(&mut self.waiting);
+        self.waiting = paused_waiting;
 
         output.num_batched_tokens = output.scheduled.iter().map(|s| s.token_ids.len()).sum();
         tracing::debug!(
@@ -506,6 +533,7 @@ impl Scheduler {
         // Remove finished requests and free their blocks.
         for id in &finished_ids {
             self.running.retain(|r| r.id != *id);
+            self.paused.remove(id);
             self.kv.free(*id);
         }
         Ok(worker)
@@ -514,6 +542,7 @@ impl Scheduler {
     /// Abort between completed steps. The next schedule notifies the worker,
     /// including for registered requests that have not yet been admitted.
     pub fn abort(&mut self, request_id: RequestId) {
+        self.paused.remove(&request_id);
         if self.running.iter().any(|r| r.id == request_id) {
             self.running.retain(|r| r.id != request_id);
             self.kv.free(request_id);

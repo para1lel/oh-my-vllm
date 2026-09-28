@@ -425,6 +425,172 @@ fn multiple_tail_victims_keep_admission_order_and_accepted_history() {
     }
 }
 
+#[test]
+fn paused_stream_keeps_kv_while_another_stream_advances_past_256_steps() {
+    let mut sched = make_scheduler(512, 128);
+    assert!(sched.add_request(make_req(1, 4, 400)));
+    assert!(sched.add_request(make_req(2, 4, 400)));
+    assert_eq!(sched.schedule().scheduled.len(), 2);
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1), dummy_output(2)],
+        },
+    );
+    let before = sched.running.front().unwrap().num_computed_tokens;
+    sched.pause(1);
+    for _ in 0..300 {
+        let step = sched.schedule();
+        assert_eq!(step.scheduled.len(), 1);
+        assert_eq!(step.scheduled[0].request_id, 2);
+        apply(
+            &mut sched,
+            WorkerOutput {
+                outputs: vec![dummy_output(2)],
+            },
+        );
+    }
+    assert_eq!(sched.running.front().unwrap().num_computed_tokens, before);
+    sched.resume(1);
+    let resumed = sched.schedule();
+    assert_eq!(resumed.scheduled[0].request_id, 1);
+    assert_eq!(resumed.scheduled[0].num_computed_tokens, before);
+}
+
+#[test]
+fn paused_waiting_request_does_not_block_later_admission() {
+    let mut sched = make_scheduler(64, 128);
+    assert!(sched.add_request(make_req(1, 4, 3)));
+    assert!(sched.add_request(make_req(2, 4, 3)));
+    sched.pause(1);
+    let first = sched.schedule();
+    assert_eq!(first.scheduled[0].request_id, 2);
+    assert_eq!(sched.waiting.front().unwrap().id, 1);
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(2)],
+        },
+    );
+    sched.resume(1);
+    assert!(
+        sched
+            .schedule()
+            .scheduled
+            .iter()
+            .any(|request| request.request_id == 1)
+    );
+}
+
+#[test]
+fn paused_waiting_keeps_fcfs_order_after_admission_break() {
+    let config = SchedulerConfig {
+        max_num_batched_tokens: 128,
+        max_num_seqs: 1,
+        enable_mtp: false,
+        mtp_draft_len: 0,
+    };
+    let mut sched = Scheduler::new(config, make_coord(64));
+    for id in 1..=3 {
+        assert!(sched.add_request(make_req(id, 4, 3)));
+    }
+    sched.pause(1);
+    let first = sched.schedule();
+    assert_eq!(first.scheduled[0].request_id, 2);
+    assert_eq!(
+        sched.waiting.iter().map(|req| req.id).collect::<Vec<_>>(),
+        vec![1, 3]
+    );
+    sched.abort(2);
+    sched.resume(1);
+    let second = sched.schedule();
+    assert_eq!(second.scheduled[0].request_id, 1);
+    assert_eq!(sched.waiting.front().unwrap().id, 3);
+}
+
+#[test]
+fn paused_waiting_keeps_fcfs_order_after_pool_shortage() {
+    let config = SchedulerConfig {
+        max_num_batched_tokens: 128,
+        max_num_seqs: 64,
+        enable_mtp: false,
+        mtp_draft_len: 0,
+    };
+    let mut sched = Scheduler::new(config, HybridCoordinator::new(6, BS, false, 0));
+    for id in 1..=4 {
+        assert!(sched.add_request(make_req(id, 4, 6)));
+    }
+    sched.pause(1);
+    let first = sched.schedule();
+    assert_eq!(
+        first
+            .scheduled
+            .iter()
+            .map(|req| req.request_id)
+            .collect::<Vec<_>>(),
+        vec![2, 3]
+    );
+    assert_eq!(
+        sched.waiting.iter().map(|req| req.id).collect::<Vec<_>>(),
+        vec![1, 4]
+    );
+    sched.abort(2);
+    sched.abort(3);
+    sched.resume(1);
+    assert_eq!(sched.schedule().scheduled[0].request_id, 1);
+}
+
+#[test]
+fn paused_tail_can_be_preempted_without_premature_readmission() {
+    let mut sched = make_scheduler(8, 128);
+    assert!(sched.add_request(make_req(1, 8, 10)));
+    assert!(sched.add_request(make_req(2, 8, 10)));
+    assert_eq!(sched.schedule().scheduled.len(), 2);
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1), dummy_output(2)],
+        },
+    );
+    sched.pause(2);
+    let second = sched.schedule();
+    assert_eq!(second.preempted_request_ids, vec![2]);
+    assert_eq!(second.scheduled[0].request_id, 1);
+    assert_eq!(sched.waiting.front().unwrap().id, 2);
+    assert!(sched.paused.contains(&2));
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    assert!(
+        sched
+            .schedule()
+            .scheduled
+            .iter()
+            .all(|req| req.request_id != 2)
+    );
+    sched.resume(2);
+    assert!(!sched.paused.contains(&2));
+}
+
+#[test]
+fn naturally_finished_paused_request_clears_pause_state() {
+    let mut sched = make_scheduler(32, 128);
+    assert!(sched.add_request(make_req(1, 4, 1)));
+    assert_eq!(sched.schedule().scheduled.len(), 1);
+    sched.pause(1);
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    assert!(!sched.paused.contains(&1));
+    assert_eq!(sched.num_running(), 0);
+}
+
 // ── MTP rollback ──────────────────────────────────────────────────────────────
 
 #[test]

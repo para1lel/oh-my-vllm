@@ -82,6 +82,8 @@ def main():
                         "<parameter=path>\nREADME.md\n</parameter>\n"
                         "</function>\n</tool_call>"
                     )
+                elif "slow-stream" in text:
+                    answer = "hello " * 1500
                 elif "long" in text or "flood-active" in text:
                     answer = "hello " * 1000
                 else:
@@ -99,6 +101,8 @@ def main():
                     "fatal": "worker-fatal" in text,
                     "hold": "hold-active" in text,
                     "flood": "flood-active" in text,
+                    "slow_stream": "slow-stream" in text,
+                    "stream_step": 0,
                 }
                 reply = {"type": "prepared", "prompt_token_ids": prompt}
                 if "slow-prepare" in text:
@@ -178,6 +182,9 @@ def main():
                     if path := os.environ.get("OH_MY_VLLM_FIXTURE_FLOOD"):
                         with Path(path).open("a") as output:
                             output.write("step\n")
+                if state["slow_stream"]:
+                    state["stream_step"] += 1
+                    text = f"{state['stream_step']:06d}|" + "x" * 8185
                 outputs.append(
                     {
                         "request_id": rid,

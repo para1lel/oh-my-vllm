@@ -22,7 +22,7 @@ use parser::Parser;
 use request::Request;
 use serde_json::{Value, json};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, VecDeque},
     convert::Infallible,
     future::IntoFuture,
     net::SocketAddr,
@@ -35,6 +35,11 @@ use std::{
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{StreamExt, wrappers::ReceiverStream};
 use tracing::{debug, info, warn};
+
+const STREAM_BACKPRESSURE_GRACE: Duration = Duration::from_secs(30);
+const STREAM_LOW_WATER: usize = 128;
+const MAX_PENDING_STREAM_EVENTS: usize = 1024;
+const MAX_PENDING_STREAM_BYTES: usize = 8 << 20;
 
 #[derive(Args, Clone)]
 pub struct ServeArgs {
@@ -130,12 +135,107 @@ struct Active {
     output: Output,
     parser: Parser,
     events: mpsc::Sender<Value>,
+    stream_buffer: StreamBuffer,
     done: oneshot::Sender<std::result::Result<Value, String>>,
     started: Instant,
     first_token: Option<Instant>,
     steps: usize,
     proposed: usize,
     accepted: usize,
+}
+
+#[derive(Default)]
+struct StreamBuffer {
+    pending: VecDeque<(Value, usize)>,
+    pending_bytes: usize,
+    blocked_since: Option<Instant>,
+}
+
+impl StreamBuffer {
+    fn is_blocked(&self) -> bool {
+        self.blocked_since.is_some()
+    }
+
+    fn queue(&mut self, event: Value) -> Result<()> {
+        let bytes = event.to_string().len();
+        anyhow::ensure!(
+            self.pending.len() < MAX_PENDING_STREAM_EVENTS
+                && self.pending_bytes.saturating_add(bytes) <= MAX_PENDING_STREAM_BYTES,
+            "stream pending buffer exceeds its memory limit"
+        );
+        self.blocked_since.get_or_insert_with(Instant::now);
+        self.pending.push_back((event, bytes));
+        self.pending_bytes += bytes;
+        Ok(())
+    }
+
+    fn flush(&mut self, sender: &mpsc::Sender<Value>) -> Result<()> {
+        while let Some((event, bytes)) = self.pending.pop_front() {
+            match sender.try_send(event) {
+                Ok(()) => self.pending_bytes -= bytes,
+                Err(mpsc::error::TrySendError::Full(event)) => {
+                    self.pending.push_front((event, bytes));
+                    break;
+                }
+                Err(mpsc::error::TrySendError::Closed(_)) => {
+                    anyhow::bail!("client disconnected");
+                }
+            }
+        }
+        if self.pending.is_empty() && sender.capacity() >= STREAM_LOW_WATER {
+            self.blocked_since = None;
+        }
+        anyhow::ensure!(
+            self.blocked_since
+                .is_none_or(|since| since.elapsed() < STREAM_BACKPRESSURE_GRACE),
+            "stream backpressure exceeded 30-second grace"
+        );
+        Ok(())
+    }
+
+    fn send(&mut self, sender: &mpsc::Sender<Value>, events: Vec<Value>) -> Result<()> {
+        self.flush(sender)?;
+        for event in events {
+            if self.pending.is_empty() {
+                match sender.try_send(event) {
+                    Ok(()) => continue,
+                    Err(mpsc::error::TrySendError::Full(event)) => self.queue(event)?,
+                    Err(mpsc::error::TrySendError::Closed(_)) => {
+                        anyhow::bail!("client disconnected");
+                    }
+                }
+            } else {
+                self.queue(event)?;
+            }
+        }
+        self.flush(sender)
+    }
+
+    fn drain_after_completion(
+        self,
+        sender: mpsc::Sender<Value>,
+    ) -> Option<tokio::task::JoinHandle<()>> {
+        if self.pending.is_empty() {
+            return None;
+        }
+        let deadline = tokio::time::Instant::from_std(
+            self.blocked_since
+                .expect("pending stream must have a deadline")
+                + STREAM_BACKPRESSURE_GRACE,
+        );
+        Some(tokio::spawn(async move {
+            for (event, _) in self.pending {
+                match tokio::time::timeout_at(deadline, sender.send(event)).await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(_)) => return,
+                    Err(_) => {
+                        warn!("completed stream exceeded backpressure grace");
+                        return;
+                    }
+                }
+            }
+        }))
+    }
 }
 
 fn error(status: StatusCode, message: impl ToString) -> Response {
@@ -377,14 +477,9 @@ pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) 
     result.map_or(Ok(()), |result| result.context("HTTP service"))
 }
 
-fn send_events(active: &Active, events: Vec<Value>) -> Result<()> {
+fn send_events(active: &mut Active, events: Vec<Value>) -> Result<()> {
     if active.output.request.stream {
-        for event in events {
-            active
-                .events
-                .try_send(event)
-                .map_err(|_| anyhow::anyhow!("client disconnected or stream buffer full"))?;
-        }
+        active.stream_buffer.send(&active.events, events)?;
     }
     Ok(())
 }
@@ -476,10 +571,11 @@ async fn admit(
     );
     output.input_tokens = tokens.len();
     let start_events = output.start();
-    let running = Active {
+    let mut running = Active {
         output,
         parser,
         events,
+        stream_buffer: StreamBuffer::default(),
         done,
         started: enqueued,
         first_token: None,
@@ -495,10 +591,13 @@ async fn admit(
         )));
         return Ok(());
     }
-    if ready.send(Ok(())).is_err() || send_events(&running, start_events).is_err() {
+    if ready.send(Ok(())).is_err() || send_events(&mut running, start_events).is_err() {
         scheduler.abort(id);
         client.cancel_prepare(id).await;
         return Ok(());
+    }
+    if running.stream_buffer.is_blocked() {
+        scheduler.pause(id);
     }
     info!(
         request_id = id,
@@ -588,16 +687,34 @@ async fn run_engine(
     active: &mut BTreeMap<u64, Active>,
 ) -> Result<()> {
     loop {
-        if active.is_empty() {
+        let was_idle = active.is_empty();
+        if was_idle {
             // Finish native cleanup before going idle, including cancelled admissions.
             execute(client, &scheduler.schedule()).await?;
             let Some(submission) = incoming.recv().await else {
                 break;
             };
             admit(client, scheduler, active, submission).await?;
-        } else if let Ok(submission) = incoming.try_recv() {
-            // Bound admission work to one request between model steps.
-            admit(client, scheduler, active, submission).await?;
+        }
+        let mut backpressure_failures = Vec::new();
+        for (&id, request) in active.iter_mut() {
+            if !request.output.request.stream {
+                continue;
+            }
+            if let Err(error) = request.stream_buffer.flush(&request.events) {
+                backpressure_failures.push((id, error.to_string()));
+            } else if request.stream_buffer.is_blocked() {
+                scheduler.pause(id);
+            } else {
+                scheduler.resume(id);
+            }
+        }
+        for (id, error) in backpressure_failures {
+            scheduler.abort(id);
+            if let Some(request) = active.remove(&id) {
+                request.fail(&error);
+                info!(request_id = id, %error, "stream aborted");
+            }
         }
         let cancelled: Vec<_> = active
             .iter()
@@ -613,7 +730,18 @@ async fn run_engine(
                 info!(request_id = id, "request cancelled");
             }
         }
+        if !was_idle && let Ok(submission) = incoming.try_recv() {
+            // Check existing streams before one potentially slow preparation.
+            admit(client, scheduler, active, submission).await?;
+        }
         let batch = scheduler.schedule();
+        if batch.scheduled.is_empty()
+            && batch.finished_request_ids.is_empty()
+            && batch.preempted_request_ids.is_empty()
+        {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            continue;
+        }
         let worker = execute(client, &batch).await?;
         for scheduled in &batch.scheduled {
             let id = scheduled.request_id;
@@ -696,6 +824,9 @@ async fn run_engine(
                 info!(request_id = id, error = %error, "request aborted");
                 continue;
             }
+            if request.stream_buffer.is_blocked() {
+                scheduler.pause(id);
+            }
             if let Some(reason) = reason {
                 scheduler.abort(id);
                 let mut request = active.remove(&id).unwrap();
@@ -710,13 +841,19 @@ async fn run_engine(
                     request.fail("response exceeds configured storage capacity");
                     continue;
                 }
-                if let Err(error) = send_events(&request, events) {
+                if let Err(error) = send_events(&mut request, events) {
                     request.fail(&error.to_string());
                     continue;
                 }
-                if !request.output.request.responses && request.output.request.stream {
-                    let _ = request.events.try_send(json!("[DONE]"));
+                if !request.output.request.responses
+                    && request.output.request.stream
+                    && let Err(error) = send_events(&mut request, vec![json!("[DONE]")])
+                {
+                    request.fail(&error.to_string());
+                    continue;
                 }
+                let pending = std::mem::take(&mut request.stream_buffer);
+                let _ = pending.drain_after_completion(request.events.clone());
                 let elapsed = request.started.elapsed().as_secs_f64();
                 let ttft_ms = request
                     .first_token
@@ -743,6 +880,106 @@ async fn run_engine(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn stalled_stream_preserves_more_than_256_events_and_recovers_in_order() {
+        let (sender, mut receiver) = mpsc::channel(256);
+        let mut buffer = StreamBuffer::default();
+        buffer
+            .send(&sender, (0..300).map(|index| json!(index)).collect())
+            .unwrap();
+        assert!(buffer.is_blocked());
+        assert_eq!(buffer.pending.len(), 44);
+        for expected in 0..200 {
+            assert_eq!(receiver.recv().await.unwrap(), json!(expected));
+        }
+        buffer.flush(&sender).unwrap();
+        assert!(!buffer.is_blocked());
+        for expected in 200..300 {
+            assert_eq!(receiver.recv().await.unwrap(), json!(expected));
+        }
+    }
+
+    #[tokio::test]
+    async fn intermittent_one_event_reads_do_not_reset_stream_grace() {
+        let (sender, mut receiver) = mpsc::channel(256);
+        let mut buffer = StreamBuffer::default();
+        buffer
+            .send(&sender, (0..257).map(|index| json!(index)).collect())
+            .unwrap();
+        assert!(buffer.is_blocked());
+        assert_eq!(receiver.recv().await.unwrap(), json!(0));
+        buffer.flush(&sender).unwrap();
+        assert!(buffer.pending.is_empty());
+        assert!(
+            buffer.is_blocked(),
+            "one free slot must not resume generation"
+        );
+        buffer.blocked_since = Some(Instant::now() - Duration::from_secs(29));
+        buffer.flush(&sender).unwrap();
+        buffer.blocked_since = Some(Instant::now() - Duration::from_secs(31));
+        assert!(buffer.flush(&sender).is_err());
+    }
+
+    #[tokio::test]
+    async fn completed_stream_drains_pending_events_and_done_in_order() {
+        let (sender, mut receiver) = mpsc::channel(256);
+        let mut buffer = StreamBuffer::default();
+        buffer
+            .send(&sender, (0..258).map(|index| json!(index)).collect())
+            .unwrap();
+        buffer.send(&sender, vec![json!("[DONE]")]).unwrap();
+        let drain = buffer.drain_after_completion(sender.clone()).unwrap();
+        for expected in 0..258 {
+            let item = tokio::time::timeout(Duration::from_secs(1), receiver.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(item, json!(expected));
+        }
+        assert_eq!(receiver.recv().await.unwrap(), json!("[DONE]"));
+        drain.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn completed_stream_drain_exits_on_timeout_or_receiver_drop() {
+        let (sender, receiver) = mpsc::channel(1);
+        sender.try_send(json!("occupied")).unwrap();
+        let mut buffer = StreamBuffer::default();
+        buffer.queue(json!("pending")).unwrap();
+        buffer.blocked_since = Some(Instant::now() - Duration::from_secs(31));
+        let drain = buffer.drain_after_completion(sender.clone()).unwrap();
+        tokio::time::timeout(Duration::from_millis(100), drain)
+            .await
+            .unwrap()
+            .unwrap();
+        drop(receiver);
+
+        let (sender, receiver) = mpsc::channel(1);
+        let mut buffer = StreamBuffer::default();
+        buffer.queue(json!("pending")).unwrap();
+        drop(receiver);
+        let drain = buffer.drain_after_completion(sender).unwrap();
+        tokio::time::timeout(Duration::from_millis(100), drain)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[test]
+    fn stream_pending_cap_and_disconnect_fail_closed() {
+        let (sender, receiver) = mpsc::channel(256);
+        let mut buffer = StreamBuffer::default();
+        assert!(
+            buffer
+                .send(&sender, (0..1281).map(|index| json!(index)).collect())
+                .is_err()
+        );
+        assert_eq!(buffer.pending.len(), MAX_PENDING_STREAM_EVENTS);
+        drop(receiver);
+        assert!(buffer.flush(&sender).is_err());
+    }
+
     #[test]
     fn store_capacity_and_expiry() {
         let mut store = Store {

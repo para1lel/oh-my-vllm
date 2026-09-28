@@ -2,6 +2,7 @@
 
 import concurrent.futures
 import ctypes
+import http.client
 import json
 import os
 import re
@@ -655,6 +656,132 @@ class HttpTests(unittest.TestCase):
                 if process.poll() is None:
                     os.killpg(process.pid, signal.SIGKILL)
                     process.wait()
+
+    def test_stalled_sse_pauses_and_recovers_without_blocking_another_request(self):
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
+        steps = self.directory / "slow-stream-steps"
+        log_path = self.directory / "slow-stream-server.log"
+        environment = os.environ | {
+            "OH_MY_VLLM_WORKER_PYTHON": str(self.directory / "worker"),
+            "OH_MY_VLLM_FIXTURE_STEPS": str(steps),
+            "CUDA_VISIBLE_DEVICES": "",
+        }
+        with log_path.open("w") as log:
+            process = subprocess.Popen(
+                [
+                    str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                    "--socket",
+                    str(self.directory / "slow-stream-worker.ipc"),
+                    "serve",
+                    "--listen",
+                    f"127.0.0.1:{port}",
+                ],
+                env=environment,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+            )
+            connection = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+            try:
+                address = f"http://127.0.0.1:{port}/v1"
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        self.fail(log_path.read_text())
+                    try:
+                        with urllib.request.urlopen(address + "/models", timeout=0.2):
+                            break
+                    except (OSError, urllib.error.URLError):
+                        time.sleep(0.05)
+                else:
+                    self.fail("slow-stream fixture did not start")
+
+                connection.connect()
+                connection.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 65536)
+                payload = self.base(
+                    stream=True,
+                    store=False,
+                    messages=[{"role": "user", "content": "slow-stream"}],
+                    max_tokens=750,
+                    reasoning_effort="off",
+                )
+                connection.request(
+                    "POST",
+                    "/v1/chat/completions",
+                    json.dumps(payload),
+                    {"Content-Type": "application/json"},
+                )
+                response = connection.getresponse()
+                self.assertEqual(response.status, 200)
+                first = response.readline()
+                self.assertTrue(first.startswith(b"data: "), first)
+                request_id = int(json.loads(first[6:])["id"].rsplit("_", 1)[1])
+
+                def slow_steps():
+                    if not steps.exists():
+                        return 0
+                    return sum(
+                        json.loads(line)["rid"] == request_id
+                        for line in steps.read_text().splitlines()
+                    )
+
+                previous = -1
+                still_count = 0
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    count = slow_steps()
+                    if count > 256 and count == previous:
+                        still_count += 1
+                    else:
+                        still_count = 0
+                    if still_count >= 10:
+                        break
+                    previous = count
+                    time.sleep(0.05)
+                else:
+                    self.fail(f"slow stream did not pause after 256 steps: {previous}")
+                self.assertLess(count, 750, "slow stream completed before resume")
+                with urllib.request.urlopen(
+                    urllib.request.Request(
+                        address + "/chat/completions",
+                        data=json.dumps(self.base()).encode(),
+                        headers={"Content-Type": "application/json"},
+                    ),
+                    timeout=10,
+                ) as other:
+                    self.assertEqual(
+                        json.load(other)["choices"][0]["finish_reason"], "stop"
+                    )
+                self.assertEqual(
+                    slow_steps(), count, "slow stream advanced while paused"
+                )
+
+                content_steps = []
+                saw_done = False
+                while line := response.readline():
+                    if not line.startswith(b"data: "):
+                        continue
+                    if line.strip() == b"data: [DONE]":
+                        saw_done = True
+                        break
+                    chunk = json.loads(line[6:])
+                    delta = chunk["choices"][0]["delta"].get("content", "")
+                    if delta:
+                        content_steps.append(int(delta.split("|", 1)[0]))
+                self.assertTrue(saw_done, "slow stream ended without [DONE]")
+                self.assertEqual(content_steps, list(range(1, 751)))
+                self.assertEqual(slow_steps(), 750)
+            finally:
+                connection.close()
+                if process.poll() is None:
+                    os.killpg(process.pid, signal.SIGINT)
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.wait(timeout=5)
 
     def test_length_inside_tool_is_not_server_error(self):
         tool = {

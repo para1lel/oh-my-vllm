@@ -38,6 +38,9 @@ The owned Python worker exits when the Rust parent dies.
 - `crates/scheduler`: FCFS waiting/running queues, chunked prefill, token budgets,
   staggered admission, recompute preemption of later-admitted running requests
   before an older request, and accepted-draft accounting.
+  A stream blocked by HTTP backpressure is excluded from new scheduling until
+  its output queue drains; another request may use that scheduling turn. Its
+  KV state stays allocated unless normal priority-based preemption needs it.
   The kv-cache crate uses one shared pool by default, or separate FA/GDN pools
   with `--mamba-blocks` (ADR-007).
 - `crates/zmq-worker`: CLI, OpenAI-compatible HTTP APIs, model process lifecycle,
