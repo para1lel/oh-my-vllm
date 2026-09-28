@@ -67,8 +67,9 @@ The `2026-09-22-cuda-{operators,framework,features}.json` artifacts remain histo
 - PY-03's bounded graph policy is closed for tested Serve workset shifts and
   framework rows. Six 258048+4096 boundary cases completed on their earlier
   clean source; they do not test repeated shape churn at 262144. A separate
-  physical <4-GiB first-miss probe passes, but PY-04 is **partial/open**
-  because resident-graph late shape churn near that limit remains untested;
+  physical <4-GiB first-miss probe passes. A later resident 36k→40k
+  transition also passed below 4 GiB, but PY-04 is **partial/open** because
+  cross-shape 262k eviction and recapture remain untested;
   PY-06 is **partial/open** because whole-step host/GPU overlap benefit is
   unverified after a pinned-DtoH diagnostic with no material full-call gain;
   KRN-06 remains **open/no-go** after its safe candidate had no
@@ -97,7 +98,47 @@ The `2026-09-22-cuda-{operators,framework,features}.json` artifacts remain histo
   precondition was lower than actual 20.94 GiB free. This diagnostic proves
   fresh graph misses become eager under the physical guard for this one
   configuration. Existing-graph late shape changes and repeated 262144-token
-  churn remain unverified, so PY-04 remains **partial/open**.
+  churn were unverified at this checkpoint. The later resident-graph
+  diagnostic below narrows the first limit; PY-04 remains **partial/open**.
+
+## Resident graph and repeated 262k checkpoint (2026-09-29)
+
+- Independently reviewed external-only probes on clean HEAD `70a5e5e`
+  used B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` and the
+  unchanged release binary SHA-256
+  `90038fc7f9598e1e42f7beb8f04370463f3d1a33fb83b33a91f6698e3f0af888`.
+  Production source was not changed. Both used zero warmups and are behavior
+  diagnostics, not formal performance measurements.
+- With FA/GDN 2333/128, an MTP4 batch-1 36832+256 run first established
+  exact resident target/draft/proposal extent-36864 graphs and no extent-40960
+  graphs. Sixty-seven retained allocations of at most 256 MiB lowered actual
+  free memory from 22,055,944,192 to 4,070,768,640 bytes. The first 40960
+  misses came draft→proposal→target: each had free bytes below 4 GiB,
+  incremented `headroom_eager` once, retained the old graph and did not add
+  a capture. Final capture counts remained 2/2/1, no eviction. Output was
+  256 tokens, MTP proposed/accepted 225/199, preemptions 0. Raw
+  `/tmp/oh-my-vllm-py04-resident/probe-283459.log` SHA-256 is
+  `9f5113d42622635639dbb1e278f0b68fc8c1681e4233939ff115de9ea3a8f847`;
+  result `/tmp/oh-my-vllm-py04-resident/probe-result-283459.json` SHA-256 is
+  `f5fae3f04eb916ce6f358c0a15d74af50f573528edf3559b8925760b3ebbbc7d`.
+- With FA/GDN 1400/128, a separate MTP4 batch-4 worker completed two
+  258048+4096 rounds in one process. Both produced 16,384 tokens with zero
+  prefix hits or preemptions and MTP proposed/accepted 16,219/12,318. The
+  first round captured 45 graphs, the second 0; final residents were
+  target/draft/proposal 13/28/4, while eviction, recent recapture and churn
+  cooldown stayed 0. Thus same-shape 262144-token repetition completed,
+  while `repeated_churn_verified=false`. Raw
+  `/tmp/oh-my-vllm-py04-262k/probe-308672.log` SHA-256 is
+  `10ab638c78e4ac8ca91c45af1d279bba211a20594b717b799efb844fc5514f61`;
+  result `/tmp/oh-my-vllm-py04-262k/probe-result-308672.json` SHA-256 is
+  `1df3e7f27be02e8b5326ce9ca0b32dc40ed171aa193e8f28bbc4d4db08507bea`.
+- Both owners exited with no surviving worker/group or IPC listener; each
+  selected GPU returned to 0 MiB with no compute PID, and source identity
+  stayed clean. The Rust Bench command holds one shape across repetitions.
+  A real 262k cross-shape eviction/recapture test needs a separately reviewed
+  bounded mixed-shape Serve session with exact token lengths and per-wave
+  graph-key/counter records. That path remains unverified; PY-04 remains
+  **partial/open**. PY-06 and KRN-06 retain their preceding statuses.
 
 ## Whole-step overlap checkpoint (2026-09-29)
 

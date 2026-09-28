@@ -61,8 +61,8 @@ CUDA 迁移在 `c36d1c9` 的原始验收属于历史结果。整库审计修复�
   为本批已复审文档/证据修改。
 - PY-03 的有界 graph 策略在所测 Serve 工作集变形与框架行上关闭。较早干净
   源码的六项 258048+4096 边界用例已完成，但未覆盖 262144 处反复 shape
-  churn。另一次物理 <4 GiB 的首次 miss 诊断通过，但 PY-04 因已有 graph 后
-  接近该余量的晚期变形仍未实测，继续为
+  churn。物理 <4 GiB 的首次 miss 和后续已有图的 36k→40k 变形诊断均通过，
+  但 PY-04 因跨形状 262k 逐出/再捕获仍未实测，继续为
   **partial/open**；PY-06 在 pinned DtoH 未见实质完整调用收益的诊断后，整步
   host/GPU overlap 净收益仍未证实，仍为
   **partial/open**；KRN-06 的安全候选没有稳定完整调用收益，仍为
@@ -87,7 +87,41 @@ CUDA 迁移在 `c36d1c9` 的原始验收属于历史结果。整库审计修复�
   GPU 恢复 0 MiB/0%，自有 IPC socket/监听不存在。首轮因真实空闲 20.94 GiB
   超过旧的 20 GiB 前置上限而在分配前拒收。该诊断只证明本配置中低于 4 GiB
   时首次 graph miss 转 eager；不覆盖已有 graph 后的晚期新形状或 262144
-  token 处反复变形。因此 PY-04 仍为 **partial/open**。
+  token 处反复变形在此检查点尚未验证。下方较新的已有图诊断缩小了第一个
+  缺口；PY-04 仍为 **partial/open**。
+
+## 已有图与重复 262k 检查点（2026-09-29）
+
+- 经独立复核的仓库外探针在干净 HEAD `70a5e5e` 上使用 B200 UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`；release 二进制 SHA-256
+  仍为 `90038fc7f9598e1e42f7beb8f04370463f3d1a33fb83b33a91f6698e3f0af888`。
+  未修改生产源码。两项均为零次预热的行为诊断，并非正式性能测量。
+- FA/GDN 2333/128 的 MTP4 batch-1、36832+256 运行先确认
+  target/draft/proposal 的精确 36864 图驻留，40960 图均不存在。保留
+  67 个不超过 256 MiB 的分配后，实报空闲显存从 22,055,944,192 降至
+  4,070,768,640 字节。三家首次 40960 miss 依次为 draft→proposal→target：
+  每次空闲低于 4 GiB，`headroom_eager` 各增 1，旧图仍驻留且捕获不增。
+  最终捕获数仍为 2/2/1，无逐出。输出 256 token，MTP proposed/accepted
+  为 225/199，零抢占。原始日志
+  `/tmp/oh-my-vllm-py04-resident/probe-283459.log` 的 SHA-256 为
+  `9f5113d42622635639dbb1e278f0b68fc8c1681e4233939ff115de9ea3a8f847`；
+  结果 `/tmp/oh-my-vllm-py04-resident/probe-result-283459.json` 的 SHA-256 为
+  `f5fae3f04eb916ce6f358c0a15d74af50f573528edf3559b8925760b3ebbbc7d`。
+- 另一 FA/GDN 1400/128 的 MTP4 batch-4 worker 在同进程完成两轮
+  258048+4096。每轮输出 16,384 token，零前缀命中、零抢占，MTP
+  proposed/accepted 为 16,219/12,318。第一轮捕获 45 个图，第二轮 0 个；
+  最终 target/draft/proposal 驻留为 13/28/4，逐出、近期再捕获和 churn
+  冷却计数均为 0。因此同形 262144-token 重复运行完成，
+  `repeated_churn_verified=false`。原始日志
+  `/tmp/oh-my-vllm-py04-262k/probe-308672.log` 的 SHA-256 为
+  `10ab638c78e4ac8ca91c45af1d279bba211a20594b717b799efb844fc5514f61`；
+  结果 `/tmp/oh-my-vllm-py04-262k/probe-result-308672.json` 的 SHA-256 为
+  `1df3e7f27be02e8b5326ce9ca0b32dc40ed171aa193e8f28bbc4d4db08507bea`。
+- 两位 owner 退出后均无自有 worker、进程组或 IPC 监听；所选 GPU 回到
+  0 MiB 且无计算进程，源码身份保持干净。Rust Bench 在重复运行之间保持
+  固定形状。验证 262k 跨形状逐出/再捕获仍需另经复核的有界混合形状 Serve
+  会话，精确控制 token 长度并逐波记录 graph key/计数；该路径尚未验证，
+  PY-04 继续为 **partial/open**。PY-06、KRN-06 保持此前状态。
 
 ## 整步重叠检查点（2026-09-29）
 
