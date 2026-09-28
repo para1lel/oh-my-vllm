@@ -337,6 +337,30 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   行宽、Ruff、Clippy 和 hooks 均通过，自有进程全部退出。该有界硬件
   测试并未穷尽全部最大值/输入配对，也不证明中间 FP32 商逐位一致。
   当前完整 GPU 套件、147 项正式算子矩阵、六项长上下文和 12 行框架门槛仍待完成。
+- 经独立复审的 `b464634` 是 PY-04 共享池候选。target、draft、proposal 图
+  分别在本类图之间共享独立的池；draft hidden 在下一图回放前沿同一 stream
+  复制到其持久输入。源码提交 `b464634` 在 B200 上的图测试8/8通过，UUID 为
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`，日志为
+  `/tmp/oh-my-vllm-py04-gpu-b464634.log`。同 UUID 的 dirty-candidate
+  配对诊断使用 HEAD `a02812d`、相同五文件 patch SHA-256
+  `7c531868cda9e65590ecdf08e1ef467f51c4195ea8b6c371e92fa36db752b8fe`
+  和 release binary SHA-256
+  `90038fc7f9598e1e42f7beb8f04370463f3d1a33fb83b33a91f6698e3f0af888`；
+  两份日志都记录各文件 hash：`/tmp/oh-my-vllm-py04-{private,shared}-r2.log`。
+  FA 1400/GDN 128 块、MTP4 batch 4、输入32768/输出512，两次预热与五次
+  测量后，私有池→共享池 reserved 显存峰值由126565220352降至
+  125986406400字节（减少578813952字节，约552 MiB）。吞吐中位数为
+  243.936→244.011 token/s，最大 TTFT 为6.55794→6.55717 s；双方离散度
+  均低于0.55%，每次运行均无抢占并接受1562个 draft。另一次**干净
+  `b464634`**运行采用 FA 2333/GDN 128，跨 extent 36864→40960 捕获新的
+  target/draft/proposal 形状，在 reserved 峰值176815079424字节时无 OOM
+  或抢占；一次预热、一次测量的日志为
+  `/tmp/oh-my-vllm-py04-late-b464634.log`。候选工作树的
+  `scripts/test.sh cpu` 通过237项测试及70个 subtest（排除220项 GPU 用例），
+  日志为 `/tmp/oh-my-vllm-py04-cpu.log`；Rust workspace 58/39/26、fmt、
+  行宽、Ruff、Clippy 与 hooks 通过。自有 GPU/worker 进程和 socket 已清理。
+  PY-04 仍为 **open**：缓存仍在捕获前分配，单个近满形状不能约束所有后期
+  捕获；当前完整 GPU、147项正式算子、六项长上下文和12行框架门槛待完成。
 
 后续工作：PY-03/04/06、SRV-08、KRN-06、PY-05/07 与 KRN-10 验收、
 EVD-07，以及当前完整算子/GPU 套件

@@ -432,6 +432,32 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   prove bitwise equality of intermediate FP32 quotients. The full current
   GPU suite, 147-case formal matrix, six context rows and 12 framework rows
   remain pending.
+- Independently reviewed `b464634` is a PY-04 shared-pool candidate. Target,
+  draft and proposal graphs each share a separate family pool; draft hidden is
+  copied to the next graph's persistent input on the same stream before replay.
+  At source commit `b464634`, B200 graph tests passed 8/8 on UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`, log
+  `/tmp/oh-my-vllm-py04-gpu-b464634.log`. A paired dirty-candidate diagnostic
+  on the same UUID used HEAD `a02812d` plus identical five-file patch SHA-256
+  `7c531868cda9e65590ecdf08e1ef467f51c4195ea8b6c371e92fa36db752b8fe`
+  and release binary SHA-256
+  `90038fc7f9598e1e42f7beb8f04370463f3d1a33fb83b33a91f6698e3f0af888`;
+  both logs include per-file hashes: `/tmp/oh-my-vllm-py04-{private,shared}-r2.log`.
+  With FA 1400/GDN 128 blocks, MTP4 batch 4, 32768 input/512 output, two
+  warmups and five measured runs, private→shared peak reserved memory fell
+  126565220352→125986406400 bytes (578813952 bytes, about 552 MiB). Median
+  throughput was 243.936→244.011 token/s and maximum TTFT 6.55794→6.55717 s;
+  both spreads were below 0.55%, with zero preemptions and 1562 accepted drafts
+  per run. A separate **clean `b464634`** run with FA 2333/GDN 128 crossed
+  extent 36864→40960, captured new target/draft/proposal shapes, and completed
+  without OOM or preemption at 176815079424 peak reserved bytes; it had one
+  warmup and one measured run, log `/tmp/oh-my-vllm-py04-late-b464634.log`.
+  Candidate-tree `scripts/test.sh cpu` passed 237 tests/70 subtests (220 GPU
+  deselected), log `/tmp/oh-my-vllm-py04-cpu.log`; Rust workspace 58/39/26,
+  fmt, line width, Ruff, Clippy and hooks passed. Owned GPU/worker processes and
+  sockets were cleared. PY-04 remains **open**: caches still precede capture,
+  one near-full shape does not bound all later captures, and the current full
+  GPU, 147-operator, six-boundary and 12-row framework gates remain pending.
 
 Remaining work: PY-03/04/06, SRV-08, KRN-06, PY-05/07 and KRN-10 acceptance,
 EVD-07, the current full operator/GPU suite, and 12-row framework acceptance.

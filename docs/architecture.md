@@ -115,6 +115,13 @@ state addresses. Warmup/capture saves every FA/state destination and restores it
 before formal replay. Target and proposer each retain at most 32 graph shapes;
 prefill or uncached shapes after that limit execute eagerly. Graph outputs are
 consumed before reuse, and recurrent MTP inputs are copied into separate buffers.
+Captures share one CUDA graph memory pool within each of the target, draft and
+proposal families, and each family owns a distinct pool. Their replays never
+overlap. A draft output is copied to the next graph's static input on the same
+CUDA stream before that graph replays; proposal outputs are transferred before
+another proposal replay. A prior graph's static output is not assumed to
+survive a different graph's replay. Cache tensors are allocated before capture
+so their graph-bound addresses stay valid; late capture still needs headroom.
 `OH_MY_VLLM_ENFORCE_EAGER=1` is diagnostic only. Final performance requires measured
 coverage of the relevant shapes, not merely successful graph capture.
 
