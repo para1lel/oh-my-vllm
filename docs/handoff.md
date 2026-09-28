@@ -312,8 +312,28 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   subtests (194 GPU deselected), plus Rust workspace, fmt, line width, Ruff,
   Clippy, and hooks. Owned GPU processes exited. KRN-10 remains open pending
   clean after16, current full147/GPU suite, and 12-row framework acceptance.
+- Independently reviewed `17413e5` is the PY-05 candidate: MTP eager/draft/
+  proposal metadata uses active extent width, and target decode keeps its
+  existing extent width while uploading one page row per request. Device
+  `index_select` expands rows for token-level attention. Target and draft
+  graph replay still copy changed tables; regressions cover 783/784/262143
+  boundaries and changed request grouping. At max context 262144, extent
+  36864 and four 42-page requests with five token rows each, draft tables
+  shrink from 20×335 to 20×48. Same-GPU host component A/B (5 warmups,
+  20×256 calls) yielded median microseconds of 259.69→32.13 for draft graph,
+  265.86→32.22 eager, 57.39→15.52 proposal, and 46.51→32.06 target. Some
+  draft samples exceeded 10% spread; these are diagnostic component timings,
+  not framework throughput evidence. Raw traces are under
+  `/tmp/oh-my-vllm-py05-*`. `scripts/test.sh cpu` passed 220 tests and 67
+  subtests (196 GPU deselected), focused B200 passed 5/5 on UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`, and Rust workspace
+  58/38/26, fmt, line width, Ruff, Clippy and hooks passed. CPU and B200
+  logs are `/tmp/oh-my-vllm-py05-cpu-17413e5.log` and
+  `/tmp/oh-my-vllm-py05-gpu-focused-17413e5.log`. The owned GPU
+  process exited. PY-05 remains open pending the full current GPU suite and
+  12 framework rows, especially MTP batch 4.
 
-Remaining work: PY-03..07, SRV-08, KRN-06 and KRN-10,
+Remaining work: PY-03/04/06/07, SRV-08, KRN-06, PY-05 and KRN-10 acceptance,
 EVD-07, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.

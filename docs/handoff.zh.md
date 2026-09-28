@@ -237,8 +237,25 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   67 个 subtest（排除 194 项 GPU 用例），Rust workspace、fmt、行宽、Ruff、
   Clippy 与 hooks 也通过。自有 GPU 进程已退出。KRN-10 仍为 open，待干净的
   修改后 16 项、当前完整 147 项/GPU 套件及 12 组框架验收。
+- 已独立复审的 `17413e5` 是 PY-05 候选实现：MTP eager/draft/proposal
+  元数据按当前 extent 定宽；target decode 保持原有 extent 宽度，同时改为每个
+  请求上传一行页表。设备端 `index_select` 展开 token 行。target/draft graph
+  replay 仍复制变更后的页表；回归覆盖位置 783/784/262143 和请求重新分组。
+  在最大上下文 262144、extent 36864、四个各 42 页且每请求五个 token 行时，
+  draft 表由 20×335 缩到 20×48。同卡 host 组件 A/B（5 次预热、20 组各
+  256 次调用）的中位数（微秒）为 draft graph 259.69→32.13、eager
+  265.86→32.22、proposal 57.39→15.52、target 46.51→32.06。部分 draft
+  样本的离散度超过 10%，这些只是组件诊断计时，不是框架吞吐证据。原始记录在
+  `/tmp/oh-my-vllm-py05-*`。`scripts/test.sh cpu` 通过 220 项及 67 个
+  subtest（排除 196 项 GPU 用例），聚焦 B200 在 UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上 5/5 通过；Rust
+  workspace 58/38/26、fmt、行宽、Ruff、Clippy 与 hooks 通过。CPU 与 B200
+  日志分别为 `/tmp/oh-my-vllm-py05-cpu-17413e5.log` 和
+  `/tmp/oh-my-vllm-py05-gpu-focused-17413e5.log`。自有 GPU
+  进程已退出。当前完整 GPU 套件及 12 行框架测试，尤其 MTP batch 4，
+  仍待完成，因此 PY-05 保持 open。
 
-后续工作：PY-03..07、SRV-08、KRN-06 与 KRN-10、
+后续工作：PY-03/04/06/07、SRV-08、KRN-06、PY-05 与 KRN-10 验收、
 EVD-07、四项未验证风险，以及当前完整算子/GPU 套件
 和 12 组框架验收。
 逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。
