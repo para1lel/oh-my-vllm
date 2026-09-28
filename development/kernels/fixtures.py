@@ -23,7 +23,7 @@ ENTRIES = {
 }
 
 
-def fixture(config, *, seed=784):
+def fixture(config, *, seed=784, observe=False):
     """Share immutable inputs; allocate isolated mutable destination pools.
 
     Sources never alias written destinations, so warmup/capture/replay preserve
@@ -37,6 +37,11 @@ def fixture(config, *, seed=784):
     candidate = getattr(importlib.import_module(f"oh_my_vllm.kernels.{module}"), entry)
     n = config.get("tokens", 0)
     kwargs = {}
+
+    def package(reference_call, candidate_call, witnesses=()):
+        if observe:
+            return reference_call, candidate_call, witnesses
+        return reference_call, candidate_call
 
     def random(*shape, dtype=torch.bfloat16):
         return torch.randn(shape, device="cuda", dtype=dtype, generator=generator)
@@ -52,9 +57,22 @@ def fixture(config, *, seed=784):
         slots = positions + 784
         pool = torch.empty(1400, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
         other = torch.empty_like(pool)
-        return lambda: reference(
-            packed, qw, kw, positions, pool, slots
-        ), lambda: candidate(packed, qw, kw, positions, other, slots)
+        return package(
+            lambda: reference(packed, qw, kw, positions, pool, slots),
+            lambda: candidate(packed, qw, kw, positions, other, slots),
+            (
+                (
+                    "written_key",
+                    lambda: pool[slots // 784, 0, slots % 784],
+                    lambda: other[slots // 784, 0, slots % 784],
+                ),
+                (
+                    "written_value",
+                    lambda: pool[slots // 784, 1, slots % 784],
+                    lambda: other[slots // 784, 1, slots % 784],
+                ),
+            ),
+        )
     if operation in ("norm", "add_norm"):
         x, w = random(n, 5120), random(5120, dtype=torch.float32)
         args = (x, w) if operation == "norm" else (x, random(n, 5120), w)
@@ -140,14 +158,37 @@ def fixture(config, *, seed=784):
             pool_index = 5
         other = list(args)
         other[pool_index] = pool.clone()
-        return lambda: reference(*args), lambda: candidate(*other)
+        if observe:
+            written = (
+                metadata(sorted({slot for slot in writes if slot >= 0}))
+                if operation == "convolution"
+                else other[8]
+            )
+            witnesses = (
+                (
+                    "written_state",
+                    lambda: pool.index_select(0, written),
+                    lambda: other[pool_index].index_select(0, written),
+                ),
+            )
+        else:
+            witnesses = ()
+        return package(lambda: reference(*args), lambda: candidate(*other), witnesses)
     elif operation == "append":
         k, v = random(n, 4, 256), random(n, 4, 256)
         slots = torch.arange(784, 784 + n, device="cuda", dtype=torch.int64)
         pool = torch.empty(1400, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
         other = torch.empty_like(pool)
-        return lambda: reference(pool, k, v, slots), lambda: candidate(
-            other, k, v, slots
+        return package(
+            lambda: reference(pool, k, v, slots),
+            lambda: candidate(other, k, v, slots),
+            (
+                (
+                    "written_cache",
+                    lambda: pool[slots // 784, :, slots % 784],
+                    lambda: other[slots // 784, :, slots % 784],
+                ),
+            ),
         )
     elif operation == "attention":
         batch, queries, length = config["batch"], config["queries"], config["length"]
@@ -176,4 +217,6 @@ def fixture(config, *, seed=784):
         )
     else:
         raise ValueError(operation)
-    return lambda: reference(*args, **kwargs), lambda: candidate(*args, **kwargs)
+    return package(
+        lambda: reference(*args, **kwargs), lambda: candidate(*args, **kwargs)
+    )

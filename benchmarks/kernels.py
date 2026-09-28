@@ -47,6 +47,7 @@ def main():
 
     from development.kernels.fixtures import fixture
     from development.kernels.observations import analyze
+    from development.kernels.output_verification import verify
     from development.kernels.timing import measure
 
     reference_manifest = verify_reference()
@@ -81,7 +82,8 @@ def main():
             "Complete static maximum-shape operations; three independent warm rounds, "
             "twenty alternating-order pairs/round,100 graph repetitions/sample. "
             "No profiler during timing. Fixtures use immutable sources and isolated "
-            "repeatable destinations."
+            "repeatable destinations. Before timing, compare both backends' "
+            "returns and written cache/state slots at existing tolerances."
         ),
         coverage=dict(
             complete=len(selected) == len(matrix),
@@ -102,7 +104,12 @@ def main():
         for case in selected:
             if failures:
                 raise RuntimeError(failures[0])
-            reference, candidate = fixture(case["configuration"])
+            reference, candidate, witnesses = fixture(
+                case["configuration"], observe=True
+            )
+            output_verification = verify(
+                case["configuration"]["operation"], reference, candidate, witnesses
+            )
             raw = measure(reference, candidate)
             report["cuda_build_provenance"] = provenance(
                 require_loaded=True, require_compiler=True
@@ -112,7 +119,14 @@ def main():
                 raise RuntimeError(
                     failures[0] if failures else "source changed during measurement"
                 )
-            report["rows"].append(dict(**case, raw_pairs_ms=raw, comparison=decision))
+            report["rows"].append(
+                dict(
+                    **case,
+                    output_verification=output_verification,
+                    raw_pairs_ms=raw,
+                    comparison=decision,
+                )
+            )
             print(
                 case["id"],
                 "PASS" if decision["passed"] else "FAIL",
