@@ -9,6 +9,7 @@ PY-01 (FA page sharing) is tested in test_batch_plan.py.
 import unittest
 from unittest.mock import MagicMock, patch
 
+import pytest
 import torch
 
 
@@ -67,6 +68,7 @@ class TestKRN04FP8Int32Overflow(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "int32 flat offset"):
             silu_mul(t)
 
+    @pytest.mark.gpu
     def test_silu_mul_within_range_passes_shape_check(self):
         """Small tensors must not trigger the overflow guard."""
         from oh_my_vllm.kernels.elementwise import silu_mul
@@ -251,6 +253,7 @@ class TestPY02FP8ProjectionAlignment(unittest.TestCase):
 class TestMNT02EmptyTensorGuards(unittest.TestCase):
     """MNT-02: silu_mul and delta_gates return empty tensors for 0-row input."""
 
+    @pytest.mark.gpu
     def test_silu_mul_empty_returns_without_launch(self):
         """0-row silu_mul should return an empty tensor, not launch a kernel."""
         if not torch.cuda.is_available():

@@ -19,6 +19,8 @@ with no OOM and zero preemptions.
 
 import pytest
 
+pytestmark = pytest.mark.gpu
+
 
 @pytest.mark.skip(reason="requires GPU and full model: see docs/testing.md")
 def test_max_context_length_ordinary_bs1():

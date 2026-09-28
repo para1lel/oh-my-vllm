@@ -54,6 +54,7 @@ class HttpTests(unittest.TestCase):
             "VLLM_TARGET_DEVICE": "cpu",
             "CUDA_VISIBLE_DEVICES": "",
             "OH_MY_VLLM_FIXTURE_CLEANUP": str(cls.directory / "cleanup"),
+            "OH_MY_VLLM_FIXTURE_BLOCKS": str(cls.directory / "blocks.json"),
             "OH_MY_VLLM_FIXTURE_OVERLAP": str(cls.directory / "overlap"),
             "OH_MY_VLLM_FIXTURE_ABORTS": str(cls.directory / "aborts"),
             "OH_MY_VLLM_PREPARE_TIMEOUT_MS": "500",
@@ -785,12 +786,33 @@ class HttpTests(unittest.TestCase):
 
     def test_cancel_does_not_break_other_request(self):
         cleanup = self.directory / "cleanup"
+        blocks = self.directory / "blocks.json"
+        initial = {"owners": [], "free_fa": 99, "free_mamba": 99}
+        self.assertEqual(json.loads(blocks.read_text()), initial)
+
         before = cleanup.read_text().splitlines() if cleanup.exists() else []
         with self.request(
             "/chat/completions",
-            self.base(stream=True, messages=[{"role": "user", "content": "long"}]),
+            self.base(
+                stream=True,
+                messages=[{"role": "user", "content": "long hold-active"}],
+                max_tokens=1500,
+            ),
         ) as response:
             response.readline()
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                allocated = json.loads(blocks.read_text())
+                if (
+                    allocated["owners"]
+                    and allocated["free_fa"] < 99
+                    and allocated["free_mamba"] < 99
+                ):
+                    break
+                time.sleep(0.02)
+            self.assertTrue(allocated["owners"], "fixture saw no allocated request")
+            self.assertLess(allocated["free_fa"], 99)
+            self.assertLess(allocated["free_mamba"], 99)
         with concurrent.futures.ThreadPoolExecutor() as pool:
 
             def complete(_):
@@ -805,6 +827,128 @@ class HttpTests(unittest.TestCase):
                 break
             time.sleep(0.02)
         self.assertGreater(len(lines), len(before))
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            if json.loads(blocks.read_text()) == initial:
+                break
+            time.sleep(0.02)
+        self.assertEqual(json.loads(blocks.read_text()), initial)
+
+    def test_cancel_reclaims_full_shared_scheduler_pool(self):
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
+        address = f"http://127.0.0.1:{port}/v1"
+        blocks = self.directory / "small-pool-blocks.json"
+        steps = self.directory / "small-pool-steps"
+        shutdown = self.directory / "small-pool-shutdown"
+        log_path = self.directory / "small-pool-server.log"
+        environment = os.environ | {
+            "OH_MY_VLLM_WORKER_PYTHON": str(self.directory / "worker"),
+            "OH_MY_VLLM_FIXTURE_BLOCKS": str(blocks),
+            "OH_MY_VLLM_FIXTURE_STEPS": str(steps),
+            "OH_MY_VLLM_FIXTURE_SHUTDOWN": str(shutdown),
+            "CUDA_VISIBLE_DEVICES": "",
+        }
+        with log_path.open("w") as log:
+            process = subprocess.Popen(
+                [
+                    str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                    "--socket",
+                    str(self.directory / "small-pool-worker.ipc"),
+                    "--scheduler-blocks",
+                    "5",
+                    "serve",
+                    "--listen",
+                    f"127.0.0.1:{port}",
+                ],
+                env=environment,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+            )
+            try:
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        self.fail(log_path.read_text())
+                    try:
+                        with urllib.request.urlopen(address + "/models", timeout=0.2):
+                            break
+                    except (OSError, urllib.error.URLError):
+                        time.sleep(0.05)
+                else:
+                    self.fail("small scheduler pool fixture did not start")
+
+                # Five shared physical blocks leave four usable slots. Crossing
+                # position 784 needs two FA pages and two GDN state slots.
+                payload = self.base(
+                    True, input="long hold-active", max_output_tokens=900
+                )
+                first = urllib.request.Request(
+                    address + "/responses",
+                    data=json.dumps(payload | {"stream": True}).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(first, timeout=5) as stream:
+                    self.assertIn(b"response.created", stream.readline())
+                    deadline = time.monotonic() + 3
+                    while time.monotonic() < deadline:
+                        observed = json.loads(blocks.read_text())
+                        lines = steps.read_text().splitlines() if steps.exists() else []
+                        if len(lines) >= 2 and observed["owners"]:
+                            break
+                        time.sleep(0.02)
+                    self.assertGreaterEqual(len(lines), 2)
+                    self.assertEqual(observed["free_fa"], 98)
+                    self.assertEqual(observed["free_mamba"], 98)
+
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline:
+                    observed = json.loads(blocks.read_text())
+                    if not observed["owners"]:
+                        break
+                    time.sleep(0.02)
+                self.assertEqual(observed["owners"], [])
+
+                # The same demand must cross 784 after cancellation. A leaked
+                # Rust block leaves fewer than four allocatable slots.
+                payload["input"] = "long"
+                second = urllib.request.Request(
+                    address + "/responses",
+                    data=json.dumps(payload).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(second, timeout=15) as response:
+                    self.assertEqual(json.load(response)["status"], "incomplete")
+                recorded = [json.loads(line) for line in steps.read_text().splitlines()]
+                first_id = recorded[0]["rid"]
+                self.assertTrue(
+                    any(
+                        row["rid"] != first_id and row["fa"] >= 2 and row["mamba"] >= 2
+                        for row in recorded
+                    ),
+                    "replacement request never occupied both FA and GDN pages",
+                )
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline:
+                    observed = json.loads(blocks.read_text())
+                    if observed == {"owners": [], "free_fa": 99, "free_mamba": 99}:
+                        break
+                    time.sleep(0.02)
+                self.assertEqual(
+                    observed, {"owners": [], "free_fa": 99, "free_mamba": 99}
+                )
+                self.assertIn("fa_pool_blocks=5", log_path.read_text())
+            finally:
+                if process.poll() is None:
+                    process.send_signal(signal.SIGINT)
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.wait()
+        self.assertEqual(shutdown.read_text(), "shutdown received\n")
 
 
 if __name__ == "__main__":

@@ -2,9 +2,12 @@
 
 import unittest
 
+import pytest
 import torch
 from oh_my_vllm.models.qwen import AttentionBatch, Batch
 from oh_my_vllm.worker.decode_graph import DecodeGraph, DraftGraph
+
+pytestmark = pytest.mark.gpu
 
 
 class ToyModel:

@@ -18,10 +18,13 @@ scripts/with-env.sh python scripts/check_rust_line_width.py
 scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
-CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p 'test_*.py'
+scripts/test.sh cpu
 ```
 
-The `unittest` command runs only `TestCase` modules. It imports the pytest-style
+`scripts/test.sh` builds the Rust HTTP binary, then runs pytest through the
+project environment. `cpu` hides CUDA and deselects cases marked `gpu`;
+`full` acquires and pins an idle B200. Pytest is the single Python test entry
+point. The former `unittest discover` command imported these pytest-style
 modules without running them:
 
 - `test_independent_kernels.py`
@@ -31,8 +34,9 @@ modules without running them:
 - `test_proposal_graph.py`
 - `test_gqa_accuracy.py`
 
-A passing `unittest` run therefore says nothing about those modules. The full
-suite is below.
+They are collected in full mode, with GPU cases explicitly marked in
+`pytest.ini`/test modules. The mixed greedy-batch and validation-guard modules
+mark only their GPU cases, so their CPU cases still run in `cpu` mode.
 
 Rust tests cover:
 
@@ -60,8 +64,7 @@ is never model or performance evidence.
 ## Full GPU suite
 
 ```bash
-scripts/with-gpu.sh scripts/with-env.sh env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 MAX_JOBS=8 \
-  python -m pytest tests -q
+scripts/test.sh full
 ```
 
 The historical default-CUDA run on the working tree after `ef07b2b`, later

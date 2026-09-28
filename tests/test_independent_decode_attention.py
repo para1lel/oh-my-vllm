@@ -9,7 +9,10 @@ import torch
 from oh_my_vllm.kernels.decode_attention import decode
 from oh_my_vllm.worker.decode_graph import DecodeAttention
 
-pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+pytestmark = [
+    pytest.mark.gpu,
+    pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA"),
+]
 
 
 @pytest.mark.parametrize("entry", ["append", "prepare_attention"])

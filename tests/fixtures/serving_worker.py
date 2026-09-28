@@ -17,7 +17,23 @@ def main():
     socket = context.socket(zmq.DEALER)
     socket.connect(address)
     requests = {}
+    block_owners = {}
     adapter = None
+
+    def publish_blocks():
+        if not (path := os.environ.get("OH_MY_VLLM_FIXTURE_BLOCKS")):
+            return
+        fa = set().union(*(owner[0] for owner in block_owners.values()))
+        mamba = set().union(*(owner[1] for owner in block_owners.values()))
+        snapshot = {
+            "owners": sorted(block_owners),
+            "free_fa": 99 - len(fa),
+            "free_mamba": 99 - len(mamba),
+        }
+        temporary = Path(path + ".tmp")
+        temporary.write_text(json.dumps(snapshot))
+        temporary.replace(path)
+
     while True:
         message = msgpack.unpackb(socket.recv(), raw=False)
         kind = message["type"]
@@ -30,6 +46,7 @@ def main():
                 "logical_num_blocks": 100,
                 "mamba_blocks": 100,
             }
+            publish_blocks()
         elif kind == "prepare":
             rid = message["request_id"]
             request = message["request"]
@@ -106,15 +123,36 @@ def main():
                     with Path(path).open("a") as output:
                         output.write("overlap\n")
             for rid in message["finished_request_ids"]:
+                block_owners.pop(rid, None)
                 requests.pop(rid, None)
                 adapter.generations.pop(rid, None)
                 if path := os.environ.get("OH_MY_VLLM_FIXTURE_CLEANUP"):
                     with Path(path).open("a") as output:
                         output.write(str(rid) + "\n")
+            for rid in message["preempted_request_ids"]:
+                block_owners.pop(rid, None)
             outputs = []
             fatal = False
             for scheduled in message["scheduled"]:
                 rid = scheduled["request_id"]
+                if path := os.environ.get("OH_MY_VLLM_FIXTURE_STEPS"):
+                    with Path(path).open("a") as output:
+                        output.write(
+                            json.dumps(
+                                {
+                                    "rid": rid,
+                                    "fa": len(set(scheduled["fa_block_table"]) - {0}),
+                                    "mamba": len(
+                                        set(scheduled["mamba_block_table"]) - {0}
+                                    ),
+                                }
+                            )
+                            + "\n"
+                        )
+                block_owners[rid] = (
+                    set(scheduled["fa_block_table"]) - {0},
+                    set(scheduled["mamba_block_table"]) - {0},
+                )
                 state = requests[rid]
                 if state["fatal"]:
                     fatal = True
@@ -162,16 +200,20 @@ def main():
                 else {"type": "execute_result", "outputs": outputs}
             )
             reply["rpc_id"] = message["rpc_id"]
+            publish_blocks()
         elif kind == "shutdown":
+            publish_blocks()
             if path := os.environ.get("OH_MY_VLLM_FIXTURE_SHUTDOWN"):
                 Path(path).write_text("shutdown received\n")
             break
         elif kind == "abort":
+            block_owners.pop(message["request_id"], None)
             requests.pop(message["request_id"], None)
             adapter.generations.pop(message["request_id"], None)
             if path := os.environ.get("OH_MY_VLLM_FIXTURE_ABORTS"):
                 with Path(path).open("a") as output:
                     output.write(str(message["request_id"]) + "\n")
+            publish_blocks()
             continue
         else:
             raise RuntimeError(kind)

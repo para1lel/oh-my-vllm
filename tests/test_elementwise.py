@@ -4,7 +4,10 @@ import pytest
 import torch
 from oh_my_vllm.kernels.elementwise import delta_gates, silu_mul
 
-pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
+pytestmark = [
+    pytest.mark.gpu,
+    pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required"),
+]
 
 
 @pytest.mark.parametrize("rows", [1, 5, 37, 128, 129])

@@ -23,12 +23,14 @@ ENTRIES = {
 }
 
 
-def fixture(config):
+def fixture(config, *, seed=784):
     """Share immutable inputs; allocate isolated mutable destination pools.
 
     Sources never alias written destinations, so warmup/capture/replay preserve
     identical effective inputs. Production-required snapshots stay in the call.
+    A local CUDA generator makes construction reproducible for every caller.
     """
+    generator = torch.Generator(device="cuda").manual_seed(seed)
     operation = config["operation"]
     module, entry = ENTRIES[operation]
     reference = reference_operator(module, entry)
@@ -37,7 +39,7 @@ def fixture(config):
     kwargs = {}
 
     def random(*shape, dtype=torch.bfloat16):
-        return torch.randn(shape, device="cuda", dtype=dtype)
+        return torch.randn(shape, device="cuda", dtype=dtype, generator=generator)
 
     def metadata(values, dtype=torch.int64):
         return torch.tensor(values, device="cuda", dtype=dtype)
@@ -128,8 +130,8 @@ def fixture(config):
                 q,
                 k,
                 v,
-                -torch.rand(n, 48, device="cuda"),
-                torch.rand(n, 48, device="cuda"),
+                -torch.rand(n, 48, device="cuda", generator=generator),
+                torch.rand(n, 48, device="cuda", generator=generator),
                 pool,
                 metadata(starts, torch.int32),
                 reads,

@@ -6,7 +6,7 @@ from oh_my_vllm.worker.sampler import RequestSampler, greedy_rows, verify_rows
 from oh_my_vllm.worker.sampling import SamplingParams
 
 
-@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=pytest.mark.gpu)])
 def test_batched_greedy_matches_request_sampling(device):
     if device == "cuda" and not torch.cuda.is_available():
         pytest.skip("requires CUDA")

@@ -5,7 +5,10 @@ import torch
 from oh_my_vllm.models.qwen import AttentionBatch
 from oh_my_vllm.worker.decode_graph import ProposalGraph
 
-pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+pytestmark = [
+    pytest.mark.gpu,
+    pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA"),
+]
 
 
 class ToyProposal:

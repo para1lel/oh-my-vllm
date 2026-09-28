@@ -11,7 +11,10 @@ import pytest
 import torch
 from oh_my_vllm.kernels import fp8, gdn
 
-pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
+pytestmark = [
+    pytest.mark.gpu,
+    pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required"),
+]
 
 
 def reference(q, k, v, g, beta, state, *, snapshots=True):

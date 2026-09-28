@@ -102,7 +102,6 @@ def main():
         for case in selected:
             if failures:
                 raise RuntimeError(failures[0])
-            torch.manual_seed(784)
             reference, candidate = fixture(case["configuration"])
             raw = measure(reference, candidate)
             report["cuda_build_provenance"] = provenance(

@@ -18,10 +18,13 @@ scripts/with-env.sh python scripts/check_rust_line_width.py
 scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
-CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p 'test_*.py'
+scripts/test.sh cpu
 ```
 
-`unittest` 命令只运行 `TestCase` 模块。它会导入以下 pytest 风格的模块，但不会运行它们：
+`scripts/test.sh` 先构建 Rust HTTP 二进制文件，再通过项目环境运行 pytest。`cpu`
+隐藏 CUDA 并排除带 `gpu` 标记的用例；`full` 等待空闲 B200 并固定 UUID。pytest 是
+统一的 Python 测试入口。旧的 `unittest discover` 命令会导入以下 pytest 风格的模块，
+但不运行其中测试：
 
 - `test_independent_kernels.py`
 - `test_independent_decode_attention.py`
@@ -30,7 +33,9 @@ CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests
 - `test_proposal_graph.py`
 - `test_gqa_accuracy.py`
 
-因此 `unittest` 通过并不能说明这些模块的任何情况。完整测试套件见下文。
+它们由 full 模式收集；GPU 用例在 `pytest.ini`/测试模块中明确标记。混合的
+greedy-batch 和 validation-guard 模块仅标记其中的 GPU 用例，因此 `cpu` 模式
+仍运行其 CPU 用例。
 
 Rust 测试覆盖：
 
@@ -57,8 +62,7 @@ CPU Python 测试覆盖：
 ## 完整 GPU 测试套件
 
 ```bash
-scripts/with-gpu.sh scripts/with-env.sh env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 MAX_JOBS=8 \
-  python -m pytest tests -q
+scripts/test.sh full
 ```
 
 在 `ef07b2b` 之后、后来成为 `030f60f` 的工作树上运行的历史默认 CUDA 套件
