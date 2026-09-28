@@ -83,6 +83,27 @@ class BatchPlanTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "another request"):
             validate_batch([a, crossing])
 
+    def test_duplicate_request_id_is_rejected_without_write_alias(self):
+        history = list(range(785))
+        first = plan_request(
+            request(784, [784], [10, 20], history, 1, fa_table=[1, 2]),
+            history,
+            None,
+            128,
+            128,
+            0,
+        )
+        second = plan_request(
+            request(784, [784], [10, 30], history, 1, fa_table=[1, 3]),
+            history,
+            None,
+            128,
+            128,
+            0,
+        )
+        with self.assertRaisesRegex(ValueError, "appear twice"):
+            validate_batch([first, second])
+
     def test_invalid_admission_history_and_addresses(self):
         for mutate in (
             lambda r: setattr(r, "prefill_token_ids", None),

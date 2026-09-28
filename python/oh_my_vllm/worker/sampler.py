@@ -208,6 +208,15 @@ class RequestSampler:
         drafts: Sequence[int] = (),
         bitmask: np.ndarray | torch.Tensor | None = None,
     ) -> list[int]:
+        return verify_rows(self.draw_rows(logits, drafts, bitmask).tolist(), drafts)
+
+    def draw_rows(
+        self,
+        logits: torch.Tensor,
+        drafts: Sequence[int] = (),
+        bitmask: np.ndarray | torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Draw on the device so a batch may copy all request rows at once."""
         needs_history = (
             self.params.repetition_penalty != 1
             or self.params.frequency_penalty != 0
@@ -232,8 +241,7 @@ class RequestSampler:
             noise = torch.empty_like(probs).exponential_(generator=self.generator)
             selected = (probs / noise).argmax(-1)
         valid = torch.isfinite(probs).all(-1) & (probs.sum(-1) > 0)
-        rows = torch.stack((selected, valid.to(torch.int64)), -1).tolist()
-        return verify_rows(rows, drafts)
+        return torch.stack((selected, valid.to(torch.int64)), -1)
 
     def commit(self, tokens: Sequence[int]) -> None:
         """Record only tokens retained after EOS/stop/length handling."""

@@ -9,6 +9,7 @@ import torch
 from oh_my_vllm.worker.model_runner import OhMyVllmWorker
 from oh_my_vllm.worker.mtp import MTP
 from oh_my_vllm.worker.protocol import ScheduledRequest, SchedulerOutput
+from oh_my_vllm.worker.sampler import RequestSampler
 from oh_my_vllm.worker.sampling import SamplingParams
 
 
@@ -94,7 +95,9 @@ class CommitTests(unittest.TestCase):
 
     def test_cuda_out_of_memory_remains_fatal(self):
         worker = self.make_worker()
-        worker.samplers[1].sample.side_effect = torch.cuda.OutOfMemoryError("CUDA OOM")
+        worker.samplers[1].draw_rows.side_effect = torch.cuda.OutOfMemoryError(
+            "CUDA OOM"
+        )
         plan = SimpleNamespace(
             request=SimpleNamespace(request_id=1, num_computed_tokens=0),
             sample_indices=[0],
@@ -102,6 +105,77 @@ class CommitTests(unittest.TestCase):
         )
         with self.assertRaises(torch.cuda.OutOfMemoryError):
             worker._commit_plans([plan], [0, 1], torch.empty(1, 1), None, {})
+
+    def test_non_greedy_rows_use_one_readback_and_preserve_seeded_draws(self):
+        worker = self.make_worker()
+        params = SamplingParams(10, temperature=0.8, top_k=3, seed=784)
+        worker.samplers = {rid: RequestSampler(params, [], "cpu") for rid in (1, 2)}
+        reference = {rid: RequestSampler(params, [], "cpu") for rid in (1, 2)}
+        logits = torch.tensor(
+            [[0.0, 3, 1, 2], [3.0, 0, 1, 2], [1.0, 2, 3, 0]],
+            dtype=torch.float32,
+        )
+        plans = [
+            SimpleNamespace(
+                request=SimpleNamespace(request_id=rid, num_computed_tokens=10),
+                sample_indices=list(range(count)),
+                drafts=drafts,
+                commit=Mock(return_value=(count, rid, [])),
+            )
+            for rid, count, drafts in ((1, 2, [2]), (2, 1, []))
+        ]
+        expected = [
+            reference[1].sample(logits[:2], [2]),
+            reference[2].sample(logits[2:]),
+        ]
+        original_tolist = torch.Tensor.tolist
+        readbacks = []
+
+        def observed_tolist(tensor):
+            readbacks.append(tuple(tensor.shape))
+            return original_tolist(tensor)
+
+        with patch.object(torch.Tensor, "tolist", observed_tolist):
+            outputs, _, kept, _, _, _ = worker._commit_plans(
+                plans, [0, 2, 3], logits, None, {}
+            )
+        self.assertEqual(readbacks, [(3, 2)])
+        self.assertEqual([output.token_ids for output in outputs], expected)
+        self.assertEqual(kept, plans)
+        self.assertEqual(worker.samplers[1].generated, expected[0])
+        self.assertEqual(worker.samplers[2].generated, expected[1])
+
+    def test_non_greedy_draw_failure_is_local_and_keeps_row_alignment(self):
+        worker = self.make_worker()
+        worker.histories[3] = [5]
+        worker.samplers[1] = RequestSampler(
+            SamplingParams(10, temperature=0), [], "cpu"
+        )
+        worker.samplers[2].draw_rows.side_effect = ValueError("invalid sample")
+        worker.samplers[3] = RequestSampler(
+            SamplingParams(10, temperature=0), [], "cpu"
+        )
+        generation = Mock(finished=None, reasoning_tokens=0)
+        generation.consume.side_effect = lambda tokens, _tokenizer: (tokens, "")
+        worker.serving.generations[3] = generation
+        plans = [
+            SimpleNamespace(
+                request=SimpleNamespace(request_id=rid, num_computed_tokens=10),
+                sample_indices=[0],
+                drafts=[],
+                commit=Mock(return_value=(1, rid, [])),
+            )
+            for rid in (1, 2, 3)
+        ]
+        logits = torch.tensor([[0.0, 4, 0], [4.0, 0, 0], [0.0, 0, 5]])
+        outputs, _, kept, _, _, _ = worker._commit_plans(
+            plans, [0, 1, 2, 3], logits, None, {}
+        )
+        self.assertEqual([output.token_ids for output in outputs], [[1], [], [2]])
+        self.assertEqual(outputs[1].error, "invalid sample")
+        self.assertEqual(kept, [plans[0], plans[2]])
+        self.assertNotIn(2, worker.samplers)
+        plans[1].commit.assert_not_called()
 
     def test_grammar_failure_is_isolated_before_sampling(self):
         worker = self.make_worker()
@@ -136,6 +210,27 @@ class CommitTests(unittest.TestCase):
         self.assertEqual(len(output.outputs), 1)
         self.assertEqual(output.outputs[0].request_id, 3)
         self.assertEqual(output.outputs[0].error, "request registration failed")
+
+    def test_duplicate_request_id_rejected_before_sampler_draw(self):
+        worker = self.make_worker()
+        worker.config = SimpleNamespace(max_model_len=64, speculative_tokens=0)
+        worker.logical_num_blocks = 16
+        worker.mamba_blocks = 16
+        sampler = RequestSampler(SamplingParams(10, seed=784), [3], "cpu")
+        worker.samplers[1] = sampler
+        before = sampler.generator.get_state().clone()
+        requests = [
+            ScheduledRequest(1, [3], 0, [page], [state], [3])
+            for page, state in ((1, 2), (3, 4))
+        ]
+        scheduled = SchedulerOutput(scheduled=requests, num_batched_tokens=2)
+        with (
+            patch.object(sampler, "draw_rows", wraps=sampler.draw_rows) as draw,
+            self.assertRaisesRegex(ValueError, "appear twice"),
+        ):
+            worker.execute_model(scheduled)
+        draw.assert_not_called()
+        torch.testing.assert_close(sampler.generator.get_state(), before)
 
     def test_same_step_preemption_resets_state_before_readmission_plan(self):
         worker = self.make_worker()

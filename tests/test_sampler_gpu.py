@@ -1,7 +1,11 @@
 """GPU sampling cache and local top-p sort retain the full-sort distribution."""
 
+from types import SimpleNamespace
+from unittest.mock import patch
+
 import pytest
 import torch
+from oh_my_vllm.worker.model_runner import OhMyVllmWorker
 from oh_my_vllm.worker.sampler import RequestSampler, probabilities, verify_rows
 from oh_my_vllm.worker.sampling import SamplingParams
 
@@ -104,3 +108,42 @@ def test_cached_gpu_penalties_preserve_seeded_samples_after_commit():
         assert actual == expected
         sampler.commit(actual)
         generated.extend(actual)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_batched_gpu_draw_reads_once_and_matches_seeded_requests():
+    params = SamplingParams(10, temperature=0.8, top_k=4, seed=784)
+    worker = OhMyVllmWorker.__new__(OhMyVllmWorker)
+    worker.serving = object()
+    worker.samplers = {rid: RequestSampler(params, [], "cuda") for rid in (1, 2, 3)}
+    reference = {rid: RequestSampler(params, [], "cuda") for rid in (1, 2, 3)}
+    logits = torch.randn(
+        6, 32, device="cuda", generator=torch.Generator(device="cuda").manual_seed(3)
+    )
+    plans = [
+        SimpleNamespace(
+            request=SimpleNamespace(request_id=rid),
+            sample_indices=list(range(count)),
+            drafts=drafts,
+        )
+        for rid, count, drafts in ((1, 2, [1]), (2, 1, []), (3, 3, [2, 3]))
+    ]
+    expected = [
+        reference[1].sample(logits[:2], [1]),
+        reference[2].sample(logits[2:3]),
+        reference[3].sample(logits[3:], [2, 3]),
+    ]
+    original_tolist = torch.Tensor.tolist
+    readbacks = []
+
+    def observed_tolist(tensor):
+        readbacks.append(tuple(tensor.shape))
+        return original_tolist(tensor)
+
+    with patch.object(torch.Tensor, "tolist", observed_tolist):
+        sampled, errors = worker._draw_batch_rows(plans, logits, None, {}, {})
+    assert errors == {}
+    assert readbacks == [(6, 2)]
+    assert [verify_rows(sampled[i], plan.drafts) for i, plan in enumerate(plans)] == (
+        expected
+    )

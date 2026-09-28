@@ -115,6 +115,9 @@ def plan_request(
 
 def validate_batch(plans: list[PlannedRequest]) -> None:
     """Shared reads are allowed; writes cannot alias another request's state."""
+    request_ids = [plan.request.request_id for plan in plans]
+    if len(set(request_ids)) != len(request_ids):
+        raise ValueError("a request cannot appear twice in one batch")
     # Every scheduled token writes its FA page, including earlier pages in a
     # multi-page prefill. Prefix pages before num_computed_tokens are read-only.
     fa_page_owners: dict[int, int] = {}

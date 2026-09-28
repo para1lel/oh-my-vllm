@@ -433,6 +433,9 @@ class OhMyVllmWorker:
     def _commit_plans(self, plans, starts, logits, greedy, masks, mask_errors=None):
         """Commit each request independently after the shared GPU forward pass."""
         results, copies, row = [], [], 0
+        sampled, sampling_errors = self._draw_batch_rows(
+            plans, logits, greedy, masks, mask_errors
+        )
         successful_plans, successful_starts, successful_counts, successful_outputs = (
             [],
             [],
@@ -453,11 +456,9 @@ class OhMyVllmWorker:
                     if greedy is not None:
                         tokens = verify_rows(greedy[sample_start:end], plan.drafts)
                     else:
-                        tokens = self.samplers[rid].sample(
-                            logits[sample_start:end],
-                            drafts=plan.drafts,
-                            bitmask=masks.get(rid),
-                        )
+                        if index in sampling_errors:
+                            raise sampling_errors[index]
+                        tokens = verify_rows(sampled[index], plan.drafts)
                 text, finish, reasoning = "", None, 0
                 if self.serving is not None and rid in self.serving.generations:
                     generation = self.serving.generations[rid]
@@ -498,6 +499,45 @@ class OhMyVllmWorker:
             successful_counts,
             successful_outputs,
         )
+
+    def _draw_batch_rows(self, plans, logits, greedy, masks, mask_errors):
+        """Read all non-greedy request draws back in one transfer.
+
+        Sampling transforms may independently synchronize, such as the exact
+        top-k/top-p cutoff-tie check.
+        """
+        if greedy is not None:
+            return {}, {}
+        drawn, errors = [], {}
+        offset = 0
+        for index, plan in enumerate(plans):
+            count = len(plan.sample_indices)
+            rid = plan.request.request_id
+            if count and (not mask_errors or rid not in mask_errors):
+                try:
+                    rows = self.samplers[rid].draw_rows(
+                        logits[offset : offset + count],
+                        drafts=plan.drafts,
+                        bitmask=masks.get(rid),
+                    )
+                    drawn.append((index, rows, count))
+                except Exception as exc:
+                    if self.serving is None or _is_device_failure(exc):
+                        raise
+                    errors[index] = exc
+            offset += count
+        if not drawn:
+            return {}, errors
+        device_rows = (
+            torch.cat([rows for _, rows, _ in drawn]) if len(drawn) > 1 else drawn[0][1]
+        )
+        host_rows = device_rows.tolist()
+        sampled = {}
+        offset = 0
+        for index, _, count in drawn:
+            sampled[index] = host_rows[offset : offset + count]
+            offset += count
+        return sampled, errors
 
     def shutdown(self) -> None:
         logger.info(
