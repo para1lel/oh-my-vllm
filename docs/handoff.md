@@ -248,9 +248,11 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   and a stable pause before 750, completed another request while the stream
   was paused, and then received content sequence 1–750 and `[DONE]` in order.
   Rust tests cover grace timing, low-water behavior, capacity, disconnect,
-  final drain, and detached drain task exit. A single in-flight prepare/execute
-  RPC can delay the 30-second check by its own timeout; serving documentation
-  states this limit. Rust workspace 58/38/26, `scripts/test.sh cpu` 203 passed
+  final drain, and detached drain task exit. At this checkpoint, an in-flight
+  prepare or execute RPC could delay the 30-second check by its own timeout.
+  After `efdef09`, background CPU preparation no longer blocks that check;
+  an execute round trip or stalled prepare/Abort send still can. Rust workspace
+  58/38/26, `scripts/test.sh cpu` 203 passed
   and 67 subtests (181 GPU cases deselected), fmt, line width, Ruff, Clippy,
   and hooks passed. Current full GPU and 12-row framework gates remain pending.
 - Independently reviewed `f4aacca` closes KRN-07's silent misaligned FA-cache
@@ -354,6 +356,28 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   fmt, line width, Ruff, Clippy and hooks passed. Owned GPU processes exited.
   PY-07 stays open until the full current GPU suite and 12 framework rows
   establish that throughput and TTFT still meet their gates.
+- Independently reviewed `efdef09` is the SRV-08 candidate. Rust overlaps one
+  in-flight prepare with execute steps, buffers out-of-order Prepared replies,
+  and treats unexpected/duplicate protocol replies as engine-fatal. Python
+  builds template/tokenizer/grammar inputs on one daemon CPU thread; the DEALER
+  owner receives a pipe wakeup and alone installs live request state. Real
+  bridge and isolated HTTP tests cover no-followup wakeup, active SSE progress,
+  both reply orders, timeout/late reply, cancellation, register overlap,
+  malformed/duplicate reply and bounded shutdown. The Qwen tokenizer/XGrammar
+  CPU concurrency and cross-thread matcher handoff regression passed. With one
+  warmup plus five measured runs of each CPU fixture on the same current Rust
+  binary, the median maximum active SSE event gap changed from 0.781507 s
+  (synchronous `f194127` fixture) to 0.081265 s (deferred fixture); the
+  respective spread/median values were 0.047% and 0.157%. Temporary harness
+  and raw log: `/tmp/oh-my-vllm-srv08-ab.py` and
+  `/tmp/oh-my-vllm-srv08-ab-efdef09.log`. `scripts/test.sh cpu` passed 236 tests and 70
+  subtests (199 GPU deselected), with log
+  `/tmp/oh-my-vllm-srv08-cpu-final.log`. Rust workspace 58/38/26, fmt, line
+  width, Ruff, Clippy and hooks passed; task-owned CPU servers/workers exited.
+  This CPU fixture measurement is not framework throughput evidence. Main
+  thread sampler registration still includes PY-07 GPU prompt-count work;
+  B200 active-stream latency, the full current GPU suite and all 12 framework
+  rows remain pending, so SRV-08 stays open.
 
 Remaining work: PY-03/04/06, SRV-08, KRN-06, PY-05/07 and KRN-10 acceptance,
 EVD-07, the four unverified risks, and current

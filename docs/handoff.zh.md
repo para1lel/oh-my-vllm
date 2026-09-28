@@ -185,8 +185,9 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   及最终事件。待发队列清空且 channel 至少空出 128 个槽位后恢复生成。真实 CPU
   HTTP 测试停读后观察到 worker 超过 256 步并在 750 步之前稳定暂停，停读期间
   第二请求完成，恢复后按序收到 1–750 的全部内容序号及 `[DONE]`。Rust 测试覆盖
-  宽限计时、低水位、容量、断连、完成态排空和独立排空任务退出。单次在途
-  prepare/execute RPC 可按自身超时延后 30 秒检查；服务文档写明此限制。
+  宽限计时、低水位、容量、断连、完成态排空和独立排空任务退出。在该检查点，单次在途
+  prepare/execute RPC 可按自身超时延后 30 秒检查。`efdef09` 后，后台 CPU
+  准备不再阻塞该检查，但 execute 往返或阻塞的 prepare/Abort 发送仍可能延迟。
   Rust workspace 58/38/26、`scripts/test.sh cpu` 203 项通过及 67 个 subtest
   （排除 181 项 GPU 用例），fmt、行宽、Ruff、Clippy 和 hooks 均通过。当前完整
   GPU 与 12 行框架门槛仍待验证。
@@ -272,6 +273,24 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   67 个 subtest（排除 199 项 GPU 用例），B200 sampler 3/3、Rust workspace
   58/38/26、fmt、行宽、Ruff、Clippy 与 hooks 通过。自有 GPU 进程已退出。
   当前完整 GPU 套件及 12 行框架测试证明吞吐/TTFT 仍达标之前，PY-07 保持 open。
+- 已独立复审的 `efdef09` 是 SRV-08 候选实现。Rust 让一个在途 prepare 与
+  execute step 并行，缓存乱序 Prepared 回复，并对意外/重复协议回复停止引擎。
+  Python 在一个 daemon CPU 线程中构造模板/分词/grammar 输入；DEALER 主线程
+  由 pipe 唤醒且独自安装活跃请求状态。真实 bridge 与隔离 HTTP 测试覆盖无后续
+  RPC 时的唤醒、活跃 SSE 推进、两种回复顺序、超时/迟到回复、取消、register
+  交错、错误类型/重复回复和有界 shutdown。Qwen tokenizer/XGrammar 的 CPU
+  并发及跨线程 matcher 移交回归通过。对同一当前 Rust binary 上的两种 CPU fixture
+  各运行一次预热和五次实测，活跃 SSE 最大事件间隙中位数由历史同步 `f194127`
+  fixture 的 0.781507 秒降到新延迟回复 fixture 的 0.081265 秒；对应
+  spread/median 为 0.047% 和 0.157%。临时脚本及原始日志：
+  `/tmp/oh-my-vllm-srv08-ab.py` 和 `/tmp/oh-my-vllm-srv08-ab-efdef09.log`。
+  `scripts/test.sh cpu` 通过 236 项、70 个
+  subtest（排除 199 项 GPU 用例），日志为
+  `/tmp/oh-my-vllm-srv08-cpu-final.log`。Rust workspace 58/38/26、fmt、
+  行宽、Ruff、Clippy 与 hooks 均通过；自有 CPU server/worker 已退出。
+  CPU fixture 数值不代表框架吞吐。主线程 sampler 注册仍包含 PY-07 的 GPU
+  prompt-count 工作；B200 活跃流时延、当前完整 GPU 套件和 12 行框架门槛仍待
+  验收，因此 SRV-08 保持 open。
 
 后续工作：PY-03/04/06、SRV-08、KRN-06、PY-05/07 与 KRN-10 验收、
 EVD-07、四项未验证风险，以及当前完整算子/GPU 套件

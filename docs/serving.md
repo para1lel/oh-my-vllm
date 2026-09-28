@@ -127,10 +127,13 @@ events. A full channel pauses that request's generation and starts a monotonic
 30-second grace period. Pending events retain their order, including final
 events. Generation resumes when the pending queue is empty and at least 128
 channel slots are free. Intermittently reading one event cannot reset the grace
-period. Disconnect cancels immediately; a stream still blocked after the grace
-period is cancelled without stopping other requests. The check runs between
-engine operations; one in-flight preparation or execution RPC can delay the
-actual cancellation. A paused request retains its KV state when capacity allows;
+period. Disconnect immediately marks the request for cancellation; the next
+engine check applies it. A stream still blocked after the grace period is
+cancelled without stopping other requests. The check runs between
+engine operations; an execute round trip or a blocked prepare/Abort send can
+delay the actual cancellation within its deadline. CPU preparation runs in a
+background thread and does not itself block this check. A paused request
+retains its KV state when capacity allows;
 normal priority-based preemption can still evict it under pool pressure.
 The default request timeout is 600 seconds (configurable); preparation/step RPCs
 have 120-second deadlines and detect worker exit. Request-local validation and

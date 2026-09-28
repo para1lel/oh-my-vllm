@@ -8,7 +8,9 @@ through ZMQ DEALER and msgpack; there is no vLLM runtime, scheduler or model ada
 
 1. The Rust frontend normalizes Chat/Responses requests. Python's ServingAdapter
    applies the checkpoint chat template, tokenizer, sampling configuration and
-   XGrammar constraints, returning prompt IDs.
+   XGrammar constraints, returning prompt IDs. One CPU preparation may overlap
+   active execute steps. A Python prepare thread builds inputs; the bridge
+   thread alone installs live sampler, history and generation state.
 2. Rust admits requests, resolves shared prefixes and allocates FA/Mamba tables.
    The scheduler batches prefill, decode and actual MTP draft IDs.
 3. Python validates accepted history and physical addresses against each tensor's
@@ -25,8 +27,10 @@ See [design.md](design.md) for message fields and scheduler/KV data structures.
 
 Error handling: prepare replies carry a validation/internal kind, so the HTTP
 adapter maps only explicit input validation to 400 and unknown worker failures
-to 500. RPC replies carry IDs; timed-out preparation is cancelled and late
-replies are discarded. Execute results can report a request-local error and
+to 500. RPC replies carry IDs and types. A prepared reply may be buffered while
+Rust waits for an execute result. Cancelled prepare replies are discarded using
+bounded tombstones; unexpected or duplicate replies stop the engine. Execute
+results can report a request-local error and
 remove only that request; CUDA/device execution failures remain engine-fatal.
 The owned Python worker exits when the Rust parent dies.
 
