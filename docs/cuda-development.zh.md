@@ -25,6 +25,10 @@ CUDA 是 B200 上默认的自定义 kernel 后端。[验收文档](acceptance.zh
   绝不调优参考实现。
 - **kernel 所在位置。** 生产模块包含校验、公开 wrapper 和显式的工厂绑定。TileLang kernel 主体只存在于
   `tilelang_reference/` 中。
+- **工厂契约。** 公开 wrapper 保留原参数。CUDA 私有工厂只接收实际生效的算子配置；
+  原生启动分块由 C++ 的 tensor 元数据决定。冻结 TileLang 调用保留原 tile/block 参数。
+  decode 仍传递 split 数、首个位置、分组模式与位置宽度；CUDA 工厂检查 partial/LSE
+  缓冲区与请求的 split 数一致。
 - **原生构建。**
   - 原生代码为 `python/oh_my_vllm/kernels/cuda_backend/kernels.cu`。它通过独立的 TVM FFI
     `build_inline` 延迟编译，再用 `load_module` 从返回路径加载。目标为 `sm_100a`，

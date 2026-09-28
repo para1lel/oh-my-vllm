@@ -172,8 +172,10 @@ share this decision, so a long prefill also gathers active decode sequences.
 The maximum-context batch4 correctness check includes the resulting temporary
 memory; neither Mamba cache precision nor numerical tolerances change.
 
-Long-prefill pointwise work uses eight-token convolution tiles and larger SiLU
-blocks; short decode retains its original tile sizes. Large gate/up projections
+The frozen TileLang path uses eight-token convolution tiles and larger SiLU
+blocks for long prefills. Native CUDA derives convolution rows from tensor
+shape and uses a 256-thread SiLU launch; its Python factory receives no
+TileLang tuning knobs. Large gate/up projections
 use the independent CUTLASS dual-SM GEMM. BF16 rounding and per-token FP8 scales
 are unchanged and checked against FP64 references.
 

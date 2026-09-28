@@ -273,45 +273,47 @@ def factory_for(module, name):
         raise NotImplementedError(f"CUDA kernel {module}.{name} is not implemented")
 
     if (module, name) == ("decode_attention", "_merge"):
-        return lambda *config: compiled().attention_merge
+        return lambda: compiled().attention_merge
     if (module, name) == ("decode_attention", "_partials"):
 
-        def partials(
-            h,
-            hk,
-            pages,
-            table_width,
-            splits,
-            first,
-            bk,
-            bq,
-            grouped,
-            index_types,
-            position_dtype,
-        ):
+        def partials(splits, first, grouped, position_dtype):
+            if position_dtype not in ("int32", "int64"):
+                raise ValueError("CUDA decode position dtype must be int32 or int64")
             fn = compiled().attention_partial
-            return lambda q, cache, tables, lengths, starts, partial, lse: fn(
-                q,
-                cache,
-                tables,
-                lengths,
-                starts,
-                partial,
-                lse,
-                first,
-                grouped,
-                position_dtype == "int64",
-            )
+
+            def launch(q, cache, tables, lengths, starts, partial, lse):
+                if (
+                    partial.ndim != 4
+                    or lse.ndim != 3
+                    or (partial.shape[2] != splits or lse.shape[2] != splits)
+                ):
+                    raise ValueError(
+                        "CUDA decode partial buffers must match split count"
+                    )
+                return fn(
+                    q,
+                    cache,
+                    tables,
+                    lengths,
+                    starts,
+                    partial,
+                    lse,
+                    first,
+                    grouped,
+                    position_dtype == "int64",
+                )
+
+            return launch
 
         return partials
     if (module, name) == ("attention", "_append"):
         return lambda *config: compiled().append
     if (module, name) == ("convolution", "_conv"):
-        return lambda *config: compiled().convolution
+        return lambda: compiled().convolution
     if (module, name) == ("gdn", "_normalize_qk"):
         return lambda h, qs, ks: compiled().normalize_qk
     if (module, name) == ("gdn", "_recurrent"):
-        return lambda *config: compiled().recurrent
+        return lambda: compiled().recurrent
     if module == "normalization":
         if name == "_rms":
 
@@ -334,11 +336,11 @@ def factory_for(module, name):
     if (module, name) == ("elementwise", "_gates"):
         return lambda: compiled().gates
     if (module, name) == ("elementwise", "_silu_mul"):
-        return lambda width, block: compiled().silu_mul
+        return lambda: compiled().silu_mul
     if (module, name) != ("fp8", "_quantize"):
         return missing
 
-    def quantize(width, dtype, column, silu, tile):
+    def quantize(column, silu):
         implementation = compiled()
 
         def launch(x, out, scales):

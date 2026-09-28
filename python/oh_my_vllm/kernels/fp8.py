@@ -2,7 +2,7 @@
 
 import torch
 
-from .backend import kernel
+from .backend import NAME, kernel
 
 _quantize = kernel("fp8", "_quantize")
 
@@ -41,10 +41,13 @@ def quantize(
     scales = torch.empty(shape, dtype=torch.float32, device=x.device)
     if column_major:
         scales = scales.T
-    tile = 16 if rows >= 128 and (silu_gate or not column_major) else 1
-    _quantize(
-        width, str(x.dtype).removeprefix("torch."), column_major, silu_gate, tile
-    )(x, data, scales)
+    if NAME == "cuda":
+        _quantize(column_major, silu_gate)(x, data, scales)
+    else:
+        tile = 16 if rows >= 128 and (silu_gate or not column_major) else 1
+        _quantize(
+            width, str(x.dtype).removeprefix("torch."), column_major, silu_gate, tile
+        )(x, data, scales)
     return data, scales
 
 

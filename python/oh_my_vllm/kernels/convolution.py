@@ -2,7 +2,7 @@
 
 import torch
 
-from .backend import kernel
+from .backend import NAME, kernel
 
 _conv = kernel("convolution", "_conv")
 
@@ -48,12 +48,17 @@ def causal_conv(
         raise ValueError("convolution inputs must share the pool CUDA device")
     sources = pool.index_select(0, read_slots)
     out = torch.empty(x.shape, device=x.device, dtype=x.dtype)
-    # Tile long-prefill rows to amortize CTA scheduling; decode retains one row.
-    rows = 8 if len(x) >= 128 else 1
-    types = tuple(
-        str(t.dtype).removeprefix("torch.") for t in (sequence_ids, starts, write_slots)
-    )
-    _conv(x.shape[1], x.stride(0), len(pool), len(read_slots), types, rows)(
-        x, weight, pool, sequence_ids, starts, sources, write_slots, out
-    )
+    if NAME == "cuda":
+        _conv()(x, weight, pool, sequence_ids, starts, sources, write_slots, out)
+    else:
+        # The frozen TileLang path still selects one row for decode and eight
+        # for long prefills; CUDA derives its launch shape from the tensor.
+        rows = 8 if len(x) >= 128 else 1
+        types = tuple(
+            str(t.dtype).removeprefix("torch.")
+            for t in (sequence_ids, starts, write_slots)
+        )
+        _conv(x.shape[1], x.stride(0), len(pool), len(read_slots), types, rows)(
+            x, weight, pool, sequence_ids, starts, sources, write_slots, out
+        )
     return out

@@ -72,7 +72,10 @@ decode 图使用固定 token/请求 shape，以及动态位置、块表和状态
 
 batch 中 query span 至少为 1024 token 时，Python 只收集活跃 FA KV token 到临时连续 tensor，调用独立 FlashInfer ragged TRT-LLM 注意力，softmax 使用 FP32。Rust 分配和持久 `[page,2,784,heads,dim]` tensor 不变。query span 为 128..1023 且 KV 至少 4096 token 时，使用原生分页 context attention、与 target decode 相同的零拷贝子页视图，以及 FP32 softmax。其他小 query span 使用分页 FA2。混合 batch 共享该决策，因此长 prefill 也会收集活跃 decode 序列。最大上下文 batch4 正确性检查包含由此产生的临时显存；Mamba 精度和数值容差均不改变。
 
-长 prefill 的逐元素计算使用八 token 卷积 tile 和更大 SiLU block；短 decode 保留原 tile 大小。大 gate/up 投影使用独立 CUTLASS dual-SM GEMM。BF16 舍入和逐 token FP8 scale 不变，并与 FP64 参考比较。
+冻结 TileLang 路径在长 prefill 时使用八 token 卷积 tile 和更大 SiLU block。原生 CUDA
+按 tensor 形状决定卷积行数，SiLU 使用 256 线程启动；其 Python 工厂不接收 TileLang
+调参值。大 gate/up 投影使用独立 CUTLASS dual-SM GEMM。BF16 舍入和逐 token FP8
+scale 不变，并与 FP64 参考比较。
 
 卷积、GDN 递归和 RMS 归一化接受带明确 token/head stride 的 packed 投影视图。输出仍为 dense，递归源快照保持隔离。每个 target/draft 组的主机整数元数据通过一个 buffer 复制，设备视图保留底层存储。图输入仍复制到持久 buffer；GDN prefill start 在执行各层前只转换一次 int32。
 

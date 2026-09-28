@@ -91,26 +91,33 @@ def decode(
     lse = torch.empty((requests, heads, splits), device=query.device)
     out = torch.empty_like(query)
     offsets = starts if starts is not None else lengths
-    types = tuple(
-        str(t.dtype).removeprefix("torch.") for t in (tables, lengths, offsets)
-    )
-    query_tile = (
-        max(16, 1 << (5 * (heads // kv_heads) - 1).bit_length())
-        if starts is not None
-        else 16
-    )
-    _partials(
-        heads,
-        kv_heads,
-        len(cache),
-        tables.shape[1],
-        splits,
-        first,
-        block,
-        query_tile,
-        starts is not None,
-        types,
-        "int32" if max_tokens <= 2**31 - splits * block else "int64",
-    )(query, cache, tables, lengths, offsets, partial, lse)
-    _merge(heads, splits)(partial, lse, out)
+    position_dtype = "int32" if max_tokens <= 2**31 - splits * block else "int64"
+    if NAME == "cuda":
+        partials = _partials(splits, first, starts is not None, position_dtype)
+        merge = _merge()
+    else:
+        types = tuple(
+            str(t.dtype).removeprefix("torch.") for t in (tables, lengths, offsets)
+        )
+        query_tile = (
+            max(16, 1 << (5 * (heads // kv_heads) - 1).bit_length())
+            if starts is not None
+            else 16
+        )
+        partials = _partials(
+            heads,
+            kv_heads,
+            len(cache),
+            tables.shape[1],
+            splits,
+            first,
+            block,
+            query_tile,
+            starts is not None,
+            types,
+            position_dtype,
+        )
+        merge = _merge(heads, splits)
+    partials(query, cache, tables, lengths, offsets, partial, lse)
+    merge(partial, lse, out)
     return out

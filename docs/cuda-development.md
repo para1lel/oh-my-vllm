@@ -30,6 +30,12 @@ entries. Read those before changing a kernel.
 - **Where the kernels live.** Production modules hold validation, the public
   wrappers and explicit factory bindings. TileLang kernel bodies live only in
   `tilelang_reference/`.
+- **Factory contracts.** Public wrappers retain their arguments. The CUDA
+  private factory receives only live operation settings; native launch tiling
+  comes from tensor metadata in C++. Frozen TileLang calls retain their
+  original tile/block arguments. Decode still forwards split count, first
+  position, grouped mode, and position width; the CUDA factory checks that
+  partial/LSE buffers match the requested split count.
 - **Native build.**
   - Native code is `python/oh_my_vllm/kernels/cuda_backend/kernels.cu`. It is
     compiled lazily through independent TVM FFI `build_inline`, then loaded from

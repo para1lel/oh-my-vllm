@@ -7,7 +7,7 @@ chooses the accepted slot later; rejected candidates never mutate a prefix.
 
 import torch
 
-from .backend import kernel
+from .backend import NAME, kernel
 
 _normalize_qk = kernel("gdn", "_normalize_qk")
 
@@ -118,20 +118,26 @@ def recurrent(
     ):
         raise ValueError("GDN tensors must be contiguous on the same CUDA device")
     output = torch.empty(v.shape, device=v.device, dtype=v.dtype)
-    tile = 32 if read_slots.numel() >= 4 else 16
-    types = tuple(
-        str(t.dtype).removeprefix("torch.") for t in (starts, read_slots, write_slots)
-    )
-    _recurrent(
-        len(read_slots),
-        len(pool),
-        q.shape[1],
-        v.shape[1],
-        tile,
-        (q.stride(0), k.stride(0), v.stride(0)),
-        str(pool.dtype).removeprefix("torch."),
-        types,
-    )(q, k, v, log_decay, beta, pool, starts, read_slots, write_slots, output)
+    if NAME == "cuda":
+        _recurrent()(
+            q, k, v, log_decay, beta, pool, starts, read_slots, write_slots, output
+        )
+    else:
+        tile = 32 if read_slots.numel() >= 4 else 16
+        types = tuple(
+            str(t.dtype).removeprefix("torch.")
+            for t in (starts, read_slots, write_slots)
+        )
+        _recurrent(
+            len(read_slots),
+            len(pool),
+            q.shape[1],
+            v.shape[1],
+            tile,
+            (q.stride(0), k.stride(0), v.stride(0)),
+            str(pool.dtype).removeprefix("torch."),
+            types,
+        )(q, k, v, log_decay, beta, pool, starts, read_slots, write_slots, output)
     return output
 
 
