@@ -140,11 +140,35 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`; owned GPU processes exited.
   `scripts/test.sh cpu` passed 153 tests and 67 subtests (166 GPU cases
   deselected); Rust workspace passed 56/26/17, and fmt, line width, Ruff,
-  Clippy and hooks passed. MNT-02's affected formal operator cases, the full
-  current GPU suite and 12-row framework collection are still pending.
+  Clippy and hooks passed. The first clean affected-formal attempt at
+  `6bd2119` stopped at a KRN-04 false rejection in large fused SiLU quantize;
+  its two preceding PASS rows do not make that attempt acceptance evidence.
+  Independently reviewed `952a01d` corrects the double-counted packed FP8
+  width, accepts exactly `2**31` input elements, and guards that limit at
+  direct CUDA FFI before launch. Independently reviewed `312c54b` applies
+  the same exact boundary to the standalone `silu_mul` Python wrapper and
+  direct CUDA FFI. CPU tests cover below/at/above the limit, the formal shape,
+  and fused versus plain width. B200 direct FFI passed 55/55; current
+  `scripts/test.sh cpu` passed 156 tests and 67 subtests (175 GPU cases
+  deselected), Rust workspace 56/26/17, fmt, line width, Ruff, Clippy and
+  hooks passed. On clean `312c54b`, the
+  [affected formal subset](../bench/baseline/2026-09-28-audit-mnt02-krn04-operators.json)
+  passed all 60 selected `quant`/`silu_quant`/`gates`/`recurrent` cases on
+  UUID `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5`. Each case passed output
+  verification, 3 × 20 alternating pairs and the positive one-sided 95%
+  bootstrap bound; the smallest gain bound was 0.00000699734 ms. The first
+  clean `312c54b` run passed 59/60; both backends had elevated timing in the
+  failed gates case, and the cause remains unconfirmed. That run is rejected
+  diagnostic evidence. A separate
+  [gates artifact](../bench/baseline/2026-09-28-audit-gates-confirm-operators.json)
+  passed 13/13 on UUID `GPU-80cebbaf-a106-2605-b902-f5f9a08645ea`; the
+  previously failed shape's lower bound was 0.0000465867 ms. No owned GPU
+  process remained. This closes the listed KRN-04/MNT-02 source findings;
+  the full current GPU suite, 147-case formal matrix and 12-row framework
+  collection remain pending separately.
 
 Remaining work: PY-03..07, SRV-08..10, SCH-06/07, KRN-06..10,
-EVD-07, MNT-01/03, MNT-02 formal verification, the four unverified risks, and current
+EVD-07, MNT-01/03, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
 

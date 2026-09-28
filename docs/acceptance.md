@@ -9,6 +9,28 @@ positive one-sided 95% gain bound is 0.000796 ms. The summarized
 source hashes, frozen-reference hashes, protocol, selected cases, and raw
 capture hash. This subset does not establish a new full 147-case result.
 
+Clean `312c54b` passes all 60 selected `quant`, `silu_quant`, `gates`, and
+`recurrent` cases after both KRN-04 entry points were corrected. Each case has
+three rounds of 20 alternating pairs, 100 graph repetitions per sample,
+passing output verification, and a positive one-sided 95% bootstrap gain
+bound. The smallest gain bound is 0.00000699734 ms; the largest three-round
+spread/median on either backend is 0.846%. The
+[formal subset](../bench/baseline/2026-09-28-audit-mnt02-krn04-operators.json)
+records B200 UUID `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5`, clean source
+identity, and live nvcc/module hashes. Its `selected_passed=true` applies to
+60/60 cases; `passed=false` reflects incomplete 147-case coverage. The first
+attempt at clean `6bd2119` stopped at a historical KRN-04 false rejection
+and is not acceptance evidence. A later clean `312c54b` attempt passed 59/60:
+the 1248-token `gates` row had a negative bootstrap gain bound, with elevated
+latency on both backends and no detected compute-process interference. Its cause
+is unproven, so that attempt is rejected. A complete repeat passed 60/60 on
+the same UUID, and an independent
+[13/13 gates confirmation](../bench/baseline/2026-09-28-audit-gates-confirm-operators.json)
+passed on UUID `GPU-80cebbaf-a106-2605-b902-f5f9a08645ea`. An initial
+attempt to start that confirmation was stopped before measurement when an
+external GPU process appeared. Full current GPU and 12-row framework gates
+remain pending.
+
 The full B200 pytest suite after `96e4ecc` passed 211 tests and 32 subtests,
 with six skipped context-boundary placeholders. SRV-03's later CPU/protocol
 repair `d33b844` passed 31 focused Python tests and 26 subtests, Rust

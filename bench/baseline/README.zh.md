@@ -7,6 +7,11 @@
 
 ## 当前
 
+- `2026-09-28-audit-mnt02-krn04-operators.json` 记录干净提交 `312c54b` 的
+  60 项选中 `quant`、`silu_quant`、`gates` 与 `recurrent` 正式用例。每项都通过
+  输出验证和冻结 TileLang 对照。这是子集，不是新的 147 项完整判定。
+- `2026-09-28-audit-gates-confirm-operators.json` 在第二张固定 UUID 的 B200
+  上确认全部 13 项 `gates` 用例。此前一次 59/60 的失败尝试在验收索引中说明，原因未查明。
 - `2026-09-28-audit-p1-operators.json` 是干净提交 `96e4ecc` 的受影响正式算子
   子集：在固定 UUID 的 B200 上，选中的 29 项 `prepare_attention` 与 `attention`
   用例全部通过。它不是新的 147 项完整判定。热路径修复后的当前 12 组框架性能尚未测量。

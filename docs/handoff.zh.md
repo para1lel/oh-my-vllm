@@ -110,11 +110,28 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   `writes=-1` 用例 1/1，通过的 UUID 为
   `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`；自有 GPU 进程已退出。
   `scripts/test.sh cpu` 通过 153 项测试和 67 个 subtest（排除 166 个 GPU 用例）；Rust
-  workspace 通过 56/26/17 项，fmt、行宽、Ruff、Clippy 与 hooks 均通过。MNT-02 的
-  受影响正式算子、当前完整 GPU 套件和 12 行框架采集仍待执行。
+  workspace 通过 56/26/17 项，fmt、行宽、Ruff、Clippy 与 hooks 均通过。干净提交
+  `6bd2119` 的首次受影响正式采集在融合 SiLU 大形状处遇到 KRN-04 误拒，之前两项 PASS
+  不构成该次验收。已独立复审的 `952a01d` 修正重复计算的 packed FP8 宽度，允许恰好
+  `2**31` 个输入元素，并在直接 CUDA FFI 启动前检查同一边界。已独立复审的
+  `312c54b` 将相同边界应用到独立 `silu_mul` Python 包装层和直接 CUDA FFI。
+  CPU 测试覆盖上限以下、恰好上限、超过上限、正式形状及普通/融合宽度。B200 直接
+  FFI 55/55 通过；当前 `scripts/test.sh cpu` 通过 156 项测试和 67 个 subtest
+  （排除 175 个 GPU 用例），Rust workspace 56/26/17，fmt、行宽、Ruff、Clippy
+  与 hooks 均通过。干净提交 `312c54b` 的
+  [受影响正式子集](../bench/baseline/2026-09-28-audit-mnt02-krn04-operators.json)
+  在 UUID `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5` 上通过全部 60 项选中的
+  `quant`/`silu_quant`/`gates`/`recurrent` 用例。每项均通过输出验证、3 × 20 交替
+  配对和单侧 95% bootstrap 正收益下界，最小下界为 0.00000699734 ms。首次干净
+  `312c54b` 运行仅通过 59/60；失败的 gates 用例中两个后端计时均偏高，原因尚未证实，
+  因此该次运行仅是被拒绝的诊断证据。独立的
+  [gates 产物](../bench/baseline/2026-09-28-audit-gates-confirm-operators.json)
+  在 UUID `GPU-80cebbaf-a106-2605-b902-f5f9a08645ea` 上通过 13/13，先前失败形状的
+  下界为 0.0000465867 ms。自有 GPU 进程已退出。这关闭了 KRN-04/MNT-02 列出的
+  源码问题；当前完整 GPU 套件、147 项正式矩阵和 12 行框架采集仍须另行执行。
 
 后续工作：PY-03..07、SRV-08..10、SCH-06/07、KRN-06..10、
-EVD-07、MNT-01/03、MNT-02 正式验证、四项未验证风险，以及当前完整算子/GPU 套件
+EVD-07、MNT-01/03、四项未验证风险，以及当前完整算子/GPU 套件
 和 12 组框架验收。
 逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。
 

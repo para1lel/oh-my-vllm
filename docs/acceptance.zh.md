@@ -10,6 +10,22 @@
 保留源码哈希、冻结参考哈希、协议、选中用例和原始采集哈希。这个子集不能证明新的
 147 项完整矩阵结果。
 
+干净提交 `312c54b` 修正 KRN-04 两个入口后，通过全部 60 项选中的
+`quant`、`silu_quant`、`gates` 与 `recurrent` 用例。每项都有三轮热身后正式测量、
+每轮 20 对交替样本、每样本 100 次 graph 重复，通过输出验证且单侧 95% bootstrap
+收益下界为正。最小收益下界为 0.00000699734 ms，两端三轮的最大 spread/median 为
+0.846%。[正式子集](../bench/baseline/2026-09-28-audit-mnt02-krn04-operators.json)
+记录 B200 UUID `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5`、干净源码身份及
+实时 nvcc/module 哈希。`selected_passed=true` 只适用于这 60/60 项；`passed=false`
+表示 147 项尚未全覆盖。干净提交 `6bd2119` 上的首次尝试因历史 KRN-04 误拒而中止，
+不算验收证据。后来干净提交 `312c54b` 的一次尝试通过 59/60：1248-token `gates`
+用例的 bootstrap 收益下界为负，两端延迟均抬升，但未检测到 compute 进程干扰。
+原因未证实，因此该次尝试作废。同一 UUID 的完整重测通过 60/60；另一 UUID
+`GPU-80cebbaf-a106-2605-b902-f5f9a08645ea` 上的独立
+[13/13 gates 确认](../bench/baseline/2026-09-28-audit-gates-confirm-operators.json)
+也通过。确认测试的一次初始启动因外部 GPU 进程出现，在测量前被停止。当前完整 GPU
+和 12 行框架门槛仍待执行。
+
 `96e4ecc` 后的完整 B200 pytest 通过 211 项测试及 32 个子测试，六项 context
 边界占位测试跳过。后续 CPU/协议修复 `d33b844` 通过 31 项聚焦 Python 测试和
 26 个子测试，以及 Rust workspace 测试、格式、Ruff 与 Clippy；该提交未重跑完整

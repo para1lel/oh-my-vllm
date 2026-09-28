@@ -6,6 +6,13 @@ for interpretation and a dated index of every artifact.
 
 ## Current
 
+- `2026-09-28-audit-mnt02-krn04-operators.json` contains clean `312c54b`
+  formal evidence for all 60 selected `quant`, `silu_quant`, `gates`, and
+  `recurrent` cases. Every selected case passes output verification and the
+  frozen TileLang comparison. It is a subset, not a new 147-case decision.
+- `2026-09-28-audit-gates-confirm-operators.json` confirms all 13 `gates`
+  cases on a second pinned B200 after one rejected 59/60 subset attempt. The
+  rejected attempt is described in the acceptance index; its cause is unknown.
 - `2026-09-28-audit-p1-operators.json` contains the clean `96e4ecc` affected
   formal subset: 29/29 selected `prepare_attention` and `attention` cases
   pass on a pinned B200. It is not a new full 147-case decision. Current
