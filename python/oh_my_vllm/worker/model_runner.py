@@ -9,6 +9,7 @@ import torch
 from oh_my_vllm.kernels.attention import PagedAttention
 from oh_my_vllm.models.qwen import Batch, Qwen
 from oh_my_vllm.worker.batch_plan import BLOCK, plan_request, validate_batch
+from oh_my_vllm.worker.graph_cache import GraphCache
 from oh_my_vllm.worker.protocol import RequestOutput, SchedulerOutput, WorkerOutput
 from oh_my_vllm.worker.runtime import identity, verify_loaded_modules
 from oh_my_vllm.worker.sampler import RequestSampler, greedy_rows, verify_rows
@@ -115,7 +116,10 @@ class OhMyVllmWorker:
                 )
             self.caches.append(cache)
         self.attention = PagedAttention()
-        self.graphs = {}
+        self.graph_cache = GraphCache(
+            free_bytes=lambda: torch.cuda.mem_get_info()[0],
+            reserved_bytes=lambda: torch.cuda.memory_reserved(),
+        )
         # Target outputs feed MTP before the next target replay. Keep target
         # capture scratch separate from the draft and proposal graph families.
         self.graph_pool = None
@@ -262,7 +266,7 @@ class OhMyVllmWorker:
         use_graph = (
             not any(p.prefill for p in plans)
             and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1"
-            and (key in self.graphs or len(self.graphs) < 32)
+            and self.graph_cache.should_use("target", key)
         )
         if not use_graph:
             self.attention.plan(
@@ -312,22 +316,41 @@ class OhMyVllmWorker:
                 dtype=torch.int32,
                 device="cuda",
             )
-            if key not in self.graphs:
+
+            def capture():
                 if self.graph_pool is None:
                     self.graph_pool = torch.cuda.graph_pool_handle()
                 logger.info(
                     "Capture target graph: tokens=%d requests=%d extent=%d", *key
                 )
-                self.graphs[key] = DecodeGraph(
-                    self.model,
-                    self.caches,
-                    token_tensor,
-                    batch,
-                    tables,
-                    extent,
-                    pool=self.graph_pool,
+                try:
+                    return DecodeGraph(
+                        self.model,
+                        self.caches,
+                        token_tensor,
+                        batch,
+                        tables,
+                        extent,
+                        pool=self.graph_pool,
+                    )
+                except Exception:
+                    if not self.graph_cache.has_family("target"):
+                        self.graph_pool = None
+                    raise
+
+            graph = self.graph_cache.get_or_create("target", key, capture)
+            if graph is None:
+                self.attention.plan(
+                    cpu_starts,
+                    torch.tensor(page_starts, dtype=torch.int32),
+                    torch.tensor(pages, dtype=torch.int32),
+                    torch.tensor(last_lengths, dtype=torch.int32),
+                    24,
+                    4,
+                    256,
                 )
-            hidden, graph_logits = self.graphs[key].replay(token_tensor, batch, tables)
+            else:
+                hidden, graph_logits = graph.replay(token_tensor, batch, tables)
         if graph_logits is None:
             hidden = self.model.forward(token_tensor, batch, self.caches)
         selected = [
@@ -478,6 +501,15 @@ class OhMyVllmWorker:
 
     def shutdown(self) -> None:
         logger.info(
+            "Target graph cache",
+            extra={"fields": self.graph_cache.snapshot()},
+        )
+        if self.mtp is not None:
+            logger.info(
+                "MTP graph cache",
+                extra={"fields": self.mtp.graph_cache.snapshot()},
+            )
+        logger.info(
             "GPU memory high water",
             extra={
                 "fields": {
@@ -492,7 +524,7 @@ class OhMyVllmWorker:
         self.samplers.clear()
         self.sources.clear()
         self.computed.clear()
-        self.graphs.clear()
+        self.graph_cache.clear()
         self.caches = []
         self.model = None
         self.attention = None

@@ -15,6 +15,7 @@ import torch
 from oh_my_vllm.kernels.mtp_attention import MTPAttention
 from oh_my_vllm.models.qwen import AttentionBatch, Qwen
 from oh_my_vllm.worker.batch_plan import BLOCK, PlannedRequest
+from oh_my_vllm.worker.graph_cache import GraphCache
 from oh_my_vllm.worker.protocol import RequestOutput
 from oh_my_vllm.worker.tensors import (
     device_page_tables,
@@ -40,8 +41,19 @@ class MTP:
         )
         self.attention = MTPAttention(max_tokens)
         self.next_position: dict[int, int] = {}
-        self.graphs = {}
-        self.chains = {}
+        self.graph_cache = GraphCache(
+            family_floors={"draft": 16, "proposal": 4},
+            free_bytes=(
+                (lambda: torch.cuda.mem_get_info(self.device)[0])
+                if self.device.type == "cuda"
+                else None
+            ),
+            reserved_bytes=(
+                (lambda: torch.cuda.memory_reserved(self.device))
+                if self.device.type == "cuda"
+                else None
+            ),
+        )
         # Draft hidden states feed proposals. These families must not share a
         # private pool even though captures within each family may share one.
         self.draft_graph_pool = None
@@ -85,7 +97,7 @@ class MTP:
 
             extent = min(self.max_tokens, ((max(positions) + 4096) // 4096) * 4096)
             key = (len(tokens), len(starts) - 1, extent)
-            if key in self.graphs or len(self.graphs) + len(self.chains) < 32:
+            if self.graph_cache.should_use("draft", key):
                 width = (extent + BLOCK - 1) // BLOCK
                 tables_tensor = device_page_tables(
                     tables,
@@ -99,24 +111,40 @@ class MTP:
                     if len(tokens) > len(starts) - 1
                     else None
                 )
-                if key not in self.graphs:
+                # A new capture in this family may reuse the preceding graph's
+                # output storage. Copy it before cache eviction or capture.
+                graph_hidden = (
+                    hidden
+                    if self.graph_cache.contains("draft", key)
+                    else hidden.clone()
+                )
+
+                def capture():
                     if self.draft_graph_pool is None and self.device.type == "cuda":
                         self.draft_graph_pool = torch.cuda.graph_pool_handle()
                     logger.info("Capture draft graph: %s", key)
-                    self.graphs[key] = DraftGraph(
-                        self.model,
-                        self.cache,
-                        token_tensor,
-                        hidden,
-                        batch,
-                        tables_tensor,
-                        extent,
-                        starts_tensor,
-                        pool=self.draft_graph_pool,
+                    try:
+                        return DraftGraph(
+                            self.model,
+                            self.cache,
+                            token_tensor,
+                            graph_hidden,
+                            batch,
+                            tables_tensor,
+                            extent,
+                            starts_tensor,
+                            pool=self.draft_graph_pool,
+                        )
+                    except Exception:
+                        if not self.graph_cache.has_family("draft"):
+                            self.draft_graph_pool = None
+                        raise
+
+                graph = self.graph_cache.get_or_create("draft", key, capture)
+                if graph is not None:
+                    return graph.replay(
+                        token_tensor, graph_hidden, batch, tables_tensor, starts_tensor
                     )
-                return self.graphs[key].replay(
-                    token_tensor, hidden, batch, tables_tensor, starts_tensor
-                )
         self.attention.plan(starts, tables, positions)
         return self.model.draft(token_tensor, hidden, batch, self.cache)
 
@@ -134,7 +162,7 @@ class MTP:
         last_position = max(p for _, _, p, _ in eligible) + 3
         extent = min(self.max_tokens, ((last_position + 4096) // 4096) * 4096)
         key = (len(eligible), extent)
-        if key not in self.chains and len(self.graphs) + len(self.chains) >= 32:
+        if not self.graph_cache.should_use("proposal", key):
             return None
         width = (extent + BLOCK - 1) // BLOCK
         tables = device_page_tables(
@@ -144,20 +172,30 @@ class MTP:
             dtype=torch.int64,
         )
         positions = device_tensor([p for _, _, p, _ in eligible], device=self.device)
-        if key not in self.chains:
+
+        def capture():
             if self.proposal_graph_pool is None:
                 self.proposal_graph_pool = torch.cuda.graph_pool_handle()
             logger.info("Capture proposal graph: %s", key)
-            self.chains[key] = ProposalGraph(
-                self.model,
-                self.cache,
-                hidden,
-                positions,
-                tables,
-                extent,
-                pool=self.proposal_graph_pool,
-            )
-        return self.chains[key].replay(hidden, positions, tables).tolist()
+            try:
+                return ProposalGraph(
+                    self.model,
+                    self.cache,
+                    hidden,
+                    positions,
+                    tables,
+                    extent,
+                    pool=self.proposal_graph_pool,
+                )
+            except Exception:
+                if not self.graph_cache.has_family("proposal"):
+                    self.proposal_graph_pool = None
+                raise
+
+        graph = self.graph_cache.get_or_create("proposal", key, capture)
+        if graph is None:
+            return None
+        return graph.replay(hidden, positions, tables).tolist()
 
     def propose(
         self,
