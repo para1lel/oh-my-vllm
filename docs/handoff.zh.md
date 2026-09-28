@@ -63,7 +63,8 @@ CUDA 迁移在 `c36d1c9` 的原始验收属于历史结果。整库审计修复�
   源码的六项 258048+4096 边界用例已完成，但未覆盖 262144 处反复 shape
   churn。另一次物理 <4 GiB 的首次 miss 诊断通过，但 PY-04 因已有 graph 后
   接近该余量的晚期变形仍未实测，继续为
-  **partial/open**；PY-06 因整步 host/GPU overlap 净收益未证实，仍为
+  **partial/open**；PY-06 在 pinned DtoH 未见实质完整调用收益的诊断后，整步
+  host/GPU overlap 净收益仍未证实，仍为
   **partial/open**；KRN-06 的安全候选没有稳定完整调用收益，仍为
   **open/no-go**。详见当前[审计索引](audit-2026-09-23.zh.md)。
 
@@ -87,6 +88,41 @@ CUDA 迁移在 `c36d1c9` 的原始验收属于历史结果。整库审计修复�
   超过旧的 20 GiB 前置上限而在分配前拒收。该诊断只证明本配置中低于 4 GiB
   时首次 graph miss 转 eager；不覆盖已有 graph 后的晚期新形状或 262144
   token 处反复变形。因此 PY-04 仍为 **partial/open**。
+
+## 整步重叠检查点（2026-09-29）
+
+- 干净 HEAD `fa3b8e6` 使用未变的 release 二进制 SHA-256
+  `90038fc7f9598e1e42f7beb8f04370463f3d1a33fb83b33a91f6698e3f0af888`
+  和 B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`。仓库外
+  profiler 采集一次已预热的 MTP4 batch 4、输入 32768、输出 256 的
+  decode step：CPU step 21.891 ms，1251 个 kernel 总计 13.624 ms，
+  GPU 工作合并时长 13.535 ms。target greedy 读回的 host
+  `cudaMemcpyAsync` 耗时 15.044 ms，而 320 字节 GPU DtoH 仅约 3.4 微秒。
+  target token 是验证、提交及 MTP 的输入，proposal token 是 Rust 下一步
+  调度更新的输入。target DtoH 后 4.417 ms 空窗无法由单条 profiler trace
+  归因。原始 `/tmp/oh-my-vllm-py06-profile/trace-173909.json` 的 SHA-256
+  为 `00767f55e0b04e12886385c703ee0d5d0b7e714addd4beb7b7e0eb5dc694357c`；
+  owner 结果 `/tmp/oh-my-vllm-py06-profile/result-173804.json` 的 SHA-256
+  为 `6a0bdc5e05a21d42d6c90383b6019f3ddb910a8c5e157e23bec3787980e5473d`。
+  包装层 157 ms wall time 包含 profiler 进入/退出开销，不是吞吐计时。
+- 经独立复核的仓库外 pinned-D2H shim 通过 12 项聚焦检查：九项 CUDA
+  精确输出对照（FP16/BF16/FP32、并列及非有限值）、一项 CPU 回退和两项
+  CUDA 无效输入拒绝；
+  `/tmp/oh-my-vllm-py06-ab/equivalence.log` 的 SHA-256 为
+  `a7283cce1be0067b1ad6527d9855409143a05f34c0fe0217c29b8e65d3a8745a`。
+  无 profiler 的 ABBA 对照在该 UUID 上串行运行四个 worker，每个一次预热、
+  三次测量，工作负载同为 MTP4 batch 4、32768→256。baseline/pinned
+  各六次中位数为 137.031/137.328 token/s（+0.216%），相对各自中位数
+  最大偏离为 0.885/0.314%。两组 baseline 自身漂移约 0.287%，超过候选
+  收益。每行均有 1024 个输出、69 步、MTP proposed/accepted 961/783、
+  零抢占。结果 `/tmp/oh-my-vllm-py06-ab/result-211290.json` 的 SHA-256
+  为 `bedccc3e3c2ef52c545755249250810d50dac7a4994a832905e718704e949f03`；
+  内含四份原始日志哈希和清理结果。此 1+3 诊断不是正式框架的 2+5 协议，
+  也没有 token 序列哈希。本轮未将 pinned DtoH 加入生产。仓库源码未变，
+  先前完整 GPU、147 项算子及 12 行框架门槛仍有效。PY-06 维持
+  **partial/open**。trace owner PID 173804 及 worker/IPC、ABBA owner
+  PID 211290 及四组 worker/IPC、聚焦测试进程均退出；所选 GPU 恢复
+  0 MiB/0%。
 
 ## 较早修复检查点（2026-09-28）
 

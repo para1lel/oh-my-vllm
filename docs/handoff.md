@@ -70,7 +70,8 @@ The `2026-09-22-cuda-{operators,framework,features}.json` artifacts remain histo
   physical <4-GiB first-miss probe passes, but PY-04 is **partial/open**
   because resident-graph late shape churn near that limit remains untested;
   PY-06 is **partial/open** because whole-step host/GPU overlap benefit is
-  unverified; KRN-06 remains **open/no-go** after its safe candidate had no
+  unverified after a pinned-DtoH diagnostic with no material full-call gain;
+  KRN-06 remains **open/no-go** after its safe candidate had no
   stable full-call gain. See the current [audit index](audit-2026-09-23.md).
 
 ## Physical low-headroom checkpoint (2026-09-29)
@@ -97,6 +98,46 @@ The `2026-09-22-cuda-{operators,framework,features}.json` artifacts remain histo
   fresh graph misses become eager under the physical guard for this one
   configuration. Existing-graph late shape changes and repeated 262144-token
   churn remain unverified, so PY-04 remains **partial/open**.
+
+## Whole-step overlap checkpoint (2026-09-29)
+
+- Clean HEAD `fa3b8e6` used the unchanged release binary SHA-256
+  `90038fc7f9598e1e42f7beb8f04370463f3d1a33fb83b33a91f6698e3f0af888`
+  and B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`. An external
+  profiler captured one warmed MTP4 batch-4 decode step at 32768 input/256
+  output: CPU step 21.891 ms, 1251 kernels totaling 13.624 ms, merged GPU
+  work 13.535 ms. The target greedy readback's host `cudaMemcpyAsync` lasted
+  15.044 ms while its 320-byte GPU DtoH lasted about 3.4 microseconds. The
+  target token is needed for verification, commit and MTP; proposal tokens
+  are needed by Rust's next scheduler update. The 4.417 ms gap after target
+  DtoH cannot be attributed from one profiler trace. Raw trace
+  `/tmp/oh-my-vllm-py06-profile/trace-173909.json` SHA-256 is
+  `00767f55e0b04e12886385c703ee0d5d0b7e714addd4beb7b7e0eb5dc694357c`;
+  owner result `/tmp/oh-my-vllm-py06-profile/result-173804.json` SHA-256 is
+  `6a0bdc5e05a21d42d6c90383b6019f3ddb910a8c5e157e23bec3787980e5473d`.
+  Its 157 ms instrumented wrapper wall time includes profiler setup/exit and
+  is not a throughput measurement.
+- An independently reviewed external pinned-D2H shim passed 12 focused
+  checks: nine CUDA exact-output cases for FP16/BF16/FP32, ties and nonfinite
+  values, one CPU fallback and two CUDA invalid-input rejections.
+  `/tmp/oh-my-vllm-py06-ab/equivalence.log` SHA-256 is
+  `a7283cce1be0067b1ad6527d9855409143a05f34c0fe0217c29b8e65d3a8745a`.
+  A profiler-free ABBA comparison used four serial workers on that UUID,
+  one warmup and three measured runs per worker, with the same MTP4 batch-4
+  32768→256 workload. Baseline/pinned medians across six samples each were
+  137.031/137.328 token/s (+0.216%); maximum median deviations were
+  0.885/0.314%. The two baseline groups drifted about 0.287%, exceeding
+  the candidate gain. Every measured row had 1024 outputs, 69 steps,
+  961/783 proposed/accepted drafts and no preemption. Result
+  `/tmp/oh-my-vllm-py06-ab/result-211290.json` SHA-256 is
+  `bedccc3e3c2ef52c545755249250810d50dac7a4994a832905e718704e949f03`;
+  it records all four raw log hashes and cleanup. This 1+3 diagnostic
+  is not the formal 2+5 framework protocol and has no token-sequence hash.
+  Pinned DtoH was not added to production. The prior full GPU, 147 operator
+  and 12 framework gates remain valid because no repository source changed.
+  PY-06 remains **partial/open**. Owner PID 173804 and its worker/IPC from
+  tracing, ABBA owner PID 211290 and all four worker groups/IPC, and the
+  focused test process exited; the selected GPU returned to 0 MiB/0%.
 
 ## Earlier remediation checkpoint (2026-09-28)
 
