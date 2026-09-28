@@ -7,6 +7,9 @@
 
 ## 当前
 
+- `2026-09-28-audit-p1-operators.json` 是干净提交 `96e4ecc` 的受影响正式算子
+  子集：在固定 UUID 的 B200 上，选中的 29 项 `prepare_attention` 与 `attention`
+  用例全部通过。它不是新的 147 项完整判定。热路径修复后的当前 12 组框架性能尚未测量。
 - `2026-09-22-refreshed-enginecore.json` 是冻结的 12 组官方 vLLM EngineCore 基线，采集自上游
   `e9f169d16b9408bb9ae44f75072b91a5521d733c`。
   - 每个 `rows[].artifact` 正是 `benchmarks/ttft.py` 需要的输入。

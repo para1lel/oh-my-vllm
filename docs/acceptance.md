@@ -1,6 +1,22 @@
 # Acceptance evidence
 
-## Current — CUDA default, 2026-09-22/23
+## Current remediation evidence — 2026-09-28
+
+Clean `96e4ecc` passes all 29 selected affected formal operator cases on a
+UUID-pinned B200: 13 `prepare_attention` and 16 `attention`. The smallest
+positive one-sided 95% gain bound is 0.000796 ms. The summarized
+[artifact](../bench/baseline/2026-09-28-audit-p1-operators.json) retains the
+source hashes, frozen-reference hashes, protocol, selected cases, and raw
+capture hash. This subset does not establish a new full 147-case result.
+
+The full B200 pytest suite after `96e4ecc` passed 211 tests and 32 subtests,
+with six skipped context-boundary placeholders. SRV-03's later CPU/protocol
+repair `d33b844` passed 31 focused Python tests and 26 subtests, Rust
+workspace tests, formatting, Ruff, and Clippy; the full GPU suite was not
+rerun for that commit. Current 12-row throughput and TTFT remain unverified
+after the hot-path changes. The 2026-09-22 results below apply to `c36d1c9`.
+
+## Historical accepted CUDA baseline — 2026-09-22/23
 
 **Performance.** Clean `c36d1c9`, with CUDA explicitly selected, passes all 12
 frozen-vLLM comparisons.

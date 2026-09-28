@@ -27,6 +27,7 @@ oh-my-vllm 按清晰边界分工：Rust 拥有调度策略和 KV 缓存记账，
  "prompt_token_ids": list[int]}
 
 {"type": "execute",
+ "rpc_id": int,
  "step_id": int,
  "scheduled": [
    {"request_id": int,
@@ -41,25 +42,27 @@ oh-my-vllm 按清晰边界分工：Rust 拥有调度策略和 KV 缓存记账，
  "preempted_request_ids": list[int],
  "num_batched_tokens": int}
 
-{"type": "prepare", "request_id": int, "request": {...}}   # 仅服务模式；见下文
-{"type": "abort",  "request_id": int}   # 无回复；Rust 端没有调用方（审计 MNT-04）
+{"type": "prepare", "rpc_id": int, "request_id": int, "request": {...}}
+{"type": "abort",  "request_id": int}   # 无回复；取消/清理
 {"type": "shutdown"}
 ```
 
-`register` 和 `abort` 没有回复；它们的 Python 处理函数一旦抛出异常，目前会使 worker 退出（审计 SRV-06）。回复中不回显 `step_id`，因此回复只按顺序匹配（审计 SRV-05）。
+`register` 和 `abort` 没有回复。register 异常会记录日志；缺失的注册会以请求局部 execute 错误报告。prepare 和 execute 回复回显 `rpc_id`；Rust 会丢弃取消 prepare 后迟到的回复。
 
 只在已完成执行步骤之间取消请求。`Scheduler::abort` 释放 Rust 所有权，并将 `finished_request_ids` 通知排入下次 execute；即使已无调度请求，也需发送。driver 必须刷出最后通知。Python 清理注册、采样、已接受状态和 MTP 进度。旧独立 `abort` 消息使用相同的 finished-only 路径，不回复，也不改变 Rust 状态。
 
 **Python → Rust：**
 
 ```
-{"type": "ready", "logical_num_blocks": int}
+{"type": "ready", "logical_num_blocks": int, "mamba_blocks": int}
 
-{"type": "prepared", "prompt_token_ids": list[int]}
+{"type": "prepared", "rpc_id": int, "prompt_token_ids": list[int]}
 
 {"type": "execute_result",
+ "rpc_id": int,
  "outputs": [
    {"request_id": int,
+    "error": str | null,          # 仅服务模式，可选：请求局部故障
     "token_ids": list[int],  # prefill 为空、普通为单 token、MTP 为被接受输出
     "num_accepted_draft_tokens": int,  # MTP 接受的 draft 数量
     "new_draft_token_ids": list[int],  # 项目 MTP proposer 生成的实际下一批 draft
@@ -68,8 +71,13 @@ oh-my-vllm 按清晰边界分工：Rust 拥有调度策略和 KV 缓存记账，
     "reasoning_tokens": int}      # 仅服务模式，可选：累计值
  ]}
 
-{"type": "error", "message": str}
+{"type": "error", "rpc_id": int | absent, "kind": "validation" | "internal" | absent,
+ "message": str}
 ```
+
+ready 容量从已分配的 FA 和 GDN 设备张量读取。
+prepare 错误包含 `rpc_id` 和 `kind`；init 错误均不带这两个字段，execute 错误
+包含 `rpc_id`，`kind` 缺失时默认为 internal。
 
 ## KV 缓存数据结构
 
@@ -122,6 +130,6 @@ MTP 缓存按输入 token 索引，首个有效位置为 1；边界 hidden featu
 
 ## 服务协议扩展（2026-09-21）
 
-`prepare` 携带 request_id 和归一化请求对象（messages、tools、effort/template 选项、输出格式、max_tokens、sampling、stop）。Python 校验、编译约束并注册请求，在 Rust 接纳前回复带 prompt_token_ids 的 `prepared` 或 `error`。旧 `register` 仍用于 Run/Bench 的固定长度贪心模式。
+`prepare` 携带 rpc_id、request_id 和归一化请求对象（messages、tools、effort/template 选项、输出格式、max_tokens、sampling、stop）。Python 校验、编译约束并注册请求，在 Rust 接纳前回复带 prompt_token_ids 的 `prepared` 或带类别的 `error`。只有明确的验证错误返回 HTTP 400；worker 内部错误返回 500。旧 `register` 仍用于 Run/Bench 的固定长度贪心模式。
 
-服务 execute 输出可额外包含 text（增量解码文本）、finish_reason（stop/length 或 null）及累计 reasoning_tokens；Rust 把它们存在每步覆盖的旁路映射 `serving_outputs` 中（审计 SRV-07）。token ID 仍是 Rust 调度/KV 的权威输入。grammar mask 完全保留在 Python，由自有 target sampler 应用，包括推测验证行。Rust 等待回复时检测 worker 退出，并为 EOS、长度和取消使用现有 finished_request_ids 清理路径。
+服务 execute 输出可额外包含 text（增量解码文本）、finish_reason（stop/length 或 null）及累计 reasoning_tokens；Rust 把它们存在逐请求结果映射 `serving_outputs` 中。token ID 仍是 Rust 调度/KV 的权威输入。grammar mask 完全保留在 Python，由自有 target sampler 应用，包括推测验证行。Rust 等待回复时检测 worker 退出，并为 EOS、长度和取消使用现有 finished_request_ids 清理路径。

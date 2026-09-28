@@ -1,10 +1,13 @@
-# 交接记录 — 2026-09-24
+# 交接记录 — 2026-09-28
 
 [English](handoff.md)。agent 以英文原文为准。
 
 ## 当前状态
 
-CUDA 迁移已完成并通过验收。下一项任务是修复整库代码审计发现的问题。
+CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。`96e4ecc` 已有受影响算子
+证据；后续 fixed 状态复核又发现 P0/P1 和证据缺口，已复审的源码提交 `487f8de`
+修复了这些问题。
+当前 12 行门槛尚未重新测量。
 
 - **Kernel 后端：** B200 上默认使用 CUDA。在 Python 启动前设置
   `OH_MY_VLLM_KERNEL_BACKEND=tilelang` 则改用冻结的 TileLang 对照。运行时身份报告实际使用的
@@ -29,7 +32,40 @@ CUDA 迁移已完成并通过验收。下一项任务是修复整库代码审计
 证据见 [acceptance.zh.md](acceptance.zh.md) 以及
 `bench/baseline/2026-09-22-cuda-{operators,framework,features}.json`。
 
-## 待办：修复代码审计问题
+## 最新修复检查点（2026-09-28）
+
+- `96e4ecc` 修复余下的 P0/P1 请求隔离、RPC 取消、注册和 FA kernel 问题
+  （SRV-01/05/06/07 与 KRN-01/02/03）。取消后的 prepare 回复不会移位到下一次
+  RPC；失败或被拒的准备会释放 Python 状态。请求局部故障不再停止其他活跃流；
+  CUDA/设备故障仍会停止引擎。
+- `d33b844` 补完 SRV-03 的错误分类：明确的输入验证错误返回 HTTP 400，未知
+  Python prepare 故障返回 500，第 65 个活跃请求返回 503。Axum 的 413/415
+  状态码保持原样。定向 bridge、HTTP、serving 测试通过 31 项及 26 个子测试，
+  包括畸形 schema 和 sampling 参数。
+- 干净提交 `96e4ecc` 的[受影响算子证据](../bench/baseline/2026-09-28-audit-p1-operators.json)
+  在 B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上通过全部 29 项
+  选中正式用例（13 项 prepare-attention、16 项 attention）；最小的单侧 95% 正
+  收益下界为 0.000796 ms。这是受影响子集，而非新的 147 项完整矩阵结果。
+- `96e4ecc` 后的完整 B200 pytest 通过 211 项测试及 32 个子测试，六项 context
+  边界占位测试跳过。Rust workspace 测试、格式、行宽、Ruff、Clippy 与提交 hooks
+  通过。SRV-03 的聚焦 Rust/Python 测试和静态检查也通过。
+- 热路径改动后的当前 12 组框架吞吐和 TTFT **尚未验证**。下文的 2026-09-22
+  数值只适用于干净提交 `c36d1c9`。P2 性能决策结束后需重跑全部 12 组。
+  EVD-07 仍为 open，因为六项边界测试仍跳过。审计中的四项“Not verified”风险
+  也尚未关闭。
+- 后续 fixed 状态复核重新打开 SRV-02、KRN-05、PY-01、SCH-01/02/04、
+  EVD-01/02/11/12/13 和 MNT-04。已复审的提交 `487f8de` 修复 SRV-02、KRN-05、PY-01、
+  SCH-01/02/04 及 EVD-01/02/11。EVD-01 拒绝三次重复或高离散度证据；
+  EVD-02 从已分配 FA/GDN 张量报告容量，拒绝 CLI/日志不符；EVD-11 检查完整
+  缓存树。聚焦 CPU 回归通过 73 项及 37 个子测试；Rust workspace 测试通过
+  56/26/14 项，格式、行宽、Ruff、Clippy 和提交 hooks 均通过。当前 GPU 套件和
+  完整框架测量仍待完成。
+
+后续工作：EVD-12/13、PY-03..07、SRV-08..10、SCH-06/07、KRN-06..10、
+EVD-03..05/07..10、MNT-01..04、四项未验证风险，以及当前 12 组框架验收。
+逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。
+
+## 历史 2026-09-24 修复检查点
 
 对 `030f60f` 的审计记录在 [audit-2026-09-23.zh.md](audit-2026-09-23.zh.md)，共 51 项。
 修复工作于 2026-09-24 开始，进行中。
@@ -44,25 +80,32 @@ CUDA 迁移已完成并通过验收。下一项任务是修复整库代码审计
 - SRV-04：`Parser::feed` 在 `LengthFinish` 时冲刷暂存字节；已新增测试。
 - SRV-06：`register_request`/`abort_request` 降级为 fire-and-forget。
 
-**批次 2 — 证据完整性**（`895d57b`，2026-09-24）：EVD-01/02/06/07/11/12/13 已修复。
-- EVD-01：`compare_vllm.py` 默认 reps=5、warmup=2；输出离散度警告。
+**批次 2 — 证据完整性**（`895d57b`，2026-09-24）：EVD-06/11/12/13 已修复，
+EVD-01/02 仅部分处理。
+- EVD-01：`compare_vllm.py` 强制 reps=5、warmup=2；高离散度只发出警告，
+  因此离散度门槛仍未修复。
+- EVD-02：`ttft.py` 解析了部分实际 BENCH_CONFIG 字段；FA/GDN pool 容量
+  仍来自 CLI 算术，且缺少错配回归。
 - EVD-02：`ttft.py` 通过 `_parse_bench_config()` 读取 worker 输出的 BENCH_CONFIG 日志行；
   `zmq-worker/src/main.rs` 在启动时输出 `info!("BENCH_CONFIG", …)`。
 - EVD-06：`test_kernel_reference.py` 断言冻结参考 JSON 中的精确文件集合。
-- EVD-07：`tests/test_context_boundary.py` 新增六个 REQ-CONTEXT-001 边界运行的占位测试。
+- EVD-07：`tests/test_context_boundary.py` 新增六个 REQ-CONTEXT-001 边界运行的
+  跳过占位测试；这没有关闭该问题。
 - EVD-11：`measurement.py` 在缓存根目录缺失时追加到 `problems`。
 - EVD-12：`cuda_backend/__init__.py` 新增 `provenance()`，返回 nvcc 版本和编译后
   `.so` 的 SHA-256。
 - EVD-13：稳态审计将 `TVM_FFI_CACHE_DIR` 作为第四个缓存根目录。
 
 **批次 3 — Kernel/worker 契约（宿主端）**（`eb5ff62`，2026-09-24）：
-  KRN-01/04/05、PY-01/02、MNT-02 已修复；KRN-02/03 涉及设备代码，需 GPU 重跑，延后。
+  KRN-01/04/05、PY-01/02 已修复；MNT-02 仅部分处理。在这个检查点，KRN-02/03
+  涉及设备代码，需 GPU 重跑，因此延后。
 - KRN-01：`decode_attention.py` 在提供 `starts` 时断言 `group_size ≤ 5`。
 - KRN-04：`elementwise.py` 和 `fp8.py` 防止 int32 溢出。
 - KRN-05：`gdn.py` 将 dtype/shape/stride 校验移入 `normalize_qk`。
 - PY-01：`batch_plan.py` 在 debug 模式断言可写 FA 尾页跨请求不相交。
 - PY-02：`qwen.py` 对每个 FP8 缩放投影断言 `w.shape[0] % 128 == 0`。
-- MNT-02：`elementwise.py` 在 `silu_mul`/`delta_gates` 对空张量提前返回。
+- MNT-02：`elementwise.py` 在 `silu_mul`/`delta_gates` 对空张量提前返回；兜底
+  dtype 分派和硬编码 epsilon 仍未修复。
 - 新增测试：`tests/test_validation_guards.py`、`tests/test_batch_plan.py`、
   `tests/test_independent_decode_attention.py`。
 
@@ -72,13 +115,13 @@ CUDA 迁移已完成并通过验收。下一项任务是修复整库代码审计
 - SCH-03：`aligned_prefill` 在 `count > 0` 时将结果夹到至少 1。
 - SCH-04：`add_request()` 返回 `bool`，在入队时拒绝超容量请求（服务层返回 HTTP 413）。
 - SCH-05：`remove_blocks_in_range` 遇到 NULL_BLOCK_ID 时改用 `continue` 而非 `break`。
-- SRV-05/07 仍为 open（取消安全性和侧信道覆盖需要较大改动，见审计文档）。
+- 在这个检查点，SRV-05/07 仍为 open；`96e4ecc` 后来修复了它们。
 
 **批次 6 部分 — 清理**（`62101a3`，2026-09-24）：MNT-04 已修复。
 - 从 `client.rs` 删除死代码 `abort_request()` 方法及 `AbortMsg` import。
 - 更新 `lib.rs` 中的协议文档注释，与实际报文格式保持一致。
 
-### 剩余未修复问题
+### 该检查点仍未修复的问题
 
 以下问题已延后（设备代码需 GPU 重跑）或归入 P2/P3 待后续处理：
 

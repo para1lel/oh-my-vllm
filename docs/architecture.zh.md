@@ -6,13 +6,13 @@ Rust 负责 HTTP 服务、请求调度、已接受 token 历史及逻辑 KV 分�
 
 1. Rust 前端归一化 Chat/Responses 请求。Python ServingAdapter 应用 checkpoint 的 chat template、tokenizer、采样配置和 XGrammar 约束，返回 prompt ID。
 2. Rust 接纳请求、解析共享前缀并分配 FA/Mamba 表。调度器将 prefill、decode 和实际 MTP draft ID 组成 batch。
-3. Python 验证已接受历史，并按各 tensor 容量验证物理地址（同时检查递归状态别名；不检查 FA 页共享——审计 PY-01），执行 Qwen 模型，并在逐 draft grammar mask 下从 target 分布采样。
+3. Python 验证已接受历史，并按各 tensor 容量验证物理地址（包括递归状态别名和跨请求 FA 页写入），执行 Qwen 模型，并在逐 draft grammar mask 下从 target 分布采样。
 4. Python 只提交保留的输出，选择被接受的递归快照，保存跨块 checkpoint，再生成新的 MTP proposal。
 5. Rust 更新已接受历史、回滚被拒绝的推测位置并释放已完成请求。即使没有请求被调度，仅包含完成信息的通知也会释放 Python 状态。
 
 消息字段和调度器/KV 数据结构见 [design.md](design.zh.md)。
 
-错误处理：目前任何 worker 异常或 RPC 超时对服务循环都是致命的（审计 SRV-01）；Rust 进程尚不能保证在 SIGTERM/SIGKILL 时清理 worker（审计 SRV-02）。
+错误处理：prepare 回复携带 validation/internal 类别；HTTP 适配层只将明确的输入验证映射为 400，未知 worker 故障映射为 500。RPC 回复携带 ID；超时的准备会取消，迟到的回复会被丢弃。execute 结果可报告请求局部错误，只移除对应请求；CUDA/设备执行故障仍会停止引擎。Rust 父进程死亡时，自有 Python worker 会退出。
 
 ## Rust 模块
 

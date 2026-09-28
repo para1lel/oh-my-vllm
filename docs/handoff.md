@@ -1,9 +1,11 @@
-# Handoff — 2026-09-24
+# Handoff — 2026-09-28
 
 ## Current state
 
-The CUDA migration is complete and accepted. The next task is to fix the findings of
-the whole-repository code audit.
+The CUDA migration's original acceptance is historical. The whole-repository
+audit remediation is in progress. `96e4ecc` has affected-operator evidence;
+later fixed-status review found additional P0/P1 and evidence gaps, repaired
+in reviewed source commit `487f8de`. Current 12-row gates are unmeasured.
 
 - **Kernel backend:** CUDA is the default on B200. Setting
   `OH_MY_VLLM_KERNEL_BACKEND=tilelang` before Python starts selects the frozen
@@ -31,7 +33,47 @@ the whole-repository code audit.
 Evidence is in [acceptance.md](acceptance.md) and in the
 `bench/baseline/2026-09-22-cuda-{operators,framework,features}.json` artifacts.
 
-## Open work: code audit remediation
+## Latest remediation checkpoint (2026-09-28)
+
+- `96e4ecc` repairs the remaining P0/P1 request-isolation, RPC cancellation,
+  registration, and FA kernel findings (SRV-01/05/06/07 and KRN-01/02/03).
+  A cancelled prepare reply cannot shift the next RPC. Failed or rejected
+  preparation releases Python state. Request-local failures do not stop other
+  active streams; CUDA/device failures still stop the engine.
+- SRV-03's remaining error classification is repaired in `d33b844`:
+  explicit validation errors return HTTP 400, unknown Python prepare failures
+  return 500, and the 65th active request returns 503. Axum's 413/415 status
+  is preserved. The targeted bridge, HTTP, and serving tests passed 31 tests
+  and 26 subtests, including malformed schemas and sampling parameters.
+- The clean `96e4ecc` [affected operator evidence](../bench/baseline/2026-09-28-audit-p1-operators.json)
+  passes all 29 selected formal cases (13 prepare-attention, 16 attention) on
+  B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`. The smallest
+  positive one-sided 95% gain bound is 0.000796 ms. This is an affected
+  subset, not a new 147-case full-matrix result.
+- The full B200 pytest suite after `96e4ecc` passed 211 tests and 32 subtests,
+  with six skipped context-boundary placeholders. Rust workspace tests,
+  formatting, line width, Ruff, Clippy, and commit hooks passed. The SRV-03
+  focused Rust/Python tests and static checks also passed.
+- Current 12-row framework throughput and TTFT remain **unverified** after
+  hot-path changes. The 2026-09-22 values below apply to clean `c36d1c9`.
+  Re-run all 12 rows after P2 performance decisions. EVD-07 remains open
+  because its six boundary tests still skip. The four audit risks marked
+  "Not verified" have not yet been closed.
+- Later fixed-status review reopened SRV-02, KRN-05, PY-01, SCH-01/02/04,
+  EVD-01/02/11/12/13 and MNT-04. Reviewed commit `487f8de` repairs SRV-02,
+  KRN-05, PY-01, SCH-01/02/04 and EVD-01/02/11. EVD-01 rejects three-run
+  or high-spread evidence; EVD-02 reports capacities from allocated FA/GDN
+  tensors and fails CLI/log mismatches. EVD-11 scans the full cache trees.
+  CPU regressions passed (73 tests and 37 subtests), as did Rust workspace
+  tests (56/26/14), formatting, line width, Ruff, Clippy and commit hooks.
+  Current GPU suite and full framework measurements remain pending.
+
+Remaining work: EVD-12/13, PY-03..07, SRV-08..10, SCH-06/07, KRN-06..10,
+EVD-03..05/07..10, MNT-01..04, the four unverified risks, and current
+12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
+for individual status and evidence limits.
+
+## Historical 2026-09-24 remediation checkpoint
 
 The audit of `030f60f` is recorded in
 [audit-2026-09-23.md](audit-2026-09-23.md). It contains 51 findings across 6 batches.
@@ -48,24 +90,30 @@ Remediation started 2026-09-24 and is in progress.
 - SRV-06: `register_request`/`abort_request` demoted to fire-and-forget `()`.
 
 **Batch 3 — Kernel/worker contracts, host-side** (`eb5ff62`, 2026-09-24):
-  KRN-01/04/05, PY-01/02, MNT-02 fixed. KRN-02/03 deferred (device code; require GPU re-run).
+  KRN-01/04/05, PY-01/02 fixed; MNT-02 partially addressed. KRN-02/03 were
+  deferred at this checkpoint (device code required a GPU re-run).
 - KRN-01: `decode_attention.py` asserts `group_size ≤ 5` when `starts` is supplied.
 - KRN-04: `elementwise.py` and `fp8.py` guard against int32 overflow.
 - KRN-05: `gdn.py` moves dtype/shape/stride validation into `normalize_qk`.
 - PY-01: `batch_plan.py` debug-asserts FA tail pages are disjoint across requests.
 - PY-02: `qwen.py` asserts `w.shape[0] % 128 == 0` for every FP8-scaled projection.
-- MNT-02: `elementwise.py` early-returns on empty tensors in `silu_mul`/`delta_gates`.
+- MNT-02: `elementwise.py` early-returns on empty tensors in `silu_mul`/`delta_gates`;
+  catch-all dtype dispatch and hard-coded epsilon remain open.
 - Tests added: `tests/test_validation_guards.py`, `tests/test_batch_plan.py`,
   `tests/test_independent_decode_attention.py`.
 
-**Batch 2 — Evidence integrity** (`895d57b`, 2026-09-24): EVD-01/02/06/07/11/12/13 fixed.
-- EVD-01: `compare_vllm.py` defaults to reps=5, warmup=2; emits a spread warning.
+**Batch 2 — Evidence integrity** (`895d57b`, 2026-09-24): EVD-06/11/12/13
+fixed; EVD-01/02 partially addressed.
+- EVD-01: `compare_vllm.py` enforces reps=5 and warmup=2; high spread only
+  emits a warning, so the spread gate remains open.
+- EVD-02: `ttft.py` parses some effective BENCH_CONFIG fields; FA/GDN pool
+  capacities still come from CLI arithmetic, and mismatch regression is absent.
 - EVD-02: `ttft.py` reads the actual BENCH_CONFIG log line from the worker via
   `_parse_bench_config()`; `zmq-worker/src/main.rs` emits `info!("BENCH_CONFIG", …)` at startup.
 - EVD-06: `test_kernel_reference.py` asserts the exact expected file set in the
   frozen reference JSON.
-- EVD-07: `tests/test_context_boundary.py` (six skip-placeholder tests for
-  REQ-CONTEXT-001 boundary runs).
+- EVD-07: `tests/test_context_boundary.py` added six skip placeholders for
+  REQ-CONTEXT-001 boundary runs; this did not close the finding.
 - EVD-11: `measurement.py` appends to `problems` when a cache root is missing.
 - EVD-12: `cuda_backend/__init__.py` gains `provenance()` returning nvcc version
   and the compiled `.so` SHA-256.
@@ -79,14 +127,13 @@ Remediation started 2026-09-24 and is in progress.
 - SCH-04: `add_request()` returns `bool`; rejects over-capacity requests at admission
   (HTTP 413 from the serving layer).
 - SCH-05: `remove_blocks_in_range` uses `continue` instead of `break` on NULL_BLOCK_ID.
-- SRV-05/07 remain open (cancellation safety and side-channel overwrite require
-  larger changes; tracked in audit).
+- SRV-05/07 were still open at this checkpoint; `96e4ecc` later repaired them.
 
 **Batch 6 partial — Cleanup** (`62101a3`, 2026-09-24): MNT-04 fixed.
 - Removed dead `abort_request()` method and `AbortMsg` import from `client.rs`.
 - Updated protocol doc comment in `lib.rs` to match the live wire format.
 
-### Remaining open findings
+### Findings still open at that checkpoint
 
 The following findings were either deferred (device-code changes require a GPU
 re-run) or are P2/P3 work accepted for later:

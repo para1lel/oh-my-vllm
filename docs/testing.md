@@ -64,8 +64,13 @@ scripts/with-gpu.sh scripts/with-env.sh env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 MAX
   python -m pytest tests -q
 ```
 
-This collects all 174 tests. The accepted default-CUDA run passes 174 tests plus
-31 subtests with no skips (`bench/baseline/2026-09-22-cuda-features.json`).
+The historical default-CUDA run on the working tree after `ef07b2b`, later
+committed as `030f60f`, passed 174 tests plus 31 subtests with no skips
+(`bench/baseline/2026-09-22-cuda-features.json`). It was not a separate
+clean-commit run of `030f60f`.
+After `96e4ecc`, the full B200 suite passed 211 tests and 32 subtests; six
+context-boundary placeholders skipped. Those skips do not verify
+REQ-CONTEXT-001 (EVD-07), and `d33b844` did not rerun the full GPU suite.
 
 The operator tests compare each kernel with CPU FP64 references. They cover:
 
@@ -164,10 +169,12 @@ project's worker, and on every call it enforces:
 - A throughput ratio ≥ 0.95, a TTFT ratio ≤ 1.10, and `(max-min)/median` ≤ 10%
   for both metrics on both engines.
 
-Its configuration comparison is weaker than it looks: the candidate side is
-filled in by the harness, not reported by the worker (EVD-02). Do not use
-`benchmarks/compare_vllm.py` for acceptance. It keeps the historical nine-row
-protocol and does not enforce these gates (EVD-01).
+The candidate's scheduler configuration and FA/GDN capacities are read from
+worker logs and allocated device tensors, then checked against the requested
+values (EVD-02); a fresh 12-row run using this path remains pending. Use
+`benchmarks/ttft.py` for acceptance. `benchmarks/compare_vllm.py` now rejects
+fewer than five measured repetitions or >10% spread, so its historical nine-row
+baseline with three repetitions cannot pass the current gates (EVD-01).
 
 **Baseline input.** The frozen baseline rows are embedded in
 `bench/baseline/2026-09-22-refreshed-enginecore.json` under `rows[].artifact`.

@@ -68,9 +68,10 @@ if any gate fails. Profiling traces are not acceptance runs.
 TileFoundry static cost/memory/roofline analysis is a development hypothesis,
 not measured kernel time. Profile the actual model to attribute throughput/TTFT
 gaps. Keep temporary operator tuning scripts and reports outside the repository.
-Formal measurements audit FlashInfer, Triton and TileLang cache roots; the audit
-does not yet cover `TVM_FFI_CACHE_DIR` text artifacts or fail on unset roots
-(audit EVD-11). Finish all compilation before measured repetitions. Kernel faults
+Formal measurements audit FlashInfer, Triton, TileLang and `TVM_FFI_CACHE_DIR`
+cache trees, including text artifacts; unset or missing roots fail the audit.
+The repaired audit has not yet been exercised by a new full 12-row collection.
+Finish all compilation before measured repetitions. Kernel faults
 surface at the next host sync; use `compute-sanitizer` on a reduced case to
 attribute them (audit KRN-09).
 

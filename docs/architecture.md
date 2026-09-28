@@ -12,8 +12,8 @@ through ZMQ DEALER and msgpack; there is no vLLM runtime, scheduler or model ada
 2. Rust admits requests, resolves shared prefixes and allocates FA/Mamba tables.
    The scheduler batches prefill, decode and actual MTP draft IDs.
 3. Python validates accepted history and physical addresses against each tensor's
-   capacity (recurrent-state aliasing is also checked; FA page sharing is not —
-   audit PY-01), executes the Qwen model and samples from target distributions
+   capacity (including recurrent-state aliasing and cross-request FA page writes),
+   executes the Qwen model and samples from target distributions
    with per-draft grammar masks.
 4. Python commits only retained outputs, selects accepted recurrent snapshots,
    saves crossed block checkpoints and generates new MTP proposals.
@@ -23,9 +23,12 @@ through ZMQ DEALER and msgpack; there is no vLLM runtime, scheduler or model ada
 
 See [design.md](design.md) for message fields and scheduler/KV data structures.
 
-Error handling: any worker exception or RPC timeout is currently engine-fatal
-for the serving loop (audit SRV-01); the Rust process does not yet guarantee
-worker cleanup on SIGTERM/SIGKILL (audit SRV-02).
+Error handling: prepare replies carry a validation/internal kind, so the HTTP
+adapter maps only explicit input validation to 400 and unknown worker failures
+to 500. RPC replies carry IDs; timed-out preparation is cancelled and late
+replies are discarded. Execute results can report a request-local error and
+remove only that request; CUDA/device execution failures remain engine-fatal.
+The owned Python worker exits when the Rust parent dies.
 
 ## Rust modules
 

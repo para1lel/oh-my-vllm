@@ -33,6 +33,7 @@ All messages are msgpack dicts with a `"type"` key.
  "prompt_token_ids": list[int]}
 
 {"type": "execute",
+ "rpc_id": int,
  "step_id": int,
  "scheduled": [
    {"request_id": int,
@@ -47,14 +48,14 @@ All messages are msgpack dicts with a `"type"` key.
  "preempted_request_ids": list[int],
  "num_batched_tokens": int}
 
-{"type": "prepare", "request_id": int, "request": {...}}   # serving only; see below
-{"type": "abort",  "request_id": int}   # no reply; no Rust caller (audit MNT-04)
+{"type": "prepare", "rpc_id": int, "request_id": int, "request": {...}}
+{"type": "abort",  "request_id": int}   # no reply; cancellation/cleanup
 {"type": "shutdown"}
 ```
 
-`register` and `abort` have no reply; an exception in their Python handlers
-currently terminates the worker (audit SRV-06). `step_id` is not echoed in the
-reply, so replies are matched only by ordering (audit SRV-05).
+`register` and `abort` have no reply. Register exceptions are logged; a missing
+registration is reported as a request-local execute error. Prepare and execute
+replies echo `rpc_id`; Rust discards late replies after prepare cancellation.
 
 Cancel requests only between completed execution steps. `Scheduler::abort`
 releases Rust ownership and queues a `finished_request_ids` notification for the
@@ -65,13 +66,15 @@ uses the same finished-only path without a reply; it does not change Rust state.
 **Python → Rust:**
 
 ```
-{"type": "ready", "logical_num_blocks": int}
+{"type": "ready", "logical_num_blocks": int, "mamba_blocks": int}
 
-{"type": "prepared", "prompt_token_ids": list[int]}
+{"type": "prepared", "rpc_id": int, "prompt_token_ids": list[int]}
 
 {"type": "execute_result",
+ "rpc_id": int,
  "outputs": [
    {"request_id": int,
+    "error": str | null,          # serving only, optional: request-local failure
     "token_ids": list[int],  # empty prefill, one normal token, or accepted MTP outputs
     "num_accepted_draft_tokens": int,  # MTP: accepted draft count
     "new_draft_token_ids": list[int],  # actual next drafts from the project MTP proposer
@@ -80,8 +83,13 @@ uses the same finished-only path without a reply; it does not change Rust state.
     "reasoning_tokens": int}      # serving only, optional: cumulative
  ]}
 
-{"type": "error", "message": str}
+{"type": "error", "rpc_id": int | absent, "kind": "validation" | "internal" | absent,
+ "message": str}
 ```
+
+The ready capacities are read from the allocated FA and GDN device tensors.
+Prepare errors include `rpc_id` and `kind`; init errors omit both, and execute
+errors include `rpc_id` while defaulting to internal when `kind` is absent.
 
 ## KV cache data structures
 
@@ -185,15 +193,16 @@ capture save and restore every mutated FA/state destination before actual replay
 
 ## Serving protocol extension (2026-09-21)
 
-`prepare` carries request_id and a normalized request object (messages, tools,
+`prepare` carries rpc_id, request_id and a normalized request object (messages, tools,
 effort/template options, output format, max_tokens, sampling, stop). Python validates,
 compiles constraints and registers the request, replying `prepared` with
-prompt_token_ids, or `error` before Rust admission. Legacy `register` remains
+prompt_token_ids, or a typed `error` before Rust admission. Only explicit
+validation errors return HTTP 400; internal worker errors return 500. Legacy `register` remains
 fixed-length greedy for Run/Bench.
 
 Serving execute outputs optionally add text (incremental decoded text), finish_reason
 (stop/length or null), and cumulative reasoning_tokens; Rust stores them in a
-per-step side map (`serving_outputs`, audit SRV-07). Token IDs remain the
+per-request result map (`serving_outputs`). Token IDs remain the
 authoritative Rust scheduling/KV input. Grammar masks stay entirely in Python and
 are applied by the owned target sampler, including speculative verification rows.
 Rust detects worker process exit while awaiting replies and uses the existing

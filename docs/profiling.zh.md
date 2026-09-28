@@ -43,7 +43,7 @@ prof.export_chrome_trace("/tmp/oh-my-vllm-trace.json")
 
 ## 自定义 kernel
 
-TileFoundry 的静态成本/显存/roofline 分析是开发假设，不是测得的 kernel 时间。分析实际模型以定位吞吐/TTFT 差距。临时算子调优脚本和报告放在仓库外。正式测量审计 FlashInfer、Triton 和 TileLang 缓存根目录；该审计尚未覆盖 `TVM_FFI_CACHE_DIR` 中的文本产物，根目录未设置时也不会失败（审计 EVD-11）。所有编译在正式重复测量前完成。kernel 故障在下一次主机同步时才暴露；用 `compute-sanitizer` 在缩小的用例上定位（审计 KRN-09）。
+TileFoundry 的静态成本/显存/roofline 分析是开发假设，不是测得的 kernel 时间。分析实际模型以定位吞吐/TTFT 差距。临时算子调优脚本和报告放在仓库外。正式测量审计 FlashInfer、Triton、TileLang 和 `TVM_FFI_CACHE_DIR` 的完整缓存树，包括文本产物；根目录未设置或不存在会令审计失败。修复后的审计尚未经新的完整 12 行采集验证。所有编译在正式重复测量前完成。kernel 故障在下一次主机同步时才暴露；用 `compute-sanitizer` 在缩小的用例上定位（审计 KRN-09）。
 
 ## CUDA/TileLang 算子观测
 

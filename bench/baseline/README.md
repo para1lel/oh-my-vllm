@@ -6,6 +6,10 @@ for interpretation and a dated index of every artifact.
 
 ## Current
 
+- `2026-09-28-audit-p1-operators.json` contains the clean `96e4ecc` affected
+  formal subset: 29/29 selected `prepare_attention` and `attention` cases
+  pass on a pinned B200. It is not a new full 147-case decision. Current
+  12-row framework performance remains unmeasured after hot-path repairs.
 - `2026-09-22-refreshed-enginecore.json` is the frozen 12-row official vLLM
   EngineCore baseline, collected at upstream `e9f169d16b9408bb9ae44f75072b91a5521d733c`.
   - Each `rows[].artifact` is the exact input `benchmarks/ttft.py` expects.

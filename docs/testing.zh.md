@@ -61,8 +61,12 @@ scripts/with-gpu.sh scripts/with-env.sh env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 MAX
   python -m pytest tests -q
 ```
 
-该命令收集全部 174 个测试。已接受的默认 CUDA 运行通过 174 个测试及 31 个 subtest，无跳过
-（`bench/baseline/2026-09-22-cuda-features.json`）。
+在 `ef07b2b` 之后、后来成为 `030f60f` 的工作树上运行的历史默认 CUDA 套件
+通过 174 项测试及 31 个子测试，没有跳过
+（`bench/baseline/2026-09-22-cuda-features.json`）；没有在干净的 `030f60f`
+提交上单独重跑。`96e4ecc` 后的完整
+B200 套件通过 211 项测试及 32 个子测试，六项 context 边界占位测试跳过。这些
+跳过不能验证 REQ-CONTEXT-001（EVD-07）；`d33b844` 未重跑完整 GPU 套件。
 
 算子测试将每个 kernel 与 CPU FP64 参考实现对比，覆盖：
 
@@ -148,8 +152,10 @@ scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-batch.py --socket /
 - 稳态编译/捕获审计。
 - 吞吐比 ≥ 0.95、TTFT 比 ≤ 1.10，且两个引擎的两项指标均满足 `(max-min)/median` ≤ 10%。
 
-它的配置比较比看上去要弱：候选侧由 harness 填写，而不是由 worker 报告（EVD-02）。
-不要用 `benchmarks/compare_vllm.py` 做验收。它保留了历史上的九行协议，且不执行这些门槛（EVD-01）。
+候选侧的 scheduler 配置和 FA/GDN 容量从 worker 日志与已分配设备张量读取，再与请求值
+比较（EVD-02）；这条路径仍待新的完整 12 行运行。验收使用 `benchmarks/ttft.py`。
+`benchmarks/compare_vllm.py` 现在拒绝少于五次正式重复或超过 10% 的离散度，因此其
+历史九行基线只有三次重复，无法通过当前门槛（EVD-01）。
 
 **基线输入。** 冻结的基线行嵌入在 `bench/baseline/2026-09-22-refreshed-enginecore.json` 的
 `rows[].artifact` 下。须逐字节一致地提取一行，格式为 `json.dumps(artifact, indent=2)` 加一个结尾换行。
