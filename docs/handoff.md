@@ -205,8 +205,17 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   which are not six-row acceptance. Raw logs remain under
   `/tmp/oh-my-vllm-context-boundary-f161b5e*`; owned GPU processes exited.
   A clean six-row run and the real long-context HTTP smoke remain pending.
+- Independently reviewed `5a3b703` closes SCH-07's repeated whole-history
+  SHA-256 work. The append-only hash chain matches full recomputation through
+  262144 tokens and still yields a real prefix hit after generated output
+  fills a block. A 100-iteration CPU microbenchmark measured old 42/334-block
+  medians of 98.373/786.007 microseconds versus incremental medians of
+  2.313/2.300 microseconds; this is local CPU work, not a framework result.
+  Rust workspace 58/29/17, CPU pytest 201 tests and 67 subtests (181 GPU
+  cases deselected), fmt, line width, Ruff, Clippy and hooks passed. Current
+  12-row framework acceptance remains pending.
 
-Remaining work: PY-03..07, SRV-08..10, SCH-06/07, KRN-06..10,
+Remaining work: PY-03..07, SRV-08..10, SCH-06, KRN-06..10,
 EVD-07, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
