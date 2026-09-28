@@ -58,9 +58,9 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   hot-path changes. The 2026-09-22 values below apply to clean `c36d1c9`.
   Re-run all 12 rows after P2 performance decisions. EVD-07 remains open
   pending a clean, uninterrupted six-row run; its six tests no longer skip.
-  Of the four risks originally marked "Not verified", only the reciprocal
-  bound remains open. Rust MTP GDN placement was verified in `7e93c18`, and
-  the tested FlashInfer workspace and stale-tail paths in `6b378d5` below.
+  The four risks originally marked "Not verified" now have scoped evidence:
+  Rust MTP GDN placement in `7e93c18`, tested FlashInfer workspace/stale-tail
+  paths in `6b378d5`, and the BF16 reciprocal bound in `32cdc2b` below.
 - Later fixed-status review reopened SRV-02, KRN-05, PY-01, SCH-01/02/04,
   EVD-01/02/11/12/13 and MNT-04. Reviewed commit `487f8de` repairs SRV-02,
   KRN-05, PY-01, SCH-01/02/04 and EVD-01/02/11. EVD-01 rejects three-run
@@ -413,10 +413,29 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   exited. FlashInfer's documented zeroing requirement applies to XQA, which
   production does not call. The result does not cover XQA, FA2, or all
   262144-token layouts; full current GPU and framework gates remain pending.
+- Independently reviewed `32cdc2b` verifies the finite BF16 reciprocal
+  assumption from NVIDIA PTX ISA 9.4 and the source operand range. The ISA
+  guarantees at most 1 ulp for `rcp.approx.f32`; finite BF16 scale/inverse
+  remain FP32 normal, so `.ftz` does not change them. Nonfinite maxima and
+  FP16/FP32 use exact division. A B200 regression at commit `32cdc2b`
+  checks production CUDA FP8 bytes and scales against a CPU IEEE FP32 RN
+  reference for 65,280 finite BF16 encodings, 32,640 finite maxima with
+  signed midpoint-derived samples, all 126 exact positive/negative FP8
+  midpoints at maximum 448, and nonfinite fallback. Focused 3/3 passed on
+  UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`; log:
+  `/tmp/oh-my-vllm-rcp-focused-32cdc2b.log`. The CPU suite at test commit
+  `c0ff543`, before the comment-only source correction, passed 237 plus 70
+  subtests (217 GPU deselected), log:
+  `/tmp/oh-my-vllm-rcp-cpu-final.log`; Rust workspace 58/39/26, fmt,
+  line width, Ruff, Clippy and hooks passed. All owned processes exited.
+  This bounded hardware test does not exhaust all maximum/input pairs or
+  prove bitwise equality of intermediate FP32 quotients. The full current
+  GPU suite, 147-case formal matrix, six context rows and 12 framework rows
+  remain pending.
 
 Remaining work: PY-03/04/06, SRV-08, KRN-06, PY-05/07 and KRN-10 acceptance,
-EVD-07, the remaining reciprocal-bound risk, and current
-full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
+EVD-07, the current full operator/GPU suite, and 12-row framework acceptance.
+See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
 
 ## Historical 2026-09-24 remediation checkpoint

@@ -48,9 +48,21 @@ CUDA 是 B200 上默认的自定义 kernel 后端。[验收文档](acceptance.zh
   - 行和缩放组按 tile 划分。kernel 使用四元素向量，并对非负 FP32 幅值使用无符号 warp REDUX。
   - 融合 SiLU 的加载是打包的，FP8 存储也是打包的。
   - 扁平 grid 处理较小的融合行，以及宽度超过 `grid.y` 的情况。
-  - 对于有限的 BF16 最大值，缩放倒数使用 `rcp.approx` 加一次 FMA 残差校正。缩放本身仍使用精确除法。
-  - 在 SM100/CUDA 13.1 上对所有有限 BF16 输入/最大值对进行的临时穷举检查未发现任何 FP8 差异。
-    2026-09-23 审计中的精确算术复核结论一致，前提是 `rcp.approx` 误差不超过 1 ulp。
+  - 对于有限的 BF16 最大值，缩放倒数使用 `rcp.approx`，再以两次
+    `__fmaf_rn` 完成一步残差校正。缩放本身仍使用精确除法。
+  - 历史 SM100/CUDA 13.1 检查及 82,048 项算术复核未发现 FP8 差异，
+    但不绑定当前生产源码。[PTX ISA 9.4 §9.7.3.13](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#floating-point-instructions-rcp)
+    保证 `rcp.approx.f32` 误差 ≤1 ulp；`.ftz` 只改变 subnormal 输入/结果。
+    有限 BF16 最大值的精确 scale 除法使 scale 位于
+    `[2.232142829e-13, 7.565917940e35]`；数学上的 `1/scale` 区间端点约为
+    `[1.321716729e-36, 4.480000066e12]`，`rcp.approx` 最多偏差 1 ulp。
+    两者均为 FP32 normal。非有限
+    最大值、FP16 和 FP32 使用精确 `__fdiv_rn`。
+  - 提交 `32cdc2b` 的 B200 回归把生产 CUDA 量化与 CPU IEEE FP32 RN
+    参考比较，覆盖全部 65,280 个有限 BF16 编码、32,640 层有限最大值的
+    正负中点派生样本、最大值为 448 时全部 126 个正负精确 FP8 中点，以及
+    非有限回退。三项测试的最终 FP8 字节和 scale 数值完全一致。这个有限的
+    硬件样本不证明中间 FP32 商逐位等价，也未穷尽全部输入配对。
 - **SiLU 与乘法。**
   - 使用快速指数和成对 BF16 乘法。两个 BF16 舍入点均保留。
   - 在 SM100/CUDA 13.1 上，对每个有限 BF16 输入以及所有有限操作数对的穷举检查均未发现差异。

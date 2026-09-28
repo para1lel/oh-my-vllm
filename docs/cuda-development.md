@@ -59,11 +59,26 @@ These describe the current code and the numerical properties it relies on.
     an unsigned warp REDUX over nonnegative FP32 magnitudes.
   - Loads for fused SiLU are packed, and FP8 stores are packed.
   - A flat grid handles small fused rows and widths too wide for `grid.y`.
-  - For finite BF16 maxima, the scale reciprocal uses `rcp.approx` plus one FMA
-    residual correction. Scales themselves still use exact division.
-  - Temporary SM100/CUDA 13.1 exhaustive checks over finite BF16 input/max pairs
-    found zero FP8 differences. An exact-arithmetic review in the 2026-09-23
-    audit agrees, assuming the `rcp.approx` error is at most 1 ulp.
+  - For finite BF16 maxima, the scale reciprocal uses `rcp.approx` plus one
+    residual-correction step with two `__fmaf_rn` operations. Scales
+    themselves still use exact division.
+  - The historical SM100/CUDA 13.1 checks and 82,048-case arithmetic review
+    found no FP8 difference; they do not identify the current production
+    source. [PTX ISA 9.4 §9.7.3.13](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#floating-point-instructions-rcp)
+    guarantees `rcp.approx.f32` error ≤1 ulp. `.ftz` only changes subnormal
+    operands/results. For finite BF16 maxima, exact scale division keeps the
+    scale within `[2.232142829e-13, 7.565917940e35]`; the mathematical
+    `1/scale` range has approximate endpoints `[1.321716729e-36,
+    4.480000066e12]`. `rcp.approx` may differ by at most 1 ulp; the actual
+    reciprocal and scale both remain FP32 normal. Nonfinite maxima, FP16 and
+    FP32 use exact `__fdiv_rn`.
+  - A `32cdc2b` B200 regression exercises the production CUDA
+    quantizer against a CPU IEEE FP32 RN reference. It covers all 65,280
+    finite BF16 encodings, 32,640 finite maxima with signed midpoint-derived
+    samples, all 126 exact positive and negative FP8 midpoints at maximum
+    448, and nonfinite fallback. All three cases pass with exact final FP8
+    bytes and scale values. This finite hardware sample does not establish
+    bitwise equivalence of intermediate FP32 quotients or exhaust every pair.
 - **SiLU and multiply.**
   - Uses a fast exponential and paired BF16 multiplication. Both BF16 rounding
     points are kept.
