@@ -43,6 +43,7 @@ def main():
     if os.environ.get("OH_MY_VLLM_KERNEL_BACKEND") != "cuda":
         parser.error("set OH_MY_VLLM_KERNEL_BACKEND=cuda before starting Python")
     import torch
+    from oh_my_vllm.kernels.cuda_backend import provenance
 
     from development.kernels.fixtures import fixture
     from development.kernels.observations import analyze
@@ -104,6 +105,9 @@ def main():
             torch.manual_seed(784)
             reference, candidate = fixture(case["configuration"])
             raw = measure(reference, candidate)
+            report["cuda_build_provenance"] = provenance(
+                require_loaded=True, require_compiler=True
+            )
             decision = compare(raw)
             if failures or sources() != initial_sources:
                 raise RuntimeError(

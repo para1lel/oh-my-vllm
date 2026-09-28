@@ -17,6 +17,29 @@ from measurement import FROZEN_SHA, audit, hardware_identity
 MAX_SPREAD = 0.10
 
 
+def _parse_cuda_provenance(stdout: str) -> dict:
+    rows = [
+        json.loads(line.removeprefix("CUDA_BUILD_PROVENANCE "))
+        for line in stdout.splitlines()
+        if line.startswith("CUDA_BUILD_PROVENANCE ")
+    ]
+    if len(rows) != 1:
+        raise ValueError("expected one loaded CUDA build provenance record")
+    row = rows[0]
+    if (
+        not row.get("nvcc_path")
+        or not row.get("nvcc_version")
+        or str(row["nvcc_version"]).startswith("nvcc-unavailable:")
+        or row["nvcc_version"] == "nvcc-changed-during-build"
+        or not row.get("so_path")
+        or not isinstance(row.get("so_sha256"), str)
+        or len(row["so_sha256"]) != 64
+        or any(char not in "0123456789abcdef" for char in row["so_sha256"])
+    ):
+        raise ValueError("loaded CUDA build provenance is incomplete")
+    return row
+
+
 def _parse_bench_config(stdout: str, key: str, cast):
     """Parse a structured-log BENCH_CONFIG line emitted by the worker.
 
@@ -212,6 +235,9 @@ def main():
         command[0] = str(snapshot)
         run_engine(command, timeout=14400, stderr=subprocess.STDOUT, log_path=log)
     stdout = log.read_text()
+    cuda_provenance = _parse_cuda_provenance(stdout)
+    identity["cuda_build_provenance"] = cuda_provenance
+    source["cuda_build_provenance"] = cuda_provenance
     worker_capacities, scheduler_capacities = _observed_pool_capacities(
         stdout, args.num_gpu_blocks // 3, args.mamba_blocks
     )

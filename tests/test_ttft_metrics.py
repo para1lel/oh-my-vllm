@@ -14,6 +14,31 @@ sys.path.pop(0)
 
 
 class TTFTMetricsTest(unittest.TestCase):
+    def test_cuda_provenance_requires_loaded_module_identity(self):
+        import json
+
+        row = {
+            "nvcc_path": "/cuda/bin/nvcc",
+            "nvcc_version": "Cuda compilation tools, release 12.8, V12.8.1",
+            "so_path": "/tmp/loaded.so",
+            "so_sha256": "a" * 64,
+        }
+        log = "CUDA_BUILD_PROVENANCE " + json.dumps(row)
+        self.assertEqual(metrics._parse_cuda_provenance(log), row)
+        for bad in (
+            "",
+            log + "\n" + log,
+            "CUDA_BUILD_PROVENANCE " + json.dumps({**row, "so_sha256": None}),
+            "CUDA_BUILD_PROVENANCE " + json.dumps({**row, "nvcc_path": None}),
+            "CUDA_BUILD_PROVENANCE " + json.dumps({**row, "so_sha256": "bad"}),
+            "CUDA_BUILD_PROVENANCE "
+            + json.dumps({**row, "nvcc_version": "nvcc-unavailable: missing"}),
+            "CUDA_BUILD_PROVENANCE "
+            + json.dumps({**row, "nvcc_version": "nvcc-changed-during-build"}),
+        ):
+            with self.subTest(log=bad), self.assertRaises(ValueError):
+                metrics._parse_cuda_provenance(bad)
+
     def test_worker_and_scheduler_pool_capacities_must_be_observed(self):
         reported = (
             "INFO BENCH_CONFIG worker_fa_pool_blocks=1400 "

@@ -1,75 +1,108 @@
 """B200 CUDA implementations, compiled lazily; executed on the caller's CUDA stream."""
 
 import hashlib
+import json
 import subprocess
+import sys
 from functools import cache
 from pathlib import Path
 
+_loaded_so_path: Path | None = None
+_loaded_so_sha256: str | None = None
+_loaded_nvcc_path: Path | None = None
+_loaded_nvcc_version: str | None = None
 
-def _nvcc_version() -> str:
-    """Return the last line of `nvcc --version`, e.g. 'V12.4.131'."""
+
+def _nvcc_identity() -> tuple[Path, str]:
+    """Query the compiler selected by TVM FFI, rather than PATH's nvcc."""
+    from tvm_ffi.cpp.extension import _find_cuda_home
+
+    path = (Path(_find_cuda_home()) / "bin" / "nvcc").resolve()
     try:
-        return (
-            subprocess.check_output(["nvcc", "--version"], text=True)
-            .strip()
-            .splitlines()[-1]
-        )
+        version = subprocess.check_output([str(path), "--version"], text=True)
+        return path, version.strip().splitlines()[-1]
     except Exception as exc:
-        return f"nvcc-unavailable: {exc}"
+        return path, f"nvcc-unavailable: {exc}"
 
 
-def provenance() -> dict:
-    """Return CUDA build provenance: nvcc version and compiled .so hash (once built)."""
-    import glob
-    import os
-
-    info: dict = {"nvcc_version": _nvcc_version()}
-    # The TVM FFI cache dir is set by scripts/with-env.sh.
-    cache_dir = os.environ.get("TVM_FFI_CACHE_DIR", "")
-    if cache_dir:
-        so_paths = sorted(
-            glob.glob(f"{cache_dir}/**/oh_my_vllm_cuda*.so", recursive=True)
-        )
-        if so_paths:
-            # Hash the most recently modified .so; there is normally only one.
-            so_path = max(so_paths, key=lambda p: Path(p).stat().st_mtime)
-            info["so_sha256"] = hashlib.sha256(Path(so_path).read_bytes()).hexdigest()
-            info["so_path"] = so_path
-        else:
-            info["so_sha256"] = None
-    else:
-        info["so_sha256"] = None
-    return info
+def provenance(*, require_loaded: bool = False, require_compiler: bool = False) -> dict:
+    """Identify the exact shared library this process loaded, if any."""
+    path = _loaded_so_path
+    if require_loaded and (path is None or _loaded_so_sha256 is None):
+        raise RuntimeError("loaded CUDA module is required")
+    if require_compiler and (
+        _loaded_nvcc_path is None
+        or not _loaded_nvcc_version
+        or _loaded_nvcc_version.startswith("nvcc-unavailable:")
+        or _loaded_nvcc_version == "nvcc-changed-during-build"
+    ):
+        raise RuntimeError("CUDA compiler identity is required")
+    return {
+        "nvcc_path": str(_loaded_nvcc_path) if _loaded_nvcc_path else None,
+        "nvcc_version": _loaded_nvcc_version,
+        "so_path": str(path) if path is not None else None,
+        "so_sha256": _loaded_so_sha256,
+    }
 
 
 @cache
 def compiled():
     import torch
-    from tvm_ffi.cpp import load_inline
+    from tvm_ffi import load_module
+    from tvm_ffi.cpp import build_inline
 
     if torch.cuda.get_device_capability() != (10, 0):
         raise RuntimeError("the CUDA custom-kernel backend requires B200/SM100")
-    return load_inline(
-        "oh_my_vllm_cuda",
-        cuda_sources=Path(__file__).with_name("kernels.cu").read_text(),
-        functions=[
-            "quantize",
-            "silu_mul",
-            "gates",
-            "rms",
-            "add_rms",
-            "rms_rope",
-            "prepare_attention",
-            "rope",
-            "normalize_qk",
-            "recurrent",
-            "append",
-            "convolution",
-            "attention_partial",
-            "attention_merge",
-        ],
-        extra_cuda_cflags=["-O3", "--generate-code=arch=compute_100a,code=sm_100a"],
+    nvcc_path, nvcc_version = _nvcc_identity()
+    compiler_key = hashlib.sha256(f"{nvcc_path}\n{nvcc_version}".encode()).hexdigest()[
+        :20
+    ]
+    so_path = Path(
+        build_inline(
+            "oh_my_vllm_cuda",
+            cuda_sources=Path(__file__).with_name("kernels.cu").read_text(),
+            functions=[
+                "quantize",
+                "silu_mul",
+                "gates",
+                "rms",
+                "add_rms",
+                "rms_rope",
+                "prepare_attention",
+                "rope",
+                "normalize_qk",
+                "recurrent",
+                "append",
+                "convolution",
+                "attention_partial",
+                "attention_merge",
+            ],
+            extra_cuda_cflags=[
+                "-O3",
+                "--generate-code=arch=compute_100a,code=sm_100a",
+                f"-DOH_MY_VLLM_NVCC_ID_{compiler_key}",
+            ],
+        )
+    ).resolve()
+    before = hashlib.sha256(so_path.read_bytes()).hexdigest()
+    module = load_module(so_path)
+    after = hashlib.sha256(so_path.read_bytes()).hexdigest()
+    if before != after:
+        raise RuntimeError("CUDA shared library changed while loading")
+    final_nvcc_path, final_nvcc_version = _nvcc_identity()
+    if (final_nvcc_path, final_nvcc_version) != (nvcc_path, nvcc_version):
+        nvcc_version = "nvcc-changed-during-build"
+    global _loaded_so_path, _loaded_so_sha256, _loaded_nvcc_path, _loaded_nvcc_version
+    _loaded_so_path = so_path
+    _loaded_so_sha256 = after
+    _loaded_nvcc_path = nvcc_path
+    _loaded_nvcc_version = nvcc_version
+    print(
+        "CUDA_BUILD_PROVENANCE " + json.dumps(provenance(require_loaded=True)),
+        file=sys.stderr,
+        flush=True,
     )
+    return module
 
 
 def factory_for(module, name):
