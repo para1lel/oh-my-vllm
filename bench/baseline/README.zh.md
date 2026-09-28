@@ -7,6 +7,9 @@
 
 ## 当前
 
+- `2026-09-28-audit-mnt03-recurrent-operators.json` 记录干净 `0394727` 的受影响
+  正式证据：8 项递归用例在固定 UUID 的 B200 上均通过输出和冻结 TileLang 门槛。
+  这不是新的完整 147 项结论。
 - `2026-09-28-audit-mnt02-krn04-operators.json` 记录干净提交 `312c54b` 的
   60 项选中 `quant`、`silu_quant`、`gates` 与 `recurrent` 正式用例。每项都通过
   输出验证和冻结 TileLang 对照。这是子集，不是新的 147 项完整判定。

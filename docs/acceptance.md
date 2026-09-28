@@ -31,6 +31,15 @@ attempt to start that confirmation was stopped before measurement when an
 external GPU process appeared. Full current GPU and 12-row framework gates
 remain pending.
 
+Clean `0394727` passes all 8 selected recurrent cases after the MNT-03 state
+alignment check was expressed in vector bytes. The
+[affected formal artifact](../bench/baseline/2026-09-28-audit-mnt03-recurrent-operators.json)
+records B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`, output
+verification, 3 × 20 alternating pairs, and positive one-sided 95% bounds;
+the smallest lower bound is 0.000064624 ms. The source is clean and
+`selected_passed=true`; `passed=false` only reflects incomplete 147-case
+coverage. The owned GPU process exited.
+
 The full B200 pytest suite after `96e4ecc` passed 211 tests and 32 subtests,
 with six skipped context-boundary placeholders. SRV-03's later CPU/protocol
 repair `d33b844` passed 31 focused Python tests and 26 subtests, Rust

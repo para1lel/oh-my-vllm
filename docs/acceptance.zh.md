@@ -26,6 +26,12 @@
 也通过。确认测试的一次初始启动因外部 GPU 进程出现，在测量前被停止。当前完整 GPU
 和 12 行框架门槛仍待执行。
 
+干净提交 `0394727` 将 MNT-03 状态池对齐检查写为向量字节对齐后，通过全部 8 项选中
+的递归用例。[受影响正式产物](../bench/baseline/2026-09-28-audit-mnt03-recurrent-operators.json)
+记录 B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`、输出验证、3 × 20
+交替配对和单侧 95% 正收益下界；最小下界为 0.000064624 ms。源码干净，
+`selected_passed=true`；`passed=false` 仅因未覆盖完整 147 项。自有 GPU 进程已退出。
+
 `96e4ecc` 后的完整 B200 pytest 通过 211 项测试及 32 个子测试，六项 context
 边界占位测试跳过。后续 CPU/协议修复 `d33b844` 通过 31 项聚焦 Python 测试和
 26 个子测试，以及 Rust workspace 测试、格式、Ruff 与 Clippy；该提交未重跑完整

@@ -166,9 +166,22 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   process remained. This closes the listed KRN-04/MNT-02 source findings;
   the full current GPU suite, 147-case formal matrix and 12-row framework
   collection remain pending separately.
+- Independently reviewed `0394727` closes MNT-03's alignment and dispatch
+  contract. Recurrence checks the actual BF16/FP32 eight-element vector
+  alignment (16/32 bytes), and alias-span analysis rejects negative strides.
+  The documented RMS and gated-RMS dispatch formulas are compared to an FP64
+  reference within existing BF16 tolerance; no bitwise batch invariance is
+  promised. B200 focused tests passed 6/6, CPU passed 156 tests and 67 subtests
+  (181 GPU cases deselected), Rust workspace 56/26/17, and fmt, line width,
+  Ruff, Clippy, and hooks passed. Clean `0394727`
+  [affected recurrent evidence](../bench/baseline/2026-09-28-audit-mnt03-recurrent-operators.json)
+  passed 8/8 selected cases with output checks and positive bootstrap bounds
+  on UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`; the smallest lower
+  bound was 0.000064624 ms. Owned GPU processes exited. Full 147-case, GPU,
+  and 12-row framework acceptance remains pending.
 
 Remaining work: PY-03..07, SRV-08..10, SCH-06/07, KRN-06..10,
-EVD-07, MNT-01/03, the four unverified risks, and current
+EVD-07, MNT-01, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
 

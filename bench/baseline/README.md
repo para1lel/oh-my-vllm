@@ -6,6 +6,9 @@ for interpretation and a dated index of every artifact.
 
 ## Current
 
+- `2026-09-28-audit-mnt03-recurrent-operators.json` contains clean `0394727`
+  affected formal evidence: all 8 selected recurrent cases pass output and
+  frozen TileLang gates on a pinned B200. It is not a new 147-case decision.
 - `2026-09-28-audit-mnt02-krn04-operators.json` contains clean `312c54b`
   formal evidence for all 60 selected `quant`, `silu_quant`, `gates`, and
   `recurrent` cases. Every selected case passes output verification and the
