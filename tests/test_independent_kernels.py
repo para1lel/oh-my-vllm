@@ -8,9 +8,10 @@ import math
 from itertools import pairwise
 from unittest.mock import patch
 
+import numpy as np
 import pytest
 import torch
-from oh_my_vllm.kernels import fp8, gdn
+from oh_my_vllm.kernels import backend, fp8, gdn
 
 pytestmark = [
     pytest.mark.gpu,
@@ -324,6 +325,58 @@ def test_fp8_block_scales(rows, features):
     ).repeat_interleave(128, 1)
     expected = restored_x @ restored_w.T
     check(out, expected)
+
+
+@pytest.mark.parametrize("inputs", ["all_finite_bf16", "finite_max_ladder", "special"])
+def test_bf16_fp8_reciprocal_matches_exact_fp32_division(inputs):
+    """Check the production quantizer against CPU IEEE FP32 division."""
+    assert backend.NAME == "cuda"
+    assert "B200" in torch.cuda.get_device_name()
+    if inputs == "all_finite_bf16":
+        codes = torch.arange(65536, dtype=torch.int32)
+        codes = codes[(codes & 0x7F80) != 0x7F80]
+        x = codes.to(torch.int16).view(torch.bfloat16).reshape(-1, 128).cuda()
+    elif inputs == "finite_max_ladder":
+        maximum = (
+            torch.arange(32640, dtype=torch.int32)
+            .to(torch.int16)
+            .view(torch.bfloat16)
+            .cuda()
+        )
+        levels = torch.arange(127, dtype=torch.uint8).view(torch.float8_e4m3fn)
+        midpoint = (levels.float()[:-1] + levels.float()[1:]) / 2
+        fractions = torch.cat(
+            (torch.tensor([1.0]), midpoint / 448, torch.tensor([-1.0]))
+        )
+        maxima = maximum.repeat_interleave(2)
+        x = (maxima.float()[:, None] * fractions.cuda()[None, :]).bfloat16()
+        x[1::2, 1:127].neg_()
+        x[:, 0] = maxima
+        midpoint_row = (maximum == 448).nonzero().item() * 2
+        assert torch.equal(x[midpoint_row, 1:127].cpu().float(), midpoint)
+        assert torch.equal(x[midpoint_row + 1, 1:127].cpu().float(), -midpoint)
+    else:
+        x = torch.zeros(4, 128, device="cuda", dtype=torch.bfloat16)
+        x[0, :2] = torch.tensor([float("inf"), float("-inf")], device="cuda")
+        x[1] = float("nan")
+        x[2, :2] = torch.tensor([float("nan"), 1.0], device="cuda")
+        x[3, :2] = torch.tensor([float("-inf"), -0.0], device="cuda")
+
+    encoded, scales = fp8.quantize(x)
+    values = x.cpu().float().numpy().reshape(x.shape[0], -1, 128)
+    maxima = np.fmax.reduce(np.abs(values), axis=-1, initial=np.float32(0))
+    reference_scales = np.divide(
+        np.fmax(maxima, np.float32(1e-10)), np.float32(448), dtype=np.float32
+    )
+    with np.errstate(invalid="ignore"):
+        divided = np.divide(values, reference_scales[..., None], dtype=np.float32)
+    clipped = np.fmin(np.float32(448), np.fmax(np.float32(-448), divided))
+    clipped = clipped.reshape(x.shape)
+    reference = torch.from_numpy(clipped.copy()).to(torch.float8_e4m3fn)
+    torch.testing.assert_close(
+        scales.cpu(), torch.from_numpy(reference_scales), atol=0, rtol=0
+    )
+    assert torch.equal(encoded.cpu().view(torch.uint8), reference.view(torch.uint8))
 
 
 @pytest.mark.parametrize("total,query_length", [(789, 5), (1553, 1025)])
