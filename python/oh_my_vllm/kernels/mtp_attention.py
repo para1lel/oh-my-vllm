@@ -5,6 +5,7 @@ from itertools import pairwise
 import torch
 
 from oh_my_vllm.kernels.decode_attention import decode
+from oh_my_vllm.worker.tensors import device_page_tables
 
 
 class MTPAttention:
@@ -38,13 +39,11 @@ class MTPAttention:
             ends.append(end)
         self.decode_mode = max(counts) <= 5
         if self.decode_mode:
-            width = (self.max_tokens + 783) // 784
-            tables = [
-                table + [0] * (width - len(table))
-                for table, count in zip(pages, counts, strict=True)
-                for _ in range(count)
-            ]
-            self.tables = torch.tensor(tables, dtype=torch.int32, device="cuda")
+            self.extent = min(self.max_tokens, ((max(positions) + 4096) // 4096) * 4096)
+            width = (self.extent + 783) // 784
+            self.tables = device_page_tables(
+                pages, width, counts=counts, device="cuda", dtype=torch.int32
+            )
             self.lengths = torch.tensor(
                 [p + 1 for p in positions], dtype=torch.int32, device="cuda"
             )
@@ -83,7 +82,7 @@ class MTPAttention:
                 self.tables,
                 self.lengths,
                 first=1,
-                max_tokens=self.max_tokens,
+                max_tokens=self.extent,
             )
         pages, offsets = self.slots // 784, self.slots % 784
         k, v = cache[pages, 0, offsets], cache[pages, 1, offsets]

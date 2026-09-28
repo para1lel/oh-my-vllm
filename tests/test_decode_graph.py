@@ -6,6 +6,7 @@ import pytest
 import torch
 from oh_my_vllm.models.qwen import AttentionBatch, Batch
 from oh_my_vllm.worker.decode_graph import DecodeGraph, DraftGraph
+from oh_my_vllm.worker.tensors import device_page_tables
 
 pytestmark = pytest.mark.gpu
 
@@ -33,6 +34,50 @@ class ToyModel:
 
 @unittest.skipUnless(torch.cuda.is_available(), "requires CUDA")
 class DecodeGraphTest(unittest.TestCase):
+    @torch.inference_mode()
+    def test_target_replay_copies_compact_expanded_page_tables(self):
+        class TableModel:
+            def forward(self, tokens, batch, caches):
+                return batch.attention.tables[:, :1].float() + tokens[:, None]
+
+            def logits(self, hidden):
+                return hidden * 2
+
+        device = "cuda"
+        tokens = torch.tensor([1, 2, 3], device=device)
+        batch = Batch(
+            positions=torch.tensor([783, 784, 785], device=device),
+            fa_slots=torch.zeros(3, device=device, dtype=torch.int64),
+            attention=None,
+            starts=torch.tensor([0, 2, 3], device=device, dtype=torch.int32),
+            sequence_ids=torch.tensor([0, 0, 1], device=device),
+            state_reads=torch.zeros(3, device=device, dtype=torch.int64),
+            state_writes=torch.full((3,), -1, device=device),
+            final_state_writes=torch.full((2,), -1, device=device),
+            prefill_sequences=0,
+            prefill_tokens=0,
+        )
+        tables = device_page_tables(
+            [[11, 12], [21, 22]], 2, counts=[2, 1], device=device
+        )
+        graph = DecodeGraph(TableModel(), [], tokens, batch, tables, 1568)
+        hidden, logits = graph.replay(tokens, batch, tables)
+        torch.testing.assert_close(
+            hidden[:, 0], torch.tensor([12, 13, 24.0], device=device)
+        )
+        torch.testing.assert_close(logits, hidden * 2)
+
+        batch.starts.copy_(torch.tensor([0, 1, 3], device=device))
+        batch.sequence_ids.copy_(torch.tensor([0, 1, 1], device=device))
+        changed = device_page_tables(
+            [[31, 32], [41, 42]], 2, counts=[1, 2], device=device
+        )
+        hidden, logits = graph.replay(tokens, batch, changed)
+        torch.testing.assert_close(
+            hidden[:, 0], torch.tensor([32, 43, 44.0], device=device)
+        )
+        torch.testing.assert_close(logits, hidden * 2)
+
     @torch.inference_mode()
     def test_draft_capture_and_recurrent_output_alias(self):
         device = "cuda"
@@ -115,9 +160,7 @@ class GroupedDraftGraphTest(unittest.TestCase):
         cache = torch.randn(5, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
         hidden = torch.randn(5, 24 * 256, device="cuda", dtype=torch.bfloat16)
         tokens = torch.ones(5, device="cuda", dtype=torch.int64)
-        tables = torch.tensor(
-            [[1, 3]] * 2 + [[2, 4]] * 3, device="cuda", dtype=torch.int32
-        )
+        tables = device_page_tables([[1, 3], [2, 4]], 2, counts=[2, 3], device="cuda")
         positions = torch.tensor([780, 781, 783, 784, 785], device="cuda")
         batch = AttentionBatch(positions, torch.arange(5, device="cuda"), None)
         starts = torch.tensor([0, 2, 5], device="cuda", dtype=torch.int32)
@@ -127,8 +170,11 @@ class GroupedDraftGraphTest(unittest.TestCase):
         for regroup in (False, True):
             if regroup:
                 starts.copy_(torch.tensor([0, 4, 5], device="cuda"))
-                tables[:4] = torch.tensor([2, 4], device="cuda")
-                tables[4] = torch.tensor([1, 3], device="cuda")
+                tables.copy_(
+                    device_page_tables(
+                        [[2, 4], [1, 3]], 2, counts=[4, 1], device="cuda"
+                    )
+                )
                 positions.copy_(torch.tensor([782, 783, 784, 785, 44], device="cuda"))
                 hidden.mul_(0.5)
             actual = graph.replay(tokens, hidden, batch, tables, starts)

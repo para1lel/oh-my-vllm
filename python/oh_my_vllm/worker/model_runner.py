@@ -14,7 +14,11 @@ from oh_my_vllm.worker.runtime import identity, verify_loaded_modules
 from oh_my_vllm.worker.sampler import RequestSampler, greedy_rows, verify_rows
 from oh_my_vllm.worker.sampling import SamplingParams
 from oh_my_vllm.worker.serving import ServingAdapter
-from oh_my_vllm.worker.tensors import device_tensor, device_vectors
+from oh_my_vllm.worker.tensors import (
+    device_page_tables,
+    device_tensor,
+    device_vectors,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -297,13 +301,10 @@ class OhMyVllmWorker:
             from oh_my_vllm.worker.decode_graph import DecodeGraph
 
             width = (extent + BLOCK - 1) // BLOCK
-            tables = device_tensor(
-                [
-                    p.request.fa_block_table[:width]
-                    + [0] * (width - len(p.request.fa_block_table[:width]))
-                    for p in plans
-                    for _ in p.writes
-                ],
+            tables = device_page_tables(
+                [p.request.fa_block_table for p in plans],
+                width,
+                counts=[len(p.writes) for p in plans],
                 dtype=torch.int32,
                 device="cuda",
             )

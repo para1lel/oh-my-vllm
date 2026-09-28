@@ -16,7 +16,11 @@ from oh_my_vllm.kernels.mtp_attention import MTPAttention
 from oh_my_vllm.models.qwen import AttentionBatch, Qwen
 from oh_my_vllm.worker.batch_plan import BLOCK, PlannedRequest
 from oh_my_vllm.worker.protocol import RequestOutput
-from oh_my_vllm.worker.tensors import device_tensor, device_vectors
+from oh_my_vllm.worker.tensors import (
+    device_page_tables,
+    device_tensor,
+    device_vectors,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,13 +82,11 @@ class MTP:
             extent = min(self.max_tokens, ((max(positions) + 4096) // 4096) * 4096)
             key = (len(tokens), len(starts) - 1, extent)
             if key in self.graphs or len(self.graphs) + len(self.chains) < 32:
-                width = (self.max_tokens + BLOCK - 1) // BLOCK
-                tables_tensor = device_tensor(
-                    [
-                        table + [0] * (width - len(table))
-                        for i, table in enumerate(tables)
-                        for _ in range(starts[i + 1] - starts[i])
-                    ],
+                width = (extent + BLOCK - 1) // BLOCK
+                tables_tensor = device_page_tables(
+                    tables,
+                    width,
+                    counts=[b - a for a, b in pairwise(starts)],
                     device=self.device,
                     dtype=torch.int32,
                 )
@@ -127,9 +129,10 @@ class MTP:
         key = (len(eligible), extent)
         if key not in self.chains and len(self.graphs) + len(self.chains) >= 32:
             return None
-        width = (self.max_tokens + BLOCK - 1) // BLOCK
-        tables = device_tensor(
-            [table + [0] * (width - len(table)) for _, table, _, _ in eligible],
+        width = (extent + BLOCK - 1) // BLOCK
+        tables = device_page_tables(
+            [table for _, table, _, _ in eligible],
+            width,
             device=self.device,
             dtype=torch.int64,
         )
