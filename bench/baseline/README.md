@@ -6,6 +6,10 @@ for interpretation and a dated index of every artifact.
 
 ## Current
 
+- `2026-09-28-audit-evd07-context-boundary.json` records six clean `bd8e21e`
+  ordinary/MTP4 258048+4096 boundary runs at batch 1/2/4 on one B200.
+  All finish without OOM or preemption; MTP4 proposals are nonzero. The
+  separate long-context HTTP smoke and full GPU/147/12-row gates remain pending.
 - `2026-09-28-audit-krn10-attention-before.json` and
   `2026-09-28-audit-krn10-attention-after.json` summarize the 16 selected
   attention cases on clean `6ba9046` and `231f066`, respectively. All selected

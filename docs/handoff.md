@@ -56,8 +56,8 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   focused Rust/Python tests and static checks also passed.
 - Current 12-row framework throughput and TTFT remain **unverified** after
   hot-path changes. The 2026-09-22 values below apply to clean `c36d1c9`.
-  Re-run all 12 rows after P2 performance decisions. EVD-07 remains open
-  pending a clean, uninterrupted six-row run; its six tests no longer skip.
+  Re-run all 12 rows after P2 performance decisions. EVD-07's clean six-row
+  boundary passed on `bd8e21e`; its real MTP HTTP smoke remains pending.
   The four risks originally marked "Not verified" now have scoped evidence:
   Rust MTP GDN placement in `7e93c18`, tested FlashInfer workspace/stale-tail
   paths in `6b378d5`, and the BF16 reciprocal bound in `32cdc2b` below.
@@ -205,7 +205,17 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   job started before MTP4 batch 4. The latter completed five diagnostic rows,
   which are not six-row acceptance. Raw logs remain under
   `/tmp/oh-my-vllm-context-boundary-f161b5e*`; owned GPU processes exited.
-  A clean six-row run and the real long-context HTTP smoke remain pending.
+  The later clean `bd8e21e`
+  [six-row artifact](../bench/baseline/2026-09-28-audit-evd07-context-boundary.json)
+  passed all ordinary/MTP4 batch 1/2/4 rows at 258048+4096 on pinned UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`. Every row generated
+  `batch_size * 4096` output tokens, with zero preemptions and no OOM.
+  MTP4 proposed/accepted drafts were 5010/2842, 9075/5917, 16219/12318;
+  largest worker peak reserved memory was 132441440256 bytes. Start/end source,
+  release binary hash and row UUIDs matched, with clean Git status. Raw logs
+  are under `/tmp/oh-my-vllm-evd07-context-bd8e21e*`. All owned GPU workers
+  exited and `nvidia-smi` reported no compute processes afterward. The real
+  131072-token MTP HTTP smoke remains pending, so EVD-07 stays open.
 - Independently reviewed `5a3b703` closes SCH-07's repeated whole-history
   SHA-256 work. The append-only hash chain matches full recomputation through
   262144 tokens and still yields a real prefix hit after generated output

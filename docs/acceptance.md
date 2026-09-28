@@ -2,6 +2,17 @@
 
 ## Current remediation evidence — 2026-09-28
 
+Clean `bd8e21e` [EVD-07 boundary evidence](../bench/baseline/2026-09-28-audit-evd07-context-boundary.json)
+passes all six ordinary/MTP4, batch 1/2/4 runs at 258048 input plus 4096
+output tokens on one B200 UUID. Every row generates `batch_size * 4096`
+tokens with zero preemptions and no OOM; MTP4 proposed/accepted draft totals
+are 5010/2842, 9075/5917, and 16219/12318. The largest worker peak
+reserved memory is 132441440256 bytes. The collector recorded clean source,
+release binary hash, matching start/end identities and UUID, and successful
+worker cleanup. This closes the six-row boundary evidence gap; the real
+131072-token MTP HTTP smoke and current full GPU, 147-case formal, and 12-row
+framework gates remain pending.
+
 Clean `6ba9046` and `231f066` passed all 16 selected attention cases before
 and after KRN-10 on B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`.
 The [before](../bench/baseline/2026-09-28-audit-krn10-attention-before.json)
@@ -193,12 +204,11 @@ TileLang implementation.
 
 - The 2026-09-23 [code audit](audit-2026-09-23.md) found no wrong-token defect
   on this path.
-- It did record serving-availability and evidence-integrity gaps. Two in
-  particular:
-  - The harness sets the candidate configuration it compares, instead of
-    observing it (EVD-02).
-  - No automated test covers the boundary runs (EVD-07).
-- Those limitations apply to the evidence above.
+- At that time it recorded serving-availability and evidence-integrity gaps.
+  The harness inferred FA/GDN capacity rather than observing it (EVD-02), and
+  no automated test covered the boundary runs (EVD-07). These limit the
+  historical `c36d1c9` evidence; later repairs and the clean EVD-07 six-row
+  artifact are recorded in the current remediation section above.
 
 ## Historical evidence index
 

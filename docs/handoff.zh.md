@@ -51,7 +51,7 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   通过。SRV-03 的聚焦 Rust/Python 测试和静态检查也通过。
 - 热路径改动后的当前 12 组框架吞吐和 TTFT **尚未验证**。下文的 2026-09-22
   数值只适用于干净提交 `c36d1c9`。P2 性能决策结束后需重跑全部 12 组。
-  EVD-07 仍为 open，等待完整、无干扰的六行运行；六项测试已不再跳过。
+  EVD-07 在 `bd8e21e` 的干净六行边界已通过；真实 MTP HTTP smoke 仍待完成。
   审计中原先四项 “Not verified” 风险现均有明确范围的证据：Rust MTP GDN 槽位由
   `7e93c18` 验证，所测 FlashInfer workspace/陈旧尾部路径由 `6b378d5`
   验证，有限 BF16 倒数上界由下文 `32cdc2b` 验证。
@@ -156,8 +156,16 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   在 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 遇到他人的短 GEMM 作业；
   第三次在 UUID `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5` 的 MTP4 batch 4
   前遇到外部多 GPU 作业。第三次完成的五行仅属诊断，不是六行验收。原始日志保留在
-  `/tmp/oh-my-vllm-context-boundary-f161b5e*`，自有 GPU 进程均已退出。完整六行运行
-  和真实长上下文 HTTP smoke 仍待完成。
+  `/tmp/oh-my-vllm-context-boundary-f161b5e*`，自有 GPU 进程均已退出。随后干净
+  提交 `bd8e21e` 的 [六行产物](../bench/baseline/2026-09-28-audit-evd07-context-boundary.json)
+  在固定 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上通过全部普通/MTP4
+  batch 1/2/4、258048+4096 边界行。每行生成 `batch_size * 4096` 个输出 token，
+  零抢占、无 OOM；MTP4 提议/接受草稿数为 5010/2842、9075/5917、
+  16219/12318；worker 最高峰值 reserved 为 132441440256 字节。前后源码、
+  release 二进制哈希与每行 UUID 一致，Git 状态干净。原始日志在
+  `/tmp/oh-my-vllm-evd07-context-bd8e21e*`；所有自有 GPU worker 均已退出，
+  后续 `nvidia-smi` 没有计算进程。真实 131072-token MTP HTTP smoke 仍待完成，
+  EVD-07 因此保持 open。
 - 已独立复审的 `5a3b703` 关闭 SCH-07 的全历史重复 SHA-256 计算。只追加的哈希链
   在 262144 token 内与全量重算一致，生成输出填满块后下一请求仍能真实命中前缀。
   100 次 CPU 微基准中，旧路径 42/334 满块的中位数为 98.373/786.007 微秒，
