@@ -212,8 +212,20 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   用例）；Rust workspace、fmt、行宽、Ruff、Clippy 和 hooks 均通过。自有 GPU
   进程已退出。这是受影响子集，不是完整 147 项结果或框架提速实测；完整 GPU
   套件和当前 12 行框架门槛仍待验证。
+- 已独立复审的 `94c3473` 关闭 KRN-09 消费式 CUDA 启动检查，并增加仅限 eager
+  的故障诊断。自有 kernel 的 19 处启动检查改用 `cudaPeekAtLastError`；显式
+  `OH_MY_VLLM_CUDA_DEBUG_SYNC=1` 要求 `OH_MY_VLLM_ENFORCE_EAGER=1`，在每次
+  启动前后检查同一 stream，并先拒绝 graph capture。诊断标记观察阶段，不声称
+  精确的故障指令。七项独立 B200 用例在 UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上通过，另外五次先前故障
+  子进程重复通过。CPU pytest 通过 211 项及 67 个 subtest（排除 190 项 GPU
+  用例）；Rust workspace、fmt、行宽、Ruff、Clippy 与 hooks 通过。自有 GPU
+  进程已退出。同卡旧/新 eager RMS 主机调用的三轮诊断中位数接近，但孤立离群
+  超过 10% spread 门槛，原因未证实，故不声称提速。日志和原始样本保留在 Git
+  仓库外的 `/tmp/oh-my-vllm-krn09-*`。当前完整 GPU/正式算子及 12 行框架
+  门槛仍待验证。
 
-后续工作：PY-03..07、SRV-08、KRN-06 与 KRN-09/10、
+后续工作：PY-03..07、SRV-08、KRN-06 与 KRN-10、
 EVD-07、四项未验证风险，以及当前完整算子/GPU 套件
 和 12 组框架验收。
 逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。

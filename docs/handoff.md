@@ -281,8 +281,23 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   passed. The owned GPU process exited. This is an affected subset, not a
   full 147-case result or a measured framework speed gain; the full GPU suite
   and current 12-row framework gates remain pending.
+- Independently reviewed `94c3473` closes KRN-09's consuming CUDA launch
+  checks and adds eager-only fault diagnostics. The 19 owned launch sites now
+  use `cudaPeekAtLastError`; opt-in `OH_MY_VLLM_CUDA_DEBUG_SYNC=1` requires
+  `OH_MY_VLLM_ENFORCE_EAGER=1` and checks the same stream before and after each
+  launch, refusing graph capture first. Diagnostics label the observation
+  phase without claiming an exact faulting instruction. Seven isolated B200
+  cases passed on UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`, plus
+  five repeated prior-fault subprocesses. CPU pytest passed 211 tests and 67
+  subtests (190 GPU cases deselected); Rust workspace, fmt, line width, Ruff,
+  Clippy, and hooks passed. The owned GPU process exited. Three same-GPU
+  old/new eager RMS host-call diagnostics had near-equal medians but isolated
+  outliers exceeded the 10% spread rule; their cause is unproven, so no speed
+  claim is made. The logs and raw samples remain outside Git under
+  `/tmp/oh-my-vllm-krn09-*`. Current full GPU/formal and 12-row framework
+  gates remain pending.
 
-Remaining work: PY-03..07, SRV-08, KRN-06 and KRN-09/10,
+Remaining work: PY-03..07, SRV-08, KRN-06 and KRN-10,
 EVD-07, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.

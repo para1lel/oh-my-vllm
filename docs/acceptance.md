@@ -2,6 +2,15 @@
 
 ## Current remediation evidence — 2026-09-28
 
+Reviewed `94c3473` passes seven isolated B200 KRN-09 fault/graph cases on
+UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`, plus five repeated
+prior-fault subprocesses. They establish non-consuming normal launch checks,
+debug observation phases, and graph-capture refusal. Three same-GPU old/new
+eager host-call diagnostics had near-equal medians but isolated >10% spread
+outliers; their cause is unproven, so they are not performance acceptance.
+The current full GPU, formal-operator, and 12-row framework gates remain
+pending.
+
 Clean `40e3e57` passes all 66 selected KRN-08 affected formal cases on B200
 UUID `GPU-1b174534-ebba-826f-b452-8e7f3c05c301`: 13 each for `norm`,
 `add_norm`, `gated_norm`, and `convolution`; 8 `recurrent`; and 6 `qk`.
