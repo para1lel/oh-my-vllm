@@ -51,8 +51,8 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   通过。SRV-03 的聚焦 Rust/Python 测试和静态检查也通过。
 - 热路径改动后的当前 12 组框架吞吐和 TTFT **尚未验证**。下文的 2026-09-22
   数值只适用于干净提交 `c36d1c9`。P2 性能决策结束后需重跑全部 12 组。
-  EVD-07 仍为 open，等待完整、无干扰的六行运行；六项测试已不再跳过。审计中的四项“Not verified”风险
-  也尚未关闭。
+  EVD-07 仍为 open，等待完整、无干扰的六行运行；六项测试已不再跳过。审计中原先四项
+  “Not verified”风险还有三项未关闭；Rust MTP GDN 槽位另由下文 `7e93c18` 验证。
 - 后续 fixed 状态复核重新打开 SRV-02、KRN-05、PY-01、SCH-01/02/04、
   EVD-01/02/11/12/13 和 MNT-04。已复审的提交 `487f8de` 修复 SRV-02、KRN-05、PY-01、
   SCH-01/02/04 及 EVD-01/02/11。EVD-01 拒绝三次重复或高离散度证据；
@@ -289,11 +289,26 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   `/tmp/oh-my-vllm-srv08-cpu-final.log`。Rust workspace 58/38/26、fmt、
   行宽、Ruff、Clippy 与 hooks 均通过；自有 CPU server/worker 已退出。
   CPU fixture 数值不代表框架吞吐。主线程 sampler 注册仍包含 PY-07 的 GPU
-  prompt-count 工作；B200 活跃流时延、当前完整 GPU 套件和 12 行框架门槛仍待
+  prompt-count 工作；正式 B200 活跃流时延、当前完整 GPU 套件和 12 行框架门槛仍待
   验收，因此 SRV-08 保持 open。
+- HEAD 为 `ed8c18c` 时的真实模型 B200 SRV-08 诊断在 UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上运行：第一条请求产生
+  2051 个 SSE data event，其中第二条 3016 输入/16 输出 token 请求在
+  0.582 秒完成期间仍有 20 个。日志为
+  `/tmp/oh-my-vllm-srv08-b200-smoke.log` 和
+  `/tmp/oh-my-vllm-srv08-b200-service.log`；服务退出且无自有 GPU 进程。
+  这只是单次诊断，不是 12 行门槛。
+- 经独立复审的 `7e93c18` 关闭狭义 Rust MTP GDN 槽位风险。真实调度输出覆盖
+  783/784/785/1568-token prompt 及分块 prefill；CPU HTTP/ZMQ fixture
+  将真实 Rust execute 帧交给 Python `plan_request`/`commit`，核对
+  783→784 的 source、五个候选写入槽和 checkpoint copy。
+  `scripts/test.sh cpu` 通过 237 项、70 个 subtest（排除 199 项 GPU 用例），
+  日志为 `/tmp/oh-my-vllm-mtp-slot-cpu.log`；Rust workspace 58/39/26、
+  fmt、行宽、Ruff、Clippy 与 hooks 均通过。这不代表 GPU 数值或当前 MTP
+  框架验收通过。
 
 后续工作：PY-03/04/06、SRV-08、KRN-06、PY-05/07 与 KRN-10 验收、
-EVD-07、四项未验证风险，以及当前完整算子/GPU 套件
+EVD-07、其余三项未验证风险，以及当前完整算子/GPU 套件
 和 12 组框架验收。
 逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。
 

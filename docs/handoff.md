@@ -58,8 +58,8 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   hot-path changes. The 2026-09-22 values below apply to clean `c36d1c9`.
   Re-run all 12 rows after P2 performance decisions. EVD-07 remains open
   pending a clean, uninterrupted six-row run; its six tests no longer skip.
-  The four audit risks marked
-  "Not verified" have not yet been closed.
+  Of the four risks originally marked "Not verified", three remain open;
+  Rust MTP GDN slot placement was verified separately in `7e93c18` below.
 - Later fixed-status review reopened SRV-02, KRN-05, PY-01, SCH-01/02/04,
   EVD-01/02/11/12/13 and MNT-04. Reviewed commit `487f8de` repairs SRV-02,
   KRN-05, PY-01, SCH-01/02/04 and EVD-01/02/11. EVD-01 rejects three-run
@@ -376,11 +376,27 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   width, Ruff, Clippy and hooks passed; task-owned CPU servers/workers exited.
   This CPU fixture measurement is not framework throughput evidence. Main
   thread sampler registration still includes PY-07 GPU prompt-count work;
-  B200 active-stream latency, the full current GPU suite and all 12 framework
-  rows remain pending, so SRV-08 stays open.
+  Formal B200 active-stream latency, the full current GPU suite and all 12
+  framework rows remain pending, so SRV-08 stays open.
+- A real-model B200 SRV-08 diagnostic with HEAD at `ed8c18c` ran on UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`: the first request emitted
+  2,051 SSE data events, including 20 while a second 3,016-input/16-output
+  request completed in 0.582 s. Logs are
+  `/tmp/oh-my-vllm-srv08-b200-smoke.log` and
+  `/tmp/oh-my-vllm-srv08-b200-service.log`; the service exited with no owned
+  GPU process. This single run is diagnostic, not the 12-row gate.
+- Independently reviewed `7e93c18` closes the narrow Rust MTP GDN slot
+  placement risk. Real scheduler output covers 783/784/785/1568-token
+  prompts and chunked prefill; a CPU HTTP/ZMQ fixture passes the actual Rust
+  execute frame to Python `plan_request`/`commit` and verifies the 783→784
+  source, five candidate writes and checkpoint copy. `scripts/test.sh cpu`
+  passed 237 tests and 70 subtests (199 GPU deselected), logged at
+  `/tmp/oh-my-vllm-mtp-slot-cpu.log`; Rust workspace 58/39/26, fmt, line
+  width, Ruff, Clippy and hooks passed. This is not GPU numerical or current
+  MTP framework acceptance.
 
 Remaining work: PY-03/04/06, SRV-08, KRN-06, PY-05/07 and KRN-10 acceptance,
-EVD-07, the four unverified risks, and current
+EVD-07, the three remaining unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
 
