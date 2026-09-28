@@ -1,26 +1,26 @@
-# 交接记录 — 2026-09-28
+# 交接记录 — 2026-09-29
 
 [English](handoff.md)。agent 以英文原文为准。
 
 ## 当前状态
 
-CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。`96e4ecc` 已有受影响算子
-证据；后续 fixed 状态复核又发现 P0/P1 和证据缺口，已复审的源码提交 `487f8de`
-修复了这些问题。
-当前 12 行整体验收仍待完成；后续部分轮次仅作诊断。
+CUDA 迁移在 `c36d1c9` 的原始验收属于历史结果。整库审计修复的干净源码
+`e3c42e0` 现已通过完整 B200 套件、147 项正式算子矩阵，以及经一次高离散度
+单行重测后的 12 个合格框架行。PY-04、PY-06、KRN-06 保留下文明确的未闭合
+范围。最新检查点之后按日期保存的段落反映各自提交时仍待完成的工作。
 
 - **Kernel 后端：** B200 上默认使用 CUDA。在 Python 启动前设置
   `OH_MY_VLLM_KERNEL_BACKEND=tilelang` 则改用冻结的 TileLang 对照。运行时身份报告实际使用的
   后端，不会静默回退到 TileLang。
 - **职责划分：** Rust 负责服务、调度和逻辑 KV 缓存；Python 负责 GPU 计算。不使用任何 vLLM
   运行时、源码或环境依赖。
-- **算子（干净提交 `c36d1c9`，显式选择 CUDA）：** 全部 147 项正式用例通过。每项都通过三轮、
-  每轮 20 对交替测量，且单侧 95% bootstrap 下界为正。
-- **框架（同一提交）：** 全部 12 组通过。
-  - 吞吐为冻结 vLLM 基线的 97.52–125.09%。
-  - TTFT 为基线的 76.01–97.50%。
-  - 每组都满足 10% 极差规则。
-  - 余量最小的是 MTP batch 4，吞吐 97.52%。
+- **当前算子（干净提交 `e3c42e0`，显式选择 CUDA）：** 全部 147 项正式用例的
+  输出和冻结 TileLang 对照通过，每项三轮、每轮 20 对交替测量；最小单侧
+  95% 正收益下界为 `0.000005722664296627035 ms`。
+- **当前框架（同一源码）：** 首轮完整采集通过 11 行；prefix batch 1 因
+  23.924% TTFT 离散度被拒，在同 GPU 独立重测以 7.825% 通过。合并后的
+  12 个合格行吞吐为冻结基线的 99.43–124.58%，TTFT 为 75.70–96.40%，
+  每行均通过 10% 离散度和稳态审计门槛。
 - **默认选择变更（`030f60f`）：** 只修改后端选择和身份报告。174 项测试加 31 个子测试的
   套件以及 MTP4 服务约束和生命周期检查，是在 `ef07b2b` 之后、后来成为该提交的工作树上
   通过的（CUDA 源码未变），而不是在 `030f60f` 上单独运行的。
@@ -29,10 +29,44 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   - 真实文本的抢占/前缀检查。
   - 两种 oh-my-pi API。
 
-证据见 [acceptance.zh.md](acceptance.zh.md) 以及
-`bench/baseline/2026-09-22-cuda-{operators,framework,features}.json`。
+当前证据见 [acceptance.zh.md](acceptance.zh.md) 和
+`bench/baseline/2026-09-29-audit-final-{operators,framework}.json` 汇总。
+`2026-09-22-cuda-{operators,framework,features}.json` 仍是历史产物。
 
-## 最新修复检查点（2026-09-28）
+## 最新验收检查点（2026-09-29）
+
+- 干净源码 `e3c42e0` 的完整 B200 pytest：**491 项通过、70 个子测试**，
+  42 条第三方 warning/编译提示；日志
+  `/tmp/oh-my-vllm-final-full-gpu-e3c42e0.log`。
+- [完整正式算子汇总](../bench/baseline/2026-09-29-audit-final-operators.json)：
+  147/147 通过，UUID `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5`，
+  无干扰、源码干净；已加载 CUDA 模块 SHA-256 为
+  `24bec3a7208ac09629d0a594940266dec2dfbb272c87e02e27c6a8196cd84318`。
+  原始 `/tmp/oh-my-vllm-final-formal-e3c42e0.json` 的 SHA-256 为
+  `526c99df52ded4cf73630d08ed5f0861a383da5644bc937f55bb3a4725989c33`。
+- [框架汇总](../bench/baseline/2026-09-29-audit-final-framework.json)：
+  同源码、同 UUID；release 二进制 SHA-256 为
+  `90038fc7f9598e1e42f7beb8f04370463f3d1a33fb83b33a91f6698e3f0af888`。
+  首轮 owner `/tmp/oh-my-vllm-final-framework-e3c42e0.log` 产出 12 份
+  结构/来源有效的结果，但只验收 11 行：prefix batch 1 TTFT 离散度
+  23.924% 而被拒收，故 owner 以状态 1 退出；独立重测
+  owner `/tmp/oh-my-vllm-final-framework-prefix1-retry-e3c42e0.log` 以
+  7.825% 离散度、状态 0 退出。11+1 个合格行均有两次预热、五次测量、
+  实报池容量、干净稳态审计；吞吐至少为基线的 99.426%，TTFT 至多 96.402%。
+- 后续 `scripts/test.sh cpu` 通过 266 项测试，排除 225 个 GPU 用例，
+  70 个子测试通过（`/tmp/oh-my-vllm-final-cpu-e3c42e0.log`）。Rust
+  workspace、fmt、行宽、Ruff format/check 和 Clippy 均通过。无自有
+  server/worker/TTFT 进程或服务监听残留；所选 GPU 为 0 MiB/0%，无计算
+  进程。已清理本次运行遗留的 13 个无监听 IPC socket 文件。工作树后续只
+  为本批已复审文档/证据修改。
+- PY-03 的有界 graph 策略在所测 Serve 工作集变形与框架行上关闭。较早干净
+  源码的六项 258048+4096 边界用例已完成，但未覆盖 262144 处反复 shape
+  churn。PY-04 因物理接近 4 GiB 余量时的后期捕获未实测，仍为
+  **partial/open**；PY-06 因整步 host/GPU overlap 净收益未证实，仍为
+  **partial/open**；KRN-06 的安全候选没有稳定完整调用收益，仍为
+  **open/no-go**。详见当前[审计索引](audit-2026-09-23.zh.md)。
+
+## 较早修复检查点（2026-09-28）
 
 - `96e4ecc` 修复余下的 P0/P1 请求隔离、RPC 取消、注册和 FA kernel 问题
   （SRV-01/05/06/07 与 KRN-01/02/03）。取消后的 prepare 回复不会移位到下一次
@@ -467,11 +501,10 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   `/tmp/oh-my-vllm-krn06-wrapper-trio-dirty.log`。补丁已回退，没有提交
   源码/测试；自有 B200 进程均已退出。
 
-后续工作：PY-03/04/06、SRV-08、PY-05/07 与 KRN-10 验收，以及当前完整算子/GPU
-套件和 12 组框架验收。
-KRN-06 保持 open/no-go，只有另一安全优化证明完整调用收益才应重启；
-如果 1248 行波动再次出现，还需调查。
-逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。
+在此 2026-09-28 检查点，PY-03/04/06、SRV-08、PY-05/07、KRN-10 及完整
+算子/GPU/12 行门槛仍待完成。上方的 2026-09-29 检查点更新了该队列。
+KRN-06 仍为 open/no-go，除非另一安全优化证明完整调用收益。
+逐项状态与限制见[当前审计索引](audit-2026-09-23.zh.md)。
 
 ## 历史 2026-09-24 修复检查点
 

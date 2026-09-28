@@ -1,6 +1,50 @@
 # Acceptance evidence
 
-## Current remediation evidence — 2026-09-28
+## Current clean-source acceptance — 2026-09-29
+
+Clean source `e3c42e0` passed the [full 147-case formal operator
+matrix](../bench/baseline/2026-09-29-audit-final-operators.json) on B200 UUID
+`GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5`. All 147 output and frozen
+TileLang comparisons pass, with three rounds of 20 interleaved pairs per case,
+no recorded GPU interference, a smallest positive one-sided 95% gain bound of
+`0.000005722664296627035 ms`, and a largest round spread of 1.139%. The
+artifact records the clean source, compiler and loaded CUDA module identity,
+all case decisions, and the SHA-256 of the raw `/tmp` collector output.
+
+The same clean source passed the [12 framework-row
+gate](../bench/baseline/2026-09-29-audit-final-framework.json) against the
+frozen `2026-09-22-refreshed-enginecore.json` baseline: two complete warmups
+and five measured repetitions per row, candidate spread at most 10%,
+throughput at least 95%, TTFT at most 110%, and no measured-window capture or
+compile. The initial complete collection accepted 11 rows; `prefix-32768-1`
+had 23.924% TTFT spread and was rejected despite meeting the median limits.
+A separate same-source, same-GPU repeat passed with 7.825% TTFT spread.
+Both attempts and their raw hashes remain in the summary. The table uses the
+accepted repeat for that one row; the original 12-row owner exit was failure,
+not an accepted all-pass run.
+
+| Row | TPS / baseline | TTFT / baseline | TPS spread | TTFT spread |
+|---|---:|---:|---:|---:|
+| mtp-32768-1 | 99.95% | 94.12% | 0.18% | 0.59% |
+| mtp-32768-2 | 99.43% | 95.94% | 0.12% | 0.29% |
+| mtp-32768-4 | 99.54% | 95.69% | 0.16% | 0.30% |
+| ordinary-131072-1 | 114.10% | 92.17% | 0.22% | 1.13% |
+| ordinary-131072-2 | 112.86% | 92.37% | 0.20% | 0.57% |
+| ordinary-131072-4 | 109.66% | 93.83% | 0.05% | 0.13% |
+| ordinary-32768-1 | 116.51% | 93.07% | 0.19% | 0.68% |
+| ordinary-32768-2 | 117.94% | 96.40% | 0.07% | 0.68% |
+| ordinary-32768-4 | 115.26% | 94.49% | 0.11% | 0.22% |
+| prefix-32768-1 (repeat) | 117.67% | 82.47% | 0.15% | 7.82% |
+| prefix-32768-2 | 124.58% | 82.31% | 0.07% | 7.30% |
+| prefix-32768-4 | 116.90% | 75.70% | 0.11% | 3.52% |
+
+The full B200 pytest suite on this source passed 491 tests and 70 subtests;
+its 42 warnings are third-party deprecations and one DSL compile hint.
+The six real 258048+4096 boundary cases remain separately evidenced below.
+The sections that follow preserve evidence and pending statements as they stood
+at their earlier commits.
+
+## Earlier remediation evidence — 2026-09-28
 
 Clean `bd8e21e` [EVD-07 boundary evidence](../bench/baseline/2026-09-28-audit-evd07-context-boundary.json)
 passes all six ordinary/MTP4, batch 1/2/4 runs at 258048 input plus 4096

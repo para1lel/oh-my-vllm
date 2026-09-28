@@ -1,12 +1,13 @@
-# Handoff — 2026-09-28
+# Handoff — 2026-09-29
 
 ## Current state
 
-The CUDA migration's original acceptance is historical. The whole-repository
-audit remediation is in progress. `96e4ecc` has affected-operator evidence;
-later fixed-status review found additional P0/P1 and evidence gaps, repaired
-in reviewed source commit `487f8de`. Current 12-row acceptance is pending;
-partial later attempts are diagnostic only.
+The CUDA migration's original `c36d1c9` acceptance is historical. The
+whole-repository audit remediation source at clean `e3c42e0` now passes the
+full B200 suite, 147-case formal operator matrix, and 12 accepted framework
+rows with one documented high-spread row repeat. PY-04, PY-06 and KRN-06
+retain the scoped open limits below. The dated checkpoints after the latest
+one preserve what had been pending at those earlier commits.
 
 - **Kernel backend:** CUDA is the default on B200. Setting
   `OH_MY_VLLM_KERNEL_BACKEND=tilelang` before Python starts selects the frozen
@@ -14,14 +15,15 @@ partial later attempts are diagnostic only.
   used, and nothing falls back silently to TileLang.
 - **Ownership:** Rust owns serving, scheduling and the logical KV cache. Python
   owns GPU computation. No vLLM runtime, source or environment dependency is used.
-- **Operator cases (clean `c36d1c9`, explicit CUDA):** all 147 formal cases pass.
-  Each passes three rounds of 20 interleaved pairs with a positive one-sided 95%
-  bootstrap bound.
-- **Framework rows (same commit):** all 12 rows pass.
-  - Throughput is 97.52–125.09% of the frozen vLLM baseline.
-  - TTFT is 76.01–97.50% of the baseline.
-  - Every row meets the 10% spread rule.
-  - The narrowest margin is MTP batch 4, at 97.52% throughput.
+- **Current operator cases (clean `e3c42e0`, explicit CUDA):** all 147 formal
+  cases pass three rounds of 20 interleaved pairs, output checks and the
+  frozen TileLang comparison; the smallest positive one-sided 95% lower bound
+  is `0.000005722664296627035 ms`.
+- **Current framework rows (same source):** 11 passed in the first complete
+  collection; prefix batch 1 was rejected for 23.924% TTFT spread and passed
+  a separate same-GPU repeat at 7.825%. The resulting 12 accepted rows have
+  throughput 99.43–124.58% and TTFT 75.70–96.40% of the frozen baseline.
+  Every accepted row passed the 10% spread and steady-state audit gates.
 - **Default-selection change (`030f60f`):** only changes backend selection and
   identity. The 174-test plus 31-subtest suite and the MTP4 service constraint
   and lifecycle checks passed on the working tree after `ef07b2b` that became
@@ -31,10 +33,46 @@ partial later attempts are diagnostic only.
   - Real-text preemption and prefix checks.
   - Both oh-my-pi APIs.
 
-Evidence is in [acceptance.md](acceptance.md) and in the
-`bench/baseline/2026-09-22-cuda-{operators,framework,features}.json` artifacts.
+Current evidence is in [acceptance.md](acceptance.md) and the
+`bench/baseline/2026-09-29-audit-final-{operators,framework}.json` summaries.
+The `2026-09-22-cuda-{operators,framework,features}.json` artifacts remain history.
 
-## Latest remediation checkpoint (2026-09-28)
+## Latest acceptance checkpoint (2026-09-29)
+
+- Clean `e3c42e0` B200 full pytest: **491 passed, 70 subtests**, 42 third-party
+  warning/compile-hint messages; log
+  `/tmp/oh-my-vllm-final-full-gpu-e3c42e0.log`.
+- [Full formal summary](../bench/baseline/2026-09-29-audit-final-operators.json):
+  147/147 passed, UUID `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5`,
+  no interference, clean source, loaded CUDA module SHA-256
+  `24bec3a7208ac09629d0a594940266dec2dfbb272c87e02e27c6a8196cd84318`.
+  Raw `/tmp/oh-my-vllm-final-formal-e3c42e0.json` SHA-256
+  `526c99df52ded4cf73630d08ed5f0861a383da5644bc937f55bb3a4725989c33`.
+- [Framework summary](../bench/baseline/2026-09-29-audit-final-framework.json):
+  same source and UUID, release binary SHA-256
+  `90038fc7f9598e1e42f7beb8f04370463f3d1a33fb83b33a91f6698e3f0af888`.
+  First owner `/tmp/oh-my-vllm-final-framework-e3c42e0.log` produced 12
+  structurally valid row artifacts but accepted only 11: prefix batch 1 had
+  23.924% TTFT spread, so the owner exited 1;
+  separate owner `/tmp/oh-my-vllm-final-framework-prefix1-retry-e3c42e0.log`
+  exited 0 with 7.825% spread. The accepted 11+1 rows each had two warmups,
+  five measurements, observed pool capacities, clean steady-state audit,
+  throughput at least 99.426%, and TTFT at most 96.402% of baseline.
+- Post-run `scripts/test.sh cpu` passed 266 tests, 225 GPU deselections and
+  70 subtests (`/tmp/oh-my-vllm-final-cpu-e3c42e0.log`). Rust workspace,
+  fmt, line-width, Ruff format/check and Clippy all passed. No owned
+  server/worker/TTFT process or service listener remained; selected GPU was
+  0 MiB/0% with no compute app. Thirteen run-owned unbound IPC socket files
+  were removed. The worktree is changing only for these reviewed docs/evidence.
+- PY-03's bounded graph policy is closed for tested Serve workset shifts and
+  framework rows. Six 258048+4096 boundary cases completed on their earlier
+  clean source; they do not test repeated shape churn at 262144. PY-04 is
+  **partial/open** because physical near-4-GiB late capture is untested;
+  PY-06 is **partial/open** because whole-step host/GPU overlap benefit is
+  unverified; KRN-06 remains **open/no-go** after its safe candidate had no
+  stable full-call gain. See the current [audit index](audit-2026-09-23.md).
+
+## Earlier remediation checkpoint (2026-09-28)
 
 - `96e4ecc` repairs the remaining P0/P1 request-isolation, RPC cancellation,
   registration, and FA kernel findings (SRV-01/05/06/07 and KRN-01/02/03).
@@ -586,12 +624,11 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   `/tmp/oh-my-vllm-krn06-wrapper-trio-dirty.log`. The patch was reverted,
   no source/test commit was made, and all owned B200 processes exited.
 
-Remaining work: PY-03/04/06, SRV-08, PY-05/07 and KRN-10 acceptance,
-the current full operator/GPU suite, and 12-row framework acceptance.
-KRN-06 stays open/no-go unless a different safe optimization has measured
-whole-call benefit; the 1248-row variance needs attention if it recurs.
-See the [audit index](audit-2026-09-23.md)
-for individual status and evidence limits.
+At this 2026-09-28 checkpoint, PY-03/04/06, SRV-08, PY-05/07, KRN-10 and
+the full operator/GPU/12-row gates were still pending. The 2026-09-29
+checkpoint above supersedes that queue. KRN-06 remains open/no-go until a
+different safe optimization demonstrates whole-call benefit. See the
+[current audit index](audit-2026-09-23.md) for each status and limit.
 
 ## Historical 2026-09-24 remediation checkpoint
 

@@ -6,6 +6,21 @@ for interpretation and a dated index of every artifact.
 
 ## Current
 
+- `2026-09-29-audit-final-operators.json` summarizes clean `e3c42e0` full
+  147/147 formal output and frozen TileLang decisions on a pinned B200. It
+  records source/compiler/module provenance, all case decisions, no GPU
+  interference, and the SHA-256 of the raw `/tmp` result; raw pairs stay out
+  of this repository.
+- `2026-09-29-audit-final-framework.json` summarizes the same clean source's
+  12 accepted framework rows against the frozen 2026-09-22 EngineCore baseline.
+  It preserves 2 warmups, 5 measurements, per-row TPS/TTFT/spread and steady
+  audit, plus the rejected high-spread prefix batch-1 attempt and its passing
+  same-GPU repeat. The initial all-row owner exited with failure; the summary
+  combines its 11 accepted rows with the explicit one-row repeat.
+
+The following earlier artifacts retain their status at their own source commits;
+their statements that later gates were pending are historical.
+
 - `2026-09-28-audit-evd07-context-boundary.json` records six clean `bd8e21e`
   ordinary/MTP4 258048+4096 boundary runs at batch 1/2/4 on one B200.
   All finish without OOM or preemption; MTP4 proposals are nonzero.
