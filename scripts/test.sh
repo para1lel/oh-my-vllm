@@ -10,6 +10,7 @@ fi
 shift
 
 scripts/with-env.sh cargo build -p oh-my-vllm-zmq-worker --bin oh-my-vllm-zmq-worker
+export OH_MY_VLLM_TEST_BINARY="${CARGO_TARGET_DIR:-$(git rev-parse --show-toplevel)/target}/debug/oh-my-vllm-zmq-worker"
 if [[ "$mode" == cpu ]]; then
     exec env CUDA_VISIBLE_DEVICES='' scripts/with-env.sh env \
         PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests -q -m 'not gpu' "$@"

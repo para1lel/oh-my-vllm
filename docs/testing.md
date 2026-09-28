@@ -222,29 +222,33 @@ The defaults are `--num-gpu-blocks 4200`, `--mamba-blocks 128`, 2 warmups and
 
 ## Maximum context (REQ-CONTEXT-001)
 
-Run the six boundary rows (ordinary and MTP4, batch 1/2/4, 258048 input plus 4096
-output). Global options go before the `bench` subcommand; use `--num-speculative-tokens 0`
-for ordinary and `4` for MTP:
+The six GPU pytest cases run ordinary and MTP4 at batch 1/2/4 with 258048 input
+plus 4096 output. `scripts/test.sh full` builds the current debug binary and holds
+one B200 lock around all tests. To collect a clean-source, summarized six-row
+artifact, build the release binary first and run the standalone entry under one
+outer GPU lock:
 
 ```bash
-scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker \
-  --socket /tmp/boundary-mtp-4.ipc --num-gpu-blocks 4200 --mamba-blocks 128 \
-  --max-model-len 262144 --num-speculative-tokens 4 \
-  bench --batch-size 4 --input-len 258048 --output-len 4096 --warmup 0 --repetitions 1
+scripts/with-env.sh cargo build --release -p oh-my-vllm-zmq-worker --bin oh-my-vllm-zmq-worker
+scripts/with-gpu.sh scripts/with-env.sh python benchmarks/context_boundary.py \
+  --binary target/release/oh-my-vllm-zmq-worker \
+  --output bench/baseline/DATE-context-boundary.json \
+  --raw-dir /tmp/oh-my-vllm-context-boundary-DATE
 ```
 
-Each run must show:
-
-- No OOM.
-- `preemptions == 0`.
-- Recorded peak memory: the worker logs `max_reserved_bytes` at shutdown
-  (`worker/model_runner.py:380-385`).
-
-No automated test covers this yet (EVD-07).
+The collector requires exact input/output and `batch_size * 4096` generated
+tokens, no OOM, zero preemptions, nonzero MTP proposals in MTP4, and a worker
+peak allocated/reserved record within the B200 memory limit. It records the
+binary hash, source identity and GPU UUID, and rechecks source/binary identity
+and every row's UUID before accepting all six. Raw logs stay outside the repository.
+The pytest cases inherit the GPU selected by `scripts/test.sh full` and never
+acquire a nested lock.
 
 `scripts/long-context-acceptance.py` exercises 131072-token strict-JSON requests
-and prefix reuse against a running MTP4 service. Confirm MTP activity from the
-server log.
+and prefix reuse against a dedicated running MTP4 service. Pass its log with
+`--server-log /tmp/mtp-server.log`; the script requires positive
+`proposed_draft_tokens` in each of its four completed request records. The
+service log must not be shared with unrelated requests during this run.
 
 ## Serving
 

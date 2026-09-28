@@ -130,14 +130,14 @@ def assert_gpu_exclusive(gpu, process_group):
             raise RuntimeError(f"GPU contention on {gpu}: external process {pid}")
 
 
-def run_engine(command, timeout=3600, stderr=None, log_path=None):
+def run_engine(command, timeout=3600, stderr=None, log_path=None, cancelled=None):
     """Own the entire engine process group, including model-worker children."""
     with ExitStack() as stack:
         output = stack.enter_context(Path(log_path).open("w")) if log_path else None
-        return _run_engine(command, timeout, stderr, output, log_path)
+        return _run_engine(command, timeout, stderr, output, log_path, cancelled)
 
 
-def _run_engine(command, timeout, stderr, output, log_path):
+def _run_engine(command, timeout, stderr, output, log_path, cancelled):
     process = subprocess.Popen(
         command,
         text=True,
@@ -149,6 +149,8 @@ def _run_engine(command, timeout, stderr, output, log_path):
         deadline = time.monotonic() + timeout
         gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "")
         while True:
+            if cancelled is not None and cancelled():
+                raise InterruptedError("engine run was cancelled")
             if gpu.startswith("GPU-"):
                 assert_gpu_exclusive(gpu, process.pid)
             remaining = deadline - time.monotonic()
@@ -163,6 +165,8 @@ def _run_engine(command, timeout, stderr, output, log_path):
                 break
             except subprocess.TimeoutExpired:
                 continue
+        if cancelled is not None and cancelled():
+            raise InterruptedError("engine run was cancelled")
         if gpu.startswith("GPU-"):
             assert_gpu_exclusive(gpu, process.pid)
         if process.returncode:

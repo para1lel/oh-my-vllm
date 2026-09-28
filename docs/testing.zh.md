@@ -199,27 +199,27 @@ scripts/with-gpu.sh scripts/with-env.sh taskset -c 8-15 \
 
 ## 最大上下文（REQ-CONTEXT-001）
 
-运行六个边界行（普通与 MTP4，batch 1/2/4，258048 输入加 4096 输出）。全局选项放在 `bench`
-子命令之前；普通模式使用 `--num-speculative-tokens 0`，MTP 使用 `4`：
+六个 GPU pytest 用例运行普通模式和 MTP4 的 batch 1/2/4，输入 258048、输出 4096。
+`scripts/test.sh full` 构建当前 debug 二进制，并在整套测试期间持有同一 B200 锁。
+若要从干净源码收集六行摘要产物，先构建 release 二进制，再在单层 GPU 锁下运行独立入口：
 
 ```bash
-scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker \
-  --socket /tmp/boundary-mtp-4.ipc --num-gpu-blocks 4200 --mamba-blocks 128 \
-  --max-model-len 262144 --num-speculative-tokens 4 \
-  bench --batch-size 4 --input-len 258048 --output-len 4096 --warmup 0 --repetitions 1
+scripts/with-env.sh cargo build --release -p oh-my-vllm-zmq-worker --bin oh-my-vllm-zmq-worker
+scripts/with-gpu.sh scripts/with-env.sh python benchmarks/context_boundary.py \
+  --binary target/release/oh-my-vllm-zmq-worker \
+  --output bench/baseline/DATE-context-boundary.json \
+  --raw-dir /tmp/oh-my-vllm-context-boundary-DATE
 ```
 
-每次运行必须显示：
-
-- 无 OOM。
-- `preemptions == 0`。
-- 记录了峰值显存：worker 在关闭时记录 `max_reserved_bytes`
-  （`worker/model_runner.py:380-385`）。
-
-目前尚无自动化测试覆盖这一点（EVD-07）。
+收集器要求准确的输入/输出长度和 `batch_size * 4096` 个生成 token、无 OOM、零抢占、
+MTP4 有非零草稿提议数，并要求 worker 报告的峰值 allocated/reserved 显存不超过 B200 总量。
+产物记录二进制哈希、源码身份及 GPU UUID，并在六行结束后复核源码/二进制身份和每行 UUID。
+原始日志留在仓库外。
+pytest 用例继承 `scripts/test.sh full` 选择的 GPU，不再嵌套获取锁。
 
 `scripts/long-context-acceptance.py` 针对正在运行的 MTP4 服务，测试 131072 token 的 strict-JSON
-请求和前缀复用。需从服务器日志确认 MTP 活动。
+请求和前缀复用。用 `--server-log /tmp/mtp-server.log` 传入专用服务日志；脚本要求四条
+完成请求的 `proposed_draft_tokens` 均大于零。运行期间不可混入其他请求。
 
 ## 服务
 
