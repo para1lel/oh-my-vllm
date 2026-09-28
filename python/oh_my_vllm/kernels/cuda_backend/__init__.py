@@ -236,6 +236,13 @@ def compiled():
     from tvm_ffi import load_module
     from tvm_ffi.cpp import build_inline
 
+    if (
+        os.environ.get("OH_MY_VLLM_CUDA_DEBUG_SYNC") == "1"
+        and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1"
+    ):
+        raise RuntimeError(
+            "CUDA debug sync requires OH_MY_VLLM_ENFORCE_EAGER=1 before Python starts"
+        )
     if torch.cuda.get_device_capability() != (10, 0):
         raise RuntimeError("the CUDA custom-kernel backend requires B200/SM100")
     cuda_source = Path(__file__).with_name("kernels.cu").read_text()

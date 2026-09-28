@@ -71,9 +71,29 @@ gaps. Keep temporary operator tuning scripts and reports outside the repository.
 Formal measurements audit FlashInfer, Triton, TileLang and `TVM_FFI_CACHE_DIR`
 cache trees, including text artifacts; unset or missing roots fail the audit.
 The repaired audit has not yet been exercised by a new full 12-row collection.
-Finish all compilation before measured repetitions. Kernel faults
-surface at the next host sync; use `compute-sanitizer` on a reduced case to
-attribute them (audit KRN-09).
+Finish all compilation before measured repetitions. In the default CUDA path,
+`cudaPeekAtLastError` checks each owned launch without clearing the calling
+thread's CUDA runtime error. An earlier asynchronous error can still surface
+there or at a later host sync; the default error names the observation point,
+not a proven faulting kernel.
+
+For KRN-09 fault attribution, start a fresh eager process with both variables
+set before Python starts:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_CUDA_DEBUG_SYNC=1 OH_MY_VLLM_ENFORCE_EAGER=1 OH_MY_VLLM_KERNEL_BACKEND=cuda python -m tests.gpu_cuda_error_case eager
+```
+
+This diagnostic mode checks for an existing error and synchronizes the selected
+stream before each owned launch, then checks and synchronizes again after it.
+It rejects CUDA Graph capture. "Prior" means observed before this launch;
+"after launch" means observed during the post-launch check. CUDA synchronization
+may also report an earlier asynchronous failure from elsewhere, so neither
+message alone proves the faulting instruction. Run a reduced failing case under
+`/usr/local/cuda-13.1/bin/compute-sanitizer --tool memcheck` for device-side
+detail. Keep diagnostic output outside Git and never use debug-sync timings for
+performance acceptance. See the [CUDA error API](https://docs.nvidia.com/cuda/cuda-runtime-api/cuda_runtime_api/group__CUDART__ERROR.html)
+and [CUDA Graph capture rules](https://docs.nvidia.com/cuda/cuda-programming-guide/04-special-topics/cuda-graphs.html).
 
 Paged decode preserves contiguous BF16 cache views with an unaligned storage
 offset by cloning them. The per-process

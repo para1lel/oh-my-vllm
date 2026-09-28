@@ -5,6 +5,8 @@
 #include <tvm/ffi/container/tensor.h>
 #include <tvm/ffi/extra/c_env_api.h>
 #include <atomic>
+#include <cstdlib>
+#include <cstring>
 #include <type_traits>
 
 using tvm::ffi::TensorView;
@@ -23,6 +25,52 @@ int64_t variant_launch_count(int64_t operation, bool fast) {
   TVM_FFI_ICHECK(operation >= 0 && operation < kVariantCount)
       << "unknown CUDA variant operation";
   return variant_launches[operation][fast].load(std::memory_order_relaxed);
+}
+
+bool cuda_debug_sync_enabled() {
+  static const bool enabled = [] {
+    const char *value = std::getenv("OH_MY_VLLM_CUDA_DEBUG_SYNC");
+    return value != nullptr && std::strcmp(value, "1") == 0;
+  }();
+  return enabled;
+}
+void begin_cuda_launch(cudaStream_t stream, const char *operation) {
+  if (!cuda_debug_sync_enabled())
+    return;
+  cudaError_t status = cudaPeekAtLastError();
+  TVM_FFI_ICHECK(status == cudaSuccess)
+      << operation << " prior CUDA error before launch: " << cudaGetErrorString(status);
+  cudaStreamCaptureStatus capture = cudaStreamCaptureStatusNone;
+  status = cudaStreamIsCapturing(stream, &capture);
+  TVM_FFI_ICHECK(status == cudaSuccess)
+      << operation << " prior CUDA work or capture query failed before launch: "
+      << cudaGetErrorString(status);
+  TVM_FFI_ICHECK(capture == cudaStreamCaptureStatusNone)
+      << operation << " CUDA debug sync requires eager execution; set "
+      << "OH_MY_VLLM_ENFORCE_EAGER=1";
+  status = cudaStreamSynchronize(stream);
+  TVM_FFI_ICHECK(status == cudaSuccess)
+      << operation << " prior CUDA work failed before launch: " << cudaGetErrorString(status);
+}
+void finish_cuda_launch(cudaStream_t stream, const char *operation) {
+  cudaError_t status = cudaPeekAtLastError();
+  if (cuda_debug_sync_enabled()) {
+    TVM_FFI_ICHECK(status == cudaSuccess)
+        << operation << " CUDA error observed after launch: " << cudaGetErrorString(status);
+    status = cudaStreamSynchronize(stream);
+    TVM_FFI_ICHECK(status == cudaSuccess)
+        << operation << " CUDA execution error observed after launch: "
+        << cudaGetErrorString(status);
+  } else {
+    TVM_FFI_ICHECK(status == cudaSuccess)
+        << operation << " CUDA launch or prior asynchronous error: "
+        << cudaGetErrorString(status);
+  }
+}
+cudaStream_t stream_for(TensorView x, const char *operation) {
+  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
+  begin_cuda_launch(stream, operation);
+  return stream;
 }
 
 bool has_dtype(TensorView tensor, int code, int bits) {
@@ -240,14 +288,14 @@ void quantize(TensorView x, TensorView out, TensorView scales, bool column, bool
       << "CUDA quantize output shape or layout is invalid";
   TVM_FFI_ICHECK(fits_int32_flat_offsets(x, false) && fits_int32_flat_offsets(out, true))
       << "CUDA quantize input/output flat offsets exceed signed int32";
-  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
+  auto stream = stream_for(x, "quantize");
   if (dtype.code == kDLBfloat)
     dispatch_alignment<__nv_bfloat16>(x, out, scales, column, silu, stream);
   else if (dtype.bits == 16)
     dispatch_alignment<__half>(x, out, scales, column, silu, stream);
   else
     dispatch_alignment<float>(x, out, scales, column, silu, stream);
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA quantize launch failed";
+  finish_cuda_launch(stream, "quantize");
 }
 __global__ void silu_kernel(const __nv_bfloat16 *__restrict__ x, __nv_bfloat16 *__restrict__ out,
                             int rows, int width) {
@@ -274,14 +322,14 @@ void silu_mul(TensorView x, TensorView out) {
       << "CUDA SiLU requires contiguous input and output";
   TVM_FFI_ICHECK(fits_int32_flat_offsets(x, false) && fits_int32_flat_offsets(out, true))
       << "CUDA SiLU input/output flat offsets exceed signed int32";
-  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
+  auto stream = stream_for(x, "silu_mul");
   int n = out.size(0) * out.size(1);
   if (!n)
     return;
   silu_kernel<<<(n + 255) / 256, 256, 0, stream>>>(static_cast<const __nv_bfloat16 *>(x.data_ptr()),
                                                    static_cast<__nv_bfloat16 *>(out.data_ptr()),
                                                    out.size(0), out.size(1));
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA SiLU launch failed";
+  finish_cuda_launch(stream, "silu_mul");
 }
 
 __device__ float warp_sum(float value) {
@@ -294,10 +342,6 @@ __device__ int64_t index_at(const void *data, bool wide, int index) {
   return wide ? static_cast<const int64_t *>(data)[index]
               : static_cast<const int32_t *>(data)[index];
 }
-cudaStream_t stream_for(TensorView x) {
-  return static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
-}
-
 __global__ void gates_kernel(const __nv_bfloat16 *__restrict__ ba, const float *__restrict__ log,
                              const float *__restrict__ bias, float *__restrict__ decay,
                              float *__restrict__ beta, int n) {
@@ -332,11 +376,12 @@ void gates(TensorView ba, TensorView log, TensorView bias, TensorView decay, Ten
       << "CUDA gates requires BF16 projection and FP32 [rows,48] outputs";
   if (ba.size(0) == 0)
     return;
-  gates_kernel<<<(ba.size(0) * 48 + 255) / 256, 256, 0, stream_for(ba)>>>(
+  auto stream = stream_for(ba, "gates");
+  gates_kernel<<<(ba.size(0) * 48 + 255) / 256, 256, 0, stream>>>(
       static_cast<const __nv_bfloat16 *>(ba.data_ptr()), static_cast<const float *>(log.data_ptr()),
       static_cast<const float *>(bias.data_ptr()), static_cast<float *>(decay.data_ptr()),
       static_cast<float *>(beta.data_ptr()), ba.size(0));
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA gate launch failed";
+  finish_cuda_launch(stream, "gates");
 }
 
 template <typename T, int Vector>
@@ -431,7 +476,7 @@ bool aligned(TensorView tensor, uintptr_t bytes) {
 void launch_rms5120(TensorView x, TensorView residual, TensorView weight,
                     TensorView out, TensorView summed, bool add,
                     float epsilon) {
-  auto stream = stream_for(x);
+  auto stream = stream_for(x, add ? "add_norm" : "norm");
 #define RMS5120(R, Threads, Vector, Streaming)                                            \
   rms5120_kernel<R, Threads, Vector, Streaming><<<x.size(0), Threads, 0, stream>>>(       \
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),                        \
@@ -463,8 +508,7 @@ void launch_rms5120(TensorView x, TensorView residual, TensorView weight,
     RMS5120(false, 256, 4, false);
   }
 #undef RMS5120
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess)
-      << "CUDA model-width RMS launch failed";
+  finish_cuda_launch(stream, add ? "add_norm" : "norm");
 }
 
 struct Strides {
@@ -560,21 +604,23 @@ void rms(TensorView x, TensorView weight, TensorView gate, TensorView out, doubl
   Strides xs{x.stride(0), x.stride(1), x.stride(2)};
   Strides gs{gate.stride(0), gate.stride(1), gate.stride(2)};
   if (gated && h == 48 && d == 128) {
-    gated_rms128_kernel<<<(rows + 3) / 4, 128, 0, stream_for(x)>>>(
+    auto stream = stream_for(x, "gated_norm");
+    gated_rms128_kernel<<<(rows + 3) / 4, 128, 0, stream>>>(
         static_cast<const __nv_bfloat16 *>(x.data_ptr()),
         static_cast<const float *>(weight.data_ptr()),
         static_cast<const __nv_bfloat16 *>(gate.data_ptr()),
         static_cast<__nv_bfloat16 *>(out.data_ptr()), rows, xs, gs, epsilon);
-    TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA gated RMS launch failed";
+    finish_cuda_launch(stream, "gated_norm");
     record_variant(kGatedNorm, true);
     return;
   }
 #define RMS(L, G)                                                                                  \
-  rms_kernel<L, G, false><<<L ? rows : (rows + 3) / 4, L ? 256 : 128, 0, stream_for(x)>>>(         \
+  rms_kernel<L, G, false><<<L ? rows : (rows + 3) / 4, L ? 256 : 128, 0, stream>>>(                 \
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),                                            \
       static_cast<const float *>(weight.data_ptr()),                                               \
       static_cast<const __nv_bfloat16 *>(gate.data_ptr()),                                         \
       static_cast<__nv_bfloat16 *>(out.data_ptr()), nullptr, rows, h, d, xs, gs, epsilon)
+  auto stream = stream_for(x, gated ? "gated_norm" : "norm");
   if (d > 256) {
     if (gated) {
       RMS(true, true);
@@ -589,7 +635,7 @@ void rms(TensorView x, TensorView weight, TensorView gate, TensorView out, doubl
     }
   }
 #undef RMS
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA RMS launch failed";
+  finish_cuda_launch(stream, gated ? "gated_norm" : "norm");
   record_variant(gated ? kGatedNorm : kNorm, false);
 }
 void add_rms(TensorView x, TensorView residual, TensorView weight, TensorView summed,
@@ -600,13 +646,14 @@ void add_rms(TensorView x, TensorView residual, TensorView weight, TensorView su
     record_variant(kAddNorm, true);
     return;
   }
-  rms_kernel<true, false, true><<<rows, 256, 0, stream_for(x)>>>(
+  auto stream = stream_for(x, "add_norm");
+  rms_kernel<true, false, true><<<rows, 256, 0, stream>>>(
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),
       static_cast<const float *>(weight.data_ptr()),
       static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
       static_cast<__nv_bfloat16 *>(out.data_ptr()), static_cast<__nv_bfloat16 *>(summed.data_ptr()),
       rows, 1, d, {d, d, 1}, {d, d, 1}, 1e-6f);
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA residual RMS launch failed";
+  finish_cuda_launch(stream, "add_norm");
   record_variant(kAddNorm, false);
 }
 
@@ -677,12 +724,13 @@ __global__ void prepare_attention_kernel(const __nv_bfloat16 *packed, const floa
 }
 void prepare_attention(TensorView p, TensorView qw, TensorView kw, TensorView pos, TensorView cache,
                        TensorView slots, TensorView out) {
-  prepare_attention_kernel<<<(p.size(0) * 28 + 3) / 4, 128, 0, stream_for(p)>>>(
+  auto stream = stream_for(p, "prepare_attention");
+  prepare_attention_kernel<<<(p.size(0) * 28 + 3) / 4, 128, 0, stream>>>(
       (const __nv_bfloat16 *)p.data_ptr(), (const float *)qw.data_ptr(),
       (const float *)kw.data_ptr(), pos.data_ptr(), (__nv_bfloat16 *)cache.data_ptr(),
       slots.data_ptr(), (__nv_bfloat16 *)out.data_ptr(), p.size(0), cache.size(0) * 784,
       pos.dtype().bits == 64, slots.dtype().bits == 64);
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess);
+  finish_cuda_launch(stream, "prepare_attention");
 }
 
 __global__ void rms_rope_kernel(const __nv_bfloat16 *__restrict__ x,
@@ -718,12 +766,13 @@ __global__ void rms_rope_kernel(const __nv_bfloat16 *__restrict__ x,
 }
 void rms_rope(TensorView x, TensorView weight, TensorView positions, TensorView out) {
   int rows = x.size(0) * x.size(1);
-  rms_rope_kernel<<<(rows + 3) / 4, 128, 0, stream_for(x)>>>(
+  auto stream = stream_for(x, "rms_rope");
+  rms_rope_kernel<<<(rows + 3) / 4, 128, 0, stream>>>(
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),
       static_cast<const float *>(weight.data_ptr()), positions.data_ptr(),
       static_cast<__nv_bfloat16 *>(out.data_ptr()), rows, x.size(1),
       {x.stride(0), x.stride(1), x.stride(2)}, positions.dtype().bits == 64);
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA RMS/RoPE launch failed";
+  finish_cuda_launch(stream, "rms_rope");
 }
 __global__ void rope_kernel(const __nv_bfloat16 *__restrict__ x, const void *__restrict__ positions,
                             __nv_bfloat16 *__restrict__ out, int n, int h, int d, int rotary,
@@ -743,11 +792,12 @@ __global__ void rope_kernel(const __nv_bfloat16 *__restrict__ x, const void *__r
 }
 void rope(TensorView x, TensorView positions, TensorView out, int64_t rotary, double theta) {
   int n = x.size(0), h = x.size(1), d = x.size(2);
-  rope_kernel<<<(n * h * d + 255) / 256, 256, 0, stream_for(x)>>>(
+  auto stream = stream_for(x, "rope");
+  rope_kernel<<<(n * h * d + 255) / 256, 256, 0, stream>>>(
       static_cast<const __nv_bfloat16 *>(x.data_ptr()), positions.data_ptr(),
       static_cast<__nv_bfloat16 *>(out.data_ptr()), n, h, d, rotary, theta,
       positions.dtype().bits == 64);
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA RoPE launch failed";
+  finish_cuda_launch(stream, "rope");
 }
 
 __device__ float half_warp_sum(float value) {
@@ -824,9 +874,10 @@ void normalize_qk(TensorView q, TensorView k, TensorView oq, TensorView ok) {
   bool packed = q.size(1) == 16 && q.stride(0) == 10240 && k.stride(0) == 10240 &&
                 reinterpret_cast<uintptr_t>(q.data_ptr()) % 16 == 0 &&
                 reinterpret_cast<uintptr_t>(k.data_ptr()) % 16 == 0;
+  auto stream = stream_for(q, "normalize_qk");
   if (packed) {
 #define MODEL_QK(T, J)                                                                             \
-  model_qk_kernel<T, J><<<q.size(0) * (256 / T), T, 0, stream_for(q)>>>(                           \
+  model_qk_kernel<T, J><<<q.size(0) * (256 / T), T, 0, stream>>>(                                   \
       static_cast<const __nv_bfloat16 *>(q.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(k.data_ptr()),                                            \
       static_cast<__nv_bfloat16 *>(oq.data_ptr()), static_cast<__nv_bfloat16 *>(ok.data_ptr()))
@@ -838,16 +889,16 @@ void normalize_qk(TensorView q, TensorView k, TensorView oq, TensorView ok) {
       MODEL_QK(256, true);
     }
 #undef MODEL_QK
-    TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA model Q/K launch failed";
+    finish_cuda_launch(stream, "normalize_qk");
     record_variant(kQk, true);
     return;
   }
   int rows = q.size(0) * q.size(1);
-  qk_kernel<<<(rows + 3) / 4, 128, 0, stream_for(q)>>>(
+  qk_kernel<<<(rows + 3) / 4, 128, 0, stream>>>(
       static_cast<const __nv_bfloat16 *>(q.data_ptr()),
       static_cast<const __nv_bfloat16 *>(k.data_ptr()), static_cast<__nv_bfloat16 *>(oq.data_ptr()),
       static_cast<__nv_bfloat16 *>(ok.data_ptr()), rows, q.size(1), q.stride(0), k.stride(0));
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA Q/K normalization launch failed";
+  finish_cuda_launch(stream, "normalize_qk");
   record_variant(kQk, false);
 }
 // Validated callers use positive dense/row-strided views. Conservative byte
@@ -1077,10 +1128,11 @@ void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, Tenso
                 reinterpret_cast<uintptr_t>(pool.data_ptr()) % state_alignment == 0;
   for (auto input : {q, k, v, decay, beta, starts, reads, writes})
     vector = vector && disjoint_storage(pool, input);
+  auto stream = stream_for(q, "recurrent");
   if (vector) {
 #define VECTOR_REC(S, R, W)                                                                        \
   recurrent_vector_kernel<S, R, W>                                                                 \
-      <<<dim3(reads.size(0), 48, 128 / (R * W * 2)), W * 32, 0, stream_for(q)>>>(                  \
+      <<<dim3(reads.size(0), 48, 128 / (R * W * 2)), W * 32, 0, stream>>>(                          \
           static_cast<const __nv_bfloat16 *>(q.data_ptr()),                                        \
           static_cast<const __nv_bfloat16 *>(k.data_ptr()),                                        \
           static_cast<const __nv_bfloat16 *>(v.data_ptr()),                                        \
@@ -1105,13 +1157,13 @@ void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, Tenso
       }
     }
 #undef VECTOR_REC
-    TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA vector recurrence launch failed";
+    finish_cuda_launch(stream, "recurrent");
     record_variant(kRecurrent, true);
     return;
   }
   dim3 grid(reads.size(0), v.size(1), 8);
 #define REC(S)                                                                                     \
-  recurrent_kernel<S><<<grid, 128, 0, stream_for(q)>>>(                                            \
+  recurrent_kernel<S><<<grid, 128, 0, stream>>>(                                                    \
       static_cast<const __nv_bfloat16 *>(q.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(k.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(v.data_ptr()),                                            \
@@ -1126,7 +1178,7 @@ void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, Tenso
     REC(float);
   }
 #undef REC
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA recurrence launch failed";
+  finish_cuda_launch(stream, "recurrent");
   record_variant(kRecurrent, false);
 }
 template <bool Vector>
@@ -1158,9 +1210,10 @@ void append(TensorView k, TensorView v, TensorView cache, TensorView slots) {
   bool vector = width % 8 == 0 && reinterpret_cast<uintptr_t>(k.data_ptr()) % 16 == 0 &&
                 reinterpret_cast<uintptr_t>(v.data_ptr()) % 16 == 0 &&
                 reinterpret_cast<uintptr_t>(cache.data_ptr()) % 16 == 0;
+  auto stream = stream_for(k, "append");
 #define APPEND(V)                                                                                  \
   append_kernel<V>                                                                                 \
-      <<<k.size(0), 128, 0, stream_for(k)>>>(static_cast<const __nv_bfloat16 *>(k.data_ptr()),     \
+      <<<k.size(0), 128, 0, stream>>>(static_cast<const __nv_bfloat16 *>(k.data_ptr()),             \
                                              static_cast<const __nv_bfloat16 *>(v.data_ptr()),     \
                                              static_cast<__nv_bfloat16 *>(cache.data_ptr()),       \
                                              slots.data_ptr(), width, cache.size(0) * 784,         \
@@ -1171,7 +1224,7 @@ void append(TensorView k, TensorView v, TensorView cache, TensorView slots) {
     APPEND(false);
   }
 #undef APPEND
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA KV append launch failed";
+  finish_cuda_launch(stream, "append");
   record_variant(kAppend, vector);
 }
 
@@ -1254,9 +1307,10 @@ void convolution(TensorView x, TensorView weight, TensorView pool, TensorView id
       c == 10240 && x.stride(0) == 16384 && reinterpret_cast<uintptr_t>(weight.data_ptr()) % 8 == 0;
   for (auto input : {x, weight, ids, starts, sources, writes})
     model = model && disjoint_storage(pool, input);
+  auto stream = stream_for(x, "convolution");
   if (model) {
 #define MODEL_CONV(R)                                                                              \
-  model_convolution_kernel<R><<<dim3((n + R - 1) / R, 80), 128, 0, stream_for(x)>>>(               \
+  model_convolution_kernel<R><<<dim3((n + R - 1) / R, 80), 128, 0, stream>>>(                       \
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(weight.data_ptr()),                                       \
       static_cast<__nv_bfloat16 *>(pool.data_ptr()), ids.data_ptr(), starts.data_ptr(),            \
@@ -1271,12 +1325,12 @@ void convolution(TensorView x, TensorView weight, TensorView pool, TensorView id
       MODEL_CONV(1);
     }
 #undef MODEL_CONV
-    TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA model convolution launch failed";
+    finish_cuda_launch(stream, "convolution");
     record_variant(kConvolution, true);
     return;
   }
 #define CONV(R)                                                                                    \
-  convolution_kernel<R><<<dim3((n + R - 1) / R, (c + 127) / 128), 128, 0, stream_for(x)>>>(        \
+  convolution_kernel<R><<<dim3((n + R - 1) / R, (c + 127) / 128), 128, 0, stream>>>(                \
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(weight.data_ptr()),                                       \
       static_cast<__nv_bfloat16 *>(pool.data_ptr()), ids.data_ptr(), starts.data_ptr(),            \
@@ -1289,7 +1343,7 @@ void convolution(TensorView x, TensorView weight, TensorView pool, TensorView id
     CONV(1);
   }
 #undef CONV
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA convolution launch failed";
+  finish_cuda_launch(stream, "convolution");
   record_variant(kConvolution, false);
 }
 __device__ float warp_max(float value) {
@@ -1583,7 +1637,7 @@ attention_partial_kernel(const __nv_bfloat16 *__restrict__ query,
 template <typename Position>
 void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorView lengths,
                       TensorView starts, TensorView partial, TensorView lse, int64_t first,
-                      bool grouped) {
+                      bool grouped, cudaStream_t stream) {
   int h = q.size(1), hk = cache.size(3), splits = lse.size(2);
   int bq = grouped ? 32 : 16, bk = grouped ? 64 : 32;
   int tiles = ((grouped ? 5 : 1) * (h / hk) + bq - 1) / bq;
@@ -1597,7 +1651,7 @@ void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorV
   TVM_FFI_ICHECK(cudaFuncSetAttribute(attention_partial_kernel<M, G, Position, B>,                 \
                                       cudaFuncAttributeMaxDynamicSharedMemorySize,                 \
                                       shared_bytes) == cudaSuccess);                               \
-  attention_partial_kernel<M, G, Position, B><<<grid, 128, shared_bytes, stream_for(q)>>>(         \
+  attention_partial_kernel<M, G, Position, B><<<grid, 128, shared_bytes, stream>>>(                 \
       static_cast<const __nv_bfloat16 *>(q.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(cache.data_ptr()), tables.data_ptr(), lengths.data_ptr(), \
       starts.data_ptr(), static_cast<float *>(partial.data_ptr()),                                 \
@@ -1629,11 +1683,12 @@ void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorV
 void attention_partial(TensorView q, TensorView cache, TensorView tables, TensorView lengths,
                        TensorView starts, TensorView partial, TensorView lse, int64_t first,
                        bool grouped, bool position64) {
+  auto stream = stream_for(q, "attention_partial");
   if (position64)
-    launch_attention<int64_t>(q, cache, tables, lengths, starts, partial, lse, first, grouped);
+    launch_attention<int64_t>(q, cache, tables, lengths, starts, partial, lse, first, grouped, stream);
   else
-    launch_attention<int32_t>(q, cache, tables, lengths, starts, partial, lse, first, grouped);
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA attention partial launch failed";
+    launch_attention<int32_t>(q, cache, tables, lengths, starts, partial, lse, first, grouped, stream);
+  finish_cuda_launch(stream, "attention_partial");
 }
 template <int Splits>
 __global__ void attention_merge_kernel(const float *__restrict__ partial,
@@ -1671,8 +1726,9 @@ __global__ void attention_merge_kernel(const float *__restrict__ partial,
 }
 
 void attention_merge(TensorView partial, TensorView lse, TensorView out) {
+  auto stream = stream_for(out, "attention_merge");
 #define MERGE(S)                                                                                   \
-  attention_merge_kernel<S><<<lse.size(0) * lse.size(1), 128, 0, stream_for(out)>>>(               \
+  attention_merge_kernel<S><<<lse.size(0) * lse.size(1), 128, 0, stream>>>(                         \
       static_cast<const float *>(partial.data_ptr()), static_cast<const float *>(lse.data_ptr()),  \
       static_cast<__nv_bfloat16 *>(out.data_ptr()))
   if (lse.size(2) == 16) {
@@ -1684,5 +1740,5 @@ void attention_merge(TensorView partial, TensorView lse, TensorView out) {
     MERGE(128);
   }
 #undef MERGE
-  TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA attention merge launch failed";
+  finish_cuda_launch(stream, "attention_merge");
 }

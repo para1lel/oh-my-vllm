@@ -43,7 +43,15 @@ prof.export_chrome_trace("/tmp/oh-my-vllm-trace.json")
 
 ## 自定义 kernel
 
-TileFoundry 的静态成本/显存/roofline 分析是开发假设，不是测得的 kernel 时间。分析实际模型以定位吞吐/TTFT 差距。临时算子调优脚本和报告放在仓库外。正式测量审计 FlashInfer、Triton、TileLang 和 `TVM_FFI_CACHE_DIR` 的完整缓存树，包括文本产物；根目录未设置或不存在会令审计失败。修复后的审计尚未经新的完整 12 行采集验证。所有编译在正式重复测量前完成。kernel 故障在下一次主机同步时才暴露；用 `compute-sanitizer` 在缩小的用例上定位（审计 KRN-09）。
+TileFoundry 的静态成本/显存/roofline 分析是开发假设，不是测得的 kernel 时间。分析实际模型以定位吞吐/TTFT 差距。临时算子调优脚本和报告放在仓库外。正式测量审计 FlashInfer、Triton、TileLang 和 `TVM_FFI_CACHE_DIR` 的完整缓存树，包括文本产物；根目录未设置或不存在会令审计失败。修复后的审计尚未经新的完整 12 行采集验证。所有编译在正式重复测量前完成。默认 CUDA 路径用 `cudaPeekAtLastError` 检查各自有 kernel 的启动，不清除当前主机线程的 CUDA runtime 错误。此前的异步故障仍可能在此处或之后的主机同步中暴露；默认错误只标识观察点，不证明哪一个 kernel 出错。
+
+排查 KRN-09 故障时，在 Python 启动前同时设置以下两个变量，并使用新的 eager 进程：
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_CUDA_DEBUG_SYNC=1 OH_MY_VLLM_ENFORCE_EAGER=1 OH_MY_VLLM_KERNEL_BACKEND=cuda python -m tests.gpu_cuda_error_case eager
+```
+
+该诊断模式在每次自有 kernel 启动前检查现存错误并同步选中 stream，启动后再次检查和同步；CUDA Graph capture 会被拒绝。“先前”表示启动前观察到，“启动后”表示在后置检查中观察到。CUDA 同步也可能报告别处更早的异步故障，因此消息本身不能证明故障指令。要定位设备侧细节，对缩小的失败用例运行 `/usr/local/cuda-13.1/bin/compute-sanitizer --tool memcheck`。诊断输出放在 Git 仓库外，不得把 debug-sync 计时用于性能验收。参见 [CUDA 错误 API](https://docs.nvidia.com/cuda/cuda-runtime-api/cuda_runtime_api/group__CUDART__ERROR.html) 和 [CUDA Graph capture 规则](https://docs.nvidia.com/cuda/cuda-programming-guide/04-special-topics/cuda-graphs.html)。
 
 分页 decode 对 storage offset 未按 16 字节对齐的连续 BF16 cache view 通过克隆维持支持。
 每个进程的 `oh_my_vllm.kernels.decode_attention.unaligned_cache_clone_count()`
