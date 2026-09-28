@@ -190,8 +190,18 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   Rust workspace 58/38/26、`scripts/test.sh cpu` 203 项通过及 67 个 subtest
   （排除 181 项 GPU 用例），fmt、行宽、Ruff、Clippy 和 hooks 均通过。当前完整
   GPU 与 12 行框架门槛仍待验证。
+- 已独立复审的 `f4aacca` 通过线程安全的进程内累计计数、附带复制字节数的 2 的幂次
+  限频警告，关闭 KRN-07 未对齐 FA cache 克隆不可见的问题。保留未对齐 BF16 view
+  支持，克隆仍在，不声称提速。修改前在 B200 UUID
+  `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5` 上对 4,383,375,360 字节
+  clone 实测中位数 2.736096 ms（5 次预热、10 次测量），诊断日志为
+  `/tmp/oh-my-vllm-krn07-clone-baseline.log`。同一 UUID 上四项聚焦 B200 用例
+  通过，覆盖对齐/未对齐数值输出、累计次数及警告限频；无自有 GPU 进程残留。
+  CPU pytest 通过 203 项测试及 67 个 subtest（排除 182 项 GPU 用例）；Rust
+  workspace 58/38/26，fmt、行宽、Ruff、Clippy 和 hooks 均通过。当前完整 GPU/
+  正式算子及 12 行框架门槛仍待验证。
 
-后续工作：PY-03..07、SRV-08、KRN-06..10、
+后续工作：PY-03..07、SRV-08、KRN-06 与 KRN-08..10、
 EVD-07、四项未验证风险，以及当前完整算子/GPU 套件
 和 12 组框架验收。
 逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。

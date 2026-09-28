@@ -253,8 +253,20 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   states this limit. Rust workspace 58/38/26, `scripts/test.sh cpu` 203 passed
   and 67 subtests (181 GPU cases deselected), fmt, line width, Ruff, Clippy,
   and hooks passed. Current full GPU and 12-row framework gates remain pending.
+- Independently reviewed `f4aacca` closes KRN-07's silent misaligned FA-cache
+  clone by adding a thread-safe per-process fallback count and power-of-two
+  warnings with copied-byte size. It preserves unaligned BF16 view support;
+  the clone remains, so no speed gain is claimed. A pre-change diagnostic
+  clone of 4,383,375,360 bytes took median 2.736096 ms (five warmups, ten
+  samples) on B200 UUID `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5`, log
+  `/tmp/oh-my-vllm-krn07-clone-baseline.log`. Four focused B200 cases passed
+  on the same UUID, covering aligned/misaligned numerical output, cumulative
+  calls, and warning throttling; no owned GPU process remains. CPU pytest
+  passed 203 tests and 67 subtests (182 GPU cases deselected); Rust workspace
+  58/38/26, fmt, line width, Ruff, Clippy, and hooks passed. Current full
+  GPU/formal operator and 12-row framework gates remain pending.
 
-Remaining work: PY-03..07, SRV-08, KRN-06..10,
+Remaining work: PY-03..07, SRV-08, KRN-06 and KRN-08..10,
 EVD-07, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
