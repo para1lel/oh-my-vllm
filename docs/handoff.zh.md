@@ -76,9 +76,18 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   workspace 通过 56/26/17 项，格式、行宽、Ruff、Clippy 与 hooks 通过。
   独立复审通过。三个未调用的冻结 TileLang 包装器因其哈希定义历史对照而有意保留；
   生产和正式 harness 均未调用。此变更尚未运行当前 GPU 套件或 12 行框架测试。
+- `6da6427` 通过已复审源码关闭 EVD-03/08/10：`scripts/test.sh` 是有文档说明的
+  CPU/full pytest 统一入口，GPU 用例有显式 marker；脚本化 worker 跟踪 FA/GDN
+  归属，HTTP 取消回归要求替代请求跨越位置 784、实际占满四块可分配共享 Rust 池并
+  完成，以证明真实池容量可复用；正式 fixture 使用旧种子 784 的局部 CUDA generator。
+  `scripts/test.sh cpu` 通过 143 项测试和 67 个子测试（排除 112 项 GPU 用例）；
+  Rust workspace 通过 56/26/17 项，fmt、行宽、Ruff、Clippy 和 hooks 均清洁。
+  B200 聚焦 RNG 测试在 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上
+  1/1 通过；日志：`/tmp/oh-my-vllm-evd10-fixture-smoke.log`。自有 GPU 进程已退出。
+  当前完整 GPU 套件、正式算子矩阵和 12 行框架采集仍待运行。
 
 后续工作：PY-03..07、SRV-08..10、SCH-06/07、KRN-06..10、
-EVD-03..05/07..10、MNT-01..03、四项未验证风险，以及当前完整算子/GPU 套件
+EVD-04/05/07/09、MNT-01..03、四项未验证风险，以及当前完整算子/GPU 套件
 和 12 组框架验收。
 逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。
 

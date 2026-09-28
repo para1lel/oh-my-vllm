@@ -91,9 +91,22 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   intentionally because their hashes define the historical comparison; the
   production and formal harness do not call them. No current GPU suite or
   12-row framework run is claimed for this change.
+- `6da6427` closes EVD-03/08/10 in reviewed source: `scripts/test.sh` is the
+  documented CPU/full pytest entry point with explicit GPU markers; the
+  scripted worker tracks FA/GDN ownership, and an HTTP cancellation test
+  proves real Rust shared-pool reuse by completing a replacement request
+  that occupies all four allocatable blocks across position 784; formal
+  fixtures use a local CUDA generator at the old seed 784. `scripts/test.sh cpu`
+  passed 143 tests and 67 subtests (112 GPU cases deselected); Rust workspace
+  passed 56/26/17, with fmt, line width, Ruff, Clippy and hooks clean. The
+  focused B200 RNG test passed 1/1 on UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`; log:
+  `/tmp/oh-my-vllm-evd10-fixture-smoke.log`. The owned GPU process exited.
+  The full current GPU suite, formal operator matrix and 12-row framework
+  collection remain pending.
 
 Remaining work: PY-03..07, SRV-08..10, SCH-06/07, KRN-06..10,
-EVD-03..05/07..10, MNT-01..03, the four unverified risks, and current
+EVD-04/05/07/09, MNT-01..03, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
 
