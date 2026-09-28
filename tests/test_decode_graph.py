@@ -35,6 +35,82 @@ class ToyModel:
 @unittest.skipUnless(torch.cuda.is_available(), "requires CUDA")
 class DecodeGraphTest(unittest.TestCase):
     @torch.inference_mode()
+    def test_shared_draft_pool_copies_previous_hidden_before_other_replay(self):
+        cache = torch.zeros(4, 2, 784, 1, 1, device="cuda")
+        pool = torch.cuda.graph_pool_handle()
+
+        def capture(extent, position):
+            tokens = torch.tensor([3], device="cuda")
+            hidden = torch.tensor([[10.0]], device="cuda")
+            batch = AttentionBatch(
+                torch.tensor([position], device="cuda"),
+                torch.tensor([784 + position], device="cuda"),
+                None,
+            )
+            tables = torch.tensor([[1]], device="cuda")
+            graph = DraftGraph(
+                ToyModel(), cache, tokens, hidden, batch, tables, extent, pool=pool
+            )
+            return graph, tokens, hidden, batch, tables
+
+        first = capture(784, 7)
+        second = capture(1568, 8)
+        output = first[0].replay(*first[1:])
+        # The copy into second.input_hidden is queued before second.graph.replay.
+        # A Python reference to first's output alone would not enforce this.
+        output = second[0].replay(second[1], output, second[3], second[4])
+        output = first[0].replay(first[1], output, first[3], first[4])
+        # No host read/sync is allowed between the three replays.
+        torch.testing.assert_close(output, torch.tensor([[44.0]], device="cuda"))
+        assert cache[1, 0, 7].item() == 43
+        assert cache[1, 0, 8].item() == 32
+
+    @torch.inference_mode()
+    def test_shared_target_pool_keeps_live_outputs_across_reverse_replay(self):
+        class Model:
+            def forward(self, tokens, batch, caches):
+                return tokens[:, None].float() + batch.positions[:, None]
+
+            def logits(self, hidden):
+                return hidden * 2
+
+        def capture(count, pool):
+            tokens = torch.full((count,), count, device="cuda")
+            positions = torch.arange(count, device="cuda")
+            batch = Batch(
+                positions=positions,
+                fa_slots=torch.zeros(count, device="cuda", dtype=torch.int64),
+                attention=None,
+                starts=torch.arange(count + 1, device="cuda", dtype=torch.int32),
+                sequence_ids=torch.arange(count, device="cuda"),
+                state_reads=torch.zeros(count, device="cuda", dtype=torch.int64),
+                state_writes=torch.full((count,), -1, device="cuda"),
+                final_state_writes=torch.full((count,), -1, device="cuda"),
+                prefill_sequences=0,
+                prefill_tokens=0,
+            )
+            tables = torch.ones((count, 1), device="cuda", dtype=torch.int32)
+            graph = DecodeGraph(Model(), [], tokens, batch, tables, 784, pool=pool)
+            return graph, tokens, batch, tables
+
+        pool = torch.cuda.graph_pool_handle()
+        one = capture(1, pool)
+        two = capture(2, pool)
+        hidden_one, logits_one = one[0].replay(*one[1:])
+        saved_one = hidden_one.clone(), logits_one.clone()
+        hidden_two, logits_two = two[0].replay(*two[1:])
+        # A saved output can be read after a different graph replays. The
+        # original static output is not promised to remain untouched.
+        torch.testing.assert_close(saved_one[0], torch.tensor([[1.0]], device="cuda"))
+        torch.testing.assert_close(saved_one[1], saved_one[0] * 2)
+        torch.testing.assert_close(
+            hidden_two, torch.tensor([[2.0], [3.0]], device="cuda")
+        )
+        torch.testing.assert_close(logits_two, hidden_two * 2)
+        hidden_one, _ = one[0].replay(*one[1:])
+        torch.testing.assert_close(hidden_one, saved_one[0], rtol=0, atol=0)
+
+    @torch.inference_mode()
     def test_target_replay_copies_compact_expanded_page_tables(self):
         class TableModel:
             def forward(self, tokens, batch, caches):

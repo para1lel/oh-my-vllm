@@ -116,6 +116,9 @@ class OhMyVllmWorker:
             self.caches.append(cache)
         self.attention = PagedAttention()
         self.graphs = {}
+        # Target outputs feed MTP before the next target replay. Keep target
+        # capture scratch separate from the draft and proposal graph families.
+        self.graph_pool = None
         from oh_my_vllm.worker.mtp import MTP
 
         self.mtp = (
@@ -310,11 +313,19 @@ class OhMyVllmWorker:
                 device="cuda",
             )
             if key not in self.graphs:
+                if self.graph_pool is None:
+                    self.graph_pool = torch.cuda.graph_pool_handle()
                 logger.info(
                     "Capture target graph: tokens=%d requests=%d extent=%d", *key
                 )
                 self.graphs[key] = DecodeGraph(
-                    self.model, self.caches, token_tensor, batch, tables, extent
+                    self.model,
+                    self.caches,
+                    token_tensor,
+                    batch,
+                    tables,
+                    extent,
+                    pool=self.graph_pool,
                 )
             hidden, graph_logits = self.graphs[key].replay(token_tensor, batch, tables)
         if graph_logits is None:

@@ -42,6 +42,10 @@ class MTP:
         self.next_position: dict[int, int] = {}
         self.graphs = {}
         self.chains = {}
+        # Draft hidden states feed proposals. These families must not share a
+        # private pool even though captures within each family may share one.
+        self.draft_graph_pool = None
+        self.proposal_graph_pool = None
 
     def forget(self, request_id: int) -> None:
         self.next_position.pop(request_id, None)
@@ -96,6 +100,8 @@ class MTP:
                     else None
                 )
                 if key not in self.graphs:
+                    if self.draft_graph_pool is None and self.device.type == "cuda":
+                        self.draft_graph_pool = torch.cuda.graph_pool_handle()
                     logger.info("Capture draft graph: %s", key)
                     self.graphs[key] = DraftGraph(
                         self.model,
@@ -106,6 +112,7 @@ class MTP:
                         tables_tensor,
                         extent,
                         starts_tensor,
+                        pool=self.draft_graph_pool,
                     )
                 return self.graphs[key].replay(
                     token_tensor, hidden, batch, tables_tensor, starts_tensor
@@ -138,9 +145,17 @@ class MTP:
         )
         positions = device_tensor([p for _, _, p, _ in eligible], device=self.device)
         if key not in self.chains:
+            if self.proposal_graph_pool is None:
+                self.proposal_graph_pool = torch.cuda.graph_pool_handle()
             logger.info("Capture proposal graph: %s", key)
             self.chains[key] = ProposalGraph(
-                self.model, self.cache, hidden, positions, tables, extent
+                self.model,
+                self.cache,
+                hidden,
+                positions,
+                tables,
+                extent,
+                pool=self.proposal_graph_pool,
             )
         return self.chains[key].replay(hidden, positions, tables).tolist()
 

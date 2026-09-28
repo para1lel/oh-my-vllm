@@ -74,3 +74,27 @@ def test_proposal_capture_dynamic_tables_and_allocator_reuse():
         torch.testing.assert_close(actual.cpu(), reference_tokens(hidden, positions))
         torch.testing.assert_close(cache, expected_cache, rtol=0, atol=0)
     assert pressure[0][0].item() == 99999
+
+
+@torch.inference_mode()
+def test_shared_proposal_pool_consumes_output_before_other_replay():
+    model = ToyProposal()
+    cache = torch.zeros(5, 2, 784, 1, 1, device="cuda")
+    pool = torch.cuda.graph_pool_handle()
+
+    def capture(extent, positions):
+        hidden = torch.tensor([[1.0, 3.0, 2.0]], device="cuda")
+        positions = torch.tensor(positions, device="cuda")
+        tables = torch.tensor([[1, 3]], device="cuda")
+        graph = ProposalGraph(
+            model, cache, hidden, positions, tables, extent, pool=pool
+        )
+        return graph, hidden, positions, tables
+
+    first = capture(1568, [779])
+    second = capture(2352, [780])
+    for graph, hidden, positions, tables in (second, first, second):
+        expected = reference_tokens(hidden, positions)
+        # This transfer consumes the first result before the next graph replay.
+        actual = graph.replay(hidden, positions, tables).tolist()
+        assert actual == expected.tolist()

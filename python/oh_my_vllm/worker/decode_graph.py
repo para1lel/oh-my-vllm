@@ -92,6 +92,7 @@ class DecodeGraph:
         batch: Batch,
         tables: torch.Tensor,
         extent: int,
+        pool=None,
     ) -> None:
         if batch.prefill_sequences:
             raise ValueError("decode graphs cannot capture prefill")
@@ -142,7 +143,7 @@ class DecodeGraph:
             run()
             restore()
             torch.cuda.synchronize()
-            with torch.cuda.graph(self.graph):
+            with torch.cuda.graph(self.graph, pool=pool):
                 self.hidden, self.logits = run()
         finally:
             restore()
@@ -166,7 +167,16 @@ class DraftGraph:
 
     @torch.inference_mode()
     def __init__(
-        self, model, cache, tokens, hidden, batch, tables, extent, starts=None
+        self,
+        model,
+        cache,
+        tokens,
+        hidden,
+        batch,
+        tables,
+        extent,
+        starts=None,
+        pool=None,
     ):
         self.tokens, self.input_hidden = tokens.clone(), hidden.clone()
         self.attention = DecodeAttention(tables.clone(), batch.positions + 1, extent)
@@ -187,7 +197,7 @@ class DraftGraph:
             run()
             cache[pages, :, offsets] = saved
             torch.cuda.synchronize()
-            with torch.cuda.graph(self.graph):
+            with torch.cuda.graph(self.graph, pool=pool):
                 self.hidden = run()
         finally:
             cache[pages, :, offsets] = saved
@@ -196,6 +206,8 @@ class DraftGraph:
         if self.attention.starts is not None:
             self.attention.starts.copy_(starts)
         self.tokens.copy_(tokens)
+        # The prior draft graph's output may share this family's pool. Queue its
+        # copy on the replay stream before this graph can overwrite that pool.
         self.input_hidden.copy_(hidden)
         self.batch.positions.copy_(batch.positions)
         self.batch.fa_slots.copy_(batch.fa_slots)
@@ -209,7 +221,7 @@ class ProposalGraph:
     """Four greedy proposals with no intermediate device-to-host synchronization."""
 
     @torch.inference_mode()
-    def __init__(self, model, cache, hidden, positions, tables, extent):
+    def __init__(self, model, cache, hidden, positions, tables, extent, pool=None):
         self.model, self.cache = model, cache
         self.hidden = hidden.clone()
         self.positions = positions.clone()
@@ -242,7 +254,7 @@ class ProposalGraph:
             run()
             cache[pages, :, offsets] = saved
             torch.cuda.synchronize()
-            with torch.cuda.graph(self.graph):
+            with torch.cuda.graph(self.graph, pool=pool):
                 self.tokens = run()
         finally:
             cache[pages, :, offsets] = saved
