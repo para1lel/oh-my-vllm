@@ -240,8 +240,21 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   cases deselected), fmt, line width, Ruff, Clippy, and hooks passed. This
   policy repair has no local speed claim; current 12-row framework acceptance
   remains pending.
+- Independently reviewed `b1761e9` closes SRV-10's step-counted SSE loss.
+  A full 256-event channel pauses only its request and starts a 30-second grace;
+  a 1,024-event/8-MiB FIFO preserves pending and final events, and generation
+  resumes after the pending queue clears with at least 128 free channel slots.
+  A real CPU HTTP test stopped reading, observed more than 256 worker steps
+  and a stable pause before 750, completed another request while the stream
+  was paused, and then received content sequence 1–750 and `[DONE]` in order.
+  Rust tests cover grace timing, low-water behavior, capacity, disconnect,
+  final drain, and detached drain task exit. A single in-flight prepare/execute
+  RPC can delay the 30-second check by its own timeout; serving documentation
+  states this limit. Rust workspace 58/38/26, `scripts/test.sh cpu` 203 passed
+  and 67 subtests (181 GPU cases deselected), fmt, line width, Ruff, Clippy,
+  and hooks passed. Current full GPU and 12-row framework gates remain pending.
 
-Remaining work: PY-03..07, SRV-08/10, KRN-06..10,
+Remaining work: PY-03..07, SRV-08, KRN-06..10,
 EVD-07, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
