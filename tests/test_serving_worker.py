@@ -1,6 +1,8 @@
 """CPU regressions on the actual tokenizer and XGrammar speculative-mask path."""
 
 import copy
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -72,6 +74,61 @@ class ServingTests(unittest.TestCase):
         ]
         self.assertEqual("".join(parts), "北京")
         self.assertEqual(generation.finished, "stop")
+
+    def test_background_compiler_and_tokenizer_with_live_decode(self):
+        from oh_my_vllm.worker.serving import Generation
+
+        self.prepare()
+        started = threading.Event()
+        errors = []
+        generated = []
+
+        def prepare_many():
+            try:
+                started.set()
+                for value in range(16):
+                    request = {
+                        "messages": [{"role": "user", "content": "Return an object."}],
+                        "tools": [],
+                        "effort": "off",
+                        "max_tokens": 16,
+                        "format": {
+                            "type": "json_schema",
+                            "schema": {
+                                "type": "object",
+                                "properties": {"n": {"const": value}},
+                                "required": ["n"],
+                            },
+                        },
+                    }
+                    _, _, generation = self.adapter.prepare_inputs(request)
+                    generated.append((value, generation))
+            except Exception as exc:
+                errors.append(exc)
+
+        background = threading.Thread(target=prepare_many, daemon=True)
+        background.start()
+        self.assertTrue(started.wait(1))
+        decoder = Generation(None, 1024, [], set())
+        token = self.adapter.tokenizer.encode("x", add_special_tokens=False)
+        progressed = 0
+        deadline = time.monotonic() + 10
+        while background.is_alive() and time.monotonic() < deadline:
+            self.adapter.masks({1: []})
+            decoder.consume(token, self.adapter.tokenizer)
+            progressed += 1
+        background.join(0.1)
+        self.assertFalse(background.is_alive(), "CPU preparation deadlocked")
+        self.assertFalse(errors, errors)
+        self.assertGreater(progressed, 0)
+        value, generation = generated[-1]
+        self.adapter.generations[9] = generation
+        self.assertIsNotNone(self.adapter.masks({9: []}))
+        ids = self.adapter.tokenizer.encode(
+            f'{{"n":{value}}}', add_special_tokens=False
+        )
+        _, text = generation.consume([*ids, 248046], self.adapter.tokenizer)
+        self.assertEqual(text, f'{{"n":{value}}}')
 
     def test_sampling_fields_and_invalid_parameters(self):
         _, params = self.prepare(

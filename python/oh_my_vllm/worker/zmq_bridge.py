@@ -48,8 +48,12 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import queue
+import threading
 import time
 import traceback
+from contextlib import suppress
+from dataclasses import dataclass
 
 import msgpack
 import zmq
@@ -60,6 +64,75 @@ from oh_my_vllm.worker.protocol import ScheduledRequest, SchedulerOutput, Worker
 from oh_my_vllm.worker.serving import RequestValidationError
 
 logger = logging.getLogger("oh_my_vllm.worker.zmq_bridge")
+
+
+@dataclass
+class _PrepareJob:
+    rpc_id: int
+    request_id: int
+    request: dict
+
+
+class _PrepareExecutor:
+    """One daemon CPU preparer; only the bridge thread owns live worker state."""
+
+    def __init__(self, adapter):
+        self.adapter = adapter
+        self.condition = threading.Condition()
+        self.queued: _PrepareJob | None = None
+        self.running_id: int | None = None
+        self.stopping = False
+        self.completed = queue.SimpleQueue()
+        self.read_fd, self.write_fd = os.pipe2(os.O_NONBLOCK | os.O_CLOEXEC)
+        self.thread = threading.Thread(
+            target=self._run, name="oh-my-vllm-prepare", daemon=True
+        )
+        self.thread.start()
+
+    def submit(self, job: _PrepareJob) -> bool:
+        with self.condition:
+            if self.stopping or self.queued is not None:
+                return False
+            self.queued = job
+            self.condition.notify()
+            return True
+
+    def cancel_queued(self, request_id: int) -> bool:
+        with self.condition:
+            if self.queued is None or self.queued.request_id != request_id:
+                return False
+            self.queued = None
+            return True
+
+    def _run(self):
+        while True:
+            with self.condition:
+                while self.queued is None and not self.stopping:
+                    self.condition.wait()
+                if self.stopping:
+                    return
+                job = self.queued
+                self.queued = None
+                self.running_id = job.request_id
+            try:
+                result = self.adapter.prepare_inputs(job.request)
+                reply = (job, result, None)
+            except Exception as exc:
+                reply = (job, None, exc)
+            with self.condition:
+                self.running_id = None
+            self.completed.put(reply)
+            # A full pipe remains readable; shutdown may have closed it.
+            with suppress(BlockingIOError, OSError):
+                os.write(self.write_fd, b"x")
+
+    def close(self):
+        with self.condition:
+            self.stopping = True
+            self.queued = None
+            self.condition.notify()
+        os.close(self.read_fd)
+        os.close(self.write_fd)
 
 
 # ---------------------------------------------------------------------------
@@ -124,23 +197,91 @@ def serve(socket_addr: str) -> None:
     ctx = zmq.Context()
     sock = ctx.socket(zmq.DEALER)
     sock.connect(socket_addr)
-    # 5-second receive timeout so we can check if the parent process is still
-    # alive and exit cleanly instead of blocking forever when the Rust side
-    # crashes without sending a shutdown message.
-    sock.RCVTIMEO = 5000
+    poller = zmq.Poller()
+    poller.register(sock, zmq.POLLIN)
     parent_pid = os.getppid()
 
     worker: OhMyVllmWorker | None = None
+    preparer: _PrepareExecutor | None = None
+    preparing: set[int] = set()
+    cancelled: set[int] = set()
+
+    def send(reply: dict) -> None:
+        sock.send(msgpack.packb(reply, use_bin_type=True))
+
+    def drain_prepared() -> None:
+        if preparer is None:
+            return
+        while True:
+            try:
+                os.read(preparer.read_fd, 4096)
+            except BlockingIOError:
+                break
+        while True:
+            try:
+                job, result, error = preparer.completed.get_nowait()
+            except queue.Empty:
+                break
+            request_id = job.request_id
+            preparing.discard(request_id)
+            if request_id in cancelled:
+                cancelled.discard(request_id)
+                continue
+            if error is not None:
+                if not isinstance(error, RequestValidationError):
+                    logger.error("prepare failed for request %s: %s", request_id, error)
+                send(
+                    {
+                        "type": "error",
+                        "rpc_id": job.rpc_id,
+                        "kind": (
+                            "validation"
+                            if isinstance(error, RequestValidationError)
+                            else "internal"
+                        ),
+                        "message": str(error),
+                    }
+                )
+                continue
+            registered = False
+            try:
+                ids, params, generation = result
+                worker.register_request(request_id, ids, params)
+                registered = True
+                worker.serving.generations[request_id] = generation
+                send(
+                    {
+                        "type": "prepared",
+                        "rpc_id": job.rpc_id,
+                        "prompt_token_ids": ids,
+                    }
+                )
+            except Exception as exc:
+                if registered:
+                    worker.unregister_request(request_id)
+                logger.exception(
+                    "prepare registration failed for request %s", request_id
+                )
+                send(
+                    {
+                        "type": "error",
+                        "rpc_id": job.rpc_id,
+                        "kind": "internal",
+                        "message": str(exc),
+                    }
+                )
 
     try:
         while True:
-            try:
-                raw = sock.recv()
-            except zmq.Again:
+            events = dict(poller.poll(5000))
+            if preparer is not None and preparer.read_fd in events:
+                drain_prepared()
+            if sock not in events:
                 if os.getppid() != parent_pid:
                     logger.info("Parent process died, exiting")
                     break
                 continue
+            raw = sock.recv()
             msg = msgpack.unpackb(raw, raw=False)
             msg_type = msg.get("type")
 
@@ -169,41 +310,47 @@ def serve(socket_addr: str) -> None:
                     )
 
             elif msg_type == "prepare":
-                existed = worker is not None and msg["request_id"] in worker.histories
+                request_id = msg["request_id"]
                 try:
                     if worker is None:
                         raise RuntimeError("worker not initialised")
-                    if msg["request_id"] in worker.histories:
-                        reply = {
-                            "type": "error",
-                            "kind": "internal",
-                            "message": "duplicate request_id",
-                        }
-                    else:
-                        ids = worker.prepare_request(msg["request_id"], msg["request"])
-                        reply = {"type": "prepared", "prompt_token_ids": ids}
-                except RequestValidationError as exc:
-                    if worker is not None and not existed:
-                        worker.unregister_request(msg["request_id"])
-                    reply = {
-                        "type": "error",
-                        "kind": "validation",
-                        "message": str(exc),
-                    }
+                    if request_id in worker.histories or request_id in preparing:
+                        raise RuntimeError("duplicate request_id")
+                    if preparer is None:
+                        if worker.serving is None:
+                            from oh_my_vllm.worker.serving import ServingAdapter
+
+                            worker.serving = ServingAdapter(
+                                worker.config.model, 248320, worker.config.max_model_len
+                            )
+                        preparer = _PrepareExecutor(worker.serving)
+                        poller.register(preparer.read_fd, zmq.POLLIN)
+                    if not preparer.submit(
+                        _PrepareJob(msg["rpc_id"], request_id, msg["request"])
+                    ):
+                        raise RuntimeError("prepare queue is full")
+                    preparing.add(request_id)
                 except Exception as exc:
-                    if worker is not None and not existed:
-                        worker.unregister_request(msg["request_id"])
-                    logger.exception("prepare failed for request %s", msg["request_id"])
-                    reply = {
-                        "type": "error",
-                        "kind": "internal",
-                        "message": str(exc),
-                    }
-                reply["rpc_id"] = msg["rpc_id"]
-                sock.send(msgpack.packb(reply, use_bin_type=True))
+                    logger.exception(
+                        "prepare dispatch failed for request %s", request_id
+                    )
+                    send(
+                        {
+                            "type": "error",
+                            "rpc_id": msg["rpc_id"],
+                            "kind": "internal",
+                            "message": str(exc),
+                        }
+                    )
 
             elif msg_type == "register":
                 if worker is None:
+                    continue
+                if msg["request_id"] in preparing:
+                    logger.warning(
+                        "register rejected during prepare for request %s",
+                        msg["request_id"],
+                    )
                     continue
                 try:
                     worker.register_request(
@@ -260,11 +407,20 @@ def serve(socket_addr: str) -> None:
                     )
 
             elif msg_type == "abort":
+                request_id = msg["request_id"]
+                if request_id in preparing:
+                    if preparer is not None and preparer.cancel_queued(request_id):
+                        preparing.remove(request_id)
+                    else:
+                        cancelled.add(request_id)
                 if worker is not None:
-                    worker.unregister_request(msg["request_id"])
+                    worker.unregister_request(request_id)
 
             elif msg_type == "shutdown":
                 logger.info("Shutdown received")
+                if preparer is not None:
+                    preparer.close()
+                    preparer = None
                 if worker is not None:
                     worker.shutdown()
                 break
@@ -273,6 +429,8 @@ def serve(socket_addr: str) -> None:
                 logger.warning("Unknown message type: %s", msg_type)
 
     finally:
+        if preparer is not None:
+            preparer.close()
         sock.close()
         ctx.term()
 

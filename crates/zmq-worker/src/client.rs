@@ -3,6 +3,7 @@
 //! `WorkerClient` owns the ZMQ DEALER socket and the Python child process.
 //! The scheduler calls `execute_one_step` once per inference step.
 
+use std::collections::BTreeSet;
 #[cfg(target_os = "linux")]
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -11,10 +12,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use oh_my_vllm_scheduler::output::{RequestOutput, ScheduledRequest, WorkerOutput};
+use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 use zeromq::prelude::{Socket, SocketRecv, SocketSend};
-use zeromq::{DealerSocket, ZmqMessage};
+use zeromq::{DealerSendHalf, DealerSocket, ZmqMessage};
 
 use crate::error::{Error, Result};
 use crate::protocol::{
@@ -67,15 +70,27 @@ impl Default for WorkerConfig {
 
 /// Handle to the running Python model worker.
 pub struct WorkerClient {
-    sock: DealerSocket,
+    sock: DealerSendHalf,
+    inbox: mpsc::Receiver<Result<crate::protocol::PythonMessage>>,
+    reader: JoinHandle<()>,
     _child: ManagedChild,
     step_id: u64,
     rpc_id: u64,
+    pending_prepare: Option<(u64, u64)>,
+    last_prepare: Option<(u64, u64)>,
+    cancelled_prepares: BTreeSet<u64>,
+    prepared_reply: Option<crate::protocol::PythonMessage>,
     serving_enabled: bool,
     pub logical_num_blocks: u32,
     pub mamba_blocks: u32,
     pub serving_outputs: std::collections::BTreeMap<u64, (String, Option<String>, usize)>,
     pub serving_errors: std::collections::BTreeMap<u64, String>,
+}
+
+impl Drop for WorkerClient {
+    fn drop(&mut self) {
+        self.reader.abort();
+    }
 }
 
 /// Reap the owned worker on errors as well as normal shutdown.
@@ -224,11 +239,28 @@ impl WorkerClient {
             }
         };
 
+        let (send, mut receive) = sock.split();
+        let (inbox_tx, inbox) = mpsc::channel(16);
+        let reader = tokio::spawn(async move {
+            loop {
+                let reply = Self::recv_raw(&mut receive).await;
+                let failed = reply.is_err();
+                if inbox_tx.send(reply).await.is_err() || failed {
+                    break;
+                }
+            }
+        });
         Ok(Self {
-            sock,
+            sock: send,
+            inbox,
+            reader,
             _child: child,
             step_id: 0,
             rpc_id: 0,
+            pending_prepare: None,
+            last_prepare: None,
+            cancelled_prepares: BTreeSet::new(),
+            prepared_reply: None,
             serving_enabled: false,
             logical_num_blocks,
             mamba_blocks,
@@ -256,23 +288,47 @@ impl WorkerClient {
     }
 
     /// Release state from a prepare whose HTTP caller timed out or disconnected.
-    pub async fn cancel_prepare(&mut self, request_id: u64) {
+    pub async fn cancel_prepare(&mut self, request_id: u64) -> Result<()> {
         let msg = RustMessage::Abort(AbortMsg { request_id });
-        if let Err(error) = Self::send_raw(&mut self.sock, &msg).await {
-            warn!(request_id, "prepare cancellation send failed: {error}");
+        timeout(Duration::from_secs(1), Self::send_raw(&mut self.sock, &msg))
+            .await
+            .map_err(|_| Error::Timeout)??;
+        if let Some((id, rpc_id)) = self.last_prepare
+            && id == request_id
+        {
+            if self.prepared_reply.is_none() {
+                self.cancelled_prepares.insert(rpc_id);
+                // An evicted late reply fails closed instead of contaminating
+                // a newer RPC; cancellation history cannot grow without bound.
+                if self.cancelled_prepares.len() > 1024 {
+                    self.cancelled_prepares.pop_first();
+                }
+            }
+            self.last_prepare = None;
         }
+        if self.pending_prepare.is_some_and(|(id, _)| id == request_id) {
+            self.pending_prepare = None;
+            self.prepared_reply = None;
+        }
+        Ok(())
     }
 
-    /// Prepare model input and sampling before Rust admission. The reply is correlated
-    /// by the single-owner, sequential RPC stream.
-    pub async fn prepare_request(
+    /// Start one CPU preparation while inference steps continue on this connection.
+    pub async fn begin_prepare_request(
         &mut self,
         request_id: u64,
         request: serde_json::Value,
-    ) -> Result<Vec<u32>> {
+    ) -> Result<()> {
+        if self.pending_prepare.is_some() {
+            return Err(Error::UnexpectedMessageType(
+                "a preparation is already in flight".to_owned(),
+            ));
+        }
         self.serving_enabled = true;
         self.rpc_id += 1;
         let rpc_id = self.rpc_id;
+        // Record the ID before send: a send timeout may race with delivery.
+        self.last_prepare = Some((request_id, rpc_id));
         Self::send_raw(
             &mut self.sock,
             &RustMessage::Prepare {
@@ -282,7 +338,62 @@ impl WorkerClient {
             },
         )
         .await?;
-        match self.recv_for(rpc_id).await? {
+        self.pending_prepare = Some((request_id, rpc_id));
+        Ok(())
+    }
+
+    /// Poll the outstanding preparation without holding up an active stream.
+    pub fn poll_prepare_request(&mut self) -> Result<Option<Result<Vec<u32>>>> {
+        let Some((_, rpc_id)) = self.pending_prepare else {
+            return Ok(None);
+        };
+        let reply = if let Some(reply) = self.prepared_reply.take() {
+            reply
+        } else {
+            match self.inbox.try_recv() {
+                Ok(reply) => {
+                    let reply = reply?;
+                    let received = match &reply {
+                        crate::protocol::PythonMessage::Prepared { rpc_id, .. } => *rpc_id,
+                        crate::protocol::PythonMessage::ExecuteResult(result) => result.rpc_id,
+                        crate::protocol::PythonMessage::Error(error) => error.rpc_id,
+                        other => {
+                            return Err(Error::UnexpectedMessageType(format!("{other:?}")));
+                        }
+                    };
+                    if received < rpc_id {
+                        if matches!(
+                            reply,
+                            crate::protocol::PythonMessage::Prepared { .. }
+                                | crate::protocol::PythonMessage::Error(_)
+                        ) && self.cancelled_prepares.remove(&received)
+                        {
+                            warn!(received, rpc_id, "discarding reply to cancelled RPC");
+                            return Ok(None);
+                        }
+                        return Err(Error::UnexpectedMessageType(format!(
+                            "unsolicited stale RPC reply {received} while waiting for {rpc_id}"
+                        )));
+                    }
+                    if received != rpc_id {
+                        return Err(Error::UnexpectedMessageType(format!(
+                            "future RPC reply {received} while waiting for {rpc_id}"
+                        )));
+                    }
+                    reply
+                }
+                Err(mpsc::error::TryRecvError::Empty) => {
+                    if self._child.child().try_wait()?.is_some() {
+                        return Err(Error::WorkerDied);
+                    }
+                    return Ok(None);
+                }
+                Err(mpsc::error::TryRecvError::Disconnected) => return Err(Error::WorkerDied),
+            }
+        };
+        self.pending_prepare = None;
+        self.last_prepare = None;
+        let result = match reply {
             crate::protocol::PythonMessage::Prepared {
                 prompt_token_ids, ..
             } => Ok(prompt_token_ids),
@@ -293,8 +404,13 @@ impl WorkerClient {
                     Err(Error::WorkerError(e.message))
                 }
             }
-            other => Err(Error::UnexpectedMessageType(format!("{other:?}"))),
-        }
+            other => {
+                return Err(Error::UnexpectedMessageType(format!(
+                    "wrong preparation reply type: {other:?}"
+                )));
+            }
+        };
+        Ok(Some(result))
     }
 
     /// Execute one inference step and return per-request next tokens.
@@ -412,8 +528,13 @@ impl WorkerClient {
     // ── internal helpers ──────────────────────────────────────────────────────
 
     async fn recv_for(&mut self, expected: u64) -> Result<crate::protocol::PythonMessage> {
+        if self.pending_prepare.is_some_and(|(_, id)| id == expected)
+            && let Some(reply) = self.prepared_reply.take()
+        {
+            return Ok(reply);
+        }
         loop {
-            let reply = Self::recv_with_child(&mut self.sock, &mut self._child).await?;
+            let reply = self.recv_reply().await?;
             let received = match &reply {
                 crate::protocol::PythonMessage::Prepared { rpc_id, .. } => *rpc_id,
                 crate::protocol::PythonMessage::ExecuteResult(result) => result.rpc_id,
@@ -423,6 +544,21 @@ impl WorkerClient {
                 }
             };
             if received == expected {
+                let valid = match &reply {
+                    crate::protocol::PythonMessage::Prepared { .. } => {
+                        self.pending_prepare.is_some_and(|(_, id)| id == expected)
+                    }
+                    crate::protocol::PythonMessage::ExecuteResult(_) => {
+                        self.pending_prepare.is_none_or(|(_, id)| id != expected)
+                    }
+                    crate::protocol::PythonMessage::Error(_) => true,
+                    _ => false,
+                };
+                if !valid {
+                    return Err(Error::UnexpectedMessageType(format!(
+                        "wrong reply type for RPC {expected}: {reply:?}"
+                    )));
+                }
                 return Ok(reply);
             }
             if received > expected {
@@ -430,11 +566,42 @@ impl WorkerClient {
                     "future RPC reply {received} while waiting for {expected}"
                 )));
             }
-            warn!(received, expected, "discarding reply to cancelled RPC");
+            if self.pending_prepare.is_some_and(|(_, id)| id == received) {
+                if self.prepared_reply.is_some() {
+                    return Err(Error::UnexpectedMessageType(format!(
+                        "duplicate preparation reply for RPC {received}"
+                    )));
+                }
+                if !matches!(
+                    reply,
+                    crate::protocol::PythonMessage::Prepared { .. }
+                        | crate::protocol::PythonMessage::Error(_)
+                ) {
+                    return Err(Error::UnexpectedMessageType(format!(
+                        "wrong preparation reply for RPC {received}: {reply:?}"
+                    )));
+                }
+                self.prepared_reply = Some(reply);
+                debug!(
+                    received,
+                    expected, "prepare reply buffered before execute reply"
+                );
+            } else if matches!(
+                reply,
+                crate::protocol::PythonMessage::Prepared { .. }
+                    | crate::protocol::PythonMessage::Error(_)
+            ) && self.cancelled_prepares.remove(&received)
+            {
+                warn!(received, expected, "discarding reply to cancelled RPC");
+            } else {
+                return Err(Error::UnexpectedMessageType(format!(
+                    "unsolicited stale RPC reply {received} while waiting for {expected}"
+                )));
+            }
         }
     }
 
-    async fn send_raw(sock: &mut DealerSocket, msg: &RustMessage) -> Result<()> {
+    async fn send_raw<S: SocketSend + Send>(sock: &mut S, msg: &RustMessage) -> Result<()> {
         let bytes = encode(msg)?;
         let zmq_msg = ZmqMessage::from(bytes);
         sock.send(zmq_msg).await?;
@@ -458,7 +625,23 @@ impl WorkerClient {
         }
     }
 
-    async fn recv_raw(sock: &mut DealerSocket) -> Result<crate::protocol::PythonMessage> {
+    async fn recv_reply(&mut self) -> Result<crate::protocol::PythonMessage> {
+        let mut heartbeat = tokio::time::interval(Duration::from_millis(100));
+        loop {
+            tokio::select! {
+                reply = self.inbox.recv() => return reply.ok_or(Error::WorkerDied)?,
+                _ = heartbeat.tick() => {
+                    if self._child.child().try_wait()?.is_some() {
+                        return Err(Error::WorkerDied);
+                    }
+                }
+            }
+        }
+    }
+
+    async fn recv_raw<S: SocketRecv + Send>(
+        sock: &mut S,
+    ) -> Result<crate::protocol::PythonMessage> {
         let raw: ZmqMessage = sock.recv().await?;
         let bytes = raw.into_vec().into_iter().next().unwrap_or_default();
         Ok(decode(&bytes)?)

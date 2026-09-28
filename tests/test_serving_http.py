@@ -58,7 +58,9 @@ class HttpTests(unittest.TestCase):
             "OH_MY_VLLM_FIXTURE_BLOCKS": str(cls.directory / "blocks.json"),
             "OH_MY_VLLM_FIXTURE_OVERLAP": str(cls.directory / "overlap"),
             "OH_MY_VLLM_FIXTURE_ABORTS": str(cls.directory / "aborts"),
+            "OH_MY_VLLM_FIXTURE_RPC_ORDER": str(cls.directory / "rpc-order"),
             "OH_MY_VLLM_PREPARE_TIMEOUT_MS": "500",
+            "RUST_LOG": "info,oh_my_vllm_zmq_worker::client=debug",
         }
         cls.log = (cls.directory / "server.log").open("w+")
         cls.process = subprocess.Popen(
@@ -423,6 +425,11 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(error.exception.code, 503)
         with self.request("/responses", self.base(True)) as response:
             self.assertEqual(json.load(response)["status"], "completed")
+        # The completed RPC may precede the delayed reply. A further RPC
+        # proves that the cancelled prepare tombstone is drained safely.
+        time.sleep(0.3)
+        with self.request("/responses", self.base(True)) as response:
+            self.assertEqual(json.load(response)["status"], "completed")
         deadline = time.monotonic() + 3
         while time.monotonic() < deadline:
             lines = aborts.read_text().splitlines() if aborts.exists() else []
@@ -433,9 +440,216 @@ class HttpTests(unittest.TestCase):
         self.log.flush()
         log = (self.directory / "server.log").read_text()
         pairs = re.findall(
-            r"discarding reply to cancelled RPC received=(\d+) expected=(\d+)", log
+            r"discarding reply to cancelled RPC received=(\d+) "
+            r"(?:expected|rpc_id)=(\d+)",
+            log,
         )
         self.assertTrue(any(int(old) < int(new) for old, new in pairs), log[-2000:])
+
+    def test_slow_prepare_does_not_pause_active_stream(self):
+        with self.request(
+            "/responses",
+            self.base(
+                True,
+                input="long hold-active",
+                max_output_tokens=256,
+                stream=True,
+            ),
+        ) as streaming:
+            self.assertIn(b"response.created", streaming.readline())
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                slow = pool.submit(
+                    self.request,
+                    "/responses",
+                    self.base(True, input="slow-prepare"),
+                )
+                deltas = 0
+                started = time.monotonic()
+                while deltas < 2:
+                    line = streaming.readline()
+                    self.assertTrue(line)
+                    if b"response.output_text.delta" in line:
+                        deltas += 1
+                self.assertLess(time.monotonic() - started, 0.45)
+                self.assertFalse(slow.done(), "preparation should still be pending")
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    slow.result(timeout=3)
+                self.assertEqual(error.exception.code, 503)
+
+    def test_prepared_reply_before_execute_is_admitted(self):
+        self.log.flush()
+        before = (self.directory / "server.log").stat().st_size
+        order_path = self.directory / "rpc-order"
+        prior = order_path.read_text().splitlines() if order_path.exists() else []
+        with self.request(
+            "/responses",
+            self.base(
+                True,
+                input="long hold-active",
+                max_output_tokens=32,
+                stream=True,
+            ),
+        ) as streaming:
+            self.assertIn(b"response.created", streaming.readline())
+            with self.request("/responses", self.base(True)) as response:
+                self.assertEqual(json.load(response)["status"], "completed")
+            remaining = streaming.read().decode()
+            self.assertIn("response.incomplete", remaining)
+            self.assertNotIn('"type":"error"', remaining)
+        self.log.flush()
+        with (self.directory / "server.log").open() as log:
+            log.seek(before)
+            self.assertIn("prepare reply buffered before execute reply", log.read())
+        order = [json.loads(line) for line in order_path.read_text().splitlines()]
+        order = order[len(prior) :]
+        prepared = [row for row in order if row["type"] == "prepared"]
+        self.assertGreaterEqual(len(prepared), 2)
+        last_prepare = prepared[-1]["rpc_id"]
+        self.assertTrue(
+            any(
+                row["type"] == "execute_result" and row["rpc_id"] > last_prepare
+                for row in order[order.index(prepared[-1]) + 1 :]
+            ),
+            order,
+        )
+
+    def test_prepare_protocol_faults_stop_untrusted_worker(self):
+        for mode, expected, prepare_timeout in (
+            ("rpc-wrong-prepare", "wrong preparation reply type", 5000),
+            ("rpc-duplicate-prepare", "unsolicited stale RPC reply", 5000),
+            ("slow-prepare rpc-wrong-late", "unsolicited stale RPC reply", 500),
+            ("rpc-buffer-cancel", "unsolicited stale RPC reply", 70),
+        ):
+            with self.subTest(mode=mode), socket.socket() as listener:
+                listener.bind(("127.0.0.1", 0))
+                port = listener.getsockname()[1]
+                listener.close()
+                address = f"http://127.0.0.1:{port}/v1"
+                name = mode.replace(" ", "_")
+                log_path = self.directory / f"{name}.log"
+                environment = os.environ | {
+                    "OH_MY_VLLM_WORKER_PYTHON": str(self.directory / "worker"),
+                    "CUDA_VISIBLE_DEVICES": "",
+                    "OH_MY_VLLM_PREPARE_TIMEOUT_MS": str(prepare_timeout),
+                    "RUST_LOG": "info,oh_my_vllm_zmq_worker::client=debug",
+                }
+                with log_path.open("w") as log:
+                    process = subprocess.Popen(
+                        [
+                            str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                            "--socket",
+                            str(self.directory / f"{name}.ipc"),
+                            "serve",
+                            "--listen",
+                            f"127.0.0.1:{port}",
+                        ],
+                        env=environment,
+                        stdout=log,
+                        stderr=log,
+                        start_new_session=True,
+                    )
+                    try:
+                        deadline = time.monotonic() + 30
+                        while time.monotonic() < deadline:
+                            try:
+                                with urllib.request.urlopen(
+                                    address + "/models", timeout=0.2
+                                ):
+                                    break
+                            except (OSError, urllib.error.URLError):
+                                time.sleep(0.05)
+                        else:
+                            self.fail("isolated protocol fixture did not start")
+                        if mode == "rpc-buffer-cancel":
+                            active = urllib.request.Request(
+                                address + "/responses",
+                                data=json.dumps(
+                                    self.base(
+                                        True,
+                                        input="long slow-execute",
+                                        max_output_tokens=256,
+                                        stream=True,
+                                    )
+                                ).encode(),
+                                headers={"Content-Type": "application/json"},
+                            )
+                            with urllib.request.urlopen(active, timeout=5) as streaming:
+                                self.assertIn(b"response.created", streaming.readline())
+                                request = urllib.request.Request(
+                                    address + "/responses",
+                                    data=json.dumps(
+                                        self.base(True, input=mode)
+                                    ).encode(),
+                                    headers={"Content-Type": "application/json"},
+                                )
+                                with self.assertRaises(
+                                    urllib.error.HTTPError
+                                ) as failure:
+                                    urllib.request.urlopen(request, timeout=5)
+                                self.assertEqual(failure.exception.code, 503)
+                                time.sleep(0.3)
+                                retry = urllib.request.Request(
+                                    address + "/responses",
+                                    data=json.dumps(self.base(True)).encode(),
+                                    headers={"Content-Type": "application/json"},
+                                )
+                                with suppress(
+                                    urllib.error.HTTPError,
+                                    urllib.error.URLError,
+                                    http.client.RemoteDisconnected,
+                                ):
+                                    urllib.request.urlopen(retry, timeout=5).close()
+                        else:
+                            request = urllib.request.Request(
+                                address + "/responses",
+                                data=json.dumps(self.base(True, input=mode)).encode(),
+                                headers={"Content-Type": "application/json"},
+                            )
+                            try:
+                                with urllib.request.urlopen(
+                                    request, timeout=5
+                                ) as response:
+                                    response.read()
+                            except (
+                                urllib.error.HTTPError,
+                                urllib.error.URLError,
+                                http.client.RemoteDisconnected,
+                            ):
+                                pass
+                        if "rpc-wrong-late" in mode:
+                            time.sleep(0.3)
+                            retry = urllib.request.Request(
+                                address + "/responses",
+                                data=json.dumps(self.base(True)).encode(),
+                                headers={"Content-Type": "application/json"},
+                            )
+                            with suppress(
+                                urllib.error.HTTPError,
+                                urllib.error.URLError,
+                                http.client.RemoteDisconnected,
+                            ):
+                                urllib.request.urlopen(retry, timeout=5).close()
+                        deadline = time.monotonic() + 3
+                        while time.monotonic() < deadline:
+                            log.flush()
+                            if expected in log_path.read_text():
+                                break
+                            time.sleep(0.02)
+                        self.assertIn(expected, log_path.read_text())
+                        self.assertIn("inference engine failed", log_path.read_text())
+                        if mode == "rpc-buffer-cancel":
+                            self.assertIn(
+                                "prepare reply buffered before execute reply",
+                                log_path.read_text(),
+                            )
+                    finally:
+                        if process.poll() is None:
+                            os.killpg(process.pid, signal.SIGINT)
+                            try:
+                                process.wait(timeout=5)
+                            except subprocess.TimeoutExpired:
+                                os.killpg(process.pid, signal.SIGKILL)
+                                process.wait()
 
     def test_capacity_rejection_releases_prepared_worker_state(self):
         with socket.socket() as listener:

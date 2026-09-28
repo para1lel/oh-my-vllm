@@ -16,9 +16,11 @@ def main():
     context = zmq.Context()
     socket = context.socket(zmq.DEALER)
     socket.connect(address)
+    socket.RCVTIMEO = 10
     requests = {}
     block_owners = {}
     adapter = None
+    delayed_replies = []
 
     def publish_blocks():
         if not (path := os.environ.get("OH_MY_VLLM_FIXTURE_BLOCKS")):
@@ -34,8 +36,24 @@ def main():
         temporary.write_text(json.dumps(snapshot))
         temporary.replace(path)
 
+    def send_reply(reply):
+        if path := os.environ.get("OH_MY_VLLM_FIXTURE_RPC_ORDER"):
+            with Path(path).open("a") as output:
+                output.write(
+                    json.dumps({"type": reply["type"], "rpc_id": reply.get("rpc_id")})
+                    + "\n"
+                )
+        socket.send(msgpack.packb(reply, use_bin_type=True))
+
     while True:
-        message = msgpack.unpackb(socket.recv(), raw=False)
+        due = [entry for entry in delayed_replies if entry[0] <= time.monotonic()]
+        for entry in due:
+            send_reply(entry[1])
+            delayed_replies.remove(entry)
+        try:
+            message = msgpack.unpackb(socket.recv(), raw=False)
+        except zmq.Again:
+            continue
         kind = message["type"]
         if kind == "init":
             adapter = ServingAdapter(
@@ -50,6 +68,7 @@ def main():
         elif kind == "prepare":
             rid = message["request_id"]
             request = message["request"]
+            text = ""
             if path := os.environ.get("OH_MY_VLLM_FIXTURE_CAPTURE"):
                 with Path(path).open("a") as output:
                     output.write(json.dumps(request) + "\n")
@@ -100,13 +119,12 @@ def main():
                     "fail": "worker-fail" in text,
                     "fatal": "worker-fatal" in text,
                     "hold": "hold-active" in text,
+                    "slow_execute": "slow-execute" in text,
                     "flood": "flood-active" in text,
                     "slow_stream": "slow-stream" in text,
                     "stream_step": 0,
                 }
                 reply = {"type": "prepared", "prompt_token_ids": prompt}
-                if "slow-prepare" in text:
-                    time.sleep(0.7)
             except Exception as exc:
                 reply = {
                     "type": "error",
@@ -118,6 +136,27 @@ def main():
                     "message": str(exc),
                 }
             reply["rpc_id"] = message["rpc_id"]
+            if "rpc-wrong-prepare" in text and reply["type"] == "prepared":
+                reply = {
+                    "type": "execute_result",
+                    "rpc_id": message["rpc_id"],
+                    "outputs": [],
+                }
+            if "rpc-wrong-late" in text and reply["type"] == "prepared":
+                reply = {
+                    "type": "execute_result",
+                    "rpc_id": message["rpc_id"],
+                    "outputs": [],
+                }
+            if "rpc-duplicate-prepare" in text and reply["type"] == "prepared":
+                send_reply(reply)
+            if "rpc-buffer-cancel" in text and reply["type"] == "prepared":
+                delayed_replies.append((time.monotonic() + 0.25, reply))
+            if "slow-prepare" in text and (
+                reply["type"] == "prepared" or "rpc-wrong-late" in text
+            ):
+                delayed_replies.append((time.monotonic() + 0.7, reply))
+                continue
         elif kind == "execute":
             if path := os.environ.get("OH_MY_VLLM_FIXTURE_OVERLAP"):
                 scheduled = message["scheduled"]
@@ -197,9 +236,18 @@ def main():
                     }
                 )
             time.sleep(
-                0.08
-                if any(requests[r["request_id"]]["hold"] for r in message["scheduled"])
-                else 0.005
+                0.15
+                if any(
+                    requests[r["request_id"]]["slow_execute"]
+                    for r in message["scheduled"]
+                )
+                else (
+                    0.08
+                    if any(
+                        requests[r["request_id"]]["hold"] for r in message["scheduled"]
+                    )
+                    else 0.005
+                )
             )
             reply = (
                 {"type": "error", "message": "fixture worker failure"}
@@ -224,7 +272,7 @@ def main():
             continue
         else:
             raise RuntimeError(kind)
-        socket.send(msgpack.packb(reply, use_bin_type=True))
+        send_reply(reply)
     socket.close()
     context.term()
 

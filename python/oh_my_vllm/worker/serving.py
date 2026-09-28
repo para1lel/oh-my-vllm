@@ -343,7 +343,8 @@ class ServingAdapter:
         self.generations: dict[int, Generation] = {}
         self._mask = None
 
-    def prepare(self, request_id: int, request: dict):
+    def prepare_inputs(self, request: dict):
+        """Build immutable request inputs without publishing a live generation."""
         thinking = request["effort"] != "off"
         tools = request.get("tools", [])
         choice = request.get("tool_choice", "auto" if tools else "none")
@@ -422,13 +423,18 @@ class ServingAdapter:
         sampling.update(request.get("sampling", {}))
         params = SamplingParams(max_tokens=max_tokens, ignore_eos=False, **sampling)
         matcher = xgr.GrammarMatcher(grammar) if grammar else None
-        self.generations[request_id] = Generation(
+        generation = Generation(
             matcher,
             max_tokens,
             request.get("stop", []),
             self.eos,
             self.tokenizer.convert_tokens_to_ids("</think>") if thinking else None,
         )
+        return ids, params, generation
+
+    def prepare(self, request_id: int, request: dict):
+        ids, params, generation = self.prepare_inputs(request)
+        self.generations[request_id] = generation
         return ids, params
 
     def masks(self, drafts_by_request: dict[int, list[int]]):

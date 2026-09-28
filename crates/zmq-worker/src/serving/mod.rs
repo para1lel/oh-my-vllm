@@ -484,65 +484,99 @@ fn send_events(active: &mut Active, events: Vec<Value>) -> Result<()> {
     Ok(())
 }
 
-async fn admit(
-    client: &mut WorkerClient,
-    scheduler: &mut Scheduler,
-    active: &mut BTreeMap<u64, Active>,
+struct PendingAdmission {
     submission: Submission,
-) -> Result<()> {
-    let Submission {
-        request,
-        enqueued,
-        events,
-        done,
-        ready,
-    } = submission;
-    if ready.is_closed() {
-        return Ok(());
+    id: u64,
+    started: Instant,
+    deadline: Instant,
+}
+
+async fn begin_admit(
+    client: &mut WorkerClient,
+    active_count: usize,
+    submission: Submission,
+) -> Result<Option<PendingAdmission>> {
+    if submission.ready.is_closed() {
+        return Ok(None);
     }
-    if active.len() >= 64 {
-        let _ = ready.send(Err((
+    if active_count >= 64 {
+        let _ = submission.ready.send(Err((
             StatusCode::SERVICE_UNAVAILABLE,
             "active request limit exceeded".to_owned(),
         )));
-        return Ok(());
+        return Ok(None);
     }
     let id = IDS.fetch_add(1, Ordering::Relaxed);
     let started = Instant::now();
-    // A short timeout lets the scripted worker exercise late-reply cancellation.
     let prepare_timeout_ms = std::env::var("OH_MY_VLLM_PREPARE_TIMEOUT_MS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .filter(|&value| value > 0)
         .unwrap_or(120_000);
-    let prepare_result = tokio::time::timeout(
+    let deadline = started + Duration::from_millis(prepare_timeout_ms);
+    // A stalled DEALER send must not hold active inference past the same
+    // preparation deadline. Abort also covers a send that reached Python just
+    // before the local future timed out.
+    match tokio::time::timeout(
         Duration::from_millis(prepare_timeout_ms),
-        client.prepare_request(id, request.normalized.clone()),
+        client.begin_prepare_request(id, submission.request.normalized.clone()),
     )
-    .await;
-    let tokens = match prepare_result {
+    .await
+    {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => return Err(error.into()),
         Err(_) => {
-            client.cancel_prepare(id).await;
-            let _ = ready.send(Err((
+            client.cancel_prepare(id).await?;
+            let _ = submission.ready.send(Err((
                 StatusCode::SERVICE_UNAVAILABLE,
                 "worker preparation timeout".to_owned(),
             )));
-            return Ok(());
+            return Ok(None);
         }
-        Ok(Err(e)) => {
+    }
+    Ok(Some(PendingAdmission {
+        submission,
+        id,
+        started,
+        deadline,
+    }))
+}
+
+async fn complete_admit(
+    client: &mut WorkerClient,
+    scheduler: &mut Scheduler,
+    active: &mut BTreeMap<u64, Active>,
+    pending: PendingAdmission,
+    prepare_result: std::result::Result<Vec<u32>, WorkerError>,
+) -> Result<()> {
+    let PendingAdmission {
+        submission:
+            Submission {
+                request,
+                enqueued,
+                events,
+                done,
+                ready,
+            },
+        id,
+        started,
+        ..
+    } = pending;
+    let tokens = match prepare_result {
+        Err(e) => {
             let status = if matches!(e, WorkerError::WorkerValidation(_)) {
                 StatusCode::BAD_REQUEST
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            client.cancel_prepare(id).await;
+            client.cancel_prepare(id).await?;
             let _ = ready.send(Err((status, e.to_string())));
             return Ok(());
         }
-        Ok(Ok(tokens)) => tokens,
+        Ok(tokens) => tokens,
     };
     if ready.is_closed() {
-        client.cancel_prepare(id).await;
+        client.cancel_prepare(id).await?;
         return Ok(());
     }
     let max_tokens = request.normalized["max_tokens"].as_u64().unwrap() as usize;
@@ -584,7 +618,7 @@ async fn admit(
         accepted: 0,
     };
     if !scheduler.add_request(EngineRequest::new(id, tokens, max_tokens, vec![])) {
-        client.cancel_prepare(id).await;
+        client.cancel_prepare(id).await?;
         let _ = ready.send(Err((
             StatusCode::PAYLOAD_TOO_LARGE,
             "request FA/GDN or output budget exceeds KV pool capacity".to_owned(),
@@ -593,7 +627,7 @@ async fn admit(
     }
     if ready.send(Ok(())).is_err() || send_events(&mut running, start_events).is_err() {
         scheduler.abort(id);
-        client.cancel_prepare(id).await;
+        client.cancel_prepare(id).await?;
         return Ok(());
     }
     if running.stream_buffer.is_blocked() {
@@ -628,6 +662,7 @@ async fn engine(
     mut shutdown: oneshot::Receiver<()>,
 ) {
     let mut active = BTreeMap::new();
+    let mut pending = None;
     let (result, stopping) = tokio::select! {
         _ = &mut shutdown => (Ok(()), true),
         result = run_engine(
@@ -637,6 +672,7 @@ async fn engine(
             &store,
             request_timeout,
             &mut active,
+            &mut pending,
         ) => (result, false),
     };
     if let Err(error) = result {
@@ -648,6 +684,15 @@ async fn engine(
         } else {
             "worker failed"
         });
+    }
+    if let Some(pending) = pending {
+        if let Err(error) = client.cancel_prepare(pending.id).await {
+            warn!(request_id = pending.id, %error, "shutdown prepare cancellation failed");
+        }
+        let _ = pending.submission.ready.send(Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "server shutting down".to_owned(),
+        )));
     }
     // Fail pending admission immediately rather than holding handlers during shutdown.
     drop(incoming);
@@ -685,16 +730,35 @@ async fn run_engine(
     store: &Mutex<Store>,
     request_timeout: Duration,
     active: &mut BTreeMap<u64, Active>,
+    pending: &mut Option<PendingAdmission>,
 ) -> Result<()> {
     loop {
         let was_idle = active.is_empty();
         if was_idle {
             // Finish native cleanup before going idle, including cancelled admissions.
             execute(client, &scheduler.schedule()).await?;
-            let Some(submission) = incoming.recv().await else {
-                break;
-            };
-            admit(client, scheduler, active, submission).await?;
+            if pending.is_none() {
+                let Some(submission) = incoming.recv().await else {
+                    break;
+                };
+                *pending = begin_admit(client, active.len(), submission).await?;
+            }
+        }
+        if let Some(preparing) = pending.as_ref() {
+            if preparing.submission.ready.is_closed() || Instant::now() >= preparing.deadline {
+                let preparing = pending.take().unwrap();
+                let disconnected = preparing.submission.ready.is_closed();
+                client.cancel_prepare(preparing.id).await?;
+                if !disconnected {
+                    let _ = preparing.submission.ready.send(Err((
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "worker preparation timeout".to_owned(),
+                    )));
+                }
+            } else if let Some(result) = client.poll_prepare_request()? {
+                let preparing = pending.take().unwrap();
+                complete_admit(client, scheduler, active, preparing, result).await?;
+            }
         }
         let mut backpressure_failures = Vec::new();
         for (&id, request) in active.iter_mut() {
@@ -730,9 +794,11 @@ async fn run_engine(
                 info!(request_id = id, "request cancelled");
             }
         }
-        if !was_idle && let Ok(submission) = incoming.try_recv() {
-            // Check existing streams before one potentially slow preparation.
-            admit(client, scheduler, active, submission).await?;
+        if !was_idle
+            && pending.is_none()
+            && let Ok(submission) = incoming.try_recv()
+        {
+            *pending = begin_admit(client, active.len(), submission).await?;
         }
         let batch = scheduler.schedule();
         if batch.scheduled.is_empty()
