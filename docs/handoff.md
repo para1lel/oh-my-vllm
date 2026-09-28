@@ -507,9 +507,32 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   Ruff, Clippy and hooks passed. Owned GPU processes exited. PY-06 remains
   **open/candidate** pending current full GPU and 12-row framework gates
   plus representative whole-step overlap evidence.
+- KRN-06 was investigated but its proposed optimization is **open/no-go**;
+  the original streaming-store `"memory"` clobber remains. CUDA 13.1's
+  `__stcs(uint2*)` still has that compiler clobber, so the audit's suggested
+  substitution would not remove it. A reviewed no-clobber trial needed
+  shape/dtype/layout/device and disjoint-output FFI guards to remain safe.
+  The trial's 7/7 direct-FFI rejection and 4/4 BF16 exact/CPU FP64 tests
+  passed on B200, but these are **rejected-candidate tests**, absent from the
+  retained source. Clean `2c85dfa` norm/add_norm before was 25/26 formal;
+  the affected 2496-row case passed, while unrelated 1248-row add_norm failed
+  by a near-zero bound. The dirty candidate was also 25/26, with the same
+  failure; isolated 1248-row 3×20 repeated as PASS, exposing cross-run
+  variance. Raw reports: `/tmp/oh-my-vllm-krn06-before-2c85dfa.json`,
+  `/tmp/oh-my-vllm-krn06-after-dirty.json`, and
+  `/tmp/oh-my-vllm-krn06-1248-repeat-dirty.log`. A same-GPU, single-CPU
+  5+100 interleaved old/no-guard/guard diagnostic gave direct FFI total
+  medians 21.980/21.971/22.302 microseconds and output-allocation call
+  medians 33.070/33.143/33.528 microseconds; per-call spreads exceeded
+  10%, so no stable full-call gain is claimed. Logs:
+  `/tmp/oh-my-vllm-krn06-host-trio-dirty.log` and
+  `/tmp/oh-my-vllm-krn06-wrapper-trio-dirty.log`. The patch was reverted,
+  no source/test commit was made, and all owned B200 processes exited.
 
-Remaining work: PY-03/04/06, SRV-08, KRN-06, PY-05/07 and KRN-10 acceptance,
+Remaining work: PY-03/04/06, SRV-08, PY-05/07 and KRN-10 acceptance,
 EVD-07, the current full operator/GPU suite, and 12-row framework acceptance.
+KRN-06 stays open/no-go unless a different safe optimization has measured
+whole-call benefit; the 1248-row variance needs attention if it recurs.
 See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
 

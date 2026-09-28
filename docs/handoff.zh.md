@@ -402,10 +402,30 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   日志为 `/tmp/oh-my-vllm-py06-cpu-full.log`。Rust workspace、fmt、行宽、
   Ruff、Clippy 和 hooks 均通过。自有 GPU 进程已退出。当前完整 GPU 套件、
   12 行框架门槛及代表性整步重叠证据完成前，PY-06 保持 **open/candidate**。
+- KRN-06 已调查，但建议的优化为 **open/no-go**；原流式 store 的
+  `"memory"` clobber 保留。CUDA 13.1 的 `__stcs(uint2*)` 自身仍带该
+  编译器 clobber，因此原审计建议的替换无效。经复审的去 clobber 试验要
+  保证安全，还须加入 shape/dtype/layout/device 与输出不重叠的 FFI guard。
+  试验源码在 B200 的直接 FFI 拒绝 7/7、BF16 精确/CPU FP64 4/4 均通过，
+  但这些是**被拒候选的测试**，不属于保留源码。干净 `2c85dfa` 的
+  norm/add_norm before 正式用例通过 25/26；受影响 2496 行通过，未受
+  影响的 1248 行 add_norm 因接近零的下界失败。dirty 候选也为 25/26，
+  同一用例失败；1248 行同卡隔离 3×20 重测为 PASS，显示跨运行波动。
+  原始报告：`/tmp/oh-my-vllm-krn06-before-2c85dfa.json`、
+  `/tmp/oh-my-vllm-krn06-after-dirty.json` 和
+  `/tmp/oh-my-vllm-krn06-1248-repeat-dirty.log`。同卡、单 CPU 的 5+100
+  交错旧版/无 guard/有 guard 诊断中，直接 FFI 总耗时中位数为
+  21.980/21.971/22.302 微秒，含输出分配的调用为
+  33.070/33.143/33.528 微秒；逐次离散度超过 10%，不声称稳定完整调用
+  提速。日志：`/tmp/oh-my-vllm-krn06-host-trio-dirty.log` 与
+  `/tmp/oh-my-vllm-krn06-wrapper-trio-dirty.log`。补丁已回退，没有提交
+  源码/测试；自有 B200 进程均已退出。
 
-后续工作：PY-03/04/06、SRV-08、KRN-06、PY-05/07 与 KRN-10 验收、
+后续工作：PY-03/04/06、SRV-08、PY-05/07 与 KRN-10 验收、
 EVD-07，以及当前完整算子/GPU 套件
 和 12 组框架验收。
+KRN-06 保持 open/no-go，只有另一安全优化证明完整调用收益才应重启；
+如果 1248 行波动再次出现，还需调查。
 逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。
 
 ## 历史 2026-09-24 修复检查点
