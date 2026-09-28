@@ -552,8 +552,10 @@ __global__ void prepare_attention_kernel(const __nv_bfloat16 *packed, const floa
   values[1] = right * c + left * s;
   if (key) {
     int64_t slot = index_at(slots, sw, token);
-    if (slot < 0 || slot >= capacity)
+    if (slot < 0)
       return;
+    if (slot >= capacity)
+      asm volatile("trap;");
     int64_t dst = ((slot / 784) * 1568 + slot % 784) * 1024 + (head - 24) * 256;
 #pragma unroll
     for (int j = 0; j < 8; ++j) {
@@ -962,11 +964,13 @@ void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, Tenso
 }
 template <bool Vector>
 __global__ void append_kernel(const __nv_bfloat16 *k, const __nv_bfloat16 *v, __nv_bfloat16 *cache,
-                              const void *slots, int width, bool wide) {
+                              const void *slots, int width, int64_t capacity, bool wide) {
   int token = blockIdx.x;
   int64_t slot = index_at(slots, wide, token);
   if (slot < 0)
     return;
+  if (slot >= capacity)
+    asm volatile("trap;");
   int64_t dst = ((slot / 784) * 1568 + slot % 784) * width;
   if constexpr (Vector) {
     for (int j = threadIdx.x; j < width / 8; j += blockDim.x) {
@@ -992,7 +996,8 @@ void append(TensorView k, TensorView v, TensorView cache, TensorView slots) {
       <<<k.size(0), 128, 0, stream_for(k)>>>(static_cast<const __nv_bfloat16 *>(k.data_ptr()),     \
                                              static_cast<const __nv_bfloat16 *>(v.data_ptr()),     \
                                              static_cast<__nv_bfloat16 *>(cache.data_ptr()),       \
-                                             slots.data_ptr(), width, slots.dtype().bits == 64)
+                                             slots.data_ptr(), width, cache.size(0) * 784,         \
+                                             slots.dtype().bits == 64)
   if (vector) {
     APPEND(true);
   } else {
@@ -1217,6 +1222,10 @@ attention_partial_kernel(const __nv_bfloat16 *__restrict__ query,
   const int kh = blockIdx.y, split = blockIdx.z, ratio = h / hk;
   const int start = Grouped ? index_at(starts, sw, seq) : seq;
   const int end = Grouped ? index_at(starts, sw, seq + 1) : seq + 1;
+  if constexpr (Grouped) {
+    if (end <= start || end - start > 5)
+      asm volatile("trap;");
+  }
   const Position last = index_at(lengths, lw, end - 1);
   const Position chunk = ((max(last - first, Position(0)) + splits * BK - 1) / (splits * BK)) * BK;
   const Position begin = first + split * chunk;
@@ -1468,7 +1477,8 @@ __global__ void attention_merge_kernel(const float *__restrict__ partial,
     scratch[warp] = maximum;
   __syncthreads();
   maximum = warp_max(lane < 4 ? scratch[lane] : -INFINITY);
-  float weight = tid < Splits ? softmax_exp2(log - maximum) : 0.f;
+  float safe_maximum = maximum == -INFINITY ? 0.f : maximum;
+  float weight = tid < Splits ? softmax_exp2(log - safe_maximum) : 0.f;
   if (tid < Splits)
     weights[tid] = weight;
   float total = warp_sum(weight);
@@ -1486,7 +1496,8 @@ __global__ void attention_merge_kernel(const float *__restrict__ partial,
     accum.y += value.y * w;
   }
   reinterpret_cast<__nv_bfloat162 *>(out)[row * 128 + tid] =
-      __floats2bfloat162_rn(accum.x / total, accum.y / total);
+      __floats2bfloat162_rn(total > 0.f ? accum.x / total : 0.f,
+                           total > 0.f ? accum.y / total : 0.f);
 }
 
 void attention_merge(TensorView partial, TensorView lse, TensorView out) {

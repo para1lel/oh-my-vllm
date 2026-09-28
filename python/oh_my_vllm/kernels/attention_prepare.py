@@ -28,6 +28,8 @@ def prepare_attention(packed, q_weight, k_weight, positions, cache, slots):
 
     The projection and physical cache are distinct allocations in the model.
     Metadata slots are unique when nonnegative, as for the existing append path.
+    Rust and batch planning provide slot bounds. CUDA traps on a bad write slot;
+    the frozen comparison receives an asynchronous device assertion here.
     """
     if packed.ndim != 2 or packed.shape[1] != 14336 or not packed.shape[0]:
         raise ValueError("attention preparation requires nonempty packed14336 rows")
@@ -58,6 +60,10 @@ def prepare_attention(packed, q_weight, k_weight, positions, cache, slots):
     ):
         raise ValueError("attention cache must not overlap projection or metadata")
     if NAME == "tilelang":
+        torch._assert_async(
+            torch.all((slots < 0) | (slots < len(cache) * 784)),
+            "FA slot exceeds cache capacity",
+        )
         return tilelang_prepare(*tensors)
     from .cuda_backend import compiled
 

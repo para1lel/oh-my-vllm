@@ -3,6 +3,7 @@
 import concurrent.futures
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -37,6 +38,9 @@ class HttpTests(unittest.TestCase):
             "VLLM_TARGET_DEVICE": "cpu",
             "CUDA_VISIBLE_DEVICES": "",
             "OH_MY_VLLM_FIXTURE_CLEANUP": str(cls.directory / "cleanup"),
+            "OH_MY_VLLM_FIXTURE_OVERLAP": str(cls.directory / "overlap"),
+            "OH_MY_VLLM_FIXTURE_ABORTS": str(cls.directory / "aborts"),
+            "OH_MY_VLLM_PREPARE_TIMEOUT_MS": "500",
         }
         cls.log = (cls.directory / "server.log").open("w+")
         cls.process = subprocess.Popen(
@@ -212,11 +216,127 @@ class HttpTests(unittest.TestCase):
             {"reasoning_effort": 123},
             {"reasoning_effort": "unknown"},
             {"max_tokens": 0},
+            {"repetition_penalty": 1e-39},
             {"unsupported": True},
         ]:
             with self.assertRaises(urllib.error.HTTPError) as error:
                 self.request("/chat/completions", self.base(**extra))
             self.assertEqual(error.exception.code, 400)
+
+    def test_prompt_file_rejects_out_of_range_token_before_worker_launch(self):
+        prompt_file = self.directory / "invalid-tokens.txt"
+        prompt_file.write_text("248320\n")
+        result = subprocess.run(
+            [
+                str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                "--model",
+                "/nonexistent-checkpoint",
+                "run",
+                "--prompt-file",
+                str(prompt_file),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("prompt token is outside", result.stderr)
+
+    def test_late_prepare_reply_does_not_shift_next_rpc(self):
+        aborts = self.directory / "aborts"
+        before = aborts.read_text().splitlines() if aborts.exists() else []
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.request("/responses", self.base(True, input="slow-prepare"))
+        self.assertEqual(error.exception.code, 503)
+        with self.request("/responses", self.base(True)) as response:
+            self.assertEqual(json.load(response)["status"], "completed")
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            lines = aborts.read_text().splitlines() if aborts.exists() else []
+            if len(lines) > len(before):
+                break
+            time.sleep(0.02)
+        self.assertGreater(len(lines), len(before))
+        self.log.flush()
+        log = (self.directory / "server.log").read_text()
+        pairs = re.findall(
+            r"discarding reply to cancelled RPC received=(\d+) expected=(\d+)", log
+        )
+        self.assertTrue(any(int(old) < int(new) for old, new in pairs), log[-2000:])
+
+    def test_capacity_rejection_releases_prepared_worker_state(self):
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
+        address = f"http://127.0.0.1:{port}/v1"
+        aborts = self.directory / "capacity-aborts"
+        log_path = self.directory / "capacity-server.log"
+        environment = os.environ | {
+            "OH_MY_VLLM_WORKER_PYTHON": str(self.directory / "worker"),
+            "OH_MY_VLLM_FIXTURE_ABORTS": str(aborts),
+            "OH_MY_VLLM_PREPARE_TIMEOUT_MS": "5000",
+            "CUDA_VISIBLE_DEVICES": "",
+        }
+        with log_path.open("w") as log:
+            process = subprocess.Popen(
+                [
+                    str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                    "--socket",
+                    str(self.directory / "capacity-worker.ipc"),
+                    "--scheduler-blocks",
+                    "8",
+                    "serve",
+                    "--listen",
+                    f"127.0.0.1:{port}",
+                ],
+                env=environment,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+            )
+            try:
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        self.fail(log_path.read_text())
+                    try:
+                        with urllib.request.urlopen(address + "/models", timeout=0.2):
+                            break
+                    except (OSError, urllib.error.URLError):
+                        time.sleep(0.05)
+                else:
+                    self.fail("capacity fixture did not start")
+                payload = self.base(True, input="hello " * 7000, max_output_tokens=1)
+                request = urllib.request.Request(
+                    address + "/responses",
+                    data=json.dumps(payload).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(request, timeout=5)
+                self.assertEqual(error.exception.code, 413)
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline and not aborts.exists():
+                    time.sleep(0.02)
+                self.assertTrue(aborts.exists(), log_path.read_text())
+                self.assertEqual(len(aborts.read_text().splitlines()), 1)
+                payload["input"] = "Hello"
+                request = urllib.request.Request(
+                    address + "/responses",
+                    data=json.dumps(payload).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    self.assertEqual(json.load(response)["status"], "incomplete")
+            finally:
+                if process.poll() is None:
+                    os.killpg(process.pid, signal.SIGINT)
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.wait()
 
     def test_length_inside_tool_is_not_server_error(self):
         tool = {
@@ -256,7 +376,7 @@ class HttpTests(unittest.TestCase):
             self.request("/responses/" + rid)
         self.assertEqual(error.exception.code, 404)
 
-    def test_z_worker_failure_is_terminal(self):
+    def test_request_failure_does_not_stop_engine(self):
         with self.request(
             "/responses", self.base(True, input="worker-fail", stream=True)
         ) as response:
@@ -266,12 +386,50 @@ class HttpTests(unittest.TestCase):
                 if line.startswith("data: ")
             ]
         self.assertEqual(events[-1]["type"], "error")
+        self.assertEqual(events[-1]["message"], "fixture request failure")
+        with self.request("/responses", self.base(True)) as response:
+            self.assertEqual(json.load(response)["status"], "completed")
+
+    def test_one_failed_request_leaves_active_stream_running(self):
+        overlap = self.directory / "overlap"
+        overlap.unlink(missing_ok=True)
+        with self.request(
+            "/responses",
+            self.base(True, input="long", max_output_tokens=256, stream=True),
+        ) as continuing:
+            self.assertIn(b"response.created", continuing.readline())
+            with self.request(
+                "/responses", self.base(True, input="worker-fail", stream=True)
+            ) as failing:
+                events = [
+                    json.loads(line[6:])
+                    for line in failing.read().decode().splitlines()
+                    if line.startswith("data: ")
+                ]
+            self.assertEqual(events[-1]["message"], "fixture request failure")
+            self.assertTrue(overlap.exists())
+            self.assertTrue(overlap.read_text().strip())
+            remaining = continuing.read().decode()
+            self.assertIn("response.incomplete", remaining)
+            self.assertNotIn('"type":"error"', remaining)
+
+    def test_z_worker_failure_is_terminal(self):
+        with self.request(
+            "/responses", self.base(True, input="worker-fatal", stream=True)
+        ) as response:
+            events = [
+                json.loads(line[6:])
+                for line in response.read().decode().splitlines()
+                if line.startswith("data: ")
+            ]
         self.assertEqual(events[-1]["message"], "worker failed")
         with self.assertRaises(urllib.error.HTTPError) as error:
             self.request("/responses", self.base(True))
         self.assertEqual(error.exception.code, 503)
 
     def test_cancel_does_not_break_other_request(self):
+        cleanup = self.directory / "cleanup"
+        before = cleanup.read_text().splitlines() if cleanup.exists() else []
         with self.request(
             "/chat/completions",
             self.base(stream=True, messages=[{"role": "user", "content": "long"}]),
@@ -284,6 +442,13 @@ class HttpTests(unittest.TestCase):
                     return json.load(response)["choices"][0]["finish_reason"]
 
             self.assertEqual(list(pool.map(complete, range(2))), ["stop", "stop"])
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            lines = cleanup.read_text().splitlines() if cleanup.exists() else []
+            if len(lines) > len(before):
+                break
+            time.sleep(0.02)
+        self.assertGreater(len(lines), len(before))
 
 
 if __name__ == "__main__":

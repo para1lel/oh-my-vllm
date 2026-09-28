@@ -386,13 +386,20 @@ async fn admit(
     }
     let id = IDS.fetch_add(1, Ordering::Relaxed);
     let started = Instant::now();
+    // A short timeout lets the scripted worker exercise late-reply cancellation.
+    let prepare_timeout_ms = std::env::var("OH_MY_VLLM_PREPARE_TIMEOUT_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|&value| value > 0)
+        .unwrap_or(120_000);
     let prepare_result = tokio::time::timeout(
-        Duration::from_secs(120),
+        Duration::from_millis(prepare_timeout_ms),
         client.prepare_request(id, request.normalized.clone()),
     )
     .await;
     let tokens = match prepare_result {
         Err(_) => {
+            client.cancel_prepare(id).await;
             let _ = ready.send(Err((
                 StatusCode::SERVICE_UNAVAILABLE,
                 "worker preparation timeout".to_owned(),
@@ -405,6 +412,10 @@ async fn admit(
         }
         Ok(Ok(tokens)) => tokens,
     };
+    if ready.is_closed() {
+        client.cancel_prepare(id).await;
+        return Ok(());
+    }
     let max_tokens = request.normalized["max_tokens"].as_u64().unwrap() as usize;
     let parser = Parser::new(
         request.normalized["effort"] != "off",
@@ -443,6 +454,7 @@ async fn admit(
         accepted: 0,
     };
     if !scheduler.add_request(EngineRequest::new(id, tokens, max_tokens, vec![])) {
+        client.cancel_prepare(id).await;
         let _ = ready.send(Err((
             StatusCode::PAYLOAD_TOO_LARGE,
             "prompt exceeds KV pool capacity".to_owned(),
@@ -451,6 +463,7 @@ async fn admit(
     }
     if ready.send(Ok(())).is_err() || send_events(&running, start_events).is_err() {
         scheduler.abort(id);
+        client.cancel_prepare(id).await;
         return Ok(());
     }
     info!(
@@ -561,6 +574,17 @@ async fn run_engine(
         }
         let batch = scheduler.schedule();
         let worker = execute(client, &batch).await?;
+        for scheduled in &batch.scheduled {
+            let id = scheduled.request_id;
+            if let Some(error) = client.serving_errors.remove(&id) {
+                scheduler.abort(id);
+                client.serving_outputs.remove(&id);
+                if let Some(request) = active.remove(&id) {
+                    request.fail(&error);
+                }
+                warn!(request_id = id, %error, "request failed in worker");
+            }
+        }
         let worker = scheduler.update(worker);
         if batch.scheduled.is_empty() && !active.is_empty() {
             // A constrained logical pool can temporarily prevent admission. Avoid a
@@ -600,7 +624,11 @@ async fn run_engine(
             }
             // Length truncation may leave an incomplete call. Never deliver that call
             // to a tool executor; retain length/incomplete rather than reporting 500.
-            let parsed = request.parser.feed(&text, reason.is_some());
+            let parsed = if reason.as_deref() == Some("length") {
+                request.parser.feed_length(&text)
+            } else {
+                request.parser.feed(&text, reason.is_some())
+            };
             let events = parsed.map(|deltas| {
                 deltas
                     .into_iter()

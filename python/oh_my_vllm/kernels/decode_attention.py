@@ -60,10 +60,14 @@ def decode(
         or not starts.is_contiguous()
     ):
         raise ValueError("grouped decode starts must be contiguous CUDA integers")
-    if starts is not None and heads // kv_heads > 5:
-        raise ValueError(
-            f"grouped decode supports at most 5 query rows per group, "
-            f"got {heads // kv_heads}"
+    # The group size is encoded by starts, not by the Q/KV head ratio.
+    # CUDA checks dynamic group extents in the partial kernel. Rust/MTP planning
+    # provides the 1..5 bound during normal execution.
+    if NAME == "tilelang" and starts is not None:
+        groups = starts[1:] - starts[:-1]
+        torch._assert_async(
+            torch.all((groups >= 1) & (groups <= 5)),
+            "grouped decode supports 1..5 query rows per group",
         )
     # Both backends issue16-byte KV copies. Preserve support for contiguous
     # views that start at an unaligned BF16 storage offset.

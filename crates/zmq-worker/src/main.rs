@@ -129,6 +129,10 @@ async fn run() -> Result<()> {
             ),
             "request exceeds context limit"
         );
+        ensure!(
+            prompts.iter().flatten().all(|&token| token < 248_320),
+            "prompt token is outside the model vocabulary"
+        );
         Some(prompts)
     } else {
         None

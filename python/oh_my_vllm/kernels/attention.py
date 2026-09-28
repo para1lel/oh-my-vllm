@@ -28,6 +28,10 @@ def append(
         for t in (cache, k, v, slots)
     ):
         raise ValueError("FA tensors must be contiguous on the same CUDA device")
+    torch._assert_async(
+        torch.all((slots < 0) | (slots < len(cache) * 784)),
+        "FA append slot exceeds cache capacity",
+    )
     _append(len(cache), *k.shape[1:], str(slots.dtype).removeprefix("torch."))(
         k, v, cache, slots
     )

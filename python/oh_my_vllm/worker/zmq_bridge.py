@@ -93,6 +93,7 @@ def _encode_worker_output(wo: WorkerOutput) -> dict:
             {
                 "request_id": o.request_id,
                 "token_ids": o.token_ids,
+                "error": o.error,
                 "num_accepted_draft_tokens": o.num_accepted_draft_tokens,
                 "new_draft_token_ids": o.new_draft_token_ids,
                 **(
@@ -165,6 +166,7 @@ def serve(socket_addr: str) -> None:
                     )
 
             elif msg_type == "prepare":
+                existed = worker is not None and msg["request_id"] in worker.histories
                 try:
                     if worker is None:
                         raise RuntimeError("worker not initialised")
@@ -174,24 +176,34 @@ def serve(socket_addr: str) -> None:
                         ids = worker.prepare_request(msg["request_id"], msg["request"])
                         reply = {"type": "prepared", "prompt_token_ids": ids}
                 except Exception as exc:
-                    if worker is not None and msg["request_id"] in worker.histories:
+                    if worker is not None and not existed:
                         worker.unregister_request(msg["request_id"])
                     reply = {"type": "error", "message": str(exc)}
+                reply["rpc_id"] = msg["rpc_id"]
                 sock.send(msgpack.packb(reply, use_bin_type=True))
 
             elif msg_type == "register":
                 if worker is None:
                     continue
-                worker.register_request(
-                    request_id=msg["request_id"],
-                    prompt_token_ids=list(msg["prompt_token_ids"]),
-                )
+                try:
+                    worker.register_request(
+                        request_id=msg["request_id"],
+                        prompt_token_ids=list(msg["prompt_token_ids"]),
+                    )
+                except Exception:
+                    logger.exception(
+                        "register failed for request %s", msg["request_id"]
+                    )
 
             elif msg_type == "execute":
                 if worker is None:
                     sock.send(
                         msgpack.packb(
-                            {"type": "error", "message": "worker not initialised"},
+                            {
+                                "type": "error",
+                                "message": "worker not initialised",
+                                "rpc_id": msg["rpc_id"],
+                            },
                             use_bin_type=True,
                         )
                     )
@@ -202,11 +214,9 @@ def serve(socket_addr: str) -> None:
                     decoded = time.perf_counter_ns()
                     worker_out = worker.execute_model(sched_out)
                     executed = time.perf_counter_ns()
-                    sock.send(
-                        msgpack.packb(
-                            _encode_worker_output(worker_out), use_bin_type=True
-                        )
-                    )
+                    reply = _encode_worker_output(worker_out)
+                    reply["rpc_id"] = msg["rpc_id"]
+                    sock.send(msgpack.packb(reply, use_bin_type=True))
                     logger.debug(
                         "execute_step",
                         extra={
@@ -224,16 +234,14 @@ def serve(socket_addr: str) -> None:
                     logger.error("execute_model failed:\n%s", err)
                     sock.send(
                         msgpack.packb(
-                            {"type": "error", "message": err}, use_bin_type=True
+                            {"type": "error", "message": err, "rpc_id": msg["rpc_id"]},
+                            use_bin_type=True,
                         )
                     )
 
             elif msg_type == "abort":
                 if worker is not None:
-                    # Registration cleanup alone leaves native runner/adapter state.
-                    worker.execute_model(
-                        SchedulerOutput(finished_request_ids=[msg["request_id"]])
-                    )
+                    worker.unregister_request(msg["request_id"])
 
             elif msg_type == "shutdown":
                 logger.info("Shutdown received")

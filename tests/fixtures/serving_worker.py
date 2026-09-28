@@ -70,11 +70,22 @@ def main():
                     "tokens": tokens,
                     "prompt_len": len(prompt),
                     "fail": "worker-fail" in text,
+                    "fatal": "worker-fatal" in text,
                 }
                 reply = {"type": "prepared", "prompt_token_ids": prompt}
+                if "slow-prepare" in text:
+                    time.sleep(0.7)
             except Exception as exc:
                 reply = {"type": "error", "message": str(exc)}
+            reply["rpc_id"] = message["rpc_id"]
         elif kind == "execute":
+            if path := os.environ.get("OH_MY_VLLM_FIXTURE_OVERLAP"):
+                scheduled = message["scheduled"]
+                if len(scheduled) > 1 and any(
+                    requests[r["request_id"]]["fail"] for r in scheduled
+                ):
+                    with Path(path).open("a") as output:
+                        output.write("overlap\n")
             for rid in message["finished_request_ids"]:
                 requests.pop(rid, None)
                 adapter.generations.pop(rid, None)
@@ -82,13 +93,22 @@ def main():
                     with Path(path).open("a") as output:
                         output.write(str(rid) + "\n")
             outputs = []
-            failed = False
+            fatal = False
             for scheduled in message["scheduled"]:
                 rid = scheduled["request_id"]
                 state = requests[rid]
-                if state["fail"]:
-                    failed = True
+                if state["fatal"]:
+                    fatal = True
                     break
+                if state["fail"]:
+                    outputs.append(
+                        {
+                            "request_id": rid,
+                            "token_ids": [],
+                            "error": "fixture request failure",
+                        }
+                    )
+                    continue
                 ids = []
                 if (
                     scheduled["num_computed_tokens"] + len(scheduled["token_ids"])
@@ -110,13 +130,18 @@ def main():
             time.sleep(0.005)
             reply = (
                 {"type": "error", "message": "fixture worker failure"}
-                if failed
+                if fatal
                 else {"type": "execute_result", "outputs": outputs}
             )
+            reply["rpc_id"] = message["rpc_id"]
         elif kind == "shutdown":
             break
         elif kind == "abort":
             requests.pop(message["request_id"], None)
+            adapter.generations.pop(message["request_id"], None)
+            if path := os.environ.get("OH_MY_VLLM_FIXTURE_ABORTS"):
+                with Path(path).open("a") as output:
+                    output.write(str(message["request_id"]) + "\n")
             continue
         else:
             raise RuntimeError(kind)

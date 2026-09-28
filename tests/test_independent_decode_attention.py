@@ -1,5 +1,9 @@
 """Paged decode reference tests, including shifted MTP cache and graph replay."""
 
+import os
+import subprocess
+import sys
+
 import pytest
 import torch
 from oh_my_vllm.kernels.decode_attention import decode
@@ -8,25 +12,46 @@ from oh_my_vllm.worker.decode_graph import DecodeAttention
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 
 
-def test_grouped_decode_rejects_group_size_above_5():
-    """KRN-01 host guard: group_size > 5 must raise before touching the GPU."""
-    # heads=24, kv_heads=4 → group_size=6. We only need a starts tensor to
-    # trigger the grouped path; actual tensor content is irrelevant.
-    query = torch.zeros(1, 24, 256, dtype=torch.bfloat16, device="cpu")
-    cache = torch.zeros(2, 2, 784, 4, 256, dtype=torch.bfloat16, device="cpu")
-    tables = torch.zeros(1, 2, dtype=torch.int32, device="cpu")
-    lengths = torch.zeros(1, dtype=torch.int32, device="cpu")
-    starts = torch.zeros(2, dtype=torch.int32, device="cpu")
-    # Move to cuda if available so the earlier CUDA checks pass; if not, the
-    # group-size check must still fire because it happens before any kernel.
-    if torch.cuda.is_available():
-        query = query.cuda()
-        cache = cache.cuda()
-        tables = tables.cuda()
-        lengths = lengths.cuda()
-        starts = starts.cuda()
-    with pytest.raises(ValueError, match="5 query rows"):
-        decode(query, cache, tables, lengths, max_tokens=1568, starts=starts)
+@pytest.mark.parametrize("entry", ["append", "prepare_attention"])
+@pytest.mark.parametrize("backend", ["cuda", "tilelang"])
+def test_out_of_range_fa_write_slot_raises(entry, backend):
+    environment = os.environ | {"OH_MY_VLLM_KERNEL_BACKEND": backend}
+    process = subprocess.run(
+        [sys.executable, "-m", "tests.gpu_slot_guard_case", entry],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+
+
+def test_attention_merge_all_empty_splits_writes_zero():
+    from oh_my_vllm.kernels.cuda_backend import compiled
+
+    partial = torch.zeros(1, 24, 16, 256, device="cuda", dtype=torch.float32)
+    lse = torch.full((1, 24, 16), -torch.inf, device="cuda")
+    out = torch.full((1, 24, 256), float("nan"), device="cuda", dtype=torch.bfloat16)
+    partial[0, 0, 0] = 1
+    lse[0, 0, 0] = 0
+    compiled().attention_merge(partial, lse, out)
+    torch.testing.assert_close(out[0, 0], torch.ones_like(out[0, 0]))
+    torch.testing.assert_close(out[0, 1:], torch.zeros_like(out[0, 1:]))
+
+
+@pytest.mark.parametrize("backend", ["cuda", "tilelang"])
+def test_grouped_decode_rejects_group_size_above_5(backend):
+    environment = os.environ | {"OH_MY_VLLM_KERNEL_BACKEND": backend}
+    process = subprocess.run(
+        [sys.executable, "-m", "tests.gpu_slot_guard_case", "grouped_decode"],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
 
 
 def reference(query, cache, tables, lengths, first):

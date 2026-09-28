@@ -10,6 +10,7 @@ pub enum RustMessage {
     Init(InitMsg),
     Register(RegisterMsg),
     Prepare {
+        rpc_id: u64,
         request_id: u64,
         request: serde_json::Value,
     },
@@ -37,6 +38,7 @@ pub struct RegisterMsg {
 
 #[derive(Debug, Serialize)]
 pub struct ExecuteMsg {
+    pub rpc_id: u64,
     pub step_id: u64,
     pub scheduled: Vec<ScheduledRequestMsg>,
     pub finished_request_ids: Vec<u64>,
@@ -66,20 +68,28 @@ pub struct AbortMsg {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PythonMessage {
-    Ready { logical_num_blocks: u32 },
+    Ready {
+        logical_num_blocks: u32,
+    },
     ExecuteResult(ExecuteResultMsg),
-    Prepared { prompt_token_ids: Vec<u32> },
+    Prepared {
+        rpc_id: u64,
+        prompt_token_ids: Vec<u32>,
+    },
     Error(ErrorMsg),
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ExecuteResultMsg {
+    pub rpc_id: u64,
     pub outputs: Vec<RequestResultMsg>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct RequestResultMsg {
     pub request_id: u64,
+    #[serde(default)]
+    pub error: Option<String>,
     pub token_ids: Vec<u32>,
     #[serde(default)]
     pub num_accepted_draft_tokens: u32,
@@ -96,6 +106,8 @@ pub struct RequestResultMsg {
 #[derive(Debug, Deserialize)]
 pub struct ErrorMsg {
     pub message: String,
+    #[serde(default)]
+    pub rpc_id: u64,
 }
 
 // ── encode / decode helpers ───────────────────────────────────────────────────

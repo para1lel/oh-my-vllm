@@ -26,6 +26,7 @@ class SchedulerOutput:
 class RequestOutput:
     request_id: int
     token_ids: list[int]
+    error: str | None = None
     num_accepted_draft_tokens: int = 0
     new_draft_token_ids: list[int] = field(default_factory=list)
     text: str = ""

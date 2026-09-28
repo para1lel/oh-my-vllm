@@ -19,6 +19,23 @@ from oh_my_vllm.worker.tensors import device_tensor, device_vectors
 logger = logging.getLogger(__name__)
 
 
+def _is_device_failure(error: Exception) -> bool:
+    if isinstance(error, (torch.cuda.OutOfMemoryError, torch.AcceleratorError)):
+        return True
+    message = str(error).lower()
+    return any(
+        marker in message
+        for marker in (
+            "cuda",
+            "cublas",
+            "cudnn",
+            "device-side assert",
+            "illegal memory",
+            "launch failure",
+        )
+    )
+
+
 @dataclass(frozen=True)
 class RuntimeConfig:
     model: str
@@ -150,8 +167,16 @@ class OhMyVllmWorker:
         ):
             raise ValueError("Rust token budget disagrees with scheduled input")
         plans = []
+        registration_errors = []
         for request in scheduled.scheduled:
             rid = request.request_id
+            if rid not in self.histories:
+                if self.serving is None:
+                    raise ValueError(f"request {rid} has no registered prompt")
+                registration_errors.append(
+                    RequestOutput(rid, [], error="request registration failed")
+                )
+                continue
             if (
                 rid in self.computed
                 and self.computed[rid] != request.num_computed_tokens
@@ -182,7 +207,7 @@ class OhMyVllmWorker:
                 )
             )
         if not plans:
-            return WorkerOutput([])
+            return WorkerOutput(registration_errors)
         validate_batch(plans)
         plans.sort(key=lambda p: not p.prefill)
         ids, positions, sequence_ids, writes, slots, pages = [], [], [], [], [], []
@@ -286,77 +311,27 @@ class OhMyVllmWorker:
             else:
                 logits = graph_logits[selected]
         # The grammar adapter only needs these two protocol-independent mappings.
-        masks = {}
-        if self.serving is not None:
-            from types import SimpleNamespace
-
-            output = self.serving.masks(
-                SimpleNamespace(
-                    num_scheduled_tokens={
-                        str(p.request.request_id): len(p.writes)
-                        for p in plans
-                        if p.sample_indices
-                    },
-                    scheduled_spec_decode_tokens={
-                        str(p.request.request_id): p.drafts
-                        for p in plans
-                        if p.sample_indices
-                    },
-                )
-            )
-            if output is not None:
-                offset = 0
-                by_id = {p.request.request_id: p for p in plans}
-                for rid in output.structured_output_request_ids:
-                    count = len(by_id[int(rid)].drafts) + 1
-                    masks[int(rid)] = output.grammar_bitmask[offset : offset + count]
-                    offset += count
+        masks, mask_errors = self._build_masks(plans)
         greedy = None
         if (
             logits is not None
             and not masks
             and all(
-                self.samplers[p.request.request_id].plain_greedy
+                self.samplers.get(p.request.request_id) is not None
+                and self.samplers[p.request.request_id].plain_greedy
                 for p in plans
-                if p.sample_indices
+                if p.sample_indices and p.request.request_id not in mask_errors
             )
         ):
             greedy = greedy_rows(logits)
-        results, copies, counts, row = [], [], [], 0
-        for plan in plans:
-            rid = plan.request.request_id
-            tokens = []
-            if plan.sample_indices:
-                end = row + len(plan.sample_indices)
-                if greedy is not None:
-                    tokens = verify_rows(greedy[row:end], plan.drafts)
-                else:
-                    tokens = self.samplers[rid].sample(
-                        logits[row:end], drafts=plan.drafts, bitmask=masks.get(rid)
-                    )
-                row += len(plan.sample_indices)
-            text, finish, reasoning = "", None, 0
-            if self.serving is not None and rid in self.serving.generations:
-                generation = self.serving.generations[rid]
-                tokens, text = generation.consume(tokens, self.serving.tokenizer)
-                finish, reasoning = generation.finished, generation.reasoning_tokens
-            count, source, checkpoints = plan.commit(len(tokens))
-            counts.append(count)
-            self.sources[rid] = source
-            self.computed[rid] = plan.request.num_computed_tokens + count
-            copies.extend(checkpoints)
-            self.samplers[rid].commit(tokens)
-            self.histories[rid].extend(tokens)
-            results.append(
-                RequestOutput(
-                    rid,
-                    tokens,
-                    num_accepted_draft_tokens=max(0, len(tokens) - 1),
-                    text=text,
-                    finish_reason=finish,
-                    reasoning_tokens=reasoning,
-                )
-            )
+        (
+            results,
+            copies,
+            successful_plans,
+            successful_starts,
+            successful_counts,
+            successful_outputs,
+        ) = self._commit_plans(plans, starts, logits, greedy, masks, mask_errors)
         if copies:
             sources, destinations = (
                 device_tensor(values, device="cuda")
@@ -366,13 +341,116 @@ class OhMyVllmWorker:
                 if kind == "linear_attention":
                     for pool in cache:
                         pool.index_copy_(0, destinations, pool.index_select(0, sources))
-        if self.mtp is not None:
+        if self.mtp is not None and successful_plans:
             drafts = self.mtp.propose(
-                plans, starts, counts, hidden, self.histories, results
+                successful_plans,
+                successful_starts,
+                successful_counts,
+                hidden,
+                self.histories,
+                successful_outputs,
             )
-            for output in results:
+            for output in successful_outputs:
                 output.new_draft_token_ids = drafts[output.request_id]
-        return WorkerOutput(results)
+        return WorkerOutput(registration_errors + results)
+
+    def _build_masks(self, plans):
+        """Generate grammar rows per request so one invalid grammar is isolated."""
+        from types import SimpleNamespace
+
+        masks, errors = {}, {}
+        if self.serving is None:
+            return masks, errors
+        for plan in plans:
+            if not plan.sample_indices:
+                continue
+            rid = plan.request.request_id
+            try:
+                output = self.serving.masks(
+                    SimpleNamespace(
+                        num_scheduled_tokens={str(rid): len(plan.writes)},
+                        scheduled_spec_decode_tokens={str(rid): plan.drafts},
+                    )
+                )
+                if output is not None:
+                    # ServingAdapter reuses its bitmask buffer on the next call.
+                    masks[rid] = output.grammar_bitmask[
+                        : len(plan.sample_indices)
+                    ].copy()
+            except Exception as exc:
+                if _is_device_failure(exc):
+                    raise
+                errors[rid] = str(exc)
+        return masks, errors
+
+    def _commit_plans(self, plans, starts, logits, greedy, masks, mask_errors=None):
+        """Commit each request independently after the shared GPU forward pass."""
+        results, copies, row = [], [], 0
+        successful_plans, successful_starts, successful_counts, successful_outputs = (
+            [],
+            [],
+            [],
+            [],
+        )
+        for index, plan in enumerate(plans):
+            rid = plan.request.request_id
+            try:
+                if mask_errors and rid in mask_errors:
+                    row += len(plan.sample_indices)
+                    raise ValueError(mask_errors[rid])
+                tokens = []
+                if plan.sample_indices:
+                    end = row + len(plan.sample_indices)
+                    sample_start = row
+                    row = end
+                    if greedy is not None:
+                        tokens = verify_rows(greedy[sample_start:end], plan.drafts)
+                    else:
+                        tokens = self.samplers[rid].sample(
+                            logits[sample_start:end],
+                            drafts=plan.drafts,
+                            bitmask=masks.get(rid),
+                        )
+                text, finish, reasoning = "", None, 0
+                if self.serving is not None and rid in self.serving.generations:
+                    generation = self.serving.generations[rid]
+                    tokens, text = generation.consume(tokens, self.serving.tokenizer)
+                    finish, reasoning = generation.finished, generation.reasoning_tokens
+                count, source, checkpoints = plan.commit(len(tokens))
+                if self.mtp is not None:
+                    self.mtp.validate_state(plan, count)
+                self.sources[rid] = source
+                self.computed[rid] = plan.request.num_computed_tokens + count
+                self.samplers[rid].commit(tokens)
+                self.histories[rid].extend(tokens)
+                output = RequestOutput(
+                    rid,
+                    tokens,
+                    num_accepted_draft_tokens=max(0, len(tokens) - 1),
+                    text=text,
+                    finish_reason=finish,
+                    reasoning_tokens=reasoning,
+                )
+                successful_plans.append(plan)
+                successful_starts.append(starts[index])
+                successful_counts.append(count)
+                successful_outputs.append(output)
+                results.append(output)
+                copies.extend(checkpoints)
+            except Exception as exc:
+                if self.serving is None or _is_device_failure(exc):
+                    raise
+                logger.exception("request %s failed during step commit", rid)
+                self.unregister_request(rid)
+                results.append(RequestOutput(rid, [], error=str(exc)))
+        return (
+            results,
+            copies,
+            successful_plans,
+            successful_starts,
+            successful_counts,
+            successful_outputs,
+        )
 
     def shutdown(self) -> None:
         logger.info(

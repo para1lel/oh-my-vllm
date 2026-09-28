@@ -76,6 +76,7 @@ class ServingTests(unittest.TestCase):
             {"seed": 1.5},
             {"presence_penalty": 3},
             {"repetition_penalty": 0},
+            {"repetition_penalty": 1e-39},
         ]:
             with self.subTest(sampling=sampling), self.assertRaises(ValueError):
                 self.prepare(sampling=sampling)

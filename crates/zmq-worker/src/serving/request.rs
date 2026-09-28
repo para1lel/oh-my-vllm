@@ -418,6 +418,12 @@ pub fn normalize(
     {
         sampling["temperature"] = json!(0.0);
     }
+    if let Some(penalty) = sampling["repetition_penalty"].as_f64() {
+        ensure!(
+            (1e-5..=1e5).contains(&penalty),
+            "repetition_penalty must be in [1e-5,1e5]"
+        );
+    }
     let stop = match body.get("stop") {
         None | Some(Value::Null) => vec![],
         Some(Value::String(s)) => vec![s.clone()],

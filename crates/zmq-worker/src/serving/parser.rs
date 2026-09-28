@@ -34,6 +34,19 @@ impl Parser {
     }
 
     pub fn feed(&mut self, text: &str, finished: bool) -> Result<Vec<Delta>> {
+        self.feed_inner(text, finished, false)
+    }
+
+    pub fn feed_length(&mut self, text: &str) -> Result<Vec<Delta>> {
+        self.feed_inner(text, true, true)
+    }
+
+    fn feed_inner(
+        &mut self,
+        text: &str,
+        finished: bool,
+        allow_incomplete_tool: bool,
+    ) -> Result<Vec<Delta>> {
         self.pending.push_str(text);
         let mut events = Vec::new();
         loop {
@@ -63,6 +76,10 @@ impl Parser {
             if self.pending.starts_with("<tool_call>") {
                 let Some(end) = tool_end(&self.pending, &self.tools)? else {
                     if finished {
+                        if allow_incomplete_tool {
+                            self.pending.clear();
+                            break;
+                        }
                         bail!("incomplete tool call at generation end");
                     }
                     break;
@@ -400,6 +417,17 @@ mod tests {
             })],
         );
         assert!(parser.feed("<tool_call><function=read>", true).is_err());
+    }
+
+    #[test]
+    fn length_finish_discards_incomplete_tool() {
+        let mut parser = Parser::new(false, vec![json!({"function": {"name": "read"}})]);
+        let deltas = parser
+            .feed_length("prefix<tool_call><function=read>")
+            .unwrap();
+        assert_eq!(deltas.len(), 1);
+        assert!(matches!(&deltas[0], Delta::Text(text) if text == "prefix"));
+        assert!(parser.pending.is_empty());
     }
 
     #[test]

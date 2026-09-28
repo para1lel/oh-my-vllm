@@ -36,8 +36,11 @@ class SamplingParams:
             not -2 <= p <= 2 for p in (self.frequency_penalty, self.presence_penalty)
         ):
             raise ValueError("frequency/presence penalties must be in [-2,2]")
-        if not math.isfinite(self.repetition_penalty) or self.repetition_penalty <= 0:
-            raise ValueError("repetition_penalty must be finite and positive")
+        if (
+            not math.isfinite(self.repetition_penalty)
+            or not 1e-5 <= self.repetition_penalty <= 1e5
+        ):
+            raise ValueError("repetition_penalty must be in [1e-5,1e5]")
 
 
 @dataclass

@@ -42,6 +42,18 @@ class MTP:
     def forget(self, request_id: int) -> None:
         self.next_position.pop(request_id, None)
 
+    def validate_state(self, plan: PlannedRequest, count: int) -> None:
+        """Check request-local proposal state before accepting its target tokens."""
+        req = plan.request
+        start = req.num_computed_tokens
+        expected = self.next_position.get(req.request_id, max(1, start))
+        if expected not in (max(1, start), start + 1):
+            raise ValueError("MTP cache position disagrees with target state")
+        if start > 0 and expected == start and start % BLOCK:
+            raise ValueError("missing MTP state away from a block boundary")
+        if count <= 0:
+            raise ValueError("MTP target commit must include an input token")
+
     def _run(
         self,
         tokens: list[int],
