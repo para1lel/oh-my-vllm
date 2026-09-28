@@ -207,7 +207,8 @@ void launch_quantize(TensorView x, TensorView out, TensorView scales, bool colum
           static_cast<const Input *>(x.data_ptr()), static_cast<__nv_fp8_e4m3 *>(out.data_ptr()),  \
           static_cast<float *>(scales.data_ptr()), rows, width)
 #define LAUNCH(S, C)                                                                               \
-  if (width / 128 > 65535 || (rows >= 4 && rows < 128)) {                                          \
+  if (width / 128 > 65535 || (rows >= 4 && rows < 128) ||                                         \
+      (rows == 1 && width == 6144 && C && !S)) {                                                  \
     quantize_kernel<Input, S, C, 1, true, Width, Aligned>                                          \
         <<<(rows * (width / 128) + 3) / 4, 128, 0, stream>>>(                                      \
             static_cast<const Input *>(x.data_ptr()),                                              \
