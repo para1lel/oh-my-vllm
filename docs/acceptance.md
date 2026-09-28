@@ -2,6 +2,17 @@
 
 ## Current remediation evidence — 2026-09-28
 
+Clean `6ba9046` passed all 16 selected attention cases before KRN-10 on B200
+UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`. The
+[before summary](../bench/baseline/2026-09-28-audit-krn10-attention-before.json)
+retains source and loaded-module hashes, output checks, comparison rounds,
+and a hash of the raw collector artifact. The largest three-round
+spread/median was 0.077%; all 16 had positive one-sided 95% bounds against
+frozen TileLang. This is a pre-change subset, not acceptance of the newer
+`37f8cc9` implementation. Three post-change 16-case attempts were rejected
+after external GPU processes appeared. Current post-change formal, full GPU,
+and 12-row framework gates remain pending.
+
 Reviewed `94c3473` passes seven isolated B200 KRN-09 fault/graph cases on
 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`, plus five repeated
 prior-fault subprocesses. They establish non-consuming normal launch checks,

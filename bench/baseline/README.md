@@ -6,6 +6,9 @@ for interpretation and a dated index of every artifact.
 
 ## Current
 
+- `2026-09-28-audit-krn10-attention-before.json` summarizes all 16 clean
+  `6ba9046` attention cases before KRN-10. It establishes a pre-change
+  reference only; `37f8cc9` still needs a complete, uncontended after run.
 - `2026-09-28-audit-krn08-operators.json` records clean `40e3e57` affected
   formal evidence: all 66 selected normalization, Q/K, recurrent, and
   convolution cases pass the frozen TileLang comparison and record one fast,

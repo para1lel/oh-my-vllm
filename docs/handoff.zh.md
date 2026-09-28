@@ -224,6 +224,19 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   超过 10% spread 门槛，原因未证实，故不声称提速。日志和原始样本保留在 Git
   仓库外的 `/tmp/oh-my-vllm-krn09-*`。当前完整 GPU/正式算子及 12 行框架
   门槛仍待验证。
+- 已独立复审的 `37f8cc9` 实现 KRN-10：对每个 kernel 特化仅设置一次
+  `cudaFuncSetAttribute`，每个线程对每个 BK tile 缓存一到两个 FA 页表项。
+  适用范围是进程内单 B200 CUDA context。修改前干净提交 `6ba9046` 的
+  [before 汇总](../bench/baseline/2026-09-28-audit-krn10-attention-before.json)
+  在 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上通过 16/16 项
+  选中的 attention 用例；它不验证新源码。修改后聚焦 B200 attention 测试通过
+  原有 29 项及四项新的 direct-FFI 边界、Position、分组、graph 用例。同卡 eager
+  FFI A/B 的旧/新每次调用中位数为 3.4138/3.0865 微秒，spread 为 3.51%/5.33%，
+  仅属主机诊断。三次完整修改后 16 项正式尝试因外部 GPU 进程（PID 849461、
+  897317、913070）而拒收，均不算验收。`scripts/test.sh cpu` 通过 211 项及
+  67 个 subtest（排除 194 项 GPU 用例），Rust workspace、fmt、行宽、Ruff、
+  Clippy 与 hooks 也通过。自有 GPU 进程已退出。KRN-10 仍为 open，待干净的
+  修改后 16 项、当前完整 147 项/GPU 套件及 12 组框架验收。
 
 后续工作：PY-03..07、SRV-08、KRN-06 与 KRN-10、
 EVD-07、四项未验证风险，以及当前完整算子/GPU 套件

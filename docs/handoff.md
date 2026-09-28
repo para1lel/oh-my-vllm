@@ -296,6 +296,22 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   claim is made. The logs and raw samples remain outside Git under
   `/tmp/oh-my-vllm-krn09-*`. Current full GPU/formal and 12-row framework
   gates remain pending.
+- Independently reviewed `37f8cc9` implements KRN-10's per-specialization
+  `cudaFuncSetAttribute` setup and per-thread, per-BK-tile caching of one or
+  two FA page-table entries. The scope assumes one B200 CUDA context for the
+  process. The clean `6ba9046`
+  [before summary](../bench/baseline/2026-09-28-audit-krn10-attention-before.json)
+  passed 16/16 selected attention cases on UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`; it does not validate the
+  new source. Post-change focused B200 attention tests passed 29 existing
+  and four new direct-FFI boundary/Position/grouped/graph cases. Same-GPU
+  eager FFI A/B measured old/new medians 3.4138/3.0865 microseconds per call
+  with 3.51%/5.33% spread, a host diagnostic only. Three full after16 formal
+  attempts were rejected by external GPU processes (PIDs 849461, 897317,
+  913070); none is accepted. `scripts/test.sh cpu` passed 211 tests and 67
+  subtests (194 GPU deselected), plus Rust workspace, fmt, line width, Ruff,
+  Clippy, and hooks. Owned GPU processes exited. KRN-10 remains open pending
+  clean after16, current full147/GPU suite, and 12-row framework acceptance.
 
 Remaining work: PY-03..07, SRV-08, KRN-06 and KRN-10,
 EVD-07, the four unverified risks, and current
