@@ -97,7 +97,7 @@ class TestKRN04FP8Int32Overflow(unittest.TestCase):
             fp8.quantize(t)
 
     def test_silu_mul_overflow_rejected(self):
-        """rows * half_width * 2 >= 2**31 must raise ValueError."""
+        """A packed gate/up matrix above 2**31 elements must reject."""
         from oh_my_vllm.kernels.elementwise import silu_mul
 
         t = MagicMock(spec=torch.Tensor)
@@ -111,6 +111,31 @@ class TestKRN04FP8Int32Overflow(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "int32 flat offset"):
             silu_mul(t)
+
+    def test_silu_mul_accepts_at_int32_limit_and_rejects_first_larger_row(self):
+        from oh_my_vllm.kernels import elementwise
+
+        t = MagicMock(spec=torch.Tensor)
+        t.dtype = torch.bfloat16
+        t.ndim = 2
+        t.is_contiguous.return_value = True
+        t.is_cuda = True
+        with (
+            patch.object(
+                elementwise.torch, "empty", return_value=MagicMock(spec=torch.Tensor)
+            ),
+            patch.object(
+                elementwise, "_silu_mul", return_value=lambda x, out: None
+            ) as launch,
+        ):
+            for rows in (2**23 - 1, 2**23):
+                t.shape = (rows, 256)
+                elementwise.silu_mul(t)
+            self.assertEqual(launch.call_count, 2)
+            t.shape = (2**23 + 1, 256)
+            with self.assertRaisesRegex(ValueError, "int32 flat offset"):
+                elementwise.silu_mul(t)
+            self.assertEqual(launch.call_count, 2)
 
     @pytest.mark.gpu
     def test_silu_mul_within_range_passes_shape_check(self):

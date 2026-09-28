@@ -15,7 +15,8 @@ def silu_mul(packed: torch.Tensor) -> torch.Tensor:
     rows, width = packed.shape[0], packed.shape[1] // 2
     if rows == 0:
         return torch.empty((0, width), dtype=packed.dtype, device=packed.device)
-    if rows * width * 2 >= 2**31:
+    # Packed input already contains both halves; its last flat offset is N-1.
+    if width and rows > 2**31 // packed.shape[1]:
         raise ValueError(
             f"tensor size {rows} * {packed.shape[1]} exceeds int32 flat offset range"
         )

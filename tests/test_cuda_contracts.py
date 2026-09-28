@@ -171,3 +171,32 @@ def test_direct_nonempty_gate_call_keeps_expected_values():
     expected_decay = torch.full_like(decay, -torch.log(torch.tensor(2.0)).item())
     torch.testing.assert_close(decay, expected_decay, rtol=2e-6, atol=2e-6)
     torch.testing.assert_close(beta, torch.full_like(beta, 0.5), rtol=0, atol=0)
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        "over_i32",
+        "input_fp32",
+        "output_fp32",
+        "out_short",
+        "out_cpu",
+        "input_strided",
+        "output_strided",
+    ],
+)
+def test_direct_silu_mul_rejects_invalid_contract(scenario):
+    _assert_rejected_in_child("silu_mul", scenario)
+
+
+def test_direct_silu_mul_keeps_expected_output_and_empty_noop():
+    x = torch.ones(1, 256, device="cuda", dtype=torch.bfloat16)
+    out = torch.empty(1, 128, device="cuda", dtype=torch.bfloat16)
+    compiled().silu_mul(x, out)
+    empty_x = torch.empty(0, 256, device="cuda", dtype=torch.bfloat16)
+    empty_out = torch.empty(0, 128, device="cuda", dtype=torch.bfloat16)
+    compiled().silu_mul(empty_x, empty_out)
+    torch.cuda.synchronize()
+    expected = torch.nn.functional.silu(torch.ones_like(out))
+    torch.testing.assert_close(out.float(), expected.float(), rtol=0.003, atol=0.003)
+    assert empty_out.numel() == 0

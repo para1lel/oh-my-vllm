@@ -243,6 +243,20 @@ __global__ void silu_kernel(const __nv_bfloat16 *__restrict__ x, __nv_bfloat16 *
   out[i] = __float2bfloat16_rn(a * __bfloat162float(x[offset + width]));
 }
 void silu_mul(TensorView x, TensorView out) {
+  TVM_FFI_ICHECK(same_cuda_device(x, x) && same_cuda_device(out, x))
+      << "CUDA SiLU tensors must share one CUDA device";
+  TVM_FFI_ICHECK(x.ndim() == 2 && out.ndim() == 2 && x.size(0) == out.size(0) &&
+                 x.size(0) >= 0 && x.size(1) >= 0 && x.size(1) % 2 == 0 &&
+                 out.size(1) == x.size(1) / 2 &&
+                 has_dtype(x, kDLBfloat, 16) && has_dtype(out, kDLBfloat, 16))
+      << "CUDA SiLU requires matching BF16 packed input and output";
+  if (out.size(0) == 0 || out.size(1) == 0)
+    return;
+  TVM_FFI_ICHECK(x.stride(1) == 1 && x.stride(0) == x.size(1) &&
+                 out.stride(1) == 1 && out.stride(0) == out.size(1))
+      << "CUDA SiLU requires contiguous input and output";
+  TVM_FFI_ICHECK(fits_int32_flat_offsets(x, false) && fits_int32_flat_offsets(out, true))
+      << "CUDA SiLU input/output flat offsets exceed signed int32";
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
   int n = out.size(0) * out.size(1);
   if (!n)

@@ -145,12 +145,51 @@ def gates_case(scenario):
     return invoke, unchanged, expected
 
 
+def silu_mul_case(scenario):
+    if scenario == "over_i32":
+        rows = 2**23 + 1
+        x = torch.empty(rows, 256, device="cuda", dtype=torch.bfloat16)
+        out = torch.empty(rows, 128, device="cuda", dtype=torch.bfloat16)
+
+        def invoke():
+            compiled().silu_mul(x, out)
+
+        return invoke, torch.cuda.synchronize, "flat offsets exceed signed int32"
+
+    input_dtype = torch.float32 if scenario == "input_fp32" else torch.bfloat16
+    output_dtype = torch.float32 if scenario == "output_fp32" else torch.bfloat16
+    x = torch.ones(1, 256, device="cuda", dtype=input_dtype)
+    if scenario == "input_strided":
+        x = torch.ones(1, 512, device="cuda", dtype=input_dtype)[:, ::2]
+    out_width = 64 if scenario == "out_short" else 128
+    out_device = "cpu" if scenario == "out_cpu" else "cuda"
+    out = torch.full((1, out_width), -1, device=out_device, dtype=output_dtype)
+    if scenario == "output_strided":
+        out = torch.full((1, 256), -1, device="cuda", dtype=output_dtype)[:, ::2]
+
+    def invoke():
+        compiled().silu_mul(x, out)
+
+    def unchanged():
+        assert torch.all(out == -1)
+
+    expected = (
+        "tensors must share one CUDA device"
+        if scenario == "out_cpu"
+        else "matching BF16 packed input and output"
+        if scenario in ("input_fp32", "output_fp32", "out_short")
+        else "requires contiguous input and output"
+    )
+    return invoke, unchanged, expected
+
+
 def main() -> None:
     entry, scenario = sys.argv[1:]
     cases = {
         "quantize": quantize_case,
         "recurrent": recurrent_case,
         "gates": gates_case,
+        "silu_mul": silu_mul_case,
     }
     invoke, unchanged, expected = cases[entry](scenario)
     try:
