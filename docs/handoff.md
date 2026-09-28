@@ -227,8 +227,21 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   pytest 201 passed and 67 subtests (181 GPU cases deselected), fmt, line
   width, Ruff, Clippy, and hooks passed. Current 12-row framework acceptance
   remains pending.
+- Independently reviewed `67deb85` closes SCH-06's priority inversion under
+  pool pressure. The old eight-block regression evicted older request 1;
+  the new scheduler evicts younger request 2 and retries request 1. A
+  separate-pool MTP4 case evicts `[3, 2]` and preserves waiting order
+  `[2, 3, 4]`, accepted histories, and cleared drafts. Tests cover the
+  self-preemption fallback and same-step preempt/re-admit output; a CPU-fake
+  Python worker test verifies state reset before planning, without claiming
+  full production-block-size readmission execution. Requirements and
+  architecture now state the implemented priority policy in both languages.
+  Rust workspace 58/32/21, CPU pytest 202 passed and 67 subtests (181 GPU
+  cases deselected), fmt, line width, Ruff, Clippy, and hooks passed. This
+  policy repair has no local speed claim; current 12-row framework acceptance
+  remains pending.
 
-Remaining work: PY-03..07, SRV-08/10, SCH-06, KRN-06..10,
+Remaining work: PY-03..07, SRV-08/10, KRN-06..10,
 EVD-07, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
