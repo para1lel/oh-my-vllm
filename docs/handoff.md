@@ -305,16 +305,25 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   process. The clean `6ba9046`
   [before summary](../bench/baseline/2026-09-28-audit-krn10-attention-before.json)
   passed 16/16 selected attention cases on UUID
-  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`; it does not validate the
-  new source. Post-change focused B200 attention tests passed 29 existing
-  and four new direct-FFI boundary/Position/grouped/graph cases. Same-GPU
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`. Clean `231f066`
+  [after summary](../bench/baseline/2026-09-28-audit-krn10-attention-after.json)
+  passed the same selected 16/16 cases on the same UUID: clean source,
+  no interference, all output and frozen TileLang comparisons passed,
+  minimum one-sided 95% lower gain +0.0028209709 ms, and maximum three-round
+  spread/median 0.173%. `selected_passed=true`; top-level `passed=false`
+  denotes the unselected 131 other formal cases. All 16 CUDA three-round
+  medians improved across the two source commits, median 7.26%, but this
+  does not isolate changes or establish framework speed. Post-change focused
+  B200 attention tests also passed 29 existing and four new direct-FFI
+  boundary/position/grouped/graph cases. Same-GPU
   eager FFI A/B measured old/new medians 3.4138/3.0865 microseconds per call
-  with 3.51%/5.33% spread, a host diagnostic only. Three full after16 formal
-  attempts were rejected by external GPU processes (PIDs 849461, 897317,
+  with 3.51%/5.33% spread, a host diagnostic only. Three earlier full after16
+  formal attempts were rejected by external GPU processes (PIDs 849461, 897317,
   913070); none is accepted. `scripts/test.sh cpu` passed 211 tests and 67
   subtests (194 GPU deselected), plus Rust workspace, fmt, line width, Ruff,
-  Clippy, and hooks. Owned GPU processes exited. KRN-10 remains open pending
-  clean after16, current full147/GPU suite, and 12-row framework acceptance.
+  Clippy, and hooks. Owned GPU processes exited after clean after16. The
+  affected subset is verified; final acceptance remains pending on current
+  full147/GPU suite and 12-row framework gates.
 - Independently reviewed `17413e5` is the PY-05 candidate: MTP eager/draft/
   proposal metadata uses active extent width, and target decode keeps its
   existing extent width while uploading one page row per request. Device

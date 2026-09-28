@@ -7,9 +7,10 @@
 
 ## 当前
 
-- `2026-09-28-audit-krn10-attention-before.json` 汇总 KRN-10 修改前干净提交
-  `6ba9046` 的 16 项 attention 用例。它只建立修改前对照；`37f8cc9` 仍需一次
-  完整、无干扰的修改后运行。
+- `2026-09-28-audit-krn10-attention-before.json` 与
+  `2026-09-28-audit-krn10-attention-after.json` 分别汇总干净提交 `6ba9046` 与
+  `231f066` 的 16 项选中 attention 用例。修改后全部用例通过输出与冻结 TileLang
+  对照；完整 147 项矩阵及当前 12 行框架门槛仍待运行。
 - `2026-09-28-audit-krn08-operators.json` 记录干净 `40e3e57` 的受影响正式证据：
   选中的 66 项归一化、Q/K、递归与卷积用例均通过冻结 TileLang 对比，并记录 CUDA
   主机分派快路径一次、通用路径零次。这不是新的 147 项完整判定。

@@ -232,14 +232,20 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   适用范围是进程内单 B200 CUDA context。修改前干净提交 `6ba9046` 的
   [before 汇总](../bench/baseline/2026-09-28-audit-krn10-attention-before.json)
   在 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上通过 16/16 项
-  选中的 attention 用例；它不验证新源码。修改后聚焦 B200 attention 测试通过
+  选中的 attention 用例。干净提交 `231f066` 的
+  [after 汇总](../bench/baseline/2026-09-28-audit-krn10-attention-after.json)
+  在同一 UUID 上通过相同 16/16 项：源码干净、无干扰、全部输出与冻结 TileLang
+  对照通过，最小单侧 95% 收益下界 +0.0028209709 ms，三轮最大 spread/median
+  为 0.173%。`selected_passed=true`；顶层 `passed=false` 表示其余 131 项未选。
+  跨两个源码提交，全部 16 项 CUDA 三轮中位数降低，中位相对差异 7.26%；
+  这不能隔离个别改动或证明框架提速。修改后聚焦 B200 attention 测试另通过
   原有 29 项及四项新的 direct-FFI 边界、Position、分组、graph 用例。同卡 eager
   FFI A/B 的旧/新每次调用中位数为 3.4138/3.0865 微秒，spread 为 3.51%/5.33%，
-  仅属主机诊断。三次完整修改后 16 项正式尝试因外部 GPU 进程（PID 849461、
+  仅属主机诊断。此前三次完整修改后 16 项正式尝试因外部 GPU 进程（PID 849461、
   897317、913070）而拒收，均不算验收。`scripts/test.sh cpu` 通过 211 项及
   67 个 subtest（排除 194 项 GPU 用例），Rust workspace、fmt、行宽、Ruff、
-  Clippy 与 hooks 也通过。自有 GPU 进程已退出。KRN-10 仍为 open，待干净的
-  修改后 16 项、当前完整 147 项/GPU 套件及 12 组框架验收。
+  Clippy 与 hooks 也通过。干净 after16 后自有 GPU 进程已退出。受影响子集
+  已验证；最终验收仍待当前完整 147 项/GPU 套件及 12 组框架门槛。
 - 已独立复审的 `17413e5` 是 PY-05 候选实现：MTP eager/draft/proposal
   元数据按当前 extent 定宽；target decode 保持原有 extent 宽度，同时改为每个
   请求上传一行页表。设备端 `index_select` 展开 token 行。target/draft graph

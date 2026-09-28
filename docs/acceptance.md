@@ -2,16 +2,22 @@
 
 ## Current remediation evidence — 2026-09-28
 
-Clean `6ba9046` passed all 16 selected attention cases before KRN-10 on B200
-UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`. The
-[before summary](../bench/baseline/2026-09-28-audit-krn10-attention-before.json)
-retains source and loaded-module hashes, output checks, comparison rounds,
-and a hash of the raw collector artifact. The largest three-round
-spread/median was 0.077%; all 16 had positive one-sided 95% bounds against
-frozen TileLang. This is a pre-change subset, not acceptance of the newer
-`37f8cc9` implementation. Three post-change 16-case attempts were rejected
-after external GPU processes appeared. Current post-change formal, full GPU,
-and 12-row framework gates remain pending.
+Clean `6ba9046` and `231f066` passed all 16 selected attention cases before
+and after KRN-10 on B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`.
+The [before](../bench/baseline/2026-09-28-audit-krn10-attention-before.json)
+and [after](../bench/baseline/2026-09-28-audit-krn10-attention-after.json)
+summaries retain source and loaded-module hashes, output checks, comparison
+rounds, and raw collector hashes. The after subset has
+`selected_passed=true`; its top-level `passed=false` means the other 131
+operator cases were not selected. After-source maximum three-round
+spread/median was 0.173%, and the minimum one-sided 95% gain bound over
+frozen TileLang was +0.0028209709 ms. All 16 after-source CUDA three-round
+medians were lower than the before-source medians on the same UUID, with a
+median relative difference of 7.26%; this across-commit comparison does not
+isolate each individual code change or establish framework throughput.
+Three earlier after attempts were rejected when external GPU processes
+appeared. The full 147-case, full GPU, and 12-row framework gates remain
+pending.
 
 Reviewed `94c3473` passes seven isolated B200 KRN-09 fault/graph cases on
 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`, plus five repeated

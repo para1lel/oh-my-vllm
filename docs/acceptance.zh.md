@@ -4,13 +4,17 @@
 
 ## 当前修复证据 — 2026-09-28
 
-修改前干净提交 `6ba9046` 在 B200 UUID
+KRN-10 修改前干净提交 `6ba9046` 和修改后干净提交 `231f066`，均在 B200 UUID
 `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上通过全部 16 项选中的
-attention 用例。[before 汇总](../bench/baseline/2026-09-28-audit-krn10-attention-before.json)
-保留源码与加载模块哈希、输出检查、对照轮次及原始采集产物的哈希。三轮最大
-spread/median 为 0.077%；全部 16 项相对冻结 TileLang 的单侧 95% 收益下界为正。
-这是修改前子集，不是对较新实现 `37f8cc9` 的验收。三次修改后 16 项尝试因外部
-GPU 进程出现而被拒收。当前修改后正式用例、完整 GPU 和 12 组框架门槛仍待验证。
+attention 用例。[before](../bench/baseline/2026-09-28-audit-krn10-attention-before.json)
+及 [after](../bench/baseline/2026-09-28-audit-krn10-attention-after.json) 汇总保留
+源码与加载模块哈希、输出检查、对照轮次及原始产物哈希。修改后子集
+`selected_passed=true`；顶层 `passed=false` 表示其余 131 项算子未选中。
+修改后三轮最大 spread/median 为 0.173%，相对冻结 TileLang 的最小单侧 95%
+收益下界为 +0.0028209709 ms。同一 UUID 上，全部 16 项修改后 CUDA 三轮中位数
+均低于修改前，中位相对差异为 7.26%；跨提交比较不能隔离每项代码变更，也不证明
+框架吞吐。此前三次修改后尝试因外部 GPU 进程而被拒收。完整 147 项算子、
+完整 GPU 套件和 12 行框架门槛仍待验证。
 
 已复审的 `94c3473` 在 B200 UUID
 `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上通过七项独立 KRN-09
