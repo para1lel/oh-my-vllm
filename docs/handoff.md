@@ -487,6 +487,26 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   log `/tmp/oh-my-vllm-py03-nearfull-final-candidate.log`. All owned GPU
   processes exited. PY-03 remains **open/candidate** pending shape-churn,
   262k, low-headroom and 12-row framework evidence.
+- Independently reviewed `3bbf926` is a PY-06 non-greedy readback
+  **candidate**. The runner draws per request on the GPU, then combines
+  rows for one final host transfer before request-local verify/commit;
+  duplicate request IDs fail before forward or RNG draw. The pure-greedy
+  path is unchanged. Clean `3bbf926` on B200 UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`, four requests × five
+  rows × 248320 logits, temperature 1 without penalties/grammar, five
+  warmups plus 20 measured pairs: per-request 0.740048 ms versus combined
+  0.674659 ms median (spreads 3.282/2.047%). Raw log:
+  `/tmp/oh-my-vllm-py06-clean-ab-3bbf926.log`. Pinned H2D staging had
+  no stable material benefit across 64–32768 int64 values, so it was not
+  changed; raw log `/tmp/oh-my-vllm-py06-h2d.log`. MTP eager fallback and
+  output-dependent next-step scheduling remain serialized, and top-k/top-p
+  can synchronize during its tie check. Focused B200 tests passed 32/32,
+  log `/tmp/oh-my-vllm-py06-gpu-focused-r2.log`; `scripts/test.sh cpu`
+  passed 259 tests/70 subtests (224 GPU deselected), log
+  `/tmp/oh-my-vllm-py06-cpu-full.log`. Rust workspace, fmt, line width,
+  Ruff, Clippy and hooks passed. Owned GPU processes exited. PY-06 remains
+  **open/candidate** pending current full GPU and 12-row framework gates
+  plus representative whole-step overlap evidence.
 
 Remaining work: PY-03/04/06, SRV-08, KRN-06, PY-05/07 and KRN-10 acceptance,
 EVD-07, the current full operator/GPU suite, and 12-row framework acceptance.

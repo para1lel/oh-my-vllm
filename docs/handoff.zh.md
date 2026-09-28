@@ -386,6 +386,22 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   `/tmp/oh-my-vllm-py03-nearfull-final-candidate.log`。自有 GPU 进程均已退出。
   PY-03 保持 **open/candidate**，待 shape churn、262k、低余量及 12 行
   框架证据。
+- 经独立复审的 `3bbf926` 是 PY-06 非 greedy 读回**候选**。runner 先逐请求
+  在 GPU 上抽样，再合并行做一次最终主机传输，之后逐请求验证和提交；同批重复
+  request ID 在前向或 RNG 抽样前即被拒绝。纯 greedy 路径未变。干净
+  `3bbf926` 在 B200 UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上，以四请求×每请求
+  五行×248320 词表、temperature 1、无 penalty/grammar、五次预热加二十次
+  成对测量，逐请求读回中位数 0.740048 ms，合并后 0.674659 ms（离散度
+  3.282/2.047%）。原始日志：`/tmp/oh-my-vllm-py06-clean-ab-3bbf926.log`。
+  64–32768 个 int64 元素的 pinned H2D 暂存没有稳定显著收益，因此未修改；
+  原始日志为 `/tmp/oh-my-vllm-py06-h2d.log`。MTP eager 回退和依赖输出的
+  下一步调度仍串行，top-k/top-p 的并列阈值检查也可能同步。B200 聚焦测试
+  通过 32/32，日志为 `/tmp/oh-my-vllm-py06-gpu-focused-r2.log`；
+  `scripts/test.sh cpu` 通过 259 项测试和 70 个 subtest（排除 224 项 GPU），
+  日志为 `/tmp/oh-my-vllm-py06-cpu-full.log`。Rust workspace、fmt、行宽、
+  Ruff、Clippy 和 hooks 均通过。自有 GPU 进程已退出。当前完整 GPU 套件、
+  12 行框架门槛及代表性整步重叠证据完成前，PY-06 保持 **open/candidate**。
 
 后续工作：PY-03/04/06、SRV-08、KRN-06、PY-05/07 与 KRN-10 验收、
 EVD-07，以及当前完整算子/GPU 套件
