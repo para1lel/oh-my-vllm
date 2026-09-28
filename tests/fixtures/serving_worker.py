@@ -8,6 +8,8 @@ from pathlib import Path
 
 import msgpack
 import zmq
+from oh_my_vllm.worker.batch_plan import plan_request
+from oh_my_vllm.worker.protocol import ScheduledRequest
 from oh_my_vllm.worker.serving import RequestValidationError, ServingAdapter
 
 
@@ -82,6 +84,11 @@ def main():
                 history = request["messages"]
                 tool_results = any(item["role"] == "tool" for item in history)
                 text = history[-1].get("content") or ""
+                mtp_slot_plan = "mtp-slot-plan-783" in text
+                if mtp_slot_plan:
+                    # Force an exact page boundary in the scripted worker. Rust
+                    # still owns every physical slot in the execute frame.
+                    prompt = (prompt + [1] * 783)[:783]
                 if request["format"]["type"] != "text":
                     answer = '{"n":123}'
                 elif (
@@ -123,6 +130,10 @@ def main():
                     "flood": "flood-active" in text,
                     "slow_stream": "slow-stream" in text,
                     "stream_step": 0,
+                    "mtp_slot_plan": mtp_slot_plan,
+                    "accepted_history": prompt.copy(),
+                    "source": None,
+                    "draft_sent": False,
                 }
                 reply = {"type": "prepared", "prompt_token_ids": prompt}
             except Exception as exc:
@@ -174,6 +185,8 @@ def main():
                         output.write(str(rid) + "\n")
             for rid in message["preempted_request_ids"]:
                 block_owners.pop(rid, None)
+                if requests[rid]["mtp_slot_plan"]:
+                    requests[rid]["source"] = None
             outputs = []
             fatal = False
             for scheduled in message["scheduled"]:
@@ -197,6 +210,16 @@ def main():
                     set(scheduled["mamba_block_table"]) - {0},
                 )
                 state = requests[rid]
+                plan = None
+                if state["mtp_slot_plan"]:
+                    plan = plan_request(
+                        ScheduledRequest(**scheduled),
+                        state["accepted_history"],
+                        state["source"],
+                        100,
+                        100,
+                        4,
+                    )
                 if state["fatal"]:
                     fatal = True
                     break
@@ -216,6 +239,32 @@ def main():
                 ):
                     ids = [state["tokens"].pop(0)]
                 ids, text = adapter.generations[rid].consume(ids, adapter.tokenizer)
+                new_drafts = []
+                if plan is not None:
+                    _, next_source, copies = plan.commit(int(bool(ids)))
+                    state["source"] = next_source
+                    state["accepted_history"].extend(ids)
+                    if ids and not state["draft_sent"]:
+                        new_drafts = [90, 91, 92, 93]
+                        state["draft_sent"] = True
+                    if path := os.environ.get("OH_MY_VLLM_FIXTURE_MTP_PLAN"):
+                        with Path(path).open("a") as output:
+                            output.write(
+                                json.dumps(
+                                    {
+                                        "request_id": rid,
+                                        "start": scheduled["num_computed_tokens"],
+                                        "scheduled": len(scheduled["token_ids"]),
+                                        "source": plan.source,
+                                        "writes": plan.writes,
+                                        "drafts": plan.drafts,
+                                        "copies": copies,
+                                        "next_source": next_source,
+                                        "table": scheduled["mamba_block_table"],
+                                    }
+                                )
+                                + "\n"
+                            )
                 if state["flood"]:
                     text = "x" * (1 << 20)
                     if path := os.environ.get("OH_MY_VLLM_FIXTURE_FLOOD"):
@@ -228,7 +277,7 @@ def main():
                     {
                         "request_id": rid,
                         "token_ids": ids,
-                        "new_draft_token_ids": [],
+                        "new_draft_token_ids": new_drafts,
                         "num_accepted_draft_tokens": 0,
                         "text": text,
                         "finish_reason": adapter.generations[rid].finished,

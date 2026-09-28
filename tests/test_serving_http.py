@@ -59,6 +59,7 @@ class HttpTests(unittest.TestCase):
             "OH_MY_VLLM_FIXTURE_OVERLAP": str(cls.directory / "overlap"),
             "OH_MY_VLLM_FIXTURE_ABORTS": str(cls.directory / "aborts"),
             "OH_MY_VLLM_FIXTURE_RPC_ORDER": str(cls.directory / "rpc-order"),
+            "OH_MY_VLLM_FIXTURE_MTP_PLAN": str(cls.directory / "mtp-plan"),
             "OH_MY_VLLM_PREPARE_TIMEOUT_MS": "500",
             "RUST_LOG": "info,oh_my_vllm_zmq_worker::client=debug",
         }
@@ -124,6 +125,31 @@ class HttpTests(unittest.TestCase):
             ),
             **extra,
         }
+
+    def test_mtp_wire_table_is_consumed_at_783_to_784_boundary(self):
+        """The real Rust execute frame must drive Python source/write/copy planning."""
+        path = self.directory / "mtp-plan"
+        path.unlink(missing_ok=True)
+        with self.request(
+            "/responses",
+            self.base(True, input="mtp-slot-plan-783", max_output_tokens=10),
+        ) as response:
+            self.assertEqual(response.status, 200)
+            result = json.load(response)
+        self.assertEqual(result["status"], "completed")
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        self.assertGreaterEqual(len(rows), 2)
+        first = rows[0]
+        self.assertEqual((first["start"], first["scheduled"]), (0, 783))
+        self.assertEqual(first["drafts"], [])
+        verification = next(row for row in rows if len(row["drafts"]) == 4)
+        self.assertEqual((verification["start"], verification["scheduled"]), (783, 5))
+        self.assertEqual(verification["source"], first["next_source"])
+        self.assertEqual(verification["writes"], verification["table"][1:6])
+        self.assertEqual(
+            verification["copies"],
+            [[verification["writes"][0], verification["table"][0]]],
+        )
 
     def test_chat_stream_matches_nonstream(self):
         with self.request("/chat/completions", self.base()) as response:

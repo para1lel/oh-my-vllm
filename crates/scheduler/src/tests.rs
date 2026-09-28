@@ -636,6 +636,80 @@ fn mtp_rollback_adjusts_computed_tokens() {
     // No panic = rollback completed successfully.
 }
 
+#[test]
+fn mtp_scheduled_gdn_slots_match_worker_candidate_slice_at_page_boundaries() {
+    for (prompt_len, budget, expected_prefill_steps) in
+        [(783, 512, 2), (784, 784, 1), (785, 784, 2), (1568, 784, 2)]
+    {
+        let config = SchedulerConfig {
+            max_num_batched_tokens: budget,
+            max_num_seqs: 1,
+            enable_mtp: true,
+            mtp_draft_len: 4,
+        };
+        let mut kv = HybridCoordinator::new(64, 784, false, 0).with_mamba_capacity(16);
+        kv.set_speculative_blocks(4);
+        let mut scheduler = Scheduler::new(config, kv);
+        assert!(scheduler.add_request(make_req(1, prompt_len, 10)));
+
+        let mut prefill_steps = 0;
+        let mut next_start = 0;
+        let source = loop {
+            let prefill = scheduler.schedule();
+            let first = &prefill.scheduled[0];
+            assert_eq!(first.num_computed_tokens, next_start);
+            next_start += first.token_ids.len();
+            assert!(next_start <= prompt_len);
+            prefill_steps += 1;
+            let last_chunk = first.num_computed_tokens + first.token_ids.len() == prompt_len;
+            let source = first.mamba_block_table[(prompt_len - 1) / 784];
+            apply(
+                &mut scheduler,
+                WorkerOutput {
+                    outputs: vec![RequestOutput {
+                        request_id: 1,
+                        token_ids: if last_chunk {
+                            vec![42]
+                        } else {
+                            Vec::new()
+                        },
+                        num_accepted_draft_tokens: 0,
+                        new_draft_token_ids: if last_chunk {
+                            vec![90, 91, 92, 93]
+                        } else {
+                            Vec::new()
+                        },
+                    }],
+                },
+            );
+            if last_chunk {
+                break source;
+            }
+        };
+        assert_eq!(prefill_steps, expected_prefill_steps);
+        assert_ne!(source, 0);
+
+        let verification = scheduler.schedule();
+        let request = &verification.scheduled[0];
+        assert_eq!(request.num_computed_tokens, prompt_len);
+        assert_eq!(request.token_ids.len(), 5);
+        assert_eq!(request.token_ids[1..], [90, 91, 92, 93]);
+        let base = (request.num_computed_tokens + request.token_ids.len() - 1) / 784;
+        let candidates = &request.mamba_block_table[base..base + request.token_ids.len()];
+        assert!(candidates.iter().all(|&slot| slot != 0));
+        assert_eq!(
+            candidates
+                .iter()
+                .copied()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            5,
+            "GDN candidate slots must be distinct at prompt length {prompt_len}"
+        );
+        assert_eq!(request.mamba_block_table[(prompt_len - 1) / 784], source);
+    }
+}
+
 // ── abort ─────────────────────────────────────────────────────────────────────
 
 #[test]
