@@ -179,9 +179,21 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   on UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`; the smallest lower
   bound was 0.000064624 ms. Owned GPU processes exited. Full 147-case, GPU,
   and 12-row framework acceptance remains pending.
+- Independently reviewed `be84176` closes MNT-01's discarded Python tuning
+  knobs. CUDA private factories now accept only live settings while frozen
+  TileLang signatures and public APIs stay intact. Decode still passes split,
+  first-position, grouping, and position-width settings; its block calculation
+  remains for a conservative position-width bound, and split buffer sizes are
+  checked before launch. The focused CPU mock suite passed 9/9 and the full
+  CPU entry point passed 165 tests and 67 subtests (181 GPU cases deselected).
+  On B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`, public-output
+  cases passed 25/25 and the post-guard decode rerun passed 2/2. Rust workspace
+  56/26/17, fmt, line width, Ruff, Clippy, and hooks passed; owned GPU
+  processes exited. Full current GPU, 147-case formal, and 12-row framework
+  acceptance remain pending.
 
 Remaining work: PY-03..07, SRV-08..10, SCH-06/07, KRN-06..10,
-EVD-07, MNT-01, the four unverified risks, and current
+EVD-07, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
 
