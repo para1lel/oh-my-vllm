@@ -99,9 +99,9 @@ class CommitTests(unittest.TestCase):
             for rid in (1, 2)
         ]
 
-        def masks(scheduled):
-            rid = next(iter(scheduled.num_scheduled_tokens))
-            if rid == "1":
+        def masks(drafts_by_request):
+            rid = next(iter(drafts_by_request))
+            if rid == 1:
                 raise ValueError("invalid grammar state")
             return SimpleNamespace(grammar_bitmask=np.array([[1]], dtype=np.int32))
 

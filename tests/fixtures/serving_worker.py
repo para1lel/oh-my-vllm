@@ -65,7 +65,7 @@ def main():
                         "<parameter=path>\nREADME.md\n</parameter>\n"
                         "</function>\n</tool_call>"
                     )
-                elif "long" in text:
+                elif "long" in text or "flood-active" in text:
                     answer = "hello " * 1000
                 else:
                     answer = "Fixture response."
@@ -81,6 +81,7 @@ def main():
                     "fail": "worker-fail" in text,
                     "fatal": "worker-fatal" in text,
                     "hold": "hold-active" in text,
+                    "flood": "flood-active" in text,
                 }
                 reply = {"type": "prepared", "prompt_token_ids": prompt}
                 if "slow-prepare" in text:
@@ -134,6 +135,11 @@ def main():
                 ):
                     ids = [state["tokens"].pop(0)]
                 ids, text = adapter.generations[rid].consume(ids, adapter.tokenizer)
+                if state["flood"]:
+                    text = "x" * (1 << 20)
+                    if path := os.environ.get("OH_MY_VLLM_FIXTURE_FLOOD"):
+                        with Path(path).open("a") as output:
+                            output.write("step\n")
                 outputs.append(
                     {
                         "request_id": rid,
@@ -157,6 +163,8 @@ def main():
             )
             reply["rpc_id"] = message["rpc_id"]
         elif kind == "shutdown":
+            if path := os.environ.get("OH_MY_VLLM_FIXTURE_SHUTDOWN"):
+                Path(path).write_text("shutdown received\n")
             break
         elif kind == "abort":
             requests.pop(message["request_id"], None)

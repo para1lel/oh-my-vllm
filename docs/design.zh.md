@@ -34,7 +34,6 @@ oh-my-vllm 按清晰边界分工：Rust 拥有调度策略和 KV 缓存记账，
     "token_ids": list[int],
     "num_computed_tokens": int,
     "prefill_token_ids": [int],  // 仅接纳/恢复时：完整已接受历史
-    "new_block_ids_to_zero": [int],  // 未使用的提示；混合了 FA/GDN 两个命名空间（审计 MNT-04）
     "fa_block_table": list[int],
     "mamba_block_table": list[int]}
  ],
@@ -126,7 +125,7 @@ num_speculative_tokens=4 时，独立 Worker 对照 target sample 验证已调�
 
 MTP 缓存按输入 token 索引，首个有效位置为 1；边界 hidden feature 恢复前缀而不修改共享页。若已分配页容得下额外三次写入，proposal 图生成四个贪心 draft，中间无主机同步；否则逐步生成在分配/上下文边界裁剪。target 验证和 draft-head 预热在请求各 query 间共享 KV 读取，并保留独立因果 mask。
 
-新逻辑分配 ID 仍作为 wire 兼容性提示。自有 kernel 完全覆盖已提交递归目的地，新请求从不可变零状态初始化，FA 读取按有效长度 mask；不需要旧 V2 物理 stride 重映射或 new_block_ids_to_zero 调用。计算图预热/捕获在正式回放前保存并恢复所有被修改的 FA/状态目的地。
+自有 kernel 完全覆盖已提交递归目的地，新请求从不可变零状态初始化，FA 读取按有效长度 mask。原先合并 FA/GDN 命名空间的清零提示已从 wire 协议删除；Python 从未消费该字段。计算图预热/捕获在正式回放前保存并恢复所有被修改的 FA/状态目的地。
 
 ## 服务协议扩展（2026-09-21）
 

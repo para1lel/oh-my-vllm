@@ -24,6 +24,7 @@ use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
     convert::Infallible,
+    future::IntoFuture,
     net::SocketAddr,
     sync::{
         Arc, Mutex,
@@ -49,6 +50,8 @@ pub struct ServeArgs {
     pub response_max_bytes: usize,
     #[arg(long, default_value_t = 600)]
     pub request_timeout_seconds: u64,
+    #[arg(long, default_value_t = 35)]
+    pub shutdown_grace_seconds: u64,
 }
 
 pub fn now() -> u64 {
@@ -289,7 +292,8 @@ pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) 
         args.response_capacity > 0
             && args.response_max_bytes > 0
             && args.response_ttl_seconds > 0
-            && args.request_timeout_seconds > 0,
+            && args.request_timeout_seconds > 0
+            && args.shutdown_grace_seconds > 0,
         "serving limits must be positive"
     );
     let listener = tokio::net::TcpListener::bind(args.listen).await?;
@@ -315,38 +319,62 @@ pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) 
         .layer(DefaultBodyLimit::max(8 << 20))
         .with_state(app);
     info!(listen = %args.listen, model = %args.served_model_name, "HTTP service ready");
-    let engine = tokio::spawn(engine(
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let mut engine = tokio::spawn(engine(
         client,
         scheduler,
         rx,
         store,
         Duration::from_secs(args.request_timeout_seconds),
+        shutdown_rx,
     ));
-    let abort_engine = engine.abort_handle();
-    let result = axum::serve(listener, router)
-        .with_graceful_shutdown(async move {
-            tokio::select! {
-                _ = tokio::signal::ctrl_c() => {}
-                _ = async {
-                    #[cfg(unix)]
-                    {
-                        let _ = tokio::signal::unix::signal(
-                            tokio::signal::unix::SignalKind::terminate(),
-                        )
-                        .unwrap()
-                        .recv()
-                        .await;
-                    }
-                    #[cfg(not(unix))]
-                    std::future::pending::<()>().await;
-                } => {}
+    let (drain_tx, mut drain_rx) = oneshot::channel();
+    let mut server = Box::pin(
+        axum::serve(listener, router)
+            .with_graceful_shutdown(async move {
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = async {
+                        #[cfg(unix)]
+                        {
+                            let _ = tokio::signal::unix::signal(
+                                tokio::signal::unix::SignalKind::terminate(),
+                            )
+                            .unwrap()
+                            .recv()
+                            .await;
+                        }
+                        #[cfg(not(unix))]
+                        std::future::pending::<()>().await;
+                    } => {}
+                }
+                let _ = shutdown_tx.send(());
+                let _ = drain_tx.send(());
+            })
+            .into_future(),
+    );
+    let grace = Duration::from_secs(args.shutdown_grace_seconds);
+    let (result, deadline) = tokio::select! {
+        result = &mut server => (Some(result), tokio::time::Instant::now() + grace),
+        _ = &mut drain_rx => {
+            let deadline = tokio::time::Instant::now() + grace;
+            let result = tokio::time::timeout_at(deadline, &mut server).await.ok();
+            if result.is_none() {
+                warn!("HTTP connections did not drain before shutdown deadline");
             }
-            abort_engine.abort();
-        })
-        .await;
-    engine.abort();
-    let _ = engine.await;
-    result.context("HTTP service")
+            (result, deadline)
+        }
+    };
+    drop(server);
+    if tokio::time::timeout_at(deadline, &mut engine)
+        .await
+        .is_err()
+    {
+        warn!("inference engine did not stop after graceful shutdown");
+        engine.abort();
+        let _ = engine.await;
+    }
+    result.map_or(Ok(()), |result| result.context("HTTP service"))
 }
 
 fn send_events(active: &Active, events: Vec<Value>) -> Result<()> {
@@ -498,22 +526,29 @@ async fn engine(
     mut incoming: mpsc::Receiver<Submission>,
     store: Arc<Mutex<Store>>,
     request_timeout: Duration,
+    mut shutdown: oneshot::Receiver<()>,
 ) {
     let mut active = BTreeMap::new();
-    let result = run_engine(
-        &mut client,
-        &mut scheduler,
-        &mut incoming,
-        &store,
-        request_timeout,
-        &mut active,
-    )
-    .await;
+    let (result, stopping) = tokio::select! {
+        _ = &mut shutdown => (Ok(()), true),
+        result = run_engine(
+            &mut client,
+            &mut scheduler,
+            &mut incoming,
+            &store,
+            request_timeout,
+            &mut active,
+        ) => (result, false),
+    };
     if let Err(error) = result {
         warn!(%error, "inference engine failed");
-        for (_, request) in active {
-            request.fail("worker failed");
-        }
+    }
+    for (_, request) in active {
+        request.fail(if stopping {
+            "server shutting down"
+        } else {
+            "worker failed"
+        });
     }
     // Fail pending admission immediately rather than holding handlers during shutdown.
     drop(incoming);

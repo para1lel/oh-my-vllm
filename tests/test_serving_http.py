@@ -508,6 +508,153 @@ class HttpTests(unittest.TestCase):
                         os.killpg(process.pid, signal.SIGKILL)
                         process.wait()
 
+    def test_sigint_drains_active_request_and_shuts_down_worker(self):
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
+        address = f"http://127.0.0.1:{port}/v1"
+        marker = self.directory / "graceful-shutdown"
+        log_path = self.directory / "graceful-shutdown.log"
+        environment = os.environ | {
+            "OH_MY_VLLM_WORKER_PYTHON": str(self.directory / "worker"),
+            "OH_MY_VLLM_FIXTURE_SHUTDOWN": str(marker),
+            "CUDA_VISIBLE_DEVICES": "",
+        }
+        with log_path.open("w") as log:
+            process = subprocess.Popen(
+                [
+                    str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                    "--socket",
+                    str(self.directory / "graceful-worker.ipc"),
+                    "serve",
+                    "--listen",
+                    f"127.0.0.1:{port}",
+                ],
+                env=environment,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+            )
+            try:
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        self.fail(log_path.read_text())
+                    try:
+                        with urllib.request.urlopen(address + "/models", timeout=0.2):
+                            break
+                    except (OSError, urllib.error.URLError):
+                        time.sleep(0.05)
+                else:
+                    self.fail("graceful shutdown fixture did not start")
+                request = urllib.request.Request(
+                    address + "/responses",
+                    data=json.dumps(
+                        self.base(
+                            True,
+                            input="long hold-active",
+                            stream=True,
+                            max_output_tokens=1500,
+                        )
+                    ).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(request, timeout=5) as stream:
+                    self.assertIn(b"response.created", stream.readline())
+                    process.send_signal(signal.SIGINT)
+                    body = stream.read().decode()
+                self.assertIn("server shutting down", body)
+                self.assertEqual(process.wait(timeout=5), 0, log_path.read_text())
+                self.assertEqual(marker.read_text(), "shutdown received\n")
+            finally:
+                if process.poll() is None:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait()
+
+    def test_sigint_has_deadline_for_client_that_stops_reading_sse(self):
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
+        address = f"http://127.0.0.1:{port}/v1"
+        marker = self.directory / "stalled-shutdown"
+        flood = self.directory / "stalled-steps"
+        log_path = self.directory / "stalled-shutdown.log"
+        environment = os.environ | {
+            "OH_MY_VLLM_WORKER_PYTHON": str(self.directory / "worker"),
+            "OH_MY_VLLM_FIXTURE_SHUTDOWN": str(marker),
+            "OH_MY_VLLM_FIXTURE_FLOOD": str(flood),
+            "CUDA_VISIBLE_DEVICES": "",
+        }
+        with log_path.open("w") as log:
+            process = subprocess.Popen(
+                [
+                    str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                    "--socket",
+                    str(self.directory / "stalled-worker.ipc"),
+                    "serve",
+                    "--listen",
+                    f"127.0.0.1:{port}",
+                    "--shutdown-grace-seconds",
+                    "1",
+                ],
+                env=environment,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+            )
+            try:
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        self.fail(log_path.read_text())
+                    try:
+                        with urllib.request.urlopen(address + "/models", timeout=0.2):
+                            break
+                    except (OSError, urllib.error.URLError):
+                        time.sleep(0.05)
+                else:
+                    self.fail("stalled shutdown fixture did not start")
+                payload = json.dumps(
+                    self.base(
+                        True, input="flood-active", stream=True, max_output_tokens=1000
+                    )
+                ).encode()
+                with socket.create_connection(("127.0.0.1", port), timeout=5) as client:
+                    client.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024)
+                    client.sendall(
+                        b"POST /v1/responses HTTP/1.1\r\n"
+                        b"Host: 127.0.0.1\r\n"
+                        b"Content-Type: application/json\r\n"
+                        + f"Content-Length: {len(payload)}\r\n\r\n".encode()
+                        + payload
+                    )
+                    status = b""
+                    while b"\r\n" not in status and len(status) < 8192:
+                        chunk = client.recv(4096)
+                        if not chunk:
+                            self.fail("server closed before the HTTP status line")
+                        status += chunk
+                    self.assertIn(b"200 OK", status.split(b"\r\n", 1)[0])
+                    deadline = time.monotonic() + 5
+                    while time.monotonic() < deadline:
+                        steps = flood.read_text().splitlines() if flood.exists() else []
+                        if len(steps) >= 16:
+                            break
+                        time.sleep(0.02)
+                    else:
+                        self.fail("fixture did not fill the stalled stream")
+                    process.send_signal(signal.SIGINT)
+                    self.assertEqual(process.wait(timeout=5), 0, log_path.read_text())
+                self.assertEqual(marker.read_text(), "shutdown received\n")
+                self.assertIn(
+                    "HTTP connections did not drain before shutdown deadline",
+                    log_path.read_text(),
+                )
+            finally:
+                if process.poll() is None:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait()
+
     def test_length_inside_tool_is_not_server_error(self):
         tool = {
             "type": "function",

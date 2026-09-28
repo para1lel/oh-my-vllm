@@ -5,12 +5,12 @@ constraints, thinking levels, lifecycle and both oh-my-pi core tasks. Long stric
 requests through both APIs reuse 130928 cached tokens. See
 [acceptance.md](acceptance.md) for evidence and retained answer limitations.
 
-**Known serving defects** (details and fixes in [audit-2026-09-23.md](audit-2026-09-23.md)):
-one request's worker-side error (for example `temperature` near zero, a grammar
-violation, or a 120 s prepare) fails every active request and makes the service
-unavailable until restart (SRV-01); SIGTERM/SIGKILL of the Rust process orphans the
-Python worker on the GPU (SRV-02); capacity and internal errors are returned as 400
-(SRV-03); a `length` finish can drop the last few held-back bytes (SRV-04).
+**Historical audit findings, now repaired:** the 2026-09-23 audit found request
+errors that could fail all active streams (SRV-01), orphaned workers after parent
+termination (SRV-02), misclassified HTTP errors (SRV-03), and dropped held-back
+bytes at a `length` finish (SRV-04). Their current code and regression status is
+tracked in [audit-2026-09-23.md](audit-2026-09-23.md); current full GPU and 12-row
+framework acceptance remain separate pending checks.
 
 ## Run
 
@@ -124,11 +124,14 @@ HTTP bodies are limited to 8 MiB; admission channel and active request limit are
 64 each; Rust schedules up to 32 concurrent sequences. Each stream has a 256-event
 buffer. A disconnected or slow client cancels its request, not the engine.
 The default request timeout is 600 seconds (configurable); preparation/step RPCs
-have 120-second deadlines and detect worker exit. Fatal worker errors fail pending
-requests; later submissions return unavailable until restart. Currently every
-worker exception is treated as fatal (audit SRV-01). Ctrl-C stops the owned worker
-(SIGKILL via drop, without Python's graceful shutdown) and closes streams; SIGTERM
-is not handled (audit SRV-02). In-flight kernels are not individually preempted.
+have 120-second deadlines and detect worker exit. Request-local validation and
+generation errors fail only that request; CUDA/device and worker-fatal errors
+fail pending requests, and later submissions return unavailable until restart.
+Ctrl-C and SIGTERM close active streams and ask Python to shut down. HTTP drain
+and worker cleanup share a bounded shutdown deadline (35 seconds by default,
+configurable with `--shutdown-grace-seconds`); a stalled HTTP reader is forcibly
+disconnected when the deadline expires. In-flight kernels are not individually
+preempted.
 
 ## OMP task and verification
 

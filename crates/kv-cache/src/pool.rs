@@ -77,7 +77,6 @@ pub struct BlockPool {
     free_queue: FreeKVCacheBlockQueue,
     cached: FxHashMap<BlockHashWithGroupId, CachedBlocks>,
     enable_caching: bool,
-    newly_allocated: Vec<u32>,
 }
 
 impl BlockPool {
@@ -99,7 +98,6 @@ impl BlockPool {
             free_queue,
             cached: FxHashMap::default(),
             enable_caching,
-            newly_allocated: Vec::new(),
         }
     }
 
@@ -155,13 +153,7 @@ impl BlockPool {
             assert_eq!(block.ref_cnt, 0, "allocated a block that was still in use");
             block.ref_cnt = 1;
         }
-        self.newly_allocated.extend_from_slice(&ids);
         Some(ids)
-    }
-
-    /// Drain fresh allocations, excluding prefix-hit references and null blocks.
-    pub fn take_newly_allocated(&mut self) -> Vec<u32> {
-        std::mem::take(&mut self.newly_allocated)
     }
 
     /// Drop `block_id`'s prefix-cache entry, if any, so the block can be reused.
@@ -290,19 +282,14 @@ mod tests {
     }
 
     #[test]
-    fn zeroing_tracks_allocations_but_not_cached_references() {
+    fn cached_reference_is_not_reallocated() {
         let mut pool = BlockPool::new(4, true);
         let ids = pool.get_new_blocks(3).unwrap();
-        assert_eq!(pool.take_newly_allocated(), ids);
-        assert!(pool.take_newly_allocated().is_empty());
         pool.free_blocks(&ids);
         pool.touch(&[ids[0]]);
-        assert!(pool.take_newly_allocated().is_empty());
         let reused = pool.get_new_blocks(2).unwrap();
-        assert_eq!(pool.take_newly_allocated(), reused);
         assert!(!reused.contains(&ids[0]));
         assert!(pool.get_new_blocks(1).is_none());
-        assert!(pool.take_newly_allocated().is_empty());
     }
 
     #[test]

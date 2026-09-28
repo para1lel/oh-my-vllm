@@ -14,8 +14,6 @@ pub struct ScheduledRequest {
     /// Complete accepted history on initial admission or recompute resumption.
     /// Unverified speculative drafts are never part of this history.
     pub prefill_token_ids: Option<Vec<u32>>,
-    /// Fresh allocations only: never clear cached prefixes or live state slots.
-    pub new_block_ids_to_zero: Vec<u32>,
     /// How many tokens at the head of `token_ids` already have KV in the cache
     /// (i.e. can be skipped by the attention computation).
     pub num_computed_tokens: usize,

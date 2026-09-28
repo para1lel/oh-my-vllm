@@ -2,7 +2,6 @@
 
 import copy
 import unittest
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from oh_my_vllm.worker.serving import (
@@ -112,26 +111,18 @@ class ServingTests(unittest.TestCase):
 
     def test_masks_rollback_valid_and_invalid_drafts(self):
         self.prepare()
-        scheduled = SimpleNamespace(
-            num_scheduled_tokens={"1": 1}, scheduled_spec_decode_tokens={}
-        )
-        initial = self.adapter.masks(scheduled).grammar_bitmask.copy()
+        drafts = {1: []}
+        initial = self.adapter.masks(drafts).grammar_bitmask.copy()
         valid = self.adapter.tokenizer.encode('{"n":', add_special_tokens=False)
-        scheduled.scheduled_spec_decode_tokens = {"1": valid}
-        speculative = self.adapter.masks(scheduled).grammar_bitmask
+        drafts[1] = valid
+        speculative = self.adapter.masks(drafts).grammar_bitmask
         self.assertEqual(len(speculative), len(valid) + 1)
-        scheduled.scheduled_spec_decode_tokens = {}
-        self.assertTrue(
-            (initial == self.adapter.masks(scheduled).grammar_bitmask).all()
-        )
-        scheduled.scheduled_spec_decode_tokens = {
-            "1": self.adapter.tokenizer.encode("invalid", add_special_tokens=False)
-        }
-        self.adapter.masks(scheduled)
-        scheduled.scheduled_spec_decode_tokens = {}
-        self.assertTrue(
-            (initial == self.adapter.masks(scheduled).grammar_bitmask).all()
-        )
+        drafts[1] = []
+        self.assertTrue((initial == self.adapter.masks(drafts).grammar_bitmask).all())
+        drafts[1] = self.adapter.tokenizer.encode("invalid", add_special_tokens=False)
+        self.adapter.masks(drafts)
+        drafts[1] = []
+        self.assertTrue((initial == self.adapter.masks(drafts).grammar_bitmask).all())
         generation = self.adapter.generations[1]
         ids = self.adapter.tokenizer.encode('{"n":123}', add_special_tokens=False)
         accepted, text = generation.consume([*ids, 248046, 123], self.adapter.tokenizer)
@@ -141,20 +132,14 @@ class ServingTests(unittest.TestCase):
 
     def test_masks_rollback_eos_draft_and_bonus(self):
         self.prepare()
-        scheduled = SimpleNamespace(
-            num_scheduled_tokens={"1": 1}, scheduled_spec_decode_tokens={}
-        )
-        initial = self.adapter.masks(scheduled).grammar_bitmask.copy()
+        drafts = {1: []}
+        initial = self.adapter.masks(drafts).grammar_bitmask.copy()
         drafts = self.adapter.tokenizer.encode('{"n":1}', add_special_tokens=False)
-        scheduled.scheduled_spec_decode_tokens = {"1": [*drafts, 248046, 123]}
-        mask = self.adapter.masks(scheduled).grammar_bitmask
+        mask = self.adapter.masks({1: [*drafts, 248046, 123]}).grammar_bitmask
         self.assertEqual(len(mask), len(drafts) + 3)
         self.assertTrue((mask[-2:] == -1).all())
         self.assertFalse(self.adapter.generations[1].matcher.is_terminated())
-        scheduled.scheduled_spec_decode_tokens = {}
-        self.assertTrue(
-            (initial == self.adapter.masks(scheduled).grammar_bitmask).all()
-        )
+        self.assertTrue((initial == self.adapter.masks({1: []}).grammar_bitmask).all())
 
     def test_stop_and_utf8_across_steps(self):
         self.prepare(format={"type": "text"}, stop=["END"])
@@ -169,17 +154,13 @@ class ServingTests(unittest.TestCase):
 
     def test_speculative_window_crosses_reasoning_boundary(self):
         self.prepare(effort="medium")
-        scheduled = SimpleNamespace(
-            num_scheduled_tokens={"1": 1}, scheduled_spec_decode_tokens={}
-        )
-        before = self.adapter.masks(scheduled).grammar_bitmask.copy()
+        drafts = {1: []}
+        before = self.adapter.masks(drafts).grammar_bitmask.copy()
         prefix = 'Checking.</think>\n\n{"n":'
-        scheduled.scheduled_spec_decode_tokens = {
-            "1": self.adapter.tokenizer.encode(prefix, add_special_tokens=False)
-        }
-        self.adapter.masks(scheduled)
-        scheduled.scheduled_spec_decode_tokens = {}
-        self.assertTrue((before == self.adapter.masks(scheduled).grammar_bitmask).all())
+        drafts[1] = self.adapter.tokenizer.encode(prefix, add_special_tokens=False)
+        self.adapter.masks(drafts)
+        drafts[1] = []
+        self.assertTrue((before == self.adapter.masks(drafts).grammar_bitmask).all())
         generation = self.adapter.generations[1]
         ids = self.adapter.tokenizer.encode(
             'Checking.</think>\n\n{"n":1}', add_special_tokens=False

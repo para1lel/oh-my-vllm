@@ -40,7 +40,6 @@ All messages are msgpack dicts with a `"type"` key.
     "token_ids": list[int],
     "num_computed_tokens": int,
     "prefill_token_ids": [int],  // admission/resumption only: full accepted history
-    "new_block_ids_to_zero": [int],  // unused hint; merges FA/GDN namespaces (audit MNT-04)
     "fa_block_table": list[int],
     "mamba_block_table": list[int]}
  ],
@@ -185,11 +184,11 @@ without intermediate host synchronization. Otherwise, stepwise generation trims
 at allocation/context boundaries. Target verification and draft-head warmup share
 KV reads across a request's queries, preserving independent causal masks.
 
-Fresh logical allocation IDs remain a wire compatibility hint. The owned kernels
-fully overwrite committed recurrent destinations, initialize new requests from
-immutable zero state, and mask FA reads by valid lengths; they do not require the
-old V2 physical-stride remapping or new_block_ids_to_zero call. Graph warmup and
-capture save and restore every mutated FA/state destination before actual replay.
+The owned kernels fully overwrite committed recurrent destinations, initialize
+new requests from immutable zero state, and mask FA reads by valid lengths. The
+obsolete combined FA/GDN zeroing hint was removed from the wire protocol; it
+had no Python consumer. Graph warmup and capture save and restore every mutated
+FA/state destination before actual replay.
 
 ## Serving protocol extension (2026-09-21)
 

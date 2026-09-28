@@ -11,7 +11,6 @@ class ScheduledRequest:
     fa_block_table: list[int]
     mamba_block_table: list[int]
     prefill_token_ids: list[int] | None = None
-    new_block_ids_to_zero: list[int] = field(default_factory=list)
 
 
 @dataclass

@@ -219,7 +219,8 @@ class OhMyVllmWorker:
                     request,
                     self.histories[rid],
                     self.sources.get(rid),
-                    max(self.logical_num_blocks, self.mamba_blocks),
+                    self.logical_num_blocks,
+                    self.mamba_blocks,
                     self.config.speculative_tokens,
                 )
             )
@@ -373,8 +374,6 @@ class OhMyVllmWorker:
 
     def _build_masks(self, plans):
         """Generate grammar rows per request so one invalid grammar is isolated."""
-        from types import SimpleNamespace
-
         masks, errors = {}, {}
         if self.serving is None:
             return masks, errors
@@ -383,12 +382,7 @@ class OhMyVllmWorker:
                 continue
             rid = plan.request.request_id
             try:
-                output = self.serving.masks(
-                    SimpleNamespace(
-                        num_scheduled_tokens={str(rid): len(plan.writes)},
-                        scheduled_spec_decode_tokens={str(rid): plan.drafts},
-                    )
-                )
+                output = self.serving.masks({rid: plan.drafts})
                 if output is not None:
                     # ServingAdapter reuses its bitmask buffer on the next call.
                     masks[rid] = output.grammar_bitmask[

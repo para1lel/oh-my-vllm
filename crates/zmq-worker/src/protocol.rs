@@ -52,7 +52,6 @@ pub struct ScheduledRequestMsg {
     pub token_ids: Vec<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prefill_token_ids: Option<Vec<u32>>,
-    pub new_block_ids_to_zero: Vec<u32>,
     pub num_computed_tokens: u32,
     pub fa_block_table: Vec<u32>,
     pub mamba_block_table: Vec<u32>,
@@ -134,6 +133,31 @@ pub fn decode(bytes: &[u8]) -> Result<PythonMessage, rmp_serde::decode::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn execute_wire_contains_only_live_cache_fields() {
+        let message = RustMessage::Execute(ExecuteMsg {
+            rpc_id: 1,
+            step_id: 2,
+            scheduled: vec![ScheduledRequestMsg {
+                request_id: 3,
+                token_ids: vec![4],
+                prefill_token_ids: Some(vec![4]),
+                num_computed_tokens: 0,
+                fa_block_table: vec![1],
+                mamba_block_table: vec![2],
+            }],
+            finished_request_ids: vec![],
+            preempted_request_ids: vec![],
+            num_batched_tokens: 1,
+        });
+        let bytes = encode(&message).unwrap();
+        let value: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+        let request = &value["scheduled"][0];
+        assert!(request.get("new_block_ids_to_zero").is_none());
+        assert_eq!(request["fa_block_table"], serde_json::json!([1]));
+        assert_eq!(request["mamba_block_table"], serde_json::json!([2]));
+    }
 
     #[test]
     fn worker_error_kind_defaults_to_internal() {

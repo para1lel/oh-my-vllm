@@ -148,7 +148,7 @@ fn prefix_cache_hit_reduces_scheduled_tokens() {
 
     // First request: 16-token prompt, generates 1 token so cache_blocks fires.
     sched.add_request(make_req(1, 16, 1));
-    let _ = sched.schedule();
+    let first = sched.schedule().scheduled.remove(0);
     apply(
         &mut sched,
         WorkerOutput {
@@ -174,13 +174,14 @@ fn prefix_cache_hit_reduces_scheduled_tokens() {
         sr.num_computed_tokens
     );
     let hit_blocks = sr.num_computed_tokens / BS;
-    for cached in &sr.fa_block_table[..hit_blocks] {
-        assert!(!sr.new_block_ids_to_zero.contains(cached));
-    }
-    for cached in &sr.mamba_block_table[..hit_blocks] {
-        assert!(!sr.new_block_ids_to_zero.contains(cached));
-    }
-    assert!(!sr.new_block_ids_to_zero.is_empty());
+    assert_eq!(
+        sr.fa_block_table[..hit_blocks],
+        first.fa_block_table[..hit_blocks]
+    );
+    assert_eq!(
+        sr.mamba_block_table[..hit_blocks],
+        first.mamba_block_table[..hit_blocks]
+    );
 }
 
 // ── pool exhaustion: preemption ───────────────────────────────────────────────

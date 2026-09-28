@@ -127,15 +127,6 @@ impl HybridCoordinator {
         self.mamba.new_step_starts();
     }
 
-    /// Fresh logical blocks requiring worker-side zeroing before their first use.
-    pub fn take_newly_allocated(&mut self) -> Vec<u32> {
-        let mut blocks = self.pool.take_newly_allocated();
-        if let Some(pool) = &mut self.mamba_pool {
-            blocks.extend(pool.take_newly_allocated());
-        }
-        blocks
-    }
-
     // ── prefix cache lookup ─────────────────────────────────────────────────
 
     /// Find the longest cache hit for `block_hashes`, capped at

@@ -431,33 +431,27 @@ class ServingAdapter:
         )
         return ids, params
 
-    def masks(self, scheduled):
+    def masks(self, drafts_by_request: dict[int, list[int]]):
         ids = [
             rid
-            for rid in scheduled.num_scheduled_tokens
-            if int(rid) in self.generations
-            and self.generations[int(rid)].matcher is not None
+            for rid in drafts_by_request
+            if rid in self.generations and self.generations[rid].matcher is not None
         ]
         if not ids:
             return None
-        rows = sum(
-            1 + len(scheduled.scheduled_spec_decode_tokens.get(rid, [])) for rid in ids
-        )
+        rows = sum(1 + len(drafts_by_request[rid]) for rid in ids)
         if self._mask is None or self._mask.shape[0] < rows:
             self._mask = xgr.allocate_token_bitmask(rows, self.vocab_size)
         mask = self._mask[:rows]
         row = 0
         for rid in ids:
-            matcher = self.generations[int(rid)].matcher
+            matcher = self.generations[rid].matcher
             advanced = 0
             valid = True
             # Masks follow each speculative prefix. An invalid draft is rejected at
             # its first bad position; subsequent rows cannot affect accepted output.
             try:
-                for token in [
-                    *scheduled.scheduled_spec_decode_tokens.get(rid, []),
-                    None,
-                ]:
+                for token in [*drafts_by_request[rid], None]:
                     valid = valid and not matcher.is_terminated()
                     if valid:
                         matcher.fill_next_token_bitmask(mask, row)
@@ -471,4 +465,4 @@ class ServingAdapter:
             finally:
                 if advanced:
                     matcher.rollback(advanced)
-        return GrammarOutput(ids, mask.numpy())
+        return GrammarOutput([str(rid) for rid in ids], mask.numpy())

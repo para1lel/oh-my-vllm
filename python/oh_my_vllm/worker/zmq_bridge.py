@@ -9,6 +9,7 @@ Message envelope (msgpack dict):
 
   Rust → Python:
     {"type": "init", "model_path": str, "num_gpu_blocks": int,
+     "mamba_blocks": int | None,
      "block_size": int, "tensor_parallel_size": int, "max_model_len": int,
      "num_speculative_tokens": int}
     {"type": "register", "request_id": int, "prompt_token_ids": list[int]}
@@ -17,8 +18,7 @@ Message envelope (msgpack dict):
        {"request_id": int, "token_ids": list[int],
         "num_computed_tokens": int,
         "fa_block_table": list[int], "mamba_block_table": list[int],
-        "prefill_token_ids": list[int] | None,
-        "new_block_ids_to_zero": list[int]}],
+        "prefill_token_ids": list[int] | None}],
      "finished_request_ids": list[int],
      "preempted_request_ids": list[int],
      "num_batched_tokens": int}
@@ -75,7 +75,6 @@ def _decode_scheduled_request(d: dict) -> ScheduledRequest:
         fa_block_table=list(d["fa_block_table"]),
         mamba_block_table=list(d["mamba_block_table"]),
         prefill_token_ids=d.get("prefill_token_ids"),
-        new_block_ids_to_zero=d["new_block_ids_to_zero"],
     )
 
 

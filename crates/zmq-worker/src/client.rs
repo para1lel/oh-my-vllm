@@ -7,6 +7,7 @@
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use oh_my_vllm_scheduler::output::{RequestOutput, ScheduledRequest, WorkerOutput};
@@ -78,12 +79,37 @@ pub struct WorkerClient {
 }
 
 /// Reap the owned worker on errors as well as normal shutdown.
-struct ManagedChild(Child);
+struct ManagedChild(Option<Child>);
+
+impl ManagedChild {
+    fn child(&mut self) -> &mut Child {
+        self.0
+            .as_mut()
+            .expect("worker child remains owned until drop")
+    }
+}
 
 impl Drop for ManagedChild {
     fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
+        if let Some(mut child) = self.0.take() {
+            if child.try_wait().ok().flatten().is_some() {
+                return;
+            }
+            let _ = child.kill();
+            // Waiting for a child can block; reap it off the Tokio executor.
+            let child = Arc::new(Mutex::new(child));
+            let waiter = Arc::clone(&child);
+            if std::thread::Builder::new()
+                .name("oh-my-vllm-worker-reap".to_owned())
+                .spawn(move || {
+                    let _ = waiter.lock().unwrap().wait();
+                })
+                .is_err()
+            {
+                // If no waiter thread can start, still satisfy the reaping contract.
+                let _ = child.lock().unwrap().wait();
+            }
+        }
     }
 }
 
@@ -98,7 +124,7 @@ impl WorkerClient {
         info!("ZMQ DEALER socket bound at {addr}");
 
         // Fork the Python worker process.
-        let mut child = ManagedChild({
+        let mut child = ManagedChild(Some({
             let mut cmd = Command::new(&config.python_executable);
             cmd.args(["-m", "oh_my_vllm.worker.zmq_bridge", "--socket", &addr])
                 .env(
@@ -131,8 +157,8 @@ impl WorkerClient {
                 });
             }
             cmd.spawn()?
-        });
-        info!("Python worker launched (pid {})", child.0.id());
+        }));
+        info!("Python worker launched (pid {})", child.child().id());
 
         // Send the init message.  The Python process needs a moment to import
         // and connect its DEALER socket before we can deliver the first message,
@@ -149,17 +175,26 @@ impl WorkerClient {
         let mut delay_ms = 100u64;
         let deadline = std::time::Instant::now() + config.init_timeout;
         loop {
-            if child.0.try_wait()?.is_some() {
+            if child.child().try_wait()?.is_some() {
                 return Err(Error::WorkerDied);
             }
-            match Self::send_raw(&mut sock, &init).await {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            let sent = timeout(remaining, Self::send_raw(&mut sock, &init))
+                .await
+                .map_err(|_| Error::Timeout)?;
+            match sent {
                 Ok(()) => break,
                 Err(e) => {
                     if std::time::Instant::now() >= deadline {
-                        return Err(e);
+                        warn!("init send failed at deadline: {e}");
+                        return Err(Error::Timeout);
                     }
                     warn!("Init send failed ({e}), retrying in {delay_ms}ms…");
-                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                    tokio::time::sleep(
+                        Duration::from_millis(delay_ms)
+                            .min(deadline.saturating_duration_since(Instant::now())),
+                    )
+                    .await;
                     delay_ms = (delay_ms * 2).min(2000);
                 }
             }
@@ -167,7 +202,7 @@ impl WorkerClient {
 
         // Wait for `ready`.
         let ready_reply = timeout(
-            config.init_timeout,
+            deadline.saturating_duration_since(Instant::now()),
             Self::recv_with_child(&mut sock, &mut child),
         )
         .await
@@ -293,7 +328,6 @@ impl WorkerClient {
                     request_id: s.request_id,
                     token_ids: s.token_ids.clone(),
                     prefill_token_ids: s.prefill_token_ids.clone(),
-                    new_block_ids_to_zero: s.new_block_ids_to_zero.clone(),
                     num_computed_tokens: s.num_computed_tokens as u32,
                     fa_block_table: s.fa_block_table.clone(),
                     mamba_block_table: s.mamba_block_table.clone(),
@@ -361,7 +395,7 @@ impl WorkerClient {
         Self::send_raw(&mut self.sock, &RustMessage::Shutdown).await?;
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
-            if let Some(status) = self._child.0.try_wait()? {
+            if let Some(status) = self._child.child().try_wait()? {
                 return if status.success() {
                     Ok(())
                 } else {
@@ -418,7 +452,7 @@ impl WorkerClient {
             tokio::select! {
                 reply = &mut receive => return reply,
                 _ = heartbeat.tick() => {
-                    if child.0.try_wait()?.is_some() { return Err(Error::WorkerDied); }
+                    if child.child().try_wait()?.is_some() { return Err(Error::WorkerDied); }
                 }
             }
         }
@@ -434,6 +468,59 @@ impl WorkerClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "current_thread")]
+    async fn child_drop_reaps_without_blocking_the_executor() {
+        let child = Command::new("/bin/sleep").arg("10").spawn().unwrap();
+        let pid = child.id();
+        let start = Instant::now();
+        drop(ManagedChild(Some(child)));
+        assert!(start.elapsed() < Duration::from_millis(250));
+        timeout(Duration::from_secs(2), async {
+            while PathBuf::from(format!("/proc/{pid}")).exists() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("killed child must be reaped by the background waiter");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn ready_wait_uses_the_original_init_deadline() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let base = std::env::temp_dir().join(format!("oh-my-vllm-silent-{}", std::process::id()));
+        let script = base.with_extension("py");
+        let socket = base.with_extension("ipc");
+        std::fs::write(
+            &script,
+            concat!(
+                "#!/usr/bin/env python3\n",
+                "import sys, time, zmq\n",
+                "sock = zmq.Context.instance().socket(zmq.DEALER)\n",
+                "sock.connect(sys.argv[sys.argv.index('--socket') + 1])\n",
+                "sock.recv()\n",
+                "time.sleep(10)\n",
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let config = WorkerConfig {
+            python_executable: script.clone(),
+            socket_path: socket.clone(),
+            init_timeout: Duration::from_millis(250),
+            ..WorkerConfig::default()
+        };
+        let start = Instant::now();
+        let result = WorkerClient::launch(config).await;
+        let error = result.err().expect("silent worker must not become ready");
+        assert!(matches!(error, Error::Timeout), "{error:?}");
+        assert!(start.elapsed() < Duration::from_secs(1));
+        let _ = std::fs::remove_file(script);
+        let _ = std::fs::remove_file(socket);
+    }
 
     #[tokio::test]
     async fn reports_child_exit_before_connection_without_waiting_for_init_timeout() {

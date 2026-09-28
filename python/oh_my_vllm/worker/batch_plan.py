@@ -57,7 +57,8 @@ def plan_request(
     request: ScheduledRequest,
     history: list[int],
     source: int | None,
-    capacity: int,
+    fa_capacity: int,
+    mamba_capacity: int,
     speculative_tokens: int,
 ) -> PlannedRequest:
     start = request.num_computed_tokens
@@ -65,7 +66,7 @@ def plan_request(
     end = start + len(tokens)
     if not tokens or not 0 <= start < len(history):
         raise ValueError("scheduled input must begin in accepted history")
-    if capacity <= 1 or speculative_tokens not in (0, 4):
+    if fa_capacity <= 1 or mamba_capacity <= 1 or speculative_tokens not in (0, 4):
         raise ValueError("invalid cache capacity or speculative token count")
     known = min(len(tokens), len(history) - start)
     if tokens[:known] != history[start : start + known]:
@@ -76,7 +77,7 @@ def plan_request(
     if drafts and known != 1:
         raise ValueError("verification must start with exactly one committed token")
     admission = source is None
-    if any(not 0 <= p < capacity for p in request.mamba_block_table):
+    if any(not 0 <= p < mamba_capacity for p in request.mamba_block_table):
         raise ValueError("Mamba table contains a row outside the allocated pool")
     if admission:
         if start % BLOCK:
@@ -88,12 +89,12 @@ def plan_request(
         source = 0 if start == 0 else request.mamba_block_table[(start - 1) // BLOCK]
     elif request.prefill_token_ids is not None:
         raise ValueError("running request cannot repeat admission history")
-    if not 0 <= source < capacity or (start > 0 and source == 0):
+    if not 0 <= source < mamba_capacity or (start > 0 and source == 0):
         raise ValueError("missing or invalid recurrent source")
     pages = (end + BLOCK - 1) // BLOCK
     if len(request.fa_block_table) < pages:
         raise ValueError("FA table does not cover scheduled input")
-    if any(not 0 < p < capacity for p in request.fa_block_table):
+    if any(not 0 < p < fa_capacity for p in request.fa_block_table):
         raise ValueError("FA page is null or outside the allocated pool")
     base = pages - 1
     prefill = len(tokens) > 1 and not drafts
@@ -101,7 +102,7 @@ def plan_request(
     if len(request.mamba_block_table) < base + count:
         raise ValueError("Mamba table does not cover candidate states")
     destinations = request.mamba_block_table[base : base + count]
-    if any(not 0 < p < capacity for p in destinations):
+    if any(not 0 < p < mamba_capacity for p in destinations):
         raise ValueError("candidate state is null or outside the allocated pool")
     if admission and start and source in destinations:
         raise ValueError("admission cannot overwrite a shared prefix checkpoint")

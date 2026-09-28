@@ -22,7 +22,6 @@ pub mod request;
 use std::collections::VecDeque;
 
 use oh_my_vllm_kv_cache::{coordinator::HybridCoordinator, group::RequestId};
-use rustc_hash::FxHashMap;
 
 pub use output::{RequestOutput, ScheduledRequest, SchedulerOutput, WorkerOutput};
 pub use request::{Request, RequestStatus};
@@ -67,10 +66,6 @@ pub struct Scheduler {
     waiting: VecDeque<Request>,
     /// Requests with live KV blocks, currently being executed.
     running: VecDeque<Request>,
-    /// Quick lookup from request id to running-queue position is done by linear
-    /// scan (queue depth is small); this map only tracks the FA + Mamba block
-    /// tables returned by the KV cache for building `ScheduledRequest`.
-    block_tables: FxHashMap<RequestId, (Vec<u32>, Vec<u32>)>,
     kv: HybridCoordinator,
     finished_ids: Vec<u64>,
 }
@@ -120,7 +115,6 @@ impl Scheduler {
             config,
             waiting: VecDeque::new(),
             running: VecDeque::new(),
-            block_tables: FxHashMap::default(),
             kv,
             finished_ids: Vec::new(),
         }
@@ -237,12 +231,7 @@ impl Scheduler {
             );
 
             match alloc {
-                Some((new_fa, new_mb)) => {
-                    // Append the new block ids to the stored block tables.
-                    let entry = self.block_tables.entry(req.id).or_default();
-                    entry.0.extend_from_slice(&new_fa);
-                    entry.1.extend_from_slice(&new_mb);
-
+                Some(_) => {
                     let fa_table = self.kv.full_attn_blocks(req.id).to_vec();
                     let mb_table = self.kv.mamba_blocks(req.id).to_vec();
                     // Combine confirmed + draft tokens so the worker receives the full
@@ -259,7 +248,6 @@ impl Scheduler {
                         request_id: req.id,
                         token_ids: scheduled_tokens,
                         prefill_token_ids: None,
-                        new_block_ids_to_zero: self.kv.take_newly_allocated(),
                         num_computed_tokens: req.num_computed_tokens,
                         fa_block_table: fa_table,
                         mamba_block_table: mb_table,
@@ -271,7 +259,6 @@ impl Scheduler {
                 None => {
                     // Pool exhausted: preempt this request.
                     self.kv.free(req.id);
-                    self.block_tables.remove(&req.id);
                     req.num_computed_tokens = 0;
                     req.num_in_flight_tokens = 0;
                     req.draft_token_ids.clear();
@@ -313,14 +300,12 @@ impl Scheduler {
             );
 
             match alloc {
-                Some((new_fa, new_mb)) => {
+                Some(_) => {
                     // Build the block table: hit blocks (from add_local_computed_blocks,
                     // which registered them inside allocate_slots) plus new blocks.
                     // The coordinator tracks per-request blocks internally; expose them.
                     let fa_table = self.kv.full_attn_blocks(req.id).to_vec();
                     let mb_table = self.kv.mamba_blocks(req.id).to_vec();
-                    self.block_tables
-                        .insert(req.id, (fa_table.clone(), mb_table.clone()));
 
                     output.cache_hit_tokens += hit_len;
                     let computed_start = hit_len;
@@ -329,7 +314,6 @@ impl Scheduler {
                         token_ids: req.token_ids[computed_start..computed_start + to_schedule]
                             .to_vec(),
                         prefill_token_ids: Some(req.token_ids.clone()),
-                        new_block_ids_to_zero: self.kv.take_newly_allocated(),
                         num_computed_tokens: hit_len,
                         fa_block_table: fa_table,
                         mamba_block_table: mb_table,
@@ -338,8 +322,6 @@ impl Scheduler {
                     req.num_computed_tokens = hit_len;
                     req.num_in_flight_tokens = to_schedule;
                     req.status = RequestStatus::Running;
-                    let _ = new_fa;
-                    let _ = new_mb;
                     self.running.push_back(req);
                 }
                 None => {
@@ -508,7 +490,6 @@ impl Scheduler {
         for id in &finished_ids {
             self.running.retain(|r| r.id != *id);
             self.kv.free(*id);
-            self.block_tables.remove(id);
         }
         Ok(worker)
     }
@@ -519,7 +500,6 @@ impl Scheduler {
         if self.running.iter().any(|r| r.id == request_id) {
             self.running.retain(|r| r.id != request_id);
             self.kv.free(request_id);
-            self.block_tables.remove(&request_id);
             self.finished_ids.push(request_id);
         } else {
             let before = self.waiting.len();
