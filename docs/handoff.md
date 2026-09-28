@@ -78,9 +78,22 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   finding is closed by `895d57b` + `487f8de`: the TVM FFI cache is now audited
   and a measured-window write regression passes. Current 12-row framework
   acceptance remains pending separately.
+- MNT-04 runtime cleanup is committed as `ff1f944` (following the live Abort
+  path added by `96e4ecc`): unused scheduler and zeroing-hint state is removed,
+  protocol comments and EN/ZH design examples match the wire, grammar masks
+  use direct draft IDs, FA/GDN capacities are checked separately, init has one
+  deadline, and Ctrl-C/SIGTERM request Python shutdown within a shared
+  deadline, forcing exit when it expires. Two real HTTP fixture regressions
+  cover active SSE and a stalled reader. A
+  focused CPU run passed 46 tests and 23 subtests; Rust workspace passed
+  56/26/17, and formatting, line width, Ruff, Clippy and hooks passed.
+  Independent review passed. Three unused frozen TileLang wrappers remain
+  intentionally because their hashes define the historical comparison; the
+  production and formal harness do not call them. No current GPU suite or
+  12-row framework run is claimed for this change.
 
 Remaining work: PY-03..07, SRV-08..10, SCH-06/07, KRN-06..10,
-EVD-03..05/07..10, MNT-01..04, the four unverified risks, and current
+EVD-03..05/07..10, MNT-01..03, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
 
@@ -140,9 +153,10 @@ fixed; EVD-01/02 partially addressed.
 - SCH-05: `remove_blocks_in_range` uses `continue` instead of `break` on NULL_BLOCK_ID.
 - SRV-05/07 were still open at this checkpoint; `96e4ecc` later repaired them.
 
-**Batch 6 partial — Cleanup** (`62101a3`, 2026-09-24): MNT-04 fixed.
-- Removed dead `abort_request()` method and `AbortMsg` import from `client.rs`.
-- Updated protocol doc comment in `lib.rs` to match the live wire format.
+**Batch 6 partial — Cleanup** (`62101a3`, 2026-09-24): MNT-04 was marked
+fixed at that checkpoint, but later review reopened it. That commit removed the
+unused `abort_request()` method and updated part of the protocol comment;
+`96e4ecc` and `ff1f944` completed the live Abort path and remaining cleanup.
 
 ### Findings still open at that checkpoint
 
