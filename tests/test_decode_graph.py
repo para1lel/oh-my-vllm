@@ -105,6 +105,8 @@ class GroupedDraftGraphTest(unittest.TestCase):
     def test_first_one_and_dynamic_regrouping(self):
         from oh_my_vllm.kernels.decode_attention import decode
 
+        from tests.test_independent_decode_attention import reference
+
         class AttentionModel:
             def draft(self, tokens, hidden, batch, cache):
                 return batch.attention(hidden.view(-1, 24, 256), cache).flatten(1)
@@ -139,6 +141,15 @@ class GroupedDraftGraphTest(unittest.TestCase):
                 max_tokens=1568,
             ).flatten(1)
             torch.testing.assert_close(actual, expected, atol=0.03, rtol=0.03)
+            absolute = reference(
+                hidden.view(-1, 24, 256), cache, tables, positions + 1, first=1
+            )
+            torch.testing.assert_close(
+                actual.cpu().double().view(-1, 24, 256),
+                absolute,
+                atol=0.03,
+                rtol=0.03,
+            )
 
 
 if __name__ == "__main__":

@@ -1,159 +1,78 @@
-"""Supplementary PyTorch SDPA vs CPU FP64; not actual model-path acceptance.
-
-Production paged attention is covered by test_independent_kernels.py,
-test_independent_decode_attention.py and the actual-model probe_worker.py.
-"""
+"""Compare the owned paged GQA decode with a CPU FP64 reference."""
 
 from __future__ import annotations
 
 import math
-import sys
 
 import pytest
 import torch
+from oh_my_vllm.kernels.backend import NAME
+from oh_my_vllm.kernels.decode_attention import decode
 
-pytestmark = pytest.mark.gpu
-
-# ---------------------------------------------------------------------------
-# CPU FP64 reference
-# ---------------------------------------------------------------------------
+pytestmark = [
+    pytest.mark.gpu,
+    pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA"),
+    pytest.mark.skipif(NAME != "cuda", reason="tests the owned CUDA decode path"),
+]
 
 
 def gqa_reference(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
+    query: torch.Tensor, keys: torch.Tensor, values: torch.Tensor
 ) -> torch.Tensor:
-    """Grouped-query attention on CPU in FP64.
-
-    Args:
-        q: (batch, num_heads, seq_len, head_dim) float64
-        k: (batch, num_kv_heads, seq_len, head_dim) float64
-        v: (batch, num_kv_heads, seq_len, head_dim) float64
-
-    Returns:
-        (batch, num_heads, seq_len, head_dim) float64
-    """
-    _batch, num_heads, _seq_len, head_dim = q.shape
-    num_kv_heads = k.shape[1]
-    groups = num_heads // num_kv_heads
-
-    # Expand k/v to match q head count.
-    k_exp = k.repeat_interleave(groups, dim=1)  # (B, H, S, D)
-    v_exp = v.repeat_interleave(groups, dim=1)
-
-    scale = 1.0 / math.sqrt(head_dim)
-    # (B, H, S, S)
-    attn_weights = torch.einsum("bhid,bhjd->bhij", q * scale, k_exp)
-    attn_weights = torch.softmax(attn_weights, dim=-1)
-    return torch.einsum("bhij,bhjd->bhid", attn_weights, v_exp)
+    """One GQA decode step using CPU FP64 after BF16 input quantization."""
+    _, heads, dim = query.shape
+    groups = heads // keys.shape[2]
+    expanded_keys = keys.repeat_interleave(groups, dim=2)
+    expanded_values = values.repeat_interleave(groups, dim=2)
+    scores = torch.einsum("bhd,bthd->bht", query, expanded_keys) / math.sqrt(dim)
+    return torch.einsum("bht,bthd->bhd", scores.softmax(-1), expanded_values)
 
 
-# ---------------------------------------------------------------------------
-# GPU path via torch.nn.functional.scaled_dot_product_attention
-# ---------------------------------------------------------------------------
-
-
-def gqa_gpu(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    v: torch.Tensor,
-) -> torch.Tensor:
-    """GQA on GPU using PyTorch's fused SDPA (dispatches to FlashAttention when
-    available).
-
-    Args:
-        q: (batch, num_heads, seq_len, head_dim) float16, on CUDA
-        k: (batch, num_kv_heads, seq_len, head_dim) float16, on CUDA
-        v: (batch, num_kv_heads, seq_len, head_dim) float16, on CUDA
-
-    Returns:
-        (batch, num_heads, seq_len, head_dim) float16, on CUDA
-    """
-    num_heads = q.shape[1]
-    num_kv_heads = k.shape[1]
-    groups = num_heads // num_kv_heads
-
-    k_exp = k.repeat_interleave(groups, dim=1)
-    v_exp = v.repeat_interleave(groups, dim=1)
-
-    return torch.nn.functional.scaled_dot_product_attention(q, k_exp, v_exp)
-
-
-# ---------------------------------------------------------------------------
-# Test cases
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
 @pytest.mark.parametrize(
-    "batch,num_heads,num_kv_heads,seq_len,head_dim",
-    [
-        # Qwen3.8-27B full-attention layer shape:
-        #   24 query heads, 4 KV heads, head_dim=256.
-        (1, 24, 4, 128, 256),
-        # Smaller shape for faster CI runs.
-        (2, 16, 4, 64, 64),
-        # Prefill length matching our benchmark (seq_len chunk).
-        (1, 24, 4, 512, 256),
-    ],
+    "batch,seq_len",
+    [(1, 128), (2, 64), (1, 512), (2, 784), (1, 785)],
 )
-def test_gqa_accuracy(
-    batch: int,
-    num_heads: int,
-    num_kv_heads: int,
-    seq_len: int,
-    head_dim: int,
-) -> None:
-    torch.manual_seed(42)
+def test_owned_paged_gqa_matches_fp64(batch: int, seq_len: int) -> None:
+    generator = torch.Generator(device="cpu").manual_seed(42)
+    query = torch.randn(batch, 24, 256, generator=generator).bfloat16()
+    keys = torch.randn(batch, seq_len, 4, 256, generator=generator).bfloat16()
+    values = torch.randn(batch, seq_len, 4, 256, generator=generator).bfloat16()
+    if seq_len == 785:
+        # Make the first token of the second page dominate the attention.
+        # A missing page must change the result far beyond the BF16 tolerance.
+        query.fill_(1)
+        keys[:, -1].fill_(1)
+        values[:, -1].fill_(16)
 
-    q64 = torch.randn(batch, num_heads, seq_len, head_dim, dtype=torch.float64)
-    k64 = torch.randn(batch, num_kv_heads, seq_len, head_dim, dtype=torch.float64)
-    v64 = torch.randn(batch, num_kv_heads, seq_len, head_dim, dtype=torch.float64)
-
-    ref = gqa_reference(q64, k64, v64)
-
-    q16 = q64.half().cuda()
-    k16 = k64.half().cuda()
-    v16 = v64.half().cuda()
-
-    gpu_out = gqa_gpu(q16, k16, v16).cpu().double()
-
-    max_err = (gpu_out - ref).abs().max().item()
-    mean_err = (gpu_out - ref).abs().mean().item()
-
-    print(
-        f"  shape=({batch},{num_heads},{num_kv_heads},{seq_len},{head_dim})  "
-        f"max_err={max_err:.4e}  mean_err={mean_err:.4e}"
+    pages_per_row = math.ceil(seq_len / 784)
+    cache = torch.zeros(
+        1 + batch * pages_per_row,
+        2,
+        784,
+        4,
+        256,
+        device="cuda",
+        dtype=torch.bfloat16,
     )
+    tables = torch.empty(batch, pages_per_row, device="cuda", dtype=torch.int32)
+    for row in range(batch):
+        for page in range(pages_per_row):
+            physical = 1 + row * pages_per_row + pages_per_row - 1 - page
+            tables[row, page] = physical
+            start, stop = page * 784, min((page + 1) * 784, seq_len)
+            cache[physical, 0, : stop - start] = keys[row, start:stop].cuda()
+            cache[physical, 1, : stop - start] = values[row, start:stop].cuda()
+    lengths = torch.full((batch,), seq_len, device="cuda", dtype=torch.int32)
 
-    assert torch.allclose(gpu_out, ref, atol=1e-2, rtol=1e-2), (
-        f"GQA output exceeds tolerance: max_err={max_err:.4e}"
+    assert NAME == "cuda"
+    actual = decode(
+        query.cuda(), cache, tables, lengths, max_tokens=784 * pages_per_row
     )
-
-
-# ---------------------------------------------------------------------------
-# Standalone entry point
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    if not torch.cuda.is_available():
-        print("SKIP: no CUDA device available")
-        sys.exit(0)
-
-    cases = [
-        (1, 24, 4, 128, 256),
-        (2, 16, 4, 64, 64),
-        (1, 24, 4, 512, 256),
-    ]
-    passed = 0
-    for args in cases:
-        try:
-            test_gqa_accuracy(*args)
-            print("  PASS")
-            passed += 1
-        except AssertionError as e:
-            print(f"  FAIL: {e}")
-
-    print(f"\n{passed}/{len(cases)} passed")
-    sys.exit(0 if passed == len(cases) else 1)
+    expected = gqa_reference(query.double(), keys.double(), values.double())
+    if seq_len == 785:
+        assert expected.abs().min() > 8
+        without_second_page = gqa_reference(
+            query.double(), keys[:, :784].double(), values[:, :784].double()
+        )
+        assert (expected - without_second_page).abs().min() > 8
+    torch.testing.assert_close(actual.cpu().double(), expected, atol=0.03, rtol=0.03)

@@ -22,6 +22,20 @@ class ToyProposal:
         return value
 
 
+def reference_tokens(hidden: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
+    """CPU FP64 draft recurrence, independent of ToyProposal.draft."""
+    current = hidden.cpu().double()
+    positions = positions.cpu().double()
+    token = current.argmax(-1)
+    proposed = [token]
+    for step in range(1, 4):
+        summed = current + token[:, None] + positions[:, None] + step
+        current = torch.cat((summed[:, -1:], summed[:, :-1]), dim=1)
+        token = current.argmax(-1)
+        proposed.append(token)
+    return torch.stack(proposed, -1)
+
+
 @torch.inference_mode()
 def test_proposal_capture_dynamic_tables_and_allocator_reuse():
     device = "cuda"
@@ -57,5 +71,6 @@ def test_proposal_capture_dynamic_tables_and_allocator_reuse():
             expected.append(token)
         actual = graph.replay(hidden, positions, tables)
         torch.testing.assert_close(actual, torch.stack(expected, -1), rtol=0, atol=0)
+        torch.testing.assert_close(actual.cpu(), reference_tokens(hidden, positions))
         torch.testing.assert_close(cache, expected_cache, rtol=0, atol=0)
     assert pressure[0][0].item() == 99999
