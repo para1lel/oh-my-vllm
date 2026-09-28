@@ -217,11 +217,95 @@ class HttpTests(unittest.TestCase):
             {"reasoning_effort": "unknown"},
             {"max_tokens": 0},
             {"repetition_penalty": 1e-39},
+            {"top_p": 0},
+            {"temperature": -1},
+            {"top_k": 1.5},
+            {"frequency_penalty": 3},
             {"unsupported": True},
         ]:
             with self.assertRaises(urllib.error.HTTPError) as error:
                 self.request("/chat/completions", self.base(**extra))
             self.assertEqual(error.exception.code, 400)
+
+    def test_malformed_nested_schema_is_client_error(self):
+        for schema in (
+            {"type": "object", "properties": []},
+            {"type": "object", "required": "name"},
+            {"type": "object", "$defs": []},
+            {"type": "object", "properties": {"x": {"$ref": "#/$defs/missing"}}},
+            {"type": "string", "enum": ["x"], "$ref": "#/enum/" + "0" * 5000},
+            {"type": "string", "pattern": "["},
+            {"type": "string", "pattern": "("},
+        ):
+            with self.subTest(schema=schema):
+                body = self.base(
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {"name": "bad", "schema": schema},
+                    }
+                )
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    self.request("/chat/completions", body)
+                self.assertEqual(error.exception.code, 400)
+        for malformed in ("bad", [], 3):
+            with self.subTest(json_schema=malformed):
+                body = self.base(
+                    response_format={"type": "json_schema", "json_schema": malformed}
+                )
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    self.request("/chat/completions", body)
+                self.assertEqual(error.exception.code, 400)
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.request(
+                "/chat/completions",
+                self.base(
+                    messages=[
+                        {"role": "assistant", "content": "hi", "tool_calls": "bad"}
+                    ]
+                ),
+            )
+        self.assertEqual(error.exception.code, 400)
+        for schema in (
+            {"type": "object", "properties": {"x": {"$ref": "#/$defs/missing"}}},
+            {
+                "type": "object",
+                "properties": {"x": {"$ref": "#/$defs/S/type"}},
+                "$defs": {"S": {"type": "string"}},
+            },
+        ):
+            with self.subTest(schema=schema):
+                tool = {
+                    "type": "function",
+                    "function": {"name": "broken", "parameters": schema},
+                }
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    self.request("/chat/completions", self.base(tools=[tool]))
+                self.assertEqual(error.exception.code, 400)
+
+    def test_prepare_error_kind_and_axum_rejection_status(self):
+        for content, status, kind in (
+            ("prepare-validation", 400, "invalid_request_error"),
+            ("prepare-internal", 500, "server_error"),
+        ):
+            with self.subTest(content=content):
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    self.request("/responses", self.base(True, input=content))
+                self.assertEqual(error.exception.code, status)
+                self.assertEqual(json.load(error.exception)["error"]["type"], kind)
+        request = urllib.request.Request(
+            self.url + "/responses", data=b"{}", headers={"Content-Type": "text/plain"}
+        )
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(request, timeout=5)
+        self.assertEqual(error.exception.code, 415)
+        request = urllib.request.Request(
+            self.url + "/responses",
+            data=b" " * ((8 << 20) + 1),
+            headers={"Content-Type": "application/json"},
+        )
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(request, timeout=10)
+        self.assertEqual(error.exception.code, 413)
 
     def test_prompt_file_rejects_out_of_range_token_before_worker_launch(self):
         prompt_file = self.directory / "invalid-tokens.txt"
@@ -426,6 +510,45 @@ class HttpTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as error:
             self.request("/responses", self.base(True))
         self.assertEqual(error.exception.code, 503)
+
+    def test_y_active_limit_returns_503(self):
+        streams = []
+        try:
+            for _ in range(64):
+                streams.append(
+                    self.request(
+                        "/responses",
+                        self.base(
+                            True,
+                            input="long hold-active",
+                            stream=True,
+                            max_output_tokens=1500,
+                        ),
+                    )
+                )
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.request("/responses", self.base(True))
+            self.assertEqual(error.exception.code, 503)
+            self.assertEqual(
+                json.load(error.exception)["error"]["type"], "server_error"
+            )
+        finally:
+            for stream in streams:
+                stream.close()
+            deadline = time.monotonic() + 8
+            while time.monotonic() < deadline:
+                try:
+                    with self.request("/responses", self.base(True)) as response:
+                        self.assertEqual(json.load(response)["status"], "completed")
+                    break
+                except urllib.error.HTTPError as error:
+                    if error.code != 503:
+                        raise
+                    time.sleep(0.05)
+            else:
+                self.fail(
+                    "active request capacity did not recover after stream closure"
+                )
 
     def test_cancel_does_not_break_other_request(self):
         cleanup = self.directory / "cleanup"

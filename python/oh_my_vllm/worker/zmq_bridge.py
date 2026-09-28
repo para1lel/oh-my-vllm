@@ -12,8 +12,8 @@ Message envelope (msgpack dict):
      "block_size": int, "tensor_parallel_size": int, "max_model_len": int,
      "num_speculative_tokens": int}
     {"type": "register", "request_id": int, "prompt_token_ids": list[int]}
-    {"type": "prepare", "request_id": int, "request": dict}
-    {"type": "execute", "step_id": int, "scheduled": [
+    {"type": "prepare", "rpc_id": int, "request_id": int, "request": dict}
+    {"type": "execute", "rpc_id": int, "step_id": int, "scheduled": [
        {"request_id": int, "token_ids": list[int],
         "num_computed_tokens": int,
         "fa_block_table": list[int], "mamba_block_table": list[int],
@@ -27,15 +27,16 @@ Message envelope (msgpack dict):
 
   Python → Rust:
     {"type": "ready", "logical_num_blocks": int}   # after init completes
-    {"type": "prepared", "prompt_token_ids": list[int]}  # after prepare
-    {"type": "execute_result",
+    {"type": "prepared", "rpc_id": int, "prompt_token_ids": list[int]}
+    {"type": "execute_result", "rpc_id": int,
      "outputs": [{"request_id": int, "token_ids": list[int],
                   "num_accepted_draft_tokens": int,
                   "new_draft_token_ids": list[int],
                   "text": str | None,
                   "finish_reason": str | None,
                   "reasoning_tokens": int}, ...]}
-    {"type": "error", "message": str}
+    {"type": "error", "rpc_id": int, "kind": "validation" | "internal",
+     "message": str}
 
 Run with::
 
@@ -56,6 +57,7 @@ import zmq
 from oh_my_vllm.worker.logging_utils import configure_logging
 from oh_my_vllm.worker.model_runner import OhMyVllmWorker, RuntimeConfig
 from oh_my_vllm.worker.protocol import ScheduledRequest, SchedulerOutput, WorkerOutput
+from oh_my_vllm.worker.serving import RequestValidationError
 
 logger = logging.getLogger("oh_my_vllm.worker.zmq_bridge")
 
@@ -171,14 +173,31 @@ def serve(socket_addr: str) -> None:
                     if worker is None:
                         raise RuntimeError("worker not initialised")
                     if msg["request_id"] in worker.histories:
-                        reply = {"type": "error", "message": "duplicate request_id"}
+                        reply = {
+                            "type": "error",
+                            "kind": "internal",
+                            "message": "duplicate request_id",
+                        }
                     else:
                         ids = worker.prepare_request(msg["request_id"], msg["request"])
                         reply = {"type": "prepared", "prompt_token_ids": ids}
+                except RequestValidationError as exc:
+                    if worker is not None and not existed:
+                        worker.unregister_request(msg["request_id"])
+                    reply = {
+                        "type": "error",
+                        "kind": "validation",
+                        "message": str(exc),
+                    }
                 except Exception as exc:
                     if worker is not None and not existed:
                         worker.unregister_request(msg["request_id"])
-                    reply = {"type": "error", "message": str(exc)}
+                    logger.exception("prepare failed for request %s", msg["request_id"])
+                    reply = {
+                        "type": "error",
+                        "kind": "internal",
+                        "message": str(exc),
+                    }
                 reply["rpc_id"] = msg["rpc_id"]
                 sock.send(msgpack.packb(reply, use_bin_type=True))
 

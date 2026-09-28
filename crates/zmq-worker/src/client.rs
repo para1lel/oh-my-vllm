@@ -238,7 +238,13 @@ impl WorkerClient {
             crate::protocol::PythonMessage::Prepared {
                 prompt_token_ids, ..
             } => Ok(prompt_token_ids),
-            crate::protocol::PythonMessage::Error(e) => Err(Error::WorkerError(e.message)),
+            crate::protocol::PythonMessage::Error(e) => {
+                if e.kind == crate::protocol::WorkerErrorKind::Validation {
+                    Err(Error::WorkerValidation(e.message))
+                } else {
+                    Err(Error::WorkerError(e.message))
+                }
+            }
             other => Err(Error::UnexpectedMessageType(format!("{other:?}"))),
         }
     }

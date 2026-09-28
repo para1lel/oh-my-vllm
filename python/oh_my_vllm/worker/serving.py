@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import unquote
 
 import xgrammar as xgr
 from tokenizers.decoders import DecodeStream
@@ -47,18 +48,105 @@ _SCHEMA_KEYS = {
 }
 
 
-def validate_schema(schema: dict, *, strict: bool = False) -> None:
+class RequestValidationError(ValueError):
+    """A rejected client request, distinct from tokenizer or compiler failures."""
+
+
+def _resolve_local_schema_ref(root: dict, ref: str) -> dict:
+    if ref == "#":
+        return root
+    if not ref.startswith("#/"):
+        raise RequestValidationError("only local schema references are supported")
+    target = root
+    for encoded in unquote(ref[2:]).split("/"):
+        if any(
+            encoded[index] == "~"
+            and (index + 1 == len(encoded) or encoded[index + 1] not in "01")
+            for index in range(len(encoded))
+        ):
+            raise RequestValidationError("invalid schema reference escape")
+        key = encoded.replace("~1", "/").replace("~0", "~")
+        if isinstance(target, dict) and key in target:
+            target = target[key]
+        elif isinstance(target, list) and key.isascii() and key.isdecimal():
+            if (len(key) > 1 and key.startswith("0")) or len(key) > len(
+                str(len(target))
+            ):
+                raise RequestValidationError("invalid schema reference array index")
+            index = int(key)
+            if index >= len(target):
+                raise RequestValidationError("unresolved schema reference")
+            target = target[index]
+        else:
+            raise RequestValidationError("unresolved schema reference")
+    if not isinstance(target, dict):
+        raise RequestValidationError("schema reference must resolve to an object")
+    return target
+
+
+def validate_schema(
+    schema: dict, *, strict: bool = False, root: dict | None = None
+) -> None:
     if not isinstance(schema, dict):
-        raise ValueError("schema must be an object")
+        raise RequestValidationError("schema must be an object")
+    if root is None:
+        root = schema
+    for key in ("properties", "$defs"):
+        if key in schema and not isinstance(schema[key], dict):
+            raise RequestValidationError(f"schema {key} must be an object")
+    if "required" in schema and (
+        not isinstance(schema["required"], list)
+        or any(not isinstance(name, str) for name in schema["required"])
+    ):
+        raise RequestValidationError("schema required must be an array of strings")
+    if "anyOf" in schema and not isinstance(schema["anyOf"], list):
+        raise RequestValidationError("schema anyOf must be an array")
+    if "$ref" in schema and not isinstance(schema["$ref"], str):
+        raise RequestValidationError("schema $ref must be a string")
+    if "$ref" in schema:
+        _resolve_local_schema_ref(root, schema["$ref"])
+    if "format" in schema and not isinstance(schema["format"], str):
+        raise RequestValidationError("schema format must be a string")
+    if "enum" in schema and not isinstance(schema["enum"], list):
+        raise RequestValidationError("schema enum must be an array")
+    kinds = {"null", "boolean", "integer", "number", "string", "array", "object"}
+    if "type" in schema:
+        value = schema["type"]
+        names = value if isinstance(value, list) else [value]
+        if not names or any(
+            not isinstance(name, str) or name not in kinds for name in names
+        ):
+            raise RequestValidationError("unsupported schema type")
+    for key in ("minItems", "maxItems", "minLength", "maxLength"):
+        if key in schema and (type(schema[key]) is not int or schema[key] < 0):
+            raise RequestValidationError(f"schema {key} must be a nonnegative integer")
+    for key in ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"):
+        if key in schema and (
+            isinstance(schema[key], bool) or not isinstance(schema[key], (int, float))
+        ):
+            raise RequestValidationError(f"schema {key} must be numeric")
+    if "pattern" in schema and not isinstance(schema["pattern"], str):
+        raise RequestValidationError("schema pattern must be a string")
+    if "pattern" in schema:
+        try:
+            xgr.Grammar.from_regex(schema["pattern"])
+        except RuntimeError as exc:
+            # XGrammar has no dedicated parse exception. Its parser tags syntax
+            # diagnostics; other native failures remain internal errors.
+            if "Regex parsing error" not in str(exc):
+                raise
+            raise RequestValidationError("invalid schema pattern") from exc
     # Keep the documented supported subset even if a newer compiler accepts
     # additional keywords. Mixed string constraints must not silently weaken.
     if ("pattern" in schema or "format" in schema) and (
         "minLength" in schema or "maxLength" in schema
     ):
-        raise ValueError("cannot combine pattern/format with string length bounds")
+        raise RequestValidationError(
+            "cannot combine pattern/format with string length bounds"
+        )
     unknown = set(schema) - _SCHEMA_KEYS
     if unknown:
-        raise ValueError(f"unsupported schema keywords: {sorted(unknown)}")
+        raise RequestValidationError(f"unsupported schema keywords: {sorted(unknown)}")
     if "format" in schema and schema["format"] not in {
         "date",
         "time",
@@ -70,47 +158,55 @@ def validate_schema(schema: dict, *, strict: bool = False) -> None:
         "ipv6",
         "uuid",
     }:
-        raise ValueError("unsupported schema format")
+        raise RequestValidationError("unsupported schema format")
     if strict and schema.get("type") == "object":
         if schema.get("additionalProperties") is not False:
-            raise ValueError("strict objects require additionalProperties=false")
+            raise RequestValidationError(
+                "strict objects require additionalProperties=false"
+            )
         if set(schema.get("required", [])) != set(schema.get("properties", {})):
-            raise ValueError("strict objects require every property to be required")
+            raise RequestValidationError(
+                "strict objects require every property to be required"
+            )
     for key in ("properties", "$defs"):
         for child in schema.get(key, {}).values():
-            validate_schema(child, strict=strict)
+            validate_schema(child, strict=strict, root=root)
     if "items" in schema:
-        validate_schema(schema["items"], strict=strict)
+        validate_schema(schema["items"], strict=strict, root=root)
+    if "additionalProperties" in schema and not isinstance(
+        schema["additionalProperties"], (bool, dict)
+    ):
+        raise RequestValidationError(
+            "schema additionalProperties must be boolean or object"
+        )
     if isinstance(schema.get("additionalProperties"), dict):
-        validate_schema(schema["additionalProperties"], strict=strict)
+        validate_schema(schema["additionalProperties"], strict=strict, root=root)
     for child in schema.get("anyOf", []):
-        validate_schema(child, strict=strict)
+        validate_schema(child, strict=strict, root=root)
 
 
 def validate_xml_parameters(schema: dict) -> None:
     """Reject XML encodings that cannot preserve strict JSON argument types."""
 
     if schema.get("type") != "object" or "$ref" in schema or "anyOf" in schema:
-        raise ValueError("XML tools require a direct root object schema")
+        raise RequestValidationError("XML tools require a direct root object schema")
     if schema.get("additionalProperties", False) is not False:
-        raise ValueError("XML tools require closed parameter objects")
+        raise RequestValidationError("XML tools require closed parameter objects")
 
     def resolve(node, seen=()):
         ref = node.get("$ref")
         if ref is None:
             return node
-        if ref in seen or not ref.startswith("#/"):
-            raise ValueError("unsupported XML parameter reference")
-        target = schema
-        for key in ref[2:].split("/"):
-            target = target[key.replace("~1", "/").replace("~0", "~")]
+        if ref in seen:
+            raise RequestValidationError("unsupported XML parameter reference")
+        target = _resolve_local_schema_ref(schema, ref)
         return resolve(target, (*seen, ref))
 
     def kinds(node):
         node = resolve(node)
         if "anyOf" in node:
             if "const" in node or "enum" in node:
-                raise ValueError("XML anyOf cannot have sibling const/enum")
+                raise RequestValidationError("XML anyOf cannot have sibling const/enum")
             return set().union(*(kinds(child) for child in node["anyOf"]))
         kind = node.get("type")
         result = set(kind) if isinstance(kind, list) else {kind}
@@ -118,13 +214,13 @@ def validate_xml_parameters(schema: dict) -> None:
             if any(
                 key in node for key in ("pattern", "minLength", "maxLength", "format")
             ):
-                raise ValueError(
+                raise RequestValidationError(
                     "XML strings with pattern/length/format are unsupported; "
                     "use JSON output"
                 )
             for value in [*node.get("enum", []), node.get("const", "")]:
                 if isinstance(value, str) and "</parameter>" in value:
-                    raise ValueError(
+                    raise RequestValidationError(
                         "XML string enum/const cannot contain </parameter>"
                     )
         return result
@@ -143,7 +239,7 @@ def validate_xml_parameters(schema: dict) -> None:
     for node in schema.get("properties", {}).values():
         types = kinds(node)
         if None in types or ("string" in types and len(types) > 1):
-            raise ValueError(
+            raise RequestValidationError(
                 "XML parameters need unambiguous types; "
                 "string/non-string unions are unsupported"
             )
@@ -152,10 +248,14 @@ def validate_xml_parameters(schema: dict) -> None:
             seen = {}
             for value in candidates or []:
                 if not isinstance(value, str):
-                    raise ValueError("XML string enum/const must contain strings")
+                    raise RequestValidationError(
+                        "XML string enum/const must contain strings"
+                    )
                 normalized = value.strip(" \n\t")
                 if normalized in seen and seen[normalized] != value:
-                    raise ValueError("ambiguous XML string enum/const whitespace")
+                    raise RequestValidationError(
+                        "ambiguous XML string enum/const whitespace"
+                    )
                 seen[normalized] = value
 
 
@@ -293,7 +393,12 @@ class ServingAdapter:
             for call in message.get("tool_calls", []):
                 args = call["function"]["arguments"]
                 if isinstance(args, str):
-                    call["function"]["arguments"] = json.loads(args)
+                    try:
+                        call["function"]["arguments"] = json.loads(args)
+                    except json.JSONDecodeError as exc:
+                        raise RequestValidationError(
+                            "tool call arguments must contain valid JSON"
+                        ) from exc
         prompt = self.tokenizer.apply_chat_template(
             messages,
             tools=tools if choice != "none" else None,
@@ -306,7 +411,9 @@ class ServingAdapter:
         ids = self.tokenizer.encode(prompt, add_special_tokens=False)
         max_tokens = request["max_tokens"]
         if not ids or len(ids) + max_tokens > self.max_model_len:
-            raise ValueError("prompt plus output budget exceeds context limit")
+            raise RequestValidationError(
+                "prompt plus output budget exceeds context limit"
+            )
         sampling = {
             key: self.defaults[key]
             for key in ("temperature", "top_p", "top_k")

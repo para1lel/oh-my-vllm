@@ -8,7 +8,7 @@ from pathlib import Path
 
 import msgpack
 import zmq
-from oh_my_vllm.worker.serving import ServingAdapter
+from oh_my_vllm.worker.serving import RequestValidationError, ServingAdapter
 
 
 def main():
@@ -33,6 +33,11 @@ def main():
                 with Path(path).open("a") as output:
                     output.write(json.dumps(request) + "\n")
             try:
+                content = request["messages"][-1].get("content") or ""
+                if "prepare-validation" in content:
+                    raise RequestValidationError("fixture invalid request")
+                if "prepare-internal" in content:
+                    raise RuntimeError("fixture tokenizer failure")
                 prompt, _ = adapter.prepare(rid, request)
                 history = request["messages"]
                 tool_results = any(item["role"] == "tool" for item in history)
@@ -71,12 +76,21 @@ def main():
                     "prompt_len": len(prompt),
                     "fail": "worker-fail" in text,
                     "fatal": "worker-fatal" in text,
+                    "hold": "hold-active" in text,
                 }
                 reply = {"type": "prepared", "prompt_token_ids": prompt}
                 if "slow-prepare" in text:
                     time.sleep(0.7)
             except Exception as exc:
-                reply = {"type": "error", "message": str(exc)}
+                reply = {
+                    "type": "error",
+                    "kind": (
+                        "validation"
+                        if isinstance(exc, RequestValidationError)
+                        else "internal"
+                    ),
+                    "message": str(exc),
+                }
             reply["rpc_id"] = message["rpc_id"]
         elif kind == "execute":
             if path := os.environ.get("OH_MY_VLLM_FIXTURE_OVERLAP"):
@@ -127,7 +141,11 @@ def main():
                         "reasoning_tokens": adapter.generations[rid].reasoning_tokens,
                     }
                 )
-            time.sleep(0.005)
+            time.sleep(
+                0.08
+                if any(requests[r["request_id"]]["hold"] for r in message["scheduled"])
+                else 0.005
+            )
             reply = (
                 {"type": "error", "message": "fixture worker failure"}
                 if fatal

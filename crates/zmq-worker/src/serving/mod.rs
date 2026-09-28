@@ -3,7 +3,7 @@ mod events;
 mod parser;
 mod request;
 
-use crate::client::WorkerClient;
+use crate::{client::WorkerClient, error::Error as WorkerError};
 use anyhow::{Context, Result};
 use axum::{
     Json, Router,
@@ -136,7 +136,7 @@ struct Active {
 }
 
 fn error(status: StatusCode, message: impl ToString) -> Response {
-    let kind = if status == StatusCode::INTERNAL_SERVER_ERROR {
+    let kind = if status.is_server_error() {
         "server_error"
     } else {
         "invalid_request_error"
@@ -407,7 +407,13 @@ async fn admit(
             return Ok(());
         }
         Ok(Err(e)) => {
-            let _ = ready.send(Err((StatusCode::BAD_REQUEST, e.to_string())));
+            let status = if matches!(e, WorkerError::WorkerValidation(_)) {
+                StatusCode::BAD_REQUEST
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            client.cancel_prepare(id).await;
+            let _ = ready.send(Err((status, e.to_string())));
             return Ok(());
         }
         Ok(Ok(tokens)) => tokens,

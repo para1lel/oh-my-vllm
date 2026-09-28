@@ -108,6 +108,16 @@ pub struct ErrorMsg {
     pub message: String,
     #[serde(default)]
     pub rpc_id: u64,
+    #[serde(default)]
+    pub kind: WorkerErrorKind,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerErrorKind {
+    Validation,
+    #[default]
+    Internal,
 }
 
 // ── encode / decode helpers ───────────────────────────────────────────────────
@@ -118,4 +128,35 @@ pub fn encode<T: Serialize>(msg: &T) -> Result<Vec<u8>, rmp_serde::encode::Error
 
 pub fn decode(bytes: &[u8]) -> Result<PythonMessage, rmp_serde::decode::Error> {
     rmp_serde::from_slice(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn worker_error_kind_defaults_to_internal() {
+        let old = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error",
+            "message": "tokenizer failed",
+            "rpc_id": 4,
+        }))
+        .unwrap();
+        let PythonMessage::Error(error) = decode(&old).unwrap() else {
+            panic!("expected error frame");
+        };
+        assert_eq!(error.kind, WorkerErrorKind::Internal);
+
+        let validation = rmp_serde::to_vec_named(&serde_json::json!({
+            "type": "error",
+            "message": "invalid schema",
+            "kind": "validation",
+            "rpc_id": 5,
+        }))
+        .unwrap();
+        let PythonMessage::Error(error) = decode(&validation).unwrap() else {
+            panic!("expected error frame");
+        };
+        assert_eq!(error.kind, WorkerErrorKind::Validation);
+    }
 }

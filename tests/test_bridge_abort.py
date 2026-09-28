@@ -5,10 +5,52 @@ from unittest.mock import Mock, patch
 
 import msgpack
 from oh_my_vllm.worker.protocol import RequestOutput, WorkerOutput
+from oh_my_vllm.worker.serving import RequestValidationError
 from oh_my_vllm.worker.zmq_bridge import serve
 
 
 class BridgeAbortTest(unittest.TestCase):
+    def test_prepare_error_kind_is_explicit_and_cleans_up(self):
+        for exception, kind in (
+            (RequestValidationError("bad schema"), "validation"),
+            (ValueError("tokenizer failed"), "internal"),
+            (RuntimeError("compiler failed"), "internal"),
+        ):
+            with self.subTest(exception=exception):
+                worker = Mock(logical_num_blocks=85, histories={})
+                worker.prepare_request.side_effect = exception
+                context = Mock()
+                socket = context.socket.return_value
+                socket.recv.side_effect = [
+                    msgpack.packb(message)
+                    for message in (
+                        {"type": "init"},
+                        {
+                            "type": "prepare",
+                            "rpc_id": 11,
+                            "request_id": 7,
+                            "request": {},
+                        },
+                        {"type": "shutdown"},
+                    )
+                ]
+                with (
+                    patch(
+                        "oh_my_vllm.worker.zmq_bridge.zmq.Context", return_value=context
+                    ),
+                    patch(
+                        "oh_my_vllm.worker.zmq_bridge._handle_init", return_value=worker
+                    ),
+                    patch("oh_my_vllm.worker.zmq_bridge.configure_logging"),
+                ):
+                    serve("ipc:///unused-test-socket")
+                reply = msgpack.unpackb(
+                    socket.send.call_args_list[1].args[0], raw=False
+                )
+                self.assertEqual(reply["kind"], kind)
+                self.assertEqual(reply["rpc_id"], 11)
+                worker.unregister_request.assert_called_once_with(7)
+
     def test_abort_notifies_worker_without_unsolicited_reply(self):
         worker = Mock(logical_num_blocks=85)
         context = Mock()

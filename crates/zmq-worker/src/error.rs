@@ -16,6 +16,9 @@ pub enum Error {
     #[error("Python worker returned an error: {0}")]
     WorkerError(String),
 
+    #[error("invalid request rejected by Python worker: {0}")]
+    WorkerValidation(String),
+
     #[error("unexpected message type '{0}' from Python worker")]
     UnexpectedMessageType(String),
 

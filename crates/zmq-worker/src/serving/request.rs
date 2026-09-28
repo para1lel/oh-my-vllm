@@ -246,7 +246,16 @@ pub fn normalize(
         if let Some(content) = message.get_mut("content") {
             *content = text_content(content)?;
         }
-        for call in message["tool_calls"].as_array().into_iter().flatten() {
+        let tool_calls = match message.get("tool_calls") {
+            Some(value) => Some(
+                value
+                    .as_array()
+                    .ok_or_else(|| anyhow::anyhow!("tool_calls must be an array"))?,
+            ),
+            None => None,
+        };
+        for call in tool_calls.into_iter().flatten() {
+            ensure!(call.is_object(), "tool call must be an object");
             let id = call["id"]
                 .as_str()
                 .ok_or_else(|| anyhow::anyhow!("tool call id is required"))?;
@@ -361,6 +370,7 @@ pub fn normalize(
     } else if let Some(f) = body.get("response_format") {
         format = if f["type"] == "json_schema" {
             let mut schema = f["json_schema"].clone();
+            ensure!(schema.is_object(), "json_schema must be an object");
             schema["type"] = json!("json_schema");
             schema
         } else {
@@ -409,6 +419,29 @@ pub fn normalize(
         if let Some(value) = body.get(key).filter(|v| !v.is_null()) {
             ensure!(value.is_number(), "{key} must be numeric");
             sampling[key] = value.clone();
+        }
+    }
+    if let Some(value) = sampling["temperature"].as_f64() {
+        ensure!(value >= 0.0, "temperature must be nonnegative");
+    }
+    if let Some(value) = sampling["top_p"].as_f64() {
+        ensure!(value > 0.0 && value <= 1.0, "top_p must be in (0,1]");
+    }
+    if !sampling["top_k"].is_null() {
+        ensure!(
+            sampling["top_k"].as_i64().is_some_and(|value| value >= -1),
+            "top_k must be an integer >= -1"
+        );
+    }
+    if !sampling["seed"].is_null() {
+        ensure!(
+            sampling["seed"].as_i64().is_some(),
+            "seed must be an integer"
+        );
+    }
+    for key in ["frequency_penalty", "presence_penalty"] {
+        if let Some(value) = sampling[key].as_f64() {
+            ensure!((-2.0..=2.0).contains(&value), "{key} must be in [-2,2]");
         }
     }
     // A temperature in (0, 1e-5) causes NaN in softmax; treat it as greedy.

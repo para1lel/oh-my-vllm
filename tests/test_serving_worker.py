@@ -3,8 +3,10 @@
 import copy
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from oh_my_vllm.worker.serving import (
+    RequestValidationError,
     ServingAdapter,
     validate_schema,
     validate_xml_parameters,
@@ -14,6 +16,22 @@ MODEL = "/data0/shared/Qwen3.8-27B-FP8"
 
 
 class ServingTests(unittest.TestCase):
+    def test_pattern_parser_distinguishes_syntax_and_internal_failure(self):
+        for pattern in ("[", "("):
+            with (
+                self.subTest(pattern=pattern),
+                self.assertRaises(RequestValidationError),
+            ):
+                validate_schema({"type": "string", "pattern": pattern})
+        with (
+            patch(
+                "oh_my_vllm.worker.serving.xgr.Grammar.from_regex",
+                side_effect=RuntimeError("native compiler failed"),
+            ),
+            self.assertRaisesRegex(RuntimeError, "native compiler failed"),
+        ):
+            validate_schema({"type": "string", "pattern": "ok"})
+
     @classmethod
     def setUpClass(cls):
         cls.adapter = ServingAdapter(MODEL, 248320, 65536)
