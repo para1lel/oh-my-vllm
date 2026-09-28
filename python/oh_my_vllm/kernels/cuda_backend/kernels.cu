@@ -884,7 +884,7 @@ void normalize_qk(TensorView q, TensorView k, TensorView oq, TensorView ok) {
       static_cast<const __nv_bfloat16 *>(q.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(k.data_ptr()),                                            \
       static_cast<__nv_bfloat16 *>(oq.data_ptr()), static_cast<__nv_bfloat16 *>(ok.data_ptr()))
-    if (q.size(0) < 2048) {
+    if (q.size(0) < 1024) {
       MODEL_QK(128, true);
     } else if (q.size(0) < 4096) {
       MODEL_QK(256, false);
