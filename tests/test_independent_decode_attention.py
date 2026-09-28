@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+from unittest.mock import patch
 
 import oh_my_vllm.kernels.decode_attention as decode_attention
 import pytest
@@ -78,6 +79,127 @@ def inputs():
     tables = torch.tensor([[2, 5], [1, 4], [6, 3]], dtype=torch.int32, device="cuda")
     lengths = torch.tensor([785, 37, 2], dtype=torch.int32, device="cuda")
     return query, cache, tables, lengths
+
+
+@pytest.mark.parametrize("length", [1, 15, 16, 17, 783, 784, 785, 4095, 4096])
+def test_flashinfer_native_decode_ignores_workspace_and_stale_subpage_bytes(length):
+    """Test first-use workspace and unwritten KV tails on TRT-LLM decode."""
+    from flashinfer.decode import trtllm_batch_decode_with_kv_cache
+
+    generator = torch.Generator(device="cpu").manual_seed(1000 + length)
+    query = torch.ones(1, 24, 256, device="cuda", dtype=torch.bfloat16)
+    keys = torch.randn(length, 4, 256, generator=generator).bfloat16()
+    values = torch.randn(length, 4, 256, generator=generator).bfloat16()
+    pages = (length + 783) // 784
+    mapping = list(range(1, pages + 1))[::-1]
+    caches = []
+    for stale in (0, 128):
+        cache = torch.full(
+            (pages + 1, 2, 784, 4, 256),
+            stale,
+            device="cuda",
+            dtype=torch.bfloat16,
+        )
+        for logical, physical in enumerate(mapping):
+            start, end = logical * 784, min((logical + 1) * 784, length)
+            cache[physical, 0, : end - start] = keys[start:end].cuda()
+            cache[physical, 1, : end - start] = values[start:end].cuda()
+        caches.append(cache)
+    tables = torch.tensor([mapping], device="cuda", dtype=torch.int32)
+    lengths = torch.tensor([length], device="cuda", dtype=torch.int32)
+    outputs = []
+    with patch(
+        "flashinfer.decode.trtllm_batch_decode_with_kv_cache",
+        wraps=trtllm_batch_decode_with_kv_cache,
+    ) as backend:
+        for cache, workspace_value in (
+            (caches[0], 0),
+            (caches[0], 0xA5),
+            (caches[1], 0),
+            (caches[1], 0xA5),
+        ):
+            attention = DecodeAttention(tables, lengths, extent=max(4096, length))
+            attention.prepare()
+            assert attention.native_metadata is not None
+            attention.workspace.fill_(workspace_value)
+            first = attention(query, cache).detach().clone()
+            repeated = attention(query, cache).detach().clone()
+            torch.testing.assert_close(repeated, first, atol=0, rtol=0)
+            outputs.append(first)
+        assert backend.call_count == 8
+    for output in outputs[1:]:
+        torch.testing.assert_close(output, outputs[0], atol=0, rtol=0)
+    torch.testing.assert_close(
+        outputs[0].cpu().double(),
+        reference(query, caches[0], tables, lengths, first=0),
+        atol=0.03,
+        rtol=0.03,
+    )
+
+
+@pytest.mark.parametrize(
+    "batch,group,length", [(4, 1, 32769), (1, 5, 785), (1, 1, 131073)]
+)
+def test_flashinfer_native_decode_first_use_poison_at_production_shapes(
+    batch, group, length
+):
+    """Test poisoned scratch/tails in batched, grouped and long decode."""
+    from flashinfer.decode import trtllm_batch_decode_with_kv_cache
+
+    pages = (length + 783) // 784
+    cache_shape = (1 + batch * pages, 2, 784, 4, 256)
+    valid = torch.randn(cache_shape, device="cuda", dtype=torch.bfloat16)
+    tables = []
+    for row in range(batch):
+        mapping = list(range(1 + row * pages, 1 + (row + 1) * pages))[::-1]
+        tables.extend([mapping] * group)
+    compact = torch.tensor(tables, device="cuda", dtype=torch.int32)
+    lengths = torch.tensor(
+        [
+            position
+            for _ in range(batch)
+            for position in range(length - group + 1, length + 1)
+        ],
+        device="cuda",
+        dtype=torch.int32,
+    )
+    caches = []
+    for stale in (0, 128):
+        cache = valid.clone()
+        for row in range(batch):
+            physical = tables[row * group][-1]
+            cache[physical, :, length % 784 :] = stale
+        caches.append(cache)
+    query = torch.ones(batch * group, 24, 256, device="cuda", dtype=torch.bfloat16)
+    starts = (
+        torch.arange(0, batch * group + 1, group, device="cuda", dtype=torch.int32)
+        if group > 1
+        else None
+    )
+    outputs = []
+    with patch(
+        "flashinfer.decode.trtllm_batch_decode_with_kv_cache",
+        wraps=trtllm_batch_decode_with_kv_cache,
+    ) as backend:
+        for cache, workspace_value in (
+            (caches[0], 0),
+            (caches[0], 0xA5),
+            (caches[1], 0),
+            (caches[1], 0xA5),
+        ):
+            attention = DecodeAttention(compact, lengths, extent=max(4096, length))
+            attention.starts = starts
+            attention.prepare()
+            assert attention.native_metadata is not None
+            attention.workspace.fill_(workspace_value)
+            first = attention(query, cache).detach().clone()
+            repeated = attention(query, cache).detach().clone()
+            torch.testing.assert_close(repeated, first, atol=0, rtol=0)
+            outputs.append(first)
+        assert backend.call_count == 8
+    for output in outputs:
+        assert torch.isfinite(output).all()
+        torch.testing.assert_close(output, outputs[0], atol=0, rtol=0)
 
 
 @pytest.mark.parametrize("first", [0, 1])

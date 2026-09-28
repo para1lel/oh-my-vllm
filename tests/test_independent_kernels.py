@@ -6,6 +6,7 @@ inputs passed to the GPU, matching actual-path probe tolerances.
 
 import math
 from itertools import pairwise
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -117,6 +118,65 @@ def test_native_prefix_attention_fp64_and_mixed_lengths():
         )
         expected = torch.einsum("hts,shd->thd", score.softmax(-1), v)
         check(out[rows], expected)
+
+
+@pytest.mark.parametrize("length", [4097, 4237, 4703])
+def test_flashinfer_native_prefill_ignores_workspace_and_stale_subpage_bytes(length):
+    """Test poisoned scratch and the final partial subpage in TRT-LLM context."""
+    from flashinfer.prefill import trtllm_batch_context_with_kv_cache
+    from oh_my_vllm.kernels.attention import PagedAttention
+
+    generator = torch.Generator(device="cpu").manual_seed(length)
+    pages = (length + 783) // 784
+    mapping = list(range(1, pages + 1))[::-1]
+    keys = torch.randn(length, 4, 256, generator=generator).bfloat16()
+    values = torch.randn(length, 4, 256, generator=generator).bfloat16()
+    caches = []
+    for stale in (0, 128):
+        cache = torch.full(
+            (pages + 1, 2, 784, 4, 256),
+            stale,
+            device="cuda",
+            dtype=torch.bfloat16,
+        )
+        for logical, physical in enumerate(mapping):
+            start, end = logical * 784, min((logical + 1) * 784, length)
+            cache[physical, 0, : end - start] = keys[start:end].cuda()
+            cache[physical, 1, : end - start] = values[start:end].cuda()
+        caches.append(cache)
+
+    query = torch.ones(128, 24, 256, device="cuda", dtype=torch.bfloat16)
+    outputs = []
+    with patch(
+        "flashinfer.prefill.trtllm_batch_context_with_kv_cache",
+        wraps=trtllm_batch_context_with_kv_cache,
+    ) as backend:
+        for cache, workspace_value in (
+            (caches[0], 0),
+            (caches[0], 0xA5),
+            (caches[1], 0),
+            (caches[1], 0xA5),
+        ):
+            plan = PagedAttention()
+            plan.plan(
+                torch.tensor([0, 128], dtype=torch.int32),
+                torch.tensor([0, pages], dtype=torch.int32),
+                torch.tensor(mapping, dtype=torch.int32),
+                torch.tensor([length - (pages - 1) * 784], dtype=torch.int32),
+                24,
+                4,
+                256,
+            )
+            assert plan.native and not plan.ragged
+            plan.workspace.fill_(workspace_value)
+            first = plan(query, cache).detach().clone()
+            repeated = plan(query, cache).detach().clone()
+            torch.testing.assert_close(repeated, first, atol=0, rtol=0)
+            outputs.append(first)
+        assert backend.call_count == 8
+    for output in outputs:
+        assert torch.isfinite(output).all()
+        torch.testing.assert_close(output, outputs[0], atol=0, rtol=0)
 
 
 def test_mtp_native_prefill_excludes_zero_and_isolates_requests():
