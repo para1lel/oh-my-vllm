@@ -254,8 +254,26 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   `/tmp/oh-my-vllm-py05-gpu-focused-17413e5.log`。自有 GPU
   进程已退出。当前完整 GPU 套件及 12 行框架测试，尤其 MTP batch 4，
   仍待完成，因此 PY-05 保持 open。
+- 已独立复审的 `503ea27` 是 PY-07 候选实现：sampler 在注册时一次性于 GPU
+  计算 prompt 计数，生成计数仅在 commit 时更新，speculative drafts 使用临时
+  计数副本。`top_k=50` 加 `top_p=0.9` 时，第 k 个分数不并列即可局部稳定
+  排序；并列则回退完整稳定排序。边界判断增加一次 CUDA host 同步。在同一张
+  空闲 B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上，
+  262144 prompt token、248320 词表的诊断交替 A/B（5 次预热、20 组各 8
+  次调用）中位数（ms）为 penalty 18.647→0.132、top-k/p 0.451→0.361、
+  两者同时启用 18.870→0.418；第二轮离散度均低于 10%。一次性注册在 32768
+  prompt token 时由约 0.063→2.314 ms，在 262144 时由 0.662→18.520 ms，
+  其中 32768 旧版和 262144 候选样本的离散度分别为 10.65% 与 15.56%。
+  这些是 dirty-tree 组件观察，不是框架门槛。日志：
+  `/tmp/oh-my-vllm-py07-ab-gpu-dirty-r2.log`、
+  `/tmp/oh-my-vllm-py07-register-gpu-dirty.log`、
+  `/tmp/oh-my-vllm-py07-cpu-503ea27.log` 和
+  `/tmp/oh-my-vllm-py07-gpu-focused-503ea27.log`。CPU 通过 226 项和
+  67 个 subtest（排除 199 项 GPU 用例），B200 sampler 3/3、Rust workspace
+  58/38/26、fmt、行宽、Ruff、Clippy 与 hooks 通过。自有 GPU 进程已退出。
+  当前完整 GPU 套件及 12 行框架测试证明吞吐/TTFT 仍达标之前，PY-07 保持 open。
 
-后续工作：PY-03/04/06/07、SRV-08、KRN-06、PY-05 与 KRN-10 验收、
+后续工作：PY-03/04/06、SRV-08、KRN-06、PY-05/07 与 KRN-10 验收、
 EVD-07、四项未验证风险，以及当前完整算子/GPU 套件
 和 12 组框架验收。
 逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。

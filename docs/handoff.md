@@ -332,8 +332,30 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   `/tmp/oh-my-vllm-py05-gpu-focused-17413e5.log`. The owned GPU
   process exited. PY-05 remains open pending the full current GPU suite and
   12 framework rows, especially MTP batch 4.
+- Independently reviewed `503ea27` is the PY-07 candidate: sampler prompt
+  counts are computed once on the GPU at registration, generated counts are
+  updated only on commit, and speculative drafts use a temporary count copy.
+  With `top_k=50` plus `top_p=0.9`, a unique kth score allows a local stable
+  sort; kth ties fall back to the full stable sort. That tie check adds one
+  CUDA host synchronization. On the same idle B200 UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`, a diagnostic interleaved
+  5-warmup, 20×8-call A/B at 262144 prompt tokens and vocabulary 248320
+  measured median ms of 18.647→0.132 for penalty, 0.451→0.361 for top-k/p,
+  and 18.870→0.418 for both; second-run spreads were below 10%. One-time
+  registration grew from about 0.063→2.314 ms at 32768 prompt tokens and
+  0.662→18.520 ms at 262144; the 32768 old and 262144 candidate samples
+  had 10.65% and 15.56% spread, respectively. These are
+  dirty-tree component observations, not framework gates. Logs:
+  `/tmp/oh-my-vllm-py07-ab-gpu-dirty-r2.log`,
+  `/tmp/oh-my-vllm-py07-register-gpu-dirty.log`,
+  `/tmp/oh-my-vllm-py07-cpu-503ea27.log`, and
+  `/tmp/oh-my-vllm-py07-gpu-focused-503ea27.log`. CPU 226 tests and 67
+  subtests (199 GPU deselected), B200 sampler 3/3, Rust workspace 58/38/26,
+  fmt, line width, Ruff, Clippy and hooks passed. Owned GPU processes exited.
+  PY-07 stays open until the full current GPU suite and 12 framework rows
+  establish that throughput and TTFT still meet their gates.
 
-Remaining work: PY-03/04/06/07, SRV-08, KRN-06, PY-05 and KRN-10 acceptance,
+Remaining work: PY-03/04/06, SRV-08, KRN-06, PY-05/07 and KRN-10 acceptance,
 EVD-07, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
