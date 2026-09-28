@@ -101,9 +101,20 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   残留。`scripts/test.sh cpu` 通过 149 项测试和 67 个子测试（排除 120 项 GPU
   用例）；Rust workspace 通过 56/26/17 项，fmt、行宽、Ruff、Clippy 和 hooks
   通过。干净完整算子矩阵与 12 行框架采集仍待运行。
+- `04540bd` 经独立复审实现 MNT-02 列出的直接 CUDA FFI 契约。量化、gates 和递归在启动前
+  检查精确 dtype、设备、形状与 stride；融合 SiLU 只接受 BF16，空 gates 不再启动零 grid，
+  空量化和递归会拒绝。固定的 `1e-6` RMS epsilon 与唯一受支持 Qwen checkpoint 一致，
+  loader 在加载权重前验证。递归索引值仍由调用方保证：`starts` 从零覆盖全部 token 行，
+  `reads` 位于池内，`writes` 为 `-1` 或池内。CPU batch plan 检查槽位容量，runner 构造
+  `starts`，没有增加 GPU→CPU 索引读回。B200 直接 FFI 测试 45/45，另有聚焦
+  `writes=-1` 用例 1/1，通过的 UUID 为
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`；自有 GPU 进程已退出。
+  `scripts/test.sh cpu` 通过 153 项测试和 67 个 subtest（排除 166 个 GPU 用例）；Rust
+  workspace 通过 56/26/17 项，fmt、行宽、Ruff、Clippy 与 hooks 均通过。MNT-02 的
+  受影响正式算子、当前完整 GPU 套件和 12 行框架采集仍待执行。
 
 后续工作：PY-03..07、SRV-08..10、SCH-06/07、KRN-06..10、
-EVD-07、MNT-01..03、四项未验证风险，以及当前完整算子/GPU 套件
+EVD-07、MNT-01/03、MNT-02 正式验证、四项未验证风险，以及当前完整算子/GPU 套件
 和 12 组框架验收。
 逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。
 

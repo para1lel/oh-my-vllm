@@ -126,9 +126,25 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   deselected); Rust workspace passed 56/26/17, and fmt, line width, Ruff,
   Clippy and hooks passed. A clean full operator matrix and 12-row framework
   collection still remain pending.
+- `04540bd` implements the listed MNT-02 direct CUDA FFI contracts after
+  independent review. Quantize, gates and recurrence check exact dtype, device,
+  shape and stride before launch; fused SiLU accepts only BF16, empty gates
+  return without a zero-grid launch, and empty quantize/recurrence reject.
+  The fixed `1e-6` RMS epsilon matches the sole supported Qwen checkpoint,
+  which the loader validates before loading weights. Recurrent index values
+  remain a caller precondition: `starts` covers the token rows from zero,
+  `reads` are in the pool, and `writes` are `-1` or in the pool. The CPU batch
+  plan checks slot capacity and the runner constructs `starts`; no GPU→CPU
+  index readback was added. B200 direct FFI tests passed 45/45, plus a focused
+  `writes=-1` case 1/1, on UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`; owned GPU processes exited.
+  `scripts/test.sh cpu` passed 153 tests and 67 subtests (166 GPU cases
+  deselected); Rust workspace passed 56/26/17, and fmt, line width, Ruff,
+  Clippy and hooks passed. MNT-02's affected formal operator cases, the full
+  current GPU suite and 12-row framework collection are still pending.
 
 Remaining work: PY-03..07, SRV-08..10, SCH-06/07, KRN-06..10,
-EVD-07, MNT-01..03, the four unverified risks, and current
+EVD-07, MNT-01/03, MNT-02 formal verification, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
 
