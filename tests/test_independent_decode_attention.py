@@ -117,6 +117,50 @@ def test_graph_replay_reads_updated_lengths_and_tables():
     )
 
 
+@pytest.mark.parametrize("grouped", [False, True])
+@pytest.mark.parametrize("position64", [False, True])
+def test_cuda_partial_tile_crosses_page_with_masked_tail(grouped, position64):
+    from oh_my_vllm.kernels.cuda_backend import compiled
+
+    torch.manual_seed(94)
+    query = torch.ones(3, 24, 256, device="cuda", dtype=torch.bfloat16)
+    cache = torch.randn(3, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
+    cache[2, 0, 0].fill_(1)
+    cache[2, 1, 0].fill_(16)
+    cache[0, 0, 0].fill_(1)
+    cache[0, 1, 0].fill_(-16)
+    tables = torch.tensor([[1, 2]] * 3, device="cuda", dtype=torch.int32)
+    lengths = torch.tensor([783, 784, 785], device="cuda", dtype=torch.int32)
+    starts = (
+        torch.tensor([0, 3], device="cuda", dtype=torch.int32) if grouped else lengths
+    )
+    partial = torch.empty(3, 24, 64, 256, device="cuda", dtype=torch.float32)
+    lse = torch.empty(3, 24, 64, device="cuda", dtype=torch.float32)
+    out = torch.empty_like(query)
+    cuda = compiled()
+
+    def launch():
+        cuda.attention_partial(
+            query, cache, tables, lengths, starts, partial, lse, 0, grouped, position64
+        )
+        cuda.attention_merge(partial, lse, out)
+
+    launch()
+    expected = reference(query, cache, tables, lengths, 0)
+    torch.testing.assert_close(out.cpu().double(), expected, atol=0.03, rtol=0.03)
+    assert expected[2].mean() > 8
+
+    graph = torch.cuda.CUDAGraph()
+    torch.cuda.synchronize()
+    with torch.cuda.graph(graph):
+        launch()
+    tables[:, 1] = 0
+    graph.replay()
+    expected = reference(query, cache, tables, lengths, 0)
+    torch.testing.assert_close(out.cpu().double(), expected, atol=0.03, rtol=0.03)
+    assert expected[2].mean() < -8
+
+
 @pytest.mark.parametrize("first", [0, 1])
 @pytest.mark.parametrize("native", [False, True])
 def test_grouped_verification_preserves_ragged_causality(first, native):

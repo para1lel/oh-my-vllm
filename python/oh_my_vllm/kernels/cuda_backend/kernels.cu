@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <type_traits>
 
 using tvm::ffi::TensorView;
@@ -1403,11 +1404,19 @@ template <int BK, typename Position>
 __device__ __forceinline__ void stage_kv(const __nv_bfloat16 *cache, const void *tables, int start,
                                          int table_width, Position base, Position last, int hk,
                                          int kh, bool tw, __nv_bfloat16 *k, __nv_bfloat16 *v) {
+  // A BK-wide tile can touch at most two 784-token pages. Each thread loads
+  // those table entries once per tile, rather than once per K/V chunk.
+  Position first_page = min(base, last - 1) / 784;
+  Position final_page = min(base + BK - 1, last - 1) / 784;
+  int64_t table_row = static_cast<int64_t>(start) * table_width;
+  int64_t first_block = index_at(tables, tw, table_row + first_page);
+  int64_t final_block = first_page == final_page
+                            ? first_block
+                            : index_at(tables, tw, table_row + final_page);
 #pragma unroll
   for (int i = threadIdx.x; i < BK * 32; i += 128) {
     Position pos = base + i / 32;
-    int64_t page =
-        index_at(tables, tw, static_cast<int64_t>(start) * table_width + min(pos, last - 1) / 784);
+    int64_t page = pos / 784 == first_page ? first_block : final_block;
     int64_t offset = ((page * 1568 + pos % 784) * hk + kh) * 256 + (i % 32) * 8;
     unsigned kd = __cvta_generic_to_shared(k + shared_index(i / 32, (i % 32) * 8));
     unsigned vd = __cvta_generic_to_shared(v + shared_index(i / 32, (i % 32) * 8));
@@ -1634,6 +1643,17 @@ attention_partial_kernel(const __nv_bfloat16 *__restrict__ query,
     }
   }
 }
+template <bool ModelShape, bool Grouped, typename Position, int Buffers>
+void configure_attention_shared_memory(int shared_bytes) {
+  // ModelShape, Grouped and Buffers determine this kernel's shared footprint.
+  // Once-only setup also keeps subsequent CUDA Graph captures free of setters.
+  static std::once_flag configured;
+  std::call_once(configured, [shared_bytes] {
+    TVM_FFI_ICHECK(cudaFuncSetAttribute(
+                      attention_partial_kernel<ModelShape, Grouped, Position, Buffers>,
+                      cudaFuncAttributeMaxDynamicSharedMemorySize, shared_bytes) == cudaSuccess);
+  });
+}
 template <typename Position>
 void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorView lengths,
                       TensorView starts, TensorView partial, TensorView lse, int64_t first,
@@ -1648,9 +1668,7 @@ void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorV
       (8 * bq) * 4;
   dim3 grid((grouped ? starts.size(0) - 1 : q.size(0)) * tiles, hk, splits);
 #define ATTENTION(M, G, B)                                                                         \
-  TVM_FFI_ICHECK(cudaFuncSetAttribute(attention_partial_kernel<M, G, Position, B>,                 \
-                                      cudaFuncAttributeMaxDynamicSharedMemorySize,                 \
-                                      shared_bytes) == cudaSuccess);                               \
+  configure_attention_shared_memory<M, G, Position, B>(shared_bytes);                             \
   attention_partial_kernel<M, G, Position, B><<<grid, 128, shared_bytes, stream>>>(                 \
       static_cast<const __nv_bfloat16 *>(q.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(cache.data_ptr()), tables.data_ptr(), lengths.data_ptr(), \
