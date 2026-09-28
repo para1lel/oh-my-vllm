@@ -75,12 +75,14 @@ These describe the current code and the numerical properties it relies on.
     fewer rows use 256.
   - Residual RMS with 2048–4095 rows uses a streaming store hint.
   - Misaligned or other layouts use the generic kernel.
-  - Reduction order therefore varies with row count and alignment (audit
-    MNT-03).
+  - Reduction order therefore varies with row count and alignment. Outputs
+    are checked against the FP64 reference within the existing BF16 tolerance;
+    bitwise batch invariance is not part of the RMS contract (audit MNT-03).
 - **Gated RMS.**
   - Specialized for 48 heads × 128 width. Values stay in registers.
   - Uses a stable sigmoid with the denominator in [1,2], and FP32 gating with no
-    intermediate BF16 rounding.
+    intermediate BF16 rounding. The generic path uses direct division, so its
+    last bits may differ; both paths meet the existing FP64-reference tolerance.
 - **Q/K normalization.**
   - The packed 16-head, 10240-stride path uses aligned eight-element loads and
     paired FP32 arithmetic.
@@ -102,8 +104,11 @@ These describe the current code and the numerical properties it relies on.
   - The model layout gives each of 16 lanes eight contiguous key values, uses four
     warps with two value rows per half-warp, and keeps FP32 persistent state.
   - Head, base/row alignment and disjoint-storage checks guard the restricted
-    pointers. Otherwise the generic kernel runs. An in-place update of the
-    request's own source is valid.
+    pointers. Otherwise the generic kernel runs. The state base check uses
+    eight-element vector alignment (16 bytes for BF16, 32 for FP32). Byte-span
+    checks reject negative strides before alias analysis; supported PyTorch
+    callers supply nonnegative dense/row-strided views. An in-place update of
+    the request's own source is valid.
 - **Full-attention preparation.**
   - One entry fuses Q/K RMS and RoPE, V layout conversion and the KV write, shared
     by the target model and MTP.

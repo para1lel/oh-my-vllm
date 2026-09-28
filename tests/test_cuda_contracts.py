@@ -119,6 +119,31 @@ def test_recurrent_keeps_supported_state_dispatch(dtype, vector):
     torch.testing.assert_close(out, torch.zeros_like(out), rtol=0, atol=0)
 
 
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float32])
+@pytest.mark.parametrize("storage_offset", [0, 1])
+def test_recurrent_state_vector_alignment(dtype, storage_offset):
+    q = torch.zeros(1, 16, 128, device="cuda", dtype=torch.bfloat16)
+    v = torch.zeros(1, 48, 128, device="cuda", dtype=torch.bfloat16)
+    gate = torch.zeros(1, 48, device="cuda")
+    shape = (2, 48, 128, 128)
+    storage = torch.empty(
+        2 * 48 * 128 * 128 + storage_offset, device="cuda", dtype=dtype
+    )
+    pool = storage[storage_offset:].view(shape)
+    assert pool.data_ptr() % dtype.itemsize == 0
+    pool[0] = torch.arange(pool[0].numel(), device="cuda").view_as(pool[0]) % 127
+    pool[1].zero_()
+    before = pool[0].clone()
+    starts = torch.tensor([0, 1], device="cuda", dtype=torch.int32)
+    reads = torch.tensor([0], device="cuda", dtype=torch.int32)
+    writes = torch.tensor([1], device="cuda", dtype=torch.int32)
+    out = torch.empty_like(v)
+    compiled().recurrent(q, q, v, gate, gate, pool, starts, reads, writes, out)
+    torch.cuda.synchronize()
+    torch.testing.assert_close(pool[1], before, rtol=0, atol=0)
+    torch.testing.assert_close(out, torch.zeros_like(out), rtol=0, atol=0)
+
+
 def test_recurrent_direct_ffi_preserves_skip_snapshot_sentinel():
     q = torch.zeros(1, 16, 128, device="cuda", dtype=torch.bfloat16)
     v = torch.zeros(1, 48, 128, device="cuda", dtype=torch.bfloat16)

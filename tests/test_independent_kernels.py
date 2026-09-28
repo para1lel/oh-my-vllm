@@ -406,6 +406,45 @@ def test_normalization_and_partial_rotary(strided):
             operation()
 
 
+def test_rms_dispatches_preserve_reference_tolerance():
+    from oh_my_vllm.kernels.normalization import rms_norm
+
+    row = torch.linspace(-2, 2, 5120, device="cuda", dtype=torch.float32).to(
+        torch.bfloat16
+    )
+    weight = torch.linspace(0.5, 1.5, 5120, device="cuda")
+    reference_row = row.cpu().double()
+    expected = reference_row * torch.rsqrt(reference_row.square().mean() + 1e-6)
+    expected *= weight.cpu().double()
+    results = []
+    for rows in (1, 2048, 4096):
+        x = row.repeat(rows).view(rows, 1, 5120)
+        result = rms_norm(x, weight)[0, 0]
+        check(result, expected)
+        results.append(result.cpu())
+    for result in results[1:]:
+        torch.testing.assert_close(result, results[0], rtol=0.03, atol=0.03)
+
+
+def test_gated_rms_specialized_and_generic_formulas_preserve_tolerance():
+    from oh_my_vllm.kernels.normalization import rms_norm
+
+    x = torch.linspace(-1, 1, 48 * 128, device="cuda").to(torch.bfloat16)
+    x = x.view(1, 48, 128)
+    gate = torch.linspace(-12, 12, 48 * 128, device="cuda").to(torch.bfloat16)
+    gate = gate.view_as(x)
+    weight = torch.full((128,), 0.25, device="cuda")
+    specialized = rms_norm(x, weight, gate=gate).reshape(48, 128)
+    generic = rms_norm(x.reshape(2, 24, 128), weight, gate=gate.reshape(2, 24, 128))
+    generic = generic.reshape(48, 128)
+    xc, gc = x.cpu().double(), gate.cpu().double()
+    expected = xc * torch.rsqrt(xc.square().mean(-1, keepdim=True) + 1e-6)
+    expected *= weight.cpu().double() * torch.nn.functional.silu(gc)
+    check(specialized, expected.reshape(48, 128))
+    check(generic, expected.reshape(48, 128))
+    torch.testing.assert_close(specialized, generic, rtol=0.03, atol=0.03)
+
+
 @pytest.mark.parametrize("rows", [16, 17, 20, 24, 32, 33])
 def test_fp8_real_width_tile_boundary_is_deterministic(rows):
     torch.manual_seed(rows)

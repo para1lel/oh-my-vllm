@@ -832,8 +832,10 @@ uint64_t tensor_span_bytes(TensorView tensor) {
   if (!tensor.numel())
     return 0;
   uint64_t elements = 1;
-  for (int i = 0; i < tensor.ndim(); ++i)
+  for (int i = 0; i < tensor.ndim(); ++i) {
+    TVM_FFI_ICHECK(tensor.stride(i) >= 0) << "CUDA storage spans require nonnegative strides";
     elements += (tensor.size(i) - 1) * tensor.stride(i);
+  }
   return elements * (tensor.dtype().bits / 8);
 }
 bool disjoint_storage(TensorView output, TensorView input) {
@@ -1043,10 +1045,12 @@ void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, Tenso
                  out.stride(2) == 1 && out.stride(1) == 128 &&
                  out.stride(0) == v.size(1) * 128)
       << "CUDA recurrence output requires contiguous BF16 value shape";
+  const auto state_alignment = bf16_state ? alignof(AlignedVector<__nv_bfloat16, 8>)
+                                          : alignof(AlignedVector<float, 8>);
   bool vector = q.size(1) == 16 && v.size(1) == 48 && q.stride(0) % 8 == 0 &&
                 k.stride(0) % 8 == 0 && reinterpret_cast<uintptr_t>(q.data_ptr()) % 16 == 0 &&
                 reinterpret_cast<uintptr_t>(k.data_ptr()) % 16 == 0 &&
-                reinterpret_cast<uintptr_t>(pool.data_ptr()) % state_dtype.bits == 0;
+                reinterpret_cast<uintptr_t>(pool.data_ptr()) % state_alignment == 0;
   for (auto input : {q, k, v, decay, beta, starts, reads, writes})
     vector = vector && disjoint_storage(pool, input);
   if (vector) {
