@@ -166,3 +166,10 @@ for the frozen comparison. scripts/with-env.sh isolates TVM_FFI_CACHE_DIR under 
 cache. Native kernels compile for SM100a; the host CUDA13.1 compiler is available.
 Use CUDA_HOME=/usr/local/cuda-13.1 when needed. No TileFoundry runtime dependency.
 See cuda-development.md for the frozen comparison and accepted development workflow.
+The wrapper also sets `TVM_FFI_CUDA_ARCH_LIST=10.0a`; the CUDA backend rejects a
+missing or different value so TVM FFI cannot infer an unrelated physical GPU's
+architecture. Set it explicitly when launching without `scripts/with-env.sh`.
+The CUDA build records the loaded `.so` hash and actual compiler path/version.
+If nvcc becomes unavailable in a new process, only one matching, hash-verified
+sidecar in `TVM_FFI_CACHE_DIR` can be reused; old cache entries without a
+trusted sidecar are rejected.

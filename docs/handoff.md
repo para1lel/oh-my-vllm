@@ -67,10 +67,21 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   CPU regressions passed (73 tests and 37 subtests), as did Rust workspace
   tests (56/26/14), formatting, line width, Ruff, Clippy and commit hooks.
   Current GPU suite and full framework measurements remain pending.
+- EVD-12 is repaired by `f34b661` plus 9648012: the exact loaded
+  `.so` SHA-256 and TVM FFI nvcc path/version are recorded, and a source/flags/
+  SM100a/ABI keyed sidecar permits hash-verified reuse if nvcc is unavailable
+  in a later process. Both formal collectors fail closed on incomplete identity.
+  Independent code review and focused CPU tests passed. A real B200 qk run
+  passed 6/6 cases on UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`,
+  with provenance and sidecar verified. That run is diagnostic because the
+  worktree was dirty; it is not a clean full operator result. EVD-13's source
+  finding is closed by `895d57b` + `487f8de`: the TVM FFI cache is now audited
+  and a measured-window write regression passes. Current 12-row framework
+  acceptance remains pending separately.
 
-Remaining work: EVD-12/13, PY-03..07, SRV-08..10, SCH-06/07, KRN-06..10,
+Remaining work: PY-03..07, SRV-08..10, SCH-06/07, KRN-06..10,
 EVD-03..05/07..10, MNT-01..04, the four unverified risks, and current
-12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
+full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
 
 ## Historical 2026-09-24 remediation checkpoint

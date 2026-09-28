@@ -2,8 +2,10 @@
 
 ## Status
 
-CUDA is the default custom-kernel backend on B200. Current acceptance evidence (147/147
-operator cases, 12/12 framework rows) is in [acceptance.md](acceptance.md). Known
+CUDA is the default custom-kernel backend on B200. The 147/147 operator cases
+and 12/12 framework rows in [acceptance.md](acceptance.md) apply to historical
+clean commit `c36d1c9`; current full-matrix and framework acceptance are pending
+after audit remediation. Known
 kernel-contract and observability issues are listed in
 [audit-2026-09-23.md](audit-2026-09-23.md), under the `KRN-*`, `MNT-*` and `EVD-09`
 entries. Read those before changing a kernel.
@@ -30,9 +32,13 @@ entries. Read those before changing a kernel.
   `tilelang_reference/`.
 - **Native build.**
   - Native code is `python/oh_my_vllm/kernels/cuda_backend/kernels.cu`. It is
-    compiled lazily through independent TVM FFI `load_inline` for `sm_100a`, and
-    runs on the caller's current CUDA stream.
-  - `scripts/with-env.sh` isolates `TVM_FFI_CACHE_DIR`.
+    compiled lazily through independent TVM FFI `build_inline`, then loaded from
+    the returned path with `load_module`. It targets `sm_100a` and runs on the
+    caller's current CUDA stream.
+  - `scripts/with-env.sh` isolates `TVM_FFI_CACHE_DIR` and sets
+    `TVM_FFI_CUDA_ARCH_LIST=10.0a`. Direct launches must set that arch explicitly.
+    A build sidecar binds the source/configuration and exact `.so` hash for
+    verified cache reuse if nvcc is unavailable later.
   - Host CUDA 13.1 compiles it. Use `CUDA_HOME=/usr/local/cuda-13.1` when needed.
   - All compilation must finish before CUDA Graph capture and before formal
     measurement.

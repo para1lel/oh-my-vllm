@@ -4,8 +4,9 @@
 
 ## 状态
 
-CUDA 是 B200 上默认的自定义 kernel 后端。当前验收证据（147/147 个算子用例、12/12 个框架行）见
-[acceptance.md](acceptance.zh.md)。已知的 kernel 契约与可观测性问题列在
+CUDA 是 B200 上默认的自定义 kernel 后端。[验收文档](acceptance.zh.md)中的
+147/147 个算子用例和 12/12 个框架行仅适用于历史干净提交 `c36d1c9`；审计整改后的
+当前完整矩阵与框架验收仍待重跑。已知的 kernel 契约与可观测性问题列在
 [audit-2026-09-23.md](audit-2026-09-23.zh.md) 的 `KRN-*`、`MNT-*` 和 `EVD-09` 条目下。
 修改 kernel 前请先阅读这些内容。
 
@@ -26,8 +27,11 @@ CUDA 是 B200 上默认的自定义 kernel 后端。当前验收证据（147/147
   `tilelang_reference/` 中。
 - **原生构建。**
   - 原生代码为 `python/oh_my_vllm/kernels/cuda_backend/kernels.cu`。它通过独立的 TVM FFI
-    `load_inline` 针对 `sm_100a` 延迟编译，并在调用者当前的 CUDA stream 上运行。
-  - `scripts/with-env.sh` 隔离 `TVM_FFI_CACHE_DIR`。
+    `build_inline` 延迟编译，再用 `load_module` 从返回路径加载。目标为 `sm_100a`，
+    在调用者当前的 CUDA stream 上运行。
+  - `scripts/with-env.sh` 隔离 `TVM_FFI_CACHE_DIR` 并设置
+    `TVM_FFI_CUDA_ARCH_LIST=10.0a`；直接启动时须显式设置该架构。构建 sidecar 绑定
+    源码/配置及准确的 `.so` 哈希，供后来无法查询 nvcc 时经验证复用缓存。
   - 由主机 CUDA 13.1 编译。需要时使用 `CUDA_HOME=/usr/local/cuda-13.1`。
   - 所有编译必须在 CUDA Graph 捕获和正式测量之前完成。
   - TileFoundry 不是运行时或构建依赖。

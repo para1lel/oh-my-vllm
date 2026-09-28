@@ -98,3 +98,9 @@ rustfmt.toml 设置稳定 Rust 2024 格式、100 字符宽度、Unix 换行和�
 ## 原生 CUDA 开发
 
 默认使用 CUDA。Python 启动前设置 OH_MY_VLLM_KERNEL_BACKEND=tilelang 使用冻结对照。scripts/with-env.sh 将 TVM_FFI_CACHE_DIR 隔离到项目运行时缓存下。原生算子编译目标为 SM100a，宿主提供 CUDA13.1 编译器，必要时设置 CUDA_HOME=/usr/local/cuda-13.1。运行时不依赖 TileFoundry。冻结对照和已验收开发流程见 cuda-development.zh.md。
+
+包装脚本还默认设置 `TVM_FFI_CUDA_ARCH_LIST=10.0a`；CUDA 后端会拒绝缺失或不同的值，
+避免 TVM FFI 按无关物理 GPU 的架构自动探测。绕过 `scripts/with-env.sh` 启动时须显式
+设置该变量。CUDA 构建记录实际加载的 `.so` 哈希以及编译器路径/版本。若新进程无法
+查询 nvcc，只能复用 `TVM_FFI_CACHE_DIR` 中唯一匹配、哈希已验证的 sidecar；没有可信
+sidecar 的旧缓存条目会被拒绝。
