@@ -20,6 +20,7 @@ class TTFTMetricsTest(unittest.TestCase):
         row = {
             "nvcc_path": "/cuda/bin/nvcc",
             "nvcc_version": "Cuda compilation tools, release 12.8, V12.8.1",
+            "compiler_identity_source": "live",
             "so_path": "/tmp/loaded.so",
             "so_sha256": "a" * 64,
         }
@@ -30,6 +31,8 @@ class TTFTMetricsTest(unittest.TestCase):
             log + "\n" + log,
             "CUDA_BUILD_PROVENANCE " + json.dumps({**row, "so_sha256": None}),
             "CUDA_BUILD_PROVENANCE " + json.dumps({**row, "nvcc_path": None}),
+            "CUDA_BUILD_PROVENANCE "
+            + json.dumps({**row, "compiler_identity_source": None}),
             "CUDA_BUILD_PROVENANCE " + json.dumps({**row, "so_sha256": "bad"}),
             "CUDA_BUILD_PROVENANCE "
             + json.dumps({**row, "nvcc_version": "nvcc-unavailable: missing"}),

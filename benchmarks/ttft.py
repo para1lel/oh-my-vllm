@@ -31,6 +31,7 @@ def _parse_cuda_provenance(stdout: str) -> dict:
         or not row.get("nvcc_version")
         or str(row["nvcc_version"]).startswith("nvcc-unavailable:")
         or row["nvcc_version"] == "nvcc-changed-during-build"
+        or row.get("compiler_identity_source") not in ("live", "manifest")
         or not row.get("so_path")
         or not isinstance(row.get("so_sha256"), str)
         or len(row["so_sha256"]) != 64
