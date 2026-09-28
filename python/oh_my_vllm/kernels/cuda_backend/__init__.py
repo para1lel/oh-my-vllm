@@ -11,6 +11,7 @@ from functools import cache
 from pathlib import Path
 
 _FUNCTIONS = (
+    "variant_launch_count",
     "quantize",
     "silu_mul",
     "gates",
@@ -25,6 +26,15 @@ _FUNCTIONS = (
     "convolution",
     "attention_partial",
     "attention_merge",
+)
+_VARIANT_OPERATIONS = (
+    "norm",
+    "add_norm",
+    "gated_norm",
+    "qk",
+    "recurrent",
+    "append",
+    "convolution",
 )
 _BASE_CUDA_FLAGS = ("-O3", "--generate-code=arch=compute_100a,code=sm_100a")
 _MANIFEST = "oh_my_vllm_cuda.provenance.json"
@@ -205,6 +215,18 @@ def provenance(*, require_loaded: bool = False, require_compiler: bool = False) 
         "compiler_identity_source": _loaded_compiler_source,
         "so_path": str(path) if path is not None else None,
         "so_sha256": _loaded_so_sha256,
+    }
+
+
+def variant_launch_counts() -> dict[str, dict[str, int]]:
+    """Host variant choices; CUDA Graph replay does not re-enter host dispatch."""
+    module = compiled()
+    return {
+        operation: {
+            "fast": module.variant_launch_count(index, True),
+            "generic": module.variant_launch_count(index, False),
+        }
+        for index, operation in enumerate(_VARIANT_OPERATIONS)
     }
 
 

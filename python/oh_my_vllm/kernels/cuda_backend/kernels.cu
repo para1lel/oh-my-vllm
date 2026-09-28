@@ -4,9 +4,26 @@
 #include <cuda_runtime.h>
 #include <tvm/ffi/container/tensor.h>
 #include <tvm/ffi/extra/c_env_api.h>
+#include <atomic>
 #include <type_traits>
 
 using tvm::ffi::TensorView;
+
+// Host dispatches include direct calls and CUDA Graph capture, but not replay.
+// A relaxed atomic keeps variants observable across Python/worker threads.
+// Keep this order in sync with _VARIANT_OPERATIONS in cuda_backend/__init__.py.
+enum VariantOperation {
+  kNorm, kAddNorm, kGatedNorm, kQk, kRecurrent, kAppend, kConvolution, kVariantCount
+};
+std::atomic<int64_t> variant_launches[kVariantCount][2]{};
+void record_variant(int operation, bool fast) {
+  variant_launches[operation][fast].fetch_add(1, std::memory_order_relaxed);
+}
+int64_t variant_launch_count(int64_t operation, bool fast) {
+  TVM_FFI_ICHECK(operation >= 0 && operation < kVariantCount)
+      << "unknown CUDA variant operation";
+  return variant_launches[operation][fast].load(std::memory_order_relaxed);
+}
 
 bool has_dtype(TensorView tensor, int code, int bits) {
   auto dtype = tensor.dtype();
@@ -537,6 +554,7 @@ void rms(TensorView x, TensorView weight, TensorView gate, TensorView out, doubl
   if (!gated && h == 1 && d == 5120 && x.stride(0) == 5120 && x.stride(1) == 5120 &&
       x.stride(2) == 1 && aligned(x, 8) && aligned(weight, 16)) {
     launch_rms5120(x, gate, weight, out, out, false, epsilon);
+    record_variant(kNorm, true);
     return;
   }
   Strides xs{x.stride(0), x.stride(1), x.stride(2)};
@@ -548,6 +566,7 @@ void rms(TensorView x, TensorView weight, TensorView gate, TensorView out, doubl
         static_cast<const __nv_bfloat16 *>(gate.data_ptr()),
         static_cast<__nv_bfloat16 *>(out.data_ptr()), rows, xs, gs, epsilon);
     TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA gated RMS launch failed";
+    record_variant(kGatedNorm, true);
     return;
   }
 #define RMS(L, G)                                                                                  \
@@ -571,12 +590,14 @@ void rms(TensorView x, TensorView weight, TensorView gate, TensorView out, doubl
   }
 #undef RMS
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA RMS launch failed";
+  record_variant(gated ? kGatedNorm : kNorm, false);
 }
 void add_rms(TensorView x, TensorView residual, TensorView weight, TensorView summed,
              TensorView out) {
   int d = x.size(1), rows = x.size(0);
   if (d == 5120 && aligned(x, 8) && aligned(residual, 8) && aligned(weight, 16)) {
     launch_rms5120(x, residual, weight, out, summed, true, 1e-6f);
+    record_variant(kAddNorm, true);
     return;
   }
   rms_kernel<true, false, true><<<rows, 256, 0, stream_for(x)>>>(
@@ -586,6 +607,7 @@ void add_rms(TensorView x, TensorView residual, TensorView weight, TensorView su
       static_cast<__nv_bfloat16 *>(out.data_ptr()), static_cast<__nv_bfloat16 *>(summed.data_ptr()),
       rows, 1, d, {d, d, 1}, {d, d, 1}, 1e-6f);
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA residual RMS launch failed";
+  record_variant(kAddNorm, false);
 }
 
 __device__ float phase(int64_t position, int channel, int rotary, double theta) {
@@ -817,6 +839,7 @@ void normalize_qk(TensorView q, TensorView k, TensorView oq, TensorView ok) {
     }
 #undef MODEL_QK
     TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA model Q/K launch failed";
+    record_variant(kQk, true);
     return;
   }
   int rows = q.size(0) * q.size(1);
@@ -825,6 +848,7 @@ void normalize_qk(TensorView q, TensorView k, TensorView oq, TensorView ok) {
       static_cast<const __nv_bfloat16 *>(k.data_ptr()), static_cast<__nv_bfloat16 *>(oq.data_ptr()),
       static_cast<__nv_bfloat16 *>(ok.data_ptr()), rows, q.size(1), q.stride(0), k.stride(0));
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA Q/K normalization launch failed";
+  record_variant(kQk, false);
 }
 // Validated callers use positive dense/row-strided views. Conservative byte
 // spans include padding so a fast restricted path never assumes false independence.
@@ -1082,6 +1106,7 @@ void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, Tenso
     }
 #undef VECTOR_REC
     TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA vector recurrence launch failed";
+    record_variant(kRecurrent, true);
     return;
   }
   dim3 grid(reads.size(0), v.size(1), 8);
@@ -1102,6 +1127,7 @@ void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, Tenso
   }
 #undef REC
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA recurrence launch failed";
+  record_variant(kRecurrent, false);
 }
 template <bool Vector>
 __global__ void append_kernel(const __nv_bfloat16 *k, const __nv_bfloat16 *v, __nv_bfloat16 *cache,
@@ -1146,6 +1172,7 @@ void append(TensorView k, TensorView v, TensorView cache, TensorView slots) {
   }
 #undef APPEND
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA KV append launch failed";
+  record_variant(kAppend, vector);
 }
 
 template <int Rows>
@@ -1245,6 +1272,7 @@ void convolution(TensorView x, TensorView weight, TensorView pool, TensorView id
     }
 #undef MODEL_CONV
     TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA model convolution launch failed";
+    record_variant(kConvolution, true);
     return;
   }
 #define CONV(R)                                                                                    \
@@ -1262,6 +1290,7 @@ void convolution(TensorView x, TensorView weight, TensorView pool, TensorView id
   }
 #undef CONV
   TVM_FFI_ICHECK(cudaGetLastError() == cudaSuccess) << "CUDA convolution launch failed";
+  record_variant(kConvolution, false);
 }
 __device__ float warp_max(float value) {
 #pragma unroll

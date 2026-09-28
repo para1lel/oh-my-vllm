@@ -17,6 +17,10 @@ from measurement import hardware_identity  # noqa: E402
 from development.kernels.cases import UNUSED, cases  # noqa: E402
 from development.kernels.comparison import compare  # noqa: E402
 from development.kernels.reference import source_hashes, verify_reference  # noqa: E402
+from development.kernels.variant import (  # noqa: E402
+    REQUIRED_FAST,
+    verify_fast_dispatch,
+)
 
 sources = source_hashes
 
@@ -43,7 +47,7 @@ def main():
     if os.environ.get("OH_MY_VLLM_KERNEL_BACKEND") != "cuda":
         parser.error("set OH_MY_VLLM_KERNEL_BACKEND=cuda before starting Python")
     import torch
-    from oh_my_vllm.kernels.cuda_backend import provenance
+    from oh_my_vllm.kernels.cuda_backend import provenance, variant_launch_counts
 
     from development.kernels.fixtures import fixture
     from development.kernels.observations import analyze
@@ -107,8 +111,15 @@ def main():
             reference, candidate, witnesses = fixture(
                 case["configuration"], observe=True
             )
-            output_verification = verify(
-                case["configuration"]["operation"], reference, candidate, witnesses
+            operation = case["configuration"]["operation"]
+            variant_before = (
+                variant_launch_counts() if operation in REQUIRED_FAST else None
+            )
+            output_verification = verify(operation, reference, candidate, witnesses)
+            variant_dispatch = (
+                verify_fast_dispatch(operation, variant_before, variant_launch_counts())
+                if variant_before is not None
+                else None
             )
             raw = measure(reference, candidate)
             report["cuda_build_provenance"] = provenance(
@@ -123,6 +134,7 @@ def main():
                 dict(
                     **case,
                     output_verification=output_verification,
+                    variant_dispatch=variant_dispatch,
                     raw_pairs_ms=raw,
                     comparison=decision,
                 )

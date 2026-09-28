@@ -130,6 +130,21 @@ scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda CUDA_
   写入的 cache/state 槽；FP8 scale stride 和逐槽递归状态边界也纳入检查。不匹配
   会使采集失败。这项校验不增加 CUDA Graph 计时 callable 的工作量。独立 FP64
   测试仍单独保留（审计 EVD-09，`ea0aa4e`）。
+- **变体门槛。** `variant_launch_counts()` 读取每进程 CUDA 主机分派次数。正式采集器
+  在计时前的输出校验阶段，对 `norm`、`add_norm`、`gated_norm`、`qk`、`recurrent`、
+  `convolution` 要求快路径恰好增加一次、通用路径不增加，并记录 `variant_dispatch`。
+  `append` 不在正式矩阵中，由聚焦 GPU 用例覆盖快/通用路径。CUDA Graph replay 不再
+  进入主机分派，因此不会增加这些计数。
+
+| 操作 | 快路径主机分派 | 通用路径主机分派 |
+|---|---|---|
+| `norm` | 非 gated、5120 宽密集行，输入和权重对齐 | 其他 RMS 布局 |
+| `add_norm` | 5120 宽行，输入、residual 和权重对齐 | 其他 residual RMS 布局 |
+| `gated_norm` | gated 48 head、128 宽行 | 其他 gated RMS 布局 |
+| `qk` | 16 head、token stride 10240、Q/K 对齐的 packed 行 | 其他 Q/K 布局 |
+| `recurrent` | 16 Q head、48 V head、Q/K/state 对齐且 state pool 不重叠 | 其他有效递归布局 |
+| `append` | 宽度可被 8 整除，K/V/cache 对齐 | 其他有效 KV 布局 |
+| `convolution` | 10240 channel、token stride 16384、权重对齐且 state pool 不重叠 | 其他有效卷积布局 |
 
 ## 开发观测
 

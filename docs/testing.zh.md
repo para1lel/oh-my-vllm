@@ -257,6 +257,9 @@ cache/state 槽，包括 FP8 scale 布局与逐槽递归状态边界。不匹配
 记录比较结果。`test_kernel_output_verification.py` 测试比较器与代表性 GPU
 fixture（EVD-09，`ea0aa4e`）。独立 CPU FP64 测试仍单独保留。当前干净完整
 矩阵尚待运行。
+若所需模型形状的 CUDA 调用在输出校验期间走通用主机分派，采集器也会失败。
+`test_kernel_variant_counts.py` 在 CPU 上覆盖门槛、在 B200 上覆盖两种分派方向
+（KRN-08）。
 
 ## 严格的 Rust 格式
 

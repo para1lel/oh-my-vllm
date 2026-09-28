@@ -295,6 +295,9 @@ per-slot recurrent-state limits. A mismatch aborts collection; the comparison
 result is recorded per row. `test_kernel_output_verification.py` tests the
 comparator and representative GPU fixtures (EVD-09, `ea0aa4e`). Independent
 CPU FP64 tests remain separate. The current clean full matrix is pending.
+The collector also fails if a required model-shape CUDA call takes a generic
+host dispatch during output verification. `test_kernel_variant_counts.py`
+covers the gate on CPU and both dispatch directions on B200 (KRN-08).
 
 ## Strict Rust formatting
 

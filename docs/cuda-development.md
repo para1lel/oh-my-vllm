@@ -173,6 +173,23 @@ scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda CUDA_
   of the check. A mismatch fails collection. This gate does not add work to
   the timed CUDA Graph callables. Independent FP64 tests remain separate
   (audit EVD-09, `ea0aa4e`).
+- **Variant gate.** `variant_launch_counts()` reads per-process CUDA host
+  dispatch counts. The formal collector records `variant_dispatch` and requires
+  exactly one fast and zero generic host dispatch during pre-timing output
+  verification for `norm`, `add_norm`, `gated_norm`, `qk`, `recurrent`, and
+  `convolution`. `append` is outside the formal matrix and has a focused GPU
+  fast/generic test. CUDA Graph replay does not repeat the host dispatch and
+  therefore does not increment these counters.
+
+| Operation | Fast host dispatch | Generic host dispatch |
+|---|---|---|
+| `norm` | Nongated, dense 5120-wide rows with aligned input and weight | Other RMS layouts |
+| `add_norm` | 5120-wide rows with aligned input, residual and weight | Other residual RMS layouts |
+| `gated_norm` | Gated 48-head, 128-wide rows | Other gated RMS layouts |
+| `qk` | Packed 16-head rows with 10240-token strides and aligned Q/K | Other Q/K layouts |
+| `recurrent` | 16 Q heads, 48 V heads, aligned Q/K/state, disjoint state pool | Other valid recurrence layouts |
+| `append` | Width divisible by 8, aligned K/V/cache | Other valid KV layouts |
+| `convolution` | 10240 channels, 16384-token stride, aligned weight, disjoint state pool | Other valid convolution layouts |
 
 ## Development observations
 
