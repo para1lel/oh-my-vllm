@@ -252,7 +252,11 @@ CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests
 
 `test_kernel_comparison.py` 测试判定统计。`test_kernel_reference.py` 测试冻结参考实现的哈希和后端选择。
 
-该对比只测量时间。后端之间的输出一致性来自 FP64 测试套件（EVD-09）。
+收集器在每项计时前检查冻结 TileLang 与 CUDA 的完整操作返回值和实际写入的
+cache/state 槽，包括 FP8 scale 布局与逐槽递归状态边界。不匹配会中止采集；每行
+记录比较结果。`test_kernel_output_verification.py` 测试比较器与代表性 GPU
+fixture（EVD-09，`ea0aa4e`）。独立 CPU FP64 测试仍单独保留。当前干净完整
+矩阵尚待运行。
 
 ## 严格的 Rust 格式
 

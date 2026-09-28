@@ -285,8 +285,12 @@ commands and the decision rule.
 `test_kernel_reference.py` tests the frozen-reference hashes and backend
 selection.
 
-The comparison measures time only. Output agreement between backends comes from
-the FP64 suite (EVD-09).
+Before timing each case, the collector checks the frozen TileLang and CUDA
+operation returns and written cache/state slots, including FP8 scale layout and
+per-slot recurrent-state limits. A mismatch aborts collection; the comparison
+result is recorded per row. `test_kernel_output_verification.py` tests the
+comparator and representative GPU fixtures (EVD-09, `ea0aa4e`). Independent
+CPU FP64 tests remain separate. The current clean full matrix is pending.
 
 ## Strict Rust formatting
 

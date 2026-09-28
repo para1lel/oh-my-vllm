@@ -104,14 +104,18 @@ scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda CUDA_
 ```
 
 - **子集。** `--operations` 选择诊断子集。部分覆盖和脏源码运行不能通过完整矩阵门槛。
-- **收集器记录的内容：** 源码哈希、GPU 身份、全部成对样本、判定结果，以及单独标注的 TileFoundry 估计。
+- **收集器记录的内容：** 源码哈希、GPU 身份、计时前的输出校验、全部成对样本、判定结果，
+  以及单独标注的 TileFoundry 估计。
 - **失效。** GPU 争用或源码变更会使一次收集失效。
 - **判定规则**（`development/kernels/comparison.py`）：
   - 至少三轮、每轮 20 对，后端顺序交错。
   - 两条路径都已 warmup，且每次运行之间恢复可变状态。
   - 每一轮中 CUDA 的中位数都更快。
   - 节省时间均值的单侧 95% 分层 bootstrap 下界大于零。
-- **harness 比较的内容。** 它只比较时间（审计 EVD-09）。数值一致性来自 FP64 测试套件。
+- **输出门槛。** 每项计时前，harness 按现有容差比较两端完整操作的返回值和实际
+  写入的 cache/state 槽；FP8 scale stride 和逐槽递归状态边界也纳入检查。不匹配
+  会使采集失败。这项校验不增加 CUDA Graph 计时 callable 的工作量。独立 FP64
+  测试仍单独保留（审计 EVD-09，`ea0aa4e`）。
 
 ## 开发观测
 

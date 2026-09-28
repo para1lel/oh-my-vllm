@@ -137,8 +137,9 @@ scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda CUDA_
 
 - **Subsets.** `--operations` selects diagnostic subsets. Partial coverage and
   dirty-source runs cannot pass the full-matrix gate.
-- **What the collector records:** source hashes, GPU identity, all paired
-  samples, the decisions, and separately labelled TileFoundry estimates.
+- **What the collector records:** source hashes, GPU identity, pre-timing
+  output verification, all paired samples, the decisions, and separately
+  labelled TileFoundry estimates.
 - **Invalidation.** GPU contention or a source change invalidates a collection.
 - **Decision rule** (`development/kernels/comparison.py`):
   - At least three rounds of 20 pairs, with interleaved backend order.
@@ -146,8 +147,12 @@ scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda CUDA_
   - A faster CUDA median in every round.
   - A one-sided 95% hierarchical-bootstrap lower bound on mean time saved that
     is greater than zero.
-- **What the harness compares.** It compares time only (audit EVD-09).
-  Numerical agreement comes from the FP64 test suite.
+- **Output gate.** Before timing each case, the harness compares both
+  whole-operation returns and actually written cache/state slots at existing
+  tolerances. FP8 scale strides and recurrent state per-slot bounds are part
+  of the check. A mismatch fails collection. This gate does not add work to
+  the timed CUDA Graph callables. Independent FP64 tests remain separate
+  (audit EVD-09, `ea0aa4e`).
 
 ## Development observations
 

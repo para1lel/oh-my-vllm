@@ -115,9 +115,20 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   deselected). Rust workspace passed 56/26/17, with fmt, line width, Ruff,
   Clippy and hooks clean. Current full GPU/formal/12-row acceptance remains
   pending.
+- `ea0aa4e` closes EVD-09's source gap after independent review: every formal
+  case now verifies both backends' returns and written cache/state slots before
+  timing, with exact copied values, FP8 scale strides, and per-slot recurrent
+  state limits. Mismatch fails collection; timed callables and the default
+  fixture API are unchanged. Six adversarial CPU comparator cases and six
+  representative B200 fixtures passed on UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`; no owned GPU process remains.
+  `scripts/test.sh cpu` passed 149 tests and 67 subtests (120 GPU cases
+  deselected); Rust workspace passed 56/26/17, and fmt, line width, Ruff,
+  Clippy and hooks passed. A clean full operator matrix and 12-row framework
+  collection still remain pending.
 
 Remaining work: PY-03..07, SRV-08..10, SCH-06/07, KRN-06..10,
-EVD-07/09, MNT-01..03, the four unverified risks, and current
+EVD-07, MNT-01..03, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
 

@@ -93,9 +93,17 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   `scripts/test.sh cpu` 通过 143 项测试和 67 个子测试（排除 114 项 GPU 用例）；
   Rust workspace 通过 56/26/17 项，fmt、行宽、Ruff、Clippy 和 hooks 均清洁。
   当前完整 GPU、正式算子矩阵和 12 行验收仍待运行。
+- `ea0aa4e` 经独立复审关闭 EVD-09 的源码缺口：每项正式用例在计时前校验两端
+  返回值和实际写入的 cache/state 槽，包括精确复制值、FP8 scale stride 和逐槽
+  递归状态边界。不匹配会使采集失败；计时 callable 与默认 fixture API 未改变。
+  六项对抗性 CPU 比较器用例及六项代表性 B200 fixture 在 UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上通过；无自有 GPU 进程
+  残留。`scripts/test.sh cpu` 通过 149 项测试和 67 个子测试（排除 120 项 GPU
+  用例）；Rust workspace 通过 56/26/17 项，fmt、行宽、Ruff、Clippy 和 hooks
+  通过。干净完整算子矩阵与 12 行框架采集仍待运行。
 
 后续工作：PY-03..07、SRV-08..10、SCH-06/07、KRN-06..10、
-EVD-07/09、MNT-01..03、四项未验证风险，以及当前完整算子/GPU 套件
+EVD-07、MNT-01..03、四项未验证风险，以及当前完整算子/GPU 套件
 和 12 组框架验收。
 逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。
 
