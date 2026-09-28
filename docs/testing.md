@@ -86,9 +86,11 @@ The operator tests compare each kernel with CPU FP64 references. They cover:
 - Per-candidate MTP snapshots
 - Graph replay
 
-Set `OH_MY_VLLM_KERNEL_BACKEND=tilelang` to run the same suite against the frozen
-comparison backend. `test_gqa_accuracy.py` tests PyTorch SDPA only and is not
-actual-path evidence (EVD-04).
+Set `OH_MY_VLLM_KERNEL_BACKEND=tilelang` to run the applicable tests against
+the frozen comparison backend. `test_gqa_accuracy.py` specifically verifies
+owned CUDA paged decode against CPU FP64, including a two-page 784/785 boundary;
+it is skipped under the TileLang backend. The graph tests also have independent
+CPU FP64 references (EVD-04/05, `4ed62ab`).
 
 ## Real text and actual-path FP64 probes
 

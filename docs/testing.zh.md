@@ -83,8 +83,10 @@ B200 套件通过 211 项测试及 32 个子测试，六项 context 边界占位
 - 每个候选的 MTP 快照
 - Graph 重放
 
-设置 `OH_MY_VLLM_KERNEL_BACKEND=tilelang` 可在冻结的对比后端上运行同一套件。
-`test_gqa_accuracy.py` 只测试 PyTorch SDPA，不是实际路径证据（EVD-04）。
+设置 `OH_MY_VLLM_KERNEL_BACKEND=tilelang` 可在冻结的对比后端上运行适用测试。
+`test_gqa_accuracy.py` 专门将自有 CUDA 分页 decode 与 CPU FP64 比较，包含
+784/785 的两页边界；TileLang 后端下跳过该项。graph 测试也有独立 CPU FP64
+参考（EVD-04/05，`4ed62ab`）。
 
 ## 真实文本与实际路径 FP64 探针
 

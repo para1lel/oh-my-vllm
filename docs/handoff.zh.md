@@ -85,9 +85,17 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   B200 聚焦 RNG 测试在 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上
   1/1 通过；日志：`/tmp/oh-my-vllm-evd10-fixture-smoke.log`。自有 GPU 进程已退出。
   当前完整 GPU 套件、正式算子矩阵和 12 行框架采集仍待运行。
+- `4ed62ab` 以独立复审的测试关闭 EVD-04/05。自有 CUDA 分页 GQA decode
+  现与 CPU FP64 参考比较，覆盖 batch 1/2、784/785、反序物理页表；负向对照
+  证明漏读第二页会超出容差。分组 draft 和 proposal graph 除原有一致性检查外，
+  也有独立 CPU FP64 参考。B200 聚焦套件在 UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上 9/9 通过；自有进程已退出。
+  `scripts/test.sh cpu` 通过 143 项测试和 67 个子测试（排除 114 项 GPU 用例）；
+  Rust workspace 通过 56/26/17 项，fmt、行宽、Ruff、Clippy 和 hooks 均清洁。
+  当前完整 GPU、正式算子矩阵和 12 行验收仍待运行。
 
 后续工作：PY-03..07、SRV-08..10、SCH-06/07、KRN-06..10、
-EVD-04/05/07/09、MNT-01..03、四项未验证风险，以及当前完整算子/GPU 套件
+EVD-07/09、MNT-01..03、四项未验证风险，以及当前完整算子/GPU 套件
 和 12 组框架验收。
 逐项状态与证据限制见[审计索引](audit-2026-09-23.zh.md)。
 

@@ -104,9 +104,20 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   `/tmp/oh-my-vllm-evd10-fixture-smoke.log`. The owned GPU process exited.
   The full current GPU suite, formal operator matrix and 12-row framework
   collection remain pending.
+- `4ed62ab` closes EVD-04/05 in independently reviewed tests. Owned CUDA
+  paged GQA decode now has a CPU FP64 oracle across batch 1/2 and 784/785,
+  with a reversed physical page table and a negative control proving that a
+  missed second page exceeds tolerance. Grouped draft and proposal graph tests
+  have independent CPU FP64 references alongside their consistency checks.
+  The focused B200 suite passed 9/9 on UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`; the owned process exited.
+  `scripts/test.sh cpu` passed 143 tests and 67 subtests (114 GPU cases
+  deselected). Rust workspace passed 56/26/17, with fmt, line width, Ruff,
+  Clippy and hooks clean. Current full GPU/formal/12-row acceptance remains
+  pending.
 
 Remaining work: PY-03..07, SRV-08..10, SCH-06/07, KRN-06..10,
-EVD-04/05/07/09, MNT-01..03, the four unverified risks, and current
+EVD-07/09, MNT-01..03, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
 
