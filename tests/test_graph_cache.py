@@ -253,6 +253,167 @@ def test_failed_capture_cooldown_entries_are_bounded():
     assert cache.snapshot()["draft_capture_failure"] == 3
 
 
+def test_short_recapture_cools_new_captures_for_exact_decision_count():
+    cache = GraphCache(
+        2,
+        admission_hits=1,
+        admission_factor=0,
+        churn_window_decisions=10,
+        churn_cooldown_decisions=3,
+        synchronize=Mock(),
+    )
+    add(cache, "target", 0)
+    add(cache, "target", 1)
+    add(cache, "target", 2)
+    resident = add(cache, "target", 0)
+    assert cache.snapshot()["churn_cooldown_started"] == 1
+    assert cache.snapshot()["churn_cooldown_remaining"] == 3
+
+    create = Mock(return_value=object())
+    assert cache.get_or_create("target", (3,), create) is None
+    create.assert_not_called()
+    assert cache.should_use("target", (0,))
+    assert cache.get_or_create("target", (0,), create) is resident
+    assert not cache.should_use("target", (3,))
+    assert not cache.should_use("target", (4,))
+    assert ("target", (3,)) not in cache.frequencies
+    assert ("target", (4,)) not in cache.probation
+    assert cache.snapshot()["churn_cooldown_remaining"] == 0
+    assert cache.should_use("target", (3,))
+    assert cache.get_or_create("target", (3,), create) is create.return_value
+    assert cache.snapshot()["target_churn_eager"] == 3
+
+
+def test_churn_cooldown_ages_residents_and_hot_shift_recovers():
+    cache = GraphCache(
+        1,
+        admission_hits=4,
+        admission_factor=2,
+        churn_window_decisions=10,
+        churn_cooldown_decisions=2048,
+        synchronize=Mock(),
+    )
+    cache.get_or_create("target", (0,), object)
+    cache.get_or_create("target", (1,), object)
+    for _ in range(4):
+        admitted = cache.should_use("target", (0,))
+    assert admitted
+    cache.get_or_create("target", (0,), object)
+    cache.frequencies[("target", (0,))] = 1024
+
+    for index in range(2048):
+        assert not cache.should_use("target", (index + 2,))
+    assert len(cache.probation) == 0
+    assert len(cache.frequencies) == 1
+    assert cache.frequencies[("target", (0,))] < 1024
+    assert cache.snapshot()["churn_cooldown_remaining"] == 0
+    for _ in range(256):
+        if cache.should_use("target", (2,)):
+            break
+    else:
+        pytest.fail("hot new shape never became eligible after cooldown")
+    cache.get_or_create("target", (2,), object)
+    assert cache.contains("target", (2,))
+    assert cache.snapshot()["target_churn_eager"] == 2048
+
+
+def test_old_recapture_does_not_trigger_churn_cooldown():
+    cache = GraphCache(
+        1,
+        admission_hits=1,
+        admission_factor=0,
+        churn_window_decisions=2,
+        churn_cooldown_decisions=3,
+        synchronize=Mock(),
+    )
+    add(cache, "target", 0)
+    add(cache, "target", 1)
+    for _ in range(3):
+        assert cache.should_use("target", (1,))
+    add(cache, "target", 0)
+    assert cache.snapshot()["target_recent_recapture"] == 1
+    assert cache.snapshot()["churn_cooldown_started"] == 0
+
+
+@pytest.mark.parametrize(
+    ("trigger_family", "other_family", "floors"),
+    [
+        ("draft", "proposal", {"draft": 1, "proposal": 2}),
+        ("proposal", "draft", {"draft": 2, "proposal": 1}),
+    ],
+)
+def test_churn_cooldown_defers_other_family_below_floor_then_recovers(
+    trigger_family, other_family, floors
+):
+    cache = GraphCache(
+        3,
+        family_floors=floors,
+        admission_hits=1,
+        admission_factor=0,
+        churn_cooldown_decisions=3,
+        synchronize=Mock(),
+    )
+    cache.get_or_create(trigger_family, (0,), object)
+    cache.get_or_create(other_family, (0,), object)
+    cache.get_or_create(trigger_family, (1,), object)
+    cache.get_or_create(trigger_family, (2,), object)
+    cache.get_or_create(trigger_family, (0,), object)
+    assert cache.snapshot()["churn_cooldown_started"] == 1
+    assert cache.snapshot()[f"{other_family}_resident"] == 1
+
+    assert cache.should_use(other_family, (0,))
+    assert not cache.should_use(other_family, (1,))
+    assert cache.should_use(trigger_family, (2,))
+    assert cache.should_use(other_family, (1,))
+    cache.get_or_create(other_family, (1,), object)
+    assert cache.snapshot()[f"{other_family}_resident"] == 2
+    assert cache.snapshot()[f"{other_family}_churn_eager"] == 1
+
+
+def test_clear_releases_churn_cooldown_and_invalid_durations_rejected():
+    cache = GraphCache(1, churn_cooldown_decisions=3, synchronize=Mock())
+    cache.get_or_create("target", (0,), object)
+    cache.get_or_create("target", (1,), object)
+    cache.get_or_create("target", (0,), object)
+    assert cache.snapshot()["churn_cooldown_remaining"] == 3
+    cache.clear()
+    assert cache.snapshot()["churn_cooldown_remaining"] == 0
+    assert cache.should_use("target", (2,))
+    cache.get_or_create("target", (2,), object)
+    assert cache.contains("target", (2,))
+
+    with pytest.raises(ValueError, match="invalid graph cache"):
+        GraphCache(churn_window_decisions=0)
+    with pytest.raises(ValueError, match="invalid graph cache"):
+        GraphCache(churn_cooldown_decisions=-1)
+
+
+def test_mtp_churn_cooldown_uses_eager_draft_path():
+    class Model:
+        mtp = object()
+
+        def __init__(self):
+            self.embedding = torch.zeros(1)
+
+        def draft(self, tokens, hidden, batch, cache):
+            return hidden + tokens[:, None]
+
+    with patch("oh_my_vllm.worker.mtp.MTPAttention"):
+        mtp = MTP(Model(), 1, 4096)
+    mtp.graph_cache = GraphCache(
+        1,
+        churn_cooldown_decisions=3,
+        synchronize=Mock(),
+    )
+    mtp.graph_cache.get_or_create("draft", (0,), object)
+    mtp.graph_cache.get_or_create("draft", (1,), object)
+    mtp.graph_cache.get_or_create("draft", (0,), object)
+    result = mtp._run([3], torch.tensor([[10.0]]), [0, 1], [[1]], [7])
+    torch.testing.assert_close(result, torch.tensor([[13.0]]))
+    mtp.attention.plan.assert_called_once()
+    assert mtp.graph_cache.snapshot()["draft_churn_eager"] == 1
+
+
 def test_mtp_graph_late_headroom_drop_uses_eager_path():
     class Model:
         mtp = object()
@@ -313,6 +474,62 @@ def test_invalid_capacity_rejected(capacity, floors, probation, history):
             probation_capacity=probation,
             recent_capacity=history,
         )
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+@torch.inference_mode()
+def test_real_draft_churn_cooldown_replays_resident_and_runs_miss_eager():
+    assert os.environ["CUDA_VISIBLE_DEVICES"].startswith("GPU-")
+    assert torch.cuda.device_count() == 1
+    assert "B200" in torch.cuda.get_device_name(0)
+
+    class Model:
+        mtp = object()
+
+        def __init__(self):
+            self.embedding = torch.zeros(1, device="cuda")
+
+        def draft(self, tokens, hidden, batch, cache):
+            return hidden + tokens[:, None] + batch.positions[:, None]
+
+    with patch("oh_my_vllm.worker.mtp.MTPAttention"):
+        mtp = MTP(Model(), 4, 4096)
+    mtp.graph_cache = GraphCache(
+        1,
+        admission_hits=1,
+        admission_factor=0,
+        churn_cooldown_decisions=3,
+    )
+    table = [[1]]
+    first_hidden = torch.tensor([[10.0]], device="cuda")
+    mtp._run([3], first_hidden, [0, 1], table, [7])
+    mtp._run(
+        [4, 5],
+        torch.tensor([[10.0], [20.0]], device="cuda"),
+        [0, 2],
+        table,
+        [8, 9],
+    )
+    resident = mtp._run([3], first_hidden, [0, 1], table, [7])
+    torch.testing.assert_close(resident, torch.tensor([[20.0]], device="cuda"))
+    assert mtp.graph_cache.snapshot()["churn_cooldown_started"] == 1
+
+    novel = mtp._run(
+        [6, 7, 8],
+        torch.tensor([[10.0], [20.0], [30.0]], device="cuda"),
+        [0, 3],
+        table,
+        [10, 11, 12],
+    )
+    torch.testing.assert_close(
+        novel, torch.tensor([[26.0], [38.0], [50.0]], device="cuda")
+    )
+    stats = mtp.graph_cache.snapshot()
+    assert stats["draft_capture"] == 3
+    assert stats["draft_recent_recapture"] == 1
+    assert stats["draft_churn_eager"] == 1
+    assert stats["draft_resident"] == 1
 
 
 @pytest.mark.gpu

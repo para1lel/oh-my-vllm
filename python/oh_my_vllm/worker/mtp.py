@@ -43,6 +43,9 @@ class MTP:
         self.next_position: dict[int, int] = {}
         self.graph_cache = GraphCache(
             family_floors={"draft": 16, "proposal": 4},
+            # A short-term recapture signals shape churn. Retain the resident
+            # graphs and run misses eagerly before trying another replacement.
+            churn_cooldown_decisions=32768,
             free_bytes=(
                 (lambda: torch.cuda.mem_get_info(self.device)[0])
                 if self.device.type == "cuda"

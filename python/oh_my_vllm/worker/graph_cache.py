@@ -19,6 +19,8 @@ class GraphCache:
         admission_hits: int = 4,
         admission_factor: int = 2,
         failure_cooldown: int = 64,
+        churn_window_decisions: int = 4096,
+        churn_cooldown_decisions: int = 0,
         synchronize: Callable[[], None] | None = None,
         free_bytes: Callable[[], int] | None = None,
         reserved_bytes: Callable[[], int] | None = None,
@@ -31,10 +33,12 @@ class GraphCache:
             or admission_hits <= 0
             or admission_factor < 0
             or failure_cooldown < 0
+            or churn_window_decisions <= 0
+            or churn_cooldown_decisions < 0
             or any(value < 0 for value in floors.values())
             or sum(floors.values()) > capacity
         ):
-            raise ValueError("invalid graph cache capacity or family floors")
+            raise ValueError("invalid graph cache configuration")
         self.capacity = capacity
         self.family_floors = floors
         self.probation_capacity = probation_capacity
@@ -42,16 +46,19 @@ class GraphCache:
         self.admission_hits = admission_hits
         self.admission_factor = admission_factor
         self.failure_cooldown = failure_cooldown
+        self.churn_window_decisions = churn_window_decisions
+        self.churn_cooldown_decisions = churn_cooldown_decisions
         self.synchronize = synchronize or torch.cuda.synchronize
         self.free_bytes = free_bytes
         self.reserved_bytes = reserved_bytes
         self.graphs: OrderedDict[tuple[str, tuple], object] = OrderedDict()
         self.probation: OrderedDict[tuple[str, tuple], int] = OrderedDict()
-        self.recent_captures: OrderedDict[tuple[str, tuple], None] = OrderedDict()
+        self.recent_captures: OrderedDict[tuple[str, tuple], int] = OrderedDict()
         self.frequencies: Counter[tuple[str, tuple]] = Counter()
         self.retry_after: OrderedDict[tuple[str, tuple], int] = OrderedDict()
         self.counters: Counter[str] = Counter()
         self.clock = 0
+        self.churn_cooldown_until = -1
 
     def contains(self, family: str, key: tuple) -> bool:
         return (family, key) in self.graphs
@@ -83,11 +90,15 @@ class GraphCache:
                 self.frequencies[resident] //= 2
                 if self.frequencies[resident] == 0 and resident not in self.graphs:
                     self.frequencies.pop(resident)
-        self.frequencies[combined] += 1
         if combined in self.graphs:
+            self.frequencies[combined] += 1
             self.graphs.move_to_end(combined)
             self.counters[f"{family}_hit"] += 1
             return True
+        if self.clock <= self.churn_cooldown_until:
+            self.counters[f"{family}_churn_eager"] += 1
+            return False
+        self.frequencies[combined] += 1
         if self.clock < self.retry_after.get(combined, 0):
             self.counters[f"{family}_capture_failure_eager"] += 1
             return False
@@ -120,10 +131,13 @@ class GraphCache:
         return True
 
     def get_or_create(self, family: str, key: tuple, create: Callable[[], object]):
-        """Create a probed graph, or defer it if headroom fell since admission."""
+        """Create a probed graph, or defer after a headroom or churn change."""
         combined = family, key
         if combined in self.graphs:
             return self.graphs[combined]
+        if self.clock <= self.churn_cooldown_until:
+            self.counters[f"{family}_churn_eager"] += 1
+            return None
         if (
             self.free_bytes is not None
             and self.free_bytes() < self.MIN_CAPTURE_FREE_BYTES
@@ -172,14 +186,22 @@ class GraphCache:
         self.retry_after.pop(combined, None)
         if victim is not None:
             self.frequencies.pop(victim, None)
-        if combined in self.recent_captures:
+        previous_capture = self.recent_captures.get(combined)
+        if previous_capture is not None:
             self.counters[f"{family}_recent_recapture"] += 1
             self.recent_captures.move_to_end(combined)
         else:
-            self.recent_captures[combined] = None
-            if len(self.recent_captures) > self.recent_capacity:
+            if len(self.recent_captures) >= self.recent_capacity:
                 self.recent_captures.popitem(last=False)
                 self.counters["capture_history_overflow"] += 1
+        self.recent_captures[combined] = self.clock
+        if (
+            previous_capture is not None
+            and self.clock - previous_capture <= self.churn_window_decisions
+            and self.churn_cooldown_decisions
+        ):
+            self.churn_cooldown_until = self.clock + self.churn_cooldown_decisions
+            self.counters["churn_cooldown_started"] += 1
         self.counters[f"{family}_capture"] += 1
         return graph
 
@@ -191,6 +213,8 @@ class GraphCache:
             "capture_history_overflow": self.counters["capture_history_overflow"],
             "probation_eviction": self.counters["probation_eviction"],
             "retry_cooldown": len(self.retry_after),
+            "churn_cooldown_remaining": max(0, self.churn_cooldown_until - self.clock),
+            "churn_cooldown_started": self.counters["churn_cooldown_started"],
         }
         for family in ("target", "draft", "proposal"):
             result[f"{family}_resident"] = counts[family]
@@ -203,6 +227,7 @@ class GraphCache:
                 "capture_failure_eager",
                 "capture_failure",
                 "recent_recapture",
+                "churn_eager",
                 "max_capture_reserved_delta",
                 "min_capture_free_bytes",
             ):
@@ -215,3 +240,4 @@ class GraphCache:
         self.recent_captures.clear()
         self.frequencies.clear()
         self.retry_after.clear()
+        self.churn_cooldown_until = -1
