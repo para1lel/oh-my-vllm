@@ -12,6 +12,23 @@ from oh_my_vllm.worker.protocol import ScheduledRequest, SchedulerOutput
 
 
 class CommitTests(unittest.TestCase):
+    def test_reported_cache_capacities_come_from_allocated_tensors(self):
+        worker = OhMyVllmWorker.__new__(OhMyVllmWorker)
+        worker.model = SimpleNamespace(
+            kinds=["full_attention", "full_attention", "gated_delta_net"]
+        )
+        worker.caches = [
+            torch.empty(7, 1),
+            torch.empty(7, 1),
+            (torch.empty(3, 1), torch.empty(3, 1)),
+        ]
+        worker.logical_num_blocks = 99
+        worker.mamba_blocks = 99
+        self.assertEqual(worker.cache_capacities(), (7, 3))
+        worker.caches[1] = torch.empty(6, 1)
+        with self.assertRaisesRegex(RuntimeError, "inconsistent allocated"):
+            worker.cache_capacities()
+
     def make_worker(self):
         worker = OhMyVllmWorker.__new__(OhMyVllmWorker)
         worker.histories = {1: [3], 2: [4]}

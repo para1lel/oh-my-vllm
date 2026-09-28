@@ -15,8 +15,8 @@ _normalize_qk = kernel("gdn", "_normalize_qk")
 def normalize_qk(q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """Normalize packed GDN inputs without FP32 intermediate tensors.
 
-    Requires BF16 tensors with matching shapes, head_dim=128, unit last stride,
-    and head_stride=128 (contiguous head rows).
+    Requires nonempty BF16 CUDA [tokens, heads, 128] tensors with matching
+    shapes and dense, non-overlapping head rows on the same device.
     """
     if q.dtype != torch.bfloat16:
         raise ValueError(f"normalize_qk requires bfloat16, got {q.dtype}")
@@ -24,8 +24,8 @@ def normalize_qk(q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.
         raise ValueError(f"normalize_qk requires bfloat16, got {k.dtype}")
     if q.shape != k.shape:
         raise ValueError(f"q and k shapes must match: {q.shape} vs {k.shape}")
-    if q.ndim < 2:
-        raise ValueError("normalize_qk requires at least 2-dimensional tensors")
+    if q.ndim != 3 or q.shape[0] == 0 or q.shape[1] == 0:
+        raise ValueError("normalize_qk requires nonempty [tokens, heads, 128] tensors")
     head_dim = q.shape[-1]
     if head_dim != 128:
         raise ValueError(f"normalize_qk requires head_dim=128, got {head_dim}")
@@ -33,6 +33,10 @@ def normalize_qk(q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.
         raise ValueError("normalize_qk requires unit stride in last dimension")
     if q.stride(-2) != 128 or k.stride(-2) != 128:
         raise ValueError("normalize_qk requires head_stride=128")
+    if q.stride(0) < q.shape[1] * 128 or k.stride(0) < k.shape[1] * 128:
+        raise ValueError("normalize_qk requires non-overlapping token rows")
+    if not q.is_cuda or not k.is_cuda or q.device != k.device:
+        raise ValueError("normalize_qk requires tensors on the same CUDA device")
     oq = torch.empty(q.shape, device=q.device, dtype=q.dtype)
     ok = torch.empty_like(oq)
     _normalize_qk(q.shape[1], q.stride(0), k.stride(0))(q, k, oq, ok)

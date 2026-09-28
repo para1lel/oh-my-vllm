@@ -14,6 +14,24 @@ sys.path.pop(0)
 
 
 class TTFTMetricsTest(unittest.TestCase):
+    def test_worker_and_scheduler_pool_capacities_must_be_observed(self):
+        reported = (
+            "INFO BENCH_CONFIG worker_fa_pool_blocks=1400 "
+            "worker_gdn_pool_blocks=128 fa_pool_blocks=1400 gdn_pool_blocks=128"
+        )
+        worker, scheduler = metrics._observed_pool_capacities(reported, 1400, 128)
+        self.assertEqual(worker, {"fa": 1400, "mamba": 128})
+        self.assertEqual(scheduler, worker)
+        for log in (
+            reported.replace(
+                "worker_gdn_pool_blocks=128", "worker_gdn_pool_blocks=127"
+            ),
+            reported.replace(" fa_pool_blocks=1400", " fa_pool_blocks=1399"),
+            "INFO BENCH_CONFIG max_num_seqs=32",
+        ):
+            with self.subTest(log=log), self.assertRaises(ValueError):
+                metrics._observed_pool_capacities(log, 1400, 128)
+
     def artifact(self, times, rate=100):
         artifact = {
             "hardware": {

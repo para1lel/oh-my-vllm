@@ -70,6 +70,7 @@ pub struct AbortMsg {
 pub enum PythonMessage {
     Ready {
         logical_num_blocks: u32,
+        mamba_blocks: u32,
     },
     ExecuteResult(ExecuteResultMsg),
     Prepared {

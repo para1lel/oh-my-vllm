@@ -18,6 +18,7 @@ class BridgeAbortTest(unittest.TestCase):
         ):
             with self.subTest(exception=exception):
                 worker = Mock(logical_num_blocks=85, histories={})
+                worker.cache_capacities.return_value = (85, 16)
                 worker.prepare_request.side_effect = exception
                 context = Mock()
                 socket = context.socket.return_value
@@ -53,6 +54,7 @@ class BridgeAbortTest(unittest.TestCase):
 
     def test_abort_notifies_worker_without_unsolicited_reply(self):
         worker = Mock(logical_num_blocks=85)
+        worker.cache_capacities.return_value = (85, 16)
         context = Mock()
         socket = context.socket.return_value
         socket.recv.side_effect = [
@@ -78,6 +80,7 @@ class BridgeAbortTest(unittest.TestCase):
 
     def test_duplicate_prepare_preserves_live_request(self):
         worker = Mock(logical_num_blocks=85, histories={7: [1]})
+        worker.cache_capacities.return_value = (85, 16)
         context = Mock()
         socket = context.socket.return_value
         socket.recv.side_effect = [
@@ -105,6 +108,7 @@ class BridgeAbortTest(unittest.TestCase):
 
     def test_bad_registration_does_not_kill_bridge(self):
         worker = Mock(logical_num_blocks=85)
+        worker.cache_capacities.return_value = (85, 16)
         worker.register_request.side_effect = ValueError("invalid prompt tokens")
         worker.execute_model.return_value = WorkerOutput(
             [RequestOutput(7, [], error="request registration failed")]

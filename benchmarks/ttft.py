@@ -41,6 +41,25 @@ def _parse_bench_config(stdout: str, key: str, cast):
     )
 
 
+def _observed_pool_capacities(stdout: str, expected_fa: int, expected_gdn: int):
+    """Require the worker and scheduler to report the requested device slots."""
+    worker = {
+        "fa": _parse_bench_config(stdout, "worker_fa_pool_blocks", int),
+        "mamba": _parse_bench_config(stdout, "worker_gdn_pool_blocks", int),
+    }
+    scheduler = {
+        "fa": _parse_bench_config(stdout, "fa_pool_blocks", int),
+        "mamba": _parse_bench_config(stdout, "gdn_pool_blocks", int),
+    }
+    expected = {"fa": expected_fa, "mamba": expected_gdn}
+    if worker != expected or scheduler != expected:
+        raise ValueError(
+            f"observed cache capacities differ from requested: "
+            f"worker={worker}, scheduler={scheduler}, requested={expected}"
+        )
+    return worker, scheduler
+
+
 def summarize(runs, batch_size, output_len, minimum=5):
     if len(runs) < minimum:
         raise ValueError("at least five repetitions required")
@@ -193,6 +212,9 @@ def main():
         command[0] = str(snapshot)
         run_engine(command, timeout=14400, stderr=subprocess.STDOUT, log_path=log)
     stdout = log.read_text()
+    worker_capacities, scheduler_capacities = _observed_pool_capacities(
+        stdout, args.num_gpu_blocks // 3, args.mamba_blocks
+    )
     candidate = dict(
         schema=1,
         engine="oh-my-vllm",
@@ -216,7 +238,8 @@ def main():
             if workload["mode"] == "mtp"
             else "auto",
         },
-        capacities={"fa": args.num_gpu_blocks // 3, "mamba": args.mamba_blocks},
+        capacities=scheduler_capacities,
+        worker_capacities=worker_capacities,
         baseline_sha256=hashlib.sha256(baseline_bytes).hexdigest(),
         warmups=parse_rows(stdout, "WARMUP_RESULT "),
         measurement_audit=audit(

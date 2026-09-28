@@ -96,7 +96,7 @@ impl KVCacheBlock {
     /// Mark this block as caching `num_tokens` tokens under `hash`.
     #[inline]
     pub fn set_block_hash(&mut self, hash: BlockHashWithGroupId, num_tokens: u32) {
-        debug_assert!(num_tokens > 0, "a cached block must cover >=1 token");
+        assert!(num_tokens > 0, "a cached block must cover >=1 token");
         self.block_hash = Some(hash);
         self.block_hash_num_tokens = num_tokens;
     }
@@ -204,7 +204,7 @@ impl FreeKVCacheBlockQueue {
     /// Immutable access to a block by id.
     #[inline]
     pub fn block(&self, block_id: u32) -> &KVCacheBlock {
-        debug_assert!(block_id < self.num_blocks, "block id out of range");
+        assert!(block_id < self.num_blocks, "block id out of range");
         &self.blocks[block_id as usize]
     }
 
@@ -213,7 +213,7 @@ impl FreeKVCacheBlockQueue {
     /// Callers must not touch the link fields; use the queue methods for that.
     #[inline]
     pub fn block_mut(&mut self, block_id: u32) -> &mut KVCacheBlock {
-        debug_assert!(block_id < self.num_blocks, "block id out of range");
+        assert!(block_id < self.num_blocks, "block id out of range");
         &mut self.blocks[block_id as usize]
     }
 
@@ -223,7 +223,7 @@ impl FreeKVCacheBlockQueue {
             let b = &self.blocks[idx as usize];
             (b.prev_free, b.next_free)
         };
-        debug_assert!(
+        assert!(
             prev != NULL && next != NULL,
             "block {idx} is not in the free queue"
         );
@@ -237,13 +237,13 @@ impl FreeKVCacheBlockQueue {
 
     /// Link `idx` immediately after `anchor`.
     fn insert_after(&mut self, anchor: u32, idx: u32) {
-        debug_assert!(idx < self.num_blocks, "cannot insert a sentinel");
-        debug_assert!(
+        assert!(idx < self.num_blocks, "cannot insert a sentinel");
+        assert!(
             !self.blocks[idx as usize].is_queued(),
             "block {idx} is already in the free queue (double free)"
         );
         let next = self.blocks[anchor as usize].next_free;
-        debug_assert!(next != NULL, "anchor {anchor} is not linked");
+        assert!(next != NULL, "anchor {anchor} is not linked");
         self.blocks[anchor as usize].next_free = idx;
         self.blocks[next as usize].prev_free = idx;
         let b = &mut self.blocks[idx as usize];
@@ -255,7 +255,7 @@ impl FreeKVCacheBlockQueue {
     /// Link `idx` immediately before `anchor`.
     fn insert_before(&mut self, anchor: u32, idx: u32) {
         let prev = self.blocks[anchor as usize].prev_free;
-        debug_assert!(prev != NULL, "anchor {anchor} is not linked");
+        assert!(prev != NULL, "anchor {anchor} is not linked");
         self.insert_after(prev, idx);
     }
 
@@ -287,9 +287,9 @@ impl FreeKVCacheBlockQueue {
 
     /// Remove a specific block from the free queue, e.g. on a prefix-cache hit.
     ///
-    /// Panics in debug builds if the block is not currently free.
+    /// Panics if the block is not currently free.
     pub fn remove(&mut self, block_id: u32) {
-        debug_assert!(block_id < self.num_blocks, "block id out of range");
+        assert!(block_id < self.num_blocks, "block id out of range");
         self.unlink(block_id);
     }
 
@@ -565,6 +565,23 @@ mod tests {
         q.append_n(&[]);
         assert_eq!(q.get_all_free_blocks(), vec![0, 1]);
         q.check_invariants();
+    }
+
+    #[test]
+    #[should_panic(expected = "double free")]
+    fn double_free_is_rejected_in_release_too() {
+        let mut queue = FreeKVCacheBlockQueue::new(2);
+        let block = queue.popleft().unwrap();
+        queue.append(block);
+        queue.append(block);
+    }
+
+    #[test]
+    #[should_panic(expected = "not in the free queue")]
+    fn removing_allocated_block_is_rejected_in_release_too() {
+        let mut queue = FreeKVCacheBlockQueue::new(2);
+        let block = queue.popleft().unwrap();
+        queue.remove(block);
     }
 
     #[test]

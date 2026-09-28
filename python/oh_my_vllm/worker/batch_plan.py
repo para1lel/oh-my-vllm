@@ -114,25 +114,22 @@ def plan_request(
 
 def validate_batch(plans: list[PlannedRequest]) -> None:
     """Shared reads are allowed; writes cannot alias another request's state."""
-    # PY-01: FA pages touched by each request's tail block must be disjoint.
-    # Shared prefix pages are read-only; only the writable tail page is checked.
-    if __debug__:
-        fa_page_owners: dict[int, int] = {}
-        for plan in plans:
-            rid = plan.request.request_id
-            req = plan.request
-            end = req.num_computed_tokens + len(plan.writes)
-            # The tail (highest index) page is the only writable FA page.
-            tail_page_idx = (end - 1) // BLOCK
-            if tail_page_idx < len(req.fa_block_table):
-                tail_page = req.fa_block_table[tail_page_idx]
-                if tail_page > 0:
-                    if tail_page in fa_page_owners:
-                        raise AssertionError(
-                            f"FA page {tail_page} is writable by both request "
-                            f"{fa_page_owners[tail_page]} and request {rid}"
-                        )
-                    fa_page_owners[tail_page] = rid
+    # Every scheduled token writes its FA page, including earlier pages in a
+    # multi-page prefill. Prefix pages before num_computed_tokens are read-only.
+    fa_page_owners: dict[int, int] = {}
+    for plan in plans:
+        rid = plan.request.request_id
+        req = plan.request
+        start = req.num_computed_tokens
+        end = start + len(req.token_ids)
+        for page_index in range(start // BLOCK, (end - 1) // BLOCK + 1):
+            page = req.fa_block_table[page_index]
+            owner = fa_page_owners.get(page)
+            if owner is not None and owner != rid:
+                raise ValueError(
+                    f"FA page {page} is writable by requests {owner} and {rid}"
+                )
+            fa_page_owners[page] = rid
     owners = {}
     for plan in plans:
         rid = plan.request.request_id

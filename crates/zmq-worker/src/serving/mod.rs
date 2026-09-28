@@ -463,7 +463,7 @@ async fn admit(
         client.cancel_prepare(id).await;
         let _ = ready.send(Err((
             StatusCode::PAYLOAD_TOO_LARGE,
-            "prompt exceeds KV pool capacity".to_owned(),
+            "request FA/GDN or output budget exceeds KV pool capacity".to_owned(),
         )));
         return Ok(());
     }
@@ -591,7 +591,21 @@ async fn run_engine(
                 warn!(request_id = id, %error, "request failed in worker");
             }
         }
-        let worker = scheduler.update(worker);
+        let mut worker = worker;
+        while let Err(invalid) = scheduler.validate_output(&worker) {
+            let id = invalid.request_id;
+            let message = invalid.to_string();
+            worker.outputs.retain(|output| output.request_id != id);
+            scheduler.abort(id);
+            client.serving_outputs.remove(&id);
+            if let Some(request) = active.remove(&id) {
+                request.fail(&message);
+            }
+            warn!(request_id = id, %message, "invalid worker output");
+        }
+        let worker = scheduler
+            .update(worker)
+            .context("validated worker output changed")?;
         if batch.scheduled.is_empty() && !active.is_empty() {
             // A constrained logical pool can temporarily prevent admission. Avoid a
             // CPU busy loop while retaining request timeout/cancellation handling.

@@ -10,6 +10,7 @@ import argparse
 import datetime
 import hashlib
 import json
+import math
 import os
 import shutil
 import signal
@@ -23,6 +24,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE_SHA256 = "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e"
+
+
+def stable_median(rows, label):
+    """Reject historical or unstable samples before any acceptance comparison."""
+    if len(rows) < 5:
+        raise ValueError(f"{label} requires at least five measured repetitions")
+    values = [row["output_tps"] for row in rows]
+    if any(not math.isfinite(value) or value <= 0 for value in values):
+        raise ValueError(f"{label} has invalid throughput")
+    median = statistics.median(values)
+    spread = (max(values) - min(values)) / median
+    if spread > 0.10:
+        raise ValueError(f"{label} spread {spread:.3f} exceeds 0.10")
+    return median
 
 
 def runtime_identity():
@@ -87,8 +102,7 @@ def historical_baseline(path, args, batch, *, data_bytes=None):
             "historical baseline must contain exactly one matching workload"
         )
     selected = matches[0]
-    if len(selected["baseline"]) < 3:
-        raise ValueError("historical baseline has fewer than three measurements")
+    stable_median(selected["baseline"], "historical baseline")
     if any(
         row["output_tokens"] != batch * args.output_len or row["output_tps"] <= 0
         for row in selected["baseline"]
@@ -192,6 +206,8 @@ def parse_rows(stdout: str, marker: str):
 
 
 def compare(args):
+    if args.repetitions < 5 or args.warmup < 2:
+        raise ValueError("acceptance requires five repetitions and two warmups")
     selected_gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "")
     if not selected_gpu.startswith("GPU-") or "," in selected_gpu:
         raise RuntimeError(
@@ -251,6 +267,8 @@ def compare(args):
             ours = parse_rows(ours_run, "BENCH_RESULT ")
         if len(ours) != args.repetitions:
             raise RuntimeError(f"missing framework measurements: {ours_run}")
+        if len(parse_rows(ours_run, "WARMUP_RESULT ")) != args.warmup:
+            raise RuntimeError("missing framework warmups")
         if any(row["output_tokens"] != batch * args.output_len for row in ours):
             raise RuntimeError("incomplete framework output")
         base = base_rows[0]["runs"]
@@ -264,18 +282,8 @@ def compare(args):
             for row in base + ours
         ):
             raise RuntimeError("MTP did not produce draft tokens")
-        base_median = statistics.median(row["output_tps"] for row in base)
-        ours_median = statistics.median(row["output_tps"] for row in ours)
-        for label, runs in (("baseline", base), ("candidate", ours)):
-            values = [row["output_tps"] for row in runs]
-            med = statistics.median(values)
-            spread = (max(values) - min(values)) / med if med > 0 else 0
-            if spread > 0.10:
-                print(
-                    f"WARNING: {label} batch={batch} spread={spread:.3f} > 0.10"
-                    " — run is unstable, results are unreliable",
-                    file=sys.stderr,
-                )
+        base_median = stable_median(base, "baseline")
+        ours_median = stable_median(ours, "candidate")
         result = {
             "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
             "gpu": selected_gpu,

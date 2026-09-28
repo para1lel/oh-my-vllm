@@ -36,13 +36,22 @@ class BenchmarkTests(unittest.TestCase):
                 num_gpu_blocks=1024,
                 speculative_tokens=4,
                 warmup=2,
-                repetitions=3,
+                repetitions=5,
                 output=None,
                 model="/data0/shared/Qwen3.8-27B-FP8",
             )
-            row = compare.historical_baseline(artifact, args, 1)
+            with self.assertRaisesRegex(ValueError, "five measured repetitions"):
+                compare.historical_baseline(artifact, args, 1)
+            original = json.loads(artifact.read_text())
+            row = next(
+                row
+                for row in original["rows"]
+                if row["mode"] == "mtp" and row["batch_size"] == 1
+            )
+            row["baseline"] = [row["baseline"][0]] * 5
             output = "\n".join(
-                "BENCH_RESULT " + json.dumps(run) for run in row["baseline"]
+                ["WARMUP_RESULT " + json.dumps(row["baseline"][0])] * 2
+                + ["BENCH_RESULT " + json.dumps(run) for run in row["baseline"]]
             )
             with (
                 patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": "GPU-fixture"}),
@@ -56,6 +65,7 @@ class BenchmarkTests(unittest.TestCase):
                     },
                 ),
                 patch.object(compare, "runtime_identity", return_value={}),
+                patch.object(compare, "historical_baseline", return_value=row),
                 patch.object(compare, "run_engine", return_value=output) as run,
                 patch("builtins.print"),
             ):
@@ -64,7 +74,6 @@ class BenchmarkTests(unittest.TestCase):
             self.assertIn("bench", run.call_args.args[0])
             self.assertNotIn("--baseline", run.call_args.args[0])
             invalid = Path(directory) / "invalid.json"
-            original = json.loads(artifact.read_text())
             for mutation in (
                 "model",
                 "block_size",
@@ -94,6 +103,19 @@ class BenchmarkTests(unittest.TestCase):
             args.input_len = 123
             with self.assertRaisesRegex(ValueError, "exactly one matching workload"):
                 compare.historical_baseline(artifact, args, 1)
+
+    def test_sample_count_and_spread_are_hard_gates(self):
+        for values, message in (
+            ([100] * 3, "five measured repetitions"),
+            ([100, 100, 100, 100, 112], "spread"),
+        ):
+            with (
+                self.subTest(values=values),
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                compare.stable_median(
+                    [{"output_tps": value} for value in values], "test"
+                )
 
     def test_timeout_terminates_worker_descendant(self):
         with tempfile.TemporaryDirectory() as directory:

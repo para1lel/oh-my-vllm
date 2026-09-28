@@ -92,7 +92,7 @@ impl BlockPool {
         );
         let mut free_queue = FreeKVCacheBlockQueue::new(num_blocks);
         let null = free_queue.popleft().expect("num_blocks > 0");
-        debug_assert_eq!(null, NULL_BLOCK_ID);
+        assert_eq!(null, NULL_BLOCK_ID);
         free_queue.block_mut(null).is_null = true;
 
         Self {
@@ -236,7 +236,7 @@ impl BlockPool {
         if !self.enable_caching {
             return;
         }
-        debug_assert!(
+        assert!(
             !self.free_queue.block(block_id).is_null,
             "the null block must never be cached"
         );

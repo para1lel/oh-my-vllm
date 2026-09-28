@@ -25,7 +25,11 @@ def main():
             adapter = ServingAdapter(
                 message["model_path"], 248320, message["max_model_len"]
             )
-            reply = {"type": "ready", "logical_num_blocks": 100}
+            reply = {
+                "type": "ready",
+                "logical_num_blocks": 100,
+                "mamba_blocks": 100,
+            }
         elif kind == "prepare":
             rid = message["request_id"]
             request = message["request"]

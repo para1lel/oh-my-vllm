@@ -603,4 +603,19 @@ mod tests {
         }
         assert_eq!(reasoning, "hello</th");
     }
+
+    #[test]
+    fn length_finish_flushes_pending_tool_marker_prefix() {
+        let mut parser = Parser::new(
+            false,
+            vec![json!({
+                "function": {"name": "read", "parameters": {"type": "object"}}
+            })],
+        );
+        let first = parser.feed("hello<tool_cal", false).unwrap();
+        assert!(matches!(&first[..], [Delta::Text(text)] if text == "hello"));
+        let last = parser.feed_length("").unwrap();
+        assert!(matches!(&last[..], [Delta::Text(text)] if text == "<tool_cal"));
+        assert!(parser.pending.is_empty());
+    }
 }

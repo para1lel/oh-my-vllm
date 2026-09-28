@@ -26,7 +26,7 @@ Message envelope (msgpack dict):
     {"type": "shutdown"}
 
   Python → Rust:
-    {"type": "ready", "logical_num_blocks": int}   # after init completes
+    {"type": "ready", "logical_num_blocks": int, "mamba_blocks": int}
     {"type": "prepared", "rpc_id": int, "prompt_token_ids": list[int]}
     {"type": "execute_result", "rpc_id": int,
      "outputs": [{"request_id": int, "token_ids": list[int],
@@ -148,11 +148,13 @@ def serve(socket_addr: str) -> None:
             if msg_type == "init":
                 try:
                     worker = _handle_init(msg)
+                    fa_blocks, mamba_blocks = worker.cache_capacities()
                     sock.send(
                         msgpack.packb(
                             {
                                 "type": "ready",
-                                "logical_num_blocks": worker.logical_num_blocks,
+                                "logical_num_blocks": fa_blocks,
+                                "mamba_blocks": mamba_blocks,
                             },
                             use_bin_type=True,
                         )

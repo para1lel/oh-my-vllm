@@ -48,6 +48,10 @@ fn dummy_output(rid: u64) -> RequestOutput {
     }
 }
 
+fn apply(scheduler: &mut Scheduler, output: WorkerOutput) -> WorkerOutput {
+    scheduler.update(output).expect("test output must be valid")
+}
+
 // ── cold prefill ──────────────────────────────────────────────────────────────
 
 #[test]
@@ -82,9 +86,12 @@ fn decode_step_advances_computed() {
     let out = sched.schedule();
     assert_eq!(out.scheduled[0].token_ids.len(), 8);
 
-    sched.update(WorkerOutput {
-        outputs: vec![dummy_output(1)],
-    });
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
 
     // Step 2: decode — should schedule just the 1 new token
     let out2 = sched.schedule();
@@ -142,15 +149,13 @@ fn prefix_cache_hit_reduces_scheduled_tokens() {
     // First request: 16-token prompt, generates 1 token so cache_blocks fires.
     sched.add_request(make_req(1, 16, 1));
     let _ = sched.schedule();
-    sched.update(WorkerOutput {
-        outputs: vec![dummy_output(1)],
-    });
-    // Decode step to trigger cache_blocks for all 4 FA blocks.
-    let _ = sched.schedule();
-    sched.update(WorkerOutput {
-        outputs: vec![dummy_output(1)],
-    });
-    // Request 1 is now finished (max_tokens=1 reached after first output).
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    // Request 1 is finished and its full prompt blocks remain cached.
 
     // Second request: same 16-token prefix + 1 extra token.
     let tokens2: Vec<u32> = (0..17).collect();
@@ -217,26 +222,32 @@ fn mtp_rollback_adjusts_computed_tokens() {
 
     // Prefill step.
     let _ = sched.schedule();
-    sched.update(WorkerOutput {
-        outputs: vec![RequestOutput {
-            request_id: 1,
-            token_ids: vec![42],
-            num_accepted_draft_tokens: 0,
-            new_draft_token_ids: vec![10, 11, 12, 13],
-        }],
-    });
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                request_id: 1,
+                token_ids: vec![42],
+                num_accepted_draft_tokens: 0,
+                new_draft_token_ids: vec![10, 11, 12, 13],
+            }],
+        },
+    );
 
     // After update, req 1 should have new drafts installed.
     // Decode step: worker accepts only 2 of 4 drafts.
     let _ = sched.schedule();
-    sched.update(WorkerOutput {
-        outputs: vec![RequestOutput {
-            request_id: 1,
-            token_ids: vec![10, 11, 99],
-            num_accepted_draft_tokens: 2,
-            new_draft_token_ids: Vec::new(),
-        }],
-    });
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                request_id: 1,
+                token_ids: vec![10, 11, 99],
+                num_accepted_draft_tokens: 2,
+                new_draft_token_ids: Vec::new(),
+            }],
+        },
+    );
     // No panic = rollback completed successfully.
 }
 
@@ -250,9 +261,12 @@ fn abort_removes_request() {
 
     // Schedule both.
     let _ = sched.schedule();
-    sched.update(WorkerOutput {
-        outputs: vec![dummy_output(1), dummy_output(2)],
-    });
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1), dummy_output(2)],
+        },
+    );
 
     // Abort req 1 while it is running.
     sched.abort(1);
@@ -265,9 +279,12 @@ fn abort_removes_request() {
     sched.abort(1); // Repeated/unknown cancellation is idempotent.
     sched.abort(99);
     assert_eq!(sched.schedule().finished_request_ids, vec![1, 3]);
-    sched.update(WorkerOutput {
-        outputs: vec![dummy_output(2)],
-    });
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(2)],
+        },
+    );
     assert!(sched.schedule().finished_request_ids.is_empty());
 }
 
@@ -277,14 +294,24 @@ fn abort_preempted_request_notifies_worker_once() {
     sched.add_request(make_req(1, 8, 10));
     sched.add_request(make_req(2, 8, 10));
     assert_eq!(sched.schedule().scheduled.len(), 2);
-    sched.update(WorkerOutput {
-        outputs: vec![dummy_output(1), dummy_output(2)],
-    });
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1), dummy_output(2)],
+        },
+    );
     let next = sched.schedule();
     assert_eq!(next.preempted_request_ids, vec![2]);
-    sched.update(WorkerOutput {
-        outputs: vec![dummy_output(1)],
-    });
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: next
+                .scheduled
+                .iter()
+                .map(|request| dummy_output(request.request_id))
+                .collect(),
+        },
+    );
     sched.abort(2);
     sched.abort(2);
     assert_eq!(sched.num_waiting(), 0);
@@ -302,9 +329,12 @@ fn preemption_resends_accepted_history_without_drafts() {
     }
     let mut second_output = dummy_output(2);
     second_output.new_draft_token_ids = vec![90, 91];
-    sched.update(WorkerOutput {
-        outputs: vec![dummy_output(1), second_output],
-    });
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1), second_output],
+        },
+    );
     let next = sched.schedule();
     assert_eq!(next.preempted_request_ids, vec![2]);
     assert!(next.scheduled[0].prefill_token_ids.is_none());
@@ -318,9 +348,12 @@ fn preemption_resends_accepted_history_without_drafts() {
         Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 42])
     );
     assert!(sched.running.back().unwrap().draft_token_ids.is_empty());
-    sched.update(WorkerOutput {
-        outputs: vec![dummy_output(1), dummy_output(2)],
-    });
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1), dummy_output(2)],
+        },
+    );
     sched.abort(1);
     let running = sched.schedule();
     assert_eq!(running.scheduled.len(), 1);
@@ -334,20 +367,26 @@ fn partial_prefill_advances_without_generating_a_token() {
     let mut sched = make_scheduler(64, 8);
     sched.add_request(make_req(1, 16, 1));
     assert_eq!(sched.schedule().num_batched_tokens, 8);
-    sched.update(WorkerOutput {
-        outputs: vec![RequestOutput {
-            request_id: 1,
-            token_ids: vec![],
-            num_accepted_draft_tokens: 0,
-            new_draft_token_ids: vec![],
-        }],
-    });
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                request_id: 1,
+                token_ids: vec![],
+                num_accepted_draft_tokens: 0,
+                new_draft_token_ids: vec![],
+            }],
+        },
+    );
     let second = sched.schedule();
     assert_eq!(second.scheduled[0].num_computed_tokens, 8);
     assert_eq!(second.num_batched_tokens, 8);
-    sched.update(WorkerOutput {
-        outputs: vec![dummy_output(1)],
-    });
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
     assert_eq!(sched.num_running(), 0);
     assert_eq!(sched.schedule().finished_request_ids, vec![1]);
     assert!(sched.schedule().finished_request_ids.is_empty());
@@ -361,18 +400,45 @@ fn partial_tail_stops_at_checkpoint_boundary() {
 }
 
 #[test]
-fn output_count_truncates_speculative_tail_to_request_limit() {
-    let mut sched = make_scheduler(64, 128);
-    sched.add_request(make_req(1, 4, 2));
+fn output_count_truncates_speculative_tail_after_limit_changes() {
+    let mut kv = make_coord(64);
+    kv.set_speculative_blocks(2);
+    let mut sched = Scheduler::new(
+        SchedulerConfig {
+            max_num_batched_tokens: 128,
+            max_num_seqs: 4,
+            enable_mtp: true,
+            mtp_draft_len: 2,
+        },
+        kv,
+    );
+    sched.add_request(make_req(1, 4, 4));
     sched.schedule();
-    let result = sched.update(WorkerOutput {
-        outputs: vec![RequestOutput {
-            request_id: 1,
-            token_ids: vec![10, 11, 12],
-            num_accepted_draft_tokens: 0,
-            new_draft_token_ids: vec![],
-        }],
-    });
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                request_id: 1,
+                token_ids: vec![42],
+                num_accepted_draft_tokens: 0,
+                new_draft_token_ids: vec![10, 11],
+            }],
+        },
+    );
+    sched.schedule();
+    // A lower limit can arrive after the speculative batch is scheduled.
+    sched.running.front_mut().unwrap().max_tokens = 3;
+    let result = apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                request_id: 1,
+                token_ids: vec![10, 11, 12],
+                num_accepted_draft_tokens: 2,
+                new_draft_token_ids: vec![],
+            }],
+        },
+    );
     assert_eq!(result.outputs[0].token_ids, vec![10, 11]);
     assert_eq!(sched.num_running(), 0);
 }
@@ -392,23 +458,29 @@ fn mtp_acceptance_preserves_tokens_and_rejects_only_scheduled_drafts() {
     );
     scheduler.add_request(make_req(1, 4, 10));
     scheduler.schedule();
-    scheduler.update(WorkerOutput {
-        outputs: vec![RequestOutput {
-            request_id: 1,
-            token_ids: vec![42],
-            num_accepted_draft_tokens: 0,
-            new_draft_token_ids: vec![10, 11],
-        }],
-    });
+    apply(
+        &mut scheduler,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                request_id: 1,
+                token_ids: vec![42],
+                num_accepted_draft_tokens: 0,
+                new_draft_token_ids: vec![10, 11],
+            }],
+        },
+    );
     assert_eq!(scheduler.schedule().num_batched_tokens, 3);
-    scheduler.update(WorkerOutput {
-        outputs: vec![RequestOutput {
-            request_id: 1,
-            token_ids: vec![10, 99],
-            num_accepted_draft_tokens: 1,
-            new_draft_token_ids: vec![],
-        }],
-    });
+    apply(
+        &mut scheduler,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                request_id: 1,
+                token_ids: vec![10, 99],
+                num_accepted_draft_tokens: 1,
+                new_draft_token_ids: vec![],
+            }],
+        },
+    );
     let request = scheduler.running.front().unwrap();
     assert_eq!(request.num_computed_tokens, 6);
     assert_eq!(&request.token_ids[4..], &[42, 10, 99]);
@@ -419,8 +491,7 @@ fn mtp_acceptance_preserves_tokens_and_rejects_only_scheduled_drafts() {
 // ── SCH-01: update() validates worker output lengths ─────────────────────────
 
 #[test]
-#[should_panic(expected = "worker accepted")]
-fn update_panics_on_overreported_accepted_drafts() {
+fn update_rejects_malformed_draft_output_without_mutation() {
     let config = SchedulerConfig {
         max_num_batched_tokens: 256,
         max_num_seqs: 64,
@@ -432,38 +503,61 @@ fn update_panics_on_overreported_accepted_drafts() {
 
     // Prefill step.
     let _ = sched.schedule();
-    sched.update(WorkerOutput {
-        outputs: vec![RequestOutput {
-            request_id: 1,
-            token_ids: vec![42],
-            num_accepted_draft_tokens: 0,
-            new_draft_token_ids: vec![10, 11, 12, 13],
-        }],
-    });
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                request_id: 1,
+                token_ids: vec![42],
+                num_accepted_draft_tokens: 0,
+                new_draft_token_ids: vec![10, 11, 12, 13],
+            }],
+        },
+    );
 
-    // Decode step: worker claims to have accepted more drafts than were sent.
+    // Decode step: reject both wrong token counts and an impossible acceptance.
     let _ = sched.schedule();
-    sched.update(WorkerOutput {
-        outputs: vec![RequestOutput {
-            request_id: 1,
-            token_ids: vec![42],
-            num_accepted_draft_tokens: 99, // invalid
-            new_draft_token_ids: vec![],
-        }],
-    });
+    let before = sched.running.front().unwrap().clone();
+    for (accepted, token_ids, expected_reason) in [
+        (1, vec![10, 11, 12], "wrong verified token count"),
+        (3, vec![10], "wrong verified token count"),
+        (99, vec![10], "accepted unscheduled drafts"),
+    ] {
+        let malformed = WorkerOutput {
+            outputs: vec![RequestOutput {
+                request_id: 1,
+                token_ids,
+                num_accepted_draft_tokens: accepted,
+                new_draft_token_ids: vec![],
+            }],
+        };
+        assert_eq!(
+            sched.validate_output(&malformed).unwrap_err().reason,
+            expected_reason
+        );
+        assert_eq!(sched.update(malformed).unwrap_err().reason, expected_reason);
+        let after = sched.running.front().unwrap();
+        assert_eq!(after.token_ids, before.token_ids);
+        assert_eq!(after.draft_token_ids, before.draft_token_ids);
+        assert_eq!(after.num_computed_tokens, before.num_computed_tokens);
+        assert_eq!(after.num_in_flight_tokens, before.num_in_flight_tokens);
+        assert_eq!(sched.num_running(), 1);
+    }
 }
 
 // ── SCH-03: aligned_prefill never returns 0 for a non-empty count ─────────────
 
 #[test]
 fn aligned_prefill_never_stalls_unaligned_start() {
-    // Block size = BS (4). Request with 3 tokens (not block-aligned).
-    // Start at 3 (prompt boundary), count=1. Should return 1, never 0.
-    let mut sched = make_scheduler(128, 256);
-    sched.add_request(make_req(1, 3, 20));
-    let out = sched.schedule();
-    // The scheduler must always schedule at least 1 token.
-    assert!(out.num_batched_tokens >= 1);
+    // Block size = 4. At an actual unaligned computed position of 5, an
+    // available count of 1 rounds down to 4 unless the clamp takes effect.
+    let sched = make_scheduler(128, 256);
+    let mut request = make_req(1, 11, 20);
+    request.num_computed_tokens = 5;
+    assert_eq!(
+        sched.aligned_prefill(&request, request.num_computed_tokens, 1),
+        1
+    );
 }
 
 // ── SCH-04: over-capacity requests are rejected at admission ─────────────────
@@ -490,6 +584,166 @@ fn add_request_admits_request_within_fa_pool() {
         "within-capacity request must be admitted"
     );
     assert_eq!(sched.num_waiting(), 1);
+}
+
+#[test]
+fn add_request_rejects_output_budget_that_exceeds_fa_pool() {
+    let mut sched = make_scheduler(8, 256);
+    assert!(!sched.add_request(make_req(1, 1, 32)));
+    assert_eq!(sched.num_waiting(), 0);
+}
+
+#[test]
+fn add_request_rejects_insufficient_separate_gdn_pool() {
+    let mut coord = make_coord(128).with_mamba_capacity(6);
+    coord.set_speculative_blocks(4);
+    let config = SchedulerConfig {
+        enable_mtp: true,
+        mtp_draft_len: 4,
+        ..SchedulerConfig::default()
+    };
+    let mut sched = Scheduler::new(config, coord);
+    assert!(!sched.add_request(make_req(1, 1, 10)));
+    assert_eq!(sched.num_waiting(), 0);
+}
+
+#[test]
+fn separate_gdn_pool_covers_two_successive_steps_with_mtp() {
+    let mut coord = make_coord(128).with_mamba_capacity(7);
+    coord.set_speculative_blocks(4);
+    let mut sched = Scheduler::new(
+        SchedulerConfig {
+            enable_mtp: true,
+            mtp_draft_len: 4,
+            ..SchedulerConfig::default()
+        },
+        coord,
+    );
+    assert!(sched.add_request(make_req(1, 4, 10)));
+    assert_eq!(sched.schedule().scheduled.len(), 1);
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                request_id: 1,
+                token_ids: vec![42],
+                num_accepted_draft_tokens: 0,
+                new_draft_token_ids: vec![10, 11, 12, 13],
+            }],
+        },
+    );
+    let second = sched.schedule();
+    assert!(second.preempted_request_ids.is_empty());
+    assert_eq!(second.scheduled[0].request_id, 1);
+}
+
+#[test]
+fn ordinary_gdn_pool_requires_previous_and_next_state_slots() {
+    let mut rejected = Scheduler::new(
+        SchedulerConfig::default(),
+        make_coord(128).with_mamba_capacity(2),
+    );
+    assert!(!rejected.add_request(make_req(1, 4, 10)));
+
+    let mut sched = Scheduler::new(
+        SchedulerConfig::default(),
+        make_coord(128).with_mamba_capacity(3),
+    );
+    assert!(sched.add_request(make_req(1, 4, 10)));
+    assert_eq!(sched.schedule().scheduled.len(), 1);
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    let second = sched.schedule();
+    assert!(second.preempted_request_ids.is_empty());
+    assert_eq!(second.scheduled[0].request_id, 1);
+}
+
+#[test]
+fn shared_pool_admission_reserves_fa_and_two_step_gdn_peak() {
+    let mut rejected = make_scheduler(6, 256);
+    assert!(!rejected.add_request(make_req(1, 4, 10)));
+
+    let mut sched = make_scheduler(7, 256);
+    assert!(sched.add_request(make_req(1, 4, 10)));
+    assert_eq!(sched.schedule().scheduled.len(), 1);
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    let second = sched.schedule();
+    assert!(second.preempted_request_ids.is_empty());
+    assert_eq!(second.scheduled[0].request_id, 1);
+}
+
+#[test]
+fn one_forward_request_fits_single_gdn_slot_and_fa_page() {
+    let mut shared = make_scheduler(3, 256);
+    assert!(shared.add_request(make_req(1, 4, 1)));
+    assert_eq!(shared.schedule().scheduled.len(), 1);
+    apply(
+        &mut shared,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    assert_eq!(shared.num_running(), 0);
+
+    let mut separate = Scheduler::new(
+        SchedulerConfig::default(),
+        make_coord(3).with_mamba_capacity(2),
+    );
+    assert!(separate.add_request(make_req(2, 4, 1)));
+    assert_eq!(separate.schedule().scheduled.len(), 1);
+    apply(
+        &mut separate,
+        WorkerOutput {
+            outputs: vec![dummy_output(2)],
+        },
+    );
+    assert_eq!(separate.num_running(), 0);
+}
+
+#[test]
+fn one_output_after_chunked_prefill_still_needs_two_gdn_slots() {
+    let mut rejected = Scheduler::new(
+        SchedulerConfig::default(),
+        make_coord(128).with_mamba_capacity(2),
+    );
+    assert!(!rejected.add_request(make_req(1, 5, 1)));
+
+    let mut sched = Scheduler::new(
+        SchedulerConfig::default(),
+        make_coord(128).with_mamba_capacity(3),
+    );
+    assert!(sched.add_request(make_req(1, 5, 1)));
+    assert_eq!(sched.schedule().num_batched_tokens, 4);
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                request_id: 1,
+                token_ids: vec![],
+                num_accepted_draft_tokens: 0,
+                new_draft_token_ids: vec![],
+            }],
+        },
+    );
+    let second = sched.schedule();
+    assert_eq!(second.num_batched_tokens, 1);
+    assert!(second.preempted_request_ids.is_empty());
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    assert_eq!(sched.num_running(), 0);
 }
 
 // ── SCH-05: remove_blocks_in_range skips nulls instead of stopping ───────────

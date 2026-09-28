@@ -97,6 +97,11 @@ impl HybridCoordinator {
         &self.pool
     }
 
+    /// Physical GDN pool size, including its reserved null block, when separate.
+    pub fn mamba_pool_capacity(&self) -> Option<u32> {
+        self.mamba_pool.as_ref().map(BlockPool::num_blocks)
+    }
+
     pub fn set_speculative_blocks(&mut self, count: usize) {
         self.mamba.set_speculative_blocks(count);
     }

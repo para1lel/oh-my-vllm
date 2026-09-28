@@ -112,7 +112,26 @@ class BatchPlanTest(unittest.TestCase):
             128,
             0,
         )
-        with self.assertRaises(AssertionError):
+        with self.assertRaisesRegex(ValueError, "FA page 99"):
+            validate_batch([a, b])
+
+    def test_multi_page_prefill_checks_earlier_writable_page(self):
+        history = list(range(1568))
+        a = plan_request(
+            request(0, history, [10, 20], history, 1, fa_table=[11, 12]),
+            history,
+            None,
+            128,
+            0,
+        )
+        b = plan_request(
+            request(0, history, [30, 40], history, 2, fa_table=[11, 13]),
+            history,
+            None,
+            128,
+            0,
+        )
+        with self.assertRaisesRegex(ValueError, "FA page 11"):
             validate_batch([a, b])
 
     def test_retained_output_count_is_bounded(self):

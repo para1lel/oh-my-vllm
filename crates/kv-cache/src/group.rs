@@ -282,11 +282,11 @@ impl GroupManager {
             // pass, so there can be no new hit blocks. Under speculative decoding
             // `num_required` can be *below* what is held, when draft tokens were
             // allocated for and then rejected.
-            debug_assert!(new_computed_blocks.is_empty());
+            assert!(new_computed_blocks.is_empty());
             return BlocksNeeded::Blocks(num_required.saturating_sub(num_req_blocks));
         }
 
-        debug_assert_eq!(
+        assert_eq!(
             self.num_skipped_tokens(total_computed_tokens),
             0,
             "full attention never skips"
@@ -305,8 +305,8 @@ impl GroupManager {
         num_local_computed_tokens: usize,
         pool: &mut BlockPool,
     ) {
-        debug_assert!(self.blocks(request_id).is_empty());
-        debug_assert_eq!(
+        assert!(self.blocks(request_id).is_empty());
+        assert_eq!(
             num_local_computed_tokens % self.block_size,
             0,
             "hits are block-aligned here, so no partial-hit copy-on-write exists"
@@ -320,7 +320,7 @@ impl GroupManager {
         if self.enable_caching {
             pool.touch(kept);
         } else {
-            debug_assert!(kept.iter().all(|&b| b == NULL_BLOCK_ID));
+            assert!(kept.iter().all(|&b| b == NULL_BLOCK_ID));
         }
 
         let blocks = self.req_to_blocks.entry(request_id).or_default();
@@ -398,7 +398,7 @@ impl GroupManager {
                     }
                 }
                 let num_new = num_required - blocks.len();
-                debug_assert!(num_new <= self.num_speculative_blocks + 1);
+                assert!(num_new <= self.num_speculative_blocks + 1);
                 let mut appended = blocks[prev_len..].to_vec();
 
                 let new = pool
@@ -435,8 +435,8 @@ impl GroupManager {
             return;
         }
         let hashes = request.block_hashes();
-        debug_assert!(num_full <= hashes.len());
-        debug_assert!(num_full <= self.blocks(rid).len());
+        assert!(num_full <= hashes.len());
+        assert!(num_full <= self.blocks(rid).len());
 
         let to_cache: Vec<(usize, u32)> = self.blocks(rid)[num_cached..num_full]
             .iter()
@@ -498,8 +498,7 @@ impl GroupManager {
 
     /// Null out `[first_block, last_block)`, freeing what was there.
     ///
-    /// Walks backward and stops at the first null, which both skips work already
-    /// done on an earlier call and produces a tail-first list — exactly the order
+    /// Walks backward across nulls and produces a tail-first list — the order
     /// [`BlockPool::free_blocks`] requires.
     fn remove_blocks_in_range(
         &mut self,
@@ -556,4 +555,27 @@ fn num_evictable(blocks: &[u32], pool: &BlockPool) -> usize {
         .iter()
         .filter(|&&id| id != NULL_BLOCK_ID && pool.block(id).ref_cnt == 0)
         .count()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GroupKind, GroupManager};
+    use crate::pool::{BlockPool, NULL_BLOCK_ID};
+
+    #[test]
+    fn remove_blocks_in_range_releases_live_blocks_below_interior_null() {
+        let mut pool = BlockPool::new(8, true);
+        let ids = pool.get_new_blocks(3).unwrap();
+        let mut group = GroupManager::new(GroupKind::MambaAlign, 1, 4, true);
+        group
+            .req_to_blocks
+            .insert(7, vec![ids[0], ids[1], NULL_BLOCK_ID, ids[2]]);
+        assert_eq!(pool.num_free_blocks(), 4);
+
+        group.remove_blocks_in_range(7, 0, 4, &mut pool);
+
+        assert_eq!(group.blocks(7), &[NULL_BLOCK_ID; 4]);
+        assert_eq!(pool.num_free_blocks(), 7);
+        assert!(ids.iter().all(|&id| pool.block(id).ref_cnt == 0));
+    }
 }

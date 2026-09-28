@@ -72,6 +72,7 @@ pub struct WorkerClient {
     rpc_id: u64,
     serving_enabled: bool,
     pub logical_num_blocks: u32,
+    pub mamba_blocks: u32,
     pub serving_outputs: std::collections::BTreeMap<u64, (String, Option<String>, usize)>,
     pub serving_errors: std::collections::BTreeMap<u64, String>,
 }
@@ -110,14 +111,22 @@ impl WorkerClient {
             // orphaned GPU worker processes.
             #[cfg(target_os = "linux")]
             unsafe {
-                cmd.pre_exec(|| {
-                    libc::prctl(
+                let parent_pid = libc::getpid();
+                cmd.pre_exec(move || {
+                    if libc::prctl(
                         libc::PR_SET_PDEATHSIG,
                         libc::SIGKILL as libc::c_ulong,
                         0,
                         0,
                         0,
-                    );
+                    ) == -1
+                    {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    // The parent may have died between fork and prctl.
+                    if libc::getppid() != parent_pid {
+                        return Err(std::io::Error::from_raw_os_error(libc::ECHILD));
+                    }
                     Ok(())
                 });
             }
@@ -164,10 +173,13 @@ impl WorkerClient {
         .await
         .map_err(|_| Error::Timeout)??;
 
-        let logical_num_blocks = match ready_reply {
-            crate::protocol::PythonMessage::Ready { logical_num_blocks } => {
-                info!(logical_num_blocks, "Python worker is ready");
-                logical_num_blocks
+        let (logical_num_blocks, mamba_blocks) = match ready_reply {
+            crate::protocol::PythonMessage::Ready {
+                logical_num_blocks,
+                mamba_blocks,
+            } => {
+                info!(logical_num_blocks, mamba_blocks, "Python worker is ready");
+                (logical_num_blocks, mamba_blocks)
             }
             crate::protocol::PythonMessage::Error(e) => {
                 return Err(Error::WorkerError(e.message));
@@ -184,6 +196,7 @@ impl WorkerClient {
             rpc_id: 0,
             serving_enabled: false,
             logical_num_blocks,
+            mamba_blocks,
             serving_outputs: Default::default(),
             serving_errors: Default::default(),
         })

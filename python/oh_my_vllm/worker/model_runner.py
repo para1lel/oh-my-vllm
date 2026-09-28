@@ -120,6 +120,23 @@ class OhMyVllmWorker:
             else None
         )
 
+    def cache_capacities(self) -> tuple[int, int]:
+        """Return the FA and GDN slot counts of the allocated device tensors."""
+        fa = {
+            cache.shape[0]
+            for kind, cache in zip(self.model.kinds, self.caches, strict=True)
+            if kind == "full_attention"
+        }
+        gdn = {
+            state.shape[0]
+            for kind, cache in zip(self.model.kinds, self.caches, strict=True)
+            if kind != "full_attention"
+            for state in cache
+        }
+        if len(fa) != 1 or len(gdn) != 1:
+            raise RuntimeError("inconsistent allocated FA or GDN cache capacities")
+        return fa.pop(), gdn.pop()
+
     def register_request(
         self,
         request_id: int,

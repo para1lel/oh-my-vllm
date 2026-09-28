@@ -155,6 +155,13 @@ async fn run() -> Result<()> {
         blocks > 1 && blocks <= client.logical_num_blocks,
         "invalid scheduler pool capacity"
     );
+    ensure!(client.mamba_blocks > 1, "invalid worker GDN pool capacity");
+    if let Some(capacity) = cli.mamba_blocks {
+        ensure!(
+            capacity > 1 && capacity <= client.mamba_blocks,
+            "invalid scheduler GDN pool capacity"
+        );
+    }
     let mut kv = HybridCoordinator::new(blocks, 784, true, 0);
     if let Some(capacity) = cli.mamba_blocks {
         kv = kv.with_mamba_capacity(capacity);
@@ -168,6 +175,10 @@ async fn run() -> Result<()> {
         block_size = cli.block_size,
         max_model_len = cli.max_model_len,
         num_speculative_tokens = cli.num_speculative_tokens,
+        worker_fa_pool_blocks = client.logical_num_blocks,
+        worker_gdn_pool_blocks = client.mamba_blocks,
+        fa_pool_blocks = blocks,
+        gdn_pool_blocks = cli.mamba_blocks.unwrap_or(blocks),
         "BENCH_CONFIG"
     );
     let mut scheduler = Scheduler::new(
@@ -392,7 +403,7 @@ async fn execute_batch(
                 proposed_draft_tokens += output.new_draft_token_ids.len();
                 accepted_draft_tokens += output.num_accepted_draft_tokens;
             }
-            let result = scheduler.update(result);
+            let result = scheduler.update(result)?;
             for output in result.outputs {
                 if !output.token_ids.is_empty() {
                     first_tokens

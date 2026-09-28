@@ -27,6 +27,13 @@ use rustc_hash::FxHashMap;
 pub use output::{RequestOutput, ScheduledRequest, SchedulerOutput, WorkerOutput};
 pub use request::{Request, RequestStatus};
 
+#[derive(Debug, thiserror::Error)]
+#[error("invalid worker output for request {request_id}: {reason}")]
+pub struct UpdateError {
+    pub request_id: RequestId,
+    pub reason: &'static str,
+}
+
 // ── config ────────────────────────────────────────────────────────────────────
 
 /// Scheduler construction parameters.
@@ -123,18 +130,51 @@ impl Scheduler {
     ///
     /// Returns `true` if the request was admitted. Returns `false` and drops
     /// the request if it is impossible to serve even with an empty pool: a
-    /// request whose prompt + max_tokens requires more FA blocks than the pool
-    /// holds would preempt itself indefinitely (SCH-04).
+    /// request whose prompt + max_tokens or GDN state cannot fit the pool
+    /// would preempt itself indefinitely (SCH-04).
     pub fn add_request(&mut self, mut req: Request) -> bool {
         let block = self.kv.block_size();
-        let fa_blocks_needed = req.num_tokens_with_spec().div_ceil(block);
-        let fa_pool_capacity = self.kv.pool().num_blocks() as usize;
-        if fa_blocks_needed > fa_pool_capacity {
+        // The last generated token is returned to the caller without another
+        // forward pass, so it does not occupy an FA page.
+        let fa_blocks_needed = req
+            .prompt_len
+            .saturating_add(req.max_tokens.saturating_sub(1))
+            .div_ceil(block);
+        let fa_usable = self.kv.pool().num_blocks().saturating_sub(1) as usize;
+        // The next forward pass must hold the preceding state while writing a
+        // new checkpoint. A one-token output after one full prefill needs only
+        // its first state; chunked prefill still requires the second slot.
+        let one_forward = req.max_tokens == 1
+            && req.prompt_len > 0
+            && self.aligned_prefill(
+                &req,
+                0,
+                req.prompt_len.min(self.config.max_num_batched_tokens),
+            ) == req.prompt_len;
+        let gdn_slots_needed = 1
+            + usize::from(!one_forward)
+            + if self.config.enable_mtp {
+                self.config.mtp_draft_len
+            } else {
+                0
+            };
+        let gdn_usable = self
+            .kv
+            .mamba_pool_capacity()
+            .map(|capacity| capacity.saturating_sub(1) as usize);
+        let fits = if let Some(gdn_usable) = gdn_usable {
+            fa_blocks_needed <= fa_usable && gdn_slots_needed <= gdn_usable
+        } else {
+            fa_blocks_needed.saturating_add(gdn_slots_needed) <= fa_usable
+        };
+        if !fits {
             tracing::warn!(
                 request_id = req.id,
                 fa_blocks_needed,
-                fa_pool_capacity,
-                "request rejected: requires more FA blocks than the pool holds"
+                fa_usable,
+                gdn_slots_needed,
+                ?gdn_usable,
+                "request rejected: FA or GDN demand exceeds pool capacity"
             );
             return false;
         }
@@ -332,39 +372,100 @@ impl Scheduler {
     ///   of accepted draft tokens and sets new drafts for the next step.
     /// - Marks finished requests and removes them from the running queue.
     ///
-    /// Panics if `worker.outputs` references an unknown id, or if token counts
-    /// from the worker are inconsistent with what was scheduled.
-    pub fn update(&mut self, mut worker: WorkerOutput) -> WorkerOutput {
+    /// Returns an error before changing any request when worker output violates
+    /// the scheduled token contract.
+    pub fn validate_output(&self, worker: &WorkerOutput) -> Result<(), UpdateError> {
+        let mut seen = rustc_hash::FxHashSet::default();
+        for result in &worker.outputs {
+            let id = result.request_id;
+            if !seen.insert(id) {
+                return Err(UpdateError {
+                    request_id: id,
+                    reason: "duplicate result",
+                });
+            }
+            let Some(req) = self.running.iter().find(|request| request.id == id) else {
+                return Err(UpdateError {
+                    request_id: id,
+                    reason: "unknown request",
+                });
+            };
+            if req.num_in_flight_tokens == 0 {
+                return Err(UpdateError {
+                    request_id: id,
+                    reason: "request was not scheduled",
+                });
+            }
+            let Some(scheduled_end) = req
+                .num_computed_tokens
+                .checked_add(req.num_in_flight_tokens)
+            else {
+                return Err(UpdateError {
+                    request_id: id,
+                    reason: "computed position overflow",
+                });
+            };
+            let scheduled_drafts = scheduled_end.saturating_sub(req.token_ids.len());
+            if result.num_accepted_draft_tokens > scheduled_drafts {
+                return Err(UpdateError {
+                    request_id: id,
+                    reason: "accepted unscheduled drafts",
+                });
+            }
+            let final_chunk = scheduled_end >= req.token_ids.len().max(req.prompt_len);
+            let expected = if final_chunk {
+                result.num_accepted_draft_tokens + 1
+            } else {
+                0
+            };
+            if result.token_ids.len() != expected {
+                return Err(UpdateError {
+                    request_id: id,
+                    reason: "wrong verified token count",
+                });
+            }
+            let computed_after =
+                scheduled_end - scheduled_drafts + result.num_accepted_draft_tokens;
+            let Some(history_after) = req.token_ids.len().checked_add(result.token_ids.len())
+            else {
+                return Err(UpdateError {
+                    request_id: id,
+                    reason: "accepted history overflow",
+                });
+            };
+            if computed_after > history_after {
+                return Err(UpdateError {
+                    request_id: id,
+                    reason: "computed position exceeds accepted history",
+                });
+            }
+        }
+        for req in &self.running {
+            if req.num_in_flight_tokens > 0 && !seen.contains(&req.id) {
+                return Err(UpdateError {
+                    request_id: req.id,
+                    reason: "missing result for scheduled request",
+                });
+            }
+        }
+        Ok(())
+    }
+
+    pub fn update(&mut self, mut worker: WorkerOutput) -> Result<WorkerOutput, UpdateError> {
+        self.validate_output(&worker)?;
         let mut finished_ids = Vec::new();
 
         for result in &mut worker.outputs {
-            let req = match self.running.iter_mut().find(|r| r.id == result.request_id) {
-                Some(r) => r,
-                None => continue,
-            };
+            let req = self
+                .running
+                .iter_mut()
+                .find(|r| r.id == result.request_id)
+                .expect("validated request must remain scheduled");
 
             // Only drafts actually scheduled in this step can be rejected.
             let scheduled_end = req.num_computed_tokens + req.num_in_flight_tokens;
             let scheduled_drafts = scheduled_end.saturating_sub(req.token_ids.len());
 
-            // Validate worker output lengths before mutating any state.
-            assert!(
-                result.num_accepted_draft_tokens <= scheduled_drafts,
-                "worker accepted {} unscheduled drafts (max {})",
-                result.num_accepted_draft_tokens,
-                scheduled_drafts,
-            );
-            // The worker must return exactly 1 verified token once all prompt
-            // tokens have been processed. For a partial-prefill chunk (there are
-            // still prompt tokens left), 0 is correct.
-            let is_final_chunk = scheduled_end >= req.token_ids.len().max(req.prompt_len);
-            if is_final_chunk {
-                assert!(
-                    !result.token_ids.is_empty(),
-                    "worker returned 0 tokens for request {} after final prefill chunk",
-                    result.request_id,
-                );
-            }
             req.num_computed_tokens =
                 scheduled_end - scheduled_drafts + result.num_accepted_draft_tokens;
             req.num_in_flight_tokens = 0;
@@ -409,7 +510,7 @@ impl Scheduler {
             self.kv.free(*id);
             self.block_tables.remove(id);
         }
-        worker
+        Ok(worker)
     }
 
     /// Abort between completed steps. The next schedule notifies the worker,

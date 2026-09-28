@@ -1,9 +1,11 @@
 """Real Rust HTTP/ZMQ integration with a scripted CPU worker, not GPU acceptance."""
 
 import concurrent.futures
+import ctypes
 import json
 import os
 import re
+import select
 import signal
 import socket
 import subprocess
@@ -13,10 +15,24 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+from contextlib import suppress
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
+
+
+def open_pidfd(pid):
+    """Use libc when this Python build omits os.pidfd_open."""
+    if hasattr(os, "pidfd_open"):
+        return os.pidfd_open(pid)
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.pidfd_open.argtypes = (ctypes.c_int, ctypes.c_uint)
+    libc.pidfd_open.restype = ctypes.c_int
+    fd = libc.pidfd_open(pid, 0)
+    if fd < 0:
+        raise OSError(ctypes.get_errno(), "pidfd_open failed")
+    return fd
 
 
 class HttpTests(unittest.TestCase):
@@ -124,6 +140,76 @@ class HttpTests(unittest.TestCase):
         )
         self.assertEqual(text, normal["choices"][0]["message"]["content"])
         self.assertGreater(chunks[-1]["usage"]["completion_tokens"], 0)
+
+    def test_sigkill_parent_reaps_scripted_worker(self):
+        """PDEATHSIG must work even when Rust cannot run Drop or a signal handler."""
+        with tempfile.TemporaryDirectory(prefix="oh-my-vllm-parent-death-") as tmp:
+            directory = Path(tmp)
+            with socket.socket() as sock:
+                sock.bind(("127.0.0.1", 0))
+                port = sock.getsockname()[1]
+            wrapper = directory / "worker"
+            wrapper.write_text(
+                f"#!/bin/sh\nexec {PYTHON} "
+                f'{ROOT}/tests/fixtures/serving_worker.py "$@"\n'
+            )
+            wrapper.chmod(0o700)
+            environment = os.environ | {
+                "OH_MY_VLLM_WORKER_PYTHON": str(wrapper),
+                "CUDA_VISIBLE_DEVICES": "",
+            }
+            with (directory / "server.log").open("w") as log:
+                process = subprocess.Popen(
+                    [
+                        str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                        "--socket",
+                        str(directory / "worker.ipc"),
+                        "serve",
+                        "--listen",
+                        f"127.0.0.1:{port}",
+                    ],
+                    env=environment,
+                    stdout=log,
+                    stderr=log,
+                    start_new_session=True,
+                )
+                worker_pidfd = None
+                try:
+                    deadline = time.monotonic() + 15
+                    while time.monotonic() < deadline:
+                        if process.poll() is not None:
+                            self.fail((directory / "server.log").read_text())
+                        try:
+                            with urllib.request.urlopen(
+                                f"http://127.0.0.1:{port}/v1/models", timeout=0.2
+                            ):
+                                break
+                        except (OSError, urllib.error.URLError):
+                            time.sleep(0.05)
+                    else:
+                        self.fail("parent-death fixture did not start")
+                    children = (
+                        Path(f"/proc/{process.pid}/task/{process.pid}/children")
+                        .read_text()
+                        .split()
+                    )
+                    self.assertEqual(len(children), 1)
+                    worker_pidfd = open_pidfd(int(children[0]))
+                    process.kill()
+                    process.wait(timeout=5)
+                    self.assertTrue(
+                        select.select([worker_pidfd], [], [], 5)[0],
+                        "scripted worker survived Rust SIGKILL",
+                    )
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait(timeout=5)
+                    if worker_pidfd is not None:
+                        if not select.select([worker_pidfd], [], [], 0)[0]:
+                            with suppress(ProcessLookupError):
+                                signal.pidfd_send_signal(worker_pidfd, signal.SIGKILL)
+                        os.close(worker_pidfd)
 
     def test_responses_stream_and_stored_continuation(self):
         with self.request(

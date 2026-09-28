@@ -153,6 +153,45 @@ class TestKRN05NormalizeQKValidation(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "head_stride=128"):
             normalize_qk(q, k)
 
+    def test_two_dimensional_input_rejected(self):
+        from oh_my_vllm.kernels.gdn import normalize_qk
+
+        q = self._make_mock(shape=(8, 128))
+        k = self._make_mock(shape=(8, 128))
+        with self.assertRaisesRegex(ValueError, r"\[tokens, heads, 128\]"):
+            normalize_qk(q, k)
+
+    def test_empty_input_rejected(self):
+        from oh_my_vllm.kernels.gdn import normalize_qk
+
+        q = self._make_mock(shape=(0, 8, 128))
+        k = self._make_mock(shape=(0, 8, 128))
+        with self.assertRaisesRegex(ValueError, "nonempty"):
+            normalize_qk(q, k)
+
+    def test_overlapping_token_rows_rejected(self):
+        from oh_my_vllm.kernels.gdn import normalize_qk
+
+        q = self._make_mock(strides=[512, 128, 1])
+        k = self._make_mock(strides=[512, 128, 1])
+        with self.assertRaisesRegex(ValueError, "non-overlapping"):
+            normalize_qk(q, k)
+
+    def test_cpu_and_cross_device_inputs_rejected(self):
+        from oh_my_vllm.kernels.gdn import normalize_qk
+
+        q = self._make_mock()
+        k = self._make_mock()
+        q.is_cuda = False
+        q.device = torch.device("cpu")
+        with self.assertRaisesRegex(ValueError, "same CUDA device"):
+            normalize_qk(q, k)
+        q.is_cuda = True
+        q.device = torch.device("cuda:0")
+        k.device = torch.device("cuda:1")
+        with self.assertRaisesRegex(ValueError, "same CUDA device"):
+            normalize_qk(q, k)
+
 
 class TestPY02FP8ProjectionAlignment(unittest.TestCase):
     """PY-02: Checkpoint.linear rejects FP8 projections not divisible by 128."""
