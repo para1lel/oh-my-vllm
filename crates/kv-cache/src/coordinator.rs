@@ -29,7 +29,7 @@
 //! `_align_cacheable(n) = round_down(n, 784)` with no partial-hit branches.
 
 use crate::group::{BlocksNeeded, CacheRequest, GroupKind, GroupManager, RequestId};
-use crate::hash::{BlockHash, hash_request_tokens};
+use crate::hash::{BlockHash, hash_block_tokens, hash_request_tokens};
 use crate::pool::BlockPool;
 pub use crate::pool::NULL_BLOCK_ID;
 
@@ -349,6 +349,21 @@ impl HybridCoordinator {
     /// This is a thin forwarding wrapper so callers need not import `hash`.
     pub fn compute_block_hashes(&self, token_ids: &[u32]) -> Vec<BlockHash> {
         hash_request_tokens(None, token_ids, self.block_size, &[])
+    }
+
+    /// Extend hashes for an append-only token history; partial tail blocks stay unhashed.
+    pub fn extend_block_hashes(&self, token_ids: &[u32], hashes: &mut Vec<BlockHash>) {
+        let first_unhashed = hashes
+            .len()
+            .checked_mul(self.block_size)
+            .expect("hashed token count overflow");
+        assert!(
+            first_unhashed <= token_ids.len(),
+            "token history cannot shrink below its hashed prefix"
+        );
+        for tokens in token_ids[first_unhashed..].chunks_exact(self.block_size) {
+            hashes.push(hash_block_tokens(hashes.last().copied(), tokens, &[]));
+        }
     }
 }
 

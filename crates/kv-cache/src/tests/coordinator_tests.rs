@@ -95,6 +95,32 @@ fn req_with_hashes(id: u64, tokens: &[u32], c: &HybridCoordinator) -> Req {
     Req::new(id, tokens.len()).with_hashes(hashes)
 }
 
+#[test]
+fn appended_block_hashes_match_full_chain_across_partial_and_max_context() {
+    let c = HybridCoordinator::new(5000, 784, true, 0);
+    let tokens: Vec<u32> = (0..262_144).map(|n| n as u32).collect();
+    let mut hashes = Vec::new();
+    for len in [
+        0, 1, 783, 784, 785, 1567, 1568, 32_768, 261_855, 261_856, 262_144,
+    ] {
+        c.extend_block_hashes(&tokens[..len], &mut hashes);
+        assert_eq!(
+            hashes,
+            c.compute_block_hashes(&tokens[..len]),
+            "at {len} tokens"
+        );
+    }
+    assert_eq!(hashes.len(), 334);
+}
+
+#[test]
+#[should_panic(expected = "token history cannot shrink below its hashed prefix")]
+fn appended_block_hashes_reject_shorter_history() {
+    let c = coord(16);
+    let mut hashes = c.compute_block_hashes(&[1, 2, 3, 4]);
+    c.extend_block_hashes(&[1, 2, 3], &mut hashes);
+}
+
 // ── cold single-request prefill ──────────────────────────────────────────────
 
 #[test]

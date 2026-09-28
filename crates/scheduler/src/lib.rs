@@ -465,7 +465,8 @@ impl Scheduler {
             req.draft_token_ids.clear();
             let full_blocks = req.token_ids.len() / self.kv.block_size();
             if full_blocks > req.block_hashes.len() {
-                req.block_hashes = self.kv.compute_block_hashes(&req.token_ids);
+                self.kv
+                    .extend_block_hashes(&req.token_ids, &mut req.block_hashes);
             }
 
             if self.config.enable_mtp && !result.new_draft_token_ids.is_empty() {

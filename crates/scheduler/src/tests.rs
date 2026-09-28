@@ -108,6 +108,62 @@ fn decode_step_advances_computed() {
     );
 }
 
+#[test]
+fn decode_updates_extend_only_new_full_block_hashes() {
+    let mut sched = make_scheduler(64, 128);
+    assert!(sched.add_request(make_req(1, 3, 6)));
+    for expected_len in 4..=8 {
+        let step = sched.schedule();
+        assert_eq!(step.scheduled.len(), 1);
+        apply(
+            &mut sched,
+            WorkerOutput {
+                outputs: vec![dummy_output(1)],
+            },
+        );
+        let req = sched
+            .running
+            .front()
+            .expect("request still has output budget");
+        assert_eq!(req.token_ids.len(), expected_len);
+        assert_eq!(
+            req.block_hashes,
+            sched.kv.compute_block_hashes(&req.token_ids)
+        );
+    }
+}
+
+#[test]
+fn update_hashes_real_784_token_boundaries() {
+    let config = SchedulerConfig {
+        max_num_batched_tokens: 32_768,
+        max_num_seqs: 4,
+        enable_mtp: false,
+        mtp_draft_len: 0,
+    };
+    let mut sched = Scheduler::new(config, HybridCoordinator::new(100, 784, true, 0));
+    assert!(sched.add_request(make_req(1, 783, 786)));
+    for generated in 1..=785 {
+        assert_eq!(sched.schedule().scheduled.len(), 1);
+        apply(
+            &mut sched,
+            WorkerOutput {
+                outputs: vec![dummy_output(1)],
+            },
+        );
+        let len = 783 + generated;
+        if matches!(len, 784 | 785 | 1567 | 1568) {
+            let req = sched.running.front().expect("request has one token left");
+            assert_eq!(req.token_ids.len(), len);
+            assert_eq!(req.block_hashes.len(), len / 784);
+            assert_eq!(
+                req.block_hashes,
+                sched.kv.compute_block_hashes(&req.token_ids)
+            );
+        }
+    }
+}
+
 // ── chunked prefill ───────────────────────────────────────────────────────────
 
 #[test]
@@ -182,6 +238,37 @@ fn prefix_cache_hit_reduces_scheduled_tokens() {
         sr.mamba_block_table[..hit_blocks],
         first.mamba_block_table[..hit_blocks]
     );
+}
+
+#[test]
+fn generated_full_block_remains_a_prefix_hit_for_new_request() {
+    let mut sched = make_scheduler(128, 256);
+    assert!(sched.add_request(make_req(1, 3, 2)));
+    assert_eq!(sched.schedule().scheduled.len(), 1);
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    let generated = sched.running.front().unwrap();
+    assert_eq!(generated.token_ids, vec![0, 1, 2, 42]);
+    assert_eq!(generated.block_hashes.len(), 1);
+    assert_eq!(sched.schedule().scheduled.len(), 1);
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    assert_eq!(sched.num_running(), 0);
+
+    let second = Request::new(2, vec![0, 1, 2, 42, 99], 1, Vec::new());
+    assert!(sched.add_request(second));
+    let scheduled = sched.schedule();
+    assert_eq!(scheduled.scheduled.len(), 1);
+    assert_eq!(scheduled.scheduled[0].num_computed_tokens, 4);
+    assert_eq!(scheduled.scheduled[0].token_ids, vec![99]);
 }
 
 // ── pool exhaustion: preemption ───────────────────────────────────────────────
@@ -349,6 +436,11 @@ fn preemption_resends_accepted_history_without_drafts() {
         Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 42])
     );
     assert!(sched.running.back().unwrap().draft_token_ids.is_empty());
+    let readmitted = sched.running.back().unwrap();
+    assert_eq!(
+        readmitted.block_hashes,
+        sched.kv.compute_block_hashes(&readmitted.token_ids)
+    );
     apply(
         &mut sched,
         WorkerOutput {
@@ -470,6 +562,12 @@ fn mtp_acceptance_preserves_tokens_and_rejects_only_scheduled_drafts() {
             }],
         },
     );
+    let with_drafts = scheduler.running.front().unwrap();
+    assert_eq!(with_drafts.draft_token_ids, vec![10, 11]);
+    assert_eq!(
+        with_drafts.block_hashes,
+        scheduler.kv.compute_block_hashes(&with_drafts.token_ids)
+    );
     assert_eq!(scheduler.schedule().num_batched_tokens, 3);
     apply(
         &mut scheduler,
@@ -486,6 +584,10 @@ fn mtp_acceptance_preserves_tokens_and_rejects_only_scheduled_drafts() {
     assert_eq!(request.num_computed_tokens, 6);
     assert_eq!(&request.token_ids[4..], &[42, 10, 99]);
     assert!(request.draft_token_ids.is_empty());
+    assert_eq!(
+        request.block_hashes,
+        scheduler.kv.compute_block_hashes(&request.token_ids)
+    );
     assert_eq!(scheduler.schedule().scheduled[0].token_ids, vec![99]);
 }
 

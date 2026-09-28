@@ -41,8 +41,8 @@ pub struct Request {
     pub num_in_flight_tokens: usize,
     /// Maximum number of output tokens to generate.
     pub max_tokens: usize,
-    /// Chain-hashed block hashes for all of `token_ids`, computed once on
-    /// admission via `HybridCoordinator::compute_block_hashes`.
+    /// Chain hashes for full blocks of `token_ids`: initialized at admission
+    /// and extended when verified output fills another block.
     pub block_hashes: Vec<BlockHash>,
     pub status: RequestStatus,
 }
