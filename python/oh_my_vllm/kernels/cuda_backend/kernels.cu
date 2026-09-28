@@ -169,8 +169,9 @@ __global__ void quantize_kernel(const Input *__restrict__ x, __nv_fp8_e4m3 *__re
     if (lane == 0)
       scales[Column ? group * rows + row : row * groups + group] = scale;
     // BF16 scale and reciprocal stay normal throughout the finite domain.
-    // One FMA residual correction preserves FP8 rounding; FP16/FP32 and
-    // nonfinite maxima retain exact division. This is not FP32 equivalence.
+    // One residual-refinement step uses two FMA operations and preserves
+    // FP8 rounding; FP16/FP32 and nonfinite maxima retain exact division.
+    // This is not FP32 equivalence.
     float inverse = 0.f;
     if constexpr (std::is_same_v<Input, __nv_bfloat16>)
       asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(inverse) : "f"(scale));
