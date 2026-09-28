@@ -214,8 +214,21 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   Rust workspace 58/29/17, CPU pytest 201 tests and 67 subtests (181 GPU
   cases deselected), fmt, line width, Ruff, Clippy and hooks passed. Current
   12-row framework acceptance remains pending.
+- Independently reviewed `c082937` closes SRV-09's repeated whole-call scan
+  on the serving thread. The parser retains per-tool byte progress across
+  chunks and checks non-string JSON at parameter close or before an
+  incomplete length-finished call is discarded; the final `parse_tool`
+  validation remains. The actual `Parser::feed`
+  path has a bounded-byte-count regression across seven chunk sizes, with
+  malformed and incomplete XML/JSON cases. A temporary CPU benchmark used
+  16-byte chunks, five warmups, and ten measured repetitions: old `e7e6d42`
+  median 151/1,668 microseconds versus new 22/89 microseconds for 8,192/32,768
+  parameter bytes. This is parser-only cost. Rust workspace 58/29/21, CPU
+  pytest 201 passed and 67 subtests (181 GPU cases deselected), fmt, line
+  width, Ruff, Clippy, and hooks passed. Current 12-row framework acceptance
+  remains pending.
 
-Remaining work: PY-03..07, SRV-08..10, SCH-06, KRN-06..10,
+Remaining work: PY-03..07, SRV-08/10, SCH-06, KRN-06..10,
 EVD-07, the four unverified risks, and current
 full operator/GPU suite and 12-row framework acceptance. See the [audit index](audit-2026-09-23.md)
 for individual status and evidence limits.
