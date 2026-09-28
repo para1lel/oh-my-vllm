@@ -7,6 +7,21 @@ from oh_my_vllm.kernels.cuda_backend import compiled
 
 
 def quantize_case(scenario):
+    if scenario == "over_i32":
+        rows = 2**23 + 1
+        x = torch.empty(rows, 256, device="cuda", dtype=torch.bfloat16)
+        out = torch.empty(rows, 128, device="cuda", dtype=torch.float8_e4m3fn)
+        scales = torch.empty(rows, 1, device="cuda")
+
+        def invoke():
+            compiled().quantize(x, out, scales, False, True)
+
+        return (
+            invoke,
+            torch.cuda.synchronize,
+            "input/output flat offsets exceed signed int32",
+        )
+
     input_dtype = (
         getattr(torch, scenario.removeprefix("silu_"))
         if scenario in ("float64", "int32", "silu_float16", "silu_float32")

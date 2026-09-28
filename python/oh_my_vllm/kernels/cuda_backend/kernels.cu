@@ -23,6 +23,16 @@ bool is_index_dtype(TensorView tensor) {
   return dtype.code == kDLInt && (dtype.bits == 32 || dtype.bits == 64) &&
          dtype.lanes == 1;
 }
+bool fits_int32_flat_offsets(TensorView tensor, bool kernel_width) {
+  if (tensor.ndim() != 2)
+    return false;
+  int64_t rows = tensor.size(0), width = tensor.size(1);
+  constexpr int64_t kMaxDimension = (int64_t(1) << 31) - 1;
+  constexpr int64_t kMaxElements = int64_t(1) << 31;
+  return rows > 0 && width > 0 && rows <= kMaxDimension &&
+         width <= (kernel_width ? kMaxDimension : kMaxElements) &&
+         rows <= kMaxElements / width;
+}
 
 // BF16 SiLU keeps both rounding boundaries. The fast exponential produces
 // identical rounded SiLU for every finite BF16 input on the required SM100.
@@ -202,14 +212,17 @@ void quantize(TensorView x, TensorView out, TensorView scales, bool column, bool
       << "CUDA quantize requires FP8 output and FP32 scales";
   TVM_FFI_ICHECK(x.ndim() == 2 && out.ndim() == 2 && scales.ndim() == 2 &&
                  out.size(0) == x.size(0) && out.size(0) > 0 &&
-                 out.size(1) > 0 && out.size(1) % 128 == 0 &&
-                 x.size(1) == out.size(1) * (silu ? 2 : 1) &&
+                 x.size(1) > 0 && out.size(1) > 0 && out.size(1) % 128 == 0 &&
+                 x.size(1) % (silu ? 2 : 1) == 0 &&
+                 x.size(1) / (silu ? 2 : 1) == out.size(1) &&
                  scales.size(0) == out.size(0) && scales.size(1) == out.size(1) / 128 &&
                  x.stride(1) == 1 && x.stride(0) == x.size(1) &&
                  out.stride(1) == 1 && out.stride(0) == out.size(1) &&
                  scales.stride(0) == (column ? 1 : scales.size(1)) &&
                  scales.stride(1) == (column ? out.size(0) : 1))
       << "CUDA quantize output shape or layout is invalid";
+  TVM_FFI_ICHECK(fits_int32_flat_offsets(x, false) && fits_int32_flat_offsets(out, true))
+      << "CUDA quantize input/output flat offsets exceed signed int32";
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
   if (dtype.code == kDLBfloat)
     dispatch_alignment<__nv_bfloat16>(x, out, scales, column, silu, stream);

@@ -46,6 +46,7 @@ def _assert_rejected_in_child(entry, dtype):
         "empty",
         "out_cpu",
         "scales_cpu",
+        "over_i32",
     ],
 )
 def test_quantize_rejects_bad_outputs(scenario):

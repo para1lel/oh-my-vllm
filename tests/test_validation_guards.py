@@ -17,18 +17,18 @@ class TestKRN04FP8Int32Overflow(unittest.TestCase):
     """KRN-04: fp8.quantize and elementwise.silu_mul reject int32-overflow shapes."""
 
     def test_fp8_quantize_overflow_rejected(self):
-        """rows * width >= 2**31 must raise ValueError (no GPU needed)."""
+        """The first representable shape above 2**31 elements must reject."""
         from oh_my_vllm.kernels import fp8
 
-        # rows * width == 2**31, which would overflow a signed int32 offset
-        # Use shape values that pass earlier checks (numel > 0, width % 128 == 0)
+        # The largest valid flat offset is 2**31-1. Use shape values above
+        # that limit that pass earlier checks (numel > 0, width % 128 == 0)
         # but fail the overflow check. We mock is_cuda / is_contiguous so no
         # actual GPU tensor is needed.
         t = MagicMock(spec=torch.Tensor)
         t.dtype = torch.bfloat16
         t.ndim = 2
-        t.numel.return_value = 2**31  # non-zero, passes the numel==0 guard
-        t.shape = (2**24, 128)  # rows * width = 2**24 * 128 = 2**31
+        t.numel.return_value = 2**31 + 128  # non-zero, passes the empty guard
+        t.shape = (2**24 + 1, 128)
         t.is_contiguous.return_value = True
         t.is_cuda = True
 
@@ -36,21 +36,65 @@ class TestKRN04FP8Int32Overflow(unittest.TestCase):
             fp8.quantize(t)
 
     def test_fp8_quantize_silu_overflow_rejected(self):
-        """rows * width * 2 >= 2**31 with silu_gate=True must raise ValueError."""
+        """The first fused shape above 2**31 packed elements must reject."""
         from oh_my_vllm.kernels import fp8
 
         t = MagicMock(spec=torch.Tensor)
         t.dtype = torch.bfloat16
         t.ndim = 2
-        t.numel.return_value = 2**31
-        # width must be divisible by 256 for silu_gate, rows * (width//2) >= 2**31/2
-        # rows * width * 2 >= 2**31  =>  rows * width >= 2**30
-        t.shape = (2**23, 256)  # rows * width * 2 = 2**23 * 256 * 2 = 2**32 > 2**31
+        t.numel.return_value = 2**31 + 256
+        # Packed width includes both gate and up; this is the first illegal row.
+        t.shape = (2**23 + 1, 256)
         t.is_contiguous.return_value = True
         t.is_cuda = True
 
         with self.assertRaisesRegex(ValueError, "int32 flat offset"):
             fp8.quantize(t, silu_gate=True)
+
+    def test_fp8_quantize_silu_accepts_through_limit_and_rejects_above(self):
+        """The packed input size, without a second x2, controls the bound."""
+        from oh_my_vllm.kernels import fp8
+
+        t = MagicMock(spec=torch.Tensor)
+        t.dtype = torch.bfloat16
+        t.ndim = 2
+        t.is_contiguous.return_value = True
+        t.is_cuda = True
+        with (
+            patch.object(fp8.torch, "empty", return_value=MagicMock(spec=torch.Tensor)),
+            patch.object(
+                fp8, "_quantize", return_value=lambda x, out, scales: None
+            ) as launch,
+        ):
+            for rows, width in [
+                (2**23 - 1, 256),
+                (2**23, 256),
+                (32144, 34816),
+                (1, 2**31),
+            ]:
+                t.shape = (rows, width)
+                t.numel.return_value = rows * width
+                fp8.quantize(t, silu_gate=True)
+            self.assertEqual(launch.call_count, 4)
+            t.shape = (2**23 + 1, 256)
+            t.numel.return_value = (2**23 + 1) * 256
+            with self.assertRaisesRegex(ValueError, "int32 flat offset"):
+                fp8.quantize(t, silu_gate=True)
+            self.assertEqual(launch.call_count, 4)
+
+    def test_fp8_quantize_rejects_nonfused_width_outside_int32(self):
+        """The kernel's int width cannot represent a 2**31-wide output row."""
+        from oh_my_vllm.kernels import fp8
+
+        t = MagicMock(spec=torch.Tensor)
+        t.dtype = torch.bfloat16
+        t.ndim = 2
+        t.shape = (1, 2**31)
+        t.numel.return_value = 2**31
+        t.is_contiguous.return_value = True
+        t.is_cuda = True
+        with self.assertRaisesRegex(ValueError, "signed int32 kernel dimension"):
+            fp8.quantize(t)
 
     def test_silu_mul_overflow_rejected(self):
         """rows * half_width * 2 >= 2**31 must raise ValueError."""

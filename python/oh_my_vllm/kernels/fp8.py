@@ -23,7 +23,10 @@ def quantize(
             "FP8 requires a contiguous CUDA matrix with K divisible by 128"
         )
     rows, width = x.shape
-    if x.shape[0] * x.shape[1] * (2 if silu_gate else 1) >= 2**31:
+    # Packed fused SiLU input already contains both gate and up halves.
+    # Compare by division so even a foreign shape scalar cannot overflow here.
+    # The largest accessed signed-int32 offset is total_elements - 1.
+    if rows > 2**31 // width:
         raise ValueError(
             f"tensor size {x.shape[0]} * {x.shape[1]} exceeds int32 flat offset range"
         )
@@ -31,6 +34,8 @@ def quantize(
         if x.dtype != torch.bfloat16 or width % 256:
             raise ValueError("fused SiLU quantization requires packed BF16 gate/up")
         width //= 2
+    if width > 2**31 - 1:
+        raise ValueError("quantization width exceeds signed int32 kernel dimension")
     data = torch.empty((rows, width), device=x.device, dtype=torch.float8_e4m3fn)
     shape = (width // 128, rows) if column_major else (rows, width // 128)
     scales = torch.empty(shape, dtype=torch.float32, device=x.device)
