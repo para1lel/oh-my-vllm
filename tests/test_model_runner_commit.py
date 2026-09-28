@@ -2,7 +2,7 @@
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import numpy as np
 import torch
@@ -120,6 +120,38 @@ class CommitTests(unittest.TestCase):
         self.assertEqual(len(output.outputs), 1)
         self.assertEqual(output.outputs[0].request_id, 3)
         self.assertEqual(output.outputs[0].error, "request registration failed")
+
+    def test_same_step_preemption_resets_state_before_readmission_plan(self):
+        worker = self.make_worker()
+        worker.config = SimpleNamespace(max_model_len=64, speculative_tokens=0)
+        worker.logical_num_blocks = 16
+        worker.mamba_blocks = 16
+        worker.sources[1] = 5
+        worker.computed[1] = 8
+        worker.mtp = Mock()
+        history = [0, 1, 2, 3, 4, 5, 6, 7, 42]
+        worker.histories[1] = history.copy()
+        scheduled = SchedulerOutput(
+            scheduled=[ScheduledRequest(1, [42], 8, [1], [1], history.copy())],
+            preempted_request_ids=[1],
+            num_batched_tokens=1,
+        )
+
+        def observe_plan(request, history, source, *_):
+            self.assertEqual(request.request_id, 1)
+            self.assertEqual(history, [0, 1, 2, 3, 4, 5, 6, 7, 42])
+            self.assertIsNone(source)
+            self.assertNotIn(1, worker.computed)
+            worker.mtp.forget.assert_called_once_with(1)
+            raise RuntimeError("plan observed reset state")
+
+        with (
+            patch(
+                "oh_my_vllm.worker.model_runner.plan_request", side_effect=observe_plan
+            ),
+            self.assertRaisesRegex(RuntimeError, "plan observed reset state"),
+        ):
+            worker.execute_model(scheduled)
 
     def test_bad_mtp_state_aborts_only_its_request(self):
         worker = self.make_worker()

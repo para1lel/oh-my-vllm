@@ -36,7 +36,8 @@ The owned Python worker exits when the Rust parent dies.
   Mamba checkpoints and speculative reservations. Two-phase allocation touches
   reused prefixes before allocating new pages.
 - `crates/scheduler`: FCFS waiting/running queues, chunked prefill, token budgets,
-  staggered admission, recompute preemption and accepted-draft accounting.
+  staggered admission, recompute preemption of later-admitted running requests
+  before an older request, and accepted-draft accounting.
   The kv-cache crate uses one shared pool by default, or separate FA/GDN pools
   with `--mamba-blocks` (ADR-007).
 - `crates/zmq-worker`: CLI, OpenAI-compatible HTTP APIs, model process lifecycle,

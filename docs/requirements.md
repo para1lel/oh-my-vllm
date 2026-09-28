@@ -131,11 +131,12 @@ Coordinated across both KV groups. See `crates/kv-cache/src/`.
 
 **Status:** user-confirmed; **implemented** (code-observed)
 
-When the block pool is exhausted during scheduling, a running request is evicted
-back to the front of the waiting queue with `num_computed_tokens=0`. The intended
-policy evicts the lowest-priority (last-admitted) request; the current code evicts
-the request whose allocation failed (audit SCH-06). See
-`crates/scheduler/src/lib.rs`.
+When a running request needs more blocks than are free, the scheduler evicts
+lower-priority (later-admitted) running requests from the queue tail and retries
+the higher-priority request. If no lower-priority request remains, it evicts the
+current request. Victims return to the waiting queue in admission order with
+`num_computed_tokens=0`; accepted history is retained and unverified drafts are
+cleared. See `crates/scheduler/src/lib.rs` (audit SCH-06).
 
 **Explicitly deferred:** swap-based preemption (CPU KV offload). Not planned for
 the current scope because it requires Python-side CPU tensor management.

@@ -294,6 +294,137 @@ fn preemption_when_pool_is_full() {
     assert!(total >= 1, "scheduler must not silently drop all requests");
 }
 
+#[test]
+fn pool_pressure_preempts_youngest_and_retries_oldest() {
+    let mut sched = make_scheduler(8, 128);
+    assert!(sched.add_request(make_req(1, 8, 10)));
+    assert!(sched.add_request(make_req(2, 8, 10)));
+    let first = sched.schedule();
+    assert_eq!(
+        first
+            .scheduled
+            .iter()
+            .map(|r| r.request_id)
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1), dummy_output(2)],
+        },
+    );
+
+    let second = sched.schedule();
+    assert_eq!(second.preempted_request_ids, vec![2]);
+    assert_eq!(
+        second
+            .scheduled
+            .iter()
+            .map(|req| req.request_id)
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+    // Re-admission can immediately recover a cached full block after reset.
+    assert_eq!(second.scheduled[1].num_computed_tokens, 8);
+    assert_eq!(
+        second.scheduled[1].prefill_token_ids,
+        Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 42])
+    );
+    assert_eq!(sched.running.front().unwrap().id, 1);
+    assert_eq!(sched.running.back().unwrap().id, 2);
+}
+
+#[test]
+fn lowest_priority_running_request_preempts_itself_when_it_cannot_fit() {
+    let config = SchedulerConfig {
+        max_num_batched_tokens: 128,
+        max_num_seqs: 64,
+        enable_mtp: false,
+        mtp_draft_len: 0,
+    };
+    let mut sched = Scheduler::new(config, HybridCoordinator::new(9, BS, false, 0));
+    for id in 1..=2 {
+        assert!(sched.add_request(make_req(id, 8, 10)));
+    }
+    assert_eq!(sched.schedule().scheduled.len(), 2);
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![dummy_output(1), dummy_output(2)],
+        },
+    );
+    // Keep a self-preempted request in waiting rather than immediately
+    // readmitting it during phase 2, so its reset state is observable.
+    sched.config.max_num_seqs = 1;
+    let second = sched.schedule();
+    assert_eq!(second.preempted_request_ids, vec![2]);
+    assert_eq!(
+        second
+            .scheduled
+            .iter()
+            .map(|req| req.request_id)
+            .collect::<Vec<_>>(),
+        vec![1]
+    );
+    assert_eq!(sched.running.front().unwrap().id, 1);
+    let victim = sched.waiting.front().unwrap();
+    assert_eq!(victim.id, 2);
+    assert_eq!(victim.status, crate::RequestStatus::Preempted);
+    assert_eq!(victim.num_computed_tokens, 0);
+    assert_eq!(victim.token_ids, vec![0, 1, 2, 3, 4, 5, 6, 7, 42]);
+    assert!(sched.kv.full_attn_blocks(2).is_empty());
+}
+
+#[test]
+fn multiple_tail_victims_keep_admission_order_and_accepted_history() {
+    let config = SchedulerConfig {
+        max_num_batched_tokens: 128,
+        max_num_seqs: 64,
+        enable_mtp: true,
+        mtp_draft_len: 4,
+    };
+    let mut coordinator = make_coord(4).with_mamba_capacity(16);
+    coordinator.set_speculative_blocks(4);
+    let mut sched = Scheduler::new(config, coordinator);
+    for id in 1..=4 {
+        assert!(sched.add_request(make_req(id, 4, 6)));
+    }
+    let first = sched.schedule();
+    assert_eq!(
+        first
+            .scheduled
+            .iter()
+            .map(|req| req.request_id)
+            .collect::<Vec<_>>(),
+        vec![1, 2, 3]
+    );
+    assert_eq!(sched.waiting.front().unwrap().id, 4);
+    let outputs = first
+        .scheduled
+        .iter()
+        .map(|req| RequestOutput {
+            new_draft_token_ids: vec![90, 91, 92, 93],
+            ..dummy_output(req.request_id)
+        })
+        .collect();
+    apply(&mut sched, WorkerOutput { outputs });
+
+    let second = sched.schedule();
+    assert_eq!(second.preempted_request_ids, vec![3, 2]);
+    assert_eq!(second.scheduled[0].request_id, 1);
+    assert_eq!(
+        sched.waiting.iter().map(|req| req.id).collect::<Vec<_>>(),
+        vec![2, 3, 4]
+    );
+    for req in sched.waiting.iter().take(2) {
+        assert_eq!(req.status, crate::RequestStatus::Preempted);
+        assert_eq!(req.token_ids, vec![0, 1, 2, 3, 42]);
+        assert!(req.draft_token_ids.is_empty());
+        assert_eq!(req.num_computed_tokens, 0);
+    }
+}
+
 // ── MTP rollback ──────────────────────────────────────────────────────────────
 
 #[test]
@@ -390,6 +521,7 @@ fn abort_preempted_request_notifies_worker_once() {
     );
     let next = sched.schedule();
     assert_eq!(next.preempted_request_ids, vec![2]);
+    assert_eq!(next.scheduled[0].request_id, 1);
     apply(
         &mut sched,
         WorkerOutput {

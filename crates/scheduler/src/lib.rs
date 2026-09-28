@@ -187,6 +187,18 @@ impl Scheduler {
         self.running.len()
     }
 
+    fn preempt_request(&mut self, mut req: Request, output: &mut SchedulerOutput) {
+        self.kv.free(req.id);
+        req.num_computed_tokens = 0;
+        req.num_in_flight_tokens = 0;
+        req.draft_token_ids.clear();
+        req.status = RequestStatus::Preempted;
+        output.preempted_request_ids.push(req.id);
+        // Victims come from the tail (youngest first), so pushing each at the
+        // front restores FCFS order ahead of newer requests already waiting.
+        self.waiting.push_front(req);
+    }
+
     // ── main scheduling entry point ───────────────────────────────────────────
 
     /// Produce the next step's batch.
@@ -221,14 +233,25 @@ impl Scheduler {
             }
 
             // Re-allocate for the new tokens (no cache-hit lookup for running reqs).
-            let alloc = self.kv.allocate_slots(
-                &req,
-                (Vec::new(), Vec::new()),
-                0,
-                to_schedule,
-                0,
-                !still_running.is_empty() || !self.running.is_empty(),
-            );
+            let alloc = loop {
+                let result = self.kv.allocate_slots(
+                    &req,
+                    (Vec::new(), Vec::new()),
+                    0,
+                    to_schedule,
+                    0,
+                    !still_running.is_empty() || !self.running.is_empty(),
+                );
+                if result.is_some() {
+                    break result;
+                }
+                // Running requests have no new prefix-hit blocks, so this
+                // failure is capacity pressure rather than same-step deferral.
+                let Some(victim) = self.running.pop_back() else {
+                    break None;
+                };
+                self.preempt_request(victim, &mut output);
+            };
 
             match alloc {
                 Some(_) => {
@@ -257,15 +280,8 @@ impl Scheduler {
                     still_running.push_back(req);
                 }
                 None => {
-                    // Pool exhausted: preempt this request.
-                    self.kv.free(req.id);
-                    req.num_computed_tokens = 0;
-                    req.num_in_flight_tokens = 0;
-                    req.draft_token_ids.clear();
-                    req.status = RequestStatus::Preempted;
-                    output.preempted_request_ids.push(req.id);
-                    // Re-queue at the front so it is retried before new arrivals.
-                    self.waiting.push_front(req);
+                    // The current request is now the last remaining priority.
+                    self.preempt_request(req, &mut output);
                 }
             }
         }

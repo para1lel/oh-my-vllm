@@ -17,7 +17,9 @@ Rust 负责 HTTP 服务、请求调度、已接受 token 历史及逻辑 KV 分�
 ## Rust 模块
 
 - `crates/kv-cache`：共享逻辑块池、链式 hash 前缀、对齐 Mamba checkpoint 和推测预留。两阶段分配在分配新页前先触达复用前缀。
-- `crates/scheduler`：FCFS 等待/运行队列、分块 prefill、token 预算、错峰接纳、重计算抢占和已接受 draft 计数。kv-cache crate 默认使用一个共享池，指定 `--mamba-blocks` 时 FA/GDN 使用独立池（ADR-007）。
+- `crates/scheduler`：FCFS 等待/运行队列、分块 prefill、token 预算、错峰接纳、
+  容量不足时先抢占更晚接纳的运行中请求并重试高优先级请求，以及已接受 draft 计数。kv-cache
+  crate 默认使用一个共享池，指定 `--mamba-blocks` 时 FA/GDN 使用独立池（ADR-007）。
 - `crates/zmq-worker`：CLI、OpenAI 兼容 HTTP API、模型进程生命周期、取消、ZMQ 传输和关联日志。
 
 目标是在一张 B200 上运行 `/data0/shared/Qwen3.8-27B-FP8`。每个逻辑 FA 页包含 784 token，共 16 层 FA、48 层 GDN。保留 CLI 的 `num_gpu_blocks` 容量单位以兼容冻结基线：ready 报告 floor(value/3) 个逻辑块。Python 现在直接按逻辑容量为每层分配 tensor，不再有旧三路物理 stride 或混合布局存储。
