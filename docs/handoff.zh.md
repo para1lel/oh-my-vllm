@@ -361,6 +361,31 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   行宽、Ruff、Clippy 与 hooks 通过。自有 GPU/worker 进程和 socket 已清理。
   PY-04 仍为 **open**：缓存仍在捕获前分配，单个近满形状不能约束所有后期
   捕获；当前完整 GPU、147项正式算子、六项长上下文和12行框架门槛待完成。
+- 经独立复审的 `5772834` 是 PY-03 有界图接纳**候选**，不等于性能验收。
+  target 独占 32 槽；draft/proposal 共享 32 槽，逐出下限为 16/4。
+  新形状要观察四次且衰减访问次数超过最冷可逐出图的两倍才能替换。
+  元数据有界；捕获失败保留旧图，首次失败会丢弃无 owner 的本类池句柄。
+  CUDA 空闲显存低于 4 GiB 时，新捕获改走 eager；CUDA OOM 仍为致命故障。
+  干净 `5772834` 在 B200 UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 的真实图聚焦测试通过 3/3，
+  包括非空捕获失败后换新句柄重试；日志为
+  `/tmp/oh-my-vllm-py03-clean-focused-5772834.log`。候选
+  `scripts/test.sh cpu` 通过 255 项测试及 70 个 subtest（排除 223 项 GPU），
+  日志为 `/tmp/oh-my-vllm-py03-cpu-full-candidate.log`；Rust workspace、fmt、
+  行宽、Ruff、Clippy 和 hooks 均通过。同一干净源码下，仓库外先到先占 shim
+  与 LFU 在 FA 1400/GDN 128、MTP4 batch 4、输入 36832/输出 512、两次
+  预热五次测量后，吞吐中位数为 213.797→214.324 token/s（离散度
+  0.324/0.361%），最大 TTFT 为 7.50258→7.50947 s（离散度
+  0.390/0.693%）；不声称稳定提速。draft/proposal 的预算 eager 次数
+  182/35→63/20，捕获 25/7→30/8，逐出 3/3，近期重捕获为零。日志：
+  `/tmp/oh-my-vllm-py03-{oldmode,lfu}-clean-5772834.log`。早前精确 LRU
+  的 dirty-candidate 诊断只有 208.301 token/s，已拒绝。全模型 FA 2333/
+  GDN 128 诊断在 179080003584 字节 reserved 峰值时驻留 32 个 MTP 图，
+  但捕获前最低空闲显存仍为 11524046848 字节（10.73 GiB），未实际触发
+  4 GiB 门槛；日志：
+  `/tmp/oh-my-vllm-py03-nearfull-final-candidate.log`。自有 GPU 进程均已退出。
+  PY-03 保持 **open/candidate**，待 shape churn、262k、低余量及 12 行
+  框架证据。
 
 后续工作：PY-03/04/06、SRV-08、KRN-06、PY-05/07 与 KRN-10 验收、
 EVD-07，以及当前完整算子/GPU 套件

@@ -458,6 +458,35 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   sockets were cleared. PY-04 remains **open**: caches still precede capture,
   one near-full shape does not bound all later captures, and the current full
   GPU, 147-operator, six-boundary and 12-row framework gates remain pending.
+- Independently reviewed `5772834` is a PY-03 bounded graph-admission
+  **candidate**, not a performance acceptance. Target owns 32 slots; draft
+  and proposal share 32 with 16/4 eviction floors. Four observations and
+  decayed frequency above twice the coldest eligible resident are required
+  for replacement. Metadata is bounded, failed captures keep the old graph,
+  and a first failed capture discards its unowned family pool handle. New
+  captures defer to eager below 4 GiB CUDA free memory; CUDA OOM remains fatal.
+  Clean `5772834` on B200 UUID
+  `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` passed 3/3 focused real
+  graph tests, including nonempty capture failure then new-handle retry;
+  log `/tmp/oh-my-vllm-py03-clean-focused-5772834.log`. Candidate
+  `scripts/test.sh cpu` passed 255 tests/70 subtests (223 GPU deselected),
+  log `/tmp/oh-my-vllm-py03-cpu-full-candidate.log`; Rust workspace, fmt,
+  line width, Ruff, Clippy and hooks passed. With the same clean source,
+  external first-come shim versus LFU, FA 1400/GDN 128 and MTP4 batch 4,
+  input 36832/output 512, two warmups and five measured runs gave median
+  throughput 213.797→214.324 token/s (spreads 0.324/0.361%) and maximum
+  TTFT 7.50258→7.50947 s (spreads 0.390/0.693%); no stable speed gain is
+  claimed. Draft/proposal budget-eager calls fell 182/35→63/20, while
+  captures rose 25/7→30/8, with 3/3 evictions and zero recent recaptures.
+  Logs: `/tmp/oh-my-vllm-py03-{oldmode,lfu}-clean-5772834.log`.
+  Exact LRU was rejected after 208.301 token/s in an earlier dirty-candidate
+  diagnostic. A full-model FA 2333/GDN 128 diagnostic held 32 MTP graphs at
+  179080003584 peak reserved bytes, but minimum observed pre-capture free
+  memory was 11524046848 bytes (10.73 GiB), so the physical 4 GiB gate was
+  not triggered;
+  log `/tmp/oh-my-vllm-py03-nearfull-final-candidate.log`. All owned GPU
+  processes exited. PY-03 remains **open/candidate** pending shape-churn,
+  262k, low-headroom and 12-row framework evidence.
 
 Remaining work: PY-03/04/06, SRV-08, KRN-06, PY-05/07 and KRN-10 acceptance,
 EVD-07, the current full operator/GPU suite, and 12-row framework acceptance.
