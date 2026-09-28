@@ -51,7 +51,7 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   通过。SRV-03 的聚焦 Rust/Python 测试和静态检查也通过。
 - 热路径改动后的当前 12 组框架吞吐和 TTFT **尚未验证**。下文的 2026-09-22
   数值只适用于干净提交 `c36d1c9`。P2 性能决策结束后需重跑全部 12 组。
-  EVD-07 仍为 open，因为六项边界测试仍跳过。审计中的四项“Not verified”风险
+  EVD-07 仍为 open，等待完整、无干扰的六行运行；六项测试已不再跳过。审计中的四项“Not verified”风险
   也尚未关闭。
 - 后续 fixed 状态复核重新打开 SRV-02、KRN-05、PY-01、SCH-01/02/04、
   EVD-01/02/11/12/13 和 MNT-04。已复审的提交 `487f8de` 修复 SRV-02、KRN-05、PY-01、
@@ -147,6 +147,15 @@ CUDA 迁移的原始验收属于历史结果。整库审计修复仍在进行。
   增加守卫后的 decode 重跑通过 2/2。Rust workspace 56/26/17、fmt、行宽、Ruff、
   Clippy 和 hooks 均通过；自有 GPU 进程已退出。当前完整 GPU、147 项正式矩阵和
   12 行框架验收仍待执行。
+- 已独立复审的 `f161b5e` 将 EVD-07 的六项跳过占位测试改为真实的普通/MTP4 GPU
+  batch 1/2/4 用例，并为长上下文 HTTP 脚本增加显式 MTP draft 门槛。CPU 入口通过
+  201 项测试和 67 个 subtest（排除 181 项 GPU 用例）；Rust 56/26/17、fmt、行宽、
+  Ruff、Clippy 和 hooks 均通过。三次干净源码 GPU 收集均被 GPU 排他门槛拒绝：前两次
+  在 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 遇到他人的短 GEMM 作业；
+  第三次在 UUID `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5` 的 MTP4 batch 4
+  前遇到外部多 GPU 作业。第三次完成的五行仅属诊断，不是六行验收。原始日志保留在
+  `/tmp/oh-my-vllm-context-boundary-f161b5e*`，自有 GPU 进程均已退出。完整六行运行
+  和真实长上下文 HTTP smoke 仍待完成。
 
 后续工作：PY-03..07、SRV-08..10、SCH-06/07、KRN-06..10、
 EVD-07、四项未验证风险，以及当前完整算子/GPU 套件

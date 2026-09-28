@@ -57,7 +57,8 @@ Evidence is in [acceptance.md](acceptance.md) and in the
 - Current 12-row framework throughput and TTFT remain **unverified** after
   hot-path changes. The 2026-09-22 values below apply to clean `c36d1c9`.
   Re-run all 12 rows after P2 performance decisions. EVD-07 remains open
-  because its six boundary tests still skip. The four audit risks marked
+  pending a clean, uninterrupted six-row run; its six tests no longer skip.
+  The four audit risks marked
   "Not verified" have not yet been closed.
 - Later fixed-status review reopened SRV-02, KRN-05, PY-01, SCH-01/02/04,
   EVD-01/02/11/12/13 and MNT-04. Reviewed commit `487f8de` repairs SRV-02,
@@ -191,6 +192,19 @@ Evidence is in [acceptance.md](acceptance.md) and in the
   56/26/17, fmt, line width, Ruff, Clippy, and hooks passed; owned GPU
   processes exited. Full current GPU, 147-case formal, and 12-row framework
   acceptance remain pending.
+- Independently reviewed `f161b5e` replaces EVD-07's six skipped boundary
+  placeholders with real ordinary/MTP4 GPU rows at batch 1/2/4, plus an
+  explicit MTP draft gate for the long-context HTTP script. The CPU entry
+  passed 201 tests and 67 subtests (181 GPU cases deselected); Rust 56/26/17,
+  fmt, line width, Ruff, Clippy and hooks passed. Three clean-source GPU
+  collection attempts were rejected by the GPU exclusivity gate: two on
+  UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` during another user's
+  short GEMM jobs, then one on UUID
+  `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5` when an external multi-GPU
+  job started before MTP4 batch 4. The latter completed five diagnostic rows,
+  which are not six-row acceptance. Raw logs remain under
+  `/tmp/oh-my-vllm-context-boundary-f161b5e*`; owned GPU processes exited.
+  A clean six-row run and the real long-context HTTP smoke remain pending.
 
 Remaining work: PY-03..07, SRV-08..10, SCH-06/07, KRN-06..10,
 EVD-07, the four unverified risks, and current
