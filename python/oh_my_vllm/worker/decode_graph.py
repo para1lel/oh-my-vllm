@@ -4,6 +4,7 @@ from dataclasses import fields
 
 import torch
 
+from oh_my_vllm.ir import compile_forward
 from oh_my_vllm.kernels.decode_attention import decode
 from oh_my_vllm.models.qwen import AttentionBatch, Batch, Qwen
 
@@ -12,6 +13,8 @@ class DecodeAttention:
     def __init__(
         self, tables: torch.Tensor, lengths: torch.Tensor, extent: int, workspace=None
     ):
+        from oh_my_vllm.ir.attention import register_plan
+
         self.tables = tables
         self.lengths = lengths
         self.extent = extent
@@ -19,6 +22,7 @@ class DecodeAttention:
         self.starts = None
         self.workspace = workspace
         self.native_metadata = None
+        self._ir_handle = register_plan(self)
 
     def prepare(self) -> None:
         """Translate logical 784-token pages once per target model execution."""
@@ -42,10 +46,44 @@ class DecodeAttention:
         self.native_metadata = subpages, lengths.to(torch.int32), starts
 
     def __call__(self, query: torch.Tensor, cache: torch.Tensor) -> torch.Tensor:
-        if self.first == 0 and self.native_metadata is not None:
+        from oh_my_vllm.ir.attention import (
+            TARGET_NATIVE_DECODE,
+            TARGET_OWNED_DECODE,
+            planned_attention,
+        )
+
+        route = (
+            TARGET_NATIVE_DECODE
+            if self.first == 0 and self.native_metadata is not None
+            else TARGET_OWNED_DECODE
+        )
+        native = self.native_metadata if route == TARGET_NATIVE_DECODE else (None,) * 3
+        return planned_attention(
+            query,
+            cache,
+            self._ir_handle,
+            route,
+            self.tables,
+            self.lengths,
+            *native,
+        )
+
+    def _run(
+        self,
+        query: torch.Tensor,
+        cache: torch.Tensor,
+        tables: torch.Tensor | None = None,
+        lengths: torch.Tensor | None = None,
+        native_tables: torch.Tensor | None = None,
+        native_lengths: torch.Tensor | None = None,
+        native_starts: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if tables is None or lengths is None:
+            raise ValueError("target decode needs explicit tables and lengths")
+        if self.first == 0 and native_tables is not None:
             from flashinfer.decode import trtllm_batch_decode_with_kv_cache
 
-            tables, lengths, starts = self.native_metadata
+            tables, lengths, starts = native_tables, native_lengths, native_starts
             # Every logical page stores 49 K subpages followed by 49 V subpages.
             # Offset views share the same indices; holes are never addressed.
             blocks = cache.view(-1, 16, *cache.shape[-2:])
@@ -66,8 +104,8 @@ class DecodeAttention:
         return decode(
             query,
             cache,
-            self.tables,
-            self.lengths,
+            tables,
+            lengths,
             first=self.first,
             max_tokens=self.extent,
             starts=self.starts,
@@ -93,6 +131,7 @@ class DecodeGraph:
         tables: torch.Tensor,
         extent: int,
         pool=None,
+        compile_model: bool = False,
     ) -> None:
         if batch.prefill_sequences:
             raise ValueError("decode graphs cannot capture prefill")
@@ -103,6 +142,10 @@ class DecodeGraph:
             extent,
             workspace=getattr(batch.attention, "workspace", None),
         )
+        if self.attention.workspace is None:
+            self.attention.workspace = torch.empty(
+                128 << 20, device=tables.device, dtype=torch.uint8
+            )
         self.batch = Batch(
             **{
                 f.name: value.clone() if isinstance(value, torch.Tensor) else value
@@ -138,13 +181,14 @@ class DecodeGraph:
             hidden = model.forward(self.tokens, self.batch, caches)
             return hidden, model.logits(hidden)
 
+        unit = compile_forward(run, unit="target_graph") if compile_model else run
         try:
             # JIT compilation and library initialization must precede capture.
-            run()
+            unit()
             restore()
             torch.cuda.synchronize()
             with torch.cuda.graph(self.graph, pool=pool):
-                self.hidden, self.logits = run()
+                self.hidden, self.logits = unit()
         finally:
             restore()
 
@@ -177,6 +221,7 @@ class DraftGraph:
         extent,
         starts=None,
         pool=None,
+        compile_model: bool = False,
     ):
         self.tokens, self.input_hidden = tokens.clone(), hidden.clone()
         self.attention = DecodeAttention(tables.clone(), batch.positions + 1, extent)
@@ -193,12 +238,13 @@ class DraftGraph:
         def run():
             return model.draft(self.tokens, self.input_hidden, self.batch, cache)
 
+        unit = compile_forward(run, unit="draft_graph") if compile_model else run
         try:
-            run()
+            unit()
             cache[pages, :, offsets] = saved
             torch.cuda.synchronize()
             with torch.cuda.graph(self.graph, pool=pool):
-                self.hidden = run()
+                self.hidden = unit()
         finally:
             cache[pages, :, offsets] = saved
 
@@ -221,7 +267,17 @@ class ProposalGraph:
     """Four greedy proposals with no intermediate device-to-host synchronization."""
 
     @torch.inference_mode()
-    def __init__(self, model, cache, hidden, positions, tables, extent, pool=None):
+    def __init__(
+        self,
+        model,
+        cache,
+        hidden,
+        positions,
+        tables,
+        extent,
+        pool=None,
+        compile_model: bool = False,
+    ):
         self.model, self.cache = model, cache
         self.hidden = hidden.clone()
         self.positions = positions.clone()
@@ -234,6 +290,11 @@ class ProposalGraph:
         offsets = all_positions % 784
         saved = cache[pages, :, offsets].clone()
         self.graph = torch.cuda.CUDAGraph()
+        self.proposal_attentions = []
+        for step in range(1, 4):
+            attention = DecodeAttention(self.tables, self.positions + step + 1, extent)
+            attention.first = 1
+            self.proposal_attentions.append(attention)
 
         def run():
             current = self.hidden
@@ -242,20 +303,21 @@ class ProposalGraph:
             for step in range(1, 4):
                 position = self.positions + step
                 page = self.tables[self.rows, position // 784]
-                attention = DecodeAttention(self.tables, position + 1, extent)
-                attention.first = 1
+                attention = self.proposal_attentions[step - 1]
+                attention.lengths = position + 1
                 batch = AttentionBatch(position, page * 784 + position % 784, attention)
                 current = model.draft(token, current, batch, cache)
                 token = model.logits(current).argmax(-1)
                 outputs.append(token)
             return torch.stack(outputs, -1)
 
+        unit = compile_forward(run, unit="proposal_graph") if compile_model else run
         try:
-            run()
+            unit()
             cache[pages, :, offsets] = saved
             torch.cuda.synchronize()
             with torch.cuda.graph(self.graph, pool=pool):
-                self.tokens = run()
+                self.tokens = unit()
         finally:
             cache[pages, :, offsets] = saved
 

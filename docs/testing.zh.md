@@ -281,3 +281,18 @@ scripts/with-env.sh pre-commit run rust-line-width --all-files
 
 另有一个硬宽度 hook，以相同限制（展开 tab）检查宏、注释和字符串字面量，rustfmt 可能会让这些内容保持超长。
 将 `json!` 主体拆分为字段，并对长字面量使用 `concat!`。
+
+## 语义 IR 与编译前向（REQ-IR-001）
+
+使用固定 PyTorch 环境和空闲 B200 运行算子契约、静态覆盖和真实模型 GPU 单元测试：
+
+```bash
+scripts/with-env.sh pytest -q tests/test_ir_core.py tests/test_ir_coverage.py
+scripts/with-gpu.sh scripts/with-env.sh env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+  python -m pytest -q tests/test_ir_*.py
+scripts/test.sh full
+```
+
+`test_ir_core.py` 检查 schema/修改契约一致、provider 优先级、仅静态元数据参与能力判断、fake 输出验证、禁止静默回退和 fullgraph lowering。`test_ir_*` 算子测试比较参考与 provider，包括缓存/状态写入。`test_ir_forward_units.py` 加载真实 27B 模型，执行编译后的 prefill，并在手工 CUDA Graph 中捕获/重放编译后的 target、MTP draft 与 proposal 单元。测试比较 eager/compiled 输出及 prefill 接续 decode 时写入的 FA/GDN 状态，并在重放时变更 draft/proposal 位置与页表。较小的 attention fixture 在重放时变更原生 decode 页表。`test_ir_coverage.py` 检查必需调用点清单及经审查的低层导入例外。
+
+完成还须通过原有六个上下文边界用例、正式 CUDA/TileLang 算子对比及 12 组框架测试，并遵守已有预热、重复、极差、吞吐和 TTFT 规则。单纯编译测试成功不等于性能验收。

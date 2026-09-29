@@ -14,12 +14,14 @@ import torch
 import torch.nn.functional as F
 from safetensors import safe_open
 
-from oh_my_vllm.kernels import attention, fp8, gdn
-from oh_my_vllm.kernels.attention_prepare import prepare_attention
-from oh_my_vllm.kernels.convolution import causal_conv
-from oh_my_vllm.kernels.elementwise import delta_gates, silu_mul
+from oh_my_vllm.ir import fp8
+from oh_my_vllm.ir.gdn_prefill import gdn_prefill
+from oh_my_vllm.ir.logits import logits_gemm
+from oh_my_vllm.ir.pointwise import add_rms_norm, delta_gates, rms_norm, silu_mul
+from oh_my_vllm.ir.recurrent import causal_conv, gdn_recurrent
+from oh_my_vllm.ir.state import prepare_attention
+from oh_my_vllm.kernels import attention
 from oh_my_vllm.kernels.mtp_attention import MTPAttention
-from oh_my_vllm.kernels.normalization import add_rms_norm, rms_norm
 
 LayerCache = torch.Tensor | tuple[torch.Tensor, torch.Tensor]
 
@@ -112,13 +114,13 @@ class Batch(AttentionBatch):
         n, t = self.prefill_sequences, self.prefill_tokens
         if n:
             initial = pool.index_select(0, self.state_reads[:n]).float()
-            out, states = gdn.prefill(
+            out, states = gdn_prefill(
                 q[:t], k[:t], v[:t], decay[:t], beta[:t], initial, self.starts[: n + 1]
             )
             pool.index_copy_(0, self.final_state_writes[:n], states.to(pool.dtype))
             results.append(out)
         if n < self.state_reads.numel():
-            out = gdn.recurrent(
+            out = gdn_recurrent(
                 q[t:],
                 k[t:],
                 v[t:],
@@ -294,9 +296,7 @@ class Qwen:
 
     def logits(self, hidden: torch.Tensor) -> torch.Tensor:
         if hidden.shape[0] <= 32:
-            from flashinfer.gemm import mm_bf16
-
-            return mm_bf16(hidden, self.head.T, backend="cute-dsl").float()
+            return logits_gemm(hidden, self.head)
         return F.linear(hidden, self.head).float()
 
     def draft(

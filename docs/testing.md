@@ -320,3 +320,31 @@ scripts/with-env.sh pre-commit run rust-line-width --all-files
 A separate hard-width hook applies the same limit, with tabs expanded, to
 macros, comments and string literals, which rustfmt may leave long. Split `json!`
 bodies into fields and use `concat!` for long literals.
+
+## Semantic IR and compiled forward (REQ-IR-001)
+
+Run the operator contract, static coverage and real-model GPU unit tests with
+the pinned PyTorch environment and an idle B200:
+
+```bash
+scripts/with-env.sh pytest -q tests/test_ir_core.py tests/test_ir_coverage.py
+scripts/with-gpu.sh scripts/with-env.sh env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+  python -m pytest -q tests/test_ir_*.py
+scripts/test.sh full
+```
+
+`test_ir_core.py` checks schema/mutation matching, provider priorities,
+static-only capability decisions, fake output validation, no silent fallback
+and fullgraph lowering. The `test_ir_*` operator tests compare references and
+providers, including cache/state writes. `test_ir_forward_units.py` loads the
+real 27B model and exercises compiled prefill plus compiled target, MTP draft
+and proposal units inside manual CUDA Graph capture/replay. It compares eager
+and compiled outputs and written FA/GDN state across prefill-to-decode, then
+changes draft/proposal positions and page tables on replay. A smaller attention
+fixture changes the native decode page table on replay. `test_ir_coverage.py` checks
+the required call-site inventory and reviewed low-level import exceptions.
+
+Completion additionally requires the unchanged six context-boundary cases,
+formal CUDA/TileLang operator comparison and twelve framework rows under the
+existing warmup, repetition, spread, throughput and TTFT rules. A successful
+compile test by itself is not performance acceptance.

@@ -2,7 +2,11 @@
 
 [English](acceptance.md)。agent 以英文原文为准。
 
-## 当前干净源码验收 — 2026-09-29
+## 语义 IR 候选 — 正式门禁待运行
+
+候选工作树通过 544 项 B200 GPU 测试（含全部六组最大上下文用例）、70 个子测试及 303 项 CPU 测试。完整 GPU 日志为 `/tmp/oh-my-vllm-ir-full-gpu-green.log`，CPU 日志为 `/tmp/oh-my-vllm-ir-cpu-verified.log`。干净提交上的正式算子和 12 行框架验收仍待运行；下方历史结果不能证明语义 IR 候选的性能。
+
+## 以前的干净源码验收 — 2026-09-29
 
 干净源码 `e3c42e0` 在 B200 UUID
 `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5` 上通过

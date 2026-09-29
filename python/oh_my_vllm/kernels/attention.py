@@ -43,10 +43,13 @@ class PagedAttention:
     def __init__(self, device: str | torch.device = "cuda") -> None:
         from flashinfer import BatchPrefillWithPagedKVCacheWrapper
 
+        from oh_my_vllm.ir.attention import register_plan
+
         self.workspace = torch.empty(128 << 20, device=device, dtype=torch.uint8)
         self.wrapper = BatchPrefillWithPagedKVCacheWrapper(
             self.workspace, "NHD", backend="fa2"
         )
+        self._ir_handle = register_plan(self)
 
     def plan(
         self,
@@ -61,6 +64,7 @@ class PagedAttention:
         starts, page_starts, pages, last_page_lengths = (
             tensor.cpu() for tensor in (starts, page_starts, pages, last_page_lengths)
         )
+        self._ir_reference_plan = starts, page_starts, pages, last_page_lengths
         lengths_q = starts[1:] - starts[:-1]
         self.ragged = int(lengths_q.max()) >= 1024
         lengths_kv = (page_starts[1:] - page_starts[:-1] - 1) * 784
@@ -129,6 +133,20 @@ class PagedAttention:
         )
 
     def __call__(self, query: torch.Tensor, cache: torch.Tensor) -> torch.Tensor:
+        from oh_my_vllm.ir.attention import PAGED_PREFILL, planned_attention
+
+        return planned_attention(query, cache, self._ir_handle, PAGED_PREFILL)
+
+    def _run(
+        self,
+        query: torch.Tensor,
+        cache: torch.Tensor,
+        tables: torch.Tensor | None = None,
+        lengths: torch.Tensor | None = None,
+        native_tables: torch.Tensor | None = None,
+        native_lengths: torch.Tensor | None = None,
+        native_starts: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         if self.native:
             from flashinfer.prefill import trtllm_batch_context_with_kv_cache
 

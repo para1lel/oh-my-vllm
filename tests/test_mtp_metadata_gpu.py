@@ -28,7 +28,9 @@ def test_mtp_eager_plan_uses_extent_and_device_row_expansion():
 
     query = torch.empty(5, 24, 256, device="cuda", dtype=torch.bfloat16)
     cache = torch.empty(1, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
-    with patch("oh_my_vllm.kernels.mtp_attention.decode") as decode:
+    with patch(
+        "oh_my_vllm.kernels.mtp_attention.decode", return_value=torch.empty_like(query)
+    ) as decode:
         attention(query, cache)
     assert decode.call_args.kwargs["max_tokens"] == 36864
 

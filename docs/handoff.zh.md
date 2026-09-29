@@ -2,7 +2,15 @@
 
 [English](handoff.md)。agent 以英文原文为准。
 
-## 当前状态
+## 语义 IR 候选检查点（2026-09-29）
+
+REQ-IR-001 现通过 Python `torch.library` 语义算子管理 Qwen/MTP 模型调用的项目自有 CUDA 和关键 FlashInfer 入口。生产默认以 fullgraph `torch.compile` 编译 prefill、target decode、MTP draft 与 proposal，并由现有手工 CUDA Graph 包住后三类单元。provider 只按静态元数据选择；缓存修改具有显式 schema，PyTorch 参考实现须显式选为调试 provider。实现包含受检查的 18 个调用点清单，以及保守的 BF16 SiLU/FP8 图改写。真实 27B 的 eager/compiled 测试比较 prefill 接续 decode 的输出和写入缓存，并验证变化的 MTP 重放元数据。不自动回退到 eager 或参考实现。
+
+候选工作树通过 `scripts/test.sh full`：**544 项测试、70 个子测试**，包含全部六组 258048+4096 边界运行；B200 UUID 为 `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`（日志 `/tmp/oh-my-vllm-ir-full-gpu-green.log`）。`scripts/test.sh cpu` 通过 **303 项测试、70 个子测试**（`/tmp/oh-my-vllm-ir-cpu-verified.log`）。Ruff、Rust workspace 测试、fmt、行宽及 Clippy 均通过。只读子代理复审未发现剩余 P1/P2 正确性问题。第一次完整 GPU 运行因所选 GPU 上的无关进程而无效；第二次通过 543/544 项并暴露旧 mock 返回非 Tensor 的问题；修复后定向测试和最终完整套件均通过。任务启动的 GPU 进程已退出。
+
+REQ-IR-001 标记验收前，还须在干净提交上执行正式 147 项 CUDA/TileLang 对比和 12 行框架门禁。4096 的 Dynamo 重编译上限及按单元的编译警告不证明长期形状切换的缓存占用有界；已测工作集之外的逐出/重捕获压力仍是开放容量限制。没有证明安全的临时目的地时不启用 activation 捐赠。未加入 vLLM 运行时依赖。
+
+## 以前已验收的状态
 
 CUDA 迁移在 `c36d1c9` 的原始验收属于历史结果。整库审计修复的干净源码
 `e3c42e0` 现已通过完整 B200 套件、147 项正式算子矩阵，以及经一次高离散度

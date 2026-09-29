@@ -170,3 +170,13 @@ Responses 支持完整历史、存储型响应的 `previous_response_id`、查�
 针对不同实现路径/配置，静态推导每个算子在 12 组工作负载中的最大合法调用，合并相同配置，不做动态 shape 采集。仅在实现路径不同时区分 prefill/decode 或普通/MTP；不将实际不能同时出现的各维度最大值拼成测试。所有去重配置均须稳定超过冻结 TileLang，不设最低提速百分比。允许比较等价融合链，包含所有必要复制和归约。至少三轮独立交错成对计时，每轮 CUDA 中位耗时更低，且成对节省耗时的单侧 95% 置信下界为正；无法确定的差异不算通过。不新增相对 TileLang 的端到端性能比例门槛。
 
 项目开发工具集成 TileFoundry 语义/静态分析、CUDA Event/Graph 计时和 Nsight/编译器指标，明确区分估计与实测。硬件分析独立于验收计时。先检查计数器权限，若缺失则保留可用证据并报告，不豁免性能门槛。TileFoundry 仅为开发依赖。正式配置、测试程序和汇总证据入库，临时调优及原始 trace 留在仓库外。见 cuda-development.zh.md。
+
+## REQ-IR-001 — 算子语义 DSL 与模型前向编译（2026-09-29）
+
+**状态：** 实现与验收进行中。
+
+使用 Python/PyTorch DSL 管理 Qwen target 与 MTP 模型调用的全部项目自有 CUDA 算子和关键 FlashInfer 算子的语义及实现选择。普通 PyTorch 运算，包括 `F.linear`、embedding、reshape 和简单逐元素表达式，不列入算子清单。每个语义算子具备可执行的 PyTorch 参考、shape/dtype 契约、显式修改 schema，并仅根据静态阶段、shape、dtype、layout 和设备元数据选择已注册 provider。provider 失败必须报错。PyTorch 参考只能显式选为调试 provider；生产不能自动回退到参考或 eager 执行。
+
+以 `torch.compile(fullgraph=True)` 编译 prefill、target decode、MTP draft 与四步 proposal 的 GPU 前向单元；自有和第三方语义算子在 provider lowering 前保留有 schema 的图节点。主机调度、FlashInfer plan、缓存分配和 Rust/ZMQ 留在编译单元外。保留现有手工 target/draft/proposal CUDA Graph 缓存、捕获恢复和显存保护；手工图包含已编译单元，不启用编译器的 CUDA Graph 管理。eager 仅是显式调试模式。持久 KV/GDN 写入须保持有序副作用。activation 捐赠必须指明已证明安全的临时张量，不能捐赠持久缓存。基础与融合语义算子可以并存；图改写须有等价性测试。维护带检查的调用点清单，并逐项说明低层入口例外理由，公开 provider 选择记录。
+
+**验收：** 现有正确性套件、六个最大上下文用例、正式 CUDA 对冻结 TileLang 算子门禁，以及全部 12 组 REQ-PERF-001/002 均通过。每组维持吞吐 95%、TTFT 110% 和极差 10% 规则。不新增编译提速百分比要求。生产模型/GPU 集成测试必须覆盖四类 fullgraph 单元和手工图重放，包括变化的 decode 元数据。

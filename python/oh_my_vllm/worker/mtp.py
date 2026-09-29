@@ -12,6 +12,7 @@ from itertools import pairwise
 
 import torch
 
+from oh_my_vllm.ir import compile_forward
 from oh_my_vllm.kernels.mtp_attention import MTPAttention
 from oh_my_vllm.models.qwen import AttentionBatch, Qwen
 from oh_my_vllm.worker.batch_plan import BLOCK, PlannedRequest
@@ -31,6 +32,20 @@ class MTP:
         if model.mtp is None:
             raise ValueError("MTP weights were not loaded")
         self.model = model
+        self.compile_model = (
+            isinstance(model, Qwen)
+            and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1"
+        )
+        self.draft_unit = (
+            compile_forward(model.draft, unit="mtp_draft")
+            if self.compile_model
+            else getattr(model, "draft", None)
+        )
+        self.logits_unit = (
+            compile_forward(model.logits, unit="model_logits")
+            if self.compile_model
+            else getattr(model, "logits", None)
+        )
         self.device = model.embedding.device
         self.max_tokens = max_tokens
         self.cache = torch.zeros(
@@ -137,6 +152,7 @@ class MTP:
                             extent,
                             starts_tensor,
                             pool=self.draft_graph_pool,
+                            compile_model=self.compile_model,
                         )
                     except Exception:
                         if not self.graph_cache.has_family("draft"):
@@ -149,7 +165,7 @@ class MTP:
                         token_tensor, graph_hidden, batch, tables_tensor, starts_tensor
                     )
         self.attention.plan(starts, tables, positions)
-        return self.model.draft(token_tensor, hidden, batch, self.cache)
+        return self.draft_unit(token_tensor, hidden, batch, self.cache)
 
     def _proposal_graph(self, hidden: torch.Tensor, eligible) -> list[list[int]] | None:
         # All three subsequent writes must fit Rust's private allocated pages.
@@ -189,6 +205,7 @@ class MTP:
                     tables,
                     extent,
                     pool=self.proposal_graph_pool,
+                    compile_model=self.compile_model,
                 )
             except Exception:
                 if not self.graph_cache.has_family("proposal"):
@@ -272,7 +289,7 @@ class MTP:
             for (rid, _, _, _), row in zip(eligible, graph_tokens, strict=True):
                 proposals[rid] = row
             return proposals
-        next_tokens = self.model.logits(last_hidden).argmax(-1).tolist()
+        next_tokens = self.logits_unit(last_hidden).argmax(-1).tolist()
         for (rid, _, _, _), token in zip(eligible, next_tokens, strict=True):
             proposals[rid].append(token)
         for step in range(1, 4):
@@ -296,7 +313,7 @@ class MTP:
                 tables,
                 positions,
             )
-            next_tokens = self.model.logits(last_hidden).argmax(-1).tolist()
+            next_tokens = self.logits_unit(last_hidden).argmax(-1).tolist()
             for (rid, _, _, _), token in zip(eligible, next_tokens, strict=True):
                 proposals[rid].append(token)
         return proposals

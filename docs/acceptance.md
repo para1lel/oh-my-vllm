@@ -1,6 +1,15 @@
 # Acceptance evidence
 
-## Current clean-source acceptance — 2026-09-29
+## Semantic IR candidate — formal gates pending
+
+The candidate working tree passes 544 B200 GPU tests (including all six
+maximum-context cases), 70 subtests and 303 CPU tests. The full GPU log is
+`/tmp/oh-my-vllm-ir-full-gpu-green.log`; CPU log is
+`/tmp/oh-my-vllm-ir-cpu-verified.log`. Formal operator and twelve-row
+framework acceptance on a clean commit are pending; the historical results
+below do not establish performance for the semantic IR candidate.
+
+## Previous clean-source acceptance — 2026-09-29
 
 Clean source `e3c42e0` passed the [full 147-case formal operator
 matrix](../bench/baseline/2026-09-29-audit-final-operators.json) on B200 UUID

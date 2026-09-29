@@ -1,6 +1,36 @@
 # Handoff — 2026-09-29
 
-## Current state
+## Semantic IR candidate checkpoint (2026-09-29)
+
+REQ-IR-001 now routes the Qwen/MTP model's owned CUDA and key FlashInfer calls
+through Python `torch.library` semantic operators. Production uses fullgraph
+`torch.compile` for prefill, target decode, MTP draft and proposal, with the
+existing manual CUDA Graphs around the latter three. Static metadata selects
+providers; cache mutations have explicit schemas and the PyTorch reference
+requires an explicit debug selection. The checked 18-site inventory and a
+conservative BF16 SiLU/FP8 graph rewrite are included. Eager/compiled 27B
+tests compare outputs and written caches across prefill-to-decode and changed
+MTP replay metadata. There is no automatic eager/reference fallback.
+
+The candidate working tree passed `scripts/test.sh full`: **544 passed, 70
+subtests**, including all six 258048+4096 boundary runs, on B200 UUID
+`GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` (log
+`/tmp/oh-my-vllm-ir-full-gpu-green.log`). `scripts/test.sh cpu` passed
+**303 tests, 70 subtests** (`/tmp/oh-my-vllm-ir-cpu-verified.log`). Ruff,
+Rust workspace tests, fmt, line width and Clippy passed. A read-only
+sub-agent review found no remaining P1/P2 correctness issue. The first full
+GPU attempt was invalidated by an unrelated process on the selected GPU;
+the second passed 543/544 and exposed an old mock returning a non-Tensor;
+the fixed test and the final full suite pass. Owned GPU processes exited.
+
+Formal 147-case CUDA/TileLang and twelve-row framework acceptance must run
+from a clean commit before REQ-IR-001 can be marked accepted. The 4096 Dynamo
+recompile limits and per-unit compilation warnings do not prove bounded
+long-lived shape churn; eviction/recapture pressure beyond the tested workset
+remains an open capacity limit. No activation donation is enabled without a
+proven temporary destination. No vLLM runtime dependency was added.
+
+## Previous accepted state
 
 The CUDA migration's original `c36d1c9` acceptance is historical. The
 whole-repository audit remediation source at clean `e3c42e0` now passes the

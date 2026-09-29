@@ -92,3 +92,13 @@ target decode 图把现有 784-token 页作为 49 个 16-token 子页提供给�
 ## CUDA 后端与冻结对照
 
 自有 kernel 工厂支持显式的进程级后端选择。冻结 TileLang 实现位于 kernels/tilelang_reference，并记录源码清单。原生 CUDA 使用独立 TVM FFI 和调用方 CUDA stream，缺失入口明确报错。算子、框架和功能验收通过后，默认使用 CUDA；启动前设置 OH_MY_VLLM_KERNEL_BACKEND=tilelang 可选择冻结对照。运行时身份使用同一进程级选择。TileFoundry 仍仅用于开发。
+
+## 语义 IR 与编译前向单元
+
+`python/oh_my_vllm/ir` 为项目自有 CUDA 和关键 FlashInfer 模型入口逐个注册 `torch.library` 语义算子。原生 PyTorch 实现定义参考语义；fake 实现定义输出 shape/dtype；custom-op schema 标明修改的缓存/状态参数。生产 provider 是独立注册的 custom op。选择仅使用 shape、stride、dtype、设备及固定 route 元数据，不读取张量内容。优先级在首次使用后冻结；不支持时直接报错，不自动选择参考实现。选择日志按静态输入键记录 eager 与 compile 决策；`compiled_graph_counts()` 按前向单元记录成功编译次数。`coverage.py` 列出模型调用点及低层导入例外。
+
+`compile_forward` 以 `fullgraph=True` 跟踪完整 GPU 单元。自定义 backend 将每个语义 FX 节点改写为 schema 匹配的已选 provider，检查 fake 输出元数据，拒绝残留语义节点，再调用 Inductor。受限适配层使用 PyTorch 2.14.0 的 FakeTensor、FX 元数据与 backend lookup API；兼容性测试保护此固定版本。模型 target prefill 与非图 decode 调用已编译的 `Qwen.forward` 和 `Qwen.logits`。target、draft、proposal CUDA Graph 构造函数在捕获前预热编译后的完整前向闭包。手工图的显存池、事务式缓存恢复与低余量保护仍是权威机制。`OH_MY_VLLM_ENFORCE_EAGER=1` 显式选择 eager 模型调用并禁用手工图。
+
+attention plan 留在主机。一个存活的 CPU plan handle 为不透明语义 attention 节点标识已计划的 wrapper；执行所需的 route、逻辑页表、长度及原生子页元数据作为显式输入。target native decode 的转换仍在手工图捕获内，因此重放可读取变化后的表/长度缓冲区。KV prepare 与 recurrent 算子声明缓存修改。GDN prefill 返回末状态，供有序 `index_copy_` 写回；主机分配器继续拥有持久存储。DSL 将基础 FP8 quantization 与融合 FP8 linear/SiLU quantization 分别建模。
+
+后期 FX pass 仅在相邻、单次使用、BF16 输入且两个生产 provider 一致时，将 `silu_mul -> fp8_linear` 链改写为融合算子，并以精确输出等价测试验证。当前没有可证明安全的 activation 捐赠，持久缓存始终不能捐赠。适配层关闭 Inductor 的 CUDA Graph 管理，并将固定版本的两个 Dynamo 重编译上限提高至 4096。这只是失败边界，不证明无限形状切换下编译缓存占用有界。每个前向单元每成功编译 256 次发出警告；手工图缓存记录捕获、逐出和分配器增量。`F.linear` 与 sampling 留在 IR 外。

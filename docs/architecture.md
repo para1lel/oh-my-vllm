@@ -263,3 +263,45 @@ native entries fail explicitly. CUDA is the default after operator/framework and
 feature acceptance; select OH_MY_VLLM_KERNEL_BACKEND=tilelang before startup for
 the frozen reference. Runtime identity uses the same process-level selection.
 TileFoundry stays development-only.
+
+## Semantic IR and compiled forward units
+
+`python/oh_my_vllm/ir` registers one `torch.library` semantic op per owned CUDA
+or key FlashInfer model entry. Its native PyTorch implementation defines the
+reference semantics; fake implementations define output shape/dtype, while the
+custom-op schema names mutated cache/state arguments. Production providers are
+independent registered custom ops. Selection evaluates shape, stride, dtype,
+device and fixed route metadata, never tensor contents. Priorities freeze when
+first used; an unsupported provider raises instead of selecting the reference.
+The selection log records eager and compile decisions by static input key;
+`compiled_graph_counts()` records successful compilations by forward unit.
+`coverage.py` lists model call sites and explicit low-level import exceptions.
+
+`compile_forward` traces an entire GPU unit with `fullgraph=True`. Its custom
+backend rewrites each semantic FX node to a schema-matched selected provider,
+checks fake output metadata, rejects remaining semantic nodes, then calls
+Inductor. The bounded adapter uses PyTorch 2.14.0's FakeTensor, FX metadata and
+backend lookup APIs; compatibility tests gate that pinned version. Model target
+prefill and non-graph decode call compiled `Qwen.forward` and `Qwen.logits`.
+Target, draft and proposal CUDA Graph constructors warm up their compiled full
+forward closures before capture. Manual graph memory pools, transactional cache
+restore and low-headroom guards remain authoritative. `OH_MY_VLLM_ENFORCE_EAGER=1`
+explicitly selects eager model calls and disables manual graph use.
+
+Attention plans stay on the host. A live CPU plan handle identifies the planned
+wrapper for an opaque semantic attention node; route, logical page tables,
+lengths and native subpage metadata needed at execution are explicit inputs.
+The target native decode translation remains inside manual graph capture, so
+changed table/length buffers affect replay. KV preparation and recurrent ops
+declare cache mutation. GDN prefill returns final states for an ordered
+`index_copy_`; the host allocator retains ownership of persistent storage.
+The DSL includes base FP8 quantization and fused FP8 linear/SiLU quantization
+as separate semantic operations. The late FX pass rewrites an adjacent,
+single-use BF16 `silu_mul -> fp8_linear` chain only when both production
+providers agree, after exact-output equivalence testing. No current activation
+is donated; persistent cache storage is never eligible. The adapter disables
+Inductor CUDA Graph management and raises both version-pinned Dynamo recompile
+limits to 4096. This is a failure bound, not proof of bounded compiler memory
+under unlimited shape churn. The per-unit count warns every 256 compilations;
+the manual graph cache records capture/eviction and allocator deltas. `F.linear`
+and sampling remain outside IR.

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import torch
 
+from oh_my_vllm.ir import compile_forward
 from oh_my_vllm.kernels.attention import PagedAttention
 from oh_my_vllm.models.qwen import Batch, Qwen
 from oh_my_vllm.worker.batch_plan import BLOCK, plan_request, validate_batch
@@ -71,6 +72,8 @@ class OhMyVllmWorker:
         self.sources: dict[int, int] = {}
         self.computed: dict[int, int] = {}
         self.serving = None
+        self.forward_unit = None
+        self.logits_unit = None
 
     def init_device(self) -> None:
         logger.info("Independent runtime", extra={"fields": identity()})
@@ -79,6 +82,14 @@ class OhMyVllmWorker:
     @torch.inference_mode()
     def load_model(self) -> None:
         self.model = Qwen(self.config.model, mtp=bool(self.config.speculative_tokens))
+        if os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") == "1":
+            self.forward_unit = self.model.forward
+            self.logits_unit = self.model.logits
+        else:
+            self.forward_unit = compile_forward(
+                self.model.forward, unit="model_forward"
+            )
+            self.logits_unit = compile_forward(self.model.logits, unit="model_logits")
 
     @torch.inference_mode()
     def initialize_cache(self) -> None:
@@ -332,6 +343,7 @@ class OhMyVllmWorker:
                         tables,
                         extent,
                         pool=self.graph_pool,
+                        compile_model=os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1",
                     )
                 except Exception:
                     if not self.graph_cache.has_family("target"):
@@ -352,14 +364,14 @@ class OhMyVllmWorker:
             else:
                 hidden, graph_logits = graph.replay(token_tensor, batch, tables)
         if graph_logits is None:
-            hidden = self.model.forward(token_tensor, batch, self.caches)
+            hidden = self.forward_unit(token_tensor, batch, self.caches)
         selected = [
             starts[i] + row for i, p in enumerate(plans) for row in p.sample_indices
         ]
         logits = None
         if selected:
             if graph_logits is None:
-                logits = self.model.logits(hidden[selected])
+                logits = self.logits_unit(hidden[selected])
             elif selected == list(range(len(ids))):
                 logits = graph_logits
             else:

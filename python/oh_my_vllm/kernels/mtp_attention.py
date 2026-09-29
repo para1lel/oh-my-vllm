@@ -12,11 +12,14 @@ class MTPAttention:
     def __init__(self, max_tokens: int) -> None:
         from flashinfer import BatchPrefillWithRaggedKVCacheWrapper
 
+        from oh_my_vllm.ir.attention import register_plan
+
         self.max_tokens = max_tokens
         self.workspace = torch.empty(128 << 20, device="cuda", dtype=torch.uint8)
         self.wrapper = BatchPrefillWithRaggedKVCacheWrapper(
             self.workspace, "NHD", backend="fa2"
         )
+        self._ir_handle = register_plan(self)
 
     def plan(
         self, starts: list[int], pages: list[list[int]], positions: list[int]
@@ -26,6 +29,7 @@ class MTPAttention:
             raise ValueError("MTP attention requires nonempty sequences")
         if starts[0] != 0 or starts[-1] != len(positions):
             raise ValueError("MTP query offsets do not match positions")
+        self._ir_reference_plan = starts, pages, positions
         ends = []
         for i, count in enumerate(counts):
             query = positions[starts[i] : starts[i + 1]]
@@ -75,12 +79,35 @@ class MTPAttention:
             )
 
     def __call__(self, query: torch.Tensor, cache: torch.Tensor) -> torch.Tensor:
+        from oh_my_vllm.ir.attention import (
+            MTP_DECODE,
+            MTP_PREFILL,
+            planned_attention,
+        )
+
+        route = MTP_DECODE if self.decode_mode else MTP_PREFILL
+        tables = self.tables if self.decode_mode else None
+        lengths = self.lengths if self.decode_mode else None
+        return planned_attention(query, cache, self._ir_handle, route, tables, lengths)
+
+    def _run(
+        self,
+        query: torch.Tensor,
+        cache: torch.Tensor,
+        tables: torch.Tensor | None = None,
+        lengths: torch.Tensor | None = None,
+        native_tables: torch.Tensor | None = None,
+        native_lengths: torch.Tensor | None = None,
+        native_starts: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         if self.decode_mode:
+            if tables is None or lengths is None:
+                raise ValueError("MTP decode needs explicit tables and lengths")
             return decode(
                 query,
                 cache,
-                self.tables,
-                self.lengths,
+                tables,
+                lengths,
                 first=1,
                 max_tokens=self.extent,
             )

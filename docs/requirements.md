@@ -335,3 +335,37 @@ permissions first; retain available evidence and report missing counters without
 waiving performance gates. TileFoundry remains development-only. Retain formal
 case definitions, harness and summarized evidence; temporary tuning and raw traces
 stay outside the repository. See cuda-development.md.
+
+## REQ-IR-001 — Semantic operator DSL and compiled model forward (2026-09-29)
+
+**Status:** implementation and acceptance in progress.
+
+Use a Python/PyTorch DSL to own the semantics and implementation selection of
+every project-owned CUDA and key FlashInfer operator called by the Qwen target
+or MTP model. Ordinary PyTorch operations, including `F.linear`, embedding,
+reshapes and simple elementwise expressions, are outside this operator inventory.
+Each semantic operation has an executable PyTorch reference, a shape/dtype
+contract, an explicit mutation schema, and registered providers selected only
+from static phase, shape, dtype, layout and device metadata. A provider failure
+is an error. The PyTorch reference is available only as an explicitly selected
+debug provider; production never falls back to it or to eager execution.
+
+Compile the prefill, target decode, MTP draft and four-step proposal GPU forward
+units with `torch.compile(fullgraph=True)`, retaining own and third-party
+semantic operators as schema-bearing nodes until provider lowering. Host
+scheduling, FlashInfer planning, cache allocation and Rust/ZMQ remain outside
+these units. Preserve the existing manual target/draft/proposal CUDA Graph
+cache, capture restoration and memory guard; the manual graphs contain compiled
+units, without compiler-managed CUDA Graphs. Eager is an explicit debug mode.
+Persistent KV/GDN writes must remain ordered effects. Any activation donation
+must name a proven temporary; persistent caches cannot be donated. Fused and
+base semantic operations may coexist, and graph rewrites require equivalence
+tests. Keep a checked call-site inventory with a reason for each low-level
+exception and observable provider selections.
+
+**Acceptance:** the existing correctness suite, six maximum-context cases,
+formal CUDA-vs-frozen-TileLang operator gate, and all twelve REQ-PERF-001/002
+rows pass. Each row retains the existing 95% throughput, 110% TTFT and 10%
+spread rules. No new compile-speedup percentage is required. A production
+model/GPU integration test must exercise all four fullgraph units and manual
+graph replay, including changed decode metadata.
