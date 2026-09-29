@@ -1,13 +1,59 @@
 # Acceptance evidence
 
-## Semantic IR candidate — formal gates pending
+## Semantic IR acceptance — 2026-09-29
 
-The candidate working tree passes 544 B200 GPU tests (including all six
-maximum-context cases), 70 subtests and 303 CPU tests. The full GPU log is
-`/tmp/oh-my-vllm-ir-full-gpu-green.log`; CPU log is
-`/tmp/oh-my-vllm-ir-cpu-verified.log`. Formal operator and twelve-row
-framework acceptance on a clean commit are pending; the historical results
-below do not establish performance for the semantic IR candidate.
+Clean commit `619c9d9` passes 544 B200 GPU tests (including all six
+258048+4096 maximum-context cases), 70 subtests and 303 CPU tests. The full
+GPU log is `/tmp/oh-my-vllm-ir-full-gpu-green.log`; the CPU log is
+`/tmp/oh-my-vllm-ir-cpu-verified.log`. The real-model tests exercise compiled
+prefill, target decode, MTP draft and proposal, including manual CUDA Graph
+replay with changed metadata.
+
+The [147-case formal operator matrix](../bench/baseline/2026-09-29-ir-operators.json)
+passes output verification and the frozen TileLang comparison on B200 UUID
+`GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`. Every case has three warm
+rounds of 20 alternating pairs and a positive one-sided 95% gain bound; the
+smallest bound is `0.0000036639670530955112 ms`. The summary records clean
+source and loaded CUDA module identity. Raw
+`/tmp/oh-my-vllm-ir-formal-619c9d9.json` has SHA-256
+`c6cdce051ea8fb50ec2e0adecde2ff0d132bd78456f829d14a3a3f49db3a5ab1`.
+
+The same source passes all [12 framework rows](../bench/baseline/2026-09-29-ir-framework.json)
+against the frozen 2026-09-22 EngineCore baseline. Every accepted row has two
+complete warmups and five measured repetitions, no preemption, throughput at
+least 95%, TTFT at most 110%, both spreads at most 10%, and a passing
+steady-state log/cache audit. Nine rows used B200 UUID
+`GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`; three prefix rows used UUID
+`GPU-80cebbaf-a106-2605-b902-f5f9a08645ea`. Each row used one GPU. The
+audit found no measured-window compilation or capture in the available logs
+and cache records; it cannot exclude a silent in-memory recompilation.
+
+| Row | TPS / baseline | TTFT / baseline | TPS spread | TTFT spread |
+|---|---:|---:|---:|---:|
+| mtp-32768-1 | 100.67% | 94.22% | 0.12% | 0.88% |
+| mtp-32768-2 | 99.53% | 95.74% | 0.20% | 0.70% |
+| mtp-32768-4 | 99.27% | 95.26% | 0.24% | 0.25% |
+| ordinary-131072-1 | 115.28% | 91.01% | 0.04% | 0.19% |
+| ordinary-131072-2 | 113.78% | 91.65% | 0.11% | 0.37% |
+| ordinary-131072-4 | 110.34% | 93.13% | 0.12% | 0.50% |
+| ordinary-32768-1 | 118.15% | 92.98% | 0.10% | 0.95% |
+| ordinary-32768-2 | 118.62% | 95.91% | 0.07% | 0.68% |
+| ordinary-32768-4 | 115.82% | 94.21% | 0.20% | 0.40% |
+| prefix-32768-1 (fourth complete attempt) | 118.86% | 83.64% | 0.16% | 5.02% |
+| prefix-32768-2 | 125.63% | 84.55% | 0.28% | 3.64% |
+| prefix-32768-4 | 117.53% | 76.92% | 0.17% | 4.72% |
+
+Three earlier complete `prefix-32768-1` attempts failed the unchanged TTFT
+spread rule at 17.378%, 20.976% and 20.177%; their median throughput and
+TTFT met the limits. The accepted fourth attempt is a full 2+5 run, not a
+selection of repetitions. Unrelated GPU processes also interrupted six
+attempts before completion. The framework summary preserves each accepted
+raw artifact, its log SHA-256, all rejected complete attempts and interruption
+logs. The cause of the isolated prefix TTFT spikes is not established and was
+also seen in the previous accepted source. These rejected attempts are not
+counted as accepted rows. The rejected raw JSON files retain their original
+generic `log_path` after archival; each linked `.spread*.log` in the summary
+matches the raw file's recorded `log_sha256`.
 
 ## Previous clean-source acceptance — 2026-09-29
 

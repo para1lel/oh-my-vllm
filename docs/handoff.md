@@ -1,6 +1,6 @@
 # Handoff — 2026-09-29
 
-## Semantic IR candidate checkpoint (2026-09-29)
+## Semantic IR accepted checkpoint (2026-09-29)
 
 REQ-IR-001 now routes the Qwen/MTP model's owned CUDA and key FlashInfer calls
 through Python `torch.library` semantic operators. Production uses fullgraph
@@ -12,7 +12,7 @@ conservative BF16 SiLU/FP8 graph rewrite are included. Eager/compiled 27B
 tests compare outputs and written caches across prefill-to-decode and changed
 MTP replay metadata. There is no automatic eager/reference fallback.
 
-The candidate working tree passed `scripts/test.sh full`: **544 passed, 70
+Clean commit `619c9d9` passed `scripts/test.sh full`: **544 passed, 70
 subtests**, including all six 258048+4096 boundary runs, on B200 UUID
 `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` (log
 `/tmp/oh-my-vllm-ir-full-gpu-green.log`). `scripts/test.sh cpu` passed
@@ -23,12 +23,28 @@ GPU attempt was invalidated by an unrelated process on the selected GPU;
 the second passed 543/544 and exposed an old mock returning a non-Tensor;
 the fixed test and the final full suite pass. Owned GPU processes exited.
 
-Formal 147-case CUDA/TileLang and twelve-row framework acceptance must run
-from a clean commit before REQ-IR-001 can be marked accepted. The 4096 Dynamo
-recompile limits and per-unit compilation warnings do not prove bounded
-long-lived shape churn; eviction/recapture pressure beyond the tested workset
-remains an open capacity limit. No activation donation is enabled without a
-proven temporary destination. No vLLM runtime dependency was added.
+[Formal operator evidence](../bench/baseline/2026-09-29-ir-operators.json)
+passes all 147 CUDA/frozen-TileLang cases on clean `619c9d9`; the smallest
+positive one-sided 95% gain bound is `0.0000036639670530955112 ms`.
+[Framework evidence](../bench/baseline/2026-09-29-ir-framework.json) accepts
+all twelve rows from the same source: throughput is 99.27–125.63% and TTFT
+76.92–95.91% of the frozen baseline. Every accepted row has two warmups, five
+measurements, at most 10% spread, no preemption and a passing steady-state
+log/cache audit. Nine rows used one B200 UUID and three prefix rows used
+another; each row was single-GPU. Three earlier complete prefix batch-1
+attempts were rejected for 17.378%, 20.976% and 20.177% TTFT spread. Six
+other attempts were interrupted by unrelated GPU processes. Raw identities,
+hashes and rejection records are preserved in the framework summary. The
+isolated TTFT spike cause remains unproven; it predates IR. Current audit
+found no logged or disk-cache evidence of measured-window compilation/capture,
+but cannot rule out silent in-memory recompilation. A compilation-count
+boundary snapshot is a future audit improvement.
+
+REQ-IR-001 is accepted for the tested workset. The 4096 Dynamo recompile
+limits and per-unit compilation warnings do not prove bounded long-lived
+shape churn; eviction/recapture pressure beyond the tested workset remains an
+open capacity limit. No activation donation is enabled without a proven
+temporary destination. No vLLM runtime dependency was added.
 
 ## Previous accepted state
 

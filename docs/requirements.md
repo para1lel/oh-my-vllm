@@ -338,7 +338,7 @@ stay outside the repository. See cuda-development.md.
 
 ## REQ-IR-001 — Semantic operator DSL and compiled model forward (2026-09-29)
 
-**Status:** implementation and acceptance in progress.
+**Status:** implemented and accepted for the tested workset on clean `619c9d9` (2026-09-29); see [acceptance evidence](acceptance.md).
 
 Use a Python/PyTorch DSL to own the semantics and implementation selection of
 every project-owned CUDA and key FlashInfer operator called by the Qwen target

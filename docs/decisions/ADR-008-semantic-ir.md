@@ -1,6 +1,6 @@
 # ADR-008: Semantic operator IR and compiled GPU forward
 
-Status: user-confirmed design 2026-09-29; implementation and acceptance in progress.
+Status: accepted for the tested workset on clean `619c9d9` (2026-09-29).
 
 ## Decision
 
@@ -44,8 +44,12 @@ No activation donation is enabled without a proven temporary destination.
 
 `tests/test_ir_*` check registration, contracts, provider selection, static
 coverage and real-model fullgraph/CUDA Graph execution. The full existing
-correctness, maximum-context, operator and twelve-row framework gates remain
-the acceptance criteria; torch.compile success alone does not waive them.
+correctness and maximum-context suites passed, alongside the
+[147-case operator gate](../../bench/baseline/2026-09-29-ir-operators.json)
+and [twelve-row framework gate](../../bench/baseline/2026-09-29-ir-framework.json).
+The three earlier complete prefix batch-1 collections with TTFT spread above
+10% remain rejected in the framework summary; a fourth complete collection
+passed. Torch.compile success alone was not treated as performance acceptance.
 
 Design reference: [vLLM IR](https://docs.vllm.ai/en/latest/design/vllm_ir/).
 This project implements its own bounded DSL without a vLLM runtime dependency.

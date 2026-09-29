@@ -173,7 +173,7 @@ Responses 支持完整历史、存储型响应的 `previous_response_id`、查�
 
 ## REQ-IR-001 — 算子语义 DSL 与模型前向编译（2026-09-29）
 
-**状态：** 实现与验收进行中。
+**状态：** 在已测工作集内由干净提交 `619c9d9` 实现并验收（2026-09-29）；见[验收证据](acceptance.zh.md)。
 
 使用 Python/PyTorch DSL 管理 Qwen target 与 MTP 模型调用的全部项目自有 CUDA 算子和关键 FlashInfer 算子的语义及实现选择。普通 PyTorch 运算，包括 `F.linear`、embedding、reshape 和简单逐元素表达式，不列入算子清单。每个语义算子具备可执行的 PyTorch 参考、shape/dtype 契约、显式修改 schema，并仅根据静态阶段、shape、dtype、layout 和设备元数据选择已注册 provider。provider 失败必须报错。PyTorch 参考只能显式选为调试 provider；生产不能自动回退到参考或 eager 执行。
 

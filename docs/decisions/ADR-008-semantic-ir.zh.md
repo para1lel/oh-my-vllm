@@ -1,6 +1,6 @@
 # ADR-008：语义算子 IR 与 GPU 前向编译
 
-状态：用户于 2026-09-29 确认设计；实现与验收进行中。
+状态：干净提交 `619c9d9` 已在测试工作集内通过验收（2026-09-29）。
 
 ## 决策
 
@@ -16,6 +16,6 @@
 
 经过精确输出等价测试的后期 FX 改写，仅在相邻、单次使用、BF16 输入且生产 provider 一致时融合 `silu_mul -> fp8_linear`。编译器适配层关闭 Inductor CUDA Graph，并将 PyTorch 2.14.0 的两个重编译上限提高至 4096。每个前向单元每编译 256 个变体发出警告。已测形状族之外的长期编译缓存增长及逐出后重捕获仍是限制；4096 不是显存或主机内存容量保证。没有证明安全的临时目的地时，不启用 activation 捐赠。
 
-`tests/test_ir_*` 检查注册、契约、provider 选择、静态覆盖和真实模型 fullgraph/CUDA Graph 执行。完整的现有正确性、最大上下文、算子及 12 组框架门禁仍是验收条件；仅 torch.compile 成功不能豁免其他门禁。
+`tests/test_ir_*` 检查注册、契约、provider 选择、静态覆盖和真实模型 fullgraph/CUDA Graph 执行。完整现有正确性与最大上下文测试已通过，[147 项算子门禁](../../bench/baseline/2026-09-29-ir-operators.json)及[12 行框架门禁](../../bench/baseline/2026-09-29-ir-framework.json)也已通过。前三次完整的 prefix batch 1 采集因 TTFT 离散度超过 10% 被拒收，记录仍保留在框架摘要中；第四次完整采集通过。仅 torch.compile 成功未被视为性能验收。
 
 设计参考：[vLLM IR](https://docs.vllm.ai/en/latest/design/vllm_ir/)。本项目实现自己的受限 DSL，不依赖 vLLM runtime。

@@ -2,13 +2,15 @@
 
 [English](handoff.md)。agent 以英文原文为准。
 
-## 语义 IR 候选检查点（2026-09-29）
+## 语义 IR 已验收检查点（2026-09-29）
 
 REQ-IR-001 现通过 Python `torch.library` 语义算子管理 Qwen/MTP 模型调用的项目自有 CUDA 和关键 FlashInfer 入口。生产默认以 fullgraph `torch.compile` 编译 prefill、target decode、MTP draft 与 proposal，并由现有手工 CUDA Graph 包住后三类单元。provider 只按静态元数据选择；缓存修改具有显式 schema，PyTorch 参考实现须显式选为调试 provider。实现包含受检查的 18 个调用点清单，以及保守的 BF16 SiLU/FP8 图改写。真实 27B 的 eager/compiled 测试比较 prefill 接续 decode 的输出和写入缓存，并验证变化的 MTP 重放元数据。不自动回退到 eager 或参考实现。
 
-候选工作树通过 `scripts/test.sh full`：**544 项测试、70 个子测试**，包含全部六组 258048+4096 边界运行；B200 UUID 为 `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`（日志 `/tmp/oh-my-vllm-ir-full-gpu-green.log`）。`scripts/test.sh cpu` 通过 **303 项测试、70 个子测试**（`/tmp/oh-my-vllm-ir-cpu-verified.log`）。Ruff、Rust workspace 测试、fmt、行宽及 Clippy 均通过。只读子代理复审未发现剩余 P1/P2 正确性问题。第一次完整 GPU 运行因所选 GPU 上的无关进程而无效；第二次通过 543/544 项并暴露旧 mock 返回非 Tensor 的问题；修复后定向测试和最终完整套件均通过。任务启动的 GPU 进程已退出。
+干净提交 `619c9d9` 通过 `scripts/test.sh full`：**544 项测试、70 个子测试**，包含全部六组 258048+4096 边界运行；B200 UUID 为 `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`（日志 `/tmp/oh-my-vllm-ir-full-gpu-green.log`）。`scripts/test.sh cpu` 通过 **303 项测试、70 个子测试**（`/tmp/oh-my-vllm-ir-cpu-verified.log`）。Ruff、Rust workspace 测试、fmt、行宽及 Clippy 均通过。只读子代理复审未发现剩余 P1/P2 正确性问题。第一次完整 GPU 运行因所选 GPU 上的无关进程而无效；第二次通过 543/544 项并暴露旧 mock 返回非 Tensor 的问题；修复后定向测试和最终完整套件均通过。任务启动的 GPU 进程已退出。
 
-REQ-IR-001 标记验收前，还须在干净提交上执行正式 147 项 CUDA/TileLang 对比和 12 行框架门禁。4096 的 Dynamo 重编译上限及按单元的编译警告不证明长期形状切换的缓存占用有界；已测工作集之外的逐出/重捕获压力仍是开放容量限制。没有证明安全的临时目的地时不启用 activation 捐赠。未加入 vLLM 运行时依赖。
+[正式算子证据](../bench/baseline/2026-09-29-ir-operators.json)显示干净源码 `619c9d9` 的 147 项 CUDA/冻结 TileLang 对照全部通过；最小单侧 95% 正收益下界为 `0.0000036639670530955112 ms`。[框架证据](../bench/baseline/2026-09-29-ir-framework.json)显示同一源码的 12 行全部合格：吞吐为冻结基线的 99.27–125.63%，TTFT 为 76.92–95.91%。每个合格行均预热两次、测量五次，离散度至多 10%，无预抢占，稳态日志和缓存审计通过。九行使用一块 B200，三个 prefix 行使用另一块；每行均为单 GPU。此前三次完整的 prefix batch 1 测量因 TTFT 离散度 17.378%、20.976% 和 20.177% 被拒收；另有六次尝试因无关 GPU 进程进入而中断。框架摘要保留原始身份、哈希和拒收记录。孤立 TTFT 尖峰原因未证实，且早于本轮 IR。现有审计未见计量窗口内的编译或捕获日志及磁盘缓存证据，但无法排除静默的内存中重编译；在计量边界记录编译计数属于后续增强。
+
+REQ-IR-001 在已测工作集内已验收。4096 的 Dynamo 重编译上限及按单元的编译警告不证明长期形状切换的缓存占用有界；已测工作集之外的逐出/重捕获压力仍是开放容量限制。没有证明安全的临时目的地时不启用 activation 捐赠。未加入 vLLM 运行时依赖。
 
 ## 以前已验收的状态
 
