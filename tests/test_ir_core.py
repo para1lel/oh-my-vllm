@@ -181,9 +181,58 @@ def test_ir_rejects_unsupported_shape_without_fallback():
         _scale(torch.ones(2, 3))
 
 
+@pytest.mark.parametrize("transposed", [False, True])
+def test_ir_reuses_symbolic_shapes_and_strides(transposed):
+    label = f"test_dynamic_scale_{transposed}"
+    compiled = compile_forward(lambda x: _scale(x) + 1, unit=label)
+
+    def input_for(rows):
+        return torch.ones(4, rows).T if transposed else torch.ones(rows, 4)
+
+    # Allow Dynamo's initial static graph and automatic dynamic generalization.
+    for rows in (2, 3):
+        x = input_for(rows)
+        torch.testing.assert_close(compiled(x), x * 2 + 1)
+    warmed = compiled_graph_counts()[label]
+    for rows in (4, 5, 6, 7):
+        x = input_for(rows)
+        torch.testing.assert_close(compiled(x), x * 2 + 1)
+    assert compiled_graph_counts()[label] == warmed
+
+    # A dimension consulted by the provider must retain its guard: the cached
+    # graph must not run the width-four provider on an unsupported width.
+    with pytest.raises(Exception, match="no supported IR implementation"):
+        compiled(torch.ones(7, 5))
+
+
 def test_ir_capability_receives_only_static_metadata():
     assert _scale.select(torch.ones(2, 4)).name == "two"
     assert _scale.select(-torch.ones(2, 4)).name == "two"
+
+
+def test_ir_symbolic_provider_predicate_keeps_range_guard():
+    @torch.library.custom_op("oh_my_vllm_native::test_row_range", mutates_args=())
+    def native(x: torch.Tensor) -> torch.Tensor:
+        return x * 2
+
+    @torch.library.custom_op("oh_my_vllm_ir::test_row_range", mutates_args=())
+    def semantic(x: torch.Tensor) -> torch.Tensor:
+        return operation.select(x).op(x)
+
+    for op in (native, semantic):
+        op.register_fake(lambda x: torch.empty_like(x))
+    operation = Operation("test_row_range", semantic, native, default_priority=("two",))
+    operation.register_impl("two", _scale_two, supports=lambda x: x.shape[0] < 5)
+    label = "test_symbolic_predicate"
+    compiled = compile_forward(lambda x: operation(x), unit=label)
+    for rows in (2, 3):
+        x = torch.ones(rows, 4)
+        torch.testing.assert_close(compiled(x), x * 2)
+    warmed = compiled_graph_counts()[label]
+    torch.testing.assert_close(compiled(torch.ones(4, 4)), torch.full((4, 4), 2.0))
+    assert compiled_graph_counts()[label] == warmed
+    with pytest.raises(Exception, match="no supported IR implementation"):
+        compiled(torch.ones(5, 4))
 
 
 def test_ir_configuration_freezes_after_selection():

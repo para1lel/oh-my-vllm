@@ -33,7 +33,8 @@ def _rms_reference(
     result = values * factor * weight.float()
     if gate is not None:
         result = result * F.silu(gate.float())
-    return result.to(x.dtype)
+    # Match the production provider and fake kernel's contiguous output layout.
+    return result.to(x.dtype).contiguous()
 
 
 @torch.library.custom_op("oh_my_vllm_ir::silu_mul", mutates_args=())

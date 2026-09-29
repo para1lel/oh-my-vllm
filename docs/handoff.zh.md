@@ -2,6 +2,14 @@
 
 [English](handoff.md)。agent 以英文原文为准。
 
+## IR 审查修复（2026-09-29）
+
+provider 元数据现在保留符号 shape/stride 维度，不再将每个维度转换为 `int`。能力谓词仍对其检查的维度建立 guard。native RMS 归一化现在返回连续输出，使转置输入也符合共享 fake 布局和生产 provider 契约。回归测试覆盖动态行数及 stride、provider 范围拒绝、有/无 gate 的 native RMS opcheck 与编译后的 reshape，以及行数 2/3/5/7 下 CUDA pointwise 图复用。
+
+最终工作区版本的 `scripts/test.sh full` 在 B200 UUID `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5` 上通过 **549 项测试及 70 个 subtest**，包括全部六个 258048+4096 边界用例及 HTTP 集成测试（日志 `/tmp/oh-my-vllm-ir-review-fixes-full.log`）。`scripts/test.sh cpu` 通过 **308 项测试及 70 个 subtest**（`/tmp/oh-my-vllm-ir-review-fixes-cpu-final.log`）。Rust workspace 测试、fmt、行宽、Clippy 和 Ruff 均通过。独立复核通过，包括新增的符号范围 guard 和 CUDA 图复用测试。pytest 主进程、推理服务、worker 及编译子进程均已退出；所选 GPU 无计算进程（4 MiB/0%），HTTP 端口 36525 和本任务 IPC 监听均已释放。
+
+本次修复尚未重跑 147-case 算子和 12-row 框架性能 gate。下方验收证据仍属于 `619c9d9`，不代表新的性能验收。保留符号元数据避免了不必要的 specialization，但不证明编译缓存内存有界，也不消除长期 worker 中所有模型/主机 shape guard。
+
 ## 语义 IR 已验收检查点（2026-09-29）
 
 REQ-IR-001 现通过 Python `torch.library` 语义算子管理 Qwen/MTP 模型调用的项目自有 CUDA 和关键 FlashInfer 入口。生产默认以 fullgraph `torch.compile` 编译 prefill、target decode、MTP draft 与 proposal，并由现有手工 CUDA Graph 包住后三类单元。provider 只按静态元数据选择；缓存修改具有显式 schema，PyTorch 参考实现须显式选为调试 provider。实现包含受检查的 18 个调用点清单，以及保守的 BF16 SiLU/FP8 图改写。真实 27B 的 eager/compiled 测试比较 prefill 接续 decode 的输出和写入缓存，并验证变化的 MTP 重放元数据。不自动回退到 eager 或参考实现。

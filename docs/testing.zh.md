@@ -284,6 +284,8 @@ scripts/with-env.sh pre-commit run rust-line-width --all-files
 
 ## 语义 IR 与编译前向（REQ-IR-001）
 
+动态行数和转置 stride 必须复用预热后的编译图，同时不支持的 provider 宽度仍须明确报错。`test_ir_pointwise.py` 检查转置输入的 native RMS fake/schema 契约及编译后的展平操作，覆盖有 gate 与无 gate 两种情况。其 CUDA pointwise 测试要求行数 2/3/5/7 下的输出与 kernel 等价，并复用预热后的图。
+
 使用固定 PyTorch 环境和空闲 B200 运行算子契约、静态覆盖和真实模型 GPU 单元测试：
 
 ```bash

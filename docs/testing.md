@@ -335,7 +335,13 @@ scripts/test.sh full
 
 `test_ir_core.py` checks schema/mutation matching, provider priorities,
 static-only capability decisions, fake output validation, no silent fallback
-and fullgraph lowering. The `test_ir_*` operator tests compare references and
+and fullgraph lowering. Dynamic row counts and transposed strides must reuse
+the warmed compilation while unsupported provider widths still fail closed.
+`test_ir_pointwise.py` checks native RMS fake/schema contracts and compiled
+flattening for transposed inputs, with and without gating.
+Its CUDA pointwise test requires kernel-equivalent outputs and warmed graph
+reuse across row counts 2/3/5/7.
+The `test_ir_*` operator tests compare references and
 providers, including cache/state writes. `test_ir_forward_units.py` loads the
 real 27B model and exercises compiled prefill plus compiled target, MTP draft
 and proposal units inside manual CUDA Graph capture/replay. It compares eager

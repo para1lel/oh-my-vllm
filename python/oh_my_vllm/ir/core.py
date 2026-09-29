@@ -25,7 +25,7 @@ LOG = logging.getLogger(__name__)
 # token extents. Dynamo shares recompile counters by Python code object even
 # when each graph has a distinct closure. Raise both its resident and lifetime
 # limits; do not let Dynamo silently run eager when either limit is reached.
-# Shape churn beyond this bound needs a reusable dynamic-shape compile unit.
+# Host specialization and manual graph closures can still exhaust this bound.
 _RECOMPILE_LIMIT = 4096
 
 
@@ -53,10 +53,10 @@ class Rewrite:
 
 @dataclass(frozen=True)
 class TensorSpec:
-    """Only metadata visible to provider capability predicates."""
+    """Metadata only; symbolic dimensions stay dynamic until a predicate uses them."""
 
-    shape: tuple[int, ...]
-    stride: tuple[int, ...]
+    shape: tuple[int | torch.SymInt, ...]
+    stride: tuple[int | torch.SymInt, ...]
     dtype: torch.dtype
     device: torch.device
 
@@ -231,8 +231,11 @@ def _record_selection(operation: str, provider: str, phase: str, key: str) -> No
 def _to_static(value: Any) -> Any:
     if isinstance(value, torch.Tensor):
         return TensorSpec(
-            tuple(map(int, value.shape)),
-            tuple(map(int, value.stride())),
+            # Converting SymInt to int installs equality guards even when the
+            # provider ignores that dimension. Predicate comparisons may still
+            # install the guards needed to make provider selection sound.
+            tuple(value.shape),
+            tuple(value.stride()),
             value.dtype,
             value.device,
         )

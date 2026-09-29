@@ -1,5 +1,32 @@
 # Handoff — 2026-09-29
 
+## IR review fixes (2026-09-29)
+
+Provider metadata now preserves symbolic shape/stride dimensions instead of
+converting every dimension to `int`. Capability predicates still guard the
+dimensions they inspect. Native RMS normalization now returns contiguous output,
+matching its shared fake layout and production provider for transposed inputs.
+Regression tests cover dynamic rows and strides, provider range rejection,
+gated/ungated native RMS opcheck and compiled reshape, and CUDA pointwise graph
+reuse across row counts 2/3/5/7.
+
+The final working-tree `scripts/test.sh full` run passed **549 tests and 70
+subtests**, including all six 258048+4096 boundary cases and HTTP integration,
+on B200 UUID `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5` (log
+`/tmp/oh-my-vllm-ir-review-fixes-full.log`). `scripts/test.sh cpu` passed **308
+tests and 70 subtests** (`/tmp/oh-my-vllm-ir-review-fixes-cpu-final.log`). Rust
+workspace tests, fmt, line width, Clippy and Ruff passed. Independent review,
+including the added symbolic range-guard and CUDA reuse tests, passed.
+The pytest owner, inference servers, workers and compiler children exited;
+the selected GPU had no compute process (4 MiB/0%), and the HTTP port 36525
+and task IPC listeners were released.
+
+The 147-case operator and twelve-row framework performance gates have not been
+rerun for these fixes. The acceptance evidence below remains evidence for
+`619c9d9`, not a new performance acceptance. Preserving symbolic metadata avoids
+unnecessary specialization; it does not prove bounded compiler memory or remove
+all model/host shape guards in long-lived workers.
+
 ## Semantic IR accepted checkpoint (2026-09-29)
 
 REQ-IR-001 now routes the Qwen/MTP model's owned CUDA and key FlashInfer calls

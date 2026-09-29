@@ -95,6 +95,8 @@ target decode 图把现有 784-token 页作为 49 个 16-token 子页提供给�
 
 ## 语义 IR 与编译前向单元
 
+lowering 期间的张量元数据保留符号 shape 和 stride 维度；仅检查相应维度的能力谓词引入选择 guard。日志不将符号具体化。native RMS 归一化返回连续输出，与生产 provider 和共享 fake 布局契约一致。
+
 `python/oh_my_vllm/ir` 为项目自有 CUDA 和关键 FlashInfer 模型入口逐个注册 `torch.library` 语义算子。原生 PyTorch 实现定义参考语义；fake 实现定义输出 shape/dtype；custom-op schema 标明修改的缓存/状态参数。生产 provider 是独立注册的 custom op。选择仅使用 shape、stride、dtype、设备及固定 route 元数据，不读取张量内容。优先级在首次使用后冻结；不支持时直接报错，不自动选择参考实现。选择日志按静态输入键记录 eager 与 compile 决策；`compiled_graph_counts()` 按前向单元记录成功编译次数。`coverage.py` 列出模型调用点及低层导入例外。
 
 `compile_forward` 以 `fullgraph=True` 跟踪完整 GPU 单元。自定义 backend 将每个语义 FX 节点改写为 schema 匹配的已选 provider，检查 fake 输出元数据，拒绝残留语义节点，再调用 Inductor。受限适配层使用 PyTorch 2.14.0 的 FakeTensor、FX 元数据与 backend lookup API；兼容性测试保护此固定版本。模型 target prefill 与非图 decode 调用已编译的 `Qwen.forward` 和 `Qwen.logits`。target、draft、proposal CUDA Graph 构造函数在捕获前预热编译后的完整前向闭包。手工图的显存池、事务式缓存恢复与低余量保护仍是权威机制。`OH_MY_VLLM_ENFORCE_EAGER=1` 显式选择 eager 模型调用并禁用手工图。

@@ -3,7 +3,7 @@
 import pytest
 import torch
 import torch.nn.functional as F
-from oh_my_vllm.ir import compile_forward, operations, pointwise
+from oh_my_vllm.ir import compile_forward, compiled_graph_counts, operations, pointwise
 
 
 def test_model_pointwise_ops_are_registered():
@@ -96,16 +96,36 @@ def test_default_provider_fails_closed_without_cuda():
         pointwise.silu_mul(torch.randn(2, 256, dtype=torch.bfloat16))
 
 
+@pytest.mark.parametrize("gated", [False, True])
+def test_native_rms_noncontiguous_input_contract_and_compile(monkeypatch, gated):
+    x = torch.randn(128, 3, dtype=torch.bfloat16).T
+    weight = torch.randn(128)
+    gate = torch.randn_like(x) if gated else None
+    args = (x, weight, 1e-6, gate)
+    result = torch.library.opcheck(
+        pointwise._native_rms_norm,
+        args,
+        test_utils=("test_schema", "test_faketensor", "test_aot_dispatch_dynamic"),
+    )
+    assert set(result.values()) == {"SUCCESS"}
+    monkeypatch.setattr(pointwise._RMS, "priority", ("native",))
+
+    def forward(x, weight, gate):
+        return pointwise.rms_norm(x, weight, gate=gate).reshape(-1)
+
+    expected = forward(x, weight, gate)
+    actual = compile_forward(forward)(x, weight, gate)
+    assert pointwise._native_rms_norm(*args).is_contiguous()
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
 def test_pointwise_model_path_compiles_with_cuda_provider():
     from oh_my_vllm.kernels import elementwise, normalization
 
-    packed = torch.randn(2, 256, device="cuda", dtype=torch.bfloat16)
-    ba = torch.randn(2, 96, device="cuda", dtype=torch.bfloat16)
     a_log = torch.randn(48, device="cuda")
     bias = torch.randn(48, device="cuda")
-    x = torch.randn(2, 128, device="cuda", dtype=torch.bfloat16)
     weight = torch.randn(128, device="cuda")
 
     def forward(packed, ba, a_log, bias, x, weight):
@@ -115,14 +135,27 @@ def test_pointwise_model_path_compiles_with_cuda_provider():
         summed, normalized = pointwise.add_rms_norm(value, x, weight)
         return summed, normalized, decay, beta
 
-    expected_gate = elementwise.silu_mul(packed)
-    expected_decay, expected_beta = elementwise.delta_gates(ba, a_log, bias)
-    expected_value = normalization.rms_norm(x, weight, gate=expected_gate)
-    expected_sum, expected_norm = normalization.add_rms_norm(expected_value, x, weight)
-    expected = expected_sum, expected_norm, expected_decay, expected_beta
-    eager = forward(packed, ba, a_log, bias, x, weight)
-    compiled = compile_forward(forward)(packed, ba, a_log, bias, x, weight)
-    for actual, reference in zip(
-        (*eager, *compiled), (*expected, *expected), strict=True
-    ):
-        torch.testing.assert_close(actual, reference, rtol=0, atol=0)
+    label = "test_dynamic_cuda_pointwise"
+    compiled_forward = compile_forward(forward, unit=label)
+    warmed = None
+    for rows in (2, 3, 5, 7):
+        packed = torch.randn(rows, 256, device="cuda", dtype=torch.bfloat16)
+        ba = torch.randn(rows, 96, device="cuda", dtype=torch.bfloat16)
+        x = torch.randn(rows, 128, device="cuda", dtype=torch.bfloat16)
+        expected_gate = elementwise.silu_mul(packed)
+        expected_decay, expected_beta = elementwise.delta_gates(ba, a_log, bias)
+        expected_value = normalization.rms_norm(x, weight, gate=expected_gate)
+        expected_sum, expected_norm = normalization.add_rms_norm(
+            expected_value, x, weight
+        )
+        expected = expected_sum, expected_norm, expected_decay, expected_beta
+        eager = forward(packed, ba, a_log, bias, x, weight)
+        compiled = compiled_forward(packed, ba, a_log, bias, x, weight)
+        for actual, reference in zip(
+            (*eager, *compiled), (*expected, *expected), strict=True
+        ):
+            torch.testing.assert_close(actual, reference, rtol=0, atol=0)
+        if rows == 3:
+            warmed = compiled_graph_counts()[label]
+        elif rows > 3:
+            assert compiled_graph_counts()[label] == warmed

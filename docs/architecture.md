@@ -273,6 +273,10 @@ custom-op schema names mutated cache/state arguments. Production providers are
 independent registered custom ops. Selection evaluates shape, stride, dtype,
 device and fixed route metadata, never tensor contents. Priorities freeze when
 first used; an unsupported provider raises instead of selecting the reference.
+Tensor metadata retains symbolic shape and stride dimensions during lowering;
+only capability predicates that inspect a dimension introduce selection guards.
+Logging does not concretize symbols. Native RMS normalization returns contiguous
+outputs, matching the production provider and shared fake layout contract.
 The selection log records eager and compile decisions by static input key;
 `compiled_graph_counts()` records successful compilations by forward unit.
 `coverage.py` lists model call sites and explicit low-level import exceptions.
