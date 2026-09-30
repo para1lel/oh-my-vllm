@@ -1,4 +1,22 @@
-# Handoff — 2026-09-29
+# Handoff — 2026-09-30
+
+## Main publication checks (2026-09-30)
+
+At task start, `main` was clean, including untracked files and the TileFoundry
+submodule. After fetching `origin`, `b489946` was the only local commit ahead
+of `origin/main`. The user authorized publishing it to the remote `main`.
+This checkpoint records the checks before publication; no runtime code changed.
+
+Re-ran the required checks through `scripts/with-env.sh`: Rust workspace tests
+(58/39/26), fmt, Rust line width, Clippy with `-D warnings`, and Ruff format/check
+all passed. Ruff left all 47 Python files unchanged. Independent read-only
+review of `b489946` and this English/Chinese checkpoint found no blocking issue.
+
+The Python CPU/full GPU suites, 147-case operator timings and twelve-row
+framework benchmarks were not rerun for this repository synchronization.
+The preceding IR-fix correctness results and the performance evidence scoped
+to `619c9d9` retain their stated limits. This task started no GPU program,
+inference service or worker, so it has no owned GPU process or listener to stop.
 
 ## IR review fixes (2026-09-29)
 

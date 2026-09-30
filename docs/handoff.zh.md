@@ -1,6 +1,14 @@
-# 交接记录 — 2026-09-29
+# 交接记录 — 2026-09-30
 
 [English](handoff.md)。agent 以英文原文为准。
+
+## main 推送前检查（2026-09-30）
+
+任务开始时，`main` 工作区干净，包括未跟踪文件和 TileFoundry 子模块。抓取 `origin` 后，`b489946` 是唯一领先 `origin/main` 的本地提交。用户授权将其推送到远端 `main`。本检查点记录推送前检查，没有修改运行时代码。
+
+通过 `scripts/with-env.sh` 重跑了全部必需检查：Rust workspace 测试（58/39/26）、fmt、Rust 行宽、带 `-D warnings` 的 Clippy，以及 Ruff format/check 均通过。Ruff 未修改全部 47 个 Python 文件。对 `b489946` 和本检查点中英文内容的独立只读审查未发现阻塞问题。
+
+本次仓库同步未重跑 Python CPU/完整 GPU 套件、147-case 算子计时和 12-row 框架基准。此前 IR 修复的正确性结果，以及仅适用于 `619c9d9` 的性能证据，保留原有范围限制。本任务未启动 GPU 程序、推理服务或 worker，因此没有需要停止的任务自有 GPU 进程或监听。
 
 ## IR 审查修复（2026-09-29）
 
