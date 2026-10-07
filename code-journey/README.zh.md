@@ -71,6 +71,13 @@ Image Gen 分别生成亮色阅读页, 实验页和暗色阅读页. 设计使用
 KaTeX, 同时提供 MathML. 内容与控件均由 HTML 和 SugarCube passage 实现.
 短代码预览与可展开节选从同一份源码提取.
 
+Shiki 4.5.0 在构建时解析完整的 Rust / Python 节选, 保留跨行语法与空白.
+GitHub 亮暗主题的配色按代码背景调整, 随页面主题通过 CSS 切换. 浏览器通过
+textContent 创建 token span, 阅读时无需高亮引擎或 CDN. 完整节选保留源码行号;
+所有代码块带语言标记和复制按钮, 复制内容为原始源码. HTTP 预览在 Clipboard API 不可用时
+使用选区复制. 长代码在可获得焦点的区域内横向滚动, 手机端也可操作.
+语言与配色在 scripts/highlight.mjs 配置, 背景与行号样式在 src/style.css 配置.
+
 中文正文使用半角标点, 左括号前留空格, 标点后以及中文与英文或公式之间留空格.
 源码, 标识符, 命令和公式保留自身语法. Humanizer-zh 已安装在用户的 Codex
 skills 中, 用于检查重复表达和缺少依据的陈述.
@@ -91,6 +98,8 @@ skills 中, 用于检查重复表达和缺少依据的陈述.
 JOURNEY_URL 可指定测试地址. JOURNEY_QA_DIR 指定仓库外的截图目录,
 默认 /tmp/oh-my-vllm-journey-qa. Playwright 检查真实 Twine 标识, 前置关系,
 五组边界轨迹, 源码显示, 主题与刷新和重置, 手机溢出以及控制台健康.
+语法测试还检查所有节选文本, Rust / Python 主题颜色, token / 工具栏 / 行号至少 4.5:1 的对比度,
+两种复制路径和键盘横向滚动.
 截图覆盖 1536x1024 桌面和 390x844 手机的两种主题.
 单独的 CPU 测试将公布的分块计数与真实 Rust 调度器核对.
 仓库全局 Rust/Ruff 检查仍然必需.
@@ -105,6 +114,7 @@ JOURNEY_URL 可指定测试地址. JOURNEY_QA_DIR 指定仓库外的截图目录
 - src/setup.js: SugarCube 宏, 经检查的持久化结构, 主题与轨迹播放.
 - src/style.css 和 src/head.html: 设计参数, 字体与本地 KaTeX.
 - scripts/build.mjs: 校验工具下载, 提取当前源码与轨迹.
+- scripts/highlight.mjs: 固定版本的 Shiki 语法规则与代码主题配置.
 - scripts/serve.mjs: 固定端口的静态文件监听器.
 - trace/: CPU 轨迹程序和直接使用调度器的边界测试.
 - tests/: 文档规定的浏览器验收检查.

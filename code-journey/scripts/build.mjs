@@ -3,6 +3,7 @@ import { cp, mkdir, readFile, writeFile, chmod } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createCodeHighlighter } from "./highlight.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repo = resolve(root, "..");
@@ -51,6 +52,8 @@ await cp(resolve(root, "node_modules/katex/LICENSE"), resolve(dist, "assets/kate
 await cp(resolve(cache, "FiraCodeNerdFontMono-Regular.ttf"), resolve(dist, "assets/FiraCodeNerdFontMono-Regular.ttf"));
 await cp(resolve(cache, "FiraCode-LICENSE"), resolve(dist, "assets/FiraCode-LICENSE"));
 await cp(resolve(cache, "storyformats/sugarcube-2/LICENSE"), resolve(dist, "assets/SugarCube-LICENSE"));
+await cp(resolve(root, "node_modules/shiki/LICENSE"), resolve(dist, "assets/Shiki-LICENSE"));
+await cp(resolve(root, "node_modules/@shikijs/themes/LICENSE"), resolve(dist, "assets/Shiki-Themes-LICENSE"));
 
 const specifications = {
   request: ["crates/scheduler/src/request.rs", "pub struct Request {", "\nimpl Request {"],
@@ -64,6 +67,7 @@ const specifications = {
   plan: ["python/oh_my_vllm/worker/batch_plan.py", "def plan_request(", null],
 };
 const snippets = {};
+const highlighter = await createCodeHighlighter();
 for (const [key, [path, begin, end]] of Object.entries(specifications)) {
   const source = await readFile(resolve(repo, path), "utf8");
   const start = source.indexOf(begin);
@@ -74,18 +78,28 @@ for (const [key, [path, begin, end]] of Object.entries(specifications)) {
     if (stop < 0) throw new Error("Missing end anchor: " + key);
   }
   const lines = source.slice(start, stop).trimEnd().split("\n").slice(0, key === "plan" ? 24 : 48);
+  const text = lines.join("\n");
+  const language = path.endsWith(".rs") ? "rust" : "python";
   snippets[key] = {
     path,
     line: source.slice(0, start).split("\n").length,
-    text: lines.join("\n"),
+    text, language,
+    tokens: highlighter.highlight(text, language),
     sha256: createHash("sha256").update(source).digest("hex"),
   };
 }
+const previewText = snippets.aligned.text.split("\n")
+  .filter((line) => line.includes("let block =") || line.includes("let last_boundary ="))
+  .map((line) => line.trim()).join("\n");
+const alignmentPreview = {
+  text: previewText, language: "rust", tokens: highlighter.highlight(previewText, "rust"),
+};
+highlighter.dispose();
 const trace = JSON.parse(execFileSync(resolve(repo, "scripts/with-env.sh"), [
   "cargo", "run", "--quiet", "--locked", "--manifest-path", resolve(root, "trace/Cargo.toml"),
 ], { cwd: repo, encoding: "utf8" }));
 const data = {
-  snippets, trace,
+  snippets, alignmentPreview, trace,
   sourceRevision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim(),
 };
 await writeFile(resolve(generated, "data.js"), "setup.journeyData = " + JSON.stringify(data) + ";\n");

@@ -1,5 +1,32 @@
 # Handoff — 2026-10-07
 
+## Code journey syntax highlighting (2026-10-07)
+
+All source excerpts and the short aligned-prefill preview now use pinned Shiki
+4.5.0 TextMate tokenization at build time. Rust/Python GitHub light/dark palettes
+switch with the page theme; adjusted comments and keywords retain >=4.5:1
+contrast on the code surfaces. Runtime rendering uses textContent, preserving
+source whitespace and generic/type syntax. Full excerpts retain real line
+numbers; all code regions have language labels, raw-source copy buttons and
+keyboard horizontal scrolling.
+Clipboard API and selection copying cover the HTTPS/localhost and HTTP preview
+paths. No highlighter engine or external asset is loaded during reading.
+
+Validation: all five Playwright Chromium tests passed, including exact text for
+every excerpt, Rust/Python theme colors, token/toolbar/gutter contrast, both clipboard paths
+and mobile keyboard scrolling. Workspace Rust tests (58/39/26), fmt, hard line
+width, Clippy and Ruff format/check passed. The rendered code was checked in
+both themes at desktop and mobile sizes. Browser plugin was unavailable, so
+Playwright supplied browser verification. Independent milestone review passed.
+
+The Python CPU/GPU suites and operator/framework performance benchmarks were
+not rerun; inference source is unchanged. No GPU program was launched. The
+explicitly requested static preview was restarted after its previous listener
+exited. Node PID 1367241 serves port 18084 at http://10.30.64.14:18084/;
+the HTTP probe returned 200. PID record: /tmp/oh-my-vllm-code-journey-18084.pid.
+Browser/check children exited. Next: user review
+of the updated preview and the remaining curriculum chapters.
+
 ## Interactive code journey preview (2026-10-07)
 
 Added `code-journey/`, a genuine Twine/SugarCube 2.37.3 static tutorial with

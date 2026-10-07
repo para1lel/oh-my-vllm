@@ -91,6 +91,97 @@ Macro.add("nextReading", {
     new Wikifier(this.output, '<<route "' + this.args[1] + '" "' + target + '">>');
   },
 });
+setup.copyCode = async function (text) {
+  if (navigator.clipboard?.writeText) {
+    try { await navigator.clipboard.writeText(text); return; } catch {}
+  }
+  // The intranet preview uses HTTP, where Clipboard API may be unavailable.
+  const active = document.activeElement;
+  const selection = window.getSelection();
+  const ranges = Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index).cloneRange());
+  const input = document.createElement("textarea");
+  input.value = text;
+  input.readOnly = true;
+  input.className = "copy-buffer";
+  input.setAttribute("aria-hidden", "true");
+  input.tabIndex = -1;
+  document.body.appendChild(input);
+  let copied;
+  try { input.select(); copied = document.execCommand("copy"); }
+  finally {
+    input.remove();
+    selection.removeAllRanges();
+    for (const range of ranges) selection.addRange(range);
+    active?.focus({ preventScroll: true });
+  }
+  if (!copied) throw new Error("Clipboard copy failed");
+};
+setup.codeBlock = function (source, preview = false) {
+  const block = document.createElement("div");
+  block.className = "code-block" + (preview ? " excerpt-preview" : "");
+  const language = source.language === "rust" ? "Rust" : "Python";
+  const toolbar = document.createElement("div");
+  toolbar.className = "code-toolbar";
+  const label = document.createElement("span");
+  label.className = "code-language";
+  label.textContent = language;
+  const copy = document.createElement("button");
+  copy.className = "code-copy";
+  copy.type = "button";
+  copy.textContent = "复制代码";
+  copy.setAttribute("aria-label", "复制 " + language + " 代码");
+  const status = document.createElement("span");
+  status.className = "sr-only";
+  status.setAttribute("role", "status");
+  let reset;
+  copy.onclick = async () => {
+    clearTimeout(reset);
+    try {
+      await setup.copyCode(source.text);
+      copy.textContent = "已复制";
+      status.textContent = "已复制 " + language + " 代码.";
+    } catch {
+      copy.textContent = "复制失败";
+      status.textContent = "复制失败, 请选中代码复制.";
+    }
+    reset = setTimeout(() => { copy.textContent = "复制代码"; status.textContent = ""; }, 1800);
+  };
+  toolbar.append(label, copy, status);
+  const pre = document.createElement("pre");
+  pre.tabIndex = 0;
+  pre.setAttribute("aria-label", language + " 代码, 可横向滚动");
+  const code = document.createElement("code");
+  code.className = "language-" + source.language;
+  for (const [index, line] of source.tokens.entries()) {
+    if (index) code.appendChild(document.createTextNode("\n"));
+    const row = document.createElement("span");
+    row.className = "source-line";
+    if (!preview) {
+      const number = document.createElement("span");
+      number.className = "line-number";
+      number.setAttribute("aria-hidden", "true");
+      number.textContent = source.line + index;
+      row.appendChild(number);
+    }
+    for (const token of line) {
+      const span = document.createElement("span");
+      span.className = "syntax-token";
+      span.textContent = token.content;
+      for (const theme of ["light", "dark"]) {
+        span.style.setProperty("--syntax-" + theme, token[theme]);
+        const style = token[theme + "Style"] || 0;
+        span.style.setProperty("--syntax-" + theme + "-style", style & 1 ? "italic" : "normal");
+        span.style.setProperty("--syntax-" + theme + "-weight", style & 2 ? "700" : "400");
+        span.style.setProperty("--syntax-" + theme + "-decoration", style & 4 ? "underline" : "none");
+      }
+      row.appendChild(span);
+    }
+    code.appendChild(row);
+  }
+  pre.appendChild(code);
+  block.append(toolbar, pre);
+  return block;
+};
 Macro.add("source", {
   handler() {
     const [key, title] = this.args;
@@ -104,30 +195,13 @@ Macro.add("source", {
     caption.className = "source-caption";
     caption.textContent = source.path + ":" + source.line + " / SHA-256 " + source.sha256.slice(0, 12);
     details.appendChild(caption);
-    const pre = document.createElement("pre");
-    const code = document.createElement("code");
-    for (const [index, line] of source.text.split("\n").entries()) {
-      const row = document.createElement("span");
-      row.className = "source-line";
-      const number = document.createElement("span");
-      number.className = "line-number";
-      number.setAttribute("aria-hidden", "true");
-      number.textContent = source.line + index;
-      row.append(number, document.createTextNode(line));
-      code.appendChild(row);
-    }
-    pre.appendChild(code);
-    details.appendChild(pre);
+    details.appendChild(setup.codeBlock(source));
     this.output.appendChild(details);
   },
 });
 Macro.add("alignmentPreview", {
   handler() {
-    const pre = document.createElement("pre");
-    pre.className = "excerpt-preview";
-    const code = document.createElement("code");
-    code.textContent = setup.journeyData.snippets.aligned.text.split("\n").filter((line) => line.includes("let block =") || line.includes("let last_boundary =")).map((line) => line.trim()).join("\n");
-    pre.appendChild(code); this.output.appendChild(pre);
+    this.output.appendChild(setup.codeBlock(setup.journeyData.alignmentPreview, true));
   },
 });
 Macro.add("math", {

@@ -364,9 +364,12 @@ With code-journey's static listener running, run its pinned Chromium workflow:
     scripts/with-env.sh cargo fmt --manifest-path code-journey/trace/Cargo.toml --check
     scripts/with-env.sh cargo clippy --manifest-path code-journey/trace/Cargo.toml --all-targets -- -D warnings
 
-Four Playwright tests cover genuine SugarCube identity, prerequisite/interest
+Five Playwright tests cover genuine SugarCube identity, prerequisite/interest
 routing, all five real Rust scheduler traces, source excerpt display, light/dark
 selection, refresh/reset, backward map markers, console health and mobile overflow.
+Syntax coverage checks exact text reconstruction for all excerpts, Rust/Python
+colors in both themes, token/toolbar/gutter contrast >=4.5:1, raw-source copying with Clipboard
+API and the HTTP selection fallback, plus keyboard horizontal code scrolling.
 The separate Rust test asserts real chunk counts, including 32144 + 624 for
 32768 input tokens, and the final output-count contract with synthetic feedback.
 These are CPU educational checks, not inference or performance measurements.

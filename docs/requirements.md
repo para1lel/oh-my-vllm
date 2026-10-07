@@ -386,8 +386,14 @@ Chinese prose uses halfwidth punctuation with the requested surrounding spaces.
 Support persistent light/dark selection and reading/experiment progress. Use
 Humanizer-zh to review prose. Provide a fixed intranet preview on port 18084.
 
+Source excerpts and short previews require complete Rust/Python syntax
+highlighting with readable light/dark palettes. Preserve original text, real
+line numbers and copy behavior; long code lines scroll within the code region.
+
 **Acceptance:** browser checks pass for prerequisite routing, source display,
 784/785/1568/1569/32768 token traces, theme switching, refresh, restart, backward
-history and mobile overflow. Verify the rendered reading/experiment screens
+history and mobile overflow. Check syntax token contrast, exact source copying
+through Clipboard API and the HTTP fallback, and keyboard code scrolling.
+Verify the rendered reading/experiment screens
 against the visual concepts. Later curriculum chapters remain planned; their
 outline maps to current source files.

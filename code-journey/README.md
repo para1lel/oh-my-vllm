@@ -82,6 +82,16 @@ with local KaTeX, including accessible MathML. UI/content remain native HTML and
 SugarCube passages. The narrow code preview is extracted from the same source
 as its expandable full excerpt.
 
+Shiki 4.5.0 tokenizes complete Rust/Python excerpts at build time, preserving
+multiline syntax and whitespace. GitHub light/dark themes are adjusted for the
+code surfaces; syntax colors switch through CSS with the page theme. The browser
+creates token spans using textContent, without a highlighter runtime or CDN.
+Full excerpts retain real source line numbers; all blocks have language labels
+and copy buttons that copy the original text. The HTTP preview uses a selection-based clipboard
+fallback when Clipboard API is unavailable. Long lines scroll within a focusable
+code region, including on mobile. Configure languages and palette replacements
+in scripts/highlight.mjs; configure surfaces and gutters in src/style.css.
+
 Chinese prose uses halfwidth punctuation, a space before an opening parenthesis,
 and spaces after punctuation and between Chinese and Latin/formula runs. Source
 code, identifiers, commands and formulas preserve their syntax. Humanizer-zh was
@@ -105,7 +115,9 @@ JOURNEY_URL overrides the test base URL. JOURNEY_QA_DIR selects a screenshot
 directory outside the repository; the default is /tmp/oh-my-vllm-journey-qa.
 Playwright checks real Twine identity, prerequisite routing, all five boundary
 traces, source display, theme/refresh/reset behavior, mobile overflow and console
-health. Screenshots cover 1536x1024 desktop and 390x844 mobile in both themes.
+health. The syntax test also checks all excerpt text, Rust/Python theme colors,
+minimum 4.5:1 token/toolbar/gutter contrast, both clipboard paths and keyboard horizontal
+scrolling. Screenshots cover 1536x1024 desktop and 390x844 mobile in both themes.
 The separate CPU test checks the published chunk counts against the actual Rust
 scheduler. Repository-wide Rust/Ruff checks remain required.
 
@@ -119,6 +131,7 @@ view_image. Functional tests and visual comparison are separate checks.
 - src/setup.js: SugarCube macros, checked persistence, theme and trace playback.
 - src/style.css and src/head.html: design tokens, fonts and local KaTeX.
 - scripts/build.mjs: checksum-verified tool setup, current source/trace extraction.
+- scripts/highlight.mjs: pinned Shiki grammars and code theme configuration.
 - scripts/serve.mjs: static-only fixed-port listener.
 - trace/: CPU trace executable and scheduler-based boundary test.
 - tests/: documented browser acceptance checks.

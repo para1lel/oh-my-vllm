@@ -14,6 +14,9 @@
   --muted: #596d7b;
   --line: #cdd7de;
   --code: #f2f4f6;
+  --code-border: #d8e0e6;
+  --code-header: #eaf0f3;
+  --code-link: #246b3d;
   --accent: #c8553d;
   --selected: #ecf5ee;
 }
@@ -26,6 +29,9 @@
   --muted: #a7b6c2;
   --line: #35414b;
   --code: #232e37;
+  --code-border: #3e4c58;
+  --code-header: #1e2831;
+  --code-link: #8fc99f;
   --accent: #e08d78;
   --selected: #243a2d;
 }
@@ -69,7 +75,7 @@ a, .text-button {
   cursor: pointer;
 }
 a:hover, .text-button:hover { text-decoration-thickness: 2px; }
-a:focus-visible, button:focus-visible, summary:focus-visible {
+a:focus-visible, button:focus-visible, summary:focus-visible, pre:focus-visible {
   outline: 2px solid var(--link); outline-offset: 6px;
 }
 button { font: inherit; font-weight: 500; }
@@ -97,8 +103,18 @@ code, pre {
 code { font-size: .83em; background: var(--code); padding: 2px 7px; border-radius: 4px; }
 pre { background: var(--code); padding: 20px 22px; border-radius: 8px; overflow: auto; font-size: 17px; line-height: 1.7; margin: 18px 0; }
 pre code { font-size: inherit; background: none; padding: 0; border-radius: 0; }
-.source-line { display: block; white-space: pre; }
-.line-number { display: inline-block; width: 4ch; user-select: none; color: var(--muted); }
+.code-block { margin: 18px 0; border: 1px solid var(--code-border); border-radius: 8px; overflow: hidden; background: var(--code); max-width: 100%; }
+.code-block pre { margin: 0; border-radius: 0; background: transparent; tab-size: 4; scrollbar-width: thin; scrollbar-color: var(--muted) transparent; }
+.code-block pre:focus-visible { outline-offset: -3px; }
+.code-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 18px; border-bottom: 1px solid var(--code-border); background: var(--code-header); font-size: 16px; line-height: 1.5; }
+.code-language { font-family: "Fira Code Nerd Font", monospace; font-size: 14px; color: var(--muted); }
+.code-copy, .code-copy:hover, .code-copy:focus { background: transparent; color: var(--code-link); border: 0; padding: 2px 4px; min-width: 4.5em; line-height: inherit; transition: none; cursor: pointer; }
+.source-line { white-space: pre; }
+.line-number { display: inline-block; width: 4ch; padding-right: 1ch; margin-right: 1.5ch; border-right: 1px solid var(--code-border); text-align: right; user-select: none; color: var(--muted); }
+.syntax-token { color: var(--syntax-light); font-style: var(--syntax-light-style); font-weight: var(--syntax-light-weight); text-decoration: var(--syntax-light-decoration); }
+:root[data-theme="dark"] .syntax-token { color: var(--syntax-dark); font-style: var(--syntax-dark-style); font-weight: var(--syntax-dark-weight); text-decoration: var(--syntax-dark-decoration); }
+.copy-buffer { position: fixed; left: 0; top: 0; opacity: 0; pointer-events: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 details { margin: 30px 0; }
 summary { cursor: pointer; color: var(--link); text-decoration: underline; text-underline-offset: 6px; font-size: 24px; }
 .source-caption { font-size: 16px; line-height: 1.8; color: var(--muted); overflow-wrap: anywhere; }
@@ -138,7 +154,8 @@ summary { cursor: pointer; color: var(--link); text-decoration: underline; text-
 .experiment .katex-display { padding: 10px 0; }
 .experiment .lab-status { margin-bottom: 12px; font-size: 22px; }
 .experiment details { margin: 10px 0 26px; }
-.excerpt-preview { margin-top: -12px; padding: 16px 22px; font-size: 19px; line-height: 1.6; }
+.excerpt-preview { margin-top: -12px; }
+.excerpt-preview pre { padding: 16px 22px; font-size: 19px; line-height: 1.6; }
 .experiment .choices { margin: 12px 0 32px; }
 .lab .primary:hover, .lab .primary:disabled { background: #398957; color: white; border: 0; }
 @keyframes appear { from { opacity: .2; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
@@ -168,7 +185,8 @@ summary { cursor: pointer; color: var(--link); text-decoration: underline; text-
   .case-options button { font-size: 23px; }
   .source-caption { font-size: 14px; }
   pre { font-size: 14px; padding: 14px; }
-  .excerpt-preview { font-size: 14px; padding: 14px; }
+  .excerpt-preview pre { font-size: 14px; padding: 14px; }
+  .code-toolbar { padding: 8px 12px; }
   .experiment .lab-status { font-size: 24px; }
   .map-list li { align-items: baseline; }
   .map-list a { font-size: 22px; color: var(--small-link); }

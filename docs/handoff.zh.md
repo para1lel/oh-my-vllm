@@ -2,6 +2,27 @@
 
 [English](handoff.md)。agent 以英文原文为准。
 
+## 代码之旅语法高亮 (2026-10-07)
+
+全部源码节选与 aligned-prefill 短预览已使用固定版本 Shiki 4.5.0, 在构建时按
+TextMate 规则解析. Rust / Python 的 GitHub 亮暗配色随页面主题切换;
+调整后的注释和关键字在代码背景上的对比度保持 >=4.5:1. 页面通过 textContent
+渲染, 保留源码空白, 泛型与类型语法. 完整节选保留真实行号; 所有代码区域带语言
+标记, 原始源码复制按钮和键盘横向滚动. Clipboard API 和选区复制分别覆盖 HTTPS / localhost
+及 HTTP 预览路径. 阅读时无需加载高亮引擎或外部资源.
+
+验证: 五个 Playwright Chromium 测试全部通过, 包括所有节选的文本保真,
+Rust / Python 主题颜色, token / 工具栏 / 行号对比度, 两种复制路径和手机键盘滚动.
+Rust 工作区测试 (58/39/26), fmt, 硬行宽, Clippy 和 Ruff format/check 通过.
+亮暗主题的代码在桌面与手机尺寸下完成视觉检查. Browser 插件不可用,
+因此使用 Playwright 验证. 独立 milestone 复核通过.
+
+未重跑 Python CPU / GPU 套件与算子 / 框架性能基准, 推理源码未变.
+本次未启动 GPU 程序. 用户明确要求保留的静态预览在原进程退出后已重新启动.
+Node PID 1367241 提供 18084 端口, 地址为 http://10.30.64.14:18084/,
+HTTP 检查返回 200. PID 记录为 /tmp/oh-my-vllm-code-journey-18084.pid.
+浏览器与检查子进程已退出. 下一步为用户审阅更新后的预览, 再制作后续章节.
+
 ## 交互代码之旅预览 (2026-10-07)
 
 新增 `code-journey/`, 使用真正的 Twine/SugarCube 2.37.3, 包含 11 篇阅读文章

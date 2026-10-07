@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 
 const evidence = process.env.JOURNEY_QA_DIR || "/tmp/oh-my-vllm-journey-qa";
 const link = (page, name) => page.getByRole("link", { name, exact: true });
-async function snapshot(page, name) {
+async function snapshot(page, name, codeBlock) {
   await mkdir(evidence, { recursive: true });
   await page.locator("#passages h1").waitFor();
   await page.evaluate(async () => {
@@ -18,6 +18,7 @@ async function snapshot(page, name) {
   if (name === "light-reading" || name === "dark-reading" || name === "light-experiment") {
     await page.screenshot({ path: evidence + "/" + name + "-viewport.png", fullPage: false, animations: "disabled" });
   }
+  if (codeBlock) await codeBlock.screenshot({ path: evidence + "/" + name + "-code.png", animations: "disabled" });
 }
 async function mainRoute(page) {
   await page.goto("/");
@@ -155,4 +156,89 @@ test("backward navigation renders monotonic read markers before map macros", asy
   const row = page.locator(".map-list li").filter({ has: link(page, "文字怎样变成 token?") });
   await expect(row.locator(".read-status")).toHaveText("已读");
   await expect(page.locator("#read-count")).toHaveText("已读 2 篇");
+});
+
+test("syntax colors, exact source copying and HTTP clipboard fallback", async ({ page, context }) => {
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await mainRoute(page);
+  const preview = page.locator(".excerpt-preview");
+  await expect(preview.locator(".source-line")).toHaveCount(2);
+  const data = await page.evaluate(() => SugarCube.setup.journeyData);
+  expect(await preview.locator("code").textContent()).toBe(data.alignmentPreview.text);
+  // Check all generated excerpts, including generic types and Python indentation.
+  const reconstructed = await page.evaluate(() => Object.fromEntries(
+    Object.entries(SugarCube.setup.journeyData.snippets).map(([key, source]) => {
+      const block = SugarCube.setup.codeBlock(source);
+      block.querySelectorAll(".line-number").forEach((number) => number.remove());
+      return [key, block.querySelector("code").textContent];
+    })));
+  for (const [key, source] of Object.entries(data.snippets)) expect(reconstructed[key]).toBe(source.text);
+  await preview.getByRole("button", { name: "复制 Rust 代码", exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(data.alignmentPreview.text);
+  await page.getByText("查看 aligned_prefill 源码", { exact: true }).click();
+  const source = page.locator("details .code-block");
+  await expect(source.locator(".line-number").first()).toHaveText(String(data.snippets.aligned.line));
+  await source.getByRole("button", { name: "复制 Rust 代码", exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(data.snippets.aligned.text);
+  await page.evaluate(async () => {
+    const clipboard = navigator.clipboard;
+    await clipboard.writeText("before HTTP fallback");
+    window.readClipboard = () => clipboard.readText();
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+  });
+  await source.getByRole("button", { name: "复制 Rust 代码", exact: true }).click();
+  await expect(source.getByRole("button", { name: "复制 Rust 代码", exact: true })).toHaveText("已复制");
+  expect(await page.evaluate(() => window.readClipboard())).toBe(data.snippets.aligned.text);
+  await expect(source.getByRole("button", { name: "复制 Rust 代码", exact: true })).toBeFocused();
+  await expect(page.locator(".copy-buffer")).toHaveCount(0);
+  const keyword = preview.locator(".syntax-token").filter({ hasText: /^let$/ }).first();
+  await expect(keyword).toHaveCSS("color", "rgb(189, 41, 59)");
+  await snapshot(page, "highlight-rust-light", preview);
+  await page.getByRole("button", { name: "切换到暗色模式" }).click();
+  await expect(keyword).toHaveCSS("color", "rgb(249, 117, 131)");
+  await snapshot(page, "highlight-rust-dark", preview);
+  await link(page, "继续看 worker 怎样返回结果").click();
+  await link(page, "我读完了, 返回请求主线").click();
+  await page.getByText("查看真实 execute_model 的入口", { exact: true }).click();
+  const python = page.locator("details").filter({ hasText: "查看真实 execute_model 的入口" });
+  await expect(python.locator(".code-language")).toHaveText("Python");
+  await expect(python.locator(".syntax-token").filter({ hasText: /^def$/ })).toHaveCSS("color", "rgb(249, 117, 131)");
+  await python.getByRole("button", { name: "复制 Python 代码", exact: true }).click();
+  expect(await page.evaluate(() => window.readClipboard())).toBe(data.snippets.worker.text);
+  for (const theme of ["dark", "light"]) {
+    if (theme === "light") await page.getByRole("button", { name: "切换到亮色模式" }).click();
+    const contrast = await page.locator(".code-block").evaluateAll((blocks) => {
+      const luminance = (color) => color.match(/\d+/g).slice(0, 3).map(Number)
+        .map((value) => value / 255).map((value) => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4)
+        .reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
+      return blocks.flatMap((block) => {
+        const background = luminance(getComputedStyle(block).backgroundColor);
+        return [...block.querySelectorAll(".syntax-token, .code-language, .code-copy, .line-number")].filter((token) => token.textContent.trim()).map((token) => {
+          const toolbar = token.closest(".code-toolbar");
+          const surface = toolbar ? luminance(getComputedStyle(toolbar).backgroundColor) : background;
+          const foreground = luminance(getComputedStyle(token).color);
+          return { ratio: (Math.max(surface, foreground) + .05) / (Math.min(surface, foreground) + .05),
+            token: token.className, color: getComputedStyle(token).color,
+            background: getComputedStyle(toolbar || block).backgroundColor };
+        });
+      });
+    });
+    expect(contrast.length).toBeGreaterThan(30);
+    expect(Math.min(...contrast.map((item) => item.ratio)), JSON.stringify(contrast.filter((item) => item.ratio < 4.5))).toBeGreaterThanOrEqual(4.5);
+    await snapshot(page, "highlight-python-" + theme, python.locator(".code-block"));
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  const pre = python.locator("pre");
+  await expect(pre).toBeVisible();
+  const size = await pre.evaluate((node) => ({ content: node.scrollWidth, viewport: node.clientWidth }));
+  expect(size.content).toBeGreaterThan(size.viewport);
+  await pre.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => pre.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await pre.evaluate((node) => { node.scrollLeft = 0; });
+  await snapshot(page, "highlight-python-mobile", python.locator(".code-block"));
+  expect(errors).toEqual([]);
 });
