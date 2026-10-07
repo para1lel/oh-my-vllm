@@ -5,7 +5,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "serve": "node scripts/serve.mjs",
-    "test": "playwright test"
+    "test": "node --test tests/excerpt.test.mjs && playwright test"
   },
   "devDependencies": {
     "@fontsource/lxgw-wenkai": "5.3.0",

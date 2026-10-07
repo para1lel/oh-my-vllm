@@ -19,7 +19,7 @@ export const sourceNotes = {
   },
   request: {
     title: "Request 的 9 个字段",
-    intro: "Request 是 Rust 为一条请求保存的状态记录. RequestId 是 u64 请求编号, BlockHash 是用 u64 保存的前缀摘要. 块是固定长度的历史片段, 本项目每块 784 个 token; 前缀摘要用于查找这些片段的缓存. MTP (Multi-Token Prediction) 先提出多个候选 token, 再由目标模型验证; 尚待验证的候选叫作草稿.",
+    intro: "Request 是 Rust 为一条请求保存的状态记录. u64 是 64 位无符号整数. RequestId 是 u64 请求编号, BlockHash 是用 u64 保存的前缀摘要. 块是固定长度的历史片段, 本项目每块 784 个 token; 前缀摘要用于查找这些片段的缓存. MTP (Multi-Token Prediction) 先提出多个候选 token, 再由目标模型验证; 尚待验证的候选叫作草稿.",
     entries: [
       ["id", "这条请求的唯一编号, 类型是 RequestId.", "把调度计划, 缓存分配, worker 返回结果和取消操作对应到同一条请求."],
       ["prompt_len", "最初提示词的 token 数, 请求创建时确定.", "即使历史继续增长也保留原值. token_ids.len() 减去它, 得到已生成的 token 数."],
@@ -158,3 +158,160 @@ export const sourceNotes = {
     ],
   },
 };
+
+Object.assign(sourceNotes, {
+  runtimeConfig: {
+    title: "RuntimeConfig 的 5 个字段", intro: "这是 Python 接收的启动配置. 数量包含保留的 0 号缓存位置, 实际可写容量会少一个.",
+    entries: [
+      ["model", "本地模型目录.", "读取配置, safetensors, tokenizer 和对话模板."],
+      ["max_model_len", "提示词加输出的 token 数上限, 默认 65536.", "校验请求与位置; 长上下文验收使用显式配置, 最高 262144."],
+      ["num_gpu_blocks", "兼容现有配置的缓存容量单位, 默认 1024.", "逻辑 FA 页数为它的整数三分之一. 每个逻辑页实际覆盖 784 个 token."],
+      ["speculative_tokens", "每轮最大草稿数量, 默认 0.", "0 走普通生成; 4 启用 MTP 头和验证路径."],
+      ["mamba_blocks", "独立 GDN 状态池容量, 默认 None.", "给定数值时与 FA 分池; None 时采用 FA 逻辑容量."],
+    ],
+  },
+  batchFields: {
+    title: "AttentionBatch 与 Batch 的 10 个字段", intro: "Tensor 是多维数组. 每轮将多条请求的输入拼接成 token 行; starts 标出每条请求的区间, 其余向量按请求或 token 行对应.",
+    entries: [
+      ["positions", "每个 token 在其完整历史中的位置.", "供 RoPE 和因果长度使用, 从 0 开始."],
+      ["fa_slots", "每个 token 的 FA 物理写入槽.", "页编号乘 784 再加页内偏移, 负值跳过写入."],
+      ["attention", "本轮选定的注意力执行对象.", "提供计划后的页表和 wrapper, 或 decode / MTP 注意力实现."],
+      ["starts", "拼接输入中的请求边界向量.", "两条长度为 3 和 1 的输入对应 [0, 3, 4]."],
+      ["sequence_ids", "每个 token 对应的批内请求下标.", "卷积核用它找到该 token 的状态读槽和序列起点."],
+      ["state_reads", "每请求的 GDN 起始读槽.", "读取上一轮确认的卷积与递归状态; 首次从零槽或前缀快照开始."],
+      ["state_writes", "每个 token 的 GDN 候选写槽.", "负值只推进计算; 正值保存候选, 验证后再选正式状态."],
+      ["final_state_writes", "每请求本段结束的状态写槽.", "长 prefill 返回最终状态后, index_copy_ 写到这些位置."],
+      ["prefill_sequences", "批内位于前面的 prefill 请求数.", "将批切为 prefill 与 decode/验证两部分, 分别调用长序列和递归实现."],
+      ["prefill_tokens", "前面 prefill 请求的输入总行数.", "用它切分 Q/K/V; starts 的后半部分减去它后成为局部下标."],
+    ],
+  },
+  poolTouch: {
+    title: "touch 的引用与空闲队列", intro: "命中索引中的页可能已经没有使用者, 仍在可用队列里等待复用. 命中后先摘下该页, 再增加使用者数量.",
+    entries: [
+      ["self / block_ids", "当前块池与要引用的编号列表.", "每个编号都属于此池, 编号 0 是保留位置."],
+      ["id / is_null / ref_cnt", "循环中的块编号, 保留位置标志与对应引用数.", "跳过保留位置; 引用数为 0 时先从空闲队列移除, 然后增加引用."],
+      ["free_queue / remove", "编号索引的双向队列与摘除操作.", "保证后续分配不会拿走当前已经命中的页."],
+    ],
+  },
+  protocolResult: {
+    title: "Python RequestOutput 的 8 个字段", intro: "结果按 request_id 对应. 计算结果, 可见文字和终止原因一起返回, Rust 再分别交给调度器和 HTTP 输出层.",
+    entries: [
+      ["request_id", "长期请求编号.", "批内重排后仍可正确匹配 Rust 的请求."],
+      ["token_ids", "本轮保留的输出 ID.", "中间 prefill 为空; 普通最终片段通常有一个, MTP 可有多个."],
+      ["error", "请求级错误文字, 默认 None.", "终止对应请求, 与导致 worker 整体退出的故障分开处理."],
+      ["num_accepted_draft_tokens", "本轮被保留的已接受草稿数.", "推进缓存计数, 与最终新采样的一个 token 分开."],
+      ["new_draft_token_ids", "为下一轮提出的候选 ID.", "保留在草稿列表, 下一轮交给目标模型验证."],
+      ["text", "本轮已经能安全发送的增量文字.", "经过 UTF-8 解码与 stop 前缀缓冲后交给 Rust 解析器."],
+      ["finish_reason", "终止原因, 未结束时为 None.", "stop 或 length 触发完成事件与状态清理."],
+      ["reasoning_tokens", "已产生的推理部分 token 数.", "提供 usage 中的推理数量统计."],
+    ],
+  },
+  modelForward: {
+    title: "forward 与 logits 的输入和中间量", intro: "F 是 torch.nn.functional. embedding 按 token ID 查向量; zip(..., strict=True) 要求模型层数与缓存数相等.",
+    entries: [
+      ["self / tokens / batch / caches", "模型, 输入 ID 向量, 本轮元数据, 每层的缓存列表.", "tokens 的每行变成 5120 维特征; batch 指定位置与状态读写."],
+      ["hidden", "当前层的 token 特征矩阵.", "按层更新; 最后归一化后交给词表投影."],
+      ["residual", "延迟相加的残差分支, 初始为 None.", "forward_residual 同时返回新分支与累积残差, 以融合加法和归一化."],
+      ["layer / cache / self.layers", "当前层, 该层缓存, 64 层列表.", "一一对应执行 FA 或 GDN 计算."],
+      ["self.embedding / self.norm / self.head", "词嵌入矩阵, 最后 RMS 权重, 词表投影矩阵.", "embedding 查输入; norm 整理幅度; head 产生 248320 个词表分数."],
+      ["hidden.shape[0] / logits_gemm / F.linear", "输入行数, 小行数投影核, 通用矩阵投影.", "最多 32 行用 CuTe-DSL, 更多行走 F.linear 后转 FP32."],
+    ],
+  },
+  modelFA: {
+    title: "FA 的投影, 门控与缓存", intro: "reshape 调整数组维度, flatten 合并维度, sigmoid 将门值映射到 0 与 1 之间. ... 表示保留前面的所有维度.",
+    entries: [
+      ["self / x / batch / cache", "当前层, 输入特征, 位置和页表计划, 此层 KV 池.", "每个 token 的 5120 维特征变成注意力输出, 页表决定历史来源."],
+      ["packed / self.qkv", "合并的投影结果与 FP8 投影权重.", "14336 列包含 Q/门控 12288 列和 K/V 各 1024 列."],
+      ["gate", "24 个 Q 头各 256 维的门控.", "从每头 512 列的后 256 列取出, sigmoid 后逐元素调节注意力输出."],
+      ["q / self.q_norm / self.k_norm", "准备后的 Q, Q/K 归一化权重.", "prepare_attention 对 Q/K 做 RMS 与 RoPE, 并写 K/V 到缓存."],
+      ["out / batch.attention / self.out", "注意力结果, 执行对象, 输出投影.", "读取历史 KV, 乘 gate 后合并头维度, 投影回 5120 维."],
+    ],
+  },
+  modelGDN: {
+    title: "GDN 的卷积和递归状态", intro: "split 按给定列数切分. Q/K 的 16 个头扩成 48 个值头, 每头 128 维; self.ba 同时产生更新门和衰减参数.",
+    entries: [
+      ["self / x / batch / cache", "当前层, 输入特征, 状态计划, 两个缓存池.", "用当前输入与已提交状态计算下一特征和候选状态."],
+      ["conv_pool / state_pool", "最近三个卷积输入与递归矩阵池.", "源槽提供历史; 写槽保存本段末尾或逐 token 的候选."],
+      ["mixed / z / self.qkvz", "合并 Q/K/V, 输出门, 合并投影.", "分别为 10240 和 6144 列; mixed 先经过因果卷积."],
+      ["q / k / v", "查询, 键, 值.", "分别拆成 16x128, 16x128, 48x128, 用于递归或长 prefill."],
+      ["decay / beta / self.ba", "对数衰减, 更新门, 生成两者的投影.", "delta_gates 使用 A_log 与 dt_bias 计算衰减, sigmoid 计算 beta."],
+      ["self.a_log / self.dt_bias / self.conv", "可学习的衰减尺度, 时间偏置, 四位置卷积权重.", "控制历史保持速度与局部输入混合."],
+      ["out / self.gate_norm / self.out", "GDN 输出, 带门控 RMS 权重, 输出投影.", "输出按头归一化并乘 SiLU(z), 再投影回 5120 维."],
+    ],
+  },
+  samplingParams: {
+    title: "SamplingParams 的 9 个字段", intro: "每条请求保留自己的参数和随机生成器. max_tokens 限制长度, 其余参数控制分数筛选或终止行为.",
+    entries: [
+      ["max_tokens", "输出 token 上限, 正整数.", "达到数量就结束, 与提示词长度分别计算."],
+      ["temperature", "采样温度, 默认 1.", "分数除以温度后做 softmax; 0 走贪心, 极小正值归零."],
+      ["top_p", "保留的累计概率阈值, 默认 1.", "按概率从高到低保留直到越过阈值的那一项."],
+      ["top_k", "最高分候选数量, 默认 -1.", "-1 或 0 关闭筛选; 正值取第 k 个分数作为阈值, 保留并列."],
+      ["seed", "可选的随机种子, 默认 None.", "创建请求自己的 generator, 避免其他请求的采样打乱其随机流."],
+      ["ignore_eos", "是否忽略模型 EOS 结束标记, 默认 False.", "基准可固定长度, 普通服务可在 EOS 处结束."],
+      ["frequency_penalty", "按已生成出现次数调整分数, 默认 0.", "出现 c 次的 ID 减去 c 乘此参数."],
+      ["presence_penalty", "按是否已经生成调整分数, 默认 0.", "已经出现的 ID 减去此参数一次."],
+      ["repetition_penalty", "提示词及已生成历史的重复惩罚, 默认 1.", "正分数除以它, 负分数乘以它; 草稿验证逐行加入候选前缀."],
+    ],
+  },
+  verifyRows: {
+    title: "verify_rows 的逐行接受规则", intro: "rows 是目标模型对每个前缀的采样结果, drafts 是已有候选. 目标行数应比候选数多一, 最后一行可以给出额外输出.",
+    entries: [
+      ["rows / drafts", "目标采样行与草稿 ID 列表.", "只有连续匹配的前缀被接受; 第一处不匹配的目标 ID 成为新输出."],
+      ["accepted / token / row", "保留列表, 当前目标 ID, 行下标.", "每个可达行先保留目标 ID; 与该位置草稿不等就结束."],
+      ["valid / ValueError / RuntimeError", "当前行有效标志, 行数错误与分布无效的错误类型.", "拒绝实际需要访问的无效行; 未到达的后续行不会影响当前接受结果."],
+    ],
+  },
+  graphReplay: {
+    title: "replay 更新哪些数据", intro: "CUDA Graph 已记录 kernel 的启动序列和数组地址. 重放前将本轮内容写入固定地址, 保持先复制, 后执行的流顺序.",
+    entries: [
+      ["self / tokens / batch / tables", "已捕获的图, 当前输入 ID, 元数据, FA 页表.", "图内地址固定, 本轮内容通过 copy_ 更新."],
+      ["self.tokens / self.attention.tables", "图的固定输入与固定页表数组.", "复制不同请求的数据, 同一形状仍可重用执行序列."],
+      ["self.attention.lengths / batch.positions", "每查询因果终点与历史位置.", "终点等于位置加 1, 保证每个查询只读取自身及之前的 token."],
+      ["f / value / fields / getattr", "字段描述, 字段值, dataclass 字段枚举, 按名字取值.", "逐个复制 Tensor 字段, 包括 starts 与状态读写槽."],
+      ["self.graph / self.hidden / self.logits", "CUDA Graph, 固定隐藏输出, 固定分数输出.", "replay 执行, 返回共享输出数组供后续采样使用."],
+    ],
+  },
+  irDispatch: {
+    title: "语义操作的两条调用路径", intro: "*args 和 **kwargs 收集位置与命名参数. Any 表示接口接收多种参数类型; Operation 的选择器仍检查实际元数据.",
+    entries: [
+      ["self / args / kwargs", "当前 Operation 与本次调用参数.", "同一语义入口兼容 eager 调用与编译捕获."],
+      ["torch.compiler.is_compiling() / self.ir_op", "是否正在捕获图, 与语义节点入口.", "编译时保留语义节点, 由 lowering 选择具体 provider."],
+      ["self.select(...).op", "选择器返回的实现入口.", "eager 模式按静态元数据选择并调用, 记录实际选择证据."],
+    ],
+  },
+  measurement: {
+    title: "summarize 的检查与汇总", intro: "runs 是完整重复测量列表. statistics.median 取中位数, math.isfinite 检查有限数值. 返回字典按 TTFT 与吞吐分别保存统计.",
+    entries: [
+      ["runs / batch_size / output_len / minimum", "测量列表, 批大小, 每请求输出长度, 最少重复次数.", "默认要求至少 5 次, 每次完成 batch_size 乘 output_len 个输出."],
+      ["row / times / t", "一次测量, 其中每请求的 TTFT 列表, 当前时间.", "检查数量, 有限正值, 完整输出与零抢占."],
+      ["values / ttft_s / output_tps", "待汇总数组, 首次输出秒数, 每秒输出数量.", "每次取最慢请求的 TTFT, 保留该次实际吞吐."],
+      ["key / v / median / spread", "指标名, 重复值列表, 中位数, 相对极差.", "spread = (max - min) / median, 用来发现不稳定测量."],
+    ],
+  },
+});
+
+Object.assign(sourceNotes, {
+  wireInit: {
+    title: "InitMsg 的 7 个字段", intro: "Rust 将启动参数编码为 init. Python 检查硬件与页大小约束, 再映射到 RuntimeConfig 并建立模型和缓存.",
+    entries: [
+      ["model_path", "模型本地目录.", "映射为 RuntimeConfig.model, 从中读取配置, 权重和 tokenizer."],
+      ["num_gpu_blocks", "兼容配置的缓存容量单位.", "映射为同名配置, 逻辑 FA 容量取整数三分之一."],
+      ["mamba_blocks", "可选独立 GDN 槽容量.", "None 使用 FA 逻辑容量, 数值使用独立池."],
+      ["block_size", "每个逻辑页的 token 数.", "固定为 784, 由 Python 核对并据此建立物理布局."],
+      ["tensor_parallel_size", "张量并行 GPU 数量.", "当前支持单卡, 固定为 1; Python 拒绝其他数量."],
+      ["max_model_len", "提示词加输出的上下文上限.", "用于输入预算与位置检查, 长上下文运行显式配置."],
+      ["num_speculative_tokens", "草稿上限.", "映射为 speculative_tokens, 0 普通生成, 4 启用 MTP."],
+    ],
+  },
+  wireExecute: {
+    title: "ExecuteMsg 的 6 个字段", intro: "rpc_id 对应本次往返, step_id 标记调度轮次. 其余字段来自 SchedulerOutput, 序列化时省略 Rust 内部的缓存命中统计.",
+    entries: [
+      ["rpc_id", "本次 execute 的关联编号.", "execute_result 必须带回同一编号, 让客户端匹配正在等待的调用."],
+      ["step_id", "Rust 引擎的轮次编号.", "标识一次计划, 与长期 request_id 和往返 rpc_id 分开."],
+      ["scheduled", "本轮单请求片段列表.", "每条带 ID, 起点和两类块表, 交给 planner 核对."],
+      ["finished_request_ids", "需要结束清理的请求编号.", "Python 删除对应 histories, sampler 和已提交状态."],
+      ["preempted_request_ids", "被回收缓存的请求编号.", "清除旧源与 MTP 进度, 保留确认历史供重新接纳."],
+      ["num_batched_tokens", "所有片段的输入总数.", "Python 与实际列表长度求和对照, 再开始模型执行."],
+    ],
+  },
+});

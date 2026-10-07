@@ -1,0 +1,30 @@
+:: Ownership
+<article>
+<<chapterHeader>>
+<h2>一条推理流程为何分成两个进程</h2>
+<p>进程是操作系统管理的一次程序运行, 各自持有内存和运行资源. Rust 进程接收 HTTP, 保存已确认 token 历史, 决定执行顺序和缓存编号. Python 进程加载模型, 持有 GPU 数组, 按编号读取和写入缓存, 返回输出.</p>
+<p>这种划分把排队策略与数值计算分开. 修改请求公平性主要涉及 Rust, 修改矩阵乘法主要涉及 Python 和 CUDA; 消息中的请求编号, 位置和块表把两者联系起来. CUDA 是 NVIDIA GPU 的执行接口与编程模型, 本项目的自有算子通过它执行.</p>
+<h2>Rust 入口怎样建立运行环境</h2>
+<p><<icode "main.rs">> 的命令入口区分 Serve 与 Bench. Serve 建立 HTTP 路由和引擎循环; Bench 构造指定长度的 token 负载, 重用调度和 worker 执行链进行测量. 两者都创建 <<icode "WorkerClient">>, 初始化缓存组和调度器.</p>
+<p>Rust 绑定一个 ZMQ DEALER 地址, 启动指定 Python 解释器, 把地址和运行编号传给子进程. ZMQ 是收发进程间消息的库, DEALER 是这里两端使用的异步通信接口. Python 连接后响应 init, 依次建立设备, 模型和缓存. Rust 得到成功回复后才开始派发请求.</p>
+<p>init 携带运行配置. <<icode "RuntimeConfig">> 的五个字段直接影响模型路径, 输入预算, 缓存容量和 MTP 路线.</p>
+<<source "runtimeConfig" "展开 RuntimeConfig 与字段说明">>
+<p><<icode "num_gpu_blocks // 3">> 保留现有配置与逻辑 FA 页容量的换算关系. 这个除法属于容量单位兼容, 每页在 GPU 上仍按 784 个 token 存放. 指定 <<icode "mamba_blocks">> 可以给 GDN 另设状态容量; 省略时采用 FA 逻辑容量.</p>
+<h2>Python 初始化什么</h2>
+<p><<icode "init_device">> 选择当前可见 GPU 的设备 0. 正式运行由项目的 GPU 包装脚本等待空闲 B200, 固定所选 UUID, 再让该卡成为进程可见设备. <<icode "identity">> 记录解释器, 包版本和 CUDA 构建来源, 检查运行路径; <<icode "verify_loaded_modules">> 再核对已加载模块和动态库.</p>
+<p><<icode "load_model">> 读取本地 safetensors (按名字保存数组的模型权重格式) 权重, 创建 Qwen 层和词表投影. 默认将 forward (模型前向计算) 与 logits (词表分数投影) 包成编译单元, 即由编译器处理的一段函数调用. 显式 eager 设置按普通调用逐操作执行, 用于诊断. 第 11 章解释编译与 CUDA Graph 如何保持相同操作契约.</p>
+<p><<icode "initialize_cache">> 分配每层 GPU 数组: 16 层 FA (全注意力) 的 KV 页, 用来逐位置保存历史; 48 层 GDN (门控递归层) 的卷积池与递归矩阵池, 用来保存最近输入和累积历史状态. 卷积将相邻位置按权重混合, 因果约束表示只读取当前和之前的位置. 开启 MTP 后还建立草稿头缓存与图缓存. tensor (张量) 就是带形状, 数据类型和存放设备的多维数组.</p>
+<h2>一条请求在两边各保存哪些状态</h2>
+<p>Rust 的 Request 是权威的调度历史. Python 同时保留四个按请求编号索引的映射: <<icode "histories">> 保存已确认 ID; <<icode "samplers">> 保存惩罚计数和随机生成器; <<icode "sources">> 保存最近提交的 GDN 源槽; <<icode "computed">> 保存已提交位置. 这些副本用于核对每轮消息与选择计算状态.</p>
+<p>例如请求编号 7 的历史有 4 个 ID, 已计算 3 个. Rust 派发历史位置 3 的一个输入, Python 核对该 ID 与 histories 相等, 从 sources 读状态, 按计划写候选. Python 在返回结果前本地提交新计算位置, Rust 收到后再校验并提交. execute 协议没有另发提交确认, 请求错误按清理路线释放状态. 请求完成时, histories 与 sampler 等映射一并释放.</p>
+<p>抢占表示 Rust 暂时收回该请求的缓存. Python 清掉 sources, computed 和 MTP 状态, 保留 histories 供之后重算. 生命周期消息因此和输入计算消息同样重要.</p>
+<h2>execute_model 怎样连接后续模块</h2>
+<p><<icode "execute_model">> 先处理完成与抢占编号, 检查宣告的输入总量, 再为每条请求调用 planner. planner 是在 CPU 上核对历史和地址的计划函数. 随后 validate_batch 检查跨请求写入冲突, 把多条输入拼成批, 调用模型, 采样, 提交候选并返回结果.</p>
+<<source "worker" "展开 execute_model 的入口和状态说明">>
+<p>prefill 请求会被排在 decode 与草稿验证之前, 方便使用不同计算实现. 返回顺序可能与 Rust 派发顺序不同, 双方始终用 request_id 匹配. GPU 数组留在 Python, 消息只传 ID 和整数元数据, 避免复制巨大的模型权重或缓存.</p>
+<h2>启动和退出怎样留下可核对的记录</h2>
+<p><<icode "logging_utils">> 把日志写成 JSON (按字段名组织的文本记录), 包含 UTC (协调世界时) 时间, 日志级别, run_id, pid, component 和 message, 并合并操作自带的 fields. run_id 关联同一次运行, pid 标识进程. 耗时使用只向前推进的单调时钟, 避免系统时间调整影响计时.</p>
+<p>Rust 持有 Python 子进程句柄, shutdown 正常结束 worker; 异常退出则由句柄清理子进程. Python 也监测父进程存活. 单卡模型和缓存属于这一个 worker, 任务结束后释放图, 张量与服务资源.</p>
+<<coverage>>
+<<chapterChoices>>
+</article>

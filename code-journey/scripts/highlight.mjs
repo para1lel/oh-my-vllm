@@ -15,7 +15,7 @@ const colorReplacements = {
 export async function createCodeHighlighter() {
   const highlighter = await createHighlighter({
     themes: Object.values(themes),
-    langs: ["rust", "python"],
+    langs: ["rust", "python", "cpp"],
   });
   return {
     highlight(text, language) {

@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
-import { cp, mkdir, readFile, writeFile, chmod } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, writeFile, chmod } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCodeHighlighter } from "./highlight.mjs";
 import { sourceNotes, readingSyntax } from "../src/source-notes.mjs";
+import { specifications } from "../src/source-specs.mjs";
+import { chapters, coverage } from "../src/curriculum.mjs";
+import { dedent } from "./excerpt.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repo = resolve(root, "..");
@@ -56,24 +59,9 @@ await cp(resolve(cache, "storyformats/sugarcube-2/LICENSE"), resolve(dist, "asse
 await cp(resolve(root, "node_modules/shiki/LICENSE"), resolve(dist, "assets/Shiki-LICENSE"));
 await cp(resolve(root, "node_modules/@shikijs/themes/LICENSE"), resolve(dist, "assets/Shiki-Themes-LICENSE"));
 
-const specifications = {
-  request: ["crates/scheduler/src/request.rs", "pub struct Request {", "\nimpl Request {"],
-  tokenHistory: ["crates/scheduler/src/request.rs", "    pub token_ids: Vec<u32>,", "    /// Unverified MTP draft tokens appended"],
-  computedCounters: ["crates/scheduler/src/request.rs", "    pub num_computed_tokens: usize,", "    /// Maximum number of output tokens"],
-  aligned: ["crates/scheduler/src/lib.rs", "    fn aligned_prefill(", "    pub fn new("],
-  queues: ["crates/scheduler/src/lib.rs", "        let mut token_budget", "        let mut still_running"],
-  waiting: ["crates/scheduler/src/lib.rs", "        // ── phase 2:", "            let has_running"],
-  output: ["crates/scheduler/src/output.rs", "pub struct ScheduledRequest", "// ── step output"],
-  batchOutput: ["crates/scheduler/src/output.rs", "pub struct SchedulerOutput", "// ── worker feedback"],
-  workerResult: ["crates/scheduler/src/output.rs", "pub struct WorkerOutput", null],
-  validate: ["crates/scheduler/src/lib.rs", "            let final_chunk", "            let computed_after"],
-  commit: ["crates/scheduler/src/lib.rs", "            req.num_computed_tokens =\n", "            let full_blocks"],
-  worker: ["python/oh_my_vllm/worker/model_runner.py", "    def execute_model(", "        plans = []"],
-  plan: ["python/oh_my_vllm/worker/batch_plan.py", "def plan_request(", null],
-};
 const snippets = {};
 const highlighter = await createCodeHighlighter();
-for (const [key, [path, begin, end]] of Object.entries(specifications)) {
+for (const [key, [path, begin, end, limit = 48]] of Object.entries(specifications)) {
   const source = await readFile(resolve(repo, path), "utf8");
   const start = source.indexOf(begin);
   if (start < 0) throw new Error("Missing source anchor: " + key);
@@ -82,8 +70,9 @@ for (const [key, [path, begin, end]] of Object.entries(specifications)) {
     if (key === "commit") stop = source.indexOf("        // Remove finished", start);
     if (stop < 0) throw new Error("Missing end anchor: " + key);
   }
-  const lines = source.slice(start, stop).trimEnd().split("\n").slice(0, key === "plan" ? 24 : 48);
-  const text = lines.join("\n");
+  const lines = source.slice(start, stop).trimEnd().split("\n").slice(0, limit);
+  const originalText = lines.join("\n");
+  const text = dedent(originalText);
   const notes = sourceNotes[key];
   if (!notes || !notes.entries.length || notes.entries.some((entry) => entry.length !== 3 || entry.some((value) => !value.trim()))) {
     throw new Error("Missing source explanation: " + key);
@@ -91,11 +80,16 @@ for (const [key, [path, begin, end]] of Object.entries(specifications)) {
   for (const [, field] of text.matchAll(/^\s*pub\s+(\w+)\s*:/gm)) {
     if (!notes.entries.some(([name]) => name === field)) throw new Error("Undocumented field: " + key + "." + field);
   }
+  if (text.startsWith("class ")) {
+    for (const [, field] of text.matchAll(/^    (\w+): /gm)) {
+      if (!notes.entries.some(([name]) => name === field)) throw new Error("Undocumented field: " + key + "." + field);
+    }
+  }
   const language = path.endsWith(".rs") ? "rust" : "python";
   snippets[key] = {
     path,
     line: source.slice(0, start).split("\n").length,
-    text, language,
+    text, originalText, language,
     tokens: highlighter.highlight(text, language),
     sha256: createHash("sha256").update(source).digest("hex"),
   };
@@ -106,12 +100,14 @@ const previewText = snippets.aligned.text.split("\n")
 const alignmentPreview = {
   text: previewText, language: "rust", tokens: highlighter.highlight(previewText, "rust"),
 };
+const sourceCoverage = await buildSourceCoverage(highlighter);
 highlighter.dispose();
 const trace = JSON.parse(execFileSync(resolve(repo, "scripts/with-env.sh"), [
   "cargo", "run", "--quiet", "--locked", "--manifest-path", resolve(root, "trace/Cargo.toml"),
 ], { cwd: repo, encoding: "utf8" }));
 const data = {
-  snippets, alignmentPreview, trace, sourceNotes, readingSyntax,
+  snippets, alignmentPreview, trace, sourceNotes, readingSyntax, chapters,
+  coverage: sourceCoverage,
   sourceRevision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim(),
 };
 await writeFile(resolve(generated, "data.js"), "setup.journeyData = " + JSON.stringify(data) + ";\n");
@@ -119,5 +115,50 @@ execFileSync(resolve(cache, "tweego"), [
   "-f", "sugarcube-2", "--head", resolve(root, "src/head.html"),
   "-o", resolve(dist, "index.html"), resolve(root, "src/story.twee"),
   resolve(root, "src/style.css"), resolve(root, "src/setup.js"), resolve(generated, "data.js"),
+  resolve(root, "src/chapters"),
 ], { cwd: root, env: { ...process.env, TWEEGO_PATH: resolve(cache, "storyformats") } });
 console.log("Built genuine SugarCube 2.37.3 with real Rust scheduler traces.");
+
+async function buildSourceCoverage(highlighter) {
+  const directory = resolve(dist, "sources");
+  await mkdir(directory, { recursive: true });
+  await cp(resolve(root, "src/style.css"), resolve(dist, "style.css"));
+  const records = [];
+  const files = new Map();
+  for (const [chapter, path, anchor, responsibility, decision] of coverage) {
+    if (!chapters[chapter]) throw new Error("Unknown coverage chapter: " + chapter);
+    const source = await readFile(resolve(repo, path), "utf8");
+    const offset = source.indexOf(anchor);
+    if (offset < 0) throw new Error("Missing coverage anchor: " + path + " / " + anchor);
+    const line = source.slice(0, offset).split("\n").length;
+    const name = path.replaceAll("/", "__") + ".html";
+    const sha256 = createHash("sha256").update(source).digest("hex");
+    const record = { chapter, path, line, sha256, responsibility, decision, url: "sources/" + name + "#L" + line };
+    records.push(record);
+    if (!files.has(path)) files.set(path, { source, name, entries: [] });
+    files.get(path).entries.push(record);
+  }
+  // Include every substantive first-party runtime file. Frozen comparison
+  // providers and test modules are deliberately outside the default call chain.
+  for (const directory of ["crates", "python/oh_my_vllm"]) {
+    for (const entry of await readdir(resolve(repo, directory), { recursive: true, withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const path = resolve(entry.parentPath, entry.name).slice(repo.length + 1);
+      if (!/\.(rs|py|cu)$/.test(path) || /\/tests[/.]|\/tilelang_reference\//.test(path)) continue;
+      if (!files.has(path)) {
+        const text = await readFile(resolve(repo, path), "utf8");
+        if (path.endsWith("/__init__.py") && !text.replace(/"""[\s\S]*?"""|#.*|\s/g, "")) continue;
+        throw new Error("Runtime file lacks chapter coverage: " + path);
+      }
+    }
+  }
+  const escape = (text) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
+  for (const [path, { source, name, entries }] of files) {
+    const language = path.endsWith(".rs") ? "rust" : path.endsWith(".cu") ? "cpp" : "python";
+    const lines = highlighter.highlight(source, language).map((tokens, index) =>
+      '<span class="source-line" id="L' + (index + 1) + '"><span class="line-number" aria-hidden="true">' + (index + 1) + '</span>' + tokens.map((token) =>
+        '<span class="syntax-token" style="--syntax-light:' + token.light + ';--syntax-dark:' + token.dark + '">' + escape(token.content) + '</span>').join("") + '</span>').join("\n");
+    await writeFile(resolve(directory, name), `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(path)} / 源码</title><link rel="stylesheet" href="../assets/wenkai/font.css"><link rel="stylesheet" href="../style.css"><script>try{document.documentElement.dataset.theme=localStorage.getItem('journey-theme')||'light'}catch{}</script></head><body><main id="story" class="source-viewer"><article><h1>完整源码</h1><p class="source-caption">${escape(path)} / SHA-256 ${entries[0].sha256}</p><ul class="navigation-list">${entries.map((entry) => '<li>如果想读懂此文件的调用背景, 返回 <a href="../index.html?chapter=' + entry.chapter + '">' + escape(chapters[entry.chapter].title) + '</a>. <p class="small">' + escape(entry.responsibility + '. ' + entry.decision) + '</p></li>').join("")}</ul><button class="text-button" id="source-theme" type="button">切换亮色 / 暗色</button><div class="code-block"><pre tabindex="0" aria-label="完整源码, 可横向滚动"><code class="language-${language}">${lines}</code></pre></div></article></main><script>document.getElementById('source-theme').onclick=()=>{const next=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=next;try{localStorage.setItem('journey-theme',next)}catch{}}</script></body></html>`);
+  }
+  return records;
+}

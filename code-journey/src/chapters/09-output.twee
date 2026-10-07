@@ -1,0 +1,34 @@
+:: Sampling
+<article>
+<<chapterHeader>>
+<h2>词表分数怎样变成输出 ID</h2>
+<p>logits 是模型给每个词表 ID 的分数. 普通最终片段需要一行分数, MTP 验证最多需要五行. RequestSampler 按请求保留已生成历史与随机生成器, 结合 SamplingParams 和可选语法掩码生成概率, 再选出 ID.</p>
+<<source "samplingParams" "展开 SamplingParams 的 9 个字段">>
+<p>temperature 为 0 时选择最高分, 称为 greedy (贪心). 大于 0 时先按温度缩放分数, 再经 softmax 归一化. 极小正温度归零, 避免数值溢出. 随机采样使用请求自己的种子和 generator, 当前调用用指数随机量与概率构造竞赛, 选出最大的一项.</p>
+<<math "p_i=\\frac{e^{z_i/T}}{\\sum_j e^{z_j/T}},\\quad y=\\mathop{\\mathrm{argmax}}_i(p_i/E_i),\\quad E_i\\sim\\operatorname{Exp}(1)">>
+<p>z 是调整和筛选后的分数, T 是正温度, p 是概率, E 是各 ID 独立的指数随机量, y 是选中 ID. T 为 0 使用贪心分支. 实现检查真正使用的行至少存在一个有效有限候选, 无效分布会使对应请求结束.</p>
+<h2>惩罚与 top-k / top-p 的顺序</h2>
+<p>repetition_penalty 看提示词和已生成历史, 对出现过的 ID 按分数正负分别除或乘惩罚系数. frequency_penalty 按已生成出现次数减分, presence_penalty 对已生成出现过的 ID 减分一次. 草稿验证逐行把候选前缀加入临时计数, 每一行对应自己看到的历史.</p>
+<p>语法掩码将不允许的 ID 分数设为负无穷. 随后 top-k 取第 k 高分作为阈值, 并列分数都会保留, 所以候选可超过 k 个. top-p 按概率稳定排序, 保留直到累计概率跨过阈值的那一项, 最高项始终保留.</p>
+<p>小 top-k 情况可以只在候选集合里做排序; 阈值并列需要回到完整稳定排序, 保持筛选语义. 无惩罚贪心路径直接选最大 ID 和有效标志, 将多行结果一次传回 CPU, 减少词表分布传输. 第 10 章会用这些行解释 MTP 接受规则.</p>
+<h2>语法约束怎样保证输出能继续匹配</h2>
+<p>JSON schema 描述允许的字段, 类型与结构. 工具调用同样有参数 schema. 输入准备检查这些结构和引用, 构造匹配器; GrammarOutput 用位掩码表示此刻每个词表 ID 是否允许. 每个整数打包 32 个 ID 的允许位, GPU 按位取得候选许可.</p>
+<p>ServingAdapter.masks 对草稿前缀逐步试探 matcher, 得到各验证行的掩码, 然后回滚. Generation.consume 只对最终保留 ID 正式 accept, 推进匹配器. 这样, 被拒草稿不会污染之后的语法状态.</p>
+<p>工具 XML 参数路径校验能表达的 schema 范围, 把参数结构转成相应约束. 字符串内的空白属于值本身, 参数整理按结构处理空白, 保留值的内容. Rust Parser 在输出端按 schema 恢复参数类型并检查工具标签和重复参数, 连接模型约束与 API 返回结构.</p>
+<h2>Generation 保存哪些输出状态</h2>
+<p>Generation 有十个状态字段. matcher 是可选语法匹配器; max_tokens 是长度上限; stop 是停止字符串列表; eos 是模型结束 ID 集合; reasoning_end 是推理结束标记 ID; reasoning_tokens 累计推理部分数量; ids 保存本请求保留输出; decoder 是增量解码器; pending 暂存尚需判断的文字; finished 保存 None, stop 或 length 的终止原因.</p>
+<p>consume 逐个接收保留 ID, 更新语法和历史, 再处理 EOS, stop 和长度. EOS ID 可以是正式输出历史的一部分, 同时结束生成, 其标记文字不送到用户. reasoning_tokens 计算推理部分直到结束标记, 用于 usage 统计.</p>
+<p>一个 token 可能只对应 UTF-8 字符的一部分. DecodeStream 保留未完整字节, 拼齐后才输出字符. stop 字符串也可能跨 token: pending 保留当前文字中可能构成 stop 前缀的尾部, 下一次继续判断, 完整 stop 及其后内容被截掉.</p>
+<p>例如 stop 为 <<icode "END">>, 本次末尾得到 <<icode "E">>, 后续还可能是 <<icode "ND">>. pending 先保留 E; 若下一次为另一字符, 已排除匹配的文字就可发送. 达到长度或正常结束时, 按结束条件排空可见内容并设置 finish_reason.</p>
+<<source "protocolResult" "展开保留 ID, 文字与结束信息的返回字段">>
+<h2>Rust 怎样增量解析正文, 推理和工具</h2>
+<p>worker 返回的 text 送入 Parser.feed. Parser 保留未完整标记, 区分推理片段, 普通正文与工具调用. ToolProgress 增量扫描结构, 处理引号和嵌套, 记录已经检查的位置, 避免每次从开头重扫不断增长的字符串.</p>
+<p>完整 schema 约束由 Python 的 XGrammar 匹配器与 token mask 执行. Rust parse_tool 按 schema 区分字符串与 JSON 值, 恢复字符串 enum / const, 检查工具名, 标签和重复参数. 数值, 布尔, 列表与对象由 JSON 解析恢复. 工具名称和调用编号被放入标准返回结构. 长度结束时, feed_length 清理未闭合工具内容, 已完成调用与此前可见文字继续保留.</p>
+<p>Output.start / delta / finish 将解析结果翻译为 Chat 或 Responses 的事件. Chat SSE 持续发送增量, include_usage 为 true 时在结尾发送用量事件; Responses 路线还有响应与输出项生命周期事件. SSE (Server-Sent Events) 是服务端向客户端持续发送文本事件的方式.</p>
+<h2>慢客户端与 Responses 历史怎样管理</h2>
+<p>StreamBuffer 暂存待发送事件并跟踪字节数. 通道满时暂停该请求调度, 缓存保留; 积压排空且通道恢复低水位后再 resume. 额外 pending 限制为 1024 个事件与 8 MiB, 首次积压开始计时, 结束后的排空沿用同一 30 秒截止点. 断连或超限则结束请求并释放归属.</p>
+<p>Responses Store 按配置限制条目数, 总字节数与过期时间, 容量紧张时逐条回收旧记录. Output.history 保存可重放的对话内容, normalize 引用 previous_response_id 时接回先前对话. 对话历史按 ID 与工具记录重建, 然后重新经过模板和分词流程.</p>
+<p>从 logits 到概率, 保留 ID, 安全文字, 解析项, API 事件的每一步都有明确状态. 模型算出的候选只有通过停止与长度裁切后才成为正式历史, HTTP 接收到的片段也要符合当前输出项的结构.</p>
+<<coverage>>
+<<chapterChoices>>
+</article>

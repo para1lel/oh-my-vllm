@@ -1,0 +1,30 @@
+:: Basics
+<article>
+<<chapterHeader>>
+<h2>文字为什么要先转换成整数</h2>
+<p>语言模型根据已有内容计算下一段内容的概率. 模型的参数来自训练; 使用这些参数生成回答叫作推理. GPU 是能同时进行大量数值运算的处理器, 模型的输入和输出都要表示成数值数组.</p>
+<p>模型随附一份词表, 把文字片段对应到整数编号. tokenizer (分词器) 按这份词表切分文字. 一个片段叫作 token, 它的编号叫作 token ID. 片段可能是一个字, 一个词的一部分, 一个标点或字节片段. 具体划分由模型自己的分词器决定.</p>
+<p>初始输入叫作 prompt (提示词). 本章用 <<icode "[17, 92, 6]">> 代表三个输入 token, 用 <<icode "42">> 代表一个输出. 这些是解释列表变化的假设编号. 实际文字的编号由本地 tokenizer 产生; 同一个编号可在历史中出现多次.</p>
+<h2>HTTP 输入怎样进入模型</h2>
+<p>HTTP 是客户端向服务器发送请求的协议. 本项目接受 Chat Completions 与 Responses 两类接口. Chat 输入主要是带角色的 messages; Responses 还可以引用先前响应. Rust 的 <<icode "normalize">> 检查模型名和字段, 解析先前对话, 整理工具声明及输出格式, 生成统一的准备输入.</p>
+<p>Python 的 <<icode "ServingAdapter.prepare_inputs">> 再使用模型目录中的 chat template (对话模板), 将 system, user, assistant 等角色和工具记录组织成模型训练时使用的文本形式. 模板也决定推理部分的起始标记. 然后 tokenizer 产生输入 ID, 准备函数建立采样参数和输出状态. 采样是从模型给出的候选分数中按规则选一个 ID, 参数控制选择规则与输出长度.</p>
+<p>输入预算检查的是提示词加允许输出的总长度. 例如输入 3 个, 输出上限 4 个, 总预算为 7. <<icode "max_model_len">> 是该运行实例的上下文上限, 默认 65536; 项目的长上下文验收要求显式配置到最高 262144. 输出上限本身称为 <<icode "max_tokens">>.</p>
+<h2>编号, 位置与计算进度</h2>
+<p>token ID 用来查词表. 序列位置表示它在当前请求历史中排在哪里, 从 0 开始计数. 历史 <<icode "[17, 92, 17]">> 的三个位置是 <<icode "0, 1, 2">>; 第一项和第三项使用同一词表向量 (表示该 ID 的一组数值特征), 位置仍然不同. 后面的 RoPE (旋转位置编码) 会按位置旋转特征, 区分先后关系. 第 8 章会展开它的计算.</p>
+<p>Rust 的 <<icode "token_ids">> 保存提示词与已确认输出组成的完整历史. 模型计算还会保存可复用的中间结果, 称为缓存. <<icode "num_computed_tokens">> 表示缓存已经正式提交到哪里, 也是下一轮读取历史的起点. <<icode "num_in_flight_tokens">> 表示已派发给 worker, 还在等待结果确认的输入数量. worker 是执行模型的 Python 进程.</p>
+<<source "tokenHistory" "展开 token_ids 的源码与说明">>
+<<source "computedCounters" "展开计算进度字段的源码与说明">>
+<p>历史长度为 3, 已提交 2 个时, 下一轮需读取 1 个输入. 派发后已提交数量仍为 2, 在途数量为 1. Rust 检查返回结果后才把已提交数量推进到 3, 将在途数归零.</p>
+<<math "n_{\\mathrm{remaining}} = n_{\\mathrm{history}} - n_{\\mathrm{computed}} = 3 - 2 = 1">>
+<p>式中的 remaining 是剩余输入数, history 是已确认历史长度, computed 是已提交缓存长度. 所有数量都以 token 为单位.</p>
+<h2>prefill 与 decode 各做什么</h2>
+<p>处理提示词叫作 prefill (预填充). 模型读取各位置输入, 计算用于理解历史的特征, 保存缓存. 长提示词可分成多个片段. 中间片段只建立缓存, 最后一个片段才产生回答的第一个 token.</p>
+<p>对示例输入, 第一轮若读 <<icode "[17, 92]">>, 产生 0 个输出. 第二轮读 <<icode "[6]">>, 模型得到下一 token 在整个词表上的分数, 按采样规则选中 <<icode "42">>. 此时历史为 <<icode "[17, 92, 6, 42]">>, 缓存覆盖原来的三个输入位置.</p>
+<p>接下来是 decode (逐步生成). 下一轮把刚选中的 <<icode "42">> 作为输入, 计算它的缓存, 再选择后一个输出. 输入数量与输出数量因此分别统计. 一个新输出刚加入历史时, 其缓存要到后续一轮才能建立.</p>
+<table class="example-table"><caption>三 token 提示词的一次普通生成</caption><thead><tr><th>时刻</th><th>历史长度</th><th>已提交缓存</th><th>本轮输出</th></tr></thead><tbody><tr><td>刚接纳</td><td>3</td><td>0</td><td>0</td></tr><tr><td>中间片段完成</td><td>3</td><td>2</td><td>0</td></tr><tr><td>提示词完成</td><td>4</td><td>3</td><td>1</td></tr><tr><td>下一轮 decode 完成</td><td>5</td><td>4</td><td>1</td></tr></tbody></table>
+<h2>接下来需要理解的三种边界</h2>
+<p>请求边界决定哪些历史属于同一位用户. 计算边界决定本轮从哪里开始, 推进多少输入. 提交边界决定哪些缓存和输出已经可以供下一轮使用. 后面的调度器, 缓存管理器和通信协议都围绕这些边界建立检查.</p>
+<p>项目还支持 MTP (Multi-Token Prediction, 多 token 预测): 先提出多个候选, 再一起验证. 候选叫作草稿, 通过验证的部分才加入已确认历史. 第 10 章会用同样的历史与进度概念解释这条路线.</p>
+<<coverage>>
+<<chapterChoices>>
+</article>

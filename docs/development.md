@@ -187,6 +187,8 @@ the real scheduler trace; it does not start Python model computation.
 The default listener is 0.0.0.0:18084. HOST/PORT can override it for local work.
 Tool downloads are pinned and checked by SHA-256; fonts, KaTeX and licenses are
 included in dist so readers need no CDN. Rebuild after changing referenced core
-source. See code-journey/README.md for curriculum and browser checks. Keep the
+source. The build also checks the file-to-chapter inventory and emits local
+highlighted full-source pages. npm test runs dedentation and browser checks.
+See code-journey/README.md for the twelve complete chapters and authoring rules. Keep the
 user-requested intranet preview running only for the explicit preview handoff;
 the inference-worker cleanup rule still applies to every GPU process.

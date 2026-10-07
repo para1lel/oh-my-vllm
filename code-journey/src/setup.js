@@ -4,38 +4,37 @@ Config.passages.nobr = true;
 Config.passages.transitionOut = 0;
 Config.saves.isAllowed = () => false;
 
-setup.lessons = {
-  Start: { title: "模型推理流程: 从输入文字到输出 token", needs: [] },
-  Token: { title: "分词: 文字, 词表与 token ID", needs: [] },
-  Position: { title: "token ID, 序列位置与计算进度", needs: ["Token"] },
-  Prefill: { title: "生成过程: prefill 与 decode", needs: ["Position"] },
-  Ownership: { title: "Rust 调度与 Python 模型计算的分工", needs: ["Prefill"] },
-  Request: { title: "Request: 请求状态与 9 个字段", needs: ["Prefill"] },
-  Queue: { title: "请求队列与每轮 token 预算", needs: ["Request"] },
-  Pages: { title: "FA 与 GDN 缓存: 每页 784 个 token", needs: ["Queue"] },
-  Experiment: { title: "分块实验: 32768 个 token 如何分两轮计算", needs: ["Pages"] },
-  Worker: { title: "执行消息: 调度计划, 缓存地址与 worker 返回值", needs: ["Experiment", "Ownership"] },
-  Commit: { title: "提交结果: 更新计算进度与输出历史", needs: ["Worker"] },
-};
-const storageKey = "oh-my-vllm-journey-v1";
+setup.lessons = {};
+const storageKey = "oh-my-vllm-journey-v2";
 setup.load = function () {
-  // Use one checked persistence schema instead of SugarCube session auto-restore.
+  setup.lessons = setup.journeyData.chapters;
   session.delete("state");
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(storageKey) || "{}") || {}; } catch {}
-  if (!saved || typeof saved !== "object") saved = {};
-  const valid = (list) => Array.isArray(list) ? list.filter((name) => Object.hasOwn(setup.lessons, name)) : [];
-  State.variables.read = valid(saved.read);
-  State.variables.visited = valid(saved.visited);
-  setup.readMemory = State.variables.read.slice();
-  setup.visitedMemory = State.variables.visited.slice();
-  State.variables.goal = Object.hasOwn(setup.lessons, saved.goal) ? saved.goal : "Request";
-  State.variables.interest = ["basics", "request", "gpu"].includes(saved.interest) ? saved.interest : "basics";
-  State.variables.expLength = [784, 785, 1568, 1569, 32768].includes(saved.expLength) ? saved.expLength : 32768;
-  State.variables.expIndex = Number.isInteger(saved.expIndex) ? Math.max(-1, Math.min(saved.expIndex, setup.journeyData.trace[State.variables.expLength].length - 1)) : -1;
-  if (Object.hasOwn(setup.lessons, saved.last)) {
-    Config.passages.start = setup.nextMissing(saved.last);
+  try { saved = JSON.parse(localStorage.getItem(storageKey) || "null"); } catch {}
+  if (!saved || typeof saved !== "object" || Array.isArray(saved)) {
+    let old = {};
+    try { old = JSON.parse(localStorage.getItem("oh-my-vllm-journey-v1") || "{}"); } catch {}
+    const mapped = { Token: "Basics", Position: "Basics", Prefill: "Basics", Ownership: "Ownership", Request: "Requests", Queue: "Budget", Pages: "Cache", Experiment: "Budget", Worker: "Protocol", Commit: "Requests" };
+    const oldList = Array.isArray(old?.visited) ? old.visited : [];
+    saved = { ...old, read: [], visited: oldList.map((id) => mapped[id]).filter(Boolean),
+      last: mapped[old?.last] || "Start", goal: mapped[old?.goal] || "Basics" };
   }
+  const valid = (list) => Array.isArray(list) ? [...new Set(list.filter((name) => Object.hasOwn(setup.lessons, name)))] : [];
+  const v = State.variables;
+  v.read = valid(saved.read); v.visited = valid(saved.visited);
+  setup.readMemory = v.read.slice(); setup.visitedMemory = v.visited.slice();
+  v.goal = Object.hasOwn(setup.lessons, saved.goal) ? saved.goal : "Basics";
+  v.interest = ["basics", "request", "gpu"].includes(saved.interest) ? saved.interest : "basics";
+  v.expLength = [784, 785, 1568, 1569, 32768].includes(saved.expLength) ? saved.expLength : 32768;
+  v.expIndex = Number.isInteger(saved.expIndex) ? Math.max(-1, Math.min(saved.expIndex, setup.journeyData.trace[v.expLength].length - 1)) : -1;
+  const requested = new URLSearchParams(location.search).get("chapter");
+  if (Object.hasOwn(setup.lessons, requested)) {
+    v.goal = requested; Config.passages.start = setup.nextMissing(requested);
+    const url = new URL(location.href); url.searchParams.delete("chapter");
+    history.replaceState(null, "", url);
+  } else if (Object.hasOwn(setup.lessons, saved.last)) {
+    Config.passages.start = setup.nextMissing(saved.last);
+  } else Config.passages.start = "Start";
 };
 setup.save = function () {
   const v = State.variables;
@@ -58,39 +57,92 @@ setup.complete = function () {
   if (setup.lessons[current] && !State.variables.read.includes(current)) State.variables.read.push(current);
   setup.readMemory = [...new Set([...setup.readMemory, ...State.variables.read])];
 };
-setup.navigate = function (target, interest) {
-  setup.complete();
+setup.navigate = function (target, interest, markComplete = false) {
+  if (markComplete) setup.complete();
   if (interest) {
     State.variables.interest = interest;
     }
-  if (target !== "Map") State.variables.goal = target;
+  if (setup.lessons[target]) State.variables.goal = target;
   setup.save();
-  Engine.play(target === "Map" ? target : setup.nextMissing(target));
+  Engine.play(setup.lessons[target] ? setup.nextMissing(target) : target);
 };
 Macro.add("route", {
   handler() {
-    const [text, target, interest] = this.args;
-    if (target !== "Map" && !setup.lessons[target]) return this.error("Unknown lesson: " + target);
+    const [text, target, interest, markComplete = false] = this.args;
+    if (!["Map", "Start"].includes(target) && !setup.lessons[target]) return this.error("Unknown lesson: " + target);
     const link = document.createElement("a");
     link.href = "#";
     link.className = "link-internal";
     link.textContent = text;
     link.addEventListener("click", (event) => {
       event.preventDefault();
-      setup.navigate(target, interest);
+      setup.navigate(target, interest, markComplete);
     });
     this.output.appendChild(link);
   },
 });
-Macro.add("nextReading", {
+Macro.add("icode", {
   handler() {
-    const goal = State.variables.goal;
-    let target;
-    if (!State.variables.read.includes(goal) && goal !== State.passage) target = goal;
-    else target = this.args[0];
-    new Wikifier(this.output, '<<route "' + this.args[1] + '" "' + target + '">>');
+    // Text insertion prevents Twine markup (e.g. Python //) changing prose DOM.
+    const code = document.createElement("code");
+    code.textContent = this.args[0];
+    this.output.appendChild(code);
   },
 });
+setup.conditionLink = function (list, condition, target, label, interest, markComplete = false) {
+  const item = document.createElement("li");
+  item.append(document.createTextNode(condition + " "));
+  new Wikifier(item, '<<route ' + JSON.stringify(label || setup.lessons[target]?.title || target) + ' ' + JSON.stringify(target) + ' ' + JSON.stringify(interest || null) + ' ' + JSON.stringify(markComplete) + '>>');
+  item.append(document.createTextNode(".")); list.appendChild(item);
+};
+Macro.add("chapterHeader", { handler() {
+  const chapter = setup.lessons[State.passage];
+  const title = document.createElement("h1"); title.textContent = "第 " + chapter.number + " 章. " + chapter.title;
+  const lead = document.createElement("p"); lead.className = "chapter-lead"; lead.textContent = chapter.question;
+  this.output.append(title, lead);
+} });
+Macro.add("chapterChoices", { handler() {
+  const id = State.passage, chapter = setup.lessons[id];
+  const list = document.createElement("ul"); list.className = "navigation-list chapter-choices";
+  const goal = State.variables.goal;
+  if (goal !== id && !State.variables.read.includes(goal))
+    setup.conditionLink(list, "如果已理解本章并想继续之前选择的主题, 阅读", goal, null, null, true);
+  const next = Object.keys(setup.lessons)[chapter.number];
+  if (next && next !== goal) setup.conditionLink(list, "如果已理解本章并想沿推理流程继续, 阅读", next, null, null, true);
+  if (!next) setup.conditionLink(list, "如果已理解本章并想查看整套阅读进度, 打开", "Map", "阅读地图", null, true);
+  const previous = chapter.needs[0];
+  if (previous) setup.conditionLink(list, "如果想复习本章用到的前置知识, 阅读", previous);
+  setup.conditionLink(list, "如果想选择其他主题或查看进度, 打开", "Map", "阅读地图");
+  this.output.appendChild(list);
+} });
+Macro.add("readingMap", { handler() {
+  const list = document.createElement("ul"); list.className = "navigation-list map-list";
+  for (const [id, chapter] of Object.entries(setup.lessons)) {
+    setup.conditionLink(list, "如果想了解" + chapter.question.replace(/[?]$/, "") + ", 阅读", id, chapter.title);
+    const item = list.lastElementChild;
+    const status = document.createElement("span"); status.className = "read-status";
+    status.textContent = State.variables.read.includes(id) ? "已读" : State.variables.visited.includes(id) ? "阅读中" : "待阅读";
+    item.append(document.createTextNode(" "), status);
+  }
+  this.output.appendChild(list);
+} });
+Macro.add("coverage", { handler() {
+  const chapter = this.args[0] || State.passage;
+  const section = document.createElement("section"); section.className = "source-coverage";
+  const heading = document.createElement("h2"); heading.textContent = "本章源码与调用位置";
+  const intro = document.createElement("p"); intro.className = "small";
+  intro.textContent = "以下链接打开当前构建的完整源码. 行号定位到本章入口, 文件摘要用于核对版本.";
+  const list = document.createElement("ul"); list.className = "navigation-list coverage-list";
+  for (const source of setup.journeyData.coverage.filter((item) => item.chapter === chapter)) {
+    const item = document.createElement("li");
+    item.append(document.createTextNode("如果想查看 " + source.responsibility + " 的完整实现, 打开 "));
+    const link = document.createElement("a"); link.href = source.url; link.textContent = source.path + ":" + source.line;
+    item.append(link, document.createTextNode("."));
+    const detail = document.createElement("p"); detail.className = "small"; detail.textContent = source.decision;
+    item.appendChild(detail); list.appendChild(item);
+  }
+  section.append(heading, intro, list); this.output.appendChild(section);
+} });
 setup.copyCode = async function (text) {
   if (navigator.clipboard?.writeText) {
     try { await navigator.clipboard.writeText(text); return; } catch {}
@@ -268,6 +320,15 @@ Macro.add("math", {
     this.output.appendChild(element);
   },
 });
+Macro.add("imath", {
+  handler() {
+    const element = document.createElement("span");
+    element.className = "inline-math";
+    try { katex.render(this.args[0], element, { displayMode: false, throwOnError: true, trust: false }); }
+    catch (error) { return this.error(error.message); }
+    this.output.appendChild(element);
+  },
+});
 
 setup.renderExperiment = function (container) {
   const v = State.variables;
@@ -323,7 +384,6 @@ $(document).on(":passageend", (event) => {
     if (!v.visited.includes(State.passage)) v.visited.push(State.passage);
     v.lastLesson = State.passage;
   }
-  if (State.passage === "Start" && !v.read.includes("Start")) v.read.push("Start");
   setup.readMemory = v.read.slice();
   setup.visitedMemory = v.visited.slice();
   document.getElementById("journey-home").onclick = (event) => { event.preventDefault(); Engine.play("Start"); };
@@ -338,11 +398,11 @@ $(document).on(":passageend", (event) => {
     theme.textContent = next === "dark" ? "亮色" : "暗色";
     theme.setAttribute("aria-label", next === "dark" ? "切换到亮色模式" : "切换到暗色模式");
   };
-  document.getElementById("read-count").textContent = "已读 " + v.read.length + " 篇";
+  document.getElementById("read-count").textContent = "已读 " + v.read.length + " / 12 章";
   document.getElementById("restart").onclick = () => {
-    v.read = []; v.visited = []; setup.readMemory = []; setup.visitedMemory = []; v.goal = "Request"; v.interest = "basics";
+    v.read = []; v.visited = []; setup.readMemory = []; setup.visitedMemory = []; v.goal = "Basics"; v.interest = "basics";
     v.expLength = 32768; v.expIndex = -1; v.lastLesson = "Start";
-    try { localStorage.removeItem(storageKey); } catch {}
+    try { localStorage.removeItem(storageKey); localStorage.removeItem("oh-my-vllm-journey-v1"); } catch {}
     State.reset();
     Config.passages.start = "Start";
     setup.load();
@@ -351,7 +411,7 @@ $(document).on(":passageend", (event) => {
   const back = document.getElementById("journey-back");
   if (back) {
     back.disabled = State.length <= 1;
-    back.hidden = State.length <= 1;
+    back.closest("li").hidden = State.length <= 1;
     back.onclick = () => Engine.backward();
   }
   const container = event.content.querySelector("[data-experiment]");

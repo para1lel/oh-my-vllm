@@ -1,0 +1,38 @@
+:: Compilation
+<article>
+<<chapterHeader>>
+<h2>为什么在模型与具体 kernel 之间加入语义层</h2>
+<p>kernel 是一次 GPU 算子执行的程序. 同一数学操作可能有不同实现, 例如短序列递归 CUDA 与长 prefill FlashInfer. Semantic IR (语义中间表示) 为操作定义统一数学契约, 输入布局, 输出形状和修改区域, 模型通过这些入口调用具体实现.</p>
+<p>Operation 注册语义 op 与各 provider (实现提供者). TensorSpec 描述形状, stride, dtype 和设备; stride 是沿一个数组维度移动一格所跨的存储元素数, 因而视图可以非连续. fake 实现描述输出元数据, 编译捕获时无需真实执行 GPU 计算.</p>
+<p>Qwen 和内核入口导入 ir.fp8, pointwise, recurrent, state, attention, gdn_prefill 与 logits 时完成注册. ir.__init__ 导出编译和选择公共接口, core 管理注册表. eager 调用按静态元数据直接选择, 编译调用先留下语义节点.</p>
+<<source "irDispatch" "展开语义操作的 eager 与编译分派">>
+<h2>各语义模块具体负责什么</h2>
+<p>fp8 定义激活量化和 FP8 投影, 包括带 SiLU 门的版本. pointwise 定义 SiLU 乘法, GDN gates, RMS 和残差归一化. recurrent 定义卷积及 GDN 更新, 将持久 pool 标成会修改的参数. state 定义完整 Q/K 归一化, RoPE 和 KV 写入链.</p>
+<p>attention 用 CPU 计划句柄表示 wrapper 与固定路由, 动态表和长度仍作为显式张量输入. gdn_prefill 返回长序列输出与最终状态, 再按有序 index_copy_ 写回持久池. logits 定义小行数词表矩阵投影. 参考实现提供数学对照, 生产 provider 有显式优先级与支持条件.</p>
+<p>优先级在第一次选择后冻结, 选择只依据元数据和声明路由. 编译器为实际读取的静态条件建立 guard (适用条件检查), 动态页表内容不决定 provider. 不支持的配置或缺少实现会报错, 保持实际执行路线可核对.</p>
+<h2>fullgraph 编译怎样完成 lowering</h2>
+<p><<icode "compile_forward">> 以 fullgraph 捕获整个编译单元. lower_to_inductor 遍历语义节点, 根据元数据选择 provider, 检查参数 schema 和修改声明, 验证 fake 输出形状, stride, dtype 与设备, 替换为具体入口, 再交给 PyTorch Inductor 编译.</p>
+<p>Inductor 是 PyTorch 的图编译后端. 本项目关闭其自动 CUDA Graph, 由 worker 管理捕获与缓存. 模型计算, logits 与 MTP 编译单元各自记录编译次数和选择来源, 第 12 章用这些记录检查测量阶段是否稳定.</p>
+<p>late rewrite 检查相邻 SiLU 与 FP8 投影: 中间输出只有一个使用者, provider 与优先级相符时, 可将 SiLU 门合入量化路径, 删掉独立节点. 融合保留声明的 BF16 中间舍入, 也保留输入所有权, 不把输入存储直接交给输出覆盖.</p>
+<h2>CUDA Graph 为什么需要固定地址</h2>
+<p>GPU 启动许多短 kernel 时, CPU 派发也会占时间. CUDA Graph 记录同一形状的一串启动与依赖, 后续 replay 重用它们. 图内数组地址固定, 但每次输入 ID, 位置, 页表和状态槽可以变化, 重放前用 copy_ 更新固定缓冲.</p>
+<<source "graphReplay" "展开 DecodeGraph 重放前的数据更新">>
+<p>DecodeGraph 处理目标计算, DraftGraph 处理单个 MTP 层, ProposalGraph 处理连续草稿提议. DecodeAttention 在图内准备动态长度和分组查询元数据, starts 也按本轮内容复制, 让一个图能服务不同请求.</p>
+<p>捕获本身会运行计算, 写到 FA 和 GDN 持久缓存. 因而初始化先备份候选写区域及会覆盖的 FA 行, 预热编译单元后恢复, 再同步并捕获, 最后在 finally 再次恢复. 图缓存只保存可供后续真实执行的结构, 捕获试跑的状态不会变成请求进度.</p>
+<h2>GraphCache 如何限制数量和内存</h2>
+<p>目标图默认上限 32, MTP 草稿和提议共享另一组上限 32. 各图族使用独立内存池, 捕获前保留 4 GiB 余量. shape 首次命中记录频率, 空间满时要求新形状反复出现且比冷条目更热, 草稿和提议分别保留族下限 16 与 4.</p>
+<p>替换先成功构造新图, 再释放旧图, 捕获失败时旧条目继续保留, 错误向上报告并记录重试冷却. 频率周期衰减, 防止很久以前的热点永久占位. MTP 在短窗口反复捕获时进入共享冷却, 已有图仍可重放, 控制分组形状变化造成的捕获开销.</p>
+<p>图 key 使用当前路径实际需要的静态形状与范围. ID 与状态地址作为动态内容复制, 既保持执行序列复用, 又保证当前请求读写自己的缓存.</p>
+<h2>自有 CUDA 算子如何实现这些契约</h2>
+<p>kernels.backend 在进程级选择默认 CUDA 后端. cuda_backend.factory_for 为量化, SiLU, gates, RMS, 残差 RMS, RoPE, RMS/RoPE, append, 注意力准备, 卷积, Q/K 归一化, GDN 递归和 decode partial/merge 建立入口. 所有调用使用调用者当前 CUDA 流, 保持与 PyTorch 操作的顺序.</p>
+<p>kernels.cu 用 warp (32 个线程的执行组) 做求和或最大值归约, 用向量读写减少访存指令. RMS 与量化每组计算归约和 scale; packed 投影视图按真实 token stride 取值; Q/K 准备链合并归一化, RoPE 和缓存写入; 卷积读取最近三项并保存候选; GDN 按头更新矩阵, 将所需位置写入 pool.</p>
+<p>decode attention 将很长 KV 切成多个 split. 每个 split 返回局部归一化输出和以 2 为底的 log-sum-exp, 再稳定合并. 令局部输出为 o, 归一化对数为 l, 合并前减去最大 l 避免指数溢出.</p>
+<<math "m=\\max_s l_s,\\quad w_s=2^{l_s-m},\\quad o=\\frac{\\sum_s w_s o_s}{\\sum_s w_s}">>
+<p>s 是分片下标, l_s 是该分片概率归一化量的 log2, CUDA 实现以 exp2 计算权重. 对没有有效位置的分片处理负无穷, 所有权重为零时输出零. 主机入口按布局, 位置整数类型和分片数量分派模板, 检查设备与形状, 并保留实际变体计数和复制统计.</p>
+<h2>构建来源和冻结比较路径怎样记录</h2>
+<p>compiled 以 CUDA 源码, torch 版本和编译器身份生成缓存摘要, 通过 TVM FFI 构建并加载共享库. FFI 是跨语言函数接口, 这里把 Python 调用接到 CUDA 主机入口. 加载前后核对库文件摘要, provenance 记录实际源码, NVCC 路径版本与加载文件.</p>
+<p>显式选择 tilelang 时使用冻结比较实现, 覆盖 FP8 量化, attention append/decode, 卷积, 逐元素与归一化, GDN 归一化/递归等同一算子契约. 这些参考模块用于已有比较证据; 默认推理使用 CUDA. 项目调用的 FlashInfer, CuTe 与 TVM FFI 按独立库接口使用, 不引入 vLLM 执行依赖.</p>
+<p>编译, 图捕获与具体 kernel 分派都留下可检查记录. 运行身份与正式算子用例因此能回答这一轮究竟执行了哪份实现, 下一章把这些信息组织成验收流程.</p>
+<<coverage>>
+<<chapterChoices>>
+</article>

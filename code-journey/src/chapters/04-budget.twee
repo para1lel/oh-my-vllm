@@ -1,0 +1,37 @@
+:: Budget
+<article class="experiment">
+<<chapterHeader>>
+<h2>一轮预算如何分给多条请求</h2>
+<p>每轮 schedule 从 max_num_batched_tokens 建立 token_budget. 预算统计本轮所有请求的输入行, 包括提示词片段, decode 输入和 MTP 草稿验证输入. 已派发的数量从余额扣除, 剩余额度用于后续成员.</p>
+<p>预算为 12 时, 若先给两条 decode 请求各 1 个输入, 余额为 10. 一条尚有 20 个输入的 prefill 初步可取 10 个, 再经边界函数调整. 同时 max_num_seqs 限制运行成员数量; 输入余额充足也要有可用运行槽和缓存.</p>
+<<source "queues" "展开预算初始化与字段说明">>
+<h2>为什么要把提示词分成片段</h2>
+<p>一个长提示词可能占据很大计算量. 分块 prefill 让调度器在相邻轮次重新安排成员, 同时控制本轮输入总量. FA 缓存按位置保存 KV, GDN 缓存保存历史状态. GDN 的恢复点位于选定的 784-token 页边界, 因而片段终点也要考虑这些边界.</p>
+<p><<icode "aligned_prefill">> 接收 request, start 和 count. start 是完整历史中的起点, count 是预算初选数量. 函数先识别 prefill 区间; 对未完成的大段输入向下选整页终点, 再检查最后完整页和当前页的下一边界. 边界必须严格位于候选区间内部才会切开.</p>
+<p>prefill_end 取提示词长度与已确认历史长度减 1 的较大值. 这也支持抢占后的重算: 已生成历史的大部分需要恢复缓存, 最后一个确认 token 是随后 decode 的起点. 正输入的返回量至少为 1, 小预算或页中间起点也能推进.</p>
+<<alignmentPreview>>
+<<source "aligned" "展开 aligned_prefill 的完整源码与说明">>
+<h2>32768 为什么分成 32144 + 624</h2>
+<p>实验把每轮预算设为 32768, 提示词也有 32768 个输入. 因为候选终点已经到达 prefill_end, 此例的第一处分块对齐检查会跳过. 后面的 last_boundary 检查发现最后完整页终点在输入区间内部, 所以在那里切开.</p>
+<<math "b=784,\\quad L=32768,\\quad p=\\left\\lfloor L/b\\right\\rfloor b=41\\times784=32144">>
+<p>b 是每页 token 数, L 是历史长度, p 是最后完整页终点. 第一轮计算 32144 个, 第二轮从该位置处理 624 个尾部输入. 第一轮返回 0 个输出, 第二轮才选出首 token. 这里同时建立整页前缀和最终可继续 decode 的状态.</p>
+<h2>亲手执行一次调度</h2>
+<p>选择输入长度, 点击执行下一步, 查看这一轮输入数, 已提交缓存数与输出数. 数据来自构建时实际运行的 Rust Scheduler. 反馈使用合成 token 42 检查状态契约, 实验展示的是调度流程.</p>
+<div class="lab" data-experiment>
+<div class="case-options" aria-label="输入长度"></div>
+<div class="math-block"></div>
+<div class="track" role="progressbar" aria-label="提示词计算进度" aria-valuemin="0"><div class="track-fill"></div></div>
+<div class="track-labels"><span>已计算 <span data-value="percent"></span></span><span>待计算 <span data-value="remaining-percent"></span></span></div>
+<dl class="metrics"><div class="metric"><dt>已提交 token</dt><dd data-value="computed"></dd></div><div class="metric"><dt>本轮输入</dt><dd data-value="count"></dd></div><div class="metric"><dt>本轮输出</dt><dd data-value="outputs"></dd></div></dl>
+<p class="lab-status" role="status"></p>
+<div class="lab-actions"><button class="primary" data-action="step" type="button">执行下一步</button><button class="text-button" data-action="reset" type="button">重置实验</button></div>
+</div>
+<h2>页边界两侧有哪些差别</h2>
+<p>784 与 1568 恰好是完整页长度, 可以一轮到达结尾并产生首 token. 785 和 1569 多一个尾部输入, 分别走 784 + 1 和 1568 + 1. 32768 则是 41 页加 624. 点击各个长度可以观察完整页与尾部的差别.</p>
+<p>若 max_num_batched_tokens 小于一页, 函数保留正输入推进; 若 start 已经在页中间, next_boundary 帮助选出下一个可恢复点. 抢占恢复和前缀命中都可能改变起点, 因而实现使用绝对历史位置, 不能把 start 当成本轮局部下标.</p>
+<h2>输入预算和缓存预算怎样配合</h2>
+<p>得到 to_schedule 后, 缓存协调器先计算 FA 页与 GDN 候选槽的需求. 容量允许才派发; 容量不足则按调度策略回收或等待. MTP 验证还会为每个候选保留状态, 其缓存需求随草稿数增长, 单看 token_budget 无法保证可执行.</p>
+<p>选择片段, 检查分配, 建立在途计数, 接收结果, 提交缓存是连续的一套步骤. 改变其中一个边界时, 都要检查另一边的地址与计数是否仍然匹配. 下一章会把 784-token 逻辑页映射到 GPU 数组.</p>
+<<coverage>>
+<<chapterChoices>>
+</article>

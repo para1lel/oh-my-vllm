@@ -1,0 +1,38 @@
+:: Protocol
+<article>
+<<chapterHeader>>
+<h2>消息怎样对应一次执行</h2>
+<p>RustMessage 与 PythonMessage 用 type 区分消息种类. prepare 和 execute 及其回复用 rpc_id 对应一次调用, init, register, abort 和 shutdown 按各自类型处理. request_id 标识长期生成请求, rpc_id 标识准备或执行的一次往返. 两个编号服务于不同生命周期, 一次 execute 可以含多个 request_id.</p>
+<p>msgpack 把带类型的记录编码成字节, ZMQ DEALER 传送这些字节. 通信依次经历 init / ready, register, prepare / prepared, execute / execute_result, abort 和 shutdown 等消息. Rust 的 WorkerClient 检查回复类型与编号. Bench 通过 register 直接安装合成 token 提示词, Serve 通过 prepare 构建模板与采样状态. 协议错误通过有类型的 Error 返回引擎.</p>
+<h2>启动字段怎样映射到运行配置</h2>
+<p>init 除了模型和缓存容量, 还带有固定页大小与并行数量. ready 回复实际 logical_num_blocks 与 mamba_blocks, Rust 用它们核对两类池. prepare 携带 rpc_id, request_id 和统一输入 request, prepared 返回相同 rpc_id 与 prompt_token_ids. register 直接发送 request_id 与 prompt_token_ids, abort 按 request_id 清理.</p>
+<<source "wireInit" "展开 init 的 7 个启动字段">>
+<h2>执行计划每个字段携带什么</h2>
+<p>长期 Request 留在调度器, ScheduledRequest 只描述本轮输入. SchedulerOutput 组合所有片段, 本轮总量, 完成和抢占编号. cache_hit_tokens 在 Rust 中统计前缀命中, 序列化执行输入时省去这个统计字段.</p>
+<<explain "output">>
+<<source "output" "展开 ScheduledRequest 定义" false>>
+<<explain "batchOutput">>
+<<source "batchOutput" "展开 SchedulerOutput 定义" false>>
+<p>prefill_token_ids 在首次或重新接纳时提供完整确认历史. token_ids 是实际本轮片段, num_computed_tokens 是它的绝对起点. FA 与 Mamba 块表是两类缓存地址, 两边都检查编号与容量.</p>
+<p>例如历史 <<icode "[17, 92, 6, 42]">>, 已计算 3 个, 普通 decode 输入为 <<icode "[42]">>, 起点为 3. Python 核对这正是 histories[3], 再根据块表和已提交源槽执行.</p>
+<<source "wireExecute" "展开 execute 的 6 个传输字段">>
+<h2>输出如何回到正确请求</h2>
+<p>Python 的 RequestOutput 还带有文字增量, 结束原因, 推理 token 数和请求错误. 桥接编码器组织这些字段, Rust 客户端将调度结果与服务输出分别交给对应层. Rust 调度用的 WorkerOutput 是结果列表, 每条 RequestOutput 保留编号, 输出 ID, 接受草稿数与新草稿.</p>
+<<explain "workerResult">>
+<<source "workerResult" "展开 Rust worker 返回记录" false>>
+<<source "protocolResult" "展开 Python 返回记录的 8 个字段">>
+<p>结果始终按 request_id 匹配, prefill 优先的批重排不会改变归属. 请求级 error 使对应请求结束; CUDA 故障或协议整体失配则结束 worker / 引擎执行, 避免继续使用不可靠状态.</p>
+<h2>CPU 输入准备怎样与 GPU 计算交错</h2>
+<p>模板处理, tokenizer 与语法编译主要在 CPU 运行. Python _PrepareExecutor 使用一个准备线程, 同时最多一个运行任务与一个排队任务. 主线程仍负责 ZMQ 消息与 GPU 执行, 因而新请求的准备可以与当前 execute 交错.</p>
+<p>准备线程产生不可变输入, 主线程收到完成通知后才安装 histories, sampler 和 Generation. 在 Rust 等待 execute_result 时, prepared 可能先到; WorkerClient 暂存这类回复, 保留它们的 rpc_id, 等引擎处理准备接纳. 有界排队和回复缓冲限制积压.</p>
+<p>CPU 准备完成后, HTTP 引擎再次检查输出通道是否仍可用, 再接纳到 Scheduler. 这避免用户早已离开时仍占用 GPU 缓存.</p>
+<h2>取消如何阻止迟到结果重新接纳</h2>
+<p>客户端断开, 准备超时或请求超时都可触发 abort. 排队准备可以直接删掉; 已运行的 CPU 准备记录取消标记, 完成后丢弃结果. Rust 也保留有界取消编号, 防止迟到 prepared 被当成新请求.</p>
+<p>已经运行的请求则从调度器移除, 释放缓存引用, 将 finished_request_ids 送给 Python 删除映射. 引擎空闲时也会发送只含清理编号的 execute, 让最后一条请求结束后仍能及时释放状态.</p>
+<h2>HTTP 错误与进程错误分别如何收尾</h2>
+<p>输入格式或参数验证错误返回 400, 准备阶段内部错误返回 500. 准备接纳达到并发上限或超时返回 503, 请求超出可用接纳容量返回 413. 这些状态让客户端区分修改输入, 稍后重试与服务故障.</p>
+<p>启动握手使用总 deadline, 重试有退避, 防止初始化长时间无响应. Rust 的 ManagedChild 在退出时终止并等待自己启动的 Python; Linux 父进程死亡信号和 Python 存活检查提供额外清理. 所有错误都关联运行日志, 请求级故障与进程故障按各自范围释放状态.</p>
+<p>这条链的关键时序是: 准备输入, 主线程安装状态, Rust 接纳, 派发片段, Python 执行并提交, Rust 校验并提交, 最后发出输出与清理. 后续模型和采样章节沿这条时序展开内部计算.</p>
+<<coverage>>
+<<chapterChoices>>
+</article>

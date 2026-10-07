@@ -1,4 +1,51 @@
-# Handoff — 2026-10-07
+# Handoff — 2026-10-08
+
+## Twelve complete code-journey chapters (2026-10-08)
+
+Replaced the short introductory passages with one substantial page for each of
+the twelve curriculum directions. The self-contained Chinese chapters cover
+HTTP preparation, process ownership, request lifecycle, budgets, FA/GDN layout,
+prefix reuse/preemption, ZMQ/cancellation, Qwen FP8/ordinary projections and
+FA/GDN computation, sampling/grammar/streaming, MTP, Semantic IR/CUDA Graph/native
+CUDA, and correctness/performance verification. Field/variable guides cover all
+27 current source excerpts. The 59 source entries map to 57 unique files;
+build validation rejects omitted substantive default-runtime Rust/Python/CUDA
+files, missing anchors or unexplained displayed record fields. Local highlighted
+full-source pages preserve real line anchors and file hashes.
+
+All page navigation now uses conditional unordered lists. Explicit understood-
+and-continue choices confirm completion; review/map visits preserve reading in
+progress. The checked v2 persistence schema migrates old short-passage visits
+without marking the expanded chapters complete. Source excerpts and clipboard
+copies remove the common literal whitespace prefix while keeping relative
+indentation and original line numbers. Inline code uses textContent through an
+icode macro: Twine no longer interprets Python // as an italic opener or leaks
+code fonts into later content. Code keeps Nerd Font first with LXGW WenKai
+fallback for Chinese shape labels and comments. KaTeX renders inline and display formulas.
+
+Validation: four Node indentation checks and all seven Playwright Chromium tests
+passed. Browser checks exercised all twelve routes, conditional lists,
+prerequisites/interest, review/completion/history/migration/reset, five actual
+scheduler traces, all displayed Rust/Python fields, fonts/formulas, both themes,
+1536x1024 desktop and 390x844 mobile, normalized source copying via both clipboard
+paths, >=4.5:1 code contrast, keyboard scrolling, all source URLs and exact
+Rust/Python/CUDA source-page content. Screenshots were inspected with view_image;
+Browser plugin was unavailable, so Playwright supplied validation. Independent
+reviews checked all twelve chapters against source; findings about wire names,
+cache alias scope, FA routing, ordinary projections, parsing, graph transaction
+order and log2 merging were corrected and rechecked.
+
+Workspace Rust tests (58/39/26), fmt, hard line width, Clippy and Ruff format/check
+passed; all 47 Python files were unchanged. The CPU trace crate test, fmt and
+Clippy passed. Python CPU/GPU suites, operator and framework performance runs
+were not rerun because inference implementations are unchanged. No GPU program
+was launched. The user-requested static preview remains on 0.0.0.0:18084,
+Node PID 1367241, http://10.30.64.14:18084/ (HTTP 200); PID record:
+/tmp/oh-my-vllm-code-journey-18084.pid. GPU compute and owned browser children
+were absent at the final resource check. Screenshot evidence is outside the repo
+in the chat visualization directory under code-journey-qa/twelve-chapters-*.
+Next: user review of the expanded chapters; revise specific teaching gaps found
+in reading. The twelve directions are implemented rather than future outline.
 
 ## Code journey document sizing and self-contained lessons (2026-10-07)
 

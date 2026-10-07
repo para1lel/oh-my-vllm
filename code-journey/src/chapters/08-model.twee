@@ -1,0 +1,40 @@
+:: Model
+<article>
+<<chapterHeader>>
+<h2>模型权重和输入特征从哪里来</h2>
+<p>Qwen 类直接读取本地 Qwen3.8-27B-FP8 配置与 safetensors. safetensors 是按名字保存数值数组的权重格式. Checkpoint 建立文件索引, 读取所需权重并传到 GPU, 将相邻投影的权重及 scale 合并, 校验当前架构的形状.</p>
+<p>投影是一次矩阵乘法 <<imath "Y=XW^{\\mathsf T}">>, 将每行输入变换到另一组特征. 例如 X 为 [行数, 5120], W 为 [14336, 5120], 输出 Y 为 [行数, 14336]. 头是并行的特征组, 每头维度表示一组向量的长度. MLP (多层感知机) 是逐 token 独立执行的前馈网络. 这个模型的隐藏特征维度为 5120, 词表有 248320 个 ID, 共 64 层, 按三层 GDN 加一层 FA 重复 16 次. FA 有 24 个查询头和 4 个 KV 头, 每头 256 维; GDN 有 16 个 Q/K 头与 48 个 V 头, 每头 128 维. MLP 中间维度为 17408.</p>
+<p>embedding 按 token ID 查一行 5120 维向量. forward 让这些向量逐层变换, 得到 hidden. 最后 logits 投影将 hidden 转成每个词表 ID 的分数. logits 还未经过概率归一化, 第 9 章从这些分数开始采样.</p>
+<<source "modelForward" "展开 forward 与 logits 的真实实现">>
+<h2>残差和 RMSNorm 怎样连接各层</h2>
+<p>残差把先前特征直接加到新计算分支, 保留输入信息. RMSNorm 按每行的均方根调整幅度, 再乘可学习权重. epsilon 为 1e-6, 用来稳定很小幅度的输入.</p>
+<<math "\\operatorname{RMSNorm}(x)_i = w_i x_i / \\sqrt{\\frac{1}{d}\\sum_{j=1}^{d}x_j^2+\\epsilon}">>
+<p>x 是一行特征, d 是该行维度, w 是归一化权重, i 与 j 是列下标. 归约在 FP32 完成, 输入和输出通常为 BF16. Checkpoint 对模型大部分 norm 权重加 1, GDN 的带门控 norm 使用 offset=False, 按自身权重加载.</p>
+<p>Layer.forward_residual 将残差相加与 RMS 合并: 整理本层输入, 执行注意力或 GDN, 再将这一分支加入残差并归一化, 最后执行 MLP. 返回新分支与保留残差, 下一层继续. 最后一层之后再做最终 add_rms_norm, 保持代码规定的 BF16 舍入位置.</p>
+<h2>FP8 投影怎样减少矩阵计算成本</h2>
+<p>Linear 有两条分支: 权重有 scale 时使用 FP8 投影与 FP32 缩放系数, scale 为 None 时用普通 F.linear. GDN 的 b/a 投影属于后者, 两份 BF16 权重合成 96 列 (各 48 列) 的门参数. Checkpoint.linear 要求一起打包的投影都有 scale 或都无 scale, 避免把两种布局混合. Linear.silu 同样分别走普通 SiLU 后投影, 或融合 FP8 路线. FP8 是 8 位浮点格式, 表达范围和精度需要 scale 配合. 激活每行按 128 个元素分组量化到 E4M3FN, 权重按 128x128 分块缩放, 矩阵乘法组合二者 scale 得到 BF16 输出.</p>
+<p>FlashInfer 是提供 GPU 推理算子的独立库, TRT-LLM 是其调用的 TensorRT-LLM kernel 路线, CUTLASS 提供 CUDA 矩阵乘法模板实现. GEMM 表示通用矩阵乘法, CuTe-DSL 用 Python 描述这类 GPU kernel. kernels.fp8.linear 根据行数选择独立 FlashInfer 实现: 最多 32 行使用 TRT-LLM 和列优先激活 scale, 更多行使用 CUTLASS 与行优先 scale. 较大行数和输出列数还决定矩阵乘法配置. 显式路由保留经过验证的数值与性能行为.</p>
+<p>MLP 先合并 gate 与 up 投影, 用 SiLU(gate) 乘 up, 再经 down 投影回 5120 维. <<imath "\\operatorname{SiLU}(x)=x\\sigma(x)">>, 其中 <<imath "\\sigma(x)=1/(1+e^{-x})">>, 输出位于 0 和 1 之间. 语义层保留中间 BF16 舍入, 编译阶段可以在满足使用条件时融合量化与 SiLU, 减少中间读写.</p>
+<h2>FA 如何生成 Q/K/V 并读取历史</h2>
+<p>Q 是当前位置查询, K 是历史匹配特征, V 是读出的内容. 合并 qkv 投影产生 14336 列: Q 与 gate 合计 12288, K 和 V 各 1024. 每个查询头的 512 列前半为 Q, 后半为 gate. 24 个查询头共用 4 个 KV 头, 每个 KV 头对应 6 个查询头.</p>
+<<source "modelFA" "展开 FA 投影, 注意力和门控代码">>
+<p>prepare_attention 先对 Q/K 做 RMSNorm, 再执行 RoPE (旋转位置编码). 每个 256 维头只旋转前 64 维, theta 为 10000000. 相位由绝对历史位置决定, 长位置相位用 FP64 计算, 再执行三角函数. K/V 写入 Batch.fa_slots 指定的页槽, 负槽跳过写入.</p>
+<<math "A(Q,K,V)=\\operatorname{softmax}(QK^{\\mathsf T}/\\sqrt{256}+M)V">>
+<p>M 是因果掩码, 将当前查询之后的位置排除. softmax 让有效历史位置的权重和为 1, 权重乘 V 得到各头输出. 输出逐元素乘 sigmoid(gate), 合并头后通过 self.out 回到隐藏维度.</p>
+<h2>prefill 注意力怎样选择执行方法</h2>
+<p>PagedAttention 根据本轮最长查询段选择路线. 查询至少 1024 行时收集活跃 KV, 使用 ragged TRT-LLM; 查询在 128 至 1023 行且历史至少 4096 时使用原生分页 context; 其余 prefill 使用 FA2 (FlashAttention 2) wrapper, 即封装好的分页注意力调用. ragged 表示多条请求可有不同长度, 用边界向量表示.</p>
+<p>Rust 的 784-token 页保持不变. 需要 16-token 原生页时, Python 用视图把每页映射为 49 个子页. K/V 在原始数组中分开放置, 物理表采用页编号乘 98 加子页偏移, 再分别建立 K 与 V 视图. 活跃表和长度限制访问范围, 空页不会成为有效历史.</p>
+<p>满足图使用条件时, 普通短 decode 通过 DecodeGraph 使用 DecodeAttention 的原生计划. eager, 新形状首次执行或图暂未使用时, 仍经 PagedAttention.plan 选择路线, 短段通常使用 FA2. 草稿验证按请求分组保留多个查询的各自因果终点; MTP 头另有起点为 1 的注意力路线, 第 10 章会解释这一位置差别.</p>
+<h2>GDN 怎样压缩历史</h2>
+<p>GDN 合并 qkv 与 z 投影, 分成 10240 列 mixed 和 6144 列输出门 z. mixed 先与此前三个位置执行四位置因果卷积, 应用 SiLU, 再拆成 Q/K/V: 2048, 2048, 6144 列. causal_conv 根据 sequence_ids 和 starts 找到请求边界, 从源槽读最近输入, 按计划保存候选卷积状态.</p>
+<<source "modelGDN" "展开 GDN 的卷积, 门控和递归实现">>
+<p>delta_gates 用 b 计算 sigmoid 更新门 beta, 用 a, A_log 和 dt_bias 计算负的 log-decay. Q/K 显式做 L2 归一化: 向量每项除以 <<imath "\\sqrt{\\sum_i x_i^2+10^{-6}}">>, 将整体长度调到接近 1. 再把 16 个头重复到 48 个值头. 每头递归矩阵 S 按下式推进.</p>
+<<math "S'_t=e^{g_t}S_{t-1},\\quad \\Delta_t=\\beta_t(v_t-S'_tk_t),\\quad S_t=S'_t+\\Delta_t k_t^{\\mathsf T},\\quad o_t=S_tq_t/\\sqrt{128}">>
+<p>g 是 log-decay, beta 是更新门, q/k/v 是当前头向量. 衰减先减少旧状态幅度, delta 修正状态对当前 k 的预测, 外积将两个 128 维向量变成 128x128 矩阵, 每项是对应向量项的乘积, 把修正写入状态, 再用 q 读出结果. 输出经每头带 SiLU(z) 门控的 RMSNorm, 投影回隐藏维度.</p>
+<p>短 decode 与验证使用自有递归 CUDA 实现, 根据候选槽保存各位置状态. planner 将多于一个输入且没有草稿的片段归为 prefill, 使用 FlashInfer 批量算法, 初始状态来自 state_reads, 最终状态写 final_state_writes. Q/K 在调用前显式归一化, log-decay 转成乘法衰减, 两条路线共享同一数学契约.</p>
+<h2>词表投影何时执行</h2>
+<p>forward 得到本轮所有 hidden, planner 只选需要产生输出的行. 最多 32 行的词表投影走独立 CuTe-DSL GEMM, 更多行走 F.linear 后转 FP32. 中间 prefill 不需要采样, 避免为无需输出的行构造完整词表分数.</p>
+<p>模型计算一路携带位置, 页表, 状态读写槽和序列边界. 数值公式说明每层算什么, 这些元数据说明从谁的历史读, 将结果写到哪里. 下一章将词表分数变成保留的 ID 与可见输出.</p>
+<<coverage>>
+<<chapterChoices>>
+</article>

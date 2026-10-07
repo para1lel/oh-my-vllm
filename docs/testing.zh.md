@@ -301,23 +301,28 @@ scripts/test.sh full
 
 ## 交互教程验收
 
-code-journey 的静态监听器运行时, 使用固定版本 Chromium 执行:
+静态监听器运行时执行:
 
     npm --prefix code-journey test
     scripts/with-env.sh cargo test --locked --manifest-path code-journey/trace/Cargo.toml
     scripts/with-env.sh cargo fmt --manifest-path code-journey/trace/Cargo.toml --check
     scripts/with-env.sh cargo clippy --manifest-path code-journey/trace/Cargo.toml --all-targets -- -D warnings
 
-六个 Playwright 测试覆盖真实 SugarCube 标识, 前置关系与兴趣路线, 五组真实 Rust
-调度轨迹, 源码节选显示, 亮暗主题, 刷新和重置, 返回后的地图标记, 控制台健康和
-手机溢出. 语法检查覆盖所有节选的文本保真, Rust / Python 亮暗配色,
-token / 工具栏 / 行号对比度 >=4.5:1, Clipboard API 与 HTTP 选区备用路径的原始源码复制,
-以及键盘横向滚动. 文档测试验证 17/16px 正文和 28/24px 章节标题, 入门节选只展示
-相关字段, 地图与文章标题一致, Request / 消息字段表可见, 每个展示的公开字段
-都有含义与用途说明. 所有文章的字段表都检查手机溢出, 纵向排列的标签须可见,
-缩小字号后的实验按钮对比度须 >=4.5:1. 单独的 Rust 测试核对真实分块计数, 包括 32768 输入的 32144 + 624,
-并通过合成返回值检查最后一个输出的数量契约. 这些是 CPU 教学检查, 不测推理或性能.
+npm test 运行四个 Node 去缩进检查和七个 Playwright 测试.
+覆盖真实 SugarCube 标识, 全部 12 章路线, 兴趣与前置关系, 条件无序跳转,
+五组 Rust 轨迹, 亮暗 / 刷新 / 重置 / 返回, 完成与复习, v1 到 v2 进度迁移.
+文档检查逐一验证显示的 Rust / Python 记录字段, 公式, 字体,
+17/16px 正文, 28/24px 标题, 14/13px 代码和手机溢出.
+源码检查核对当前文件摘要与原始行, 规范后的节选重建和 Clipboard API / HTTP
+选区备用路径复制, >=4.5:1 token / 工具栏 / 行号对比度, 键盘滚动,
+全部完整源码 URL, Rust / Python / CUDA 高亮页的完整内容及返回链接.
 
-视觉验收另用 view_image 对照 Image Gen 方案和截图, 桌面为 1536x1024,
-手机为 390x844. JOURNEY_URL 可调整测试地址, JOURNEY_QA_DIR 将截图放在仓库外.
-Browser 插件不可用时使用 Playwright; 2026-10-07 的预览验收属于这种情况.
+构建时检查所有实质默认运行 Rust / Python / CUDA 文件都有章节,
+锚点有效且展示字段有说明. 测试, 只有文档的初始化文件和冻结比较实现
+不属于默认主线清单. 独立里程碑审查按真实实现核对正文准确性.
+
+单独 Rust 测试核对实际分块, 包括 32768 输入的 32144 + 624,
+并使用合成 token 反馈检查最后输出数量契约. 这些 CPU 教学检查不运行推理或测性能.
+另查看桌面 1536x1024 与手机 390x844 截图, 核对阅读, 条件列表,
+代码缩进和两种主题. JOURNEY_URL 调整地址, JOURNEY_QA_DIR 将证据保存到仓库外.
+本轮 Browser 插件不可用, 使用 Playwright Chromium 验证.

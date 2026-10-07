@@ -13,198 +13,35 @@ oh-my-vllm 代码之旅
 <<run setup.load()>>
 
 :: StoryInterface
-<header id="journey-header"><a class="brand" id="journey-home" href="#">oh-my-vllm</a><nav class="header-actions" aria-label="阅读工具"><a id="journey-map" href="#">阅读地图</a><button id="theme-toggle" class="text-button" type="button">暗色</button></nav></header>
+<header id="journey-header"><span class="brand">oh-my-vllm</span><button id="theme-toggle" class="text-button" type="button">暗色</button></header>
+<nav class="reading-tools" aria-label="阅读工具"><ul class="navigation-list"><li>如果想重新选择阅读兴趣, 返回 <a id="journey-home" href="#">教程首页</a>.</li><li>如果想查看章节与阅读进度, 打开 <a id="journey-map" href="#">阅读地图</a>.</li></ul></nav>
 <div id="passages"></div>
-<footer id="journey-footer"><span id="read-count"></span><div class="footer-actions"><button id="journey-back" class="text-button" type="button">返回</button><button id="restart" class="text-button" type="button">重新开始</button></div></footer>
+<footer id="journey-footer"><span id="read-count"></span><ul class="navigation-list footer-actions"><li>如果想回到刚才的页面, 点击 <button id="journey-back" class="text-button" type="button">返回</button>.</li><li>如果想清空阅读和实验进度, 点击 <button id="restart" class="text-button" type="button">重新开始</button>.</li></ul></footer>
 
 :: Start
 <article class="opening">
 <h1>模型推理流程: 从输入文字到输出 token</h1>
-<p>你在输入框里写下一句话, 点击发送. 服务器收到这条请求后, 调用语言模型, 将生成的文字送回屏幕.</p>
-<p>语言模型根据已有文字, 计算下一段文字出现的概率. 模型的参数来自训练; 使用这些参数计算并生成回答的过程叫作推理. 一次计算只能推进一部分, 完整回答要经过多轮.</p>
-<p>oh-my-vllm 用 Rust 程序安排请求的执行顺序, 用 Python 程序调用 GPU 完成模型计算. GPU 是适合同时进行大量数值运算的处理器. 我们会跟踪一条请求, 从文字切分讲到第一个生成结果.</p>
-<p class="question">你最想先了解哪一部分?</p>
-<div class="choices">
-<<route "先弄清 token 是什么" "Token" "basics">>
-<<route "跟着请求往前走" "Request" "request">>
-<<route "看看 Rust 与 Python 怎样分工" "Ownership" "gpu">>
-</div>
-<p class="closing">选择会记录你的兴趣. 需要用到的基础知识会先在教程内展开, 读完后继续前往所选章节. 阅读地图保留进度, 也可以随时换一条路线.</p>
-</article>
-
-:: Token
-<article>
-<h1>分词: 文字, 词表与 token ID</h1>
-<p>模型的数值计算需要整数输入. 词表是一张片段与整数编号的对应表; tokenizer (分词器) 把文字切成词表中的片段, 再查出各片段的编号.</p>
-<p>一个片段叫作 token, 它的词表编号叫作 token ID. 一个 token 可以对应一个字, 一个词的一部分, 或一个标点. 具体切分由模型配套的分词器决定.</p>
-<p>例如, 我们用 <code>[17, 92, 6]</code> 代表包含三个 token 的输入. 这些数字是教学用的假设 ID, 用来说明列表怎样变化. 实际文字的编号由分词器生成.</p>
-<p>用户提供的初始输入叫作提示词 (prompt). 对话输入还包含谁在说话等信息. 本项目使用模型文件附带的 chat template (对话模板), 将角色和消息内容排成模型需要的格式, 再完成分词.</p>
-<p>Rust 用 <code>Request</code> 记录一条请求的状态. 其中的 <code>token_ids</code> 保存完整历史: 最初是提示词, 以后把每个确认的输出 ID 加到末尾. 产生 ID <code>42</code> 后, 示例历史变成 <code>[17, 92, 6, 42]</code>.</p>
-<<source "tokenHistory" "查看 token_ids 的源码与说明">>
-<div class="choices"><<nextReading "Position" "我读完了, 接着看位置">></div>
-</article>
-
-:: Position
-<article>
-<h1>token ID, 序列位置与计算进度</h1>
-<p>token ID 用来查词表. 序列位置表示这个 token 在当前历史中排在哪里, 从 0 开始计数. 同一个 ID 可以出现多次, 每次有自己的位置.</p>
-<table class="example-table"><caption>示例历史 [17, 92, 17]</caption><thead><tr><th scope="col">序列位置</th><th scope="col">token ID</th><th scope="col">含义</th></tr></thead><tbody><tr><td>0</td><td>17</td><td>第一个输入</td></tr><tr><td>1</td><td>92</td><td>第二个输入</td></tr><tr><td>2</td><td>17</td><td>第三个输入, 重复使用 ID 17</td></tr></tbody></table>
-<p>计算还需要一个进度. 模型把已经算出的中间结果放进缓存, 后续轮次可以复用. <code>num_computed_tokens</code> 记录已经提交且缓存可用的 token 数, 也是下一轮在历史中的起点.</p>
-<p>历史有 3 个 token, 已经提交 2 个时, 下一轮从位置 2 开始, 还需处理 1 个. 下面公式里的三个数量分别是剩余输入数, 历史长度和已提交数.</p>
-<<math "n_{\\mathrm{remaining}} = n_{\\mathrm{history}} - n_{\\mathrm{computed}} = 3 - 2 = 1">>
-<p><code>num_in_flight_tokens</code> 记录已经发给 Python worker, 等待确认的输入数. worker 是执行模型计算的进程. 派发剩下的 1 个输入后, 已提交数仍为 2, 在途数为 1. Rust 收到并检查结果后, 已提交数变成 3, 在途数归零.</p>
-<<source "computedCounters" "查看这两个计数字段">>
-<div class="choices"><<nextReading "Prefill" "我读完了, 看看模型怎样接着写">></div>
-</article>
-
-:: Prefill
-<article>
-<h1>生成过程: prefill 与 decode</h1>
-<p>处理提示词的阶段叫作 prefill (预填充). 模型读取输入 ID, 计算各位置的中间结果, 并在缓存中保存后续生成要用的状态. 长提示词可以分几轮计算, 每轮处理一段.</p>
-<p>以前面的三个输入为例: 如果第一轮只处理前两个输入, 这一轮产生 0 个输出 token. 第二轮处理最后一个输入, 模型得到下一 token 的概率分布, 再通过采样选择一个 ID. 我们假设选中了 <code>42</code>.</p>
-<p>采样是按设定规则从概率分布中选取结果. 计算这份分布的模型调用常叫作 forward (前向计算). 算完提示词后, 历史变为 <code>[17, 92, 6, 42]</code>, 缓存覆盖前三个位置.</p>
-<p>接下来进入 decode (逐步生成). 普通生成的下一轮把新 ID <code>42</code> 当作输入, 算出它的缓存, 再选择后一个输出 ID. 因此, 本轮处理的输入数与本轮产生的输出数需要分别统计.</p>
-<p>本教程的实验使用普通生成. 源码也支持 MTP (Multi-Token Prediction): 先提出多个候选 ID, 再由目标模型一起验证. 候选叫作草稿, 验证通过的数量记在 <code>num_accepted_draft_tokens</code>. 普通生成时这个数量为 0.</p>
-<<source "validate" "查看 Rust 如何检查返回的输出数量">>
-<div class="choices"><<nextReading "Request" "我读完了, 继续走选中的路线">></div>
-</article>
-
-:: Ownership
-<article>
-<h1>Rust 调度与 Python 模型计算的分工</h1>
-<p>Rust 与 Python 是这里使用的两种编程语言, 各自的程序运行在独立进程中. Rust 调度器决定这一轮选择哪些请求, 各处理多少输入, 并分配缓存编号. Python worker 按这份计划执行模型, 返回确认的输出 ID.</p>
-<div class="flow"><span>Rust 调度</span><svg viewBox="0 0 26 16" aria-hidden="true"><path d="M1 8h23m-6-6 6 6-6 6"/></svg><span>ZMQ / msgpack</span><svg viewBox="0 0 26 16" aria-hidden="true"><path d="M1 8h23m-6-6 6 6-6 6"/></svg><span>Python 计算</span></div>
-<p>ZMQ 是进程之间收发消息的通信库. 两边使用它的 DEALER 通信接口; Rust 用 bind 监听地址, Python 用 connect 连接这个地址. msgpack 是消息编码格式, 将整数和列表等记录转换成可以发送的字节, 接收方再解码.</p>
-<p>消息传递 token ID, 起始位置和缓存块表. 块表是编号列表, 用来告诉 Python 到哪里读取和写入缓存. GPU tensor 是 GPU 内存中的多维数值数组, 用于保存模型数据与计算结果, 由 Python 进程持有.</p>
-<p>这样的分工让请求排队策略和 GPU 计算方法可以分别改进. 两个进程通过明确的消息字段协调: Rust 提供执行范围, Python 检查范围与地址, Rust 再检查返回结果后提交状态.</p>
-<div class="choices"><<nextReading "Request" "我读完了, 返回请求主线">></div>
-</article>
-
-:: Request
-<article>
-<h1>Request: 请求状态与 9 个字段</h1>
-<p><code>Request</code> 是 Rust 为一条请求保存的长期状态记录. 提示词变成 ID 后, 它保存原始长度和完整历史, 跟踪已提交进度, 并规定最多可以生成多少输出.</p>
-<p>例如提示词为 <code>[17, 92, 6]</code>, 输出上限为 4. 新请求的 <code>prompt_len = 3</code>, <code>max_tokens = 4</code>, 两个计算进度都为 0. 生成两个输出后, 历史长度为 5, 已生成数为 2.</p>
-<<math "n_{\\mathrm{generated}} = n_{\\mathrm{history}} - n_{\\mathrm{prompt}} = 5 - 3 = 2">>
-<p>源码还为前缀复用和 MTP 保存信息. 前缀指历史开头的一段; 如果相同开头已经算过, 可以找到对应缓存并复用. 哈希是从内容计算的短摘要, 用于查找这段缓存. MTP 草稿是等待目标模型验证的候选 ID, 与已确认历史分别保存.</p>
-<<explain "request">>
-<<source "request" "逐行看 Request 的真实字段" false>>
-<h2>状态怎样变化?</h2>
-<p>新请求处于 <code>Waiting</code>, 等待分配缓存. 分配成功后进入 <code>Running</code>. 内存不足时, 调度器可以回收某条请求的缓存, 把它标为 <code>Preempted</code> 后重新排队; 后续重新计算历史, 恢复生成. 达到输出上限或被取消的请求会从队列中移除.</p>
-<div class="choices"><<route "我读完了, 让请求进入队列" "Queue">></div>
-</article>
-
-:: Queue
-<article>
-<h1>请求队列与每轮 token 预算</h1>
-<p>调度器维护两个队列. <code>waiting</code> 保存等待接纳的请求, <code>running</code> 保存已经持有缓存的请求. 每次调用 <code>schedule</code>, 就安排一轮计算.</p>
-<p>这一轮先推进 running 中的请求, 再用剩余预算接纳 waiting 中的新请求. 多条请求的输入可以组合成一批, 一起送给模型计算. 下一轮可以换掉已完成的请求并加入新请求, 这种逐轮更新的组织方式叫作连续批处理.</p>
-<p><code>max_num_batched_tokens</code> 限制一轮所有请求的输入总数. 例如预算为 12, 已有请求需要 2 个输入, 新请求便可以使用剩余的 10 个. <code>max_num_seqs</code> 另行限制同时运行的请求数量. 这两个限制分别控制计算量和并发数.</p>
-<p>服务器通过 HTTP 将文字送给客户端. HTTP 是浏览器与服务器交换请求和响应的协议. 客户端读取过慢时, 输出缓冲区会积压; 调度器暂时跳过暂停的请求, 等待缓冲区腾出空间.</p>
-<<source "queues" "看 schedule 如何建立本轮预算">>
-<<source "waiting" "看 waiting 请求怎样申请本轮执行">>
-<p>接下来的实验只放一条请求, 每轮预算设为 32768, 并提供充足缓存. 这样可以看清页边界如何影响它实际得到的输入数量.</p>
-<div class="choices"><<route "我读完了, 看看缓存的分块单位" "Pages">></div>
-</article>
-
-:: Pages
-<article>
-<h1>FA 与 GDN 缓存: 每页 784 个 token</h1>
-<p>模型由多层计算组成, 每层把输入变成下一层需要的数值表示. 当前 Qwen3.8-27B 模型有 16 层 full attention (FA, 全注意力) 和 48 层 GatedDeltaNet (GDN). 两类层保存历史的方法不同.</p>
-<p>FA 为每个位置计算 key 和 value, 两组用于后续读取历史的数值向量. 向量是一列数字. 新位置根据相关程度, 汇总历史位置的 value. 已有 key/value 保存起来, 就可以在后续轮次复用; 这份缓存简称 KV 缓存.</p>
-<p>GDN 把历史信息逐步汇入一个递归状态, 新 token 到来时更新这个状态. 它还保存因果卷积使用的近期历史; 因果表示只使用当前位置及之前的输入. 保存状态快照, 就能从那一刻继续计算, 无需重新读取快照之前的全部输入.</p>
-<p>项目把 token 位置按 784 个一页管理, 即 <code>block_size = 784</code>. 逻辑页表示历史中的位置范围, 物理页表示实际分配的内存位置. FA 块表将逻辑页对应到物理页; GDN 在选定的块边界保存可恢复的状态快照. 源码中 GDN 相关变量沿用 <code>Mamba</code> 命名.</p>
-<p>784 是当前项目混合缓存的固定约束. 调度时需要兼顾 FA 页和 GDN 恢复点, 所以长 prefill 有时在页边界停一轮. GDN 块表中的 0 表示对应位置没有保留快照, 实际写入会选择有效的状态槽.</p>
-<<math "41 \\times 784 = 32144, \\qquad 42 \\times 784 = 32928">>
-<p>32768 个输入包含 41 个完整页, 后面还剩 624 个 token. 接下来看看调度器如何把完整页和尾段分开处理.</p>
-<div class="choices"><<route "我读完了, 亲手执行两轮调度" "Experiment">></div>
-</article>
-
-:: Experiment
-<article class="experiment" data-experiment>
-<h1>分块实验: 32768 个 token 如何分两轮计算</h1>
-<p>选择提示词长度, 逐轮查看调度结果. 每轮输入预算为 32768. 进度表示累计已经计算并提交的输入, 输出计数只表示当前轮产生的 token.</p>
-<div class="case-options" aria-label="选择提示词 token 数"></div>
-<div class="math-block"></div>
-<div class="lab">
-<div class="track" role="progressbar" aria-label="已计算提示词 token" aria-valuemin="0"><div class="track-fill"></div></div>
-<div class="track-labels"><span data-value="percent"></span><span data-value="remaining-percent"></span></div>
-<dl class="metrics"><div class="metric"><dt>累计已计算</dt><dd data-value="computed"></dd></div><div class="metric"><dt>本轮输入</dt><dd data-value="count"></dd></div><div class="metric"><dt>本轮输出</dt><dd data-value="outputs"></dd></div></dl>
-<div class="lab-actions"><button type="button" class="primary" data-action="step">执行下一步</button><button type="button" class="text-button" data-action="reset">重置实验</button></div>
-</div>
-<p class="lab-status" role="status" aria-live="polite"></p>
-<h2>为什么第一轮是 32144?</h2>
-<p>32768 个输入全部放得进预算. <code>aligned_prefill</code> 仍会检查历史中的最后一个完整页边界, 在 32144 处切开, 使完整页与尾段分两轮处理. 第一轮输出 0 个 token, 第二轮处理剩余的 624 个, 再产生首个输出.</p>
-<p>上面公式中的向下取整符号表示只保留完整页: 32768 除以 784 得到 41 个完整页, 再乘以 784 得到 32144. 源码的 <code>block</code> 是页大小, <code>last_boundary</code> 是最后一个完整页的结束位置.</p>
-<<alignmentPreview>>
-<p>函数还有一条预算规则: 如果预算只允许处理一部分 prefill, 且配置预算至少够一页, 就把这一段的结束位置向下对齐. 起点落在页中间时也会检查下一个边界. 正好整页的 784 和 1568 可以一轮完成; 多出 1 个的 785 和 1569 会分两轮.</p>
-<<source "aligned" "查看 aligned_prefill 源码">>
-<p class="small">数据由构建时执行仓库中的 Rust Scheduler 得到. worker 的返回值按普通生成契约构造, 最后一轮使用示例 ID 42. 实验关闭前缀复用和 MTP, 展示调度及计数, 没有调用 GPU 模型.</p>
-<div class="choices"><<route "继续看 worker 怎样返回结果" "Worker">></div>
-</article>
-
-:: Worker
-<article>
-<h1>执行消息: 调度计划, 缓存地址与 worker 返回值</h1>
-<p>长期状态 <code>Request</code> 留在 Rust. 每轮执行前, Rust 为每条选中的请求建立 <code>ScheduledRequest</code>, 再把这些记录装入一份 <code>SchedulerOutput</code> 消息. Python 据此安排模型输入和缓存读写.</p>
-<h2>一条请求在这一轮计算什么?</h2>
-<<explain "output">>
-<<source "output" "查看 ScheduledRequest 消息中的字段" false>>
-<p>同样叫作 <code>token_ids</code> 的列表, 在 Request 中是完整历史, 在 ScheduledRequest 中是本轮片段. 第二轮的片段长度为 624, 片段内下标从 0 开始, 它在完整历史中的起点却是 32144.</p>
-<h2>整轮消息还包含哪些信息?</h2>
-<<explain "batchOutput">>
-<<source "batchOutput" "查看 SchedulerOutput 的完整字段" false>>
-<p>Python 的 <code>execute_model</code> 先处理完成和抢占通知, 再把每个片段长度相加, 检查是否等于消息中的总输入量. 抢占表示缓存被回收, 因此旧的计算位置与状态地址需要清理.</p>
-<<source "worker" "查看真实 execute_model 的入口">>
-<h2>怎样找到缓存里的位置?</h2>
-<p>CPU 是负责程序控制和一般运算的处理器. Python 的 batch planner 在 CPU 上整理计划: 检查历史片段是否一致, FA 页编号是否有效, 并选定本轮读取与写入的 GDN 状态槽. 状态槽是 GPU 状态数组中的一行.</p>
-<p>对于历史位置 <code>p</code>, FA 页表用整数商 <code>p / 784</code> 找到物理页, 用余数 <code>p % 784</code> 找到页内位置. GDN 则从已提交状态或前缀快照恢复, 并为更新后的状态安排目标槽. 模型按这些位置进行前向计算, 完成后在需要输出的位置采样.</p>
-<<source "plan" "查看 batch planner 的参数与检查">>
-<h2>worker 把什么交回 Rust?</h2>
-<<explain "workerResult">>
-<<source "workerResult" "查看 WorkerOutput 与 RequestOutput 的字段" false>>
-<p>实验的第一轮结果是空的输出列表; 第二轮结果是 <code>[42]</code>. 两轮都返回各自的请求编号, 接受草稿数都为 0, 新草稿列表都为空. GPU 中的缓存继续由 Python 持有, Rust 收到这些结果后提交自己的请求进度.</p>
-<div class="choices"><<route "我读完了, 看看 Rust 怎样提交结果" "Commit">></div>
-</article>
-
-:: Commit
-<article>
-<h1>提交结果: 更新计算进度与输出历史</h1>
-<p>提交是把本轮计算确认为下一轮可以使用的状态. Rust 先调用 <code>validate_output</code>, 检查 worker 是否按计划返回: 普通生成的中间 prefill 片段应返回 0 个输出, 最终片段应返回 1 个.</p>
-<p><code>scheduled_end</code> 是派发时的起点加在途输入数. 它覆盖当前已确认历史的末尾时, 这一轮属于最终片段. MTP 验证时, 期望输出数还包括通过验证的草稿; 普通生成的草稿数为 0.</p>
-<<source "validate" "查看检查输出数量的完整条件">>
-<p>检查通过后, <code>update</code> 推进已提交位置, 清零在途计数, 并把确认的输出 ID 加到历史末尾. 追加时检查 <code>max_tokens</code>, 达到用户设置的输出上限后结束请求.</p>
-<<source "commit" "查看 update 怎样提交确认的结果">>
-<table class="example-table"><caption>32768 个输入的实验状态, 每行表示提交之后</caption><thead><tr><th scope="col">时刻</th><th scope="col">已计算</th><th scope="col">历史长度</th><th scope="col">本轮输出</th></tr></thead><tbody><tr><td>创建请求</td><td>0</td><td>32768</td><td>0</td></tr><tr><td>提交第一轮</td><td>32144</td><td>32768</td><td>0</td></tr><tr><td>提交第二轮</td><td>32768</td><td>32769</td><td>1</td></tr></tbody></table>
-<p>第二轮之后, 提示词已经算完, 新 ID <code>42</code> 也进入历史. 它自身的缓存会在下一轮 decode 中计算. 这解释了为什么历史长度可以比已计算数多 1.</p>
-<p>服务器用分词器将确认的输出 ID 解码成文字, 通过 HTTP 送给客户端. 后续轮次重复计算和提交, 逐步把回答写出来.</p>
-<div class="choices"><<route "回到实验, 换一条请求" "Experiment">><<route "我读完了, 查看后续阅读大纲" "Map">></div>
+<p>你输入一句话, 服务器把它转换成模型能读取的整数, 安排 GPU 计算, 再把结果逐段送回来. oh-my-vllm 将这条流程分成两个进程: Rust 管理请求和缓存地址, Python 执行模型.</p>
+<p>这份教程用 12 个完整章节讲解当前项目的推理主线. 每章都有问题背景, 执行步骤, 设计取舍, 源码摘录和完整文件入口. 你可以从头阅读, 也可以选择一个感兴趣的主题; 教程会先带你读该主题用到的前置章节.</p>
+<p>阅读只需要理解教程内先前出现的概念. token, GPU 数组, 缓存页, 采样和编译会在第一次使用时解释. 数字例子帮助追踪状态, 字段表说明代码中的名字如何参与实际计算.</p>
+<h2>选择阅读起点</h2>
+<ul class="navigation-list">
+<li>如果想先理解模型怎样读取文字并生成回答, 阅读 <<route "输入与生成" "Basics" "basics">>.</li>
+<li>如果关心请求怎样排队和推进, 沿前置章节进入 <<route "请求管理" "Requests" "request">>.</li>
+<li>如果关心 GPU 上的模型计算, 沿前置章节进入 <<route "Qwen 模型计算" "Model" "gpu">>.</li>
+<li>如果想先浏览所有主题, 打开 <<route "12 章阅读地图" "Map">>.</li>
+</ul>
+<p class="small">阅读记录保存在当前浏览器. 点击章节末尾的已理解继续链接会确认本章已读; 复习前置知识或查看地图会保留阅读中状态. 首版短文的访问记录会保留为阅读中, 新扩写章节可重新阅读.</p>
 </article>
 
 :: Map
 <article>
-<h1>阅读地图与教程大纲</h1>
-<p>按兴趣选择文章. 用到的前置文章会先展开, 已读内容可以随时重访.</p>
-<ul class="map-list">
-<<for _name range Object.keys(setup.lessons)>>
-<<capture _name>><li><<route setup.lessons[_name].title _name>><span class="read-status"><<if $read.includes(_name)>>已读<<elseif $visited.includes(_name)>>阅读中<<else>>待阅读<</if>></span></li><</capture>>
-<</for>>
-</ul>
-<h2>完整教程的 12 个章节方向</h2>
-<p class="small">首版已完成请求到首个输出 token 的主线. 后续将沿着下面的大纲, 继续解释其余核心代码.</p>
-<ol class="outline">
-<li>基础流程: 请求, 分词, 位置与生成.</li>
-<li>进程分工: Rust 调度与 Python 模型计算.</li>
-<li>请求管理: 状态变化与连续批处理.</li>
-<li>计算分配: 每轮 token 预算与分块 prefill.</li>
-<li>缓存布局: 784-token 页与 FA / GDN 状态.</li>
-<li>缓存复用: 前缀摘要, 引用数量与抢占后恢复.</li>
-<li>消息通信: ZMQ / msgpack, 请求取消和错误处理.</li>
-<li>模型计算: Qwen 各层与 FP8 (8 位浮点数) 投影运算.</li>
-<li>输出生成: 采样, 限制允许输出的内容与逐段发送文字.</li>
-<li>多 token 预测: MTP 草稿提议, 验证与状态回滚.</li>
-<li>执行优化: Semantic IR (语义中间表示), 将运算编译为 CUDA GPU 内核, 用 CUDA Graph 复用执行流程.</li>
-<li>验证方法: 正确性测试, 性能测量与验收证据.</li>
-</ol>
-<p class="small">阅读形式参考 <a href="https://matrix67.com/math_journey/" target="_blank" rel="noopener">Matrix67 的数学之旅</a>. 本站使用 Twine / SugarCube 2.37.3, 公式由 KaTeX 显示.</p>
+<h1>12 章阅读地图: 从请求接入到执行验证</h1>
+<p>前 7 章建立请求, 调度, 缓存与通信的共同基础. 第 8 章展开模型层的数值计算, 第 9 至 11 章连接输出, MTP 和 GPU 执行优化. 第 12 章说明怎样检查正确性和性能证据.</p>
+<p>每个方向对应一个完整页面. 点击一个尚缺基础的主题时, 会先进入未读的前置章节; 读完后可沿章节末尾的链接继续所选路线. 已读章节可直接复习.</p>
+<<readingMap>>
+<h2>源码覆盖范围</h2>
+<p>正文覆盖当前默认推理调用链中的 Rust 调度与 KV 管理, HTTP 服务与输出解析, ZMQ 通信, Python 输入准备和 worker, Qwen 模型, 采样与语法约束, MTP, Semantic IR, CUDA Graph, CUDA 算子和所调用的独立计算库. 各章的源码列表附上职责与实现取舍, 构建时逐文件检查运行代码是否有章节归属.</p>
+<p>第 11 章还解释冻结 TileLang 比较路径如何使用同一算子契约. 第 12 章把测试和基准入口接入阅读路线. 第三方库的内部实现通过项目调用契约说明, 仓库中的测试代码用于验证这些契约.</p>
+<ul class="navigation-list"><li>如果想按实际调用顺序从头阅读, 进入 <<route "第 1 章. 输入与生成" "Basics">>.</li></ul>
 </article>

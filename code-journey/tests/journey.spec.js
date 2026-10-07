@@ -1,330 +1,285 @@
-import { test, expect } from "@playwright/test";
-import { mkdir, readFile } from "node:fs/promises";
+import { test, expect } from '@playwright/test';
+import { mkdir, readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 
-import { createHash } from "node:crypto";
-
-const evidence = process.env.JOURNEY_QA_DIR || "/tmp/oh-my-vllm-journey-qa";
-const link = (page, name) => page.getByRole("link", { name, exact: true });
-async function snapshot(page, name, codeBlock) {
+const evidence = process.env.JOURNEY_QA_DIR || '/tmp/oh-my-vllm-journey-qa';
+const route = (page, name) => page.getByRole('link', { name, exact: true });
+const heading = (page) => page.getByRole('heading', { level: 1 });
+async function snapshot(page, name, region) {
   await mkdir(evidence, { recursive: true });
-  await expect(page.locator(".passage-out")).toHaveCount(0);
-  await page.locator("#passages h1").waitFor();
   await page.evaluate(async () => {
     await document.fonts.load('500 17px "LXGW WenKai"');
     await document.fonts.load('400 14px "Fira Code Nerd Font"');
     await document.fonts.ready;
-    window.scrollTo(0, 0);
   });
-  await page.screenshot({ path: evidence + "/" + name + ".png", fullPage: true, animations: "disabled" });
-  if (name === "light-reading" || name === "dark-reading" || name === "light-experiment") {
-    await page.screenshot({ path: evidence + "/" + name + "-viewport.png", fullPage: false, animations: "disabled" });
+  if (region) await region.screenshot({ path: evidence + '/' + name + '.png', animations: 'disabled' });
+  else {
+    await page.evaluate(() => scrollTo(0, 0));
+    await page.screenshot({ path: evidence + '/' + name + '.png', animations: 'disabled' });
   }
-  if (codeBlock) await codeBlock.screenshot({ path: evidence + "/" + name + "-code.png", animations: "disabled" });
 }
-async function mainRoute(page) {
-  await page.goto("/");
-  await link(page, "跟着请求往前走").click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("分词: 文字, 词表与 token ID");
-  await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
-  for (const text of [
-    "我读完了, 接着看位置", "我读完了, 看看模型怎样接着写",
-    "我读完了, 继续走选中的路线", "我读完了, 让请求进入队列",
-    "我读完了, 看看缓存的分块单位", "我读完了, 亲手执行两轮调度",
-  ]) await link(page, text).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("分块实验: 32768 个 token 如何分两轮计算");
-  await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
+async function openChapter(page, target) {
+  await page.goto('/');
+  await page.locator('#journey-map').click();
+  const chapters = await page.evaluate(() => SugarCube.setup.lessons);
+  await route(page, chapters[target].title).click();
+  while (await page.evaluate(() => SugarCube.State.passage) !== target) {
+    await page.locator('.chapter-choices a').first().click();
+  }
+  return chapters;
+}
+function monitor(page) {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => { if (['error', 'warning'].includes(message.type())) errors.push(message.text()); });
+  return errors;
 }
 
-test("genuine Twine, prerequisite routing, real Rust trace and worker branch", async ({ page }) => {
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
-  await page.goto("/");
-  await expect(page).toHaveTitle("oh-my-vllm 代码之旅");
-  await expect(page.locator("tw-storydata")).toHaveAttribute("format", "SugarCube");
-  await expect(page.locator("tw-storydata")).toHaveAttribute("format-version", "2.37.3");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-  await expect(page.locator("#journey-header")).toHaveText("oh-my-vllm阅读地图暗色");
-  await snapshot(page, "light-reading");
-  await mainRoute(page);
-  const value = (key) => page.locator("[data-value='" + key + "']");
-  await expect(value("computed")).toHaveText("0");
-  await page.getByRole("button", { name: "执行下一步", exact: true }).click();
-  await expect(value("computed")).toHaveText("32144");
-  await expect(value("count")).toHaveText("32144");
-  await expect(value("outputs")).toHaveText("0");
-  await expect(page.locator(".katex-error")).toHaveCount(0);
-  await expect(page.locator(".katex")).toHaveCount(1);
-  await snapshot(page, "light-experiment");
-  await page.getByRole("button", { name: "执行下一步", exact: true }).click();
-  await expect(value("computed")).toHaveText("32768");
-  await expect(value("count")).toHaveText("624");
-  await expect(value("outputs")).toHaveText("1");
-  await expect(page.getByRole("button", { name: "已得到首 token" })).toBeDisabled();
-  for (const [length, counts] of [[784, [784]], [785, [784, 1]], [1568, [1568]], [1569, [1568, 1]]]) {
-    await page.getByRole("button", { name: String(length), exact: true }).click();
-    for (const count of counts) {
-      await page.getByRole("button", { name: "执行下一步", exact: true }).click();
-      await expect(value("count")).toHaveText(String(count));
+test('Twine prerequisite routes retain interest and complete all twelve chapters', async ({ page }) => {
+  const errors = monitor(page);
+  await page.goto('/');
+  await expect(page).toHaveTitle('oh-my-vllm 代码之旅');
+  await expect(page.locator('tw-storydata')).toHaveAttribute('format', 'SugarCube');
+  await expect(page.locator('tw-storydata')).toHaveAttribute('format-version', '2.37.3');
+  await snapshot(page, 'twelve-chapters-home-light');
+  await route(page, 'Qwen 模型计算').click();
+  await expect(heading(page)).toContainText('第 1 章. 输入与生成');
+  await expect(heading(page)).toBeFocused();
+  expect(await page.evaluate(() => SugarCube.State.variables.interest)).toBe('gpu');
+  const chapters = await page.evaluate(() => SugarCube.setup.lessons);
+  for (const [id, chapter] of Object.entries(chapters)) {
+    await expect(heading(page)).toHaveText('第 ' + chapter.number + ' 章. ' + chapter.title);
+    await expect(page.locator('.source-coverage li')).not.toHaveCount(0);
+    await expect(page.locator('.error, .katex-error')).toHaveCount(0);
+    if (await page.locator('article code').count()) {
+      await expect(page.locator('article code').first()).toHaveCSS('font-family', '"Fira Code Nerd Font", "LXGW WenKai", monospace');
     }
-    await expect(value("computed")).toHaveText(String(length));
-    await expect(value("outputs")).toHaveText("1");
+    const links = await page.locator('article a, .reading-tools a').evaluateAll((links) => links.map((link) => ({
+      list: link.closest('ul')?.className, condition: link.closest('li')?.textContent,
+    })));
+    expect(links.length).toBeGreaterThan(2);
+    for (const item of links) {
+      expect(item.list).toContain('navigation-list');
+      expect(item.condition).toMatch(/^如果/);
+    }
+    await page.locator('.chapter-choices a').first().click();
   }
-  await page.getByText("查看 aligned_prefill 源码", { exact: true }).click();
-  await expect(page.locator("details pre")).toContainText("let block = self.kv.block_size();");
-  await expect(page.locator("details .source-caption")).toContainText("crates/scheduler/src/lib.rs:80");
-  await link(page, "继续看 worker 怎样返回结果").click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Rust 调度与 Python 模型计算的分工");
-  await link(page, "我读完了, 返回请求主线").click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("执行消息: 调度计划, 缓存地址与 worker 返回值");
-  await link(page, "我读完了, 看看 Rust 怎样提交结果").click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("提交结果: 更新计算进度与输出历史");
-  await link(page, "我读完了, 查看后续阅读大纲").click();
-  await expect(page.locator(".outline li")).toHaveCount(12);
-  await expect(page.locator(".error")).toHaveCount(0);
-  await expect(page.locator(".map-list .read-status").filter({ hasText: "待阅读" })).toHaveCount(0);
+  await expect(heading(page)).toContainText('12 章阅读地图');
+  await expect(page.locator('.map-list li')).toHaveCount(12);
+  await expect(page.locator('.map-list .read-status').filter({ hasText: '已读' })).toHaveCount(12);
+  await expect(page.locator('#read-count')).toHaveText('已读 12 / 12 章');
+  await snapshot(page, 'twelve-chapters-map-light');
+  await page.reload();
+  // Last chapter is restored; a fresh map visit must retain every marker.
+  await page.locator('#journey-map').click();
+  await expect(page.locator('.map-list .read-status').filter({ hasText: '已读' })).toHaveCount(12);
   expect(errors).toEqual([]);
 });
 
-test("light/dark persistence, restart and mobile layout", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "切换到暗色模式" }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await snapshot(page, "dark-reading");
+test('actual scheduler boundary traces, refresh and theme persistence', async ({ page }) => {
+  const errors = monitor(page);
+  await openChapter(page, 'Budget');
+  const value = (key) => page.locator('[data-value="' + key + '"]');
+  await expect(value('computed')).toHaveText('0');
+  await page.getByRole('button', { name: '执行下一步', exact: true }).click();
+  await expect(value('computed')).toHaveText('32144');
+  await expect(value('outputs')).toHaveText('0');
+  await snapshot(page, 'twelve-chapters-budget-light', page.locator('.lab'));
+  await page.getByRole('button', { name: '切换到暗色模式' }).click();
   await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await mainRoute(page);
-  await page.getByRole("button", { name: "执行下一步", exact: true }).click();
-  await snapshot(page, "dark-experiment");
-  await page.reload();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("分块实验: 32768 个 token 如何分两轮计算");
-  await expect(page.locator("[data-value='computed']")).toHaveText("32144");
-  await page.setViewportSize({ width: 390, height: 844 });
-  await snapshot(page, "mobile-experiment");
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await page.getByRole("button", { name: "切换到亮色模式" }).click();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await page.getByRole("button", { name: "重新开始", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("模型推理流程: 从输入文字到输出 token");
-  await expect(page.locator("#read-count")).toHaveText("已读 1 篇");
-  await expect(page.getByRole("button", { name: "返回", exact: true })).toBeHidden();
-  await page.reload();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("模型推理流程: 从输入文字到输出 token");
-  await expect(page.locator("#read-count")).toHaveText("已读 1 篇");
-  await snapshot(page, "mobile-reading");
-  const font = await page.evaluate(() => ({
-    body: getComputedStyle(document.body).fontFamily,
-    loaded: document.fonts.check('500 16px "LXGW WenKai"'),
-    code: document.fonts.check('400 14px "Fira Code Nerd Font"'),
-  }));
-  expect(font.body).toContain("LXGW WenKai");
-  expect(font.loaded).toBe(true);
-  expect(font.code).toBe(true);
+  await expect(heading(page)).toContainText('第 4 章');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(value('computed')).toHaveText('32144');
+  await page.getByRole('button', { name: '执行下一步', exact: true }).click();
+  await expect(value('count')).toHaveText('624');
+  await expect(value('computed')).toHaveText('32768');
+  await expect(value('outputs')).toHaveText('1');
+  await expect(page.getByRole('button', { name: '已得到首 token' })).toBeDisabled();
+  for (const [length, counts] of [[784, [784]], [785, [784, 1]], [1568, [1568]], [1569, [1568, 1]]]) {
+    await page.getByRole('button', { name: String(length), exact: true }).click();
+    for (const count of counts) {
+      await page.getByRole('button', { name: '执行下一步', exact: true }).click();
+      await expect(value('count')).toHaveText(String(count));
+    }
+    await expect(value('computed')).toHaveText(String(length));
+    await expect(value('outputs')).toHaveText('1');
+  }
+  await page.getByRole('button', { name: '重置实验' }).click();
+  await expect(value('computed')).toHaveText('0');
+  await snapshot(page, 'twelve-chapters-budget-dark', page.locator('.lab'));
+  expect(errors).toEqual([]);
 });
 
-test("punctuation, source freshness and corrupt saved state", async ({ page }) => {
-  await page.goto("/");
-  await page.evaluate(() => localStorage.setItem("oh-my-vllm-journey-v1", "null"));
-  await page.reload();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("模型推理流程: 从输入文字到输出 token");
-  const prose = await page.evaluate(() =>
-    [...document.querySelectorAll("tw-passagedata")].map((p) => p.textContent).join("\n"));
-  expect(prose).not.toMatch(/[，。！？；：、“”‘’（）【】]/u);
-  await mainRoute(page);
-  const source = await readFile("../crates/scheduler/src/lib.rs");
-  const hash = createHash("sha256").update(source).digest("hex");
-  const displayedHash = await page.evaluate(() => SugarCube.setup.journeyData.snippets.aligned.sha256);
-  expect(displayedHash).toBe(hash);
-  await page.getByRole("button", { name: "切换到暗色模式" }).click();
-  const colors = await page.evaluate(() => ({
-    background: getComputedStyle(document.body).backgroundColor,
-    text: getComputedStyle(document.body).color,
-  }));
-  expect(colors).toEqual({ background: "rgb(22, 29, 35)", text: "rgb(213, 223, 230)" });
-  await page.getByRole("button", { name: "重置实验", exact: true }).click();
-  await expect(page.locator("[data-value='computed']")).toHaveText("0");
-});
-
-test("backward navigation renders monotonic read markers before map macros", async ({ page }) => {
-  await page.goto("/");
-  await link(page, "阅读地图").click();
-  await link(page, "分词: 文字, 词表与 token ID").click();
-  await link(page, "我读完了, 接着看位置").click();
-  await page.getByRole("button", { name: "返回", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("分词: 文字, 词表与 token ID");
-  await page.getByRole("button", { name: "返回", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("阅读地图与教程大纲");
-  const row = page.locator(".map-list li").filter({ has: link(page, "分词: 文字, 词表与 token ID") });
-  await expect(row.locator(".read-status")).toHaveText("已读");
-  await expect(page.locator("#read-count")).toHaveText("已读 2 篇");
-});
-
-test("syntax colors, exact source copying and HTTP clipboard fallback", async ({ page, context }) => {
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await mainRoute(page);
-  const preview = page.locator(".excerpt-preview");
-  await expect(preview.locator(".source-line")).toHaveCount(2);
+test('normalized source display, dual-theme contrast and both clipboard paths', async ({ page, context }) => {
+  const errors = monitor(page);
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await openChapter(page, 'Budget');
   const data = await page.evaluate(() => SugarCube.setup.journeyData);
-  expect(await preview.locator("code").textContent()).toBe(data.alignmentPreview.text);
-  // Check all generated excerpts, including generic types and Python indentation.
-  const reconstructed = await page.evaluate(() => Object.fromEntries(
-    Object.entries(SugarCube.setup.journeyData.snippets).map(([key, source]) => {
-      const block = SugarCube.setup.codeBlock(source);
-      block.querySelectorAll(".line-number").forEach((number) => number.remove());
-      return [key, block.querySelector("code").textContent];
-    })));
-  for (const [key, source] of Object.entries(data.snippets)) expect(reconstructed[key]).toBe(source.text);
-  await preview.getByRole("button", { name: "复制 Rust 代码", exact: true }).click();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(data.alignmentPreview.text);
-  await page.getByText("查看 aligned_prefill 源码", { exact: true }).click();
-  const source = page.locator("details .code-block");
-  await expect(source.locator(".line-number").first()).toHaveText(String(data.snippets.aligned.line));
-  await source.getByRole("button", { name: "复制 Rust 代码", exact: true }).click();
+  const reconstructed = await page.evaluate(() => Object.fromEntries(Object.entries(SugarCube.setup.journeyData.snippets).map(([key, source]) => {
+    const block = SugarCube.setup.codeBlock(source); block.querySelectorAll('.line-number').forEach((line) => line.remove());
+    return [key, block.querySelector('code').textContent];
+  })));
+  for (const [key, source] of Object.entries(data.snippets)) {
+    expect(reconstructed[key]).toBe(source.text);
+    const file = await readFile('../' + source.path, 'utf8');
+    expect(source.sha256).toBe(createHash('sha256').update(file).digest('hex'));
+    expect(file.split('\n').slice(source.line - 1, source.line - 1 + source.originalText.split('\n').length).join('\n')).toBe(source.originalText);
+    expect(source.text.split('\n').some((line) => line.trim() && !/^\s/.test(line)), key).toBe(true);
+  }
+  await page.getByText('展开 aligned_prefill 的完整源码与说明', { exact: true }).click();
+  const block = page.locator('details').filter({ hasText: '展开 aligned_prefill' }).locator('.code-block');
+  await block.getByRole('button', { name: '复制 Rust 代码' }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(data.snippets.aligned.text);
-  await page.evaluate(async () => {
-    const clipboard = navigator.clipboard;
-    await clipboard.writeText("before HTTP fallback");
-    window.readClipboard = () => clipboard.readText();
-    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+  await page.evaluate(() => {
+    const clipboard = navigator.clipboard; window.readClipboard = () => clipboard.readText();
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
   });
-  await source.getByRole("button", { name: "复制 Rust 代码", exact: true }).click();
-  await expect(source.getByRole("button", { name: "复制 Rust 代码", exact: true })).toHaveText("已复制");
+  await block.getByRole('button', { name: '复制 Rust 代码' }).click();
   expect(await page.evaluate(() => window.readClipboard())).toBe(data.snippets.aligned.text);
-  await expect(source.getByRole("button", { name: "复制 Rust 代码", exact: true })).toBeFocused();
-  await expect(page.locator(".copy-buffer")).toHaveCount(0);
-  const keyword = preview.locator(".syntax-token").filter({ hasText: /^let$/ }).first();
-  await expect(keyword).toHaveCSS("color", "rgb(189, 41, 59)");
-  await snapshot(page, "highlight-rust-light", preview);
-  await page.getByRole("button", { name: "切换到暗色模式" }).click();
-  await expect(keyword).toHaveCSS("color", "rgb(249, 117, 131)");
-  await snapshot(page, "highlight-rust-dark", preview);
-  await link(page, "继续看 worker 怎样返回结果").click();
-  await link(page, "我读完了, 返回请求主线").click();
-  await page.getByText("查看真实 execute_model 的入口", { exact: true }).click();
-  const python = page.locator("details").filter({ hasText: "查看真实 execute_model 的入口" });
-  await expect(python.locator(".code-language")).toHaveText("Python");
-  await expect(python.locator(".syntax-token").filter({ hasText: /^def$/ })).toHaveCSS("color", "rgb(249, 117, 131)");
-  await python.getByRole("button", { name: "复制 Python 代码", exact: true }).click();
-  expect(await page.evaluate(() => window.readClipboard())).toBe(data.snippets.worker.text);
-  for (const theme of ["dark", "light"]) {
-    if (theme === "light") await page.getByRole("button", { name: "切换到亮色模式" }).click();
-    const contrast = await page.locator(".code-block").evaluateAll((blocks) => {
-      const luminance = (color) => color.match(/\d+/g).slice(0, 3).map(Number)
-        .map((value) => value / 255).map((value) => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4)
-        .reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
-      return blocks.flatMap((block) => {
-        const background = luminance(getComputedStyle(block).backgroundColor);
-        return [...block.querySelectorAll(".syntax-token, .code-language, .code-copy, .line-number")].filter((token) => token.textContent.trim()).map((token) => {
-          const toolbar = token.closest(".code-toolbar");
-          const surface = toolbar ? luminance(getComputedStyle(toolbar).backgroundColor) : background;
-          const foreground = luminance(getComputedStyle(token).color);
-          return { ratio: (Math.max(surface, foreground) + .05) / (Math.min(surface, foreground) + .05),
-            token: token.className, color: getComputedStyle(token).color,
-            background: getComputedStyle(toolbar || block).backgroundColor };
-        });
+  await expect(block.getByRole('button', { name: '复制 Rust 代码' })).toBeFocused();
+  await expect(page.locator('.copy-buffer')).toHaveCount(0);
+  for (const theme of ['light', 'dark']) {
+    if (theme === 'dark') await page.getByRole('button', { name: '切换到暗色模式' }).click();
+    const contrast = await block.evaluate((block) => {
+      const luminance = (color) => color.match(/\d+/g).slice(0, 3).map(Number).map((x) => x / 255)
+        .map((x) => x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4)
+        .reduce((sum, x, i) => sum + x * [.2126, .7152, .0722][i], 0);
+      return [...block.querySelectorAll('.syntax-token, .code-language, .code-copy, .line-number')].filter((t) => t.textContent.trim()).map((t) => {
+        const bg = luminance(getComputedStyle(t.closest('.code-toolbar') || block).backgroundColor);
+        const fg = luminance(getComputedStyle(t).color); return (Math.max(bg, fg) + .05) / (Math.min(bg, fg) + .05);
       });
     });
-    expect(contrast.length).toBeGreaterThan(30);
-    expect(Math.min(...contrast.map((item) => item.ratio)), JSON.stringify(contrast.filter((item) => item.ratio < 4.5))).toBeGreaterThanOrEqual(4.5);
-    await snapshot(page, "highlight-python-" + theme, python.locator(".code-block"));
+    expect(Math.min(...contrast)).toBeGreaterThanOrEqual(4.5);
+    await snapshot(page, 'twelve-chapters-dedented-rust-' + theme, block);
   }
+  await openChapter(page, 'Ownership');
+  await page.getByText('展开 execute_model 的入口和状态说明', { exact: true }).click();
+  const python = page.locator('details').filter({ hasText: '展开 execute_model' }).locator('.code-block');
+  await expect(python.getByRole('button', { name: '复制 Python 代码' })).toHaveCSS('font-family', '"LXGW WenKai", serif');
+  await expect(python.locator('.code-language')).toHaveCSS('font-style', 'normal');
+  await expect(page.locator('article > p code').filter({ hasText: 'num_gpu_blocks // 3' })).toHaveText('num_gpu_blocks // 3');
+  await python.getByRole('button', { name: '复制 Python 代码' }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(data.snippets.worker.text);
+  await snapshot(page, 'twelve-chapters-dedented-python-dark', python);
   await page.setViewportSize({ width: 390, height: 844 });
-  const pre = python.locator("pre");
-  await expect(pre).toBeVisible();
-  const size = await pre.evaluate((node) => ({ content: node.scrollWidth, viewport: node.clientWidth }));
-  expect(size.content).toBeGreaterThan(size.viewport);
-  await pre.focus();
-  await page.keyboard.press("ArrowRight");
-  await expect.poll(() => pre.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+  await python.locator('pre').focus();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(() => python.locator('pre').evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await pre.evaluate((node) => { node.scrollLeft = 0; });
-  await snapshot(page, "highlight-python-mobile", python.locator(".code-block"));
   expect(errors).toEqual([]);
 });
 
-test("document sizing, clear chapter titles and every displayed field explained", async ({ page }) => {
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/");
-  await expect(page.locator("body")).toHaveCSS("font-size", "17px");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveCSS("font-size", "28px");
-  await link(page, "跟着请求往前走").click();
-  await page.getByText("查看 token_ids 的源码与说明", { exact: true }).click();
-  await expect(page.locator("pre")).toHaveCSS("font-size", "14px");
-  await expect(page.locator("pre")).toContainText("pub token_ids");
-  await expect(page.locator("pre")).not.toContainText("pub struct Request");
-  await link(page, "我读完了, 接着看位置").click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("token ID, 序列位置与计算进度");
-  await page.getByText("查看这两个计数字段", { exact: true }).click();
-  const counters = page.locator("details").filter({ hasText: "查看这两个计数字段" });
-  await expect(counters.locator("pre")).toContainText("pub num_in_flight_tokens");
-  await expect(counters.locator("pre")).not.toContainText("pub struct Request");
-  await link(page, "我读完了, 看看模型怎样接着写").click();
-  await link(page, "我读完了, 继续走选中的路线").click();
-  const requestFields = page.getByRole("table", { name: "Request 的 9 个字段", exact: true });
-  await expect(requestFields).toBeVisible();
-  await expect(requestFields.locator("tbody tr")).toHaveCount(9);
-  await expect(requestFields).toContainText("提示词 3 个, 上限 4 个时, 历史最多包含 7 个 token");
-  await snapshot(page, "request-fields-light");
-  await page.getByRole("button", { name: "切换到暗色模式" }).click();
-  await snapshot(page, "request-fields-dark");
+test('every chapter, displayed field and formula works at mobile document sizes', async ({ page }) => {
+  test.setTimeout(90000);
+  const errors = monitor(page);
+  const chapters = await openChapter(page, 'Validation');
+  await expect(page.locator('body')).toHaveCSS('font-size', '17px');
+  await expect(heading(page)).toHaveCSS('font-size', '28px');
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator("body")).toHaveCSS("font-size", "16px");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveCSS("font-size", "24px");
-  await expect(requestFields.getByText("num_in_flight_tokens", { exact: true })).toBeVisible();
-  const mobileLabels = await requestFields.locator("tbody tr").first().locator("td").evaluateAll((cells) =>
-    cells.slice(1).map((cell) => getComputedStyle(cell, "::before").content));
-  expect(mobileLabels[0]).toContain("含义");
-  expect(mobileLabels[1]).toContain("用途与例子");
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await snapshot(page, "request-fields-mobile");
-  // Complete prerequisites once, then check every rendered article from its map link.
-  await link(page, "我读完了, 让请求进入队列").click();
-  await link(page, "我读完了, 看看缓存的分块单位").click();
-  await link(page, "我读完了, 亲手执行两轮调度").click();
-  await link(page, "继续看 worker 怎样返回结果").click();
-  await link(page, "我读完了, 返回请求主线").click();
-  for (const [title, count] of [["ScheduledRequest 的 6 个字段", 6], ["SchedulerOutput 的 5 个字段", 5], ["WorkerOutput 与 RequestOutput 的字段", 5]]) {
-    const table = page.getByRole("table", { name: title, exact: true });
-    await expect(table).toBeVisible();
-    await expect(table.locator("tbody tr")).toHaveCount(count);
-  }
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await link(page, "我读完了, 看看 Rust 怎样提交结果").click();
-  await link(page, "我读完了, 查看后续阅读大纲").click();
-  const lessons = await page.evaluate(() => SugarCube.setup.lessons);
-  for (const { title } of Object.values(lessons)) {
-    await link(page, title).click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
-    for (const summary of await page.locator(".passage:not(.passage-out) summary").all()) await summary.click();
-    await expect(page.locator(".error")).toHaveCount(0);
-    const incomplete = await page.locator(".passage:not(.passage-out) details").evaluateAll((details) => details.flatMap((detail) => {
-      const source = detail.querySelector("code").cloneNode(true);
-      source.querySelectorAll(".line-number").forEach((number) => number.remove());
-      const fields = [...source.textContent.matchAll(/^\s*pub\s+(\w+)\s*:/gm)].map((match) => match[1]);
-      if (source.textContent.includes("pub struct") && fields.length === 0) return ["No record fields inspected"];
-      const guide = detail.querySelector(".field-guide") || detail.previousElementSibling;
-      const rows = [...guide.querySelectorAll("tbody tr")];
-      return fields.filter((field) => !rows.some((row) => row.cells[0].textContent === field && row.cells[1].textContent.length > 5 && row.cells[2].textContent.length > 5));
+  await expect(page.locator('body')).toHaveCSS('font-size', '16px');
+  await expect(heading(page)).toHaveCSS('font-size', '24px');
+  await page.locator('.chapter-choices a').last().click();
+  for (const [id, chapter] of Object.entries(chapters)) {
+    await route(page, chapter.title).click();
+    await expect(heading(page)).toHaveText('第 ' + chapter.number + ' 章. ' + chapter.title);
+    for (const summary of await page.locator('article summary').all()) await summary.click();
+    await expect(page.locator('.error, .katex-error')).toHaveCount(0);
+    if (await page.locator('article pre').count()) await expect(page.locator('article pre').first()).toHaveCSS('font-size', '13px');
+    const missing = await page.locator('article details').evaluateAll((details) => details.flatMap((detail) => {
+      const source = detail.querySelector('pre code').cloneNode(true); source.querySelectorAll('.line-number').forEach((line) => line.remove());
+      const text = source.textContent;
+      const fields = [...text.matchAll(text.startsWith('class ') ? /^    (\w+): /gm : /^\s*pub\s+(\w+)\s*:/gm)].map((match) => match[1]);
+      const guide = detail.querySelector('.field-guide') || detail.previousElementSibling;
+      return fields.filter((field) => ![...guide.querySelectorAll('tbody tr')].some((row) => row.cells[0].textContent === field && row.cells[1].textContent && row.cells[2].textContent));
     }));
-    expect(incomplete, title).toEqual([]);
-    if (await page.locator(".passage:not(.passage-out) .primary").count()) {
-      const ratio = await page.locator(".passage:not(.passage-out) .primary").evaluate((button) => {
-        const luminance = (color) => color.match(/\d+/g).slice(0, 3).map(Number)
-          .map((value) => value / 255).map((value) => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4)
-          .reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
-        const style = getComputedStyle(button);
-        const values = [luminance(style.color), luminance(style.backgroundColor)];
-        return (Math.max(...values) + .05) / (Math.min(...values) + .05);
-      });
-      expect(ratio).toBeGreaterThanOrEqual(4.5);
+    expect(missing, id).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), id).toBeLessThanOrEqual(390);
+    if (id === 'Requests') {
+      await expect(page.getByRole('table', { name: 'Request 的 9 个字段', exact: true }).locator('tbody tr')).toHaveCount(9);
+      await snapshot(page, 'twelve-chapters-fields-mobile', page.locator('.field-guide').first());
     }
-    expect(await page.evaluate(() => document.documentElement.scrollWidth), title).toBeLessThanOrEqual(390);
-    await link(page, "阅读地图").click();
+    if (id === 'Model') await snapshot(page, 'twelve-chapters-model-mobile');
+    await page.locator('#journey-map').click();
   }
-  const notes = await page.evaluate(() => JSON.stringify(SugarCube.setup.journeyData.sourceNotes));
-  expect(notes).not.toMatch(/[，。！？；：、“”‘’（）【】]/u);
+  const prose = await page.evaluate(() => [...document.querySelectorAll('tw-passagedata')].map((p) => p.textContent).join('\n') + JSON.stringify(SugarCube.setup.journeyData.sourceNotes));
+  expect(prose).not.toMatch(/[，。！？；：、“”‘’（）【】]/u);
+  const fonts = await page.evaluate(() => ({ prose: document.fonts.check('500 16px "LXGW WenKai"'), code: document.fonts.check('400 13px "Fira Code Nerd Font"') }));
+  expect(fonts).toEqual({ prose: true, code: true });
   expect(errors).toEqual([]);
+});
+
+test('complete source coverage links and highlighted full-file line anchors', async ({ page, request }) => {
+  test.setTimeout(90000);
+  const errors = monitor(page);
+  await openChapter(page, 'Model');
+  const records = await page.evaluate(() => SugarCube.setup.journeyData.coverage);
+  for (const record of records) {
+    const source = await readFile('../' + record.path, 'utf8');
+    expect(record.sha256).toBe(createHash('sha256').update(source).digest('hex'));
+    const response = await request.get('/' + record.url);
+    expect(response.ok(), record.path).toBe(true);
+    expect(await response.text()).toContain('id="L' + record.line + '"');
+  }
+  for (const path of ['crates/scheduler/src/lib.rs', 'python/oh_my_vllm/models/qwen.py', 'python/oh_my_vllm/kernels/cuda_backend/kernels.cu']) {
+    const record = records.find((item) => item.path === path);
+    await page.goto('/' + record.url);
+    await expect(heading(page)).toHaveText('完整源码');
+    await expect(page.locator('#L' + record.line)).toBeVisible();
+    expect(await page.locator('pre code').evaluate((node) => {
+      const copy = node.cloneNode(true); copy.querySelectorAll('.line-number').forEach((line) => line.remove()); return copy.textContent;
+    })).toBe(await readFile('../' + path, 'utf8'));
+    if (path.endsWith('qwen.py')) {
+      await snapshot(page, 'twelve-chapters-full-source-light');
+      await page.getByRole('button', { name: '切换亮色 / 暗色' }).click();
+      await snapshot(page, 'twelve-chapters-full-source-dark');
+      await page.setViewportSize({ width: 390, height: 844 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+      await page.setViewportSize({ width: 1536, height: 1024 });
+      await page.locator('.navigation-list a').first().click();
+      await expect(heading(page)).toContainText('第 8 章');
+    }
+  }
+  expect(errors).toEqual([]);
+});
+
+test('map history stays monotonic; old short passages migrate to visited', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.removeItem('oh-my-vllm-journey-v2');
+    localStorage.setItem('oh-my-vllm-journey-v1', JSON.stringify({ read: ['Start', 'Token', 'Position'], visited: ['Token', 'Position', 'Experiment'], last: 'Experiment', goal: 'Worker', interest: 'gpu', expLength: 32768, expIndex: 0 }));
+  });
+  await page.reload();
+  await expect(heading(page)).toContainText('第 1 章');
+  await expect(page.locator('#read-count')).toHaveText('已读 0 / 12 章');
+  await page.locator('#journey-map').click();
+  await expect(page.locator('.map-list .read-status').filter({ hasText: '阅读中' })).toHaveCount(2);
+  await page.locator('.map-list a').first().click();
+  await page.locator('.chapter-choices a').first().click();
+  await page.getByRole('button', { name: '返回', exact: true }).click();
+  await page.getByRole('button', { name: '返回', exact: true }).click();
+  await expect(heading(page)).toContainText('12 章阅读地图');
+  await expect(page.locator('.map-list li').first().locator('.read-status')).toHaveText('已读');
+  await expect(page.locator('#read-count')).toHaveText('已读 1 / 12 章');
+  await page.getByRole('button', { name: '重新开始', exact: true }).click();
+  await expect(heading(page)).toHaveText('模型推理流程: 从输入文字到输出 token');
+  await expect(page.locator('#read-count')).toHaveText('已读 0 / 12 章');
+  await expect(page.getByRole('button', { name: '返回', exact: true })).toBeHidden();
+  await page.evaluate(() => localStorage.setItem('oh-my-vllm-journey-v2', 'null'));
+  await page.reload();
+  await expect(heading(page)).toHaveText('模型推理流程: 从输入文字到输出 token');
+});
+
+test('review and map choices preserve an unfinished chapter', async ({ page }) => {
+  const chapters = await openChapter(page, 'Requests');
+  await page.locator('.chapter-choices li').filter({ hasText: '如果想复习' }).getByRole('link').click();
+  await expect(heading(page)).toContainText('第 2 章');
+  await page.locator('#journey-map').click();
+  await expect(page.locator('.map-list li').filter({ has: route(page, chapters.Requests.title) }).locator('.read-status')).toHaveText('阅读中');
+  await route(page, chapters.Requests.title).click();
+  await page.locator('.chapter-choices li').filter({ hasText: '如果想选择其他主题' }).getByRole('link').click();
+  await expect(page.locator('.map-list li').filter({ has: route(page, chapters.Requests.title) }).locator('.read-status')).toHaveText('阅读中');
+  await route(page, chapters.Requests.title).click();
+  await page.locator('.chapter-choices li').filter({ hasText: '如果已理解本章' }).first().getByRole('link').click();
+  await page.locator('#journey-map').click();
+  await expect(page.locator('.map-list li').filter({ has: route(page, chapters.Requests.title) }).locator('.read-status')).toHaveText('已读');
 });

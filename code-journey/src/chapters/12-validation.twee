@@ -1,0 +1,33 @@
+:: Validation
+<article>
+<<chapterHeader>>
+<h2>从一条状态变化到完整回答</h2>
+<p>验证先看请求状态: 派发范围是否来自确认历史, 结果数量是否符合契约, computed 是否停在实际提交边界, 完成与取消是否释放引用. Rust 的 scheduler 与 kv-cache 测试覆盖预算, 前缀, 抢占, 草稿和边界, serving 测试覆盖输入整理, 输出解析, 事件与慢客户端.</p>
+<p>Python planner 与 sampler 的 CPU 测试检查历史对应, 地址别名, 逐行草稿验证, 概率筛选与语法回滚. 模型与 GPU 测试再检查投影, FA, 卷积和 GDN 的数值行为, 普通与 MTP 的实际输出, 缓存恢复和页边界. 多层验证将状态错误和数值错误定位到较小范围.</p>
+<h2>算子正确性怎样连接最大形状</h2>
+<p>Semantic IR 提供参考数学, fake 元数据与修改声明. CUDA 测试用这些契约检查结果和被修改区域, 包括 packed stride, 非对齐缓存视图, 每 token 因果终点与候选状态. GDN 的高精度参考按 FP64 推进, 与生产状态精度的容差分别检查.</p>
+<p>development/kernels/cases.py 静态推导正式最大形状, 来自生产预算, 页大小, 批大小与验证行数. 例如 32768 输入的首段为 32144, 尾部和另一长请求混批会出现 624 + 32144; 更长输入还出现其他页边界余量. 正式算子 harness 按这些形状测正确性与耗时, 对每个必需最大形状稳定比较冻结 TileLang.</p>
+<p>ir.coverage.check_coverage 扫描模型的语义调用点, 核对操作注册与允许的低层导入. 新代码绕过语义入口时, 覆盖检查能指出遗漏. 本教程构建另做文件到章节的覆盖检查, 解决阅读导航的归属问题.</p>
+<h2>长上下文验证检查什么</h2>
+<p>项目要求输入加输出最高 262144 token. 普通与 MTP4 在 batch 1, 2, 4 的边界运行都要完成, 无 OOM (GPU 内存不足) 和重算抢占. FA 页数随历史增长, GDN 候选与图捕获也占内存, 所以长上下文检查需要观察完整池和执行图, 同时保持 block_size 为 784.</p>
+<p>内存检查与模型正确性同时进行. 单次分配成功不能代表整条输出能完成, 正式边界运行需走到结束并检查输出数量, 抢占计数与清理. MTP 被拒候选后的恢复状态也必须继续得到正确结果.</p>
+<h2>TTFT 与吞吐分别计算什么</h2>
+<p>TTFT (Time To First Token) 是从测量起点到首个保留输出的时间. 本项目 EngineCore 基准由 benchmarks/ttft.py 启动 Rust Bench, 在引擎提交与生成链上计时, 排除模型加载和预热. 每个请求保留自己的首次输出时间, 每轮取最慢请求的 TTFT.</p>
+<<math "\\mathrm{TTFT}_i=t_{i,\\mathrm{first}}-t_{\\mathrm{start}},\\quad R=\\frac{N_{\\mathrm{output}}}{t_{\\mathrm{finish}}-t_{\\mathrm{start}}}">>
+<p>i 是请求下标, start 是该次批测量起点, first 是该请求首个确认输出, finish 是整轮结束, N 是整轮实际输出 token 数, R 的单位为 token/s. HTTP 客户端还会包含输入准备, 网络与流式输出时间, 比较记录需要使用相同计时范围.</p>
+<p>正式 12 个负载来自四个方向, 每个方向 batch 为 1, 2, 4: 普通 32768 输入, MTP4 32768 输入, 前缀复用 32768 输入, 普通 131072 输入; 输出都为 4096. 前缀负载另检查命中长度与来源, 普通和 MTP 分别记录.</p>
+<h2>重复测量和门槛如何验收</h2>
+<p>每个负载至少两次完整预热, 五次正式重复. summarize 检查每请求 TTFT 为有限正值, 实际输出数恰好等于 batch_size 乘 output_len, 抢占为零, 吞吐有效. 再计算重复值的中位数与相对极差.</p>
+<<source "measurement" "展开重复测量检查与统计代码">>
+<<math "\\mathrm{spread}=\\frac{\\max(x)-\\min(x)}{\\operatorname{median}(x)},\\quad \\rho_R=R_{\\mathrm{ours}}/R_{\\mathrm{baseline}},\\quad \\rho_T=T_{\\mathrm{ours}}/T_{\\mathrm{baseline}}">>
+<p>x 是同一指标的重复测量列表, R 是吞吐中位数, T 是最慢请求 TTFT 的重复中位数. 任一指标 spread 超过 10% 需要调查并重测. 每一行要求吞吐比至少 95%, TTFT 比最高 110%, 用逐行检查保护不同批大小与路线.</p>
+<p>基线来自已经冻结版本的隔离 vLLM 环境, 只由基线工具使用. 项目构建, 测试和推理保持独立环境, compare 核对同一负载, 模型, 实际缓存容量, GPU 型号/内存/驱动与 CPU 亲和性. 历史结果随当时源码版本保留, 阅读教程不会产生新的性能数字.</p>
+<h2>如何确定测量时已经进入稳定执行</h2>
+<p>measurement.audit 读取 BENCH_PHASE 日志的 measured 起点, 检查其后有无编译或图捕获. 同时审计编译缓存根目录, 文件摘要和时间变化, 确认正式阶段执行的是预热完成后的实现. runtime 与 CUDA provenance 记录解释器, 包, 编译器和实际加载库.</p>
+<p>正式运行先用 scripts/with-gpu.sh 等待空闲 B200 并固定 UUID, 再用 scripts/with-env.sh 进入项目环境. 运行记录保存原始重复结果与汇总, 正式证据放入仓库, 临时调优脚本和原始 profiling 留在仓库外. 完成后停掉该次启动的服务器与 worker, 核对进程与 GPU 资源已释放.</p>
+<h2>从完整调用链回看一条请求</h2>
+<p>HTTP 输入经 normalize 和模板分词变成历史, Rust 按预算与两类缓存分配片段, ZMQ 交给 worker. planner 核对地址, Batch 携带位置与读写槽, Qwen 经过 FP8 投影和 FA/GDN 层, sampler 选择 ID, Generation 裁切并解码, 双方提交状态, Parser 与 Output 形成流式响应.</p>
+<p>MTP 在这条链中加入提议和多行验证, Semantic IR 与 CUDA Graph 改进具体执行, 验证代码检查每个状态与数值契约. 你现在可以根据关心的条件回到对应章节, 打开源码定位完整实现, 从入口逐层追踪一次实际推理.</p>
+<<coverage>>
+<<chapterChoices>>
+</article>

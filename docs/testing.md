@@ -357,29 +357,34 @@ compile test by itself is not performance acceptance.
 
 ## Interactive tutorial acceptance
 
-With code-journey's static listener running, run its pinned Chromium workflow:
+With the static listener running:
 
     npm --prefix code-journey test
     scripts/with-env.sh cargo test --locked --manifest-path code-journey/trace/Cargo.toml
     scripts/with-env.sh cargo fmt --manifest-path code-journey/trace/Cargo.toml --check
     scripts/with-env.sh cargo clippy --manifest-path code-journey/trace/Cargo.toml --all-targets -- -D warnings
 
-Six Playwright tests cover genuine SugarCube identity, prerequisite/interest
-routing, all five real Rust scheduler traces, source excerpt display, light/dark
-selection, refresh/reset, backward map markers, console health and mobile overflow.
-Syntax coverage checks exact text reconstruction for all excerpts, Rust/Python
-colors in both themes, token/toolbar/gutter contrast >=4.5:1, raw-source copying with Clipboard
-API and the HTTP selection fallback, plus keyboard horizontal code scrolling.
-The document test verifies 17/16px prose and 28/24px chapter headings,
-introductory excerpts limited to relevant fields, map/article title agreement,
-visible Request/message tables and meaning/purpose coverage for every displayed
-public field. All article tables are checked for mobile overflow; stacked labels
-must remain visible and the smaller experiment button retains >=4.5:1 contrast.
-The separate Rust test asserts real chunk counts, including 32144 + 624 for
-32768 input tokens, and the final output-count contract with synthetic feedback.
-These are CPU educational checks, not inference or performance measurements.
+npm test runs four Node dedentation checks, then seven Playwright tests. They
+cover genuine SugarCube identity, all twelve chapter routes, interest and
+prerequisites, unordered conditional navigation, all five Rust traces,
+light/dark/refresh/reset/history, completion versus review and v1-to-v2 progress
+migration. Document checks inspect every displayed Rust/Python record field,
+formulas, fonts, 17/16px prose, 28/24px headings, 14/13px code and mobile overflow.
+Source checks verify current file hashes and original lines, normalized excerpt
+reconstruction/copying via Clipboard API and the HTTP selection fallback,
+>=4.5:1 token/toolbar/gutter contrast, keyboard scrolling, every full-source URL
+and exact highlighted Rust/Python/CUDA source-page content and return links.
 
-Visual review separately compares Image Gen concepts and screenshots using
-view_image at 1536x1024 desktop and 390x844 mobile. JOURNEY_URL overrides the test
-URL; JOURNEY_QA_DIR stores screenshots outside the repository. Use Playwright only
-when the Browser plugin is unavailable, as in the 2026-10-07 preview acceptance.
+Build-time coverage checks require a chapter for each substantive default
+runtime Rust/Python/CUDA file, valid anchors and explanations for displayed
+record fields. Tests, documentation-only initializers and frozen comparison
+providers are excluded from the default-flow inventory. Independent milestone
+review checks narrative accuracy against the real implementation.
+
+The separate Rust test checks actual chunk counts, including 32144 + 624 for
+32768 input, and final output-count contracts using synthetic token feedback.
+These CPU educational checks do not run inference or measure GPU performance.
+Inspect desktop 1536x1024 and mobile 390x844 screenshots separately for reading,
+conditional lists, source indentation and both themes. JOURNEY_URL overrides the
+URL; JOURNEY_QA_DIR stores evidence outside the repository. Browser plugin was
+unavailable, so Playwright Chromium supplies this revision's browser validation.
