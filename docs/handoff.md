@@ -1,4 +1,49 @@
-# Handoff — 2026-09-30
+# Handoff — 2026-10-07
+
+## Interactive code journey preview (2026-10-07)
+
+Added `code-journey/`, a genuine Twine/SugarCube 2.37.3 static tutorial with
+eleven reading passages and a reading map. The first slice follows one request
+to its first retained token. A twelve-chapter outline maps the remaining core
+logic to current Rust/Python/CUDA sources. Reading choices record interests;
+unread internal prerequisites are presented before the selected destination.
+LXGW WenKai, Fira Code Nerd Font and KaTeX are served locally. Light/dark choice,
+read markers and experiment progress persist independently.
+
+The interactive cases use the actual Rust scheduler at build time: 784, 785,
+1568, 1569 and 32768 tokens. The latter schedules 32144 then 624. Worker feedback
+is synthetic CPU contract data, not model output or performance evidence.
+Source excerpts preserve real line numbers and file hashes. Pinned tool assets
+are SHA-256 checked before extraction/execution. Humanizer-zh was installed in
+`/home/dongwu.chen/.codex/skills/humanizer-zh` and applied to the prose.
+
+Validation: four Playwright Chromium tests passed at 1536x1024 desktop and
+390x844 mobile; the separate real-scheduler boundary test passed. Rust workspace
+tests (58/39/26), fmt, hard line width, Clippy and Ruff format/check passed.
+The trace crate's fmt/test/Clippy also passed. Independent review confirmed
+fixes for header transclusion, reset-history resurrection, stale backward
+map markers and passage-scoped keyboard focus, with no remaining P1/P2.
+Image Gen reading/experiment/dark concepts
+and browser screenshots were inspected with `view_image`; the native viewport,
+copy, typography, palette, layout and responsive behavior were checked. Browser
+plugin was unavailable, so Playwright supplied the browser verification.
+
+The GPU suite, Python CPU suite and operator/framework benchmarks were not rerun:
+inference source is unchanged. Existing acceptance evidence retains its original
+source scope. This task launched no GPU model, inference server or worker;
+`nvidia-smi` showed no compute process during the final resource check.
+
+**Explicit preview service exception:** the user requested a fixed intranet
+deployment for review. Static Node listener PID `1211499` remains bound to
+`0.0.0.0:18084`, reachable at `http://10.30.64.14:18084/`. It serves only
+`code-journey/dist`, uses no GPU and has no model child. PID record:
+`/tmp/oh-my-vllm-code-journey-18084.pid`. All browser/check children exited;
+the abandoned proxy-routed HTTP probe was stopped. No temporary service port
+other than the requested preview remains owned by this task.
+
+Next: user review of this slice, then implement the remaining curriculum chapters
+with the same prerequisite, source and interactive-check structure. See
+`code-journey/README.md` for the complete outline and reproducible commands.
 
 ## Main publication checks (2026-09-30)
 

@@ -1,0 +1,183 @@
+:: StoryTitle
+oh-my-vllm 代码之旅
+
+:: StoryData
+{
+  "ifid": "98EB06ED-4F88-428D-9B3B-3D1B0A7FC667",
+  "format": "SugarCube",
+  "format-version": "2.37.3",
+  "start": "Start"
+}
+
+:: StoryInit
+<<run setup.load()>>
+
+:: StoryInterface
+<header id="journey-header"><a class="brand" id="journey-home" href="#">oh-my-vllm</a><nav class="header-actions" aria-label="阅读工具"><a id="journey-map" href="#">阅读地图</a><button id="theme-toggle" class="text-button" type="button">暗色</button></nav></header>
+<div id="passages"></div>
+<footer id="journey-footer"><span id="read-count"></span><div class="footer-actions"><button id="journey-back" class="text-button" type="button">返回</button><button id="restart" class="text-button" type="button">重新开始</button></div></footer>
+
+:: Start
+<article class="opening">
+<h1>从一条请求开始</h1>
+<p>你在输入框里写下一句话, 点击发送. 几秒后, 新的文字出现在屏幕上.</p>
+<p>这段等待里发生了什么? 我们跟着一条请求, 看它怎样经过 <code>Rust</code> 调度器, 到达 <code>Python</code> worker, 再带回第一个 <code>token</code>.</p>
+<p class="question">你想从哪里开始?</p>
+<div class="choices">
+<<route "先弄清 token 是什么" "Token" "basics">>
+<<route "跟着请求往前走" "Request" "request">>
+<<route "看看 Rust 与 Python 怎样分工" "Ownership" "gpu">>
+</div>
+<p class="closing">每次选择会带你读一段前置文章. 读过的内容会留在阅读地图里, 你也可以随时回来换条路.</p>
+</article>
+
+:: Token
+<article>
+<h1>文字怎样变成 token?</h1>
+<p>模型接收的是一串整数. tokenizer 把文字拆成词表里的片段, 再把每个片段换成一个 ID. 这样的片段叫作 token.</p>
+<p>一个 token 可能对应一个字, 一个词的一部分, 或一个标点. 切分结果由模型的 tokenizer 决定. 本项目的 Python serving adapter 使用检查点自带的 tokenizer 和 chat template.</p>
+<p>先把一条提示词记成 <span class="inline-math">一串 ID</span>. 教学例子用 <code>[17, 92, 6]</code> 表示三个 token, 实际 ID 要由 tokenizer 取得.</p>
+<p>Rust 的 <code>Request</code> 会保存这些 ID. 后面每得到一个确认的输出 token, 它就把新 ID 接到这串历史的末尾.</p>
+<<source "request" "看看 Request 中保存 token 的字段">>
+<div class="choices"><<nextReading "Position" "我读完了, 接着看位置">></div>
+</article>
+
+:: Position
+<article>
+<h1>一个 token, 两种编号</h1>
+<p>token ID 回答它对应哪个词表片段. 序列位置回答它排在第几个. 同一个 ID 出现在两处, 也有两个位置.</p>
+<p>Rust 用 <code>num_computed_tokens</code> 记录已经计算并提交的位置. 例如历史有 3 个 token, 已计算 2 个, 那么这轮从位置 2 开始, 处理剩下的 1 个.</p>
+<<math "n_{\\mathrm{remaining}} = n_{\\mathrm{history}} - n_{\\mathrm{computed}}">>
+<p>刚发出去的计算还有一个单独的计数: <code>num_in_flight_tokens</code>. worker 返回后, Rust 才将这一轮确认的进度写入已计算位置.</p>
+<<source "request" "查看这两个计数字段">>
+<div class="choices"><<nextReading "Prefill" "我读完了, 看看模型怎样接着写">></div>
+</article>
+
+:: Prefill
+<article>
+<h1>先读完, 再接着写</h1>
+<p>处理提示词的阶段叫作 prefill. 模型为输入位置计算中间结果, 并把后续生成要复用的状态留在缓存里. 长提示词可以分几轮读完.</p>
+<p>提示词的最后一段算完后, worker 才产生第一个输出 token. 后续的普通 decode 每轮处理上一个输出 token, 再取出下一个 token.</p>
+<p>因此, 读完 32768 个输入 token 和生成 1 个输出 token 是两种计数. 一个尚未读完提示词的分块, 可以完成许多计算而返回 0 个输出 token.</p>
+<<source "validate" "查看 Rust 如何检查返回的输出数量">>
+<p>我们先研究普通生成. MTP 的草稿验证会在后面的章节加入这条主线.</p>
+<div class="choices"><<nextReading "Request" "我读完了, 继续走选中的路线">></div>
+</article>
+
+:: Ownership
+<article>
+<h1>谁决定, 谁计算?</h1>
+<p>Rust 决定这一轮执行哪些请求, 各执行多少 token, 并分配逻辑缓存块. Python 根据这份计划加载数据, 执行模型, 再返回确认的 token.</p>
+<div class="flow"><span>Rust 调度</span><svg viewBox="0 0 26 16" aria-hidden="true"><path d="M1 8h23m-6-6 6 6-6 6"/></svg><span>ZMQ / msgpack</span><svg viewBox="0 0 26 16" aria-hidden="true"><path d="M1 8h23m-6-6 6 6-6 6"/></svg><span>Python 计算</span></div>
+<p>两边都使用 ZMQ DEALER. Rust bind, Python connect. 消息里有 token ID, 位置和块表, GPU tensor 留在 Python 进程.</p>
+<p>这条边界让请求排序与 GPU 算法可以分别修改. 同时, 两边必须对已提交位置和缓存地址达成一致. worker 在执行前会检查这些约定.</p>
+<<source "worker" "查看 worker 的执行入口与计数检查">>
+<div class="choices"><<nextReading "Request" "我读完了, 返回请求主线">></div>
+</article>
+
+:: Request
+<article>
+<h1>请求带着哪些东西?</h1>
+<p>提示词已转成 ID. Rust 创建一个 <code>Request</code>, 将原始长度记在 <code>prompt_len</code>, 将历史记在 <code>token_ids</code>.</p>
+<p>现在它还没有计算任何位置: <code>num_computed_tokens = 0</code>. 状态是 <code>Waiting</code>, 正等待调度器分配缓存并选择一个执行片段.</p>
+<p>后续生成会延长历史, 原始提示词长度仍保留. 两者相减, 就是已经生成的 token 数.</p>
+<<math "n_{\\mathrm{generated}} = n_{\\mathrm{history}} - n_{\\mathrm{prompt}}">>
+<<source "request" "逐行看 Request 的真实字段">>
+<div class="choices"><<route "我读完了, 让请求进入队列" "Queue">></div>
+</article>
+
+:: Queue
+<article>
+<h1>这一轮, 轮到谁?</h1>
+<p>调度器维护 waiting 和 running 两个队列. 新请求先进入 waiting, 分配缓存成功后进入 running.</p>
+<p>每轮先查看 running 请求, 再接纳 waiting 中的新请求. 这样, 已经开始生成的请求可以继续推进, 新提示词也能使用剩余预算. HTTP 输出队列拥塞时, 暂停的请求会跳过这一轮.</p>
+<p>每轮 token 预算是 <code>32768</code>. 这个上限计算所有请求本轮处理的 token 总数. 队列里的请求数还受 <code>max_num_seqs</code> 约束.</p>
+<<source "queues" "看 schedule 如何建立本轮预算">>
+<<source "waiting" "看 waiting 请求怎样申请本轮执行">>
+<p>现在只放一条请求, 并准备足够的缓存. 我们可以专心观察预算怎样分给它.</p>
+<div class="choices"><<route "我读完了, 看看缓存的分块单位" "Pages">></div>
+</article>
+
+:: Pages
+<article>
+<h1>为什么是 784?</h1>
+<p>当前目标模型有 16 层 full attention (FA) 和 48 层 GatedDeltaNet (GDN). 两类层保存的历史不同.</p>
+<p>FA 按页保存各位置的 key/value. GDN 维护随 token 更新的递归状态和因果卷积状态. 项目使用 <code>block_size = 784</code>, 并在块边界保存能够恢复计算的 GDN checkpoint.</p>
+<p>这个数来自当前项目的混合缓存约束. 阅读调度代码时, 我们把 784 当作固定条件, 再推导它怎样影响分块.</p>
+<p>长 prefill 会停在合适的块边界, 让 worker 保存那一刻的状态. 例如 <code>41 × 784 = 32144</code>, 下一页的末尾已经超过 32768.</p>
+<<math "41 \\times 784 = 32144, \\qquad 42 \\times 784 = 32928">>
+<div class="choices"><<route "我读完了, 亲手执行两轮调度" "Experiment">></div>
+</article>
+
+:: Experiment
+<article class="experiment" data-experiment>
+<h1>预算为什么留下一截?</h1>
+<p>给调度器一条 32768-token 请求. 每步最多计算 32768 个 token, 第一轮会处理多少?</p>
+<div class="case-options" aria-label="选择提示词 token 数"></div>
+<div class="math-block"></div>
+<div class="lab">
+<div class="track" role="progressbar" aria-label="已计算提示词 token" aria-valuemin="0"><div class="track-fill"></div></div>
+<div class="track-labels"><span data-value="percent"></span><span data-value="remaining-percent"></span></div>
+<dl class="metrics"><div class="metric"><dt>已计算</dt><dd data-value="computed"></dd></div><div class="metric"><dt>本轮 token</dt><dd data-value="count"></dd></div><div class="metric"><dt>输出 token</dt><dd data-value="outputs"></dd></div></dl>
+<div class="lab-actions"><button type="button" class="primary" data-action="step">执行下一步</button><button type="button" class="text-button" data-action="reset">重置实验</button></div>
+</div>
+<p class="lab-status" role="status" aria-live="polite"></p>
+<<source "aligned" "查看 aligned_prefill 源码">>
+<<alignmentPreview>>
+<div class="choices"><<route "继续看 worker 怎样返回结果" "Worker">></div>
+<p class="small">轨迹由仓库中的 Rust Scheduler 在构建时生成. 示例使用单请求, 充足缓存, 关闭前缀复用和 MTP. worker 的返回计数按输出契约构造.</p>
+</article>
+
+:: Worker
+<article>
+<h1>worker 怎样返回结果?</h1>
+<p>Rust 把本轮片段装进 <code>SchedulerOutput</code>. 每个片段包含请求 ID, 这一轮的 token, 起始已计算位置, 以及 FA / GDN 块表.</p>
+<<source "output" "查看 ScheduledRequest 消息中的字段">>
+<p>Python 的 <code>execute_model</code> 先验证计数与物理地址, 再调用 batch planner 选择要读取和写入的缓存位置. 随后执行 Qwen 的 forward 和采样.</p>
+<p>尚未读完提示词时, worker 返回空的输出 token 列表. Rust 按本轮已发出的 token 数提交进度. 最后一个 prefill 分块完成后, 从目标模型的分布采样, 返回第一个确认的 token.</p>
+<<source "worker" "查看真实 execute_model 的入口">>
+<<source "plan" "查看 batch planner 的参数与检查">>
+<p>GPU 中的 FA / GDN 状态留在 Python. 返回给 Rust 的是确认后的结果和计数.</p>
+<div class="choices"><<route "我读完了, 看看 Rust 怎样提交结果" "Commit">></div>
+</article>
+
+:: Commit
+<article>
+<h1>第一个 token 回到了哪里?</h1>
+<p>Rust 先用 <code>validate_output</code> 检查 worker 是否遵守本轮计划. 普通生成的最后一个 prefill 分块应返回 1 个输出 token, 中间分块应返回 0 个.</p>
+<<source "validate" "查看检查输出数量的完整条件">>
+<p>检查通过后, <code>update</code> 更新已计算位置, 清零 in-flight 计数, 将确认的 token 接到请求历史末尾.</p>
+<<source "commit" "查看 update 怎样提交确认的结果">>
+<p>此时, 32768 个提示词 token 已经计算完, 历史有 32769 个 token. 新输出 token 的 ID 已进入历史, 它自身的缓存会在下一轮 decode 中计算.</p>
+<p>HTTP serving adapter 将确认的输出解码成文字, 再交给客户端. 后面的采样和流式输出章节会继续跟踪这一步.</p>
+<p>试着回想: 第一次处理 32144 个 token, 第二次处理 624 个. 请求经历了两轮计算, 最后得到了第一个输出 token.</p>
+<div class="choices"><<route "回到实验, 换一条请求" "Experiment">><<route "我读完了, 查看后续阅读大纲" "Map">></div>
+</article>
+
+:: Map
+<article>
+<h1>阅读地图</h1>
+<p>沿着你的兴趣选择文章. 前置内容会先展开, 已读文章可以随时重访.</p>
+<ul class="map-list">
+<<for _name range Object.keys(setup.lessons)>>
+<<capture _name>><li><<route setup.lessons[_name].title _name>><span class="read-status"><<if $read.includes(_name)>>已读<<elseif $visited.includes(_name)>>阅读中<<else>>待阅读<</if>></span></li><</capture>>
+<</for>>
+</ul>
+<h2>后续章节</h2>
+<p class="small">首版已完成请求到首 token 的主线. 完整教程按下面的大纲继续展开.</p>
+<ol class="outline">
+<li>请求, token, 位置与生成.</li>
+<li>Rust 与 Python 的职责边界.</li>
+<li>Request 状态和连续批处理.</li>
+<li>token 预算与 chunked prefill.</li>
+<li>784-token 页, FA / GDN 混合缓存.</li>
+<li>前缀哈希, 引用计数与抢占恢复.</li>
+<li>ZMQ / msgpack 协议, 取消和错误处理.</li>
+<li>Qwen 模型, FP8 投影, FA 与 GDN 计算.</li>
+<li>采样, 约束生成与流式输出.</li>
+<li>MTP 提议, 验证和状态回滚.</li>
+<li>Semantic IR, 编译, CUDA Graph 与自有内核.</li>
+<li>正确性测试, 性能测量和验收证据.</li>
+</ol>
+<p class="small">参考 <a href="https://matrix67.com/math_journey/" target="_blank" rel="noopener">Matrix67 的数学之旅</a>. 本站使用 Twine / SugarCube 2.37.3, 公式由 KaTeX 显示.</p>
+</article>

@@ -180,3 +180,20 @@ Responses 支持完整历史、存储型响应的 `previous_response_id`、查�
 以 `torch.compile(fullgraph=True)` 编译 prefill、target decode、MTP draft 与四步 proposal 的 GPU 前向单元；自有和第三方语义算子在 provider lowering 前保留有 schema 的图节点。主机调度、FlashInfer plan、缓存分配和 Rust/ZMQ 留在编译单元外。保留现有手工 target/draft/proposal CUDA Graph 缓存、捕获恢复和显存保护；手工图包含已编译单元，不启用编译器的 CUDA Graph 管理。eager 仅是显式调试模式。持久 KV/GDN 写入须保持有序副作用。activation 捐赠必须指明已证明安全的临时张量，不能捐赠持久缓存。基础与融合语义算子可以并存；图改写须有等价性测试。维护带检查的调用点清单，并逐项说明低层入口例外理由，公开 provider 选择记录。
 
 **验收：** 现有正确性套件、六个最大上下文用例、正式 CUDA 对冻结 TileLang 算子门禁，以及全部 12 组 REQ-PERF-001/002 均通过。每组维持吞吐 95%、TTFT 110% 和极差 10% 规则。不新增编译提速百分比要求。生产模型/GPU 集成测试必须覆盖四类 fullgraph 单元和手工图重放，包括变化的 decode 元数据。
+
+## REQ-LEARN-001 — 交互代码之旅 (2026-10-07)
+
+**状态:** 用户确认; 首个请求到 token 的切片已实现.
+**范围:** 仓库教学, 与推理服务独立.
+
+在 code-journey/ 维护真正使用 Twine 的交互网站, 制定覆盖当前核心代码的完整大纲.
+阅读选项了解兴趣与知识基础; 文章只假设读者已读过内部前置内容, 逐步引入概念.
+首个切片跟踪请求到第一个确认 token, 展示源码节选和真实 Rust 调度器生成的 CPU 轨迹.
+
+正文使用 LXGW WenKai, 代码使用 Fira Code Nerd Font, 公式使用 KaTeX.
+中文正文使用半角标点和用户要求的空格. 支持持久化亮暗主题, 阅读进度与实验步骤.
+使用 Humanizer-zh 检查文案. 在固定内网端口 18084 提供预览.
+
+**验收:** 浏览器检查覆盖前置关系, 源码显示, 784/785/1568/1569/32768-token 轨迹,
+主题切换, 刷新, 重新开始, 返回历史与手机溢出. 阅读页和实验页与视觉方案对照验收.
+其他章节仍按大纲继续制作, 大纲映射到当前源码文件.

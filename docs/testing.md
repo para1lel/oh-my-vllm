@@ -354,3 +354,24 @@ Completion additionally requires the unchanged six context-boundary cases,
 formal CUDA/TileLang operator comparison and twelve framework rows under the
 existing warmup, repetition, spread, throughput and TTFT rules. A successful
 compile test by itself is not performance acceptance.
+
+## Interactive tutorial acceptance
+
+With code-journey's static listener running, run its pinned Chromium workflow:
+
+    npm --prefix code-journey test
+    scripts/with-env.sh cargo test --locked --manifest-path code-journey/trace/Cargo.toml
+    scripts/with-env.sh cargo fmt --manifest-path code-journey/trace/Cargo.toml --check
+    scripts/with-env.sh cargo clippy --manifest-path code-journey/trace/Cargo.toml --all-targets -- -D warnings
+
+Four Playwright tests cover genuine SugarCube identity, prerequisite/interest
+routing, all five real Rust scheduler traces, source excerpt display, light/dark
+selection, refresh/reset, backward map markers, console health and mobile overflow.
+The separate Rust test asserts real chunk counts, including 32144 + 624 for
+32768 input tokens, and the final output-count contract with synthetic feedback.
+These are CPU educational checks, not inference or performance measurements.
+
+Visual review separately compares Image Gen concepts and screenshots using
+view_image at 1536x1024 desktop and 390x844 mobile. JOURNEY_URL overrides the test
+URL; JOURNEY_QA_DIR stores screenshots outside the repository. Use Playwright only
+when the Browser plugin is unavailable, as in the 2026-10-07 preview acceptance.

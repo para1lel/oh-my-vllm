@@ -1,0 +1,180 @@
+@font-face {
+  font-family: "Fira Code Nerd Font";
+  src: url("assets/FiraCodeNerdFontMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+:root {
+  color-scheme: light;
+  --bg: #fff;
+  --text: #2e4052;
+  --link: #499f68;
+  --small-link: #2d7d4a;
+  --muted: #596d7b;
+  --line: #cdd7de;
+  --code: #f2f4f6;
+  --accent: #c8553d;
+  --selected: #ecf5ee;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #161d23;
+  --text: #d5dfe6;
+  --link: #8fc99f;
+  --small-link: #8fc99f;
+  --muted: #a7b6c2;
+  --line: #35414b;
+  --code: #232e37;
+  --accent: #e08d78;
+  --selected: #243a2d;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); scrollbar-gutter: stable; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "LXGW WenKai", serif;
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.78;
+}
+#ui-bar { display: none; }
+#story { margin: 0 auto; padding: 0; max-width: 950px; }
+#passages { max-width: none; margin: 0; }
+.passage { padding: 0; animation: appear 180ms ease-out; }
+#journey-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 34px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+  line-height: 1.4;
+}
+.brand { font-size: 30px; text-decoration: none; color: var(--text); }
+.header-actions { display: flex; align-items: center; gap: 32px; }
+.header-actions a, .header-actions button { font-size: 26px; }
+article { padding-top: 38px; }
+h1 { font-weight: 500; font-size: 56px; line-height: 1.35; margin: 0 0 32px; }
+h2 { font-weight: 500; font-size: 32px; line-height: 1.5; margin: 42px 0 18px; }
+p { margin: 0 0 32px; }
+a, .text-button {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  text-decoration-thickness: 1px;
+  cursor: pointer;
+}
+a:hover, .text-button:hover { text-decoration-thickness: 2px; }
+a:focus-visible, button:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--link); outline-offset: 6px;
+}
+button { font: inherit; font-weight: 500; }
+.text-button { background: none; padding: 0; border: 0; }
+#theme-toggle { color: var(--text); text-decoration: none; }
+.choices { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; margin: 24px 0 44px; }
+.opening .question { margin-top: 40px; }
+.opening .closing { margin-top: 24px; margin-bottom: 0; }
+#journey-footer {
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 0 36px;
+  margin-top: 68px;
+  font-size: 24px;
+}
+.footer-actions { display: flex; gap: 24px; }
+code, pre {
+  font-family: "Fira Code Nerd Font", monospace;
+  font-weight: 400;
+  font-variant-ligatures: contextual;
+}
+code { font-size: .83em; background: var(--code); padding: 2px 7px; border-radius: 4px; }
+pre { background: var(--code); padding: 20px 22px; border-radius: 8px; overflow: auto; font-size: 17px; line-height: 1.7; margin: 18px 0; }
+pre code { font-size: inherit; background: none; padding: 0; border-radius: 0; }
+.source-line { display: block; white-space: pre; }
+.line-number { display: inline-block; width: 4ch; user-select: none; color: var(--muted); }
+details { margin: 30px 0; }
+summary { cursor: pointer; color: var(--link); text-decoration: underline; text-underline-offset: 6px; font-size: 24px; }
+.source-caption { font-size: 16px; line-height: 1.8; color: var(--muted); overflow-wrap: anywhere; }
+.small { font-size: 20px; line-height: 1.8; color: var(--muted); }
+.small a { color: var(--small-link); }
+.math-block { margin: 20px 0 28px; overflow-x: auto; overflow-y: hidden; }
+.katex { color: var(--text); font-size: 1.14em; }
+.katex-display { margin: 0; padding: 14px 0; }
+.experiment { font-size: 24px; }
+.experiment h1 { font-size: 52px; margin-bottom: 24px; }
+.case-options { display: flex; flex-wrap: wrap; gap: 24px; margin: 20px 0 22px; }
+.case-options button { min-width: 48px; font-size: 26px; }
+.case-options button[aria-pressed="true"] { background: var(--selected); border-radius: 4px; padding: 0 10px; }
+.lab { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 20px 0 26px; margin: 22px 0; }
+.track { display: flex; width: 100%; height: 16px; background: var(--accent); border-radius: 6px; overflow: hidden; }
+.track-fill { height: 100%; background: var(--link); transition: width 220ms ease; }
+.track-labels { display: flex; justify-content: space-between; font-size: 17px; line-height: 1.7; }
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; margin: 14px 0 16px; }
+.metric + .metric { border-left: 1px solid var(--line); }
+.metric dt { font-size: 22px; line-height: 1.45; }
+.metric dd { margin: 0; font-size: 36px; line-height: 1.4; }
+.lab-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 28px; }
+.lab .primary { padding: 10px 28px; background: #398957; color: white; border: 0; border-radius: 6px; font-size: 24px; line-height: 1.4; cursor: pointer; }
+.primary:disabled { opacity: .65; cursor: default; }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 28px 0; font-size: 22px; }
+.flow svg { width: 26px; height: 16px; stroke: var(--muted); fill: none; stroke-width: 1.6; }
+.map-list { margin: 16px 0; padding: 0; list-style: none; }
+.map-list li { border-bottom: 1px solid var(--line); padding: 16px 0; display: flex; justify-content: space-between; gap: 18px; }
+.map-list .read-status { color: var(--muted); font-size: 18px; white-space: nowrap; }
+.outline { margin-top: 46px; padding-left: 1.5em; font-size: 23px; }
+.outline li { padding: 6px 0; }
+.text-button:disabled { background: transparent; color: var(--muted); text-decoration: none; opacity: .6; }
+.text-button:not(:disabled), .text-button:not(:disabled):hover, .text-button:not(:disabled):focus { background: transparent; border: 0; }
+#journey-back[hidden] { display: none; }
+.experiment > p:first-of-type { margin-bottom: 18px; }
+.experiment .math-block { margin: 14px 0 18px; }
+.experiment .katex-display { padding: 10px 0; }
+.experiment .lab-status { margin-bottom: 12px; font-size: 22px; }
+.experiment details { margin: 10px 0 26px; }
+.excerpt-preview { margin-top: -12px; padding: 16px 22px; font-size: 19px; line-height: 1.6; }
+.experiment .choices { margin: 12px 0 32px; }
+.lab .primary:hover, .lab .primary:disabled { background: #398957; color: white; border: 0; }
+@keyframes appear { from { opacity: .2; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 1080px) { #story { margin: 0 40px; } }
+@media (max-width: 680px) {
+  html { scrollbar-gutter: auto; }
+  #story { margin: 0 24px; }
+  body { font-size: 24px; line-height: 1.8; }
+  #journey-header { margin-top: 24px; gap: 12px; padding-bottom: 16px; }
+  .brand { font-size: 23px; }
+  .header-actions { gap: 16px; }
+  .header-actions a, .header-actions button { font-size: 20px; color: var(--small-link); }
+  article { padding-top: 30px; }
+  h1, .experiment h1 { font-size: clamp(30px, 8.2vw, 37px); margin-bottom: 26px; }
+  h2 { font-size: 29px; }
+  p { margin-bottom: 26px; }
+  .opening .question { margin-top: 36px; }
+  .choices { gap: 18px; }
+  .opening .closing { margin-top: 32px; }
+  #journey-footer { margin-top: 46px; font-size: 18px; flex-wrap: wrap; }
+  #journey-footer a, #journey-footer button { color: var(--small-link); }
+  .footer-actions { gap: 18px; }
+  .experiment { font-size: 24px; }
+  .metric dt { font-size: 18px; }
+  .metric dd { font-size: 29px; }
+  .case-options { gap: 12px; }
+  .case-options button { font-size: 23px; }
+  .source-caption { font-size: 14px; }
+  pre { font-size: 14px; padding: 14px; }
+  .excerpt-preview { font-size: 14px; padding: 14px; }
+  .experiment .lab-status { font-size: 24px; }
+  .map-list li { align-items: baseline; }
+  .map-list a { font-size: 22px; color: var(--small-link); }
+  .katex { font-size: 1em; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .passage { animation: none; }
+  .track-fill { transition: none; }
+}

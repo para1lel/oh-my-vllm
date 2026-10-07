@@ -298,3 +298,21 @@ scripts/test.sh full
 `test_ir_core.py` 检查 schema/修改契约一致、provider 优先级、仅静态元数据参与能力判断、fake 输出验证、禁止静默回退和 fullgraph lowering。`test_ir_*` 算子测试比较参考与 provider，包括缓存/状态写入。`test_ir_forward_units.py` 加载真实 27B 模型，执行编译后的 prefill，并在手工 CUDA Graph 中捕获/重放编译后的 target、MTP draft 与 proposal 单元。测试比较 eager/compiled 输出及 prefill 接续 decode 时写入的 FA/GDN 状态，并在重放时变更 draft/proposal 位置与页表。较小的 attention fixture 在重放时变更原生 decode 页表。`test_ir_coverage.py` 检查必需调用点清单及经审查的低层导入例外。
 
 完成还须通过原有六个上下文边界用例、正式 CUDA/TileLang 算子对比及 12 组框架测试，并遵守已有预热、重复、极差、吞吐和 TTFT 规则。单纯编译测试成功不等于性能验收。
+
+## 交互教程验收
+
+code-journey 的静态监听器运行时, 使用固定版本 Chromium 执行:
+
+    npm --prefix code-journey test
+    scripts/with-env.sh cargo test --locked --manifest-path code-journey/trace/Cargo.toml
+    scripts/with-env.sh cargo fmt --manifest-path code-journey/trace/Cargo.toml --check
+    scripts/with-env.sh cargo clippy --manifest-path code-journey/trace/Cargo.toml --all-targets -- -D warnings
+
+四个 Playwright 测试覆盖真实 SugarCube 标识, 前置关系与兴趣路线, 五组真实 Rust
+调度轨迹, 源码节选显示, 亮暗主题, 刷新和重置, 返回后的地图标记, 控制台健康和
+手机溢出. 单独的 Rust 测试核对真实分块计数, 包括 32768 输入的 32144 + 624,
+并通过合成返回值检查最后一个输出的数量契约. 这些是 CPU 教学检查, 不测推理或性能.
+
+视觉验收另用 view_image 对照 Image Gen 方案和截图, 桌面为 1536x1024,
+手机为 390x844. JOURNEY_URL 可调整测试地址, JOURNEY_QA_DIR 将截图放在仓库外.
+Browser 插件不可用时使用 Playwright; 2026-10-07 的预览验收属于这种情况.

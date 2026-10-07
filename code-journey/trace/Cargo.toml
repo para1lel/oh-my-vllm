@@ -1,0 +1,11 @@
+[package]
+name = "code-journey-trace"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+oh-my-vllm-scheduler = { path = "../../crates/scheduler" }
+oh-my-vllm-kv-cache = { path = "../../crates/kv-cache" }

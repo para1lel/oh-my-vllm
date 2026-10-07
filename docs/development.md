@@ -173,3 +173,20 @@ The CUDA build records the loaded `.so` hash and actual compiler path/version.
 If nvcc becomes unavailable in a new process, only one matching, hash-verified
 sidecar in `TVM_FFI_CACHE_DIR` can be reused; old cache entries without a
 trusted sidecar are rejected.
+
+## Interactive code journey
+
+The independent static tutorial lives in code-journey/. It needs Node 24, curl,
+unzip and the existing Rust environment. Its build invokes scripts/with-env.sh for
+the real scheduler trace; it does not start Python model computation.
+
+    npm --prefix code-journey ci --ignore-scripts
+    npm --prefix code-journey run build
+    npm --prefix code-journey run serve
+
+The default listener is 0.0.0.0:18084. HOST/PORT can override it for local work.
+Tool downloads are pinned and checked by SHA-256; fonts, KaTeX and licenses are
+included in dist so readers need no CDN. Rebuild after changing referenced core
+source. See code-journey/README.md for curriculum and browser checks. Keep the
+user-requested intranet preview running only for the explicit preview handoff;
+the inference-worker cleanup rule still applies to every GPU process.

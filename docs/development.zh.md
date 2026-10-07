@@ -104,3 +104,17 @@ rustfmt.toml 设置稳定 Rust 2024 格式、100 字符宽度、Unix 换行和�
 设置该变量。CUDA 构建记录实际加载的 `.so` 哈希以及编译器路径/版本。若新进程无法
 查询 nvcc，只能复用 `TVM_FFI_CACHE_DIR` 中唯一匹配、哈希已验证的 sidecar；没有可信
 sidecar 的旧缓存条目会被拒绝。
+
+## 交互代码之旅
+
+独立静态教程位于 code-journey/. 构建需要 Node 24, curl, unzip 和已有 Rust 环境.
+真实调度轨迹通过 scripts/with-env.sh 生成, 不启动 Python 模型计算.
+
+    npm --prefix code-journey ci --ignore-scripts
+    npm --prefix code-journey run build
+    npm --prefix code-journey run serve
+
+默认监听 0.0.0.0:18084. 本地开发可通过 HOST/PORT 调整.
+下载工具固定版本并核对 SHA-256; 字体, KaTeX 和许可证随 dist 提供, 阅读无需 CDN.
+修改引用的核心源码后重新构建. 大纲和浏览器检查见 code-journey/README.md.
+仅为用户明确要求的预览交接保留内网监听器, GPU 进程仍执行原有清理规则.
