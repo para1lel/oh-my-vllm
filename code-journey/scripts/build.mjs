@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCodeHighlighter } from "./highlight.mjs";
+import { sourceNotes, readingSyntax } from "../src/source-notes.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repo = resolve(root, "..");
@@ -57,10 +58,14 @@ await cp(resolve(root, "node_modules/@shikijs/themes/LICENSE"), resolve(dist, "a
 
 const specifications = {
   request: ["crates/scheduler/src/request.rs", "pub struct Request {", "\nimpl Request {"],
+  tokenHistory: ["crates/scheduler/src/request.rs", "    pub token_ids: Vec<u32>,", "    /// Unverified MTP draft tokens appended"],
+  computedCounters: ["crates/scheduler/src/request.rs", "    pub num_computed_tokens: usize,", "    /// Maximum number of output tokens"],
   aligned: ["crates/scheduler/src/lib.rs", "    fn aligned_prefill(", "    pub fn new("],
   queues: ["crates/scheduler/src/lib.rs", "        let mut token_budget", "        let mut still_running"],
   waiting: ["crates/scheduler/src/lib.rs", "        // ── phase 2:", "            let has_running"],
   output: ["crates/scheduler/src/output.rs", "pub struct ScheduledRequest", "// ── step output"],
+  batchOutput: ["crates/scheduler/src/output.rs", "pub struct SchedulerOutput", "// ── worker feedback"],
+  workerResult: ["crates/scheduler/src/output.rs", "pub struct WorkerOutput", null],
   validate: ["crates/scheduler/src/lib.rs", "            let final_chunk", "            let computed_after"],
   commit: ["crates/scheduler/src/lib.rs", "            req.num_computed_tokens =\n", "            let full_blocks"],
   worker: ["python/oh_my_vllm/worker/model_runner.py", "    def execute_model(", "        plans = []"],
@@ -79,6 +84,13 @@ for (const [key, [path, begin, end]] of Object.entries(specifications)) {
   }
   const lines = source.slice(start, stop).trimEnd().split("\n").slice(0, key === "plan" ? 24 : 48);
   const text = lines.join("\n");
+  const notes = sourceNotes[key];
+  if (!notes || !notes.entries.length || notes.entries.some((entry) => entry.length !== 3 || entry.some((value) => !value.trim()))) {
+    throw new Error("Missing source explanation: " + key);
+  }
+  for (const [, field] of text.matchAll(/^\s*pub\s+(\w+)\s*:/gm)) {
+    if (!notes.entries.some(([name]) => name === field)) throw new Error("Undocumented field: " + key + "." + field);
+  }
   const language = path.endsWith(".rs") ? "rust" : "python";
   snippets[key] = {
     path,
@@ -99,7 +111,7 @@ const trace = JSON.parse(execFileSync(resolve(repo, "scripts/with-env.sh"), [
   "cargo", "run", "--quiet", "--locked", "--manifest-path", resolve(root, "trace/Cargo.toml"),
 ], { cwd: repo, encoding: "utf8" }));
 const data = {
-  snippets, alignmentPreview, trace,
+  snippets, alignmentPreview, trace, sourceNotes, readingSyntax,
   sourceRevision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim(),
 };
 await writeFile(resolve(generated, "data.js"), "setup.journeyData = " + JSON.stringify(data) + ";\n");

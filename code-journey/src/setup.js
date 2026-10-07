@@ -5,17 +5,17 @@ Config.passages.transitionOut = 0;
 Config.saves.isAllowed = () => false;
 
 setup.lessons = {
-  Start: { title: "从一条请求开始", needs: [] },
-  Token: { title: "文字怎样变成 token?", needs: [] },
-  Position: { title: "一个 token, 两种编号", needs: ["Token"] },
-  Prefill: { title: "先读完, 再接着写", needs: ["Position"] },
-  Ownership: { title: "谁决定, 谁计算?", needs: ["Prefill"] },
-  Request: { title: "请求带着哪些东西?", needs: ["Prefill"] },
-  Queue: { title: "这一轮, 轮到谁?", needs: ["Request"] },
-  Pages: { title: "为什么是 784?", needs: ["Queue"] },
-  Experiment: { title: "预算为什么留下一截?", needs: ["Pages"] },
-  Worker: { title: "worker 怎样返回结果?", needs: ["Experiment", "Ownership"] },
-  Commit: { title: "第一个 token 回到了哪里?", needs: ["Worker"] },
+  Start: { title: "模型推理流程: 从输入文字到输出 token", needs: [] },
+  Token: { title: "分词: 文字, 词表与 token ID", needs: [] },
+  Position: { title: "token ID, 序列位置与计算进度", needs: ["Token"] },
+  Prefill: { title: "生成过程: prefill 与 decode", needs: ["Position"] },
+  Ownership: { title: "Rust 调度与 Python 模型计算的分工", needs: ["Prefill"] },
+  Request: { title: "Request: 请求状态与 9 个字段", needs: ["Prefill"] },
+  Queue: { title: "请求队列与每轮 token 预算", needs: ["Request"] },
+  Pages: { title: "FA 与 GDN 缓存: 每页 784 个 token", needs: ["Queue"] },
+  Experiment: { title: "分块实验: 32768 个 token 如何分两轮计算", needs: ["Pages"] },
+  Worker: { title: "执行消息: 调度计划, 缓存地址与 worker 返回值", needs: ["Experiment", "Ownership"] },
+  Commit: { title: "提交结果: 更新计算进度与输出历史", needs: ["Worker"] },
 };
 const storageKey = "oh-my-vllm-journey-v1";
 setup.load = function () {
@@ -182,9 +182,57 @@ setup.codeBlock = function (source, preview = false) {
   block.append(toolbar, pre);
   return block;
 };
+setup.sourceGuide = function (key, withSyntax = false) {
+  const notes = setup.journeyData.sourceNotes[key];
+  const section = document.createElement("section");
+  section.className = "field-guide";
+  section.dataset.sourceKey = key;
+  const heading = document.createElement("h3");
+  heading.textContent = notes.title;
+  const intro = document.createElement("p");
+  intro.textContent = notes.intro;
+  section.append(heading, intro);
+  if (withSyntax) {
+    const syntax = document.createElement("p");
+    syntax.className = "syntax-guide";
+    syntax.textContent = setup.journeyData.readingSyntax[setup.journeyData.snippets[key].language];
+    section.appendChild(syntax);
+  }
+  const table = document.createElement("table");
+  table.className = "field-table";
+  table.setAttribute("aria-label", notes.title);
+  const labels = ["字段 / 变量", "含义", "用途与例子"];
+  const head = table.createTHead().insertRow();
+  for (const label of labels) {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.textContent = label;
+    head.appendChild(cell);
+  }
+  const body = table.createTBody();
+  for (const entry of notes.entries) {
+    const row = body.insertRow();
+    entry.forEach((text, index) => {
+      const cell = row.insertCell();
+      cell.dataset.label = labels[index];
+      const content = index === 0 ? document.createElement("code") : document.createElement("span");
+      content.textContent = text;
+      cell.appendChild(content);
+    });
+  }
+  section.appendChild(table);
+  return section;
+};
+Macro.add("explain", {
+  handler() {
+    const key = this.args[0];
+    if (!setup.journeyData.sourceNotes[key]) return this.error("Unknown explanation: " + key);
+    this.output.appendChild(setup.sourceGuide(key));
+  },
+});
 Macro.add("source", {
   handler() {
-    const [key, title] = this.args;
+    const [key, title, includeGuide = true] = this.args;
     const source = setup.journeyData.snippets[key];
     if (!source) return this.error("Unknown source: " + key);
     const details = document.createElement("details");
@@ -196,6 +244,13 @@ Macro.add("source", {
     caption.textContent = source.path + ":" + source.line + " / SHA-256 " + source.sha256.slice(0, 12);
     details.appendChild(caption);
     details.appendChild(setup.codeBlock(source));
+    if (includeGuide) details.appendChild(setup.sourceGuide(key, true));
+    else {
+      const syntax = document.createElement("p");
+      syntax.className = "syntax-guide";
+      syntax.textContent = setup.journeyData.readingSyntax[source.language];
+      details.appendChild(syntax);
+    }
     this.output.appendChild(details);
   },
 });

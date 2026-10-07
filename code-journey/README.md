@@ -74,13 +74,22 @@ revision named in its acceptance artifacts.
 The Matrix67 reference supplies the quiet, branching reading model: true-white
 background, blue-gray text and underlined green choices. Image Gen concepts were
 created for the light reading screen, the experiment, and the dark reading screen.
-The design uses one open 950px column, deliberate text/control sizing and no card
-grid. Mobile uses a 24px gutter. The dark palette uses #161D23, #D5DFE6 and #8FC99F.
+The current design uses an open 820px column with technical-document sizing:
+17px desktop prose, 16px mobile prose, 28/24px chapter titles and 14/13px code. Mobile uses a 24px gutter. The dark palette uses #161D23, #D5DFE6 and #8FC99F.
 
 Prose uses LXGW WenKai; code uses Fira Code Nerd Font Mono. Formula macros render
 with local KaTeX, including accessible MathML. UI/content remain native HTML and
 SugarCube passages. The narrow code preview is extracted from the same source
 as its expandable full excerpt.
+
+Chapter titles name the concept directly. Early passages show only the fields
+needed at that point; later request/message chapters explain every displayed
+record field with its meaning and purpose. Function excerpts include parameter,
+state and local-variable notes plus basic language syntax. Maintain those notes
+in src/source-notes.mjs. Build validation rejects any displayed public Rust field
+without an explanation. Main record tables remain visible beside collapsed
+source; other guides appear with their source excerpt. Mobile tables stack each
+field's meaning and example without page overflow.
 
 Shiki 4.5.0 tokenizes complete Rust/Python excerpts at build time, preserving
 multiline syntax and whitespace. GitHub light/dark themes are adjusted for the
@@ -117,7 +126,9 @@ Playwright checks real Twine identity, prerequisite routing, all five boundary
 traces, source display, theme/refresh/reset behavior, mobile overflow and console
 health. The syntax test also checks all excerpt text, Rust/Python theme colors,
 minimum 4.5:1 token/toolbar/gutter contrast, both clipboard paths and keyboard horizontal
-scrolling. Screenshots cover 1536x1024 desktop and 390x844 mobile in both themes.
+scrolling. A sixth test checks document font sizes, clear map/article titles,
+visible request/message explanations, every displayed public field and all
+articles at mobile width. Screenshots cover 1536x1024 desktop and 390x844 mobile in both themes.
 The separate CPU test checks the published chunk counts against the actual Rust
 scheduler. Repository-wide Rust/Ruff checks remain required.
 
@@ -128,6 +139,7 @@ view_image. Functional tests and visual comparison are separate checks.
 ## Files
 
 - src/story.twee: passages and prerequisite teaching content.
+- src/source-notes.mjs: source field/variable meanings, purposes and syntax notes.
 - src/setup.js: SugarCube macros, checked persistence, theme and trace playback.
 - src/style.css and src/head.html: design tokens, fonts and local KaTeX.
 - scripts/build.mjs: checksum-verified tool setup, current source/trace extraction.

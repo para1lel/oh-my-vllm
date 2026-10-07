@@ -390,10 +390,17 @@ Source excerpts and short previews require complete Rust/Python syntax
 highlighting with readable light/dark palettes. Preserve original text, real
 line numbers and copy behavior; long code lines scroll within the code region.
 
+Use ordinary technical-document sizes (17px desktop / 16px mobile prose).
+Titles must identify their topic directly. Articles must define unfamiliar terms
+and assume only completed internal prerequisites. Explain the meaning and
+purpose of every displayed record field, plus parameters and variables in
+function excerpts; early articles should show only the relevant fields.
+
 **Acceptance:** browser checks pass for prerequisite routing, source display,
 784/785/1568/1569/32768 token traces, theme switching, refresh, restart, backward
 history and mobile overflow. Check syntax token contrast, exact source copying
 through Clipboard API and the HTTP fallback, and keyboard code scrolling.
 Verify the rendered reading/experiment screens
-against the visual concepts. Later curriculum chapters remain planned; their
+against the visual concepts, with the user-requested technical-document sizes.
+Check rendered chapter titles, all displayed field explanations and mobile tables. Later curriculum chapters remain planned; their
 outline maps to current source files.

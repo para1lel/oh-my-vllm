@@ -308,11 +308,14 @@ code-journey 的静态监听器运行时, 使用固定版本 Chromium 执行:
     scripts/with-env.sh cargo fmt --manifest-path code-journey/trace/Cargo.toml --check
     scripts/with-env.sh cargo clippy --manifest-path code-journey/trace/Cargo.toml --all-targets -- -D warnings
 
-五个 Playwright 测试覆盖真实 SugarCube 标识, 前置关系与兴趣路线, 五组真实 Rust
+六个 Playwright 测试覆盖真实 SugarCube 标识, 前置关系与兴趣路线, 五组真实 Rust
 调度轨迹, 源码节选显示, 亮暗主题, 刷新和重置, 返回后的地图标记, 控制台健康和
 手机溢出. 语法检查覆盖所有节选的文本保真, Rust / Python 亮暗配色,
 token / 工具栏 / 行号对比度 >=4.5:1, Clipboard API 与 HTTP 选区备用路径的原始源码复制,
-以及键盘横向滚动. 单独的 Rust 测试核对真实分块计数, 包括 32768 输入的 32144 + 624,
+以及键盘横向滚动. 文档测试验证 17/16px 正文和 28/24px 章节标题, 入门节选只展示
+相关字段, 地图与文章标题一致, Request / 消息字段表可见, 每个展示的公开字段
+都有含义与用途说明. 所有文章的字段表都检查手机溢出, 纵向排列的标签须可见,
+缩小字号后的实验按钮对比度须 >=4.5:1. 单独的 Rust 测试核对真实分块计数, 包括 32768 输入的 32144 + 624,
 并通过合成返回值检查最后一个输出的数量契约. 这些是 CPU 教学检查, 不测推理或性能.
 
 视觉验收另用 view_image 对照 Image Gen 方案和截图, 桌面为 1536x1024,

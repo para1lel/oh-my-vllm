@@ -1,5 +1,35 @@
 # Handoff — 2026-10-07
 
+## Code journey document sizing and self-contained lessons (2026-10-07)
+
+Revised all eleven reading passages with direct topic titles and definitions for
+readers who have completed only the internal prerequisites. Desktop/mobile prose
+is 17/16px, chapter headings 28/24px, and source code 14/13px in an 820px column.
+Early excerpts show only relevant fields. Request and execution/result records
+have visible meaning/purpose tables; function excerpts include parameter, state,
+local-variable and basic syntax guides. Mobile tables retain explicit labels.
+Build validation rejects undocumented displayed public Rust fields. Notes track
+actual implementations, including absolute history positions, ID-matched worker
+results, selected GDN snapshots and the 32768-token last-boundary split.
+
+Validation: all six Playwright Chromium tests passed at 1536x1024 and 390x844,
+covering every article title and displayed public field, document sizes, mobile
+labels/overflow, both themes, source copying, contrast and existing reading and
+experiment behavior. Independent review additionally checked all thirteen guides
+at 320px; findings were corrected and rechecked. Reading, field tables and source
+screenshots were inspected with view_image. Browser plugin was unavailable, so
+Playwright supplied browser verification. Rust workspace tests (58/39/26), fmt,
+hard line width, Clippy and Ruff format/check passed; all 47 Python files were
+unchanged. The scheduler trace test, fmt and Clippy also passed.
+
+Python CPU/GPU suites and operator/framework performance benchmarks were not
+rerun because inference sources are unchanged. No GPU program was launched;
+nvidia-smi showed no compute process at the final resource check. The explicitly
+requested static preview remains on port 18084, Node PID 1367241, reachable at
+http://10.30.64.14:18084/ with HTTP 200. PID record:
+/tmp/oh-my-vllm-code-journey-18084.pid. Browser/check children exited.
+Next: user review of these revisions, then the remaining curriculum chapters.
+
 ## Code journey syntax highlighting (2026-10-07)
 
 All source excerpts and the short aligned-prefill preview now use pinned Shiki
