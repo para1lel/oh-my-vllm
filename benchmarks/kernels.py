@@ -86,9 +86,12 @@ def main():
             "Complete static maximum-shape operations; three independent warm rounds, "
             "twenty alternating-order pairs/round,100 graph repetitions/sample. "
             "External timing events inside each graph exclude host submission gaps. "
-            "No profiler during timing. Fixtures use immutable sources and isolated "
-            "repeatable destinations; DSpark append timing shares one cache after "
-            "independent-cache verification. Before timing, compare both backends' "
+            "No profiler during timing. Fixtures use immutable sources and repeatable "
+            "destinations. DSpark append shares one cache after independent-cache "
+            "verification. Stateless Q/K timing uses matching output-address sequences "
+            "in one graph pool after independent verification; whole functions keep "
+            "their output allocations. Other mutable destinations remain isolated. "
+            "Before timing, compare both backends' "
             "returns and written cache/state slots at existing tolerances."
         ),
         coverage=dict(

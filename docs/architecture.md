@@ -252,11 +252,12 @@ A comparison worker has 96 entries, with family floors of 16 for target and 32 f
 The modes have different family keys and memory pools. The 4 GiB capture-headroom check stays active.
 
 DSpark proposal graphs have a different 16-entry cache and pool.
-DSpark context injection with at most 32 rows uses a different pool and an eight-entry cache.
+DSpark context injection with at most 32 rows uses a different pool and a 32-entry cache.
 
 Warmup and capture save destination KV slots and restore them in `finally`. Replay commits the current inputs.
 Larger context injection uses the compiled unit without manual capture.
-Draft/proposal graphs share 32 entries with floors of 16 and 4.
+An MTP worker uses 32 draft/proposal entries with floors of 16 and 4.
+A comparison worker uses 64 entries with floors of 32 and 8.
 
 At a full cache budget, replacement admission must have four observations.
 Its decayed count must be more than twice the coldest evictable entry.

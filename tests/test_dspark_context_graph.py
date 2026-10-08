@@ -75,6 +75,7 @@ def test_context_headroom_denial_preserves_compiled_execution():
 def test_context_shape_churn_keeps_admission_and_proposal_budgets_independent():
     worker, _ = make_worker()
     worker.compile_model = True
+    worker.context_graph_cache.capacity = 8
     worker.context_graph_cache.synchronize = lambda: None
     proposal_owner = object()
     worker.graph_cache.get_or_create("dspark", (True, 1, 4096), lambda: proposal_owner)
@@ -272,3 +273,37 @@ def test_context_capture_rejects_wrong_dtype_and_device():
         DSparkContextGraph._validate_inputs(
             torch.zeros(1, 4).bfloat16(), torch.tensor([0]), torch.tensor([784])
         )
+
+
+def test_context_budget_keeps_all_supported_row_shapes_resident():
+    worker, _ = make_worker()
+    worker.compile_model = True
+    worker.context_graph_cache.free_bytes = lambda: 8 << 30
+
+    class Graph:
+        MAX_ROWS = 32
+
+        def __init__(self, unit, caches, *inputs, pool):
+            self.unit, self.caches = unit, caches
+
+        def replay(self, *inputs):
+            return self.unit(*inputs, self.caches)
+
+    with (
+        patch("oh_my_vllm.worker.dspark_graph.DSparkContextGraph", Graph),
+        patch("torch.cuda.graph_pool_handle", return_value=object()),
+    ):
+        for _ in range(3):
+            for rows in range(1, 33):
+                worker._inject(
+                    torch.zeros(rows, 16).bfloat16(),
+                    torch.arange(rows),
+                    torch.arange(rows),
+                )
+        stats = worker.context_graph_cache.snapshot()
+        assert stats["dspark_context_capture"] == 32
+        assert stats["dspark_context_resident"] == 32
+        assert stats["dspark_context_eviction"] == 0
+        assert stats["dspark_context_recent_recapture"] == 0
+        assert stats["dspark_context_hit"] == 64
+        assert stats["dspark_context_budget_eager"] == 0

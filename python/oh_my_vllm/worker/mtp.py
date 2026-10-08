@@ -28,7 +28,11 @@ logger = logging.getLogger(__name__)
 
 
 class MTP:
-    def __init__(self, model: Qwen, capacity: int, max_tokens: int) -> None:
+    def __init__(
+        self, model: Qwen, capacity: int, max_tokens: int, *, graph_capacity: int = 32
+    ) -> None:
+        if graph_capacity not in (32, 64):
+            raise ValueError("MTP graph capacity must be 32 or 64")
         if model.mtp is None:
             raise ValueError("MTP weights were not loaded")
         self.model = model
@@ -57,7 +61,11 @@ class MTP:
         self.attention = MTPAttention(max_tokens)
         self.next_position: dict[int, int] = {}
         self.graph_cache = GraphCache(
-            family_floors={"draft": 16, "proposal": 4},
+            capacity=graph_capacity,
+            family_floors={
+                "draft": graph_capacity // 2,
+                "proposal": graph_capacity // 8,
+            },
             # A short-term recapture signals shape churn. Retain the resident
             # graphs and run misses eagerly before trying another replacement.
             churn_cooldown_decisions=32768,

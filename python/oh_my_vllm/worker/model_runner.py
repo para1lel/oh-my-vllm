@@ -221,7 +221,12 @@ class OhMyVllmWorker:
         from oh_my_vllm.worker.mtp import MTP
 
         self.mtp = (
-            MTP(self.model, self.logical_num_blocks, self.config.max_model_len)
+            MTP(
+                self.model,
+                self.logical_num_blocks,
+                self.config.max_model_len,
+                graph_capacity=64 if self.config.comparison else 32,
+            )
             if self.config.speculative_mode == "mtp" or self.config.comparison
             else None
         )

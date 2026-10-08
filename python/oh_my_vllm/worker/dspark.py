@@ -98,7 +98,9 @@ class DSpark:
         # Context commits have no live outputs. Keep their admission budget and
         # temporary storage independent from the read-only proposal graphs.
         self.context_graph_cache = GraphCache(
-            capacity=8,
+            # Context graphs support exactly 1..32 rows. Retain each row count
+            # so acceptance-driven shape changes cannot churn this finite set.
+            capacity=32,
             churn_cooldown_decisions=32768,
             free_bytes=self.graph_cache.free_bytes,
             reserved_bytes=self.graph_cache.reserved_bytes,

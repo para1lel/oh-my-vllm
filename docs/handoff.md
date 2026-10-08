@@ -260,6 +260,20 @@ The CPU collection passed 539 tests and 70 subtests. Selected graph-timing GPU t
 The interrupted full GPU selection is not acceptance evidence. Its task-owned descendants were stopped.
 New service, paired, operator, boundary, and framework collections stay open on the committed correction.
 
+## Draft and context graph budgets
+
+The next paired attempt passed batch-one and batch-two measurement audits.
+Batch four had no target graph recapture. Its MTP draft/proposal and DSpark context caches still had recaptures during measured work.
+The full failed attempt keeps all samples and counters. All owned workers were released.
+
+DSpark context graphs now have 32 entries for all legal row counts from 1 to 32.
+An MTP comparison worker uses 64 draft/proposal entries with floors of 32 and 8.
+A worker that runs only MTP keeps 32 entries with floors of 16 and 4.
+The existing memory, admission, pool, and cooldown contracts stay active.
+
+Selected CPU tests passed 137 cases. New tests cover all context row shapes, comparison-family retention, and invalid budgets.
+Selected GPU graph checks and all eight hooks passed. Full acceptance stays open on the committed correction.
+
 ## Open work
 
 The first paired collection completed batch 1, then failed to bind the batch 2 IPC address.

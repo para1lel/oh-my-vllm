@@ -724,3 +724,50 @@ def test_real_32_graph_pool_defers_late_capture_at_low_headroom():
     torch.testing.assert_close(output[0], torch.full_like(output[0], 8))
     old_output = run_shape(mtp, *shapes[0])
     torch.testing.assert_close(old_output, torch.full_like(old_output, 8))
+
+
+def test_comparison_mtp_budget_keeps_draft_and_proposal_shapes():
+    class Model:
+        mtp = object()
+        embedding = torch.zeros(1)
+
+    with patch("oh_my_vllm.worker.mtp.MTPAttention"):
+        standalone = MTP(Model(), 1, 40960)
+        comparison = MTP(Model(), 1, 40960, graph_capacity=64)
+    assert standalone.graph_cache.capacity == 32
+    assert standalone.graph_cache.family_floors == {"draft": 16, "proposal": 4}
+    cache = comparison.graph_cache
+    assert cache.capacity == 64
+    assert cache.family_floors == {"draft": 32, "proposal": 8}
+    free = [8 << 30]
+    cache.free_bytes = lambda: free[0]
+    shapes = [
+        ("draft", (rows, requests, 36864))
+        for requests in range(1, 5)
+        for rows in range(requests, requests * 5 + 1)
+    ][:33]
+    shapes += [
+        ("proposal", (requests, extent))
+        for requests in range(1, 4)
+        for extent in (32768, 36864)
+    ]
+    for _ in range(3):
+        for family, key in shapes:
+            assert cache.should_use(family, key)
+            cache.get_or_create(family, key, object)
+    stats = cache.snapshot()
+    assert stats["draft_capture"] == 33
+    assert stats["proposal_capture"] == 6
+    for family in ("draft", "proposal"):
+        assert stats[f"{family}_eviction"] == 0
+        assert stats[f"{family}_recent_recapture"] == 0
+    assert stats["churn_cooldown_started"] == 0
+    free[0] = 0
+    assert not cache.should_use("draft", (20, 4, 40960))
+    assert cache.should_use(*shapes[0])
+
+
+@pytest.mark.parametrize("capacity", [0, 1, 31, 33, 65])
+def test_mtp_rejects_unapproved_graph_budget_before_allocations(capacity):
+    with pytest.raises(ValueError, match="MTP graph capacity"):
+        MTP(None, 1, 4096, graph_capacity=capacity)

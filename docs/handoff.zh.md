@@ -259,6 +259,20 @@ CPU 集合通过 539 个测试和 70 个 subtests. 重点 graph 计时 GPU 测�
 中止的完整 GPU 选择不作为验收证据. 任务子进程已停止.
 新的服务, 成对比较, 算子, 边界和框架采集仍待使用提交后的修正完成.
 
+## 草稿和 context graph 预算
+
+下一次成对采集的 batch 1 和 batch 2 通过测量审计.
+Batch 4 没有 target graph 重捕获. MTP draft / proposal 和 DSpark context cache 仍在测量阶段重捕获.
+完整失败采集保留全部样本和计数. 所有任务 worker 已释放.
+
+DSpark context graph 改为 32 条目, 覆盖全部合法的 1 至 32 行数.
+MTP 比较 worker 使用 64 条目 draft / proposal, 下限分别为 32 和 8.
+仅运行 MTP 的 worker 保持 32 条目, 下限分别为 16 和 4.
+已有显存, 准入, pool 与 cooldown 合同继续生效.
+
+重点 CPU 测试通过 137 项. 新测试覆盖全部 context 行形状, 比较 family 保留和无效预算.
+重点 GPU graph 检查与全部 8 个 hooks 通过. 完整验收仍待使用提交后的修正完成.
+
 ## 开放工作
 
 首组成对采集完成了 batch 1, 随后在绑定 batch 2 的 IPC 地址时失败.
