@@ -1,4 +1,4 @@
-"""Run the six real 262144-token boundary rows on one UUID-pinned B200."""
+"""Run the requested real 262144-token boundary modes on one UUID-pinned B200."""
 
 import argparse
 import hashlib
@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INPUT_LEN = 258048
 OUTPUT_LEN = 4096
 BATCH_SIZES = (1, 2, 4)
-MODES = ("ordinary", "mtp4")
+MODES = ("ordinary", "mtp4", "dspark")
 
 
 @contextmanager
@@ -74,7 +74,7 @@ def validate_row(log: str, batch_size: int, mode: str, gpu_total_bytes: int) -> 
     proposed = row.get("proposed_draft_tokens")
     if (
         not isinstance(proposed, int)
-        or (mode == "mtp4" and proposed <= 0)
+        or (mode in ("mtp4", "dspark") and proposed <= 0)
         or (mode == "ordinary" and proposed != 0)
     ):
         raise ValueError(f"boundary {mode} proposed_draft_tokens={proposed}")
@@ -93,6 +93,14 @@ def validate_row(log: str, batch_size: int, mode: str, gpu_total_bytes: int) -> 
         raise ValueError("ordinary boundary accepted MTP drafts")
     if row["accepted_draft_tokens"] > proposed:
         raise ValueError("boundary accepted more MTP drafts than proposed")
+    if mode == "dspark":
+        verified = row.get("verified_draft_tokens")
+        if row.get("speculative_mode") != "dspark":
+            raise ValueError("boundary did not execute DSpark mode")
+        if type(verified) is not int or verified <= 0:
+            raise ValueError("boundary has no actual verified DSpark drafts")
+        if row["accepted_draft_tokens"] > verified:
+            raise ValueError("boundary accepted more drafts than actually verified")
     memories = []
     for line in log.splitlines():
         try:
@@ -119,7 +127,7 @@ def validate_row(log: str, batch_size: int, mode: str, gpu_total_bytes: int) -> 
         and 0 < allocated <= reserved <= gpu_total_bytes
     ):
         raise ValueError("invalid worker peak GPU memory")
-    return {
+    result = {
         "mode": mode,
         "batch_size": batch_size,
         "input_len": INPUT_LEN,
@@ -135,6 +143,9 @@ def validate_row(log: str, batch_size: int, mode: str, gpu_total_bytes: int) -> 
         "max_reserved_bytes": reserved,
         "log_sha256": hashlib.sha256(log.encode()).hexdigest(),
     }
+    if "verified_draft_tokens" in row:
+        result["verified_draft_tokens"] = row["verified_draft_tokens"]
+    return result
 
 
 def _gpu_total_bytes(hardware: dict) -> int:
@@ -150,6 +161,7 @@ def run_row(
     mode: str,
     *,
     model: str,
+    draft_model: str | None = None,
     gpu_total_bytes: int | None = None,
     raw_dir: Path | None = None,
     timeout: int = 1800,
@@ -180,20 +192,30 @@ def run_row(
             "128",
             "--max-model-len",
             "262144",
-            "--num-speculative-tokens",
-            "4" if mode == "mtp4" else "0",
-            "bench",
-            "--batch-size",
-            str(batch_size),
-            "--input-len",
-            str(INPUT_LEN),
-            "--output-len",
-            str(OUTPUT_LEN),
-            "--warmup",
-            "0",
-            "--repetitions",
-            "1",
         ]
+        if mode == "dspark":
+            if not draft_model:
+                raise ValueError("DSpark boundary requires --draft-model")
+            command.extend(
+                ["--speculative-mode", "dspark", "--draft-model", draft_model]
+            )
+        else:
+            command.extend(["--num-speculative-tokens", "4" if mode == "mtp4" else "0"])
+        command.extend(
+            [
+                "bench",
+                "--batch-size",
+                str(batch_size),
+                "--input-len",
+                str(INPUT_LEN),
+                "--output-len",
+                str(OUTPUT_LEN),
+                "--warmup",
+                "0",
+                "--repetitions",
+                "1",
+            ]
+        )
         with _reap_on_termination() as cancelled:
             log = run_engine(
                 command,
@@ -219,7 +241,18 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--raw-dir", type=Path, required=True)
+    parser.add_argument(
+        "--modes", choices=MODES, nargs="+", default=["ordinary", "mtp4"]
+    )
+    parser.add_argument(
+        "--draft-model", default=os.environ.get("OH_MY_VLLM_DRAFT_MODEL")
+    )
+    parser.add_argument("--portable-output", type=Path)
     args = parser.parse_args()
+    if len(set(args.modes)) != len(args.modes):
+        parser.error("boundary modes must not repeat")
+    if "dspark" in args.modes and not args.draft_model:
+        parser.error("DSpark boundary requires --draft-model or OH_MY_VLLM_DRAFT_MODEL")
     if args.raw_dir.resolve().is_relative_to(ROOT):
         raise ValueError("raw boundary logs must stay outside the repository")
     binary = args.binary.resolve()
@@ -227,11 +260,25 @@ def main() -> None:
         raise FileNotFoundError(f"build the boundary bench binary first: {binary}")
     hardware = hardware_identity()
     source = source_identity(binary)
+    checkpoints = None
+    if "dspark" in args.modes:
+        from benchmarks.speculative import checkpoint_identity
+
+        checkpoints = {
+            "target": checkpoint_identity(args.model),
+            "draft": checkpoint_identity(args.draft_model),
+        }
     rows = []
-    for mode in MODES:
+    for mode in args.modes:
         for batch_size in BATCH_SIZES:
+            options = {"draft_model": args.draft_model} if mode == "dspark" else {}
             row = run_row(
-                binary, batch_size, mode, model=args.model, raw_dir=args.raw_dir
+                binary,
+                batch_size,
+                mode,
+                model=args.model,
+                raw_dir=args.raw_dir,
+                **options,
             )
             rows.append(row)
             print(
@@ -243,28 +290,41 @@ def main() -> None:
             )
     source_end = source_identity(binary)
     same_source = source == source_end
+    same_checkpoints = True
+    if checkpoints is not None:
+        same_checkpoints = checkpoints == {
+            "target": checkpoint_identity(args.model),
+            "draft": checkpoint_identity(args.draft_model),
+        }
     same_gpu = all(row["gpu_uuid"] == hardware["gpu"] for row in rows)
     artifact = {
         "source": source,
         "hardware": hardware,
         "run_id": os.environ.get("OH_MY_VLLM_RUN_ID"),
         "protocol": (
-            "ordinary/MTP4 x batch 1/2/4; 258048 input + 4096 output; "
-            "zero preemption; MTP drafts; worker peak memory"
+            "requested modes x batch 1/2/4; 258048 input + 4096 output; "
+            "zero preemption; speculative drafts; worker peak memory"
         ),
+        "modes": args.modes,
         "rows": rows,
         "source_end_matches_start": same_source,
         "gpu_uuid_matches_start": same_gpu,
         "passed": (
-            len(rows) == 6
+            len(rows) == len(args.modes) * len(BATCH_SIZES)
             and same_source
+            and same_checkpoints
             and source_end["git_status"] == ""
             and same_gpu
         ),
     }
+    if checkpoints is not None:
+        artifact["checkpoints"] = checkpoints
+        artifact["checkpoint_end_matches_start"] = same_checkpoints
     if not same_source:
         artifact["source_end"] = source_end
-    args.output.write_text(json.dumps(artifact, indent=2) + "\n")
+    from benchmarks.speculative import write_artifact
+
+    write_artifact(args.output, artifact, args.portable_output)
     if not artifact["passed"]:
         raise ValueError("boundary rows require a clean source for acceptance")
 

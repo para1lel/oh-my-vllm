@@ -216,7 +216,14 @@ class GraphCache:
             "churn_cooldown_remaining": max(0, self.churn_cooldown_until - self.clock),
             "churn_cooldown_started": self.counters["churn_cooldown_started"],
         }
-        for family in ("target", "draft", "proposal"):
+        for family in (
+            "target",
+            "draft",
+            "proposal",
+            "target_dspark",
+            "dspark",
+            "dspark_context",
+        ):
             result[f"{family}_resident"] = counts[family]
             for metric in (
                 "hit",

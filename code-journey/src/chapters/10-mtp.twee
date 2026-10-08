@@ -3,7 +3,7 @@
 <<chapterHeader>>
 <h2>多 token 预测怎样减少目标模型轮次</h2>
 <p>普通生成每轮从目标模型得到一个新 ID. MTP 使用额外预测头先提出最多四个草稿, 下一轮目标模型一起计算这些候选前缀, 再逐位置验证. 连续接受多个候选时, 一次目标计算可以推进多个输出.</p>
-<p>草稿来自模型自己的 MTP 头, 复用 embedding 与词表 head, 另外有输入归一化, 合并投影和一层 FA. 当前 speculative_tokens 支持 0 与 4, 启用 4 后 worker 和调度器都使用草稿路线.</p>
+<p>草稿来自模型自己的 MTP 头, 复用 embedding 与词表 head, 另外有输入归一化, 合并投影和一层 FA. 本章的 speculative_tokens 为 0 或 4, 启用 4 后 worker 和调度器都使用 MTP 路线. 第 13 章解释另一个独立 DSpark checkpoint 的七候选路线.</p>
 <h2>MTP 的位置为什么从 1 开始</h2>
 <p>位置 p 的 MTP 输入使用目标模型 hidden[p-1] 与 token[p]. 二者分别归一化, 拼成 10240 维, 经 mtp_fc 投影回 5120 维, 通过 MTP 层得到新的 hidden, 再投影到词表预测后一个 ID.</p>
 <p>位置 0 缺少前一个目标 hidden, MTP 缓存从位置 1 开始. MTPAttention 长查询收集有效位置, decode 核使用 first=1 限制可读范围. 均匀的位置平移保留相对 RoPE 关系, 页表仍按完整历史位置建立.</p>

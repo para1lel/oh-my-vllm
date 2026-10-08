@@ -92,7 +92,18 @@ def _smallest_formal_case(operation):
 )
 @pytest.mark.parametrize(
     "operation",
-    ["prepare_attention", "convolution", "recurrent", "quant", "attention", "append"],
+    [
+        "prepare_attention",
+        "convolution",
+        "recurrent",
+        "quant",
+        "attention",
+        "append",
+        "dspark_rms_norm",
+        "dspark_norm_rope",
+        "dspark_append",
+        "dspark_attention",
+    ],
 )
 def test_formal_fixture_compares_both_backends(operation):
     config = (
@@ -104,5 +115,11 @@ def test_formal_fixture_compares_both_backends(operation):
     result = verify(operation, reference, candidate, witnesses)
     assert result["passed"]
     assert result["compared_tensors"] >= 1
-    if operation in ("prepare_attention", "convolution", "recurrent", "append"):
+    if operation in (
+        "prepare_attention",
+        "convolution",
+        "recurrent",
+        "append",
+        "dspark_append",
+    ):
         assert result["witnessed_writes"]

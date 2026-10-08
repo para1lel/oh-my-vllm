@@ -19,6 +19,22 @@ The local service has no authentication.
 Use `serve --listen` and `--served-model-name` to change these values.
 Keep server addresses in `LOCAL.md`.
 
+For DSpark, set `OH_MY_VLLM_DRAFT_MODEL` and select the mode explicitly:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/oh-my-vllm-dspark-serve.ipc --speculative-mode dspark serve
+```
+
+One worker serves one draft mode. HTTP requests cannot change that mode.
+Native MTP4 stays available through the legacy four-token option or `--speculative-mode mtp`.
+DSpark has at most seven drafts, with the same target checkpoint, block 784, APIs, and request constraints.
+
+The initial `--dspark-confidence-threshold` setting is `0.2`. It limits cumulative confidence from the first candidate.
+It can return zero through seven candidates. Zero uses one target token for that step.
+Use `0.0` for fixed-count proposals up to seven. Output, context, and grammar limits can decrease the proposal count.
+
+Current-source DSpark target-model service and performance acceptance results are not available.
+
 ## API surface
 
 | Method and route | Contract |
@@ -74,7 +90,7 @@ Responses reasoning maps back to assistant `reasoning_content`.
 Top-level Responses instructions apply only to that response.
 Continuation does not inherit these instructions.
 
-## Grammar and MTP
+## Grammar and speculative tokens
 
 JSON object, JSON Schema, and strict tool grammars apply before sampling.
 Reasoning can precede the constrained answer.
@@ -86,12 +102,18 @@ The supported keyword inventory is in `python/oh_my_vllm/worker/serving.py`.
 Unknown string formats and pattern/format combined with length bounds are unsupported.
 
 XGrammar supplies Qwen XML tool grammars and JSON answer grammars.
-Each MTP draft and bonus position uses its speculative-prefix mask.
+Each MTP or DSpark draft and bonus position uses its speculative-prefix mask.
 Simulated grammar advancement rolls back. Kept output alone advances persistent state.
 A draft that the mask rejects fails at its first invalid position.
 
 CPU tests include rollback, rejection, and reasoning-end crossings.
 Target-model MTP4 evidence includes the two APIs, off/medium, JSON object, JSON Schema, and strict tools.
+
+DSpark proposals use the same masks before candidate selection.
+For stochastic output, acceptance uses full conditional target/proposal probabilities with the configured sampling parameters.
+Candidate acceptance is `min(1,p(x)/q(x))`. Rejection uses normalized `max(p-q,0)`, and the bonus uses target distribution `p`.
+Verification uses target tokens with maximum scores for greedy sampling.
+See [architecture](architecture.md#dspark) for context and state commit.
 
 ## XML tool restrictions
 
@@ -119,7 +141,7 @@ Literal tool tags in ordinary text or JSON answers stay text.
 
 ## Storage and resource limits
 
-Responses defaults to `store=true`. OMP usually sends `store=false`.
+Without an explicit value, Responses uses `store=true`. OMP usually sends `store=false`.
 Stored responses and resolved history snapshots expire one hour after completion.
 Defaults are 1000 records and 256 MiB of serialized response/history bytes.
 Object/allocation overhead is additional.
@@ -156,22 +178,30 @@ Paused requests keep KV when capacity permits. Priority preemption can still evi
 Request-local validation or generation failures affect that request alone.
 Fatal CUDA/device/worker failures fail pending requests and make later submissions unavailable until restart.
 Ctrl-C and SIGTERM close streams and request worker shutdown.
-HTTP drain and worker cleanup share the configurable `--shutdown-grace-seconds` deadline.
+HTTP drain and worker cleanup share the `--shutdown-grace-seconds` deadline, which the user can set.
 Stalled readers disconnect at deadline. Kernels have no individual preemption.
 
 ## Verification
 
 Use `scripts/serving-acceptance.py`, `scripts/serving-lifecycle.py`, and `scripts/agentic-acceptance.py`.
-Complete OMP tasks with the target checkpoint independently through `--api chat` and `--api responses` with MTP enabled.
+Complete OMP tasks through `--api chat` and `--api responses` with the target checkpoint in each draft mode.
 Use `--omp` or the executable on `PATH`.
 The client JSONL must show successful `read` calls for `crates/scheduler/src/lib.rs` and `python/oh_my_vllm/worker/model_runner.py`.
 Directory listings alone are insufficient.
 The model must receive the tool results.
 
+The recording proxy keeps the forwarded model request that contains each source-read result.
+Client response IDs for the last answer must agree with the recorded HTTP responses and active-mode server logs.
+
 The answer must use those results and refer to the files.
 Keep the repository unchanged during the agent task.
 
-Examine measured queue/preparation time, TTFT, rate, steps, prefix reuse, and proposed/accepted drafts.
+Examine measured queue/preparation time, TTFT, rate, steps, prefix reuse, and verified/accepted drafts.
+`verified_draft_tokens` counts scheduled candidates, with rejected candidates. Future proposals are a different counter.
+Completion logs keep `proposed_draft_tokens` as a legacy alias for the scheduled-candidate count.
+Use the active mode in `BENCH_CONFIG` and the explicit `--speculative-mode` acceptance option.
+
+Repeat constraints, mixed-batch/cancellation, and long-context checks for native MTP4 and DSpark through the two APIs.
 There is no additional HTTP throughput gate.
 Script exit status or a scripted worker alone does not show target-model acceptance.
 See [testing](testing.md) and [acceptance](acceptance.md).

@@ -386,7 +386,7 @@ $(document).on(":passageend", (event) => {
     theme.textContent = next === "dark" ? "亮色" : "暗色";
     theme.setAttribute("aria-label", next === "dark" ? "切换到亮色模式" : "切换到暗色模式");
   };
-  document.getElementById("read-count").textContent = "已读 " + v.read.length + " / 12 章";
+  document.getElementById("read-count").textContent = "已读 " + v.read.length + " / " + Object.keys(setup.lessons).length + " 章";
   document.getElementById("restart").onclick = () => {
     v.read = []; v.visited = []; setup.readMemory = []; setup.visitedMemory = []; v.goal = "Basics"; v.interest = "basics";
     v.expLength = 32768; v.expIndex = -1; v.lastLesson = "Start";

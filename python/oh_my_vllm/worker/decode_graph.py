@@ -11,13 +11,19 @@ from oh_my_vllm.models.qwen import AttentionBatch, Batch, Qwen
 
 class DecodeAttention:
     def __init__(
-        self, tables: torch.Tensor, lengths: torch.Tensor, extent: int, workspace=None
+        self,
+        tables: torch.Tensor,
+        lengths: torch.Tensor,
+        extent: int,
+        workspace=None,
+        max_query_len: int = 5,
     ):
         from oh_my_vllm.ir.attention import register_plan
 
         self.tables = tables
         self.lengths = lengths
         self.extent = extent
+        self.max_query_len = max_query_len
         self.first = 0
         self.starts = None
         self.workspace = workspace
@@ -98,7 +104,7 @@ class DecodeAttention:
                 kv_layout="NHD",
                 backend="trtllm-gen",
                 q_len_per_req=None,
-                max_q_len=5 if self.starts is not None else 1,
+                max_q_len=self.max_query_len if self.starts is not None else 1,
                 cum_seq_lens_q=starts,
             )
         return decode(
@@ -109,6 +115,7 @@ class DecodeAttention:
             first=self.first,
             max_tokens=self.extent,
             starts=self.starts,
+            max_query_len=self.max_query_len,
         )
 
 
@@ -132,6 +139,8 @@ class DecodeGraph:
         extent: int,
         pool=None,
         compile_model: bool = False,
+        capture_features: bool = False,
+        max_query_len: int = 5,
     ) -> None:
         if batch.prefill_sequences:
             raise ValueError("decode graphs cannot capture prefill")
@@ -141,6 +150,7 @@ class DecodeGraph:
             batch.positions.clone() + 1,
             extent,
             workspace=getattr(batch.attention, "workspace", None),
+            max_query_len=max_query_len,
         )
         if self.attention.workspace is None:
             self.attention.workspace = torch.empty(
@@ -176,10 +186,16 @@ class DecodeGraph:
                 else:
                     cache[fa_pages, :, fa_offsets] = backup
 
-        def run() -> tuple[torch.Tensor, torch.Tensor]:
+        def run() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
             self.attention.prepare()
-            hidden = model.forward(self.tokens, self.batch, caches)
-            return hidden, model.logits(hidden)
+            if capture_features:
+                hidden, features = model.forward_features(
+                    self.tokens, self.batch, caches
+                )
+            else:
+                hidden = model.forward(self.tokens, self.batch, caches)
+                features = None
+            return hidden, model.logits(hidden), features
 
         unit = compile_forward(run, unit="target_graph") if compile_model else run
         try:
@@ -188,7 +204,7 @@ class DecodeGraph:
             restore()
             torch.cuda.synchronize()
             with torch.cuda.graph(self.graph, pool=pool):
-                self.hidden, self.logits = unit()
+                self.hidden, self.logits, self.features = unit()
         finally:
             restore()
 

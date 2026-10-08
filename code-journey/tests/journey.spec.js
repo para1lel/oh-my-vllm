@@ -35,7 +35,7 @@ function monitor(page) {
   return errors;
 }
 
-test('Twine prerequisite routes retain interest and complete all twelve chapters', async ({ page }) => {
+test('Twine prerequisite routes retain interest and complete all thirteen chapters', async ({ page }) => {
   const errors = monitor(page);
   await page.goto('/');
   await expect(page).toHaveTitle('oh-my-vllm 代码之旅');
@@ -64,15 +64,15 @@ test('Twine prerequisite routes retain interest and complete all twelve chapters
     }
     await page.locator('.chapter-choices a').first().click();
   }
-  await expect(heading(page)).toContainText('12 章阅读地图');
-  await expect(page.locator('.map-list li')).toHaveCount(12);
-  await expect(page.locator('.map-list .read-status').filter({ hasText: '已读' })).toHaveCount(12);
-  await expect(page.locator('#read-count')).toHaveText('已读 12 / 12 章');
+  await expect(heading(page)).toContainText('13 章阅读地图');
+  await expect(page.locator('.map-list li')).toHaveCount(13);
+  await expect(page.locator('.map-list .read-status').filter({ hasText: '已读' })).toHaveCount(13);
+  await expect(page.locator('#read-count')).toHaveText('已读 13 / 13 章');
   await snapshot(page, 'twelve-chapters-map-light');
   await page.reload();
   // Last chapter is restored; a fresh map visit must retain every marker.
   await page.locator('#journey-map').click();
-  await expect(page.locator('.map-list .read-status').filter({ hasText: '已读' })).toHaveCount(12);
+  await expect(page.locator('.map-list .read-status').filter({ hasText: '已读' })).toHaveCount(13);
   expect(errors).toEqual([]);
 });
 
@@ -172,7 +172,7 @@ test('normalized source display, dual-theme contrast and both clipboard paths', 
 test('every chapter, displayed field and formula works at mobile document sizes', async ({ page }) => {
   test.setTimeout(90000);
   const errors = monitor(page);
-  const chapters = await openChapter(page, 'Validation');
+  const chapters = await openChapter(page, 'DSpark');
   await expect(page.locator('body')).toHaveCSS('font-size', '17px');
   await expect(heading(page)).toHaveCSS('font-size', '28px');
   await page.setViewportSize({ width: 390, height: 844 });
@@ -278,19 +278,19 @@ test('map history stays monotonic; old short passages migrate to visited', async
   });
   await page.reload();
   await expect(heading(page)).toContainText('第 1 章');
-  await expect(page.locator('#read-count')).toHaveText('已读 0 / 12 章');
+  await expect(page.locator('#read-count')).toHaveText('已读 0 / 13 章');
   await page.locator('#journey-map').click();
   await expect(page.locator('.map-list .read-status').filter({ hasText: '阅读中' })).toHaveCount(2);
   await page.locator('.map-list a').first().click();
   await page.locator('.chapter-choices a').first().click();
   await page.getByRole('button', { name: '返回', exact: true }).click();
   await page.getByRole('button', { name: '返回', exact: true }).click();
-  await expect(heading(page)).toContainText('12 章阅读地图');
+  await expect(heading(page)).toContainText('13 章阅读地图');
   await expect(page.locator('.map-list li').first().locator('.read-status')).toHaveText('已读');
-  await expect(page.locator('#read-count')).toHaveText('已读 1 / 12 章');
+  await expect(page.locator('#read-count')).toHaveText('已读 1 / 13 章');
   await page.getByRole('button', { name: '重新开始', exact: true }).click();
   await expect(heading(page)).toHaveText('模型推理流程: 从输入文字到输出 token');
-  await expect(page.locator('#read-count')).toHaveText('已读 0 / 12 章');
+  await expect(page.locator('#read-count')).toHaveText('已读 0 / 13 章');
   await expect(page.getByRole('button', { name: '返回', exact: true })).toBeHidden();
   await page.evaluate(() => localStorage.setItem('oh-my-vllm-journey-v2', 'null'));
   await page.reload();
@@ -310,4 +310,44 @@ test('review and map choices preserve an unfinished chapter', async ({ page }) =
   await page.locator('.chapter-choices li').filter({ hasText: '如果已理解本章' }).first().getByRole('link').click();
   await page.locator('#journey-map').click();
   await expect(page.locator('.map-list li').filter({ has: route(page, chapters.Requests.title) }).locator('.read-status')).toHaveText('已读');
+});
+
+test('DSpark chapter explains causal proposals, probability verification and current source', async ({ page, context }) => {
+  const errors = monitor(page);
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await openChapter(page, 'DSpark');
+  await expect(heading(page)).toContainText('第 13 章. DSpark');
+  await expect(page.locator('article')).toContainText('前缀置信度');
+  await expect(page.locator('article')).toContainText('draft_probabilities');
+  await expect(page.locator('article')).toContainText('真实 q');
+  await expect(page.locator('article')).toContainText('tau 的默认值为 0.2');
+  await expect(page.locator('article')).toContainText('实际候选数为 0 至 7');
+  await expect(page.locator('article')).toContainText('1, 2, 5, 8');
+  await expect(page.locator('article')).toContainText('bench --prompt-file');
+  await expect(page.locator('article')).toContainText('--num-speculative-tokens 7');
+  await expect(page.locator('.katex')).toHaveCount(7);
+  await expect(page.locator('.error, .katex-error')).toHaveCount(0);
+  await expect(page.locator('.source-coverage li')).not.toHaveCount(0);
+  await snapshot(page, 'dspark-desktop-light');
+  await page.getByText('展开 DSpark 架构字段与用途', { exact: true }).click();
+  const detail = page.locator('details').filter({ hasText: '展开 DSpark 架构字段与用途' });
+  await expect(detail.locator('.field-guide tbody tr')).toHaveCount(18);
+  const source = await page.evaluate(() => SugarCube.setup.journeyData.snippets.dsparkConfig);
+  expect(source.text).toMatch(/^@dataclass\(frozen=True\)\nclass DSparkConfig:/);
+  await detail.getByRole('button', { name: '复制 Python 代码' }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(source.text);
+  await page.getByText('展开 context 图的事务恢复与动态输入', { exact: true }).click();
+  const contextDetail = page.locator('details').filter({ hasText: '展开 context 图的事务恢复与动态输入' });
+  await expect(contextDetail.locator('.field-guide tbody tr')).toHaveCount(6);
+  await expect(contextDetail.locator('.code-block code')).toContainText('Capturing CUDA graph');
+  await page.getByRole('button', { name: '切换到暗色模式' }).click();
+  await snapshot(page, 'dspark-desktop-dark', detail);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await snapshot(page, 'dspark-mobile-dark', detail);
+  await page.getByRole('button', { name: '切换到亮色模式' }).click();
+  await snapshot(page, 'dspark-mobile-light', detail);
+  await page.locator('#journey-map').click();
+  await expect(page.locator('.map-list li').last().locator('.read-status')).toHaveText('阅读中');
+  expect(errors).toEqual([]);
 });

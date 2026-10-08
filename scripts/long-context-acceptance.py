@@ -5,9 +5,13 @@ import hashlib
 import json
 import os
 import re
+import sys
 import time
-import urllib.request
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from benchmarks.speculative import read_service_evidence
+from scripts.serving_evidence import ServiceAttempt
 
 
 def read_draft_counts(server_log: Path, offset: int, expected: int = 4) -> list[int]:
@@ -57,7 +61,17 @@ def main() -> None:
     parser.add_argument("--base-url", default="http://127.0.0.1:18015/v1")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--server-log", type=Path, required=True)
+    parser.add_argument("--speculative-mode", choices=["mtp", "dspark"], default="mtp")
     args = parser.parse_args()
+    with ServiceAttempt(
+        args.output,
+        {"speculative_mode": args.speculative_mode, "kind": "long-context"},
+    ) as attempt:
+        run(args, attempt)
+        attempt.update(passed=True)
+
+
+def run(args, attempt):
     from transformers import AutoTokenizer
 
     if not args.server_log.is_file():
@@ -85,6 +99,7 @@ def main() -> None:
         "additionalProperties": False,
     }
     rows = []
+    attempt.update(rows=rows)
     for api in ["chat/completions", "responses"]:
         for repeat in range(2):
             body = {"model": "qwen3.8-27b-fp8", "temperature": 0}
@@ -118,15 +133,7 @@ def main() -> None:
                     },
                 )
             start = time.monotonic()
-            with urllib.request.urlopen(
-                urllib.request.Request(
-                    base + api,
-                    data=json.dumps(body).encode(),
-                    headers={"Content-Type": "application/json"},
-                ),
-                timeout=600,
-            ) as response:
-                out = json.load(response)
+            out = attempt.request(base + api, body, timeout=600)
             if api == "chat/completions":
                 text = out["choices"][0]["message"]["content"]
                 usage = out["usage"]
@@ -142,7 +149,6 @@ def main() -> None:
                 usage = out["usage"]
                 count = usage["input_tokens"]
                 cached = usage["input_tokens_details"]["cached_tokens"]
-            validate_response(text, count, cached, repeat)
             rows.append(
                 {
                     "api": api,
@@ -152,14 +158,28 @@ def main() -> None:
                     "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
                 }
             )
+            attempt.update(rows=rows)
+            validate_response(text, count, cached, repeat)
             print(api, repeat, count, cached, flush=True)
     current_identity = (args.server_log.stat().st_dev, args.server_log.stat().st_ino)
     if current_identity != log_identity:
         raise ValueError("server log changed identity during acceptance")
-    counts = read_draft_counts(args.server_log, log_offset, expected=len(rows))
-    for row, proposed in zip(rows, counts, strict=True):
-        row["proposed_draft_tokens"] = proposed
-    args.output.write_text(json.dumps(rows, indent=2) + "\n")
+    ids = {int(row["response"]["id"].rsplit("_", 1)[1]) for row in rows}
+    verified = read_service_evidence(
+        args.server_log,
+        log_offset,
+        args.speculative_mode,
+        request_ids=ids,
+        expected=len(rows),
+    )
+    by_id = {row["request_id"]: row for row in verified}
+    for row in rows:
+        request_id = int(row["response"]["id"].rsplit("_", 1)[1])
+        if by_id[request_id]["verified_draft_tokens"] <= 0:
+            raise ValueError("long-context request has no actual verified drafts")
+        row["speculative_mode"] = args.speculative_mode
+        row["draft_verification"] = by_id[request_id]
+    attempt.update(rows=rows)
 
 
 if __name__ == "__main__":

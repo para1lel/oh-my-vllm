@@ -202,6 +202,59 @@ It records reported capacities and full measurement identity.
 A new source revision must have an independently approved baseline policy.
 Keep baseline caches isolated from project caches.
 
+## DSpark comparison
+
+Set `OH_MY_VLLM_DRAFT_MODEL` to the validated local checkpoint and build the current release binary.
+Keep full attempts in an external directory. Use a new output path for each attempt:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh python benchmarks/speculative.py --binary target/release/oh-my-vllm-zmq-worker --raw-dir "$EVIDENCE_DIR/dspark-attempts" --output "$EVIDENCE_DIR/dspark-comparison.json" --portable-output "$EVIDENCE_DIR/dspark-comparison-portable.json"
+scripts/with-env.sh python benchmarks/speculative.py --input "$EVIDENCE_DIR/dspark-comparison.json" --output "$EVIDENCE_DIR/dspark-recheck.json"
+```
+
+The collector starts one comparison worker per batch, with the same target weights and physical target caches.
+Each mode loads its draft model before warmup.
+Each attempt resets prefix reuse.
+Use batches 1/2/4, input 32768, output 4096, synthetic IDs, greedy sampling, and ignored EOS.
+EngineCore throughput includes registration, prefill, transport, and cleanup.
+
+Each batch has three rounds.
+Each round has two full warmups per mode and five measured pairs with alternating order.
+Report each mode's throughput median and spread in each round.
+Record the DSpark median difference from native MTP4 and the one-sided 95% hierarchical paired-bootstrap lower bound on throughput gain.
+TTFT and its spread are reported.
+
+This comparison reports DSpark throughput, spread, and confidence bounds.
+Do not add a DSpark throughput or TTFT gate for this comparison.
+
+The raw artifact keeps each attempt, log hashes, source/binary/Python identities, packages, hardware, capacities, and checkpoint file hashes.
+Compare loaded draft configuration and weight hashes with the requested checkpoint bytes. They must agree.
+
+Records include compile/capture audit, peak GPU memory, and scheduled/accepted drafts.
+The paired audit checks all forty-two phase markers and each measured interval.
+Subsequent warmups keep their own compilation/capture interval.
+Logs and the last cache mtimes show observed activity. They cannot exclude all silent in-memory compilation.
+
+`--dspark-confidence-threshold` selects fixed or shorter proposals and is recorded with the observed worker configuration.
+Its initial setting is `0.2`. Use `0.0` for fixed-count proposals up to seven. Output, context, and grammar limits can decrease the proposal count.
+Compare each setting through its scheduled/accepted draft counts and measured performance.
+Acceptance rate is total accepted drafts divided by total scheduled drafts in the measured pairs.
+
+Use `bench --prompt-file PATH` for experiments with text or tool histories different from formal inputs.
+The file has one request per line, with whitespace-separated token IDs.
+Its row count must equal `--batch-size`. Each row length must equal `--input-len`.
+The command checks these constraints before model or GPU loading.
+Keep text sources, token hashes, templates, and sampling settings with the experiment records.
+
+`spec-bench` keeps the fixed synthetic inputs for the formal comparison.
+It does not accept `--prompt-file`. Use different inputs for threshold experiments and that comparison.
+
+Verified drafts are scheduled candidates. Returned next-step proposals have a different diagnostic counter.
+The portable output is a derived summary. It cannot replace original evidence for comparison.
+Keep the original twelve vLLM performance gates active on the source after implementation.
+
+Current-source DSpark performance acceptance results are not available.
+
 ## Context and service acceptance
 
 ```bash
@@ -213,6 +266,15 @@ Make sure that output is full, source identities match, and workers stop.
 Reject OOM or preemption.
 Record peak allocated/reserved GPU memory and draft counters.
 Raw boundary logs must stay in an external directory.
+
+Add the three DSpark boundary cases and keep ordinary/MTP4:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh python benchmarks/context_boundary.py --binary target/release/oh-my-vllm-zmq-worker --modes ordinary mtp4 dspark --raw-dir "$EVIDENCE_DIR/boundary-dspark-logs" --output "$EVIDENCE_DIR/boundary-dspark.json"
+```
+
+Supply the DSpark path through `OH_MY_VLLM_DRAFT_MODEL` or `--draft-model`.
+These nine rows keep the same full-output, no-OOM, no-preemption, and memory-record contracts.
 
 Start a dedicated MTP4 service in one terminal with the release binary and a unique IPC path.
 Use Serving DEBUG logs for mixed-batch and cancellation evidence:
@@ -227,11 +289,12 @@ Use the same explicit URL for all clients. The long-context tool has a different
 
 ```bash
 export SERVICE_URL="http://127.0.0.1:8000/v1"
-scripts/with-env.sh python scripts/serving-acceptance.py --base-url "$SERVICE_URL" --output-dir "$EVIDENCE_DIR/constraints"
-scripts/with-env.sh python scripts/serving-lifecycle.py --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output "$EVIDENCE_DIR/lifecycle.json"
+scripts/with-env.sh python scripts/serving-acceptance.py --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output-dir "$EVIDENCE_DIR/constraints"
+scripts/with-env.sh python scripts/serving-lifecycle.py --api chat --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output "$EVIDENCE_DIR/lifecycle-chat.json"
+scripts/with-env.sh python scripts/serving-lifecycle.py --api responses --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output "$EVIDENCE_DIR/lifecycle-responses.json"
 scripts/with-env.sh python scripts/long-context-acceptance.py --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output "$EVIDENCE_DIR/long-context.json"
-scripts/with-env.sh python scripts/agentic-acceptance.py --api chat --base-url "$SERVICE_URL" --output-dir "$EVIDENCE_DIR/agentic-chat"
-scripts/with-env.sh python scripts/agentic-acceptance.py --api responses --base-url "$SERVICE_URL" --output-dir "$EVIDENCE_DIR/agentic-responses"
+scripts/with-env.sh python scripts/agentic-acceptance.py --api chat --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output-dir "$EVIDENCE_DIR/agentic-chat"
+scripts/with-env.sh python scripts/agentic-acceptance.py --api responses --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output-dir "$EVIDENCE_DIR/agentic-responses"
 ```
 
 The lifecycle tool must find a shared mixed-request batch and worker cancellation/release in the supplied log.
@@ -243,10 +306,36 @@ Complete OMP tasks with the target checkpoint through each API as specified in [
 The tools must read files, and the model must receive their results.
 Script success alone is insufficient.
 
+Repeat the service gates with a different DSpark worker:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh env RUST_LOG=info,oh_my_vllm_zmq_worker::serving=debug target/release/oh-my-vllm-zmq-worker --socket /tmp/dspark-service-acceptance.ipc --max-model-len 262144 --num-gpu-blocks 4200 --mamba-blocks 128 --speculative-mode dspark serve > "$EVIDENCE_DIR/dspark-server.log" 2>&1
+```
+
+Supply `--speculative-mode dspark` and its `--server-log` to each acceptance script.
+Use different evidence paths for each mode and API.
+Run lifecycle checks with `--api chat` and `--api responses`.
+The constraint and long-context scripts test the two APIs.
+Each completed response ID must agree with the active mode and scheduled/accepted counts in the server log.
+
+The OMP script forwards client HTTP through a temporary recording proxy without body changes.
+It keeps client JSONL, forwarded requests, response IDs, and tool-result hashes.
+
+The two source reads must complete without error. Their results must enter a subsequent model request before its last answer.
+The last answer must cite the source files and use their results.
+Examine answer meaning after the automated checks.
+Stop the DSpark service and its worker after these tests.
+
+Service scripts reserve each output file or directory before requests. An existing result path fails.
+They keep `passed=false` until the applicable contracts pass.
+Each received HTTP response is saved before content or log checks.
+Failures keep received responses and an explicit error record.
+Lifecycle streams keep the consumed SSE frames before disconnect.
+
 ## Tutorial and cleanup
 
 Use the checks in [code-journey](../code-journey/README.md#verification).
-Examine desktop/mobile screenshots and all twelve routes after tutorial changes.
+Examine desktop/mobile screenshots and all thirteen routes after tutorial changes.
 
 Run each GPU program through `scripts/with-gpu.sh`.
 Stop all owned processes and descendants after completion or failure.

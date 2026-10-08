@@ -11,6 +11,8 @@ use oh_my_vllm_zmq_worker::client::{WorkerClient, WorkerConfig};
 use tracing::{Instrument, info};
 use tracing_subscriber::EnvFilter;
 
+mod spec_bench;
+
 #[derive(Parser)]
 struct Cli {
     #[arg(long, env = "OH_MY_VLLM_MODEL")]
@@ -30,6 +32,15 @@ struct Cli {
     max_model_len: u32,
     #[arg(long, default_value_t = 0)]
     num_speculative_tokens: usize,
+    /// Explicit speculative algorithm; the legacy token count still selects MTP4.
+    #[arg(long, value_parser = ["none", "mtp", "dspark"])]
+    speculative_mode: Option<String>,
+    /// Separate DSpark checkpoint directory.
+    #[arg(long, env = "OH_MY_VLLM_DRAFT_MODEL")]
+    draft_model: Option<PathBuf>,
+    /// DSpark cumulative prefix confidence cutoff; zero keeps all legal candidates.
+    #[arg(long, default_value_t = 0.2)]
+    dspark_confidence_threshold: f64,
     /// Restrict Rust's pool for preemption tests; cannot exceed worker capacity.
     #[arg(long)]
     scheduler_blocks: Option<u32>,
@@ -54,6 +65,8 @@ enum Cmd {
         prefix_hit: bool,
     },
     Bench(BenchArgs),
+    /// Interleaved native MTP4 / DSpark comparison on one shared target model.
+    SpecBench(spec_bench::SpecBenchArgs),
     Serve(oh_my_vllm_zmq_worker::serving::ServeArgs),
 }
 
@@ -69,11 +82,58 @@ struct BenchArgs {
     warmup: usize,
     #[arg(long, default_value_t = 3)]
     repetitions: usize,
+    /// Whitespace-separated token IDs, one equal-length request per line.
+    #[arg(long)]
+    prompt_file: Option<PathBuf>,
     #[arg(long)]
     prefix_hit: bool,
     /// Admit one request every N steps to exercise continuous batching.
     #[arg(long, default_value_t = 0)]
     arrival_interval: usize,
+}
+
+impl BenchArgs {
+    fn prompts(&self, max_model_len: usize) -> Result<Vec<Vec<u32>>> {
+        ensure!(
+            (1..=32).contains(&self.batch_size)
+                && self.input_len > 0
+                && self.output_len > 0
+                && self.repetitions > 0,
+            "invalid benchmark dimensions"
+        );
+        ensure!(
+            self.input_len.saturating_add(self.output_len) <= max_model_len,
+            "workload exceeds context limit"
+        );
+        if let Some(path) = &self.prompt_file {
+            return self.parse_prompts(&std::fs::read_to_string(path)?);
+        }
+        // Preserve the acceptance workload's deterministic valid token IDs.
+        Ok((0..self.batch_size)
+            .map(|request| {
+                (0..self.input_len)
+                    .map(|i| ((i + request * 997) % 32000 + 1) as u32)
+                    .collect()
+            })
+            .collect())
+    }
+
+    fn parse_prompts(&self, text: &str) -> Result<Vec<Vec<u32>>> {
+        let prompts = text
+            .lines()
+            .map(|line| line.split_whitespace().map(str::parse::<u32>).collect())
+            .collect::<std::result::Result<Vec<Vec<u32>>, _>>()?;
+        ensure!(
+            prompts.len() == self.batch_size
+                && prompts.iter().all(|tokens| tokens.len() == self.input_len),
+            "prompt file must match benchmark batch size and input length"
+        );
+        ensure!(
+            prompts.iter().flatten().all(|&token| token < 248_320),
+            "prompt token is outside the model vocabulary"
+        );
+        Ok(prompts)
+    }
 }
 
 // The controller has one inference stream; keep IPC wakeups on the same thread.
@@ -100,6 +160,37 @@ async fn run() -> Result<()> {
         "requires block_size=784 and TP=1"
     );
     ensure!(cli.num_gpu_blocks >= 6, "physical cache is too small");
+    ensure!(
+        cli.dspark_confidence_threshold.is_finite()
+            && (0.0..1.0).contains(&cli.dspark_confidence_threshold),
+        "DSpark confidence threshold must be in [0,1)"
+    );
+    let comparison = matches!(&cli.cmd, Cmd::SpecBench(_));
+    let mode = cli.speculative_mode.clone().unwrap_or_else(|| {
+        if cli.num_speculative_tokens == 4 || comparison {
+            "mtp"
+        } else {
+            "none"
+        }
+        .to_owned()
+    });
+    let speculative_tokens = match mode.as_str() {
+        "none" => 0,
+        "mtp" => 4,
+        "dspark" => 7,
+        _ => unreachable!("Clap validates the explicit mode"),
+    };
+    ensure!(
+        cli.num_speculative_tokens == 0 || cli.num_speculative_tokens == speculative_tokens,
+        "speculative token count disagrees with mode"
+    );
+    if let Cmd::SpecBench(args) = &cli.cmd {
+        args.validate()?;
+        ensure!(
+            cli.max_model_len >= 36864,
+            "comparison requires at least 36864 tokens"
+        );
+    }
     // Reject malformed input before loading the model or allocating GPU memory.
     let run_prompts = if let Cmd::Run {
         tokens,
@@ -137,6 +228,11 @@ async fn run() -> Result<()> {
     } else {
         None
     };
+    let bench_prompts = if let Cmd::Bench(args) = &cli.cmd {
+        Some(args.prompts(cli.max_model_len as usize)?)
+    } else {
+        None
+    };
     let mut client = WorkerClient::launch(WorkerConfig {
         model_path: cli.model,
         socket_path: cli.socket,
@@ -145,7 +241,11 @@ async fn run() -> Result<()> {
         block_size: cli.block_size,
         tensor_parallel_size: cli.tp,
         max_model_len: cli.max_model_len,
-        num_speculative_tokens: cli.num_speculative_tokens,
+        num_speculative_tokens: speculative_tokens,
+        speculative_mode: Some(mode.clone()),
+        draft_model_path: cli.draft_model,
+        comparison,
+        dspark_confidence_threshold: cli.dspark_confidence_threshold,
         ..WorkerConfig::default()
     })
     .await
@@ -166,7 +266,7 @@ async fn run() -> Result<()> {
     if let Some(capacity) = cli.mamba_blocks {
         kv = kv.with_mamba_capacity(capacity);
     }
-    kv.set_speculative_blocks(cli.num_speculative_tokens);
+    kv.set_speculative_blocks(speculative_tokens);
     let sched_max_num_seqs = 32.min((cli.num_gpu_blocks - 1) as usize);
     let sched_max_batched: usize = SchedulerConfig::default().max_num_batched_tokens;
     info!(
@@ -174,7 +274,14 @@ async fn run() -> Result<()> {
         max_num_batched_tokens = sched_max_batched,
         block_size = cli.block_size,
         max_model_len = cli.max_model_len,
-        num_speculative_tokens = cli.num_speculative_tokens,
+        num_speculative_tokens = speculative_tokens,
+        speculative_mode = if comparison {
+            "comparison"
+        } else {
+            mode.as_str()
+        },
+        comparison,
+        dspark_confidence_threshold = cli.dspark_confidence_threshold,
         worker_fa_pool_blocks = client.logical_num_blocks,
         worker_gdn_pool_blocks = client.mamba_blocks,
         fa_pool_blocks = blocks,
@@ -184,8 +291,8 @@ async fn run() -> Result<()> {
     let mut scheduler = Scheduler::new(
         SchedulerConfig {
             max_num_seqs: sched_max_num_seqs,
-            enable_mtp: cli.num_speculative_tokens > 0,
-            mtp_draft_len: cli.num_speculative_tokens,
+            enable_mtp: speculative_tokens > 0,
+            mtp_draft_len: speculative_tokens,
             ..SchedulerConfig::default()
         },
         kv,
@@ -196,6 +303,9 @@ async fn run() -> Result<()> {
     let mut next_id = 1;
     match cli.cmd {
         Cmd::Serve(_) => unreachable!(),
+        Cmd::SpecBench(args) => {
+            spec_bench::run(&mut client, &mut scheduler, &mut next_id, args).await?;
+        }
         Cmd::Run {
             tokens: _,
             prompt_file: _,
@@ -242,27 +352,7 @@ async fn run() -> Result<()> {
             );
         }
         Cmd::Bench(args) => {
-            ensure!(
-                args.batch_size > 0
-                    && args.batch_size <= 32
-                    && args.input_len > 0
-                    && args.output_len > 0
-                    && args.repetitions > 0,
-                "invalid benchmark dimensions"
-            );
-            ensure!(
-                args.input_len + args.output_len <= cli.max_model_len as usize,
-                "workload exceeds context limit"
-            );
-            // Same deterministic, valid token IDs as the Python baseline. Distinct
-            // first tokens ensure the cold mode has no cross-request prefix hits.
-            let prompts: Vec<Vec<u32>> = (0..args.batch_size)
-                .map(|request| {
-                    (0..args.input_len)
-                        .map(|i| ((i + request * 997) % 32000 + 1) as u32)
-                        .collect()
-                })
-                .collect();
+            let prompts = bench_prompts.expect("validated benchmark input");
             for iteration in 0..args.warmup + args.repetitions {
                 info!(
                     iteration,
@@ -290,11 +380,13 @@ async fn run() -> Result<()> {
                     let count: usize = result.outputs.values().map(Vec::len).sum();
                     println!(
                         concat!(
-                            "{} {{\"batch_size\":{},\"input_len\":{},",
+                            "{} {{\"speculative_mode\":\"{}\",",
+                            "\"batch_size\":{},\"input_len\":{},",
                             "\"output_len\":{},\"output_tokens\":{},\"elapsed_s\":{},",
                             "\"output_tps\":{},\"steps\":{},\"prefix_hit_tokens\":{},",
                             "\"initial_prefix_hit_tokens\":{},\"preemptions\":{},",
-                            "\"proposed_draft_tokens\":{},\"accepted_draft_tokens\":{},",
+                            "\"proposed_draft_tokens\":{},\"verified_draft_tokens\":{},",
+                            "\"accepted_draft_tokens\":{},",
                             "\"ttft_s\":{:?}}}"
                         ),
                         if iteration >= args.warmup {
@@ -302,6 +394,7 @@ async fn run() -> Result<()> {
                         } else {
                             "WARMUP_RESULT"
                         },
+                        mode,
                         args.batch_size,
                         args.input_len,
                         args.output_len,
@@ -313,6 +406,7 @@ async fn run() -> Result<()> {
                         result.initial_prefix_hit_tokens,
                         result.preemptions,
                         result.proposed_draft_tokens,
+                        result.verified_draft_tokens,
                         result.accepted_draft_tokens,
                         result.ttft_s
                     );
@@ -334,6 +428,8 @@ struct BatchResult {
     preemptions: usize,
     proposed_draft_tokens: usize,
     accepted_draft_tokens: usize,
+    /// Candidate tokens actually present in executed verification inputs.
+    verified_draft_tokens: usize,
 }
 
 async fn execute_batch(
@@ -355,6 +451,8 @@ async fn execute_batch(
     let mut preemptions = 0;
     let mut proposed_draft_tokens = 0;
     let mut accepted_draft_tokens = 0;
+    let mut verified_draft_tokens = 0;
+    let mut prompt_lengths = BTreeMap::new();
     loop {
         let idle = scheduler.num_running() + scheduler.num_waiting() == 0;
         if arrival_interval == 0 || idle || steps.is_multiple_of(arrival_interval) {
@@ -367,6 +465,7 @@ async fn execute_batch(
                     continue;
                 }
                 outputs.insert(id, vec![]);
+                prompt_lengths.insert(id, prompt.len());
                 awaiting_first_schedule.insert(id);
                 if arrival_interval > 0 {
                     break;
@@ -374,6 +473,11 @@ async fn execute_batch(
             }
         }
         let step = scheduler.schedule();
+        for request in &step.scheduled {
+            let known = prompt_lengths[&request.request_id] + outputs[&request.request_id].len();
+            verified_draft_tokens +=
+                (request.num_computed_tokens + request.token_ids.len()).saturating_sub(known);
+        }
         prefix_hit_tokens += step.cache_hit_tokens;
         if !awaiting_first_schedule.is_empty() {
             for request in &step.scheduled {
@@ -447,5 +551,54 @@ async fn execute_batch(
         preemptions,
         proposed_draft_tokens,
         accepted_draft_tokens,
+        verified_draft_tokens,
     })
+}
+
+#[cfg(test)]
+mod benchmark_input_tests {
+    use super::BenchArgs;
+
+    fn args() -> BenchArgs {
+        BenchArgs {
+            batch_size: 2,
+            input_len: 2,
+            output_len: 3,
+            warmup: 2,
+            repetitions: 5,
+            prompt_file: None,
+            prefix_hit: false,
+            arrival_interval: 0,
+        }
+    }
+
+    #[test]
+    fn custom_prompts_preserve_each_request_and_reject_invalid_shapes() {
+        let args = args();
+        assert_eq!(
+            args.parse_prompts("7 0\n248319 9\n").unwrap(),
+            vec![vec![7, 0], vec![248319, 9]]
+        );
+        for text in [
+            "7 0\n",
+            "7 0\n\n",
+            "7 0 1\n8 9\n",
+            "7 0\n8 248320\n",
+            "7 x\n8 9\n",
+        ] {
+            assert!(args.parse_prompts(text).is_err());
+        }
+    }
+
+    #[test]
+    fn synthetic_acceptance_inputs_and_capacity_validation_stay_stable() {
+        assert_eq!(args().prompts(5).unwrap(), vec![vec![1, 2], vec![998, 999]]);
+        assert!(args().prompts(4).is_err());
+        let mut invalid = args();
+        invalid.repetitions = 0;
+        assert!(invalid.prompts(5).is_err());
+        invalid.repetitions = 1;
+        invalid.batch_size = 33;
+        assert!(invalid.prompts(5).is_err());
+    }
 }

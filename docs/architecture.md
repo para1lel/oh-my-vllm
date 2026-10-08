@@ -11,7 +11,7 @@ The [requirements](requirements.md) define accepted behavior. [decisions](README
 3. The Python main thread installs the prepared state.
 4. Rust admits the prompt, finds a consistent prefix, and schedules token work.
 5. Rust allocates logical FA/GDN slots and sends execution metadata.
-6. Python builds the batch plan and starts the target or MTP GPU units.
+6. Python builds the batch plan and starts the target and selected draft GPU units.
 7. Python returns kept tokens, next drafts, and optional service output.
 8. Rust validates the full reply before state changes.
 9. Rust commits accepted history, completes or reschedules the request, and supplies output.
@@ -40,9 +40,11 @@ The Rust child owner and Linux parent-death signal prevent abandoned Python work
 | `worker/model_runner.py`, `runtime.py`, `logging_utils.py` | Independent initialization, source/library identity, execution, and diagnostics. |
 | `worker/batch_plan.py`, `tensors.py` | Validated CPU plans, slot selection, batched metadata transfer, and tensor views. |
 | `worker/mtp.py` | Proposals, verification, accepted-state retention, and checkpoint writes. |
+| `worker/dspark.py`, `worker/dspark_graph.py` | DSpark context, conditional proposals, confidence limits, and different proposal graphs. |
 | `worker/decode_graph.py`, `graph_cache.py` | Persistent inputs, transactional capture, bounded graph entries, and replay. |
 | `worker/serving.py`, `sampling.py`, `sampler.py` | Tokenization, XGrammar, sampling, detokenization, and output accounting. |
 | `models/qwen.py` | Checkpoint loading, 64-layer target, MTP layer, FP8/ordinary projections, and forward units. |
+| `models/dspark.py` | Local BF16 draft checkpoint, five GQA layers, target-feature projection, and Markov/confidence heads. |
 | `ir/` | Semantic operations, references, mutation schemas, provider selection, lowering, and coverage. |
 | `kernels/` | Attention, GDN, convolution, normalization, elementwise operations, and backend choice. |
 | `kernels/cuda_backend/` | B200 CUDA implementation and loaded-module provenance. |
@@ -60,7 +62,7 @@ Prepare and execute replies echo `rpc_id`. Late cancelled prepare replies are di
 
 | Message | Fields and effect |
 |---|---|
-| `init` | `model_path`, `num_gpu_blocks`, `mamba_blocks`, `block_size`, `tensor_parallel_size`, `max_model_len`, `num_speculative_tokens`. Allocate worker state. |
+| `init` | Model paths, capacities, `block_size`, `tensor_parallel_size`, `max_model_len`, speculative mode/count, and DSpark confidence threshold. Allocate worker state. |
 | `ready` | `logical_num_blocks`, `mamba_blocks`. Report device capacities. |
 | `register` | `request_id`, `prompt_token_ids`. Register offline input. |
 | `prepare` / `prepared` | `rpc_id`, `request_id`, `request` / prepared `prompt_token_ids`. Create service state. |
@@ -70,6 +72,7 @@ Prepare and execute replies echo `rpc_id`. Late cancelled prepare replies are di
 | Output row | `request_id`, `token_ids`, `num_accepted_draft_tokens`, `new_draft_token_ids`. Optional `error`, `text`, `finish_reason`, `reasoning_tokens`. |
 | `error` | `message`, optional `rpc_id` and `kind`. Distinguish validation and internal failure. |
 | `abort` / `shutdown` | `request_id` for abort. Release request state / stop the worker. |
+| `set_speculative_mode` / `mode_changed` | Correlated comparison RPC. Change MTP/DSpark mode only in an idle comparison worker. |
 
 `prefill_token_ids` contains full accepted history on admission or recompute.
 Ordinary decode stays incremental. Drafts have different storage.
@@ -121,7 +124,7 @@ The coordinator reconciles that prefix with an available GDN checkpoint.
 The result is the minimum compatible FA/GDN hit length.
 References protect live blocks. The free queue evicts least-recently-used cache entries.
 
-Ordinary GDN state is FP32. MTP GDN state is BF16.
+Ordinary GDN state is FP32. MTP and DSpark GDN state is BF16.
 The state layout is `[slot,48,128,128]`. Convolution state is BF16 `[slot,10240,3]`.
 See [ADR-003](decisions/ADR-003-mtp-state-slots.md) and [ADR-007](decisions/ADR-007-ttft-and-cache-capacities.md).
 
@@ -180,6 +183,54 @@ Rejected scheduled drafts roll back computed progress. Unscheduled drafts have n
 
 Grammar simulation uses each speculative prefix and rolls back before it commits kept output.
 
+## DSpark
+
+The optional mode loads the local DSpark checkpoint through project-owned code.
+It validates configuration, tensor names, shapes, BF16 dtype, and stable source-file identities before execution.
+The loaded configuration and weight hashes identify the bytes that supplied the tensors.
+Checkpoint Python code does not execute.
+
+The draft uses five GQA layers and zero-based target layer outputs `(5,19,33,47,61)`.
+Each feature is the BF16 layer output before the subsequent normalization.
+MTP4 and ordinary computation do not calculate these features.
+The shared target embedding and vocabulary head supply DSpark token representations and base logits.
+The draft projects concatenated target features into context KV for its five layers.
+
+DSpark context pages use the same Rust-owned FA page IDs and 784-token layout, in a different physical cache.
+Only committed target input rows enter this context.
+Rejected input rows can stay in target FA after the committed cursor and are overwritten before subsequent use.
+DSpark context receives only kept input rows.
+Seven proposal rows use bidirectional draft attention and temporary KV.
+They do not enter persistent context.
+
+The Markov head uses the previous draft token to adjust each row's base logits.
+The confidence head limits the candidate prefix through cumulative confidence.
+The initial `--dspark-confidence-threshold` setting is `0.2`.
+A first confidence product less than the threshold returns zero candidates and uses one target token for that step.
+Set it to `0.0` to keep all valid rows up to seven for fixed-count experiments.
+Output and context budgets can make that prefix shorter.
+
+Draft block 7 and training block 16 are different from target block 784.
+
+Verification with greedy sampling compares draft tokens with the target tokens that have maximum scores.
+For stochastic output, the worker keeps each candidate's full conditional proposal distribution `q`.
+Target distribution `p` and proposal distribution `q` use the configured temperature, penalties, top-k/top-p, and grammar masks.
+
+Accept candidate `x` with probability `min(1,p(x)/q(x))`.
+After rejection, sample from normalized `max(p-q,0)`. After full acceptance, sample the bonus token from `p`.
+Draft sampling has a different random generator. Target sampling keeps its own generator.
+
+The existing GDN snapshot/rollback logic keeps the state after committed input, with at most eight verification rows.
+Speculative state is BF16. The target and draft keep specified BF16 rounding points.
+Grammar simulation rolls back before committed output changes persistent grammar state.
+Cancellation and preemption release target and draft request state.
+
+Comparison workers load MTP and DSpark before timing, with one target and the same physical target caches.
+The idle-only mode RPC changes the active draft count between four and seven.
+The scheduler resets prefix metadata between attempts.
+HTTP workers select one mode at initialization and reject this RPC.
+See [ADR-009](decisions/ADR-009-dspark-optional-mode.md).
+
 ## Semantic IR and graphs
 
 `torch.library` operations supply references, fake implementations, mutation schemas, and provider registrations.
@@ -187,15 +238,24 @@ Selection uses static metadata. It converts symbolic dimensions only when necess
 The pinned PyTorch lowering keeps semantic nodes until provider replacement.
 Production provider failure raises an error. The worker uses debug reference/eager modes only after explicit selection.
 
-Four fullgraph units include prefill, target decode, MTP draft, and four-step proposal.
+Ordinary/MTP4 fullgraph units include prefill, target decode, MTP draft, and four-step proposal.
+DSpark adds target features, context injection, backbone, Markov step, and greedy proposal units.
 Host planning, logical allocation, ZMQ, sampling, and ordinary PyTorch operations are not in the operator inventory.
 Manual CUDA Graphs contain compiled units. Inductor graphs are disabled.
+
 Persistent cache writes keep ordering. Activation donation is currently absent.
 
 The single-use BF16 SiLU-to-FP8 rewrite has equivalence tests.
 
 Target graphs have a 32-entry budget.
+Ordinary/MTP4 target and DSpark target-feature graphs have different family keys and memory pools in that budget.
+DSpark proposal graphs have a different 16-entry cache and pool.
+DSpark context injection with at most 32 rows uses a different pool and an eight-entry cache.
+
+Warmup and capture save destination KV slots and restore them in `finally`. Replay commits the current inputs.
+Larger context injection uses the compiled unit without manual capture.
 Draft/proposal graphs share 32 entries with floors of 16 and 4.
+
 At a full cache budget, replacement admission must have four observations.
 Its decayed count must be more than twice the coldest evictable entry.
 An available budget permits capture on the first miss.
@@ -223,7 +283,6 @@ Multiple GPUs must have new process ownership and collective contracts.
 Other NVIDIA backends must have device-specific providers and measured acceptance.
 Current interfaces make no such support claim.
 
-The DSpark design uses five BF16 GQA layers and target features `[5,19,33,47,61]`.
-It has confidence/Markov heads, seven drafts, and eight-token verification.
-Draft block 7 and training block 16 are different from target block 784.
-This is extension documentation. No DSpark runtime is supplied.
+DSpark runtime support applies to the validated local checkpoint architecture.
+Different draft checkpoints must have new loading, semantic, numerical, and acceptance tests.
+Current-source DSpark performance and full target-model acceptance results are not available.

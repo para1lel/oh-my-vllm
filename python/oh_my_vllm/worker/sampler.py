@@ -255,6 +255,71 @@ class RequestSampler:
             counts.index_add_(0, indices, torch.ones_like(indices))
         self.generated.extend(tokens)
 
+    def draw_speculative_rows(
+        self,
+        logits: torch.Tensor,
+        drafts: Sequence[int],
+        draft_probs: torch.Tensor,
+        bitmask: np.ndarray | torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Verify sampled drafts using their actual conditional proposal PMFs.
+
+        A candidate x is accepted with min(1, p(x)/q(x)). Rejection emits a
+        sample from normalized positive (p-q), then discards the suffix.
+        The last row samples the target bonus distribution. Returned rows use
+        the same [token, valid] contract as draw_rows and one host readback.
+        Only retained tokens advance persistent history in commit.
+        """
+        if logits.shape[0] != len(drafts) + 1 or draft_probs.shape != logits[:-1].shape:
+            raise ValueError(
+                "proposal PMFs must match the candidate rows and vocabulary"
+            )
+        if draft_probs.device != logits.device:
+            raise ValueError("proposal PMFs and target logits must share a device")
+        needs_history = (
+            self.params.repetition_penalty != 1
+            or self.params.frequency_penalty != 0
+            or self.params.presence_penalty != 0
+        )
+        if needs_history:
+            self._resize_counts(logits.shape[-1])
+        target = probabilities(
+            logits,
+            self.params,
+            self.prompt if needs_history else (),
+            self.generated if needs_history else (),
+            drafts,
+            bitmask,
+            history_counts=self._history_counts,
+        )
+        proposal = draft_probs.float()
+        candidate = torch.tensor(drafts, dtype=torch.int64, device=logits.device)
+        qx = proposal.gather(1, candidate[:, None]).squeeze(1)
+        px = target[:-1].gather(1, candidate[:, None]).squeeze(1)
+        valid_q = (
+            torch.isfinite(proposal).all(-1)
+            & (proposal >= 0).all(-1)
+            & torch.isclose(proposal.sum(-1), torch.ones_like(qx), atol=1e-5, rtol=1e-5)
+            & (qx > 0)
+        )
+        uniforms = torch.rand(
+            len(drafts), device=logits.device, generator=self.generator
+        )
+        accepted = uniforms < torch.minimum(torch.ones_like(px), px / qx)
+        residual = (target[:-1] - proposal).clamp_min(0)
+        mass = residual.sum(-1, keepdim=True)
+        # Accepted rows do not consume a residual. Supply a finite distribution
+        # there to avoid invalid unreachable intermediate values when p == q.
+        corrected = torch.where(mass > 0, residual / mass.clamp_min(1e-30), target[:-1])
+        distributions = torch.cat((corrected, target[-1:]), 0)
+        noise = torch.empty_like(distributions).exponential_(generator=self.generator)
+        selected = (distributions / noise).argmax(-1)
+        selected[:-1] = torch.where(accepted, candidate, selected[:-1])
+        valid_p = torch.isfinite(target).all(-1) & (target.sum(-1) > 0)
+        valid = valid_p.clone()
+        valid[:-1] &= valid_q & (accepted | (mass[:, 0] > 0))
+        return torch.stack((selected, valid.to(torch.int64)), -1)
+
     def _resize_counts(self, width: int) -> None:
         if self._history_counts is None:
             return

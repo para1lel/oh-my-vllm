@@ -88,7 +88,7 @@ def test_cuda_partial_factory_keeps_live_split_and_position_contract(monkeypatch
     lse = SimpleNamespace(ndim=3, shape=(1, 16, 16))
     launch("q", "cache", "tables", "lengths", "starts", partial, lse)
     assert calls == [
-        ("q", "cache", "tables", "lengths", "starts", partial, lse, 1, True, True)
+        ("q", "cache", "tables", "lengths", "starts", partial, lse, 1, True, True, 5)
     ]
     lse.shape = (1, 16, 15)
     with pytest.raises(ValueError, match="split count"):
@@ -156,7 +156,7 @@ def test_public_wrappers_keep_backend_specific_factory_arguments(monkeypatch, se
             "_silu_mul": (),
             "_conv": (),
             "_recurrent": (),
-            "_partials": (128, 0, False, "int32"),
+            "_partials": (128, 0, False, "int32", 5),
             "_merge": (),
         }
     else:

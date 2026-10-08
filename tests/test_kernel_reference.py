@@ -99,6 +99,8 @@ class ReferenceTest(unittest.TestCase):
             root = Path(directory)
             for relative in (
                 "development/kernels/tilelang-reference.json",
+                "development/kernels/dspark-reference.json",
+                "python/oh_my_vllm/kernels/dspark_tilelang_reference.py",
                 "requirements/runtime.txt",
             ):
                 target = root / relative
@@ -110,10 +112,22 @@ class ReferenceTest(unittest.TestCase):
             for relative in (
                 "requirements/runtime.txt",
                 "python/oh_my_vllm/kernels/tilelang_reference/gdn.py",
+                "python/oh_my_vllm/kernels/dspark_tilelang_reference.py",
             ):
                 path = root / relative
                 original = path.read_bytes()
                 path.write_bytes(original + b"\n# changed\n")
-                with self.assertRaisesRegex(ValueError, "frozen comparison changed"):
+                with self.assertRaisesRegex(ValueError, "comparison changed"):
                     verify_reference(root)
                 path.write_bytes(original)
+
+    def test_supplemental_pin_cannot_drop_original_gates(self):
+        from unittest.mock import patch
+
+        from development.kernels.reference import verify_reference
+
+        with (
+            patch("development.kernels.cases.cases", return_value=[]),
+            self.assertRaisesRegex(ValueError, "removed an original frozen gate"),
+        ):
+            verify_reference()

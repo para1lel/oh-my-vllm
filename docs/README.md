@@ -16,7 +16,7 @@ Start with [requirements](requirements.md), [architecture](architecture.md), and
 | [Audit](audit.md) | Open findings and compact closed-fix index. |
 | [Writing](writing.md) | ASD-STE100 rules, translations, and automated checks. |
 | [Glossary](glossary.md) | Project technical nouns, verbs, and definitions. |
-| [Tutorial](../code-journey/README.md) | Twelve interactive Chinese chapters and project source coverage. |
+| [Tutorial](../code-journey/README.md) | Thirteen interactive Chinese chapters and project source coverage. |
 | [Contribution](../CONTRIBUTING.md) | Review, checks, and commit procedure. |
 
 ## Decision records
@@ -31,6 +31,7 @@ Start with [requirements](requirements.md), [architecture](architecture.md), and
 | [ADR-006](decisions/ADR-006-independent-runtime.md) | Active: independent runtime and extension boundaries. |
 | [ADR-007](decisions/ADR-007-ttft-and-cache-capacities.md) | Active: TTFT protocol and different FA/GDN capacities. |
 | [ADR-008](decisions/ADR-008-semantic-ir.md) | Active: semantic operations and compiled GPU units. |
+| [ADR-009](decisions/ADR-009-dspark-optional-mode.md) | Active: optional DSpark mode and acceptance with source identities. |
 
 Architecture includes the former design document.
 Current work includes the former plan.

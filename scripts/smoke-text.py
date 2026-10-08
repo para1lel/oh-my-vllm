@@ -20,6 +20,9 @@ parser.add_argument("--prompt", default="请用中文简短介绍北京。")
 parser.add_argument("--socket", required=True)
 parser.add_argument("--context-repeats", type=int, default=0)
 parser.add_argument("--num-speculative-tokens", type=int, default=0)
+parser.add_argument("--speculative-mode", choices=("none", "mtp", "dspark"))
+parser.add_argument("--draft-model", default=os.environ.get("OH_MY_VLLM_DRAFT_MODEL"))
+parser.add_argument("--dspark-confidence-threshold", type=float, default=0.2)
 parser.add_argument("--prefix-hit", action="store_true")
 parser.add_argument("--binary", type=Path)
 args = parser.parse_args()
@@ -49,6 +52,14 @@ result = subprocess.run(
         "128",
         "--num-speculative-tokens",
         str(args.num_speculative_tokens),
+        *(
+            ["--speculative-mode", args.speculative_mode]
+            if args.speculative_mode
+            else []
+        ),
+        *(["--draft-model", args.draft_model] if args.draft_model else []),
+        "--dspark-confidence-threshold",
+        str(args.dspark_confidence_threshold),
         "run",
         "--tokens",
         *map(str, tokens),

@@ -26,6 +26,10 @@ _FUNCTIONS = (
     "convolution",
     "attention_partial",
     "attention_merge",
+    "dspark_norm_rope",
+    "dspark_rms_norm",
+    "dspark_attention_partial",
+    "dspark_attention_merge",
 )
 _VARIANT_OPERATIONS = (
     "norm",
@@ -305,9 +309,11 @@ def factory_for(module, name):
         return lambda: compiled().attention_merge
     if (module, name) == ("decode_attention", "_partials"):
 
-        def partials(splits, first, grouped, position_dtype):
+        def partials(splits, first, grouped, position_dtype, max_query_len=5):
             if position_dtype not in ("int32", "int64"):
                 raise ValueError("CUDA decode position dtype must be int32 or int64")
+            if type(max_query_len) is not int or not 1 <= max_query_len <= 8:
+                raise ValueError("CUDA decode query bound must be in 1..8")
             fn = compiled().attention_partial
 
             def launch(q, cache, tables, lengths, starts, partial, lse):
@@ -330,6 +336,7 @@ def factory_for(module, name):
                     first,
                     grouped,
                     position_dtype == "int64",
+                    max_query_len,
                 )
 
             return launch

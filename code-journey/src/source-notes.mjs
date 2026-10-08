@@ -121,7 +121,7 @@ export const sourceNotes = {
       ["history", "worker 保存的完整已确认 token 历史.", "用于核对本轮输入是否真的是这条历史从 start 开始的片段."],
       ["source", "上一轮已提交的 GDN 状态槽编号, 或 None.", "None 表示首次接纳或重新接纳, 需要从零状态或命中前缀快照选取起点."],
       ["fa_capacity / mamba_capacity", "FA 页池与 GDN 状态池的编号容量, 包含保留的 0 号位置.", "地址必须小于容量. 两个池分别检查, 防止用一类缓存的容量验证另一类缓存."],
-      ["speculative_tokens", "允许输入的 MTP 草稿数量, 当前支持 0 或 4.", "0 表示普通生成. 限制草稿长度并检查验证输入是否包含正确的已确认起点."],
+      ["speculative_tokens", "允许输入的草稿数量, 支持 0, 4 或 7.", "0 普通生成, 4 为 MTP, 7 为 DSpark; 检查草稿长度与确认起点."],
       ["start / tokens / end", "历史起点, 本轮输入列表, 以及起点加输入长度得到的终点.", "本轮区间为 [start, end). 输入必须非空, 起点必须落在已确认历史中."],
       ["known", "本轮输入中可从已确认历史核对的 token 数.", "先核对 tokens[:known] 与 history 的对应片段, 剩余部分才视为草稿."],
       ["drafts", "本轮输入超过已确认历史的待验证候选.", "检查长度是否超过 speculative_tokens. 带草稿时, 已确认输入恰有一个, 为验证提供起点."],
@@ -156,13 +156,17 @@ export const sourceNotes = {
 
 Object.assign(sourceNotes, {
   runtimeConfig: {
-    title: "RuntimeConfig 的 5 个字段", intro: "这是 Python 接收的启动配置. 数量包含保留的 0 号缓存位置, 实际可写容量会少一个.",
+    title: "RuntimeConfig 的 9 个字段", intro: "这是 Python 接收的启动配置. 数量包含保留的 0 号缓存位置, 实际可写容量会少一个.",
     entries: [
       ["model", "本地模型目录.", "读取配置, safetensors, tokenizer 和对话模板."],
       ["max_model_len", "提示词加输出的 token 数上限, 默认 65536.", "校验请求与位置; 长上下文验收使用显式配置, 最高 262144."],
       ["num_gpu_blocks", "兼容现有配置的缓存容量单位, 默认 1024.", "逻辑 FA 页数为它的整数三分之一. 每个逻辑页实际覆盖 784 个 token."],
-      ["speculative_tokens", "每轮最大草稿数量, 默认 0.", "0 走普通生成; 4 启用 MTP 头和验证路径."],
+      ["speculative_tokens", "每轮最大草稿数量, 默认 0.", "0 走普通生成, 4 启用 MTP, 7 使用独立 DSpark; 与显式模式一起校验."],
       ["mamba_blocks", "独立 GDN 状态池容量, 默认 None.", "给定数值时与 FA 分池; None 时采用 FA 逻辑容量."],
+      ["speculative_mode", "none, mtp 或 dspark 模式.", "缺省保留旧的 0/4 推导, 显式 dspark 必须对应七个候选."],
+      ["draft_model", "独立 DSpark checkpoint 目录.", "DSpark 或同进程比较需要此路径, 与目标模型目录分开加载."],
+      ["comparison", "是否预加载两种 proposer.", "仅允许完成请求清理后的同进程 MTP / DSpark 比较切换."],
+      ["dspark_confidence_threshold", "前缀累积接受置信度阈值, 默认 0.2.", "从首项起累计 confidence 低于阈值就停止, 可返回 0 至 7 个草稿; 0 保留全部合法候选供调试."],
     ],
   },
   batchFields: {
@@ -287,7 +291,7 @@ Object.assign(sourceNotes, {
 
 Object.assign(sourceNotes, {
   wireInit: {
-    title: "InitMsg 的 7 个字段", intro: "Rust 将启动参数编码为 init. Python 检查硬件与页大小约束, 再映射到 RuntimeConfig 并建立模型和缓存.",
+    title: "InitMsg 的 11 个字段", intro: "Rust 将启动参数编码为 init. Python 检查硬件与页大小约束, 再映射到 RuntimeConfig 并建立模型和缓存.",
     entries: [
       ["model_path", "模型本地目录.", "映射为 RuntimeConfig.model, 从中读取配置, 权重和 tokenizer."],
       ["num_gpu_blocks", "兼容配置的缓存容量单位.", "映射为同名配置, 逻辑 FA 容量取整数三分之一."],
@@ -295,7 +299,11 @@ Object.assign(sourceNotes, {
       ["block_size", "每个逻辑页的 token 数.", "固定为 784, 由 Python 核对并据此建立物理布局."],
       ["tensor_parallel_size", "张量并行 GPU 数量.", "当前支持单卡, 固定为 1; Python 拒绝其他数量."],
       ["max_model_len", "提示词加输出的上下文上限.", "用于输入预算与位置检查, 长上下文运行显式配置."],
-      ["num_speculative_tokens", "草稿上限.", "映射为 speculative_tokens, 0 普通生成, 4 启用 MTP."],
+      ["num_speculative_tokens", "草稿上限.", "映射为 speculative_tokens, 0 普通生成, 4 启用 MTP, 7 启用 DSpark."],
+      ["speculative_mode", "可选显式草稿模式.", "映射为同名字段, 缺省兼容旧的 0/4 选择."],
+      ["draft_model_path", "独立 DSpark 本地目录.", "映射为 RuntimeConfig.draft_model, 检查配置与权重后加载."],
+      ["comparison", "同进程比较是否预加载两个 proposer.", "普通服务只加载选择的模式; 比较命令可在空闲时切换."],
+      ["dspark_confidence_threshold", "前缀累积置信度阈值, 默认 0.2.", "独立自然文本 / 工具历史小样本选定; 首项未达到阈值可返回 0 草稿, 完整负载表现另行测量."],
     ],
   },
   wireExecute: {
@@ -305,8 +313,130 @@ Object.assign(sourceNotes, {
       ["step_id", "Rust 引擎的轮次编号.", "标识一次计划, 与长期 request_id 和往返 rpc_id 分开."],
       ["scheduled", "本轮单请求片段列表.", "每条带 ID, 起点和两类块表, 交给 planner 核对."],
       ["finished_request_ids", "需要结束清理的请求编号.", "Python 删除对应 histories, sampler 和已提交状态."],
-      ["preempted_request_ids", "被回收缓存的请求编号.", "清除旧源与 MTP 进度, 保留确认历史供重新接纳."],
+      ["preempted_request_ids", "被回收缓存的请求编号.", "清除旧源, MTP / DSpark 进度与提议记录, 保留确认历史供重新接纳."],
       ["num_batched_tokens", "所有片段的输入总数.", "Python 与实际列表长度求和对照, 再开始模型执行."],
+    ],
+  },
+});
+
+Object.assign(sourceNotes, {
+  dsparkConfig: {
+    title: "DSparkConfig 的架构与位置字段", intro: "配置对应当前完整实现的固定 checkpoint. 每项尺寸参与张量形状检查和模型计算, 改成其他结构会在加载前拒绝.",
+    entries: [
+      ["hidden_size", "草稿 hidden 的 5120 维宽度.", "决定 embedding, 归一化和残差向量尺寸."],
+      ["intermediate_size", "MLP 的 17408 维中间宽度.", "gate/up 投影扩大向量, down 投影回 hidden_size."],
+      ["num_hidden_layers", "五个草稿解码层.", "每层各持注意力, MLP 和 context KV."],
+      ["num_attention_heads", "32 个查询头.", "决定 Q 投影的 4096 维输出."],
+      ["num_key_value_heads", "8 个 K/V 头.", "每个 K/V 头服务四个 Q 头, 缓存保存较少的头."],
+      ["head_dim", "每个头的 128 维宽度.", "用于完整 NeoX RoPE 和 attention 的平方根缩放."],
+      ["vocab_size", "248320 个目标词表项.", "共享 head, Markov 投影与 q 的最后维度一致."],
+      ["markov_rank", "前一个 ID 的 256 维 latent.", "连接 Markov embedding, 词表偏置与 confidence 拼接."],
+      ["block_size", "七个临时 noise 查询行.", "anchor 加六个 MASK, 每行预测后一个候选."],
+      ["mask_token_id", "固定 MASK 输入 ID 248070.", "从目标 embedding 查出未来 noise 行的初始向量."],
+      ["target_layer_ids", "目标零基层号 5, 19, 33, 47, 61.", "按此顺序拼接同位置的真实 BF16 层输出."],
+      ["rms_norm_eps", "RMS 分母中的 1e-6 稳定项.", "用于 context, block, 最后 norm 和 Q/K head norm."],
+      ["rope_theta", "RoPE 基数 10000000.", "决定维度相关的基础 inverse frequency."],
+      ["rope_factor", "YaRN 插值因子 32.", "将部分频率拉伸到更长上下文."],
+      ["original_max_position_embeddings", "原始上下文长度 8192.", "与 beta 参数一起确定插值/外推的混合维度."],
+      ["max_position_embeddings", "checkpoint 配置的上限 262144.", "实际目标验证候选还受 worker max_tokens 限制."],
+      ["beta_fast", "YaRN 快频段修正参数 32.", "决定插值过渡范围的一端."],
+      ["beta_slow", "YaRN 慢频段修正参数 1.", "决定插值过渡范围的另一端."],
+    ],
+  },
+  dsparkFeatures: {
+    title: "forward_features 的目标行与层输出", intro: "每行按目标批的 token 顺序对应, 不能按请求输出数量重新排列.",
+    entries: [
+      ["tokens / batch / caches", "本轮目标 ID, 元数据与目标持久池.", "与普通 forward 相同, 额外收集指定层输出."],
+      ["hidden / residual", "当前分支与另存的残差.", "hidden + residual 重建该层输出, 保持 BF16 加法舍入."],
+      ["feature_layer_ids / index", "需要读取的层号, 以及当前零基层号.", "按顺序收集 5, 19, 33, 47, 61 层."],
+      ["features / torch.cat", "各层同位置向量与最后的特征拼接.", "沿最后维度得到 [T,25600], 保持所有输入行顺序."],
+      ["add_rms_norm", "目标最终归一化操作.", "目标 head 使用此 hidden, DSpark 的中间特征另行返回."],
+    ],
+  },
+  dsparkInject: {
+    title: "context injection 的位置与页写入", intro: "同一 context 向量由每层自己的 K/V 权重投影, 不经过 block 的 input RMS.",
+    entries: [
+      ["features / self.fc", "本轮保留的 25600 维目标特征和投影权重.", "线性变换到 5120 维, hidden_norm 得到 context."],
+      ["context / shape", "归一化后的特征和 K/V 形状.", "每行投影为 8 个 128 维头."],
+      ["positions", "本轮保留输入的绝对位置.", "K 的完整 RoPE 对应同位置 token."],
+      ["slots", "由目标 FA 页表求出的物理位置.", "每页 784 个位置, append 只写实际保留行."],
+      ["caches / layer", "五个草稿持久池与当前层权重.", "每层写自己的 pool, 相同逻辑页编号指向相应层的数据."],
+      ["k / v / prepare_qk", "context K/V 与 K 准备操作.", "context 没有 Q; None 跳过 Q, K 经过 k_norm 和 RoPE."],
+      ["inv_freq / attention_factor", "YaRN 频率和 cos/sin 幅度因子.", "使用草稿 checkpoint 的独立位置配置."],
+      ["append", "声明修改 cache 的语义操作.", "将 prepared K 与直接投影的 V 写进给定槽."],
+    ],
+  },
+  dsparkContextGraph: {
+    title: "context 图的备份, 流依赖和 replay 输入", intro: "1 至 32 行按行数复用同一图, 每轮位置与目的槽可以改变; 缓存所有者先检查逻辑页范围.",
+    entries: [
+      ["features / positions / slots", "BF16 特征行, int64 绝对位置和目的槽.", "捕获时克隆为静态输入, replay 先校验全部元数据再 copy."],
+      ["caches / pages / offsets", "五层持久池, 本次目的页号与页内位置.", "只备份本次会写的行, 完整前缀和其他后缀位置保留."],
+      ["saved / restore", "目的槽的原始 K/V 和恢复函数.", "预热后恢复, 捕获的 finally 再恢复; 异常也执行恢复."],
+      ["stream / current", "预热流与调用者当前流.", "预热流先等待当前输入, 当前流随后等待预热写入, 再恢复缓存."],
+      ["graph / pool / outputs", "手动 CUDA 图, 独立 context pool 与 None 输出.", "context injection 没有活跃返回张量, replay 执行真正提交."],
+      ["MAX_ROWS", "小批量捕获上限 32.", "更多行保持 compiled unit 路径, context 图缓存最多保留 8 项."],
+    ],
+  },
+  decodeGraphKey: {
+    title: "目标 graph key 的四个维度", intro: "静态图包含 token 总行数, 请求数, context 范围和每请求 query 上限, 动态地址内容在 replay 时复制.",
+    entries: [
+      ["token_counts", "本轮每请求实际输入行数.", "由 plan.writes 数量取得, 包括 anchor 和本轮真正验证的候选."],
+      ["extent", "按 4096 位置取整的 context 范围.", "限制到 max_model_len, 确定图内静态页表宽度."],
+      ["bound / max(token_counts)", "分组 attention 的每请求安全 query 上界.", "DSpark 将真实最大行数向上归入 1, 2, 5, 8 bucket; [1,3] 用 5, [2,2] 用 2. 普通和 MTP 分别固定为 1 和 5."],
+      ["next / 1,2,5,8", "覆盖真实最大行数的最小 bucket.", "每个 KV 头对应 6 个 Q 头, 安全上界分别适合 8, 16, 32, 64 行分组 tile, 减少冷编译变体."],
+      ["sum(token_counts) / len(token_counts)", "总 token 行数和请求数.", "控制输入与输出张量形状, 和 extent, bound 一起组成四项 key."],
+    ],
+  },
+  benchPrompts: {
+    title: "BenchArgs 的合成与自然语料入口", intro: "启动 GPU worker 前解析与校验全部请求 ID, 自然语料可用于独立参数调优.",
+    entries: [
+      ["batch_size / input_len / output_len / repetitions", "请求数, 每请求输入 / 输出数量与重复次数.", "正数量且 batch 不超过 32, 输入加输出须满足 context 上限."],
+      ["prompt_file / parse_prompts", "可选 ID 文件与文本解析函数.", "每行一个请求, 以空格分开目标 tokenizer 编码后的 u32 ID."],
+      ["prompts / tokens", "请求向量与每行 ID.", "行数等于 batch_size, 每行长度等于 input_len, 每个 ID 小于 248320."],
+      ["max_model_len", "worker 支持的输入加输出上限.", "解析前检查工作量范围, 避免为错误输入先加载模型."],
+      ["request / i / 997 / 32000", "未指定文件时的合成 ID 生成变量.", "按请求偏移产生固定有效输入, 保留正式基线负载的确定性."],
+    ],
+  },
+  dsparkHeads: {
+    title: "Markov 和 confidence 的条件输入", intro: "第一个 previous 是已提交 anchor, 之后每步换成刚抽取的候选.",
+    entries: [
+      ["hidden", "当前 noise 位置的最终 5120 维 hidden.", "为 confidence 提供该位置的目标前缀与 block 信息."],
+      ["base_logits", "共享目标 head 的当前行词表分数.", "BF16 head 分数加 BF16 Markov bias, 随后交给采样变换."],
+      ["previous / latent", "前一个候选 ID 与 256 维 Markov embedding.", "当前 decision 只依赖已经提出的候选."],
+      ["markov_w1 / markov_w2", "查询 embedding 与词表投影权重.", "得到当前 ID 对下一候选分布的学习偏置."],
+      ["confidence_input", "hidden 与 latent 的 5376 维拼接.", "传给带 bias 的单行线性 confidence 头."],
+      ["confidence / sigmoid", "映射到 [0,1] 的预测条件接受概率.", "从首项起累乘并与默认 0.2 阈值比较, 决定是否抽取当前候选."],
+    ],
+  },
+  dsparkProposal: {
+    title: "Proposal 的 2 个字段", intro: "候选 ID 的副本和真实 q 保留到下一轮验证或 forget.",
+    entries: [
+      ["tokens", "本次真实抽取的候选 ID 列表.", "核对调度器传回的验证前缀, 防止 q 对错候选."],
+      ["probabilities", "设备上的 [候选数,248320] FP32 q, 或 None.", "随机模式直接供 p/q verifier 使用; greedy 保留 ID 即可."],
+    ],
+  },
+  dsparkStop: {
+    title: "逐步提议的前缀和停止变量", intro: "每个位置先检查累计 confidence, 再填语法 mask 与抽样, 首项即可停止, finally 恢复 matcher.",
+    entries: [
+      ["rid / hidden / base_logits / anchor / limit", "请求编号, block 输出, 首个前一 ID 与候选上限.", "逐步调用同一 Markov/confidence 头, limit 同时满足预算与位置边界."],
+      ["sampler / params", "已提交 anchor 的目标 sampler 与用户配置.", "复制当前 history 加临时 prefix, 构造真实 q 而不提交候选."],
+      ["candidates / distributions", "已提出的 ID 和对应 q 行.", "下一位置加入候选历史, 下一轮验证按此列表核对切片."],
+      ["previous / position", "上一候选的设备 ID 与当前 block 下标.", "confidence 当前行不读取尚未抽取的 ID."],
+      ["score / survival", "当前条件置信度和累积前缀概率.", "默认 threshold 0.2, 从首项起在第一个 survival 低于阈值处停止, 实际草稿数可为 0."],
+      ["matcher / mask / advanced", "临时语法状态, 当前掩码和成功推进次数.", "每步按 mask 抽样并 accept, finally rollback advanced 次."],
+    ],
+  },
+  dsparkProbability: {
+    title: "p/q 接受与残差的张量和检查", intro: "目标每行按真实前缀构造 p, 提议 q 从原始抽样记录取得.",
+    entries: [
+      ["logits / drafts / draft_probs / bitmask", "目标分数, 原始候选, 对应 q 与目标语法行.", "目标有候选数加一行, q 有候选数行, 词表与设备必须匹配."],
+      ["needs_history / target / history_counts", "惩罚条件, 目标 p 和已经提交的计数.", "逐行加入草稿前缀, 最后一行条件为全部候选."],
+      ["proposal / candidate / qx / px", "q 矩阵, 候选 ID 及两种分布对候选的概率.", "gather 在每行取当前候选概率, 用于接受比率."],
+      ["valid_q", "有限, 非负, 总和接近 1 且候选概率大于 0 的检查.", "只有真实可达的有效提议分布才能验证."],
+      ["uniforms / accepted", "均匀随机数与 min(1,px/qx) 比较结果.", "逐行决定是否保留原始候选."],
+      ["residual / mass / corrected", "正的 p-q, 残差总量与归一化分布.", "拒绝时从残差抽样, 已接受行允许有限的未使用占位分布."],
+      ["distributions / noise / selected", "残差和 bonus 行, 指数随机噪声与所选 ID.", "设备端按这些概率抽样, accepted 行再替换为原始候选."],
+      ["valid_p / valid", "目标有限性与最终行有效标志.", "verify_rows 到达无效行时报错, 第一次拒绝结束本轮."],
     ],
   },
 });

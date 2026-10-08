@@ -66,7 +66,7 @@ def plan_request(
     end = start + len(tokens)
     if not tokens or not 0 <= start < len(history):
         raise ValueError("scheduled input must begin in accepted history")
-    if fa_capacity <= 1 or mamba_capacity <= 1 or speculative_tokens not in (0, 4):
+    if fa_capacity <= 1 or mamba_capacity <= 1 or speculative_tokens not in (0, 4, 7):
         raise ValueError("invalid cache capacity or speculative token count")
     known = min(len(tokens), len(history) - start)
     if tokens[:known] != history[start : start + known]:

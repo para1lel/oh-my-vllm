@@ -1,5 +1,7 @@
 """The IR must lower opaque semantic nodes before Inductor sees the graph."""
 
+import logging
+
 import pytest
 import torch
 from oh_my_vllm.ir import (
@@ -174,6 +176,32 @@ def test_ir_compiled_and_eager_select_same_provider():
     ]
     assert {record.phase for record in records} == {"eager", "compile"}
     assert {record.provider for record in records} == {"two"}
+
+
+def test_compile_log_is_emitted_once_per_actual_lowering(caplog, monkeypatch):
+    from oh_my_vllm.ir import core
+
+    # Keep this test focused on backend entry, independent of Inductor latency.
+    monkeypatch.setattr(core, "lower_to_inductor", lambda graph, _: graph.forward)
+    unit = compile_forward(lambda x: x.sin() + 7, unit="test_compile_log")
+    with caplog.at_level(logging.INFO, logger=core.__name__):
+        x = torch.ones(2, 4)
+        unit(x)
+        unit(x)
+        first = [r for r in caplog.records if "Compilation started:" in r.getMessage()]
+        assert [r.getMessage() for r in first] == [
+            "Compilation started: IR unit test_compile_log"
+        ]
+        unit(torch.ones(3, 5))
+        count = len(
+            [r for r in caplog.records if "Compilation started:" in r.getMessage()]
+        )
+        assert count == 2
+        unit(torch.ones(3, 5))
+        assert (
+            len([r for r in caplog.records if "Compilation started:" in r.getMessage()])
+            == count
+        )
 
 
 def test_ir_rejects_unsupported_shape_without_fallback():

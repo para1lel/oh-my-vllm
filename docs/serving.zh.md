@@ -19,6 +19,22 @@ scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --s
 通过 `serve --listen` 和 `--served-model-name` 修改这些值.
 实际服务器地址记入 `LOCAL.md`.
 
+DSpark 设置 `OH_MY_VLLM_DRAFT_MODEL`, 显式选择模式:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/oh-my-vllm-dspark-serve.ipc --speculative-mode dspark serve
+```
+
+每个 worker 服务一种草稿模式, HTTP 请求不能切换模式.
+原生 MTP4 可通过旧 4-token 选项或 `--speculative-mode mtp` 使用.
+DSpark 至多 7 个草稿, 保持相同 target checkpoint, block784, API 和请求约束.
+
+`--dspark-confidence-threshold` 初始设置为 `0.2`, 从首个 candidate 开始限制累计 confidence.
+可返回 0 至 7 个 candidate, 返回 0 个时, 该步由目标执行单 token 解码.
+使用 `0.0` 保留至多 7 个固定数量 proposal. 输出, 上下文和 grammar 限制可减少 proposal 数量.
+
+当前源码的 DSpark 真实模型服务及性能验收待测.
+
 ## API 范围
 
 | 方法和路由 | 合同 |
@@ -72,7 +88,7 @@ Responses reasoning 映射回 assistant `reasoning_content`.
 Responses 顶层 instruction 只适用于当前响应.
 续接不继承这些 instruction.
 
-## Grammar 与 MTP
+## Grammar 与推测 token
 
 JSON object, JSON Schema 和 strict tool grammar 在采样前生效.
 思考可先于约束答案.
@@ -83,11 +99,17 @@ Strict schema 需要 closed object, 全部 property 都 required.
 不支持未知 string format, 或 pattern / format 与 length bound 的组合.
 
 XGrammar 提供 Qwen XML tool grammar 和 JSON answer grammar.
-每个 MTP draft 和 bonus position 使用其 speculative prefix 对应的 mask.
+每个 MTP 或 DSpark draft 和 bonus position 使用其 speculative prefix 对应的 mask.
 模拟 grammar 推进后回滚; 只有保留输出推进持久状态.
 被 mask 的草稿在第一个无效位置失败.
 CPU 测试覆盖回滚, 拒绝和 reasoning-end 跨界.
 真实 MTP4 证据覆盖两个 API, off/medium, JSON object, JSON Schema 和 strict tool.
+
+DSpark proposal 在选择 candidate 前使用相同 mask.
+随机输出的接受规则使用完整条件 target / proposal 概率, 应用配置的采样参数.
+Candidate 接受概率为 `min(1,p(x)/q(x))`, 拒绝时使用归一化的 `max(p-q,0)`, bonus 使用 target 分布 `p`.
+Greedy 输出使用 target argmax 验证.
+Context 和状态提交参见 [架构](architecture.zh.md#dspark).
 
 ## XML 工具限制
 
@@ -153,14 +175,21 @@ HTTP drain 和 worker cleanup 共享可配置的 `--shutdown-grace-seconds` dead
 ## 验证
 
 使用 `scripts/serving-acceptance.py`, `scripts/serving-lifecycle.py` 和 `scripts/agentic-acceptance.py`.
-开启 MTP, 分别通过 `--api chat` 和 `--api responses` 完成真实 OMP 任务.
+每种草稿模式分别通过 `--api chat` 和 `--api responses`, 使用 target checkpoint 完成真实 OMP 任务.
 使用 `--omp` 或 `PATH` 上的可执行程序.
 客户端 JSONL 必须记录 `read` 成功读取 `crates/scheduler/src/lib.rs` 和 `python/oh_my_vllm/worker/model_runner.py`.
 仅列出目录不能满足条件.
-工具结果必须回传模型, 答案必须使用结果并引用文件.
+工具结果必须回传模型.
+记录代理保留包含每个源码读取结果的实际转发模型请求.
+客户端最后一条答案的 response ID 必须与记录的 HTTP 响应和实际模式服务日志匹配.
+答案必须使用结果并引用文件.
 代理任务期间保持仓库不变.
 
-检查实际排队 / 准备时间, TTFT, 速率, 步数, 前缀复用和 proposed / accepted draft.
+检查实际排队 / 准备时间, TTFT, 速率, 步数, 前缀复用和 verified / accepted draft.
+`verified_draft_tokens` 统计已调度 candidate, 包括被拒绝 candidate, 后续 proposal 使用另一计数.
+Completion 日志保留 `proposed_draft_tokens`, 作为已调度 candidate 数的旧 alias.
+核对 `BENCH_CONFIG` 中的实际模式及验收脚本显式 `--speculative-mode` 选项.
+原生 MTP4 和 DSpark 分别通过两个 API 重跑约束, 混合 batch / 取消和长上下文检查.
 不增加 HTTP 吞吐门槛.
 脚本 exit status 或 scripted worker 本身不能证明真实模型验收.
 参见 [测试](testing.zh.md) 和 [验收](acceptance.zh.md).

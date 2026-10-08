@@ -11,11 +11,24 @@ export const chapters = {
   Speculation: { number: 10, title: "多 token 预测: MTP 提议, 验证与状态提交", needs: ["Sampling"], question: "怎样一次验证多个草稿, 同时保留正确的历史与缓存?" },
   Compilation: { number: 11, title: "执行优化: Semantic IR, CUDA Graph 与自有内核", needs: ["Speculation"], question: "语义操作怎样选择实现, 编译并复用 GPU 执行流程?" },
   Validation: { number: 12, title: "验证方法: 正确性, 性能测量与验收证据", needs: ["Compilation"], question: "如何证明执行结果正确, 并复现一次性能验收?" },
+  DSpark: { number: 13, title: "DSpark: 特征注入, 草稿分布与前缀验证", needs: ["Validation"], question: "独立草稿模型怎样读取目标特征, 提出七个候选并保持采样分布?" },
 };
 
 // Each record is checked against the current source, then shown in its chapter.
 // Layout: chapter, file, source anchor, responsibility, implementation and decision.
 export const coverage = [
+  ["DSpark", "python/oh_my_vllm/models/dspark.py", "class DSparkModel", "DSparkCheckpoint / DSparkModel: 加载, 双源计算与学习头", "校验固定配置与 62 个 BF16 张量, 绑定稳定文件的 SHA-256. 目标层特征投影为 context KV, 七个临时 noise 行经过五层双向注意力; Markov 根据前一候选修正 logits, confidence 预测接受概率."],
+  ["DSpark", "python/oh_my_vllm/worker/dspark.py", "class DSpark:", "DSpark: 已保留特征注入与因果提议", "复用目标 FA 页编号, 只注入实际保留的输入. 贪心链保留在设备上, 随机链保存真实 q; 默认累计 confidence 阈值 0.2, 从首项起向右截断, 实际提议 0 至 7 个; grammar 临时前进后回滚."],
+  ["DSpark", "python/oh_my_vllm/worker/dspark_graph.py", "class DSparkContextGraph", "DSparkContextGraph / DSparkGraph: 提交与提议图", "小批量 context 图备份目的槽, 预热与捕获后恢复, replay 复制动态位置后正式写入; 单独 pool 与 8 项预算. 提议图仅读 context, 使用独立 16 项预算, 输出在同族下次捕获前消费."],
+  ["DSpark", "python/oh_my_vllm/kernels/dspark_attention.py", "def attention(", "DSpark 准备, context 写入与双源 attention", "Q/K 使用完整 128 维 NeoX YaRN, 保留 Qwen3 BF16 舍入. 自有 CUDA 将持久前缀与七行 block 分开读取, split-KV 计算局部结果并稳定合并."],
+  ["DSpark", "python/oh_my_vllm/ir/dspark.py", "def block_attention(", "DSpark 语义操作与参考", "为独立 RMS, Q/K/RoPE, context append 和双源 attention 注册参考, fake 元数据和 CUDA 实现. append 明确修改缓存, attention 仅读缓存."],
+  ["DSpark", "python/oh_my_vllm/kernels/dspark_tilelang_reference.py", "def attention(", "新增 DSpark 操作的 TileLang 比较 provider", "实现同一双源注意力与 BF16 舍入契约, 为自有 CUDA 新增路径提供正式算子比较. 通过显式后端选择使用, 生产 CUDA 路径保持显式."],
+  ["DSpark", "python/oh_my_vllm/models/qwen.py", "    def forward_features(", "Qwen.forward_features: 同位置目标特征", "按零基层号 5, 19, 33, 47, 61 重建 BF16 层输出, 按该顺序拼接成每行 25600 维, 最终归一化 hidden 另行返回."],
+  ["DSpark", "python/oh_my_vllm/worker/sampler.py", "    def draw_speculative_rows(", "draw_speculative_rows: 随机提议的完整概率接受", "从实际 q 读取候选概率, 以 min(1,p/q) 接受, 拒绝后抽取正残差分布, 全部接受后抽取目标 bonus. 复用原有逐行提交与有效性契约."],
+  ["DSpark", "python/oh_my_vllm/worker/model_runner.py", "    def _proposer(", "RuntimeConfig / proposer: 模式与提交整合", "普通, MTP4 和 DSpark7 分别选择 proposer; DSpark 获取目标特征, 在 sampler/history 已提交后生成下一轮候选. 完成和抢占清除对应请求状态."],
+  ["DSpark", "crates/zmq-worker/src/spec_bench.rs", "pub async fn", "同进程 MTP / DSpark 配对测量", "共用目标权重和固定硬件, 请求结束后清空前缀管理再切换草稿模式. 记录完整引擎耗时, 真实验证/接受草稿数, 步数与每请求 TTFT."],
+  ["DSpark", "benchmarks/speculative.py", "def compare_rounds(", "compare_rounds: 吞吐统计与配对增益", "长输入 batch 1, 2, 4 各运行三轮, 每模式两次预热和五对交替正式测量. 报告每轮 TPS 中位数, 极差和分层配对 bootstrap 增益下界, TTFT 单独报告; DSpark 暂无高于 MTP 的新增性能门槛."],
+  ["DSpark", "crates/zmq-worker/src/main.rs", "    fn prompts(&self,", "BenchArgs.prompts / parse_prompts: 独立自然语料校准", "bench --prompt-file 读取目标 tokenizer 生成的逐行 ID, 在启动 worker 前核对 batch, 每行长度, context 和词表. 调优语料与固定合成 spec-bench 负载分别记录, 复用实际引擎计时与草稿计数."],
   ["Basics", "crates/zmq-worker/src/serving/request.rs", "pub fn normalize(", "normalize: 统一 Chat 与 Responses 输入", "校验字段和模型名, 合并对话历史, 转换工具与输出格式. 把不同 API 整理成同一种准备输入, 后续调度器只处理 token."],
   ["Basics", "python/oh_my_vllm/worker/serving.py", "    def prepare_inputs(", "ServingAdapter.prepare_inputs: 模板, 分词与输入预算", "按模型本地模板组织角色和工具记录, 检查提示词加输出预算, 返回 ID, SamplingParams 和 Generation. 准备阶段构造数据, 桥接主线程再安装活跃状态."],
   ["Ownership", "crates/zmq-worker/src/main.rs", "async fn run()", "run / execute_batch: CLI 的 Serve 与 Bench 路线", "配置 worker, 初始化 Rust 缓存与调度器, 分派 HTTP 或批量基准入口. Bench 使用同一调度和模型执行链, 通过合成 ID 构造负载."],
@@ -56,7 +69,7 @@ export const coverage = [
   ["Sampling", "crates/zmq-worker/src/serving/events.rs", "pub struct Output", "Output.start / delta / finish / history", "把解析后的增量翻译为 Chat 或 Responses 事件, 统计输入/缓存/输出/推理用量, 组装完成响应并保存可重放历史."],
   ["Speculation", "python/oh_my_vllm/worker/mtp.py", "class MTP", "MTP.propose / validate_state / forget / _run", "MTP 行 p 使用目标 hidden[p-1] 与 token[p]. 缓存边界隐藏特征, 验证后选已接受状态; 四草稿一路在图中产生, 接近分配边界时逐步缩短提议."],
   ["Speculation", "python/oh_my_vllm/kernels/mtp_attention.py", "class MTPAttention", "MTPAttention: 从位置 1 开始的注意力", "MTP 没有位置 0, 因此长查询只收集有效 KV, decode 使用带 first=1 的项目注意力核. 因果长度逐查询保留."],
-  ["Speculation", "python/oh_my_vllm/kernels/decode_attention.py", "def decode(", "decode: 普通与分组草稿验证注意力", "按请求分组最多五个查询, 每查询保留因果终点. split-KV 先算局部最大值与加权和, 再稳定合并; 允许非对齐 cache 视图并保留克隆统计."],
+  ["Speculation", "python/oh_my_vllm/kernels/decode_attention.py", "def decode(", "decode: 普通与分组草稿验证注意力", "普通每请求一个查询, MTP 最多五个, DSpark 最多八个, 每查询保留因果终点. split-KV 先算局部最大值与加权和, 再稳定合并; 允许非对齐 cache 视图并保留克隆统计."],
   ["Compilation", "python/oh_my_vllm/ir/__init__.py", "from .", "IR 公共入口", "导出 compile_forward, 优先级和选择证据. 模型与内核入口导入各语义模块时注册对应操作, 使第一次调用前完成生产 provider 注册."],
   ["Compilation", "python/oh_my_vllm/ir/core.py", "class Operation", "Operation / TensorSpec / compile_forward / lower_to_inductor", "按形状, stride, dtype 和路由选择实现, 首次选择后冻结优先级. 全图编译将语义节点换成 schema 匹配的 provider, 校验 fake 输出, 再交给 Inductor."],
   ["Compilation", "python/oh_my_vllm/ir/fp8.py", "def linear(", "FP8 语义操作", "定义量化与矩阵投影的 PyTorch 参考, fake 输出形状及 CUDA provider. fused silu_gate 是独立明确的数学路径."],

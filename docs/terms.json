@@ -1231,6 +1231,356 @@
         "FP32 normal value",
         "FP32 normal values"
       ]
+    },
+    {
+      "term": "DSpark",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Optional seven-token draft mode with five BF16 GQA layers, target features, and Markov/confidence heads.",
+      "translation": "可选 7-token 草稿模式, 使用 5 层 BF16 GQA, target feature 和 Markov / confidence head.",
+      "forms": [
+        "DSpark"
+      ]
+    },
+    {
+      "term": "target feature",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "BF16 target layer output at one target input position, before the next normalization. Temporary verification rows also have these outputs.",
+      "translation": "一个 target 输入位置的 BF16 target 层输出, 位于下一 normalization 前. 临时验证行也有这些输出.",
+      "forms": [
+        "target feature",
+        "target features"
+      ]
+    },
+    {
+      "term": "Markov head",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Draft projection with checkpoint weights that adds scores from the previous draft token to each row's base logits.",
+      "translation": "使用 checkpoint 权重的草稿 projection, 用此前草稿 token 的分数修正每行 base logits.",
+      "forms": [
+        "Markov head",
+        "Markov heads"
+      ]
+    },
+    {
+      "term": "confidence head",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Draft projection with checkpoint weights that supplies conditional draft confidence for draft-count selection.",
+      "translation": "使用 checkpoint 权重的草稿 projection, 产生条件草稿 confidence, 用于选择草稿数量.",
+      "forms": [
+        "confidence head",
+        "confidence heads"
+      ]
+    },
+    {
+      "term": "cumulative confidence",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Product of conditional draft confidence values through the current draft position.",
+      "translation": "截至当前草稿位置的条件草稿 confidence 乘积.",
+      "forms": [
+        "cumulative confidence"
+      ]
+    },
+    {
+      "term": "probability distribution",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Nonnegative vocabulary probabilities with total mass one, after configured sampling transforms and masks.",
+      "translation": "配置采样变换及 mask 后的非负 vocabulary 概率, 总概率质量为 1.",
+      "forms": [
+        "probability distribution",
+        "probability distributions"
+      ]
+    },
+    {
+      "term": "conditional distribution",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Vocabulary probabilities for one position given the accepted history and previous speculative drafts.",
+      "translation": "给定已接受历史及此前推测草稿后, 一个位置的 vocabulary 概率.",
+      "forms": [
+        "conditional distribution",
+        "conditional distributions"
+      ]
+    },
+    {
+      "term": "stochastic sampling",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Random token selection from configured conditional vocabulary probabilities.",
+      "translation": "从配置的条件 vocabulary 概率中随机选择 token.",
+      "forms": [
+        "stochastic sampling"
+      ]
+    },
+    {
+      "term": "hierarchical paired-bootstrap",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Resampling rounds, then paired samples in each selected round, to calculate the one-sided confidence bound on throughput gain.",
+      "translation": "先重采样轮次, 再在选中轮次内重采样配对样本, 估计吞吐增益的单侧置信下界.",
+      "forms": [
+        "hierarchical paired-bootstrap"
+      ]
+    },
+    {
+      "term": "probability",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Nonnegative numerical mass for one vocabulary outcome or acceptance event, with values from zero to one.",
+      "translation": "单个 vocabulary 结果或接受事件的非负概率质量, 取值为 0 到 1.",
+      "forms": [
+        "probability",
+        "probabilities"
+      ]
+    },
+    {
+      "term": "confidence bound",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Statistical limit from resampled measurement data at a specified confidence level.",
+      "translation": "指定置信水平下, 从重采样测量数据计算的统计界限.",
+      "forms": [
+        "confidence bound",
+        "confidence bounds"
+      ]
+    },
+    {
+      "term": "greedy sampling",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Token selection by the maximum configured model score, with deterministic token-ID handling of ties.",
+      "translation": "选择配置模型分数的最大值, 并按确定的 token ID 顺序处理相同分数.",
+      "forms": [
+        "greedy sampling"
+      ]
+    },
+    {
+      "term": "native MTP4",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Four-token speculation through the target checkpoint's own MTP layer.",
+      "translation": "通过 target checkpoint 自带 MTP 层进行的 4-token 推测.",
+      "forms": [
+        "native MTP4"
+      ]
+    },
+    {
+      "term": "backbone",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "The five DSpark attention/MLP layers before the shared vocabulary head and Markov correction.",
+      "translation": "共享 vocabulary head 及 Markov 修正前的 5 层 DSpark attention / MLP.",
+      "forms": [
+        "backbone"
+      ]
+    },
+    {
+      "term": "context injection",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Projection of accepted target features and append of their per-layer KV to DSpark context storage.",
+      "translation": "投影已接受 target feature, 并将各层 KV 追加到 DSpark context 存储.",
+      "forms": [
+        "context injection"
+      ]
+    },
+    {
+      "term": "base logits",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Draft vocabulary scores from the shared target head before the Markov head adds its scores.",
+      "translation": "Markov head 修正前, 共享 target head 产生的草稿 vocabulary 分数.",
+      "forms": [
+        "base logits"
+      ]
+    },
+    {
+      "term": "Markov step",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Draft-head computation at one proposal row with the previous draft token as input.",
+      "translation": "以此前草稿 token 为输入, 计算一个 proposal row 的草稿 head.",
+      "forms": [
+        "Markov step",
+        "Markov steps"
+      ]
+    },
+    {
+      "term": "median",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Middle value in sorted measurement samples, or the mean of the two middle values for an even count.",
+      "translation": "测量样本排序后的中间值, 偶数样本时取两个中间值的平均数.",
+      "forms": [
+        "median",
+        "medians"
+      ]
+    },
+    {
+      "term": "load",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Read checkpoint tensors or executable code into the runtime memory used for inference.",
+      "translation": "将 checkpoint tensor 或可执行代码读入推理运行时内存.",
+      "forms": [
+        "load",
+        "loads",
+        "loaded"
+      ]
+    },
+    {
+      "term": "initialize",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Set runtime objects, device storage, and request state to their specified starting values.",
+      "translation": "将运行时对象, device 存储和请求状态设置为规定的初始值.",
+      "forms": [
+        "initialize",
+        "initializes",
+        "initialized"
+      ]
+    },
+    {
+      "term": "return",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Send output data from a software function, RPC, or HTTP operation to its caller.",
+      "translation": "将软件函数, RPC 或 HTTP 操作的输出数据传给调用方.",
+      "forms": [
+        "return",
+        "returns",
+        "returned"
+      ]
+    },
+    {
+      "term": "commit",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Make accepted token history, grammar state, or cache state the state for subsequent engine steps.",
+      "translation": "使接受的 token 历史, grammar 或 cache 状态成为后续引擎步骤使用的状态.",
+      "forms": [
+        "commit",
+        "commits",
+        "committed"
+      ]
+    },
+    {
+      "term": "reset",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Restore specified software counters, request state, or cache metadata to their starting values.",
+      "translation": "将指定软件计数器, 请求状态或 cache metadata 恢复为初始值.",
+      "forms": [
+        "reset",
+        "resets"
+      ]
+    },
+    {
+      "term": "forward",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Transmit client HTTP requests and upstream replies through the acceptance proxy without body changes.",
+      "translation": "通过验收代理传输客户端 HTTP 请求和上游回复, 保持 body 不变.",
+      "forms": [
+        "forward",
+        "forwards",
+        "forwarded"
+      ]
+    },
+    {
+      "term": "overwrite",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Write new tensor values at device addresses that held earlier computed values.",
+      "translation": "在保存此前计算值的 device 地址写入新的 tensor 值.",
+      "forms": [
+        "overwrite",
+        "overwrites",
+        "overwritten"
+      ]
+    },
+    {
+      "term": "generate",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Calculate model output tokens with the selected inference and sampling path.",
+      "translation": "通过选定推理和采样路径计算模型输出 token.",
+      "forms": [
+        "generate",
+        "generates",
+        "generated"
+      ]
+    },
+    {
+      "term": "concatenate",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Put tensor values together along a specified dimension and keep their row order.",
+      "translation": "沿指定维度连接 tensor 值, row 顺序不变.",
+      "forms": [
+        "concatenate",
+        "concatenates",
+        "concatenated"
+      ]
+    },
+    {
+      "term": "conditional draft confidence",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Score from the confidence head at one proposal position, given the previous draft token and current hidden row.",
+      "translation": "给定此前草稿 token 和当前 hidden row, confidence head 在一个 proposal 位置产生的分数.",
+      "forms": [
+        "conditional draft confidence"
+      ]
+    },
+    {
+      "term": "normalize",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Scale tensor values by their specified norm, or scale vocabulary probabilities to total mass one.",
+      "translation": "按规定 norm 缩放 tensor 值, 或将 vocabulary 概率缩放为总概率质量 1.",
+      "forms": [
+        "normalize",
+        "normalizes",
+        "normalized"
+      ]
+    },
+    {
+      "term": "share",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Use the same physical model weights, tensor storage, or graph memory pool from different software execution paths.",
+      "translation": "不同软件执行路径使用相同物理模型权重, tensor 存储或 graph 内存 pool.",
+      "forms": [
+        "share",
+        "shares",
+        "shared"
+      ]
+    },
+    {
+      "term": "bidirectional attention",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Draft attention that reads accepted context KV and all seven temporary proposal KV rows.",
+      "translation": "读取已接受 context KV 及全部 7 个临时 proposal KV row 的草稿 attention.",
+      "forms": [
+        "bidirectional attention"
+      ]
+    },
+    {
+      "term": "synthetic token IDs",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Benchmark input IDs generated by the fixed index formula, without natural-language text or tokenization.",
+      "translation": "按固定索引公式生成的基准输入 ID, 不包含自然语言文本或 tokenization.",
+      "forms": [
+        "synthetic token IDs"
+      ]
     }
   ]
 }

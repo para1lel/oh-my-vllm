@@ -1,6 +1,6 @@
 # Interactive code tutorial
 
-This static Twine/SugarCube 2.37.3 tutorial gives current inference code in twelve Chinese chapters.
+This static Twine/SugarCube 2.37.3 tutorial gives current inference code in thirteen Chinese chapters.
 Each chapter includes logic, decisions, implementation, and displayed fields/variables.
 Readers use interest choices and internal prerequisites to select their path.
 Readers must know basic Rust and Python syntax.
@@ -44,8 +44,9 @@ It shows scheduling and submission, without model output or GPU performance clai
 | 10 | MTP proposals, grouped verification, and state ownership. |
 | 11 | Semantic IR, lowering, graph caches, and CUDA kernels. |
 | 12 | Correctness, maximum shapes, TTFT, throughput, and measurement audit. |
+| 13 | DSpark feature taps, context KV, seven proposals, confidence, probability verification, and measurement. |
 
-`src/curriculum.mjs` maps each substantive default-runtime Rust/Python/CUDA file to a chapter and entry symbol.
+`src/curriculum.mjs` maps each substantive runtime Rust/Python/CUDA file to a chapter and entry symbol.
 The build rejects missing coverage, anchors, and record-field explanations.
 It records current source lines and full-file hashes.
 Pinned comparison providers, tests, and documentation-only initializers have different scope.
@@ -108,7 +109,9 @@ scripts/with-env.sh cargo clippy --manifest-path code-journey/trace/Cargo.toml -
 ```
 
 Node tests include documentation/metadata boundaries, dedentation, tabs, blank lines, and neighboring elements.
-Playwright Chromium includes all twelve routes, choices, prerequisites, conditional lists, completion/review, migration, history, restart, and five scheduler cases.
+Playwright Chromium includes all thirteen routes, choices, prerequisites, conditional lists, completion/review, migration, history, restart, and five scheduler cases.
+DSpark checks include its configuration fields, probability formulas, source copying, and desktop/mobile themes.
+
 It also checks documentation copying, fields, fonts, formulas, themes, source hashes/anchors/URLs, keyboard scrolling, and code contrast of at least 4.5:1.
 Examine desktop 1536x1024 and mobile 390x844 screenshots independently.
 Use the Browser plugin when available. Otherwise record the reason for Playwright use.

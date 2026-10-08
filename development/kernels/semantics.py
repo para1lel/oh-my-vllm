@@ -45,6 +45,81 @@ class Operators:
         return tf.cast(values * tf.rsqrt(mean + 1e-6) * weight, "bf16")
 
     @func
+    def dspark_rms_norm(
+        x: Tensor[(2, 5120), DType.bf16], weight: Tensor[(5120,), DType.bf16]
+    ):
+        values = tf.cast(x, "f32")
+        mean = tf.reduce(tf.square(values), (-1,), True, "mean")
+        normalized = tf.cast(values * tf.rsqrt(mean + 1e-6), "bf16")
+        return tf.cast(tf.cast(normalized, "f32") * tf.cast(weight, "f32"), "bf16")
+
+    @func
+    def dspark_norm_rope(
+        x: Tensor[(2, 8, 128), DType.bf16],
+        weight: Tensor[(128,), DType.f32],
+        positions: Tensor[(2,), DType.i64],
+        inv_freq: Tensor[(64,), DType.f32],
+    ):
+        # HIR estimates use f32 phases; independent FP64 tests establish the
+        # actual full-YaRN maximum-context numerical contract.
+        values = tf.cast(x, "f32")
+        mean = tf.reduce(tf.square(values), (-1,), True, "mean")
+        normalized = tf.cast(values * tf.rsqrt(mean + 1e-6), "bf16")
+        weighted = tf.cast(
+            tf.cast(normalized, "f32") * tf.cast(tf.cast(weight, "bf16"), "f32"), "bf16"
+        )
+        angle = tf.reshape(tf.cast(positions, "f32"), (2, 1, 1)) * tf.reshape(
+            inv_freq, (1, 1, 64)
+        )
+        cosine = tf.cast(tf.cos(angle) * 1.3465735902799727, "bf16")
+        sine = tf.cast(tf.sin(angle) * 1.3465735902799727, "bf16")
+        left, right = (
+            tf.cast(weighted[:, :, :64], "f32"),
+            tf.cast(weighted[:, :, 64:], "f32"),
+        )
+        a = tf.cast(left * tf.cast(cosine, "f32"), "bf16")
+        b = tf.cast(right * tf.cast(sine, "f32"), "bf16")
+        c = tf.cast(right * tf.cast(cosine, "f32"), "bf16")
+        d = tf.cast(left * tf.cast(sine, "f32"), "bf16")
+        return tf.concat(
+            [
+                tf.cast(tf.cast(a, "f32") - tf.cast(b, "f32"), "bf16"),
+                tf.cast(tf.cast(c, "f32") + tf.cast(d, "f32"), "bf16"),
+            ],
+            axis=2,
+        )
+
+    @func
+    def dspark_append(
+        k: Tensor[(783, 8, 128), DType.bf16],
+        v: Tensor[(783, 8, 128), DType.bf16],
+        new_k: Tensor[(2, 8, 128), DType.bf16],
+        new_v: Tensor[(2, 8, 128), DType.bf16],
+    ):
+        return tf.concat([k, new_k], axis=0), tf.concat([v, new_v], axis=0)
+
+    @func
+    def dspark_attention(
+        q: Tensor[(7, 32, 128), DType.bf16],
+        k: Tensor[(783, 8, 128), DType.bf16],
+        v: Tensor[(783, 8, 128), DType.bf16],
+        block_k: Tensor[(7, 8, 128), DType.bf16],
+        block_v: Tensor[(7, 8, 128), DType.bf16],
+    ):
+        keys = tf.concat([k, block_k], axis=0)
+        values = tf.concat([v, block_v], axis=0)
+        qh = tf.transpose(tf.cast(q, "f32"), (1, 0, 2))
+        kh = tf.transpose(
+            tf.cast(tf.repeat_interleave(keys, 4, axis=1), "f32"), (1, 2, 0)
+        )
+        vh = tf.transpose(
+            tf.cast(tf.repeat_interleave(values, 4, axis=1), "f32"), (1, 0, 2)
+        )
+        probability = tf.softmax(tf.matmul(qh, kh) * Q_SCALE, axis=-1)
+        output = tf.matmul(tf.cast(tf.cast(probability, "bf16"), "f32"), vh)
+        return tf.cast(tf.transpose(output, (1, 0, 2)), "bf16")
+
+    @func
     def add_norm(
         x: Tensor[(2, 5120), DType.bf16],
         residual: Tensor[(2, 5120), DType.bf16],

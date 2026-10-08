@@ -7,6 +7,12 @@ def reference_operator(module, name):
     """Bind the whole frozen operation, including Python-side copies/allocations."""
     from importlib import import_module
 
+    if module == "dspark_attention":
+        path = "oh_my_vllm.kernels.dspark_tilelang_reference"
+        function = getattr(import_module(path), name)
+        if function.__module__ != path:
+            raise ValueError("comparison must bind the supplemental operation directly")
+        return function
     if (module, name) == ("attention_prepare", "prepare_attention"):
         # The production pre-fusion chain, composed only of immutable kernels.
         # Its V.contiguous() is a no-op when the original view is contiguous.

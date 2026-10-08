@@ -56,6 +56,37 @@ def test_default_frequency_admission_protects_hot_residents():
     assert cache.snapshot()["target_budget_eager"] == 3
 
 
+def test_dspark_families_report_capture_replay_failures_and_eviction():
+    cache = GraphCache(
+        1,
+        admission_hits=1,
+        admission_factor=0,
+        synchronize=Mock(),
+        free_bytes=lambda: 8 << 30,
+        reserved_bytes=lambda: 1 << 30,
+    )
+    add(cache, "target_dspark", "first")
+    assert cache.should_use("target_dspark", ("first",))
+    assert cache.should_use("dspark", ("failed",))
+    with pytest.raises(RuntimeError, match="capture failed"):
+        cache.get_or_create(
+            "dspark", ("failed",), Mock(side_effect=RuntimeError("capture failed"))
+        )
+    add(cache, "dspark", "second")
+    snapshot = cache.snapshot()
+    assert snapshot["target_dspark_capture"] == 1
+    assert snapshot["target_dspark_hit"] == 1
+    assert snapshot["target_dspark_eviction"] == 1
+    assert snapshot["target_dspark_resident"] == 0
+    assert snapshot["target_dspark_min_capture_free_bytes"] == 8 << 30
+    assert snapshot["dspark_capture"] == 1
+    assert snapshot["dspark_capture_failure"] == 1
+    assert snapshot["dspark_resident"] == 1
+    cache.clear()
+    assert cache.snapshot()["dspark_capture"] == 1
+    assert cache.snapshot()["dspark_resident"] == 0
+
+
 def test_mtp_floor_protects_proposal_and_draft_families():
     cache = GraphCache(
         32,

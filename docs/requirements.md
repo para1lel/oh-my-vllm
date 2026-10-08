@@ -38,7 +38,7 @@ Record source, environment, and reported cache identities.
 ## REQ-PERF-002: TTFT and measurement
 
 Each row must have TTFT of at most 110% of the baseline.
-Start the monotonic clock at common pretokenized batch submission, before request registration.
+Start the monotonic clock at the same pretokenized batch submission, before request registration.
 Stop each request's clock when the caller receives its first kept output token.
 Include engine queue time, scheduling, transport, and sampling.
 Exclude HTTP, tokenization, loading, and warmup.
@@ -65,6 +65,38 @@ Historical portable summaries are for reference and offline analysis.
 The next performance-policy goal derives thresholds from roofline analysis instead of vLLM measurements.
 The existing thresholds stay active until a new requirement replaces them.
 
+## REQ-PERF-003: DSpark and native MTP4
+
+Compare optional DSpark with native MTP4 from the same source and binary after implementation.
+Use 32768 input tokens, 4096 kept output tokens, and batches 1, 2, and 4.
+Use the same synthetic token IDs, greedy sampling, and fixed output counts. Ignore EOS.
+Include registration, prefill, scheduling, transport, sampling, and cleanup in EngineCore throughput.
+
+One comparison worker keeps the target weights and physical target caches for each batch.
+Load the two draft models before warmup. Reset prefix reuse before each attempt.
+For each batch, use three rounds.
+Each round has two full warmups per mode and five measured pairs with alternating mode order.
+
+Report these statistics for each batch:
+
+- Each mode's throughput median and spread in each round.
+- Each round's DSpark median difference from MTP4.
+- The hierarchical paired-bootstrap one-sided 95% lower bound on throughput gain.
+
+Report TTFT and its spread.
+Do not add a DSpark speed, spread, or confidence-bound acceptance gate for this comparison.
+The twelve existing vLLM throughput and TTFT gates stay active.
+Keep each failed or interrupted attempt and its full raw records.
+Compilation or graph capture during measured work invalidates an attempt.
+
+Bind records to source files, binary, Python environment, loaded CUDA module, runtime configuration, and checkpoint bytes.
+Compare loaded DSpark configuration and weight hashes with the requested checkpoint. They must agree.
+Record capacities, peak allocated/reserved memory, compile/capture audit, and scheduled/accepted draft counts.
+Acceptance rate uses scheduled draft tokens as its denominator. Returned proposals for future steps are a different counter.
+
+Current-source DSpark performance acceptance results are not available.
+See [testing](testing.md#dspark-comparison) for the collection procedure.
+
 ## REQ-CONTEXT-001: Context and memory
 
 Support input plus output up to 262144 tokens.
@@ -74,6 +106,8 @@ Keep the 32768-token step budget and 784-token blocks.
 Record performance and peak GPU memory. Add no extra ratio gate.
 
 Include long-context prefix restoration and constrained decoding.
+Apply the same boundary cases to DSpark at batches 1, 2, and 4.
+Keep the six ordinary/MTP4 cases as different gates.
 
 ## Functional requirements
 
@@ -84,6 +118,21 @@ Include long-context prefix restoration and constrained decoding.
 | REQ-FUNC-003 | Use chain-hash prefix reuse, LRU eviction, and coordinated FA/GDN groups. |
 | REQ-FUNC-004 | Preempt later-admitted running requests first. Keep accepted history and clear unverified drafts for recompute. |
 | REQ-FUNC-005 | Supply MTP4 with explicit kept tokens and new draft IDs. Keep BF16 GDN state and block 784. |
+| REQ-FUNC-006 | Supply optional DSpark with the local BF16 checkpoint, at most seven drafts, target verification, and block 784. |
+
+DSpark uses zero-based target layer outputs `(5,19,33,47,61)` and five draft GQA layers.
+Keep native MTP4 available. Select one draft mode for the worker, not per request.
+
+The initial DSpark cumulative confidence threshold is `0.2`. The proposal count can be zero through seven.
+A first confidence product less than the threshold gives one target-token step.
+Set `--dspark-confidence-threshold 0.0` for fixed-count proposals up to seven. Output, context, and grammar limits can decrease the proposal count.
+
+For stochastic sampling, use conditional proposal probabilities and target acceptance `min(1,p(x)/q(x))`.
+On rejection, sample from normalized `max(p-q,0)`. Sample the bonus token from the target distribution.
+Apply user sampling parameters and grammar masks to each conditional distribution.
+
+Keep BF16 GDN state and the existing half-precision rounding constraints in speculative modes.
+Only accepted input rows can commit target state or DSpark context.
 
 ## REQ-ACC-001: Numerical accuracy
 
@@ -107,11 +156,11 @@ The former adapters are removed. [ADR-002](decisions/ADR-002-gpuworker-adapter.m
 `REQ-RUNNER-001` is retired and superseded by this requirement.
 Select compatible stable dependencies in dependency order and pin versions with satisfactory compatibility tests.
 Keep ported-code provenance and licenses.
-Document future architectures, multiple GPUs, other NVIDIA GPUs, and DSpark briefly.
+Document future architectures, multiple GPUs, and other NVIDIA GPUs briefly.
 
 ## REQ-OBS-001: Diagnostics
 
-Supply UTC timestamps, monotonic durations, run/request/step correlation, and configurable log levels.
+Supply UTC timestamps, monotonic durations, run/request/step correlation, and log levels that the user can set.
 Avoid per-step I/O at the default log level.
 Debug logs show scheduler, cache, transport, and worker durations.
 Identify host time independently from CUDA kernel time.
@@ -123,12 +172,15 @@ Make profiling an explicit choice.
 |---|---|
 | REQ-SERVE-001 | Supply text Chat Completions and Responses, streams, tools, history, usage, model discovery, retrieval, and deletion. |
 | REQ-SERVE-002 | Supply off/low/medium/high/xhigh thinking. Default medium, high maps to xhigh, none maps to off. |
-| REQ-SERVE-003 | Complete oh-my-pi tasks through each API with MTP and the target checkpoint. Use successful file reads and returned results for answers that use those results. |
-| REQ-SERVE-004 | Apply JSON/Schema/strict-tool masks before sampling, with MTP drafts and bonus tokens. Reject unsupported schemas. |
+| REQ-SERVE-003 | Complete oh-my-pi tasks through each API with MTP4 and DSpark. Read files without error and use their returned results in subsequent model input. |
+| REQ-SERVE-004 | Apply JSON/Schema/strict-tool masks before sampling, with each mode's drafts and bonus tokens. Reject unsupported schemas. |
 | REQ-SERVE-005 | Examine queue time, preparation, TTFT, output rate, cache behavior, and draft counters without an extra HTTP throughput gate. |
 
 [Service contracts](serving.md) define supported parameters, XML restrictions, storage limits, and errors.
 Scripted workers alone cannot show target-model acceptance.
+For each draft mode, test the two APIs, constraints, cancellation, mixed batches, and long-context prefix reuse.
+OMP evidence must show two source reads, forwarded results, continued generation, and an answer that uses those results.
+Compare response IDs with server logs for the active mode and scheduled drafts.
 
 ## REQ-KERNEL-001: Pinned TileLang comparison
 
@@ -165,6 +217,11 @@ Profile independently from acceptance timing.
 Report unavailable counters. Keep the gates active.
 Use [kernel procedures](kernels.md).
 
+DSpark adds independently derived supplemental operator cases.
+Keep the old case set and pinned TileLang source hash unchanged.
+Keep the new TileLang reference in a different file from that pinned implementation.
+Apply the same accuracy, three-round, twenty-pair, and confidence-bound gates to each new case.
+
 ## REQ-IR-001: Semantic IR
 
 Control the semantics and provider selection of project CUDA and key FlashInfer operations in the Qwen target and MTP paths.
@@ -174,6 +231,7 @@ Provider selection uses phase, shape, dtype, layout, and device metadata.
 Provider failure is an error. The reference is an explicit debug choice.
 
 Compile prefill, target decode, MTP draft, and four-step proposal with `torch.compile(fullgraph=True)`.
+Compile DSpark target features, context injection, backbone, Markov step, and greedy proposal with the same fullgraph contract.
 Keep semantic nodes until provider lowering.
 Keep host planning, allocation, scheduling, and ZMQ not in these units.
 Manual CUDA Graphs contain compiled units. Disable compiler-managed graphs.
@@ -182,13 +240,14 @@ Keep ordered persistent writes, capture restoration, and memory guards.
 Any activation donation must have proof for the named temporary. Persistent caches cannot be donated.
 Graph rewrites must have equivalence tests and an exception-aware call-site inventory.
 
-Acceptance includes all existing accuracy tests, six context cases, formal operator cases, and twelve performance rows.
+Acceptance includes all existing accuracy tests, ordinary/MTP4 context cases, formal operator cases, and twelve performance rows.
+Add DSpark boundary, service, supplemental operator, and paired-performance cases.
 A target-model test must exercise all four compiled units and graph replay with changed metadata.
 There is no new compile-speedup percentage gate.
 
 ## REQ-LEARN-001: Interactive tutorial
 
-Maintain a Twine-engine tutorial in `code-journey/` with twelve full Chinese chapters.
+Maintain a Twine-engine tutorial in `code-journey/` with thirteen full Chinese chapters.
 Include core inference logic, decisions, and implementation through project source.
 Use reading choices for interests and internal prerequisites.
 Give a description of displayed fields, parameters, and variables. Assume basic Rust and Python syntax.
@@ -205,11 +264,12 @@ Only an explicit completion choice completes a chapter.
 Review/map visits keep reading progress. Old short passages migrate to visits.
 Extract current source with attached documentation, attributes, and decorators.
 
-Remove common leading indentation. Keep relative indentation, line numbers, and full-file hashes.
+Remove the leading indentation that is the same on all lines that contain text.
+Keep relative indentation, line numbers, and full-file hashes.
 Use identical displayed and copied excerpts, readable highlighting, full-source pages, and keyboard scrolling.
 Reject missing source coverage, anchors, and record-field explanations at build time.
 
-Test twelve routes, prerequisites, choices, completion, migration, restart, refresh, and backward history.
+Test thirteen routes, prerequisites, choices, completion, migration, restart, refresh, and backward history.
 Test five Rust CPU traces: 784, 785, 1568, 1569, and 32768 tokens.
 Test fonts, formulas, fields, console health, desktop/mobile layout, and the two themes.
 Test excerpt documentation, dedentation, clipboard paths, source hashes, line anchors, URLs, and code contrast of at least 4.5:1.

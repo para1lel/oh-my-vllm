@@ -10,14 +10,15 @@ Keep all existing features and numerical tolerances.
 - Keep the production block size at 784 tokens.
 - Keep 16 FA layers and 48 GDN layers with `mamba_cache_mode="align"`.
 - Support 262144 total input and output tokens.
-- Keep ordinary and MTP4 boundary tests at batches 1, 2, and 4 free of OOM and recompute preemption.
+- Keep ordinary, MTP4, and DSpark boundary tests at batches 1, 2, and 4 free of OOM and recompute preemption.
 - Keep each active criterion in [requirements](docs/requirements.md).
 - Keep project builds, tests, and inference free of vLLM dependencies code, environments, and build caches.
 - Use the isolated baseline collector only for independently authorized baseline work.
 - Use CUDA for project kernels. Keep the pinned TileLang comparison.
 - Keep formal operator cases, the harness, and summarized evidence in the repository.
 - Keep temporary experiments and raw profiling traces in an external directory.
-- Document future architectures, multiple GPUs, other NVIDIA backends, and DSpark without untested support claims.
+- Document future architectures, multiple GPUs, and other NVIDIA backends without untested support claims.
+- Keep DSpark weights fixed. Use current-source paired measurements for its comparison with MTP4.
 
 Use recent compatible stable dependencies in dependency order.
 Pin the combination with satisfactory compatibility tests.

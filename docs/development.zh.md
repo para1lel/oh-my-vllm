@@ -53,7 +53,8 @@ vLLM 及其缓存与项目运行时隔离.
 | 变量 | 用途 |
 |---|---|
 | `OH_MY_VLLM_MODEL` | Checkpoint 目录; 显式 `--model` 优先. |
-| `OH_MY_VLLM_RUNTIME_CACHE` | 独立运行时缓存的公共根目录. |
+| `OH_MY_VLLM_DRAFT_MODEL` | DSpark checkpoint 目录; 显式 `--draft-model` 优先. |
+| `OH_MY_VLLM_RUNTIME_CACHE` | 全部项目命令使用的独立运行时缓存根目录. |
 | `XDG_CACHE_HOME` | 默认缓存基础目录; 未设置时使用用户 `.cache`. |
 | `FLASHINFER_WORKSPACE_BASE` | 覆盖 FlashInfer workspace. |
 | `TRITON_CACHE_DIR` | 覆盖第三方 Triton 缓存. |
@@ -69,6 +70,29 @@ vLLM 及其缓存与项目运行时隔离.
 首次使用可能编译内核或下载带版本的 FlashInfer GEMM cubin.
 运行时身份记录库版本, 拒绝意外 vLLM 导入或映射库.
 性能验收期间不启用精度 probe 或 eager override.
+
+## 草稿模式选择
+
+旧 `--num-speculative-tokens 0` 和 `4` 分别选择普通计算和原生 MTP4.
+`--speculative-mode none`, `mtp` 或 `dspark` 显式选择 worker 模式.
+模式与数量不兼容时在 worker 初始化前报错.
+DSpark 通过 `OH_MY_VLLM_DRAFT_MODEL` 或 `--draft-model` 指定独立 checkpoint.
+
+设置草稿 checkpoint 并使用显式模式:
+
+```bash
+export OH_MY_VLLM_DRAFT_MODEL="/path/to/local-DSpark-checkpoint"
+scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/dspark-text.ipc --speculative-mode dspark bench --input-len 32 --output-len 64 --batch-size 1
+```
+
+DSpark 至多提出 7 个 token, 原生 MTP4 保留 4-token 路径.
+
+`--dspark-confidence-threshold` 设置累计前缀 confidence, 初始设置为 `0.2`.
+使用 `0.0` 保留至多 7 个固定数量 proposal. 输出, 上下文和 grammar 限制可减少 proposal 数量.
+阈值必须有限, 大于等于 0 且小于 1.
+HTTP 模式在 worker 生命周期内固定.
+只有 `spec-bench` 允许在空闲时切换 MTP / DSpark, 共享 target 权重和缓存.
+当前源码的 DSpark 性能验收待测.
 
 ## 构建与检查
 

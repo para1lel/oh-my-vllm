@@ -1,6 +1,6 @@
 # 交互代码教程
 
-静态 Twine/SugarCube2.37.3 教程用 12 个中文章节讲解当前推理代码.
+静态 Twine/SugarCube2.37.3 教程用 13 个中文章节讲解当前推理代码.
 每章包含逻辑, 决策, 实现及展示的字段 / 变量.
 读者通过兴趣选项和内部前置知识选择路线.
 默认熟悉基础 Rust 和 Python 语法.
@@ -43,8 +43,9 @@ CPU 实验使用 token42 的合成 worker 反馈.
 | 10 | MTP proposal, grouped verification 和状态所有权. |
 | 11 | Semantic IR, lowering, graph cache 和 CUDA 内核. |
 | 12 | 正确性, 最大 shape, TTFT, 吞吐和测量审计. |
+| 13 | DSpark 目标特征, context KV, 七候选提议, confidence, 概率验证和测量. |
 
-`src/curriculum.mjs` 将每个有实质内容的默认运行路径 Rust/Python/CUDA 文件映射到章节和入口符号.
+`src/curriculum.mjs` 将每个有实质内容的运行路径 Rust/Python/CUDA 文件映射到章节和入口符号.
 构建拒绝缺失覆盖, anchor 和记录字段解释.
 记录当前源码行和完整文件哈希.
 冻结比较 provider, 测试和仅含文档的 initializer 单独限定范围.
@@ -102,7 +103,9 @@ scripts/with-env.sh cargo clippy --manifest-path code-journey/trace/Cargo.toml -
 ```
 
 Node 测试覆盖文档 / metadata 边界, 去缩进, tab, 空行和相邻元素.
-Playwright Chromium 覆盖全部 12 条路线, 选项, 前置知识, 条件列表, 完成 / 复习, 迁移, 历史, 重启和 5 个调度用例.
+Playwright Chromium 覆盖全部 13 条路线, 选项, 前置知识, 条件列表, 完成 / 复习, 迁移, 历史, 重启和 5 个调度用例.
+DSpark 检查包含配置字段, 概率公式, 源码复制和桌面 / 移动端主题.
+
 还检查文档复制, 字段, 字体, 公式, 主题, 源码 hash/anchor/URL, 键盘滚动和至少 4.5:1 的代码对比度.
 分别检查桌面 1536x1024 和移动端 390x844 截图.
 Browser plugin 可用时优先使用; 否则记录采用 Playwright 的原因.

@@ -73,6 +73,18 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
+    /// Change the draft budget only with no live requests and no cached prefixes.
+    /// This is for shared-target comparisons, not per-request service routing.
+    pub fn set_speculative_tokens(&mut self, count: usize) -> bool {
+        if !matches!(count, 0 | 4 | 7) || !self.reset_prefix_cache() {
+            return false;
+        }
+        self.config.enable_mtp = count > 0;
+        self.config.mtp_draft_len = count;
+        self.kv.set_speculative_blocks(count);
+        true
+    }
+
     pub fn reset_prefix_cache(&mut self) -> bool {
         self.running.is_empty() && self.waiting.is_empty() && self.kv.reset_prefix_cache()
     }

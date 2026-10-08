@@ -269,6 +269,12 @@ def _static_key(args: Any, kwargs: Any) -> str:
 
 def _example(node: torch.fx.Node) -> Any:
     if "example_value" not in node.meta:
+        # Dynamo omits example_value for a void custom op. Its registered
+        # mutation schema still retains the effectful node and validates that
+        # each selected provider also returns None; no alias/clone is needed.
+        schema = getattr(node.target, "_schema", None)
+        if node.op == "call_function" and schema is not None and not schema.returns:
+            return None
         raise RuntimeError(f"IR compiler lacks metadata for FX node {node.name}")
     return node.meta["example_value"]
 
@@ -408,6 +414,7 @@ def compile_forward(
     label = unit or getattr(function, "__qualname__", type(function).__name__)
 
     def lower(graph_module: torch.fx.GraphModule, inputs: Sequence[Any]):
+        LOG.info("Compilation started: IR unit %s", label)
         compiled = lower_to_inductor(graph_module, inputs)
         _COMPILED_GRAPHS[label] += 1
         count = _COMPILED_GRAPHS[label]

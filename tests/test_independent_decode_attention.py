@@ -59,6 +59,42 @@ def test_grouped_decode_rejects_group_size_above_5(backend):
     assert process.returncode == 0, process.stdout + process.stderr
 
 
+@pytest.mark.parametrize("batch", [1, 2, 4])
+def test_eight_target_rows_match_independent_causal_reference(batch):
+    generator = torch.Generator(device="cuda").manual_seed(784)
+    query = torch.randn(
+        batch * 8, 24, 256, generator=generator, device="cuda", dtype=torch.bfloat16
+    )
+    cache = torch.randn(
+        1 + batch * 2,
+        2,
+        784,
+        4,
+        256,
+        generator=generator,
+        device="cuda",
+        dtype=torch.bfloat16,
+    )
+    tables = torch.tensor(
+        [[1 + row * 2, 2 + row * 2] for row in range(batch)],
+        device="cuda",
+        dtype=torch.int32,
+    ).repeat_interleave(8, 0)
+    lengths = torch.tensor(
+        list(range(779, 787)) * batch, device="cuda", dtype=torch.int32
+    )
+    starts = torch.arange(0, batch * 8 + 1, 8, device="cuda", dtype=torch.int32)
+    actual = decode(
+        query, cache, tables, lengths, max_tokens=1568, starts=starts, max_query_len=8
+    )
+    torch.testing.assert_close(
+        actual.cpu().double(),
+        reference(query, cache, tables, lengths, 0),
+        atol=0.03,
+        rtol=0.03,
+    )
+
+
 def reference(query, cache, tables, lengths, first):
     q, pool = query.cpu().double(), cache.cpu().double()
     out = []
@@ -239,6 +275,66 @@ def test_graph_replay_reads_updated_lengths_and_tables():
     )
 
 
+@pytest.mark.parametrize("compiled", [False, True])
+def test_native_query_bucket_replay_changes_request_boundaries(compiled):
+    """One bound-five graph serves [1,4] and [2,3] with dynamic causality."""
+    from oh_my_vllm.ir import compile_forward
+
+    generator = torch.Generator(device="cuda").manual_seed(1568)
+    query = torch.randn(
+        5, 24, 256, generator=generator, device="cuda", dtype=torch.bfloat16
+    )
+    cache = torch.randn(
+        5, 2, 784, 4, 256, generator=generator, device="cuda", dtype=torch.bfloat16
+    )
+    before = cache.clone()
+    tables = torch.tensor([[1, 2]] + [[3, 4]] * 4, device="cuda", dtype=torch.int32)
+    lengths = torch.tensor([21, 782, 783, 784, 785], device="cuda", dtype=torch.int32)
+    starts = torch.tensor([0, 1, 5], device="cuda", dtype=torch.int32)
+    # Production allocates scratch before compiling the opaque attention plan.
+    workspace = torch.empty(128 << 20, device="cuda", dtype=torch.uint8)
+    attention = DecodeAttention(
+        tables, lengths, 1568, workspace=workspace, max_query_len=5
+    )
+    attention.starts = starts
+
+    def run():
+        attention.prepare()
+        return attention(query, cache)
+
+    unit = compile_forward(run, unit="query_bucket_replay") if compiled else run
+    initial = unit().clone()
+    torch.testing.assert_close(
+        initial.cpu().double(),
+        reference(query, cache, tables, lengths, 0),
+        atol=0.03,
+        rtol=0.03,
+    )
+    torch.cuda.synchronize()
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        output = unit()
+
+    # Change the group boundaries, both page mappings, and positions in place.
+    starts.copy_(torch.tensor([0, 2, 5], device="cuda", dtype=torch.int32))
+    tables.copy_(
+        torch.tensor([[4, 1]] * 2 + [[2, 3]] * 3, device="cuda", dtype=torch.int32)
+    )
+    lengths.copy_(
+        torch.tensor([783, 784, 784, 785, 786], device="cuda", dtype=torch.int32)
+    )
+    query.copy_(
+        torch.randn(query.shape, generator=generator, device="cuda", dtype=query.dtype)
+    )
+    graph.replay()
+    replayed = output.clone()
+    expected = reference(query, cache, tables, lengths, 0)
+    torch.testing.assert_close(replayed.cpu().double(), expected, atol=0.03, rtol=0.03)
+    torch.testing.assert_close(replayed, run(), atol=0.03, rtol=0.03)
+    assert not torch.allclose(replayed, initial, atol=0.03, rtol=0.03)
+    torch.testing.assert_close(cache, before, atol=0, rtol=0)
+
+
 @pytest.mark.parametrize("grouped", [False, True])
 @pytest.mark.parametrize("position64", [False, True])
 def test_cuda_partial_tile_crosses_page_with_masked_tail(grouped, position64):
@@ -263,7 +359,17 @@ def test_cuda_partial_tile_crosses_page_with_masked_tail(grouped, position64):
 
     def launch():
         cuda.attention_partial(
-            query, cache, tables, lengths, starts, partial, lse, 0, grouped, position64
+            query,
+            cache,
+            tables,
+            lengths,
+            starts,
+            partial,
+            lse,
+            0,
+            grouped,
+            position64,
+            5,
         )
         cuda.attention_merge(partial, lse, out)
 

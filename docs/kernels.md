@@ -64,7 +64,7 @@ The batch plan validates logical slots against reported capacities.
 Use different contracts for fresh-output non-aliasing and in-place state/cache operations.
 Reject invalid wrapper inputs at the wrapper or C++ boundary.
 Negative attention slots skip KV writes and keep Q.
-Grouped verification has at most five queries.
+Native MTP4 verification has at most five queries. DSpark verification has at most eight.
 The production wrapper aligns misaligned KV views by copying and reports that cost.
 
 See [profiling](profiling.md) for clone counters and fault attribution.
@@ -90,6 +90,16 @@ This finite test does not include all pairs or prove identical intermediate quot
 FA fixtures exclude null page 0.
 Full operations include snapshots, copies, and split merges.
 `development/kernels/semantics.py` gives logical behavior. `twins.py` binds the pinned full operations.
+
+DSpark adds static supplemental shapes for target verification and draft operators.
+The original case IDs and eight pinned TileLang files stay unchanged.
+`development/kernels/dspark-reference.json` binds the supplemental reference and its original manifest hash.
+`dspark_tilelang_reference.py` supplies a different DSpark performance comparison.
+Independent references from FP64 PyTorch supply the numerical comparison.
+The new cases include BF16 hidden RMS rounding, head-128 YaRN Q/K preparation, context append, and seven-row draft attention.
+
+Each new case has the same full-output, cache-write, three-round, twenty-pair, and confidence-bound gates.
+Current-source supplemental operator performance acceptance results are not available.
 
 ```bash
 scripts/with-env.sh python benchmarks/kernels.py --list

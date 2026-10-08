@@ -10,6 +10,7 @@ _TOLERANCES = {
     "quant": (0, 0),
     "silu_quant": (0, 0),
     "append": (0, 0),
+    "dspark_append": (0, 0),
 }
 
 

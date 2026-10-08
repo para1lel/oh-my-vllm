@@ -20,6 +20,10 @@ ENTRIES = {
     "convolution": ("convolution", "causal_conv"),
     "append": ("attention", "append"),
     "attention": ("decode_attention", "decode"),
+    "dspark_rms_norm": ("dspark_attention", "rms_norm"),
+    "dspark_norm_rope": ("dspark_attention", "normalize_rope"),
+    "dspark_append": ("dspark_attention", "append"),
+    "dspark_attention": ("dspark_attention", "attention"),
 }
 
 
@@ -49,7 +53,60 @@ def fixture(config, *, seed=784, observe=False):
     def metadata(values, dtype=torch.int64):
         return torch.tensor(values, device="cuda", dtype=dtype)
 
-    if operation == "prepare_attention":
+    if operation == "dspark_rms_norm":
+        args = (random(n, 5120), random(5120))
+    elif operation == "dspark_norm_rope":
+        # The supplied frequency vector matches the production YaRN blend.
+        # Construction remains outside both full-operation measurements.
+        from oh_my_vllm.models.dspark import DSparkConfig, yarn_frequencies
+
+        frequency, factor = yarn_frequencies(DSparkConfig(), "cuda")
+        positions = torch.arange(n, device="cuda", dtype=torch.int64)
+        if config["draft"]:
+            positions = positions % 7
+        positions = positions + config["position_base"]
+        args = (
+            random(n, config["heads"], 128),
+            random(128, dtype=torch.float32),
+            positions,
+            frequency,
+            factor,
+        )
+    elif operation == "dspark_append":
+        key, value = random(n, 8, 128), random(n, 8, 128)
+        slots = torch.arange(784, 784 + n, device="cuda", dtype=torch.int64)
+        pool = torch.empty(
+            (n + 1567) // 784, 2, 784, 8, 128, device="cuda", dtype=torch.bfloat16
+        )
+        other = torch.empty_like(pool)
+        return package(
+            lambda: reference(pool, key, value, slots),
+            lambda: candidate(other, key, value, slots),
+            (
+                (
+                    "written_cache",
+                    lambda: pool[slots // 784, :, slots % 784],
+                    lambda: other[slots // 784, :, slots % 784],
+                ),
+            ),
+        )
+    elif operation == "dspark_attention":
+        batch, length = config["batch"], config["length"]
+        pages = (length + 783) // 784
+        pool = random(1 + batch * pages, 2, 784, 8, 128)
+        table = torch.arange(
+            1, 1 + batch * pages, device="cuda", dtype=torch.int32
+        ).view(batch, pages)
+        contexts = torch.full((batch,), length, device="cuda", dtype=torch.int32)
+        args = (
+            random(batch, 7, 32, 128),
+            pool,
+            table,
+            contexts,
+            random(batch, 7, 8, 128),
+            random(batch, 7, 8, 128),
+        )
+    elif operation == "prepare_attention":
         packed = random(n, 14336)
         qw, kw = random(256, dtype=torch.float32), random(256, dtype=torch.float32)
         dtype = getattr(torch, config["index_dtype"])
@@ -73,7 +130,7 @@ def fixture(config, *, seed=784, observe=False):
                 ),
             ),
         )
-    if operation in ("norm", "add_norm"):
+    elif operation in ("norm", "add_norm"):
         x, w = random(n, 5120), random(5120, dtype=torch.float32)
         args = (x, w) if operation == "norm" else (x, random(n, 5120), w)
     elif operation == "gated_norm":
@@ -119,7 +176,7 @@ def fixture(config, *, seed=784, observe=False):
             next_slot = sequences
             for start, count in zip(starts[:-1], counts, strict=True):
                 positions = (
-                    [start + count - 1] if count > 5 else range(start, start + count)
+                    [start + count - 1] if count > 8 else range(start, start + count)
                 )
                 for pos in positions:
                     writes[pos] = next_slot
@@ -209,12 +266,21 @@ def fixture(config, *, seed=784, observe=False):
         )
         args = (q, pool, table, lengths)
         kwargs = dict(
-            first=1,
+            first=config.get("first", 1),
             max_tokens=config["max_tokens"],
             starts=metadata(list(range(0, batch * queries + 1, queries)), torch.int32)
             if config["grouped"]
             else None,
         )
+        if queries > 5:
+            # The frozen grouped tile covers five target queries. Its original
+            # independent-row path computes all eight without changing source.
+            reference_kwargs = kwargs | {"starts": None}
+            candidate_kwargs = kwargs | {"max_query_len": 8}
+            return package(
+                lambda: reference(*args, **reference_kwargs),
+                lambda: candidate(*args, **candidate_kwargs),
+            )
     else:
         raise ValueError(operation)
     return package(

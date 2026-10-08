@@ -45,8 +45,8 @@ A missing selected environment is an error.
 The wrapper prepends its `bin` to `PATH` and repository `python` to `PYTHONPATH`.
 The wrapper sets `UV_PYTHON` to its selected Python. An explicit uv `--python` option takes precedence.
 
-`CARGO_TARGET_DIR` defaults to repository `target`.
-`OH_MY_VLLM_WORKER_PYTHON` defaults to the selected environment's Python.
+Without an explicit value, `CARGO_TARGET_DIR` uses repository `target`.
+Without an explicit value, `OH_MY_VLLM_WORKER_PYTHON` uses the selected environment's Python.
 Without the wrapper, Rust uses this variable or `python3` from `PATH`.
 
 Supply `WorkerConfig.model_path` explicitly for direct Rust library calls.
@@ -54,7 +54,8 @@ Supply `WorkerConfig.model_path` explicitly for direct Rust library calls.
 | Variable | Purpose |
 |---|---|
 | `OH_MY_VLLM_MODEL` | Checkpoint directory. Explicit `--model` takes precedence. |
-| `OH_MY_VLLM_RUNTIME_CACHE` | Common independent runtime cache root. |
+| `OH_MY_VLLM_DRAFT_MODEL` | DSpark checkpoint directory. Explicit `--draft-model` takes precedence. |
+| `OH_MY_VLLM_RUNTIME_CACHE` | Independent runtime cache root for all project commands. |
 | `XDG_CACHE_HOME` | Default cache base. Otherwise the user's `.cache` directory. |
 | `FLASHINFER_WORKSPACE_BASE` | Override FlashInfer workspace. |
 | `TRITON_CACHE_DIR` | Override third-party Triton cache. |
@@ -70,6 +71,30 @@ Different subdirectories hold FlashInfer, third-party Triton, TileLang, and nati
 First use can compile kernels or download versioned FlashInfer GEMM cubins.
 Runtime identity records library versions and rejects accidental vLLM imports or mapped libraries.
 Do not use accuracy probes or eager overrides during performance acceptance.
+
+## Draft mode selection
+
+The legacy `--num-speculative-tokens 0` and `4` select ordinary computation and native MTP4.
+`--speculative-mode none`, `mtp`, or `dspark` selects the worker mode explicitly.
+A mode/count combination that is not compatible fails before worker initialization.
+DSpark must have a different checkpoint through `OH_MY_VLLM_DRAFT_MODEL` or `--draft-model`.
+
+Set the draft checkpoint and use the explicit mode:
+
+```bash
+export OH_MY_VLLM_DRAFT_MODEL="/path/to/local-DSpark-checkpoint"
+scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/dspark-text.ipc --speculative-mode dspark bench --input-len 32 --output-len 64 --batch-size 1
+```
+
+DSpark proposes at most seven tokens. Native MTP4 keeps its four-token path.
+
+`--dspark-confidence-threshold` sets cumulative confidence. Its initial setting is `0.2`.
+Use `0.0` for fixed-count proposals up to seven. Output, context, and grammar limits can decrease the proposal count.
+The threshold must be finite, at least zero, and less than one.
+
+HTTP mode stays fixed for the worker lifetime.
+`spec-bench` alone can change MTP/DSpark modes when idle with shared target weights and caches.
+Current-source DSpark performance acceptance results are not available.
 
 ## Build and checks
 

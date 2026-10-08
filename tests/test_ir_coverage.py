@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from oh_my_vllm.ir import attention as ir_attention  # noqa: F401
+from oh_my_vllm.ir import dspark as ir_dspark  # noqa: F401
 from oh_my_vllm.ir import operations
 from oh_my_vllm.ir.coverage import SITES, check_coverage
 from oh_my_vllm.models import qwen  # noqa: F401 - registers model operators
@@ -19,6 +20,8 @@ def test_coverage_rejects_direct_backend_call_through_allowed_type_import(tmp_pa
     for file in {site.file for site in SITES} | {
         "worker/model_runner.py",
         "worker/mtp.py",
+        "worker/dspark.py",
+        "worker/dspark_graph.py",
     }:
         destination = tmp_path / file
         destination.parent.mkdir(parents=True, exist_ok=True)

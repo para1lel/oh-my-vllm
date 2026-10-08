@@ -63,6 +63,38 @@ Prefix 行为每请求预置恰好 32144 个可复用 token.
 后续性能策略目标是通过 roofline 分析确定门槛, 与 vLLM 解耦.
 在独立需求替代之前, 现有门槛继续有效.
 
+## REQ-PERF-003: DSpark 与原生 MTP4
+
+比较同一最终源码和二进制中的可选 DSpark 与原生 MTP4.
+使用 32768 个输入 token, 4096 个保留输出 token, batch 为 1, 2, 4.
+使用相同的合成 token ID, greedy sampling 和固定输出数量, 忽略 EOS.
+EngineCore 吞吐包含注册, prefill, 调度, 传输, 采样和清理.
+
+每个 batch 的比较 worker 共享 target 权重和物理 target 缓存.
+预热前加载两种草稿模型, 每次尝试前重置前缀复用.
+每个 batch 执行 3 轮.
+每轮每种模式执行 2 次完整预热, 随后执行 5 个测量配对, 交替改变模式顺序.
+
+每个 batch 报告以下统计:
+
+- 每轮每种模式的吞吐中位数及波动.
+- 每轮 DSpark 中位数与 MTP4 的差值.
+- 吞吐增益的 hierarchical paired-bootstrap 单侧 95% 置信下界.
+
+报告 TTFT 及其波动.
+DSpark 速度, 波动及置信界限不增加验收门槛.
+现有 12 个 vLLM 吞吐和 TTFT 门槛继续有效.
+保留每次失败或中断尝试及完整原始记录.
+测量期间发生编译或 graph capture 会使该次尝试失效.
+
+记录绑定实际源码文件, 二进制, Python 环境, 加载的 CUDA 模块, 运行配置及 checkpoint 字节.
+加载的 DSpark 配置和权重哈希必须与指定 checkpoint 匹配.
+记录容量, allocated / reserved 显存峰值, compile / capture 审计和实际验证 / 接受的草稿数.
+接受率的分母是已调度草稿 token, 下一步返回的 proposal 使用另一计数.
+
+当前源码尚无 DSpark 性能验收结果.
+采集流程见 [测试](testing.zh.md#dspark-比较).
+
 ## REQ-CONTEXT-001: 上下文与显存
 
 支持输入与输出合计 262144 token.
@@ -71,6 +103,8 @@ Prefix 行为每请求预置恰好 32144 个可复用 token.
 保持 32768-token 步预算和 784-token 块.
 记录性能和 GPU 显存峰值; 不增加额外比率门槛.
 覆盖长上下文前缀恢复和约束解码.
+DSpark 在 batch 1, 2, 4 执行相同边界用例.
+保留 6 个普通 / MTP4 用例作为独立门槛.
 
 ## 功能需求
 
@@ -81,6 +115,20 @@ Prefix 行为每请求预置恰好 32144 个可复用 token.
 | REQ-FUNC-003 | 使用链式哈希前缀复用, LRU 淘汰和协调的 FA / GDN group. |
 | REQ-FUNC-004 | 优先抢占较晚接纳的运行请求; 重计算保留已接受历史, 清除未验证草稿. |
 | REQ-FUNC-005 | 提供 MTP4, 显式返回保留 token 和新草稿 ID; 保持 BF16 GDN 状态和 block784. |
+| REQ-FUNC-006 | 提供可选 DSpark, 使用本地 BF16 checkpoint, 至多 7 个草稿, target 验证和 block784. |
+
+DSpark 使用从 0 开始编号的 target 层输出 `(5,19,33,47,61)`, 以及 5 层草稿 GQA.
+保留原生 MTP4, 每个 worker 选择一种草稿模式, 不按请求切换.
+
+DSpark 累计 confidence 阈值的初始设置为 `0.2`, proposal 数量为 0 至 7.
+首项 confidence 乘积低于阈值时, 该步由目标执行单 token 解码.
+设置 `--dspark-confidence-threshold 0.0` 可保留至多 7 个固定数量 proposal. 输出, 上下文和 grammar 限制可减少 proposal 数量.
+
+随机采样使用条件 proposal 概率及 target 接受概率 `min(1,p(x)/q(x))`.
+拒绝时从归一化的 `max(p-q,0)` 采样, bonus token 从 target 分布采样.
+每个条件分布都应用用户采样参数和 grammar mask.
+推测模式保持 BF16 GDN 状态及既有半精度舍入约束.
+只有接受的输入行才能提交 target 状态或 DSpark context.
 
 ## REQ-ACC-001: 数值精度
 
@@ -102,7 +150,7 @@ Recurrent state 的 NRMSE 至多 1%, 最大绝对误差至多为参考峰值的 
 `REQ-RUNNER-001` 已退役, 由本需求替代.
 按依赖顺序选择兼容的稳定版本, 固定已验证版本.
 保留移植代码的来源和许可证.
-未来架构, 多 GPU, 其他 NVIDIA GPU 和 DSpark 只写简要扩展说明.
+未来架构, 多 GPU 和其他 NVIDIA GPU 只写简要扩展说明.
 
 ## REQ-OBS-001: 诊断
 
@@ -118,12 +166,15 @@ Profiling 需显式选择.
 |---|---|
 | REQ-SERVE-001 | 提供文本 Chat Completions 和 Responses, 流式响应, 工具, 历史, usage, 模型发现, 查询和删除. |
 | REQ-SERVE-002 | 提供 off/low/medium/high/xhigh 思考; 默认 medium, high 映射为 xhigh, none 映射为 off. |
-| REQ-SERVE-003 | 两种 API 分别完成真实 oh-my-pi 任务, 开启 MTP, 实际读文件, 回传工具结果并给出有依据的答案. |
-| REQ-SERVE-004 | 采样前施加 JSON / Schema / strict-tool mask, 包括 MTP 草稿和 bonus token; 拒绝不支持的 schema. |
+| REQ-SERVE-003 | MTP4 和 DSpark 分别通过两种 API 完成真实 oh-my-pi 任务, 实际读文件并将结果传入后续模型输入. |
+| REQ-SERVE-004 | 采样前施加 JSON / Schema / strict-tool mask, 包括每种模式的草稿和 bonus token; 拒绝不支持的 schema. |
 | REQ-SERVE-005 | 检查排队, 准备, TTFT, 输出速率, 缓存和草稿计数, 不增加 HTTP 吞吐门槛. |
 
 [服务合同](serving.zh.md) 定义支持的参数, XML 限制, 存储限制和错误.
 单独使用 scripted worker 不能证明真实模型验收.
+每种草稿模式都测试两种 API, 约束, 取消, 混合 batch 和长上下文前缀复用.
+OMP 证据必须显示两次源码读取, 结果回传, 继续生成及使用读取结果的答案.
+通过 response ID 与服务日志核对实际模式及已验证草稿.
 
 ## REQ-KERNEL-001: 冻结 TileLang 比较
 
@@ -158,6 +209,11 @@ Profiling 与验收计时分开.
 缺少计数器时明确报告, 不豁免门槛.
 使用 [内核流程](kernels.zh.md).
 
+DSpark 增加独立推导的补充算子用例.
+原用例集合及冻结 TileLang 源码哈希保持不变.
+新增 TileLang 参考与冻结实现保存在不同文件中.
+每个新用例使用相同精度, 3 轮, 20 个配对和置信下界门槛.
+
 ## REQ-IR-001: Semantic IR
 
 拥有 Qwen target 和 MTP 路径中项目 CUDA 及关键 FlashInfer 算子的语义和 provider 选择.
@@ -167,6 +223,7 @@ Provider 选择使用 phase, shape, dtype, layout 和 device metadata.
 Provider 失败即报错; reference 只作为显式 debug 选项.
 
 使用 `torch.compile(fullgraph=True)` 编译 prefill, target decode, MTP draft 和四步 proposal.
+DSpark target feature, context injection, backbone, Markov step 和 greedy proposal 使用相同 fullgraph 合同.
 Provider lowering 前保留语义节点.
 主机规划, 分配, 调度和 ZMQ 保留在这些单元外.
 手动 CUDA Graph 包含编译单元; 禁用编译器管理的 graph.
@@ -174,13 +231,14 @@ Provider lowering 前保留语义节点.
 Activation donation 需要对指定临时值的证明; 持久缓存不能被 donation.
 Graph rewrite 需要等价测试和注明例外原因的调用点清单.
 
-验收包括全部现有精度测试, 6 个上下文用例, 正式算子用例和 12 个性能行.
+验收包括全部现有精度测试, 普通 / MTP4 上下文用例, 正式算子用例和 12 个性能行.
+增加 DSpark 边界, 服务, 补充算子和配对性能用例.
 真实模型测试必须覆盖全部 4 个编译单元, 以及 metadata 变化后的 graph replay.
 不增加编译加速百分比门槛.
 
 ## REQ-LEARN-001: 交互教程
 
-在 `code-journey/` 维护真正的 Twine 教程, 包含 12 个完整中文章节.
+在 `code-journey/` 维护真正的 Twine 教程, 包含 13 个完整中文章节.
 通过实际源码讲解核心推理逻辑, 决策和实现.
 阅读选项用于了解兴趣和处理内部前置知识.
 解释展示的字段, 参数和变量; 默认读者熟悉基础 Rust 和 Python 语法.
@@ -199,7 +257,7 @@ Graph rewrite 需要等价测试和注明例外原因的调用点清单.
 展示与复制的片段一致, 提供清晰高亮, 完整源码页和键盘滚动.
 构建时拒绝缺失的源码覆盖, anchor 和记录字段解释.
 
-测试 12 条路线, 前置知识, 选项, 完成, 迁移, 重启, 刷新和后退历史.
+测试 13 条路线, 前置知识, 选项, 完成, 迁移, 重启, 刷新和后退历史.
 测试 5 个真实 Rust CPU trace: 784, 785, 1568, 1569, 32768 token.
 测试字体, 公式, 字段, console 健康, 桌面 / 移动布局和两种主题.
 测试片段文档, 缩进规范, 剪贴板路径, 源码哈希, 行 anchor, URL 和至少 4.5:1 的代码对比度.

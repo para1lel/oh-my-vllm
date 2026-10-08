@@ -343,6 +343,23 @@ def serve(socket_addr: str) -> None:
                         }
                     )
 
+            elif msg_type == "set_speculative_mode":
+                try:
+                    if worker is None or preparing:
+                        raise RuntimeError("mode switch requires an idle worker")
+                    worker.set_speculative_mode(msg["mode"])
+                    send(
+                        {
+                            "type": "mode_changed",
+                            "rpc_id": msg["rpc_id"],
+                            "mode": msg["mode"],
+                        }
+                    )
+                except Exception as exc:
+                    send(
+                        {"type": "error", "rpc_id": msg["rpc_id"], "message": str(exc)}
+                    )
+
             elif msg_type == "register":
                 if worker is None:
                     continue
@@ -447,6 +464,10 @@ def _handle_init(msg: dict) -> OhMyVllmWorker:
             msg["num_gpu_blocks"],
             msg.get("num_speculative_tokens", 0),
             msg.get("mamba_blocks"),
+            msg.get("speculative_mode"),
+            msg.get("draft_model_path"),
+            msg.get("comparison", False),
+            msg.get("dspark_confidence_threshold", 0.2),
         )
     )
     worker.init_device()

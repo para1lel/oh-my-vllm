@@ -39,9 +39,17 @@ SITES = (
     Site("models/qwen.py", "Layer.forward_residual", "rms_norm", "rms_norm"),
     Site("models/qwen.py", "Layer.forward_residual", "add_rms_norm", "add_rms_norm"),
     Site("models/qwen.py", "Qwen.forward", "add_rms_norm", "add_rms_norm"),
+    Site("models/qwen.py", "Qwen.forward_features", "add_rms_norm", "add_rms_norm"),
     Site("models/qwen.py", "Qwen.draft", "rms_norm", "rms_norm"),
     Site("models/qwen.py", "Qwen.draft", "add_rms_norm", "add_rms_norm"),
     Site("models/qwen.py", "Qwen.logits", "logits_gemm", "logits_gemm"),
+    Site("models/dspark.py", "rms_norm", "dspark_rms_norm", "dspark_rms_norm"),
+    Site("models/dspark.py", "DSparkModel.inject", "rms_norm", "dspark_rms_norm"),
+    Site("models/dspark.py", "DSparkModel.inject", "prepare_qk", "dspark_norm_rope"),
+    Site("models/dspark.py", "DSparkModel.inject", "append", "dspark_append"),
+    Site("models/dspark.py", "DSparkModel.forward", "rms_norm", "dspark_rms_norm"),
+    Site("models/dspark.py", "DSparkModel.forward", "prepare_qk", "dspark_norm_rope"),
+    Site("models/dspark.py", "DSparkModel.forward", "attention", "dspark_attention"),
     Site(
         "kernels/attention.py",
         "PagedAttention.__call__",
@@ -65,6 +73,13 @@ SITES = (
 # These imports are planning/type references or provider bodies. A new direct
 # backend import in model execution needs an explicit review and reason here.
 DIRECT_IMPORT_EXCEPTIONS = {
+    (
+        "models/dspark.py",
+        "oh_my_vllm.kernels.dspark_attention",
+        name,
+    ): "Public DSpark wrapper delegates to a registered semantic IR operation"
+    for name in ("rms_norm", "prepare_qk", "append", "attention")
+} | {
     (
         "models/qwen.py",
         "oh_my_vllm.kernels",
@@ -136,9 +151,12 @@ def check_coverage(package_root: Path, registered: set[str]) -> None:
         raise AssertionError(f"uncovered model operator sites: {missing}")
     high_level_files = {
         "models/qwen.py",
+        "models/dspark.py",
         "worker/model_runner.py",
         "worker/mtp.py",
         "worker/decode_graph.py",
+        "worker/dspark.py",
+        "worker/dspark_graph.py",
     }
     used_exceptions = set()
     for file in high_level_files:

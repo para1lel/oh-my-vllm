@@ -934,6 +934,7 @@ async fn run_engine(
                     output_tps = request.output.output_tokens as f64 / elapsed,
                     steps = request.steps,
                     proposed_draft_tokens = request.proposed,
+                    verified_draft_tokens = request.proposed,
                     accepted_draft_tokens = request.accepted,
                     finish_reason = %reason, "request completed");
                 let _ = request.done.send(Ok(response));

@@ -1,8 +1,9 @@
 """Project-owned single-device GPU execution; Rust retains cache allocations."""
 
 import logging
+import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import torch
 
@@ -49,12 +50,47 @@ class RuntimeConfig:
     num_gpu_blocks: int = 1024
     speculative_tokens: int = 0
     mamba_blocks: int | None = None
+    speculative_mode: str | None = None
+    draft_model: str | None = None
+    comparison: bool = False
+    dspark_confidence_threshold: float = 0.2
+
+    def __post_init__(self) -> None:
+        mode = self.speculative_mode or ("mtp" if self.speculative_tokens else "none")
+        if mode not in ("none", "mtp", "dspark"):
+            raise ValueError("unknown speculative mode")
+        expected = {"none": 0, "mtp": 4, "dspark": 7}[mode]
+        if self.speculative_tokens != expected:
+            raise ValueError("speculative token count disagrees with mode")
+        if (mode == "dspark" or self.comparison) and not self.draft_model:
+            raise ValueError("DSpark requires a draft checkpoint")
+        if self.comparison and mode == "none":
+            raise ValueError("comparison requires a speculative target configuration")
+        if not math.isfinite(self.dspark_confidence_threshold) or not (
+            0 <= self.dspark_confidence_threshold < 1
+        ):
+            raise ValueError("DSpark confidence threshold must be in [0,1)")
+        object.__setattr__(self, "speculative_mode", mode)
+
+    def decode_graph_key(self, token_counts: list[int], extent: int) -> tuple:
+        """Include the per-request query bound in the captured attention shape.
+
+        DSpark confidence stopping changes each request's verification length.
+        Equal total rows can still require different FlashInfer query bounds.
+        Target GQA has six query heads per KV head. Bounds 1/2/5/8 keep groups
+        within the native 8/16/32/64-row tiles and limit captured shape variety.
+        Ordinary and MTP keep their existing fixed bounds.
+        """
+        bound = (
+            next(value for value in (1, 2, 5, 8) if value >= max(token_counts))
+            if self.speculative_mode == "dspark"
+            else max(1, self.speculative_tokens + 1)
+        )
+        return sum(token_counts), len(token_counts), extent, bound
 
 
 class OhMyVllmWorker:
     def __init__(self, config: RuntimeConfig):
-        if config.speculative_tokens not in (0, 4):
-            raise ValueError("independent runtime supports ordinary or MTP4")
         if config.num_gpu_blocks < 6 or config.max_model_len <= 0:
             raise ValueError("invalid runtime capacity")
         self.config = config
@@ -74,6 +110,29 @@ class OhMyVllmWorker:
         self.serving = None
         self.forward_unit = None
         self.logits_unit = None
+        self.feature_unit = None
+        self.dspark = None
+
+    def _is_dspark(self) -> bool:
+        return (
+            getattr(getattr(self, "config", None), "speculative_mode", None) == "dspark"
+        )
+
+    def _proposer(self):
+        return getattr(self, "dspark", None) if self._is_dspark() else self.mtp
+
+    def set_speculative_mode(self, mode: str) -> None:
+        """Switch a preloaded comparison worker only after request cleanup."""
+        if not self.config.comparison or self.histories or self.serving is not None:
+            raise ValueError("mode switch requires an idle comparison worker")
+        if mode not in ("mtp", "dspark"):
+            raise ValueError("comparison supports MTP4 and DSpark")
+        self.config = replace(
+            self.config,
+            speculative_mode=mode,
+            speculative_tokens=4 if mode == "mtp" else 7,
+        )
+        logger.info("Speculative mode selected: %s", mode)
 
     def init_device(self) -> None:
         logger.info("Independent runtime", extra={"fields": identity()})
@@ -81,15 +140,25 @@ class OhMyVllmWorker:
 
     @torch.inference_mode()
     def load_model(self) -> None:
-        self.model = Qwen(self.config.model, mtp=bool(self.config.speculative_tokens))
+        has_dspark = self._is_dspark() or self.config.comparison
+        self.model = Qwen(
+            self.config.model,
+            mtp=self.config.speculative_mode == "mtp" or self.config.comparison,
+            feature_layer_ids=(5, 19, 33, 47, 61) if has_dspark else (),
+        )
         if os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") == "1":
             self.forward_unit = self.model.forward
             self.logits_unit = self.model.logits
+            self.feature_unit = self.model.forward_features if has_dspark else None
         else:
             self.forward_unit = compile_forward(
                 self.model.forward, unit="model_forward"
             )
             self.logits_unit = compile_forward(self.model.logits, unit="model_logits")
+            if has_dspark:
+                self.feature_unit = compile_forward(
+                    self.model.forward_features, unit="model_features"
+                )
 
     @torch.inference_mode()
     def initialize_cache(self) -> None:
@@ -134,13 +203,24 @@ class OhMyVllmWorker:
         # Target outputs feed MTP before the next target replay. Keep target
         # capture scratch separate from the draft and proposal graph families.
         self.graph_pool = None
+        self.dspark_graph_pool = None
         from oh_my_vllm.worker.mtp import MTP
 
         self.mtp = (
             MTP(self.model, self.logical_num_blocks, self.config.max_model_len)
-            if self.config.speculative_tokens
+            if self.config.speculative_mode == "mtp" or self.config.comparison
             else None
         )
+        if self._is_dspark() or self.config.comparison:
+            from oh_my_vllm.worker.dspark import DSpark
+
+            self.dspark = DSpark(
+                self.model,
+                self.config.draft_model,
+                self.logical_num_blocks,
+                self.config.max_model_len,
+                confidence_threshold=self.config.dspark_confidence_threshold,
+            )
 
     def cache_capacities(self) -> tuple[int, int]:
         """Return the FA and GDN slot counts of the allocated device tensors."""
@@ -188,6 +268,8 @@ class OhMyVllmWorker:
     def unregister_request(self, request_id: int) -> None:
         if self.mtp is not None:
             self.mtp.forget(request_id)
+        if getattr(self, "dspark", None) is not None:
+            self.dspark.forget(request_id)
         for mapping in (self.histories, self.samplers, self.sources, self.computed):
             mapping.pop(request_id, None)
         if self.serving is not None:
@@ -200,6 +282,8 @@ class OhMyVllmWorker:
         for rid in scheduled.preempted_request_ids:
             if self.mtp is not None:
                 self.mtp.forget(rid)
+            if getattr(self, "dspark", None) is not None:
+                self.dspark.forget(rid)
             self.sources.pop(rid, None)
             self.computed.pop(rid, None)
         if scheduled.num_batched_tokens != sum(
@@ -273,11 +357,17 @@ class OhMyVllmWorker:
         extent = min(
             self.config.max_model_len, ((max(positions) + 4096) // 4096) * 4096
         )
-        key = (len(ids), len(plans), extent)
+        decode_only = not any(p.prefill for p in plans)
+        key = (
+            self.config.decode_graph_key([len(p.writes) for p in plans], extent)
+            if decode_only
+            else ()
+        )
+        family = "target_dspark" if self._is_dspark() else "target"
         use_graph = (
-            not any(p.prefill for p in plans)
+            decode_only
             and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1"
-            and self.graph_cache.should_use("target", key)
+            and self.graph_cache.should_use(family, key)
         )
         if not use_graph:
             self.attention.plan(
@@ -316,6 +406,7 @@ class OhMyVllmWorker:
         )
         token_tensor = metadata[7]
         graph_logits = None
+        features = None
         if use_graph:
             from oh_my_vllm.worker.decode_graph import DecodeGraph
 
@@ -329,10 +420,13 @@ class OhMyVllmWorker:
             )
 
             def capture():
-                if self.graph_pool is None:
-                    self.graph_pool = torch.cuda.graph_pool_handle()
+                pool_name = "dspark_graph_pool" if self._is_dspark() else "graph_pool"
+                if getattr(self, pool_name) is None:
+                    setattr(self, pool_name, torch.cuda.graph_pool_handle())
                 logger.info(
-                    "Capture target graph: tokens=%d requests=%d extent=%d", *key
+                    "Capture target graph: tokens=%d requests=%d "
+                    "extent=%d max_query_len=%d",
+                    *key,
                 )
                 try:
                     return DecodeGraph(
@@ -342,15 +436,17 @@ class OhMyVllmWorker:
                         batch,
                         tables,
                         extent,
-                        pool=self.graph_pool,
+                        pool=getattr(self, pool_name),
                         compile_model=os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1",
+                        max_query_len=key[-1],
+                        capture_features=self._is_dspark(),
                     )
                 except Exception:
-                    if not self.graph_cache.has_family("target"):
-                        self.graph_pool = None
+                    if not self.graph_cache.has_family(family):
+                        setattr(self, pool_name, None)
                     raise
 
-            graph = self.graph_cache.get_or_create("target", key, capture)
+            graph = self.graph_cache.get_or_create(family, key, capture)
             if graph is None:
                 self.attention.plan(
                     cpu_starts,
@@ -363,8 +459,12 @@ class OhMyVllmWorker:
                 )
             else:
                 hidden, graph_logits = graph.replay(token_tensor, batch, tables)
+                features = graph.features if self._is_dspark() else None
         if graph_logits is None:
-            hidden = self.forward_unit(token_tensor, batch, self.caches)
+            if self._is_dspark():
+                hidden, features = self.feature_unit(token_tensor, batch, self.caches)
+            else:
+                hidden = self.forward_unit(token_tensor, batch, self.caches)
         selected = [
             starts[i] + row for i, p in enumerate(plans) for row in p.sample_indices
         ]
@@ -407,14 +507,22 @@ class OhMyVllmWorker:
                 if kind == "linear_attention":
                     for pool in cache:
                         pool.index_copy_(0, destinations, pool.index_select(0, sources))
-        if self.mtp is not None and successful_plans:
-            drafts = self.mtp.propose(
+        proposer = self._proposer()
+        if proposer is not None and successful_plans:
+            draft_args = (
                 successful_plans,
                 successful_starts,
                 successful_counts,
-                hidden,
+                features if self._is_dspark() else hidden,
                 self.histories,
                 successful_outputs,
+            )
+            drafts = (
+                proposer.propose(
+                    *draft_args, samplers=self.samplers, serving=self.serving
+                )
+                if self._is_dspark()
+                else proposer.propose(*draft_args)
             )
             for output in successful_outputs:
                 output.new_draft_token_ids = drafts[output.request_id]
@@ -477,8 +585,9 @@ class OhMyVllmWorker:
                     tokens, text = generation.consume(tokens, self.serving.tokenizer)
                     finish, reasoning = generation.finished, generation.reasoning_tokens
                 count, source, checkpoints = plan.commit(len(tokens))
-                if self.mtp is not None:
-                    self.mtp.validate_state(plan, count)
+                proposer = self._proposer()
+                if proposer is not None:
+                    proposer.validate_state(plan, count)
                 self.sources[rid] = source
                 self.computed[rid] = plan.request.num_computed_tokens + count
                 self.samplers[rid].commit(tokens)
@@ -527,11 +636,24 @@ class OhMyVllmWorker:
             rid = plan.request.request_id
             if count and (not mask_errors or rid not in mask_errors):
                 try:
-                    rows = self.samplers[rid].draw_rows(
-                        logits[offset : offset + count],
-                        drafts=plan.drafts,
-                        bitmask=masks.get(rid),
-                    )
+                    sampler = self.samplers[rid]
+                    if (
+                        self._is_dspark()
+                        and plan.drafts
+                        and sampler.params.temperature > 0
+                    ):
+                        rows = sampler.draw_speculative_rows(
+                            logits[offset : offset + count],
+                            plan.drafts,
+                            self.dspark.draft_probabilities(rid, plan.drafts),
+                            masks.get(rid),
+                        )
+                    else:
+                        rows = sampler.draw_rows(
+                            logits[offset : offset + count],
+                            drafts=plan.drafts,
+                            bitmask=masks.get(rid),
+                        )
                     drawn.append((index, rows, count))
                 except Exception as exc:
                     if self.serving is None or _is_device_failure(exc):
@@ -561,6 +683,15 @@ class OhMyVllmWorker:
                 "MTP graph cache",
                 extra={"fields": self.mtp.graph_cache.snapshot()},
             )
+        if self.dspark is not None:
+            logger.info(
+                "DSpark graph cache",
+                extra={"fields": self.dspark.graph_cache.snapshot()},
+            )
+            logger.info(
+                "DSpark context graph cache",
+                extra={"fields": self.dspark.context_graph_cache.snapshot()},
+            )
         logger.info(
             "GPU memory high water",
             extra={
@@ -582,4 +713,5 @@ class OhMyVllmWorker:
         self.attention = None
         self.serving = None
         self.mtp = None
+        self.dspark = None
         torch.cuda.empty_cache()

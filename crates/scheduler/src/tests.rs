@@ -638,76 +638,126 @@ fn mtp_rollback_adjusts_computed_tokens() {
 
 #[test]
 fn mtp_scheduled_gdn_slots_match_worker_candidate_slice_at_page_boundaries() {
-    for (prompt_len, budget, expected_prefill_steps) in
-        [(783, 512, 2), (784, 784, 1), (785, 784, 2), (1568, 784, 2)]
-    {
-        let config = SchedulerConfig {
-            max_num_batched_tokens: budget,
-            max_num_seqs: 1,
-            enable_mtp: true,
-            mtp_draft_len: 4,
-        };
-        let mut kv = HybridCoordinator::new(64, 784, false, 0).with_mamba_capacity(16);
-        kv.set_speculative_blocks(4);
-        let mut scheduler = Scheduler::new(config, kv);
-        assert!(scheduler.add_request(make_req(1, prompt_len, 10)));
+    for draft_len in [4, 7] {
+        for (prompt_len, budget, expected_prefill_steps) in
+            [(783, 512, 2), (784, 784, 1), (785, 784, 2), (1568, 784, 2)]
+        {
+            let config = SchedulerConfig {
+                max_num_batched_tokens: budget,
+                max_num_seqs: 1,
+                enable_mtp: true,
+                mtp_draft_len: draft_len,
+            };
+            let mut kv = HybridCoordinator::new(64, 784, false, 0).with_mamba_capacity(16);
+            kv.set_speculative_blocks(draft_len);
+            let mut scheduler = Scheduler::new(config, kv);
+            assert!(scheduler.add_request(make_req(1, prompt_len, 10)));
+            let drafts: Vec<u32> = (90..90 + draft_len as u32).collect();
 
-        let mut prefill_steps = 0;
-        let mut next_start = 0;
-        let source = loop {
-            let prefill = scheduler.schedule();
-            let first = &prefill.scheduled[0];
-            assert_eq!(first.num_computed_tokens, next_start);
-            next_start += first.token_ids.len();
-            assert!(next_start <= prompt_len);
-            prefill_steps += 1;
-            let last_chunk = first.num_computed_tokens + first.token_ids.len() == prompt_len;
-            let source = first.mamba_block_table[(prompt_len - 1) / 784];
+            let mut prefill_steps = 0;
+            let mut next_start = 0;
+            let source = loop {
+                let prefill = scheduler.schedule();
+                let first = &prefill.scheduled[0];
+                assert_eq!(first.num_computed_tokens, next_start);
+                next_start += first.token_ids.len();
+                assert!(next_start <= prompt_len);
+                prefill_steps += 1;
+                let last_chunk = first.num_computed_tokens + first.token_ids.len() == prompt_len;
+                let source = first.mamba_block_table[(prompt_len - 1) / 784];
+                apply(
+                    &mut scheduler,
+                    WorkerOutput {
+                        outputs: vec![RequestOutput {
+                            request_id: 1,
+                            token_ids: if last_chunk {
+                                vec![42]
+                            } else {
+                                Vec::new()
+                            },
+                            num_accepted_draft_tokens: 0,
+                            new_draft_token_ids: if last_chunk {
+                                drafts.clone()
+                            } else {
+                                Vec::new()
+                            },
+                        }],
+                    },
+                );
+                if last_chunk {
+                    break source;
+                }
+            };
+            assert_eq!(prefill_steps, expected_prefill_steps);
+            assert_ne!(source, 0);
+
+            let verification = scheduler.schedule();
+            let request = &verification.scheduled[0];
+            assert_eq!(request.num_computed_tokens, prompt_len);
+            assert_eq!(request.token_ids.len(), draft_len + 1);
+            assert_eq!(request.token_ids[1..], drafts);
+            let base = (request.num_computed_tokens + request.token_ids.len() - 1) / 784;
+            let candidates = &request.mamba_block_table[base..base + request.token_ids.len()];
+            assert!(candidates.iter().all(|&slot| slot != 0));
+            assert_eq!(
+                candidates
+                    .iter()
+                    .copied()
+                    .collect::<std::collections::HashSet<_>>()
+                    .len(),
+                draft_len + 1,
+                "GDN candidate slots must be distinct at prompt length {prompt_len}"
+            );
+            assert_eq!(request.mamba_block_table[(prompt_len - 1) / 784], source);
             apply(
                 &mut scheduler,
                 WorkerOutput {
                     outputs: vec![RequestOutput {
                         request_id: 1,
-                        token_ids: if last_chunk {
-                            vec![42]
-                        } else {
-                            Vec::new()
-                        },
-                        num_accepted_draft_tokens: 0,
-                        new_draft_token_ids: if last_chunk {
-                            vec![90, 91, 92, 93]
-                        } else {
-                            Vec::new()
-                        },
+                        token_ids: vec![90, 91, 92, 99],
+                        num_accepted_draft_tokens: 3,
+                        new_draft_token_ids: Vec::new(),
                     }],
                 },
             );
-            if last_chunk {
-                break source;
-            }
-        };
-        assert_eq!(prefill_steps, expected_prefill_steps);
-        assert_ne!(source, 0);
-
-        let verification = scheduler.schedule();
-        let request = &verification.scheduled[0];
-        assert_eq!(request.num_computed_tokens, prompt_len);
-        assert_eq!(request.token_ids.len(), 5);
-        assert_eq!(request.token_ids[1..], [90, 91, 92, 93]);
-        let base = (request.num_computed_tokens + request.token_ids.len() - 1) / 784;
-        let candidates = &request.mamba_block_table[base..base + request.token_ids.len()];
-        assert!(candidates.iter().all(|&slot| slot != 0));
-        assert_eq!(
-            candidates
-                .iter()
-                .copied()
-                .collect::<std::collections::HashSet<_>>()
-                .len(),
-            5,
-            "GDN candidate slots must be distinct at prompt length {prompt_len}"
-        );
-        assert_eq!(request.mamba_block_table[(prompt_len - 1) / 784], source);
+            let kept = scheduler.running.front().unwrap();
+            assert_eq!(kept.num_computed_tokens, prompt_len + 4);
+            assert_eq!(&kept.token_ids[prompt_len..], [42, 90, 91, 92, 99]);
+            assert!(kept.draft_token_ids.is_empty());
+            let next = scheduler.schedule();
+            assert_eq!(next.scheduled[0].num_computed_tokens, prompt_len + 4);
+            assert_eq!(next.scheduled[0].token_ids, [99]);
+        }
     }
+}
+
+#[test]
+fn speculative_mode_switch_requires_idle_and_clears_prefixes() {
+    let mut scheduler = make_scheduler(64, 128);
+    assert!(!scheduler.set_speculative_tokens(6));
+    assert!(!scheduler.config.enable_mtp);
+    assert!(scheduler.add_request(make_req(1, 8, 1)));
+    assert!(!scheduler.set_speculative_tokens(7));
+    assert_eq!(scheduler.config.mtp_draft_len, 0);
+    scheduler.schedule();
+    assert!(!scheduler.set_speculative_tokens(4));
+    apply(
+        &mut scheduler,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    assert!(scheduler.set_speculative_tokens(7));
+    assert!(scheduler.config.enable_mtp);
+    assert_eq!(scheduler.config.mtp_draft_len, 7);
+    assert!(scheduler.add_request(make_req(2, 8, 1)));
+    let cold = scheduler.schedule();
+    assert_eq!(cold.scheduled[0].num_computed_tokens, 0);
+    scheduler.abort(2);
+    assert!(scheduler.set_speculative_tokens(4));
+    assert_eq!(scheduler.config.mtp_draft_len, 4);
+    assert!(scheduler.set_speculative_tokens(0));
+    assert!(!scheduler.config.enable_mtp);
 }
 
 // ── abort ─────────────────────────────────────────────────────────────────────

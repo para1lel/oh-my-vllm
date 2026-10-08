@@ -16,7 +16,7 @@
 | [审计](audit.zh.md) | 剩余问题和简短已关闭修复索引. |
 | [写作](writing.zh.md) | ASD-STE100 规则, 翻译和自动检查. |
 | [术语表](glossary.zh.md) | 项目技术名词, 动词和定义. |
-| [教程](../code-journey/README.zh.md) | 12 个交互中文章节和实际源码覆盖. |
+| [教程](../code-journey/README.zh.md) | 13 个交互中文章节和实际源码覆盖. |
 | [贡献](../CONTRIBUTING.zh.md) | 审查, 检查和提交流程. |
 
 ## 决策记录
@@ -31,6 +31,7 @@
 | [ADR-006](decisions/ADR-006-independent-runtime.zh.md) | 有效: 独立运行时和扩展边界. |
 | [ADR-007](decisions/ADR-007-ttft-and-cache-capacities.zh.md) | 有效: TTFT 协议和独立 FA/GDN 容量. |
 | [ADR-008](decisions/ADR-008-semantic-ir.zh.md) | 有效: 语义算子和编译 GPU 单元. |
+| [ADR-009](decisions/ADR-009-dspark-optional-mode.zh.md) | 有效: 可选 DSpark 模式和绑定源码的独立验收. |
 
 架构包含原设计文档.
 当前工作包含原计划.

@@ -5,6 +5,7 @@ full shape/dtype matrix remain covered by the existing project tests.
 """
 
 import torch
+from oh_my_vllm.kernels import dspark_tilelang_reference as dspark
 from oh_my_vllm.kernels.tilelang_reference import (
     attention,
     convolution,
@@ -43,6 +44,37 @@ class TileLang:
     @runtime_func
     def norm(self, x, weight):
         return normalization.rms_norm(x, weight)
+
+    @runtime_func
+    def dspark_rms_norm(self, x, weight):
+        return dspark.rms_norm(x, weight)
+
+    @runtime_func
+    def dspark_norm_rope(self, x, weight, positions, inv_freq):
+        return dspark.normalize_rope(x, weight, positions, inv_freq, 1.3465735902799727)
+
+    @runtime_func
+    def dspark_append(self, k, v, new_k, new_v):
+        cache = torch.zeros((2, 2, 784, 8, 128), device=k.device, dtype=k.dtype)
+        prior = torch.arange(783, device=k.device, dtype=torch.int64)
+        slots = torch.tensor([783, 784], device=k.device, dtype=torch.int64)
+        dspark.append(cache, k, v, prior)
+        dspark.append(cache, new_k, new_v, slots)
+        logical = torch.arange(785, device=k.device)
+        return cache[logical // 784, 0, logical % 784], cache[
+            logical // 784, 1, logical % 784
+        ]
+
+    @runtime_func
+    def dspark_attention(self, q, k, v, block_k, block_v):
+        cache = torch.zeros((1, 2, 784, 8, 128), device=k.device, dtype=k.dtype)
+        slots = torch.arange(783, device=k.device, dtype=torch.int64)
+        dspark.append(cache, k, v, slots)
+        tables = torch.zeros((1, 1), device=k.device, dtype=torch.int32)
+        contexts = torch.tensor([783], device=k.device, dtype=torch.int32)
+        return dspark.attention(
+            q[None], cache, tables, contexts, block_k[None], block_v[None]
+        )[0]
 
     @runtime_func
     def add_norm(self, x, residual, weight):

@@ -7,126 +7,118 @@ Passing against a scripted worker is not real model acceptance.
 
 import argparse
 import json
+import sys
 import time
-import urllib.request
 from pathlib import Path
 
-parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--base-url", default="http://127.0.0.1:8000/v1")
-parser.add_argument("--output-dir", type=Path, required=True)
-args = parser.parse_args()
-OUT = args.output_dir
-OUT.mkdir(parents=True, exist_ok=True)
-SCHEMA = {
-    "type": "object",
-    "properties": {
-        "n": {"type": "integer", "enum": [123]},
-        "label": {"type": "string", "const": "verified"},
-    },
-    "required": ["n", "label"],
-    "additionalProperties": False,
-}
-for api in ["chat", "responses"]:
-    for effort in ["off", "medium"]:
-        for kind in ["json_object", "json_schema", "tool"]:
-            key = f"{api}-{effort}-{kind}"
-            prompt = (
-                "Return JSON with n=123 and label=verified. "
-                "For tool use, call report with those arguments."
-            )
-            body = {"model": "qwen3.8-27b-fp8", "temperature": 0}
-            if api == "chat":
-                path = "chat/completions"
-                body.update(
-                    messages=[{"role": "user", "content": prompt}],
-                    reasoning_effort=effort,
-                    max_completion_tokens=4096,
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from benchmarks.speculative import read_service_evidence
+from scripts.serving_evidence import ServiceAttempt, validate_constraint_response
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base-url", default="http://127.0.0.1:8000/v1")
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--speculative-mode", choices=["mtp", "dspark"], default="mtp")
+    parser.add_argument("--server-log", type=Path)
+    args = parser.parse_args()
+    if args.speculative_mode == "dspark" and not args.server_log:
+        parser.error("DSpark constrained acceptance requires --server-log")
+    args.output_dir.mkdir(parents=True, exist_ok=False)
+    with ServiceAttempt(
+        args.output_dir / "attempt.json",
+        {"speculative_mode": args.speculative_mode, "kind": "constraints"},
+    ) as attempt:
+        run(args, attempt)
+        if args.server_log:
+            attempt.update(passed=True)
+
+
+def run(args, attempt):
+    OUT = args.output_dir
+    log_offset = args.server_log.stat().st_size if args.server_log else None
+    log_identity = (
+        (args.server_log.stat().st_dev, args.server_log.stat().st_ino)
+        if args.server_log
+        else None
+    )
+    request_ids = set()
+    SCHEMA = {
+        "type": "object",
+        "properties": {
+            "n": {"type": "integer", "enum": [123]},
+            "label": {"type": "string", "const": "verified"},
+        },
+        "required": ["n", "label"],
+        "additionalProperties": False,
+    }
+    for api in ["chat", "responses"]:
+        for effort in ["off", "medium"]:
+            for kind in ["json_object", "json_schema", "tool"]:
+                key = f"{api}-{effort}-{kind}"
+                prompt = (
+                    "Return JSON with n=123 and label=verified. "
+                    "For tool use, call report with those arguments."
                 )
-            else:
-                path = "responses"
-                body.update(
-                    input=prompt,
-                    reasoning={"effort": effort},
-                    max_output_tokens=4096,
-                    store=False,
+                body = {"model": "qwen3.8-27b-fp8", "temperature": 0}
+                if api == "chat":
+                    path = "chat/completions"
+                    body.update(
+                        messages=[{"role": "user", "content": prompt}],
+                        reasoning_effort=effort,
+                        max_completion_tokens=4096,
+                    )
+                else:
+                    path = "responses"
+                    body.update(
+                        input=prompt,
+                        reasoning={"effort": effort},
+                        max_output_tokens=4096,
+                        store=False,
+                    )
+                if kind == "tool":
+                    function = {
+                        "name": "report",
+                        "description": "Report the result.",
+                        "strict": True,
+                        "parameters": SCHEMA,
+                    }
+                    body["tools"] = (
+                        [{"type": "function", "function": function}]
+                        if api == "chat"
+                        else [{"type": "function", **function}]
+                    )
+                    body.update(tool_choice="required", parallel_tool_calls=False)
+                else:
+                    fmt = {"type": kind}
+                    if kind == "json_schema":
+                        details = {"name": "result", "schema": SCHEMA, "strict": True}
+                        fmt.update(
+                            {"json_schema": details} if api == "chat" else details
+                        )
+                    body.update(
+                        {"response_format": fmt}
+                        if api == "chat"
+                        else {"text": {"format": fmt}}
+                    )
+                started = time.monotonic()
+                result = attempt.request(
+                    args.base_url.rstrip("/") + "/" + path, body, timeout=600
                 )
-            if kind == "tool":
-                function = {
-                    "name": "report",
-                    "description": "Report the result.",
-                    "strict": True,
-                    "parameters": SCHEMA,
-                }
-                body["tools"] = (
-                    [{"type": "function", "function": function}]
-                    if api == "chat"
-                    else [{"type": "function", **function}]
-                )
-                body.update(tool_choice="required", parallel_tool_calls=False)
-            else:
-                fmt = {"type": kind}
-                if kind == "json_schema":
-                    details = {"name": "result", "schema": SCHEMA, "strict": True}
-                    fmt.update({"json_schema": details} if api == "chat" else details)
-                body.update(
-                    {"response_format": fmt}
-                    if api == "chat"
-                    else {"text": {"format": fmt}}
-                )
-            started = time.monotonic()
-            req = urllib.request.Request(
-                args.base_url.rstrip("/") + "/" + path,
-                data=json.dumps(body).encode(),
-                headers={"Content-Type": "application/json"},
-            )
-            try:
-                with urllib.request.urlopen(req, timeout=600) as response:
-                    result = json.load(response)
                 (OUT / (key + ".json")).write_text(
                     json.dumps(
                         {
                             "request": body,
                             "response": result,
                             "elapsed_s": time.monotonic() - started,
+                            "speculative_mode": args.speculative_mode,
                         },
                         indent=2,
                     )
                 )
-                if api == "chat":
-                    choice = result["choices"][0]
-                    assert choice["finish_reason"] == (
-                        "tool_calls" if kind == "tool" else "stop"
-                    ), choice
-                    if kind == "tool":
-                        calls = choice["message"]["tool_calls"]
-                        assert (
-                            len(calls) == 1 and calls[0]["function"]["name"] == "report"
-                        )
-                        output = calls[0]["function"]["arguments"]
-                    else:
-                        output = choice["message"]["content"]
-                else:
-                    assert result["status"] == "completed", result
-                    if kind == "tool":
-                        calls = [
-                            item
-                            for item in result["output"]
-                            if item["type"] == "function_call"
-                        ]
-                        assert len(calls) == 1 and calls[0]["name"] == "report"
-                        output = calls[0]["arguments"]
-                    else:
-                        output = "".join(
-                            part["text"]
-                            for item in result["output"]
-                            if item["type"] == "message"
-                            for part in item["content"]
-                            if part["type"] == "output_text"
-                        )
-                decoded = json.loads(output)
-                assert isinstance(decoded, dict), decoded
-                if kind != "json_object":
-                    assert decoded == {"n": 123, "label": "verified"}, decoded
+                validate_constraint_response(result, api, kind)
+                request_ids.add(int(result["id"].rsplit("_", 1)[1]))
                 print(
                     key,
                     "PASS",
@@ -136,7 +128,34 @@ for api in ["chat", "responses"]:
                     result["id"],
                     flush=True,
                 )
-            except Exception as error:
-                if hasattr(error, "read"):
-                    print(error.read().decode(), flush=True)
-                raise
+
+    if args.server_log:
+        if log_identity != (
+            args.server_log.stat().st_dev,
+            args.server_log.stat().st_ino,
+        ):
+            raise ValueError(
+                "server log changed identity during constrained acceptance"
+            )
+        evidence = read_service_evidence(
+            args.server_log,
+            log_offset,
+            args.speculative_mode,
+            request_ids=request_ids,
+            expected=12,
+        )
+        (OUT / "server-verification.json").write_text(
+            json.dumps(
+                {
+                    "speculative_mode": args.speculative_mode,
+                    "requests": evidence,
+                    "passed": True,
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+
+
+if __name__ == "__main__":
+    main()

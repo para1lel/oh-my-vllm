@@ -11,7 +11,7 @@ Python 负责 GPU tensor 和计算.
 3. Python 主线程安装准备好的状态.
 4. Rust 接纳 prompt, 查找一致前缀并调度 token 工作.
 5. Rust 分配逻辑 FA / GDN slot, 发送执行 metadata.
-6. Python 构建 batch plan, 启动 target 或 MTP GPU 单元.
+6. Python 构建 batch plan, 启动 target 和所选草稿模式的 GPU 单元.
 7. Python 返回保留 token, 下一批草稿和可选服务输出.
 8. Rust 在状态变化前校验完整回复.
 9. Rust 提交已接受历史, 结束或重新调度请求, 提供输出.
@@ -40,9 +40,11 @@ Rust 子进程管理和 Linux parent-death signal 防止遗留 Python worker.
 | `worker/model_runner.py`, `runtime.py`, `logging_utils.py` | 独立初始化, 源码 / 库身份, 执行和诊断. |
 | `worker/batch_plan.py`, `tensors.py` | 校验后的 CPU plan, slot 选择, 批量 metadata 传输和 tensor view. |
 | `worker/mtp.py` | Proposal, 验证, 已接受状态保留和 checkpoint 写入. |
+| `worker/dspark.py`, `worker/dspark_graph.py` | DSpark context, 条件 proposal, confidence 限制和独立 proposal graph. |
 | `worker/decode_graph.py`, `graph_cache.py` | 持久输入, 事务式 capture, 有界 graph 条目和 replay. |
 | `worker/serving.py`, `sampling.py`, `sampler.py` | Tokenization, XGrammar, 采样, detokenization 和输出计数. |
 | `models/qwen.py` | Checkpoint 加载, 64 层 target, MTP 层, FP8 / 普通 projection 和 forward 单元. |
+| `models/dspark.py` | 本地 BF16 草稿 checkpoint, 5 层 GQA, target feature projection 及 Markov / confidence head. |
 | `ir/` | 语义算子, 参考, mutation schema, provider 选择, lowering 和覆盖. |
 | `kernels/` | Attention, GDN, convolution, normalization, elementwise 算子和后端选择. |
 | `kernels/cuda_backend/` | B200 CUDA 实现和加载模块来源. |
@@ -59,7 +61,7 @@ Prepare 和 execute 回复回显 `rpc_id`; 丢弃迟到的已取消 prepare 回�
 
 | 消息 | 字段和作用 |
 |---|---|
-| `init` | `model_path`, `num_gpu_blocks`, `mamba_blocks`, `block_size`, `tensor_parallel_size`, `max_model_len`, `num_speculative_tokens`; 分配 worker 状态. |
+| `init` | 模型路径, 容量, `block_size`, `tensor_parallel_size`, `max_model_len`, 推测模式 / 数量和 DSpark confidence threshold; 分配 worker 状态. |
 | `ready` | `logical_num_blocks`, `mamba_blocks`; 返回实际设备容量. |
 | `register` | `request_id`, `prompt_token_ids`; 注册离线输入. |
 | `prepare` / `prepared` | `rpc_id`, `request_id`, `request` / 准备好的 `prompt_token_ids`; 创建服务状态. |
@@ -69,6 +71,7 @@ Prepare 和 execute 回复回显 `rpc_id`; 丢弃迟到的已取消 prepare 回�
 | Output row | `request_id`, `token_ids`, `num_accepted_draft_tokens`, `new_draft_token_ids`; 可选 `error`, `text`, `finish_reason`, `reasoning_tokens`. |
 | `error` | `message`, 可选 `rpc_id` 和 `kind`; 区分 validation 和 internal 失败. |
 | `abort` / `shutdown` | Abort 带 `request_id`; 释放请求状态 / 停止 worker. |
+| `set_speculative_mode` / `mode_changed` | 带关联 ID 的私有比较 RPC, 仅在空闲比较 worker 中切换 MTP / DSpark. |
 
 `prefill_token_ids` 在接纳或重计算时包含完整已接受历史.
 普通解码保持增量; 草稿单独保留.
@@ -117,7 +120,7 @@ FA page 0 为 null page.
 结果为兼容 FA / GDN 命中长度的最小值.
 引用保护活跃块; 空闲队列淘汰最久未使用的缓存条目.
 
-普通 GDN 状态为 FP32; MTP GDN 状态为 BF16.
+普通 GDN 状态为 FP32; MTP 和 DSpark GDN 状态为 BF16.
 状态 layout 为 `[slot,48,128,128]`; convolution 状态为 BF16 `[slot,10240,3]`.
 参见 [ADR-003](decisions/ADR-003-mtp-state-slots.zh.md) 和 [ADR-007](decisions/ADR-007-ttft-and-cache-capacities.zh.md).
 
@@ -171,20 +174,72 @@ Worker 保留接受的 target output 和正确 GDN / convolution snapshot.
 被拒绝的已调度草稿回滚 computed progress; 未调度草稿不需要回滚.
 Grammar simulation 使用各 speculative prefix, 提交保留输出前先回滚.
 
+## DSpark
+
+可选模式通过项目内代码加载本地 DSpark checkpoint.
+执行前校验配置, tensor 名称, shape, BF16 dtype 和稳定的源文件身份.
+加载的配置和权重哈希标识实际提供 tensor 的文件字节.
+不执行 checkpoint 内的 Python 代码.
+
+草稿使用 5 层 GQA, 以及从 0 开始编号的 target 层输出 `(5,19,33,47,61)`.
+每个 feature 是下一次 normalization 前的 BF16 层输出.
+原生 MTP 和普通计算不提取这些 feature.
+共享的 target embedding 和 vocabulary head 提供 DSpark token 表示及 base logits.
+草稿将拼接的 target feature 投影为其 5 层的 context KV.
+
+DSpark context page 使用相同的 Rust 分配 FA page ID 和 784-token layout, 保存在独立物理缓存中.
+只有已提交的 target 输入行进入 context.
+被拒绝的输入行可以保留在 committed cursor 之后的 target FA 中, 后续使用前会被覆盖.
+DSpark context 只接收保留输入行.
+7 个 proposal row 使用双向草稿 attention 和临时 KV, 不进入持久 context.
+
+Markov head 用前一个 candidate token 修正每行 base logits.
+Confidence head 通过累计条件 confidence 限制 candidate prefix.
+`--dspark-confidence-threshold` 初始设置为 `0.2`.
+首项 confidence 乘积低于阈值时返回 0 个 candidate, 该步使用一个目标 token.
+设置为 `0.0` 可在固定数量实验中保留至多 7 个合法 row.
+输出和上下文预算可以缩短这个前缀.
+
+Draft block 7 和 training block 16 独立于 target block784.
+
+Greedy verification 将 candidate 与 target argmax token 比较.
+随机输出保留每个 candidate 的完整条件 proposal 分布 `q`.
+Target 分布 `p` 和 proposal 分布 `q` 都使用配置的 temperature, penalty, top-k / top-p 和 grammar mask.
+以概率 `min(1,p(x)/q(x))` 接受 candidate `x`.
+拒绝后从归一化的 `max(p-q,0)` 采样, 全部接受后从 `p` 采样 bonus token.
+草稿和 target 采样使用各自独立的随机数生成器.
+
+既有 GDN snapshot / rollback 逻辑保留已提交输入后的状态, 验证行数至多 8.
+推测状态为 BF16, target 和草稿保留规定的 BF16 舍入点.
+Grammar simulation 先回滚, 再由已提交输出更新持久 grammar 状态.
+取消和抢占释放 target 与草稿的请求状态.
+
+私有比较 worker 在计时前加载 MTP 与 DSpark, 共享 target 及物理 target 缓存.
+仅空闲时允许 mode RPC 将活跃草稿数量在 4 和 7 之间切换.
+调度器在每次尝试之间重置前缀 metadata.
+HTTP worker 在初始化时选择一种模式, 拒绝此 RPC.
+参见 [ADR-009](decisions/ADR-009-dspark-optional-mode.zh.md).
+
 ## Semantic IR 与 graph
 
 `torch.library` 算子提供 reference, fake implementation, mutation schema 和 provider 注册.
-选择使用静态 metadata, 不提前具体化 symbolic dimension.
+选择使用静态 metadata, 仅在选择 predicate 需要时转换 symbolic dimension.
 固定 PyTorch lowering 在 provider 替换前保留语义节点.
 生产 provider 失败报错; debug reference / eager 模式需显式选择.
 
-4 个 fullgraph 单元覆盖 prefill, target decode, MTP draft 和四步 proposal.
+普通 / MTP4 fullgraph 单元覆盖 prefill, target decode, MTP draft 和四步 proposal.
+DSpark 增加 target feature, context injection, backbone, Markov step 和 greedy proposal 单元.
 主机规划, 逻辑分配, ZMQ, 采样和普通 PyTorch 算子保留在算子清单外.
 手动 CUDA Graph 包含编译单元; 禁用 Inductor graph.
 持久 cache 写入保留顺序; 当前没有 activation donation.
 单次使用的 BF16 SiLU-to-FP8 rewrite 有等价测试.
 
 Target graph 预算为 32 条目.
+普通 / MTP4 target 和 DSpark target feature graph 在这一预算内使用独立 family key 和内存 pool.
+DSpark proposal graph 使用独立的 16 条目 cache 和 pool.
+至多 32 row 的 DSpark context injection 使用独立 pool 和 8 条目 cache.
+预热和 capture 备份目标 KV slot, 在 `finally` 恢复; replay 提交当前输入.
+更大的 context injection 使用编译单元, 不进行手动 capture.
 Draft / proposal 共享 32 条目, 下限分别为 16 和 4.
 缓存预算已满时, 替换接纳需要 4 次观察.
 衰减计数必须超过最冷可淘汰条目的 2 倍.
@@ -210,7 +265,6 @@ Dynamo 限制为 4096, 在 256 时警告.
 其他 NVIDIA 后端需要设备专属 provider 和实测验收.
 当前接口没有这些支持声明.
 
-DSpark 设计使用 5 层 BF16 GQA 和 target feature `[5,19,33,47,61]`.
-包含 confidence / Markov head, 7 个草稿和 8-token verification.
-Draft block 7 和 training block 16 独立于 target block784.
-这是扩展说明; 未提供 DSpark 运行时.
+DSpark 运行时支持仅覆盖已校验的本地 checkpoint 架构.
+不同草稿 checkpoint 需要新增加载, 语义, 数值和验收测试.
+当前源码的 DSpark 性能和完整真实模型验收待测.

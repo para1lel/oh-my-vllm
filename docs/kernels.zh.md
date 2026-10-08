@@ -61,7 +61,7 @@ Batch plan 按报告容量校验逻辑 slot.
 区分 fresh-output non-aliasing 与 in-place state/cache 合同.
 无效 wrapper 输入在 wrapper 或 C++ 边界拒绝.
 负 attention slot 跳过 KV write, 保留 Q.
-Grouped verification 最多 5 个 query.
+原生 MTP4 verification 最多 5 个 query, DSpark verification 最多 8 个.
 Production wrapper 通过复制对齐未对齐 KV view, 并报告该成本.
 Clone counter 和故障归因见 [profiling](profiling.zh.md).
 
@@ -85,6 +85,15 @@ B200 production 回归覆盖 65280 个 finite BF16 encoding, 32640 个 finite ma
 FA fixture 排除 null page0.
 完整操作包括 snapshot, copy 和 split merge.
 `development/kernels/semantics.py` 描述逻辑行为; `twins.py` 绑定冻结的完整操作.
+
+DSpark 为 target verification 和草稿算子增加静态补充 shape.
+原用例 ID 和 8 个冻结 TileLang 文件保持不变.
+`development/kernels/dspark-reference.json` 绑定补充参考及其原始 manifest 哈希.
+`dspark_tilelang_reference.py` 提供不同的 DSpark 性能比较对象.
+独立 FP64 PyTorch 参考提供数值比较.
+新用例包括 BF16 hidden RMS 舍入, head-128 YaRN Q / K preparation, context append 和 7-row 草稿 attention.
+每个新用例沿用完整输出, cache write, 3 轮, 20 个配对和置信下界门槛.
+当前源码的补充算子性能验收待测.
 
 ```bash
 scripts/with-env.sh python benchmarks/kernels.py --list

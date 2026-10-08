@@ -228,6 +228,7 @@ class Qwen:
         path: str | Path,
         *,
         mtp: bool = False,
+        feature_layer_ids: tuple[int, ...] = (),
         device: str | torch.device = "cuda",
     ) -> None:
         checkpoint = Checkpoint(path, device)
@@ -277,6 +278,11 @@ class Qwen:
             Layer(checkpoint, f"model.language_model.layers.{i}", kind)
             for i, kind in enumerate(self.kinds)
         ]
+        if tuple(sorted(set(feature_layer_ids))) != feature_layer_ids or any(
+            not 0 <= index < len(self.layers) for index in feature_layer_ids
+        ):
+            raise ValueError("target feature layers must be unique ordered indices")
+        self.feature_layer_ids = feature_layer_ids
         self.mtp = None
         if mtp:
             self.mtp = Layer(checkpoint, "mtp.layers.0", "full_attention")
@@ -298,6 +304,27 @@ class Qwen:
         if hidden.shape[0] <= 32:
             return logits_gemm(hidden, self.head)
         return F.linear(hidden, self.head).float()
+
+    def forward_features(
+        self, tokens: torch.Tensor, batch: Batch, caches: list[LayerCache]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return final hidden and layer outputs required by a feature-based drafter.
+
+        Layer IDs are zero-based. Each tap reconstructs the BF16 layer output
+        from the separate residual and branch tensors, before the next norm.
+        Concatenated features follow feature_layer_ids and retain input row order.
+        Ordinary and native MTP continue to use forward without these outputs.
+        """
+        if not self.feature_layer_ids:
+            raise ValueError("target feature layers were not configured")
+        hidden = F.embedding(tokens, self.embedding)
+        residual = None
+        features = []
+        for index, (layer, cache) in enumerate(zip(self.layers, caches, strict=True)):
+            hidden, residual = layer.forward_residual(hidden, batch, cache, residual)
+            if index in self.feature_layer_ids:
+                features.append(hidden + residual)
+        return add_rms_norm(hidden, residual, self.norm)[1], torch.cat(features, -1)
 
     def draft(
         self,

@@ -37,11 +37,12 @@ def decode(
     first: int = 0,
     max_tokens: int = 65536,
     starts: torch.Tensor | None = None,
+    max_query_len: int = 5,
 ) -> torch.Tensor:
     """Paged causal decode, optionally sharing KV reads across verification rows.
 
     Host planning validates table IDs, lengths and (when supplied) starts: each
-    group has 1..5 contiguous query rows, identical tables and increasing lengths.
+    group has at most max_query_len contiguous rows, with a hard bound of eight.
     The per-row length still masks every candidate's attention independently.
     """
     if query.ndim != 3 or query.shape[-1] != 256 or query.numel() == 0:
@@ -56,6 +57,8 @@ def decode(
         raise ValueError("decode metadata must match request count")
     if first not in (0, 1) or max_tokens <= first or tables.shape[1] * 784 < max_tokens:
         raise ValueError("invalid decode extent or first position")
+    if type(max_query_len) is not int or not 1 <= max_query_len <= 8:
+        raise ValueError("grouped decode supports 1..8 query rows per group")
     if any(t.dtype != torch.bfloat16 for t in (query, cache)) or any(
         t.dtype not in (torch.int32, torch.int64) for t in (tables, lengths)
     ):
@@ -75,13 +78,17 @@ def decode(
         raise ValueError("grouped decode starts must be contiguous CUDA integers")
     # The group size is encoded by starts, not by the Q/KV head ratio.
     # CUDA checks dynamic group extents in the partial kernel. Rust/MTP planning
-    # provides the 1..5 bound during normal execution.
+    # provides the configured bound during normal execution.
     if NAME == "tilelang" and starts is not None:
         groups = starts[1:] - starts[:-1]
         torch._assert_async(
-            torch.all((groups >= 1) & (groups <= 5)),
-            "grouped decode supports 1..5 query rows per group",
+            torch.all((groups >= 1) & (groups <= max_query_len)),
+            "grouped decode exceeds its configured query bound",
         )
+        if max_query_len > 5:
+            # Preserve the immutable TileLang body. Its grouped tile covers five
+            # target rows; independent rows compute the same causal attention.
+            starts = None
     # Both backends issue16-byte KV copies. Preserve support for contiguous
     # views that start at an unaligned BF16 storage offset.
     if cache.data_ptr() % 16:
@@ -116,7 +123,9 @@ def decode(
     offsets = starts if starts is not None else lengths
     position_dtype = "int32" if max_tokens <= 2**31 - splits * block else "int64"
     if NAME == "cuda":
-        partials = _partials(splits, first, starts is not None, position_dtype)
+        partials = _partials(
+            splits, first, starts is not None, position_dtype, max_query_len
+        )
         merge = _merge()
     else:
         types = tuple(
