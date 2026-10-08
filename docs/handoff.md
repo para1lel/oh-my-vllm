@@ -242,6 +242,11 @@ Full operator and service collections will use the new committed source and load
 
 ## Open work
 
+The first paired collection completed batch 1, then failed to bind the batch 2 IPC address.
+The closed Unix listener left its filesystem entry. Each batch now uses a different address in the temporary directory.
+A CPU regression binds and closes all three listeners without removal of their entries.
+The failed collection stays in external storage. A full repeat must use the committed correction.
+
 - Complete user review of the expanded tutorial and address specific teaching gaps.
 - Add derived selection evidence with its text/tool-history sources, hashes, and scheduled/accepted draft counts.
 - Complete the open service, operator, performance, paired-comparison, and release-binary context collections on unchanged source.

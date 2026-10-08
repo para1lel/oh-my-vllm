@@ -4,10 +4,60 @@ import copy
 import datetime
 import json
 import os
+import socket
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from benchmarks import speculative as bench
+
+
+def test_collection_uses_new_ipc_address_after_each_worker_exit(tmp_path, monkeypatch):
+    """A closed Rust Unix listener leaves its filesystem entry behind."""
+    binary = tmp_path / "worker"
+    binary.write_bytes(b"test executable")
+    args = SimpleNamespace(
+        binary=binary,
+        model="target",
+        draft_model="draft",
+        raw_dir=tmp_path / "logs",
+        output=tmp_path / "result.json",
+        portable_output=None,
+        num_gpu_blocks=4200,
+        mamba_blocks=128,
+        dspark_confidence_threshold=0.2,
+        timeout=10,
+    )
+    seen = []
+
+    def run(command, **kwargs):
+        address = command[command.index("--socket") + 1]
+        with socket.socket(socket.AF_UNIX) as listener:
+            listener.bind(address)
+            listener.listen()
+        assert Path(address).exists()
+        seen.append(address)
+        batch = int(command[command.index("--batch-size") + 1])
+        log = "\n".join("SPEC_BENCH_RESULT " + json.dumps(r) for r in records(batch))
+        kwargs["log_path"].write_text(log)
+        return log
+
+    monkeypatch.delenv("OH_MY_VLLM_ENFORCE_EAGER", raising=False)
+    monkeypatch.setattr(bench, "run_engine", run)
+    monkeypatch.setattr(
+        bench, "hardware_identity", lambda: {"gpu_info": "test, B200, 200000 MiB, test"}
+    )
+    monkeypatch.setattr(bench, "runtime_identity", lambda: {})
+    monkeypatch.setattr(bench, "checkpoint_identity", lambda _: {})
+    monkeypatch.setattr(bench, "_source", lambda _: {})
+    for name in ("_configuration", "_provenance", "_memory", "loaded_draft_provenance"):
+        monkeypatch.setattr(bench, name, lambda *args: {})
+    monkeypatch.setattr(bench, "audit_paired", lambda *args: {})
+    monkeypatch.setattr(bench, "validate_artifact", lambda _: [{"passed": True}])
+    assert bench.collect(args)["passed"]
+    assert len(seen) == len(set(seen)) == 3
+    assert all(Path(address).parent == Path(seen[0]).parent for address in seen)
 
 
 def measurement(mode="mtp", batch_size=1, rate=100.0, **changes):

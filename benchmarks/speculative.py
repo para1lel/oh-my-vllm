@@ -642,7 +642,7 @@ def collect(args) -> dict:
                     "--draft-model",
                     args.draft_model,
                     "--socket",
-                    str(Path(temporary) / "worker.ipc"),
+                    str(Path(temporary) / f"worker-{batch_size}.ipc"),
                     "--num-gpu-blocks",
                     str(args.num_gpu_blocks),
                     "--mamba-blocks",
