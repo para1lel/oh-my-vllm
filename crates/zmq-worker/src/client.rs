@@ -50,7 +50,9 @@ pub struct WorkerConfig {
 impl Default for WorkerConfig {
     fn default() -> Self {
         Self {
-            model_path: PathBuf::from("/data0/shared/Qwen3.8-27B-FP8"),
+            model_path: std::env::var_os("OH_MY_VLLM_MODEL")
+                .map(PathBuf::from)
+                .unwrap_or_default(),
             socket_path: PathBuf::from("/tmp/oh-my-vllm.ipc"),
             num_gpu_blocks: 1024,
             mamba_blocks: None,
@@ -60,9 +62,7 @@ impl Default for WorkerConfig {
             num_speculative_tokens: 0,
             python_executable: std::env::var_os("OH_MY_VLLM_WORKER_PYTHON")
                 .map(PathBuf::from)
-                .unwrap_or_else(|| {
-                    PathBuf::from("/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python")
-                }),
+                .unwrap_or_else(|| PathBuf::from("python3")),
             init_timeout: Duration::from_secs(300),
         }
     }
@@ -131,6 +131,13 @@ impl Drop for ManagedChild {
 impl WorkerClient {
     /// Launch the Python worker and wait for the `ready` handshake.
     pub async fn launch(config: WorkerConfig) -> Result<Self> {
+        if config.model_path.as_os_str().is_empty() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "set OH_MY_VLLM_MODEL or WorkerConfig.model_path",
+            )
+            .into());
+        }
         let addr = format!("ipc://{}", config.socket_path.display());
 
         // Bind on the Rust side; the Python side connects.
@@ -691,6 +698,7 @@ mod tests {
         .unwrap();
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
         let config = WorkerConfig {
+            model_path: PathBuf::from("fixture-model"),
             python_executable: script.clone(),
             socket_path: socket.clone(),
             init_timeout: Duration::from_millis(250),
@@ -706,10 +714,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn empty_model_is_rejected_before_worker_launch() {
+        let config = WorkerConfig {
+            model_path: PathBuf::new(),
+            python_executable: PathBuf::from("/bin/false"),
+            ..WorkerConfig::default()
+        };
+        let result = WorkerClient::launch(config).await;
+        assert!(matches!(result, Err(Error::Io(error))
+            if error.kind() == std::io::ErrorKind::InvalidInput));
+    }
+
+    #[tokio::test]
     async fn reports_child_exit_before_connection_without_waiting_for_init_timeout() {
         let socket_path =
             std::env::temp_dir().join(format!("oh-my-vllm-dead-child-{}.ipc", std::process::id()));
         let config = WorkerConfig {
+            model_path: PathBuf::from("fixture-model"),
             python_executable: PathBuf::from("/bin/false"),
             socket_path: socket_path.clone(),
             init_timeout: Duration::from_secs(60),

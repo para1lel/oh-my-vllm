@@ -78,7 +78,7 @@ def main():
     parser.add_argument("--api", choices=["chat", "responses"], required=True)
     parser.add_argument("--base-url", default="http://127.0.0.1:8000/v1")
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--omp", default="/home/dongwu.chen/.local/bin/omp")
+    parser.add_argument("--omp", default="omp")
     parser.add_argument(
         "--thinking",
         default="medium",

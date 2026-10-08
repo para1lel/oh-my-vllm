@@ -1,5 +1,7 @@
 """Full model compile units inside the existing manual CUDA Graph lifecycle."""
 
+import os
+
 import pytest
 import torch
 from oh_my_vllm.ir import compile_forward, selected_implementations
@@ -12,7 +14,7 @@ from oh_my_vllm.worker.decode_graph import (
     ProposalGraph,
 )
 
-MODEL = "/data0/shared/Qwen3.8-27B-FP8"
+MODEL = os.environ.get("OH_MY_VLLM_MODEL")
 
 
 def _clone_caches(caches):
@@ -104,6 +106,8 @@ def test_compiled_target_graph_replays_changed_native_page_tables():
 @pytest.mark.gpu
 @torch.inference_mode()
 def test_full_model_prefill_target_and_mtp_compile_units():
+    if not MODEL:
+        pytest.skip("set OH_MY_VLLM_MODEL for full-model integration tests")
     model = Qwen(MODEL, mtp=True)
     caches = []
     for kind in model.kinds:

@@ -1,16 +1,31 @@
-# 验收证据
+# 验收证据索引
 
-[English](acceptance.md)。agent 以英文原文为准。
+本索引标明测量, 源码范围和限制.
+跟踪的 [可移植证据](../bench/evidence/README.zh.md) 是用于查阅和离线分析的历史派生数据.
+每份摘要记录原始 SHA-256 和删除字段.
+完整原始记录保留在被忽略的本地存储或原始 Git 历史中.
+正式比较需要原始记录及匹配条件.
+新服务器必须测量自己的匹配基线.
 
-## 语义 IR 验收 — 2026-09-29
+## 最近一次完整性能验收
 
-干净提交 `619c9d9` 通过 544 项 B200 GPU 测试（含六组 258048+4096 最大上下文用例）、70 个子测试和 303 项 CPU 测试。完整 GPU 日志为 `/tmp/oh-my-vllm-ir-full-gpu-green.log`，CPU 日志为 `/tmp/oh-my-vllm-ir-cpu-verified.log`。真实模型测试覆盖已编译的 prefill、target decode、MTP draft 和 proposal，并用变化的元数据验证手工 CUDA Graph 重放。
+源码: `619c9d98809c00081c5afb549987cde1cbd71690`, 2026-09-29 采集时为干净源码.
+基线源码: `e9f169d16b9408bb9ae44f75072b91a5521d733c`.
+原始基线 SHA-256: `fa3729f1a2ce160235b45df75542774d628dac7af963f01d673353fb419df8fd`.
+Release binary SHA-256: `90038fc7f9598e1e42f7beb8f04370463f3d1a33fb83b33a91f6698e3f0af888`.
+加载 CUDA module SHA-256: `24bec3a7208ac09629d0a594940266dec2dfbb272c87e02e27c6a8196cd84318`.
 
-[147 项正式算子矩阵](../bench/baseline/2026-09-29-ir-operators.json)在 B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上通过输出验证和冻结 TileLang 对照。每项均有三轮预热、每轮 20 对交替测量，且单侧 95% 收益下界为正；最小下界为 `0.0000036639670530955112 ms`。摘要记录干净源码与已加载 CUDA 模块身份。原始 `/tmp/oh-my-vllm-ir-formal-619c9d9.json` 的 SHA-256 为 `c6cdce051ea8fb50ec2e0adecde2ff0d132bd78456f829d14a3a3f49db3a5ab1`。
+[算子摘要](../bench/evidence/2026-09-29-ir-operators.json) 包含 147 个通过输出校验和冻结 TileLang 比较的用例.
+每个用例 3 轮, 每轮 20 个交替配对, 每个样本 100 次 graph repetition.
+最小单侧 95% 正收益下界为 `0.0000036639670530955112 ms`.
+原始外部算子采集器 SHA-256 为 `c6cdce051ea8fb50ec2e0adecde2ff0d132bd78456f829d14a3a3f49db3a5ab1`.
 
-同一源码相对冻结的 2026-09-22 EngineCore 基线通过[全部 12 个框架行](../bench/baseline/2026-09-29-ir-framework.json)。每个合格行均完整预热两次、测量五次，无预抢占，吞吐至少 95%、TTFT 至多 110%、两项离散度至多 10%，稳态日志和缓存审计通过。九行使用 B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`；三个 prefix 行使用 `GPU-80cebbaf-a106-2605-b902-f5f9a08645ea`。每行只使用一块 GPU。现有日志和缓存记录未发现计量期编译或捕获，但不能排除静默的内存中重编译。
+[框架摘要](../bench/evidence/2026-09-29-ir-framework.json) 包含 12 个通过行.
+每个接受行包含 2 次完整预热和 5 次重复, 无抢占, 观察到的稳态审计通过.
+每行使用单张 B200 GPU.
+下表来自接受的完整集合:
 
-| 工作负载 | 吞吐/基线 | TTFT/基线 | 吞吐离散度 | TTFT 离散度 |
+| 行 | TPS/baseline | TTFT/baseline | TPS spread | TTFT spread |
 |---|---:|---:|---:|---:|
 | mtp-32768-1 | 100.67% | 94.22% | 0.12% | 0.88% |
 | mtp-32768-2 | 99.53% | 95.74% | 0.20% | 0.70% |
@@ -21,247 +36,55 @@
 | ordinary-32768-1 | 118.15% | 92.98% | 0.10% | 0.95% |
 | ordinary-32768-2 | 118.62% | 95.91% | 0.07% | 0.68% |
 | ordinary-32768-4 | 115.82% | 94.21% | 0.20% | 0.40% |
-| prefix-32768-1（第四次完整测量） | 118.86% | 83.64% | 0.16% | 5.02% |
+| prefix-32768-1, fourth attempt | 118.86% | 83.64% | 0.16% | 5.02% |
 | prefix-32768-2 | 125.63% | 84.55% | 0.28% | 3.64% |
 | prefix-32768-4 | 117.53% | 76.92% | 0.17% | 4.72% |
 
-前三次完整 `prefix-32768-1` 测量的 TTFT 离散度分别为 17.378%、20.976% 和 20.177%，因此按原规则拒收；其中位吞吐与 TTFT 均达标。第四次合格结果是完整的 2+5 测量，未从不同测量中挑选单轮结果。另有六次尝试因无关 GPU 进程进入而在完成前中断。框架摘要保留每个合格原始结果及其日志 SHA-256，以及全部完整拒收和干扰中断记录。孤立的 prefix TTFT 尖峰原因未确定，先前已验收源码中也出现过；拒收测量不计为合格行。归档后，拒收原始 JSON 中的 `log_path` 仍是原来的通用路径；摘要链接的各个 `.spread*.log` 与原始文件记录的 `log_sha256` 一致。
+此前 3 个完整 prefix-batch1 尝试因 TTFT spread 17.378%, 20.976%, 20.177% 被拒收.
+第 4 个完整 2+5 集合通过.
+另有 6 次尝试因无关 GPU 进程而中止.
+摘要保留拒收尝试及 raw/log hash.
+孤立 prefix TTFT spike 的原因尚不明确.
+审计无法排除静默内存内重新编译, 或短于进程轮询间隔的干扰.
 
-## 以前的干净源码验收 — 2026-09-29
+该源码还通过 544 个 GPU 测试, 70 个 subtest 和 303 个 CPU 测试, 包括 6 个最大上下文用例.
+后续 IR 正确性修改通过 549 个 GPU 测试, 70 个 subtest 和 308 个 CPU 测试.
+这些修改后没有重跑完整 147-case 和 12-row 性能采集.
+这些历史结果不能证明当前 HEAD 的性能.
 
-干净源码 `e3c42e0` 在 B200 UUID
-`GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5` 上通过
-[完整 147 项正式算子矩阵](../bench/baseline/2026-09-29-audit-final-operators.json)。
-147 项输出和冻结 TileLang 对照全部通过；每项为三轮、每轮 20 对交替测量，
-未记录 GPU 干扰。最小单侧 95% 正收益下界为
-`0.000005722664296627035 ms`，最大轮间离散度为 1.139%。产物保留干净
-源码、编译器及已加载 CUDA 模块身份、所有用例判定，以及 `/tmp` 原始采集
-结果的 SHA-256。
+## 上下文与服务证据
 
-同一干净源码相对冻结的 `2026-09-22-refreshed-enginecore.json` 基线通过
-[12 行框架门槛](../bench/baseline/2026-09-29-audit-final-framework.json)：
-每行完整预热两次、测量五次，候选离散度不超过 10%，吞吐至少 95%，TTFT
-至多 110%，且测量窗口内无图捕获或编译。首轮完整采集有 11 行通过；
-`prefix-32768-1` 虽满足中位数门槛，但 TTFT 离散度 23.924%，被拒收。
-同源码、同 GPU 的独立重测以 7.825% TTFT 离散度通过。汇总同时保存
-首测、重测及各自原始结果哈希。表格使用该行的合格重测；首轮 12 行
-采集器退出状态仍是失败，并未被改写为全部通过。
+| 证据 | 源码与结果 |
+|---|---|
+| [6 行上下文](../bench/evidence/2026-09-28-audit-evd07-context-boundary.json) | `bd8e21e5607387b081e1d4494bc7b8fdf79ac8d4`: ordinary/MTP4, batch1/2/4, input258048, output4096, 无 OOM / 抢占. |
+| [长上下文 HTTP](../bench/evidence/2026-09-28-audit-evd07-long-context-http.json) | `8dfc97b544d18e21f0856a2b2b4098bea90c8be5`: Chat/Responses 各两次, strict JSON 和 MTP. |
+| [真实 MTP 服务与 OMP](../bench/evidence/2026-09-22-ttft-agentic.json) | 两种 API 都完成 MTP 和实际读源码的工具结果往返. |
 
-| 工作负载 | 吞吐/基线 | TTFT/基线 | 吞吐离散度 | TTFT 离散度 |
-|---|---:|---:|---:|---:|
-| mtp-32768-1 | 99.95% | 94.12% | 0.18% | 0.59% |
-| mtp-32768-2 | 99.43% | 95.94% | 0.12% | 0.29% |
-| mtp-32768-4 | 99.54% | 95.69% | 0.16% | 0.30% |
-| ordinary-131072-1 | 114.10% | 92.17% | 0.22% | 1.13% |
-| ordinary-131072-2 | 112.86% | 92.37% | 0.20% | 0.57% |
-| ordinary-131072-4 | 109.66% | 93.83% | 0.05% | 0.13% |
-| ordinary-32768-1 | 116.51% | 93.07% | 0.19% | 0.68% |
-| ordinary-32768-2 | 117.94% | 96.40% | 0.07% | 0.68% |
-| ordinary-32768-4 | 115.26% | 94.49% | 0.11% | 0.22% |
-| prefix-32768-1（重测） | 117.67% | 82.47% | 0.15% | 7.82% |
-| prefix-32768-2 | 124.58% | 82.31% | 0.07% | 7.30% |
-| prefix-32768-4 | 116.90% | 75.70% | 0.11% | 3.52% |
+6 行上下文各输出 `batch_size * 4096` token.
+MTP proposed/accepted 总量为 5010/2842, 9075/5917, 16219/12318.
+Worker 最大 reserved memory 为 132441440256 bytes.
+这些数字只适用于标明的边界源码.
 
-该源码的完整 B200 pytest 套件通过 491 项测试及 70 个子测试；42 条
-warning 来自第三方弃用提醒与一条 DSL 编译提示。六项真实
-258048+4096 边界用例在下文另有证据。以下章节保留先前提交时的证据和
-当时尚待完成的状态描述。
+长上下文 HTTP 每个 prompt 包含 131099 token.
+每次返回 `{"n":123,"label":"verified"}`, 提出 20 个草稿.
+重复请求命中 130928 个缓存 token.
+专用 server, listener, IPC 路径和 worker 已清理.
+同形状 262144 重复和低 headroom probe 的范围窄于跨形状 eviction/recapture.
+参见 [审计](audit.zh.md).
 
-## 较早修复证据 — 2026-09-28
+## 关键前序证据
 
-干净提交 `bd8e21e` 的 [EVD-07 边界证据](../bench/baseline/2026-09-28-audit-evd07-context-boundary.json)
-在同一 B200 UUID 上通过全部六项普通/MTP4、batch 1/2/4、输入 258048 加输出
-4096 token 的运行。每行生成 `batch_size * 4096` token，零抢占且无 OOM；
-MTP4 提议/接受草稿总数依次为 5010/2842、9075/5917、16219/12318。
-worker 最大峰值 reserved 为 132441440256 字节。收集器记录干净源码、
-release 二进制哈希、前后相同的身份与 UUID，以及 worker 清理成功。
-干净提交 `8dfc97b` 的 [MTP HTTP 证据](../bench/baseline/2026-09-28-audit-evd07-long-context-http.json)
-增加四条真实 strict-JSON 请求：chat/completions 与 responses 各两次。
-每个 prompt 为 131099 token，每个响应均验证为
-`{"n":123,"label":"verified"}`，每条请求提议 20 个 MTP 草稿。
-重复请求命中 130928 个缓存 token。专用服务退出，listener 与 IPC 路径关闭，
-所选 GPU 无计算进程。EVD-07 要求的边界与 HTTP 证据已齐；当前完整 GPU、
-147 项正式算子及 12 行框架门槛仍待完成。
+| 决策或里程碑 | 保留摘要 |
+|---|---|
+| 初始 adapter 与 MTP 设计 | [2026-09-19](../bench/evidence/2026-09-19-acceptance.json) |
+| 独立运行时 | [2026-09-21](../bench/evidence/2026-09-21-independent-acceptance.json) |
+| 冻结 TileLang | [2026-09-22](../bench/evidence/2026-09-22-tilelang-acceptance.json) |
+| 刷新后的 12 行分母 | [EngineCore 基线](../bench/evidence/2026-09-22-refreshed-enginecore.json) |
+| CUDA 实现 | [算子](../bench/evidence/2026-09-22-cuda-operators.json), [框架](../bench/evidence/2026-09-22-cuda-framework.json) |
+| 审计修复源码 `e3c42e0` | [算子](../bench/evidence/2026-09-29-audit-final-operators.json), [框架](../bench/evidence/2026-09-29-audit-final-framework.json) |
 
-KRN-10 修改前干净提交 `6ba9046` 和修改后干净提交 `231f066`，均在 B200 UUID
-`GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上通过全部 16 项选中的
-attention 用例。[before](../bench/baseline/2026-09-28-audit-krn10-attention-before.json)
-及 [after](../bench/baseline/2026-09-28-audit-krn10-attention-after.json) 汇总保留
-源码与加载模块哈希、输出检查、对照轮次及原始产物哈希。修改后子集
-`selected_passed=true`；顶层 `passed=false` 表示其余 131 项算子未选中。
-修改后三轮最大 spread/median 为 0.173%，相对冻结 TileLang 的最小单侧 95%
-收益下界为 +0.0028209709 ms。同一 UUID 上，全部 16 项修改后 CUDA 三轮中位数
-均低于修改前，中位相对差异为 7.26%；跨提交比较不能隔离每项代码变更，也不证明
-框架吞吐。此前三次修改后尝试因外部 GPU 进程而被拒收。完整 147 项算子、
-完整 GPU 套件和 12 行框架门槛仍待验证。
-
-已复审的 `94c3473` 在 B200 UUID
-`GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad` 上通过七项独立 KRN-09
-故障/graph 用例，另有五次先前故障子进程重复通过。测试证明正常启动检查不消费
-错误、调试模式能区分观察阶段并拒绝 graph capture。同卡旧/新 eager 主机调用
-三轮诊断的中位数接近，但孤立离群令 spread 超过 10%，原因未证实，故不作为
-性能验收。当前完整 GPU、正式算子矩阵和 12 行框架门槛仍待执行。
-
-干净提交 `40e3e57` 在 B200 UUID `GPU-1b174534-ebba-826f-b452-8e7f3c05c301`
-上通过全部 66 项选中的 KRN-08 受影响正式用例：`norm`、`add_norm`、
-`gated_norm`、`convolution` 各 13 项，`recurrent` 8 项，`qk` 6 项。每项均通过
-输出验证，记录 CUDA 主机分派快路径恰好一次、通用路径零次，并在三轮、每轮 20 对
-交替测量中快于冻结 TileLang。最小的单侧 95% 正收益下界为
-0.000000213335 ms，三轮最大 spread/median 为 1.695%。
-[正式子集](../bench/baseline/2026-09-28-audit-krn08-operators.json) 源码身份干净，
-`selected_passed=true`；`passed=false` 表示未覆盖全部 147 项。自有 GPU 进程
-已退出。当前完整 GPU 和 12 行框架门槛仍待执行。
-
-干净提交 `96e4ecc` 在固定 UUID 的 B200 上通过全部 29 项选中的受影响正式算子
-用例：13 项 `prepare_attention` 和 16 项 `attention`。最小的单侧 95% 正收益
-下界为 0.000796 ms。[汇总产物](../bench/baseline/2026-09-28-audit-p1-operators.json)
-保留源码哈希、冻结参考哈希、协议、选中用例和原始采集哈希。这个子集不能证明新的
-147 项完整矩阵结果。
-
-干净提交 `312c54b` 修正 KRN-04 两个入口后，通过全部 60 项选中的
-`quant`、`silu_quant`、`gates` 与 `recurrent` 用例。每项都有三轮热身后正式测量、
-每轮 20 对交替样本、每样本 100 次 graph 重复，通过输出验证且单侧 95% bootstrap
-收益下界为正。最小收益下界为 0.00000699734 ms，两端三轮的最大 spread/median 为
-0.846%。[正式子集](../bench/baseline/2026-09-28-audit-mnt02-krn04-operators.json)
-记录 B200 UUID `GPU-a832d9c1-260f-9e37-0c99-95e62ab16ca5`、干净源码身份及
-实时 nvcc/module 哈希。`selected_passed=true` 只适用于这 60/60 项；`passed=false`
-表示 147 项尚未全覆盖。干净提交 `6bd2119` 上的首次尝试因历史 KRN-04 误拒而中止，
-不算验收证据。后来干净提交 `312c54b` 的一次尝试通过 59/60：1248-token `gates`
-用例的 bootstrap 收益下界为负，两端延迟均抬升，但未检测到 compute 进程干扰。
-原因未证实，因此该次尝试作废。同一 UUID 的完整重测通过 60/60；另一 UUID
-`GPU-80cebbaf-a106-2605-b902-f5f9a08645ea` 上的独立
-[13/13 gates 确认](../bench/baseline/2026-09-28-audit-gates-confirm-operators.json)
-也通过。确认测试的一次初始启动因外部 GPU 进程出现，在测量前被停止。当前完整 GPU
-和 12 行框架门槛仍待执行。
-
-干净提交 `0394727` 将 MNT-03 状态池对齐检查写为向量字节对齐后，通过全部 8 项选中
-的递归用例。[受影响正式产物](../bench/baseline/2026-09-28-audit-mnt03-recurrent-operators.json)
-记录 B200 UUID `GPU-a4b4fc91-7347-839a-dd09-b1f0818ef5ad`、输出验证、3 × 20
-交替配对和单侧 95% 正收益下界；最小下界为 0.000064624 ms。源码干净，
-`selected_passed=true`；`passed=false` 仅因未覆盖完整 147 项。自有 GPU 进程已退出。
-
-`96e4ecc` 后的完整 B200 pytest 通过 211 项测试及 32 个子测试，六项 context
-边界占位测试跳过。后续 CPU/协议修复 `d33b844` 通过 31 项聚焦 Python 测试和
-26 个子测试，以及 Rust workspace 测试、格式、Ruff 与 Clippy；该提交未重跑完整
-GPU 套件。热路径改动后的当前 12 组吞吐和 TTFT 仍未验证。下文 2026-09-22
-的结果只适用于 `c36d1c9`。
-
-## 历史 CUDA 验收基线 — 2026-09-22/23
-
-**性能。** 干净提交 `c36d1c9` 显式选择 CUDA，通过全部 12 组冻结 vLLM 对比。
-
-- **工作负载：** 输入 32768 的 ordinary、MTP4 和 prefix，各 batch 1/2/4；外加仅 ordinary
-  的输入 131072，batch 1/2/4。输出均为 4096 token。
-- **协议：**
-  - `benchmarks/ttft.py`，2 次完整预热和 5 次正式重复测量。
-  - 冻结基线的 CPU affinity。
-  - UUID 固定的 B200，并监控进程。
-  - 稳态编译/捕获审计。
-
-| Workload | 基线 tok/s | CUDA tok/s | 吞吐比 | TTFT 比 |
-|---|---:|---:|---:|---:|
-| ordinary-32768-1 | 90.10 | 105.30 | 116.86% | 93.14% |
-| ordinary-32768-2 | 163.50 | 193.08 | 118.09% | 95.60% |
-| ordinary-32768-4 | 288.41 | 331.64 | 114.99% | 96.37% |
-| mtp-32768-1 | 329.36 | 329.24 | 99.96% | 93.92% |
-| mtp-32768-2 | 497.37 | 490.52 | 98.62% | 94.81% |
-| mtp-32768-4 | 729.62 | 711.53 | 97.52% | 97.50% |
-| prefix-32768-1 | 93.01 | 109.10 | 117.30% | 82.96% |
-| prefix-32768-2 | 173.52 | 217.06 | 125.09% | 85.02% |
-| prefix-32768-4 | 325.31 | 380.50 | 116.97% | 76.01% |
-| ordinary-131072-1 | 72.35 | 82.68 | 114.29% | 92.95% |
-| ordinary-131072-2 | 114.06 | 129.45 | 113.49% | 91.54% |
-| ordinary-131072-4 | 162.85 | 178.82 | 109.80% | 93.82% |
-
-- **稳定性：** 每组都满足吞吐 ≥ 95%、TTFT ≤ 110%，两个引擎在两项指标上的
-  `(max-min)/median` 都 ≤ 10%。进程轮询无法排除样本之间任意短暂的干扰。
-- **此前的尝试：**
-  - prefix batch 1 两次、prefix batch 2 一次未满足稳定性；在稳定性规则不变的情况下完整重跑后通过。
-  - 有三组通过的数据与其他运行共用了物理 CPU 核，保守起见已用完整重跑替换。
-  - prefix TTFT 抖动的原因尚未查明；一次临时的 GC 诊断在测量区间内未发现回收，该诊断不作为验收依据。
-  - 所有尝试都保留。
-- **基线：** 没有重跑 vLLM 基线。
-- **对比性质：** 这是不同运行、不同框架版本之间的对比，不是同源配对实验。
-- **余量：** MTP 各组余量最小；MTP batch 4 比门槛只高 2.52 个百分点。
-
-**算子（REQ-KERNEL-002）。** 全部 147 项正式静态用例都快于冻结的 TileLang 实现。
-
-- **判定规则：** 三轮热身后测量、每轮 20 对交替测量；每轮 CUDA 中位数都更快；节省时间的单侧
-  95% bootstrap 下界为正。
-- **余量：** 较小的收益可能只有纳秒级，不声称任何最低余量。
-- **与延迟分开：** TileFoundry HIR 估计值和 Nsight 计数器都与验收延迟分开记录。
-
-**正确性和功能。**
-
-- **测试套件：** 在默认 CUDA 下、不设置任何 backend/CUDA_HOME/TVM 覆盖，套件通过 174 项测试
-  及 31 个子测试，没有跳过，也没有放宽容差。
-- **FP64 探针：** 实际模型的 ordinary 和 MTP4 探针通过。
-- **真实文本：**
-  - ordinary 和 MTP4 真实文本检查通过，包括强制抢占和前缀复用。
-  - 十二组 MTP4 约束用例、各档思考强度和生命周期检查通过。
-  - 四次长 strict-JSON 调用通过。
-- **边界运行：** 六组输入 258048、输出 4096 的运行完成，无 OOM、无重算抢占：
-
-  | 模式 | Batch | 输出 tok/s | 提议 / 接受的草稿 |
-  |---|---:|---:|---|
-  | ordinary | 1 | 56.25 | — |
-  | ordinary | 2 | 78.58 | — |
-  | ordinary | 4 | 96.65 | — |
-  | MTP4 | 1 | 89.40 | 5010 / 2842 |
-  | MTP4 | 2 | 111.66 | 8989 / 5939 |
-  | MTP4 | 4 | 126.06 | 16272 / 12306 |
-
-  PyTorch reserved 峰值为 134.69 GB，这不是整卡用量；这些运行是容量诊断，不是吞吐门槛。
-- **oh-my-pi 读回（干净提交 `ef07b2b`）：** 两种 API 都通过核心任务。
-  - Chat 和 Responses 各成功读取九次，分别发出 5 次和 3 次模型请求。
-  - 提议/接受的草稿分别为 3297/1943（Chat）和 3687/2164（Responses）。
-  - 部分答案不准确之处已记录在功能产物中，不声称回答完全基于文件。
-- **清理：** 清理结果不依赖模型答案，是独立验证的。
-
-**来源。**
-
-- 147/12 的计时来自 `c36d1c9`。
-- `030f60f` 只修改默认选择和身份报告，kernel、模型和派发实现均未改变。
-- 默认选择的测试套件和服务运行使用的是 `ef07b2b` 之后的工作树（其 diff 哈希记录在 feature
-  artifact 中），该工作树后来成为 `030f60f`；没有在该提交本身上重跑。
-
-**证据文件**（位于 `bench/baseline/`）：
-
-- `2026-09-22-cuda-operators.json`
-- `2026-09-22-cuda-framework.json`，其各行的 `baseline_sha256` 与
-  `2026-09-22-refreshed-enginecore.json` 中内嵌的产物一致
-- `2026-09-22-cuda-features.json`
-
-**范围限制。**
-
-- 2026-09-23 的[代码审计](audit-2026-09-23.zh.md)在这条路径上没有发现产生错误 token 的缺陷。
-- 当时审计记录了服务可用性和证据完整性缺口：测试工具推算 FA/GDN 容量，
-  而非观测实际值（EVD-02）；边界运行没有自动化测试覆盖（EVD-07）。这些限制
-  适用于历史 `c36d1c9` 证据；后续修复及干净 EVD-07 六行产物已在上方当前
-  整改章节记录。
-
-## 历史证据索引
-
-较早的阶段已被取代。原始产物仍保留在 `bench/baseline/` 中，作为当时测量内容的记录。不要把
-它们当作当前状态引用，也不要把 2026-09-22 之前的基线用作当前的分母。
-
-| 日期 | 阶段 | 当时的结果 | 产物 |
-|---|---|---|---|
-| 2026-09-19 | 原始 GPUWorker 适配器，9 组对比原始 EngineCore 基线（2 次预热/3 次重复） | 9/9 ≥ 95% | `2026-09-19-acceptance.json`、`2026-09-19-mtp-bs2-repeat.json`、`2026-09-19-batch-text.json`、`2026-09-19-paired-investigation.json` |
-| 2026-09-21 | 服务扩展（真实 MTP4 约束、生命周期、oh-my-pi） | 通过 | `2026-09-21-serving-acceptance.json` |
-| 2026-09-21 | V2 Model Runner，9 组对比原始基线 | 9/9 ≥ 95% | `2026-09-21-v2-acceptance.json` |
-| 2026-09-21 | 独立运行时（移除 vLLM），9 组对比原始基线 | 9/9 ≥ 95% | `2026-09-21-independent-{stage1,stage2,stage3,acceptance,batched-sampling,grouped-decode,proposal-graph}.json` |
-| 2026-09-22 | 刷新的官方 vLLM 基线 `e9f169d1…`，12 组 | 冻结的分母 | `2026-09-22-refreshed-enginecore.json` |
-| 2026-09-22 | TTFT/长上下文调查及 MTP 差距诊断 | 10/12；MTP bs4 为 94.87% | `2026-09-22-ttft-{stage1,agentic,discarded}.json`、`2026-09-22-performance-gap{,-candidates}.json`、`2026-09-22-{native-decode-fusions,prefill-*,ragged-prefill,strided-metadata}.json` |
-| 2026-09-22 | TileLang 迁移（`da75c02`），12 组 | 在 10% 稳定性下 12/12 | `2026-09-22-tilelang-{acceptance,correctness}.json` |
-| 2026-09-22 | CUDA 里程碑子集（未提交的源码，诊断用） | 部分 | `2026-09-22-cuda-*-progress.json` |
-
-`baseline_*`、`clean_*`、`mtp_*` 文件和 `logs/` 是早期从 vLLM HTTP 服务采集的数据，其设置、
-输入、计时边界和 MTP 配置都与 EngineCore 协议不同，不能与之比较。部分较早的产物带有错误的
-“Qwen3.5” 标签，模型一直是 Qwen3.8-27B-FP8。
-
-## 运行范围
-
-多卡、CPU KV swap、多模态输入、LoRA 和生产部署不在范围内。OpenAI 兼容的 HTTP 服务已实现，
-其验收由上面的功能和 agentic 检查组成，没有 HTTP 吞吐门槛。EngineCore 测量不能验证 HTTP
-路径的性能。
+早期测量使用不同源码 / 配置, 部分只有 3 次重复.
+它们只证明对应历史范围, 不作为当前性能比较分母.
+全部原跟踪记录都有字节不变的本地归档, 哈希位于 [originals.json](../bench/evidence/originals.json).
+[决策记录](README.zh.md#决策记录) 解释有用的替代关系.
+本轮检查和开放工作见 [当前工作](handoff.zh.md).

@@ -1,0 +1,795 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "2026-09-22-prefill-research-verification.json",
+    "sha256": "3513fa3797acbdf7bffc71e43f019b3dc8dc89e56768fa6466a598fb2b397227",
+    "bytes": 22537
+  },
+  "removed_fields": [
+    "data.evidence[0].path",
+    "data.evidence[10].path",
+    "data.evidence[10].results[1].pid",
+    "data.evidence[1].path",
+    "data.evidence[2].path",
+    "data.evidence[2].results[5].pid",
+    "data.evidence[3].path",
+    "data.evidence[3].results[54].pid",
+    "data.evidence[4].path",
+    "data.evidence[5].path",
+    "data.evidence[5].results[1].pid",
+    "data.evidence[6].path",
+    "data.evidence[6].results[1].pid",
+    "data.evidence[7].path",
+    "data.evidence[7].results[1].pid",
+    "data.evidence[8].path",
+    "data.evidence[8].results[1].pid",
+    "data.evidence[9].path",
+    "data.evidence[9].results[1].pid"
+  ],
+  "data": {
+    "schema": 1,
+    "status": "Correctness milestone; final 12-row performance acceptance pending",
+    "verification": {
+      "gpu_tests": 146,
+      "subtests": 12,
+      "skips": 0,
+      "fp64": "Unit and actual-model target/draft probes retain original tolerances",
+      "service": "12 constraints, lifecycle, 131099-input prefix reuse; port18020 released",
+      "boundaries": "All six 258048+4096 rows, zero preemptions; ordinary precedes final MTP-only change",
+      "cleanup": "All task-owned GPU processes exited; nvidia-smi empty"
+    },
+    "evidence": [
+      {
+        "path": "<local-path>",
+        "sha256": "e84270e58b8f39734441bd76c4d67afb2c4ea06ff5063224bd75292db656f061",
+        "results": []
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "f3e55f7f9832bec68142bbdf0c7408e40148ee73f45759bc29a8788189aeb010",
+        "results": []
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "cadf60fce81ccf95ffc3eda64413421801081a56a5892e7c0206642946a69cd6",
+        "results": [
+          {
+            "probe": "actual_native_prefix_fp64",
+            "row": 0,
+            "length": 4705,
+            "max_abs_error": 0.006579259869048393,
+            "atol": 0.03,
+            "rtol": 0.03
+          },
+          {
+            "probe": "actual_native_prefix_fp64",
+            "row": 303,
+            "length": 5008,
+            "max_abs_error": 0.007436280802219475,
+            "atol": 0.03,
+            "rtol": 0.03
+          },
+          {
+            "probe": "actual_native_prefix_fp64",
+            "row": 304,
+            "length": 4705,
+            "max_abs_error": 0.007743959963530056,
+            "atol": 0.03,
+            "rtol": 0.03
+          },
+          {
+            "probe": "actual_native_prefix_fp64",
+            "row": 607,
+            "length": 5008,
+            "max_abs_error": 0.005167315291563668,
+            "atol": 0.03,
+            "rtol": 0.03
+          },
+          {
+            "batch_size": 2,
+            "input_len": 5008,
+            "output_len": 16,
+            "output_tokens": 32,
+            "elapsed_s": 4.458416665,
+            "output_tps": 7.177435938460006,
+            "steps": 12,
+            "prefix_hit_tokens": 9408,
+            "initial_prefix_hit_tokens": 9408,
+            "preemptions": 0,
+            "proposed_draft_tokens": 92,
+            "accepted_draft_tokens": 9,
+            "ttft_s": [
+              0.063404659,
+              0.063405543
+            ]
+          },
+          {
+            "timestamp": "2026-09-22T04:22:43.483185+00:00",
+            "level": "INFO",
+            "run_id": "20260922T042217-1710911",
+            "component": "oh_my_vllm.worker.model_runner",
+            "message": "GPU memory high water",
+            "max_allocated_bytes": 45272932864,
+            "max_reserved_bytes": 46714060800
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "906b6ad977930413c8dd848b0bffd4d7c12f5a9a71076a31f40d7ee4c24d5aa1",
+        "results": [
+          {
+            "probe": "gdn_prefill",
+            "max_abs_error": 0.02922464806080116,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_prefill_state",
+            "max_abs_error": 0.11488502326274364,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gqa_prefill",
+            "max_abs_error": 0.018208491451345843,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "actual_mtp_native_prefill_fp64",
+            "row": 0,
+            "length": 1,
+            "max_abs_error": 0.0,
+            "atol": 0.03,
+            "rtol": 0.03
+          },
+          {
+            "probe": "actual_mtp_native_prefill_fp64",
+            "row": 1566,
+            "length": 1567,
+            "max_abs_error": 0.058013001465795355,
+            "atol": 0.03,
+            "rtol": 0.03
+          },
+          {
+            "probe": "gdn_decode",
+            "max_abs_error": 0.007281024925321233,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_decode_state",
+            "max_abs_error": 0.11069415913547687,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gqa_decode",
+            "max_abs_error": 0.00679742986662113,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "mtp_gqa_decode",
+            "max_abs_error": 0.06139534076351438,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp",
+            "max_abs_error": 0.007785996786782157,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.08805557228394889,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.10582184359117974,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.10168284130195815,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.062422699666889514,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.06218740963812053,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gqa_decode",
+            "max_abs_error": 0.013274323087052231,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "mtp_gqa_decode",
+            "max_abs_error": 0.06238785989742368,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp",
+            "max_abs_error": 0.007779969089450667,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.08259108002929594,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.09991524757172954,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.09289184379694149,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.11378612292046597,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.12326308042860745,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gqa_decode",
+            "max_abs_error": 0.013768940588913203,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "mtp_gqa_decode",
+            "max_abs_error": 0.035138886176630635,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp",
+            "max_abs_error": 0.007786754718356104,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.09805869499484743,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.09095851147988299,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.06855635044375674,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.06181277538661334,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.10087245736487915,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gqa_decode",
+            "max_abs_error": 0.012540801405589885,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "mtp_gqa_decode",
+            "max_abs_error": 0.04884730900428025,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp",
+            "max_abs_error": 0.0077575050320941585,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.10018268719397128,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.10405807284121238,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.112022156666157,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.06215472107129827,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.1237660770273834,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gqa_decode",
+            "max_abs_error": 0.01377756642416017,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "mtp_gqa_decode",
+            "max_abs_error": 0.06805643635591352,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp",
+            "max_abs_error": 0.007711443205103752,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.09909679469075883,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.057294011227288166,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.11730796530545717,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.061766891025911264,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_mtp_state",
+            "max_abs_error": 0.0924393223272375,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gqa_decode",
+            "max_abs_error": 0.014901037420171015,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "mtp_gqa_decode",
+            "max_abs_error": 0.11322607502150817,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_decode",
+            "max_abs_error": 0.007356778415034793,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gdn_decode_state",
+            "max_abs_error": 0.0740542771932482,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "gqa_decode",
+            "max_abs_error": 0.011354060319128667,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "probe": "mtp_gqa_decode",
+            "max_abs_error": 0.0718710733485608,
+            "atol": 0.03,
+            "rtol": 0.03,
+            "actual_nonfinite": 0,
+            "reference_nonfinite": 0
+          },
+          {
+            "batch_size": 1,
+            "input_len": 1569,
+            "output_len": 16,
+            "output_tokens": 16,
+            "elapsed_s": 50.276696178,
+            "output_tps": 0.3182388903072206,
+            "steps": 8,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 28,
+            "accepted_draft_tokens": 9,
+            "ttft_s": [
+              46.741165916
+            ]
+          },
+          {
+            "timestamp": "2026-09-22T04:37:17.042790+00:00",
+            "level": "INFO",
+            "run_id": "20260922T043616-1776004",
+            "component": "oh_my_vllm.worker.model_runner",
+            "message": "GPU memory high water",
+            "max_allocated_bytes": 43943057408,
+            "max_reserved_bytes": 44495273984
+          },
+          {
+            "probe_coverage_pass": [
+              "gdn_decode",
+              "gdn_decode_state",
+              "gdn_mtp",
+              "gdn_mtp_state",
+              "gdn_prefill",
+              "gdn_prefill_state",
+              "gqa_decode",
+              "gqa_prefill",
+              "mtp_gqa_decode"
+            ]
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "aee2f645309483c4dd192fd07cddb3f8c3773f60e4163c21c2e2be1ff43bbd08",
+        "results": []
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "235d981044bb60896e97a53adc85752ce6a681d3e9617f7b65e408d05a54053a",
+        "results": [
+          {
+            "batch_size": 1,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 4096,
+            "elapsed_s": 76.026929446,
+            "output_tps": 53.87564682471209,
+            "steps": 4105,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0,
+            "ttft_s": [
+              28.799221314
+            ]
+          },
+          {
+            "timestamp": "2026-09-22T04:24:04.815303+00:00",
+            "level": "INFO",
+            "run_id": "20260922T042236-1711640",
+            "component": "oh_my_vllm.worker.model_runner",
+            "message": "GPU memory high water",
+            "max_allocated_bytes": 126193300992,
+            "max_reserved_bytes": 130182807552
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "72c9edc87fc6461ed4d69863ff76d700ea26a57144c72ca337ca756810e6dbf1",
+        "results": [
+          {
+            "batch_size": 2,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 8192,
+            "elapsed_s": 108.892858152,
+            "output_tps": 75.22991074919766,
+            "steps": 4113,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0,
+            "ttft_s": [
+              30.352251589,
+              51.063270261
+            ]
+          },
+          {
+            "timestamp": "2026-09-22T04:26:06.636776+00:00",
+            "level": "INFO",
+            "run_id": "20260922T042236-1711640",
+            "component": "oh_my_vllm.worker.model_runner",
+            "message": "GPU memory high water",
+            "max_allocated_bytes": 126707441664,
+            "max_reserved_bytes": 132433051648
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "d8b7a08815f0fab4a55c4c577e01ad30474c10263efbfa63f00e577b65141904",
+        "results": [
+          {
+            "batch_size": 4,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 16384,
+            "elapsed_s": 175.851060956,
+            "output_tps": 93.16975348871776,
+            "steps": 4129,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0,
+            "ttft_s": [
+              29.730628228,
+              52.864263572,
+              76.674296033,
+              97.407023474
+            ]
+          },
+          {
+            "timestamp": "2026-09-22T04:29:14.283051+00:00",
+            "level": "INFO",
+            "run_id": "20260922T042236-1711640",
+            "component": "oh_my_vllm.worker.model_runner",
+            "message": "GPU memory high water",
+            "max_allocated_bytes": 128823463936,
+            "max_reserved_bytes": 134687490048
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "c793196d0a2082ad5e630bb59177668f988eadceb2c974cbeaf6bd0bb66b66a2",
+        "results": [
+          {
+            "batch_size": 1,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 4096,
+            "elapsed_s": 54.327356362,
+            "output_tps": 75.39479691791155,
+            "steps": 1204,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 4769,
+            "accepted_draft_tokens": 2901,
+            "ttft_s": [
+              31.417635323
+            ]
+          },
+          {
+            "timestamp": "2026-09-22T04:37:25.560885+00:00",
+            "level": "INFO",
+            "run_id": "20260922T043619-1776365",
+            "component": "oh_my_vllm.worker.model_runner",
+            "message": "GPU memory high water",
+            "max_allocated_bytes": 122322346496,
+            "max_reserved_bytes": 125600530432
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "f783ff75dcbde0ebca498348e9a58e6cb1110381065f4ac63a734aa530af954f",
+        "results": [
+          {
+            "batch_size": 2,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 8192,
+            "elapsed_s": 77.885639651,
+            "output_tps": 105.17985133983322,
+            "steps": 1047,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 8242,
+            "accepted_draft_tokens": 6125,
+            "ttft_s": [
+              31.951214453,
+              54.154398013
+            ]
+          },
+          {
+            "timestamp": "2026-09-22T04:38:53.970817+00:00",
+            "level": "INFO",
+            "run_id": "20260922T043619-1776365",
+            "component": "oh_my_vllm.worker.model_runner",
+            "message": "GPU memory high water",
+            "max_allocated_bytes": 122557848576,
+            "max_reserved_bytes": 130094727168
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "738a8ab13083897e4b45d60f6134b49742749298330fb487c1bfeadaea00b727",
+        "results": [
+          {
+            "batch_size": 4,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 16384,
+            "elapsed_s": 141.10856032,
+            "output_tps": 116.1091854586643,
+            "steps": 1294,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 15351,
+            "accepted_draft_tokens": 12535,
+            "ttft_s": [
+              31.006077606,
+              55.809759687,
+              82.003844801,
+              105.042959463
+            ]
+          },
+          {
+            "timestamp": "2026-09-22T04:41:28.653647+00:00",
+            "level": "INFO",
+            "run_id": "20260922T043619-1776365",
+            "component": "oh_my_vllm.worker.model_runner",
+            "message": "GPU memory high water",
+            "max_allocated_bytes": 124697075712,
+            "max_reserved_bytes": 130094727168
+          }
+        ]
+      }
+    ]
+  }
+}

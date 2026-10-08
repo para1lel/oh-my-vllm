@@ -1,0 +1,24 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "2026-09-22-strided-metadata.json",
+    "sha256": "b3aec58ce0bdd2ad5f3c29cc25a0a88964436482738ba624f8640d5ba02a6042",
+    "bytes": 1602
+  },
+  "removed_fields": [
+    "data.logs"
+  ],
+  "data": {
+    "status": "intermediate optimization; formal performance remains pending",
+    "change": "Read packed convolution/GDN/RMS views directly and transfer target/draft integer metadata in one buffer per group. Keep int32 starts by converting once per batch.",
+    "tests": "120 GPU tests and 12 subtests; actual MTP target/draft FP64; 12 service constraints, lifecycle and long-input prefix reuse. Final int32 starts conversion follows review and restores prior dtype.",
+    "diagnostic_tps": {
+      "mtp_bs1": 305.8634851894921,
+      "mtp_bs2": 450.65028008876226
+    },
+    "limitations": "One warmup/measurement diagnostics, no formal acceptance. Both MTP rows remain below95% of new baseline.",
+    "cleanup": "Service1438115 exited, port18017 closed; worker cleanup independently checked."
+  }
+}

@@ -1,54 +1,34 @@
-# ADR-006: Own the GPU execution runtime
+# ADR-006: Independent GPU runtime
 
-Date: 2026-09-21. Status: user-approved; implemented. Acceptance evidence is in ../acceptance.md.
+Date: 2026-09-21. Status: accepted and implemented.
+This decision supersedes [ADR-002](ADR-002-gpuworker-adapter.md) and [ADR-005](ADR-005-v2-model-runner.md).
 
 ## Decision
 
-Keep Rust serving, scheduling and logical KV ownership and Python GPU execution.
-Replace vLLM integration with small project-owned implementations and independent
-libraries. Selected upstream code may be adapted with its provenance and license;
-copying the framework wholesale is not acceptable. Final builds, tests and services
-must work without the vLLM package, source checkout, compiled operators, old conda
-environment or its build caches. Transitional stages may still use the old adapter.
+Keep Rust service, scheduling, logical KV, and Python GPU execution.
+Use small project implementations and third-party libraries instead of a vLLM runtime dependency.
+Port selected code only with provenance and licenses. Do not copy the framework wholesale.
+Builds, tests, and inference must work without vLLM packages, checkout, old environment, or compiled caches.
 
-Select recent compatible stable dependencies in order, starting with the GPU
-toolchain and tensor runtime. Pin the verified combination. System driver and
-working CUDA/compiler tools are allowed; higher-level libraries live in conda
-oh-my-vllm. Avoid nightly dependencies unless this decision is explicitly revised.
+Only the independently authorized baseline collector has an isolated exception.
 
-Investigate the highest-risk boundaries first: FP8 weight/scale semantics, GQA,
-GDN recurrence and MTP state rollback. Then integrate model loading, request/cache
-state, sampling, graph execution and service utilities. Migrate FP64 observation
-points alongside their actual execution paths, retaining independent references.
+Select compatible stable dependencies in dependency order and pin the combination with satisfactory compatibility tests.
+Use the host driver and working CUDA/compiler tools, with higher-level libraries in the project environment.
+Keep host locations in `LOCAL.md`.
 
-Relevant correctness tests and independent review gate each milestone. Targeted
-performance checks accompany hot-path changes; full nine-row acceptance was needed
-at execution-chain completion and final acceptance (met 2026-09-21; the current gate
-is the twelve-row REQ-PERF-001/002 matrix). Intermediate performance gaps
-must be recorded. Compare only with the original 2026-09-19 frozen EngineCore
-baseline at >=95%; do not rerun native vLLM or add a V2-relative gate.
+## Consequences
 
-## Design references
+The project controls FP8 weight/scales, GQA/GDN, MTP rollback, loading, cache state, sampling, graphs, and service adapters.
+Keep inference-path independent references with FP64 computation and all existing features.
+Review each milestone and measure affected hot paths.
+The initial nine-row acceptance was met. The current denominator is the refreshed twelve-row baseline.
 
-- https://docs.vllm.ai/en/latest/design/model_runner_v2/: persistent request state,
-  incremental updates, GPU metadata and explicit graph lifecycle.
-- https://docs.vllm.ai/en/latest/design/vllm_ir/: separate operator semantics from
-  implementation. Do not build a general compiler IR for this single-model task.
-- https://docs.vllm.ai/en/latest/design/cuda_graphs/: separate graph capture from
-  compilation, with stable buffers and explicit execution shapes.
+[Requirements](../requirements.md) and [acceptance](../acceptance.md) define active scope and measured identity.
 
-## Future extensions (not current implementation requirements)
+## Future boundaries
 
-Keep model/weight mapping, device kernels, cache state and execution flow readable
-and localized. Different models and NVIDIA GPUs can add concrete implementations
-when needed. Single-node multi-GPU would add rank-local weights/state and
-collectives around the same Rust scheduling contract. PD disaggregation and
-multi-node execution are out of scope. Do not add speculative empty interfaces.
-
-DSpark refers primarily to /data0/shared/Qwen3.8-27B-DSpark. Its config declares a
-five-layer BF16 GQA draft model, target feature layers [5,19,33,47,61], confidence
-and Markov heads, seven proposals and eight verification tokens including bonus.
-Draft block_size=7 and training_block_size=16 are not the KV page size of 784.
-Future integration needs independent draft state, target hidden features and
-variable verification/commit/rollback handling. Exact feature extraction and token
-mapping must be verified then; the checkpoint README is not local acceptance.
+New architectures and GPU backends must have concrete contracts and tests before support claims.
+Multiple GPUs must have rank-local state and collectives while Rust keeps scheduling ownership.
+A DSpark implementation must have its own draft state, target hidden features, and variable verification/commit/rollback.
+Its five-layer BF16 design, feature indices, and block distinctions are in [architecture](../architecture.md#extension-boundaries).
+Do not add empty interfaces or multi-node support for this task.

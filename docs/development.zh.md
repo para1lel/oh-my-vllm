@@ -1,121 +1,112 @@
-# 开发指南
+# 开发
 
-## 环境
+## 环境安装
 
-全部 Rust 工具、Python 包、测试和模型执行使用 `/data0/shared/dongwu.chen/conda-envs/oh-my-vllm`。cargo/Python 命令使用 `scripts/with-env.sh`，设置 PATH、PYTHONPATH、CARGO_TARGET_DIR 和 Worker Python。旧适配器和旧环境默认值已移除。
+安装 `uv`, Python 3.12 或更高版本, 以及支持 edition 2024 的 Rust 工具链.
+已验证的完整运行依赖位于 `requirements/runtime.txt`.
+Python 直接依赖位于 `python/pyproject.toml`.
+NVIDIA 驱动由主机提供.
+使用主机或项目环境中的兼容 CUDA / 编译器工具.
 
-通过 uv 向该环境安装 Python 依赖。直接依赖在 python/pyproject.toml，requirements/runtime.txt 固定完整稳定 Linux/Python3.12 依赖闭包。主机 CUDA13.1/编译工具用于构建 kernel，Torch2.14 使用已安装的 CUDA13.0 运行库。NVIDIA 驱动由宿主机提供。
+在仓库根目录创建并选择环境:
 
 ```bash
-uv pip install --python /data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python -r requirements/runtime.txt
-uv pip check --python /data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python
+uv venv --python 3.12 .venv
+export OH_MY_VLLM_CONDA_PREFIX="$PWD/.venv"
+uv pip install --python "$OH_MY_VLLM_CONDA_PREFIX/bin/python" -r requirements/runtime.txt
+uv pip install --python "$OH_MY_VLLM_CONDA_PREFIX/bin/python" -r requirements/tools.txt
+uv pip check --python "$OH_MY_VLLM_CONDA_PREFIX/bin/python"
+export OH_MY_VLLM_MODEL="/path/to/Qwen3.8-27B-FP8"
 ```
 
-包装脚本在 `/data0/shared/dongwu.chen/.cache/oh-my-vllm/tilelang-ffi012` 下选择独立 FlashInfer/TileLang/第三方 Triton 缓存。通过 OH_MY_VLLM_RUNTIME_CACHE 覆盖公共根目录。FlashInfer 首次使用可能编译 kernel，或下载其带版本的 NVIDIA GEMM cubin；这些是独立库产物，不是旧 vLLM 构建输出。启动记录库版本，关闭时检查导入模块及映射库。环境中不得安装 vLLM。
+`requirements/tools.txt` 固定 pytest, Ruff, pre-commit 及受约束依赖.
+验证工具修改后, 使用 runtime constraint 从 `requirements/tools.in` 重新生成.
 
-`OH_MY_VLLM_ENFORCE_EAGER=1` 仅用于诊断，禁用 target/MTP 图。只有明确授权的隔离采集器可更新 EngineCore 基线。性能验收绝不启用正确性探针。
+也可以使用现有 conda 环境.
+将 `OH_MY_VLLM_CONDA_PREFIX` 设置为其位置, 无需创建 `.venv`.
+实际位置记入被忽略的 `LOCAL.md`.
+高层依赖在此环境中用 `uv` 安装, 不直接使用 `pip`.
+vLLM 及其缓存与项目运行时隔离.
+
+已验证组合包括 Torch 2.14.0, Transformers 5.17.0, FlashInfer 0.6.18.post1, TileLang 0.1.14 和 apache-tvm-ffi 0.1.12.
+记录中的构建使用 CUDA 13.1 工具和 Torch CUDA 13.0 运行库.
+这些版本描述已测试组合; 完整依赖以 lockfile 为准.
+
+## 配置选择
+
+`scripts/with-env.sh` 按以下顺序选择环境:
+
+1. `OH_MY_VLLM_CONDA_PREFIX`.
+2. 已激活的 `VIRTUAL_ENV`.
+3. 已激活的 `CONDA_PREFIX`.
+4. 仓库 `.venv`.
+
+选定环境不存在时即报错.
+包装脚本将其 `bin` 加在 `PATH` 前, 将仓库 `python` 加在 `PYTHONPATH` 前.
+包装脚本将 `UV_PYTHON` 设为所选 Python. uv 的显式 `--python` 选项优先.
+
+`CARGO_TARGET_DIR` 默认为仓库 `target`.
+`OH_MY_VLLM_WORKER_PYTHON` 默认为选定环境的 Python.
+不使用包装脚本时, Rust 使用此变量或 `PATH` 中的 `python3`.
+直接调用 Rust library 时显式提供 `WorkerConfig.model_path`.
+
+| 变量 | 用途 |
+|---|---|
+| `OH_MY_VLLM_MODEL` | Checkpoint 目录; 显式 `--model` 优先. |
+| `OH_MY_VLLM_RUNTIME_CACHE` | 独立运行时缓存的公共根目录. |
+| `XDG_CACHE_HOME` | 默认缓存基础目录; 未设置时使用用户 `.cache`. |
+| `FLASHINFER_WORKSPACE_BASE` | 覆盖 FlashInfer workspace. |
+| `TRITON_CACHE_DIR` | 覆盖第三方 Triton 缓存. |
+| `TILELANG_CACHE_DIR` | 覆盖冻结 TileLang 缓存. |
+| `TVM_FFI_CACHE_DIR` | 覆盖 native CUDA 构建缓存. |
+| `TVM_FFI_CUDA_ARCH_LIST` | CUDA 架构; B200 默认 `10.0a`. |
+| `OH_MY_VLLM_KERNEL_BACKEND` | 显式选择 `cuda` 或冻结 `tilelang`. |
+| `OH_MY_VLLM_ENFORCE_EAGER` | 设置为 `1` 时启用显式诊断模式. |
+| `OMP_NUM_THREADS` | 主机线程数量; 默认 `1`. |
+
+默认缓存后缀为 `oh-my-vllm/tilelang-ffi012`, 与已验证库组合兼容.
+子目录隔离 FlashInfer, 第三方 Triton, TileLang 和 native CUDA 产物.
+首次使用可能编译内核或下载带版本的 FlashInfer GEMM cubin.
+运行时身份记录库版本, 拒绝意外 vLLM 导入或映射库.
+性能验收期间不启用精度 probe 或 eager override.
 
 ## 构建与检查
 
-Rust workspace 使用 edition2024 和现有 conda 工具链。
-
 ```bash
 scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
-scripts/with-env.sh cargo fmt --all
+scripts/with-env.sh cargo fmt --all --check
+scripts/with-env.sh python scripts/check_rust_line_width.py
 scripts/with-env.sh cargo test --workspace
 scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
+scripts/with-env.sh python scripts/check_docs.py
 scripts/with-env.sh pre-commit run --all-files
 ```
 
-hook 是 .pre-commit-config.yaml 中的本地/system hook。只暂存有意修改的路径，包括有变更的 Cargo.lock。避免未暂存的 hook 修改与 pre-commit 临时 stash 冲突。不禁用 hook，不用 git add .。
+钩子通过同一包装脚本使用本地系统工具.
+`git commit` 前配置环境, 确保钩子选择正确环境.
+参见 [贡献流程](../CONTRIBUTING.zh.md).
 
-## GPU 执行
+## TileFoundry 开发工具
 
-```bash
-scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/oh-my-vllm-text.ipc --max-tokens 64
-```
-
-性能验收使用 `benchmarks/ttft.py`；基线提取、CPU 亲和性和门槛见 testing.md。
-
-多条真实 prompt 可用 `run --prompt-file PATH`：每行是一条以空白分隔的 token ID 序列，最多 32 个请求。`--arrival-interval N` 按调度步骤错峰接纳；`--prefix-hit` 先预填 prompt 并要求初始命中。输出包含有序 token batch 和功能计数。带显存压力的双请求 `scripts/smoke-batch.py` 及抢占后文本检查见 testing.md。
-
-GPU 包装脚本等待空闲 B200：无计算进程、显存使用不超过 64 MiB、报告利用率为零。选择 UUID 并持有协作 flock；无关程序不一定遵守该锁。锁 fd 会被子进程继承，孤儿 worker 会继续持有它（审计 SRV-02）。基准在引擎运行期间额外检测同 GPU 外部客户端，使受影响测量失效。不得中断无关任务。使用唯一 socket；仅确认所有者退出后才删除遗留 socket。
-
-`benchmarks/ttft.py` 默认使用 4200 容量单位、128 个 GDN 槽、预热两次和测量五次，并运行 release 二进制的私有副本。验收不启用 eager/probe。运行中不修改源码。
-
-## 日志与诊断
-
-日志写 stderr，结果写 stdout。Rust tracing 和 Python JSON 行使用 UTC 时间戳。OH_MY_VLLM_RUN_ID 关联两端，step_id 关联 RPC。INFO 记录初始化、容量和 batch 摘要。RUST_LOG=debug 与 OH_MY_VLLM_LOG_LEVEL=DEBUG 开启调度时间/空闲块、RPC 耗时、Python 消息解码、主机执行和编码/发送计时。
-
-主机耗时不是 CUDA kernel 耗时。GPU 计时单独运行 profiling，trace 留在仓库外。默认 INFO 避免逐步骤 I/O。控制器对串行调度/RPC 流使用一个 Tokio 线程。CPU 亲和性实验需给两引擎相同的继承掩码并记录；taskset 可放在 benchmark Python 命令前。实测结果见 acceptance.md。
-
-## 故障排查
-
-- 初始化失败：看启动日志中 Python traceback 和 conda 解释器，检查固定依赖、checkpoint 配置和独立缓存。
-- 地址占用：换 socket，或确认遗留 socket 的所有者已退出。
-- worker 意外退出：重跑前检查 stderr；子进程在连接前退出会及时报告，不会耗尽整个初始化超时。
-- 启动显存不足：重新等空闲卡。选择后可能有外部任务进入，不能降低限制掩盖被污染的配对。
-
-## OpenAI 服务开发
-
-启动/OMP 命令及协议兼容矩阵见 serving.md。Rust 使用 Axum/serde_json/tokio-stream，Python 使用固定的 tokenizer 和 XGrammar 包。
-
-在 GPU 主机上做纯 CPU tokenizer/schema/HTTP 测试时，启动 Python 前设置 CUDA_VISIBLE_DEVICES=''，避免设备初始化；这不验证 CUDA 执行。tests/fixtures/serving_worker.py 仅为集成测试提供脚本化输出，不得用于报告模型验收或速度。
-
-对正在运行的 MTP4 服务执行真实约束输出检查：
+源码依赖安装前先安装 metadata 工具:
 
 ```bash
-scripts/with-env.sh python scripts/serving-acceptance.py --output-dir /tmp/oh-my-vllm-serving-constraints
+git submodule update --init --recursive 3rdparty/TileFoundry
+scripts/with-env.sh uv pip install --python "$OH_MY_VLLM_CONDA_PREFIX/bin/python" setuptools-scm==10.2.3 vcs-versioning==2.4.1
+scripts/with-env.sh uv pip install --python "$OH_MY_VLLM_CONDA_PREFIX/bin/python" --no-build-isolation -r requirements/development.txt
+scripts/with-env.sh tilefoundry --help
 ```
 
-脚本保存完整请求/响应。用匹配的 response/request ID 检查服务日志中的真实 MTP proposal/acceptance 计数。Python DEBUG 日志展示消息解码、执行和编码/发送时间。
+固定 fork 是开发依赖, 不属于推理依赖.
+不为此 fork 创建上游 PR.
+参见 [内核开发](kernels.zh.md).
 
-## 严格 Rust 格式
+## 部署记录
 
-```bash
-scripts/with-env.sh cargo fmt --all
-scripts/with-env.sh cargo fmt --all --check
-scripts/with-env.sh python scripts/check_rust_line_width.py
-scripts/with-env.sh python -m unittest discover -s tests -p test_rust_style.py
-scripts/with-env.sh pre-commit run cargo-fmt --all-files
-scripts/with-env.sh pre-commit run rust-line-width --all-files
-```
-
-rustfmt.toml 设置稳定 Rust 2024 格式、100 字符宽度、Unix 换行和多行 if/else、let/else 表达式。pre-commit 检查格式，不静默重写。独立硬行宽 hook 读取同一配置，检查已跟踪和未忽略的新 `.rs` 文件，包括宏、注释、字符串；按 rustfmt tab 大小展开制表符。仅 rustfmt 可能保留超出 max_width 的 `json!` 宏体，需手动拆字段并用 `concat!` 换行且保持字面量值不变。配置和 hook 修改会触发两项 Rust 样式 hook。
-
-## 隔离参考采集（2026-09-22 授权）
-
-`benchmarks/baseline/enginecore.py` 仅用于基线，用单独维护的 vllm 环境运行，不向 oh-my-vllm 安装 vLLM。要求官方上游 SHA e9f169d16b9408bb9ae44f75072b91a5521d733c。独立 `benchmarks/ttft.py` 读取该 JSON，只启动自有 worker。此明确例外不改变日常构建/测试/运行依赖隔离。
-
-长上下文和验收运行在 CLI 子命令前添加 `--max-model-len 262144 --num-gpu-blocks 4200 --mamba-blocks 128`：代表 1400 个 FA 槽和 128 个独立 GDN 槽，已由六组 262144 token 边界运行验证。
-
-## TileLang 与 TileFoundry
-
-固定 fork、源码安装、完整算子 HIR、生产 runtime twin 和审查/验证流程见[自定义 kernel 工作流](tilelang-development.zh.md)。启动推理 worker 不需要 TileFoundry。运行时默认使用 CUDA，冻结 TileLang 可显式选择作为对照；独立依赖内部仍可使用 Triton。
-
-## 原生 CUDA 开发
-
-默认使用 CUDA。Python 启动前设置 OH_MY_VLLM_KERNEL_BACKEND=tilelang 使用冻结对照。scripts/with-env.sh 将 TVM_FFI_CACHE_DIR 隔离到项目运行时缓存下。原生算子编译目标为 SM100a，宿主提供 CUDA13.1 编译器，必要时设置 CUDA_HOME=/usr/local/cuda-13.1。运行时不依赖 TileFoundry。冻结对照和已验收开发流程见 cuda-development.zh.md。
-
-包装脚本还默认设置 `TVM_FFI_CUDA_ARCH_LIST=10.0a`；CUDA 后端会拒绝缺失或不同的值，
-避免 TVM FFI 按无关物理 GPU 的架构自动探测。绕过 `scripts/with-env.sh` 启动时须显式
-设置该变量。CUDA 构建记录实际加载的 `.so` 哈希以及编译器路径/版本。若新进程无法
-查询 nvcc，只能复用 `TVM_FFI_CACHE_DIR` 中唯一匹配、哈希已验证的 sidecar；没有可信
-sidecar 的旧缓存条目会被拒绝。
-
-## 交互代码之旅
-
-独立静态教程位于 code-journey/. 构建需要 Node 24, curl, unzip 和已有 Rust 环境.
-真实调度轨迹通过 scripts/with-env.sh 生成, 不启动 Python 模型计算.
-
-    npm --prefix code-journey ci --ignore-scripts
-    npm --prefix code-journey run build
-    npm --prefix code-journey run serve
-
-默认监听 0.0.0.0:18084. 本地开发可通过 HOST/PORT 调整.
-下载工具固定版本并核对 SHA-256; 字体, KaTeX 和许可证随 dist 提供, 阅读无需 CDN.
-修改引用的核心源码后重新构建. 构建还检查文件到章节的覆盖并生成本地完整高亮源码页.
-npm test 执行去缩进和浏览器检查. 12 个完整章节与编写规则见 code-journey/README.md.
-仅为用户明确要求的预览交接保留内网监听器, GPU 进程仍执行原有清理规则.
+主机路径, 地址, 选定进程 ID, 缓存位置和维护命令放在被忽略的 `LOCAL.md` 中.
+被忽略的 `.local/evidence/` 保存完整原始测量.
+跟踪的 [证据索引](acceptance.zh.md) 标明可移植摘要和原始哈希.
+新服务器需要自己的模型位置, 兼容环境, GPU 选择和基线采集.
+仓库不含主机专属的默认模型或环境位置.

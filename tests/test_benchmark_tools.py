@@ -25,7 +25,53 @@ class BenchmarkTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             binary = Path(directory) / "worker"
             binary.write_bytes(b"fixture binary")
-            artifact = ROOT / "bench/baseline/2026-09-19-acceptance.json"
+            artifact = Path(directory) / "original.json"
+            measurement = {
+                "output_tps": 100.0,
+                "output_tokens": 4096,
+                "prefix_hit_tokens": 0,
+                "proposed_draft_tokens": 4,
+                "accepted_draft_tokens": 3,
+            }
+            fixture = {
+                "protocol": {
+                    "model": "fixture-model",
+                    "block_size": 784,
+                    "max_model_len": 65536,
+                    "max_num_seqs": 32,
+                    "max_num_batched_tokens": 32768,
+                    "language_model_only": True,
+                    "enable_chunked_prefill": True,
+                    "enable_prefix_caching": True,
+                    "async_scheduling": False,
+                    "temperature": 0,
+                    "ignore_eos": True,
+                    "detokenize": False,
+                    "mtp_ssm_dtype": "bfloat16",
+                    "ordinary_prefix_ssm_dtype": "auto",
+                },
+                "warmup_per_engine": 2,
+                "rows": [
+                    {
+                        "mode": "mtp",
+                        "batch_size": 1,
+                        "input_len": 32768,
+                        "output_len": 4096,
+                        "num_gpu_blocks": 1024,
+                        "speculative_tokens": 4,
+                        "vllm_version": "fixture",
+                        "baseline": [measurement] * 3,
+                    }
+                ],
+            }
+            artifact.write_text(json.dumps(fixture))
+            self.enterContext(
+                patch.object(
+                    compare,
+                    "BASELINE_SHA256",
+                    hashlib.sha256(artifact.read_bytes()).hexdigest(),
+                )
+            )
             args = SimpleNamespace(
                 binary=binary,
                 baseline_json=artifact,
@@ -38,7 +84,7 @@ class BenchmarkTests(unittest.TestCase):
                 warmup=2,
                 repetitions=5,
                 output=None,
-                model="/data0/shared/Qwen3.8-27B-FP8",
+                model="fixture-model",
             )
             with self.assertRaisesRegex(ValueError, "five measured repetitions"):
                 compare.historical_baseline(artifact, args, 1)
@@ -97,9 +143,7 @@ class BenchmarkTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     compare.historical_baseline(invalid, args, 1)
             with self.assertRaisesRegex(ValueError, "baseline hash"):
-                compare.historical_baseline(
-                    ROOT / "bench/baseline/2026-09-19-mtp-bs2-repeat.json", args, 2
-                )
+                compare.historical_baseline(invalid, args, 2)
             args.input_len = 123
             with self.assertRaisesRegex(ValueError, "exactly one matching workload"):
                 compare.historical_baseline(artifact, args, 1)
@@ -158,7 +202,14 @@ class BenchmarkTests(unittest.TestCase):
 
     def test_numeric_gpu_id_cannot_bypass_contention_monitor(self):
         result = subprocess.run(
-            [sys.executable, str(ROOT / "benchmarks/compare_vllm.py")],
+            [
+                sys.executable,
+                str(ROOT / "benchmarks/compare_vllm.py"),
+                "--model",
+                "fixture-model",
+                "--baseline-json",
+                "unused.json",
+            ],
             capture_output=True,
             text=True,
             env={**os.environ, "CUDA_VISIBLE_DEVICES": "0"},
@@ -172,6 +223,10 @@ class BenchmarkTests(unittest.TestCase):
             [
                 sys.executable,
                 str(ROOT / "benchmarks/compare_vllm.py"),
+                "--model",
+                "fixture-model",
+                "--baseline-json",
+                "unused.json",
                 "--mode",
                 "mtp",
                 "--speculative-tokens",

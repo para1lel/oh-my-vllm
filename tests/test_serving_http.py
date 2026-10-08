@@ -36,9 +36,40 @@ def open_pidfd(pid):
     return fd
 
 
+class PromptValidationTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.directory = Path(temporary.name)
+
+    def test_prompt_file_rejects_out_of_range_token_before_worker_launch(self):
+        prompt_file = self.directory / "invalid-tokens.txt"
+        prompt_file.write_text("248320\n")
+        result = subprocess.run(
+            [
+                str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                "--model",
+                "/nonexistent-checkpoint",
+                "run",
+                "--prompt-file",
+                str(prompt_file),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("prompt token is outside", result.stderr)
+
+
 class HttpTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        if not os.environ.get("OH_MY_VLLM_MODEL"):
+            raise unittest.SkipTest(
+                "set OH_MY_VLLM_MODEL for HTTP tokenizer integration"
+            )
         cls.temp = tempfile.TemporaryDirectory(prefix="oh-my-vllm-http-")
         cls.directory = Path(cls.temp.name)
         with socket.socket() as sock:
@@ -422,26 +453,6 @@ class HttpTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as error:
             urllib.request.urlopen(request, timeout=10)
         self.assertEqual(error.exception.code, 413)
-
-    def test_prompt_file_rejects_out_of_range_token_before_worker_launch(self):
-        prompt_file = self.directory / "invalid-tokens.txt"
-        prompt_file.write_text("248320\n")
-        result = subprocess.run(
-            [
-                str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
-                "--model",
-                "/nonexistent-checkpoint",
-                "run",
-                "--prompt-file",
-                str(prompt_file),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("prompt token is outside", result.stderr)
 
     def test_late_prepare_reply_does_not_shift_next_rpc(self):
         aborts = self.directory / "aborts"

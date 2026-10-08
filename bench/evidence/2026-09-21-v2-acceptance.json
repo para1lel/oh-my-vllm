@@ -1,0 +1,3556 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "2026-09-21-v2-acceptance.json",
+    "sha256": "954d545cebeb46296102e1bcad559e605516087df55c9bca9bf4d8862cf12605",
+    "bytes": 189659
+  },
+  "removed_fields": [
+    "data.batch_text.mtp.command",
+    "data.batch_text.mtp.gpu",
+    "data.batch_text.ordinary.command",
+    "data.batch_text.ordinary.gpu",
+    "data.fp64.mtp.command",
+    "data.fp64.mtp.gpu",
+    "data.fp64.ordinary.command",
+    "data.fp64.ordinary.gpu",
+    "data.model",
+    "data.performance.commands",
+    "data.performance.historical_protocol.model",
+    "data.performance.rows[0].cpu_affinity",
+    "data.performance.rows[0].framework_vllm.source_path",
+    "data.performance.rows[0].gpu",
+    "data.performance.rows[0].historical_identity.cpu_affinity",
+    "data.performance.rows[0].historical_identity.gpu",
+    "data.performance.rows[1].cpu_affinity",
+    "data.performance.rows[1].framework_vllm.source_path",
+    "data.performance.rows[1].gpu",
+    "data.performance.rows[1].historical_identity.cpu_affinity",
+    "data.performance.rows[1].historical_identity.gpu",
+    "data.performance.rows[2].cpu_affinity",
+    "data.performance.rows[2].framework_vllm.source_path",
+    "data.performance.rows[2].gpu",
+    "data.performance.rows[2].historical_identity.cpu_affinity",
+    "data.performance.rows[2].historical_identity.gpu",
+    "data.performance.rows[3].cpu_affinity",
+    "data.performance.rows[3].framework_vllm.source_path",
+    "data.performance.rows[3].gpu",
+    "data.performance.rows[3].historical_identity.cpu_affinity",
+    "data.performance.rows[3].historical_identity.gpu",
+    "data.performance.rows[4].cpu_affinity",
+    "data.performance.rows[4].framework_vllm.source_path",
+    "data.performance.rows[4].gpu",
+    "data.performance.rows[4].historical_identity.cpu_affinity",
+    "data.performance.rows[4].historical_identity.gpu",
+    "data.performance.rows[5].cpu_affinity",
+    "data.performance.rows[5].framework_vllm.source_path",
+    "data.performance.rows[5].gpu",
+    "data.performance.rows[5].historical_identity.cpu_affinity",
+    "data.performance.rows[5].historical_identity.gpu",
+    "data.performance.rows[6].cpu_affinity",
+    "data.performance.rows[6].framework_vllm.source_path",
+    "data.performance.rows[6].gpu",
+    "data.performance.rows[6].historical_identity.cpu_affinity",
+    "data.performance.rows[6].historical_identity.gpu",
+    "data.performance.rows[7].cpu_affinity",
+    "data.performance.rows[7].framework_vllm.source_path",
+    "data.performance.rows[7].gpu",
+    "data.performance.rows[7].historical_identity.cpu_affinity",
+    "data.performance.rows[7].historical_identity.gpu",
+    "data.performance.rows[8].cpu_affinity",
+    "data.performance.rows[8].framework_vllm.source_path",
+    "data.performance.rows[8].gpu",
+    "data.performance.rows[8].historical_identity.cpu_affinity",
+    "data.performance.rows[8].historical_identity.gpu",
+    "data.performance.supplemental_note",
+    "data.performance.supplemental_prefix_rows[0].command",
+    "data.performance.supplemental_prefix_rows[0].cpu_affinity",
+    "data.performance.supplemental_prefix_rows[0].framework_vllm.source_path",
+    "data.performance.supplemental_prefix_rows[0].gpu",
+    "data.performance.supplemental_prefix_rows[1].command",
+    "data.performance.supplemental_prefix_rows[1].cpu_affinity",
+    "data.performance.supplemental_prefix_rows[1].framework_vllm.source_path",
+    "data.performance.supplemental_prefix_rows[1].gpu",
+    "data.rejected_measurement_attempts[0].log",
+    "data.rejected_measurement_attempts[0].reason",
+    "data.rejected_measurement_attempts[1].log",
+    "data.rejected_measurement_attempts[1].reason",
+    "data.rejected_measurement_attempts[2].log",
+    "data.rejected_measurement_attempts[2].reason",
+    "data.rejected_measurement_attempts[3].log",
+    "data.rejected_measurement_attempts[3].reason",
+    "data.rejected_measurement_attempts[4].log",
+    "data.rejected_measurement_attempts[4].reason",
+    "data.rejected_measurement_attempts[5].log",
+    "data.rejected_measurement_attempts[5].reason",
+    "data.serving.agentic.chat.command",
+    "data.serving.agentic.chat.final_answer",
+    "data.serving.agentic.chat.tool_calls[0].arguments.path",
+    "data.serving.agentic.chat.tool_calls[1].arguments.path",
+    "data.serving.agentic.chat.tool_calls[2].arguments.path",
+    "data.serving.agentic.chat.tool_calls[3].arguments.path",
+    "data.serving.agentic.chat.tool_calls[4].arguments.path",
+    "data.serving.agentic.chat.tool_calls[5].arguments.path",
+    "data.serving.agentic.chat.tool_calls[6].arguments.path",
+    "data.serving.agentic.chat.tool_calls[7].arguments.path",
+    "data.serving.agentic.chat.tool_calls[8].arguments.path",
+    "data.serving.agentic.responses.command",
+    "data.serving.agentic.responses.final_answer",
+    "data.serving.agentic.responses.tool_calls[0].arguments.path",
+    "data.serving.agentic.responses.tool_calls[10].arguments.path",
+    "data.serving.agentic.responses.tool_calls[1].arguments.path",
+    "data.serving.agentic.responses.tool_calls[2].arguments.path",
+    "data.serving.agentic.responses.tool_calls[3].arguments.path",
+    "data.serving.agentic.responses.tool_calls[4].arguments.path",
+    "data.serving.agentic.responses.tool_calls[5].arguments.path",
+    "data.serving.agentic.responses.tool_calls[6].arguments.path",
+    "data.serving.agentic.responses.tool_calls[7].arguments.path",
+    "data.serving.agentic.responses.tool_calls[8].arguments.path",
+    "data.serving.agentic.responses.tool_calls[9].arguments.path",
+    "data.serving.preliminary_agentic.chat.command",
+    "data.serving.preliminary_agentic.chat.final_answer",
+    "data.serving.preliminary_agentic.chat.tool_calls[0].arguments.path",
+    "data.serving.preliminary_agentic.responses.command",
+    "data.serving.preliminary_agentic.responses.final_answer",
+    "data.serving.preliminary_agentic.responses.tool_calls[0].arguments.path",
+    "data.serving.preliminary_agentic.responses.tool_calls[1].arguments.path",
+    "data.serving.preliminary_agentic.responses.tool_calls[2].arguments.path",
+    "data.serving.preliminary_agentic.responses.tool_calls[3].arguments.path",
+    "data.serving.preliminary_agentic.responses.tool_calls[4].arguments.path",
+    "data.serving.preliminary_agentic.responses.tool_calls[5].arguments.path",
+    "data.serving.preliminary_agentic.responses.tool_calls[6].arguments.path",
+    "data.serving.preliminary_agentic.responses.tool_calls[7].arguments.path",
+    "data.serving.preliminary_agentic.responses.tool_calls[8].arguments.path"
+  ],
+  "data": {
+    "implementation_commit": "d85c23e19a6b96a861fbd240e96e01d13d83b518",
+    "build_note": "FP64, batch and OMP runs exercised these inference changes before the final diagnostic-only serving log additions; log-asserting lifecycle and performance use the committed release binary.",
+    "model": "<local-path>",
+    "block_size": 784,
+    "mtp_drafts": 4,
+    "vllm_git_commit": "039b2ad67da6d64f7c1835c4738c7fb545ad37fc",
+    "fp64": {
+      "ordinary": {
+        "log_sha256": "14336bf94c3abb20091187b670da09c1022f99053f12116126b4f204a7b25a72",
+        "coverage": [
+          "gdn_decode",
+          "gdn_decode_state",
+          "gdn_prefill",
+          "gdn_prefill_state",
+          "gqa_decode",
+          "gqa_prefill"
+        ],
+        "output_atol": 0.03,
+        "output_rtol": 0.03,
+        "max_state_nrmse": 0.0022747992015333,
+        "max_state_relative_max": 0.003916336376689876,
+        "checks": 51,
+        "nonfinite_count": 0,
+        "text": {
+          "prompt": "请用中文简短介绍北京。",
+          "output_tokens": 16,
+          "text": "北京是中国的首都，拥有悠久的历史底蕴和丰富灿烂的文化，是著名的历史文化"
+        }
+      },
+      "mtp": {
+        "log_sha256": "318bab12b427929e71957821cf1749a8e6eb34dadc0ae29cd8777400c434b8db",
+        "coverage": [
+          "gdn_mtp_decode",
+          "gdn_mtp_state",
+          "gdn_prefill",
+          "gdn_prefill_state",
+          "gqa_decode",
+          "gqa_prefill"
+        ],
+        "output_atol": 0.03,
+        "output_rtol": 0.03,
+        "max_state_nrmse": 0.002704482600021701,
+        "max_state_relative_max": 0.002677604275579628,
+        "checks": 40,
+        "nonfinite_count": 0,
+        "text": {
+          "prompt": "请用中文简短介绍北京。",
+          "output_tokens": 16,
+          "text": "北京是中国的首都，拥有三千多年的建城史和八百多年的建都"
+        }
+      }
+    },
+    "batch_text": {
+      "ordinary": {
+        "log_sha256": "f10e1a284967c3b75a832687ca347812970afa5a0fe6b230fcad1d34232b9c64",
+        "stats": {
+          "steps": 1747,
+          "prefix_hit_tokens": 2352,
+          "initial_prefix_hit_tokens": 0,
+          "preemptions": 2,
+          "accepted_draft_tokens": 0
+        },
+        "requests": [
+          {
+            "question": "请用中文写一篇至少四千字的文章,详细介绍北京的历史、地理、交通、文化和景点。每段都以“北京:”开头,不要介绍另一个城市。请直接开始正文。",
+            "output_tokens": 1024,
+            "text": "北京:作为中华人民共和国的首都，北京不仅是中国政治、文化和国际交往的中心，更是一座拥有三千多年建城史、八百多年建都史的古老城市。这座城市的历史脉络清晰而深远，从辽代的燕京，到金代的中都，再到元大都、明清两代的京师，直至现代的新中国首都，北京始终处于中国历史发展的核心位置。其历史底蕴之深厚，在世界各大城市中亦属罕见。北京的历史不仅仅是帝王将相的更迭史，更是中华文明不断融合、创新与传承的见证。在这里，每一块砖石、每一座宫殿、每一条胡同，都仿佛会说话，诉说着千年的沧桑巨变。从周口店北京人遗址发现的远古火种，到元大都规划中体现的“左祖右社，前朝后市”的礼制思想，再到明清紫禁城所代表的封建皇权巅峰，北京的历史层层叠叠，构成了一个庞大而精密的文化体系。这种历史连续性使得北京在现代化进程中依然保持着独特的文化定力，它既拥抱全球化的浪潮，又坚守着中华文化的根脉，这种古今交融的特质，是北京最迷人的地方之一。\n\n北京:在地理环境上，北京位于华北平原的北部边缘，背靠燕山，西倚太行山，面向渤海，这种“背山面海”的地理格局赋予了北京独特的自然风貌和战略地位。北京的地形西北高、东南低，西部和北部为山地，东部和南部为平原，这种地形结构不仅影响了北京的气候特征，也决定了其城市发展的空间布局。北京属于暖温带半湿润大陆性季风气候，四季分明，春季多风干燥，夏季炎热多雨，秋季天高气爽，冬季寒冷干燥。这种气候特点使得北京的植被呈现出明显的季节性变化，春季的樱花、夏季的荷花、秋季的银杏与红叶、冬季的瑞雪，共同构成了北京四季分明的自然景观。北京的河流主要属于海河流域，永定河、潮白河等河流穿城而过，为城市提供了宝贵的水源，同时也塑造了北京的水系格局。近年来，随着南水北调工程的实施，北京的水资源状况得到了显著改善，城市生态环境不断优化。北京的地理环境不仅为居民提供了宜居的生活空间，也为旅游业的发展提供了丰富的自然资源，如香山、八达岭长城等自然景观与人文景观交相辉映，吸引了无数游客前来探访。\n\n北京:交通是北京城市运转的动脉，也是展示其现代化水平的重要窗口。作为国际大都市，北京拥有极其发达的交通网络，包括地铁、公交、出租车、共享单车以及日益完善的轨道交通系统。北京地铁线路纵横交错，覆盖了城市的主要区域，不仅连接了市中心与郊区，还延伸至周边的河北廊坊、河北燕郊等地，形成了京津冀一体化的交通格局。地铁的高效、便捷和准时，使得数百万市民每天能够顺畅地通勤，极大地缓解了地面交通的压力。除了地铁，北京的公交系统也是世界级的，线路密集，覆盖面广，且不断引入新能源公交车，致力于减少碳排放，改善空气质量。北京的机场系统同样强大，首都国际机场和大兴国际机场双枢纽运行，连接全球各大城市，使得北京成为国际航空的重要枢纽。此外，北京的高铁网络也极为发达，京沪高铁、京广高铁等线路将北京与全国主要城市紧密连接，使得“同城化”效应日益显著。在市内交通方面，北京也在不断推广绿色出行理念，共享单车和电动滑板车的普及，解决了“最后一公里”的出行难题。然而，随着城市规模的扩大和机动车数量的增加，交通拥堵依然是北京面临的一大挑战，政府通过限行、拥堵费试点、智能交通系统等措施，努力优化交通结构，提升通行效率。\n\n北京:文化是北京的灵魂，这座城市汇聚了中华文化的精华，同时也包容了世界各地的文化元素。北京的文化特色体现在其深厚的历史积淀、丰富的艺术形式以及独特的民俗风情中。京剧、昆曲、相声、评书等传统艺术形式在北京有着广泛的群众基础，各大剧院和剧场常年上演各类经典剧目，使得传统文化在现代社会中焕发出新的生机。北京还是中国文学、艺术和学术的重镇，拥有众多高校、科研院所和文化机构，如北京大学、清华大学、故宫博物院、国家博物馆等，这些机构不仅是知识传播的中心，也是文化创新的源泉。北京的胡同文化更是其独特魅力的一部分，胡同不仅是居住空间，更是社会关系的载体，邻里之间的互动、传统手工艺的传承、老北京生活方式的延续，都在胡同中得以体现。尽管城市化进程使得许多胡同被拆除或改造，但仍有不少胡同得以保留，成为游客体验老北京风情的最佳场所。此外，北京的文化氛围还体现在其多元化的艺术展览、音乐节、电影节等活动中，这些活动不仅丰富了市民的精神生活，也提升了北京的国际文化影响力。北京的文化包容性使其成为一个开放、包容、创新的城市，吸引了来自世界各地的人才和艺术家，共同创造着丰富多彩的文化景观。\n\n北京:景点是北京吸引游客的核心资源，这座城市拥有众多世界级的旅游景点，涵盖了历史古迹、皇家园林、现代地标等多种"
+          },
+          {
+            "question": "请用中文写一篇至少四千字的文章,详细介绍东京的历史、地理、交通、文化和景点。每段都以“东京:”开头,不要介绍另一个城市。请直接开始正文。",
+            "output_tokens": 1024,
+            "text": "东京:作为日本的首都及最大城市，东京不仅是日本政治、经济、文化和交通的中心，更是全球最具影响力的国际大都市之一。这座城市的历史可以追溯到数百年前，其前身是江户，一个由德川家康建立的幕府所在地。在1868年明治维新后，江户被改名为东京，意为“东方的首都”，并正式成为日本的新首都。这一转变标志着日本从封建社会向现代国家的过渡，东京也随之迅速发展成为现代化的国际都市。如今，东京以其独特的魅力、先进的科技、丰富的文化遗产和多元的生活方式吸引着来自世界各地的游客和移民。这座城市不仅拥有摩天大楼林立的现代天际线，还保留着众多古老的寺庙、神社和传统街区，完美地融合了传统与现代，展现出一种独特的都市美学。东京的人口密度极高，拥有超过一千四百万居民，是世界上最繁忙的城市之一，其高效的社会运作和严谨的公共秩序使其成为许多人心中的理想居住地。\n\n东京:从地理角度来看，东京位于日本本州岛关东平原的东南部，濒临东京湾，拥有得天独厚的地理位置。这座城市由23个特别区、26个市、5个町和8个村组成，总面积约为2194平方公里。东京的地形多样，既有平坦的沿海平原，也有起伏的山丘和森林。北部的多摩地区多山，而南部的临海地区则较为平坦，适合城市建设。东京湾是重要的天然良港，为城市的贸易和物流提供了便利。此外，东京还拥有丰富的水资源，隅田川、荒川等河流穿城而过，不仅为城市提供了水源，也构成了城市景观的重要组成部分。气候方面，东京属于温带季风气候，四季分明。春季温暖宜人，樱花盛开；夏季炎热潮湿，是梅雨季节；秋季凉爽干燥，红叶满山；冬季寒冷干燥，偶尔会有降雪。这种气候特点使得东京的四季景色各异，为游客提供了不同的旅游体验。东京的地理位置使其成为连接日本各地以及国际交通的重要枢纽，其战略地位不言而喻。\n\n东京:东京的交通系统以其高效、准时和便捷而闻名于世，是全球最发达的城市交通网络之一。东京地铁和JR东日本铁路构成了城市交通的骨干，覆盖了城市的每一个角落。东京地铁拥有多条线路，连接着各个主要区域，如新宿、涩谷、银座、上野等，乘客可以方便地在不同区域之间穿梭。JR东日本则提供了更广泛的覆盖范围，包括连接东京与周边城市的线路，如成田特快（N'EX）和横须贺线等。除了地铁和铁路，东京还拥有发达的巴士网络，巴士线路密集，几乎可以到达城市的任何角落。此外，东京的出租车服务也非常便捷，虽然价格相对较高，但提供了门到门的便利服务。东京的交通系统不仅服务于本地居民，也为游客提供了极大的便利。游客可以通过购买各种交通票券，如Suica卡、Pasmo卡等，轻松地在不同交通工具之间换乘。东京的交通准时性极高，列车通常精确到秒，这种高效的服务模式使得东京的交通系统成为全球城市交通的典范。无论是日常通勤还是旅游观光，东京的交通都能提供无缝衔接的体验，让出行变得轻松愉快。\n\n东京:东京的文化底蕴深厚，融合了日本传统文化与现代流行文化，形成了独特的都市文化景观。在传统文化方面，东京拥有众多历史悠久的寺庙和神社，如浅草寺、明治神宫、上野东照宫等，这些地方不仅是宗教活动的中心，也是游客了解日本历史和文化的重要窗口。浅草寺是东京最古老的寺庙，其雷门大灯笼是东京的标志性景观之一。明治神宫则位于繁华的涩谷区，供奉着明治天皇和昭宪皇后，是东京市民和游客祈求平安和幸福的圣地。除了宗教场所，东京还保留了许多传统的艺伎区和花街，如吉原，这些地方展示了日本传统艺术和生活方式。在现代文化方面，东京是全球流行文化的中心之一，动漫、漫画、游戏、时尚和音乐在这里蓬勃发展。秋叶原是动漫和电子产品的圣地，吸引了无数粉丝前来朝圣；原宿和表参道则是时尚潮流的前沿，汇聚了众多国际品牌和独立设计师店铺；涩谷则是年轻一代的聚集地，充满了活力和创新。东京的文化多样性使其成为一个充满创意和灵感的城市，无论是传统爱好者还是现代潮流追随者，都能在这里找到属于自己的文化共鸣。\n\n东京:东京的景点丰富多样，涵盖了历史古迹、现代建筑、自然景观和娱乐设施，为游客提供了丰富的选择。首先，浅草寺及其周边的仲见世商店街是游客必访之地，这里不仅有古老的寺庙建筑，还有各种传统小吃和手工艺品，充满了浓厚的市井气息。其次，明治神宫位于繁华的涩谷区，是一片宁静的绿洲，游客可以在这里感受自然的宁静和神圣的氛围。上野公园是东京最大的公园之一，园内拥有众多博物馆、美术馆和动物园，是文化爱好者和家庭的理想去处。东京塔和"
+          }
+        ]
+      },
+      "mtp": {
+        "log_sha256": "80d84c0ebe08274bd02bdf61cf32c53a6476b896d6c8486c9385d2544d121ff2",
+        "stats": {
+          "steps": 740,
+          "prefix_hit_tokens": 6272,
+          "initial_prefix_hit_tokens": 3136,
+          "preemptions": 3,
+          "accepted_draft_tokens": 1181
+        },
+        "requests": [
+          {
+            "question": "请用中文写一篇至少四千字的文章,详细介绍北京的历史、地理、交通、文化和景点。每段都以“北京:”开头,不要介绍另一个城市。请直接开始正文。",
+            "output_tokens": 1024,
+            "text": "北京:作为中华人民共和国的首都，北京不仅是中国政治、文化和国际交流的中心，更是一座拥有三千多年建城史、八百多年建都史的古老城市。这座城市的历史脉络清晰而深远，从辽代的南京城，到金代的燕京，再到元大都、明清两代的京师，直至现代的新中国首都，北京始终处于中国历史发展的核心位置。其历史底蕴之深厚，在世界各大城市中亦属罕见。北京的历史不仅仅是帝王将相的更迭史，更是中华文明演进、民族融合以及社会变革的缩影。在这里，每一块砖瓦、每一座宫殿、每一条胡同，都承载着厚重的历史记忆，见证着中华民族从古代走向现代，从封闭走向开放的伟大历程。了解北京，首先要从理解其独特的历史地位开始，它是中华文明的重要发祥地之一，也是多民族国家统一和发展的见证者。\n\n北京:在地理环境上，北京位于华北平原的北部边缘，背靠燕山，西倚太行山，面向渤海，这种“背山面海”的地理格局赋予了北京独特的自然风貌和战略地位。北京的地形西北高、东南低，西部和北部为山地，东部和南部为平原，这种地形结构使得北京既有山峦起伏的壮丽景色，又有平原沃野的开阔视野。燕山山脉和太行山脉构成了北京的天然屏障，不仅保护了城市免受北方寒风的直接侵袭，也为城市提供了丰富的水源和森林资源。北京的主要河流包括永定河、潮白河、北运河等，这些河流不仅滋养了这片土地，也塑造了北京独特的水系景观。气候方面，北京属于暖温带半湿润大陆性季风气候，四季分明，春季多风干燥，夏季炎热多雨，秋季天高气爽，冬季寒冷干燥。这种气候特征对北京的植被分布、农业生产以及居民的生活方式都产生了深远的影响。北京的地理环境不仅决定了其城市的空间布局，也深刻影响了其文化性格，使得北京人既有着北方人的豪爽大气，又有着皇城根下的精致细腻。\n\n北京:交通是北京这座超大城市运行的血脉，其交通网络之发达、规模之宏大，在全球城市中名列前茅。北京拥有世界上最复杂的轨道交通系统之一，地铁线路纵横交错，覆盖了城市的各个角落，极大地缓解了地面交通压力，成为市民日常出行的重要选择。除了地铁，北京还建有庞大的公交网络，包括常规公交、快速公交（BRT）以及定制公交等多种形式，满足了不同层次、不同需求的出行要求。在地面交通方面，北京拥有多条放射状和环状高速公路，如京港澳高速、京沪高速、京藏高速等，以及二环路、三环路、四环路、五环路、六环路等多条城市快速路，构成了高效的地面交通骨架。此外，北京还拥有两个国际机场——北京首都国际机场和北京大兴国际机场，其中大兴国际机场作为世界最大的单体航站楼之一，极大地提升了北京的国际航空枢纽地位。高铁网络也是北京交通的重要组成部分，京沪高铁、京广高铁、京哈高铁等线路将北京与全国各大城市紧密连接，使得“朝发夕至”成为可能。北京的交通发展始终与城市扩张同步，不断进行优化和升级，旨在构建更加绿色、智能、高效的综合交通体系，以应对日益增长的人口流动和经济发展需求。\n\n北京:文化是北京最鲜明的名片，这里汇聚了中华文化的精华，形成了独特而丰富的文化景观。北京的文化具有鲜明的皇家文化特色，故宫、天坛、颐和园等皇家园林和宫殿建筑群，展示了中国古代皇权的威严与辉煌，体现了儒家礼制思想和天人合一的哲学理念。同时，北京也是胡同文化的发源地，老北京的胡同四合院生活，蕴含着浓厚的市井气息和邻里温情，反映了普通百姓的生活智慧和道德观念。京剧作为中国的国粹，起源于北京，其唱腔、身段、服饰、脸谱等艺术形式，凝聚了中国传统戏曲艺术的精髓，深受国内外观众的喜爱。此外，北京还是文学、艺术、音乐、舞蹈等多种艺术形式的重要中心，众多著名作家、艺术家、音乐家在此创作和表演，推动了文化艺术的繁荣发展。北京的文化还体现在其饮食文化上，北京烤鸭、炸酱面、豆汁儿、焦圈等特色美食，不仅满足了人们的味蕾，更承载着北京人的情感记忆和生活情趣。北京的文化具有包容性和开放性，它既保留了传统的精髓，又积极吸收外来文化的有益成分，形成了古今交融、中西合璧的独特文化风貌。\n\n北京:景点是北京吸引全球游客的重要资源，这里拥有众多世界文化遗产和国家级风景名胜区。故宫博物院是世界上现存规模最大、保存最为完整的木质结构古建筑群，其红墙黄瓦、金碧辉煌的建筑风格，让人叹为观止，馆藏的百万件文物更是中华文明的瑰宝。天坛是明清两代皇帝祭天、祈谷的场所，其圜丘坛、祈年殿等建筑，以其独特的圆形设计和精美的装饰，体现了古代天文学和建筑学的最高成就。颐和园是中国现存规模最大、保存"
+          },
+          {
+            "question": "请用中文写一篇至少四千字的文章,详细介绍东京的历史、地理、交通、文化和景点。每段都以“东京:”开头,不要介绍另一个城市。请直接开始正文。",
+            "output_tokens": 1024,
+            "text": "东京:作为日本的首都以及全球最具影响力的超级都市之一，东京的历史渊源可以追溯到数百年前的江户时代。在1603年，德川家康在此建立了幕府，将这里定为政治中心，并开始了大规模的城市建设，包括挖掘运河、修建道路以及规划城市布局，从而奠定了现代东京的基础。当时的江户迅速从一个渔村发展成为一个拥有百万人口的大都市，成为日本经济、文化和政治的核心。随着1868年明治维新的发生，江户被改名为东京，意为“东方的首都”，标志着日本从封建社会向现代国家的转型。这一时期，东京开始引入西方的建筑风格和城市规划理念，同时保留了大量的传统日式建筑，形成了独特的东西方文化融合景观。在随后的几十年里，东京经历了多次重大变革，包括1923年的关东大地震，这场灾难摧毁了城市的大部分区域，但也促使政府重新规划城市，引入了更现代化的基础设施和抗震建筑标准。第二次世界大战期间，东京遭受了严重的空袭，城市中心几乎被夷为平地，但战后东京以惊人的速度重建，并在1964年成功举办了夏季奥运会，向世界展示了其现代化的面貌和强大的恢复能力。如今，东京不仅是日本的政治、经济和文化中心，也是全球金融、科技、时尚和娱乐的重要枢纽，其历史积淀与现代活力完美融合，使其成为一座充满故事与魅力的城市。\n\n东京:从地理角度来看，东京位于日本本州岛关东平原的东南部，濒临东京湾，拥有得天独厚的地理位置。这座城市由23个特别区以及周边的多摩地区组成，总面积约为2194平方公里，其中特别区占据了核心位置，是人口最密集、商业活动最频繁的区域。东京的地形多样，既有平坦的平原，也有起伏的山丘和森林，这种地理多样性为城市提供了丰富的自然景观和生态资源。东京湾沿岸分布着众多港口和工业区，是国际贸易和物流的重要节点，而内陆地区则逐渐过渡为住宅区和绿地公园。气候方面，东京属于温带季风气候，四季分明，春季温暖宜人，夏季炎热潮湿，秋季凉爽舒适，冬季则相对温和但偶尔会有降雪。这种气候条件使得东京在一年中的不同季节都展现出不同的风貌，吸引了大量游客前来体验。此外，东京地处环太平洋地震带，地震活动较为频繁，因此城市在规划和建设上高度重视抗震性能，许多高楼大厦都采用了先进的抗震技术，以确保居民的安全。尽管面临自然灾害的挑战，东京凭借其强大的基础设施和高效的应急管理体系，始终保持着城市的稳定运行，展现了现代都市的韧性和智慧。\n\n东京:东京的交通系统以其高效、准时和便捷而闻名于世，是全球最发达的城市交通网络之一。地铁和铁路构成了东京交通的骨干，由多家运营商共同运营，包括东京地铁、都营地铁以及JR东日本等，线路纵横交错，覆盖了城市的每一个角落。无论是前往市中心的主要商业区，还是探访郊外的自然景点，乘客都能找到合适的交通工具。东京的地铁系统不仅线路密集，而且班次频繁，高峰时段几乎每隔几分钟就有一列车进站，极大地提高了通勤效率。除了地铁，东京还拥有发达的巴士网络，连接着地铁无法直接到达的区域，为居民和游客提供了更多的出行选择。此外，东京的出租车服务也非常成熟，虽然价格相对较高，但其安全性和便利性使其成为短途出行或夜间出行的理想选择。对于长途旅行，东京的新干线连接着日本各地的主要城市，如大阪、京都和福冈，使得跨城旅行变得轻松快捷。在航空方面，成田国际机场和羽田国际机场是东京的两个主要门户，前者主要服务于国际长途航班，后者则更多承担国内及亚洲短途航班，两者共同构成了东京强大的空中交通网络。这种多层次、立体化的交通体系，不仅支撑着东京庞大的日常通勤需求，也为旅游业的发展提供了坚实保障，让游客能够轻松探索这座城市的各个角落。\n\n东京:东京的文化氛围独特而多元，传统与现代在这里和谐共存，形成了丰富多彩的文化景观。在传统文化方面，东京拥有众多历史悠久的寺庙、神社和庭园，如浅草寺、明治神宫和上野公园，这些地方不仅是宗教活动的中心，也是游客体验日本传统文化的重要场所。浅草寺作为东京最古老的寺庙，每年吸引数百万游客前来祈福和参观，其雷门大灯笼和仲见世商店街充满了浓厚的市井气息。明治神宫则坐落在繁华的都市中心，周围环绕着茂密的森林，为市民和游客提供了一个宁静的休憩空间，让人在喧嚣中感受到自然的宁静。除了宗教场所，东京还保留了许多传统的艺术形式，如歌舞伎、能剧和茶道，这些艺术形式在专门的剧院和茶室中得以传承和发展，吸引了大量国内外观众。在现代文化方面，东京是全球流行文化的重要发源地之一，动漫、漫画、电子游戏和时尚产业在这里蓬勃发展。秋叶原作为动漫文化的圣地，聚集了众多的电器商店、动漫周边店和主题咖啡馆，吸引了无数粉丝前来朝"
+          }
+        ]
+      }
+    },
+    "serving": {
+      "constraints": [
+        {
+          "case": "chat-medium-json_object",
+          "request": {
+            "model": "qwen3.5-27b-fp8",
+            "temperature": 0,
+            "messages": [
+              {
+                "role": "user",
+                "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+              }
+            ],
+            "reasoning_effort": "medium",
+            "max_completion_tokens": 4096,
+            "response_format": {
+              "type": "json_object"
+            }
+          },
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "content": "\n\n{\"n\": 123, \"label\": \"verified\"}",
+                  "reasoning_content": "The user is asking me to:\n1. Return JSON with n=123 and label=verified\n2. For tool use, call report with those arguments\n\nLet me think about this. The user wants me to return a JSON object with specific fields. They also mention \"for tool use, call report with those arguments\" - but I don't have a \"report\" tool available. I should just return the JSON as requested.\n\nLet me provide the JSON output:\n{\"n\": 123, \"label\": \"verified\"}\n\nI don't have a \"report\" tool to call, so I'll just return the JSON.\n",
+                  "role": "assistant"
+                }
+              }
+            ],
+            "created": 1789979637,
+            "id": "chatcmpl_1294008_6ab0ebf5_4",
+            "model": "qwen3.5-27b-fp8",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 152,
+              "completion_tokens_details": {
+                "reasoning_tokens": 136
+              },
+              "prompt_tokens": 33,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 185
+            }
+          },
+          "metrics": {
+            "input_tokens": 33,
+            "max_tokens": 4096,
+            "queue_ms": 0,
+            "prepare_ms": 12,
+            "output_tokens": 152,
+            "cached_tokens": 0,
+            "reasoning_tokens": 136,
+            "elapsed_s": 0.548443801,
+            "ttft_ms": 55,
+            "output_tps": 277.147812998984,
+            "steps": 37,
+            "proposed_draft_tokens": 144,
+            "accepted_draft_tokens": 115,
+            "finish_reason": "stop"
+          }
+        },
+        {
+          "case": "chat-medium-json_schema",
+          "request": {
+            "model": "qwen3.5-27b-fp8",
+            "temperature": 0,
+            "messages": [
+              {
+                "role": "user",
+                "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+              }
+            ],
+            "reasoning_effort": "medium",
+            "max_completion_tokens": 4096,
+            "response_format": {
+              "type": "json_schema",
+              "json_schema": {
+                "name": "result",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "n": {
+                      "type": "integer",
+                      "enum": [
+                        123
+                      ]
+                    },
+                    "label": {
+                      "type": "string",
+                      "const": "verified"
+                    }
+                  },
+                  "required": [
+                    "n",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                },
+                "strict": true
+              }
+            }
+          },
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "content": "\n\n{\"label\": \"verified\", \"n\": 123}",
+                  "reasoning_content": "The user is asking me to:\n1. Return JSON with n=123 and label=verified\n2. For tool use, call report with those arguments\n\nLet me think about this. The user wants me to return a JSON object with specific fields. They also mention \"for tool use, call report with those arguments\" - but I don't have a \"report\" tool available. I should just return the JSON as requested.\n\nLet me provide the JSON output:\n{\"n\": 123, \"label\": \"verified\"}\n\nI don't have a \"report\" tool to call, so I'll just return the JSON.\n",
+                  "role": "assistant"
+                }
+              }
+            ],
+            "created": 1789979637,
+            "id": "chatcmpl_1294008_6ab0ebf5_5",
+            "model": "qwen3.5-27b-fp8",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 152,
+              "completion_tokens_details": {
+                "reasoning_tokens": 136
+              },
+              "prompt_tokens": 33,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 185
+            }
+          },
+          "metrics": {
+            "input_tokens": 33,
+            "max_tokens": 4096,
+            "queue_ms": 0,
+            "prepare_ms": 2,
+            "output_tokens": 152,
+            "cached_tokens": 0,
+            "reasoning_tokens": 136,
+            "elapsed_s": 0.551241686,
+            "ttft_ms": 45,
+            "output_tps": 275.74112020258207,
+            "steps": 38,
+            "proposed_draft_tokens": 148,
+            "accepted_draft_tokens": 114,
+            "finish_reason": "stop"
+          }
+        },
+        {
+          "case": "chat-medium-tool",
+          "request": {
+            "model": "qwen3.5-27b-fp8",
+            "temperature": 0,
+            "messages": [
+              {
+                "role": "user",
+                "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+              }
+            ],
+            "reasoning_effort": "medium",
+            "max_completion_tokens": 4096,
+            "tools": [
+              {
+                "type": "function",
+                "function": {
+                  "name": "report",
+                  "description": "Report the result.",
+                  "strict": true,
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "n": {
+                        "type": "integer",
+                        "enum": [
+                          123
+                        ]
+                      },
+                      "label": {
+                        "type": "string",
+                        "const": "verified"
+                      }
+                    },
+                    "required": [
+                      "n",
+                      "label"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            ],
+            "tool_choice": "required",
+            "parallel_tool_calls": false
+          },
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "content": "\n\n",
+                  "reasoning_content": "The user wants me to call the report tool with n=123 and label=\"verified\".\n",
+                  "role": "assistant",
+                  "tool_calls": [
+                    {
+                      "function": {
+                        "arguments": "{\"label\":\"verified\",\"n\":123}",
+                        "name": "report"
+                      },
+                      "id": "call_chatcmpl_1294008_6ab0ebf6_6_0",
+                      "type": "function"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1789979638,
+            "id": "chatcmpl_1294008_6ab0ebf6_6",
+            "model": "qwen3.5-27b-fp8",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 61,
+              "completion_tokens_details": {
+                "reasoning_tokens": 22
+              },
+              "prompt_tokens": 323,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 384
+            }
+          },
+          "metrics": {
+            "input_tokens": 323,
+            "max_tokens": 4096,
+            "queue_ms": 0,
+            "prepare_ms": 3,
+            "output_tokens": 61,
+            "cached_tokens": 0,
+            "reasoning_tokens": 22,
+            "elapsed_s": 0.254685603,
+            "ttft_ms": 63,
+            "output_tps": 239.51098641410053,
+            "steps": 15,
+            "proposed_draft_tokens": 56,
+            "accepted_draft_tokens": 46,
+            "finish_reason": "stop"
+          }
+        },
+        {
+          "case": "chat-off-json_object",
+          "request": {
+            "model": "qwen3.5-27b-fp8",
+            "temperature": 0,
+            "messages": [
+              {
+                "role": "user",
+                "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+              }
+            ],
+            "reasoning_effort": "off",
+            "max_completion_tokens": 4096,
+            "response_format": {
+              "type": "json_object"
+            }
+          },
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "content": "{\n  \"n\": 123,\n  \"label\": \"verified\"\n}",
+                  "role": "assistant"
+                }
+              }
+            ],
+            "created": 1789979636,
+            "id": "chatcmpl_1294008_6ab0ebf4_1",
+            "model": "qwen3.5-27b-fp8",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 22,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "prompt_tokens": 35,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 57
+            }
+          },
+          "metrics": {
+            "input_tokens": 35,
+            "max_tokens": 4096,
+            "queue_ms": 0,
+            "prepare_ms": 962,
+            "output_tokens": 22,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0,
+            "elapsed_s": 1.104351131,
+            "ttft_ms": 1032,
+            "output_tps": 19.92120022558296,
+            "steps": 6,
+            "proposed_draft_tokens": 20,
+            "accepted_draft_tokens": 16,
+            "finish_reason": "stop"
+          }
+        },
+        {
+          "case": "chat-off-json_schema",
+          "request": {
+            "model": "qwen3.5-27b-fp8",
+            "temperature": 0,
+            "messages": [
+              {
+                "role": "user",
+                "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+              }
+            ],
+            "reasoning_effort": "off",
+            "max_completion_tokens": 4096,
+            "response_format": {
+              "type": "json_schema",
+              "json_schema": {
+                "name": "result",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "n": {
+                      "type": "integer",
+                      "enum": [
+                        123
+                      ]
+                    },
+                    "label": {
+                      "type": "string",
+                      "const": "verified"
+                    }
+                  },
+                  "required": [
+                    "n",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                },
+                "strict": true
+              }
+            }
+          },
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "stop",
+                "index": 0,
+                "message": {
+                  "content": "{\n  \"label\": \"verified\",\n  \"n\": 123\n}",
+                  "role": "assistant"
+                }
+              }
+            ],
+            "created": 1789979636,
+            "id": "chatcmpl_1294008_6ab0ebf4_2",
+            "model": "qwen3.5-27b-fp8",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 21,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "prompt_tokens": 35,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 56
+            }
+          },
+          "metrics": {
+            "input_tokens": 35,
+            "max_tokens": 4096,
+            "queue_ms": 0,
+            "prepare_ms": 1,
+            "output_tokens": 21,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0,
+            "elapsed_s": 0.114445308,
+            "ttft_ms": 44,
+            "output_tps": 183.4937610548438,
+            "steps": 6,
+            "proposed_draft_tokens": 20,
+            "accepted_draft_tokens": 15,
+            "finish_reason": "stop"
+          }
+        },
+        {
+          "case": "chat-off-tool",
+          "request": {
+            "model": "qwen3.5-27b-fp8",
+            "temperature": 0,
+            "messages": [
+              {
+                "role": "user",
+                "content": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments."
+              }
+            ],
+            "reasoning_effort": "off",
+            "max_completion_tokens": 4096,
+            "tools": [
+              {
+                "type": "function",
+                "function": {
+                  "name": "report",
+                  "description": "Report the result.",
+                  "strict": true,
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "n": {
+                        "type": "integer",
+                        "enum": [
+                          123
+                        ]
+                      },
+                      "label": {
+                        "type": "string",
+                        "const": "verified"
+                      }
+                    },
+                    "required": [
+                      "n",
+                      "label"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            ],
+            "tool_choice": "required",
+            "parallel_tool_calls": false
+          },
+          "response": {
+            "choices": [
+              {
+                "finish_reason": "tool_calls",
+                "index": 0,
+                "message": {
+                  "content": null,
+                  "role": "assistant",
+                  "tool_calls": [
+                    {
+                      "function": {
+                        "arguments": "{\"label\":\"verified\",\"n\":123}",
+                        "name": "report"
+                      },
+                      "id": "call_chatcmpl_1294008_6ab0ebf4_3_0",
+                      "type": "function"
+                    }
+                  ]
+                }
+              }
+            ],
+            "created": 1789979636,
+            "id": "chatcmpl_1294008_6ab0ebf4_3",
+            "model": "qwen3.5-27b-fp8",
+            "object": "chat.completion",
+            "usage": {
+              "completion_tokens": 38,
+              "completion_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "prompt_tokens": 325,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 363
+            }
+          },
+          "metrics": {
+            "input_tokens": 325,
+            "max_tokens": 4096,
+            "queue_ms": 0,
+            "prepare_ms": 3,
+            "output_tokens": 38,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0,
+            "elapsed_s": 0.174972611,
+            "ttft_ms": 65,
+            "output_tps": 217.1768471809568,
+            "steps": 9,
+            "proposed_draft_tokens": 32,
+            "accepted_draft_tokens": 29,
+            "finish_reason": "stop"
+          }
+        },
+        {
+          "case": "responses-medium-json_object",
+          "request": {
+            "model": "qwen3.5-27b-fp8",
+            "temperature": 0,
+            "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+            "reasoning": {
+              "effort": "medium"
+            },
+            "max_output_tokens": 4096,
+            "store": false,
+            "text": {
+              "format": {
+                "type": "json_object"
+              }
+            }
+          },
+          "response": {
+            "background": false,
+            "completed_at": 1789979639,
+            "created_at": 1789979638,
+            "error": null,
+            "id": "resp_1294008_6ab0ebf6_10",
+            "incomplete_details": null,
+            "instructions": null,
+            "max_output_tokens": 4096,
+            "metadata": {},
+            "model": "qwen3.5-27b-fp8",
+            "object": "response",
+            "output": [
+              {
+                "id": "rs_resp_1294008_6ab0ebf6_10",
+                "summary": [
+                  {
+                    "text": "The user is asking me to:\n1. Return JSON with n=123 and label=verified\n2. For tool use, call report with those arguments\n\nLet me think about this. The user wants me to return a JSON object with specific fields. They also mention \"for tool use, call report with those arguments\" - but I don't have a \"report\" tool available. I should just return the JSON as requested.\n\nLet me provide the JSON output:\n{\"n\": 123, \"label\": \"verified\"}\n\nI don't have a \"report\" tool to call, so I'll just return the JSON.\n",
+                    "type": "summary_text"
+                  }
+                ],
+                "type": "reasoning"
+              },
+              {
+                "content": [
+                  {
+                    "annotations": [],
+                    "logprobs": [],
+                    "text": "\n\n{\"n\": 123, \"label\": \"verified\"}",
+                    "type": "output_text"
+                  }
+                ],
+                "id": "msg_resp_1294008_6ab0ebf6_10",
+                "role": "assistant",
+                "status": "completed",
+                "type": "message"
+              }
+            ],
+            "parallel_tool_calls": true,
+            "previous_response_id": null,
+            "reasoning": {
+              "effort": "medium",
+              "summary": "auto"
+            },
+            "service_tier": "default",
+            "status": "completed",
+            "store": false,
+            "temperature": 0,
+            "text": {
+              "format": {
+                "type": "json_object"
+              }
+            },
+            "tool_choice": "auto",
+            "tools": [],
+            "top_p": 0.95,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 33,
+              "input_tokens_details": {
+                "cached_tokens": 0
+              },
+              "output_tokens": 152,
+              "output_tokens_details": {
+                "reasoning_tokens": 136
+              },
+              "total_tokens": 185
+            },
+            "user": null
+          },
+          "metrics": {
+            "input_tokens": 33,
+            "max_tokens": 4096,
+            "queue_ms": 0,
+            "prepare_ms": 0,
+            "output_tokens": 152,
+            "cached_tokens": 0,
+            "reasoning_tokens": 136,
+            "elapsed_s": 0.535785198,
+            "ttft_ms": 42,
+            "output_tps": 283.6957806363288,
+            "steps": 37,
+            "proposed_draft_tokens": 144,
+            "accepted_draft_tokens": 115,
+            "finish_reason": "stop"
+          }
+        },
+        {
+          "case": "responses-medium-json_schema",
+          "request": {
+            "model": "qwen3.5-27b-fp8",
+            "temperature": 0,
+            "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+            "reasoning": {
+              "effort": "medium"
+            },
+            "max_output_tokens": 4096,
+            "store": false,
+            "text": {
+              "format": {
+                "type": "json_schema",
+                "name": "result",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "n": {
+                      "type": "integer",
+                      "enum": [
+                        123
+                      ]
+                    },
+                    "label": {
+                      "type": "string",
+                      "const": "verified"
+                    }
+                  },
+                  "required": [
+                    "n",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                },
+                "strict": true
+              }
+            }
+          },
+          "response": {
+            "background": false,
+            "completed_at": 1789979639,
+            "created_at": 1789979639,
+            "error": null,
+            "id": "resp_1294008_6ab0ebf7_11",
+            "incomplete_details": null,
+            "instructions": null,
+            "max_output_tokens": 4096,
+            "metadata": {},
+            "model": "qwen3.5-27b-fp8",
+            "object": "response",
+            "output": [
+              {
+                "id": "rs_resp_1294008_6ab0ebf7_11",
+                "summary": [
+                  {
+                    "text": "The user is asking me to:\n1. Return JSON with n=123 and label=verified\n2. For tool use, call report with those arguments\n\nLet me think about this. The user wants me to return a JSON object with specific fields. They also mention \"for tool use, call report with those arguments\" - but I don't have a \"report\" tool available. I should just return the JSON as requested.\n\nLet me provide the JSON output:\n{\"n\": 123, \"label\": \"verified\"}\n\nI don't have a \"report\" tool to call, so I'll just return the JSON.\n",
+                    "type": "summary_text"
+                  }
+                ],
+                "type": "reasoning"
+              },
+              {
+                "content": [
+                  {
+                    "annotations": [],
+                    "logprobs": [],
+                    "text": "\n\n{\"label\": \"verified\", \"n\": 123}",
+                    "type": "output_text"
+                  }
+                ],
+                "id": "msg_resp_1294008_6ab0ebf7_11",
+                "role": "assistant",
+                "status": "completed",
+                "type": "message"
+              }
+            ],
+            "parallel_tool_calls": true,
+            "previous_response_id": null,
+            "reasoning": {
+              "effort": "medium",
+              "summary": "auto"
+            },
+            "service_tier": "default",
+            "status": "completed",
+            "store": false,
+            "temperature": 0,
+            "text": {
+              "format": {
+                "name": "result",
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "label": {
+                      "const": "verified",
+                      "type": "string"
+                    },
+                    "n": {
+                      "enum": [
+                        123
+                      ],
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "n",
+                    "label"
+                  ],
+                  "type": "object"
+                },
+                "strict": true,
+                "type": "json_schema"
+              }
+            },
+            "tool_choice": "auto",
+            "tools": [],
+            "top_p": 0.95,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 33,
+              "input_tokens_details": {
+                "cached_tokens": 0
+              },
+              "output_tokens": 152,
+              "output_tokens_details": {
+                "reasoning_tokens": 136
+              },
+              "total_tokens": 185
+            },
+            "user": null
+          },
+          "metrics": {
+            "input_tokens": 33,
+            "max_tokens": 4096,
+            "queue_ms": 0,
+            "prepare_ms": 0,
+            "output_tokens": 152,
+            "cached_tokens": 0,
+            "reasoning_tokens": 136,
+            "elapsed_s": 0.549443196,
+            "ttft_ms": 42,
+            "output_tps": 276.6437024001294,
+            "steps": 38,
+            "proposed_draft_tokens": 148,
+            "accepted_draft_tokens": 114,
+            "finish_reason": "stop"
+          }
+        },
+        {
+          "case": "responses-medium-tool",
+          "request": {
+            "model": "qwen3.5-27b-fp8",
+            "temperature": 0,
+            "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+            "reasoning": {
+              "effort": "medium"
+            },
+            "max_output_tokens": 4096,
+            "store": false,
+            "tools": [
+              {
+                "type": "function",
+                "name": "report",
+                "description": "Report the result.",
+                "strict": true,
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "n": {
+                      "type": "integer",
+                      "enum": [
+                        123
+                      ]
+                    },
+                    "label": {
+                      "type": "string",
+                      "const": "verified"
+                    }
+                  },
+                  "required": [
+                    "n",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "tool_choice": "required",
+            "parallel_tool_calls": false
+          },
+          "response": {
+            "background": false,
+            "completed_at": 1789979640,
+            "created_at": 1789979639,
+            "error": null,
+            "id": "resp_1294008_6ab0ebf7_12",
+            "incomplete_details": null,
+            "instructions": null,
+            "max_output_tokens": 4096,
+            "metadata": {},
+            "model": "qwen3.5-27b-fp8",
+            "object": "response",
+            "output": [
+              {
+                "id": "rs_resp_1294008_6ab0ebf7_12",
+                "summary": [
+                  {
+                    "text": "The user wants me to call the report tool with n=123 and label=\"verified\".\n",
+                    "type": "summary_text"
+                  }
+                ],
+                "type": "reasoning"
+              },
+              {
+                "content": [
+                  {
+                    "annotations": [],
+                    "logprobs": [],
+                    "text": "\n\n",
+                    "type": "output_text"
+                  }
+                ],
+                "id": "msg_resp_1294008_6ab0ebf7_12",
+                "role": "assistant",
+                "status": "completed",
+                "type": "message"
+              },
+              {
+                "arguments": "{\"label\":\"verified\",\"n\":123}",
+                "call_id": "call_resp_1294008_6ab0ebf7_12_0",
+                "id": "fc_resp_1294008_6ab0ebf7_12_0",
+                "name": "report",
+                "status": "completed",
+                "type": "function_call"
+              }
+            ],
+            "parallel_tool_calls": false,
+            "previous_response_id": null,
+            "reasoning": {
+              "effort": "medium",
+              "summary": "auto"
+            },
+            "service_tier": "default",
+            "status": "completed",
+            "store": false,
+            "temperature": 0,
+            "text": {
+              "format": {
+                "type": "text"
+              }
+            },
+            "tool_choice": "required",
+            "tools": [
+              {
+                "description": "Report the result.",
+                "name": "report",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "label": {
+                      "const": "verified",
+                      "type": "string"
+                    },
+                    "n": {
+                      "enum": [
+                        123
+                      ],
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "n",
+                    "label"
+                  ],
+                  "type": "object"
+                },
+                "strict": true,
+                "type": "function"
+              }
+            ],
+            "top_p": 0.95,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 323,
+              "input_tokens_details": {
+                "cached_tokens": 0
+              },
+              "output_tokens": 61,
+              "output_tokens_details": {
+                "reasoning_tokens": 22
+              },
+              "total_tokens": 384
+            },
+            "user": null
+          },
+          "metrics": {
+            "input_tokens": 323,
+            "max_tokens": 4096,
+            "queue_ms": 0,
+            "prepare_ms": 0,
+            "output_tokens": 61,
+            "cached_tokens": 0,
+            "reasoning_tokens": 22,
+            "elapsed_s": 0.252681306,
+            "ttft_ms": 60,
+            "output_tps": 241.41081493381233,
+            "steps": 15,
+            "proposed_draft_tokens": 56,
+            "accepted_draft_tokens": 46,
+            "finish_reason": "stop"
+          }
+        },
+        {
+          "case": "responses-off-json_object",
+          "request": {
+            "model": "qwen3.5-27b-fp8",
+            "temperature": 0,
+            "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+            "reasoning": {
+              "effort": "off"
+            },
+            "max_output_tokens": 4096,
+            "store": false,
+            "text": {
+              "format": {
+                "type": "json_object"
+              }
+            }
+          },
+          "response": {
+            "background": false,
+            "completed_at": 1789979638,
+            "created_at": 1789979638,
+            "error": null,
+            "id": "resp_1294008_6ab0ebf6_7",
+            "incomplete_details": null,
+            "instructions": null,
+            "max_output_tokens": 4096,
+            "metadata": {},
+            "model": "qwen3.5-27b-fp8",
+            "object": "response",
+            "output": [
+              {
+                "content": [
+                  {
+                    "annotations": [],
+                    "logprobs": [],
+                    "text": "{\n  \"n\": 123,\n  \"label\": \"verified\"\n}",
+                    "type": "output_text"
+                  }
+                ],
+                "id": "msg_resp_1294008_6ab0ebf6_7",
+                "role": "assistant",
+                "status": "completed",
+                "type": "message"
+              }
+            ],
+            "parallel_tool_calls": true,
+            "previous_response_id": null,
+            "reasoning": {
+              "effort": "off",
+              "summary": "auto"
+            },
+            "service_tier": "default",
+            "status": "completed",
+            "store": false,
+            "temperature": 0,
+            "text": {
+              "format": {
+                "type": "json_object"
+              }
+            },
+            "tool_choice": "auto",
+            "tools": [],
+            "top_p": 0.95,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 35,
+              "input_tokens_details": {
+                "cached_tokens": 0
+              },
+              "output_tokens": 22,
+              "output_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "total_tokens": 57
+            },
+            "user": null
+          },
+          "metrics": {
+            "input_tokens": 35,
+            "max_tokens": 4096,
+            "queue_ms": 0,
+            "prepare_ms": 0,
+            "output_tokens": 22,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0,
+            "elapsed_s": 0.111215975,
+            "ttft_ms": 42,
+            "output_tps": 197.81330874453963,
+            "steps": 6,
+            "proposed_draft_tokens": 20,
+            "accepted_draft_tokens": 16,
+            "finish_reason": "stop"
+          }
+        },
+        {
+          "case": "responses-off-json_schema",
+          "request": {
+            "model": "qwen3.5-27b-fp8",
+            "temperature": 0,
+            "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+            "reasoning": {
+              "effort": "off"
+            },
+            "max_output_tokens": 4096,
+            "store": false,
+            "text": {
+              "format": {
+                "type": "json_schema",
+                "name": "result",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "n": {
+                      "type": "integer",
+                      "enum": [
+                        123
+                      ]
+                    },
+                    "label": {
+                      "type": "string",
+                      "const": "verified"
+                    }
+                  },
+                  "required": [
+                    "n",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                },
+                "strict": true
+              }
+            }
+          },
+          "response": {
+            "background": false,
+            "completed_at": 1789979638,
+            "created_at": 1789979638,
+            "error": null,
+            "id": "resp_1294008_6ab0ebf6_8",
+            "incomplete_details": null,
+            "instructions": null,
+            "max_output_tokens": 4096,
+            "metadata": {},
+            "model": "qwen3.5-27b-fp8",
+            "object": "response",
+            "output": [
+              {
+                "content": [
+                  {
+                    "annotations": [],
+                    "logprobs": [],
+                    "text": "{\n  \"label\": \"verified\",\n  \"n\": 123\n}",
+                    "type": "output_text"
+                  }
+                ],
+                "id": "msg_resp_1294008_6ab0ebf6_8",
+                "role": "assistant",
+                "status": "completed",
+                "type": "message"
+              }
+            ],
+            "parallel_tool_calls": true,
+            "previous_response_id": null,
+            "reasoning": {
+              "effort": "off",
+              "summary": "auto"
+            },
+            "service_tier": "default",
+            "status": "completed",
+            "store": false,
+            "temperature": 0,
+            "text": {
+              "format": {
+                "name": "result",
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "label": {
+                      "const": "verified",
+                      "type": "string"
+                    },
+                    "n": {
+                      "enum": [
+                        123
+                      ],
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "n",
+                    "label"
+                  ],
+                  "type": "object"
+                },
+                "strict": true,
+                "type": "json_schema"
+              }
+            },
+            "tool_choice": "auto",
+            "tools": [],
+            "top_p": 0.95,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 35,
+              "input_tokens_details": {
+                "cached_tokens": 0
+              },
+              "output_tokens": 21,
+              "output_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "total_tokens": 56
+            },
+            "user": null
+          },
+          "metrics": {
+            "input_tokens": 35,
+            "max_tokens": 4096,
+            "queue_ms": 0,
+            "prepare_ms": 0,
+            "output_tokens": 21,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0,
+            "elapsed_s": 0.110991087,
+            "ttft_ms": 42,
+            "output_tps": 189.2043817896837,
+            "steps": 6,
+            "proposed_draft_tokens": 20,
+            "accepted_draft_tokens": 15,
+            "finish_reason": "stop"
+          }
+        },
+        {
+          "case": "responses-off-tool",
+          "request": {
+            "model": "qwen3.5-27b-fp8",
+            "temperature": 0,
+            "input": "Return JSON with n=123 and label=verified. For tool use, call report with those arguments.",
+            "reasoning": {
+              "effort": "off"
+            },
+            "max_output_tokens": 4096,
+            "store": false,
+            "tools": [
+              {
+                "type": "function",
+                "name": "report",
+                "description": "Report the result.",
+                "strict": true,
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "n": {
+                      "type": "integer",
+                      "enum": [
+                        123
+                      ]
+                    },
+                    "label": {
+                      "type": "string",
+                      "const": "verified"
+                    }
+                  },
+                  "required": [
+                    "n",
+                    "label"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            ],
+            "tool_choice": "required",
+            "parallel_tool_calls": false
+          },
+          "response": {
+            "background": false,
+            "completed_at": 1789979638,
+            "created_at": 1789979638,
+            "error": null,
+            "id": "resp_1294008_6ab0ebf6_9",
+            "incomplete_details": null,
+            "instructions": null,
+            "max_output_tokens": 4096,
+            "metadata": {},
+            "model": "qwen3.5-27b-fp8",
+            "object": "response",
+            "output": [
+              {
+                "arguments": "{\"label\":\"verified\",\"n\":123}",
+                "call_id": "call_resp_1294008_6ab0ebf6_9_0",
+                "id": "fc_resp_1294008_6ab0ebf6_9_0",
+                "name": "report",
+                "status": "completed",
+                "type": "function_call"
+              }
+            ],
+            "parallel_tool_calls": false,
+            "previous_response_id": null,
+            "reasoning": {
+              "effort": "off",
+              "summary": "auto"
+            },
+            "service_tier": "default",
+            "status": "completed",
+            "store": false,
+            "temperature": 0,
+            "text": {
+              "format": {
+                "type": "text"
+              }
+            },
+            "tool_choice": "required",
+            "tools": [
+              {
+                "description": "Report the result.",
+                "name": "report",
+                "parameters": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "label": {
+                      "const": "verified",
+                      "type": "string"
+                    },
+                    "n": {
+                      "enum": [
+                        123
+                      ],
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "n",
+                    "label"
+                  ],
+                  "type": "object"
+                },
+                "strict": true,
+                "type": "function"
+              }
+            ],
+            "top_p": 0.95,
+            "truncation": "disabled",
+            "usage": {
+              "input_tokens": 325,
+              "input_tokens_details": {
+                "cached_tokens": 0
+              },
+              "output_tokens": 38,
+              "output_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "total_tokens": 363
+            },
+            "user": null
+          },
+          "metrics": {
+            "input_tokens": 325,
+            "max_tokens": 4096,
+            "queue_ms": 0,
+            "prepare_ms": 0,
+            "output_tokens": 38,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0,
+            "elapsed_s": 0.170234086,
+            "ttft_ms": 60,
+            "output_tps": 223.22204026754076,
+            "steps": 9,
+            "proposed_draft_tokens": 32,
+            "accepted_draft_tokens": 29,
+            "finish_reason": "stop"
+          }
+        }
+      ],
+      "agentic": {
+        "chat": {
+          "api": "chat",
+          "exit_code": 0,
+          "elapsed_s": 15.286755516000994,
+          "task": "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count.",
+          "requires_review": "Verify real tool execution, tool-result follow-up requests, grounded final answer, and MTP counters in server logs; exit zero alone is not acceptance.",
+          "assistant_turns": 4,
+          "tool_results": 9,
+          "tool_errors": 0,
+          "tool_calls": [
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading repository README",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading architecture documentation",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading handoff document",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Listing repository root",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading scheduler crate entry",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading Python model runner wrapper",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading scheduler core loop details",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading worker adapter key methods",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading acceptance evidence doc",
+                "path": "<local-path>"
+              }
+            }
+          ],
+          "required_source_reads": [
+            "crates/scheduler/src/lib.rs",
+            "python/oh_my_vllm/worker/model_runner.py"
+          ],
+          "final_answer": "\n\n## oh-my-vllm — project introduction\n\n### Goals\nA **Rust-first inference framework** for **Qwen3.5-27B-FP8 on a single B200 GPU** (`<local-path>), targeting at least **95% of matched vLLM EngineCore throughput** at batch 1/2/4, input 32768, output 4096, in ordinary / MTP / prefix-hit modes (`README.md`, `AGENTS.md` \"Non-negotiable constraints\"). Core idea: **Rust owns scheduling and KV-cache bookkeeping; Python only wraps vLLM's installed `GPUWorker`** for model execution — vLLM's scheduler is explicitly forbidden by project rules (`AGENTS.md` \"Forbidden actions\", `docs/architecture.md` §1). A later extension adds a Rust-owned OpenAI-compatible HTTP service (Chat Completions + Responses with thinking, tools, JSON constraints) (`docs/serving.md`, `docs/acceptance.md`).\n\n### Architecture\nTwo processes, one ZMQ DEALER↔msgpack IPC link (default `ipc:///tmp/oh-my-vllm.ipc`), per `docs/architecture.md` §1 and `README.md`:\n\n**Rust side** (`oh-my-vllm-zmq-worker` binary, `crates/zmq-worker/`):\n- **`crates/scheduler/src/lib.rs`** — a port of vLLM's v1 scheduling: FCFS `waiting` → `running` deques, per-step token budget making chunked prefill a natural consequence of `tokens_needed.min(token_budget)` (phase 1 runs running requests first, phase 2 admits new prefills). `aligned_prefill()` clamps chunk ends to 784-token block boundaries for Mamba state alignment. Pool exhaustion triggers **recompute preemption**: `kv.free(req.id)`, `num_computed_tokens = 0`, request re-queued at the front of `waiting` (lib.rs:150–215). MTP drafts travel through `draft_token_ids` and rollback via `set_drafts([])` + `num_computed_tokens` correction.\n- **`crates/kv-cache/`** — `HybridCoordinator` with two logical groups matching the model's 16 full-attention + 48 GDN layers: a flat `BlockPool` with hand-written doubly-linked LRU, chain-hash (SHA-256[0..8]) prefix cache, and two-phase FA+Mamba allocation per vLLM issue #33775 ordering (`docs/architecture.md` §1, §3).\n- **`crates/zmq-worker/`** — CLI, `WorkerClient` (DealerSocket, msgpack), the per-step loop, and the Axum-based OpenAI serving layer (`docs/architecture.md` §6).\n\n**Python side** (`python/oh_my_vllm/worker/`):\n- `zmq_bridge.py` — event loop dispatching `init`<local-path> (`docs/architecture.md` §1).\n- **`model_runner.py`** — `OhMyVllmWorker` wraps `vllm.v1.worker.gpu_worker.Worker`. The key piece, `SchedulerAdapter.convert()`, translates Rust's **full** block tables into vLLM's **incremental** `NewRequestData`<local-path> each Rust logical allocation maps to a physical stride across shared FA/Mamba storage (`block * stride + offset`), V2 re-admission requires complete accepted history (`prefill_token_ids`), MTP drafts are re-injected as `scheduled_spec_decode_tokens`, and genuinely new blocks are reported in `new_block_ids_to_zero` for V2's pre-execution cache zeroer (model_runner.py:54–153).\n- V2 model runner is **mandatory** (`VLLM_USE_V2_MODEL_RUNNER=1`, no V1 fallback, no vLLM source changes); a local `RustDraftTokensHandler` forces real draft-token D2H so the Rust protocol always receives actual MTP IDs (`docs/architecture.md` \"Python side\", ADR-002/ADR-005).\n\nKey invariants: `block_size = 784` (hybrid GDN requirement, unchangeable), Mamba group `mamba_cache_mode=\"align\"`, prefix hits capped at `num_tokens - 1` (last token always recomputed for logits) (`docs/architecture.md` §3, `AGENTS.md`).\n\n### How to run\nTwo conda envs wrapped by scripts (framework commands in `oh-my-vllm`, GPU work in `vllm`); GPU tests wait for an idle B200 and pin its UUID (`README.md` Quick start, `scripts/with-env.sh`, `scripts/with-gpu.sh`):\n\n```bash\n# Build\nscripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker\n\n# Smoke: 64 tokens over the ZMQ worker\nscripts/with-gpu.sh scripts/with-env.sh ...<local-path> scripts/smoke-text.py \\\n    --socket <local-path> --max-tokens 64\n\n# Paired performance vs vLLM EngineCore\nscripts/with-gpu.sh scripts/with-env.sh ...<local-path> benchmarks/compare_vllm.py \\\n    --mode ordinary --batch-sizes 1 2 4 --output <local-path>\n\n# Local OpenAI service at http://127.0.0.1:8000/v1 (MTP4)\nscripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker \\\n    --socket <local-path> --num-speculative-tokens 4 serve\n```\n\nChecks: `cargo test --workspace`, `cargo clippy --all-targets --all-features -- -D warnings`, `ruff format/check python/` (`README.md`, `AGENTS.md` task-end checklist).\n\n### Completion status\n- **EngineCore performance gate: PASSED** — all nine required rows measured 97.13%–103.78% of matched vLLM (e.g. ordinary bs1 101.66%, MTP bs2 103.78%, prefix bs4 97.13%), medians of 3 runs × 2 warmups on B200, with raw data committed to `bench/baseline/2026-09-19-acceptance.json` (`docs/acceptance.md`, `README.md`).\n- **Serving: accepted in real GPU runs** — both APIs completed real agentic tasks; all 12 constraint × thinking cases, five thinking levels, stored Responses lifecycle, disconnect recovery passed with real MTP4 draft acceptance on 2026-09-21 (`docs/acceptance.md`, `docs/handoff.md`).\n- **Correctness:** actual-path GQA/GDN FP64 probes (atol/rtol 0.03, recurrent-state NRMSE ≤1%), coherent Chinese text tests through preemption (2–4 recompute preemptions), 75 Rust + 39 Python CPU tests (`docs/accepting.md`, `docs/handoff.md`).\n- **One open item:** the V2-migration log-proof lifecycle assertion still needs a GPU run, and the nine-row performance matrix should be re-verified against the frozen baseline after the V2 migration — `docs/handoff.md` explicitly says not to label the migration fully accepted until that and performance pass.\n- **Explicitly out of scope:** multi-GPU/TP, CPU KV swap (REQ-OUT-SCOPE-001), LoRA, multimodal, gRPC (`docs/architecture.md` §5).",
+          "client_log_sha256": "4ba00bcc9d8cf1628f98e5d2c7b1af26f578ecf95a6b0e9f5ed43bf3f42cf367",
+          "request_metrics": {
+            "1": {
+              "output_tokens": "242",
+              "input_tokens": "6297",
+              "cached_tokens": "0",
+              "reasoning_tokens": "28",
+              "elapsed_s": "3.048999308",
+              "ttft_ms": "2233",
+              "output_tps": "79.37030335331254",
+              "steps": "57",
+              "proposed_draft_tokens": "224",
+              "accepted_draft_tokens": "186",
+              "finish_reason": "stop"
+            },
+            "2": {
+              "output_tokens": "173",
+              "input_tokens": "15146",
+              "cached_tokens": "6272",
+              "reasoning_tokens": "50",
+              "elapsed_s": "1.094752002",
+              "ttft_ms": "459",
+              "output_tps": "158.0266578037279",
+              "steps": "45",
+              "proposed_draft_tokens": "176",
+              "accepted_draft_tokens": "129",
+              "finish_reason": "stop"
+            },
+            "3": {
+              "output_tokens": "375",
+              "input_tokens": "16189",
+              "cached_tokens": "14896",
+              "reasoning_tokens": "181",
+              "elapsed_s": "1.996243408",
+              "ttft_ms": "173",
+              "output_tps": "187.85284324405393",
+              "steps": "125",
+              "proposed_draft_tokens": "496",
+              "accepted_draft_tokens": "251",
+              "finish_reason": "stop"
+            },
+            "4": {
+              "output_tokens": "1859",
+              "input_tokens": "21330",
+              "cached_tokens": "15680",
+              "reasoning_tokens": "119",
+              "elapsed_s": "8.251651293",
+              "ttft_ms": "333",
+              "output_tps": "225.28824037644654",
+              "steps": "532",
+              "proposed_draft_tokens": "2124",
+              "accepted_draft_tokens": "1328",
+              "finish_reason": "stop"
+            }
+          },
+          "review": "Successful real source reads, documentation reads, tool-result follow-ups and grounded final answer; V2 acceptance correctly described as ongoing at read time."
+        },
+        "responses": {
+          "api": "responses",
+          "exit_code": 0,
+          "elapsed_s": 20.472482781000508,
+          "task": "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files. Read at least crates/scheduler/src/lib.rs and python/oh_my_vllm/worker/model_runner.py with the read tool before writing the final answer; directory listings alone do not count.",
+          "requires_review": "Verify real tool execution, tool-result follow-up requests, grounded final answer, and MTP counters in server logs; exit zero alone is not acceptance.",
+          "assistant_turns": 4,
+          "tool_results": 11,
+          "tool_errors": 0,
+          "tool_calls": [
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading project README",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading handoff doc for status",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading architecture documentation",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "glob",
+              "arguments": {
+                "i": "Listing repository top-level layout",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading rest of handoff doc",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading scheduler crate entry",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading Python model runner",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading requirements document",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading acceptance evidence document",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading scheduler core loop body",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading worker adapter core methods",
+                "path": "<local-path>"
+              }
+            }
+          ],
+          "required_source_reads": [
+            "crates/scheduler/src/lib.rs",
+            "python/oh_my_vllm/worker/model_runner.py"
+          ],
+          "final_answer": "\n\n# oh-my-vllm — Project Introduction\n\n## 1. Goals\n\n**Primary objective (REQ-GOAL-001, `docs/requirements.md`):** build a Rust-first inference framework for **Qwen3.5-27B-FP8 on a single B200 GPU** that reaches **≥95% of vLLM EngineCore output throughput** at batch 1/2/4 with in=32768/out=4096, in three modes (ordinary, MTP speculative decoding, controlled prefix-hit) — 9 required rows total (`docs/requirements.md` REQ-PERF-001).\n\nThe design constraint (`REQ-ARCH-001`): **Rust owns the scheduler and KV cache bookkeeping; Python only wraps vLLM's installed `GPUWorker`** for model loading, forward pass, attention kernels and CUDAGraph capture. vLLM's Python scheduler is never called; the split is \"the design, not an implementation convenience.\" The boundary is a single ZMQ DEALER socket carrying msgpack; no shared memory, no tensors cross.\n\nA 2026-09-21 extension (`REQ-SERVE-001`..`004`) adds a **local OpenAI-compatible service** (Chat Completions + Responses, streaming, tools, JSON/strict-schema constraints via XGrammar token masks with MTP, configurable thinking, stored Responses) implemented with Rust owning HTTP and lifecycle.\n\nThe target model `<local-path> is a hybrid: **48 GatedDeltaNet (Mamba) + 16 full-attention layers**, forcing a **block size of 784 tokens** (hard constraint, `REQ-MODEL-001`) and two logical KV groups — FA (`mamba_cache_mode=\"align\"` for the Mamba group) — per `docs/architecture.md` §3.\n\n## 2. Architecture\n\nPer `docs/architecture.md` §1 and the code:\n\n**Rust binary `oh-my-vllm-zmq-worker`** (`crates/zmq-worker/src/main.rs`):\n\n- **Scheduler** (`crates/scheduler/src/lib.rs`) — a focused port of vLLM's v1 scheduler: FCFS `waiting` → `running` queues, per-step token budget (`max_num_batched_tokens`, chunked prefill falls out of `remaining.min(budget)` plus `aligned_prefill` which snaps prefill chunks to 784-token block boundaries to materialize Mamba checkpoints), phase-1 running / phase-2 waiting ordering for continuous batching, **preemption by recompute** when the pool is exhausted, and MTP accounting with draft rollback (`num_computed_tokens` correction). I read `lib.rs` directly: `Scheduler::schedule()` walks the running queue, calls `HybridCoordinator::allocate_slots`, emits `ScheduledRequest` with full FA + Mamba block tables and `new_block_ids_to_zero`, then `update(WorkerOutput)` frees finished requests and rolls back rejected drafts.\n- **HybridCoordinator** (`crates/kv-cache/`) — flat `Vec<Block>` pool with a hand-written doubly-linked LRU free queue, chain-hash prefix cache (SHA-256 truncated to 64 bits per block), two `GroupManager`s (FA + Mamba) with a two-phase allocation sequence matching vLLM's ordering.\n- **WorkerClient** (`crates/zmq-worker/src/client.rs`) — DEALER bound at `ipc:///tmp/oh-my-vllm.ipc` (both sides DEALER because zeromq 0.6.0 lacks `PairSocket`; `docs/decisions/ADR-001-zmq-socket-type.md`), msgpack protocol documented in `docs/design.md`. Spawns the Python bridge as a child process.\n- **Serving** (`crates/zmq-worker/src/serving/`) — Axum HTTP for both OpenAI APIs, model discovery, bounded/expiring in-memory Responses store, deadlines and disconnect cancellation; a `prepare` ZMQ RPC lets Python tokenize/template before Rust admission.\n\n**Python process** (`python/oh_my_vllm/worker/`):\n\n- `zmq_bridge.py` — event loop dispatching `init` / `register` / `execute` / `abort` / `shutdown`.\n- `model_runner.py` (read directly) — `OhMyVllmWorker` wraps `vllm.v1.worker.gpu_worker.Worker`. It **requires the V2 Model Runner** (`GPUModelRunner`, no V1 fallback, no vLLM source modified — `REQ-RUNNER-001`, `docs/decisions/ADR-005-v2-model-runner.md`). `SchedulerAdapter.convert()` translates Rust's full block tables into vLLM's incremental `NewRequestData`<local-path> (block-table suffix deltas; logical FA/Mamba groups mapped into the worker's three physical Mamba groups + one FA group via disjoint physical IDs, ADR-002), validates the 784 block size at three points (`load_model`, `initialize_cache`, and Rust capacity cross-check), and `execute_model()` calls `Worker.execute_model` then `sample_tokens` (with XGrammar masks when serving), pulls real MTP drafts via `take_draft_token_ids()`, and optionally does incremental detokenization/finish-reason extraction for serving.\n- `v2_runner.py` — `RustDraftTokensHandler` reuses vLLM's async D2H path so unconstrained MTP requests return *real* draft IDs (fixing V2's `-1` placeholders); also warmup-cache zeroing (`clear_warmup_cache`) and reporting of genuinely-new allocations for V2's pre-execution cache zeroer.\n- `serving.py` — `ServingAdapter`: local chat template, XGrammar masks for each draft prefix + bonus position (rolled back after simulation), per-request grammar/detokenizer state.\n\nOne step's data flow (`docs/architecture.md` §1): `Scheduler.schedule()` → msgpack `ExecuteMsg` → Python `Worker.execute_model` + `sample_tokens` → `ExecuteResultMsg` → `Scheduler.update(WorkerOutput)` → free/rollback.\n\n## 3. How to run it\n\nFrom `README.md` Quick start (env wrappers set `PYTHONPATH`<local-path>; GPU scripts wait for an idle B200 and pin its UUID — `scripts/with-gpu.sh`, `scripts/with-env.sh`):\n\n```bash\n# Build the Rust binary\nscripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker\n\n# Smoke: 64 tokens of real text\nscripts/with-gpu.sh scripts/with-env.sh <local-path> \\\n  scripts/smoke-text.py --socket <local-path> --max-tokens 64\n# add --num-speculative-tokens 4 for MTP\n\n# Paired benchmark vs vLLM EngineCore (modes: ordinary, mtp, prefix)\nscripts/with-gpu.sh scripts/with-env.sh <local-path> \\\n  benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output <local-path>\n\n# OpenAI-compatible service (MTP4) at http://127.0.0.1:8000/v1\nscripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker \\\n  --socket <local-path> --num-speculative-tokens 4 serve\n```\n\nVerification: `cargo test --workspace`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo fmt --all --check` + `python scripts/check_rust_line_width.py`, `ruff format/check python/` — all via `scripts/with-env.sh` (root `AGENTS.md`).\n\n## 4. Current completion status (as of 2026-09-21, `docs/handoff.md` + `docs/acceptance.md`)\n\n**Done and accepted:**\n\n- **EngineCore performance target met.** All nine required rows passed on 2026-09-19: ordinary 101.66%<local-path>, MTP 102.64%<local-path>, prefix 101.68%<local-path> of matched vLLM (`docs/acceptance.md`; raw data `bench/baseline/2026-09-19-acceptance.json`), with an extra MTP-bs2 repeat pair (98.85%) to confirm material spread.\n- **Correctness:** actual-path GQA/GDN FP64 probes (prefill/decode/784-boundary/speculative states), coherent Chinese text in ordinary/MTP/prefix combinations with real preemptions, prefix hits (3136 tokens) and accepted drafts (1143), evidence in `docs/acceptance.md` and `bench/baseline/2026-09-19-batch-text.json`.\n- **OpenAI serving (2026-09-21):** real MTP4 acceptance passed on B200 `<gpu-identity>` — both APIs completed the read-only agentic repository task, all 12 Chat/Responses × off/medium × constraint combinations with real proposed/accepted drafts (no fallback), all five thinking levels, stored-Responses continuation/retrieve/delete, disconnect recovery; 202.8–280.1 tok/s on short constrained cases (`docs/acceptance.md`, `bench/baseline/2026-09-21-serving-acceptance.json`). Two defects were found and fixed during it (Qwen XML newline wrapping; per-token vocabulary lookup, ~29 ms → ~0.1 ms).\n- CPU regression: 75 Rust tests, 39 Python tests, rustfmt/hard-width, clippy, ruff all passing.\n\n**In progress — not yet accepted:** the **V2 Model Runner migration** (`REQ-RUNNER-001`, ADR-005; the current top section of `docs/handoff.md`). The V2-only worker, real-draft D2H transfer, Rust-owned accepted-history resumption and mandatory hybrid-cache zeroing are implemented and pass actual-path FP64 probes, two-request text, MTP4/prefix/staggered arrivals with preemptions, and the full serving constraint suite. Explicitly *not* done yet: (a) re-running the nine performance rows against the frozen 2026-09-19 baseline (`--baseline-json`, never re-running EngineCore); (b) one stronger DEBUG-log assertion on the serving lifecycle script requiring a GPU run; and (c) the host is currently blocked — an unrelated user's pytest occupies all visible GPUs, so runs must wait on `scripts/with-gpu.sh`. The handoff states: \"Do not label the migration fully accepted until that and performance pass.\"\n\n**Explicitly out of scope** (`docs/architecture.md` §5, `REQ-OUT-SCOPE-001`): swap-based preemption (CPU KV offload), multi-GPU/TP>1, LoRA, multimodal, gRPC, production deployment.\n\n**Note:** the historical EngineCore performance numbers were measured on the pre-serving V1-based worker binary (`12d227d`); they remain the acceptance gate for the V2 migration but have not yet been re-measured on the new code.",
+          "client_log_sha256": "c456030cc1234af76af88681300fd0f792f207d618087db20f707dc7749f4da9",
+          "request_metrics": {
+            "5": {
+              "output_tokens": "235",
+              "input_tokens": "6298",
+              "cached_tokens": "0",
+              "reasoning_tokens": "16",
+              "elapsed_s": "1.121690842",
+              "ttft_ms": "316",
+              "output_tps": "209.50514277266427",
+              "steps": "56",
+              "proposed_draft_tokens": "220",
+              "accepted_draft_tokens": "180",
+              "finish_reason": "stop"
+            },
+            "6": {
+              "output_tokens": "274",
+              "input_tokens": "14809",
+              "cached_tokens": "6272",
+              "reasoning_tokens": "32",
+              "elapsed_s": "1.377834813",
+              "ttft_ms": "496",
+              "output_tps": "198.86273551428985",
+              "steps": "62",
+              "proposed_draft_tokens": "244",
+              "accepted_draft_tokens": "213",
+              "finish_reason": "stop"
+            },
+            "7": {
+              "output_tokens": "522",
+              "input_tokens": "20254",
+              "cached_tokens": "14896",
+              "reasoning_tokens": "327",
+              "elapsed_s": "3.08267961",
+              "ttft_ms": "374",
+              "output_tps": "169.333199047565",
+              "steps": "185",
+              "proposed_draft_tokens": "736",
+              "accepted_draft_tokens": "338",
+              "finish_reason": "stop"
+            },
+            "8": {
+              "output_tokens": "3130",
+              "input_tokens": "26436",
+              "cached_tokens": "20384",
+              "reasoning_tokens": "550",
+              "elapsed_s": "13.936506219",
+              "ttft_ms": "362",
+              "output_tps": "224.59000489898895",
+              "steps": "907",
+              "proposed_draft_tokens": "3624",
+              "accepted_draft_tokens": "2224",
+              "finish_reason": "stop"
+            }
+          },
+          "review": "Successful real source reads, documentation reads, tool-result follow-ups and grounded final answer; V2 acceptance correctly described as ongoing at read time."
+        }
+      },
+      "lifecycle": {
+        "first": {
+          "sha256": "d5f818cdcffe1460163012b290a27be05a8ed42a1d7c94a306be17309a6638e2",
+          "verification": {
+            "mixed_request_ids": [
+              8,
+              9
+            ],
+            "canceled_request_id": 10,
+            "same_batch": true,
+            "worker_released": true
+          },
+          "thinking_levels": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "stored_response_ids": [
+            "resp_1345243_6ab0ed6c_6",
+            "resp_1345243_6ab0ed6c_7"
+          ]
+        },
+        "-warm": {
+          "sha256": "134c62fd4bd9342dc297899587d23765b19ff23a7f41f9f11686e5c6f939651c",
+          "verification": {
+            "mixed_request_ids": [
+              19,
+              20
+            ],
+            "canceled_request_id": 21,
+            "same_batch": true,
+            "worker_released": true
+          },
+          "thinking_levels": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "stored_response_ids": [
+            "resp_1345243_6ab0ed6d_17",
+            "resp_1345243_6ab0ed6d_18"
+          ]
+        }
+      },
+      "service_log_sha256": "264b335dad74f6b51428c56a98c1ed38713ee51ff9c63e063d73bd0d9240a1f7",
+      "lifecycle_service_log_sha256": "7a1431cc55210ce805bf24b4ae289a09cd09af3ac4f545fb0217051995c76c98",
+      "preliminary_agentic": {
+        "chat": {
+          "api": "chat",
+          "exit_code": 0,
+          "elapsed_s": 16.49534356500044,
+          "task": "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files.",
+          "requires_review": "Verify real tool execution, tool-result follow-up requests, grounded final answer, and MTP counters in server logs; exit zero alone is not acceptance.",
+          "assistant_turns": 6,
+          "tool_results": 15,
+          "tool_errors": 0,
+          "tool_calls": [
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Listing repo root",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "glob",
+              "arguments": {
+                "i": "Finding docs files",
+                "path": "docs/*"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading project README",
+                "path": "README.md"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading architecture doc",
+                "path": "docs/architecture.md"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading handoff doc",
+                "path": "docs/handoff.md"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading rest of handoff history",
+                "path": "docs/handoff.md:301-410"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading requirements doc",
+                "path": "docs/requirements.md"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading wire protocol design",
+                "path": "docs/design.md"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading acceptance evidence",
+                "path": "docs/acceptance.md"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading development guide",
+                "path": "docs/development.md"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading serving doc",
+                "path": "docs/serving.md"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading docs index",
+                "path": "docs/README.md"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading plan doc",
+                "path": "docs/plan.md"
+              }
+            },
+            {
+              "name": "glob",
+              "arguments": {
+                "i": "Mapping source crates",
+                "path": "crates/scheduler/src; crates/kv-cache/src; crates/zmq-worker/src"
+              }
+            },
+            {
+              "name": "glob",
+              "arguments": {
+                "i": "Mapping Python worker package",
+                "path": "python/oh_my_vllm/**"
+              }
+            }
+          ],
+          "final_answer": "\n\n## oh-my-vllm — project overview\n\n### Goals\n\nA Rust-first inference framework for **Qwen3.5-27B-FP8** (the checkpoint at `<local-path>, 48 GatedDeltaNet/Mamba + 16 full-attention layers) on a **single B200 GPU**, whose hard requirement is **≥95% of matched vLLM EngineCore output throughput** at batch 1/2/4, input 32768 / output 4096, in three modes: ordinary decoding, MTP speculative decoding, and controlled prefix-hit ([`README.md`](README.md), [`docs/requirements.md`](docs/requirements.md) REQ-GOAL-001, REQ-PERF-001, REQ-MODEL-001).\n\nThe defining constraint is the split itself: **Rust owns the scheduler and KV-cache bookkeeping; Python wraps the installed vLLM `GPUWorker` for model execution; vLLM's scheduler is never used** ([`AGENTS.md`], [`docs/requirements.md`](docs/requirements.md) REQ-ARCH-001). Model-specific invariants: `block_size = 784` (hard, from the hybrid architecture), FA + Mamba KV groups with `mamba_cache_mode=\"align\"` ([`docs/architecture.md`](docs/architecture.md) §3, [`docs/requirements.md`](docs/requirements.md) REQ-MODEL-001).\n\n### Architecture\n\nTwo processes, no shared memory, one ZMQ DEALER socket with msgpack messages per step ([`docs/architecture.md`](docs/architecture.md) §1, §4; [`docs/design.md`](docs/design.md); socket choice ADR-001 in [`docs/decisions/`](docs/decisions/)):\n\n**Rust binary `oh-my-vllm-zmq-worker`** ([`crates/zmq-worker/src/main.rs`](crates/zmq-worker/src/main.rs), [`client.rs`](crates/zmq-worker/src/client.rs), protocol in [`protocol.rs`](crates/zmq-worker/src/protocol.rs)):\n- **Scheduler** ([`crates/scheduler/src/lib.rs`](crates/scheduler/src/lib.rs), [`request.rs`](crates/scheduler/src/request.rs), [`output.rs`](crates/scheduler/src/output.rs)): FCFS waiting→running queues, per-step token budget (chunked prefill), two-phase scheduling (running before new prefills), recompute-based preemption, MTP draft rollback, explicit Mamba-aligned prefill splits.\n- **HybridCoordinator / BlockPool** ([`crates/kv-cache/src/coordinator.rs`](crates/kv-cache/src/coordinator.rs), [`pool.rs`](crates/kv-cache/src/pool.rs), [`group.rs`](crates/kv-cache/src/group.rs), [`block.rs`](crates/kv-cache/src/block.rs), [`hash.rs`](crates/kv-cache/src/hash.rs)): one shared flat `Vec<Block>` pool with a doubly-linked LRU free queue, chain-hash (truncated SHA-256) prefix cache, two group managers (FA=16 layers, Mamba=48 layers), vLLM-issue-#33775 two-phase allocation, and cache-hit reconciliation (`min(fa_len, mb_len)` for this simple-hybrid model).\n\n**Python process** `python -m oh_my_vllm.worker.zmq_bridge` ([`python/oh_my_vllm/worker/zmq_bridge.py`](python/oh_my_vllm/worker/zmq_bridge.py)): dispatches `init`<local-path> ([`docs/design.md`](docs/design.md)); [`model_runner.py`](python/oh_my_vllm/worker/model_runner.py) wraps vLLM's `Worker` (`execute_model` + `sample_tokens`, preserving every token and MTP drafts); [`v2_runner.py`](python/oh_my_vllm/worker/v2_runner.py) carries the V2-model-runner adaptation (`RustDraftTokensHandler` returns real MTP draft IDs; logical FA/Mamba block tables map into disjoint physical groups per ADR-002; V2-mandatory cache zeroing of fresh allocations). No vLLM source is modified.\n\nPer step: `Scheduler.schedule()` → msgpack `execute` over ZMQ → `Worker.execute_model`<local-path> → `execute_result` → `Scheduler.update()`, with finished/preempted IDs flushed back ([`docs/architecture.md`](docs/architecture.md) §1 data flow).\n\n**OpenAI serving** (`serve` subcommand, Axum in [`crates/zmq-worker/src/serving/`](crates/zmq-worker/src/serving/)): Rust owns HTTP, request lifecycle, deadlines, cancellation, and stored Responses (bounded/expiring); Python owns templating, XGrammar masks, incremental detokenization, GPU execution ([`docs/serving.md`](docs/serving.md), ADR-004). Grammar masks stay in Python and never cross ZMQ.\n\n### How to run\n\nTwo conda envs (framework + vllm/torch), wrappers set `PYTHONPATH`<local-path> interpreter ([`docs/development.md`](docs/development.md)):\n\n```bash\n# build\nscripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker\n\n# text smoke test (waits for an idle B200, pins its UUID)\nscripts/with-gpu.sh scripts/with-env.sh <local-path> scripts/smoke-text.py --socket <local-path> --max-tokens 64\n\n# matched benchmark vs vLLM EngineCore (modes: ordinary | mtp | prefix)\nscripts/with-gpu.sh scripts/with-env.sh <local-path> benchmarks/compare_vllm.py --mode ordinary --batch-sizes 1 2 4 --output <local-path>\n\n# local OpenAI-compatible service (Chat Completions + Responses at 127.0.0.1:8000/v1, MTP4)\nscripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket <local-path> --num-speculative-tokens 4 serve\n```\n\nChecks: `cargo test --workspace`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo fmt --all --check` + hard 100-char width check, `ruff format/check python/` ([`README.md`](README.md), [`docs/development.md`](docs/development.md)). Serving acceptance via [`scripts/agentic-acceptance.py`](scripts/agentic-acceptance.py) and [`scripts/serving-acceptance.py`](scripts/serving-acceptance.py) ([`docs/serving.md`](docs/serving.md)).\n\n### Current completion status (2026-09-21)\n\n**Passed and committed:**\n- **Performance acceptance complete.** All nine required rows pass the ≥95% gate: ordinary 101.66%<local-path>, MTP 102.64%<local-path>, prefix 101.68%<local-path> of matched vLLM, measured on a clean binary (`12d227d`), raw repetitions in [`bench/baseline/2026-09-19-acceptance.json`](bench/baseline/2026-09-19-acceptance.json) ([`docs/acceptance.md`](docs/acceptance.md), [`docs/requirements.md`](docs/requirements.md) REQ-PERF-001 \"All nine required rows passed\"). An MTP-bs2 variance follow-up passed at 98.85% ([`docs/acceptance.md`](docs/acceptance.md)).\n- **Correctness:** actual-path GQA/GDN FP64 probes (prefill/decode/cross-784/speculative states), coherent ordinary/MTP/prefix text, preemption/recompute and two-request batch tests ([`docs/acceptance.md`](docs/acceptance.md), [`docs/testing.md`](docs/testing.md), [`tests/probe_worker.py`](tests/probe_worker.py)).\n- **All core features implemented:** chunked prefill, continuous batching, prefix caching, recompute preemption, MTP4 with real draft scheduling ([`docs/requirements.md`](docs/requirements.md) REQ-FUNC-001..005).\n- **OpenAI serving implemented and accepted with real MTP4** on a UUID-pinned B200: both agentic oh-my-pi tasks, all 12 JSON/Schemas/strict-tool combinations, five thinking levels, stored Responses lifecycle — [`docs/acceptance.md`](docs/acceptance.md), [`docs/serving.md`](docs/serving.md), evidence in [`bench/baseline/2026-09-21-serving-acceptance.json`](bench/baseline/2026-09-21-serving-acceptance.json).\n\n**In flight:** a V2 model-runner migration (REQ-RUNNER-001, mandatory, no V1 fallback, no vLLM patches). Per [`docs/handoff.md`](docs/handoff.md), V2 FP64 ordinary/MTP probes and CPU suites (75 Rust + 39 Python tests, clippy, ruff, hard-width) pass, and two defect fixes (real MTP draft D2H, cache zeroing after warmup) landed — but **\"final serving and MTP/prefix/preemption regression runs are being completed after these fixes; do not label the migration fully accepted yet.\"** Remaining: re-run the nine framework performance rows against the frozen 2026-09-19 baseline with `--baseline-json` (never rerun the vLLM side), record evidence, doc alignment, then commit to `main`.\n\n**Explicitly out of scope:** multi-GPU/TP>1, CPU KV swap, LoRA, multimodal, gRPC, production deployment ([`docs/requirements.md`](docs/requirements.md) REQ-OUT-SCOPE-001, [`docs/architecture.md`](docs/architecture.md) §5).\n\nIn short: the engine core met its performance and correctness targets and is committed; the OpenAI serving extension is built and accepted; the current open work is final verification of the V2 runner migration before it is committed.",
+          "client_log_sha256": "130cf291e0fb1d8d883c9ff9035603af696e15c445bb872d4a225600a31c04cd",
+          "review": "Tool executions and follow-up turns succeeded; final answer cites actual repository files and identifies V2 regression verification as pending at read time."
+        },
+        "responses": {
+          "api": "responses",
+          "exit_code": 0,
+          "elapsed_s": 17.544961679001062,
+          "task": "Read this repository's README, architecture documentation and necessary source. Introduce the project goals, architecture, how to run it and its current completion status. Cite the files supporting your answer. Do not modify files.",
+          "requires_review": "Verify real tool execution, tool-result follow-up requests, grounded final answer, and MTP counters in server logs; exit zero alone is not acceptance.",
+          "assistant_turns": 4,
+          "tool_results": 9,
+          "tool_errors": 0,
+          "tool_calls": [
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading project README",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading current handoff status",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading architecture documentation",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Listing repository root structure",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading acceptance evidence documentation",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading rest of handoff history",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading requirements documentation",
+                "path": "<local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Listing Rust crate layout",
+                "path": "<local-path>; <local-path>; <local-path>"
+              }
+            },
+            {
+              "name": "read",
+              "arguments": {
+                "i": "Reading workspace manifest",
+                "path": "<local-path>"
+              }
+            }
+          ],
+          "final_answer": "\n\n## oh-my-vllm — project introduction\n\n### Goal\n\nBuild a **Rust-first inference framework for Qwen3.5-27B-FP8 on a single B200 GPU** that reaches **≥95% of matched vLLM EngineCore throughput** (bs=1/2/4, in=32768, out=4096, in ordinary / MTP / prefix-hit modes — 9 rows total). The defining design constraint: **Rust owns scheduling and KV-cache bookkeeping; Python only wraps vLLM's `GPUWorker`** for model execution, and vLLM's scheduler is never used. ([README.md](README.md), [docs/requirements.md](docs/requirements.md) `REQ-GOAL-001`, `REQ-ARCH-001`, `REQ-PERF-001`, [AGENTS.md](AGENTS.md) non-negotiables)\n\nModel-specific hard constraints: block size **784 tokens** (hybrid-architecture requirement, must not change), 16 full-attention layers + 48 GDN/Mamba layers tracked as two logical KV groups (FA group 0, Mamba group 1 with `mamba_cache_mode=\"align\"`). ([docs/requirements.md](docs/requirements.md) `REQ-MODEL-001`, [docs/architecture.md](docs/architecture.md) §3)\n\n### Architecture\n\nTwo processes over a **ZMQ DEALER socket with msgpack** (no shared memory, no tensors crossing; Rust binds `ipc:///tmp/oh-my-vllm.ipc`, Python connects — DEALER chosen because zeromq 0.6.0 has no PairSocket, [docs/decisions/ADR-001](docs/decisions/ADR-001-zmq-socket-type.md)):\n\n**Rust side** (`oh-my-vllm-zmq-worker` binary; [Cargo.toml](Cargo.toml) workspace with 3 crates):\n- `crates/scheduler` ([crates/scheduler/src/lib.rs](crates/scheduler/src/lib.rs)) — FCFS waiting/running queues, per-step token budget (natural chunked prefill), running-then-waiting two-phase scheduling, **recompute preemption**, MTP draft rollback.\n- `crates/kv-cache` ([crates/kv-cache/src/coordinator.rs](crates/kv-cache/src/coordinator.rs), [pool.rs](crates/kv-cache/src/pool.rs)) — flat `Block` pool with hand-written doubly-linked LRU free queue, chain-hash prefix cache (SHA-256 truncated, parent-chained), two `GroupManager`s for FA+Mamba, two-phase allocation ordering, state-slot reservations/migration for MTP.\n- `crates/zmq-worker` ([client.rs](crates/zmq-worker/src/client.rs), [main.rs](crates/zmq-worker/src/main.rs)) — CLI, ZMQ client, inference loop, and the OpenAI **`serve`** mode (Axum: Chat Completions + Responses, stored Responses, tool/reasoning parsing in [serving/mod.rs](crates/zmq-worker/src/serving/mod.rs)).\n\n**Python side** (`python/oh_my_vllm/worker/`):\n- `zmq_bridge.py` — event loop dispatching `init/register/execute/abort/shutdown`.\n- `model_runner.py` (`OhMyVllmWorker`) — wraps `vllm.v1.worker.gpu_worker.Worker`; now **V2 Model Runner only, no V1 fallback** (`VLLM_USE_V2_MODEL_RUNNER=1`, class-verified); maps the two logical groups into vLLM's physical hybrid groups with disjoint physical block IDs (ADR-002).\n- `v2_runner.py` — `RustDraftTokensHandler` transfers **real** MTP draft IDs to Rust (V2 normally returns `-1` placeholders for unconstrained requests).\n- Serving path adds `prepare` ZMQ RPC for Python-side tokenization/template/XGrammar masks across speculative draft prefixes; no masks cross ZMQ. ([docs/architecture.md](docs/architecture.md) §1–2, \"Python side: V2 GPUWorker adaptation\", [docs/decisions/](docs/decisions/))\n\n### How to run\n\nWrapper scripts set the conda envs (`with-env.sh`) and wait for/pin an idle B200 (`with-gpu.sh`). ([README.md](README.md) Quick start, [scripts/with-env.sh](scripts/with-env.sh), [scripts/with-gpu.sh](scripts/with-gpu.sh))\n\n```bash\n# build\nscripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker\n\n# offline smoke test (add --num-speculative-tokens 4 for MTP)\nscripts/with-gpu.sh scripts/with-env.sh ...<local-path> scripts/smoke-text.py \\\n  --socket <local-path> --max-tokens 64\n\n# matched EngineCore benchmark vs vLLM (modes: ordinary, mtp, prefix)\nscripts/with-gpu.sh scripts/with-env.sh ...<local-path> benchmarks/compare_vllm.py \\\n  --mode ordinary --batch-sizes 1 2 4 --output <local-path>\n\n# local OpenAI service (Chat Completions + Responses at 127.0.0.1:8000/v1)\nscripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker \\\n  --socket <local-path> --num-speculative-tokens 4 serve\n```\n\nUse unique `--socket` paths for concurrent runs. Checks: `cargo test --workspace`, `cargo clippy --all-targets --all-features -- -D warnings`, `ruff format/check python/`, plus a hard 100-char Rust line check ([scripts/check_rust_line_width.py](scripts/check_rust_line_width.py), [AGENTS.md](AGENTS.md) task-end checklist).\n\n### Current completion status (2026-09-21)\n\nTwo acceptance gates are **already passed**, and a third (in-progress) migration is the current work:\n\n1. **EngineCore performance: PASSED (2026-09-19, historical binary `12d227d`).** All 9 rows passed the ≥95% gate: ordinary 101.66/101.29/101.46%, MTP 102.64/103.78/100.77%, prefix 101.68/101.55/97.13% of matched vLLM; raw data + identities in [bench/baseline/2026-09-19-acceptance.json](bench/baseline/2026-09-19-acceptance.json), table in [docs/acceptance.md](docs/acceptance.md).\n2. **OpenAI serving extension: PASSED (2026-09-21, pre-V2 build).** Real MTP4 acceptance on B200: both Chat and Responses completed real oh-my-pi agentic tasks with grounded answers; all 12 API×thinking×constraint cases with real proposed/accepted drafts; 5 thinking levels; stored Responses; 202.8–280.1 tok/s on short constrained cases (workload observations, not a throughput gate). Evidence in [docs/acceptance.md](docs/acceptance.md) \"Serving acceptance\" and [bench/baseline/2026-09-21-serving-acceptance.json](bench/baseline/2026-09-21-serving-acceptance.json).\n3. **V2 Model Runner migration: IN PROGRESS, not yet accepted.** Per `REQ-RUNNER-001` the GPUWorker must be V2-only with no legacy fallback and no vLLM source modification. State per [docs/handoff.md](docs/handoff.md) top section: Rust now sends full accepted history on admission/resumption; the local draft handler returns real MTP IDs; Rust reports genuinely new cache allocations for V2 zeroing. **Passed so far:** actual V2 FP64 ordinary/MTP probes across the 784 boundary, two-request ordinary text with 2 preemptions, 75 Rust + 39 Python CPU tests, rustfmt/width/clippy/ruff, and initial serving verification (12 constraint cases + both real OMP APIs), which exposed and fixed two defects (native V2 `-1` draft placeholders → real draft D2H; nonfinite GQA after warmup → startup/runtime cache zeroing). **Remaining:** final serving + MTP/prefix/preemption regression runs, then re-running the **nine performance rows against the frozen 2026-09-19 baseline** (`--baseline-json`, never rerunning the vLLM engine), documentation alignment, review, and commit. The handoff explicitly says *\"do not label the migration fully accepted yet.\"*\n\nExplicitly out of scope: multi-GPU, swap-based preemption, multimodal, LoRA, gRPC, production deployment. ([docs/requirements.md](docs/requirements.md) `REQ-OUT-SCOPE-001`, [docs/architecture.md](docs/architecture.md) §5)\n\nNote: [README.md](README.md) describes the two passing milestones and reads as fully accepted; the authoritative *current* state — the unfinished V2 migration — lives in the top section of [docs/handoff.md](docs/handoff.md).",
+          "client_log_sha256": "6a559ec25834a5ae2c1748139f02e5c92c659fa168dc5cc6e8b7148f1fd60e47",
+          "review": "Tool executions and follow-up turns succeeded; final answer cites actual repository files and identifies V2 regression verification as pending at read time."
+        }
+      },
+      "source_service_log_sha256": "36d6b0f30d851290f6ccdd7b3fb7a23997b17a563b507eadc75b05e42cafa513",
+      "agentic_review_note": "Answers describe the documents as read during validation, including later-resolved blockers. Chat contains one filename citation typo (docs/accepting.md); retained verbatim, not treated as an authoritative project status report."
+    },
+    "investigations": [
+      "Native V2 plain MTP draft handler returned -1 placeholders; fixed with local real-draft transfer.",
+      "One initial Chat run repeated reasoning until output limit. Later Chat and Responses runs completed; no causal attribution from a single retry.",
+      "V2 dummy warmup has attention metadata; probe now activates only for real requests.",
+      "Actual GQA output contained NaNs after warmup. Startup cache clearing restored finite output; mandatory fresh-block zeroing also added for runtime page recycling.",
+      "Review found the first post-fix OMP runs read documentation but not implementation source. Both APIs were rerun with explicit required scheduler/model-runner read paths; only those source-reading runs establish full agentic acceptance. Preliminary runs are retained.",
+      "All attempts detecting external same-GPU contention were discarded in full; see rejected_measurement_attempts. Retries do not rerun the vLLM baseline."
+    ],
+    "gpu_cleanup": {
+      "checked_at": "2026-09-21T09:13:10.729223+00:00",
+      "nvidia_compute_apps": "",
+      "service_port_18002": "State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess",
+      "note": "All task-owned GPU probes, text runs, servers and benchmark workers exited. No unrelated process was stopped; no service retention exception."
+    },
+    "rejected_measurement_attempts": [
+      {
+        "sha256": "bf6b6aa413a1d339469c46d48587246c84f8f26c29f7158425f482cbdb8a8bf4",
+        "reason": "RuntimeError: GPU contention on <gpu-identity>: external process 1385828",
+        "disposition": "Entire attempt excluded; rerun on an idle GPU"
+      },
+      {
+        "sha256": "06a5d0dcd1e61bbe3163abc972874ecb301b5e46b33f1867a8cd3f5b9d4a2fe6",
+        "reason": "RuntimeError: GPU contention on <gpu-identity>: external process 1391113",
+        "disposition": "Entire attempt excluded; rerun on an idle GPU"
+      },
+      {
+        "sha256": "e1f90c083e2025fe8fc5d94cdfc4d70e3e0c82242d40b7756d9a716170d4c719",
+        "reason": "RuntimeError: GPU contention on <gpu-identity>: external process 1443066",
+        "disposition": "Entire attempt excluded; rerun on an idle GPU"
+      },
+      {
+        "sha256": "8e61aa066c9477e3be79cc3f2380b5de1095b9c60b7319389ca44b64ab261bca",
+        "reason": "RuntimeError: GPU contention on <gpu-identity>: external process 1344741",
+        "disposition": "Entire attempt excluded; rerun on an idle GPU"
+      },
+      {
+        "sha256": "e3c4418d75141386b86e29e0f15a7d0108bd8ed176cfd95af10808a7b5b9fa62",
+        "reason": "RuntimeError: GPU contention on <gpu-identity>: external process 1475949",
+        "disposition": "Entire attempt excluded; rerun on an idle GPU"
+      },
+      {
+        "sha256": "9de8aafe2854d33704f692a54fff63a8023d65060eb37c466ff6e2f941efb922",
+        "reason": "RuntimeError: GPU contention on <gpu-identity>: external process 1398842",
+        "disposition": "Entire attempt excluded; rerun on an idle GPU"
+      }
+    ],
+    "verification": {
+      "rust_tests": 75,
+      "python_unittest_tests": 39,
+      "cargo_fmt": true,
+      "rust_hard_width": true,
+      "cargo_clippy_all_targets_all_features_deny_warnings": true,
+      "ruff_format_and_check": true,
+      "all_pre_commit_hooks": true,
+      "independent_reviews": [
+        "V2 request admission/resumption and real draft transfer",
+        "Warmup and fresh hybrid block zeroing",
+        "Historical benchmark protocol and lifecycle evidence",
+        "FP64/text/constraints/lifecycle and source-reading OMP evidence"
+      ]
+    },
+    "performance": {
+      "baseline_rerun": false,
+      "warmup_per_framework": 2,
+      "repetitions_per_framework": 3,
+      "historical_protocol": {
+        "model": "<local-path>",
+        "block_size": 784,
+        "max_model_len": 65536,
+        "max_num_seqs": 32,
+        "max_num_batched_tokens": 32768,
+        "language_model_only": true,
+        "enable_chunked_prefill": true,
+        "enable_prefix_caching": true,
+        "async_scheduling": false,
+        "temperature": 0,
+        "ignore_eos": true,
+        "detokenize": false,
+        "timing": "Request submission through completion; baseline uses LLM.generate driving native EngineCore. Rust includes registration, scheduler, IPC and final cleanup. Excludes loading, compile, warmup, prefix seed.",
+        "mtp_ssm_dtype": "bfloat16",
+        "ordinary_prefix_ssm_dtype": "auto"
+      },
+      "rows": [
+        {
+          "timestamp": "2026-09-21T08:44:20.298110+00:00",
+          "cpu_affinity_count": 1,
+          "source": {
+            "git_commit": "d85c23e19a6b96a861fbd240e96e01d13d83b518",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "e8376ddc53aee9d2354dc0eb6316978749c32438b26b6d7d2eb8f0efb6d16137",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "07cab8a2f08a340155e567f0ca0a942afeb6d787d140c8c51582dac25c13411c",
+              "python/oh_my_vllm/worker/serving.py": "38c96a113ec79d1e6b2871a20d51774832bddcd2bff2dbed3555b96c957d6131",
+              "python/oh_my_vllm/worker/v2_runner.py": "8dedc9ddb9117222ae30d369632e2783880cc4847b3b192cafa572c38da70fd8",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "59d56e0a32295117e92e8ec4fa4a0141dabee70d2556571ecfee892fb5308061"
+            }
+          },
+          "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+          "framework_vllm": {
+            "package_version": "0.28.1rc1.dev691+g6376c601e.cu131",
+            "source_path": "<local-path>",
+            "git_commit": "039b2ad67da6d64f7c1835c4738c7fb545ad37fc",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "runner": "vllm.v1.worker.gpu.model_runner.GPUModelRunner"
+          },
+          "comparison": "historical",
+          "baseline_artifact": "bench/baseline/2026-09-19-acceptance.json",
+          "baseline_sha256": "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e",
+          "mode": "ordinary",
+          "batch_size": 1,
+          "input_len": 32768,
+          "output_len": 4096,
+          "num_gpu_blocks": 1024,
+          "speculative_tokens": 0,
+          "baseline": [
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 4096,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 44.64019292895682,
+              "output_tps": 91.75587584306881
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 4096,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 44.42008052021265,
+              "output_tps": 92.21054874351658
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 4096,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 44.41959000006318,
+              "output_tps": 92.211567013432
+            }
+          ],
+          "ours": [
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 44.442341864,
+              "output_tps": 92.16436011707827,
+              "steps": 4097,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 44.464040387,
+              "output_tps": 92.11938376156999,
+              "steps": 4097,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 44.446851952,
+              "output_tps": 92.15500806274065,
+              "steps": 4097,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            }
+          ],
+          "ratio": 0.999397675412057,
+          "passed": true,
+          "historical_identity": {
+            "cpu_affinity_count": 1,
+            "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+            "source": {
+              "git_commit": "12d227d17bda931c8c64217ac4d91bc03496d926",
+              "git_status": "",
+              "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "binary_sha256": "1903f5b2a4ed70b1d85944112f68cb53dfe4a73117990619fc17030df4d00c25"
+            }
+          },
+          "summary": {
+            "baseline_median_tps": 92.21054874351658,
+            "framework_median_tps": 92.15500806274065,
+            "within_framework_spread_percent": 0.04882398651806508,
+            "slowest_framework_over_fastest_baseline": 0.9990003070672404
+          }
+        },
+        {
+          "timestamp": "2026-09-21T08:56:01.845036+00:00",
+          "cpu_affinity_count": 1,
+          "source": {
+            "git_commit": "d85c23e19a6b96a861fbd240e96e01d13d83b518",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "e8376ddc53aee9d2354dc0eb6316978749c32438b26b6d7d2eb8f0efb6d16137",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "07cab8a2f08a340155e567f0ca0a942afeb6d787d140c8c51582dac25c13411c",
+              "python/oh_my_vllm/worker/serving.py": "38c96a113ec79d1e6b2871a20d51774832bddcd2bff2dbed3555b96c957d6131",
+              "python/oh_my_vllm/worker/v2_runner.py": "8dedc9ddb9117222ae30d369632e2783880cc4847b3b192cafa572c38da70fd8",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "59d56e0a32295117e92e8ec4fa4a0141dabee70d2556571ecfee892fb5308061"
+            }
+          },
+          "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+          "framework_vllm": {
+            "package_version": "0.28.1rc1.dev691+g6376c601e.cu131",
+            "source_path": "<local-path>",
+            "git_commit": "039b2ad67da6d64f7c1835c4738c7fb545ad37fc",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "runner": "vllm.v1.worker.gpu.model_runner.GPUModelRunner"
+          },
+          "comparison": "historical",
+          "baseline_artifact": "bench/baseline/2026-09-19-acceptance.json",
+          "baseline_sha256": "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e",
+          "mode": "ordinary",
+          "batch_size": 2,
+          "input_len": 32768,
+          "output_len": 4096,
+          "num_gpu_blocks": 1024,
+          "speculative_tokens": 0,
+          "baseline": [
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 8192,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 48.87243751692586,
+              "output_tps": 167.62004140192286
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 8192,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 48.80032577784732,
+              "output_tps": 167.8677318117151
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 8192,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 48.780539349187165,
+              "output_tps": 167.93582254921304
+            }
+          ],
+          "ours": [
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 49.049701785,
+              "output_tps": 167.01426719999372,
+              "steps": 4098,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 49.064468347,
+              "output_tps": 166.96400217900032,
+              "steps": 4098,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 49.09358673,
+              "output_tps": 166.86497250758114,
+              "steps": 4098,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            }
+          ],
+          "ratio": 0.9946164183970245,
+          "passed": true,
+          "historical_identity": {
+            "cpu_affinity_count": 1,
+            "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+            "source": {
+              "git_commit": "12d227d17bda931c8c64217ac4d91bc03496d926",
+              "git_status": "",
+              "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "binary_sha256": "1903f5b2a4ed70b1d85944112f68cb53dfe4a73117990619fc17030df4d00c25"
+            }
+          },
+          "summary": {
+            "baseline_median_tps": 167.8677318117151,
+            "framework_median_tps": 166.96400217900032,
+            "within_framework_spread_percent": 0.08947036047712853,
+            "slowest_framework_over_fastest_baseline": 0.9936234567147334
+          }
+        },
+        {
+          "timestamp": "2026-09-21T09:05:53.755252+00:00",
+          "cpu_affinity_count": 1,
+          "source": {
+            "git_commit": "d85c23e19a6b96a861fbd240e96e01d13d83b518",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "e8376ddc53aee9d2354dc0eb6316978749c32438b26b6d7d2eb8f0efb6d16137",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "07cab8a2f08a340155e567f0ca0a942afeb6d787d140c8c51582dac25c13411c",
+              "python/oh_my_vllm/worker/serving.py": "38c96a113ec79d1e6b2871a20d51774832bddcd2bff2dbed3555b96c957d6131",
+              "python/oh_my_vllm/worker/v2_runner.py": "8dedc9ddb9117222ae30d369632e2783880cc4847b3b192cafa572c38da70fd8",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "59d56e0a32295117e92e8ec4fa4a0141dabee70d2556571ecfee892fb5308061"
+            }
+          },
+          "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+          "framework_vllm": {
+            "package_version": "0.28.1rc1.dev691+g6376c601e.cu131",
+            "source_path": "<local-path>",
+            "git_commit": "039b2ad67da6d64f7c1835c4738c7fb545ad37fc",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "runner": "vllm.v1.worker.gpu.model_runner.GPUModelRunner"
+          },
+          "comparison": "historical",
+          "baseline_artifact": "bench/baseline/2026-09-19-acceptance.json",
+          "baseline_sha256": "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e",
+          "mode": "ordinary",
+          "batch_size": 4,
+          "input_len": 32768,
+          "output_len": 4096,
+          "num_gpu_blocks": 1024,
+          "speculative_tokens": 0,
+          "baseline": [
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 16384,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 65.2909608609043,
+              "output_tps": 250.93825828209867
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 16384,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 65.14960796595551,
+              "output_tps": 251.48271051088443
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 16384,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 65.28480094717816,
+              "output_tps": 250.9619354320506
+            }
+          ],
+          "ours": [
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 64.932900361,
+              "output_tps": 252.3220110130882,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 64.948086665,
+              "output_tps": 252.26301252734524,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 64.959914025,
+              "output_tps": 252.21708257949007,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            }
+          ],
+          "ratio": 1.0051843603017117,
+          "passed": true,
+          "historical_identity": {
+            "cpu_affinity_count": 1,
+            "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+            "source": {
+              "git_commit": "12d227d17bda931c8c64217ac4d91bc03496d926",
+              "git_status": "",
+              "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "binary_sha256": "1903f5b2a4ed70b1d85944112f68cb53dfe4a73117990619fc17030df4d00c25"
+            }
+          },
+          "summary": {
+            "baseline_median_tps": 250.9619354320506,
+            "framework_median_tps": 252.26301252734524,
+            "within_framework_spread_percent": 0.04160242935371539,
+            "slowest_framework_over_fastest_baseline": 1.0029201692120853
+          }
+        },
+        {
+          "timestamp": "2026-09-21T08:41:03.734795+00:00",
+          "cpu_affinity_count": 1,
+          "source": {
+            "git_commit": "d85c23e19a6b96a861fbd240e96e01d13d83b518",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "e8376ddc53aee9d2354dc0eb6316978749c32438b26b6d7d2eb8f0efb6d16137",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "07cab8a2f08a340155e567f0ca0a942afeb6d787d140c8c51582dac25c13411c",
+              "python/oh_my_vllm/worker/serving.py": "38c96a113ec79d1e6b2871a20d51774832bddcd2bff2dbed3555b96c957d6131",
+              "python/oh_my_vllm/worker/v2_runner.py": "8dedc9ddb9117222ae30d369632e2783880cc4847b3b192cafa572c38da70fd8",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "59d56e0a32295117e92e8ec4fa4a0141dabee70d2556571ecfee892fb5308061"
+            }
+          },
+          "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+          "framework_vllm": {
+            "package_version": "0.28.1rc1.dev691+g6376c601e.cu131",
+            "source_path": "<local-path>",
+            "git_commit": "039b2ad67da6d64f7c1835c4738c7fb545ad37fc",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "runner": "vllm.v1.worker.gpu.model_runner.GPUModelRunner"
+          },
+          "comparison": "historical",
+          "baseline_artifact": "bench/baseline/2026-09-19-acceptance.json",
+          "baseline_sha256": "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e",
+          "mode": "mtp",
+          "batch_size": 1,
+          "input_len": 32768,
+          "output_len": 4096,
+          "num_gpu_blocks": 1024,
+          "speculative_tokens": 4,
+          "baseline": [
+            {
+              "proposed_draft_tokens": 3600,
+              "accepted_draft_tokens": 3195,
+              "output_tokens": 4096,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 15.195811240002513,
+              "output_tps": 269.5479652456727
+            },
+            {
+              "proposed_draft_tokens": 3600,
+              "accepted_draft_tokens": 3195,
+              "output_tokens": 4096,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 15.217729164054617,
+              "output_tps": 269.1597383448675
+            },
+            {
+              "proposed_draft_tokens": 3600,
+              "accepted_draft_tokens": 3195,
+              "output_tokens": 4096,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 15.2343676679302,
+              "output_tps": 268.86577042659087
+            }
+          ],
+          "ours": [
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 14.27891203,
+              "output_tps": 286.85658903103416,
+              "steps": 895,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 3580,
+              "accepted_draft_tokens": 3202
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 14.257878883,
+              "output_tps": 287.2797583435609,
+              "steps": 895,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 3580,
+              "accepted_draft_tokens": 3202
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 14.272560928,
+              "output_tps": 286.9842364424202,
+              "steps": 895,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 3580,
+              "accepted_draft_tokens": 3202
+            }
+          ],
+          "ratio": 1.0662227501303134,
+          "passed": true,
+          "historical_identity": {
+            "cpu_affinity_count": 1,
+            "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+            "source": {
+              "git_commit": "12d227d17bda931c8c64217ac4d91bc03496d926",
+              "git_status": "",
+              "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "binary_sha256": "1903f5b2a4ed70b1d85944112f68cb53dfe4a73117990619fc17030df4d00c25"
+            }
+          },
+          "summary": {
+            "baseline_median_tps": 269.1597383448675,
+            "framework_median_tps": 286.9842364424202,
+            "within_framework_spread_percent": 0.1475194674649627,
+            "slowest_framework_over_fastest_baseline": 1.064213520475237
+          }
+        },
+        {
+          "timestamp": "2026-09-21T08:43:28.238122+00:00",
+          "cpu_affinity_count": 1,
+          "source": {
+            "git_commit": "d85c23e19a6b96a861fbd240e96e01d13d83b518",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "e8376ddc53aee9d2354dc0eb6316978749c32438b26b6d7d2eb8f0efb6d16137",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "07cab8a2f08a340155e567f0ca0a942afeb6d787d140c8c51582dac25c13411c",
+              "python/oh_my_vllm/worker/serving.py": "38c96a113ec79d1e6b2871a20d51774832bddcd2bff2dbed3555b96c957d6131",
+              "python/oh_my_vllm/worker/v2_runner.py": "8dedc9ddb9117222ae30d369632e2783880cc4847b3b192cafa572c38da70fd8",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "59d56e0a32295117e92e8ec4fa4a0141dabee70d2556571ecfee892fb5308061"
+            }
+          },
+          "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+          "framework_vllm": {
+            "package_version": "0.28.1rc1.dev691+g6376c601e.cu131",
+            "source_path": "<local-path>",
+            "git_commit": "039b2ad67da6d64f7c1835c4738c7fb545ad37fc",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "runner": "vllm.v1.worker.gpu.model_runner.GPUModelRunner"
+          },
+          "comparison": "historical",
+          "baseline_artifact": "bench/baseline/2026-09-19-acceptance.json",
+          "baseline_sha256": "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e",
+          "mode": "mtp",
+          "batch_size": 2,
+          "input_len": 32768,
+          "output_len": 4096,
+          "num_gpu_blocks": 1024,
+          "speculative_tokens": 4,
+          "baseline": [
+            {
+              "proposed_draft_tokens": 7692,
+              "accepted_draft_tokens": 6269,
+              "output_tokens": 8192,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 19.803330098977312,
+              "output_tps": 413.6678002667366
+            },
+            {
+              "proposed_draft_tokens": 7692,
+              "accepted_draft_tokens": 6269,
+              "output_tokens": 8192,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 19.573336408939213,
+              "output_tps": 418.5285445898066
+            },
+            {
+              "proposed_draft_tokens": 7692,
+              "accepted_draft_tokens": 6269,
+              "output_tokens": 8192,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 19.298248874023557,
+              "output_tps": 424.49447374610537
+            }
+          ],
+          "ours": [
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 18.827344749,
+              "output_tps": 435.11180727888416,
+              "steps": 1054,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 7816,
+              "accepted_draft_tokens": 6241
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 18.876257119,
+              "output_tps": 433.9843406643522,
+              "steps": 1054,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 7816,
+              "accepted_draft_tokens": 6241
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 18.840709271,
+              "output_tps": 434.80316383891613,
+              "steps": 1054,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 7816,
+              "accepted_draft_tokens": 6241
+            }
+          ],
+          "ratio": 1.0388853268420677,
+          "passed": true,
+          "historical_identity": {
+            "cpu_affinity_count": 1,
+            "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+            "source": {
+              "git_commit": "12d227d17bda931c8c64217ac4d91bc03496d926",
+              "git_status": "",
+              "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "binary_sha256": "1903f5b2a4ed70b1d85944112f68cb53dfe4a73117990619fc17030df4d00c25"
+            }
+          },
+          "summary": {
+            "baseline_median_tps": 418.5285445898066,
+            "framework_median_tps": 434.80316383891613,
+            "within_framework_spread_percent": 0.25979430797111736,
+            "slowest_framework_over_fastest_baseline": 1.0223556901330189
+          }
+        },
+        {
+          "timestamp": "2026-09-21T08:47:10.746642+00:00",
+          "cpu_affinity_count": 1,
+          "source": {
+            "git_commit": "d85c23e19a6b96a861fbd240e96e01d13d83b518",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "e8376ddc53aee9d2354dc0eb6316978749c32438b26b6d7d2eb8f0efb6d16137",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "07cab8a2f08a340155e567f0ca0a942afeb6d787d140c8c51582dac25c13411c",
+              "python/oh_my_vllm/worker/serving.py": "38c96a113ec79d1e6b2871a20d51774832bddcd2bff2dbed3555b96c957d6131",
+              "python/oh_my_vllm/worker/v2_runner.py": "8dedc9ddb9117222ae30d369632e2783880cc4847b3b192cafa572c38da70fd8",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "59d56e0a32295117e92e8ec4fa4a0141dabee70d2556571ecfee892fb5308061"
+            }
+          },
+          "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+          "framework_vllm": {
+            "package_version": "0.28.1rc1.dev691+g6376c601e.cu131",
+            "source_path": "<local-path>",
+            "git_commit": "039b2ad67da6d64f7c1835c4738c7fb545ad37fc",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "runner": "vllm.v1.worker.gpu.model_runner.GPUModelRunner"
+          },
+          "comparison": "historical",
+          "baseline_artifact": "bench/baseline/2026-09-19-acceptance.json",
+          "baseline_sha256": "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e",
+          "mode": "mtp",
+          "batch_size": 4,
+          "input_len": 32768,
+          "output_len": 4096,
+          "num_gpu_blocks": 1024,
+          "speculative_tokens": 4,
+          "baseline": [
+            {
+              "proposed_draft_tokens": 16380,
+              "accepted_draft_tokens": 12290,
+              "output_tokens": 16384,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 36.78862426802516,
+              "output_tps": 445.35506086429433
+            },
+            {
+              "proposed_draft_tokens": 16392,
+              "accepted_draft_tokens": 12287,
+              "output_tokens": 16384,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 36.373518879991025,
+              "output_tps": 450.43758493800266
+            },
+            {
+              "proposed_draft_tokens": 16380,
+              "accepted_draft_tokens": 12290,
+              "output_tokens": 16384,
+              "prefix_hit_tokens": 0,
+              "elapsed_s": 36.685606012819335,
+              "output_tps": 446.60567946662275
+            }
+          ],
+          "ours": [
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 36.318801591,
+              "output_tps": 451.1162065452084,
+              "steps": 1118,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 16416,
+              "accepted_draft_tokens": 12287
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 36.35308476,
+              "output_tps": 450.690776537006,
+              "steps": 1118,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 16416,
+              "accepted_draft_tokens": 12287
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 36.318895929,
+              "output_tps": 451.11503477498786,
+              "steps": 1118,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 16416,
+              "accepted_draft_tokens": 12287
+            }
+          ],
+          "ratio": 1.0100969502084045,
+          "passed": true,
+          "historical_identity": {
+            "cpu_affinity_count": 1,
+            "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+            "source": {
+              "git_commit": "12d227d17bda931c8c64217ac4d91bc03496d926",
+              "git_status": "",
+              "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "binary_sha256": "1903f5b2a4ed70b1d85944112f68cb53dfe4a73117990619fc17030df4d00c25"
+            }
+          },
+          "summary": {
+            "baseline_median_tps": 446.60567946662275,
+            "framework_median_tps": 451.11503477498786,
+            "within_framework_spread_percent": 0.09439509977799965,
+            "slowest_framework_over_fastest_baseline": 1.0005621014042116
+          }
+        },
+        {
+          "timestamp": "2026-09-21T08:44:25.026890+00:00",
+          "cpu_affinity_count": 1,
+          "source": {
+            "git_commit": "d85c23e19a6b96a861fbd240e96e01d13d83b518",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "e8376ddc53aee9d2354dc0eb6316978749c32438b26b6d7d2eb8f0efb6d16137",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "07cab8a2f08a340155e567f0ca0a942afeb6d787d140c8c51582dac25c13411c",
+              "python/oh_my_vllm/worker/serving.py": "38c96a113ec79d1e6b2871a20d51774832bddcd2bff2dbed3555b96c957d6131",
+              "python/oh_my_vllm/worker/v2_runner.py": "8dedc9ddb9117222ae30d369632e2783880cc4847b3b192cafa572c38da70fd8",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "59d56e0a32295117e92e8ec4fa4a0141dabee70d2556571ecfee892fb5308061"
+            }
+          },
+          "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+          "framework_vllm": {
+            "package_version": "0.28.1rc1.dev691+g6376c601e.cu131",
+            "source_path": "<local-path>",
+            "git_commit": "039b2ad67da6d64f7c1835c4738c7fb545ad37fc",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "runner": "vllm.v1.worker.gpu.model_runner.GPUModelRunner"
+          },
+          "comparison": "historical",
+          "baseline_artifact": "bench/baseline/2026-09-19-acceptance.json",
+          "baseline_sha256": "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e",
+          "mode": "prefix",
+          "batch_size": 1,
+          "input_len": 32768,
+          "output_len": 4096,
+          "num_gpu_blocks": 1024,
+          "speculative_tokens": 0,
+          "baseline": [
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 4096,
+              "prefix_hit_tokens": 32144,
+              "elapsed_s": 43.07336410996504,
+              "output_tps": 95.09357080963149
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 4096,
+              "prefix_hit_tokens": 32144,
+              "elapsed_s": 43.041728786891326,
+              "output_tps": 95.16346381624585
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 4096,
+              "prefix_hit_tokens": 32144,
+              "elapsed_s": 42.91367874084972,
+              "output_tps": 95.44742189862646
+            }
+          ],
+          "ours": [
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 42.812659582,
+              "output_tps": 95.67263608454046,
+              "steps": 4096,
+              "prefix_hit_tokens": 32144,
+              "initial_prefix_hit_tokens": 32144,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 42.845832741,
+              "output_tps": 95.5985620529312,
+              "steps": 4096,
+              "prefix_hit_tokens": 32144,
+              "initial_prefix_hit_tokens": 32144,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 42.844713491,
+              "output_tps": 95.60105941332552,
+              "steps": 4096,
+              "prefix_hit_tokens": 32144,
+              "initial_prefix_hit_tokens": 32144,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            }
+          ],
+          "ratio": 1.0045983571796486,
+          "passed": true,
+          "historical_identity": {
+            "cpu_affinity_count": 1,
+            "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+            "source": {
+              "git_commit": "12d227d17bda931c8c64217ac4d91bc03496d926",
+              "git_status": "",
+              "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "binary_sha256": "1903f5b2a4ed70b1d85944112f68cb53dfe4a73117990619fc17030df4d00c25"
+            }
+          },
+          "summary": {
+            "baseline_median_tps": 95.16346381624585,
+            "framework_median_tps": 95.60105941332552,
+            "within_framework_spread_percent": 0.07748446212845206,
+            "slowest_framework_over_fastest_baseline": 1.0015834912174502
+          }
+        },
+        {
+          "timestamp": "2026-09-21T08:49:09.399428+00:00",
+          "cpu_affinity_count": 1,
+          "source": {
+            "git_commit": "d85c23e19a6b96a861fbd240e96e01d13d83b518",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "e8376ddc53aee9d2354dc0eb6316978749c32438b26b6d7d2eb8f0efb6d16137",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "07cab8a2f08a340155e567f0ca0a942afeb6d787d140c8c51582dac25c13411c",
+              "python/oh_my_vllm/worker/serving.py": "38c96a113ec79d1e6b2871a20d51774832bddcd2bff2dbed3555b96c957d6131",
+              "python/oh_my_vllm/worker/v2_runner.py": "8dedc9ddb9117222ae30d369632e2783880cc4847b3b192cafa572c38da70fd8",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "59d56e0a32295117e92e8ec4fa4a0141dabee70d2556571ecfee892fb5308061"
+            }
+          },
+          "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+          "framework_vllm": {
+            "package_version": "0.28.1rc1.dev691+g6376c601e.cu131",
+            "source_path": "<local-path>",
+            "git_commit": "039b2ad67da6d64f7c1835c4738c7fb545ad37fc",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "runner": "vllm.v1.worker.gpu.model_runner.GPUModelRunner"
+          },
+          "comparison": "historical",
+          "baseline_artifact": "bench/baseline/2026-09-19-acceptance.json",
+          "baseline_sha256": "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e",
+          "mode": "prefix",
+          "batch_size": 2,
+          "input_len": 32768,
+          "output_len": 4096,
+          "num_gpu_blocks": 1024,
+          "speculative_tokens": 0,
+          "baseline": [
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 8192,
+              "prefix_hit_tokens": 64288,
+              "elapsed_s": 45.6758266009856,
+              "output_tps": 179.3508866640463
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 8192,
+              "prefix_hit_tokens": 64288,
+              "elapsed_s": 45.52802749606781,
+              "output_tps": 179.93311923534424
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 8192,
+              "prefix_hit_tokens": 64288,
+              "elapsed_s": 45.65371652296744,
+              "output_tps": 179.43774623208986
+            }
+          ],
+          "ours": [
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 47.176361281,
+              "output_tps": 173.6462876228498,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 45.691745714,
+              "output_tps": 179.28840038803688,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 45.59744004,
+              "output_tps": 179.659208780441,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            }
+          ],
+          "ratio": 0.9991677010707668,
+          "passed": true,
+          "historical_identity": {
+            "cpu_affinity_count": 1,
+            "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+            "source": {
+              "git_commit": "12d227d17bda931c8c64217ac4d91bc03496d926",
+              "git_status": "",
+              "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "binary_sha256": "1903f5b2a4ed70b1d85944112f68cb53dfe4a73117990619fc17030df4d00c25"
+            }
+          },
+          "summary": {
+            "baseline_median_tps": 179.43774623208986,
+            "framework_median_tps": 179.28840038803688,
+            "within_framework_spread_percent": 3.4627409775963347,
+            "slowest_framework_over_fastest_baseline": 0.965060175474024
+          }
+        },
+        {
+          "timestamp": "2026-09-21T08:57:17.266491+00:00",
+          "cpu_affinity_count": 1,
+          "source": {
+            "git_commit": "d85c23e19a6b96a861fbd240e96e01d13d83b518",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "e8376ddc53aee9d2354dc0eb6316978749c32438b26b6d7d2eb8f0efb6d16137",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "07cab8a2f08a340155e567f0ca0a942afeb6d787d140c8c51582dac25c13411c",
+              "python/oh_my_vllm/worker/serving.py": "38c96a113ec79d1e6b2871a20d51774832bddcd2bff2dbed3555b96c957d6131",
+              "python/oh_my_vllm/worker/v2_runner.py": "8dedc9ddb9117222ae30d369632e2783880cc4847b3b192cafa572c38da70fd8",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "59d56e0a32295117e92e8ec4fa4a0141dabee70d2556571ecfee892fb5308061"
+            }
+          },
+          "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+          "framework_vllm": {
+            "package_version": "0.28.1rc1.dev691+g6376c601e.cu131",
+            "source_path": "<local-path>",
+            "git_commit": "039b2ad67da6d64f7c1835c4738c7fb545ad37fc",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "runner": "vllm.v1.worker.gpu.model_runner.GPUModelRunner"
+          },
+          "comparison": "historical",
+          "baseline_artifact": "bench/baseline/2026-09-19-acceptance.json",
+          "baseline_sha256": "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e",
+          "mode": "prefix",
+          "batch_size": 4,
+          "input_len": 32768,
+          "output_len": 4096,
+          "num_gpu_blocks": 1024,
+          "speculative_tokens": 0,
+          "baseline": [
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 16384,
+              "prefix_hit_tokens": 128576,
+              "elapsed_s": 49.15356144099496,
+              "output_tps": 333.3227444702602
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 16384,
+              "prefix_hit_tokens": 128576,
+              "elapsed_s": 49.14444088912569,
+              "output_tps": 333.3846047198662
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 16384,
+              "prefix_hit_tokens": 128576,
+              "elapsed_s": 49.3865269550588,
+              "output_tps": 331.75039854309375
+            }
+          ],
+          "ours": [
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 51.323796036,
+              "output_tps": 319.22814104607124,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 50.556559603,
+              "output_tps": 324.0726847051472,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 49.1295237,
+              "output_tps": 333.48583023205657,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            }
+          ],
+          "ratio": 0.9722489391481105,
+          "passed": true,
+          "historical_identity": {
+            "cpu_affinity_count": 1,
+            "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+            "source": {
+              "git_commit": "12d227d17bda931c8c64217ac4d91bc03496d926",
+              "git_status": "",
+              "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "binary_sha256": "1903f5b2a4ed70b1d85944112f68cb53dfe4a73117990619fc17030df4d00c25"
+            }
+          },
+          "summary": {
+            "baseline_median_tps": 333.3227444702602,
+            "framework_median_tps": 324.0726847051472,
+            "within_framework_spread_percent": 4.4663008528210035,
+            "slowest_framework_over_fastest_baseline": 0.9575371403676836
+          }
+        }
+      ],
+      "comparison_note": "Frozen historical EngineCore measurements; current editable vLLM source differs from historical package build identity. UUID-selected B200s and original per-row CPU masks were used; this is not a same-source or same-GPU paired comparison.",
+      "execution_notes": "Three independent single-GPU measurement queues used distinct idle B200s concurrently. Each row ran alone on its selected GPU, with exclusive-process monitoring. Python/Rust inference sources remained unchanged on clean d85c23e throughout. Attempts listed in rejected_measurement_attempts were discarded for external GPU contention and retried; no rejected attempt contributes numbers.",
+      "supplemental_prefix_rows": [
+        {
+          "timestamp": "2026-09-21T09:12:28.846585+00:00",
+          "cpu_affinity_count": 1,
+          "source": {
+            "git_commit": "d85c23e19a6b96a861fbd240e96e01d13d83b518",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "e8376ddc53aee9d2354dc0eb6316978749c32438b26b6d7d2eb8f0efb6d16137",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "07cab8a2f08a340155e567f0ca0a942afeb6d787d140c8c51582dac25c13411c",
+              "python/oh_my_vllm/worker/serving.py": "38c96a113ec79d1e6b2871a20d51774832bddcd2bff2dbed3555b96c957d6131",
+              "python/oh_my_vllm/worker/v2_runner.py": "8dedc9ddb9117222ae30d369632e2783880cc4847b3b192cafa572c38da70fd8",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "59d56e0a32295117e92e8ec4fa4a0141dabee70d2556571ecfee892fb5308061"
+            }
+          },
+          "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+          "framework_vllm": {
+            "package_version": "0.28.1rc1.dev691+g6376c601e.cu131",
+            "source_path": "<local-path>",
+            "git_commit": "039b2ad67da6d64f7c1835c4738c7fb545ad37fc",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "runner": "vllm.v1.worker.gpu.model_runner.GPUModelRunner"
+          },
+          "comparison": "historical",
+          "baseline_artifact": "bench/baseline/2026-09-19-acceptance.json",
+          "baseline_sha256": "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e",
+          "mode": "prefix",
+          "batch_size": 2,
+          "input_len": 32768,
+          "output_len": 4096,
+          "num_gpu_blocks": 1024,
+          "speculative_tokens": 0,
+          "baseline": [
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 8192,
+              "prefix_hit_tokens": 64288,
+              "elapsed_s": 45.6758266009856,
+              "output_tps": 179.3508866640463
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 8192,
+              "prefix_hit_tokens": 64288,
+              "elapsed_s": 45.52802749606781,
+              "output_tps": 179.93311923534424
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 8192,
+              "prefix_hit_tokens": 64288,
+              "elapsed_s": 45.65371652296744,
+              "output_tps": 179.43774623208986
+            }
+          ],
+          "ours": [
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 45.627811617,
+              "output_tps": 179.53962089533627,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 45.668811841,
+              "output_tps": 179.37843507996598,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 45.660821446,
+              "output_tps": 179.40982532887918,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 45.637361588,
+              "output_tps": 179.50205084059954,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 45.644289031,
+              "output_tps": 179.47480777795184,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            }
+          ],
+          "ratio": 1.0002065426402205,
+          "passed": true,
+          "summary": {
+            "baseline_median_tps": 179.43774623208986,
+            "framework_median_tps": 179.47480777795184,
+            "within_framework_spread_percent": 0.08985796720684114,
+            "slowest_framework_over_fastest_baseline": 0.9969172759426642
+          }
+        },
+        {
+          "timestamp": "2026-09-21T09:09:43.787768+00:00",
+          "cpu_affinity_count": 1,
+          "source": {
+            "git_commit": "d85c23e19a6b96a861fbd240e96e01d13d83b518",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "e8376ddc53aee9d2354dc0eb6316978749c32438b26b6d7d2eb8f0efb6d16137",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "07cab8a2f08a340155e567f0ca0a942afeb6d787d140c8c51582dac25c13411c",
+              "python/oh_my_vllm/worker/serving.py": "38c96a113ec79d1e6b2871a20d51774832bddcd2bff2dbed3555b96c957d6131",
+              "python/oh_my_vllm/worker/v2_runner.py": "8dedc9ddb9117222ae30d369632e2783880cc4847b3b192cafa572c38da70fd8",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "59d56e0a32295117e92e8ec4fa4a0141dabee70d2556571ecfee892fb5308061"
+            }
+          },
+          "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+          "framework_vllm": {
+            "package_version": "0.28.1rc1.dev691+g6376c601e.cu131",
+            "source_path": "<local-path>",
+            "git_commit": "039b2ad67da6d64f7c1835c4738c7fb545ad37fc",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "runner": "vllm.v1.worker.gpu.model_runner.GPUModelRunner"
+          },
+          "comparison": "historical",
+          "baseline_artifact": "bench/baseline/2026-09-19-acceptance.json",
+          "baseline_sha256": "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e",
+          "mode": "prefix",
+          "batch_size": 4,
+          "input_len": 32768,
+          "output_len": 4096,
+          "num_gpu_blocks": 1024,
+          "speculative_tokens": 0,
+          "baseline": [
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 16384,
+              "prefix_hit_tokens": 128576,
+              "elapsed_s": 49.15356144099496,
+              "output_tps": 333.3227444702602
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 16384,
+              "prefix_hit_tokens": 128576,
+              "elapsed_s": 49.14444088912569,
+              "output_tps": 333.3846047198662
+            },
+            {
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "output_tokens": 16384,
+              "prefix_hit_tokens": 128576,
+              "elapsed_s": 49.3865269550588,
+              "output_tps": 331.75039854309375
+            }
+          ],
+          "ours": [
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 49.184278985,
+              "output_tps": 333.1145711213276,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 49.186187717,
+              "output_tps": 333.10164419059606,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 49.18204487,
+              "output_tps": 333.1297029903263,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 49.174590868,
+              "output_tps": 333.1801995868107,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 49.210026793,
+              "output_tps": 332.9402779827501,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0
+            }
+          ],
+          "ratio": 0.9993754601137,
+          "passed": true,
+          "summary": {
+            "baseline_median_tps": 333.3227444702602,
+            "framework_median_tps": 333.1145711213276,
+            "within_framework_spread_percent": 0.07206145363796157,
+            "slowest_framework_over_fastest_baseline": 0.9986672247883508
+          }
+        }
+      ],
+      "supplemental_note": "Original prefix bs2/bs4 three-measurement spreads were 3.46%<local-path> Repeated framework only with the same two warmups and five measurements, retaining original rows and unchanged historical baseline. These follow-ups test repeatability rather than replace original results."
+    },
+    "recorded_at": "2026-09-21T09:13:10.924142+00:00"
+  }
+}

@@ -53,9 +53,11 @@ def runtime_identity():
 def historical_baseline(path, args, batch, *, data_bytes=None):
     """Select an exact workload from frozen data without starting vLLM."""
     data_bytes = Path(path).read_bytes() if data_bytes is None else data_bytes
+    artifact = json.loads(data_bytes)
+    if isinstance(artifact, dict) and "artifact_kind" in artifact:
+        raise ValueError("formal comparison requires original raw evidence")
     if hashlib.sha256(data_bytes).hexdigest() != BASELINE_SHA256:
         raise ValueError("baseline hash differs from the original frozen artifact")
-    artifact = json.loads(data_bytes)
     expected_protocol = {
         "model": args.model,
         "block_size": 784,
@@ -319,7 +321,12 @@ def compare(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", default="/data0/shared/Qwen3.8-27B-FP8")
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("OH_MY_VLLM_MODEL"),
+        required=not bool(os.environ.get("OH_MY_VLLM_MODEL")),
+        help="checkpoint path; defaults to OH_MY_VLLM_MODEL",
+    )
     parser.add_argument("--num-gpu-blocks", type=int, default=1024)
     parser.add_argument("--batch-sizes", type=int, nargs="+", default=[1, 2, 4])
     parser.add_argument("--input-len", type=int, default=32768)
@@ -337,7 +344,7 @@ def main():
     parser.add_argument(
         "--baseline-json",
         type=Path,
-        default=ROOT / "bench/baseline/2026-09-19-acceptance.json",
+        required=True,
         help="Use frozen workload rows; run only the framework, never vLLM baseline",
     )
     args = parser.parse_args()

@@ -1,0 +1,4 @@
+# Verified test and repository maintenance tools.
+pytest==9.1.1
+ruff==0.16.7
+pre-commit==4.6.2

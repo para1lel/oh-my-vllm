@@ -149,6 +149,7 @@ def run_row(
     batch_size: int,
     mode: str,
     *,
+    model: str,
     gpu_total_bytes: int | None = None,
     raw_dir: Path | None = None,
     timeout: int = 1800,
@@ -169,6 +170,8 @@ def run_row(
             raw_dir.mkdir(parents=True, exist_ok=True)
         command = [
             str(binary),
+            "--model",
+            model,
             "--socket",
             str(socket),
             "--num-gpu-blocks",
@@ -207,6 +210,12 @@ def run_row(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("OH_MY_VLLM_MODEL"),
+        required=not bool(os.environ.get("OH_MY_VLLM_MODEL")),
+        help="checkpoint path; defaults to OH_MY_VLLM_MODEL",
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--raw-dir", type=Path, required=True)
@@ -221,7 +230,9 @@ def main() -> None:
     rows = []
     for mode in MODES:
         for batch_size in BATCH_SIZES:
-            row = run_row(binary, batch_size, mode, raw_dir=args.raw_dir)
+            row = run_row(
+                binary, batch_size, mode, model=args.model, raw_dir=args.raw_dir
+            )
             rows.append(row)
             print(
                 mode,

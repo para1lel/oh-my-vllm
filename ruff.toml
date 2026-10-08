@@ -1,5 +1,5 @@
 # Python lint/format settings, shared by the pre-commit hook and manual runs.
-# Matches vLLM's own ruff setup so code copied from there needs no reformatting.
+# Apply the same format in hooks and manual checks.
 line-length = 88
 target-version = "py312"
 

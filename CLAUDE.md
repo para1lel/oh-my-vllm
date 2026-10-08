@@ -1,9 +1,4 @@
-@AGENTS.md
+# Agent entry point
 
-# Claude-specific notes
-
-- Standing commit attribution: `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
-- Reply in Chinese when the user writes Chinese.
-- Today's date context: session was last active 2026-09-19.
-- The pre-commit hook stashes unstaged files before running formatters; always
-  stage `Cargo.lock` alongside Rust source changes to avoid stash conflicts.
+Read [AGENTS.md](AGENTS.md) for project constraints, environment selection, required checks, and document maintenance.
+Read [handoff](docs/handoff.md) before task work.

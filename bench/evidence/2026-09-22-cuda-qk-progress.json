@@ -1,0 +1,671 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "2026-09-22-cuda-qk-progress.json",
+    "sha256": "da2e28e179f598e0620cdbfa20d8f6a48e1bc70412e8da1ffec51810952de755",
+    "bytes": 41193
+  },
+  "removed_fields": [
+    "data.collection.hardware.cpu_affinity",
+    "data.collection.hardware.gpu",
+    "data.collection.hardware.gpu_info",
+    "data.observations.hardware.cpu_affinity",
+    "data.observations.hardware.gpu",
+    "data.observations.hardware.gpu_info"
+  ],
+  "data": {
+    "accepted": false,
+    "limitation": "All six dirty Q/K cases pass after compile fix; full147-case and framework acceptance outstanding. Default stays TileLang. FP32 accumulation order differs; no bitwise equivalence claim.",
+    "collection": {
+      "source_commit": "9cc867c6fec308c679953b7ebf8692dea220f8a4",
+      "source_status": " M python/oh_my_vllm/kernels/cuda_backend/kernels.cu\n",
+      "sources_sha256": {
+        "benchmarks/kernels.py": "98ffe4ec7ed3e444f60261bb44d584b9f2e6b61cf0bcf3073a401744070d31bf",
+        "development/kernels/cases.py": "13a71e3253d20e7b2e26ad0764885bb8cd8cb5bb1260c263a92a4669b63c5e19",
+        "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+        "development/kernels/fixtures.py": "bd346bf0acbd0218fa3a59e6c572790307ebfb19467e5d0a7ccdaf4a40cf5595",
+        "development/kernels/observations.py": "838276bb4def11e107c4eac84b43b42c8332e76a5e03d3ea72b404abc80db660",
+        "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+        "development/kernels/reference.py": "ddf5a63e286e975a81e74982d24ebd575e94a0208c0a013ff3b20eb0f06adf12",
+        "development/kernels/semantics.py": "96be066b579b829f9179ec87bb39f70ceebcdcd6aa5c7845482ce1614e79cd99",
+        "development/kernels/tilelang-reference.json": "14c3df434dedf6d60629eba25c267df888d1a83f1e35cf868fc29a4b1e0945e0",
+        "development/kernels/timing.py": "1f8afa6dde7cf2bc31256f4a5bbd58e7bf7a5da1b30cabba00e0b200355d8006",
+        "development/kernels/twins.py": "608ac3edd7d08e6e47a1ccdefb5c4d7c891b3080d8e3cb05d05a0b8be121117b",
+        "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+        "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+        "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+        "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+        "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+        "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+        "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "6d20e56cb3978b1f4d309b155c7be259255c6ec99d81826c4eb39536ef18609a",
+        "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+        "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+        "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+        "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+        "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+        "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+        "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+        "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+        "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+        "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+      },
+      "hardware": {
+        "cpu_affinity_count": 192,
+        "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+      },
+      "reference": {
+        "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+        "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+        "files": {
+          "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+          "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+          "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+          "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+          "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+          "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+          "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+        },
+        "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+        "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690"
+      },
+      "protocol": "Complete static maximum-shape operations; three independent warm rounds, twenty alternating-order pairs/round,100 graph repetitions/sample. No profiler during timing. Fixtures use immutable sources and isolated repeatable destinations.",
+      "coverage": {
+        "complete": false,
+        "required": [
+          "norm-8f0939a3eb",
+          "add_norm-1cd0b34f33",
+          "gated_norm-cf3f37cb9e",
+          "prepare_attention-2123658257",
+          "quant-a83ee98240",
+          "quant-7a2c2961c3",
+          "silu_quant-bdb6037d89",
+          "gates-20dd53c898",
+          "convolution-c4c3ff2aef",
+          "qk-12fc3a9e63",
+          "norm-effe245bd2",
+          "add_norm-27c6f00266",
+          "gated_norm-526cd44715",
+          "prepare_attention-831ee3469c",
+          "quant-cba5ed9729",
+          "quant-14b2b04fc3",
+          "silu_quant-7e22ac4193",
+          "gates-9710bbc960",
+          "convolution-0febb0c2f0",
+          "recurrent-5a418230e1",
+          "norm-c2c1f928be",
+          "add_norm-d38e95acda",
+          "gated_norm-730a8e2832",
+          "prepare_attention-7eb9ea324c",
+          "quant-ab0ac5c4e5",
+          "quant-0e5f3a0b2e",
+          "silu_quant-ab0edc82bb",
+          "gates-cae0b44add",
+          "convolution-2e3c4391cd",
+          "qk-f930cef0b5",
+          "norm-b75ec1a7a2",
+          "add_norm-c7cb824ce7",
+          "gated_norm-bdec59c631",
+          "prepare_attention-e2b930a517",
+          "quant-5b659364da",
+          "quant-cb18873355",
+          "silu_quant-71ac03b9bc",
+          "gates-c72bdad5d4",
+          "convolution-ff7930b7b7",
+          "recurrent-2a62969158",
+          "norm-7d0299aa63",
+          "add_norm-0c6631a889",
+          "gated_norm-cdfb1224cc",
+          "prepare_attention-50d5f5fd1d",
+          "quant-cacaef771f",
+          "quant-0ab771f274",
+          "silu_quant-7ed9c30e04",
+          "gates-ee30f1b859",
+          "convolution-647f178fc3",
+          "recurrent-041544e32f",
+          "recurrent-36a6d98675",
+          "norm-9690ce8dc3",
+          "add_norm-c3003e1746",
+          "gated_norm-c04fc8e4ea",
+          "prepare_attention-e3ad7889b2",
+          "quant-317bf37c2b",
+          "quant-0eea55c864",
+          "silu_quant-a089c70b05",
+          "gates-eb9ecb7e6b",
+          "convolution-669242bf59",
+          "recurrent-38fd6bd99e",
+          "attention-c426ebd5d5",
+          "attention-d3973698ea",
+          "attention-e3bf2f1708",
+          "attention-6ee6a06e37",
+          "norm-214c77fddf",
+          "add_norm-17cf75a750",
+          "gated_norm-a20f3afb37",
+          "prepare_attention-15fddb117a",
+          "quant-c7c5a33dd2",
+          "quant-c908ceb94f",
+          "silu_quant-6ddda81d2c",
+          "gates-db0ed2a574",
+          "convolution-acc1f1fa4a",
+          "recurrent-e73333aa6f",
+          "attention-4fbadf5691",
+          "attention-80f93685bd",
+          "attention-39a3371fd0",
+          "attention-4705faca24",
+          "norm-82d8a65dcf",
+          "add_norm-28b801aed5",
+          "gated_norm-d88b128193",
+          "prepare_attention-53663d6020",
+          "quant-78967ef6bb",
+          "quant-b6aca61c7f",
+          "silu_quant-fbdf53e4ed",
+          "gates-7c7a082031",
+          "convolution-ea757c8cde",
+          "recurrent-4b9de1f8fa",
+          "recurrent-fe8f9e7511",
+          "attention-86c02993e7",
+          "attention-302aa28608",
+          "attention-5d1d8dd9c4",
+          "attention-2b7ac478c8",
+          "attention-0ebf3559b6",
+          "attention-764772a69f",
+          "attention-166a4bce77",
+          "attention-a6899c8eba",
+          "norm-1953a6389d",
+          "add_norm-a8eca15b2f",
+          "gated_norm-37b6f09e50",
+          "prepare_attention-857fc001ea",
+          "quant-38a4f3d421",
+          "quant-6b2b789e0f",
+          "silu_quant-a828b90cc9",
+          "gates-230b55c57b",
+          "convolution-accdf72929",
+          "qk-2fdf585888",
+          "norm-3f7d78bda0",
+          "add_norm-ea3a42f942",
+          "gated_norm-cf90127954",
+          "prepare_attention-396e3971a6",
+          "quant-6f964d5026",
+          "quant-31fe1ff1c4",
+          "silu_quant-e81d00f9c2",
+          "gates-414c933c7a",
+          "convolution-8f95316330",
+          "qk-2bc130d5f3",
+          "norm-80dce647f9",
+          "add_norm-6c841c61cc",
+          "gated_norm-fc1b4f5fca",
+          "prepare_attention-c7a5f6c559",
+          "quant-9c9c4ad938",
+          "quant-effc981768",
+          "silu_quant-07d0318c78",
+          "gates-032c38d108",
+          "convolution-cdeba28a40",
+          "qk-ee1062c676",
+          "norm-ea1e7c720d",
+          "add_norm-8fa7f5b472",
+          "gated_norm-a3ae6d7d9e",
+          "prepare_attention-409a17bee0",
+          "quant-0413ce3ad4",
+          "quant-f70208e990",
+          "silu_quant-6e2b085b5c",
+          "gates-fe0ffa9ef4",
+          "convolution-75d71689d9",
+          "qk-df607783e7",
+          "norm-1e2a1a065f",
+          "add_norm-16c7eea28c",
+          "gated_norm-bf1c454402",
+          "prepare_attention-70856729ec",
+          "quant-0a7394ccef",
+          "quant-4e026ac5b2",
+          "silu_quant-3d777559ac",
+          "gates-7f196271c1",
+          "convolution-445867aff2"
+        ],
+        "selected": [
+          "qk-12fc3a9e63",
+          "qk-f930cef0b5",
+          "qk-2fdf585888",
+          "qk-2bc130d5f3",
+          "qk-ee1062c676",
+          "qk-df607783e7"
+        ]
+      },
+      "diagnostic": true,
+      "rows": [
+        {
+          "id": "qk-12fc3a9e63",
+          "configuration": {
+            "operation": "qk",
+            "tokens": 32144
+          },
+          "workloads": [
+            "ordinary-32768-1",
+            "mtp-32768-1",
+            "ordinary-131072-1"
+          ],
+          "comparison": {
+            "rounds": [
+              {
+                "tilelang_ms": 0.0787939190864563,
+                "cuda_ms": 0.07861104011535644
+              },
+              {
+                "tilelang_ms": 0.07883280038833618,
+                "cuda_ms": 0.07863712072372436
+              },
+              {
+                "tilelang_ms": 0.07882879972457885,
+                "cuda_ms": 0.07862879991531371
+              }
+            ],
+            "paired_mean_gain_ms": 0.0001916424433390298,
+            "gain_lower_95_ms": 0.00017832024892171529,
+            "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+            "passed": true
+          }
+        },
+        {
+          "id": "qk-f930cef0b5",
+          "configuration": {
+            "operation": "qk",
+            "tokens": 32768
+          },
+          "workloads": [
+            "ordinary-32768-2",
+            "ordinary-32768-4",
+            "mtp-32768-2",
+            "mtp-32768-4"
+          ],
+          "comparison": {
+            "rounds": [
+              {
+                "tilelang_ms": 0.08021312236785888,
+                "cuda_ms": 0.08006656169891357
+              },
+              {
+                "tilelang_ms": 0.0802772808074951,
+                "cuda_ms": 0.0800775957107544
+              },
+              {
+                "tilelang_ms": 0.08027440071105957,
+                "cuda_ms": 0.08008063793182373
+              }
+            ],
+            "paired_mean_gain_ms": 0.0001760163307189942,
+            "gain_lower_95_ms": 0.00015248394012451111,
+            "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+            "passed": true
+          }
+        },
+        {
+          "id": "qk-2fdf585888",
+          "configuration": {
+            "operation": "qk",
+            "tokens": 624
+          },
+          "workloads": [
+            "prefix-32768-1"
+          ],
+          "comparison": {
+            "rounds": [
+              {
+                "tilelang_ms": 0.002072960063815117,
+                "cuda_ms": 0.0020444799959659574
+              },
+              {
+                "tilelang_ms": 0.0020788799971342086,
+                "cuda_ms": 0.0020443200320005416
+              },
+              {
+                "tilelang_ms": 0.0020726399868726732,
+                "cuda_ms": 0.0020473600178956986
+              }
+            ],
+            "paired_mean_gain_ms": 3.5039998590946215e-05,
+            "gain_lower_95_ms": 3.024533142646156e-05,
+            "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+            "passed": true
+          }
+        },
+        {
+          "id": "qk-2bc130d5f3",
+          "configuration": {
+            "operation": "qk",
+            "tokens": 1248
+          },
+          "workloads": [
+            "prefix-32768-2"
+          ],
+          "comparison": {
+            "rounds": [
+              {
+                "tilelang_ms": 0.002986560016870499,
+                "cuda_ms": 0.0029075199365615843
+              },
+              {
+                "tilelang_ms": 0.002987679988145828,
+                "cuda_ms": 0.0029094399511814116
+              },
+              {
+                "tilelang_ms": 0.0029905599355697634,
+                "cuda_ms": 0.0029099199175834653
+              }
+            ],
+            "paired_mean_gain_ms": 7.717334230740863e-05,
+            "gain_lower_95_ms": 7.388799885908764e-05,
+            "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+            "passed": true
+          }
+        },
+        {
+          "id": "qk-ee1062c676",
+          "configuration": {
+            "operation": "qk",
+            "tokens": 2496
+          },
+          "workloads": [
+            "prefix-32768-4"
+          ],
+          "comparison": {
+            "rounds": [
+              {
+                "tilelang_ms": 0.00462016001343727,
+                "cuda_ms": 0.004588000029325485
+              },
+              {
+                "tilelang_ms": 0.0046163201332092285,
+                "cuda_ms": 0.004581760019063949
+              },
+              {
+                "tilelang_ms": 0.004621919989585877,
+                "cuda_ms": 0.004574400037527084
+              }
+            ],
+            "paired_mean_gain_ms": 3.85013322035472e-05,
+            "gain_lower_95_ms": 3.304001688957216e-05,
+            "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+            "passed": true
+          }
+        },
+        {
+          "id": "qk-df607783e7",
+          "configuration": {
+            "operation": "qk",
+            "tokens": 32288
+          },
+          "workloads": [
+            "ordinary-131072-2",
+            "ordinary-131072-4"
+          ],
+          "comparison": {
+            "rounds": [
+              {
+                "tilelang_ms": 0.07907487869262696,
+                "cuda_ms": 0.07888000011444092
+              },
+              {
+                "tilelang_ms": 0.07912240028381348,
+                "cuda_ms": 0.07891151905059815
+              },
+              {
+                "tilelang_ms": 0.07910703897476196,
+                "cuda_ms": 0.07890432119369506
+              }
+            ],
+            "paired_mean_gain_ms": 0.00020100235939025867,
+            "gain_lower_95_ms": 0.00018466639518737726,
+            "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+            "passed": true
+          }
+        }
+      ],
+      "estimates": {
+        "qk": {
+          "kind": "estimated",
+          "source": "TileFoundry HIR",
+          "symbol": "qk",
+          "report": "# analysis target=nvidia.b200_sxm module=Operators function=qk topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:1024@logical,1024@total,1024@cta;f32:4104@logical,4104@total,4104@cta other-ops=special:8@logical,8@total,8@cta\n# traffic traffic=gmem:r18528/w14432@total,r18528/w14432@cta;rmem:r8/w0@total,r8/w0@cta\n# peak-footprint=gmem:7184;rmem:0\n# roofline ideal-ns=5 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef qk(\n    q: Tensor[(2, 2, 128), \"bf16\"],\n    k: Tensor[(2, 2, 128), \"bf16\"]\n):\n    v0 = cast(q, dtype=\"f32\")  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v1 = unary(v0, kind=\"square\")  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w2048@total,r2048/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v2 = reduce(v1, axes=(-1,), keepdim=True, kind=\"sum\")  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w16@total,r2048/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v0_2 = 1e-06  # Tensor[(), \"f32\", \"umat\"]\n    v3 = add(v2, v0_2)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v4 = unary(v3, kind=\"rsqrt\")  # Tensor[(2, 2, 1), \"f32\"]; compute-cost other-ops=special:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta; roofline ideal-ns=1 bound-by=memory\n    v5 = mul(v0, v4)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2064/w2048@total,r2064/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v6 = cast(v5, dtype=\"bf16\")  # Tensor[(2, 2, 128), \"bf16\"]; compute-cost flops=bf16:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w1024@total,r2048/w1024@cta; roofline ideal-ns=1 bound-by=balanced\n    v7 = cast(k, dtype=\"f32\")  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = unary(v7, kind=\"square\")  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w2048@total,r2048/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v9 = reduce(v8, axes=(-1,), keepdim=True, kind=\"sum\")  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w16@total,r2048/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v1_2 = 1e-06  # Tensor[(), \"f32\", \"umat\"]\n    v10 = add(v9, v1_2)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v11 = unary(v10, kind=\"rsqrt\")  # Tensor[(2, 2, 1), \"f32\"]; compute-cost other-ops=special:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta; roofline ideal-ns=1 bound-by=memory\n    v12 = mul(v7, v11)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2064/w2048@total,r2064/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v13 = cast(v12, dtype=\"bf16\")  # Tensor[(2, 2, 128), \"bf16\"]; compute-cost flops=bf16:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w1024@total,r2048/w1024@cta; roofline ideal-ns=1 bound-by=balanced\n    return (v6, v13)\n",
+          "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+        }
+      },
+      "passed": false,
+      "selected_passed": true,
+      "interference": [],
+      "raw_report_sha256": "9bd1a3b286506aa4c43541a00977c176cb06b02725f11ac36f5aea9c429320e1"
+    },
+    "observations": {
+      "sources_sha256": {
+        "benchmarks/kernels.py": "98ffe4ec7ed3e444f60261bb44d584b9f2e6b61cf0bcf3073a401744070d31bf",
+        "development/kernels/cases.py": "13a71e3253d20e7b2e26ad0764885bb8cd8cb5bb1260c263a92a4669b63c5e19",
+        "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+        "development/kernels/fixtures.py": "bd346bf0acbd0218fa3a59e6c572790307ebfb19467e5d0a7ccdaf4a40cf5595",
+        "development/kernels/observations.py": "838276bb4def11e107c4eac84b43b42c8332e76a5e03d3ea72b404abc80db660",
+        "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+        "development/kernels/reference.py": "ddf5a63e286e975a81e74982d24ebd575e94a0208c0a013ff3b20eb0f06adf12",
+        "development/kernels/semantics.py": "96be066b579b829f9179ec87bb39f70ceebcdcd6aa5c7845482ce1614e79cd99",
+        "development/kernels/tilelang-reference.json": "14c3df434dedf6d60629eba25c267df888d1a83f1e35cf868fc29a4b1e0945e0",
+        "development/kernels/timing.py": "1f8afa6dde7cf2bc31256f4a5bbd58e7bf7a5da1b30cabba00e0b200355d8006",
+        "development/kernels/twins.py": "608ac3edd7d08e6e47a1ccdefb5c4d7c891b3080d8e3cb05d05a0b8be121117b",
+        "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+        "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+        "python/oh_my_vllm/kernels/attention_prepare.py": "d3110437ed871189dfe7ba8a9192f96df56c72544d14d579b646740094727990",
+        "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+        "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+        "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "9fe477f3d58e97b0901671f6ba5baf38e69ee98d8f693dc6c406445dd94ba532",
+        "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "6d20e56cb3978b1f4d309b155c7be259255c6ec99d81826c4eb39536ef18609a",
+        "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+        "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+        "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+        "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+        "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+        "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+        "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+        "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+        "python/oh_my_vllm/models/qwen.py": "aadce6ff4d935ac807dfa27a0da604587f5d1f438a51ac9c34510f259d2cc452",
+        "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+      },
+      "case": {
+        "id": "qk-2bc130d5f3",
+        "configuration": {
+          "operation": "qk",
+          "tokens": 1248
+        },
+        "workloads": [
+          "prefix-32768-2"
+        ]
+      },
+      "hardware": {
+        "cpu_affinity_count": 192,
+        "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+      },
+      "reference": {
+        "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+        "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+        "files": {
+          "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+          "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+          "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+          "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+          "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+          "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+          "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+        },
+        "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+        "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690"
+      },
+      "source_commit": "9cc867c6fec308c679953b7ebf8692dea220f8a4",
+      "source_status": " M python/oh_my_vllm/kernels/cuda_backend/kernels.cu\n M tests/test_independent_kernels.py\n",
+      "estimated": {
+        "kind": "estimated",
+        "source": "TileFoundry HIR",
+        "symbol": "qk",
+        "report": "# analysis target=nvidia.b200_sxm module=Operators function=qk topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:1024@logical,1024@total,1024@cta;f32:4104@logical,4104@total,4104@cta other-ops=special:8@logical,8@total,8@cta\n# traffic traffic=gmem:r18528/w14432@total,r18528/w14432@cta;rmem:r8/w0@total,r8/w0@cta\n# peak-footprint=gmem:7184;rmem:0\n# roofline ideal-ns=5 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef qk(\n    q: Tensor[(2, 2, 128), \"bf16\"],\n    k: Tensor[(2, 2, 128), \"bf16\"]\n):\n    v0 = cast(q, dtype=\"f32\")  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v1 = unary(v0, kind=\"square\")  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w2048@total,r2048/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v2 = reduce(v1, axes=(-1,), keepdim=True, kind=\"sum\")  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w16@total,r2048/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v0_2 = 1e-06  # Tensor[(), \"f32\", \"umat\"]\n    v3 = add(v2, v0_2)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v4 = unary(v3, kind=\"rsqrt\")  # Tensor[(2, 2, 1), \"f32\"]; compute-cost other-ops=special:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta; roofline ideal-ns=1 bound-by=memory\n    v5 = mul(v0, v4)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2064/w2048@total,r2064/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v6 = cast(v5, dtype=\"bf16\")  # Tensor[(2, 2, 128), \"bf16\"]; compute-cost flops=bf16:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w1024@total,r2048/w1024@cta; roofline ideal-ns=1 bound-by=balanced\n    v7 = cast(k, dtype=\"f32\")  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = unary(v7, kind=\"square\")  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w2048@total,r2048/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v9 = reduce(v8, axes=(-1,), keepdim=True, kind=\"sum\")  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w16@total,r2048/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v1_2 = 1e-06  # Tensor[(), \"f32\", \"umat\"]\n    v10 = add(v9, v1_2)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v11 = unary(v10, kind=\"rsqrt\")  # Tensor[(2, 2, 1), \"f32\"]; compute-cost other-ops=special:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta; roofline ideal-ns=1 bound-by=memory\n    v12 = mul(v7, v11)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2064/w2048@total,r2064/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v13 = cast(v12, dtype=\"bf16\")  # Tensor[(2, 2, 128), \"bf16\"]; compute-cost flops=bf16:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w1024@total,r2048/w1024@cta; roofline ideal-ns=1 bound-by=balanced\n    return (v6, v13)\n",
+        "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+      },
+      "measured": {
+        "tilelang": {
+          "kind": "measured",
+          "source": "Nsight Compute (separate replay)",
+          "launches": [
+            {
+              "launch_id": "0",
+              "kernel": "kernel_kernel",
+              "metrics": {
+                "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+                  "value": "13.94",
+                  "unit": "%"
+                },
+                "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+                  "value": "0",
+                  "unit": ""
+                },
+                "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum": {
+                  "value": "0",
+                  "unit": "sector"
+                },
+                "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": {
+                  "value": "0",
+                  "unit": "sector"
+                },
+                "launch__registers_per_thread": {
+                  "value": "30",
+                  "unit": "register/thread"
+                },
+                "launch__shared_mem_per_block_dynamic": {
+                  "value": "0",
+                  "unit": "byte/block"
+                },
+                "launch__shared_mem_per_block_static": {
+                  "value": "0",
+                  "unit": "byte/block"
+                },
+                "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+                  "value": "20.78",
+                  "unit": "%"
+                },
+                "smsp__inst_executed.sum": {
+                  "value": "1317888",
+                  "unit": "inst"
+                },
+                "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+                  "value": "58.36",
+                  "unit": "%"
+                },
+                "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+                  "value": "6.77",
+                  "unit": "%"
+                }
+              }
+            }
+          ]
+        },
+        "cuda": {
+          "kind": "measured",
+          "source": "Nsight Compute (separate replay)",
+          "launches": [
+            {
+              "launch_id": "0",
+              "kernel": "void model_qk_kernel<128, 1>(const __nv_bfloat16 *, const __nv_bfloat16 *, __nv_bfloat16 *, __nv_bfloat16 *)",
+              "metrics": {
+                "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+                  "value": "14.36",
+                  "unit": "%"
+                },
+                "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+                  "value": "0",
+                  "unit": ""
+                },
+                "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum": {
+                  "value": "0",
+                  "unit": "sector"
+                },
+                "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": {
+                  "value": "0",
+                  "unit": "sector"
+                },
+                "launch__registers_per_thread": {
+                  "value": "32",
+                  "unit": "register/thread"
+                },
+                "launch__shared_mem_per_block_dynamic": {
+                  "value": "0",
+                  "unit": "byte/block"
+                },
+                "launch__shared_mem_per_block_static": {
+                  "value": "0",
+                  "unit": "byte/block"
+                },
+                "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+                  "value": "17.71",
+                  "unit": "%"
+                },
+                "smsp__inst_executed.sum": {
+                  "value": "1078272",
+                  "unit": "inst"
+                },
+                "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+                  "value": "56.07",
+                  "unit": "%"
+                },
+                "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+                  "value": "7.51",
+                  "unit": "%"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "limitation": "Profiler replay only; not timing or performance acceptance",
+      "raw_report_sha256": "23cb6cee07dc07133360e3fedfcfade9910d7a2cdc902ed16b6d6832ced110f8"
+    },
+    "validation": {
+      "qk-formal": {
+        "result": "Initial build failed: obsolete fifth kernel launch argument; corrected before successful reruns",
+        "sha256": "999886111f308d05207be00dfde37c206f4e1c2d77bb631a9c09b2c280e0ff0f"
+      },
+      "qk-tests": {
+        "result": "Initial test process stopped after compile failures; not a correctness pass",
+        "sha256": "b87a6c4b977890230642aeaa8bcaa7cbbc6f38863b4d27f5c0913f16303310c2"
+      },
+      "qk-final-tests": {
+        "result": "173 passed;28 subtests; no skips. Existing normalization reference/tolerances unchanged,adds2048/4096 rows.",
+        "sha256": "9f0c90443fcc80371db68e55e095b96d95b612ba2bd3d7b5310b750da6d6f01b"
+      },
+      "qk-boundaries": {
+        "result": "Original FP64 tolerances pass for2047/2048/4095/4096 rows,Q/K offset,different strides,genericheads,separate allocations",
+        "sha256": "65354ccf909e909578522c64a8fe00e9bba5ac030666a8adfb5482b5913d75be"
+      },
+      "qk-ordinary-fp64": {
+        "result": "Actual-model eager ordinary independent FP64 probes pass; forced64-token output includes trailing whitespace, not agentic acceptance",
+        "sha256": "1cad48b01a9ee6acd43f8c7b8859c8ec7c8686e5aff5aa8a2293724fe421da84"
+      },
+      "qk-mtp-fp64": {
+        "result": "Actual-model eager MTP4 independent FP64 probes pass; forced64-token output includes control tokens/repetition, not agentic acceptance",
+        "sha256": "152d699e5672d96efce489307b80907734d82cc730174366ce4dde2fd11c208d"
+      },
+      "qk-hooks": {
+        "result": "All-file Rust fmt/width/clippy/tests and Ruff pass",
+        "sha256": "f3e55f7f9832bec68142bbdf0c7408e40148ee73f45759bc29a8788189aeb010"
+      }
+    },
+    "test_sources_sha256": {
+      "tests/test_independent_kernels.py": "d2d53227ffac36050df011743c235e1b3f10170f81eb8f90a7b4e43c2b5ca44a"
+    },
+    "implementation": "Aligned8-element loads,SM100 paired FP32 add/mul,128/256 fixed threads,selected joint Q/K reduction,64-bit addresses; guarded model layout with generic CUDA retained.",
+    "review": "Independent review identified obsolete launch argument; fixed and rerun. Remaining address/layout/precision review passes; requested supplements completed."
+  }
+}

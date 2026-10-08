@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -11,6 +12,12 @@ from transformers import AutoTokenizer
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
+    "--model",
+    default=os.environ.get("OH_MY_VLLM_MODEL"),
+    required=not bool(os.environ.get("OH_MY_VLLM_MODEL")),
+    help="checkpoint path; defaults to OH_MY_VLLM_MODEL",
+)
+parser.add_argument(
     "--binary", type=Path, default=ROOT / "target/release/oh-my-vllm-zmq-worker"
 )
 parser.add_argument("--socket", required=True)
@@ -19,7 +26,7 @@ parser.add_argument("--num-speculative-tokens", type=int, default=0)
 parser.add_argument("--prefix-hit", action="store_true")
 parser.add_argument("--max-tokens", type=int, default=1024)
 args = parser.parse_args()
-model = "/data0/shared/Qwen3.8-27B-FP8"
+model = args.model
 tokenizer = AutoTokenizer.from_pretrained(model)
 cities = [("北京", "Beijing"), ("东京", "Tokyo")]
 prompts = []

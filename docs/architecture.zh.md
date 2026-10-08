@@ -1,106 +1,216 @@
-# 架构 — oh-my-vllm
+# 架构
 
-Rust 负责 HTTP 服务、请求调度、已接受 token 历史及逻辑 KV 分配。Python 负责单设备 GPU 计算。两进程通过 ZMQ DEALER 和 msgpack 通信；不存在 vLLM 运行时、调度器或模型适配器。
+Rust 负责请求生命周期和逻辑内存.
+Python 负责 GPU tensor 和计算.
+[需求](requirements.zh.md) 定义验收行为; [决策](README.zh.md#决策记录) 记录关键替代方案.
 
-## 执行流程
+## 请求流程
 
-1. Rust 前端归一化 Chat/Responses 请求。Python ServingAdapter 应用 checkpoint 的 chat template、tokenizer、采样配置和 XGrammar 约束，返回 prompt ID。最多一个 CPU prepare 可与活跃 execute step 并行；Python prepare 线程构造输入，只有 bridge 主线程安装活跃 sampler、history 和 generation 状态。
-2. Rust 接纳请求、解析共享前缀并分配 FA/Mamba 表。调度器将 prefill、decode 和实际 MTP draft ID 组成 batch。
-3. Python 验证已接受历史，并按各 tensor 容量验证物理地址（包括递归状态别名和跨请求 FA 页写入），执行 Qwen 模型，并在逐 draft grammar mask 下从 target 分布采样。
-4. Python 只提交保留的输出，选择被接受的递归快照，保存跨块 checkpoint，再生成新的 MTP proposal。
-5. Rust 更新已接受历史、回滚被拒绝的推测位置并释放已完成请求。即使没有请求被调度，仅包含完成信息的通知也会释放 Python 状态。
+1. Rust 校验 HTTP 请求并保留接纳容量.
+2. Python 在后台线程应用 tokenizer / template, 准备采样和 grammar 状态.
+3. Python 主线程安装准备好的状态.
+4. Rust 接纳 prompt, 查找一致前缀并调度 token 工作.
+5. Rust 分配逻辑 FA / GDN slot, 发送执行 metadata.
+6. Python 构建 batch plan, 启动 target 或 MTP GPU 单元.
+7. Python 返回保留 token, 下一批草稿和可选服务输出.
+8. Rust 在状态变化前校验完整回复.
+9. Rust 提交已接受历史, 结束或重新调度请求, 提供输出.
 
-消息字段和调度器/KV 数据结构见 [design.md](design.zh.md)。
-
-错误处理：prepare 回复携带 validation/internal 类别；HTTP 适配层只将明确的输入验证映射为 400，未知 worker 故障映射为 500。RPC 回复携带 ID 和类型；Rust 等待 execute 结果时可缓存先到的 prepared 回复。已取消 prepare 的迟到回复通过有界 tombstone 丢弃；意外或重复回复会停止引擎。execute 结果可报告请求局部错误，只移除对应请求；CUDA/设备执行故障仍会停止引擎。Rust 父进程死亡时，自有 Python worker 会退出。
+取消在已完成的引擎操作之间生效.
+Finished-only execution 会刷新待处理的 Python 清理, 包括没有剩余工作时.
+请求局部失败只停止该请求; worker / device 失败停止引擎.
+Rust 子进程管理和 Linux parent-death signal 防止遗留 Python worker.
 
 ## Rust 模块
 
-- `crates/kv-cache`：共享逻辑块池、链式 hash 前缀、对齐 Mamba checkpoint 和推测预留。两阶段分配在分配新页前先触达复用前缀。
-- `crates/scheduler`：FCFS 等待/运行队列、分块 prefill、token 预算、错峰接纳、
-  容量不足时先抢占更晚接纳的运行中请求并重试高优先级请求，以及已接受 draft 计数。
-  因 HTTP 背压阻塞的流暂不参与新一轮调度，其他请求可以利用该轮；其 KV 状态在正常按优先级
-  抢占不需要时仍予保留。kv-cache crate 默认使用一个共享池，指定 `--mamba-blocks`
-  时 FA/GDN 使用独立池（ADR-007）。
-- `crates/zmq-worker`：CLI、OpenAI 兼容 HTTP API、模型进程生命周期、取消、ZMQ 传输和关联日志。
-
-目标是在一张 B200 上运行 `/data0/shared/Qwen3.8-27B-FP8`。每个逻辑 FA 页包含 784 token，共 16 层 FA、48 层 GDN。保留 CLI 的 `num_gpu_blocks` 容量单位以兼容冻结基线：ready 报告 floor(value/3) 个逻辑块。Python 现在直接按逻辑容量为每层分配 tensor，不再有旧三路物理 stride 或混合布局存储。
+| 模块 | 职责 |
+|---|---|
+| `crates/kv-cache/src/block.rs`, `pool.rs`, `free_queue.rs` | 块引用, 缓存 metadata 和 LRU 空闲队列. |
+| `crates/kv-cache/src/hash.rs`, `group.rs`, `coordinator.rs` | 前缀哈希, group layout 和协调分配. |
+| `crates/scheduler/src/request.rs`, `output.rs`, `lib.rs` | 已接受历史, 草稿调度, 校验和队列转换. |
+| `crates/zmq-worker/src/client.rs`, `protocol.rs`, `error.rs` | 子进程生命周期, 关联 RPC, 类型化消息和错误边界. |
+| `crates/zmq-worker/src/main.rs` | CLI, 离线驱动, 基准计时和运行配置. |
+| `crates/zmq-worker/src/serving/` | Axum HTTP, 类型化事件, 工具解析, 响应存储和在线接纳. |
 
 ## Python 模块
 
-- `worker/protocol.py`：框架自有 wire dataclass。
-- `worker/model_runner.py`：具体 Worker、持久请求/采样状态、缓存 tensor 和执行编排。
-- `worker/batch_plan.py`：主机校验、已接受状态选择及 checkpoint 复制，不分配逻辑页。
-- `models/qwen.py`：直接加载 safetensors、融合投影权重映射、64 层 target 模型和共享 embedding/output 权重的单层 MTP head。
-- `worker/sampler.py`：惩罚、top-k/top-p、贪心/随机 target 采样和确定性贪心 proposal 的精确验证。
-- `worker/serving.py`：Transformers/Tokenizers 准备、增量解码、XGrammar mask、EOS/stop/长度处理及 reasoning 计数。
-- `worker/mtp.py`：偏移 MTP 缓存、边界特征和 proposal 生成。
-- `worker/decode_graph.py`：target/MTP CUDA Graph buffer、捕获和回放。
-- `worker/runtime.py`：依赖身份及已加载模块/库审计。
+| 模块 | 职责 |
+|---|---|
+| `worker/zmq_bridge.py`, `protocol.py` | 消息处理, 后台准备, 主线程安装和清理. |
+| `worker/model_runner.py`, `runtime.py`, `logging_utils.py` | 独立初始化, 源码 / 库身份, 执行和诊断. |
+| `worker/batch_plan.py`, `tensors.py` | 校验后的 CPU plan, slot 选择, 批量 metadata 传输和 tensor view. |
+| `worker/mtp.py` | Proposal, 验证, 已接受状态保留和 checkpoint 写入. |
+| `worker/decode_graph.py`, `graph_cache.py` | 持久输入, 事务式 capture, 有界 graph 条目和 replay. |
+| `worker/serving.py`, `sampling.py`, `sampler.py` | Tokenization, XGrammar, 采样, detokenization 和输出计数. |
+| `models/qwen.py` | Checkpoint 加载, 64 层 target, MTP 层, FP8 / 普通 projection 和 forward 单元. |
+| `ir/` | 语义算子, 参考, mutation schema, provider 选择, lowering 和覆盖. |
+| `kernels/` | Attention, GDN, convolution, normalization, elementwise 算子和后端选择. |
+| `kernels/cuda_backend/` | B200 CUDA 实现和加载模块来源. |
+| `kernels/tilelang_reference/` | 冻结比较实现. |
 
-## 混合缓存与 MTP
+全部 Python 模块路径相对于 `python/oh_my_vllm/`.
 
-GDN 状态形状为 [slot,48,128,128]，普通模式为 FP32，MTP 为 BF16。因果卷积状态为 BF16 [slot,10240,3]。decode 读取最后提交的物理槽，并独立写候选快照。被拒绝候选绝不会成为缓存前缀。token 跨越 784 边界时，将该位置的精确快照保存到对应 checkpoint 槽，即使后面的 draft 也被接受。零源槽不可变。batch 规划禁止写/写及其他请求写/源别名，包括 checkpoint 复制。
+## 传输合同
 
-MTP 行 p 组合 target hidden[p-1] 和 input token[p]。统一 +1 RoPE 偏移保留相对注意力，位置零不存在。由此每行与 Rust 前缀 hash 一致，避免共享边界行依赖未缓存后缀。每个 784 边界的 target hidden 与 FA 页一起保存。若 Rust 尚未分配下一页，proposer 推迟边界行并缩短 draft，绝不绕过 Rust 分配页。抢占丢弃请求局部进度；恢复时由已接受前缀和保留的边界特征重建。
+Rust 绑定 `ipc://<socket_path>`; 唯一 Python worker 连接它.
+消息为带 `type` 字段的 msgpack dictionary.
+Prepare 和 execute 回复回显 `rpc_id`; 丢弃迟到的已取消 prepare 回复.
+`register` 和 `abort` 无回复.
 
-贪心 proposal 依次对照各 draft 前缀下的 target 分布采样结果验证。匹配则接受；首次不匹配或 bonus sample 结束验证。这保留随机 target 采样，不假定 draft 概率。grammar 状态只随保留输出前进。
+| 消息 | 字段和作用 |
+|---|---|
+| `init` | `model_path`, `num_gpu_blocks`, `mamba_blocks`, `block_size`, `tensor_parallel_size`, `max_model_len`, `num_speculative_tokens`; 分配 worker 状态. |
+| `ready` | `logical_num_blocks`, `mamba_blocks`; 返回实际设备容量. |
+| `register` | `request_id`, `prompt_token_ids`; 注册离线输入. |
+| `prepare` / `prepared` | `rpc_id`, `request_id`, `request` / 准备好的 `prompt_token_ids`; 创建服务状态. |
+| `execute` | `rpc_id`, `step_id`, `scheduled`, `finished_request_ids`, `preempted_request_ids`, `num_batched_tokens`; 计算选定工作. |
+| Scheduled row | `request_id`, `token_ids`, `num_computed_tokens`, `prefill_token_ids`, `fa_block_table`, `mamba_block_table`. |
+| `execute_result` | `rpc_id`, `outputs`; 返回 output row. |
+| Output row | `request_id`, `token_ids`, `num_accepted_draft_tokens`, `new_draft_token_ids`; 可选 `error`, `text`, `finish_reason`, `reasoning_tokens`. |
+| `error` | `message`, 可选 `rpc_id` 和 `kind`; 区分 validation 和 internal 失败. |
+| `abort` / `shutdown` | Abort 带 `request_id`; 释放请求状态 / 停止 worker. |
 
-## 设备 kernel 与计算图
+`prefill_token_ids` 在接纳或重计算时包含完整已接受历史.
+普通解码保持增量; 草稿单独保留.
+初始化错误不带关联 ID 和 kind; 执行错误的 kind 默认 internal.
+缺失注册产生请求局部执行错误.
+精确 wire 名称和默认值以 Rust 和 Python 协议定义为准.
 
-独立 FlashInfer TRT-LLM FP8 GEMM 处理 <=32 行，使用列主序 activation scale 和行主序 checkpoint scale。更大输入使用行主序 scale 的 CUTLASS。FlashInfer 0.6.18 的 CUTLASS SM100 17..32 行路径在真实模型宽度下不确定，因此永不选择。实际宽度 FP64/重复测试覆盖 16/17/20/24/32/33 行。量化保留逐行、每 128 元素的 scale。
+## 调度与分配
 
-项目自有 CUDA kernel（保留冻结 TileLang 对照）实现 GDN 递归、因果卷积、分页 split-KV GQA decode、归一化、部分 NeoX RoPE 和逐元素融合。长 GDN/FA prefill 由 FlashInfer 实现。GDN prefill 显式归一化 q/k，因为所选版本声明的归一化标志实际未使用。
+调度器在 sequence 和 token 预算下先处理运行请求, 再处理等待请求.
+对齐 prefill 在 784-token 边界保存可复用 GDN checkpoint.
+32768-token prompt 分为 32144 和 624 token.
+所需逻辑容量无法容纳的请求会被拒绝.
 
-decode 图使用固定 token/请求 shape，以及动态位置、块表和状态地址。预热/捕获保存每个 FA/状态写目的地，正式回放前恢复。target 有独立的 32-shape 缓存；draft 与 proposal 共享另一份 32-shape 预算，分别将已驻留图的逐出下限设为 16 和 4。预算满时，新 shape 先 eager 执行；观察至少 4 次且衰减后的访问次数超过最冷可逐出图的两倍，才尝试捕获。访问次数每 512 次衰减，试用区和近期捕获历史有界。任何新捕获前若 CUDA 报告空闲显存低于 4 GiB，包括接纳后余量下降，改走 eager；捕获失败保留旧图并延后 64 次访问再试。prefill 保持 eager。图输出在复用前消耗，递归 MTP 输入复制到独立 buffer。Serve 和 Bench 共用策略：draft 或 proposal 形状若在 4096 次 MTP 缓存决策内重新捕获，就启动两类共用的 32768 次决策捕获冷却。已驻留图照常 replay；非驻留形状在冷却结束前走 eager，之后恢复正常接纳。冷却可暂时延迟任一类增至其逐出保底数；target 图缓存不受影响。target、draft、proposal 各自在同类捕获之间共享一个私有池，三类池彼此分离；图回放不重叠。draft 输出在下一图回放前，沿同一 CUDA stream 复制到下一图的静态输入；proposal 输出在下一次 proposal 回放前传回主机。不假定前一个图的静态输出在另一图回放后仍保持不变。旧图在替换捕获成功前维持本类池所有权；首次捕获失败会丢弃无 owner 的池句柄。缓存 tensor 在捕获前分配，以保持图绑定地址有效；后期捕获仍需显存余量。`OH_MY_VLLM_ENFORCE_EAGER=1` 仅用于诊断。最终性能需要测得相关 shape 的覆盖，不能仅凭图捕获成功。
+分配先移除过期对齐状态, 只读统计所需容量.
+容量检查包含 watermark.
+任何 group 分配新块前, 先 touch 全部复用块.
+随后分配新块, 注册完整缓存块.
+这一顺序防止空闲队列重复计数复用块.
 
-## 依赖与未来范围
+容量不足时, Rust 从队尾抢占较晚接纳的运行请求, 重试较早请求.
+没有更晚的 victim 时, 抢占当前请求.
+Victim 按接纳顺序返回等待队列.
+重计算重置 computed cursor, 保留已接受历史并清除草稿.
+事务提交前校验输出 ID, 调度数量, token 范围, 接受草稿和错误.
 
-全部高层依赖和 Rust 工具放在 conda `oh-my-vllm`；允许宿主机驱动及 CUDA/编译工具。独立 FlashInfer/TileLang/第三方 Triton 缓存根目录避免复用旧框架产物。启动记录精确运行时身份，关闭时检查导入模块和映射库中的旧依赖。
+## 缓存 group 与前缀复用
 
-[ADR-006](decisions/ADR-006-independent-runtime.zh.md) 说明未来模型/NVIDIA 后端扩展、单机多 GPU collective 和本地 DSpark draft checkpoint。真正开展时再实现具体能力；当前运行时没有空接口、PD 分离路径或多机组件。历史 vLLM/V2 决策保留在早期 ADR 和验收数据中。
+FA group 保存 16 层 784-token page.
+GDN align 模式保存运行 / checkpoint 状态, 受保护前一状态和 speculative state slot.
+Null placeholder 保留逻辑位置.
+未使用的缓存 checkpoint 可以保留到被淘汰.
 
-### 分组推测验证注意力
+默认 group 共享一个逻辑池.
+`--mamba-blocks N` 为 GDN 提供独立池, ID 在 group 内有效.
+FA 容量为 `floor(num_gpu_blocks/3)`; 块 ID 直接索引 tensor slot.
+旧 physical-stride 映射已退役.
+GDN slot 0 是只读零初始状态, 不作为写入目的地.
+FA page 0 为 null page.
 
-图中的 target 验证让同一请求最多五个连续 query 共享一次分块 KV 读取。每个 query 保留各自因果长度；请求之间不共享块表或注意力归一化。CUDA Graph 回放复制 ragged start、块表及长度，因此同一图支持不同逐请求数量。普通单 query decode 保留单 query 路径；draft-head 验证使用相同分组路径，以 token 数和请求数作为 key。分组 FP64 测试覆盖两种 split 数、页边界、偏移后的首个有效位置和回放时重新分组。
+概念上的前缀哈希为 `SHA-256(parent_hash || token_ids || extra_keys)[0..8]`.
+字节编码包含 parent 存在标记及 token/extra-key 长度.
+整数和 digest 前 8 字节使用 little-endian 编码.
+每个哈希依赖前序内容; resident 块仍需形成连续 FA 前缀.
+协调器将该前缀与可用 GDN checkpoint 协调.
+结果为兼容 FA / GDN 命中长度的最小值.
+引用保护活跃块; 空闲队列淘汰最久未使用的缓存条目.
 
-无 mask、无 penalty 的贪心 batch 只传输选中 token 和行有效性，所有请求一次传完，然后各自验证 draft 前缀。其他采样配置保留完整 target 分布构造。小型私有 CPU 元数据 tensor 在 GPU consumer 的同一 stream 上执行 nonblocking copy，去除显式逐次等待；不假定 pageable 传输必然与计算重叠。
+普通 GDN 状态为 FP32; MTP GDN 状态为 BF16.
+状态 layout 为 `[slot,48,128,128]`; convolution 状态为 BF16 `[slot,10240,3]`.
+参见 [ADR-003](decisions/ADR-003-mtp-state-slots.zh.md) 和 [ADR-007](decisions/ADR-007-ttft-and-cache-capacities.zh.md).
 
-所有活跃 MTP 请求都有额外三次缓存写空间时，一个 proposal 图计算初始贪心 token 和三个自回归 draft/head 步骤，中间不与主机同步，四个 proposal 一次传回。接近分配/上下文边界时，逐步 proposer 仍会裁剪活跃集合和数量。预热/捕获恢复三个推测 FA 目的地；持久行索引、位置、块表、hidden 输入、模型和缓存引用保持存活供回放使用。两类 proposer 图共享原有 32-shape 预算。
+## Target 计算与 attention
 
-### 独立 FA/GDN 容量（2026-09-22）
+Loader 校验 head dimension 256, rotary dimension 64, theta 10000000 和 RMS epsilon `1e-6`.
+FP8 activation 使用逐行 128-value scale.
+最多 32 个 FP8 projection row 使用独立 TRT-LLM GEMM; 更大的 FP8 batch 使用 CUTLASS.
+不带 scale 的普通 projection 使用 `F.linear`.
+这避开已观察到的 FlashInfer CUTLASS 在 17 至 32 row 的不稳定性.
+小批 BF16 vocabulary projection 使用 FlashInfer CuTe-DSL GEMM.
 
-`--mamba-blocks N` 为 Rust coordinator 提供独立 GDN 池。FA 容量仍由 worker 报告；Python 按 N 槽分配递归 tensor，按 FA 容量分配 FA/MTP 注意力 tensor。ID 在各缓存组内有效，数值可相同。接纳检查两个池，前缀查找协调两者命中，worker 按各自 tensor 容量验证地址。不指定时保留共享容量配置。理由和长上下文验收协议见 ADR-007。
+Residual / RMS 和 SiLU / FP8 融合保留已有 BF16 舍入点.
+Convolution, GDN 和 RMS 接受 packed projection stride, 返回 dense output.
+GDN prefill 显式归一化 Q / K, 使用 FP32 norm 和 BF16 输出.
+整数 metadata 按每个 target / draft group 使用一个传输 buffer.
+Device view 保留 backing storage.
 
-### 长 prefill 注意力
+CUDA attention preparation 融合 Q / K RMS, partial NeoX RoPE, V 转换和 KV 写入.
+接受 packed 14336-value projection, 返回连续 Q.
+每个 512-wide Q head 的 gate 半部保持不变.
+FP64 phase 计算先于 FP32 三角函数.
+负 slot 跳过 KV 写入并保留 Q; cache 不能与输入 alias.
 
-batch 中 query span 至少为 1024 token 时，Python 只收集活跃 FA KV token 到临时连续 tensor，调用独立 FlashInfer ragged TRT-LLM 注意力，softmax 使用 FP32。Rust 分配和持久 `[page,2,784,heads,dim]` tensor 不变。query span 为 128..1023 且 KV 至少 4096 token 时，使用原生分页 context attention、与 target decode 相同的零拷贝子页视图，以及 FP32 softmax。其他小 query span 使用分页 FA2。混合 batch 共享该决策，因此长 prefill 也会收集活跃 decode 序列。最大上下文 batch4 正确性检查包含由此产生的临时显存；Mamba 精度和数值容差均不改变。
+Target query span 至少 1024 时, gather 活跃 KV 并使用 ragged TRT-LLM attention.
+Span 128 至 1023 且 KV 至少 4096 时使用 native paged context attention.
+其他小 span 使用 paged FA2.
+路径阈值使用 batch 的最大 query 和 KV 长度.
+混合 batch 共享所选路径.
+最大上下文显存检查包括 gather KV 的临时内存.
 
-冻结 TileLang 路径在长 prefill 时使用八 token 卷积 tile 和更大 SiLU block。原生 CUDA
-按 tensor 形状决定卷积行数，SiLU 使用 256 线程启动；其 Python 工厂不接收 TileLang
-调参值。大 gate/up 投影使用独立 CUTLASS dual-SM GEMM。BF16 舍入和逐 token FP8
-scale 不变，并与 FP64 参考比较。
+Target `DecodeGraph` 使用 native decode, 将每个 784-token page 视为 49 个 16-token subpage.
+未选择 graph 的短 target decode 使用 paged FA2 路径.
+K / V offset view 和 `page * 98 + subpage` 表避免 KV 复制.
+Graph capture 内的表展开和长度使用当前执行 metadata.
+Draft prefill 从位置 1 开始; span 至少 128 时使用 ragged attention.
+更小 draft span 使用 FA2; draft decode 使用项目内核.
 
-卷积、GDN 递归和 RMS 归一化接受带明确 token/head stride 的 packed 投影视图。输出仍为 dense，递归源快照保持隔离。每个 target/draft 组的主机整数元数据通过一个 buffer 复制，设备视图保留底层存储。图输入仍复制到持久 buffer；GDN prefill start 在执行各层前只转换一次 int32。
+## MTP
 
-小 batch BF16 词表投影使用独立 FlashInfer CuTe-DSL GEMM。残差相加和 RMS 归一化共用一个 kernel，在 FP32 归一化前保留 BF16 求和。MLP SiLU/乘法和 FP8 量化共用一个 kernel，保留两处 BF16 舍入和原 scale。融合 RMS 与注意力准备 kernel 使用 epsilon `1e-6`；Qwen loader 在加载权重前验证 checkpoint 的该配置。支持其他 epsilon 需要相应修改 kernel 契约。冻结对照中，Q/K RMS 归一化与部分 NeoX 旋转融合在 TileLang kernel 中，保留中间 BF16 舍入及 packed 投影 stride。固定 256 维 head、64 维旋转和 theta10000000，与校验后的 Qwen checkpoint 一致。相位先用 FP64 计算并约化，再执行 FP32 sin/cos，避免最大上下文附近频率/角度舍入误差放大。冻结 TileLang 的 GDN 递归在至少四条序列时使用 32-value tile，否则为16。原生 CUDA 为模型布局使用带对齐/别名检查的向量状态更新，其他布局保留通用 CUDA 路径。
+Draft row `p` 组合 target hidden row `p-1` 和 token row `p`.
+Row 0 不存在.
+统一 RoPE offset 保留相对位置.
+Rust 分配 draft / state 容量; Python 不自行创建逻辑块.
+784-token 边界 hidden state 在所需 page 不可用时等待.
 
-CUDA 后端将完整的全注意力准备链融合：Q/K RMS/RoPE、V 布局转换和物理 KV 写入。主模型与 MTP 对 packed14336 投影调用同一 `attention_prepare.prepare_attention` 入口。返回的 Q 连续，每个 512 维 Q head 的 gate 半区不变。缓存不得与输入重叠；负 slot 跳过 KV 写入，但仍产生 Q。显式 TileLang 对照后端保留原有完整冻结链。
+MTP4 提出 4 个草稿, 对照 target sampling 验证.
+Grouped verification 最多 5 个 query, 每个 query 有自己的 causal length.
+Single-token decode 路径独立保留.
+Worker 保留接受的 target output 和正确 GDN / convolution snapshot.
+被拒绝的已调度草稿回滚 computed progress; 未调度草稿不需要回滚.
+Grammar simulation 使用各 speculative prefix, 提交保留输出前先回滚.
 
-target decode 图把现有 784-token 页作为 49 个 16-token 子页提供给原生 TRT-LLM 注意力。K/V 偏移视图和 `page * 98 + subpage` 块表避免 KV 复制，并保留 Rust 页所有权。块表展开和 query/KV 长度选择在每次模型执行的图捕获内只做一次，回放使用当前请求元数据。draft 注意力保留项目 kernel，以排除 decode 中不存在的位置零。draft prefill 的 query 至少 128 token 时，从位置一开始收集有效 KV，使用独立 ragged TRT-LLM 注意力及 FP32 softmax；中间 query span 使用 FA2。规划阶段先验证 query 非空连续及 KV 长度，再跳过原生算子的冗余活跃行检查。GDN prefill 用单个 strided kernel 归一化 Q/K，FP32 norm、epsilon 1e-6、BF16 输出，避免多个大临时 tensor。缓存精度和容差均不改变。
+## Semantic IR 与 graph
 
-## CUDA 后端与冻结对照
+`torch.library` 算子提供 reference, fake implementation, mutation schema 和 provider 注册.
+选择使用静态 metadata, 不提前具体化 symbolic dimension.
+固定 PyTorch lowering 在 provider 替换前保留语义节点.
+生产 provider 失败报错; debug reference / eager 模式需显式选择.
 
-自有 kernel 工厂支持显式的进程级后端选择。冻结 TileLang 实现位于 kernels/tilelang_reference，并记录源码清单。原生 CUDA 使用独立 TVM FFI 和调用方 CUDA stream，缺失入口明确报错。算子、框架和功能验收通过后，默认使用 CUDA；启动前设置 OH_MY_VLLM_KERNEL_BACKEND=tilelang 可选择冻结对照。运行时身份使用同一进程级选择。TileFoundry 仍仅用于开发。
+4 个 fullgraph 单元覆盖 prefill, target decode, MTP draft 和四步 proposal.
+主机规划, 逻辑分配, ZMQ, 采样和普通 PyTorch 算子保留在算子清单外.
+手动 CUDA Graph 包含编译单元; 禁用 Inductor graph.
+持久 cache 写入保留顺序; 当前没有 activation donation.
+单次使用的 BF16 SiLU-to-FP8 rewrite 有等价测试.
 
-## 语义 IR 与编译前向单元
+Target graph 预算为 32 条目.
+Draft / proposal 共享 32 条目, 下限分别为 16 和 4.
+缓存预算已满时, 替换接纳需要 4 次观察.
+衰减计数必须超过最冷可淘汰条目的 2 倍.
+预算未满时允许首次 miss 就 capture.
+计数每 512 次观察衰减.
+空闲 GPU 显存少于 4 GiB 时, cache 跳过新 capture.
+Worker 仍执行编译单元.
+Capture 失败后退避 64 次观察.
+同一 MTP shape 在 4096 次 cache decision 内再次 capture, 会启动共享的 32768-decision capture cooldown.
+Resident graph 继续 replay.
 
-lowering 期间的张量元数据保留符号 shape 和 stride 维度；仅检查相应维度的能力谓词引入选择 guard。日志不将符号具体化。native RMS 归一化返回连续输出，与生产 provider 和共享 fake 布局契约一致。
+各 graph family 内共享 pool, target / draft / proposal family 独立, replay 不重叠.
+Capture 恢复持久状态和 FA 写入; 输出复制先于 pool 复用.
+Prefill 使用编译单元, 不做手动 graph capture.
+Dynamo 限制为 4096, 在 256 时警告.
+这些限制不能证明无限 shape 变化下编译器内存有界.
+参见 [开放审计工作](audit.zh.md).
 
-`python/oh_my_vllm/ir` 为项目自有 CUDA 和关键 FlashInfer 模型入口逐个注册 `torch.library` 语义算子。原生 PyTorch 实现定义参考语义；fake 实现定义输出 shape/dtype；custom-op schema 标明修改的缓存/状态参数。生产 provider 是独立注册的 custom op。选择仅使用 shape、stride、dtype、设备及固定 route 元数据，不读取张量内容。优先级在首次使用后冻结；不支持时直接报错，不自动选择参考实现。选择日志按静态输入键记录 eager 与 compile 决策；`compiled_graph_counts()` 按前向单元记录成功编译次数。`coverage.py` 列出模型调用点及低层导入例外。
+## 扩展边界
 
-`compile_forward` 以 `fullgraph=True` 跟踪完整 GPU 单元。自定义 backend 将每个语义 FX 节点改写为 schema 匹配的已选 provider，检查 fake 输出元数据，拒绝残留语义节点，再调用 Inductor。受限适配层使用 PyTorch 2.14.0 的 FakeTensor、FX 元数据与 backend lookup API；兼容性测试保护此固定版本。模型 target prefill 与非图 decode 调用已编译的 `Qwen.forward` 和 `Qwen.logits`。target、draft、proposal CUDA Graph 构造函数在捕获前预热编译后的完整前向闭包。手工图的显存池、事务式缓存恢复与低余量保护仍是权威机制。`OH_MY_VLLM_ENFORCE_EAGER=1` 显式选择 eager 模型调用并禁用手工图。
+新模型需要经过验证的加载, 语义合同和缓存 layout.
+多 GPU 需要新进程所有权和 collective 合同.
+其他 NVIDIA 后端需要设备专属 provider 和实测验收.
+当前接口没有这些支持声明.
 
-attention plan 留在主机。一个存活的 CPU plan handle 为不透明语义 attention 节点标识已计划的 wrapper；执行所需的 route、逻辑页表、长度及原生子页元数据作为显式输入。target native decode 的转换仍在手工图捕获内，因此重放可读取变化后的表/长度缓冲区。KV prepare 与 recurrent 算子声明缓存修改。GDN prefill 返回末状态，供有序 `index_copy_` 写回；主机分配器继续拥有持久存储。DSL 将基础 FP8 quantization 与融合 FP8 linear/SiLU quantization 分别建模。
-
-后期 FX pass 仅在相邻、单次使用、BF16 输入且两个生产 provider 一致时，将 `silu_mul -> fp8_linear` 链改写为融合算子，并以精确输出等价测试验证。当前没有可证明安全的 activation 捐赠，持久缓存始终不能捐赠。适配层关闭 Inductor 的 CUDA Graph 管理，并将固定版本的两个 Dynamo 重编译上限提高至 4096。这只是失败边界，不证明无限形状切换下编译缓存占用有界。每个前向单元每成功编译 256 次发出警告；手工图缓存记录捕获、逐出和分配器增量。`F.linear` 与 sampling 留在 IR 外。
+DSpark 设计使用 5 层 BF16 GQA 和 target feature `[5,19,33,47,61]`.
+包含 confidence / Markov head, 7 个草稿和 8-token verification.
+Draft block 7 和 training block 16 独立于 target block784.
+这是扩展说明; 未提供 DSpark 运行时.

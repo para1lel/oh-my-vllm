@@ -2,6 +2,7 @@
 
 import csv
 import io
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -192,9 +193,7 @@ def main():
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--case", required=True)
-    parser.add_argument(
-        "--ncu", type=Path, default=Path("/usr/local/cuda-13.1/bin/ncu")
-    )
+    parser.add_argument("--ncu", type=Path, default=Path(shutil.which("ncu") or "ncu"))
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     import signal

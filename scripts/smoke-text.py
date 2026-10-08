@@ -2,12 +2,19 @@
 
 import argparse
 import json
+import os
 import subprocess
 from pathlib import Path
 
 from transformers import AutoTokenizer
 
 parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--model",
+    default=os.environ.get("OH_MY_VLLM_MODEL"),
+    required=not bool(os.environ.get("OH_MY_VLLM_MODEL")),
+    help="checkpoint path; defaults to OH_MY_VLLM_MODEL",
+)
 parser.add_argument("--max-tokens", type=int, default=64)
 parser.add_argument("--prompt", default="请用中文简短介绍北京。")
 parser.add_argument("--socket", required=True)
@@ -17,7 +24,7 @@ parser.add_argument("--prefix-hit", action="store_true")
 parser.add_argument("--binary", type=Path)
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
-model = "/data0/shared/Qwen3.8-27B-FP8"
+model = args.model
 tokenizer = AutoTokenizer.from_pretrained(model)
 prompt = (
     "背景材料:北京拥有悠久的历史和丰富的文化。" * args.context_repeats + args.prompt

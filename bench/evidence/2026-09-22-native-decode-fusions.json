@@ -1,0 +1,359 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "2026-09-22-native-decode-fusions.json",
+    "sha256": "a8e00b61133e3f0b03aa0cec84f8ac7760aa47c5b1e328a82ebc9293542f360d",
+    "bytes": 10004
+  },
+  "removed_fields": [
+    "data.evidence[0].path",
+    "data.evidence[10].path",
+    "data.evidence[11].path",
+    "data.evidence[12].path",
+    "data.evidence[13].path",
+    "data.evidence[14].path",
+    "data.evidence[1].path",
+    "data.evidence[2].path",
+    "data.evidence[3].path",
+    "data.evidence[4].path",
+    "data.evidence[5].path",
+    "data.evidence[6].path",
+    "data.evidence[7].path",
+    "data.evidence[8].path",
+    "data.evidence[9].path"
+  ],
+  "data": {
+    "schema": 1,
+    "status": "diagnostic; formal 12-row acceptance pending",
+    "changes": [
+      "BF16 residual rounding preserved in fused RMS",
+      "BF16 SiLU/mul rounding preserved in fused FP8 quantization",
+      "Independent CuTe-DSL BF16 vocabulary projection",
+      "Zero-copy native target decode with 16-token subpage views of block784; draft excludes position zero in custom kernel",
+      "GDN BV32 for >=4 sequences; residual RMS eight warps"
+    ],
+    "verification": {
+      "gpu_tests": 138,
+      "subtests": 12,
+      "skips": 0,
+      "actual_model_fp64": "Target/draft graph warmup, separate eager GDN probe; original tolerances",
+      "service": "12 constraint cases, lifecycle, 131099-input prefix reuse; port18018 released"
+    },
+    "limitations": [
+      "MTP batch4 diagnostics remain below throughput gate",
+      "Single measured repetitions are diagnostics, not formal acceptance",
+      "Final GDN/RMS launch tuning follows maximum-context worker launch; FP64 unit and short MTP4 rerun cover final tuning"
+    ],
+    "evidence": [
+      {
+        "path": "<local-path>",
+        "sha256": "a3ca4f00a5f20393b48750108dbc7d7d1c229efc978b4195ba354cd95bf2fb87",
+        "results": []
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "f3e55f7f9832bec68142bbdf0c7408e40148ee73f45759bc29a8788189aeb010",
+        "results": []
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "3596943e487f215a671e6f143403692ffac3eaecc47361e17c4d250c8281da8c",
+        "results": [
+          {
+            "batch_size": 2,
+            "input_len": 1569,
+            "output_len": 32,
+            "output_tokens": 64,
+            "elapsed_s": 12.827703689,
+            "output_tps": 4.989201617970114,
+            "steps": 13,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 92,
+            "accepted_draft_tokens": 41,
+            "ttft_s": [
+              8.541368446,
+              8.541369616
+            ]
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "e2931d248aa101925fb4df64b53e20694947954d9421470dcba34d2ca714548f",
+        "results": [
+          {
+            "batch_size": 1,
+            "input_len": 1569,
+            "output_len": 16,
+            "output_tokens": 16,
+            "elapsed_s": 55.9404398,
+            "output_tps": 0.2860184878274768,
+            "steps": 8,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 28,
+            "accepted_draft_tokens": 9,
+            "ttft_s": [
+              52.227129786
+            ]
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "ed561ee7de95cb9ad668aa588aad93fc990e0e13ee60c6a6eedec00de92455ff",
+        "results": []
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "bb0143b92cc9af03be0c4efd41c178276f0af881832c3690f8ffc42a67311a0d",
+        "results": [
+          {
+            "batch_size": 1,
+            "input_len": 32768,
+            "output_len": 4096,
+            "output_tokens": 4096,
+            "elapsed_s": 12.813508914,
+            "output_tps": 319.66263320148965,
+            "steps": 887,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 3533,
+            "accepted_draft_tokens": 3210,
+            "ttft_s": [
+              1.859707256
+            ]
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "e59f5f7465d79f627f8d57c4da55067cf7c0493e54dd8ed2cc924fd54c2bde7f",
+        "results": [
+          {
+            "batch_size": 2,
+            "input_len": 32768,
+            "output_len": 4096,
+            "output_tokens": 8192,
+            "elapsed_s": 17.293982226,
+            "output_tps": 473.6907840511157,
+            "steps": 1046,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 7705,
+            "accepted_draft_tokens": 6261,
+            "ttft_s": [
+              3.5157151840000003,
+              3.604335947
+            ]
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "3e23d4bee1f60bdfc06ebe0a38a09b2158655381710566e1ef398adc34779414",
+        "results": [
+          {
+            "batch_size": 4,
+            "input_len": 32768,
+            "output_len": 4096,
+            "output_tokens": 16384,
+            "elapsed_s": 24.365109061,
+            "output_tps": 672.4369654566842,
+            "steps": 1110,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 16342,
+            "accepted_draft_tokens": 12292,
+            "ttft_s": [
+              3.492782868,
+              5.177703509,
+              7.05766713,
+              7.153052313
+            ]
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "d3305e934eb5dcabd764bd770cd765a60856e052e967cdb41133961b2fc171c5",
+        "results": [
+          {
+            "batch_size": 4,
+            "input_len": 32768,
+            "output_len": 4096,
+            "output_tokens": 16384,
+            "elapsed_s": 24.307353122,
+            "output_tps": 674.0347218295536,
+            "steps": 1109,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 16341,
+            "accepted_draft_tokens": 12291,
+            "ttft_s": [
+              3.675601026,
+              5.384162859,
+              7.255378558,
+              7.351089148
+            ]
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "346b7c4945157453fc1b1e59cd63436f0d279c1cd8e4a25a9873ce14445802a6",
+        "results": [
+          {
+            "batch_size": 1,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 4096,
+            "elapsed_s": 77.071447604,
+            "output_tps": 53.14549197318331,
+            "steps": 4105,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0,
+            "ttft_s": [
+              29.516892816
+            ]
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "209873339b18bce07c5c8b1bb8d517f21bf2a840e0fc07838a031db477427c05",
+        "results": [
+          {
+            "batch_size": 2,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 8192,
+            "elapsed_s": 110.022622838,
+            "output_tps": 74.45741419982417,
+            "steps": 4113,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0,
+            "ttft_s": [
+              31.274058724,
+              52.274650812
+            ]
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "81fba42de63dcc83a3b608b02073a3b91a476b333e170ace75e8056e3e657d20",
+        "results": [
+          {
+            "batch_size": 4,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 16384,
+            "elapsed_s": 178.711519377,
+            "output_tps": 91.67847745414336,
+            "steps": 4129,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0,
+            "ttft_s": [
+              31.046000137,
+              54.647852403,
+              79.032332683,
+              100.285533123
+            ]
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "9b8e5d0949296f5c29c4aa9dd548bd95016cd08693ba7a0669e05315035da53a",
+        "results": [
+          {
+            "batch_size": 1,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 4096,
+            "elapsed_s": 55.958129758,
+            "output_tps": 73.19758572550255,
+            "steps": 1194,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 4731,
+            "accepted_draft_tokens": 2911,
+            "ttft_s": [
+              33.63662635
+            ]
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "1d66e778d55bf23d58bd707bea17f951ba3279274af074926057e731da9ccef7",
+        "results": [
+          {
+            "batch_size": 2,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 8192,
+            "elapsed_s": 82.661507842,
+            "output_tps": 99.10295872727445,
+            "steps": 1152,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 8011,
+            "accepted_draft_tokens": 6185,
+            "ttft_s": [
+              34.172388418,
+              58.039714094
+            ]
+          }
+        ]
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "4ae0705c97a385957802772d692ea7c050c637fc4d2640543cdeed9ddec4465e",
+        "results": [
+          {
+            "batch_size": 4,
+            "input_len": 258048,
+            "output_len": 4096,
+            "output_tokens": 16384,
+            "elapsed_s": 151.771827239,
+            "output_tps": 107.95152366584864,
+            "steps": 1330,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 16352,
+            "accepted_draft_tokens": 12285,
+            "ttft_s": [
+              33.17879752,
+              59.918443056,
+              88.097227416,
+              112.94702182
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

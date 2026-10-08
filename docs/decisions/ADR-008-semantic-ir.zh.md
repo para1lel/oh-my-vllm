@@ -1,21 +1,43 @@
-# ADR-008：语义算子 IR 与 GPU 前向编译
+# ADR-008: Semantic IR 与编译 forward
 
-状态：干净提交 `619c9d9` 已在测试工作集内通过验收（2026-09-29）。
+日期: 2026-09-29. 状态: 在 `619c9d9` 的实测工作集上 accepted.
 
 ## 决策
 
-以 PyTorch `torch.library` custom op 为项目自有 CUDA 和关键 FlashInfer 计算建立不透明语义节点。每个算子由可执行的 PyTorch 参考、显式 fake shape/dtype 及修改 schema 定义。生产 provider 独立注册，使用静态元数据能力检查和有序优先级。参考仅是显式选择的调试 provider，不自动回退。eager 与 compiled 执行共用 provider 选择；首次选择后冻结注册配置。
+以 `torch.library` 算子作为项目 CUDA 和关键 FlashInfer 算子的语义节点.
+每个节点具有 executable reference, fake shape/dtype 合同, mutation schema 和有序 provider.
+Provider 从静态 phase, shape, dtype, layout 和 device metadata 选择, 不读取 tensor value.
+选择时冻结 registry configuration.
+Reference 是显式 debug provider; provider 失败报错.
 
-以 fullgraph torch.compile 编译 prefill、target decode、MTP draft 和四步 proposal；一个小型 FX backend 在调用 Inductor 前降低语义节点。现有手工 CUDA Graph 捕获已编译的 GPU 单元。Rust 调度、Python 主机计划及持久缓存分配留在编译单元外。保留受检查的调用点清单；包括 `F.linear` 在内的普通 PyTorch 运算不列入语义算子范围。
+使用 fullgraph `torch.compile` 编译 prefill, target decode, MTP draft 和四步 proposal.
+在 Inductor 前通过小型 FX backend lower 语义节点.
+Rust 调度, 主机规划和持久分配保留在编译单元外.
+手动 graph capture 已预热的编译单元; 禁用 Inductor graph.
+保持持久写入有序, 禁止 persistent-cache donation.
 
-可用时优先采用公开 `torch.library` 和 `torch.compile` 接口。受限的 FakeTensor、FX 元数据与 Inductor backend lookup 调用使用 PyTorch 2.14.0 内部接口，需要固定版本回归测试。缓存写入须显式且有序；持久 KV/GDN buffer 不能捐赠。provider 选择仅依赖阶段、shape、dtype、layout 和设备，不依赖张量值。编译或 provider 失败须报错，不自动回到 eager。
+## 影响
 
-## 结果与验证
+模型使用语义名称代替低层入口.
+Eager 和编译路径共享 provider 选择.
+普通 PyTorch 算子, 包括 `F.linear`, 保留在算子清单外.
+经过检查的调用点清单记录每个低层例外.
+有限的 FakeTensor, FX metadata 和 backend lookup 使用固定 PyTorch2.14 内部接口, 配有回归测试.
 
-模型调用路径使用语义名称，而非直接 CUDA/FlashInfer 入口。基础 FP8 quantization 与融合 FP8 linear/SiLU quantization 各有语义名称。计划型 attention 通过存活的 CPU handle 引用主机 plan 状态，同时将动态 decode 表/长度和原生子页元数据作为显式图输入。编译后的 target、draft、proposal 闭包在手工捕获前预热，捕获恢复仍具事务性。
+Planned attention 的 CPU handle 保留在动态 device metadata 外.
+Graph capture 恢复保持事务性.
+已测试的 late rewrite 在生产 provider 兼容时融合 single-use BF16 `silu_mul -> fp8_linear` 链.
+Dynamo 限制为 4096, 每 256 个 variant 警告.
+这些限制不保证 compiler-memory 容量.
+当前未启用 activation donation.
 
-经过精确输出等价测试的后期 FX 改写，仅在相邻、单次使用、BF16 输入且生产 provider 一致时融合 `silu_mul -> fp8_linear`。编译器适配层关闭 Inductor CUDA Graph，并将 PyTorch 2.14.0 的两个重编译上限提高至 4096。每个前向单元每编译 256 个变体发出警告。已测形状族之外的长期编译缓存增长及逐出后重捕获仍是限制；4096 不是显存或主机内存容量保证。没有证明安全的临时目的地时，不启用 activation 捐赠。
+## 验证与替代方案
 
-`tests/test_ir_*` 检查注册、契约、provider 选择、静态覆盖和真实模型 fullgraph/CUDA Graph 执行。完整现有正确性与最大上下文测试已通过，[147 项算子门禁](../../bench/baseline/2026-09-29-ir-operators.json)及[12 行框架门禁](../../bench/baseline/2026-09-29-ir-framework.json)也已通过。前三次完整的 prefix batch 1 采集因 TTFT 离散度超过 10% 被拒收，记录仍保留在框架摘要中；第四次完整采集通过。仅 torch.compile 成功未被视为性能验收。
+真实模型集成覆盖 4 个编译单元和 metadata 变化后的 graph replay.
+对应源码通过完整正确性 / 上下文套件, 147 个算子用例和 12 个框架行.
+3 个完整 prefix-batch1 尝试因 spread 失败; 第 4 个完整采集通过.
+编译成功本身不代表性能验收.
+参见 [验收](../acceptance.zh.md) 和 [开放限制](../audit.zh.md).
 
-设计参考：[vLLM IR](https://docs.vllm.ai/en/latest/design/vllm_ir/)。本项目实现自己的受限 DSL，不依赖 vLLM runtime。
+项目拥有此有限 DSL, 不导入 vLLM 运行时, 不构建通用编译器.
+[vLLM IR 设计](https://docs.vllm.ai/en/latest/design/vllm_ir/) 是设计参考.

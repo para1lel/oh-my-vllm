@@ -1,55 +1,46 @@
-# ADR-008: Semantic operator IR and compiled GPU forward
+# ADR-008: Semantic IR and compiled forward
 
-Status: accepted for the tested workset on clean `619c9d9` (2026-09-29).
+Date: 2026-09-29. Status: accepted for the measured workset at `619c9d9`.
 
 ## Decision
 
-Use PyTorch `torch.library` custom operations as opaque semantic nodes for
-project-owned CUDA and key FlashInfer computation. An executable PyTorch
-reference plus explicit fake shape/dtype and mutation schema define each
-operation. Production providers register independently, with static metadata
-capability checks and ordered priorities. The reference is an explicitly
-selected debug provider, never an automatic fallback. Eager and compiled
-execution share provider selection. Selection freezes registry configuration.
+Use `torch.library` operations as semantic nodes for owned CUDA and key FlashInfer operations.
+Give each node an executable reference, fake shape/dtype contract, mutation schema, and ordered providers.
+Select providers from static phase, shape, dtype, layout, and device metadata, never tensor values.
+Keep registry configuration unchanged after selection.
+The reference is an explicit debug provider. Provider failure raises an error.
 
-Compile prefill, target decode, MTP draft and four-step proposal with fullgraph
-torch.compile and a small FX backend that lowers semantic nodes just before
-Inductor. The existing manual CUDA Graph captures compiled GPU units. Rust
-scheduling, Python host planning and persistent cache allocation stay outside
-the compiled units. Keep a checked call-site inventory; ordinary PyTorch
-operations, including `F.linear`, remain outside the semantic operator scope.
+Compile prefill, target decode, MTP draft, and four-step proposal with fullgraph `torch.compile`.
+Lower semantic nodes through a small FX backend immediately before Inductor.
+Keep Rust scheduling, host planning, and persistent allocation not in the compiled units.
+Manual graphs capture compiled units after warmup. Inductor graphs are disabled.
 
-Use public `torch.library` and `torch.compile` interfaces where available.
-Bounded FakeTensor, FX metadata and Inductor backend lookup calls use PyTorch
-2.14.0 internals and require pinned-version regression tests. Keep cache writes
-explicit and ordered; persistent KV/GDN buffers cannot be donated. Provider
-selection depends on phase, shape, dtype, layout and device, never tensor
-values. A failed compile or provider raises rather than falling back to eager.
+Keep persistent writes ordered and prohibit persistent-cache donation.
 
-## Consequences and verification
+## Consequences
 
-The model call path names semantics rather than CUDA/FlashInfer entry points.
-Base FP8 quantization and fused FP8 linear/SiLU quantization both have semantic
-names. Planned attention uses a live CPU handle for host plan state while
-passing dynamic decode tables/lengths and native subpage metadata as explicit
-graph inputs. Compiled target, draft and proposal closures warm up before
-manual capture, and capture restore remains transactional. An exact-output
-tested late FX rewrite fuses an adjacent, single-use BF16
-`silu_mul -> fp8_linear` chain when the production providers agree. The
-compiler adapter disables Inductor CUDA Graphs and raises both PyTorch 2.14.0
-recompile limits to 4096. Per-unit compilation counts warn every 256 variants.
-Compiler cache growth and eviction/recapture beyond the tested shape families
-remain a long-lived-worker limit; 4096 is not a memory-capacity guarantee.
-No activation donation is enabled without a proven temporary destination.
+The model names semantics instead of low-level entry points.
+Eager and compiled paths share provider selection.
+Ordinary PyTorch operations, with `F.linear`, are not in the operator inventory.
+A checked call-site inventory records each low-level exception.
+Bounded FakeTensor, FX metadata, and backend lookups use pinned PyTorch 2.14 internals with regression tests.
 
-`tests/test_ir_*` check registration, contracts, provider selection, static
-coverage and real-model fullgraph/CUDA Graph execution. The full existing
-correctness and maximum-context suites passed, alongside the
-[147-case operator gate](../../bench/baseline/2026-09-29-ir-operators.json)
-and [twelve-row framework gate](../../bench/baseline/2026-09-29-ir-framework.json).
-The three earlier complete prefix batch-1 collections with TTFT spread above
-10% remain rejected in the framework summary; a fourth complete collection
-passed. Torch.compile success alone was not treated as performance acceptance.
+Planned attention keeps its CPU handle isolated from dynamic device metadata.
+Graph capture restoration stays transactional.
+A tested late rewrite fuses the single-use BF16 `silu_mul -> fp8_linear` chain with compatible production providers.
+Dynamo limits are 4096 and warnings occur each 256 variants.
+These limits are not a compiler-memory capacity guarantee.
 
-Design reference: [vLLM IR](https://docs.vllm.ai/en/latest/design/vllm_ir/).
-This project implements its own bounded DSL without a vLLM runtime dependency.
+No activation donation is currently enabled.
+
+## Verification and alternatives
+
+Target-model integration includes four compiled units and changed-metadata graph replay.
+The full correctness/context suites,147 operator cases, and twelve framework rows passed on the identified source.
+Three full prefix-batch 1 attempts failed spread. The fourth full collection passed.
+Compilation success alone was not performance acceptance.
+
+See [acceptance](../acceptance.md) and [open limits](../audit.md).
+
+The project controls this bounded DSL as an alternative to a vLLM runtime or a general compiler.
+The [vLLM IR design](https://docs.vllm.ai/en/latest/design/vllm_ir/) was a design reference.

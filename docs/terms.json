@@ -1,0 +1,1236 @@
+{
+  "schema": 1,
+  "standard": "ASD-STE100 Issue 9",
+  "terms": [
+    {
+      "term": "inference",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Model computation that supplies output tokens.",
+      "translation": "产生输出 token 的模型计算.",
+      "forms": [
+        "inference"
+      ]
+    },
+    {
+      "term": "token",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "One vocabulary ID in input or output.",
+      "translation": "输入或输出中的一个 vocabulary ID.",
+      "forms": [
+        "token"
+      ]
+    },
+    {
+      "term": "checkpoint",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Model weights/configuration, or a saved recurrent state at a token boundary.",
+      "translation": "模型权重 / 配置, 或 token 边界保存的 recurrent state.",
+      "forms": [
+        "checkpoint"
+      ]
+    },
+    {
+      "term": "prefill",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Model computation over prompt or recompute history.",
+      "translation": "处理 prompt 或重计算历史的模型计算.",
+      "forms": [
+        "prefill"
+      ]
+    },
+    {
+      "term": "decode",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Compute the next target output from an accepted prefix.",
+      "translation": "从已接受前缀计算下一 target 输出.",
+      "forms": [
+        "decode",
+        "decodes",
+        "decoded"
+      ]
+    },
+    {
+      "term": "scheduler",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Rust component that selects token work and logical slots.",
+      "translation": "选择 token 工作和逻辑 slot 的 Rust 组件.",
+      "forms": [
+        "scheduler"
+      ]
+    },
+    {
+      "term": "scheduling",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Selection of request work with token and sequence budgets.",
+      "translation": "在 token 和 sequence 预算下选择请求工作.",
+      "forms": [
+        "scheduling"
+      ]
+    },
+    {
+      "term": "cache",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Stored KV or state for continued computation or prefix reuse.",
+      "translation": "为继续计算或前缀复用保存的 KV 或状态.",
+      "forms": [
+        "cache"
+      ]
+    },
+    {
+      "term": "cache",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Keep computed data for subsequent reuse.",
+      "translation": "保存已计算数据以供后续复用.",
+      "forms": [
+        "cache",
+        "caches",
+        "cached"
+      ]
+    },
+    {
+      "term": "KV",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Attention keys and values.",
+      "translation": "Attention key 和 value.",
+      "forms": [
+        "KV"
+      ]
+    },
+    {
+      "term": "FA",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Full attention over the applicable token prefix.",
+      "translation": "针对适用 token 前缀的 full attention.",
+      "forms": [
+        "FA"
+      ]
+    },
+    {
+      "term": "GQA",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Grouped-query attention with fewer KV heads than query heads.",
+      "translation": "KV head 少于 query head 的 grouped-query attention.",
+      "forms": [
+        "GQA"
+      ]
+    },
+    {
+      "term": "GDN",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "GatedDeltaNet recurrent computation and its state.",
+      "translation": "GatedDeltaNet recurrent 计算及状态.",
+      "forms": [
+        "GDN"
+      ]
+    },
+    {
+      "term": "MTP",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Multi-token prediction with draft proposals and target verification.",
+      "translation": "带草稿 proposal 和 target verification 的 multi-token prediction.",
+      "forms": [
+        "MTP"
+      ]
+    },
+    {
+      "term": "MTP4",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "MTP mode with four proposed draft tokens.",
+      "translation": "提出 4 个草稿 token 的 MTP 模式.",
+      "forms": [
+        "MTP4"
+      ]
+    },
+    {
+      "term": "draft",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "An unverified token proposal or the model that supplies it.",
+      "translation": "未验证 token proposal 或提供它的模型.",
+      "forms": [
+        "draft"
+      ]
+    },
+    {
+      "term": "bonus",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Target token after the accepted speculative prefix.",
+      "translation": "已接受 speculative prefix 后的 target token.",
+      "forms": [
+        "bonus"
+      ]
+    },
+    {
+      "term": "slot",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "A group-local tensor location for a logical block or state.",
+      "translation": "Group 内 tensor 的逻辑块或状态位置.",
+      "forms": [
+        "slot"
+      ]
+    },
+    {
+      "term": "page",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Persistent attention storage for 784 target tokens.",
+      "translation": "保存 784 个 target token 的持久 attention 存储.",
+      "forms": [
+        "page"
+      ]
+    },
+    {
+      "term": "subpage",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Native attention view of sixteen tokens in a target page.",
+      "translation": "Target page 内 16 个 token 的 native attention view.",
+      "forms": [
+        "subpage"
+      ]
+    },
+    {
+      "term": "batch",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Requests or token rows computed together.",
+      "translation": "一起计算的请求或 token row.",
+      "forms": [
+        "batch"
+      ]
+    },
+    {
+      "term": "batching",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Combination of active request work in one step.",
+      "translation": "在一个 step 中组合活跃请求工作.",
+      "forms": [
+        "batching"
+      ]
+    },
+    {
+      "term": "logits",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Model scores for the output vocabulary before sampling.",
+      "translation": "采样前模型对输出 vocabulary 的分数.",
+      "forms": [
+        "logits"
+      ]
+    },
+    {
+      "term": "sampling",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Selection of a token from model scores and configured constraints.",
+      "translation": "按模型分数和配置约束选择 token.",
+      "forms": [
+        "sampling"
+      ]
+    },
+    {
+      "term": "sample",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Select a token according to the configured distribution.",
+      "translation": "按配置的分布选择 token.",
+      "forms": [
+        "sample",
+        "samples",
+        "sampled"
+      ]
+    },
+    {
+      "term": "grammar",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Token-level constraints for JSON answers or function arguments.",
+      "translation": "JSON 答案或函数参数的 token 级约束.",
+      "forms": [
+        "grammar"
+      ]
+    },
+    {
+      "term": "mask",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Allowed-token information used before sampling.",
+      "translation": "采样前使用的允许 token 信息.",
+      "forms": [
+        "mask"
+      ]
+    },
+    {
+      "term": "tensor",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "A typed multidimensional array with device and layout metadata.",
+      "translation": "具有 device 和 layout metadata 的类型化多维数组.",
+      "forms": [
+        "tensor"
+      ]
+    },
+    {
+      "term": "dtype",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Tensor element representation, such as BF16 or FP32.",
+      "translation": "Tensor 元素表示, 例如 BF16 或 FP32.",
+      "forms": [
+        "dtype"
+      ]
+    },
+    {
+      "term": "stride",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Storage offset between adjacent entries of a tensor dimension.",
+      "translation": "Tensor 某维相邻元素之间的存储偏移.",
+      "forms": [
+        "stride"
+      ]
+    },
+    {
+      "term": "metadata",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Configuration and shape/state descriptors different from tensor values.",
+      "translation": "与 tensor value 分离的配置和 shape/state 描述.",
+      "forms": [
+        "metadata"
+      ]
+    },
+    {
+      "term": "provider",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Registered implementation of a semantic operation.",
+      "translation": "语义算子的已注册实现.",
+      "forms": [
+        "provider"
+      ]
+    },
+    {
+      "term": "IR",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Intermediate representation of semantic GPU operations.",
+      "translation": "语义 GPU 算子的 intermediate representation.",
+      "forms": [
+        "IR"
+      ]
+    },
+    {
+      "term": "DSL",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Domain-specific language for project semantic operations.",
+      "translation": "用于项目语义算子的 domain-specific language.",
+      "forms": [
+        "DSL"
+      ]
+    },
+    {
+      "term": "schema",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Explicit contract for data fields or operator mutations.",
+      "translation": "数据字段或算子 mutation 的显式合同.",
+      "forms": [
+        "schema"
+      ]
+    },
+    {
+      "term": "mutation",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "An operation effect that changes persistent tensor storage.",
+      "translation": "改变持久 tensor 存储的算子 effect.",
+      "forms": [
+        "mutation"
+      ]
+    },
+    {
+      "term": "donation",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Reuse of storage from a proven temporary as another output.",
+      "translation": "将已证明临时值的存储复用于其他输出.",
+      "forms": [
+        "donation"
+      ]
+    },
+    {
+      "term": "graph",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "CUDA launch sequence with persistent inputs for replay, or compiler operation representation.",
+      "translation": "带持久输入以供 replay 的 CUDA launch 序列, 或编译器算子表示.",
+      "forms": [
+        "graph"
+      ]
+    },
+    {
+      "term": "capture",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Record GPU launches in a CUDA Graph.",
+      "translation": "将 GPU launch 记录到 CUDA Graph.",
+      "forms": [
+        "capture",
+        "captures",
+        "captured"
+      ]
+    },
+    {
+      "term": "replay",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Start a previously captured CUDA Graph with current inputs.",
+      "translation": "使用当前输入启动先前 capture 的 CUDA Graph.",
+      "forms": [
+        "replay",
+        "replays",
+        "replayed"
+      ]
+    },
+    {
+      "term": "lower",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Replace semantic IR nodes with selected provider operations.",
+      "translation": "将语义 IR 节点替换为选定 provider 算子.",
+      "forms": [
+        "lower",
+        "lowers",
+        "lowered"
+      ]
+    },
+    {
+      "term": "compile",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Translate model or kernel code into an executable GPU program.",
+      "translation": "将模型或内核代码转换为可执行 GPU 程序.",
+      "forms": [
+        "compile",
+        "compiles",
+        "compiled"
+      ]
+    },
+    {
+      "term": "compilation",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Translation of model or kernel code into executable programs.",
+      "translation": "将模型或内核代码转换为可执行程序.",
+      "forms": [
+        "compilation"
+      ]
+    },
+    {
+      "term": "allocate",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Supply logical slots or tensor storage for computation.",
+      "translation": "为计算预留逻辑 slot 或 tensor 存储.",
+      "forms": [
+        "allocate",
+        "allocates",
+        "allocated"
+      ]
+    },
+    {
+      "term": "allocation",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Reservation of logical slots or tensor storage.",
+      "translation": "逻辑 slot 或 tensor 存储的预留.",
+      "forms": [
+        "allocation"
+      ]
+    },
+    {
+      "term": "preempt",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Release the logical blocks of a request and queue its accepted history for recompute.",
+      "translation": "释放请求逻辑块, 将已接受历史重新排队以重计算.",
+      "forms": [
+        "preempt",
+        "preempts",
+        "preempted"
+      ]
+    },
+    {
+      "term": "preemption",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Request displacement with logical cache pressure.",
+      "translation": "逻辑缓存压力下请求退出当前运行集合.",
+      "forms": [
+        "preemption"
+      ]
+    },
+    {
+      "term": "evict",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Remove a reusable cache or graph entry to release capacity.",
+      "translation": "删除可复用 cache 或 graph 条目以释放容量.",
+      "forms": [
+        "evict",
+        "evicts",
+        "evicted"
+      ]
+    },
+    {
+      "term": "rollback",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Restoration of computed progress or speculative state after rejection.",
+      "translation": "拒绝后恢复 computed progress 或 speculative state.",
+      "forms": [
+        "rollback"
+      ]
+    },
+    {
+      "term": "validate",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Compare input with a data, schema, or operation contract and reject invalid input.",
+      "translation": "按数据, schema 或算子合同比较输入, 拒绝无效输入.",
+      "forms": [
+        "validate",
+        "validates",
+        "validated"
+      ]
+    },
+    {
+      "term": "validation",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Comparison of input with data, schema, or operation contracts and rejection of invalid input.",
+      "translation": "按数据, schema 或算子合同比较输入并拒绝无效输入.",
+      "forms": [
+        "validation"
+      ]
+    },
+    {
+      "term": "verify",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Accept or reject speculative tokens, or compare output with an independent reference.",
+      "translation": "接受 / 拒绝 speculative token, 或对照独立参考比较输出.",
+      "forms": [
+        "verify",
+        "verifies",
+        "verified"
+      ]
+    },
+    {
+      "term": "verification",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Speculative acceptance decisions or comparisons with an independent reference.",
+      "translation": "Speculative 接受决策或独立输出比较.",
+      "forms": [
+        "verification"
+      ]
+    },
+    {
+      "term": "configure",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Set software runtime parameters or environment selection.",
+      "translation": "设置软件运行参数或环境选择.",
+      "forms": [
+        "configure",
+        "configures",
+        "configured"
+      ]
+    },
+    {
+      "term": "configuration",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Explicit software parameters and environment selection.",
+      "translation": "显式软件参数和环境选择.",
+      "forms": [
+        "configuration"
+      ]
+    },
+    {
+      "term": "tokenize",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Convert text into vocabulary IDs.",
+      "translation": "将文本转换为 vocabulary ID.",
+      "forms": [
+        "tokenize",
+        "tokenizes",
+        "tokenized"
+      ]
+    },
+    {
+      "term": "detokenization",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Conversion of vocabulary IDs into output text.",
+      "translation": "将 vocabulary ID 转换为输出文本.",
+      "forms": [
+        "detokenization"
+      ]
+    },
+    {
+      "term": "serialize",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Encode data as msgpack or JSON bytes.",
+      "translation": "将数据编码为 msgpack 或 JSON 字节.",
+      "forms": [
+        "serialize",
+        "serializes",
+        "serialized"
+      ]
+    },
+    {
+      "term": "dispatch",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Host selection and launch of a kernel implementation.",
+      "translation": "主机选择和 launch 内核实现.",
+      "forms": [
+        "dispatch"
+      ]
+    },
+    {
+      "term": "quantization",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Conversion to FP8 values with explicit scales and rounding.",
+      "translation": "使用显式 scale 和舍入转换为 FP8 值.",
+      "forms": [
+        "quantization"
+      ]
+    },
+    {
+      "term": "projection",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Model linear computation with ordinary or FP8 weights.",
+      "translation": "使用普通或 FP8 权重的模型 linear 计算.",
+      "forms": [
+        "projection"
+      ]
+    },
+    {
+      "term": "normalization",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Scaling by the defined norm and epsilon.",
+      "translation": "按定义的 norm 和 epsilon 缩放.",
+      "forms": [
+        "normalization"
+      ]
+    },
+    {
+      "term": "recurrent state",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "State used by GDN computation across tokens.",
+      "translation": "GDN 跨 token 计算使用的状态.",
+      "forms": [
+        "recurrent state"
+      ]
+    },
+    {
+      "term": "convolution",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Model causal convolution with persistent history.",
+      "translation": "带持久历史的模型 causal convolution.",
+      "forms": [
+        "convolution"
+      ]
+    },
+    {
+      "term": "alias",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Shared storage between tensor views or API parameter names for the same behavior.",
+      "translation": "Tensor view 间共享存储, 或相同行为的 API 参数别名.",
+      "forms": [
+        "alias"
+      ]
+    },
+    {
+      "term": "runtime",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "The active inference implementation and its software environment.",
+      "translation": "活跃推理实现及软件环境.",
+      "forms": [
+        "runtime"
+      ]
+    },
+    {
+      "term": "worker",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Python child that controls device computation and request preparation.",
+      "translation": "负责 device 计算和请求准备的 Python 子进程.",
+      "forms": [
+        "worker"
+      ]
+    },
+    {
+      "term": "process",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Operating-system program instance with its own lifetime.",
+      "translation": "具有独立生命周期的操作系统程序实例.",
+      "forms": [
+        "process"
+      ]
+    },
+    {
+      "term": "process",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Transform request data or token rows through a defined software operation.",
+      "translation": "通过定义的软件操作处理请求数据或 token row.",
+      "forms": [
+        "process",
+        "processes",
+        "processed"
+      ]
+    },
+    {
+      "term": "baseline",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Pinned measurements from original evidence used as the performance denominator.",
+      "translation": "用作性能分母的冻结原始测量.",
+      "forms": [
+        "baseline"
+      ]
+    },
+    {
+      "term": "throughput",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Kept output tokens per second for a measured workload.",
+      "translation": "实测工作负载每秒保留的输出 token 数.",
+      "forms": [
+        "throughput"
+      ]
+    },
+    {
+      "term": "TTFT",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Submission-to-first-kept-output-token duration at the caller.",
+      "translation": "从提交到调用方收到首个保留输出 token 的时长.",
+      "forms": [
+        "TTFT"
+      ]
+    },
+    {
+      "term": "roofline",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Compute and bandwidth limits used to analyze attainable performance.",
+      "translation": "用于分析可达性能的计算和带宽界限.",
+      "forms": [
+        "roofline"
+      ]
+    },
+    {
+      "term": "warmup",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "An unmeasured full workload before measured repetitions.",
+      "translation": "测量重复前不计入测量的完整工作负载.",
+      "forms": [
+        "warmup"
+      ]
+    },
+    {
+      "term": "spread",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Maximum minus minimum divided by the median for one measured metric.",
+      "translation": "单项实测指标的最大减最小值, 除以中位数.",
+      "forms": [
+        "spread"
+      ]
+    },
+    {
+      "term": "NRMSE",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Root mean square error divided by reference root mean square magnitude.",
+      "translation": "均方根误差除以参考均方根幅值.",
+      "forms": [
+        "NRMSE"
+      ]
+    },
+    {
+      "term": "fixture",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Controlled test input or scripted worker.",
+      "translation": "受控测试输入或 scripted worker.",
+      "forms": [
+        "fixture"
+      ]
+    },
+    {
+      "term": "harness",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Program that constructs cases and collects formal output/timing results.",
+      "translation": "构造用例并采集正式输出 / 计时结果的程序.",
+      "forms": [
+        "harness"
+      ]
+    },
+    {
+      "term": "provenance",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Source, compiler, module, and raw hash identity for a result.",
+      "translation": "结果对应的源码, 编译器, 模块和原始哈希身份.",
+      "forms": [
+        "provenance"
+      ]
+    },
+    {
+      "term": "profile",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Collect device execution traces or counters for diagnosis.",
+      "translation": "采集 device 执行 trace 或 counter 用于诊断.",
+      "forms": [
+        "profile",
+        "profiles",
+        "profiled"
+      ]
+    },
+    {
+      "term": "redact",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Remove host identities from derived evidence. Keep original data independently.",
+      "translation": "从派生证据删除主机身份, 原始数据另行保留.",
+      "forms": [
+        "redact",
+        "redacts",
+        "redacted"
+      ]
+    },
+    {
+      "term": "export",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Write a portable derived evidence record from an unchanged original record.",
+      "translation": "从未改变的原始记录写入可移植派生证据.",
+      "forms": [
+        "export",
+        "exports",
+        "exported"
+      ]
+    },
+    {
+      "term": "repository",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Project source and tracked documents in Git.",
+      "translation": "由 Git 管理的项目源码和跟踪文档.",
+      "forms": [
+        "repository"
+      ]
+    },
+    {
+      "term": "submodule",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Pinned third-party Git source tree.",
+      "translation": "固定版本的第三方 Git 源码树.",
+      "forms": [
+        "submodule"
+      ]
+    },
+    {
+      "term": "lockfile",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Pinned dependency versions for reproducible installation.",
+      "translation": "为可复现安装固定依赖版本的文件.",
+      "forms": [
+        "lockfile"
+      ]
+    },
+    {
+      "term": "RPC",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Correlated request/reply operation over the worker channel.",
+      "translation": "Worker 通道上的关联请求 / 回复操作.",
+      "forms": [
+        "RPC"
+      ]
+    },
+    {
+      "term": "IPC",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Local interprocess transport endpoint.",
+      "translation": "本地进程间传输 endpoint.",
+      "forms": [
+        "IPC"
+      ]
+    },
+    {
+      "term": "SSE",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "HTTP server-sent events for incremental output.",
+      "translation": "用于增量输出的 HTTP server-sent event.",
+      "forms": [
+        "SSE"
+      ]
+    },
+    {
+      "term": "backpressure",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Paused generation caused by a full bounded stream queue.",
+      "translation": "有界 stream 队列满时暂停生成.",
+      "forms": [
+        "backpressure"
+      ]
+    },
+    {
+      "term": "timeout",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Maximum permitted wait for a request or RPC.",
+      "translation": "请求或 RPC 允许的最长等待.",
+      "forms": [
+        "timeout"
+      ]
+    },
+    {
+      "term": "TTL",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Time to live of a stored response after completion.",
+      "translation": "保存响应在完成后的有效期.",
+      "forms": [
+        "TTL"
+      ]
+    },
+    {
+      "term": "passage",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Twine story unit for a page or reading transition.",
+      "translation": "用于页面或阅读跳转的 Twine story 单元.",
+      "forms": [
+        "passage"
+      ]
+    },
+    {
+      "term": "companion",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Full same-directory Chinese translation of an English Markdown source.",
+      "translation": "英文 Markdown 原文在同目录的完整中文译文.",
+      "forms": [
+        "companion"
+      ]
+    },
+    {
+      "term": "update",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Change software state, configuration, or its authoritative document.",
+      "translation": "修改软件状态, 配置或对应权威文档.",
+      "forms": [
+        "update",
+        "updates",
+        "updated"
+      ]
+    },
+    {
+      "term": "store",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Keep data in device memory or bounded response storage.",
+      "translation": "将数据保存在 device memory 或有界响应存储中.",
+      "forms": [
+        "store",
+        "stores",
+        "stored"
+      ]
+    },
+    {
+      "term": "decode",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Incremental inference stage that computes target output tokens.",
+      "translation": "逐步计算 target output token 的增量推理阶段.",
+      "forms": [
+        "decode"
+      ]
+    },
+    {
+      "term": "capture",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "CUDA launch recording that supplies a reusable graph.",
+      "translation": "记录 CUDA launch 并生成可复用 graph 的操作.",
+      "forms": [
+        "capture"
+      ]
+    },
+    {
+      "term": "replay",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Execution of a recorded CUDA Graph with current inputs.",
+      "translation": "使用当前输入执行已记录 CUDA Graph 的操作.",
+      "forms": [
+        "replay"
+      ]
+    },
+    {
+      "term": "profiling",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Diagnostic measurement of device traces or counters.",
+      "translation": "对 device trace 或 counter 的诊断测量.",
+      "forms": [
+        "profiling"
+      ]
+    },
+    {
+      "term": "lowering",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "IR replacement of semantic nodes with selected providers.",
+      "translation": "在 IR 中将 semantic node 替换为所选 provider 的操作.",
+      "forms": [
+        "lowering"
+      ]
+    },
+    {
+      "term": "store",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Memory operation that writes values to device storage.",
+      "translation": "向 device storage 写入数值的内存操作.",
+      "forms": [
+        "store",
+        "stores"
+      ]
+    },
+    {
+      "term": "update",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Software operation that changes configured or persistent state.",
+      "translation": "修改配置或持久状态的软件操作.",
+      "forms": [
+        "update",
+        "updates"
+      ]
+    },
+    {
+      "term": "pin",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Fix a software version or device identity for reproducible execution.",
+      "translation": "固定软件版本或设备身份, 以复现执行.",
+      "forms": [
+        "pin",
+        "pins",
+        "pinned"
+      ]
+    },
+    {
+      "term": "run",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Start execution of a software command or program.",
+      "translation": "启动软件命令或程序的执行.",
+      "forms": [
+        "run",
+        "runs",
+        "ran"
+      ]
+    },
+    {
+      "term": "pass",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Give satisfactory results for all criteria in a software test or gate.",
+      "translation": "产生满足全部指定条件的软件测试或门槛结果.",
+      "forms": [
+        "pass",
+        "passes",
+        "passed"
+      ]
+    },
+    {
+      "term": "fail",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Give unsatisfactory results for one or more criteria in a software test or gate.",
+      "translation": "对软件测试或门槛的一个或多个条件给出不满足要求的结果.",
+      "forms": [
+        "fail",
+        "fails",
+        "failed"
+      ]
+    },
+    {
+      "term": "test",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Use software validation cases to compare behavior with specified criteria.",
+      "translation": "执行软件验证用例, 将行为与指定条件比较.",
+      "forms": [
+        "test",
+        "tests",
+        "tested"
+      ]
+    },
+    {
+      "term": "check",
+      "part_of_speech": "verb",
+      "category": "technical",
+      "meaning": "Use software validation to find violations of specified rules.",
+      "translation": "通过软件校验发现对指定规则的违反.",
+      "forms": [
+        "check",
+        "checks",
+        "checked"
+      ]
+    },
+    {
+      "term": "independent runtime",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Project inference runtime with no vLLM execution, environment, or build-cache dependency.",
+      "translation": "推理执行, 环境和编译缓存均不依赖 vLLM 的项目运行时.",
+      "forms": [
+        "independent runtime"
+      ]
+    },
+    {
+      "term": "independent reference",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Expected operator output computed with an implementation different from the candidate.",
+      "translation": "使用不同于候选实现的计算方法得到的预期算子输出.",
+      "forms": [
+        "independent reference",
+        "independent references"
+      ]
+    },
+    {
+      "term": "original evidence",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Full byte-unchanged measurement artifacts before portable export.",
+      "translation": "可移植导出前, 完整且字节不变的实测产物.",
+      "forms": [
+        "original evidence"
+      ]
+    },
+    {
+      "term": "original record",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "One full byte-unchanged measurement record before portable export.",
+      "translation": "可移植导出前, 一份完整且字节不变的实测记录.",
+      "forms": [
+        "original record",
+        "original records"
+      ]
+    },
+    {
+      "term": "original hash",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "SHA-256 of a full measurement artifact before portable export.",
+      "translation": "可移植导出前, 完整实测产物的 SHA-256.",
+      "forms": [
+        "original hash",
+        "original hashes"
+      ]
+    },
+    {
+      "term": "original data",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Full measurement data before portable redaction or export.",
+      "translation": "可移植脱敏或导出前的完整实测数据.",
+      "forms": [
+        "original data"
+      ]
+    },
+    {
+      "term": "exact division",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "FP32 division with correct round-to-nearest output.",
+      "translation": "得到正确 round-to-nearest 输出的 FP32 除法.",
+      "forms": [
+        "exact division"
+      ]
+    },
+    {
+      "term": "exact scale division",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Correct round-to-nearest FP32 division of a maximum by the FP8 range.",
+      "translation": "将 maximum 除以 FP8 range, 得到正确 round-to-nearest 结果的 FP32 除法.",
+      "forms": [
+        "exact scale division"
+      ]
+    },
+    {
+      "term": "FP32 normal value",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Finite FP32 value with an encoded exponent from 1 to 254. Zero and subnormal values are not in this class.",
+      "translation": "编码 exponent 为 1 到 254 的有限 FP32 数值. 此类不包含零和 subnormal value.",
+      "forms": [
+        "FP32 normal value",
+        "FP32 normal values"
+      ]
+    }
+  ]
+}

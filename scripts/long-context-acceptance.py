@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 import re
 import time
 import urllib.request
@@ -47,6 +48,12 @@ def validate_response(text: str, count: int, cached: int, repeat: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("OH_MY_VLLM_MODEL"),
+        required=not bool(os.environ.get("OH_MY_VLLM_MODEL")),
+        help="checkpoint path; defaults to OH_MY_VLLM_MODEL",
+    )
     parser.add_argument("--base-url", default="http://127.0.0.1:18015/v1")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--server-log", type=Path, required=True)
@@ -60,7 +67,7 @@ def main() -> None:
     log_identity = (args.server_log.stat().st_dev, args.server_log.stat().st_ino)
     log_offset = args.server_log.stat().st_size
     base = args.base_url.rstrip("/") + "/"
-    tok = AutoTokenizer.from_pretrained("/data0/shared/Qwen3.8-27B-FP8")
+    tok = AutoTokenizer.from_pretrained(args.model)
     unit = tok.encode(
         "参考资料:北京是中国的首都,拥有丰富的历史文化。", add_special_tokens=False
     )

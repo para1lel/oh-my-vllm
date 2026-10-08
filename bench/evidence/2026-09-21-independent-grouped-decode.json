@@ -1,0 +1,316 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "2026-09-21-independent-grouped-decode.json",
+    "sha256": "b63f2a42e017f3270b925487de6b2b2c1c071c8057a95344f97843936626bfd5",
+    "bytes": 14548
+  },
+  "removed_fields": [
+    "data.preoptimization_valid_rows[0].baseline_artifact",
+    "data.preoptimization_valid_rows[0].cpu_affinity",
+    "data.preoptimization_valid_rows[0].framework_runtime.flashinfer_workspace",
+    "data.preoptimization_valid_rows[0].framework_runtime.python",
+    "data.preoptimization_valid_rows[0].framework_runtime.triton_cache",
+    "data.preoptimization_valid_rows[0].gpu",
+    "data.preoptimization_valid_rows[1].baseline_artifact",
+    "data.preoptimization_valid_rows[1].cpu_affinity",
+    "data.preoptimization_valid_rows[1].framework_runtime.flashinfer_workspace",
+    "data.preoptimization_valid_rows[1].framework_runtime.python",
+    "data.preoptimization_valid_rows[1].framework_runtime.triton_cache",
+    "data.preoptimization_valid_rows[1].gpu"
+  ],
+  "data": {
+    "status": "intermediate; final nine-row acceptance pending",
+    "preoptimization_commit": "9c8e27b3242f765d39a8e80c8ac9d37c065c55b1",
+    "preoptimization_valid_rows": [
+      {
+        "timestamp": "2026-09-21T11:45:37.465486+00:00",
+        "cpu_affinity_count": 1,
+        "source": {
+          "git_commit": "9c8e27b3242f765d39a8e80c8ac9d37c065c55b1",
+          "git_status": "",
+          "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "binary_sha256": "ead063f089f6d1821413254376e0d8880b75a8e36cb7defff2b33b57e711ff65",
+          "python_sources_sha256": {
+            "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+            "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+            "python/oh_my_vllm/kernels/attention.py": "43a15e397e48df21b25ece5883228583dcc8db1fd1f2ee22c1925aafdd017e0d",
+            "python/oh_my_vllm/kernels/convolution.py": "949889ad07989af2f69e02d610229d49139b2f53ec750be6cb2ca3add42b72c5",
+            "python/oh_my_vllm/kernels/decode_attention.py": "bc1d535004a61483ced322c2d2a3494125640bbe9382a5623c504602eab62de4",
+            "python/oh_my_vllm/kernels/elementwise.py": "5f6657afba63e83c800d19ef80bb84433cabc85dff4e68020161d3891151eafe",
+            "python/oh_my_vllm/kernels/fp8.py": "3a23873c3e62d7944f38d86b568ac420aedd026d35e5dd39f5cc3c10d7b9ef3e",
+            "python/oh_my_vllm/kernels/gdn.py": "0ae215519344b6b11b1422539bd84bc8c9b6881fa7774d29ec8c119ae1cd73e0",
+            "python/oh_my_vllm/kernels/mtp_attention.py": "06889d400f81381479d7e16f0aa9f4c08b1dece4c0515c250b69bc3b6f306b93",
+            "python/oh_my_vllm/kernels/normalization.py": "f1762223acc82b07f56f1bd9adbb984e3cde0d26c75e16879187d5c2b90268b6",
+            "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+            "python/oh_my_vllm/models/qwen.py": "732e905880a58b68e6bd1c42774c4d4442eef3949a62fcbe2e751f38c2a5ff52",
+            "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+            "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+            "python/oh_my_vllm/worker/decode_graph.py": "b09e087a4d6c4fee7f710391fc772e85f288fd59f88f63e0cf6cf01b71766f7e",
+            "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+            "python/oh_my_vllm/worker/model_runner.py": "b64e3ef3dbcb7ef6867e502ee6d220ae870ffa95cac9eef92213bb8690890539",
+            "python/oh_my_vllm/worker/mtp.py": "039ad5813ff2b0bee6ce1fce71dc34f34e025d72ba8d47c10557669a90b0a601",
+            "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+            "python/oh_my_vllm/worker/runtime.py": "9436b168640a246c56019ff8f15dfb329c5407aa4e4b5829ef9c83a43858b0c1",
+            "python/oh_my_vllm/worker/sampler.py": "1249b346353b06e3134ea9ec3f70c2fb65d6c4601f35166f238b00da8c1c0714",
+            "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+            "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+            "python/oh_my_vllm/worker/zmq_bridge.py": "9ee70755e5ed49c84405573b31efca8bb46a2f4a6d630e42a9d7807d7453a460"
+          }
+        },
+        "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+        "framework_runtime": {
+          "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+          "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+          "packages": {
+            "torch": "2.14.0",
+            "triton": "3.8.0",
+            "flashinfer-python": "0.6.18.post1",
+            "transformers": "5.17.0",
+            "tokenizers": "0.23.2",
+            "safetensors": "0.8.0",
+            "xgrammar": "0.2.7",
+            "pyzmq": "27.2.0",
+            "msgpack": "1.2.2"
+          },
+          "vllm_importable": false
+        },
+        "comparison": "historical",
+        "baseline_artifact": "<local-path>",
+        "baseline_sha256": "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e",
+        "mode": "mtp",
+        "batch_size": 1,
+        "input_len": 32768,
+        "output_len": 4096,
+        "num_gpu_blocks": 1024,
+        "speculative_tokens": 4,
+        "baseline": [
+          {
+            "proposed_draft_tokens": 3600,
+            "accepted_draft_tokens": 3195,
+            "output_tokens": 4096,
+            "prefix_hit_tokens": 0,
+            "elapsed_s": 15.195811240002513,
+            "output_tps": 269.5479652456727
+          },
+          {
+            "proposed_draft_tokens": 3600,
+            "accepted_draft_tokens": 3195,
+            "output_tokens": 4096,
+            "prefix_hit_tokens": 0,
+            "elapsed_s": 15.217729164054617,
+            "output_tps": 269.1597383448675
+          },
+          {
+            "proposed_draft_tokens": 3600,
+            "accepted_draft_tokens": 3195,
+            "output_tokens": 4096,
+            "prefix_hit_tokens": 0,
+            "elapsed_s": 15.2343676679302,
+            "output_tps": 268.86577042659087
+          }
+        ],
+        "ours": [
+          {
+            "batch_size": 1,
+            "input_len": 32768,
+            "output_len": 4096,
+            "output_tokens": 4096,
+            "elapsed_s": 16.604938555,
+            "output_tps": 246.67360173799813,
+            "steps": 906,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 3609,
+            "accepted_draft_tokens": 3191
+          },
+          {
+            "batch_size": 1,
+            "input_len": 32768,
+            "output_len": 4096,
+            "output_tokens": 4096,
+            "elapsed_s": 16.547576619,
+            "output_tps": 247.52869222535912,
+            "steps": 906,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 3609,
+            "accepted_draft_tokens": 3191
+          },
+          {
+            "batch_size": 1,
+            "input_len": 32768,
+            "output_len": 4096,
+            "output_tokens": 4096,
+            "elapsed_s": 16.559872482,
+            "output_tps": 247.34489981442843,
+            "steps": 906,
+            "prefix_hit_tokens": 0,
+            "initial_prefix_hit_tokens": 0,
+            "preemptions": 0,
+            "proposed_draft_tokens": 3609,
+            "accepted_draft_tokens": 3191
+          }
+        ],
+        "ratio": 0.9189520740933094,
+        "passed": false
+      },
+      {
+        "timestamp": "2026-09-21T11:46:05.439845+00:00",
+        "cpu_affinity_count": 1,
+        "source": {
+          "git_commit": "9c8e27b3242f765d39a8e80c8ac9d37c065c55b1",
+          "git_status": "",
+          "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "binary_sha256": "ead063f089f6d1821413254376e0d8880b75a8e36cb7defff2b33b57e711ff65",
+          "python_sources_sha256": {
+            "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+            "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+            "python/oh_my_vllm/kernels/attention.py": "43a15e397e48df21b25ece5883228583dcc8db1fd1f2ee22c1925aafdd017e0d",
+            "python/oh_my_vllm/kernels/convolution.py": "949889ad07989af2f69e02d610229d49139b2f53ec750be6cb2ca3add42b72c5",
+            "python/oh_my_vllm/kernels/decode_attention.py": "bc1d535004a61483ced322c2d2a3494125640bbe9382a5623c504602eab62de4",
+            "python/oh_my_vllm/kernels/elementwise.py": "5f6657afba63e83c800d19ef80bb84433cabc85dff4e68020161d3891151eafe",
+            "python/oh_my_vllm/kernels/fp8.py": "3a23873c3e62d7944f38d86b568ac420aedd026d35e5dd39f5cc3c10d7b9ef3e",
+            "python/oh_my_vllm/kernels/gdn.py": "0ae215519344b6b11b1422539bd84bc8c9b6881fa7774d29ec8c119ae1cd73e0",
+            "python/oh_my_vllm/kernels/mtp_attention.py": "06889d400f81381479d7e16f0aa9f4c08b1dece4c0515c250b69bc3b6f306b93",
+            "python/oh_my_vllm/kernels/normalization.py": "f1762223acc82b07f56f1bd9adbb984e3cde0d26c75e16879187d5c2b90268b6",
+            "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+            "python/oh_my_vllm/models/qwen.py": "732e905880a58b68e6bd1c42774c4d4442eef3949a62fcbe2e751f38c2a5ff52",
+            "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+            "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+            "python/oh_my_vllm/worker/decode_graph.py": "b09e087a4d6c4fee7f710391fc772e85f288fd59f88f63e0cf6cf01b71766f7e",
+            "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+            "python/oh_my_vllm/worker/model_runner.py": "b64e3ef3dbcb7ef6867e502ee6d220ae870ffa95cac9eef92213bb8690890539",
+            "python/oh_my_vllm/worker/mtp.py": "039ad5813ff2b0bee6ce1fce71dc34f34e025d72ba8d47c10557669a90b0a601",
+            "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+            "python/oh_my_vllm/worker/runtime.py": "9436b168640a246c56019ff8f15dfb329c5407aa4e4b5829ef9c83a43858b0c1",
+            "python/oh_my_vllm/worker/sampler.py": "1249b346353b06e3134ea9ec3f70c2fb65d6c4601f35166f238b00da8c1c0714",
+            "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+            "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+            "python/oh_my_vllm/worker/zmq_bridge.py": "9ee70755e5ed49c84405573b31efca8bb46a2f4a6d630e42a9d7807d7453a460"
+          }
+        },
+        "vllm_version": "0.28.1rc1.dev691+g6376c601e",
+        "framework_runtime": {
+          "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+          "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+          "packages": {
+            "torch": "2.14.0",
+            "triton": "3.8.0",
+            "flashinfer-python": "0.6.18.post1",
+            "transformers": "5.17.0",
+            "tokenizers": "0.23.2",
+            "safetensors": "0.8.0",
+            "xgrammar": "0.2.7",
+            "pyzmq": "27.2.0",
+            "msgpack": "1.2.2"
+          },
+          "vllm_importable": false
+        },
+        "comparison": "historical",
+        "baseline_artifact": "<local-path>",
+        "baseline_sha256": "941aef26a73048ae9759a0303fdc94c92d1cefd6cc5ee532b99f622710b3884e",
+        "mode": "prefix",
+        "batch_size": 1,
+        "input_len": 32768,
+        "output_len": 4096,
+        "num_gpu_blocks": 1024,
+        "speculative_tokens": 0,
+        "baseline": [
+          {
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0,
+            "output_tokens": 4096,
+            "prefix_hit_tokens": 32144,
+            "elapsed_s": 43.07336410996504,
+            "output_tps": 95.09357080963149
+          },
+          {
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0,
+            "output_tokens": 4096,
+            "prefix_hit_tokens": 32144,
+            "elapsed_s": 43.041728786891326,
+            "output_tps": 95.16346381624585
+          },
+          {
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0,
+            "output_tokens": 4096,
+            "prefix_hit_tokens": 32144,
+            "elapsed_s": 42.91367874084972,
+            "output_tps": 95.44742189862646
+          }
+        ],
+        "ours": [
+          {
+            "batch_size": 1,
+            "input_len": 32768,
+            "output_len": 4096,
+            "output_tokens": 4096,
+            "elapsed_s": 39.043631726,
+            "output_tps": 104.9082736141163,
+            "steps": 4096,
+            "prefix_hit_tokens": 32144,
+            "initial_prefix_hit_tokens": 32144,
+            "preemptions": 0,
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0
+          },
+          {
+            "batch_size": 1,
+            "input_len": 32768,
+            "output_len": 4096,
+            "output_tokens": 4096,
+            "elapsed_s": 39.013660775,
+            "output_tps": 104.98886591603119,
+            "steps": 4096,
+            "prefix_hit_tokens": 32144,
+            "initial_prefix_hit_tokens": 32144,
+            "preemptions": 0,
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0
+          },
+          {
+            "batch_size": 1,
+            "input_len": 32768,
+            "output_len": 4096,
+            "output_tokens": 4096,
+            "elapsed_s": 39.057043985,
+            "output_tps": 104.87224792467867,
+            "steps": 4096,
+            "prefix_hit_tokens": 32144,
+            "initial_prefix_hit_tokens": 32144,
+            "preemptions": 0,
+            "proposed_draft_tokens": 0,
+            "accepted_draft_tokens": 0
+          }
+        ],
+        "ratio": 1.1024007471679154,
+        "passed": true
+      }
+    ],
+    "diagnostic_only": {
+      "description": "Uncommitted grouped target verification attention; one warmup and one measurement, not acceptance",
+      "result": {
+        "batch_size": 1,
+        "input_len": 32768,
+        "output_len": 4096,
+        "output_tokens": 4096,
+        "elapsed_s": 15.544965098,
+        "output_tps": 263.4936761953224,
+        "steps": 890,
+        "prefix_hit_tokens": 0,
+        "initial_prefix_hit_tokens": 0,
+        "preemptions": 0,
+        "proposed_draft_tokens": 3545,
+        "accepted_draft_tokens": 3207
+      }
+    },
+    "discarded_measurements": "Ordinary bs1 (three attempts), prefix bs2 and MTP bs2 interrupted by external GPU clients; no result accepted. Only owned engine process groups stopped."
+  }
+}

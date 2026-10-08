@@ -8,6 +8,10 @@ if [[ "$mode" != cpu && "$mode" != full ]]; then
     exit 2
 fi
 shift
+if [[ "$mode" == full && -z "${OH_MY_VLLM_MODEL:-}" ]]; then
+    echo "set OH_MY_VLLM_MODEL before full GPU tests" >&2
+    exit 2
+fi
 
 scripts/with-env.sh cargo build -p oh-my-vllm-zmq-worker --bin oh-my-vllm-zmq-worker
 export OH_MY_VLLM_TEST_BINARY="${CARGO_TARGET_DIR:-$(git rev-parse --show-toplevel)/target}/debug/oh-my-vllm-zmq-worker"

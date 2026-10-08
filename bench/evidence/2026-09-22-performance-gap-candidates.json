@@ -1,0 +1,3194 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "2026-09-22-performance-gap-candidates.json",
+    "sha256": "2fe312d988956c8c2dd7aba540513438ca23e0f8e6841e222af0b1ea3dfaede7",
+    "bytes": 280494
+  },
+  "removed_fields": [
+    "data.other_attempts[0].path",
+    "data.other_attempts[1].path",
+    "data.other_attempts[1].reason",
+    "data.other_attempts[2].path",
+    "data.other_attempts[2].reason",
+    "data.other_attempts[3].path",
+    "data.other_attempts[3].reason",
+    "data.other_attempts[4].path",
+    "data.other_attempts[4].reason",
+    "data.rows[0].path",
+    "data.rows[0].result.command",
+    "data.rows[0].result.config.model",
+    "data.rows[0].result.hardware.cpu_affinity",
+    "data.rows[0].result.hardware.gpu",
+    "data.rows[0].result.hardware.gpu_info",
+    "data.rows[0].result.measurement_audit.cache_roots",
+    "data.rows[0].result.measurement_audit.log_path",
+    "data.rows[0].result.runtime.flashinfer_workspace",
+    "data.rows[0].result.runtime.python",
+    "data.rows[0].result.runtime.triton_cache",
+    "data.rows[0].result.stdout",
+    "data.rows[10].path",
+    "data.rows[10].result.command",
+    "data.rows[10].result.config.model",
+    "data.rows[10].result.hardware.cpu_affinity",
+    "data.rows[10].result.hardware.gpu",
+    "data.rows[10].result.hardware.gpu_info",
+    "data.rows[10].result.measurement_audit.cache_roots",
+    "data.rows[10].result.measurement_audit.log_path",
+    "data.rows[10].result.runtime.flashinfer_workspace",
+    "data.rows[10].result.runtime.python",
+    "data.rows[10].result.runtime.triton_cache",
+    "data.rows[10].result.stdout",
+    "data.rows[11].path",
+    "data.rows[11].result.command",
+    "data.rows[11].result.config.model",
+    "data.rows[11].result.hardware.cpu_affinity",
+    "data.rows[11].result.hardware.gpu",
+    "data.rows[11].result.hardware.gpu_info",
+    "data.rows[11].result.measurement_audit.cache_roots",
+    "data.rows[11].result.measurement_audit.log_path",
+    "data.rows[11].result.runtime.flashinfer_workspace",
+    "data.rows[11].result.runtime.python",
+    "data.rows[11].result.runtime.triton_cache",
+    "data.rows[11].result.stdout",
+    "data.rows[1].path",
+    "data.rows[1].result.command",
+    "data.rows[1].result.config.model",
+    "data.rows[1].result.hardware.cpu_affinity",
+    "data.rows[1].result.hardware.gpu",
+    "data.rows[1].result.hardware.gpu_info",
+    "data.rows[1].result.measurement_audit.cache_roots",
+    "data.rows[1].result.measurement_audit.log_path",
+    "data.rows[1].result.runtime.flashinfer_workspace",
+    "data.rows[1].result.runtime.python",
+    "data.rows[1].result.runtime.triton_cache",
+    "data.rows[1].result.stdout",
+    "data.rows[2].path",
+    "data.rows[2].result.command",
+    "data.rows[2].result.config.model",
+    "data.rows[2].result.hardware.cpu_affinity",
+    "data.rows[2].result.hardware.gpu",
+    "data.rows[2].result.hardware.gpu_info",
+    "data.rows[2].result.measurement_audit.cache_roots",
+    "data.rows[2].result.measurement_audit.log_path",
+    "data.rows[2].result.runtime.flashinfer_workspace",
+    "data.rows[2].result.runtime.python",
+    "data.rows[2].result.runtime.triton_cache",
+    "data.rows[2].result.stdout",
+    "data.rows[3].path",
+    "data.rows[3].result.command",
+    "data.rows[3].result.config.model",
+    "data.rows[3].result.hardware.cpu_affinity",
+    "data.rows[3].result.hardware.gpu",
+    "data.rows[3].result.hardware.gpu_info",
+    "data.rows[3].result.measurement_audit.cache_roots",
+    "data.rows[3].result.measurement_audit.log_path",
+    "data.rows[3].result.runtime.flashinfer_workspace",
+    "data.rows[3].result.runtime.python",
+    "data.rows[3].result.runtime.triton_cache",
+    "data.rows[3].result.stdout",
+    "data.rows[4].path",
+    "data.rows[4].result.command",
+    "data.rows[4].result.config.model",
+    "data.rows[4].result.hardware.cpu_affinity",
+    "data.rows[4].result.hardware.gpu",
+    "data.rows[4].result.hardware.gpu_info",
+    "data.rows[4].result.measurement_audit.cache_roots",
+    "data.rows[4].result.measurement_audit.log_path",
+    "data.rows[4].result.runtime.flashinfer_workspace",
+    "data.rows[4].result.runtime.python",
+    "data.rows[4].result.runtime.triton_cache",
+    "data.rows[4].result.stdout",
+    "data.rows[5].path",
+    "data.rows[5].result.command",
+    "data.rows[5].result.config.model",
+    "data.rows[5].result.hardware.cpu_affinity",
+    "data.rows[5].result.hardware.gpu",
+    "data.rows[5].result.hardware.gpu_info",
+    "data.rows[5].result.measurement_audit.cache_roots",
+    "data.rows[5].result.measurement_audit.log_path",
+    "data.rows[5].result.runtime.flashinfer_workspace",
+    "data.rows[5].result.runtime.python",
+    "data.rows[5].result.runtime.triton_cache",
+    "data.rows[5].result.stdout",
+    "data.rows[6].path",
+    "data.rows[6].result.command",
+    "data.rows[6].result.config.model",
+    "data.rows[6].result.hardware.cpu_affinity",
+    "data.rows[6].result.hardware.gpu",
+    "data.rows[6].result.hardware.gpu_info",
+    "data.rows[6].result.measurement_audit.cache_roots",
+    "data.rows[6].result.measurement_audit.log_path",
+    "data.rows[6].result.runtime.flashinfer_workspace",
+    "data.rows[6].result.runtime.python",
+    "data.rows[6].result.runtime.triton_cache",
+    "data.rows[6].result.stdout",
+    "data.rows[7].path",
+    "data.rows[7].result.command",
+    "data.rows[7].result.config.model",
+    "data.rows[7].result.hardware.cpu_affinity",
+    "data.rows[7].result.hardware.gpu",
+    "data.rows[7].result.hardware.gpu_info",
+    "data.rows[7].result.measurement_audit.cache_roots",
+    "data.rows[7].result.measurement_audit.log_path",
+    "data.rows[7].result.runtime.flashinfer_workspace",
+    "data.rows[7].result.runtime.python",
+    "data.rows[7].result.runtime.triton_cache",
+    "data.rows[7].result.stdout",
+    "data.rows[8].path",
+    "data.rows[8].result.command",
+    "data.rows[8].result.config.model",
+    "data.rows[8].result.hardware.cpu_affinity",
+    "data.rows[8].result.hardware.gpu",
+    "data.rows[8].result.hardware.gpu_info",
+    "data.rows[8].result.measurement_audit.cache_roots",
+    "data.rows[8].result.measurement_audit.log_path",
+    "data.rows[8].result.runtime.flashinfer_workspace",
+    "data.rows[8].result.runtime.python",
+    "data.rows[8].result.runtime.triton_cache",
+    "data.rows[8].result.stdout",
+    "data.rows[9].path",
+    "data.rows[9].result.command",
+    "data.rows[9].result.config.model",
+    "data.rows[9].result.hardware.cpu_affinity",
+    "data.rows[9].result.hardware.gpu",
+    "data.rows[9].result.hardware.gpu_info",
+    "data.rows[9].result.measurement_audit.cache_roots",
+    "data.rows[9].result.measurement_audit.log_path",
+    "data.rows[9].result.runtime.flashinfer_workspace",
+    "data.rows[9].result.runtime.python",
+    "data.rows[9].result.runtime.triton_cache",
+    "data.rows[9].result.stdout"
+  ],
+  "data": {
+    "schema": 1,
+    "status": "10/12 pass; MTP batch4 throughput and prefix batch1 TTFT stability fail",
+    "source_commit": "ee2fb63dfb195e2f68c5e43eab24f0bd24a68c66",
+    "baseline_artifact": "2026-09-22-refreshed-enginecore.json",
+    "rows": [
+      {
+        "label": "ordinary-32768-1",
+        "path": "<local-path>",
+        "sha256": "232aad5e6ec9ffad85eca78ce25f18a9a8ed9e2a89d9f1ca3571bbe58a9d99f0",
+        "result": {
+          "schema": 1,
+          "engine": "oh-my-vllm",
+          "workload": {
+            "mode": "ordinary",
+            "batch_size": 1,
+            "input_len": 32768,
+            "output_len": 4096
+          },
+          "runtime": {
+            "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+            "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+            "packages": {
+              "torch": "2.14.0",
+              "triton": "3.8.0",
+              "flashinfer-python": "0.6.18.post1",
+              "transformers": "5.17.0",
+              "tokenizers": "0.23.2",
+              "safetensors": "0.8.0",
+              "xgrammar": "0.2.7",
+              "pyzmq": "27.2.0",
+              "msgpack": "1.2.2"
+            },
+            "vllm_importable": false
+          },
+          "source": {
+            "git_commit": "ee2fb63dfb195e2f68c5e43eab24f0bd24a68c66",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+              "python/oh_my_vllm/kernels/attention.py": "f9f32608083558dd4c825491e4c824146b3e05e2add14723cf92fc0de3d9eedf",
+              "python/oh_my_vllm/kernels/convolution.py": "c9273e96b9cfaf5c566e63899893dbd21557dd0ae72e729c716cb214bd1e4841",
+              "python/oh_my_vllm/kernels/decode_attention.py": "b5442157324d3fc062f6c4832e2d680f59e0c0ca604f0a027609cd8cfead6bf1",
+              "python/oh_my_vllm/kernels/elementwise.py": "f0dcf0e7f33021a47d96b362bd8c802baf96df5f381fccd78d5565059386f2ce",
+              "python/oh_my_vllm/kernels/fp8.py": "d3c292d4caee65cc6792317570c406845f1ffd1ef7c8f3eb7a44ca26bcb11850",
+              "python/oh_my_vllm/kernels/gdn.py": "30f750eb184b5e20925c6ceeba214134f2845333ffe99e43ba2a48a2c1fbf09d",
+              "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+              "python/oh_my_vllm/kernels/normalization.py": "7eef1d4e3eac3fec0e9e89945f73bc8b09de5d044242b0db7714042729a98fc0",
+              "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+              "python/oh_my_vllm/models/qwen.py": "54a0cf0ae286b984800f702d670b628c034b49c0101586b65c6d77e0c1c9f1d5",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+              "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+              "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+              "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+              "python/oh_my_vllm/worker/runtime.py": "9436b168640a246c56019ff8f15dfb329c5407aa4e4b5829ef9c83a43858b0c1",
+              "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+              "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+              "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+              "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+            }
+          },
+          "hardware": {
+            "cpu_affinity_count": 8,
+            "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+          },
+          "config": {
+            "model": "<local-path>",
+            "max_model_len": 262144,
+            "max_num_seqs": 32,
+            "max_num_batched_tokens": 32768,
+            "block_size": 784,
+            "enable_prefix_caching": true,
+            "enable_chunked_prefill": true,
+            "async_scheduling": false,
+            "mamba_ssm_cache_dtype": "auto"
+          },
+          "capacities": {
+            "fa": 1400,
+            "mamba": 128
+          },
+          "baseline_sha256": "8f1c594e7846853495e4c7fcfda920645f353f2487b0a4d5c10a1cfa9ed1938c",
+          "warmups": [
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 43.596304846,
+              "output_tps": 93.95291675449901,
+              "steps": 4097,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                5.895214524
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 39.123900022,
+              "output_tps": 104.69303923424692,
+              "steps": 4097,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                1.600940115
+              ]
+            }
+          ],
+          "measurement_audit": {
+            "steady_state_verified": true,
+            "problems": [],
+            "log_sha256": "8ad6d2e5af62346e283e29189c8b007adb7fa0bb7711440f26e4f932e640788e"
+          },
+          "runs": [
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 39.08373165,
+              "output_tps": 104.80063768424733,
+              "steps": 4097,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                1.597991626
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 39.163122485,
+              "output_tps": 104.58818756264449,
+              "steps": 4097,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                1.60466787
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 39.147731401,
+              "output_tps": 104.62930681841172,
+              "steps": 4097,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                1.610196084
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 39.170389825,
+              "output_tps": 104.56878316247392,
+              "steps": 4097,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                1.602101989
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 39.132000605,
+              "output_tps": 104.67136708253662,
+              "steps": 4097,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                1.6032520670000001
+              ]
+            }
+          ],
+          "comparison": {
+            "baseline": {
+              "ttft_s": {
+                "median": 1.7061183230107417,
+                "spread": 0.0054244268225999955
+              },
+              "output_tps": {
+                "median": 90.10279481683648,
+                "spread": 0.005405413547296384
+              }
+            },
+            "candidate": {
+              "ttft_s": {
+                "median": 1.6032520670000001,
+                "spread": 0.007612313903226066
+              },
+              "output_tps": {
+                "median": 104.62930681841172,
+                "spread": 0.0022159615582258104
+              }
+            },
+            "ttft_ratio": 0.9397074314111953,
+            "throughput_ratio": 1.1612215473571619,
+            "stable": true,
+            "passed": true
+          }
+        }
+      },
+      {
+        "label": "ordinary-32768-2",
+        "path": "<local-path>",
+        "sha256": "b69315269b334d5cc09b1d1c345d486b72aa8fc2d7a1e9282b9e0928613f61f4",
+        "result": {
+          "schema": 1,
+          "engine": "oh-my-vllm",
+          "workload": {
+            "mode": "ordinary",
+            "batch_size": 2,
+            "input_len": 32768,
+            "output_len": 4096
+          },
+          "runtime": {
+            "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+            "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+            "packages": {
+              "torch": "2.14.0",
+              "triton": "3.8.0",
+              "flashinfer-python": "0.6.18.post1",
+              "transformers": "5.17.0",
+              "tokenizers": "0.23.2",
+              "safetensors": "0.8.0",
+              "xgrammar": "0.2.7",
+              "pyzmq": "27.2.0",
+              "msgpack": "1.2.2"
+            },
+            "vllm_importable": false
+          },
+          "source": {
+            "git_commit": "ee2fb63dfb195e2f68c5e43eab24f0bd24a68c66",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+              "python/oh_my_vllm/kernels/attention.py": "f9f32608083558dd4c825491e4c824146b3e05e2add14723cf92fc0de3d9eedf",
+              "python/oh_my_vllm/kernels/convolution.py": "c9273e96b9cfaf5c566e63899893dbd21557dd0ae72e729c716cb214bd1e4841",
+              "python/oh_my_vllm/kernels/decode_attention.py": "b5442157324d3fc062f6c4832e2d680f59e0c0ca604f0a027609cd8cfead6bf1",
+              "python/oh_my_vllm/kernels/elementwise.py": "f0dcf0e7f33021a47d96b362bd8c802baf96df5f381fccd78d5565059386f2ce",
+              "python/oh_my_vllm/kernels/fp8.py": "d3c292d4caee65cc6792317570c406845f1ffd1ef7c8f3eb7a44ca26bcb11850",
+              "python/oh_my_vllm/kernels/gdn.py": "30f750eb184b5e20925c6ceeba214134f2845333ffe99e43ba2a48a2c1fbf09d",
+              "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+              "python/oh_my_vllm/kernels/normalization.py": "7eef1d4e3eac3fec0e9e89945f73bc8b09de5d044242b0db7714042729a98fc0",
+              "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+              "python/oh_my_vllm/models/qwen.py": "54a0cf0ae286b984800f702d670b628c034b49c0101586b65c6d77e0c1c9f1d5",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+              "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+              "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+              "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+              "python/oh_my_vllm/worker/runtime.py": "9436b168640a246c56019ff8f15dfb329c5407aa4e4b5829ef9c83a43858b0c1",
+              "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+              "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+              "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+              "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+            }
+          },
+          "hardware": {
+            "cpu_affinity_count": 8,
+            "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+          },
+          "config": {
+            "model": "<local-path>",
+            "max_model_len": 262144,
+            "max_num_seqs": 32,
+            "max_num_batched_tokens": 32768,
+            "block_size": 784,
+            "enable_prefix_caching": true,
+            "enable_chunked_prefill": true,
+            "async_scheduling": false,
+            "mamba_ssm_cache_dtype": "auto"
+          },
+          "capacities": {
+            "fa": 1400,
+            "mamba": 128
+          },
+          "baseline_sha256": "a7f185ca413beb153b2759e22687cfa58050e2e5659fee2e30770854e09114ec",
+          "warmups": [
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 48.502150816,
+              "output_tps": 168.89972634569443,
+              "steps": 4098,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                7.541051382,
+                7.851575111
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 43.028646947,
+              "output_tps": 190.3847920221706,
+              "steps": 4098,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                3.167239428,
+                3.229588536
+              ]
+            }
+          ],
+          "measurement_audit": {
+            "steady_state_verified": true,
+            "problems": [],
+            "log_sha256": "6ce315c14f0e4ef835226ea56c71b300d8f9c85ce95aeb00be75d3ec4c5119a5"
+          },
+          "runs": [
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 42.95441024,
+              "output_tps": 190.7138278521037,
+              "steps": 4098,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                3.1399258310000002,
+                3.198855902
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 42.99861497,
+              "output_tps": 190.51776448417078,
+              "steps": 4098,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                3.169182509,
+                3.2298555860000002
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 43.012758134,
+              "output_tps": 190.4551197223627,
+              "steps": 4098,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                3.167553463,
+                3.226077303
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 42.997538819,
+              "output_tps": 190.5225328008791,
+              "steps": 4098,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                3.152670068,
+                3.213301194
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 43.039051497,
+              "output_tps": 190.33876712108807,
+              "steps": 4098,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                3.155091226,
+                3.216583339
+              ]
+            }
+          ],
+          "comparison": {
+            "baseline": {
+              "ttft_s": {
+                "median": 3.3163465980032925,
+                "spread": 0.0076818578071881005
+              },
+              "output_tps": {
+                "median": 163.49796338874413,
+                "spread": 0.004233303059155824
+              }
+            },
+            "candidate": {
+              "ttft_s": {
+                "median": 3.216583339,
+                "spread": 0.009637457119216954
+              },
+              "output_tps": {
+                "median": 190.51776448417078,
+                "spread": 0.0019686391556771846
+              }
+            },
+            "ttft_ratio": 0.96991772239266,
+            "throughput_ratio": 1.1652607808403246,
+            "stable": true,
+            "passed": true
+          }
+        }
+      },
+      {
+        "label": "ordinary-32768-4",
+        "path": "<local-path>",
+        "sha256": "2908becbbe773111017d6979c4e584d129368ba5546da10e3d65082ec7be7903",
+        "result": {
+          "schema": 1,
+          "engine": "oh-my-vllm",
+          "workload": {
+            "mode": "ordinary",
+            "batch_size": 4,
+            "input_len": 32768,
+            "output_len": 4096
+          },
+          "runtime": {
+            "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+            "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+            "packages": {
+              "torch": "2.14.0",
+              "triton": "3.8.0",
+              "flashinfer-python": "0.6.18.post1",
+              "transformers": "5.17.0",
+              "tokenizers": "0.23.2",
+              "safetensors": "0.8.0",
+              "xgrammar": "0.2.7",
+              "pyzmq": "27.2.0",
+              "msgpack": "1.2.2"
+            },
+            "vllm_importable": false
+          },
+          "source": {
+            "git_commit": "ee2fb63dfb195e2f68c5e43eab24f0bd24a68c66",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+              "python/oh_my_vllm/kernels/attention.py": "f9f32608083558dd4c825491e4c824146b3e05e2add14723cf92fc0de3d9eedf",
+              "python/oh_my_vllm/kernels/convolution.py": "c9273e96b9cfaf5c566e63899893dbd21557dd0ae72e729c716cb214bd1e4841",
+              "python/oh_my_vllm/kernels/decode_attention.py": "b5442157324d3fc062f6c4832e2d680f59e0c0ca604f0a027609cd8cfead6bf1",
+              "python/oh_my_vllm/kernels/elementwise.py": "f0dcf0e7f33021a47d96b362bd8c802baf96df5f381fccd78d5565059386f2ce",
+              "python/oh_my_vllm/kernels/fp8.py": "d3c292d4caee65cc6792317570c406845f1ffd1ef7c8f3eb7a44ca26bcb11850",
+              "python/oh_my_vllm/kernels/gdn.py": "30f750eb184b5e20925c6ceeba214134f2845333ffe99e43ba2a48a2c1fbf09d",
+              "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+              "python/oh_my_vllm/kernels/normalization.py": "7eef1d4e3eac3fec0e9e89945f73bc8b09de5d044242b0db7714042729a98fc0",
+              "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+              "python/oh_my_vllm/models/qwen.py": "54a0cf0ae286b984800f702d670b628c034b49c0101586b65c6d77e0c1c9f1d5",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+              "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+              "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+              "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+              "python/oh_my_vllm/worker/runtime.py": "9436b168640a246c56019ff8f15dfb329c5407aa4e4b5829ef9c83a43858b0c1",
+              "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+              "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+              "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+              "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+            }
+          },
+          "hardware": {
+            "cpu_affinity_count": 8,
+            "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+          },
+          "config": {
+            "model": "<local-path>",
+            "max_model_len": 262144,
+            "max_num_seqs": 32,
+            "max_num_batched_tokens": 32768,
+            "block_size": 784,
+            "enable_prefix_caching": true,
+            "enable_chunked_prefill": true,
+            "async_scheduling": false,
+            "mamba_ssm_cache_dtype": "auto"
+          },
+          "capacities": {
+            "fa": 1400,
+            "mamba": 128
+          },
+          "baseline_sha256": "30f40ff07574d911b8d9764f643185889b3dde35d8dd4cd207f70655413801c5",
+          "warmups": [
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 55.990378093,
+              "output_tps": 292.62170676515495,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                7.441960335,
+                9.211770589,
+                11.09014139,
+                11.246097938
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 49.877039712,
+              "output_tps": 328.48781913691136,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                3.140306042,
+                4.695102089,
+                6.354465246,
+                6.408574732
+              ]
+            }
+          ],
+          "measurement_audit": {
+            "steady_state_verified": true,
+            "problems": [],
+            "log_sha256": "e0ae1024684834152ba2556629f4110b0f613217f55707b8a347e4a7df1d1ef3"
+          },
+          "runs": [
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 49.86552139,
+              "output_tps": 328.56369578210484,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                3.12968022,
+                4.684756751,
+                6.344541474,
+                6.399448054
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 49.910835446,
+              "output_tps": 328.265392746758,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                3.117718299,
+                4.66547241,
+                6.336444481,
+                6.390710083
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 49.971096304,
+              "output_tps": 327.86953282608937,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                3.148846714,
+                4.698203902,
+                6.359427416,
+                6.413759268
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 49.920849116,
+              "output_tps": 328.19954568338477,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                3.118203859,
+                4.666880634,
+                6.333441981,
+                6.38711244
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 49.932144838,
+              "output_tps": 328.1252999076306,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                3.115070266,
+                4.663484581,
+                6.337123977,
+                6.390901947
+              ]
+            }
+          ],
+          "comparison": {
+            "baseline": {
+              "ttft_s": {
+                "median": 6.735070716997143,
+                "spread": 0.003963283702119169
+              },
+              "output_tps": {
+                "median": 288.40502377902874,
+                "spread": 0.0038376556937785218
+              }
+            },
+            "candidate": {
+              "ttft_s": {
+                "median": 6.390901947,
+                "spread": 0.004169494105993616
+              },
+              "output_tps": {
+                "median": 328.19954568338477,
+                "spread": 0.0021150637322488453
+              }
+            },
+            "ttft_ratio": 0.9488990116869044,
+            "throughput_ratio": 1.1379813755770287,
+            "stable": true,
+            "passed": true
+          }
+        }
+      },
+      {
+        "label": "ordinary-131072-1",
+        "path": "<local-path>",
+        "sha256": "8df4769ac8ce07b2452239c2fc1f84e5d60b20597a6a98dfd0d4564c9165f091",
+        "result": {
+          "schema": 1,
+          "engine": "oh-my-vllm",
+          "workload": {
+            "mode": "ordinary",
+            "batch_size": 1,
+            "input_len": 131072,
+            "output_len": 4096
+          },
+          "runtime": {
+            "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+            "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+            "packages": {
+              "torch": "2.14.0",
+              "triton": "3.8.0",
+              "flashinfer-python": "0.6.18.post1",
+              "transformers": "5.17.0",
+              "tokenizers": "0.23.2",
+              "safetensors": "0.8.0",
+              "xgrammar": "0.2.7",
+              "pyzmq": "27.2.0",
+              "msgpack": "1.2.2"
+            },
+            "vllm_importable": false
+          },
+          "source": {
+            "git_commit": "ee2fb63dfb195e2f68c5e43eab24f0bd24a68c66",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+              "python/oh_my_vllm/kernels/attention.py": "f9f32608083558dd4c825491e4c824146b3e05e2add14723cf92fc0de3d9eedf",
+              "python/oh_my_vllm/kernels/convolution.py": "c9273e96b9cfaf5c566e63899893dbd21557dd0ae72e729c716cb214bd1e4841",
+              "python/oh_my_vllm/kernels/decode_attention.py": "b5442157324d3fc062f6c4832e2d680f59e0c0ca604f0a027609cd8cfead6bf1",
+              "python/oh_my_vllm/kernels/elementwise.py": "f0dcf0e7f33021a47d96b362bd8c802baf96df5f381fccd78d5565059386f2ce",
+              "python/oh_my_vllm/kernels/fp8.py": "d3c292d4caee65cc6792317570c406845f1ffd1ef7c8f3eb7a44ca26bcb11850",
+              "python/oh_my_vllm/kernels/gdn.py": "30f750eb184b5e20925c6ceeba214134f2845333ffe99e43ba2a48a2c1fbf09d",
+              "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+              "python/oh_my_vllm/kernels/normalization.py": "7eef1d4e3eac3fec0e9e89945f73bc8b09de5d044242b0db7714042729a98fc0",
+              "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+              "python/oh_my_vllm/models/qwen.py": "54a0cf0ae286b984800f702d670b628c034b49c0101586b65c6d77e0c1c9f1d5",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+              "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+              "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+              "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+              "python/oh_my_vllm/worker/runtime.py": "9436b168640a246c56019ff8f15dfb329c5407aa4e4b5829ef9c83a43858b0c1",
+              "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+              "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+              "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+              "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+            }
+          },
+          "hardware": {
+            "cpu_affinity_count": 8,
+            "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+          },
+          "config": {
+            "model": "<local-path>",
+            "max_model_len": 262144,
+            "max_num_seqs": 32,
+            "max_num_batched_tokens": 32768,
+            "block_size": 784,
+            "enable_prefix_caching": true,
+            "enable_chunked_prefill": true,
+            "async_scheduling": false,
+            "mamba_ssm_cache_dtype": "auto"
+          },
+          "capacities": {
+            "fa": 1400,
+            "mamba": 128
+          },
+          "baseline_sha256": "68c25b3b0f77ce8fc8ccedd9711f2af73d141d50b54b52d50935298b054643b3",
+          "warmups": [
+            {
+              "batch_size": 1,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 54.750410255,
+              "output_tps": 74.81222480202217,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                12.866654573
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 49.880427978,
+              "output_tps": 82.1163764233651,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                8.439586526
+              ]
+            }
+          ],
+          "measurement_audit": {
+            "steady_state_verified": true,
+            "problems": [],
+            "log_sha256": "721f6341519e9378a07d6b8c7391e70d8fa1370ef696cf6b0cd57c3fc660b71a"
+          },
+          "runs": [
+            {
+              "batch_size": 1,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 49.889815152,
+              "output_tps": 82.10092556006991,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                8.436245521
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 49.897316729,
+              "output_tps": 82.08858248322261,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                8.422882178
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 49.882217748,
+              "output_tps": 82.11343009431907,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                8.416623467
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 49.732050760999996,
+              "output_tps": 82.36137334622231,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                8.425943689
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 49.846846749,
+              "output_tps": 82.17169725148506,
+              "steps": 4101,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                8.434065156
+              ]
+            }
+          ],
+          "comparison": {
+            "baseline": {
+              "ttft_s": {
+                "median": 9.172354672002257,
+                "spread": 0.005695019529994351
+              },
+              "output_tps": {
+                "median": 72.34641333638002,
+                "spread": 0.0017107541146778875
+              }
+            },
+            "candidate": {
+              "ttft_s": {
+                "median": 8.425943689,
+                "spread": 0.0023287663345787127
+              },
+              "output_tps": {
+                "median": 82.11343009431907,
+                "spread": 0.003322122370072221
+              }
+            },
+            "ttft_ratio": 0.918623842002032,
+            "throughput_ratio": 1.1350034688316417,
+            "stable": true,
+            "passed": true
+          }
+        }
+      },
+      {
+        "label": "ordinary-131072-2",
+        "path": "<local-path>",
+        "sha256": "cba550317eaa4627ffb0d0ca7de793ecd558d42fd9e12088afbbadc80a2d34f4",
+        "result": {
+          "schema": 1,
+          "engine": "oh-my-vllm",
+          "workload": {
+            "mode": "ordinary",
+            "batch_size": 2,
+            "input_len": 131072,
+            "output_len": 4096
+          },
+          "runtime": {
+            "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+            "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+            "packages": {
+              "torch": "2.14.0",
+              "triton": "3.8.0",
+              "flashinfer-python": "0.6.18.post1",
+              "transformers": "5.17.0",
+              "tokenizers": "0.23.2",
+              "safetensors": "0.8.0",
+              "xgrammar": "0.2.7",
+              "pyzmq": "27.2.0",
+              "msgpack": "1.2.2"
+            },
+            "vllm_importable": false
+          },
+          "source": {
+            "git_commit": "ee2fb63dfb195e2f68c5e43eab24f0bd24a68c66",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+              "python/oh_my_vllm/kernels/attention.py": "f9f32608083558dd4c825491e4c824146b3e05e2add14723cf92fc0de3d9eedf",
+              "python/oh_my_vllm/kernels/convolution.py": "c9273e96b9cfaf5c566e63899893dbd21557dd0ae72e729c716cb214bd1e4841",
+              "python/oh_my_vllm/kernels/decode_attention.py": "b5442157324d3fc062f6c4832e2d680f59e0c0ca604f0a027609cd8cfead6bf1",
+              "python/oh_my_vllm/kernels/elementwise.py": "f0dcf0e7f33021a47d96b362bd8c802baf96df5f381fccd78d5565059386f2ce",
+              "python/oh_my_vllm/kernels/fp8.py": "d3c292d4caee65cc6792317570c406845f1ffd1ef7c8f3eb7a44ca26bcb11850",
+              "python/oh_my_vllm/kernels/gdn.py": "30f750eb184b5e20925c6ceeba214134f2845333ffe99e43ba2a48a2c1fbf09d",
+              "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+              "python/oh_my_vllm/kernels/normalization.py": "7eef1d4e3eac3fec0e9e89945f73bc8b09de5d044242b0db7714042729a98fc0",
+              "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+              "python/oh_my_vllm/models/qwen.py": "54a0cf0ae286b984800f702d670b628c034b49c0101586b65c6d77e0c1c9f1d5",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+              "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+              "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+              "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+              "python/oh_my_vllm/worker/runtime.py": "9436b168640a246c56019ff8f15dfb329c5407aa4e4b5829ef9c83a43858b0c1",
+              "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+              "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+              "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+              "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+            }
+          },
+          "hardware": {
+            "cpu_affinity_count": 8,
+            "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+          },
+          "config": {
+            "model": "<local-path>",
+            "max_model_len": 262144,
+            "max_num_seqs": 32,
+            "max_num_batched_tokens": 32768,
+            "block_size": 784,
+            "enable_prefix_caching": true,
+            "enable_chunked_prefill": true,
+            "async_scheduling": false,
+            "mamba_ssm_cache_dtype": "auto"
+          },
+          "capacities": {
+            "fa": 1400,
+            "mamba": 128
+          },
+          "baseline_sha256": "1570032a9f39bfcd3eb6d9c16ee7ca68f4125121426bb3bef73eb2bb89629b4b",
+          "warmups": [
+            {
+              "batch_size": 2,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 69.575661616,
+              "output_tps": 117.74232267043396,
+              "steps": 4105,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                16.078724923,
+                21.653464971
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 64.123914082,
+              "output_tps": 127.75265074312655,
+              "steps": 4105,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                11.684633441,
+                16.954026431
+              ]
+            }
+          ],
+          "measurement_audit": {
+            "steady_state_verified": true,
+            "problems": [],
+            "log_sha256": "c106b7a5b8c2dd575158a7dbe8673556bfa559e595c50c195818357c31ceaf43"
+          },
+          "runs": [
+            {
+              "batch_size": 2,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 64.153236963,
+              "output_tps": 127.69425812020503,
+              "steps": 4105,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                11.701407916,
+                16.940800198
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 64.220750636,
+              "output_tps": 127.5600163322887,
+              "steps": 4105,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                11.751983766,
+                17.018310674
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 64.198000592,
+              "output_tps": 127.60522016975155,
+              "steps": 4105,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                11.732093925000001,
+                17.021788135
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 64.129726441,
+              "output_tps": 127.74107195883212,
+              "steps": 4105,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                11.729900707,
+                16.974833158
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 64.185515819,
+              "output_tps": 127.63004075718635,
+              "steps": 4105,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                11.743578172,
+                17.034770573
+              ]
+            }
+          ],
+          "comparison": {
+            "baseline": {
+              "ttft_s": {
+                "median": 18.334923478003475,
+                "spread": 0.004223708165673607
+              },
+              "output_tps": {
+                "median": 114.05630369910162,
+                "spread": 0.003079596370682448
+              }
+            },
+            "candidate": {
+              "ttft_s": {
+                "median": 17.018310674,
+                "spread": 0.005521721679670744
+              },
+              "output_tps": {
+                "median": 127.63004075718635,
+                "spread": 0.0014185972633815934
+              }
+            },
+            "ttft_ratio": 0.9281909845119874,
+            "throughput_ratio": 1.1190090912808675,
+            "stable": true,
+            "passed": true
+          }
+        }
+      },
+      {
+        "label": "ordinary-131072-4",
+        "path": "<local-path>",
+        "sha256": "d729b5b2ff55950259a6691b769bd9da2c8c658764be2f6a930ce103b7a7a0d0",
+        "result": {
+          "schema": 1,
+          "engine": "oh-my-vllm",
+          "workload": {
+            "mode": "ordinary",
+            "batch_size": 4,
+            "input_len": 131072,
+            "output_len": 4096
+          },
+          "runtime": {
+            "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+            "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+            "packages": {
+              "torch": "2.14.0",
+              "triton": "3.8.0",
+              "flashinfer-python": "0.6.18.post1",
+              "transformers": "5.17.0",
+              "tokenizers": "0.23.2",
+              "safetensors": "0.8.0",
+              "xgrammar": "0.2.7",
+              "pyzmq": "27.2.0",
+              "msgpack": "1.2.2"
+            },
+            "vllm_importable": false
+          },
+          "source": {
+            "git_commit": "ee2fb63dfb195e2f68c5e43eab24f0bd24a68c66",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+              "python/oh_my_vllm/kernels/attention.py": "f9f32608083558dd4c825491e4c824146b3e05e2add14723cf92fc0de3d9eedf",
+              "python/oh_my_vllm/kernels/convolution.py": "c9273e96b9cfaf5c566e63899893dbd21557dd0ae72e729c716cb214bd1e4841",
+              "python/oh_my_vllm/kernels/decode_attention.py": "b5442157324d3fc062f6c4832e2d680f59e0c0ca604f0a027609cd8cfead6bf1",
+              "python/oh_my_vllm/kernels/elementwise.py": "f0dcf0e7f33021a47d96b362bd8c802baf96df5f381fccd78d5565059386f2ce",
+              "python/oh_my_vllm/kernels/fp8.py": "d3c292d4caee65cc6792317570c406845f1ffd1ef7c8f3eb7a44ca26bcb11850",
+              "python/oh_my_vllm/kernels/gdn.py": "30f750eb184b5e20925c6ceeba214134f2845333ffe99e43ba2a48a2c1fbf09d",
+              "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+              "python/oh_my_vllm/kernels/normalization.py": "7eef1d4e3eac3fec0e9e89945f73bc8b09de5d044242b0db7714042729a98fc0",
+              "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+              "python/oh_my_vllm/models/qwen.py": "54a0cf0ae286b984800f702d670b628c034b49c0101586b65c6d77e0c1c9f1d5",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+              "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+              "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+              "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+              "python/oh_my_vllm/worker/runtime.py": "9436b168640a246c56019ff8f15dfb329c5407aa4e4b5829ef9c83a43858b0c1",
+              "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+              "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+              "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+              "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+            }
+          },
+          "hardware": {
+            "cpu_affinity_count": 8,
+            "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+          },
+          "config": {
+            "model": "<local-path>",
+            "max_model_len": 262144,
+            "max_num_seqs": 32,
+            "max_num_batched_tokens": 32768,
+            "block_size": 784,
+            "enable_prefix_caching": true,
+            "enable_chunked_prefill": true,
+            "async_scheduling": false,
+            "mamba_ssm_cache_dtype": "auto"
+          },
+          "capacities": {
+            "fa": 1400,
+            "mamba": 128
+          },
+          "baseline_sha256": "11865b433adb15e143ac79a3fdc5d5bc3d2eaa1d9db2c87747cfbd6d24037015",
+          "warmups": [
+            {
+              "batch_size": 4,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 98.351035442,
+              "output_tps": 166.58695992745336,
+              "steps": 4113,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                16.040953322,
+                24.499808656,
+                32.977556317,
+                38.728370726
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 92.288035781,
+              "output_tps": 177.53113782678525,
+              "steps": 4113,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                11.690460039,
+                20.061987007,
+                28.442283987,
+                34.008177294
+              ]
+            }
+          ],
+          "measurement_audit": {
+            "steady_state_verified": true,
+            "problems": [],
+            "log_sha256": "881faa1235254d37846ce67179cabb856c11ca98a3959220a39316c7d8e5997b"
+          },
+          "runs": [
+            {
+              "batch_size": 4,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 92.346675032,
+              "output_tps": 177.418407260712,
+              "steps": 4113,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                11.748311787,
+                20.07920679,
+                28.451333707,
+                34.002532565
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 92.415795699,
+              "output_tps": 177.2857104792237,
+              "steps": 4113,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                11.743814842,
+                20.108505486,
+                28.524423115,
+                34.087985496
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 92.246921366,
+              "output_tps": 177.6102633820661,
+              "steps": 4113,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                11.675531759,
+                20.001828906,
+                28.372431859,
+                33.936733116
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 92.248678904,
+              "output_tps": 177.6068795201963,
+              "steps": 4113,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                11.671577023,
+                20.06174105,
+                28.386392006,
+                33.944217364
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 131072,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 92.335601926,
+              "output_tps": 177.4396837000157,
+              "steps": 4113,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                11.696365476,
+                20.025152098,
+                28.396563224,
+                33.960741425
+              ]
+            }
+          ],
+          "comparison": {
+            "baseline": {
+              "ttft_s": {
+                "median": 36.32862414000556,
+                "spread": 0.0039978190596576535
+              },
+              "output_tps": {
+                "median": 162.85455568374564,
+                "spread": 0.00033305399822501126
+              }
+            },
+            "candidate": {
+              "ttft_s": {
+                "median": 33.960741425,
+                "spread": 0.004453741987171663
+              },
+              "output_tps": {
+                "median": 177.4396837000157,
+                "spread": 0.001829088601122119
+              }
+            },
+            "ttft_ratio": 0.9348204681278306,
+            "throughput_ratio": 1.089559226360198,
+            "stable": true,
+            "passed": true
+          }
+        }
+      },
+      {
+        "label": "mtp-32768-1",
+        "path": "<local-path>",
+        "sha256": "5d8adcaee4ee602bed952201cffce519541bda57aed2a35f99228658c76b0d49",
+        "result": {
+          "schema": 1,
+          "engine": "oh-my-vllm",
+          "workload": {
+            "mode": "mtp",
+            "batch_size": 1,
+            "input_len": 32768,
+            "output_len": 4096
+          },
+          "runtime": {
+            "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+            "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+            "packages": {
+              "torch": "2.14.0",
+              "triton": "3.8.0",
+              "flashinfer-python": "0.6.18.post1",
+              "transformers": "5.17.0",
+              "tokenizers": "0.23.2",
+              "safetensors": "0.8.0",
+              "xgrammar": "0.2.7",
+              "pyzmq": "27.2.0",
+              "msgpack": "1.2.2"
+            },
+            "vllm_importable": false
+          },
+          "source": {
+            "git_commit": "ee2fb63dfb195e2f68c5e43eab24f0bd24a68c66",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+              "python/oh_my_vllm/kernels/attention.py": "f9f32608083558dd4c825491e4c824146b3e05e2add14723cf92fc0de3d9eedf",
+              "python/oh_my_vllm/kernels/convolution.py": "c9273e96b9cfaf5c566e63899893dbd21557dd0ae72e729c716cb214bd1e4841",
+              "python/oh_my_vllm/kernels/decode_attention.py": "b5442157324d3fc062f6c4832e2d680f59e0c0ca604f0a027609cd8cfead6bf1",
+              "python/oh_my_vllm/kernels/elementwise.py": "f0dcf0e7f33021a47d96b362bd8c802baf96df5f381fccd78d5565059386f2ce",
+              "python/oh_my_vllm/kernels/fp8.py": "d3c292d4caee65cc6792317570c406845f1ffd1ef7c8f3eb7a44ca26bcb11850",
+              "python/oh_my_vllm/kernels/gdn.py": "30f750eb184b5e20925c6ceeba214134f2845333ffe99e43ba2a48a2c1fbf09d",
+              "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+              "python/oh_my_vllm/kernels/normalization.py": "7eef1d4e3eac3fec0e9e89945f73bc8b09de5d044242b0db7714042729a98fc0",
+              "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+              "python/oh_my_vllm/models/qwen.py": "54a0cf0ae286b984800f702d670b628c034b49c0101586b65c6d77e0c1c9f1d5",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+              "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+              "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+              "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+              "python/oh_my_vllm/worker/runtime.py": "9436b168640a246c56019ff8f15dfb329c5407aa4e4b5829ef9c83a43858b0c1",
+              "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+              "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+              "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+              "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+            }
+          },
+          "hardware": {
+            "cpu_affinity_count": 8,
+            "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+          },
+          "config": {
+            "model": "<local-path>",
+            "max_model_len": 262144,
+            "max_num_seqs": 32,
+            "max_num_batched_tokens": 32768,
+            "block_size": 784,
+            "enable_prefix_caching": true,
+            "enable_chunked_prefill": true,
+            "async_scheduling": false,
+            "mamba_ssm_cache_dtype": "bfloat16"
+          },
+          "capacities": {
+            "fa": 1400,
+            "mamba": 128
+          },
+          "baseline_sha256": "ad016bb06f7c0dadb44494f1fc0a376761ec170677dd98e97e4873765d170444",
+          "warmups": [
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 18.263787295,
+              "output_tps": 224.26892811664231,
+              "steps": 890,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 3547,
+              "accepted_draft_tokens": 3207,
+              "ttft_s": [
+                6.327595569
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 12.678817386,
+              "output_tps": 323.0585215718005,
+              "steps": 890,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 3547,
+              "accepted_draft_tokens": 3207,
+              "ttft_s": [
+                1.768034143
+              ]
+            }
+          ],
+          "measurement_audit": {
+            "steady_state_verified": true,
+            "problems": [],
+            "log_sha256": "6617e280ad42c70a5a7df8f74f785591b3cf2c7eed1803aac1645d8b8b33edf3"
+          },
+          "runs": [
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 12.54622692,
+              "output_tps": 326.4726539793846,
+              "steps": 890,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 3547,
+              "accepted_draft_tokens": 3207,
+              "ttft_s": [
+                1.652460356
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 12.518242256,
+              "output_tps": 327.20248707735186,
+              "steps": 890,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 3547,
+              "accepted_draft_tokens": 3207,
+              "ttft_s": [
+                1.668781
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 12.593265641,
+              "output_tps": 325.2532041144768,
+              "steps": 890,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 3547,
+              "accepted_draft_tokens": 3207,
+              "ttft_s": [
+                1.672527864
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 12.584708686,
+              "output_tps": 325.4743595739042,
+              "steps": 890,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 3547,
+              "accepted_draft_tokens": 3207,
+              "ttft_s": [
+                1.664543106
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 12.582798727,
+              "output_tps": 325.52376374032417,
+              "steps": 890,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 3547,
+              "accepted_draft_tokens": 3207,
+              "ttft_s": [
+                1.669533481
+              ]
+            }
+          ],
+          "comparison": {
+            "baseline": {
+              "ttft_s": {
+                "median": 1.7334930690121837,
+                "spread": 0.0070947892597593865
+              },
+              "output_tps": {
+                "median": 329.3636879644099,
+                "spread": 0.00034160509164767445
+              }
+            },
+            "candidate": {
+              "ttft_s": {
+                "median": 1.668781,
+                "spread": 0.012025249568397603
+              },
+              "output_tps": {
+                "median": 325.52376374032417,
+                "spread": 0.0059881433554266235
+              }
+            },
+            "ttft_ratio": 0.9626695542261041,
+            "throughput_ratio": 0.9883413856341666,
+            "stable": true,
+            "passed": true
+          }
+        }
+      },
+      {
+        "label": "mtp-32768-2",
+        "path": "<local-path>",
+        "sha256": "be50c0e8c86513f61cb4f3573f7de7aebfb2c3e37510c4108cd63b911128975b",
+        "result": {
+          "schema": 1,
+          "engine": "oh-my-vllm",
+          "workload": {
+            "mode": "mtp",
+            "batch_size": 2,
+            "input_len": 32768,
+            "output_len": 4096
+          },
+          "runtime": {
+            "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+            "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+            "packages": {
+              "torch": "2.14.0",
+              "triton": "3.8.0",
+              "flashinfer-python": "0.6.18.post1",
+              "transformers": "5.17.0",
+              "tokenizers": "0.23.2",
+              "safetensors": "0.8.0",
+              "xgrammar": "0.2.7",
+              "pyzmq": "27.2.0",
+              "msgpack": "1.2.2"
+            },
+            "vllm_importable": false
+          },
+          "source": {
+            "git_commit": "ee2fb63dfb195e2f68c5e43eab24f0bd24a68c66",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+              "python/oh_my_vllm/kernels/attention.py": "f9f32608083558dd4c825491e4c824146b3e05e2add14723cf92fc0de3d9eedf",
+              "python/oh_my_vllm/kernels/convolution.py": "c9273e96b9cfaf5c566e63899893dbd21557dd0ae72e729c716cb214bd1e4841",
+              "python/oh_my_vllm/kernels/decode_attention.py": "b5442157324d3fc062f6c4832e2d680f59e0c0ca604f0a027609cd8cfead6bf1",
+              "python/oh_my_vllm/kernels/elementwise.py": "f0dcf0e7f33021a47d96b362bd8c802baf96df5f381fccd78d5565059386f2ce",
+              "python/oh_my_vllm/kernels/fp8.py": "d3c292d4caee65cc6792317570c406845f1ffd1ef7c8f3eb7a44ca26bcb11850",
+              "python/oh_my_vllm/kernels/gdn.py": "30f750eb184b5e20925c6ceeba214134f2845333ffe99e43ba2a48a2c1fbf09d",
+              "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+              "python/oh_my_vllm/kernels/normalization.py": "7eef1d4e3eac3fec0e9e89945f73bc8b09de5d044242b0db7714042729a98fc0",
+              "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+              "python/oh_my_vllm/models/qwen.py": "54a0cf0ae286b984800f702d670b628c034b49c0101586b65c6d77e0c1c9f1d5",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+              "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+              "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+              "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+              "python/oh_my_vllm/worker/runtime.py": "9436b168640a246c56019ff8f15dfb329c5407aa4e4b5829ef9c83a43858b0c1",
+              "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+              "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+              "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+              "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+            }
+          },
+          "hardware": {
+            "cpu_affinity_count": 8,
+            "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+          },
+          "config": {
+            "model": "<local-path>",
+            "max_model_len": 262144,
+            "max_num_seqs": 32,
+            "max_num_batched_tokens": 32768,
+            "block_size": 784,
+            "enable_prefix_caching": true,
+            "enable_chunked_prefill": true,
+            "async_scheduling": false,
+            "mamba_ssm_cache_dtype": "bfloat16"
+          },
+          "capacities": {
+            "fa": 1400,
+            "mamba": 128
+          },
+          "baseline_sha256": "766365816c4446857e5042a3d9e38e5774eb07ca80371259df6e85c55fd20e13",
+          "warmups": [
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 23.571373741,
+              "output_tps": 347.54020236634966,
+              "steps": 1047,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 7773,
+              "accepted_draft_tokens": 6244,
+              "ttft_s": [
+                7.547077559,
+                7.889324055
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 17.012952331,
+              "output_tps": 481.51548541478127,
+              "steps": 1047,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 7773,
+              "accepted_draft_tokens": 6244,
+              "ttft_s": [
+                3.280428635,
+                3.346656724
+              ]
+            }
+          ],
+          "measurement_audit": {
+            "steady_state_verified": true,
+            "problems": [],
+            "log_sha256": "2d440e224ce2039f01868ce6432fb6c82aac25f27a21de9fc01d335269791d5a"
+          },
+          "runs": [
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 16.967351033,
+              "output_tps": 482.8096020449676,
+              "steps": 1047,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 7773,
+              "accepted_draft_tokens": 6244,
+              "ttft_s": [
+                3.234337299,
+                3.305131048
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 16.968528138,
+              "output_tps": 482.7761095940023,
+              "steps": 1047,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 7773,
+              "accepted_draft_tokens": 6244,
+              "ttft_s": [
+                3.211835064,
+                3.284634492
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 17.014483952,
+              "output_tps": 481.47214003731546,
+              "steps": 1047,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 7773,
+              "accepted_draft_tokens": 6244,
+              "ttft_s": [
+                3.239363909,
+                3.317517992
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 16.992136342,
+              "output_tps": 482.1053595098325,
+              "steps": 1047,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 7773,
+              "accepted_draft_tokens": 6244,
+              "ttft_s": [
+                3.223310302,
+                3.297940354
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 16.984906475,
+              "output_tps": 482.3105745125983,
+              "steps": 1047,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 7773,
+              "accepted_draft_tokens": 6244,
+              "ttft_s": [
+                3.232480367,
+                3.306459732
+              ]
+            }
+          ],
+          "comparison": {
+            "baseline": {
+              "ttft_s": {
+                "median": 3.4402881050045835,
+                "spread": 0.012603712446106382
+              },
+              "output_tps": {
+                "median": 497.37060953334435,
+                "spread": 0.02995800002695432
+              }
+            },
+            "candidate": {
+              "ttft_s": {
+                "median": 3.305131048,
+                "spread": 0.009949227284012997
+              },
+              "output_tps": {
+                "median": 482.3105745125983,
+                "spread": 0.002773030653544645
+              }
+            },
+            "ttft_ratio": 0.9607134481533768,
+            "throughput_ratio": 0.9697206977411149,
+            "stable": true,
+            "passed": true
+          }
+        }
+      },
+      {
+        "label": "mtp-32768-4",
+        "path": "<local-path>",
+        "sha256": "3003ff833510ae416f6e5e08e5541f5a63b18efda8d350432de26fc032d7ee61",
+        "result": {
+          "schema": 1,
+          "engine": "oh-my-vllm",
+          "workload": {
+            "mode": "mtp",
+            "batch_size": 4,
+            "input_len": 32768,
+            "output_len": 4096
+          },
+          "runtime": {
+            "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+            "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+            "packages": {
+              "torch": "2.14.0",
+              "triton": "3.8.0",
+              "flashinfer-python": "0.6.18.post1",
+              "transformers": "5.17.0",
+              "tokenizers": "0.23.2",
+              "safetensors": "0.8.0",
+              "xgrammar": "0.2.7",
+              "pyzmq": "27.2.0",
+              "msgpack": "1.2.2"
+            },
+            "vllm_importable": false
+          },
+          "source": {
+            "git_commit": "ee2fb63dfb195e2f68c5e43eab24f0bd24a68c66",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+              "python/oh_my_vllm/kernels/attention.py": "f9f32608083558dd4c825491e4c824146b3e05e2add14723cf92fc0de3d9eedf",
+              "python/oh_my_vllm/kernels/convolution.py": "c9273e96b9cfaf5c566e63899893dbd21557dd0ae72e729c716cb214bd1e4841",
+              "python/oh_my_vllm/kernels/decode_attention.py": "b5442157324d3fc062f6c4832e2d680f59e0c0ca604f0a027609cd8cfead6bf1",
+              "python/oh_my_vllm/kernels/elementwise.py": "f0dcf0e7f33021a47d96b362bd8c802baf96df5f381fccd78d5565059386f2ce",
+              "python/oh_my_vllm/kernels/fp8.py": "d3c292d4caee65cc6792317570c406845f1ffd1ef7c8f3eb7a44ca26bcb11850",
+              "python/oh_my_vllm/kernels/gdn.py": "30f750eb184b5e20925c6ceeba214134f2845333ffe99e43ba2a48a2c1fbf09d",
+              "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+              "python/oh_my_vllm/kernels/normalization.py": "7eef1d4e3eac3fec0e9e89945f73bc8b09de5d044242b0db7714042729a98fc0",
+              "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+              "python/oh_my_vllm/models/qwen.py": "54a0cf0ae286b984800f702d670b628c034b49c0101586b65c6d77e0c1c9f1d5",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+              "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+              "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+              "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+              "python/oh_my_vllm/worker/runtime.py": "9436b168640a246c56019ff8f15dfb329c5407aa4e4b5829ef9c83a43858b0c1",
+              "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+              "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+              "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+              "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+            }
+          },
+          "hardware": {
+            "cpu_affinity_count": 8,
+            "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+          },
+          "config": {
+            "model": "<local-path>",
+            "max_model_len": 262144,
+            "max_num_seqs": 32,
+            "max_num_batched_tokens": 32768,
+            "block_size": 784,
+            "enable_prefix_caching": true,
+            "enable_chunked_prefill": true,
+            "async_scheduling": false,
+            "mamba_ssm_cache_dtype": "bfloat16"
+          },
+          "capacities": {
+            "fa": 1400,
+            "mamba": 128
+          },
+          "baseline_sha256": "71130052eea821400f0b7ae61241e8afd0bf721e35061c109e66bf132b694f36",
+          "warmups": [
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 30.998984115,
+              "output_tps": 528.5334493291346,
+              "steps": 1117,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 16375,
+              "accepted_draft_tokens": 12280,
+              "ttft_s": [
+                7.5482464799999995,
+                9.210631009,
+                11.653155262,
+                11.78149086
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 23.710977144,
+              "output_tps": 690.9879715415241,
+              "steps": 1117,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 16375,
+              "accepted_draft_tokens": 12280,
+              "ttft_s": [
+                3.271423552,
+                4.874554009,
+                6.615924808,
+                6.694199676
+              ]
+            }
+          ],
+          "measurement_audit": {
+            "steady_state_verified": true,
+            "problems": [],
+            "log_sha256": "78dfcd8abb95494d8bb738b86743ff150802ae164561315d2c2a5d8e72e2acc0"
+          },
+          "runs": [
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 23.67650273,
+              "output_tps": 691.9940916459835,
+              "steps": 1117,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 16375,
+              "accepted_draft_tokens": 12280,
+              "ttft_s": [
+                3.237107118,
+                4.83687887,
+                6.58221075,
+                6.660299767
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 23.667365377,
+              "output_tps": 692.261252531387,
+              "steps": 1117,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 16375,
+              "accepted_draft_tokens": 12280,
+              "ttft_s": [
+                3.232400345,
+                4.83475372,
+                6.580210238,
+                6.6584150730000005
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 23.669016564,
+              "output_tps": 692.2129593216672,
+              "steps": 1117,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 16375,
+              "accepted_draft_tokens": 12280,
+              "ttft_s": [
+                3.25376949,
+                4.852718454,
+                6.591623491,
+                6.670104685
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 23.669805485,
+              "output_tps": 692.1898876770596,
+              "steps": 1117,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 16375,
+              "accepted_draft_tokens": 12280,
+              "ttft_s": [
+                3.244252781,
+                4.84583912,
+                6.589415445,
+                6.667744513
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 23.682921786,
+              "output_tps": 691.8065324898083,
+              "steps": 1117,
+              "prefix_hit_tokens": 0,
+              "initial_prefix_hit_tokens": 0,
+              "preemptions": 0,
+              "proposed_draft_tokens": 16375,
+              "accepted_draft_tokens": 12280,
+              "ttft_s": [
+                3.216226796,
+                4.830194497,
+                6.597825068,
+                6.676563105
+              ]
+            }
+          ],
+          "comparison": {
+            "baseline": {
+              "ttft_s": {
+                "median": 6.874139541003387,
+                "spread": 0.0072535943878183845
+              },
+              "output_tps": {
+                "median": 729.6212311394553,
+                "spread": 0.02585649200870287
+              }
+            },
+            "candidate": {
+              "ttft_s": {
+                "median": 6.667744513,
+                "spread": 0.002721764753375929
+              },
+              "output_tps": {
+                "median": 692.1898876770596,
+                "spread": 0.0006569296224546817
+              }
+            },
+            "ttft_ratio": 0.9699751471770005,
+            "throughput_ratio": 0.9486975681835096,
+            "stable": true,
+            "passed": false
+          }
+        }
+      },
+      {
+        "label": "prefix-32768-1",
+        "path": "<local-path>",
+        "sha256": "67b4444a78c997ca40fb41777b671b8567f1234bafb7cf8fa4c9918a21911b3e",
+        "result": {
+          "schema": 1,
+          "engine": "oh-my-vllm",
+          "workload": {
+            "mode": "prefix",
+            "batch_size": 1,
+            "input_len": 32768,
+            "output_len": 4096
+          },
+          "runtime": {
+            "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+            "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+            "packages": {
+              "torch": "2.14.0",
+              "triton": "3.8.0",
+              "flashinfer-python": "0.6.18.post1",
+              "transformers": "5.17.0",
+              "tokenizers": "0.23.2",
+              "safetensors": "0.8.0",
+              "xgrammar": "0.2.7",
+              "pyzmq": "27.2.0",
+              "msgpack": "1.2.2"
+            },
+            "vllm_importable": false
+          },
+          "source": {
+            "git_commit": "ee2fb63dfb195e2f68c5e43eab24f0bd24a68c66",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+              "python/oh_my_vllm/kernels/attention.py": "f9f32608083558dd4c825491e4c824146b3e05e2add14723cf92fc0de3d9eedf",
+              "python/oh_my_vllm/kernels/convolution.py": "c9273e96b9cfaf5c566e63899893dbd21557dd0ae72e729c716cb214bd1e4841",
+              "python/oh_my_vllm/kernels/decode_attention.py": "b5442157324d3fc062f6c4832e2d680f59e0c0ca604f0a027609cd8cfead6bf1",
+              "python/oh_my_vllm/kernels/elementwise.py": "f0dcf0e7f33021a47d96b362bd8c802baf96df5f381fccd78d5565059386f2ce",
+              "python/oh_my_vllm/kernels/fp8.py": "d3c292d4caee65cc6792317570c406845f1ffd1ef7c8f3eb7a44ca26bcb11850",
+              "python/oh_my_vllm/kernels/gdn.py": "30f750eb184b5e20925c6ceeba214134f2845333ffe99e43ba2a48a2c1fbf09d",
+              "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+              "python/oh_my_vllm/kernels/normalization.py": "7eef1d4e3eac3fec0e9e89945f73bc8b09de5d044242b0db7714042729a98fc0",
+              "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+              "python/oh_my_vllm/models/qwen.py": "54a0cf0ae286b984800f702d670b628c034b49c0101586b65c6d77e0c1c9f1d5",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+              "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+              "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+              "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+              "python/oh_my_vllm/worker/runtime.py": "9436b168640a246c56019ff8f15dfb329c5407aa4e4b5829ef9c83a43858b0c1",
+              "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+              "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+              "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+              "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+            }
+          },
+          "hardware": {
+            "cpu_affinity_count": 8,
+            "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+          },
+          "config": {
+            "model": "<local-path>",
+            "max_model_len": 262144,
+            "max_num_seqs": 32,
+            "max_num_batched_tokens": 32768,
+            "block_size": 784,
+            "enable_prefix_caching": true,
+            "enable_chunked_prefill": true,
+            "async_scheduling": false,
+            "mamba_ssm_cache_dtype": "auto"
+          },
+          "capacities": {
+            "fa": 1400,
+            "mamba": 128
+          },
+          "baseline_sha256": "392a975defea2e4b0bf3dbcbb9f8932f00b7fa90d9172b623e5321dc0f4688a3",
+          "warmups": [
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 37.924477901,
+              "output_tps": 108.00412363467225,
+              "steps": 4096,
+              "prefix_hit_tokens": 32144,
+              "initial_prefix_hit_tokens": 32144,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.04462538
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 37.685416396,
+              "output_tps": 108.68925944612242,
+              "steps": 4096,
+              "prefix_hit_tokens": 32144,
+              "initial_prefix_hit_tokens": 32144,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.044253146
+              ]
+            }
+          ],
+          "measurement_audit": {
+            "steady_state_verified": true,
+            "problems": [],
+            "log_sha256": "c4f6f19433ef97d62dc30e54f861e7752c2cfca035e1757eb78f906496695850"
+          },
+          "runs": [
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 37.636635514,
+              "output_tps": 108.83013170708041,
+              "steps": 4096,
+              "prefix_hit_tokens": 32144,
+              "initial_prefix_hit_tokens": 32144,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.045014427
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 37.634804124,
+              "output_tps": 108.8354276138759,
+              "steps": 4096,
+              "prefix_hit_tokens": 32144,
+              "initial_prefix_hit_tokens": 32144,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.045369626
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 37.661933821,
+              "output_tps": 108.75702823618958,
+              "steps": 4096,
+              "prefix_hit_tokens": 32144,
+              "initial_prefix_hit_tokens": 32144,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.051162937
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 37.650905252,
+              "output_tps": 108.78888495735231,
+              "steps": 4096,
+              "prefix_hit_tokens": 32144,
+              "initial_prefix_hit_tokens": 32144,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.046204601
+              ]
+            },
+            {
+              "batch_size": 1,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 4096,
+              "elapsed_s": 37.703553768,
+              "output_tps": 108.6369742545697,
+              "steps": 4096,
+              "prefix_hit_tokens": 32144,
+              "initial_prefix_hit_tokens": 32144,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.044721876
+              ]
+            }
+          ],
+          "comparison": {
+            "baseline": {
+              "ttft_s": {
+                "median": 0.05503579699143302,
+                "spread": 0.0376285457643046
+              },
+              "output_tps": {
+                "median": 93.0064489411602,
+                "spread": 0.0026182635264199307
+              }
+            },
+            "candidate": {
+              "ttft_s": {
+                "median": 0.045369626,
+                "spread": 0.14196857166069646
+              },
+              "output_tps": {
+                "median": 108.78888495735231,
+                "spread": 0.0018242062080514737
+              }
+            },
+            "ttft_ratio": 0.8243657488427456,
+            "throughput_ratio": 1.169691846058726,
+            "stable": false,
+            "passed": false
+          }
+        }
+      },
+      {
+        "label": "prefix-32768-2",
+        "path": "<local-path>",
+        "sha256": "54e2a0c4fefa0781328bad263e0644c9306147fc0804a185b3ce269e27617d30",
+        "result": {
+          "schema": 1,
+          "engine": "oh-my-vllm",
+          "workload": {
+            "mode": "prefix",
+            "batch_size": 2,
+            "input_len": 32768,
+            "output_len": 4096
+          },
+          "runtime": {
+            "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+            "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+            "packages": {
+              "torch": "2.14.0",
+              "triton": "3.8.0",
+              "flashinfer-python": "0.6.18.post1",
+              "transformers": "5.17.0",
+              "tokenizers": "0.23.2",
+              "safetensors": "0.8.0",
+              "xgrammar": "0.2.7",
+              "pyzmq": "27.2.0",
+              "msgpack": "1.2.2"
+            },
+            "vllm_importable": false
+          },
+          "source": {
+            "git_commit": "ee2fb63dfb195e2f68c5e43eab24f0bd24a68c66",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+              "python/oh_my_vllm/kernels/attention.py": "f9f32608083558dd4c825491e4c824146b3e05e2add14723cf92fc0de3d9eedf",
+              "python/oh_my_vllm/kernels/convolution.py": "c9273e96b9cfaf5c566e63899893dbd21557dd0ae72e729c716cb214bd1e4841",
+              "python/oh_my_vllm/kernels/decode_attention.py": "b5442157324d3fc062f6c4832e2d680f59e0c0ca604f0a027609cd8cfead6bf1",
+              "python/oh_my_vllm/kernels/elementwise.py": "f0dcf0e7f33021a47d96b362bd8c802baf96df5f381fccd78d5565059386f2ce",
+              "python/oh_my_vllm/kernels/fp8.py": "d3c292d4caee65cc6792317570c406845f1ffd1ef7c8f3eb7a44ca26bcb11850",
+              "python/oh_my_vllm/kernels/gdn.py": "30f750eb184b5e20925c6ceeba214134f2845333ffe99e43ba2a48a2c1fbf09d",
+              "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+              "python/oh_my_vllm/kernels/normalization.py": "7eef1d4e3eac3fec0e9e89945f73bc8b09de5d044242b0db7714042729a98fc0",
+              "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+              "python/oh_my_vllm/models/qwen.py": "54a0cf0ae286b984800f702d670b628c034b49c0101586b65c6d77e0c1c9f1d5",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+              "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+              "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+              "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+              "python/oh_my_vllm/worker/runtime.py": "9436b168640a246c56019ff8f15dfb329c5407aa4e4b5829ef9c83a43858b0c1",
+              "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+              "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+              "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+              "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+            }
+          },
+          "hardware": {
+            "cpu_affinity_count": 1,
+            "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+          },
+          "config": {
+            "model": "<local-path>",
+            "max_model_len": 262144,
+            "max_num_seqs": 32,
+            "max_num_batched_tokens": 32768,
+            "block_size": 784,
+            "enable_prefix_caching": true,
+            "enable_chunked_prefill": true,
+            "async_scheduling": false,
+            "mamba_ssm_cache_dtype": "auto"
+          },
+          "capacities": {
+            "fa": 1400,
+            "mamba": 128
+          },
+          "baseline_sha256": "c6adc4660ce0a223cb533ee2fc7a9ef420828fdd8efd7e7cac1329bf1c8e825a",
+          "warmups": [
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 38.796592676,
+              "output_tps": 211.15256353601538,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.18095438,
+                0.180955017
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 38.133585303,
+              "output_tps": 214.82375535655518,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.075661443,
+                0.07566198
+              ]
+            }
+          ],
+          "measurement_audit": {
+            "steady_state_verified": true,
+            "problems": [],
+            "log_sha256": "e22d379aa05c5fb85a93617ee85f91a3ba61ddab667972d7004a2e9c8b39c97f"
+          },
+          "runs": [
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 38.10082792,
+              "output_tps": 215.0084511864329,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.073946842,
+                0.073947353
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 38.158592643,
+              "output_tps": 214.68297000997444,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.070575922,
+                0.070576479
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 38.101340607,
+              "output_tps": 215.00555805889312,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.072560146,
+                0.072560694
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 38.067898814,
+              "output_tps": 215.1944356063928,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.070652485,
+                0.070653017
+              ]
+            },
+            {
+              "batch_size": 2,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 8192,
+              "elapsed_s": 38.117592684,
+              "output_tps": 214.91388682157313,
+              "steps": 4096,
+              "prefix_hit_tokens": 64288,
+              "initial_prefix_hit_tokens": 64288,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.071225419,
+                0.07122595
+              ]
+            }
+          ],
+          "comparison": {
+            "baseline": {
+              "ttft_s": {
+                "median": 0.08787577200564556,
+                "spread": 0.03543380530853079
+              },
+              "output_tps": {
+                "median": 173.52499453275001,
+                "spread": 0.0025578705354372053
+              }
+            },
+            "candidate": {
+              "ttft_s": {
+                "median": 0.07122595,
+                "spread": 0.04732648704580277
+              },
+              "output_tps": {
+                "median": 215.00555805889312,
+                "spread": 0.0023788482541379856
+              }
+            },
+            "ttft_ratio": 0.8105300058749311,
+            "throughput_ratio": 1.2390466205622863,
+            "stable": true,
+            "passed": true
+          }
+        }
+      },
+      {
+        "label": "prefix-32768-4",
+        "path": "<local-path>",
+        "sha256": "bca3236d0e6f6a0eeb67a95ef35eaf3999c0769cab3e56c7e1ec52170b2312d0",
+        "result": {
+          "schema": 1,
+          "engine": "oh-my-vllm",
+          "workload": {
+            "mode": "prefix",
+            "batch_size": 4,
+            "input_len": 32768,
+            "output_len": 4096
+          },
+          "runtime": {
+            "python_version": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+            "runner": "oh_my_vllm.worker.model_runner.OhMyVllmWorker",
+            "packages": {
+              "torch": "2.14.0",
+              "triton": "3.8.0",
+              "flashinfer-python": "0.6.18.post1",
+              "transformers": "5.17.0",
+              "tokenizers": "0.23.2",
+              "safetensors": "0.8.0",
+              "xgrammar": "0.2.7",
+              "pyzmq": "27.2.0",
+              "msgpack": "1.2.2"
+            },
+            "vllm_importable": false
+          },
+          "source": {
+            "git_commit": "ee2fb63dfb195e2f68c5e43eab24f0bd24a68c66",
+            "git_status": "",
+            "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "binary_sha256": "0aab8494cb62596f2528e39c597e28a9c522f600ae65513c764254affe011b7f",
+            "python_sources_sha256": {
+              "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+              "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+              "python/oh_my_vllm/kernels/attention.py": "f9f32608083558dd4c825491e4c824146b3e05e2add14723cf92fc0de3d9eedf",
+              "python/oh_my_vllm/kernels/convolution.py": "c9273e96b9cfaf5c566e63899893dbd21557dd0ae72e729c716cb214bd1e4841",
+              "python/oh_my_vllm/kernels/decode_attention.py": "b5442157324d3fc062f6c4832e2d680f59e0c0ca604f0a027609cd8cfead6bf1",
+              "python/oh_my_vllm/kernels/elementwise.py": "f0dcf0e7f33021a47d96b362bd8c802baf96df5f381fccd78d5565059386f2ce",
+              "python/oh_my_vllm/kernels/fp8.py": "d3c292d4caee65cc6792317570c406845f1ffd1ef7c8f3eb7a44ca26bcb11850",
+              "python/oh_my_vllm/kernels/gdn.py": "30f750eb184b5e20925c6ceeba214134f2845333ffe99e43ba2a48a2c1fbf09d",
+              "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+              "python/oh_my_vllm/kernels/normalization.py": "7eef1d4e3eac3fec0e9e89945f73bc8b09de5d044242b0db7714042729a98fc0",
+              "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+              "python/oh_my_vllm/models/qwen.py": "54a0cf0ae286b984800f702d670b628c034b49c0101586b65c6d77e0c1c9f1d5",
+              "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+              "python/oh_my_vllm/worker/batch_plan.py": "39c03b4ed34c60c4fd8232919c9662244eb3aa863dc2dc4241ddda91bd9b5dd4",
+              "python/oh_my_vllm/worker/decode_graph.py": "f997aae4280c50d93496a54fe3d6af895966fc98483281c411df7fe871d23dc0",
+              "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+              "python/oh_my_vllm/worker/model_runner.py": "ce7d869315fcc6d818ee9ed08c94834727fcf9c4954af232b5c756520eadfb8f",
+              "python/oh_my_vllm/worker/mtp.py": "6327ae630a8d24529f251da07e7ef65b570f671d1588f8f63c4978ff8bb8520d",
+              "python/oh_my_vllm/worker/protocol.py": "d1443725b1e90f4c17a73a75d8f77b0f10ff3848ca3acd10c42ebd17f88bc85b",
+              "python/oh_my_vllm/worker/runtime.py": "9436b168640a246c56019ff8f15dfb329c5407aa4e4b5829ef9c83a43858b0c1",
+              "python/oh_my_vllm/worker/sampler.py": "8ceb74f003aa6ec17a06d03b560c83de95ff2badd692dccaef066273e9a7f317",
+              "python/oh_my_vllm/worker/sampling.py": "f4c5518e6b0882bcee3b3bad53d06d0be70775b03fecb98d11ed2bb53902c8cc",
+              "python/oh_my_vllm/worker/serving.py": "d2020dd279281e9b63d6fafe06de732447def2be6cb049dba752c72d14e710d7",
+              "python/oh_my_vllm/worker/tensors.py": "fae99667e65f2344c197aa5f075f278cd6cc9338915c93314892a1a60fc34daf",
+              "python/oh_my_vllm/worker/zmq_bridge.py": "9b5f178c42c8c41de073391a91fcf1883e1c5c0ab0556818a85be18d62693a23"
+            }
+          },
+          "hardware": {
+            "cpu_affinity_count": 8,
+            "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+          },
+          "config": {
+            "model": "<local-path>",
+            "max_model_len": 262144,
+            "max_num_seqs": 32,
+            "max_num_batched_tokens": 32768,
+            "block_size": 784,
+            "enable_prefix_caching": true,
+            "enable_chunked_prefill": true,
+            "async_scheduling": false,
+            "mamba_ssm_cache_dtype": "auto"
+          },
+          "capacities": {
+            "fa": 1400,
+            "mamba": 128
+          },
+          "baseline_sha256": "60ae7ea8d8d2bca575403465ff22e953c2eb8541b08fc18e5724ff5dc4831abc",
+          "warmups": [
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 43.998569452,
+              "output_tps": 372.3757432130614,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.143103176,
+                0.143103782,
+                0.143103897,
+                0.143103975
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 43.658734492,
+              "output_tps": 375.2742765139515,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.136491339,
+                0.136491885,
+                0.136491992,
+                0.136492101
+              ]
+            }
+          ],
+          "measurement_audit": {
+            "steady_state_verified": true,
+            "problems": [],
+            "log_sha256": "894b5d656932ced5d40c9ea030b0d7f964a1c520fd8f3807cf80d5ec89364002"
+          },
+          "runs": [
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 43.687506212,
+              "output_tps": 375.02712836238004,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.137146861,
+                0.137147404,
+                0.137147509,
+                0.137147624
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 43.704514804,
+              "output_tps": 374.8811781454779,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.138619543,
+                0.138620138,
+                0.138620251,
+                0.13862036
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 43.724552452,
+              "output_tps": 374.7093813707082,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.139242925,
+                0.139243451,
+                0.139243564,
+                0.139243665
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 43.719290346,
+              "output_tps": 374.7544818393654,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.135533216,
+                0.135533842,
+                0.135534061,
+                0.135534162
+              ]
+            },
+            {
+              "batch_size": 4,
+              "input_len": 32768,
+              "output_len": 4096,
+              "output_tokens": 16384,
+              "elapsed_s": 43.714373991,
+              "output_tps": 374.796628755868,
+              "steps": 4096,
+              "prefix_hit_tokens": 128576,
+              "initial_prefix_hit_tokens": 128576,
+              "preemptions": 0,
+              "proposed_draft_tokens": 0,
+              "accepted_draft_tokens": 0,
+              "ttft_s": [
+                0.140427326,
+                0.140427981,
+                0.140428081,
+                0.140428178
+              ]
+            }
+          ],
+          "comparison": {
+            "baseline": {
+              "ttft_s": {
+                "median": 0.17762373700679746,
+                "spread": 0.04998823433752937
+              },
+              "output_tps": {
+                "median": 325.3068913608454,
+                "spread": 0.004780007077065073
+              }
+            },
+            "candidate": {
+              "ttft_s": {
+                "median": 0.13862036,
+                "spread": 0.035305174506832716
+              },
+              "output_tps": {
+                "median": 374.796628755868,
+                "spread": 0.0008477850847448238
+              }
+            },
+            "ttft_ratio": 0.7804157391120262,
+            "throughput_ratio": 1.152132459254072,
+            "stable": true,
+            "passed": true
+          }
+        }
+      }
+    ],
+    "other_attempts": [
+      {
+        "path": "<local-path>",
+        "sha256": "79f924072f22b15848f77f531bfeeafbc91506b8b2825d5c87bf662a6f4b9b6f",
+        "comparison": {
+          "baseline": {
+            "ttft_s": {
+              "median": 0.05503579699143302,
+              "spread": 0.0376285457643046
+            },
+            "output_tps": {
+              "median": 93.0064489411602,
+              "spread": 0.0026182635264199307
+            }
+          },
+          "candidate": {
+            "ttft_s": {
+              "median": 0.045962402,
+              "spread": 0.09948168070067347
+            },
+            "output_tps": {
+              "median": 109.06198585419702,
+              "spread": 0.0010146574744883102
+            }
+          },
+          "ttft_ratio": 0.8351364841169575,
+          "throughput_ratio": 1.1726282112243016,
+          "stable": false,
+          "passed": false
+        }
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "5e6a1c5b78d1ee9b6ebd386ea149c4a85d9b169944a74303924e409e8696e9fc",
+        "reason": "RuntimeError: GPU contention on <gpu-identity>: external process 1823466"
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "29a9da707cd349906c02cae0e332d43077933f77ad7032ff6d7a3efe6c328ccd",
+        "reason": "RuntimeError: GPU contention on <gpu-identity>: external process 1840290"
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "4a15f8dfc177959325e4b05e4192283216b8e3365c161d335c56fcc63b43326f",
+        "reason": "RuntimeError: GPU contention on <gpu-identity>: external process 1865853"
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "b9d3d7d73853751673c72aea7bce27cbce5ebeec92d6e5a518e790fece34f7e7",
+        "reason": "RuntimeError: GPU contention on <gpu-identity>: external process 1840024"
+      }
+    ],
+    "cleanup": "All task-owned GPU workers exited; nvidia-smi empty after runs"
+  }
+}

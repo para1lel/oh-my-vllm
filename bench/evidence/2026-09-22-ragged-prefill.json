@@ -1,0 +1,93 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "2026-09-22-ragged-prefill.json",
+    "sha256": "2024b604fa67c1777fea3f8de22048e30f38afb2d7c410323db0f4c1d70ccd6a",
+    "bytes": 3641
+  },
+  "removed_fields": [
+    "data.boundaries[0].memory.pid",
+    "data.boundaries[1].memory.pid",
+    "data.logs"
+  ],
+  "data": {
+    "status": "intermediate correctness and diagnostics; formal twelve-row gates pending",
+    "implementation": "Compact active KV for >=1024-query prefill and use FlashInfer ragged TRT-LLM FMHA with FP32 softmax. Persistent 784-token pages unchanged. Small queries retain paged FA2.",
+    "source_base": "f80b34e with uncommitted attention optimization",
+    "tests": {
+      "gpu_suite": "110 passed and 12 subtests before expanded long-decode mixed case",
+      "actual_model": "ordinary and MTP4 FP64 checks pass at original tolerances; input1569 exercises optimized prefill",
+      "final_numerical": "3 passed: paged/ragged FP64 attention and mixed long-decode isolation"
+    },
+    "boundaries": [
+      {
+        "mode": "ordinary",
+        "result": {
+          "batch_size": 4,
+          "input_len": 258048,
+          "output_len": 4096,
+          "output_tokens": 16384,
+          "elapsed_s": 202.219706266,
+          "output_tps": 81.02078824330043,
+          "steps": 4129,
+          "prefix_hit_tokens": 0,
+          "initial_prefix_hit_tokens": 0,
+          "preemptions": 0,
+          "proposed_draft_tokens": 0,
+          "accepted_draft_tokens": 0,
+          "ttft_s": [
+            31.664462288,
+            55.97151045,
+            80.626168458,
+            101.592095818
+          ]
+        },
+        "memory": {
+          "timestamp": "2026-09-22T03:01:56.375210+00:00",
+          "level": "INFO",
+          "run_id": "20260922T025820-1245320",
+          "component": "oh_my_vllm.worker.model_runner",
+          "message": "GPU memory high water",
+          "max_allocated_bytes": 128131608064,
+          "max_reserved_bytes": 134951731200
+        }
+      },
+      {
+        "mode": "mtp",
+        "result": {
+          "batch_size": 4,
+          "input_len": 258048,
+          "output_len": 4096,
+          "output_tokens": 16384,
+          "elapsed_s": 154.643135882,
+          "output_tps": 105.94715314426736,
+          "steps": 1087,
+          "prefix_hit_tokens": 0,
+          "initial_prefix_hit_tokens": 0,
+          "preemptions": 0,
+          "proposed_draft_tokens": 14476,
+          "accepted_draft_tokens": 12755,
+          "ttft_s": [
+            35.138531832,
+            63.241330464,
+            91.508036928,
+            116.410417837
+          ]
+        },
+        "memory": {
+          "timestamp": "2026-09-22T03:01:12.163053+00:00",
+          "level": "INFO",
+          "run_id": "20260922T025823-1245428",
+          "component": "oh_my_vllm.worker.model_runner",
+          "message": "GPU memory high water",
+          "max_allocated_bytes": 124663725568,
+          "max_reserved_bytes": 140033130496
+        }
+      }
+    ],
+    "limitation": "One cold full-output boundary run per mode, not formal performance measurements. Temporary gathers copy active KV per layer; mixed decode/prefill cost must also be checked.",
+    "cleanup": "Both full-boundary and both FP64 workers exited."
+  }
+}

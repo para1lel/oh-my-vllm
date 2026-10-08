@@ -1,15 +1,10 @@
-# 测试指南 — oh-my-vllm
+# 测试与验收流程
 
-[English](testing.md)。agent 以英文版为准。
+使用 [开发指南](development.zh.md) 中的环境.
+Tokenizer 或真实模型集成测试需设置 `OH_MY_VLLM_MODEL`.
+有效门槛见 [需求](requirements.zh.md), 历史结果见 [验收](acceptance.zh.md).
 
-所有命令都经由 `scripts/with-env.sh` 运行，它设置 conda 环境、`PYTHONPATH`、`CARGO_TARGET_DIR`
-以及独立的 kernel 缓存根目录。GPU 命令还要经由 `scripts/with-gpu.sh`，它会等待一块空闲的 B200
-并固定其 UUID。每次运行使用唯一的 socket。运行结束时停止你启动的每一个 GPU 进程。
-
-已知的测试缺口记录在 [audit-2026-09-23.md](audit-2026-09-23.zh.md)（EVD-03…EVD-11）中。
-不要把其中列出的检查当作它未能覆盖的那项属性的证据。
-
-## 静态检查与 CPU 检查
+## CPU 与 GPU 测试套件
 
 ```bash
 scripts/with-env.sh cargo test --workspace
@@ -18,311 +13,235 @@ scripts/with-env.sh python scripts/check_rust_line_width.py
 scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
+scripts/with-env.sh python scripts/check_docs.py
 scripts/test.sh cpu
-```
-
-`scripts/test.sh` 先构建 Rust HTTP 二进制文件，再通过项目环境运行 pytest。`cpu`
-隐藏 CUDA 并排除带 `gpu` 标记的用例；`full` 等待空闲 B200 并固定 UUID。pytest 是
-统一的 Python 测试入口。旧的 `unittest discover` 命令会导入以下 pytest 风格的模块，
-但不运行其中测试：
-
-- `test_independent_kernels.py`
-- `test_independent_decode_attention.py`
-- `test_elementwise.py`
-- `test_greedy_batch.py`
-- `test_proposal_graph.py`
-- `test_gqa_accuracy.py`
-
-它们由 full 模式收集；GPU 用例在 `pytest.ini`/测试模块中明确标记。混合的
-greedy-batch 和 validation-guard 模块仅标记其中的 GPU 用例，因此 `cpu` 模式
-仍运行其 CPU 用例。
-
-Rust 测试覆盖：
-
-- 池、空闲链表、哈希及前缀计数
-- Chunked prefill 与请求到达
-- 重算抢占（recompute preemption）
-- MTP 接受与拒绝
-- 私有前缀命中状态
-- 投机槽位迁移
-- 分离的 FA/GDN 池
-- 完整释放
-
-CPU Python 测试覆盖：
-
-- Batch 规划与 sampler
-- 服务预处理（真实 tokenizer/XGrammar）
-- 使用脚本化 worker 的 HTTP 服务器
-- Bridge
-- Benchmark 与测量工具
-- 算子对比统计与冻结参考实现的完整性
-
-脚本化 worker（`tests/fixtures/serving_worker.py`）产生的是伪造输出，绝不能作为模型或性能证据。
-
-## 完整 GPU 测试套件
-
-```bash
 scripts/test.sh full
 ```
 
-在 `ef07b2b` 之后、后来成为 `030f60f` 的工作树上运行的历史默认 CUDA 套件
-通过 174 项测试及 31 个子测试，没有跳过
-（`bench/baseline/2026-09-22-cuda-features.json`）；没有在干净的 `030f60f`
-提交上单独重跑。`96e4ecc` 后的完整
-B200 套件通过 211 项测试及 32 个子测试，六项 context 边界占位测试跳过。这些
-跳过不能验证 REQ-CONTEXT-001（EVD-07）；`d33b844` 未重跑完整 GPU 套件。
+`scripts/test.sh` 构建测试 binary, 提供 `OH_MY_VLLM_TEST_BINARY`.
+CPU 模式选择 `not gpu`, GPU visibility 为空.
+Full 模式在等待空闲且绑定 UUID 的 B200 前要求模型位置.
+模型未配置时, CPU tokenizer / HTTP 集成测试明确跳过.
+纯校验测试无需 checkpoint, 仍然执行.
+选定 pytest 参数放在 `cpu` 或 `full` 之后.
 
-算子测试将每个 kernel 与 CPU FP64 参考实现对比，覆盖：
+测试覆盖调度事务, 缓存所有权, 取消, RPC framing, 服务, 实际路径 FP64 参考和编译模型单元.
+GPU 覆盖包括全部 6 个最大上下文用例和 metadata 变化后的 graph replay.
+完整模型 drift 测试在严格算子容差之外, 使用各自记录的模型级界限.
+协议回归使用 scripted worker; GPU / agentic 验收使用真实模型.
+记录 warning 和跳过测试及原因.
 
-- Block-scaled FP8 与 paged/grouped GQA
-- Gated delta 递推、因果卷积、RMS 与 partial rotary
-- 融合的 attention 预处理
-- 非连续页
-- 784/785 token 边界
-- 超出 int32 的页地址
-- 每个候选的 MTP 快照
-- Graph 重放
+## 精度
 
-设置 `OH_MY_VLLM_KERNEL_BACKEND=tilelang` 可在冻结的对比后端上运行适用测试。
-`test_gqa_accuracy.py` 专门将自有 CUDA 分页 decode 与 CPU FP64 比较，包含
-784/785 的两页边界；TileLang 后端下跳过该项。graph 测试也有独立 CPU FP64
-参考（EVD-04/05，`4ed62ab`）。
+用独立计算的 FP64 参考比较实际舍入输入.
+覆盖 prefill, decode, 边界写入, strided view, grouped MTP verification 和 speculative rollback.
+BF16 算子输出使用 `atol=rtol=0.03`.
+Recurrent state 的 NRMSE 至多 1%, 最大绝对误差至多为参考峰值 2%.
+检查每个写入 slot 和未改动的受保护状态.
+融合链包括全部舍入, scale, copy 和 reduction 行为.
+参见 `tests/probe_worker.py` 和相关内核测试.
 
-## 真实文本与实际路径 FP64 探针
+## 离线执行与数值探针
+
+执行以下命令前构建 release binary. 按 [开发指南](development.zh.md) 设置环境和模型.
 
 ```bash
-scripts/with-env.sh cargo build --release -p oh-my-vllm-zmq-worker
+scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
 scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/text-check.ipc --max-tokens 64
 ```
 
-选项：
+使用 `--num-speculative-tokens 4` 启用 MTP4.
+使用 `--context-repeats 100 --prefix-hit` 跨越 784-token 边界并要求前缀命中.
+使用 `--binary` 选择其他构建.
+离线固定输出忽略 EOS.
 
-- `--num-speculative-tokens 4`：启用 MTP。
-- `--context-repeats 100`：跨越 784 token 边界。
-- `--prefix-hit` 配合 `--context-repeats 100`：先预置 prompt，并要求命中缓存。
-- `--binary`：选择隔离的构建产物。
+`run --prompt-file PATH` 读取空白分隔的 token ID, 每行一个请求, 最多 32 个请求.
+`--arrival-interval N` 按 N 个调度 step 延迟每次接纳.
+`--prefix-hit` 先填充 prompt, 随后要求真实缓存命中.
+全局 `--scheduler-blocks` 在 worker 报告容量内限制 Rust pool.
+`bench` 子命令还提供 `--warmup` 和 `--repetitions`.
 
-固定的输出上限会忽略 EOS，与吞吐 workload 一致。
-
-若要为真实 kernel 调用添加 FP64 探针，在 `with-env.sh` 之后追加以下变量：
-
-```bash
-env OH_MY_VLLM_ENFORCE_EAGER=1 OH_MY_VLLM_WORKER_PYTHON=/data0/shared/dongwu.chen/oh-my-vllm/tests/probe_worker.py
-```
-
-对于 MTP，还需设置 `OH_MY_VLLM_PROBE_MTP=1` 并传入 `--num-speculative-tokens 4`。
-`scripts/probe-independent-model.py` 运行同样的短 eager 模型探针。
-
-- **探针插桩的对象：** 真实的 GQA、GDN prefill 与递推验证，以及 MTP paged decode。它从不替换生产 kernel。
-- **参考：** 在实际舍入后的输入上计算的 CPU FP64 参考。
-- **容差：** BF16 输出使用 atol=rtol=0.03。递推状态要求 NRMSE ≤ 1%，且最大绝对误差 ≤ 参考峰值的 2%。
-- **覆盖要求：** 必须在关闭前出现所有要求的覆盖类别，关闭才会成功。
-- **范围：** 这些是 eager、单请求的诊断，不构成完整模型 token 一致性的结论。由于禁用了
-  graph capture，诊断用的 CPU 拷贝只观察真实请求。接近零的逐元素状态相对误差不稳定，不作为判据。
-
-绝不要在性能运行中启用探针或 eager 模式。
-
-## 功能组合与抢占
-
-Rust `bench` 命令接受 `--arrival-interval`、`--prefix-hit`、`--warmup` 和 `--repetitions`。
-全局选项 `--scheduler-blocks` 会缩小 Rust 池以强制抢占。需检查结果中 `preemptions > 0`，
-因为仅凭池较小并不能证明确实发生了抢占。
+以下双请求探针每个请求使用 2048 个输入和 1024 个输出 token:
 
 ```bash
 scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-batch.py --socket /tmp/batch-text.ipc --scheduler-blocks 10
 scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-batch.py --socket /tmp/batch-mtp-text.ipc --scheduler-blocks 18 --num-speculative-tokens 4 --prefix-hit
 ```
 
-每条命令以错开的到达时间运行两个不同的中文 prompt。每个请求有 2048 个输入 token 和 1024 个输出 token。
+它们要求正抢占计数, 且每个输出的开头和结尾都包含正确城市.
+MTP4 必须接受 draft. 前缀模式必须有正初始命中.
+检查打印文本, 作为语义 smoke test.
+较小 pool 本身不能证明发生抢占.
 
-脚本检查：
-
-- 观察到抢占。
-- 每个输出的开头和结尾都给出正确的城市。
-- 有被接受的草稿（MTP）。
-- `initial_prefix_hit_tokens > 0`（前缀模式）。
-
-它还会打印完整的生成文本供检查。这些是语义层面的冒烟检查。
-
-`run --prompt-file PATH` 每行读取一个 token-ID 请求。
-
-## 冻结基线性能验收（REQ-PERF-001/002）
-
-**工具。** `benchmarks/ttft.py` 是验收工具。它只启动本项目的 worker，并在每次调用时强制执行：
-
-- 至少 2 次 warmup 和 5 次重复。
-- 每个请求 4096 个输出且零抢占。
-- 精确的前缀命中计数。
-- 一致的 CPU 亲和性、GPU 型号与驱动。
-- 冻结的基线 SHA。
-- 稳态编译/捕获审计。
-- 吞吐比 ≥ 0.95、TTFT 比 ≤ 1.10，且两个引擎的两项指标均满足 `(max-min)/median` ≤ 10%。
-
-候选侧的 scheduler 配置和 FA/GDN 容量从 worker 日志与已分配设备张量读取，再与请求值
-比较（EVD-02）；这条路径仍待新的完整 12 行运行。验收使用 `benchmarks/ttft.py`。
-`benchmarks/compare_vllm.py` 现在拒绝少于五次正式重复或超过 10% 的离散度，因此其
-历史九行基线只有三次重复，无法通过当前门槛（EVD-01）。
-
-**基线输入。** 冻结的基线行嵌入在 `bench/baseline/2026-09-22-refreshed-enginecore.json` 的
-`rows[].artifact` 下。须逐字节一致地提取一行，格式为 `json.dumps(artifact, indent=2)` 加一个结尾换行。
-其 SHA-256 必须等于 `rows[].sha256`。然后在 `artifact.hardware.cpu_affinity` 记录的 CPU 核上运行该行：
+诊断实际路径数值时, 使用可执行探针作为 worker interpreter:
 
 ```bash
-scripts/with-env.sh python - <<'EOF'
-import hashlib, json
-rows = json.load(open("bench/baseline/2026-09-22-refreshed-enginecore.json"))["rows"]
-for row in rows:
-    text = json.dumps(row["artifact"], indent=2) + "\n"
-    assert hashlib.sha256(text.encode()).hexdigest() == row["sha256"]
-    open(f"/tmp/baseline-{row['label']}.json", "w").write(text)
-    print(row["label"], ",".join(map(str, row["artifact"]["hardware"]["cpu_affinity"])))
-EOF
+scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_ENFORCE_EAGER=1 OH_MY_VLLM_WORKER_PYTHON="$PWD/tests/probe_worker.py" python scripts/smoke-text.py --socket /tmp/probe-text.ipc --max-tokens 32
+scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_ENFORCE_EAGER=1 OH_MY_VLLM_WORKER_PYTHON="$PWD/tests/probe_worker.py" OH_MY_VLLM_PROBE_MTP=1 python scripts/smoke-text.py --socket /tmp/probe-mtp.ipc --max-tokens 32 --num-speculative-tokens 4
+scripts/with-gpu.sh scripts/with-env.sh python scripts/probe-independent-model.py --max-tokens 32
+```
+
+Worker probe 测量真实 GQA, GDN prefill / recurrent verification 和 MTP attention 调用, 保留生产内核.
+它基于实际舍入输入, 通过 CPU FP64 计算独立参考并比较结果.
+Eager 模式关闭 capture, 让诊断复制观察真实请求.
+直接模型探针提供不经过 Rust 调度的短 eager 模型诊断.
+性能验收时关闭这些探针和 eager 模式.
+
+## 验收用 release binary
+
+TTFT harness 读取仓库 `target/release/oh-my-vllm-zmq-worker`.
+显式使用此目录, 防止其他构建位置或旧 binary 改变实测候选:
+
+```bash
+export CARGO_TARGET_DIR="$PWD/target"
 scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
-scripts/with-gpu.sh scripts/with-env.sh taskset -c 8-15 \
-  python benchmarks/ttft.py --baseline /tmp/baseline-ordinary-32768-1.json \
-  --output /tmp/candidate-ordinary-32768-1.json
 ```
 
-默认值为 `--num-gpu-blocks 4200`、`--mamba-blocks 128`、2 次 warmup 和 5 次重复。任何门槛未通过时，
-脚本以非零状态退出。它在仓库根目录下运行 `target/release/oh-my-vllm-zmq-worker`，因此不支持
-自定义 `CARGO_TARGET_DIR`。prefix 各组必须恰好报告 `batch_size * 32144` 个命中 token
-（每个请求 `(32768-1)//784*784`）。
+框架, 上下文或服务验收前使用此构建.
+将 `EVIDENCE_DIR` 设为外部可写目录, 保存完整原始记录和日志.
 
-**某一行计为验收所需的规则：**
-
-- 从干净的提交构建，运行期间不要编辑源码。
-- 保留每一次尝试。若出现外部 GPU 进程，该次运行无效。调查任何离散度失败，然后重复完整的一组运行。
-- 绝不挑选单次重复。
-- 未经用户明确授权，绝不重新运行 vLLM 基线。
-
-**结果存放位置。** 已接受的矩阵记录在 `bench/baseline` 中，参照 `2026-09-22-cuda-framework.json`。
-
-## 最大上下文（REQ-CONTEXT-001）
-
-六个 GPU pytest 用例运行普通模式和 MTP4 的 batch 1/2/4，输入 258048、输出 4096。
-`scripts/test.sh full` 构建当前 debug 二进制，并在整套测试期间持有同一 B200 锁。
-若要从干净源码收集六行摘要产物，先构建 release 二进制，再在单层 GPU 锁下运行独立入口：
+## 正式算子门槛
 
 ```bash
-scripts/with-env.sh cargo build --release -p oh-my-vllm-zmq-worker --bin oh-my-vllm-zmq-worker
-scripts/with-gpu.sh scripts/with-env.sh python benchmarks/context_boundary.py \
-  --binary target/release/oh-my-vllm-zmq-worker \
-  --output bench/baseline/DATE-context-boundary.json \
-  --raw-dir /tmp/oh-my-vllm-context-boundary-DATE
+scripts/with-env.sh python benchmarks/kernels.py --list
+scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda python benchmarks/kernels.py --output "$EVIDENCE_DIR/operators.json"
 ```
 
-收集器要求准确的输入/输出长度和 `batch_size * 4096` 个生成 token、无 OOM、零抢占、
-MTP4 有非零草稿提议数，并要求 worker 报告的峰值 allocated/reserved 显存不超过 B200 总量。
-产物记录二进制哈希、源码身份及 GPU UUID，并在六行结束后复核源码/二进制身份和每行 UUID。
-原始日志留在仓库外。
-pytest 用例继承 `scripts/test.sh full` 选择的 GPU，不再嵌套获取锁。
+将 `EVIDENCE_DIR` 设置为仓库外的可写证据目录.
+测试框架使用 `development/kernels/cases.py` 中的静态用例.
+计时前校验完整输出和实际写入缓存.
+每个用例需要 3 轮, 每轮 20 个交错配对, CUDA 每轮中位数更快.
+节省时间的 hierarchical-bootstrap 单侧 95% 下界必须为正.
+每个计时样本使用 100 次 graph repetition.
+用例和轮次之间恢复持久状态.
+Normalization, Q / K, recurrent 和 convolution 校验要求 1 次 fast, 0 次 generic host dispatch.
+不以 graph replay 次数代替 host dispatch 次数.
+来源记录和 profiling 分离见 [内核开发](kernels.zh.md).
 
-`scripts/long-context-acceptance.py` 针对正在运行的 MTP4 服务，测试 131072 token 的 strict-JSON
-请求和前缀复用。用 `--server-log /tmp/mtp-server.log` 传入专用服务日志；脚本要求四条
-完成请求的 `proposed_draft_tokens` 均大于零。运行期间不可混入其他请求。
+## 框架性能
 
-## 服务
+当前 12 行协议使用 `benchmarks/ttft.py`.
+它接受单行完整原始基线, 包括 hardware, configuration, warmup, repetition 和 measurement audit.
+历史刷新产物包含多个 row; 提取其中原始 baseline row, 不改变字段.
+原主机使用保存的完整记录, 其他服务器重新采集匹配基线.
+提取前, 将 `BASELINE_COLLECTION` 设为完整的刷新基线集合.
+序列化规则和哈希断言保留每个归档行的字节身份.
+不要提供可移植摘要.
+
+```python
+import hashlib
+import json
+import os
+from pathlib import Path
+
+collection = json.loads(Path(os.environ["BASELINE_COLLECTION"]).read_text())
+assert "artifact_kind" not in collection, "use the full original collection"
+output = Path(os.environ["EVIDENCE_DIR"])
+output.mkdir(parents=True, exist_ok=True)
+for row in collection["rows"]:
+    raw = (json.dumps(row["artifact"], indent=2) + "\n").encode()
+    assert hashlib.sha256(raw).hexdigest() == row["sha256"]
+    (output / f"baseline-{row['label']}.json").write_bytes(raw)
+    print(row["label"], row["artifact"]["hardware"]["cpu_affinity"])
+```
+
+比较前明确拒绝可移植摘要.
+
+设置 `EVIDENCE_DIR`, 模型和匹配的 CPU affinity 后, 单行命令为:
 
 ```bash
-scripts/with-env.sh cargo build
-CUDA_VISIBLE_DEVICES='' scripts/with-env.sh python -m unittest discover -s tests -p 'test_serving*.py'
+scripts/with-gpu.sh scripts/with-env.sh python benchmarks/ttft.py --baseline "$EVIDENCE_DIR/baseline-ordinary-32768-1.json" --output "$EVIDENCE_DIR/candidate-row.json"
 ```
 
-这些测试覆盖：
+其他行按 label 替换 `--baseline` 文件. Harness 从该记录选择 mode, input/output length 和 batch.
+提取结果打印 label 和 CPU affinity; 采集时使用匹配的 CPU affinity.
 
-- 针对 reasoning/XML 解析器、请求映射与响应状态的 Rust 单元测试。
-- `test_serving_worker.py`：使用真实 tokenizer 和 XGrammar，测试严格约束、投机前缀回滚、
-  跨越 reasoning 结束位置、EOS、stop 以及 UTF-8。
-- `test_serving_http.py`：使用脚本化 CPU worker 的真实 Rust 服务器，覆盖两种 API、usage、
-  工具历史、已存储的响应、截断、取消、并发和错误处理。
+覆盖 ordinary/MTP4/prefix-hit 的 input32768, output4096, batch1/2/4, 以及相同 batch 的 ordinary input131072.
+Candidate 默认使用 4200 个历史容量单位和 128 个 GDN slot.
+对应 1400 个 FA slot.
+校验实际 worker 和 scheduler 容量, 不只看 CLI 设置.
+基线容量需让相同工作负载驻留, 无抢占.
 
-针对 MTP4 服务的真实 GPU 验收使用以下脚本。其命令和所需的日志检查见 [serving.md](serving.zh.md)。
+匹配 CPU affinity 和 GPU 型号, 显存, 驱动.
+比较器还要求相同 model / configuration 和冻结基线源码身份.
+使用 2 次完整预热和 5 次重复.
+记录每个请求 TTFT 和固定输出数量.
+每行应用 95% 吞吐, 110% TTFT 和 10% spread 门槛.
+Spread 失败需调查并完整重跑.
+保留全部拒收完整尝试和中断运行.
 
-- `scripts/serving-acceptance.py`：12 个约束用例。
-- `scripts/serving-lifecycle.py`：思考档位、已存储的响应、混合 batch 和断开连接。
-- `scripts/agentic-acceptance.py`：两种 API 上的 oh-my-pi。
+采集器记录源码, binary, Python 文件哈希, package 版本, 加载 CUDA 模块和完整日志.
+Log / cache 审计需显示测量处于稳态, 没有观察到编译或 capture.
+现有日志和缓存记录不能排除静默的内存内重新编译.
+性能运行禁用会改变执行的诊断功能.
+GPU-only prefill timing 不作为 EngineCore TTFT.
 
-脚本化输出绝不是 GPU 证据。
+`benchmarks/compare_vllm.py` 是历史 9 行工具, 校验固定的原始 SHA.
+早期 3 次重复产物不满足当前 5 次重复规则.
+工具要求显式 `--baseline-json`, 从不启动 vLLM.
+旧验收不作为当前性能比较分母.
 
-## 算子对比（REQ-KERNEL-002）
+## 隔离基线采集
 
-`benchmarks/kernels.py` 运行 `development/kernels/cases.py` 中定义的正式静态用例。它使用成对、
-交错的计时，将 CUDA 与冻结的 TileLang 进行对比。命令和判定规则见
-[cuda-development.md](cuda-development.zh.md)。
-
-`test_kernel_comparison.py` 测试判定统计。`test_kernel_reference.py` 测试冻结参考实现的哈希和后端选择。
-
-收集器在每项计时前检查冻结 TileLang 与 CUDA 的完整操作返回值和实际写入的
-cache/state 槽，包括 FP8 scale 布局与逐槽递归状态边界。不匹配会中止采集；每行
-记录比较结果。`test_kernel_output_verification.py` 测试比较器与代表性 GPU
-fixture（EVD-09，`ea0aa4e`）。独立 CPU FP64 测试仍单独保留。当前干净完整
-矩阵尚待运行。
-若所需模型形状的 CUDA 调用在输出校验期间走通用主机分派，采集器也会失败。
-`test_kernel_variant_counts.py` 在 CPU 上覆盖门槛、在 B200 上覆盖两种分派方向
-（KRN-08）。
-
-## 严格的 Rust 格式
+基线采集器是唯一获授权依赖 vLLM 的工具.
+使用独立 interpreter, checkout 和 cache.
+不通过项目环境包装脚本调用它.
+将 `BASELINE_PYTHON` 和 `BASELINE_CHECKOUT` 设置为隔离安装位置:
 
 ```bash
-scripts/with-env.sh cargo fmt --all
-scripts/with-env.sh cargo fmt --all --check
-scripts/with-env.sh python scripts/check_rust_line_width.py
-scripts/with-env.sh python -m unittest discover -s tests -p test_rust_style.py
-scripts/with-env.sh pre-commit run cargo-fmt --all-files
-scripts/with-env.sh pre-commit run rust-line-width --all-files
+scripts/with-gpu.sh "$BASELINE_PYTHON" benchmarks/baseline/enginecore.py --checkout "$BASELINE_CHECKOUT" --model "$OH_MY_VLLM_MODEL" --mode ordinary --batch-size 1 --input-len 32768 --output-len 4096 --output "$EVIDENCE_DIR/baseline-row.json"
 ```
 
-`rustfmt.toml` 设置：
+采集器要求冻结提交和未修改 checkout.
+记录实际容量和完整测量身份.
+新源码 revision 需要单独批准的基线策略.
+基线 cache 与项目 cache 隔离.
 
-- Stable Rust 2024 格式
-- 100 字符宽度
-- Unix 换行符
-- 多行形式的 if/else 与 let/else 表达式
-
-另有一个硬宽度 hook，以相同限制（展开 tab）检查宏、注释和字符串字面量，rustfmt 可能会让这些内容保持超长。
-将 `json!` 主体拆分为字段，并对长字面量使用 `concat!`。
-
-## 语义 IR 与编译前向（REQ-IR-001）
-
-动态行数和转置 stride 必须复用预热后的编译图，同时不支持的 provider 宽度仍须明确报错。`test_ir_pointwise.py` 检查转置输入的 native RMS fake/schema 契约及编译后的展平操作，覆盖有 gate 与无 gate 两种情况。其 CUDA pointwise 测试要求行数 2/3/5/7 下的输出与 kernel 等价，并复用预热后的图。
-
-使用固定 PyTorch 环境和空闲 B200 运行算子契约、静态覆盖和真实模型 GPU 单元测试：
+## 上下文与服务验收
 
 ```bash
-scripts/with-env.sh pytest -q tests/test_ir_core.py tests/test_ir_coverage.py
-scripts/with-gpu.sh scripts/with-env.sh env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
-  python -m pytest -q tests/test_ir_*.py
-scripts/test.sh full
+scripts/with-gpu.sh scripts/with-env.sh python benchmarks/context_boundary.py --binary target/release/oh-my-vllm-zmq-worker --raw-dir "$EVIDENCE_DIR/boundary-logs" --output "$EVIDENCE_DIR/boundary.json"
 ```
 
-`test_ir_core.py` 检查 schema/修改契约一致、provider 优先级、仅静态元数据参与能力判断、fake 输出验证、禁止静默回退和 fullgraph lowering。`test_ir_*` 算子测试比较参考与 provider，包括缓存/状态写入。`test_ir_forward_units.py` 加载真实 27B 模型，执行编译后的 prefill，并在手工 CUDA Graph 中捕获/重放编译后的 target、MTP draft 与 proposal 单元。测试比较 eager/compiled 输出及 prefill 接续 decode 时写入的 FA/GDN 状态，并在重放时变更 draft/proposal 位置与页表。较小的 attention fixture 在重放时变更原生 decode 页表。`test_ir_coverage.py` 检查必需调用点清单及经审查的低层导入例外。
+6 行覆盖输入 258048, 输出 4096, ordinary/MTP4, batch1/2/4.
+要求完整输出, 无 OOM / 抢占, 开始 / 结束源码匹配和 worker 清理.
+记录 allocated / reserved GPU 显存峰值和草稿计数.
+原始边界日志必须放在仓库外.
 
-完成还须通过原有六个上下文边界用例、正式 CUDA/TileLang 算子对比及 12 组框架测试，并遵守已有预热、重复、极差、吞吐和 TTFT 规则。单纯编译测试成功不等于性能验收。
+在一个终端使用 release binary 和独立 IPC 路径启动专用 MTP4 服务.
+使用 Serving DEBUG 日志提供混批与取消证据:
 
-## 交互教程验收
+```bash
+scripts/with-gpu.sh scripts/with-env.sh env RUST_LOG=info,oh_my_vllm_zmq_worker::serving=debug target/release/oh-my-vllm-zmq-worker --socket /tmp/service-acceptance.ipc --max-model-len 262144 --num-gpu-blocks 4200 --mamba-blocks 128 --num-speculative-tokens 4 serve > "$EVIDENCE_DIR/server.log" 2>&1
+```
 
-静态监听器运行时执行:
+服务就绪后, 从另一个终端执行以下命令.
+将 OMP executable 安装到 `PATH`, 或通过 `--omp` 指定路径.
+全部客户端使用相同的显式 URL. 长上下文工具的默认端口不同.
 
-    npm --prefix code-journey test
-    scripts/with-env.sh cargo test --locked --manifest-path code-journey/trace/Cargo.toml
-    scripts/with-env.sh cargo fmt --manifest-path code-journey/trace/Cargo.toml --check
-    scripts/with-env.sh cargo clippy --manifest-path code-journey/trace/Cargo.toml --all-targets -- -D warnings
+```bash
+export SERVICE_URL="http://127.0.0.1:8000/v1"
+scripts/with-env.sh python scripts/serving-acceptance.py --base-url "$SERVICE_URL" --output-dir "$EVIDENCE_DIR/constraints"
+scripts/with-env.sh python scripts/serving-lifecycle.py --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output "$EVIDENCE_DIR/lifecycle.json"
+scripts/with-env.sh python scripts/long-context-acceptance.py --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output "$EVIDENCE_DIR/long-context.json"
+scripts/with-env.sh python scripts/agentic-acceptance.py --api chat --base-url "$SERVICE_URL" --output-dir "$EVIDENCE_DIR/agentic-chat"
+scripts/with-env.sh python scripts/agentic-acceptance.py --api responses --base-url "$SERVICE_URL" --output-dir "$EVIDENCE_DIR/agentic-responses"
+```
 
-npm test 运行四个 Node 去缩进检查和七个 Playwright 测试.
-覆盖真实 SugarCube 标识, 全部 12 章路线, 兴趣与前置关系, 条件无序跳转,
-五组 Rust 轨迹, 亮暗 / 刷新 / 重置 / 返回, 完成与复习, v1 到 v2 进度迁移.
-文档检查逐一验证显示的 Rust / Python 记录字段, 公式, 字体,
-17/16px 正文, 28/24px 标题, 14/13px 代码和手机溢出.
-源码检查核对当前文件摘要与原始行, 规范后的节选重建和 Clipboard API / HTTP
-选区备用路径复制, >=4.5:1 token / 工具栏 / 行号对比度, 键盘滚动,
-全部完整源码 URL, Rust / Python / CUDA 高亮页的完整内容及返回链接.
+Lifecycle 工具必须在所提供日志中找到混合请求共享 batch, 以及 worker 取消 / 释放证据.
+检查服务日志中的正 MTP proposal 和 accepted draft 计数.
+这些测试完成后立即停止服务及其 worker.
 
-构建时检查所有实质默认运行 Rust / Python / CUDA 文件都有章节,
-锚点有效且展示字段有说明. 测试, 只有文档的初始化文件和冻结比较实现
-不属于默认主线清单. 独立里程碑审查按真实实现核对正文准确性.
+长上下文门槛检查 strict JSON 内容, 输入超过 131072, 重复前缀复用和逐请求正 MTP proposal.
+按 [服务合同](serving.zh.md#验证) 分别完成两种 API 的真实 OMP 任务.
+要求实际读文件和工具结果, 不只看脚本成功.
 
-单独 Rust 测试核对实际分块, 包括 32768 输入的 32144 + 624,
-并使用合成 token 反馈检查最后输出数量契约. 这些 CPU 教学检查不运行推理或测性能.
-另查看桌面 1536x1024 与手机 390x844 截图, 核对阅读, 条件列表,
-代码缩进和两种主题. JOURNEY_URL 调整地址, JOURNEY_QA_DIR 将证据保存到仓库外.
-本轮 Browser 插件不可用, 使用 Playwright Chromium 验证.
+## 教程与清理
+
+使用 [code-journey](../code-journey/README.zh.md#验证) 中的检查.
+教程修改后检查桌面 / 移动截图和全部 12 条路线.
+
+所有 GPU 程序经过 `scripts/with-gpu.sh`.
+完成或失败后停止全部所属进程及后代.
+确认 GPU 进程退出, listener 释放和 IPC 清理.
+只保留用户明确要求持续运行的服务; 本机信息记入 `LOCAL.md`.

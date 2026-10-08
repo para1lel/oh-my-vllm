@@ -22,8 +22,13 @@ FROZEN_SHA = "e9f169d16b9408bb9ae44f75072b91a5521d733c"
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--model", default="/data0/shared/Qwen3.8-27B-FP8")
-    parser.add_argument("--checkout", default="/data0/shared/dongwu.chen/vllm")
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("OH_MY_VLLM_MODEL"),
+        required=not bool(os.environ.get("OH_MY_VLLM_MODEL")),
+        help="checkpoint path; defaults to OH_MY_VLLM_MODEL",
+    )
+    parser.add_argument("--checkout", required=True)
     parser.add_argument("--mode", choices=["ordinary", "mtp", "prefix"], required=True)
     parser.add_argument("--batch-size", type=int, required=True)
     parser.add_argument("--input-len", type=int, default=32768)
@@ -46,7 +51,10 @@ def main():
     if not args.worker:
         os.environ.setdefault(
             "VLLM_CACHE_ROOT",
-            "/data0/shared/dongwu.chen/.cache/oh-my-vllm/baseline-main",
+            str(
+                Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+                / "oh-my-vllm-baseline"
+            ),
         )
         os.environ.setdefault(
             "FLASHINFER_WORKSPACE_BASE", os.environ["VLLM_CACHE_ROOT"] + "/flashinfer"

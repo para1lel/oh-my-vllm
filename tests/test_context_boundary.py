@@ -109,7 +109,13 @@ def test_boundary_run_row_inherits_pin_and_uses_shared_process_owner(monkeypatch
         "hardware_identity",
         lambda: {"gpu": "GPU-test", "gpu_info": "GPU-test, B200, 1000 MiB, 1"},
     )
-    row = boundary.run_row(Path("/unused/binary"), 1, "ordinary", gpu_total_bytes=256)
+    row = boundary.run_row(
+        Path("/unused/binary"),
+        1,
+        "ordinary",
+        model="fixture-model",
+        gpu_total_bytes=256,
+    )
     assert row["gpu_uuid"] == "GPU-test"
     assert seen["command"][0] == "/unused/binary"
     assert seen["command"][-2:] == ["--repetitions", "1"]
@@ -135,7 +141,13 @@ def test_boundary_termination_reaches_owned_cleanup(monkeypatch, termination_sig
         lambda: {"gpu": "GPU-test", "gpu_info": "GPU-test, B200, 1000 MiB, 1"},
     )
     with pytest.raises(InterruptedError, match="terminated"):
-        boundary.run_row(Path("/unused/binary"), 1, "ordinary", gpu_total_bytes=256)
+        boundary.run_row(
+            Path("/unused/binary"),
+            1,
+            "ordinary",
+            model="fixture-model",
+            gpu_total_bytes=256,
+        )
     assert cleanup == ["reaped"]
     assert signal.getsignal(termination_signal) is previous
 
@@ -192,7 +204,7 @@ def test_boundary_artifact_rejects_source_or_gpu_drift(
     monkeypatch.setattr(
         boundary,
         "run_row",
-        lambda _binary, batch_size, mode, raw_dir=None: {
+        lambda _binary, batch_size, mode, *, model, raw_dir=None: {
             "output_tokens": batch_size * 4096,
             "max_reserved_bytes": 128,
             "gpu_uuid": "GPU-other" if gpu_changed else "GPU-one",
@@ -203,6 +215,8 @@ def test_boundary_artifact_rejects_source_or_gpu_drift(
         "argv",
         [
             "context_boundary.py",
+            "--model",
+            "fixture-model",
             "--binary",
             str(binary),
             "--output",
@@ -230,6 +244,8 @@ def test_boundary_collector_rejects_raw_log_dir_inside_repo(monkeypatch, tmp_pat
         "argv",
         [
             "context_boundary.py",
+            "--model",
+            "fixture-model",
             "--binary",
             str(binary),
             "--output",
@@ -251,7 +267,9 @@ def test_max_context_length_262144(mode, batch_size, tmp_path):
     assert binary_env, "run GPU boundary cases through scripts/test.sh full"
     binary = Path(binary_env)
     assert binary.is_file(), "scripts/test.sh must build the debug bench binary"
-    row = boundary.run_row(binary, batch_size, mode, raw_dir=tmp_path)
+    row = boundary.run_row(
+        binary, batch_size, mode, model=os.environ["OH_MY_VLLM_MODEL"], raw_dir=tmp_path
+    )
     assert row["output_tokens"] == batch_size * 4096
     assert row["preemptions"] == 0
     assert row["max_reserved_bytes"] > 0

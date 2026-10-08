@@ -1,97 +1,109 @@
-# AGENTS.md — oh-my-vllm 协作规则
+# 协作规则
 
-本文件为中文译本，供用户阅读；agent 阅读并维护英文版，以英文版为准。
+## 目标与约束
 
-## 项目目标（用户已确认）
+为单张 B200 GPU 上的 Qwen3.8-27B-FP8 构建 Rust 推理框架.
+Rust 负责服务, 调度和逻辑 KV 缓存; Python 负责 GPU 计算.
+边界使用 ZMQ DEALER 和 msgpack.
+保留全部现有功能和数值容差.
 
-构建以 Rust 为主的推理框架，在**单张 B200 GPU 上运行 Qwen3.8-27B-FP8**，在 `docs/requirements.md` 规定的工作负载上达到 vLLM EngineCore 吞吐的至少 **95%**。Rust 负责服务、调度和逻辑 KV 缓存，Python 负责 GPU 计算。两端使用 ZMQ DEALER 和 msgpack。
+- 生产路径的块大小保持 784 token.
+- 保持 16 层 FA 和 48 层 GDN, 使用 `mamba_cache_mode="align"`.
+- 支持输入与输出合计 262144 token.
+- 普通和 MTP4 边界测试覆盖 batch 1, 2, 4, 无 OOM 和重计算抢占.
+- 保留 [需求](docs/requirements.zh.md) 中全部有效验收条件.
+- 项目构建, 测试和推理独立于 vLLM 代码, 环境和构建缓存.
+- 隔离基线采集器仅用于单独获授权的基线工作.
+- 项目内核使用 CUDA; 保留冻结的 TileLang 比较实现.
+- 正式算子用例, 测试框架和汇总证据保留在仓库内.
+- 临时实验和原始 profiling trace 放在仓库外.
+- 未来架构, 多 GPU, 其他 NVIDIA 后端和 DSpark 只写扩展说明, 不声称未经测试的支持.
 
-运行时采用项目自有实现及独立库，过渡期 vLLM 适配器已移除。构建、测试和推理不得安装、导入或链接 vLLM，不得使用其源码检出目录，也不得依赖旧 vllm conda 环境或构建缓存。
+按依赖顺序选择近期兼容的稳定版本.
+固定经过验证的组合.
+在项目环境中使用 `uv` 安装 Python 依赖.
+使用可用的系统 CUDA / 编译器工具或环境内工具; 驱动由主机提供.
+TileFoundry 是来自固定 fork 的开发依赖.
+简单的 fork 兼容性问题直接修复; 大幅修改先与用户讨论.
 
-## 不可违反的约束
+## 环境与 GPU 管理
 
-- **目标模型：** `/data0/shared/Qwen3.8-27B-FP8`（Qwen3.8-27B，48 层 GDN + 16 层 FA）。
-- **目标硬件：** 单张 B200 GPU；通过 `scripts/with-gpu.sh` 等待任意空闲 B200，并固定所选 GPU UUID。
-- **GPU 清理：** 任务启动的 GPU 程序在测试/运行结束后立即停止，包括推理服务器及子 worker。完成、失败、取消或交接后都不能遗留，除非用户明确要求保持运行。确认自有进程退出且不再出现在 `nvidia-smi` 中；不得停止无关进程。
-- **性能目标：** bs=1/2/4、输入 32768、输出 4096 时，吞吐至少达到 vLLM EngineCore 的 95%。
-- **目标 Python 环境：** `/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python`。设置 `PYTHONPATH=/data0/shared/dongwu.chen/oh-my-vllm/python:$PYTHONPATH`。
-- **依赖：** 按依赖顺序选择较新且兼容的稳定版本，验证后固定组合。高层依赖放在 oh-my-vllm 环境中。方便时使用可正常工作的系统 CUDA/编译工具，否则放在该环境中维护。驱动由宿主机提供。
-- **范围：** 保留全部现有功能。未来模型架构、单机多 GPU、其他 NVIDIA 后端及本地 DSpark checkpoint 只需简要说明扩展方式，不添加空接口，也不声称支持未经测试的能力。
-- **回归基线（2026-09-22）：** 用户授权将隔离的 vLLM 仓库/环境更新到官方 main 并冻结 SHA，然后重测全部 12 组 TTFT 和吞吐。旧产物作为历史保留。仅基线工具可以使用隔离的 vLLM 环境；项目构建、测试和推理必须保持独立。每组要求吞吐 >=95%、TTFT <= 新基线的 110%。至少完整预热两次、测量五次；极差/中位数 >10% 时调查并重测。
-- **上下文：** 支持输入与输出合计最多 262144 token。普通模式及 MTP4 的 batch 1/2/4 边界测试必须无 OOM、无重计算抢占地完成。按需优化显存布局，保留 block784 和现有正确性。
-- **Rust 环境：** `/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/cargo`；`CARGO_TARGET_DIR=/data0/shared/dongwu.chen/oh-my-vllm/target`。
-- **块大小：** 784 token（Qwen3.8 混合模型要求，不可更改）。
-- **KV 分组：** FA 组（16 层）+ Mamba 组（48 层，`mamba_cache_mode="align"`）。
-- **每次提交的署名行：** `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`。
-- **回复语言：** 用户用中文时回复中文，否则回复英文。
-- **分支策略：** 只在 `main` 开发和提交。不创建任何本地/远程新分支，包括功能分支及依附分支的 worktree。用户授权的例外：TileFoundry fork 使用适配分支，并固定为 `3rdparty/TileFoundry`；不得向上游提 PR。
-- **Kernel 迁移：** 将项目自有 Triton kernel 全部替换为 TileLang，保留现有正确性测试和容差。第三方实现不在范围内。TileFoundry 是同一 conda 环境中的开发专用源码依赖。fork 中简单的不兼容问题直接修复；重大修复先与用户讨论。
-- **临时 kernel 实验：** 微基准/测试脚本及记录放在仓库外。只保留用户要求或文档规定的测试和正式验收证据。不增加相对 Triton 的验收门槛。
+[开发指南](docs/development.zh.md) 说明可移植的环境选择.
+运行模型前设置 `OH_MY_VLLM_MODEL` 或传入 `--model`.
+Cargo 和 Python 命令通过 `scripts/with-env.sh` 调用.
+包装脚本默认按仓库位置设置 `PYTHONPATH` 和 `CARGO_TARGET_DIR`.
+实际主机路径和维护记录放在被忽略的 `LOCAL.md` 中.
 
-- **CUDA 迁移（当前）：** 用户批准 REQ-KERNEL-002。保留冻结 TileLang 对照，将自有 kernel 迁移为 B200 CUDA/必要的内联 PTX。静态推导的最大 shape 正式配置须逐项稳定超过 TileLang，既有框架门槛不变，禁止静默回退。正式算子测试程序、配置及汇总证据现为必需的仓库产物；临时调优和原始 profiling trace 仍留在仓库外。
+使用 `scripts/with-gpu.sh` 等待空闲 B200 并绑定其 UUID.
+每次运行结束, 失败, 取消或交接后立即停止任务启动的 GPU 进程及子进程.
+通过进程记录和 `nvidia-smi` 确认退出.
+只停止任务所属的进程.
+只有用户明确要求时才保留服务运行.
+在 `LOCAL.md` 记录例外, 在交接文档说明用途.
 
-## 禁止事项
+## 任务流程
 
-- 不得将 `block_size` 改为 784 以外的值。
-- 不得换用 vLLM 自有调度器（Rust 拥有调度权是项目核心）。
-- 不得在 oh-my-vllm 环境中用 pip 安装 Python 依赖。
-- 没有明确指令时不得 `git push` 或提 PR。
-- 不得 `git add .`；只暂存有意修改的文件。
-- 不得用 `--no-verify` 禁用 pre-commit hook。
-- 不得提交秘密信息、`.env` 值或 GPU profiling trace。
+1. 阅读 `git status --short`, 识别已有修改.
+2. 确认当前分支为 `main`.
+3. 阅读 [交接](docs/handoff.zh.md) 和适用的目录规则.
+4. 阅读下表中的任务指南.
+5. 完成已授权修改及相关测试.
+6. 每个里程碑后启动独立子代理审查.
+7. 提交前修复正确性, 性能和工程规范问题.
+8. 更新交接文档, 说明结果, 验证限制和剩余工作.
+9. 只暂存有意修改的路径.
+10. 按 [CONTRIBUTING](CONTRIBUTING.zh.md) 的格式提交到 `main`.
+11. 确认任务所属 GPU worker 和临时服务端口已释放.
 
-## 任务开始检查
+不创建分支或依托分支的 worktree.
+已有 TileFoundry 适配分支是用户授权的例外.
+不为该 fork 创建上游 PR.
+未经明确指示, 不推送或创建 PR.
+不使用 `git add .` 或禁用钩子.
+不提交秘密, 环境值或原始 GPU trace.
 
-1. 执行 `git status --short`，修改前记录已有未暂存改动；确认当前分支为 `main`。
-2. 查看 `docs/handoff.md` 中的当前任务状态和阻塞项。
-3. 若相关子目录有 `AGENTS.md`，先阅读（当前尚无，仍需检查）。
-4. 任何 `cargo` 或 `python` 调用前设置上述两个环境变量。
+## 必需检查
 
-## 任务结束检查
+```bash
+scripts/with-env.sh cargo test --workspace
+scripts/with-env.sh cargo fmt --all --check
+scripts/with-env.sh python scripts/check_rust_line_width.py
+scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
+scripts/with-env.sh ruff format python/
+scripts/with-env.sh ruff check python/
+scripts/with-env.sh python scripts/check_docs.py
+```
 
-1. Rust 的 `cargo test --workspace` 必须通过；还需通过 `scripts/with-env.sh` 运行 `cargo fmt --all --check` 和 `python scripts/check_rust_line_width.py`。
-2. Python 的 `ruff format python/ && ruff check python/` 必须通过。
-3. `cargo clippy --all-targets --all-features -- -D warnings` 必须通过。
-4. 只暂存修改的文件，禁止 `git add .`。
-5. 每个里程碑后启动子 agent 代码审查；解决正确性、性能及最佳实践问题后，以 Conventional Commits 格式和规定署名提交。
-6. 更新 `docs/handoff.md`：完成了什么、验证了什么、还剩什么。
-7. 停止所有任务自有 GPU 服务器/worker，验证 GPU 资源和临时服务端口释放。用户明确要求保持服务运行的例外需记入交接文档；不能从“测试/运行”的要求推导出保持运行授权。
+按 [测试指南](docs/testing.zh.md) 执行适用的 Python, GPU, 教程和验收检查.
+新增功能需要测试, 或记录无法测试的原因.
+性能结论必须来自实际测量.
+提交正文说明跳过的检查.
+Rust 行宽硬限制为 100 字符, 包括宏和字符串.
+每个 `unsafe` 块需要 `// SAFETY:` 注释.
 
-## 验证要求
+## 文档
 
-- 每个新功能需要测试，或在文档中解释为何不适合测试。
-- 吞吐数值（tok/s）必须来自实际运行，不能估算。
-- 跳过测试或没有运行某项检查时，在提交正文中明确说明。
+英文 Markdown 原文及同目录 `<stem>.zh.md` 完整译文在同一次修改中维护.
+代理以英文原文为准.
+两个语言版本的命令, 标识符, 数字, 证据范围和限制保持一致.
+排除第三方子模块和生成或 vendored 依赖.
+遵循 [写作规则](docs/writing.zh.md) 和 [技术术语表](docs/glossary.zh.md).
 
-## 工程标准
-
-完整规则见 CONTRIBUTING.md，摘要如下：
-
-- Rust：使用 `rustfmt.toml`、`cargo fmt --all --check` 和 `clippy -D warnings`。pre-commit 强制每行最多 100 字符（展开制表符），包含宏体、字符串和注释。长 JSON 宏拆成字段，长字面量用 `concat!` 拆分；仅 rustfmt 成功并不足够。`unsafe` 块需有 `// SAFETY:` 注释。
-- Python：使用 `ruff format` 和 `ruff check`，配置在 `ruff.toml`；Python ≥3.12。
-- `.pre-commit-config.yaml` 中的所有 hook 都通过 `scripts/with-env.sh` 运行。
-
-## 文档更新触发条件
-
-项目自有 Markdown 文档在同目录提供 `<stem>.zh.md` 中文译本。英文源文档修改时，在同一次改动中创建或更新中文版本。保留命令、标识符、数值和证据限制，翻译时不得将历史结果当成当前结果。agent 阅读和维护英文权威版本；中文版供用户阅读。第三方 submodule、生成文件和 vendored 依赖不在范围内。不要为已有 `.zh.md` 再生成译本。
-
-| 事件 | 需要更新 |
+| 变更 | 文档 |
 |---|---|
-| 需求变化 | `docs/requirements.md` |
-| 架构变化 | `docs/architecture.md` |
-| 值得记录为 ADR 的新决策 | `docs/decisions/` |
+| 需求 | `docs/requirements.md` |
+| 架构 | `docs/architecture.md` |
+| 关键决策 | `docs/decisions/` |
 | 任务完成或阻塞 | `docs/handoff.md` |
-| 构建/测试命令变化 | `docs/development.md`、`docs/testing.md` |
-| 提交/PR 约定变化 | `CONTRIBUTING.md` |
-
-## 不同任务的最少阅读路径
+| 构建或测试命令 | `docs/development.md`, `docs/testing.md` |
+| 提交约定 | `CONTRIBUTING.md` |
 
 | 任务 | 优先阅读 |
 |---|---|
-| 任意任务 | 本文件 + `docs/handoff.md` |
-| Rust 调度器/KV 缓存 | `docs/architecture.md` + `docs/decisions/` |
-| Python 模型 runner | `docs/architecture.md` 的 “Python modules” |
-| 性能工作 | `docs/requirements.md` 的 REQ-PERF-* + `docs/profiling.md` + `docs/testing.md` |
-| 新功能 | `docs/requirements.md` + `docs/architecture.md` |
-| 排查失败 | `docs/handoff.md` 的 “Open work” + `docs/testing.md` |
-| 修复审计问题 | `docs/audit-2026-09-23.md`（对应问题及其修复批次） |
+| 任何任务 | 本文件和 `docs/handoff.md` |
+| 调度或 KV 缓存 | `docs/architecture.md`, `docs/decisions/` |
+| Python runner | `docs/architecture.md` 的 Python 职责 |
+| 性能 | `docs/requirements.md`, `docs/profiling.md`, `docs/testing.md` |
+| 新功能 | `docs/requirements.md`, `docs/architecture.md` |
+| 故障 | `docs/handoff.md` 的开放工作和 `docs/testing.md` |
+| 审计问题 | `docs/audit.md` |

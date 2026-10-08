@@ -1,26 +1,39 @@
 # 文档索引
 
-[English](README.md)。agent 使用英文原文；英文修改时同步同目录 `.zh.md` 译本。
+英文文件为权威原文; 每份均有同目录完整中文译文.
+先阅读 [需求](requirements.zh.md), [架构](architecture.zh.md) 和 [当前工作](handoff.zh.md).
 
-先阅读 [AGENTS.md](../AGENTS.zh.md) 和 [handoff.md](handoff.zh.md)。前者规定项目约束，后者记录当前状态和待办工作。agent 以对应英文版为准。
+## 指南
 
-- [需求](requirements.zh.md)：模型、职责归属、功能和验收。
-- [架构](architecture.zh.md)：当前运行时和模块职责。
-- [设计](design.zh.md)：通信消息、逻辑缓存和调度器生命周期。
-- [开发](development.zh.md)：conda 包装脚本、构建和带时间戳的日志。
-- [测试](testing.zh.md)：CPU/GPU 测试套件、FP64 探针、功能组合和性能命令。
-- [验收](acceptance.zh.md)：当前证据及历史产物的日期索引。
-- [代码审计 2026-09-23](audit-2026-09-23.zh.md)：未修复问题和修复批次。
-- [计划](plan.zh.md)：已完成阶段和下一步工作。
-- [CUDA 开发](cuda-development.zh.md)：原生 kernel、冻结对照和算子门槛。
-- [TileLang 开发](tilelang-development.zh.md)：冻结参考实现和 TileFoundry 工具。
-- [性能分析](profiling.zh.md)：主机计时和 kernel 诊断。
-- [服务](serving.zh.md)：OpenAI 兼容子集、客户端命令和服务检查。
-- [贡献指南](../CONTRIBUTING.zh.md)：审查、检查和提交。
-- 设计决策：[ADR-001](decisions/ADR-001-zmq-socket-type.zh.md) DEALER socket；
-  [ADR-002](decisions/ADR-002-gpuworker-adapter.zh.md) GPUWorker 适配器（已被取代）；
-  [ADR-003](decisions/ADR-003-mtp-state-slots.zh.md) MTP 状态槽和 BF16 SSM；
-  [ADR-004](decisions/ADR-004-openai-serving.zh.md) Rust 优先的服务；
-  [ADR-005](decisions/ADR-005-v2-model-runner.zh.md) V2 runner（已被取代）；
-  [ADR-006](decisions/ADR-006-independent-runtime.zh.md) 独立运行时；
-  [ADR-007](decisions/ADR-007-ttft-and-cache-capacities.zh.md) TTFT 门槛和独立容量。
+| 文档 | 用途 |
+|---|---|
+| [开发](development.zh.md) | 环境, 配置, 依赖和构建. |
+| [测试](testing.zh.md) | CPU/GPU 检查及正式验收流程. |
+| [服务](serving.zh.md) | HTTP 子集, mask, 思考, 状态和限制. |
+| [内核](kernels.zh.md) | CUDA, 冻结 TileLang, 正式用例和开发工具. |
+| [Profiling](profiling.zh.md) | 诊断, counter, 来源和计时限制. |
+| [验收](acceptance.zh.md) | 实测源码和证据范围的统一索引. |
+| [审计](audit.zh.md) | 剩余问题和简短已关闭修复索引. |
+| [写作](writing.zh.md) | ASD-STE100 规则, 翻译和自动检查. |
+| [术语表](glossary.zh.md) | 项目技术名词, 动词和定义. |
+| [教程](../code-journey/README.zh.md) | 12 个交互中文章节和实际源码覆盖. |
+| [贡献](../CONTRIBUTING.zh.md) | 审查, 检查和提交流程. |
+
+## 决策记录
+
+| 记录 | 状态和用途 |
+|---|---|
+| [ADR-001](decisions/ADR-001-zmq-socket-type.zh.md) | 有效: DEALER transport. |
+| [ADR-002](decisions/ADR-002-gpuworker-adapter.zh.md) | 已替代: 原始 GPUWorker adapter. |
+| [ADR-003](decisions/ADR-003-mtp-state-slots.zh.md) | 有效: BF16 MTP 状态和 block784. |
+| [ADR-004](decisions/ADR-004-openai-serving.zh.md) | 有效: Rust HTTP 和真实 OMP 验收. |
+| [ADR-005](decisions/ADR-005-v2-model-runner.zh.md) | 已替代: 过渡 V2 runner. |
+| [ADR-006](decisions/ADR-006-independent-runtime.zh.md) | 有效: 独立运行时和扩展边界. |
+| [ADR-007](decisions/ADR-007-ttft-and-cache-capacities.zh.md) | 有效: TTFT 协议和独立 FA/GDN 容量. |
+| [ADR-008](decisions/ADR-008-semantic-ir.zh.md) | 有效: 语义算子和编译 GPU 单元. |
+
+架构包含原设计文档.
+当前工作包含原计划.
+内核开发合并原 CUDA 和 TileLang 指南.
+审计保留剩余问题和有用修复身份; 详细任务历史保留在 Git 中.
+主机专属维护记录放在被忽略的 `LOCAL.md`.

@@ -1,311 +1,229 @@
-# Architecture — oh-my-vllm
+# Architecture
 
-Rust owns HTTP serving, request scheduling, accepted token history and logical KV
-allocation. Python owns single-device GPU computation. Both processes communicate
-through ZMQ DEALER and msgpack; there is no vLLM runtime, scheduler or model adapter.
+Rust controls request lifetime and logical memory.
+Python controls GPU tensors and computation.
+The [requirements](requirements.md) define accepted behavior. [decisions](README.md#decision-records) record key alternatives.
 
-## Execution flow
+## Request flow
 
-1. The Rust frontend normalizes Chat/Responses requests. Python's ServingAdapter
-   applies the checkpoint chat template, tokenizer, sampling configuration and
-   XGrammar constraints, returning prompt IDs. One CPU preparation may overlap
-   active execute steps. A Python prepare thread builds inputs; the bridge
-   thread alone installs live sampler, history and generation state.
-2. Rust admits requests, resolves shared prefixes and allocates FA/Mamba tables.
-   The scheduler batches prefill, decode and actual MTP draft IDs.
-3. Python validates accepted history and physical addresses against each tensor's
-   capacity (including recurrent-state aliasing and cross-request FA page writes),
-   executes the Qwen model and samples from target distributions
-   with per-draft grammar masks.
-4. Python commits only retained outputs, selects accepted recurrent snapshots,
-   saves crossed block checkpoints and generates new MTP proposals.
-5. Rust updates accepted history, rolls back rejected speculative positions and
-   frees finished requests. Finished-only notifications release Python state even
-   when no requests remain scheduled.
+1. Rust validates the HTTP request and reserves admission capacity.
+2. Python applies the tokenizer/template and prepares sampling and grammar state in a background thread.
+3. The Python main thread installs the prepared state.
+4. Rust admits the prompt, finds a consistent prefix, and schedules token work.
+5. Rust allocates logical FA/GDN slots and sends execution metadata.
+6. Python builds the batch plan and starts the target or MTP GPU units.
+7. Python returns kept tokens, next drafts, and optional service output.
+8. Rust validates the full reply before state changes.
+9. Rust commits accepted history, completes or reschedules the request, and supplies output.
 
-See [design.md](design.md) for message fields and scheduler/KV data structures.
-
-Error handling: prepare replies carry a validation/internal kind, so the HTTP
-adapter maps only explicit input validation to 400 and unknown worker failures
-to 500. RPC replies carry IDs and types. A prepared reply may be buffered while
-Rust waits for an execute result. Cancelled prepare replies are discarded using
-bounded tombstones; unexpected or duplicate replies stop the engine. Execute
-results can report a request-local error and
-remove only that request; CUDA/device execution failures remain engine-fatal.
-The owned Python worker exits when the Rust parent dies.
+Cancellation takes effect between completed engine operations.
+Finished-only execution flushes pending Python cleanup, even when no work stays.
+Request-local failures stop their request. Worker/device failures stop the engine.
+The Rust child owner and Linux parent-death signal prevent abandoned Python workers.
 
 ## Rust modules
 
-- `crates/kv-cache`: shared logical block pool, chain-hashed prefixes, aligned
-  Mamba checkpoints and speculative reservations. Two-phase allocation touches
-  reused prefixes before allocating new pages.
-- `crates/scheduler`: FCFS waiting/running queues, chunked prefill, token budgets,
-  staggered admission, recompute preemption of later-admitted running requests
-  before an older request, and accepted-draft accounting.
-  A stream blocked by HTTP backpressure is excluded from new scheduling until
-  its output queue drains; another request may use that scheduling turn. Its
-  KV state stays allocated unless normal priority-based preemption needs it.
-  The kv-cache crate uses one shared pool by default, or separate FA/GDN pools
-  with `--mamba-blocks` (ADR-007).
-- `crates/zmq-worker`: CLI, OpenAI-compatible HTTP APIs, model process lifecycle,
-  cancellation, ZMQ transport and correlated logs.
-
-The target is one B200 and Qwen3.8-27B-FP8 at
-`/data0/shared/Qwen3.8-27B-FP8`. Each logical FA page contains 784 tokens. There are
-16 FA layers and 48 GDN layers. The CLI's existing `num_gpu_blocks` capacity unit
-is preserved for frozen-baseline compatibility: ready reports floor(value/3)
-logical blocks. Python now allocates each layer's tensors directly at that logical
-capacity; it has no old three-way physical stride or mixed-layout storage.
+| Module | Responsibility |
+|---|---|
+| `crates/kv-cache/src/block.rs`, `pool.rs`, `free_queue.rs` | Block references, cache metadata, and LRU free queue. |
+| `crates/kv-cache/src/hash.rs`, `group.rs`, `coordinator.rs` | Prefix hashes, group layouts, and coordinated allocation. |
+| `crates/scheduler/src/request.rs`, `output.rs`, `lib.rs` | Accepted history, draft scheduling, validation, and queue transitions. |
+| `crates/zmq-worker/src/client.rs`, `protocol.rs`, `error.rs` | Child lifetime, correlated RPCs, typed messages, and error boundaries. |
+| `crates/zmq-worker/src/main.rs` | CLI, offline driver, benchmark timing, and runtime configuration. |
+| `crates/zmq-worker/src/serving/` | Axum HTTP, typed events, tool parsing, response storage, and online admission. |
 
 ## Python modules
 
-- `worker/protocol.py`: framework-owned wire dataclasses.
-- `worker/model_runner.py`: concrete Worker, persistent request/sampling state,
-  cache tensors and execution orchestration.
-- `worker/batch_plan.py`: host validation, accepted-state selection and checkpoint
-  copies. It does not allocate logical pages.
-- `models/qwen.py`: direct safetensors loading, fused projection weight mapping,
-  64-layer target model and one-layer MTP head sharing embedding/output weights.
-- `worker/sampler.py`: penalties, top-k/top-p, greedy/stochastic target sampling
-  and exact verification of deterministic greedy proposals.
-- `worker/serving.py`: Transformers/Tokenizers preparation, incremental decoding,
-  XGrammar masks, EOS/stop/length handling and reasoning accounting.
-- `worker/mtp.py`: shifted MTP cache, boundary features and proposal generation.
-- `worker/decode_graph.py`: target and MTP CUDA graph buffers/capture/replay.
-- `worker/runtime.py`: dependency identity and loaded-module/library audit.
+| Module | Responsibility |
+|---|---|
+| `worker/zmq_bridge.py`, `protocol.py` | Message handling, background preparation, main-thread installation, and cleanup. |
+| `worker/model_runner.py`, `runtime.py`, `logging_utils.py` | Independent initialization, source/library identity, execution, and diagnostics. |
+| `worker/batch_plan.py`, `tensors.py` | Validated CPU plans, slot selection, batched metadata transfer, and tensor views. |
+| `worker/mtp.py` | Proposals, verification, accepted-state retention, and checkpoint writes. |
+| `worker/decode_graph.py`, `graph_cache.py` | Persistent inputs, transactional capture, bounded graph entries, and replay. |
+| `worker/serving.py`, `sampling.py`, `sampler.py` | Tokenization, XGrammar, sampling, detokenization, and output accounting. |
+| `models/qwen.py` | Checkpoint loading, 64-layer target, MTP layer, FP8/ordinary projections, and forward units. |
+| `ir/` | Semantic operations, references, mutation schemas, provider selection, lowering, and coverage. |
+| `kernels/` | Attention, GDN, convolution, normalization, elementwise operations, and backend choice. |
+| `kernels/cuda_backend/` | B200 CUDA implementation and loaded-module provenance. |
+| `kernels/tilelang_reference/` | Pinned comparison implementation. |
 
-## Hybrid cache and MTP
+All Python module paths are relative to `python/oh_my_vllm/`.
 
-GDN state uses [slot,48,128,128], FP32 ordinarily and BF16 with MTP. Causal
-convolution state is BF16 [slot,10240,3]. Decode reads the last committed physical
-slot and writes candidate snapshots independently. A rejected candidate never
-becomes a cached prefix. A token crossing a 784 boundary preserves that exact
-snapshot in the corresponding checkpoint slot, even when later drafts also pass.
-The zero source slot is immutable. Batch planning forbids write/write and foreign
-write/source aliases, including checkpoint copies.
+## Transport contract
 
-MTP row p combines target hidden[p-1] with input token[p]. A uniform +1 RoPE shift
-preserves relative attention; row zero is absent. This makes every row match
-Rust's prefix hash and avoids a shared boundary row depending on an uncached suffix.
-Target hidden at each 784 boundary is stored with its FA page. If Rust has not yet
-allocated the next page, the proposer defers the boundary row and shortens drafts.
-It never allocates pages outside Rust. Preemption drops request-local progress;
-resumption reconstructs it from the accepted prefix and retained boundary feature.
+Rust binds `ipc://<socket_path>`. The single Python worker connects.
+Messages are msgpack dictionaries with a `type` field.
+Prepare and execute replies echo `rpc_id`. Late cancelled prepare replies are discarded.
 
-Greedy proposals are verified against samples from the target distribution for
-successive draft prefixes. Matching proposals pass; the first mismatch or bonus
-sample terminates verification. This preserves stochastic target sampling without
-assuming draft probabilities. Grammar state advances only with retained outputs.
+`register` and `abort` have no reply.
 
-## Device kernels and graphs
+| Message | Fields and effect |
+|---|---|
+| `init` | `model_path`, `num_gpu_blocks`, `mamba_blocks`, `block_size`, `tensor_parallel_size`, `max_model_len`, `num_speculative_tokens`. Allocate worker state. |
+| `ready` | `logical_num_blocks`, `mamba_blocks`. Report device capacities. |
+| `register` | `request_id`, `prompt_token_ids`. Register offline input. |
+| `prepare` / `prepared` | `rpc_id`, `request_id`, `request` / prepared `prompt_token_ids`. Create service state. |
+| `execute` | `rpc_id`, `step_id`, `scheduled`, `finished_request_ids`, `preempted_request_ids`, `num_batched_tokens`. Compute selected work. |
+| Scheduled row | `request_id`, `token_ids`, `num_computed_tokens`, `prefill_token_ids`, `fa_block_table`, `mamba_block_table`. |
+| `execute_result` | `rpc_id`, `outputs`. Return the output rows. |
+| Output row | `request_id`, `token_ids`, `num_accepted_draft_tokens`, `new_draft_token_ids`. Optional `error`, `text`, `finish_reason`, `reasoning_tokens`. |
+| `error` | `message`, optional `rpc_id` and `kind`. Distinguish validation and internal failure. |
+| `abort` / `shutdown` | `request_id` for abort. Release request state / stop the worker. |
 
-Independent FlashInfer TRT-LLM FP8 GEMM handles <=32 rows, with column-major
-activation scales and row-major checkpoint scales. Larger inputs use CUTLASS with
-row-major scales. FlashInfer 0.6.18's CUTLASS SM100 17..32-row path was nondeterministic
-at real model widths and is never selected. Actual-width FP64/repetition tests cover
-16/17/20/24/32/33 rows. Quantization preserves per-row 128-element scaling.
+`prefill_token_ids` contains full accepted history on admission or recompute.
+Ordinary decode stays incremental. Drafts have different storage.
+Initialization errors omit correlation and kind. Execution errors default to internal kind.
 
-Project-owned CUDA kernels (with a frozen TileLang comparison) implement GDN recurrence, causal convolution, paged
-split-KV GQA decode, normalization, partial NeoX RoPE and pointwise fusions.
-FlashInfer implements long GDN/FA prefill. GDN prefill explicitly normalizes q/k
-because the selected release's advertised normalization flag is unused.
+Missing registration becomes a request-local execution error.
+See the Rust and Python protocol definitions for wire names and defaults.
 
-Decode graphs use fixed token/request shapes and dynamic positions, tables and
-state addresses. Warmup/capture saves every FA/state destination and restores it
-before formal replay. Target has a 32-shape cache; draft and proposal share a
-separate 32-shape budget with eviction floors of 16 draft and 4 proposal
-graphs. At a full budget, a new shape runs eagerly until four observations and
-its decayed access
-count exceeds twice the coldest evictable resident's count. Counts decay every
-512 accesses; probation and recent-capture histories are bounded. Any new
-capture is deferred to eager execution when CUDA reports less than 4 GiB free,
-including if headroom falls after admission. A failed capture retains the old
-resident graph and delays another attempt for 64 accesses. Prefill remains
-eager. Graph outputs are consumed before reuse, and recurrent MTP inputs are
-copied into separate buffers.
-For both Serve and Bench, a draft or proposal shape recaptured within 4096
-MTP cache decisions starts a shared 32768-decision capture cooldown. Resident
-draft/proposal graphs keep replaying; nonresident shapes execute eagerly until
-the cooldown expires, then normal admission resumes. The cooldown can
-temporarily delay either family's growth even below its eviction floor; the
-target graph cache is unaffected.
-Captures share one CUDA graph memory pool within each of the target, draft and
-proposal families, and each family owns a distinct pool. Their replays never
-overlap. A draft output is copied to the next graph's static input on the same
-CUDA stream before that graph replays; proposal outputs are transferred before
-another proposal replay. A prior graph's static output is not assumed to
-survive a different graph's replay. A resident graph keeps its family pool alive
-until replacement capture succeeds; failed first capture discards its unowned
-pool handle. Cache tensors are allocated before capture so their graph-bound
-addresses stay valid; late capture still needs headroom.
-`OH_MY_VLLM_ENFORCE_EAGER=1` is diagnostic only. Final performance requires measured
-coverage of the relevant shapes, not merely successful graph capture.
+## Scheduler and allocation
 
-## Dependencies and future scope
+The scheduler handles running requests before waiting requests with sequence and token budgets.
+Aligned prefill materializes reusable GDN checkpoints at 784-token boundaries.
+A 32768-token prompt splits into 32144 and 624 tokens.
+The scheduler rejects requests that cannot fit their required logical capacity.
 
-All high-level dependencies and Rust tools are in conda `oh-my-vllm`; host driver,
-CUDA/compiler tools are allowed. Independent FlashInfer/TileLang/third-party Triton cache roots avoid
-reuse of old framework artifacts. Startup records exact runtime identity, and
-shutdown checks imported modules and mapped libraries for legacy dependencies.
+Allocation first removes obsolete aligned state and counts required capacity with read-only pool access.
+It includes the watermark in the capacity test.
+It touches all reused blocks before any group allocates new blocks.
+It then allocates new blocks and registers full cache blocks.
+This order prevents double-counting reused blocks in the free queue.
 
-[ADR-006](decisions/ADR-006-independent-runtime.md) describes future model and NVIDIA
-backend extensions, single-node multi-GPU collectives, and the local DSpark draft
-checkpoint. These require concrete implementations when pursued; there are no empty
-interfaces, PD-disaggregation paths or multi-node components in the current runtime.
-Historical vLLM/V2 integration decisions remain in earlier ADRs and acceptance data.
+On capacity failure, Rust preempts later-admitted running requests from the queue tail and retries earlier requests.
+If no later victim stays, it preempts the current request.
+Victims return to the waiting queue in admission order.
+Recompute resets the computed cursor, keeps accepted history, and clears drafts.
+Output validation checks IDs, scheduled counts, token bounds, accepted drafts, and errors before a transactional commit.
 
-### Grouped speculative verification attention
+## Cache groups and prefix reuse
 
-For graph target verification, up to five consecutive queries of a request share
-one tiled KV read. Each query retains its own causal length; requests never share
-a table or attention normalization. CUDA Graph replay copies ragged starts as
-well as tables and lengths, so the same graph supports different per-request
-counts. Ordinary one-query decode retains the single-query path; draft-head
-verification uses the same grouped path, keyed by token count and request count. Grouped FP64 reference tests cover both split counts, page boundaries, the
-shifted first valid position, and regrouping during replay.
+The FA group holds sixteen layers of 784-token pages.
+GDN alignment holds running/checkpoint state, a protected previous state, and speculative state slots.
+Null placeholders keep logical positions.
+Unused cached checkpoints can stay until eviction.
 
-Unmasked greedy batches without penalties transfer only selected tokens and row
-validity, once for all requests. Each request then verifies its own draft prefix.
-Other sampling configurations retain full target-distribution construction. Small
-private CPU metadata tensors use nonblocking copies on the same stream as their
-GPU consumers; this removes explicit per-copy waits without assuming that
-pageable transfers necessarily overlap computation.
+By default, groups share one logical pool.
+`--mamba-blocks N` gives GDN a different pool with group-local IDs.
+FA capacity is `floor(num_gpu_blocks/3)`. Block IDs directly index tensor slots.
+The former physical-stride mapping is retired.
 
-When every active MTP request has room for three further cache writes, a proposal
-graph computes the initial greedy token and three autoregressive draft/head steps
-without intermediate host synchronization. It returns all four proposals in one
-transfer. Near an allocation/context boundary, the stepwise proposer still trims
-the active set and proposal count. Warmup/capture restores all three speculative
-FA destinations; persistent row indices, positions, tables, hidden inputs, model
-and cache references remain alive for replay. Both proposer graph families share
-the existing32-shape budget.
+GDN slot zero is read-only initial zero state and never a write destination.
+FA page zero is the null page.
 
-### Independent FA/GDN capacities (2026-09-22)
+The conceptual prefix hash is `SHA-256(parent_hash || token_ids || extra_keys)[0..8]`.
+The byte encoding includes a parent-presence marker and token/extra-key lengths.
+Integers and the first eight digest bytes use little-endian encoding.
+Each hash depends on preceding content. Resident blocks still must have a contiguous FA prefix.
 
-`--mamba-blocks N` gives the Rust coordinator an independent GDN pool. FA capacity
-remains the worker-reported logical capacity; Python allocates recurrent tensors
-at N slots and FA/MTP attention tensors at FA capacity. IDs are local to their
-cache group and may have equal numeric values. Admission checks both pools, prefix
-lookup reconciles hits across both, and the worker validates each address against
-its own tensor capacity. Omission preserves the shared-capacity configuration.
-See ADR-007 for rationale and the long-context acceptance protocol.
+The coordinator reconciles that prefix with an available GDN checkpoint.
+The result is the minimum compatible FA/GDN hit length.
+References protect live blocks. The free queue evicts least-recently-used cache entries.
 
-### Long prefill attention
+Ordinary GDN state is FP32. MTP GDN state is BF16.
+The state layout is `[slot,48,128,128]`. Convolution state is BF16 `[slot,10240,3]`.
+See [ADR-003](decisions/ADR-003-mtp-state-slots.md) and [ADR-007](decisions/ADR-007-ttft-and-cache-capacities.md).
 
-For batches with a query span of at least 1024 tokens, Python gathers only active
-FA KV tokens into temporary contiguous tensors and invokes independent FlashInfer
-ragged TRT-LLM attention with FP32 softmax. Rust allocations and persistent
-`[page,2,784,heads,dim]` tensors are unchanged. Query spans from 128 through 1023
-with at least 4096 KV tokens use native paged context attention and the same
-zero-copy subpage views as target decode, with FP32 softmax. Other small query
-spans use paged FA2. Mixed batches
-share this decision, so a long prefill also gathers active decode sequences.
-The maximum-context batch4 correctness check includes the resulting temporary
-memory; neither Mamba cache precision nor numerical tolerances change.
+## Target computation and attention
 
-The frozen TileLang path uses eight-token convolution tiles and larger SiLU
-blocks for long prefills. Native CUDA derives convolution rows from tensor
-shape and uses a 256-thread SiLU launch; its Python factory receives no
-TileLang tuning knobs. Large gate/up projections
-use the independent CUTLASS dual-SM GEMM. BF16 rounding and per-token FP8 scales
-are unchanged and checked against FP64 references.
+The loader validates head dimension 256, rotary dimension 64, theta 10000000, and RMS epsilon `1e-6`.
+FP8 activations use per-row 128-value scales.
+At most 32 FP8 projection rows use TRT-LLM GEMM from a third-party library. Larger FP8 batches use CUTLASS.
+Ordinary projections without scales use `F.linear`.
 
-Convolution, GDN recurrence and RMS normalization accept packed projection views
-with explicit token/head strides. Outputs remain dense and recurrent source
-snapshots retain their isolation guarantees. Host integer metadata is copied in
-one buffer per target/draft group, whose device views retain the backing storage.
-Graph inputs still copy into persistent buffers; GDN prefill starts are converted
-once to int32 before layer execution.
+This avoids the observed FlashInfer CUTLASS instability at 17 through 32 rows.
+Small BF16 vocabulary projections use FlashInfer CuTe-DSL GEMM.
 
-Small-batch BF16 vocabulary projections use independent FlashInfer CuTe-DSL GEMM.
-Residual addition and RMS normalization share one kernel, preserving the BF16
-sum before FP32 normalization. MLP SiLU/multiplication and FP8 quantization share
-a kernel while preserving both BF16 rounding points and the original scales.
-The fused RMS and attention-preparation kernels use epsilon `1e-6`, which the
-Qwen loader validates against the checkpoint before loading weights. Supporting
-a different epsilon requires a corresponding kernel contract change.
-In the frozen reference, Q/K RMS and partial NeoX rotation share a TileLang kernel,
-retaining
-the intermediate BF16 rounding and packed projection strides. Its fixed256-wide
-heads,64 rotary dimensions and theta10000000 match the validated Qwen checkpoint.
-It computes and reduces the phase in FP64 before FP32 sin/cos, avoiding amplified
-frequency/angle rounding error near the maximum context.
-The CUDA backend combines the complete full-attention preparation chain:
-Q/K RMS/RoPE, V layout conversion and physical KV writes. Target and MTP call the
-same `attention_prepare.prepare_attention` entry with packed14336 projections.
-The returned Q is contiguous; the gate half of each512-wide Q head is untouched.
-Cache must not alias inputs, and negative slots skip KV writes while retaining Q.
-The explicit TileLang comparison backend preserves the original complete frozen chain.
+Residual/RMS and SiLU/FP8 fusions keep the existing BF16 rounding points.
+Convolution, GDN, and RMS accept packed projection strides and return dense outputs.
+GDN prefill normalizes Q/K explicitly with FP32 norms and BF16 output.
+Integer metadata transfers use one buffer per target/draft group.
+Device views keep their backing storage.
 
-Frozen TileLang GDN recurrence uses32-value tiles for at least four sequences,16
-otherwise. Native CUDA uses guarded vector state updates for the model layout and
-retains a generic CUDA path for other alignments/layouts.
+The CUDA attention preparation combines Q/K RMS, partial NeoX RoPE, V conversion, and KV writes.
+It accepts packed 14336-value projections and returns contiguous Q.
+Each 512-wide Q head keeps its gate half unchanged.
+FP64 phase calculation precedes FP32 trigonometry.
+Negative slots skip KV writes and keep Q. Caches cannot alias inputs.
 
-Target decode graphs expose existing 784-token pages to native TRT-LLM attention
-as 49 sixteen-token subpages. K/V offset views and `page * 98 + subpage` tables
-avoid KV copies and retain Rust page ownership. Table expansion and query/KV
-length selection occur once per model execution inside graph capture, so replay
-uses current request metadata. Draft attention retains the project kernel to
-exclude its absent position zero during decode. Draft prefill with at least 128
-query tokens gathers valid KV starting at position one and uses independent
-ragged TRT-LLM attention with FP32 softmax; intermediate query spans use FA2.
-Planning validates nonempty contiguous queries and KV lengths before skipping
-the native operator's redundant active-row check. GDN prefill normalizes Q/K
-in one strided kernel with FP32 norms, epsilon 1e-6 and BF16 outputs, avoiding
-several large temporary tensors. No cache precision or tolerance changes.
+Target query spans of at least 1024 gather active KV for ragged TRT-LLM attention.
+Spans from 128 through 1023 with at least 4096 KV tokens use native paged context attention.
+Other small spans use paged FA 2.
+The routing thresholds use the batch maximum query and KV lengths.
+Mixed batches share the selected route.
 
-## CUDA backend and frozen comparison
+The longest-context memory checks include temporary gathered KV.
 
-Custom kernel factories have an explicit process-level backend selection. The
-frozen TileLang implementation lives in kernels/tilelang_reference with a source
-manifest. Native CUDA uses independent TVM FFI and the caller CUDA stream; missing
-native entries fail explicitly. CUDA is the default after operator/framework and
-feature acceptance; select OH_MY_VLLM_KERNEL_BACKEND=tilelang before startup for
-the frozen reference. Runtime identity uses the same process-level selection.
-TileFoundry stays development-only.
+Target `DecodeGraph` uses native decode and views each 784-token page as 49 subpages of 16 tokens.
+Short target decode without a selected graph uses the paged FA 2 route.
+K/V offset views and `page * 98 + subpage` tables avoid KV copies.
+Table expansion and lengths use current execution metadata inside graph capture.
+Draft prefill starts at position one. Spans of at least 128 use ragged attention.
 
-## Semantic IR and compiled forward units
+Smaller draft spans use FA 2. Draft decode uses the owned kernel.
 
-`python/oh_my_vllm/ir` registers one `torch.library` semantic op per owned CUDA
-or key FlashInfer model entry. Its native PyTorch implementation defines the
-reference semantics; fake implementations define output shape/dtype, while the
-custom-op schema names mutated cache/state arguments. Production providers are
-independent registered custom ops. Selection evaluates shape, stride, dtype,
-device and fixed route metadata, never tensor contents. Priorities freeze when
-first used; an unsupported provider raises instead of selecting the reference.
-Tensor metadata retains symbolic shape and stride dimensions during lowering;
-only capability predicates that inspect a dimension introduce selection guards.
-Logging does not concretize symbols. Native RMS normalization returns contiguous
-outputs, matching the production provider and shared fake layout contract.
-The selection log records eager and compile decisions by static input key;
-`compiled_graph_counts()` records successful compilations by forward unit.
-`coverage.py` lists model call sites and explicit low-level import exceptions.
+## MTP
 
-`compile_forward` traces an entire GPU unit with `fullgraph=True`. Its custom
-backend rewrites each semantic FX node to a schema-matched selected provider,
-checks fake output metadata, rejects remaining semantic nodes, then calls
-Inductor. The bounded adapter uses PyTorch 2.14.0's FakeTensor, FX metadata and
-backend lookup APIs; compatibility tests gate that pinned version. Model target
-prefill and non-graph decode call compiled `Qwen.forward` and `Qwen.logits`.
-Target, draft and proposal CUDA Graph constructors warm up their compiled full
-forward closures before capture. Manual graph memory pools, transactional cache
-restore and low-headroom guards remain authoritative. `OH_MY_VLLM_ENFORCE_EAGER=1`
-explicitly selects eager model calls and disables manual graph use.
+Draft row `p` combines target hidden row `p-1` and token row `p`.
+Row zero is absent.
+The uniform RoPE offset keeps relative positions.
+Rust allocates draft/state capacity. Python never invents logical blocks.
 
-Attention plans stay on the host. A live CPU plan handle identifies the planned
-wrapper for an opaque semantic attention node; route, logical page tables,
-lengths and native subpage metadata needed at execution are explicit inputs.
-The target native decode translation remains inside manual graph capture, so
-changed table/length buffers affect replay. KV preparation and recurrent ops
-declare cache mutation. GDN prefill returns final states for an ordered
-`index_copy_`; the host allocator retains ownership of persistent storage.
-The DSL includes base FP8 quantization and fused FP8 linear/SiLU quantization
-as separate semantic operations. The late FX pass rewrites an adjacent,
-single-use BF16 `silu_mul -> fp8_linear` chain only when both production
-providers agree, after exact-output equivalence testing. No current activation
-is donated; persistent cache storage is never eligible. The adapter disables
-Inductor CUDA Graph management and raises both version-pinned Dynamo recompile
-limits to 4096. This is a failure bound, not proof of bounded compiler memory
-under unlimited shape churn. The per-unit count warns every 256 compilations;
-the manual graph cache records capture/eviction and allocator deltas. `F.linear`
-and sampling remain outside IR.
+A 784-token boundary hidden state waits if its required page is unavailable.
+
+MTP4 proposes four drafts and verifies them against target sampling.
+Grouped verification has at most five queries with per-query causal lengths.
+The single-token decode path has its own implementation.
+The worker keeps accepted target output and the correct GDN/convolution snapshot.
+Rejected scheduled drafts roll back computed progress. Unscheduled drafts have no computed progress to roll back.
+
+Grammar simulation uses each speculative prefix and rolls back before it commits kept output.
+
+## Semantic IR and graphs
+
+`torch.library` operations supply references, fake implementations, mutation schemas, and provider registrations.
+Selection uses static metadata. It converts symbolic dimensions only when necessary for a selection predicate.
+The pinned PyTorch lowering keeps semantic nodes until provider replacement.
+Production provider failure raises an error. The worker uses debug reference/eager modes only after explicit selection.
+
+Four fullgraph units include prefill, target decode, MTP draft, and four-step proposal.
+Host planning, logical allocation, ZMQ, sampling, and ordinary PyTorch operations are not in the operator inventory.
+Manual CUDA Graphs contain compiled units. Inductor graphs are disabled.
+Persistent cache writes keep ordering. Activation donation is currently absent.
+
+The single-use BF16 SiLU-to-FP8 rewrite has equivalence tests.
+
+Target graphs have a 32-entry budget.
+Draft/proposal graphs share 32 entries with floors of 16 and 4.
+At a full cache budget, replacement admission must have four observations.
+Its decayed count must be more than twice the coldest evictable entry.
+An available budget permits capture on the first miss.
+
+Counts decay each 512 observations.
+The cache skips new captures with less than 4 GiB of free GPU memory.
+The worker still uses the compiled unit.
+Capture failures back off for 64 observations.
+A repeated MTP shape capture in a 4096-cache-decision window starts a shared 32768-decision capture cooldown.
+
+Resident graphs continue to replay.
+
+Pools are shared in each graph family, with different target/draft/proposal families and no overlapping replay.
+Capture restores persistent state and FA writes. Output copies precede pool reuse.
+Prefill uses compiled units without manual graph capture.
+Dynamo limits are 4096 with warnings at 256.
+
+These limits do not show bounded compiler memory with indefinite shape changes.
+See [open audit work](audit.md).
+
+## Extension boundaries
+
+New models must have validated loading, semantic contracts, and cache layouts.
+Multiple GPUs must have new process ownership and collective contracts.
+Other NVIDIA backends must have device-specific providers and measured acceptance.
+Current interfaces make no such support claim.
+
+The DSpark design uses five BF16 GQA layers and target features `[5,19,33,47,61]`.
+It has confidence/Markov heads, seven drafts, and eight-token verification.
+Draft block 7 and training block 16 are different from target block 784.
+This is extension documentation. No DSpark runtime is supplied.

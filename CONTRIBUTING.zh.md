@@ -1,95 +1,62 @@
-# 参与 oh-my-vllm 开发
+# 贡献流程
 
-## 分支策略
+修改前阅读 [协作规则](AGENTS.zh.md) 和 [当前工作](docs/handoff.zh.md).
+只在 `main` 上开发和提交.
+保留其他任务已有的修改.
+仅在用户明确指示后推送或创建 PR.
 
-直接在 `main` 上开发和提交。不要创建本地或远程功能分支，也不要创建依附分支的 worktree。编辑前确认已检出 `main`。推送和提 PR 仍需用户明确指令（见 AGENTS.md）。唯一的分支例外是用户批准的 TileFoundry submodule fork：适配分支属于 para1lel/TileFoundry，不向上游提 PR。
+## 实现
 
-## 提交约定
+保持 Rust 对服务, 调度和逻辑缓存的所有权.
+GPU 计算保留在 Python 和独立库中.
+保留块大小, 数值容差, API 功能和有效验收条件.
+选择兼容的稳定依赖, 固定经过验证的组合.
+Python 依赖使用 `uv` 安装; 不直接使用 `pip`.
 
-每条提交消息遵循 [Conventional Commits](https://www.conventionalcommits.org/)：
+使用 `rustfmt.toml`, Rust 行宽硬限制为 100 字符.
+限制包括宏, 字符串, 注释和展开后的制表符.
+长 JSON 宏拆成字段, 长字符串使用 `concat!`.
+每个 `unsafe` 块都添加 `// SAFETY:` 注释.
+使用 Python 3.12 或更高版本及 `ruff.toml`.
 
+新增行为添加有实际意义的测试.
+无法测试时记录原因.
+按正式协议测量性能; 估算值明确标为估算.
+临时调优和原始 trace 放在仓库外.
+
+## 审查与检查
+
+每个里程碑后启动独立子代理审查.
+提交前修复审查发现的正确性, 性能和工程规范问题.
+完成必需 [检查](AGENTS.zh.md#必需检查) 和适用 [测试](docs/testing.zh.md).
+使用 `scripts/with-env.sh` 选择环境.
+`.pre-commit-config.yaml` 的本地钩子使用此包装脚本.
+
+英文 Markdown 修改时同步更新完整中文译文.
+遵循 [写作规则](docs/writing.zh.md), [术语表](docs/glossary.zh.md) 和 `AGENTS.md` 的文档更新表.
+主机配置记入被忽略的 `LOCAL.md`.
+原始证据保存在被忽略的本地存储; 仓库提交明确标识的可移植摘要.
+
+## 提交
+
+只暂存属于当前修改的路径:
+
+```bash
+git add path/to/changed-file path/to/another-file
+scripts/with-env.sh pre-commit run --all-files
+git commit
 ```
-<type>(<scope>): <short description>
 
-[optional body]
+提交钩子需要与手动检查相同的配置环境.
+保持钩子启用; 不使用 `git add .` 或 `--no-verify`.
+标题采用 Conventional Commits, 例如 `docs: make deployment guides portable`.
+正文说明最终行为, 验证, 跳过的检查和剩余限制.
+每次提交包含以下原样署名:
 
+```text
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 ```
 
-AI 协助完成的每次提交都必须包含署名行。类型：`feat`、`fix`、`refactor`、`test`、`docs`、`chore`、`perf`。scope 与 crate 或模块对应：`kv-cache`、`scheduler`、`zmq-worker`、`zmq-bridge`、`spec-decode`、`bench`、`docs`。
-
-示例：
-
-```
-feat(scheduler): add preemption by recompute
-
-fix(zmq-bridge): remove swap_space from CacheConfig, add mamba_cache_mode
-
-docs(handoff): add full engineering handoff documentation suite
-```
-
-## 提交前
-
-每个里程碑启动子 agent 代码审查，检查最佳实践及正确性/性能风险。修复问题、审查通过后再提交。重写模块时同步架构/决策文档。
-
-逐项暂存有意修改的路径；`Cargo.lock` 有变化时一并暂存：
-
-```bash
-git add Cargo.lock <your other changed files>
-```
-
-pre-commit hook 自动执行：
-
-- `cargo fmt --all --check` 与 `cargo clippy --all-targets --all-features -- -D warnings`。
-- `python scripts/check_rust_line_width.py`：对全部已跟踪及未被忽略的新 Rust 文件检查 `rustfmt.toml` 规定的硬性行宽，包括宏体。
-- `cargo test --all`：完整测试必须通过。
-- 对暂存的 Python 文件运行 `ruff format` 和 `ruff check --fix`。
-- `scripts/fix_whitespace.py`。
-
-hook 失败时修复所报问题并重新暂存，不要使用 `--no-verify`。常规格式问题用 `scripts/with-env.sh cargo fmt --all` 修复。宏体和长字面量可能需手工换行：`rustfmt` 无法可靠格式化任意宏语法，其 `max_width` 也不是硬性校验规则。
-
-## 代码标准
-
-每份项目自有 Markdown 文档都在同目录维护 `<stem>.zh.md` 中文版。英文修改时同步翻译，包括需求、命令、证据和任务状态。agent 以英文版为准。第三方 submodule 和生成的依赖除外。
-
-**Rust：** 遵循 `rustfmt.toml` 和每行 100 字符硬限制（展开制表符），包含宏、字符串和注释。JSON 字段分别占行，长字面量使用 `concat!`。没有解释保留理由的注释时，不得使用 `#[allow(dead_code)]` 或 `#[allow(unused)]`。所有 `unsafe` 块必须有说明所维持不变量的 `// SAFETY:` 注释。
-
-**Python：** 用 `ruff` 约束格式及 lint（PEP 8 和选定规则）。禁止裸 `except:`。全部公开函数签名添加类型提示。
-
-## 完成定义
-
-任务完成需满足：
-
-1. 代码已提交，pre-commit hook 全部通过。
-2. 受影响测试通过：调度器/KV 缓存修改运行 Rust 单元测试；注意力/状态修改运行实际路径 GQA/GDN FP64 探针，涉及 MTP 时也覆盖 MTP。
-3. 改动涉及 `zmq_bridge.py`、`model_runner.py` 或 `client.rs` 时，端到端冒烟测试通过。
-4. `docs/handoff.md`（阶段完成时还有 `docs/plan.md`）已反映新任务状态；修复审计问题时，同时在 `docs/audit-2026-09-23.md` 中更新其状态。
-5. 运行结束后及时停止任务自有 GPU 服务器和 worker，失败或取消时同样如此。确认进程、GPU 分配和临时服务端口均已释放。只有用户明确要求时才保留服务，并在交接记录中注明例外。
-
-## 添加新功能
-
-1. 在 `docs/requirements.md` 添加或更新对应 `REQ-*`。
-2. 编写 Rust 或 Python 代码。
-3. 添加单元测试：Rust 放在同文件的 `#[cfg(test)]` 模块，Python 放在 `tests/`。
-4. 在 `docs/testing.md` 更新测试位置和预期结果。
-5. 按上述约定使用 `feat(...)` 提交。
-
-## 手工运行测试
-
-```bash
-# 框架检查会设置两个必要的环境变量。
-scripts/with-env.sh cargo test --workspace
-scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
-scripts/with-env.sh ruff format python/
-scripts/with-env.sh ruff check python/
-
-# 连贯文本；实际路径 FP64 变体见 docs/testing.md。
-scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/contribution-smoke.ipc --max-tokens 64
-```
-
-## 不要做的事情
-
-- 不要添加基于 swap 的抢占、多 GPU、gRPC 服务、LoRA 或多模态输入；它们明确不在范围内（REQ-OUT-SCOPE-001）。需要调整范围时先讨论。OpenAI 兼容 HTTP 服务已实现并通过验收（REQ-SERVE-001）；修改服务时须重跑其真实 GPU/agentic 检查。
-- 不得提交秘密信息、token、`.env` 值或生产凭据。
-- 未获项目负责人明确确认，不得向任何分支强制推送。
-- 升级 Rust `zeromq` crate 前，检查 `DealerSocket` 和 `ipc-transport` 是否仍正常，见 `docs/decisions/ADR-001-zmq-socket-type.md`。
+更新 `docs/handoff.md`, 说明当前结果和开放工作.
+停止所属 GPU 进程和临时监听器.
+用户要求持续运行的服务, 在交接文档记录用途, 在 `LOCAL.md` 记录本机信息.

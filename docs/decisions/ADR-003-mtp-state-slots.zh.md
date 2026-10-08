@@ -1,10 +1,25 @@
-# ADR-003：MTP target 状态槽与精度
+# ADR-003: MTP 状态 slot 与精度
 
-2026-09-19 接受，属于已授权的模块/精度实现范围。
-在独立运行时下仍然有效：MTP 使用 BF16 GDN 状态，ordinary 使用 FP32。下文关于 vLLM 平台容量计算的内容描述的是最初动机。
+日期: 2026-09-19. 状态: accepted, 在独立运行时中仍有效.
 
-draft 模型不含 GDN 层，但 target 验证 K 个 draft token 需要额外 K 个递归状态槽。Rust 预留这些槽，在 draft 被拒绝后复用，在大 prefill 分块后迁移，并保留此前已接受状态，直到下一次执行消耗它。worker 接收实际调度的 draft，返回实际被接受的输出和下一批 draft token ID。Rust 只回滚已调度且被拒绝的 draft。
+## 背景
 
-当时安装的模型/后端中，默认 FP32 SSM 加四个推测槽，会让 vLLM 平台缓存定容将 block_size 从 784 增至 1568。项目要求 784，因此 MTP 显式使用 BF16 SSM 缓存存储；普通模式保留后端 auto 精度。配对 vLLM 基线采用完全相同选择。初始化断言 block_size 保持 784。这一精度选择属于基准配置，不代表对任意 draft 数量的 MTP 精度或兼容性作普遍保证。
+Draft layer 没有 GDN, 但 target verification 需要为已调度草稿保留额外 recurrent state.
+原后端的 FP32 状态容量计算在 4 个草稿时将块大小从 784 增至 1568.
+项目合同固定块大小为 784.
 
-实际路径测试观测 target GDN 融合 MTP 验证及全部 draft 状态，同时观测真实 GQA 和 prefill 调用；以相同舍入输入与 CPU FP64 参考比较。短中文生成和跨块中文生成均通过检查，输出连贯。状态误差容差及限制记录在 testing.md。完整模型 token 一致不属于验收门槛。
+## 决策
+
+MTP 使用 BF16 GDN 状态, 普通执行使用 FP32.
+Rust 保留 speculative slot, 保护前一已接受状态直到下一次执行消费它.
+Worker 返回保留的 target token, 接受草稿数量和下一批草稿.
+Rust 只回滚已调度且被拒绝的草稿.
+匹配基线使用相同状态精度.
+
+## 影响
+
+精度属于实测配置, 不作为通用 MTP 精度结论.
+保持 block784 和实际路径 FP64 参考容差.
+测试覆盖 target verification state, GQA/GDN, 分块边界, 前缀复用和连贯文本.
+完整模型 token identity 不作为门槛.
+参见 [精度需求](../requirements.zh.md#req-acc-001-数值精度) 和 [验收](../acceptance.zh.md).

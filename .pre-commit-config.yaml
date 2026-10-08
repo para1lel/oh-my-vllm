@@ -1,8 +1,4 @@
-# All hooks are `repo: local` with `language: system`: the toolchain already lives
-# in the project's conda env, so commits never wait on pre-commit building hook
-# environments and never need network access.
-#
-# scripts/with-env.sh puts that env on PATH and pins CARGO_TARGET_DIR.
+# Hooks use installed project tools through the portable environment wrapper.
 fail_fast: false
 
 repos:
@@ -59,4 +55,10 @@ repos:
         entry: scripts/with-env.sh python scripts/fix_whitespace.py
         language: system
         types: [text]
-        exclude: ^bench/baseline/
+
+      - id: documentation
+        name: portable bilingual documentation
+        entry: scripts/with-env.sh python scripts/check_docs.py
+        language: system
+        pass_filenames: false
+        always_run: true

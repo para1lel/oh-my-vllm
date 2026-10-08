@@ -110,7 +110,14 @@ def summarize(runs, batch_size, output_len, minimum=5):
     }
 
 
+def require_raw(artifact):
+    if not isinstance(artifact, dict) or "artifact_kind" in artifact:
+        raise ValueError("formal comparison requires original raw evidence")
+
+
 def compare(baseline, candidate):
+    require_raw(baseline)
+    require_raw(candidate)
     if baseline["workload"] != candidate["workload"]:
         raise ValueError("workload mismatch")
     workload = baseline["workload"]
@@ -187,6 +194,12 @@ def compare(baseline, candidate):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("OH_MY_VLLM_MODEL"),
+        required=not bool(os.environ.get("OH_MY_VLLM_MODEL")),
+        help="checkpoint path; defaults to OH_MY_VLLM_MODEL",
+    )
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--num-gpu-blocks", type=int, default=4200)
@@ -199,10 +212,13 @@ def main():
         raise ValueError("at least two warmups and five repetitions required")
     baseline_bytes = args.baseline.read_bytes()
     baseline = json.loads(baseline_bytes)
+    require_raw(baseline)
     workload = baseline["workload"]
     binary = ROOT / "target/release/oh-my-vllm-zmq-worker"
     command = [
         str(binary),
+        "--model",
+        args.model,
         "--socket",
         f"/tmp/oh-my-vllm-ttft-{os.getpid()}.ipc",
         "--num-gpu-blocks",
@@ -251,7 +267,7 @@ def main():
         command=command,
         hardware=hardware,
         config={
-            "model": "/data0/shared/Qwen3.8-27B-FP8",
+            "model": args.model,
             "max_model_len": baseline["config"]["max_model_len"],
             "max_num_seqs": _parse_bench_config(stdout, "max_num_seqs", int),
             "max_num_batched_tokens": _parse_bench_config(

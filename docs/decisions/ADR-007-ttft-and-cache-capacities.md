@@ -1,47 +1,36 @@
-# ADR-007: EngineCore TTFT and independent hybrid cache capacities
+# ADR-007: TTFT and different cache capacities
 
-Status: user-confirmed 2026-09-22; implemented and accepted (see acceptance.md).
+Date: 2026-09-22. Status: accepted and implemented.
 
 ## Decision
 
-Measure batch-submission-to-first-retained-token with a monotonic host clock, per
-request. Include registration, engine queueing, scheduling, transport and sampling.
-Use the median of five per-run maxima, after at least two full warmups. All twelve
-workloads must reach TTFT <=110% and throughput >=95% of a newly collected official
-vLLM main baseline. The authorized isolated reference collector is the sole
-exception to the project's no-vLLM-import rule. Existing baseline JSON is historical.
-Freeze upstream e9f169d16b9408bb9ae44f75072b91a5521d733c and its adapted environment.
+Use batch-submission-to-first-kept-token TTFT with per-request monotonic clocks.
+Include registration, queue time, scheduling, transport, and sampling.
+Use the median of five repetition maxima after two full warmups.
+The twelve rows must meet 95% throughput,110% TTFT, and 10% spread limits.
+Pin baseline source `e9f169d16b9408bb9ae44f75072b91a5521d733c` in its isolated environment.
 
-Support 262144 total tokens without altering block784, recurrent dtypes or tolerances.
-The prior shared logical pool allocated both FA and GDN tensors at the same capacity;
-large FA capacity therefore duplicated substantial unused recurrent storage.
-`--mamba-blocks` configures a separate Rust-owned GDN block pool and Python state
-capacity. FA and GDN IDs occupy separate namespaces. Each pool retains the existing
-prefix hash, refcount and eviction rules; admission checks both capacities before
-allocating. Prefix hits touch both pools before allocation. Without the option the
-historical shared pool remains available for controlled capacity/preemption tests.
-This is one runner implementation, with configurable cache allocation policy.
+Keep total context 262144, block 784, state dtypes, and numerical tolerances.
+Add `--mamba-blocks` for different Rust GDN allocation and Python tensor capacity.
+FA and GDN IDs have different namespaces.
+Without the option, keep the shared pool for controlled capacity/preemption tests.
+Admission checks the two capacities and rejects impossible requests.
 
-The initial long-context diagnostic uses 1400 FA slots and 128 GDN slots (including
-immutable null slots). No numerical precision is changed. Capture save/restore and
-MTP state ownership remain per tensor type. Fresh-allocation IDs remain unused wire
-hints; they must not be interpreted as globally unique IDs across separate pools.
+Prefix hits touch the two pools before new allocation.
 
-## Sources and verification
+## Reason and consequences
 
-Design reference: [vLLM hybrid cache manager](https://docs.vllm.ai/en/stable/design/hybrid_kv_cache_manager/).
-Our limited single-model scope permits explicit capacities instead of a general
-heterogeneous-memory allocator. Future automatic sizing must preserve admission and
-prefix ownership invariants, and cannot move logical allocation into Python.
+A large shared pool allocated excess recurrent state alongside FA capacity.
+Separate 1400 FA and 128 GDN slots keep long contexts resident with less unused state.
+The historical `num_gpu_blocks` unit stays. Python shows `floor(num_gpu_blocks/3)` FA slots.
+Block IDs directly address their own group tensors.
 
-Rust tests cover separate-pool exhaustion, prefix restoration, MTP crossing,
-rejection reuse and migration across prefill chunks. GPU/model tests, the six
-boundary runs and the 12-row matrix have passed (acceptance.md). Admission does not
-yet reject requests exceeding either pool's capacity (audit SCH-04).
+Future automatic sizing must keep admission, prefix, reference, and eviction invariants with Rust allocation ownership.
 
-For the comparison, both engines must keep the full workload resident, with zero
-preemptions and the prescribed prefix-hit counts. Raw cache configuration, GPU
-identity and CPU affinity are recorded; GPU model/memory/driver and CPU affinity
-must match. Byte layouts differ, so matching a raw block-count integer across
-engines is not a valid capacity comparison. Check each engine's effective token
-capacity against the workload before accepting a baseline configuration.
+The two engines must keep the full workload resident without preemption.
+Match effective token capacity, CPU affinity, and GPU model/memory/driver.
+A matching raw block-count integer does not show equivalent capacity.
+Record full configuration and measured source identity.
+See [requirements](../requirements.md), [testing](../testing.md), and [acceptance](../acceptance.md).
+
+The future roofline policy does not change this active protocol.

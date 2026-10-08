@@ -1,0 +1,18 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "2026-09-22-ttft-discarded.json",
+    "sha256": "cb3dd2b1d63ec5be64a83e5d3adc533af258af7f9588fc39fae29ae793a3e133",
+    "bytes": 4454
+  },
+  "removed_fields": [
+    "data.logs"
+  ],
+  "data": {
+    "status": "discarded; external GPU interference",
+    "reason": "A non-cooperating external TP4 job entered four selected GPUs. Exclusivity checks aborted our process groups; external jobs were not stopped.",
+    "limitation": "These attempts used the previous pipe collector and retain driver rejection traces only, not full child stdout. No data from these attempts enters acceptance. File-backed capture now preserves child logs even on interference."
+  }
+}

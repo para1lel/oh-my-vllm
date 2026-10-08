@@ -1,207 +1,177 @@
-# OpenAI-compatible local serving
+# HTTP service contracts
 
-**Status (2026-09-23):** the default CUDA Qwen Worker passes real MTP4 JSON/tool
-constraints, thinking levels, lifecycle and both oh-my-pi core tasks. Long strict-JSON
-requests through both APIs reuse 130928 cached tokens. See
-[acceptance.md](acceptance.md) for evidence and retained answer limitations.
+Rust controls Axum HTTP, admission, protocol adaptation, response storage, cancellation, scheduling, and logical KV.
+Python controls tokenization, templates, XGrammar, detokenization, and GPU model execution.
+The client executes function tools.
 
-**Historical audit findings, now repaired:** the 2026-09-23 audit found request
-errors that could fail all active streams (SRV-01), orphaned workers after parent
-termination (SRV-02), misclassified HTTP errors (SRV-03), and dropped held-back
-bytes at a `length` finish (SRV-04). Their current code and regression status is
-tracked in [audit-2026-09-23.md](audit-2026-09-23.md); current full GPU and 12-row
-framework acceptance remain separate pending checks.
+## Start
 
-## Run
+Set the environment and model as specified in [development](development.md).
+Use a unique IPC path for each service:
 
 ```bash
 scripts/with-env.sh cargo build --release
 scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/oh-my-vllm-serve.ipc --num-speculative-tokens 4 serve
 ```
 
-Defaults: `127.0.0.1:8000`, model ID `qwen3.8-27b-fp8`, no authentication for the
-local workflow. Set `serve --listen` and `--served-model-name` as needed. Rust
-owns HTTP (Axum), protocol adaptation, response state, online admission,
-cancellation, scheduling and KV. Python owns tokenizer/template application,
-XGrammar state and masks, incremental detokenization, and project-owned GPU model execution.
-No Python scheduler or tool executor is introduced. KV block size remains 784.
+Defaults are `127.0.0.1:8000` and model ID `qwen3.8-27b-fp8`.
+The local service has no authentication.
+Use `serve --listen` and `--served-model-name` to change these values.
+Keep server addresses in `LOCAL.md`.
 
-## Compatibility surface
+## API surface
 
-- `GET /v1/models`.
-- `POST /v1/chat/completions`: streaming SSE and non-streaming JSON, text and
-  function tools, tool-result history, usage and finish reasons.
-- `POST /v1/responses`: its own typed SSE events and JSON output items, text,
-  function tools, full-history replay and `previous_response_id` continuation.
-- `GET /v1/responses/{id}` and `DELETE /v1/responses/{id}`.
-- Tool choice: auto, none, required, named function; multiple calls are allowed
-  unless `parallel_tool_calls=false`. The service generates calls; OMP runs tools.
-- Sampling: temperature, top_p, top_k, seed, frequency/presence/repetition penalties.
-  Defaults come from the local generation_config.json (temperature 1, top_p .95,
-  top_k 20). Offline Run/Bench retain greedy, fixed-length, ignore-EOS behavior.
-- Default output budget: 8,192 tokens, including reasoning and text. The CLI
-  context default is 65,536; prompt + output budget exceeding it is an error.
-  No automatic truncation. EOS ends generation; up to four nonempty stop strings
-  work for ordinary text, including across token/UTF-8 boundaries. Stops cannot
-  interrupt enabled tools or structured output. Length exhaustion returns
-  `length` / `incomplete`; an unfinished tool call is never delivered for execution.
-- Text-only inputs, one completion per request. Unknown top-level fields and
-  unsupported features such as logprobs, background mode and automatic truncation
-  produce errors. This is a documented subset, not full OpenAI platform parity.
+| Method and route | Contract |
+|---|---|
+| `GET /v1/models` | Model discovery. |
+| `POST /v1/chat/completions` | JSON or SSE, text, function tools, tool history, usage, and finish reasons. |
+| `POST /v1/responses` | JSON items or typed SSE, text, tools, full history, and `previous_response_id`. |
+| `GET /v1/responses/{id}` | Stored response retrieval. |
+| `DELETE /v1/responses/{id}` | Stored response deletion. |
 
-Protocol references: [Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create),
-[Responses](https://developers.openai.com/api/reference/resources/responses/methods/create),
-[Responses SSE](https://developers.openai.com/api/reference/resources/responses/streaming-events),
-[Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
-The installed OMP 18.2.6 provider payloads and event consumers are also tested.
+Inputs are text-only with one completion per request.
+Unknown fields and unsupported features, with logprobs, background mode, and automatic truncation, produce errors.
+Supported OMP provider payloads and event consumers have tests.
+The API subset follows [Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) and [Responses](https://developers.openai.com/api/reference/resources/responses/methods/create) conventions.
+
+## Sampling, tools, and stopping
+
+Sampling supplies temperature, top_p, top_k, seed, and frequency/presence/repetition penalties.
+Checkpoint defaults are temperature `1`, top_p `.95`, and top_k `20`.
+Offline Run/Bench use greedy sampling, fixed output length, and ignore EOS.
+
+Tool choice permits auto, none, required, and a named function.
+Multiple calls are permitted unless `parallel_tool_calls=false`.
+The service generates tool calls. OMP executes them and returns results.
+
+The default output budget is 8192 tokens, with reasoning and text.
+The default CLI context is 65536 tokens.
+Prompt plus output budget more than the context limit is an error.
+EOS ends generation.
+Up to four nonempty stop strings can cross token and UTF-8 boundaries in ordinary text.
+
+Stops cannot interrupt enabled tools or structured output.
+Length exhaustion returns `length` or `incomplete`.
+The service withholds unfinished tool calls from execution.
 
 ## Thinking and replay
 
-Chat accepts `reasoning_effort`; Responses accepts `reasoning.effort`.
-Default is medium. Native off/low/medium/xhigh map to the model template; high
-explicitly aliases xhigh, and the OpenAI-style none aliases off. These are prompt
-controls, not fixed reasoning budgets or a claim of monotonic quality/latency.
-Unknown efforts fail. Thinking stays separate from content/JSON/tool arguments:
-Chat uses reasoning_content; Responses uses readable reasoning summary events/items.
-These contain the local model's emitted reasoning, not a separately generated summary.
+Chat uses `reasoning_effort`. Responses uses `reasoning.effort`.
+The default is medium.
+Native off/low/medium/xhigh control the template. High aliases xhigh and none aliases off.
 
-OMP's validated chat_template_kwargs preserve_thinking/enable_thinking/reasoning_effort
-extensions are supported; other template options fail. Direct enable_thinking=false
-also selects off. History tool arguments arrive as JSON strings and become objects
-before templating. Responses readable reasoning is mapped back to the assistant's
-reasoning_content. Instructions supplied as a Responses top-level field apply only
-to that response and are not inherited via previous_response_id.
+Unknown efforts fail.
+These prompt controls do not specify fixed token budgets or monotonic quality/latency.
 
-## Constraints and MTP
+Chat separates `reasoning_content` from text and tool arguments.
+Responses supplies readable reasoning events/items from the model's emitted reasoning.
+It does not generate another summary.
+Supported `chat_template_kwargs` are `preserve_thinking`, `enable_thinking`, and `reasoning_effort`.
+Direct `enable_thinking=false` selects off. Other template options fail.
 
-JSON object, JSON Schema and tool argument grammars are applied **before sampling**.
-Reasoning may precede the constrained answer. Response JSON and enabled tools cannot
-be combined in one request. strict=true requires closed objects with every property
-required. Unsupported schemas fail; there is no validate-and-retry substitute.
+History tool arguments arrive as JSON strings and become objects before templating.
+Responses reasoning maps back to assistant `reasoning_content`.
+Top-level Responses instructions apply only to that response.
+Continuation does not inherit these instructions.
 
-XGrammar builds Qwen-native XML tool grammars and JSON answer grammars. For MTP,
-each scheduled draft position and the bonus position get the mask for their
-speculative prefix. Simulated grammar advancement is rolled back; only accepted
-output advances persistent state. An invalid draft is rejected at its first masked
-position. This path does not turn off MTP or switch to vLLM's scheduler.
-CPU tests cover mask rollback, rejected drafts, and reasoning-end crossings;
-Real MTP4 runs additionally verify both APIs at off/medium with JSON object, JSON
-Schema and strict tools; every completed case proposed and accepted actual drafts.
+## Grammar and MTP
 
-Supported schema keywords are explicitly listed in worker/serving.py; unsupported
-backend features/combinations are rejected, including unknown string formats and
-pattern/format combined with length bounds. Tool XML has extra encoding limits:
+JSON object, JSON Schema, and strict tool grammars apply before sampling.
+Reasoning can precede the constrained answer.
+A request cannot combine JSON answer format with enabled tools.
+Strict schemas must have closed objects with each property required.
+Unsupported schemas fail explicitly.
 
-- Tool parameters require a direct object root (no root $ref/anyOf) and known,
-  unambiguously typed properties. Explicit open additionalProperties is unsupported.
-  Omitted additionalProperties in a non-strict tool is closed to known properties.
-- Local property $ref and unambiguous anyOf are supported; mixed string/non-string
-  XML unions are rejected because raw `null`/`123` cannot distinguish JSON types.
-- XML strings with pattern, length or format constraints are rejected. String
-  enum/const cannot contain the parameter closing delimiter or candidates that
-  differ only in surrounding spaces/newlines/tabs; encoding padding is restored
-  from the unique schema value. XML anyOf cannot have sibling const/enum. JSON answer schemas
-  do not have these XML-specific restrictions.
-- Unconstrained strings remove one leading/trailing newline from Qwen's XML
-  template markup, matching the supported Qwen XML representation. Quotes, spaces, additional
-  newlines and function/tool-close literals are preserved. Enum/const strings
-  instead recover their exact schema value, including its own newlines.
-  Parsers recognize closing tags only outside parameter values. A literal tool tag
-  in ordinary text or a JSON answer is not interpreted as a tool invocation.
+The supported keyword inventory is in `python/oh_my_vllm/worker/serving.py`.
+Unknown string formats and pattern/format combined with length bounds are unsupported.
 
-## State and resource limits
+XGrammar supplies Qwen XML tool grammars and JSON answer grammars.
+Each MTP draft and bonus position uses its speculative-prefix mask.
+Simulated grammar advancement rolls back. Kept output alone advances persistent state.
+A draft that the mask rejects fails at its first invalid position.
 
-Responses defaults to store=true; OMP normally sends store=false. Stored responses
-and their resolved conversation snapshots expire one hour after completion. Limits
-are 1,000 records and 256 MiB of serialized response/history payload, configurable
-with response-ttl-seconds, response-capacity and response-max-bytes. Object/allocation
-overhead is additional to that serialized-byte budget. Oldest records are evicted
-when capacity is reached; oversized records fail explicitly. Unknown/deleted/expired
-IDs return 404. Restart invalidates IDs. Concurrent continuations copy a snapshot;
-deleting an ancestor does not invalidate already-started requests or saved children.
+CPU tests include rollback, rejection, and reasoning-end crossings.
+Target-model MTP4 evidence includes the two APIs, off/medium, JSON object, JSON Schema, and strict tools.
 
-HTTP bodies are limited to 8 MiB; admission channel and active request limit are
-64 each; Rust schedules up to 32 concurrent sequences. Each stream has a 256-event
-channel and a pending queue limited to 1,024 events or 8 MiB of serialized
-events. A full channel pauses that request's generation and starts a monotonic
-30-second grace period. Pending events retain their order, including final
-events. Generation resumes when the pending queue is empty and at least 128
-channel slots are free. Intermittently reading one event cannot reset the grace
-period. Disconnect immediately marks the request for cancellation; the next
-engine check applies it. A stream still blocked after the grace period is
-cancelled without stopping other requests. The check runs between
-engine operations; an execute round trip or a blocked prepare/Abort send can
-delay the actual cancellation within its deadline. CPU preparation runs in a
-background thread and does not itself block this check. A paused request
-retains its KV state when capacity allows;
-normal priority-based preemption can still evict it under pool pressure.
-The default request timeout is 600 seconds (configurable); preparation/step RPCs
-have 120-second deadlines and detect worker exit. Request-local validation and
-generation errors fail only that request; CUDA/device and worker-fatal errors
-fail pending requests, and later submissions return unavailable until restart.
-Ctrl-C and SIGTERM close active streams and ask Python to shut down. HTTP drain
-and worker cleanup share a bounded shutdown deadline (35 seconds by default,
-configurable with `--shutdown-grace-seconds`); a stalled HTTP reader is forcibly
-disconnected when the deadline expires. In-flight kernels are not individually
-preempted.
+## XML tool restrictions
 
-## OMP task and verification
+Tool parameters must have a direct object root, without root `$ref` or `anyOf`.
+Properties must have known, unambiguous types.
+Explicit open `additionalProperties` is unsupported.
+Omission in a non-strict tool closes the object to known properties.
+Local property `$ref` and unambiguous `anyOf` are permitted.
 
-Run the service with MTP enabled, then run both commands separately:
+Mixed string/nonstring unions are ambiguous in XML and fail.
 
-```bash
-scripts/with-env.sh python scripts/agentic-acceptance.py --api chat --output-dir /tmp/oh-my-vllm-agentic-chat
-scripts/with-env.sh python scripts/agentic-acceptance.py --api responses --output-dir /tmp/oh-my-vllm-agentic-responses
-```
+XML strings cannot use pattern, length, or format constraints.
+String enum/const cannot contain the parameter closing delimiter.
+Candidates cannot differ only in surrounding spaces, newlines, or tabs.
+The parser restores padding from the unique schema value.
+XML `anyOf` cannot have sibling const/enum.
 
-Also exercise the 12 real constrained-output cases (keep MTP enabled):
+JSON answer schemas have no XML-specific restrictions.
 
-```bash
-scripts/with-env.sh python scripts/serving-acceptance.py --output-dir /tmp/oh-my-vllm-serving-constraints
-```
+Unconstrained strings remove one leading/trailing newline from template markup.
+Quotes, spaces, extra newlines, and function/tool-close literals stay.
+Enum/const strings restore the same schema value, with its newlines.
+Parsers recognize closing tags only when they are not in parameter values.
+Literal tool tags in ordinary text or JSON answers stay text.
 
-`scripts/serving-lifecycle.py --server-log /tmp/serve.log --output /tmp/serving-lifecycle.json` additionally
-checks all five thinking levels, stored response retrieval/continuation/deletion,
-concurrent plain/constrained requests, and a successful request after disconnect.
-Start the service with `RUST_LOG=info,oh_my_vllm_zmq_worker::serving=debug` and
-redirect its output to the supplied log file. The script requires log evidence
-that both mixed requests shared a scheduled batch and the disconnected request
-was canceled and released by the Worker RPC. It disconnects only after nonempty
-generated SSE content. Use --base-url on all three scripts when the service uses
-a non-default port. Check actual MTP activity in server logs, and stop the service
-and its worker immediately after the runs.
+## Storage and resource limits
 
-The agentic script creates an isolated models.yml, allows read/grep/glob, and asks:
+Responses defaults to `store=true`. OMP usually sends `store=false`.
+Stored responses and resolved history snapshots expire one hour after completion.
+Defaults are 1000 records and 256 MiB of serialized response/history bytes.
+Object/allocation overhead is additional.
 
-> Read this repository's README, architecture documentation and necessary source.
-> Introduce the project goals, architecture, how to run it and its current
-> completion status. Cite the files supporting your answer. Do not modify files.
-> Read at least crates/scheduler/src/lib.rs and
-> python/oh_my_vllm/worker/model_runner.py with the read tool before writing
-> the final answer; directory listings alone do not count.
+Use `--response-ttl-seconds`, `--response-capacity`, and `--response-max-bytes` for changes.
+Evict oldest records at capacity. Oversized records fail.
+Unknown, deleted, or expired IDs return 404. Restart invalidates IDs.
 
-It saves client JSONL, stderr and exact command/configuration. Verify tool execution,
-follow-up model requests with tool results, and a final answer grounded in files.
-Verify successful reads of both named implementation files in the client JSONL.
-Exit zero alone does not pass acceptance. The script kills its owned process group
-on timeout. The dummy local API key is not a credential.
+Concurrent continuations copy snapshots.
+Ancestor deletion keeps already-started requests and stored children.
 
-OMP uses native non-strict tool schemas because its strict normalization introduces
-ambiguous nullable XML strings. Separate strict API tests cover supported schemas.
-OMP minimal maps to off: the installed client's off control falls back to its
-lowest supported effort. low→low, medium→medium, high/xhigh/max→xhigh. Both off and
-medium client paths passed scripted protocol tests. Both real agentic API tasks
-passed at medium, and all five thinking levels passed real API checks.
+| Resource | Default limit |
+|---|---:|
+| HTTP body | 8 MiB |
+| Admission channel / active requests | 64 / 64 |
+| Scheduled sequences | 32 |
+| Stream channel | 256 events |
+| Pending stream queue | 1024 events or 8 MiB serialized bytes |
+| Backpressure grace | 30 seconds |
+| Request timeout | 600 seconds |
+| Prepare/step RPC deadline | 120 seconds |
+| Shared shutdown grace | 35 seconds |
 
-No new strict serving throughput threshold is set. Check real logs for queue wait,
-preparation time, TTFT, end-to-end output tok/s, steps, cache hits and MTP proposed/
-accepted tokens. Use DEBUG for RPC/worker host timing; do not label it CUDA kernel
-time. Investigate persistent queueing, stalls, unexpected zero proposals/acceptance,
-excess preemption, memory growth or worker errors. Compare like workloads after
-warmup. Existing EngineCore >=95% requirements remain separate and unchanged.
+A full channel pauses its request and starts a monotonic backpressure deadline.
+Pending events keep order, with final events.
+Resume generation after the pending queue empties and at least 128 channel slots become free.
+Sparse reads do not reset the deadline.
+Disconnect marks cancellation immediately. The next engine check applies it.
 
-The tokenizer uses Transformers with native Tokenizers DecodeStream for incremental
-decoding. Vocabulary properties are obtained once during preparation, avoiding
-repeated tokenizer metadata work per output token. Python DEBUG logs separate
-message decoding, host execution and response encoding; those durations include
-synchronization and are not CUDA kernel timings.
+Deadline checks occur between operations. RPCs or blocked sends can delay cancellation.
+Background CPU preparation itself does not block this check.
+Paused requests keep KV when capacity permits. Priority preemption can still evict them.
+
+Request-local validation or generation failures affect that request alone.
+Fatal CUDA/device/worker failures fail pending requests and make later submissions unavailable until restart.
+Ctrl-C and SIGTERM close streams and request worker shutdown.
+HTTP drain and worker cleanup share the configurable `--shutdown-grace-seconds` deadline.
+Stalled readers disconnect at deadline. Kernels have no individual preemption.
+
+## Verification
+
+Use `scripts/serving-acceptance.py`, `scripts/serving-lifecycle.py`, and `scripts/agentic-acceptance.py`.
+Complete OMP tasks with the target checkpoint independently through `--api chat` and `--api responses` with MTP enabled.
+Use `--omp` or the executable on `PATH`.
+The client JSONL must show successful `read` calls for `crates/scheduler/src/lib.rs` and `python/oh_my_vllm/worker/model_runner.py`.
+Directory listings alone are insufficient.
+The model must receive the tool results.
+
+The answer must use those results and refer to the files.
+Keep the repository unchanged during the agent task.
+
+Examine measured queue/preparation time, TTFT, rate, steps, prefix reuse, and proposed/accepted drafts.
+There is no additional HTTP throughput gate.
+Script exit status or a scripted worker alone does not show target-model acceptance.
+See [testing](testing.md) and [acceptance](acceptance.md).

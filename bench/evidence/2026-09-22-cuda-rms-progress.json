@@ -1,0 +1,3584 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "2026-09-22-cuda-rms-progress.json",
+    "sha256": "1df96ad111d9489c9a43f87e96765b91b9974f777e7d462f92809636395434b2",
+    "bytes": 158384
+  },
+  "removed_fields": [
+    "data.collections[0].hardware.cpu_affinity",
+    "data.collections[0].hardware.gpu",
+    "data.collections[0].hardware.gpu_info",
+    "data.collections[1].hardware.cpu_affinity",
+    "data.collections[1].hardware.gpu",
+    "data.collections[1].hardware.gpu_info",
+    "data.collections[2].hardware.cpu_affinity",
+    "data.collections[2].hardware.gpu",
+    "data.collections[2].hardware.gpu_info",
+    "data.observations.hardware.cpu_affinity",
+    "data.observations.hardware.gpu",
+    "data.observations.hardware.gpu_info"
+  ],
+  "data": {
+    "accepted": false,
+    "limitation": "Dirty-source RMS subsets only. First vector4 launch tuning passes24/26; vector8 passes25/26 then26/26 unchanged. Retain the failed confidence result: one CUDA sample209.542us versus paired TileLang191.684us; no detected GPU interference, exact cause unresolved. No excluded pairs or threshold changes. Full173 and framework acceptance outstanding.",
+    "collections": [
+      {
+        "source_commit": "102d4360715ffe57fe63a3d762c375efed1106f8",
+        "source_status": " M python/oh_my_vllm/kernels/cuda_backend/kernels.cu\n",
+        "sources_sha256": {
+          "benchmarks/kernels.py": "98ffe4ec7ed3e444f60261bb44d584b9f2e6b61cf0bcf3073a401744070d31bf",
+          "development/kernels/cases.py": "7b38a1e5a655fb54d8e808c63bde1ae9e0b1d4f1149d89b37703dd36863304f6",
+          "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+          "development/kernels/fixtures.py": "e03e144a1e6b520997e898f0be531ff2d7f65134db567b18d3c9a106a95bf10b",
+          "development/kernels/observations.py": "838276bb4def11e107c4eac84b43b42c8332e76a5e03d3ea72b404abc80db660",
+          "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+          "development/kernels/reference.py": "fa2f39539f538d421c7860fa6f82c7f645933f046b813c3ed1f2691a42f79200",
+          "development/kernels/semantics.py": "b383b26bfbba7cd8d7dde2865107da55331558ada11b791e9cf4f4dffa5a9407",
+          "development/kernels/tilelang-reference.json": "14c3df434dedf6d60629eba25c267df888d1a83f1e35cf868fc29a4b1e0945e0",
+          "development/kernels/timing.py": "a723b623d1c58c652523c319153fd216deb179935a601398af531cf86d503ef7",
+          "development/kernels/twins.py": "40ea4c4c7dcc11fbef752c894d61e1204ef40c567ce68c20ce76ed522d5c89e4",
+          "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+          "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+          "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+          "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+          "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "97c29fed7753772b1455fe7ba53d9d35928da3bd64fadf460fa30b2c1b29c9e2",
+          "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "8adf80fd574a70d8baf01486c71020d23b8972d8fc3607e13fe4beab20ad1fb1",
+          "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+          "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+          "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+          "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+          "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+          "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+          "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+          "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+          "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+          "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+          "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+          "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+          "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+          "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+          "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+        },
+        "hardware": {
+          "cpu_affinity_count": 192,
+          "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+        },
+        "reference": {
+          "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+          "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+          "files": {
+            "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+            "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+            "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+            "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+            "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+            "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+            "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+          },
+          "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+          "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690"
+        },
+        "protocol": "Complete static maximum-shape operations; three independent warm rounds, twenty alternating-order pairs/round,100 graph repetitions/sample. No profiler during timing. Fixtures use immutable sources and isolated repeatable destinations.",
+        "coverage": {
+          "complete": false,
+          "required": [
+            "norm-8f0939a3eb",
+            "add_norm-1cd0b34f33",
+            "gated_norm-cf3f37cb9e",
+            "norm_rope-aa858970fa",
+            "norm_rope-1ef4fa4b71",
+            "quant-a83ee98240",
+            "quant-7a2c2961c3",
+            "silu_quant-bdb6037d89",
+            "gates-20dd53c898",
+            "append-3ac45728b6",
+            "convolution-c4c3ff2aef",
+            "qk-12fc3a9e63",
+            "norm-effe245bd2",
+            "add_norm-27c6f00266",
+            "gated_norm-526cd44715",
+            "norm_rope-7f94c83a80",
+            "norm_rope-5042ce9f04",
+            "quant-cba5ed9729",
+            "quant-14b2b04fc3",
+            "silu_quant-7e22ac4193",
+            "gates-9710bbc960",
+            "append-ec1c6c71f0",
+            "convolution-0febb0c2f0",
+            "recurrent-5a418230e1",
+            "norm-c2c1f928be",
+            "add_norm-d38e95acda",
+            "gated_norm-730a8e2832",
+            "norm_rope-c6d198d051",
+            "norm_rope-7605fcf60a",
+            "quant-ab0ac5c4e5",
+            "quant-0e5f3a0b2e",
+            "silu_quant-ab0edc82bb",
+            "gates-cae0b44add",
+            "append-b87e0af969",
+            "convolution-2e3c4391cd",
+            "qk-f930cef0b5",
+            "norm-b75ec1a7a2",
+            "add_norm-c7cb824ce7",
+            "gated_norm-bdec59c631",
+            "norm_rope-e7efa0f644",
+            "norm_rope-020f143656",
+            "quant-5b659364da",
+            "quant-cb18873355",
+            "silu_quant-71ac03b9bc",
+            "gates-c72bdad5d4",
+            "append-11918a5a72",
+            "convolution-ff7930b7b7",
+            "recurrent-2a62969158",
+            "norm-7d0299aa63",
+            "add_norm-0c6631a889",
+            "gated_norm-cdfb1224cc",
+            "norm_rope-fe6caee7bd",
+            "norm_rope-1d215f4369",
+            "quant-cacaef771f",
+            "quant-0ab771f274",
+            "silu_quant-7ed9c30e04",
+            "gates-ee30f1b859",
+            "append-563a85532c",
+            "convolution-647f178fc3",
+            "recurrent-041544e32f",
+            "recurrent-36a6d98675",
+            "norm-9690ce8dc3",
+            "add_norm-c3003e1746",
+            "gated_norm-c04fc8e4ea",
+            "norm_rope-be67ccbf8e",
+            "norm_rope-a259bdd515",
+            "quant-317bf37c2b",
+            "quant-0eea55c864",
+            "silu_quant-a089c70b05",
+            "gates-eb9ecb7e6b",
+            "append-4ecd37d0f5",
+            "convolution-669242bf59",
+            "recurrent-38fd6bd99e",
+            "attention-c426ebd5d5",
+            "attention-d3973698ea",
+            "attention-e3bf2f1708",
+            "attention-6ee6a06e37",
+            "norm-214c77fddf",
+            "add_norm-17cf75a750",
+            "gated_norm-a20f3afb37",
+            "norm_rope-d63d3bf6c3",
+            "norm_rope-7af50d1396",
+            "quant-c7c5a33dd2",
+            "quant-c908ceb94f",
+            "silu_quant-6ddda81d2c",
+            "gates-db0ed2a574",
+            "append-04349e7a5a",
+            "convolution-acc1f1fa4a",
+            "recurrent-e73333aa6f",
+            "attention-4fbadf5691",
+            "attention-80f93685bd",
+            "attention-39a3371fd0",
+            "attention-4705faca24",
+            "norm-82d8a65dcf",
+            "add_norm-28b801aed5",
+            "gated_norm-d88b128193",
+            "norm_rope-0da98727ba",
+            "norm_rope-22ae6d48f1",
+            "quant-78967ef6bb",
+            "quant-b6aca61c7f",
+            "silu_quant-fbdf53e4ed",
+            "gates-7c7a082031",
+            "append-33834e80da",
+            "convolution-ea757c8cde",
+            "recurrent-4b9de1f8fa",
+            "recurrent-fe8f9e7511",
+            "attention-86c02993e7",
+            "attention-302aa28608",
+            "attention-5d1d8dd9c4",
+            "attention-2b7ac478c8",
+            "attention-0ebf3559b6",
+            "attention-764772a69f",
+            "attention-166a4bce77",
+            "attention-a6899c8eba",
+            "norm-1953a6389d",
+            "add_norm-a8eca15b2f",
+            "gated_norm-37b6f09e50",
+            "norm_rope-1d6150fee8",
+            "norm_rope-ae15b12d9e",
+            "quant-38a4f3d421",
+            "quant-6b2b789e0f",
+            "silu_quant-a828b90cc9",
+            "gates-230b55c57b",
+            "append-e970b8e2d2",
+            "convolution-accdf72929",
+            "qk-2fdf585888",
+            "norm-3f7d78bda0",
+            "add_norm-ea3a42f942",
+            "gated_norm-cf90127954",
+            "norm_rope-afcd6f6db6",
+            "norm_rope-21783c6eed",
+            "quant-6f964d5026",
+            "quant-31fe1ff1c4",
+            "silu_quant-e81d00f9c2",
+            "gates-414c933c7a",
+            "append-0f2df713a0",
+            "convolution-8f95316330",
+            "qk-2bc130d5f3",
+            "norm-80dce647f9",
+            "add_norm-6c841c61cc",
+            "gated_norm-fc1b4f5fca",
+            "norm_rope-107cd54d94",
+            "norm_rope-f77fa562f3",
+            "quant-9c9c4ad938",
+            "quant-effc981768",
+            "silu_quant-07d0318c78",
+            "gates-032c38d108",
+            "append-6d87de0fda",
+            "convolution-cdeba28a40",
+            "qk-ee1062c676",
+            "norm-ea1e7c720d",
+            "add_norm-8fa7f5b472",
+            "gated_norm-a3ae6d7d9e",
+            "norm_rope-fefd6d7eee",
+            "norm_rope-3ad6d7a9b1",
+            "quant-0413ce3ad4",
+            "quant-f70208e990",
+            "silu_quant-6e2b085b5c",
+            "gates-fe0ffa9ef4",
+            "append-5a49c472c2",
+            "convolution-75d71689d9",
+            "qk-df607783e7",
+            "norm-1e2a1a065f",
+            "add_norm-16c7eea28c",
+            "gated_norm-bf1c454402",
+            "norm_rope-e3f1f18c4a",
+            "norm_rope-61e679a0dc",
+            "quant-0a7394ccef",
+            "quant-4e026ac5b2",
+            "silu_quant-3d777559ac",
+            "gates-7f196271c1",
+            "append-acf57c318e",
+            "convolution-445867aff2"
+          ],
+          "selected": [
+            "norm-8f0939a3eb",
+            "add_norm-1cd0b34f33",
+            "norm-effe245bd2",
+            "add_norm-27c6f00266",
+            "norm-c2c1f928be",
+            "add_norm-d38e95acda",
+            "norm-b75ec1a7a2",
+            "add_norm-c7cb824ce7",
+            "norm-7d0299aa63",
+            "add_norm-0c6631a889",
+            "norm-9690ce8dc3",
+            "add_norm-c3003e1746",
+            "norm-214c77fddf",
+            "add_norm-17cf75a750",
+            "norm-82d8a65dcf",
+            "add_norm-28b801aed5",
+            "norm-1953a6389d",
+            "add_norm-a8eca15b2f",
+            "norm-3f7d78bda0",
+            "add_norm-ea3a42f942",
+            "norm-80dce647f9",
+            "add_norm-6c841c61cc",
+            "norm-ea1e7c720d",
+            "add_norm-8fa7f5b472",
+            "norm-1e2a1a065f",
+            "add_norm-16c7eea28c"
+          ]
+        },
+        "diagnostic": true,
+        "rows": [
+          {
+            "id": "norm-8f0939a3eb",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 32144,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-1",
+              "mtp-32768-1",
+              "ordinary-131072-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.09675407886505127,
+                  "cuda_ms": 0.09597856044769287
+                },
+                {
+                  "tilelang_ms": 0.09677328109741211,
+                  "cuda_ms": 0.0958894395828247
+                },
+                {
+                  "tilelang_ms": 0.09673824310302734,
+                  "cuda_ms": 0.09590175628662109
+                }
+              ],
+              "paired_mean_gain_ms": 0.0008157339096069328,
+              "gain_lower_95_ms": 0.0007659578323364268,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-1cd0b34f33",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 32144,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-1",
+              "mtp-32768-1",
+              "ordinary-131072-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.19058127403259278,
+                  "cuda_ms": 0.190415678024292
+                },
+                {
+                  "tilelang_ms": 0.1905841636657715,
+                  "cuda_ms": 0.19040191650390625
+                },
+                {
+                  "tilelang_ms": 0.19058608055114745,
+                  "cuda_ms": 0.1904044818878174
+                }
+              ],
+              "paired_mean_gain_ms": 0.00016680971781413007,
+              "gain_lower_95_ms": 0.0001433003743489633,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-effe245bd2",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 1,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-1",
+              "prefix-32768-1",
+              "ordinary-131072-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.002348640039563179,
+                  "cuda_ms": 0.0015627200156450272
+                },
+                {
+                  "tilelang_ms": 0.0023452800512313845,
+                  "cuda_ms": 0.0015665599703788757
+                },
+                {
+                  "tilelang_ms": 0.0023481599986553193,
+                  "cuda_ms": 0.001562720015645027
+                }
+              ],
+              "paired_mean_gain_ms": 0.0007829333543777466,
+              "gain_lower_95_ms": 0.0007800586968660354,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-27c6f00266",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 1,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-1",
+              "prefix-32768-1",
+              "ordinary-131072-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0019017599523067474,
+                  "cuda_ms": 0.001796320006251335
+                },
+                {
+                  "tilelang_ms": 0.0019027200341224671,
+                  "cuda_ms": 0.0017992000281810761
+                },
+                {
+                  "tilelang_ms": 0.0019017599523067474,
+                  "cuda_ms": 0.0017948800325393677
+                }
+              ],
+              "paired_mean_gain_ms": 0.00010524266958236692,
+              "gain_lower_95_ms": 0.00010388268530368803,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-c2c1f928be",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 32768,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-2",
+              "ordinary-32768-4",
+              "mtp-32768-2",
+              "mtp-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.09914832115173339,
+                  "cuda_ms": 0.09796783924102784
+                },
+                {
+                  "tilelang_ms": 0.09918384075164796,
+                  "cuda_ms": 0.0978545618057251
+                },
+                {
+                  "tilelang_ms": 0.09919008255004882,
+                  "cuda_ms": 0.0978439998626709
+                }
+              ],
+              "paired_mean_gain_ms": 0.0012678769429524752,
+              "gain_lower_95_ms": 0.0011872733434041352,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-d38e95acda",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 32768,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-2",
+              "ordinary-32768-4",
+              "mtp-32768-2",
+              "mtp-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.1942767906188965,
+                  "cuda_ms": 0.19403136253356934
+                },
+                {
+                  "tilelang_ms": 0.19428447723388673,
+                  "cuda_ms": 0.19402048110961914
+                },
+                {
+                  "tilelang_ms": 0.1943062400817871,
+                  "cuda_ms": 0.19401264190673828
+                }
+              ],
+              "paired_mean_gain_ms": 0.000261886278788249,
+              "gain_lower_95_ms": 0.0002362518310546897,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-b75ec1a7a2",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 2,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-2",
+              "prefix-32768-2",
+              "ordinary-131072-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0024377599358558653,
+                  "cuda_ms": 0.0015942399948835374
+                },
+                {
+                  "tilelang_ms": 0.0024387200176715852,
+                  "cuda_ms": 0.0015924800187349319
+                },
+                {
+                  "tilelang_ms": 0.002436639964580536,
+                  "cuda_ms": 0.0015918400138616561
+                }
+              ],
+              "paired_mean_gain_ms": 0.0008462986722588539,
+              "gain_lower_95_ms": 0.0008443626686930655,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-c7cb824ce7",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 2,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-2",
+              "prefix-32768-2",
+              "ordinary-131072-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0019177600741386413,
+                  "cuda_ms": 0.0018158400058746337
+                },
+                {
+                  "tilelang_ms": 0.0019201599806547166,
+                  "cuda_ms": 0.0018144000321626665
+                },
+                {
+                  "tilelang_ms": 0.0019169600307941438,
+                  "cuda_ms": 0.0018176000565290453
+                }
+              ],
+              "paired_mean_gain_ms": 0.00010252267618974049,
+              "gain_lower_95_ms": 9.982933104038237e-05,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-7d0299aa63",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 4,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-4",
+              "prefix-32768-4",
+              "ordinary-131072-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.002375520020723343,
+                  "cuda_ms": 0.0015931200236082078
+                },
+                {
+                  "tilelang_ms": 0.0023736000061035153,
+                  "cuda_ms": 0.0015904000401496888
+                },
+                {
+                  "tilelang_ms": 0.0023747200518846514,
+                  "cuda_ms": 0.0015912000089883804
+                }
+              ],
+              "paired_mean_gain_ms": 0.0007826986735065778,
+              "gain_lower_95_ms": 0.0007809493392705917,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-0c6631a889",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 4,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-4",
+              "prefix-32768-4",
+              "ordinary-131072-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0019167999923229216,
+                  "cuda_ms": 0.0017974400520324708
+                },
+                {
+                  "tilelang_ms": 0.001919040009379387,
+                  "cuda_ms": 0.001794239953160286
+                },
+                {
+                  "tilelang_ms": 0.0019193599373102188,
+                  "cuda_ms": 0.0017956800013780594
+                }
+              ],
+              "paired_mean_gain_ms": 0.00012161067376534142,
+              "gain_lower_95_ms": 0.00011931734035412471,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-9690ce8dc3",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 5,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.002388319969177246,
+                  "cuda_ms": 0.0016022399812936784
+                },
+                {
+                  "tilelang_ms": 0.0023905599862337115,
+                  "cuda_ms": 0.0016079999506473542
+                },
+                {
+                  "tilelang_ms": 0.0023931200057268143,
+                  "cuda_ms": 0.0016052799671888351
+                }
+              ],
+              "paired_mean_gain_ms": 0.0007873066812753677,
+              "gain_lower_95_ms": 0.0007851733515659968,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-c3003e1746",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 5,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0019308800250291823,
+                  "cuda_ms": 0.0018031999468803405
+                },
+                {
+                  "tilelang_ms": 0.0019259200245141982,
+                  "cuda_ms": 0.001802240014076233
+                },
+                {
+                  "tilelang_ms": 0.0019334400445222854,
+                  "cuda_ms": 0.0018023999780416489
+                }
+              ],
+              "paired_mean_gain_ms": 0.00012557867417732876,
+              "gain_lower_95_ms": 0.00012306666870911918,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-214c77fddf",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 10,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.002410399988293648,
+                  "cuda_ms": 0.0016102400422096253
+                },
+                {
+                  "tilelang_ms": 0.0024084799736738207,
+                  "cuda_ms": 0.0016078399866819382
+                },
+                {
+                  "tilelang_ms": 0.002409119978547096,
+                  "cuda_ms": 0.001610720008611679
+                }
+              ],
+              "paired_mean_gain_ms": 0.0008012853388984999,
+              "gain_lower_95_ms": 0.0007991093397140503,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-17cf75a750",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 10,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0019185599684715272,
+                  "cuda_ms": 0.0018007999658584595
+                },
+                {
+                  "tilelang_ms": 0.0019193600118160249,
+                  "cuda_ms": 0.0017988800257444381
+                },
+                {
+                  "tilelang_ms": 0.0019160000234842301,
+                  "cuda_ms": 0.0017985600233078004
+                }
+              ],
+              "paired_mean_gain_ms": 0.00011569600552320483,
+              "gain_lower_95_ms": 0.00011312535653511684,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-82d8a65dcf",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 20,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.002484480068087578,
+                  "cuda_ms": 0.0016870399564504622
+                },
+                {
+                  "tilelang_ms": 0.0024881599843502044,
+                  "cuda_ms": 0.0016892799735069275
+                },
+                {
+                  "tilelang_ms": 0.0024867200106382372,
+                  "cuda_ms": 0.0016894400119781493
+                }
+              ],
+              "paired_mean_gain_ms": 0.0007972693468133608,
+              "gain_lower_95_ms": 0.000794917327662309,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-28b801aed5",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 20,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0020199999958276753,
+                  "cuda_ms": 0.0019049600511789322
+                },
+                {
+                  "tilelang_ms": 0.0020207999646663665,
+                  "cuda_ms": 0.0019032000005245208
+                },
+                {
+                  "tilelang_ms": 0.002017280012369156,
+                  "cuda_ms": 0.0019028799980878829
+                }
+              ],
+              "paired_mean_gain_ms": 0.00011442665755748748,
+              "gain_lower_95_ms": 0.00011169598996639255,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-1953a6389d",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 624,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.003296480029821396,
+                  "cuda_ms": 0.002927840054035187
+                },
+                {
+                  "tilelang_ms": 0.003299199938774109,
+                  "cuda_ms": 0.0029281599819660185
+                },
+                {
+                  "tilelang_ms": 0.003296319991350174,
+                  "cuda_ms": 0.0029278400540351866
+                }
+              ],
+              "paired_mean_gain_ms": 0.0003686826527118683,
+              "gain_lower_95_ms": 0.000366341342528661,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-a8eca15b2f",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 624,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0038433600962162018,
+                  "cuda_ms": 0.0036668799817562107
+                },
+                {
+                  "tilelang_ms": 0.003845439851284027,
+                  "cuda_ms": 0.0036641600728034972
+                },
+                {
+                  "tilelang_ms": 0.003845279961824417,
+                  "cuda_ms": 0.003665120005607605
+                }
+              ],
+              "paired_mean_gain_ms": 0.00017865599691867825,
+              "gain_lower_95_ms": 0.00017574936648209887,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-3f7d78bda0",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 1248,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.005518879890441895,
+                  "cuda_ms": 0.0042707198858261105
+                },
+                {
+                  "tilelang_ms": 0.00552191972732544,
+                  "cuda_ms": 0.004267520010471345
+                },
+                {
+                  "tilelang_ms": 0.005525600016117096,
+                  "cuda_ms": 0.004269599914550781
+                }
+              ],
+              "paired_mean_gain_ms": 0.001249829317132632,
+              "gain_lower_95_ms": 0.0012459786583979926,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-ea3a42f942",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 1248,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.006012479960918426,
+                  "cuda_ms": 0.005867359936237335
+                },
+                {
+                  "tilelang_ms": 0.006010400056838989,
+                  "cuda_ms": 0.005864159762859344
+                },
+                {
+                  "tilelang_ms": 0.006012319922447204,
+                  "cuda_ms": 0.005867359936237335
+                }
+              ],
+              "paired_mean_gain_ms": 0.00019618670145670568,
+              "gain_lower_95_ms": 0.00014061341683069834,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-80dce647f9",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 2496,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.006774879992008209,
+                  "cuda_ms": 0.006423679888248443
+                },
+                {
+                  "tilelang_ms": 0.006773760020732879,
+                  "cuda_ms": 0.006430720090866089
+                },
+                {
+                  "tilelang_ms": 0.006782880127429962,
+                  "cuda_ms": 0.00642223984003067
+                }
+              ],
+              "paired_mean_gain_ms": 0.0003524266978104909,
+              "gain_lower_95_ms": 0.0003483519951502482,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-6c841c61cc",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 2496,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.016723840236663817,
+                  "cuda_ms": 0.016525440216064453
+                },
+                {
+                  "tilelang_ms": 0.016727839708328248,
+                  "cuda_ms": 0.01653551995754242
+                },
+                {
+                  "tilelang_ms": 0.01672048032283783,
+                  "cuda_ms": 0.016535840034484862
+                }
+              ],
+              "paired_mean_gain_ms": 0.000188416024049123,
+              "gain_lower_95_ms": 0.00017540270090103145,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-ea1e7c720d",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 32288,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-131072-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.09763887882232666,
+                  "cuda_ms": 0.09668464183807374
+                },
+                {
+                  "tilelang_ms": 0.09765007972717285,
+                  "cuda_ms": 0.09657776355743408
+                },
+                {
+                  "tilelang_ms": 0.09763951778411865,
+                  "cuda_ms": 0.09656976222991943
+                }
+              ],
+              "paired_mean_gain_ms": 0.0010046517054239908,
+              "gain_lower_95_ms": 0.0009476332664489747,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-8fa7f5b472",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 32288,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-131072-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.19170719146728515,
+                  "cuda_ms": 0.19167295455932618
+                },
+                {
+                  "tilelang_ms": 0.19167647361755372,
+                  "cuda_ms": 0.1916256046295166
+                },
+                {
+                  "tilelang_ms": 0.19167183876037597,
+                  "cuda_ms": 0.19167600631713866
+                }
+              ],
+              "paired_mean_gain_ms": 3.750864664713629e-05,
+              "gain_lower_95_ms": 1.224231719970705e-05,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": false
+            }
+          },
+          {
+            "id": "norm-1e2a1a065f",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 32290,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-131072-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.09763952255249023,
+                  "cuda_ms": 0.09672751903533935
+                },
+                {
+                  "tilelang_ms": 0.09761807918548585,
+                  "cuda_ms": 0.09659680366516113
+                },
+                {
+                  "tilelang_ms": 0.09761231899261474,
+                  "cuda_ms": 0.09661279678344727
+                }
+              ],
+              "paired_mean_gain_ms": 0.0009636265436808264,
+              "gain_lower_95_ms": 0.0009037871360778812,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-16c7eea28c",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 32290,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-131072-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.19170991897583006,
+                  "cuda_ms": 0.19169360160827636
+                },
+                {
+                  "tilelang_ms": 0.19170175552368163,
+                  "cuda_ms": 0.19169519424438475
+                },
+                {
+                  "tilelang_ms": 0.1916660785675049,
+                  "cuda_ms": 0.19169536590576172
+                }
+              ],
+              "paired_mean_gain_ms": 5.8660507202180445e-06,
+              "gain_lower_95_ms": -1.7034848531084318e-05,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": false
+            }
+          }
+        ],
+        "estimates": {
+          "add_norm": {
+            "kind": "estimated",
+            "source": "TileFoundry HIR",
+            "symbol": "add_norm",
+            "report": "# analysis target=nvidia.b200_sxm module=Operators function=add_norm topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:20480@logical,20480@total,20480@cta;f32:81922@logical,81922@total,81922@cta other-ops=special:2@logical,2@total,2@cta\n# traffic traffic=gmem:r409624/w327704@total,r409624/w327704@cta;rmem:r4/w0@total,r4/w0@cta\n# peak-footprint=gmem:163848;rmem:0\n# roofline ideal-ns=97 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef add_norm(\n    x: Tensor[(2, 5120), \"bf16\"],\n    residual: Tensor[(2, 5120), \"bf16\"],\n    weight: Tensor[(5120,), \"f32\"]\n):\n    v0 = cast(x, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v1 = cast(residual, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v2 = add(v0, v1)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r81920/w40960@total,r81920/w40960@cta; roofline ideal-ns=17 bound-by=memory\n    v3 = cast(v2, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    v4 = cast(v3, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v5 = unary(v4, kind=\"square\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w40960@total,r40960/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v6 = reduce(v5, axes=(-1,), keepdim=True, kind=\"mean\")  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w8@total,r40960/w8@cta; roofline ideal-ns=6 bound-by=memory\n    v0_2 = 1e-06  # Tensor[(), \"f32\", \"umat\"]\n    v7 = add(v6, v0_2)  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = unary(v7, kind=\"rsqrt\")  # Tensor[(2, 1), \"f32\"]; compute-cost other-ops=special:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta; roofline ideal-ns=1 bound-by=memory\n    v9 = mul(v4, v8)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40968/w40960@total,r40968/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v10 = mul(v9, weight)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r61440/w40960@total,r61440/w40960@cta; roofline ideal-ns=14 bound-by=memory\n    v11 = cast(v10, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    return (v3, v11)\n",
+            "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+          },
+          "norm": {
+            "kind": "estimated",
+            "source": "TileFoundry HIR",
+            "symbol": "norm",
+            "report": "# analysis target=nvidia.b200_sxm module=Operators function=norm topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:10240@logical,10240@total,10240@cta;f32:51202@logical,51202@total,51202@cta other-ops=special:2@logical,2@total,2@cta\n# traffic traffic=gmem:r245784/w184344@total,r245784/w184344@cta;rmem:r4/w0@total,r4/w0@cta\n# peak-footprint=gmem:122888;rmem:0\n# roofline ideal-ns=57 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef norm(\n    x: Tensor[(2, 5120), \"bf16\"],\n    weight: Tensor[(5120,), \"f32\"]\n) -> Tensor[(2, 5120), \"bf16\"]:\n    v0 = cast(x, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v1 = unary(v0, kind=\"square\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w40960@total,r40960/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v2 = reduce(v1, axes=(-1,), keepdim=True, kind=\"mean\")  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w8@total,r40960/w8@cta; roofline ideal-ns=6 bound-by=memory\n    v0_2 = 1e-06  # Tensor[(), \"f32\", \"umat\"]\n    v3 = add(v2, v0_2)  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v4 = unary(v3, kind=\"rsqrt\")  # Tensor[(2, 1), \"f32\"]; compute-cost other-ops=special:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta; roofline ideal-ns=1 bound-by=memory\n    v5 = mul(v0, v4)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40968/w40960@total,r40968/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v6 = mul(v5, weight)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r61440/w40960@total,r61440/w40960@cta; roofline ideal-ns=14 bound-by=memory\n    v7 = cast(v6, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    return v7\n",
+            "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+          }
+        },
+        "passed": false,
+        "selected_passed": false,
+        "interference": [],
+        "raw_collection_sha256": "96c09a6b6f73198a691f729490dce12d5032be8a46d4c4f9bb37c90e14dd12f8",
+        "passed_cases": 24
+      },
+      {
+        "source_commit": "102d4360715ffe57fe63a3d762c375efed1106f8",
+        "source_status": " M python/oh_my_vllm/kernels/cuda_backend/kernels.cu\n",
+        "sources_sha256": {
+          "benchmarks/kernels.py": "98ffe4ec7ed3e444f60261bb44d584b9f2e6b61cf0bcf3073a401744070d31bf",
+          "development/kernels/cases.py": "7b38a1e5a655fb54d8e808c63bde1ae9e0b1d4f1149d89b37703dd36863304f6",
+          "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+          "development/kernels/fixtures.py": "e03e144a1e6b520997e898f0be531ff2d7f65134db567b18d3c9a106a95bf10b",
+          "development/kernels/observations.py": "838276bb4def11e107c4eac84b43b42c8332e76a5e03d3ea72b404abc80db660",
+          "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+          "development/kernels/reference.py": "fa2f39539f538d421c7860fa6f82c7f645933f046b813c3ed1f2691a42f79200",
+          "development/kernels/semantics.py": "b383b26bfbba7cd8d7dde2865107da55331558ada11b791e9cf4f4dffa5a9407",
+          "development/kernels/tilelang-reference.json": "14c3df434dedf6d60629eba25c267df888d1a83f1e35cf868fc29a4b1e0945e0",
+          "development/kernels/timing.py": "a723b623d1c58c652523c319153fd216deb179935a601398af531cf86d503ef7",
+          "development/kernels/twins.py": "40ea4c4c7dcc11fbef752c894d61e1204ef40c567ce68c20ce76ed522d5c89e4",
+          "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+          "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+          "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+          "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+          "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "97c29fed7753772b1455fe7ba53d9d35928da3bd64fadf460fa30b2c1b29c9e2",
+          "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "25416115aba90961d97887bedcc3e8aec3afcd02f8560ba7e753e2cbdf9d2755",
+          "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+          "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+          "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+          "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+          "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+          "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+          "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+          "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+          "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+          "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+          "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+          "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+          "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+          "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+          "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+        },
+        "hardware": {
+          "cpu_affinity_count": 192,
+          "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+        },
+        "reference": {
+          "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+          "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+          "files": {
+            "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+            "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+            "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+            "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+            "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+            "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+            "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+          },
+          "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+          "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690"
+        },
+        "protocol": "Complete static maximum-shape operations; three independent warm rounds, twenty alternating-order pairs/round,100 graph repetitions/sample. No profiler during timing. Fixtures use immutable sources and isolated repeatable destinations.",
+        "coverage": {
+          "complete": false,
+          "required": [
+            "norm-8f0939a3eb",
+            "add_norm-1cd0b34f33",
+            "gated_norm-cf3f37cb9e",
+            "norm_rope-aa858970fa",
+            "norm_rope-1ef4fa4b71",
+            "quant-a83ee98240",
+            "quant-7a2c2961c3",
+            "silu_quant-bdb6037d89",
+            "gates-20dd53c898",
+            "append-3ac45728b6",
+            "convolution-c4c3ff2aef",
+            "qk-12fc3a9e63",
+            "norm-effe245bd2",
+            "add_norm-27c6f00266",
+            "gated_norm-526cd44715",
+            "norm_rope-7f94c83a80",
+            "norm_rope-5042ce9f04",
+            "quant-cba5ed9729",
+            "quant-14b2b04fc3",
+            "silu_quant-7e22ac4193",
+            "gates-9710bbc960",
+            "append-ec1c6c71f0",
+            "convolution-0febb0c2f0",
+            "recurrent-5a418230e1",
+            "norm-c2c1f928be",
+            "add_norm-d38e95acda",
+            "gated_norm-730a8e2832",
+            "norm_rope-c6d198d051",
+            "norm_rope-7605fcf60a",
+            "quant-ab0ac5c4e5",
+            "quant-0e5f3a0b2e",
+            "silu_quant-ab0edc82bb",
+            "gates-cae0b44add",
+            "append-b87e0af969",
+            "convolution-2e3c4391cd",
+            "qk-f930cef0b5",
+            "norm-b75ec1a7a2",
+            "add_norm-c7cb824ce7",
+            "gated_norm-bdec59c631",
+            "norm_rope-e7efa0f644",
+            "norm_rope-020f143656",
+            "quant-5b659364da",
+            "quant-cb18873355",
+            "silu_quant-71ac03b9bc",
+            "gates-c72bdad5d4",
+            "append-11918a5a72",
+            "convolution-ff7930b7b7",
+            "recurrent-2a62969158",
+            "norm-7d0299aa63",
+            "add_norm-0c6631a889",
+            "gated_norm-cdfb1224cc",
+            "norm_rope-fe6caee7bd",
+            "norm_rope-1d215f4369",
+            "quant-cacaef771f",
+            "quant-0ab771f274",
+            "silu_quant-7ed9c30e04",
+            "gates-ee30f1b859",
+            "append-563a85532c",
+            "convolution-647f178fc3",
+            "recurrent-041544e32f",
+            "recurrent-36a6d98675",
+            "norm-9690ce8dc3",
+            "add_norm-c3003e1746",
+            "gated_norm-c04fc8e4ea",
+            "norm_rope-be67ccbf8e",
+            "norm_rope-a259bdd515",
+            "quant-317bf37c2b",
+            "quant-0eea55c864",
+            "silu_quant-a089c70b05",
+            "gates-eb9ecb7e6b",
+            "append-4ecd37d0f5",
+            "convolution-669242bf59",
+            "recurrent-38fd6bd99e",
+            "attention-c426ebd5d5",
+            "attention-d3973698ea",
+            "attention-e3bf2f1708",
+            "attention-6ee6a06e37",
+            "norm-214c77fddf",
+            "add_norm-17cf75a750",
+            "gated_norm-a20f3afb37",
+            "norm_rope-d63d3bf6c3",
+            "norm_rope-7af50d1396",
+            "quant-c7c5a33dd2",
+            "quant-c908ceb94f",
+            "silu_quant-6ddda81d2c",
+            "gates-db0ed2a574",
+            "append-04349e7a5a",
+            "convolution-acc1f1fa4a",
+            "recurrent-e73333aa6f",
+            "attention-4fbadf5691",
+            "attention-80f93685bd",
+            "attention-39a3371fd0",
+            "attention-4705faca24",
+            "norm-82d8a65dcf",
+            "add_norm-28b801aed5",
+            "gated_norm-d88b128193",
+            "norm_rope-0da98727ba",
+            "norm_rope-22ae6d48f1",
+            "quant-78967ef6bb",
+            "quant-b6aca61c7f",
+            "silu_quant-fbdf53e4ed",
+            "gates-7c7a082031",
+            "append-33834e80da",
+            "convolution-ea757c8cde",
+            "recurrent-4b9de1f8fa",
+            "recurrent-fe8f9e7511",
+            "attention-86c02993e7",
+            "attention-302aa28608",
+            "attention-5d1d8dd9c4",
+            "attention-2b7ac478c8",
+            "attention-0ebf3559b6",
+            "attention-764772a69f",
+            "attention-166a4bce77",
+            "attention-a6899c8eba",
+            "norm-1953a6389d",
+            "add_norm-a8eca15b2f",
+            "gated_norm-37b6f09e50",
+            "norm_rope-1d6150fee8",
+            "norm_rope-ae15b12d9e",
+            "quant-38a4f3d421",
+            "quant-6b2b789e0f",
+            "silu_quant-a828b90cc9",
+            "gates-230b55c57b",
+            "append-e970b8e2d2",
+            "convolution-accdf72929",
+            "qk-2fdf585888",
+            "norm-3f7d78bda0",
+            "add_norm-ea3a42f942",
+            "gated_norm-cf90127954",
+            "norm_rope-afcd6f6db6",
+            "norm_rope-21783c6eed",
+            "quant-6f964d5026",
+            "quant-31fe1ff1c4",
+            "silu_quant-e81d00f9c2",
+            "gates-414c933c7a",
+            "append-0f2df713a0",
+            "convolution-8f95316330",
+            "qk-2bc130d5f3",
+            "norm-80dce647f9",
+            "add_norm-6c841c61cc",
+            "gated_norm-fc1b4f5fca",
+            "norm_rope-107cd54d94",
+            "norm_rope-f77fa562f3",
+            "quant-9c9c4ad938",
+            "quant-effc981768",
+            "silu_quant-07d0318c78",
+            "gates-032c38d108",
+            "append-6d87de0fda",
+            "convolution-cdeba28a40",
+            "qk-ee1062c676",
+            "norm-ea1e7c720d",
+            "add_norm-8fa7f5b472",
+            "gated_norm-a3ae6d7d9e",
+            "norm_rope-fefd6d7eee",
+            "norm_rope-3ad6d7a9b1",
+            "quant-0413ce3ad4",
+            "quant-f70208e990",
+            "silu_quant-6e2b085b5c",
+            "gates-fe0ffa9ef4",
+            "append-5a49c472c2",
+            "convolution-75d71689d9",
+            "qk-df607783e7",
+            "norm-1e2a1a065f",
+            "add_norm-16c7eea28c",
+            "gated_norm-bf1c454402",
+            "norm_rope-e3f1f18c4a",
+            "norm_rope-61e679a0dc",
+            "quant-0a7394ccef",
+            "quant-4e026ac5b2",
+            "silu_quant-3d777559ac",
+            "gates-7f196271c1",
+            "append-acf57c318e",
+            "convolution-445867aff2"
+          ],
+          "selected": [
+            "norm-8f0939a3eb",
+            "add_norm-1cd0b34f33",
+            "norm-effe245bd2",
+            "add_norm-27c6f00266",
+            "norm-c2c1f928be",
+            "add_norm-d38e95acda",
+            "norm-b75ec1a7a2",
+            "add_norm-c7cb824ce7",
+            "norm-7d0299aa63",
+            "add_norm-0c6631a889",
+            "norm-9690ce8dc3",
+            "add_norm-c3003e1746",
+            "norm-214c77fddf",
+            "add_norm-17cf75a750",
+            "norm-82d8a65dcf",
+            "add_norm-28b801aed5",
+            "norm-1953a6389d",
+            "add_norm-a8eca15b2f",
+            "norm-3f7d78bda0",
+            "add_norm-ea3a42f942",
+            "norm-80dce647f9",
+            "add_norm-6c841c61cc",
+            "norm-ea1e7c720d",
+            "add_norm-8fa7f5b472",
+            "norm-1e2a1a065f",
+            "add_norm-16c7eea28c"
+          ]
+        },
+        "diagnostic": true,
+        "rows": [
+          {
+            "id": "norm-8f0939a3eb",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 32144,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-1",
+              "mtp-32768-1",
+              "ordinary-131072-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.09684560298919678,
+                  "cuda_ms": 0.0959881591796875
+                },
+                {
+                  "tilelang_ms": 0.09688015937805175,
+                  "cuda_ms": 0.09590960025787354
+                },
+                {
+                  "tilelang_ms": 0.09687119960784912,
+                  "cuda_ms": 0.09591599941253662
+                }
+              ],
+              "paired_mean_gain_ms": 0.0009269069035847971,
+              "gain_lower_95_ms": 0.0008630084991455074,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-1cd0b34f33",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 32144,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-1",
+              "mtp-32768-1",
+              "ordinary-131072-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.19056912422180175,
+                  "cuda_ms": 0.19008383750915528
+                },
+                {
+                  "tilelang_ms": 0.19060080528259277,
+                  "cuda_ms": 0.19008895874023438
+                },
+                {
+                  "tilelang_ms": 0.19060976028442383,
+                  "cuda_ms": 0.19007568359375
+                }
+              ],
+              "paired_mean_gain_ms": 0.0005034723281860369,
+              "gain_lower_95_ms": 0.000478311538696292,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-effe245bd2",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 1,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-1",
+              "prefix-32768-1",
+              "ordinary-131072-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0023497599363327027,
+                  "cuda_ms": 0.0015644800662994384
+                },
+                {
+                  "tilelang_ms": 0.0023475199937820434,
+                  "cuda_ms": 0.001563680022954941
+                },
+                {
+                  "tilelang_ms": 0.002349919974803925,
+                  "cuda_ms": 0.0015676800161600114
+                }
+              ],
+              "paired_mean_gain_ms": 0.0007853653232256572,
+              "gain_lower_95_ms": 0.000782709317902724,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-27c6f00266",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 1,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-1",
+              "prefix-32768-1",
+              "ordinary-131072-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0018983999639749526,
+                  "cuda_ms": 0.001796800047159195
+                },
+                {
+                  "tilelang_ms": 0.001899999976158142,
+                  "cuda_ms": 0.001793919950723648
+                },
+                {
+                  "tilelang_ms": 0.0018979200720787048,
+                  "cuda_ms": 0.0017932799458503723
+                }
+              ],
+              "paired_mean_gain_ms": 0.000103632020453612,
+              "gain_lower_95_ms": 0.00010261335472265879,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-c2c1f928be",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 32768,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-2",
+              "ordinary-32768-4",
+              "mtp-32768-2",
+              "mtp-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.09919343948364258,
+                  "cuda_ms": 0.09799983978271484
+                },
+                {
+                  "tilelang_ms": 0.099235200881958,
+                  "cuda_ms": 0.09785903930664062
+                },
+                {
+                  "tilelang_ms": 0.09922128200531005,
+                  "cuda_ms": 0.09786592006683349
+                }
+              ],
+              "paired_mean_gain_ms": 0.001313136259714762,
+              "gain_lower_95_ms": 0.001234463532765707,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-d38e95acda",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 32768,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-2",
+              "ordinary-32768-4",
+              "mtp-32768-2",
+              "mtp-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.19432736396789552,
+                  "cuda_ms": 0.1937659168243408
+                },
+                {
+                  "tilelang_ms": 0.19431360244750978,
+                  "cuda_ms": 0.1937292766571045
+                },
+                {
+                  "tilelang_ms": 0.1943017578125,
+                  "cuda_ms": 0.19375871658325194
+                }
+              ],
+              "paired_mean_gain_ms": 0.0011778243382771828,
+              "gain_lower_95_ms": 0.0005556640624999993,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-b75ec1a7a2",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 2,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-2",
+              "prefix-32768-2",
+              "ordinary-131072-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0024348799884319305,
+                  "cuda_ms": 0.0015934400260448455
+                },
+                {
+                  "tilelang_ms": 0.002433120012283325,
+                  "cuda_ms": 0.0015928000211715698
+                },
+                {
+                  "tilelang_ms": 0.002436800003051758,
+                  "cuda_ms": 0.0015942399948835374
+                }
+              ],
+              "paired_mean_gain_ms": 0.0008420266558726629,
+              "gain_lower_95_ms": 0.0008401546478271484,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-c7cb824ce7",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 2,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-2",
+              "prefix-32768-2",
+              "ordinary-131072-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0019174400717020036,
+                  "cuda_ms": 0.0018134399503469466
+                },
+                {
+                  "tilelang_ms": 0.0019183999300003052,
+                  "cuda_ms": 0.0018144000321626665
+                },
+                {
+                  "tilelang_ms": 0.001918879970908165,
+                  "cuda_ms": 0.0018144000321626665
+                }
+              ],
+              "paired_mean_gain_ms": 0.0001063840116063754,
+              "gain_lower_95_ms": 0.00010446401437123618,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-7d0299aa63",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 4,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-4",
+              "prefix-32768-4",
+              "ordinary-131072-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0023758400231599806,
+                  "cuda_ms": 0.0015937599539756775
+                },
+                {
+                  "tilelang_ms": 0.0023734399676322935,
+                  "cuda_ms": 0.0015944000333547592
+                },
+                {
+                  "tilelang_ms": 0.0023716799914836884,
+                  "cuda_ms": 0.0015876799821853637
+                }
+              ],
+              "paired_mean_gain_ms": 0.0007834400236606597,
+              "gain_lower_95_ms": 0.0007805973465243975,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-0c6631a889",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 4,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-4",
+              "prefix-32768-4",
+              "ordinary-131072-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0019160000234842301,
+                  "cuda_ms": 0.0018011199682950974
+                },
+                {
+                  "tilelang_ms": 0.0019164800643920899,
+                  "cuda_ms": 0.001796320006251335
+                },
+                {
+                  "tilelang_ms": 0.0019185599684715272,
+                  "cuda_ms": 0.0017990400642156601
+                }
+              ],
+              "paired_mean_gain_ms": 0.00011749333639939628,
+              "gain_lower_95_ms": 0.00011581865698099139,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-9690ce8dc3",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 5,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.002391519993543625,
+                  "cuda_ms": 0.001600000038743019
+                },
+                {
+                  "tilelang_ms": 0.002396000027656555,
+                  "cuda_ms": 0.0016043200343847275
+                },
+                {
+                  "tilelang_ms": 0.0023947200179100037,
+                  "cuda_ms": 0.001603040024638176
+                }
+              ],
+              "paired_mean_gain_ms": 0.0007920479948321979,
+              "gain_lower_95_ms": 0.0007902293279767037,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-c3003e1746",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 5,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.001934719979763031,
+                  "cuda_ms": 0.0017984000593423842
+                },
+                {
+                  "tilelang_ms": 0.0019313599914312363,
+                  "cuda_ms": 0.0018014399707317352
+                },
+                {
+                  "tilelang_ms": 0.0019356799870729447,
+                  "cuda_ms": 0.0018000000715255738
+                }
+              ],
+              "paired_mean_gain_ms": 0.00012997867166996004,
+              "gain_lower_95_ms": 0.00012712000807126364,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-214c77fddf",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 10,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.002408639937639237,
+                  "cuda_ms": 0.0016073599457740785
+                },
+                {
+                  "tilelang_ms": 0.0024089599400758744,
+                  "cuda_ms": 0.0016091199964284896
+                },
+                {
+                  "tilelang_ms": 0.0024083199352025984,
+                  "cuda_ms": 0.0016096000373363494
+                }
+              ],
+              "paired_mean_gain_ms": 0.0008014559944470724,
+              "gain_lower_95_ms": 0.0007994773164391518,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-17cf75a750",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 10,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0019176000356674193,
+                  "cuda_ms": 0.0018011199682950974
+                },
+                {
+                  "tilelang_ms": 0.0019179200381040573,
+                  "cuda_ms": 0.0018023999780416489
+                },
+                {
+                  "tilelang_ms": 0.0019223999977111817,
+                  "cuda_ms": 0.0018015999346971514
+                }
+              ],
+              "paired_mean_gain_ms": 0.00011670401195685071,
+              "gain_lower_95_ms": 0.00011445866773525876,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-82d8a65dcf",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 20,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.002486879974603653,
+                  "cuda_ms": 0.0016899199783802033
+                },
+                {
+                  "tilelang_ms": 0.0024803200364112853,
+                  "cuda_ms": 0.001690400019288063
+                },
+                {
+                  "tilelang_ms": 0.0024824000149965284,
+                  "cuda_ms": 0.0016884800046682359
+                }
+              ],
+              "paired_mean_gain_ms": 0.0007966720089316368,
+              "gain_lower_95_ms": 0.0007943893596529961,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-28b801aed5",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 20,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.002019840031862259,
+                  "cuda_ms": 0.001905920058488846
+                },
+                {
+                  "tilelang_ms": 0.0020185599476099016,
+                  "cuda_ms": 0.0019015999883413314
+                },
+                {
+                  "tilelang_ms": 0.0020185600221157072,
+                  "cuda_ms": 0.0019036800414323806
+                }
+              ],
+              "paired_mean_gain_ms": 0.00011393597970406217,
+              "gain_lower_95_ms": 0.00011202130963404978,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-1953a6389d",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 624,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0032966400682926176,
+                  "cuda_ms": 0.002927200049161911
+                },
+                {
+                  "tilelang_ms": 0.003297759890556335,
+                  "cuda_ms": 0.002930079996585846
+                },
+                {
+                  "tilelang_ms": 0.003294400125741959,
+                  "cuda_ms": 0.002927840054035187
+                }
+              ],
+              "paired_mean_gain_ms": 0.0003675093352794647,
+              "gain_lower_95_ms": 0.00036501337091128023,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-a8eca15b2f",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 624,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.003840799927711487,
+                  "cuda_ms": 0.0036659198999404907
+                },
+                {
+                  "tilelang_ms": 0.003840959966182709,
+                  "cuda_ms": 0.0036588799953460693
+                },
+                {
+                  "tilelang_ms": 0.0038388800621032716,
+                  "cuda_ms": 0.0036615999042987823
+                }
+              ],
+              "paired_mean_gain_ms": 0.00017656533916791283,
+              "gain_lower_95_ms": 0.00017403735220432285,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-3f7d78bda0",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 1248,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.005545279979705811,
+                  "cuda_ms": 0.004267359972000122
+                },
+                {
+                  "tilelang_ms": 0.005541599988937378,
+                  "cuda_ms": 0.0042694398760795595
+                },
+                {
+                  "tilelang_ms": 0.005540640056133271,
+                  "cuda_ms": 0.004270399957895278
+                }
+              ],
+              "paired_mean_gain_ms": 0.0012724747012058896,
+              "gain_lower_95_ms": 0.0012676267276207607,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-ea3a42f942",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 1248,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.006013120114803315,
+                  "cuda_ms": 0.005874719917774201
+                },
+                {
+                  "tilelang_ms": 0.0060156801342964175,
+                  "cuda_ms": 0.005879999995231628
+                },
+                {
+                  "tilelang_ms": 0.0060191997885704045,
+                  "cuda_ms": 0.005872479975223541
+                }
+              ],
+              "paired_mean_gain_ms": 0.00013956799109776812,
+              "gain_lower_95_ms": 0.00013516794641812632,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-80dce647f9",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 2496,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.006766400039196015,
+                  "cuda_ms": 0.006416480243206024
+                },
+                {
+                  "tilelang_ms": 0.006769599914550782,
+                  "cuda_ms": 0.0064212802052497865
+                },
+                {
+                  "tilelang_ms": 0.006771519780158997,
+                  "cuda_ms": 0.006416480243206024
+                }
+              ],
+              "paired_mean_gain_ms": 0.00035041590531667083,
+              "gain_lower_95_ms": 0.0003469278514385223,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-6c841c61cc",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 2496,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.01674560010433197,
+                  "cuda_ms": 0.01665567994117737
+                },
+                {
+                  "tilelang_ms": 0.01674336016178131,
+                  "cuda_ms": 0.016653759479522703
+                },
+                {
+                  "tilelang_ms": 0.01674175977706909,
+                  "cuda_ms": 0.016663519740104674
+                }
+              ],
+              "paired_mean_gain_ms": 8.365345001220692e-05,
+              "gain_lower_95_ms": 7.562136650085469e-05,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-ea1e7c720d",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 32288,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-131072-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.09767103672027588,
+                  "cuda_ms": 0.09673583984375
+                },
+                {
+                  "tilelang_ms": 0.09762416362762451,
+                  "cuda_ms": 0.0966158390045166
+                },
+                {
+                  "tilelang_ms": 0.09761775970458984,
+                  "cuda_ms": 0.09661711692810059
+                }
+              ],
+              "paired_mean_gain_ms": 0.0009776115417480472,
+              "gain_lower_95_ms": 0.0009331838289896649,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-8fa7f5b472",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 32288,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-131072-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.19166943550109863,
+                  "cuda_ms": 0.191364164352417
+                },
+                {
+                  "tilelang_ms": 0.19165552139282227,
+                  "cuda_ms": 0.19131872177124024
+                },
+                {
+                  "tilelang_ms": 0.19169967651367187,
+                  "cuda_ms": 0.19129440307617188
+                }
+              ],
+              "paired_mean_gain_ms": 0.0003561684290568033,
+              "gain_lower_95_ms": 0.00032776832580566536,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-1e2a1a065f",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 32290,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-131072-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.09764431953430176,
+                  "cuda_ms": 0.09674623966217041
+                },
+                {
+                  "tilelang_ms": 0.09764671802520752,
+                  "cuda_ms": 0.09661808013916015
+                },
+                {
+                  "tilelang_ms": 0.09764783859252929,
+                  "cuda_ms": 0.09662623882293701
+                }
+              ],
+              "paired_mean_gain_ms": 0.0009709552129109706,
+              "gain_lower_95_ms": 0.0008996001879374188,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-16c7eea28c",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 32290,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-131072-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.19168543815612793,
+                  "cuda_ms": 0.19134848594665527
+                },
+                {
+                  "tilelang_ms": 0.19170576095581054,
+                  "cuda_ms": 0.19137375831604003
+                },
+                {
+                  "tilelang_ms": 0.1917039966583252,
+                  "cuda_ms": 0.19133440017700196
+                }
+              ],
+              "paired_mean_gain_ms": 4.3854395548502424e-05,
+              "gain_lower_95_ms": -0.0008522952397664434,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": false
+            }
+          }
+        ],
+        "estimates": {
+          "add_norm": {
+            "kind": "estimated",
+            "source": "TileFoundry HIR",
+            "symbol": "add_norm",
+            "report": "# analysis target=nvidia.b200_sxm module=Operators function=add_norm topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:20480@logical,20480@total,20480@cta;f32:81922@logical,81922@total,81922@cta other-ops=special:2@logical,2@total,2@cta\n# traffic traffic=gmem:r409624/w327704@total,r409624/w327704@cta;rmem:r4/w0@total,r4/w0@cta\n# peak-footprint=gmem:163848;rmem:0\n# roofline ideal-ns=97 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef add_norm(\n    x: Tensor[(2, 5120), \"bf16\"],\n    residual: Tensor[(2, 5120), \"bf16\"],\n    weight: Tensor[(5120,), \"f32\"]\n):\n    v0 = cast(x, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v1 = cast(residual, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v2 = add(v0, v1)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r81920/w40960@total,r81920/w40960@cta; roofline ideal-ns=17 bound-by=memory\n    v3 = cast(v2, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    v4 = cast(v3, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v5 = unary(v4, kind=\"square\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w40960@total,r40960/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v6 = reduce(v5, axes=(-1,), keepdim=True, kind=\"mean\")  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w8@total,r40960/w8@cta; roofline ideal-ns=6 bound-by=memory\n    v0_2 = 1e-06  # Tensor[(), \"f32\", \"umat\"]\n    v7 = add(v6, v0_2)  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = unary(v7, kind=\"rsqrt\")  # Tensor[(2, 1), \"f32\"]; compute-cost other-ops=special:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta; roofline ideal-ns=1 bound-by=memory\n    v9 = mul(v4, v8)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40968/w40960@total,r40968/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v10 = mul(v9, weight)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r61440/w40960@total,r61440/w40960@cta; roofline ideal-ns=14 bound-by=memory\n    v11 = cast(v10, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    return (v3, v11)\n",
+            "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+          },
+          "norm": {
+            "kind": "estimated",
+            "source": "TileFoundry HIR",
+            "symbol": "norm",
+            "report": "# analysis target=nvidia.b200_sxm module=Operators function=norm topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:10240@logical,10240@total,10240@cta;f32:51202@logical,51202@total,51202@cta other-ops=special:2@logical,2@total,2@cta\n# traffic traffic=gmem:r245784/w184344@total,r245784/w184344@cta;rmem:r4/w0@total,r4/w0@cta\n# peak-footprint=gmem:122888;rmem:0\n# roofline ideal-ns=57 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef norm(\n    x: Tensor[(2, 5120), \"bf16\"],\n    weight: Tensor[(5120,), \"f32\"]\n) -> Tensor[(2, 5120), \"bf16\"]:\n    v0 = cast(x, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v1 = unary(v0, kind=\"square\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w40960@total,r40960/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v2 = reduce(v1, axes=(-1,), keepdim=True, kind=\"mean\")  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w8@total,r40960/w8@cta; roofline ideal-ns=6 bound-by=memory\n    v0_2 = 1e-06  # Tensor[(), \"f32\", \"umat\"]\n    v3 = add(v2, v0_2)  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v4 = unary(v3, kind=\"rsqrt\")  # Tensor[(2, 1), \"f32\"]; compute-cost other-ops=special:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta; roofline ideal-ns=1 bound-by=memory\n    v5 = mul(v0, v4)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40968/w40960@total,r40968/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v6 = mul(v5, weight)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r61440/w40960@total,r61440/w40960@cta; roofline ideal-ns=14 bound-by=memory\n    v7 = cast(v6, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    return v7\n",
+            "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+          }
+        },
+        "passed": false,
+        "selected_passed": false,
+        "interference": [],
+        "raw_collection_sha256": "b6b07ebf98ffcb4719f84bc6afad61badd016ece83887656bd8db24cea280c8f",
+        "passed_cases": 25
+      },
+      {
+        "source_commit": "102d4360715ffe57fe63a3d762c375efed1106f8",
+        "source_status": " M python/oh_my_vllm/kernels/cuda_backend/kernels.cu\n",
+        "sources_sha256": {
+          "benchmarks/kernels.py": "98ffe4ec7ed3e444f60261bb44d584b9f2e6b61cf0bcf3073a401744070d31bf",
+          "development/kernels/cases.py": "7b38a1e5a655fb54d8e808c63bde1ae9e0b1d4f1149d89b37703dd36863304f6",
+          "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+          "development/kernels/fixtures.py": "e03e144a1e6b520997e898f0be531ff2d7f65134db567b18d3c9a106a95bf10b",
+          "development/kernels/observations.py": "838276bb4def11e107c4eac84b43b42c8332e76a5e03d3ea72b404abc80db660",
+          "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+          "development/kernels/reference.py": "fa2f39539f538d421c7860fa6f82c7f645933f046b813c3ed1f2691a42f79200",
+          "development/kernels/semantics.py": "b383b26bfbba7cd8d7dde2865107da55331558ada11b791e9cf4f4dffa5a9407",
+          "development/kernels/tilelang-reference.json": "14c3df434dedf6d60629eba25c267df888d1a83f1e35cf868fc29a4b1e0945e0",
+          "development/kernels/timing.py": "a723b623d1c58c652523c319153fd216deb179935a601398af531cf86d503ef7",
+          "development/kernels/twins.py": "40ea4c4c7dcc11fbef752c894d61e1204ef40c567ce68c20ce76ed522d5c89e4",
+          "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+          "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+          "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+          "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+          "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "97c29fed7753772b1455fe7ba53d9d35928da3bd64fadf460fa30b2c1b29c9e2",
+          "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "25416115aba90961d97887bedcc3e8aec3afcd02f8560ba7e753e2cbdf9d2755",
+          "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+          "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+          "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+          "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+          "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+          "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+          "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+          "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+          "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+          "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+          "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+          "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+          "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+          "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+          "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+        },
+        "hardware": {
+          "cpu_affinity_count": 192,
+          "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+        },
+        "reference": {
+          "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+          "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+          "files": {
+            "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+            "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+            "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+            "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+            "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+            "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+            "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+          },
+          "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+          "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690"
+        },
+        "protocol": "Complete static maximum-shape operations; three independent warm rounds, twenty alternating-order pairs/round,100 graph repetitions/sample. No profiler during timing. Fixtures use immutable sources and isolated repeatable destinations.",
+        "coverage": {
+          "complete": false,
+          "required": [
+            "norm-8f0939a3eb",
+            "add_norm-1cd0b34f33",
+            "gated_norm-cf3f37cb9e",
+            "norm_rope-aa858970fa",
+            "norm_rope-1ef4fa4b71",
+            "quant-a83ee98240",
+            "quant-7a2c2961c3",
+            "silu_quant-bdb6037d89",
+            "gates-20dd53c898",
+            "append-3ac45728b6",
+            "convolution-c4c3ff2aef",
+            "qk-12fc3a9e63",
+            "norm-effe245bd2",
+            "add_norm-27c6f00266",
+            "gated_norm-526cd44715",
+            "norm_rope-7f94c83a80",
+            "norm_rope-5042ce9f04",
+            "quant-cba5ed9729",
+            "quant-14b2b04fc3",
+            "silu_quant-7e22ac4193",
+            "gates-9710bbc960",
+            "append-ec1c6c71f0",
+            "convolution-0febb0c2f0",
+            "recurrent-5a418230e1",
+            "norm-c2c1f928be",
+            "add_norm-d38e95acda",
+            "gated_norm-730a8e2832",
+            "norm_rope-c6d198d051",
+            "norm_rope-7605fcf60a",
+            "quant-ab0ac5c4e5",
+            "quant-0e5f3a0b2e",
+            "silu_quant-ab0edc82bb",
+            "gates-cae0b44add",
+            "append-b87e0af969",
+            "convolution-2e3c4391cd",
+            "qk-f930cef0b5",
+            "norm-b75ec1a7a2",
+            "add_norm-c7cb824ce7",
+            "gated_norm-bdec59c631",
+            "norm_rope-e7efa0f644",
+            "norm_rope-020f143656",
+            "quant-5b659364da",
+            "quant-cb18873355",
+            "silu_quant-71ac03b9bc",
+            "gates-c72bdad5d4",
+            "append-11918a5a72",
+            "convolution-ff7930b7b7",
+            "recurrent-2a62969158",
+            "norm-7d0299aa63",
+            "add_norm-0c6631a889",
+            "gated_norm-cdfb1224cc",
+            "norm_rope-fe6caee7bd",
+            "norm_rope-1d215f4369",
+            "quant-cacaef771f",
+            "quant-0ab771f274",
+            "silu_quant-7ed9c30e04",
+            "gates-ee30f1b859",
+            "append-563a85532c",
+            "convolution-647f178fc3",
+            "recurrent-041544e32f",
+            "recurrent-36a6d98675",
+            "norm-9690ce8dc3",
+            "add_norm-c3003e1746",
+            "gated_norm-c04fc8e4ea",
+            "norm_rope-be67ccbf8e",
+            "norm_rope-a259bdd515",
+            "quant-317bf37c2b",
+            "quant-0eea55c864",
+            "silu_quant-a089c70b05",
+            "gates-eb9ecb7e6b",
+            "append-4ecd37d0f5",
+            "convolution-669242bf59",
+            "recurrent-38fd6bd99e",
+            "attention-c426ebd5d5",
+            "attention-d3973698ea",
+            "attention-e3bf2f1708",
+            "attention-6ee6a06e37",
+            "norm-214c77fddf",
+            "add_norm-17cf75a750",
+            "gated_norm-a20f3afb37",
+            "norm_rope-d63d3bf6c3",
+            "norm_rope-7af50d1396",
+            "quant-c7c5a33dd2",
+            "quant-c908ceb94f",
+            "silu_quant-6ddda81d2c",
+            "gates-db0ed2a574",
+            "append-04349e7a5a",
+            "convolution-acc1f1fa4a",
+            "recurrent-e73333aa6f",
+            "attention-4fbadf5691",
+            "attention-80f93685bd",
+            "attention-39a3371fd0",
+            "attention-4705faca24",
+            "norm-82d8a65dcf",
+            "add_norm-28b801aed5",
+            "gated_norm-d88b128193",
+            "norm_rope-0da98727ba",
+            "norm_rope-22ae6d48f1",
+            "quant-78967ef6bb",
+            "quant-b6aca61c7f",
+            "silu_quant-fbdf53e4ed",
+            "gates-7c7a082031",
+            "append-33834e80da",
+            "convolution-ea757c8cde",
+            "recurrent-4b9de1f8fa",
+            "recurrent-fe8f9e7511",
+            "attention-86c02993e7",
+            "attention-302aa28608",
+            "attention-5d1d8dd9c4",
+            "attention-2b7ac478c8",
+            "attention-0ebf3559b6",
+            "attention-764772a69f",
+            "attention-166a4bce77",
+            "attention-a6899c8eba",
+            "norm-1953a6389d",
+            "add_norm-a8eca15b2f",
+            "gated_norm-37b6f09e50",
+            "norm_rope-1d6150fee8",
+            "norm_rope-ae15b12d9e",
+            "quant-38a4f3d421",
+            "quant-6b2b789e0f",
+            "silu_quant-a828b90cc9",
+            "gates-230b55c57b",
+            "append-e970b8e2d2",
+            "convolution-accdf72929",
+            "qk-2fdf585888",
+            "norm-3f7d78bda0",
+            "add_norm-ea3a42f942",
+            "gated_norm-cf90127954",
+            "norm_rope-afcd6f6db6",
+            "norm_rope-21783c6eed",
+            "quant-6f964d5026",
+            "quant-31fe1ff1c4",
+            "silu_quant-e81d00f9c2",
+            "gates-414c933c7a",
+            "append-0f2df713a0",
+            "convolution-8f95316330",
+            "qk-2bc130d5f3",
+            "norm-80dce647f9",
+            "add_norm-6c841c61cc",
+            "gated_norm-fc1b4f5fca",
+            "norm_rope-107cd54d94",
+            "norm_rope-f77fa562f3",
+            "quant-9c9c4ad938",
+            "quant-effc981768",
+            "silu_quant-07d0318c78",
+            "gates-032c38d108",
+            "append-6d87de0fda",
+            "convolution-cdeba28a40",
+            "qk-ee1062c676",
+            "norm-ea1e7c720d",
+            "add_norm-8fa7f5b472",
+            "gated_norm-a3ae6d7d9e",
+            "norm_rope-fefd6d7eee",
+            "norm_rope-3ad6d7a9b1",
+            "quant-0413ce3ad4",
+            "quant-f70208e990",
+            "silu_quant-6e2b085b5c",
+            "gates-fe0ffa9ef4",
+            "append-5a49c472c2",
+            "convolution-75d71689d9",
+            "qk-df607783e7",
+            "norm-1e2a1a065f",
+            "add_norm-16c7eea28c",
+            "gated_norm-bf1c454402",
+            "norm_rope-e3f1f18c4a",
+            "norm_rope-61e679a0dc",
+            "quant-0a7394ccef",
+            "quant-4e026ac5b2",
+            "silu_quant-3d777559ac",
+            "gates-7f196271c1",
+            "append-acf57c318e",
+            "convolution-445867aff2"
+          ],
+          "selected": [
+            "norm-8f0939a3eb",
+            "add_norm-1cd0b34f33",
+            "norm-effe245bd2",
+            "add_norm-27c6f00266",
+            "norm-c2c1f928be",
+            "add_norm-d38e95acda",
+            "norm-b75ec1a7a2",
+            "add_norm-c7cb824ce7",
+            "norm-7d0299aa63",
+            "add_norm-0c6631a889",
+            "norm-9690ce8dc3",
+            "add_norm-c3003e1746",
+            "norm-214c77fddf",
+            "add_norm-17cf75a750",
+            "norm-82d8a65dcf",
+            "add_norm-28b801aed5",
+            "norm-1953a6389d",
+            "add_norm-a8eca15b2f",
+            "norm-3f7d78bda0",
+            "add_norm-ea3a42f942",
+            "norm-80dce647f9",
+            "add_norm-6c841c61cc",
+            "norm-ea1e7c720d",
+            "add_norm-8fa7f5b472",
+            "norm-1e2a1a065f",
+            "add_norm-16c7eea28c"
+          ]
+        },
+        "diagnostic": true,
+        "rows": [
+          {
+            "id": "norm-8f0939a3eb",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 32144,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-1",
+              "mtp-32768-1",
+              "ordinary-131072-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.09721872329711914,
+                  "cuda_ms": 0.09591919898986817
+                },
+                {
+                  "tilelang_ms": 0.09719295978546141,
+                  "cuda_ms": 0.0958742380142212
+                },
+                {
+                  "tilelang_ms": 0.09726143836975099,
+                  "cuda_ms": 0.09587440013885498
+                }
+              ],
+              "paired_mean_gain_ms": 0.0013359638849894221,
+              "gain_lower_95_ms": 0.001287243366241458,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-1cd0b34f33",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 32144,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-1",
+              "mtp-32768-1",
+              "ordinary-131072-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.19058079719543458,
+                  "cuda_ms": 0.19011119842529298
+                },
+                {
+                  "tilelang_ms": 0.1905771255493164,
+                  "cuda_ms": 0.19008031845092774
+                },
+                {
+                  "tilelang_ms": 0.19058095932006835,
+                  "cuda_ms": 0.19007664680480957
+                }
+              ],
+              "paired_mean_gain_ms": 0.0004842252731323266,
+              "gain_lower_95_ms": 0.0004573036829630552,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-effe245bd2",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 1,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-1",
+              "prefix-32768-1",
+              "ordinary-131072-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0023478400707244874,
+                  "cuda_ms": 0.0015643200278282166
+                },
+                {
+                  "tilelang_ms": 0.0023497599363327027,
+                  "cuda_ms": 0.0015676799416542053
+                },
+                {
+                  "tilelang_ms": 0.002353440001606941,
+                  "cuda_ms": 0.0015678399801254271
+                }
+              ],
+              "paired_mean_gain_ms": 0.0007863946855068206,
+              "gain_lower_95_ms": 0.0007843200142184893,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-27c6f00266",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 1,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-1",
+              "prefix-32768-1",
+              "ordinary-131072-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0018980800360441207,
+                  "cuda_ms": 0.0017953599989414216
+                },
+                {
+                  "tilelang_ms": 0.0019035200029611588,
+                  "cuda_ms": 0.0017955200374126434
+                },
+                {
+                  "tilelang_ms": 0.0019009599834680557,
+                  "cuda_ms": 0.00179456003010273
+                }
+              ],
+              "paired_mean_gain_ms": 0.00010461867103974025,
+              "gain_lower_95_ms": 0.00010299732784430185,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-c2c1f928be",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 32768,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-2",
+              "ordinary-32768-4",
+              "mtp-32768-2",
+              "mtp-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.09874224185943603,
+                  "cuda_ms": 0.09795007705688477
+                },
+                {
+                  "tilelang_ms": 0.09878560066223144,
+                  "cuda_ms": 0.09788336277008057
+                },
+                {
+                  "tilelang_ms": 0.09875264167785644,
+                  "cuda_ms": 0.0978659200668335
+                }
+              ],
+              "paired_mean_gain_ms": 0.0008463524182637535,
+              "gain_lower_95_ms": 0.0007725016276041656,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-d38e95acda",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 32768,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-2",
+              "ordinary-32768-4",
+              "mtp-32768-2",
+              "mtp-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.19429344177246094,
+                  "cuda_ms": 0.19373424530029298
+                },
+                {
+                  "tilelang_ms": 0.19431296348571775,
+                  "cuda_ms": 0.19373727798461915
+                },
+                {
+                  "tilelang_ms": 0.19429584503173827,
+                  "cuda_ms": 0.1937598419189453
+                }
+              ],
+              "paired_mean_gain_ms": 0.000569199879964194,
+              "gain_lower_95_ms": 0.0005435953140258803,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-b75ec1a7a2",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 2,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-2",
+              "prefix-32768-2",
+              "ordinary-131072-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0024320000410079957,
+                  "cuda_ms": 0.0015935999900102615
+                },
+                {
+                  "tilelang_ms": 0.002433760017156601,
+                  "cuda_ms": 0.0015916799753904344
+                },
+                {
+                  "tilelang_ms": 0.002433599978685379,
+                  "cuda_ms": 0.0015912000089883804
+                }
+              ],
+              "paired_mean_gain_ms": 0.0008407146508495012,
+              "gain_lower_95_ms": 0.0008382346431414287,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-c7cb824ce7",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 2,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-2",
+              "prefix-32768-2",
+              "ordinary-131072-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0019191999733448027,
+                  "cuda_ms": 0.0018163199722766876
+                },
+                {
+                  "tilelang_ms": 0.0019172800332307816,
+                  "cuda_ms": 0.0018139199912548065
+                },
+                {
+                  "tilelang_ms": 0.0019172800332307816,
+                  "cuda_ms": 0.0018164800107479096
+                }
+              ],
+              "paired_mean_gain_ms": 0.00010217601557572682,
+              "gain_lower_95_ms": 9.99946817755699e-05,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-7d0299aa63",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 4,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-4",
+              "prefix-32768-4",
+              "ordinary-131072-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0023708799481391906,
+                  "cuda_ms": 0.0015905600041151047
+                },
+                {
+                  "tilelang_ms": 0.002376160025596619,
+                  "cuda_ms": 0.001589439958333969
+                },
+                {
+                  "tilelang_ms": 0.0023758400231599806,
+                  "cuda_ms": 0.001589599996805191
+                }
+              ],
+              "paired_mean_gain_ms": 0.0007851840307315191,
+              "gain_lower_95_ms": 0.0007833866874376933,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-0c6631a889",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 4,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-32768-4",
+              "prefix-32768-4",
+              "ordinary-131072-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0019174399971961975,
+                  "cuda_ms": 0.0017987199872732161
+                },
+                {
+                  "tilelang_ms": 0.0019166400283575059,
+                  "cuda_ms": 0.0017953599989414216
+                },
+                {
+                  "tilelang_ms": 0.0019174400717020036,
+                  "cuda_ms": 0.0017971199750900268
+                }
+              ],
+              "paired_mean_gain_ms": 0.00011914134273926418,
+              "gain_lower_95_ms": 0.00011763735115528108,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-9690ce8dc3",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 5,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0023916800320148467,
+                  "cuda_ms": 0.001594879999756813
+                },
+                {
+                  "tilelang_ms": 0.002390879988670349,
+                  "cuda_ms": 0.001594879999756813
+                },
+                {
+                  "tilelang_ms": 0.002389120012521744,
+                  "cuda_ms": 0.0016031999886035918
+                }
+              ],
+              "paired_mean_gain_ms": 0.0007927306617299716,
+              "gain_lower_95_ms": 0.0007893013184269269,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-c3003e1746",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 5,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0019334400445222854,
+                  "cuda_ms": 0.0017995200306177139
+                },
+                {
+                  "tilelang_ms": 0.0019340799748897553,
+                  "cuda_ms": 0.0018012800067663192
+                },
+                {
+                  "tilelang_ms": 0.001931999996304512,
+                  "cuda_ms": 0.001799359992146492
+                }
+              ],
+              "paired_mean_gain_ms": 0.00012953600784142814,
+              "gain_lower_95_ms": 0.00012731732428073882,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-214c77fddf",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 10,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.002407680004835129,
+                  "cuda_ms": 0.0016096000373363494
+                },
+                {
+                  "tilelang_ms": 0.0024084799736738202,
+                  "cuda_ms": 0.0016097600013017656
+                },
+                {
+                  "tilelang_ms": 0.0024089600145816804,
+                  "cuda_ms": 0.0016092800348997114
+                }
+              ],
+              "paired_mean_gain_ms": 0.0008002026528120042,
+              "gain_lower_95_ms": 0.0007987093230088552,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-17cf75a750",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 10,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.0019174399971961975,
+                  "cuda_ms": 0.0018025600165128709
+                },
+                {
+                  "tilelang_ms": 0.0019172800332307816,
+                  "cuda_ms": 0.0018094400316476821
+                },
+                {
+                  "tilelang_ms": 0.0019177599996328355,
+                  "cuda_ms": 0.0018035200238227843
+                }
+              ],
+              "paired_mean_gain_ms": 0.0001142506624261538,
+              "gain_lower_95_ms": 0.00011057599882284799,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-82d8a65dcf",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 20,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.002487519979476929,
+                  "cuda_ms": 0.0016910400241613387
+                },
+                {
+                  "tilelang_ms": 0.0024870399385690687,
+                  "cuda_ms": 0.0016910400241613387
+                },
+                {
+                  "tilelang_ms": 0.0024884799867868424,
+                  "cuda_ms": 0.00169295996427536
+                }
+              ],
+              "paired_mean_gain_ms": 0.0007941920061906179,
+              "gain_lower_95_ms": 0.0007919466719031334,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-28b801aed5",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 20,
+              "width": 5120
+            },
+            "workloads": [
+              "mtp-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.002019679993391037,
+                  "cuda_ms": 0.0019022399932146074
+                },
+                {
+                  "tilelang_ms": 0.002019200026988983,
+                  "cuda_ms": 0.0019033600389957428
+                },
+                {
+                  "tilelang_ms": 0.002019200026988983,
+                  "cuda_ms": 0.001900479942560196
+                }
+              ],
+              "paired_mean_gain_ms": 0.00011559466024239859,
+              "gain_lower_95_ms": 0.00011338666329781216,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-1953a6389d",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 624,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.003295520097017288,
+                  "cuda_ms": 0.002928000092506409
+                },
+                {
+                  "tilelang_ms": 0.003294239938259125,
+                  "cuda_ms": 0.0029287999868392945
+                },
+                {
+                  "tilelang_ms": 0.003293440043926239,
+                  "cuda_ms": 0.002922080010175705
+                }
+              ],
+              "paired_mean_gain_ms": 0.00036838933825492857,
+              "gain_lower_95_ms": 0.0003660746912161509,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-a8eca15b2f",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 624,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-1"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.003835040032863617,
+                  "cuda_ms": 0.0036590400338172915
+                },
+                {
+                  "tilelang_ms": 0.0038390401005744933,
+                  "cuda_ms": 0.0036590400338172915
+                },
+                {
+                  "tilelang_ms": 0.0038363200426101687,
+                  "cuda_ms": 0.0036596798896789554
+                }
+              ],
+              "paired_mean_gain_ms": 0.00017491198082764947,
+              "gain_lower_95_ms": 0.0001722186704476675,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-3f7d78bda0",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 1248,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.005534079968929291,
+                  "cuda_ms": 0.004268479943275452
+                },
+                {
+                  "tilelang_ms": 0.005538240075111389,
+                  "cuda_ms": 0.004271359890699386
+                },
+                {
+                  "tilelang_ms": 0.005528640151023865,
+                  "cuda_ms": 0.0042687998712062835
+                }
+              ],
+              "paired_mean_gain_ms": 0.0012658399989207588,
+              "gain_lower_95_ms": 0.0012615787039200466,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-ea3a42f942",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 1248,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.006021440029144287,
+                  "cuda_ms": 0.005871040225028992
+                },
+                {
+                  "tilelang_ms": 0.006014400124549866,
+                  "cuda_ms": 0.0058756801486015316
+                },
+                {
+                  "tilelang_ms": 0.006013120114803315,
+                  "cuda_ms": 0.005872640013694763
+                }
+              ],
+              "paired_mean_gain_ms": 0.00014354137579600007,
+              "gain_lower_95_ms": 0.00013778669635454812,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-80dce647f9",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 2496,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.006769919991493225,
+                  "cuda_ms": 0.006419039964675903
+                },
+                {
+                  "tilelang_ms": 0.0067667198181152344,
+                  "cuda_ms": 0.006418880224227905
+                },
+                {
+                  "tilelang_ms": 0.00676943987607956,
+                  "cuda_ms": 0.0064191997051239015
+                }
+              ],
+              "paired_mean_gain_ms": 0.00035234135389328007,
+              "gain_lower_95_ms": 0.00034870935479799903,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-6c841c61cc",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 2496,
+              "width": 5120
+            },
+            "workloads": [
+              "prefix-32768-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.016723199486732482,
+                  "cuda_ms": 0.016631839871406554
+                },
+                {
+                  "tilelang_ms": 0.016726240515708923,
+                  "cuda_ms": 0.01662720024585724
+                },
+                {
+                  "tilelang_ms": 0.016714879870414735,
+                  "cuda_ms": 0.01661791980266571
+                }
+              ],
+              "paired_mean_gain_ms": 9.001606702804585e-05,
+              "gain_lower_95_ms": 8.158421516418485e-05,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-ea1e7c720d",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 32288,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-131072-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.09727663993835449,
+                  "cuda_ms": 0.09676095962524414
+                },
+                {
+                  "tilelang_ms": 0.0972923231124878,
+                  "cuda_ms": 0.09665760040283203
+                },
+                {
+                  "tilelang_ms": 0.09725264072418213,
+                  "cuda_ms": 0.09662224292755128
+                }
+              ],
+              "paired_mean_gain_ms": 0.0005922075907389331,
+              "gain_lower_95_ms": 0.0005300575892130536,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-8fa7f5b472",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 32288,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-131072-2"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.19164463996887207,
+                  "cuda_ms": 0.1913475227355957
+                },
+                {
+                  "tilelang_ms": 0.19164735794067383,
+                  "cuda_ms": 0.19133327484130858
+                },
+                {
+                  "tilelang_ms": 0.19166768074035645,
+                  "cuda_ms": 0.19135279655456544
+                }
+              ],
+              "paired_mean_gain_ms": 0.00032424004872640133,
+              "gain_lower_95_ms": 0.000301652272542322,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "norm-1e2a1a065f",
+            "configuration": {
+              "operation": "norm",
+              "tokens": 32290,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-131072-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.09730911731719971,
+                  "cuda_ms": 0.0966924810409546
+                },
+                {
+                  "tilelang_ms": 0.09730160236358643,
+                  "cuda_ms": 0.09662816047668457
+                },
+                {
+                  "tilelang_ms": 0.0972828769683838,
+                  "cuda_ms": 0.09664992332458497
+                }
+              ],
+              "paired_mean_gain_ms": 0.0006096313794453948,
+              "gain_lower_95_ms": 0.0005590831438700352,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          },
+          {
+            "id": "add_norm-16c7eea28c",
+            "configuration": {
+              "operation": "add_norm",
+              "tokens": 32290,
+              "width": 5120
+            },
+            "workloads": [
+              "ordinary-131072-4"
+            ],
+            "comparison": {
+              "rounds": [
+                {
+                  "tilelang_ms": 0.19165664672851562,
+                  "cuda_ms": 0.1913316822052002
+                },
+                {
+                  "tilelang_ms": 0.19165040016174317,
+                  "cuda_ms": 0.19136431694030762
+                },
+                {
+                  "tilelang_ms": 0.19165792465209963,
+                  "cuda_ms": 0.1913476848602295
+                }
+              ],
+              "paired_mean_gain_ms": 0.0003196004231770827,
+              "gain_lower_95_ms": 0.0002988440195719412,
+              "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+              "passed": true
+            }
+          }
+        ],
+        "estimates": {
+          "add_norm": {
+            "kind": "estimated",
+            "source": "TileFoundry HIR",
+            "symbol": "add_norm",
+            "report": "# analysis target=nvidia.b200_sxm module=Operators function=add_norm topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:20480@logical,20480@total,20480@cta;f32:81922@logical,81922@total,81922@cta other-ops=special:2@logical,2@total,2@cta\n# traffic traffic=gmem:r409624/w327704@total,r409624/w327704@cta;rmem:r4/w0@total,r4/w0@cta\n# peak-footprint=gmem:163848;rmem:0\n# roofline ideal-ns=97 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef add_norm(\n    x: Tensor[(2, 5120), \"bf16\"],\n    residual: Tensor[(2, 5120), \"bf16\"],\n    weight: Tensor[(5120,), \"f32\"]\n):\n    v0 = cast(x, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v1 = cast(residual, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v2 = add(v0, v1)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r81920/w40960@total,r81920/w40960@cta; roofline ideal-ns=17 bound-by=memory\n    v3 = cast(v2, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    v4 = cast(v3, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v5 = unary(v4, kind=\"square\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w40960@total,r40960/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v6 = reduce(v5, axes=(-1,), keepdim=True, kind=\"mean\")  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w8@total,r40960/w8@cta; roofline ideal-ns=6 bound-by=memory\n    v0_2 = 1e-06  # Tensor[(), \"f32\", \"umat\"]\n    v7 = add(v6, v0_2)  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = unary(v7, kind=\"rsqrt\")  # Tensor[(2, 1), \"f32\"]; compute-cost other-ops=special:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta; roofline ideal-ns=1 bound-by=memory\n    v9 = mul(v4, v8)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40968/w40960@total,r40968/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v10 = mul(v9, weight)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r61440/w40960@total,r61440/w40960@cta; roofline ideal-ns=14 bound-by=memory\n    v11 = cast(v10, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    return (v3, v11)\n",
+            "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+          },
+          "norm": {
+            "kind": "estimated",
+            "source": "TileFoundry HIR",
+            "symbol": "norm",
+            "report": "# analysis target=nvidia.b200_sxm module=Operators function=norm topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:10240@logical,10240@total,10240@cta;f32:51202@logical,51202@total,51202@cta other-ops=special:2@logical,2@total,2@cta\n# traffic traffic=gmem:r245784/w184344@total,r245784/w184344@cta;rmem:r4/w0@total,r4/w0@cta\n# peak-footprint=gmem:122888;rmem:0\n# roofline ideal-ns=57 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef norm(\n    x: Tensor[(2, 5120), \"bf16\"],\n    weight: Tensor[(5120,), \"f32\"]\n) -> Tensor[(2, 5120), \"bf16\"]:\n    v0 = cast(x, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v1 = unary(v0, kind=\"square\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w40960@total,r40960/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v2 = reduce(v1, axes=(-1,), keepdim=True, kind=\"mean\")  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w8@total,r40960/w8@cta; roofline ideal-ns=6 bound-by=memory\n    v0_2 = 1e-06  # Tensor[(), \"f32\", \"umat\"]\n    v3 = add(v2, v0_2)  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v4 = unary(v3, kind=\"rsqrt\")  # Tensor[(2, 1), \"f32\"]; compute-cost other-ops=special:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta; roofline ideal-ns=1 bound-by=memory\n    v5 = mul(v0, v4)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40968/w40960@total,r40968/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v6 = mul(v5, weight)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r61440/w40960@total,r61440/w40960@cta; roofline ideal-ns=14 bound-by=memory\n    v7 = cast(v6, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    return v7\n",
+            "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+          }
+        },
+        "passed": false,
+        "selected_passed": true,
+        "interference": [],
+        "raw_collection_sha256": "ca912e13a88b4995b4b0babc438f782d224756dab1f01e7cac8ed2f9c0404db8",
+        "passed_cases": 26
+      }
+    ],
+    "observations": {
+      "sources_sha256": {
+        "benchmarks/kernels.py": "98ffe4ec7ed3e444f60261bb44d584b9f2e6b61cf0bcf3073a401744070d31bf",
+        "development/kernels/cases.py": "7b38a1e5a655fb54d8e808c63bde1ae9e0b1d4f1149d89b37703dd36863304f6",
+        "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+        "development/kernels/fixtures.py": "e03e144a1e6b520997e898f0be531ff2d7f65134db567b18d3c9a106a95bf10b",
+        "development/kernels/observations.py": "838276bb4def11e107c4eac84b43b42c8332e76a5e03d3ea72b404abc80db660",
+        "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+        "development/kernels/reference.py": "fa2f39539f538d421c7860fa6f82c7f645933f046b813c3ed1f2691a42f79200",
+        "development/kernels/semantics.py": "b383b26bfbba7cd8d7dde2865107da55331558ada11b791e9cf4f4dffa5a9407",
+        "development/kernels/tilelang-reference.json": "14c3df434dedf6d60629eba25c267df888d1a83f1e35cf868fc29a4b1e0945e0",
+        "development/kernels/timing.py": "a723b623d1c58c652523c319153fd216deb179935a601398af531cf86d503ef7",
+        "development/kernels/twins.py": "40ea4c4c7dcc11fbef752c894d61e1204ef40c567ce68c20ce76ed522d5c89e4",
+        "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+        "python/oh_my_vllm/kernels/attention.py": "4858046b5bf5fe78636c0c8630b99ffe937a0f75bcd36591d175507ea5c20316",
+        "python/oh_my_vllm/kernels/backend.py": "93a4da7c2053fcb2a90cded795fef3090e4c478bec67ac9251c90ddff978f5e2",
+        "python/oh_my_vllm/kernels/convolution.py": "8e6a324649155640be5e4b4a9edd47e06832afe70fb054a04c7b6c6d05402012",
+        "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "97c29fed7753772b1455fe7ba53d9d35928da3bd64fadf460fa30b2c1b29c9e2",
+        "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "25416115aba90961d97887bedcc3e8aec3afcd02f8560ba7e753e2cbdf9d2755",
+        "python/oh_my_vllm/kernels/decode_attention.py": "b2f293bdc1719791bf0e2e1c2571f6c7339615fe505196935439a2d647346547",
+        "python/oh_my_vllm/kernels/elementwise.py": "cbbd605555a7b7f18df6b0c914fc2202fb490e3a8e48f51a328662223a8f0968",
+        "python/oh_my_vllm/kernels/fp8.py": "8a5f0ce99755255239d060683910125897728d7b39005da5b3ceb99530317148",
+        "python/oh_my_vllm/kernels/gdn.py": "095847d36927c31e5f4947b4225dfa23357ab4b5700ec91ed5f4389fe00f2ace",
+        "python/oh_my_vllm/kernels/mtp_attention.py": "20964980b2d96ade7fcc316c114544fe23661667a993e5811a6a265c2688cd21",
+        "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+        "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+        "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+        "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+      },
+      "case": {
+        "id": "add_norm-16c7eea28c",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 32290,
+          "width": 5120
+        },
+        "workloads": [
+          "ordinary-131072-4"
+        ]
+      },
+      "hardware": {
+        "cpu_affinity_count": 192,
+        "gpu_info": "<gpu-identity>, NVIDIA B200, 183359 MiB, 590.48.01"
+      },
+      "reference": {
+        "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+        "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+        "files": {
+          "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+          "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+          "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+          "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+          "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+          "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+          "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+        },
+        "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+        "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690"
+      },
+      "source_commit": "102d4360715ffe57fe63a3d762c375efed1106f8",
+      "source_status": " M python/oh_my_vllm/kernels/cuda_backend/kernels.cu\n",
+      "estimated": {
+        "kind": "estimated",
+        "source": "TileFoundry HIR",
+        "symbol": "add_norm",
+        "report": "# analysis target=nvidia.b200_sxm module=Operators function=add_norm topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:20480@logical,20480@total,20480@cta;f32:81922@logical,81922@total,81922@cta other-ops=special:2@logical,2@total,2@cta\n# traffic traffic=gmem:r409624/w327704@total,r409624/w327704@cta;rmem:r4/w0@total,r4/w0@cta\n# peak-footprint=gmem:163848;rmem:0\n# roofline ideal-ns=97 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef add_norm(\n    x: Tensor[(2, 5120), \"bf16\"],\n    residual: Tensor[(2, 5120), \"bf16\"],\n    weight: Tensor[(5120,), \"f32\"]\n):\n    v0 = cast(x, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v1 = cast(residual, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v2 = add(v0, v1)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r81920/w40960@total,r81920/w40960@cta; roofline ideal-ns=17 bound-by=memory\n    v3 = cast(v2, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    v4 = cast(v3, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v5 = unary(v4, kind=\"square\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w40960@total,r40960/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v6 = reduce(v5, axes=(-1,), keepdim=True, kind=\"mean\")  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w8@total,r40960/w8@cta; roofline ideal-ns=6 bound-by=memory\n    v0_2 = 1e-06  # Tensor[(), \"f32\", \"umat\"]\n    v7 = add(v6, v0_2)  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = unary(v7, kind=\"rsqrt\")  # Tensor[(2, 1), \"f32\"]; compute-cost other-ops=special:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta; roofline ideal-ns=1 bound-by=memory\n    v9 = mul(v4, v8)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40968/w40960@total,r40968/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v10 = mul(v9, weight)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r61440/w40960@total,r61440/w40960@cta; roofline ideal-ns=14 bound-by=memory\n    v11 = cast(v10, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    return (v3, v11)\n",
+        "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+      },
+      "measured": {
+        "tilelang": {
+          "kind": "measured",
+          "source": "Nsight Compute (separate replay)",
+          "launches": [
+            {
+              "launch": "0",
+              "kernel": "kernel_kernel",
+              "metrics": {
+                "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+                  "value": "72.51",
+                  "unit": "%"
+                },
+                "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+                  "value": "149746",
+                  "unit": ""
+                },
+                "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum": {
+                  "value": "0",
+                  "unit": "sector"
+                },
+                "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": {
+                  "value": "0",
+                  "unit": "sector"
+                },
+                "launch__registers_per_thread": {
+                  "value": "48",
+                  "unit": "register/thread"
+                },
+                "launch__shared_mem_per_block_dynamic": {
+                  "value": "1024",
+                  "unit": "byte/block"
+                },
+                "launch__shared_mem_per_block_static": {
+                  "value": "0",
+                  "unit": "byte/block"
+                },
+                "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+                  "value": "51.05",
+                  "unit": "%"
+                },
+                "smsp__inst_executed.sum": {
+                  "value": "73104560",
+                  "unit": "inst"
+                },
+                "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+                  "value": "39.03",
+                  "unit": "%"
+                },
+                "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+                  "value": "13.47",
+                  "unit": "%"
+                }
+              }
+            }
+          ]
+        },
+        "cuda": {
+          "kind": "measured",
+          "source": "Nsight Compute (separate replay)",
+          "launches": [
+            {
+              "launch": "0",
+              "kernel": "void rms5120_kernel<1, 320, 8>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_bfloat16 *, __nv_bfloat16 *, float)",
+              "metrics": {
+                "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+                  "value": "72.92",
+                  "unit": "%"
+                },
+                "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+                  "value": "25066",
+                  "unit": ""
+                },
+                "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum": {
+                  "value": "0",
+                  "unit": "sector"
+                },
+                "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum": {
+                  "value": "0",
+                  "unit": "sector"
+                },
+                "launch__registers_per_thread": {
+                  "value": "36",
+                  "unit": "register/thread"
+                },
+                "launch__shared_mem_per_block_dynamic": {
+                  "value": "0",
+                  "unit": "byte/block"
+                },
+                "launch__shared_mem_per_block_static": {
+                  "value": "64",
+                  "unit": "byte/block"
+                },
+                "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+                  "value": "37.70",
+                  "unit": "%"
+                },
+                "smsp__inst_executed.sum": {
+                  "value": "55215900",
+                  "unit": "inst"
+                },
+                "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+                  "value": "51.22",
+                  "unit": "%"
+                },
+                "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+                  "value": "20.48",
+                  "unit": "%"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "limitation": "Profiler replay only; not timing or performance acceptance",
+      "raw_collection_sha256": "d2b2bb0b045abd91a60a831a7b0d658c6204d66bfe8eb40ef929fe680afb41ae"
+    },
+    "validation": {
+      "rms-wide-tests": {
+        "sha256": "e71fb526b049623cf7eb8dfdd539e9b370bbe4e8c3c74b5f4af426b05c522fdd",
+        "result": "160 passed, 42 warnings, 28 subtests passed in 37.13s"
+      },
+      "rms-boundaries": {
+        "sha256": "7806639201ffdf43ec722f7c6ae47209820bb2c9863c56623c1e951dee691cec",
+        "result": "4096 PASS"
+      },
+      "rms-wide-alignment": {
+        "sha256": "6ed43059ee6cbb8e5b3e65de70096be08ce70866010d09a479e5d0a0a6aacbc5",
+        "result": "(1, 1, 1) PASS"
+      }
+    },
+    "boundary_coverage": "FP64 existing tolerances at rows2047/2048/4095/4096, plain epsilon1e-6/1e-4 and residual; residual sum bitwise. At4096, input/residual offsets4 BF16 or weight offset4 FP32 exercise vector4 fallback; offsets1 exercise generic fallback. Temporary scripts remain outside repository."
+  }
+}

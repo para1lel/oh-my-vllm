@@ -1,19 +1,33 @@
-# ADR-007：EngineCore TTFT 与独立混合缓存容量
+# ADR-007: TTFT 与独立缓存容量
 
-状态：用户于 2026-09-22 确认；已实现并通过验收（见 acceptance.md）。
+日期: 2026-09-22. 状态: accepted, 已实现.
 
 ## 决策
 
-使用主机单调时钟，逐请求测量从 batch 提交到首个保留 token 的时间，包括注册、引擎排队、调度、传输和采样。至少完整预热两次后，取五次运行各自最大 TTFT 的中位数。全部 12 组相对新采集的官方 vLLM main 基线，TTFT <=110%、吞吐 >=95%。获授权的隔离参考采集器是项目禁止导入 vLLM 规则的唯一例外。已有基线 JSON 作为历史。冻结上游 e9f169d16b9408bb9ae44f75072b91a5521d733c 及适配环境。
+使用 batch 共同提交到首个保留 token 的 TTFT, 每请求使用单调时钟.
+包括注册, 排队, 调度, 传输和采样.
+2 次完整预热后, 取 5 次重复最大值的中位数.
+12 行必须满足 95% 吞吐, 110% TTFT 和 10% spread 门槛.
+在隔离环境中冻结基线源码 `e9f169d16b9408bb9ae44f75072b91a5521d733c`.
 
-不改变 block784、递归状态 dtype 或容差，支持合计 262144 token。此前共享逻辑池为 FA 和 GDN tensor 分配相同容量，大 FA 容量因此附带大量未使用递归存储。`--mamba-blocks` 配置独立的 Rust GDN 块池和 Python 状态容量。FA/GDN ID 属于独立命名空间。每个池保留现有前缀 hash、引用计数和淘汰规则；接纳前检查两种容量。前缀命中在分配前触达两个池。不指定该选项时，历史共享池仍可用于受控容量/抢占测试。这是单一 runner 实现，缓存分配策略可配置。
+保持总上下文 262144, block784, state dtype 和数值容差.
+增加 `--mamba-blocks`, 分开 Rust GDN 分配和 Python tensor 容量.
+FA 和 GDN ID 具有独立 namespace.
+未设置该选项时, 保留共享 pool 用于受控容量 / 抢占测试.
+接纳检查两种容量, 拒绝无法容纳的请求.
+Prefix hit 在新分配前 touch 两种 pool.
 
-最初长上下文诊断使用 1400 个 FA 槽和 128 个 GDN 槽（包括不可变 null 槽），不改变数值精度。计算图捕获的保存/恢复和 MTP 状态所有权仍按 tensor 类型处理。新分配 ID 仍是未使用的 wire hint，不能视为跨独立池全局唯一的 ID。
+## 原因与影响
 
-## 来源与验证
+大共享 pool 在分配 FA 容量时同时分配了过多 recurrent state.
+独立 1400 FA 和 128 GDN slot 减少闲置状态, 让长上下文驻留.
+历史 `num_gpu_blocks` 单位保留; Python 返回 `floor(num_gpu_blocks/3)` 个 FA slot.
+Block ID 直接寻址所属 group tensor.
+未来自动容量计算必须保留接纳, 前缀, 引用和淘汰不变量, 逻辑分配仍由 Rust 负责.
 
-设计参考：[vLLM 混合缓存管理器](https://docs.vllm.ai/en/stable/design/hybrid_kv_cache_manager/)。当前单模型范围允许明确配置容量，不必引入通用异构显存分配器。未来自动定容必须保持接纳及前缀所有权不变量，不能将逻辑分配移交 Python。
-
-Rust 测试覆盖独立池耗尽、前缀恢复、MTP 跨界、拒绝复用及跨 prefill 分块迁移。GPU/模型测试、六组边界运行和 12 组矩阵均已通过（acceptance.md）。准入时尚不拒绝超过任一池容量的请求（审计 SCH-04）。
-
-对比时，两引擎必须保持整个工作负载驻留，无抢占，且满足规定前缀命中数。记录原始缓存配置、GPU 身份和 CPU 亲和性；GPU 型号/显存/驱动及 CPU 亲和性必须一致。字节布局不同，不能通过相同原始块数判定容量等价。接受基线配置前，检查各引擎有效 token 容量是否覆盖工作负载。
+两引擎都需让完整工作负载驻留, 无抢占.
+匹配有效 token 容量, CPU affinity 和 GPU 型号 / 显存 / 驱动.
+相同的原始块数量整数不代表容量等价.
+记录完整配置和原始源码身份.
+参见 [需求](../requirements.zh.md), [测试](../testing.zh.md) 和 [验收](../acceptance.zh.md).
+后续 roofline 策略独立于当前有效协议.

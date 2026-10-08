@@ -13,7 +13,7 @@ use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
 struct Cli {
-    #[arg(long, default_value = "/data0/shared/Qwen3.8-27B-FP8")]
+    #[arg(long, env = "OH_MY_VLLM_MODEL")]
     model: PathBuf,
     #[arg(long, default_value = "/tmp/oh-my-vllm.ipc")]
     socket: PathBuf,

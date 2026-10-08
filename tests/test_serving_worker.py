@@ -1,6 +1,7 @@
 """CPU regressions on the actual tokenizer and XGrammar speculative-mask path."""
 
 import copy
+import os
 import threading
 import time
 import unittest
@@ -13,10 +14,10 @@ from oh_my_vllm.worker.serving import (
     validate_xml_parameters,
 )
 
-MODEL = "/data0/shared/Qwen3.8-27B-FP8"
+MODEL = os.environ.get("OH_MY_VLLM_MODEL")
 
 
-class ServingTests(unittest.TestCase):
+class ValidationTests(unittest.TestCase):
     def test_pattern_parser_distinguishes_syntax_and_internal_failure(self):
         for pattern in ("[", "("):
             with (
@@ -33,8 +34,47 @@ class ServingTests(unittest.TestCase):
         ):
             validate_schema({"type": "string", "pattern": "ok"})
 
+    def test_xml_ambiguities_are_explicit_errors(self):
+        schemas = [
+            {"$ref": "#/$defs/Args", "$defs": {}},
+            {"type": "object", "additionalProperties": True},
+            {"type": "object", "properties": {"s": {"type": ["string", "null"]}}},
+            {
+                "type": "object",
+                "properties": {"s": {"type": "string", "enum": ["abc", " abc"]}},
+            },
+        ]
+        for schema in schemas:
+            with self.assertRaises(ValueError):
+                validate_xml_parameters(schema)
+        with self.assertRaises(ValueError):
+            validate_xml_parameters(
+                {
+                    "type": "object",
+                    "properties": {"s": {"anyOf": [{"type": "string"}], "const": "a"}},
+                }
+            )
+        with self.assertRaises(ValueError):
+            validate_schema({"type": "string", "format": "bogus"})
+        with self.assertRaises(ValueError):
+            validate_schema({"type": "string", "pattern": "a+", "maxLength": 3})
+
+    def test_unknown_schema_is_rejected(self):
+        with self.assertRaises(ValueError):
+            validate_schema({"type": "object", "unevaluatedProperties": False})
+        with self.assertRaises(ValueError):
+            validate_schema(
+                {"type": "object", "properties": {"x": {"type": "string"}}}, strict=True
+            )
+
+
+class ServingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        if not MODEL:
+            raise unittest.SkipTest(
+                "set OH_MY_VLLM_MODEL for tokenizer integration tests"
+            )
         cls.adapter = ServingAdapter(MODEL, 248320, 65536)
 
     def prepare(self, **overrides):
@@ -259,39 +299,6 @@ class ServingTests(unittest.TestCase):
             self.assertFalse(matcher.accept_token(248046))
             self.assertTrue(matcher.accept_string(call))
             self.assertEqual(matcher.accept_string("\n" + call), parallel)
-
-    def test_xml_ambiguities_are_explicit_errors(self):
-        schemas = [
-            {"$ref": "#/$defs/Args", "$defs": {}},
-            {"type": "object", "additionalProperties": True},
-            {"type": "object", "properties": {"s": {"type": ["string", "null"]}}},
-            {
-                "type": "object",
-                "properties": {"s": {"type": "string", "enum": ["abc", " abc"]}},
-            },
-        ]
-        for schema in schemas:
-            with self.assertRaises(ValueError):
-                validate_xml_parameters(schema)
-        with self.assertRaises(ValueError):
-            validate_xml_parameters(
-                {
-                    "type": "object",
-                    "properties": {"s": {"anyOf": [{"type": "string"}], "const": "a"}},
-                }
-            )
-        with self.assertRaises(ValueError):
-            validate_schema({"type": "string", "format": "bogus"})
-        with self.assertRaises(ValueError):
-            validate_schema({"type": "string", "pattern": "a+", "maxLength": 3})
-
-    def test_unknown_schema_is_rejected(self):
-        with self.assertRaises(ValueError):
-            validate_schema({"type": "object", "unevaluatedProperties": False})
-        with self.assertRaises(ValueError):
-            validate_schema(
-                {"type": "object", "properties": {"x": {"type": "string"}}}, strict=True
-            )
 
 
 if __name__ == "__main__":

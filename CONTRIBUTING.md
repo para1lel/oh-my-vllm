@@ -1,111 +1,63 @@
-# Contributing to oh-my-vllm
+# Contribution procedure
 
-## Branch policy
+Read [collaboration rules](AGENTS.md) and [current work](docs/handoff.md) before changes.
+Develop and commit only on `main`.
+Keep existing changes from other work.
+Push or open a pull request only after explicit user instruction.
 
-Develop and commit directly on `main`. Do not create local or remote feature
-branches or branch-backed worktrees. Confirm `main` is checked out before editing.
-Pushing and opening PRs still require explicit user instructions (AGENTS.md).
-The user-approved TileFoundry submodule fork is the sole branch exception: its
-adaptation branch belongs to para1lel/TileFoundry; do not open upstream PRs.
+## Implementation
 
-## Commit conventions
+Keep Rust service, scheduler, and logical cache ownership.
+Keep GPU computation in Python and third-party libraries.
+Keep the block size, numerical tolerances, API features, and active acceptance criteria.
+Select stable compatible dependencies and pin the combination with satisfactory compatibility tests.
+Install Python dependencies with `uv`. Do not use `pip` directly.
 
-Every commit message must follow [Conventional Commits](https://www.conventionalcommits.org/):
+Use `rustfmt.toml` and a hard Rust line width of 100 characters.
+This limit includes macros, strings, comments, and expanded tabs.
+Split long JSON macros into fields and long literals with `concat!`.
+Put a `// SAFETY:` comment at each `unsafe` block.
+Use Python 3.12 or later and `ruff.toml`.
 
+Add a meaningful test for new behavior.
+If a test is impractical, record the reason.
+Measure performance with the formal protocol. Identify estimates as estimates.
+Keep temporary tuning and raw traces in an external directory.
+
+## Review and checks
+
+Start an review by another sub-agent after each milestone.
+Correct its correctness, performance, and engineering findings before the commit.
+Complete the required [checks](AGENTS.md#required-checks) and applicable [tests](docs/testing.md).
+Use `scripts/with-env.sh` for environment selection.
+The local hooks in `.pre-commit-config.yaml` use this wrapper.
+
+Update each changed English Markdown document and its full Chinese companion together.
+Follow [writing rules](docs/writing.md), [glossary](docs/glossary.md), and the document update table in `AGENTS.md`.
+Keep host configuration in ignored `LOCAL.md`.
+Keep original evidence in ignored local storage. Commit clearly marked portable summaries.
+
+## Commit
+
+Stage only the paths that belong to the change:
+
+```bash
+git add path/to/changed-file path/to/another-file
+scripts/with-env.sh pre-commit run --all-files
+git commit
 ```
-<type>(<scope>): <short description>
 
-[optional body]
+The commit hooks must have the same configured environment as the manual checks.
+Keep hooks active. Do not use `git add .` or `--no-verify`.
+Use a Conventional Commits title, such as `docs: make deployment guides portable`.
+Give the resulting behavior, validation, skipped checks, and open limitations in the body.
 
+Include this attribution line in each commit:
+
+```text
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 ```
 
-The attribution line is required on every commit made with AI assistance. Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`. Scope matches the crate or module: `kv-cache`, `scheduler`, `zmq-worker`, `zmq-bridge`, `spec-decode`, `bench`, `docs`.
-
-Examples:
-```
-feat(scheduler): add preemption by recompute
-
-fix(zmq-bridge): remove swap_space from CacheConfig, add mamba_cache_mode
-
-docs(handoff): add full engineering handoff documentation suite
-```
-
-## Before committing
-
-At every milestone, start a sub-agent code review for best practices and
-correctness/performance risks. Fix findings and obtain a passing review before
-committing. Update architecture/decision documents when rewriting modules.
-
-Stage each intentional changed path; include Cargo.lock when it changed:
-
-```bash
-git add Cargo.lock <your other changed files>
-```
-
-The pre-commit hooks run automatically:
-- `cargo fmt --all --check` and `cargo clippy --all-targets --all-features -- -D warnings`
-- `python scripts/check_rust_line_width.py` checks all tracked and unignored new
-  Rust files against the hard width in `rustfmt.toml`, including macro bodies
-- `cargo test --all` (the complete suite must pass)
-- `ruff format` and `ruff check --fix` on staged Python files
-- `scripts/fix_whitespace.py`
-
-If a hook fails, fix the reported issue and re-stage. Do not use `--no-verify`.
-Run `scripts/with-env.sh cargo fmt --all` to fix normal formatting. Macro bodies
-and long literals may require manual wrapping: `rustfmt` cannot reliably format
-arbitrary macro syntax and its `max_width` is not a hard validation rule.
-
-## Code standards
-
-Maintain a same-directory `<stem>.zh.md` Chinese translation for every project-owned
-Markdown document. Update it together with the English source, including changed
-requirements, commands, evidence and task status. Agents use the English source
-as authoritative. Third-party submodules and generated dependencies are excluded.
-
-**Rust:** follow `rustfmt.toml` and the hard 100-character line limit (tabs expanded), including macros, strings and comments. Keep JSON fields on separate lines and use `concat!` for long literals. No `#[allow(dead_code)]` or `#[allow(unused)]` without a comment explaining why the item must be kept. All `unsafe` blocks must have a `// SAFETY:` comment stating the invariant being upheld.
-
-**Python:** `ruff` enforces formatting and linting (PEP 8 + selected rules). No bare `except:`. Type hints on all public function signatures.
-
-## Definition of done
-
-A task is done when:
-1. The code change is committed and the pre-commit hooks pass.
-2. Affected tests pass (Rust unit tests for scheduler/kv-cache changes; actual-path GQA/GDN FP64 probes for attention/state changes, including MTP when affected).
-3. The end-to-end smoke test passes if the change touches `zmq_bridge.py`, `model_runner.py`, or `client.rs`.
-4. `docs/handoff.md` (and `docs/plan.md` when a stage completes) reflect the new
-   task status; when fixing an audit finding, update its status in
-   `docs/audit-2026-09-23.md`.
-5. Task-owned GPU servers and workers are stopped promptly after their runs,
-   including on failure or cancellation. Verify their processes, GPU allocations
-   and temporary service ports are gone. Leave a service running only when the
-   user explicitly requests it, and document that exception in the handoff.
-
-## Adding a new feature
-
-1. Add or update the relevant `REQ-*` entry in `docs/requirements.md`.
-2. Write the Rust or Python code.
-3. Add unit tests (Rust: `#[cfg(test)]` module in the same file; Python: `tests/` directory).
-4. Update `docs/testing.md` with the new test location and expected result.
-5. Commit with a `feat(...)` message following the convention above.
-
-## Running tests manually
-
-```bash
-# Framework checks set both required environment variables.
-scripts/with-env.sh cargo test --workspace
-scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
-scripts/with-env.sh ruff format python/
-scripts/with-env.sh ruff check python/
-
-# Coherent text; actual-path FP64 variants are documented in docs/testing.md.
-scripts/with-gpu.sh scripts/with-env.sh python scripts/smoke-text.py --socket /tmp/contribution-smoke.ipc --max-tokens 64
-
-```
-
-## What not to do
-
-- Do not add swap-based preemption, multi-GPU, gRPC serving, LoRA, or multimodal inputs — these are explicitly out of scope (REQ-OUT-SCOPE-001). Open a discussion first if scope needs to change. OpenAI-compatible HTTP serving is implemented and accepted (REQ-SERVE-001); serving changes must re-run its real GPU/agentic checks.
-- Do not commit secrets, tokens, `.env` values, or production credentials.
-- Do not force-push to any branch without explicit confirmation from the project owner.
-- Do not upgrade the `zeromq` Rust crate without checking that `DealerSocket` and `ipc-transport` still work correctly — see `docs/decisions/ADR-001-zmq-socket-type.md`.
+Update `docs/handoff.md` with current results and open work.
+Stop owned GPU processes and temporary listeners.
+For a user-requested active service, record its purpose in the handoff and its host details in `LOCAL.md`.

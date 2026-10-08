@@ -1,218 +1,221 @@
-# 需求 — oh-my-vllm
+# 需求
 
-_确认状态：除另有说明，均经用户确认。最后审阅：2026-09-23。_
+本文件定义当前有效范围.
+[验收](acceptance.zh.md) 记录实测源码身份, [审计](audit.zh.md) 记录尚存限制.
 
-当前验收状态见 acceptance.zh.md；对下文部分“已实现”表述有所限定的未修复代码审计问题见 audit-2026-09-23.zh.md。
+## REQ-GOAL-001: 推理目标
 
-## REQ-GOAL-001 — 主要目标
+为单张 B200 GPU 上的 Qwen3.8-27B-FP8 提供 Rust 推理框架.
+保留全部现有离线和 HTTP 功能.
+每个性能工作负载必须满足 `REQ-PERF-001` 和 `REQ-PERF-002`.
 
-**状态：** 用户已确认
-**优先级：** 必须
+## REQ-ARCH-001: 职责
 
-构建以 Rust 为主的推理框架，在单张 B200 GPU 上运行 Qwen3.8-27B-FP8，在下述工作负载达到 vLLM EngineCore 吞吐的至少 95%。Rust 负责服务、调度和逻辑 KV，Python 负责 GPU 计算。
+Rust 负责服务, 请求队列, token 预算, 逻辑 KV 分配, 前缀复用和抢占.
+Python 负责模型加载, GPU forward 计算, 内核和手动 CUDA Graph.
+使用一条 ZMQ DEALER 通道传输 msgpack.
+Tensor 保留在 Python 侧.
 
-**验收：** `benchmarks/ttft.py` 对冻结基线为 REQ-PERF-001 的每一组记录 passed=true（采用 REQ-PERF-002 协议）。
+## REQ-MODEL-001: 目标
 
-## REQ-ARCH-001 — Rust/Python 分工
+使用包含 48 层 GDN 和 16 层 FA 的 Qwen3.8-27B-FP8.
+所有生产路径使用块大小 784.
+FA group 为 0, GDN group 为 1, 使用 `mamba_cache_mode="align"`.
+Checkpoint 位置通过 `OH_MY_VLLM_MODEL` 或 `--model` 设置.
 
-**状态：** 用户已确认
-**优先级：** 必须
+## REQ-PERF-001: 吞吐
 
-Rust 负责请求队列、token 预算、KV 块分配、前缀缓存和抢占。Python 负责模型加载、前向传播、注意力 kernel 和 CUDAGraph 捕获。边界为单个 ZMQ DEALER socket，不共享内存，不传递 Tensor 数据。
-
-**约束：** 不把调度逻辑移到 Python，不调用 vLLM Python 调度器。这一分工是设计本身，不是实现便利措施。
-
-## REQ-MODEL-001 — 目标模型
-
-**状态：** 用户已确认
-**优先级：** 必须
-
-模型：`/data0/shared/Qwen3.8-27B-FP8`（Qwen3.8-27B，FP8 量化）。架构：48 层 GatedDeltaNet（Mamba）+16 层全注意力。块大小：**784 token**，混合架构的硬约束。KV 分组：FA 组（`group_id=0`，16 层）和 Mamba 组（`group_id=1`，48 层，`mamba_cache_mode="align"`）。
-
-**不可更改：** block_size。代码可以将其他值参数化，但默认值和全部生产路径均为 784。
-
-## REQ-PERF-001 — 吞吐目标
-
-**状态：** 用户已确认
-**优先级：** 必须
-
-| 模式 | 输入 token | 输出 token | batch |
-|---|---|---|---|
-| ordinary / MTP4 / prefix-hit | 32768 | 4096 | 1, 2, 4 |
+| 模式 | 输入 token | 输出 token | Batch |
+|---|---:|---:|---|
+| ordinary, MTP4, prefix-hit | 32768 | 4096 | 1, 2, 4 |
 | ordinary | 131072 | 4096 | 1, 2, 4 |
 
-全部 12 组要求吞吐 >= 新冻结官方 vLLM main 基线的 95%。用户于 2026-09-22 授权更新隔离 checkout/环境并重测全部组。旧基线产物保留为历史。使用相同 token 输入、采样、输出数量及可比较的有效缓存容量，明确记录配置和源码/环境身份。
-
-## REQ-PERF-002 — EngineCore TTFT
-
-全部 12 组同时要求 TTFT <= 新基线的 110%。输入预先 token 化，从共同 batch 提交、请求注册之前启动单调时钟；各请求在调用方收到第一个保留输出 token 时停止。包含引擎排队、调度、传输和采样，不包含 HTTP、tokenization、模型加载及预热。保留每请求 TTFT。每组统计量为各次重复最大请求 TTFT 的中位数。纯 GPU prefill 计时仅供诊断。
-
-至少完整预热两次、测量五次。普通/MTP 测量重置前缀复用；prefix 模式显式预填受控命中。正式运行出现编译或新图捕获则失效。TTFT 或吞吐的 (max-min)/median >10% 时，调查并重跑完整测量集，保留每次尝试和排除原因，不能挑选重复结果。用户于 2026-09-22 将两种指标、两个引擎的稳定性上限从 5% 调整为 10%。复核完整原始测量集时保留原产物并记录新规则，吞吐及 TTFT 比例门槛不变。冷时延单独报告，无硬门槛。修复失败，未经用户授权不放宽阈值。默认 CUDA 后端下全部 12 组均已通过，见 acceptance.zh.md 及保留的原始证据。
-
-## REQ-CONTEXT-001 — 最大上下文与显存
-
-支持输入/输出合计 262144 token。边界工作负载为输入 258048、输出 4096，普通模式和 MTP4，batch 1/2/4，要求无 OOM、无重计算抢占。记录性能和峰值 GPU 显存，不在 12 组矩阵外增加比例门槛。覆盖长上下文前缀恢复和约束解码。保持每步 32768 token 预算和块大小 784；按需优化布局/workspace，保持数值容差与功能。
-
-## REQ-FUNC-001 — 分块 prefill
-
-**状态：** 用户已确认；**已实现**（代码观察）
-
-长 prompt 按 `max_num_batched_tokens=32768` 上限分块。调度器应用 token 预算和显式 aligned_prefill 拆分，在块边界生成 Mamba checkpoint。
-
-## REQ-FUNC-002 — 连续 batching
-
-**状态：** 用户已确认；**已实现**（代码观察）
-
-同一步内先调度 decode 请求，再调度新 prefill。见 `crates/scheduler/src/lib.rs` 的阶段一运行队列和阶段二等待队列。
-
-## REQ-FUNC-003 — 前缀缓存
-
-**状态：** 用户已确认；**已实现**（代码观察）
-
-链式 hash 前缀缓存，SHA-256 截断为 64 位，采用 LRU 淘汰。跨两组 KV 协调，见 `crates/kv-cache/src/`。
-
-## REQ-FUNC-004 — 重计算抢占
-
-**状态：** 用户已确认；**已实现**（代码观察）
-
-运行中请求需要的块超过可用量时，调度器从运行队列尾部抢占优先级更低（更晚接纳）
-的请求，并重试高优先级请求。如果没有更低优先级的请求，则抢占当前请求。被抢占者
-按接纳顺序返回等待队列，`num_computed_tokens=0`；已接受历史保留，未验证 draft
-清空。见 `crates/scheduler/src/lib.rs`（审计 SCH-06）。
-
-**明确推迟：** 基于 swap 的抢占（CPU KV offload）。它需要 Python 端 CPU tensor 管理，不在当前计划中。
-
-## REQ-FUNC-005 — MTP 推测解码
-
-**状态：** 用户已确认，已实现并端到端运行。
-
-以 num_speculative_tokens=4 启用 MTP4。自有 Worker 在同一协议响应中返回全部保留 target token 和明确的 new_draft_token_ids。Rust 调度 draft、预留 target 状态并回滚已调度的拒绝项。ADR003 记录为保留 block784 而使用 BF16 SSM。连贯 MTP 文本、实际路径 FP64 和功能组合已通过；历史 MTP 性能在 batch 1/2/4 均通过。
-
-## REQ-ACC-001 — 实际路径 GQA/GDN 精度
-
-将真实推理的 GQA/GDN kernel 与独立 CPU FP64 参考比较，覆盖 prefill、decode、分块边界和递归状态。记录随 dtype 变化的容差。已有独立 GQA 测试不能证明实际路径覆盖。还需展示连贯真实文本推理，包含 MTP 和前缀命中。完整模型 token 相等不是验收门槛。
-
-## REQ-RUNNER-002 — 独立运行时
-
-用本仓库维护的代码和独立库替代 vLLM 实现依赖。保留 Rust 服务/调度/逻辑 KV 及 Python GPU 执行。最终构建、测试和服务不得安装/导入/链接 vLLM，也不依赖其源码、conda 环境或编译缓存。V2 适配器已移除。运行时独立性和正确性通过；当前性能验收为 REQ-PERF-001/002 的十二组矩阵。
-
-按依赖顺序选择较新且兼容的稳定版本，验证后固定。高层依赖在 conda oh-my-vllm，可用正常工作的系统 CUDA/编译工具。可移植选定代码并保留来源和许可证，但不能整套复制框架。
-
-保留全部功能及 FP64 容差。每个里程碑运行针对性回归。（原始 2026-09-19 基线的九组门槛已于 2026-09-21 达成，并由 REQ-PERF-001/002 取代。）未来模型架构、单机多 GPU、其他 NVIDIA GPU 和本地 DSpark 只需简要扩展文档。用户确认的边界见 ADR-006。
-
-## REQ-RUNNER-001 — V2 Model Runner（已完成的前序阶段）
-
-只用 GPUWorker 的 V2 Model Runner，不保留旧实现或回退。保留全部离线和服务功能，包括 MTP4 约束解码、前缀缓存、重计算抢占和取消。不改 vLLM 源码，所需适配在本项目实现。Rust 拥有已接受历史，可在接纳/恢复时发送完整历史；普通 decode 保持增量，draft 单独处理。
-
-该迁移复用 bench/baseline/2026-09-19-acceptance.json 中冻结的九组 EngineCore 基线，不重跑 vLLM。保留 95% 门槛、已有 FP64 容差和 HTTP 可观测检查。当前 editable vLLM revision、包版本和历史基线身份分别记录，见 ADR-005。
-
-## REQ-OBS-001 — 带时间戳的诊断日志
-
-两进程需要 UTC 时间戳、单调计时、run/request/step 关联及可配置级别。默认日志避免逐步 I/O；debug 展示 scheduler、KV、传输和 worker 计时。主机执行时间不能作为 CUDA kernel 时间报告。profiling 显式开启。
-
-## REQ-SERVE-001 — OpenAI 兼容本地服务
-
-**状态：** 用户于 2026-09-21 确认，已实现，真实 MTP4 验收通过
-**优先级：** 服务扩展必须具备
-
-同时支持 Chat Completions 和 Responses，包含流式/非流式响应、模型发现、函数工具调用、工具结果历史、usage、终止及错误语义。服务和 oh-my-pi 在本机运行。HTTP 入口、协议适配和生命周期优先 Rust，保留 Rust scheduler/KV 所有权及 Rust/Python GPU 分工。这扩展了此前 HTTP 排除范围，但不替代 EngineCore 性能要求，也不声明 HTTP 性能验收。
-
-Responses 支持完整历史、存储型响应的 `previous_response_id`、查询和删除。使用有界、可过期内存，无需跨服务重启续接。默认 store=true、TTL 一小时、1,000 条记录、256 MiB 序列化响应/历史载荷。可配置限制、错误及兼容性见 serving.md。
-
-## REQ-SERVE-002 — 可配置思考强度
-
-**状态：** 用户于 2026-09-21 确认，已实现，真实 MTP4 验收通过
-
-提供 off/low/medium/high/xhigh，默认 medium。high 是原生 xhigh 的别名，OpenAI none 是 off 的别名。使用原生模板，将 reasoning 与正文/工具参数分离。OMP 映射、回放和校验后的模板扩展见 serving.md。这些是 prompt 控制，不是硬性思考预算。
-
-## REQ-SERVE-003 — 两种 API 的真实 oh-my-pi 验收
-
-**状态：** 用户于 2026-09-21 确认，两种真实 MTP4 agentic 任务均通过
-
-在本仓库分别对两种 API 运行 oh-my-pi。要求读取 README、架构文档和必要源码，然后引用文件介绍项目目标、架构、运行方式和当前完成状态。必须有真实工具调用、工具结果回传模型以及基于文件的最终回答；该任务中不修改仓库。工具由 oh-my-pi 执行。测试两种 API，以及非流式、取消、错误和思考映射。详细覆盖见 [serving.md](serving.zh.md)。
-
-实现请求取代此前仅文档讨论。两次真实 agentic 运行都启用 MTP。脚本化 worker/客户端协议测试不能代替真实模型验收。早期主机 CUDA/NVML 故障已恢复；真实证据和局限记录在 acceptance.md、handoff.md。
-
-## REQ-SERVE-004 — 兼容 MTP 的约束解码
-
-通过 token 级 mask 支持 JSON object、JSON Schema 和严格函数参数，包含 MTP 验证路径。不静默回退到非 MTP，不用仅生成后校验替代。不支持的 schema 显式拒绝。支持 tool choice auto/none/required/named 和 parallel_tool_calls=false。支持 schema 和 XML 编码限制见 serving.md。
-
-## REQ-SERVE-005 — 服务可观测性
-
-不添加严格 HTTP 吞吐门槛。检查真实排队/准备耗时、TTFT、输出速率、步骤/缓存行为和 MTP proposed/accepted 计数。诊断异常日志及资源滞留。不能用旧 EngineCore 结果作为服务性能证据。既有 REQ-PERF-001 保持不变。
-
-## REQ-OUT-SCOPE-001 — 明确排除
-
-**状态：** 用户已确认
-
-- 多模态输入：当前仅文本，架构保留扩展可能。
-- 基于 swap 的抢占（CPU KV offload）。
-- 多 GPU / tensor parallel >1。
-- gRPC server；OpenAI 兼容 HTTP 属于范围内，见 REQ-SERVE-001。
-- LoRA adapter。
-- 生产部署或容器化。
-
-## REQ-KERNEL-001 — TileLang 自定义 kernel 与 TileFoundry 工作流
-
-**状态：** 已实现并验收（2026-09-22）；现为 REQ-KERNEL-002 的冻结对照
-**优先级：** 必须
-
-逐步将所有项目自有 Triton kernel 替换为 TileLang，保留每个现有功能及数值容差。第三方库内部不在替换范围内。最终生产代码不保留旧自定义 Triton 回退。TileFoundry 是仅供开发的工具，从 3rdparty 下固定的个人 fork/submodule 在现有 conda 环境中源码安装。取消 Transformers 上限，简单兼容问题在 fork 修复，重大修复先讨论。可降级为兼容已发布 TileLang/OR-Tools，但不在本地维护这两个库。
-
-保持已有正确性和冻结 vLLM 的 12 组验收标准。不设相对旧 Triton kernel 的性能或正确性门槛。全部 12 组必须通过吞吐、TTFT 和稳定性后才算完成。结合 TileFoundry 分析和实际模型测量，在所需多种 shape 上调查并调优；解释不能豁免失败的性能门槛。临时算子测试和记录必须放在仓库外。最终保留测试/证据仅限用户要求和已有文档规定的验收，见 tilelang-development.md。
-
-## REQ-KERNEL-002 — CUDA/PTX 迁移（2026-09-22）
-
-**状态：** 已实现并验收；CUDA 为默认后端（2026-09-23）。
-
-设计讨论后用户授权实施。将全部项目自有 TileLang kernel 替换为 CUDA C++ 和必要的内联 PTX，仅针对 B200 优化，允许使用 CUTLASS。冻结并保留已验收的 TileLang 后端，可显式选择；CUDA 验收禁止静默回退。第三方库算子不在范围内。保持已有独立正确性参考与容差、12 组冻结 vLLM 性能门槛（吞吐 95%、TTFT 110%、极差/中位数 10%）、最大上下文以及 MTP 服务/agentic 检查。
-
-针对不同实现路径/配置，静态推导每个算子在 12 组工作负载中的最大合法调用，合并相同配置，不做动态 shape 采集。仅在实现路径不同时区分 prefill/decode 或普通/MTP；不将实际不能同时出现的各维度最大值拼成测试。所有去重配置均须稳定超过冻结 TileLang，不设最低提速百分比。允许比较等价融合链，包含所有必要复制和归约。至少三轮独立交错成对计时，每轮 CUDA 中位耗时更低，且成对节省耗时的单侧 95% 置信下界为正；无法确定的差异不算通过。不新增相对 TileLang 的端到端性能比例门槛。
-
-项目开发工具集成 TileFoundry 语义/静态分析、CUDA Event/Graph 计时和 Nsight/编译器指标，明确区分估计与实测。硬件分析独立于验收计时。先检查计数器权限，若缺失则保留可用证据并报告，不豁免性能门槛。TileFoundry 仅为开发依赖。正式配置、测试程序和汇总证据入库，临时调优及原始 trace 留在仓库外。见 cuda-development.zh.md。
-
-## REQ-IR-001 — 算子语义 DSL 与模型前向编译（2026-09-29）
-
-**状态：** 在已测工作集内由干净提交 `619c9d9` 实现并验收（2026-09-29）；见[验收证据](acceptance.zh.md)。
-
-使用 Python/PyTorch DSL 管理 Qwen target 与 MTP 模型调用的全部项目自有 CUDA 算子和关键 FlashInfer 算子的语义及实现选择。普通 PyTorch 运算，包括 `F.linear`、embedding、reshape 和简单逐元素表达式，不列入算子清单。每个语义算子具备可执行的 PyTorch 参考、shape/dtype 契约、显式修改 schema，并仅根据静态阶段、shape、dtype、layout 和设备元数据选择已注册 provider。provider 失败必须报错。PyTorch 参考只能显式选为调试 provider；生产不能自动回退到参考或 eager 执行。
-
-以 `torch.compile(fullgraph=True)` 编译 prefill、target decode、MTP draft 与四步 proposal 的 GPU 前向单元；自有和第三方语义算子在 provider lowering 前保留有 schema 的图节点。主机调度、FlashInfer plan、缓存分配和 Rust/ZMQ 留在编译单元外。保留现有手工 target/draft/proposal CUDA Graph 缓存、捕获恢复和显存保护；手工图包含已编译单元，不启用编译器的 CUDA Graph 管理。eager 仅是显式调试模式。持久 KV/GDN 写入须保持有序副作用。activation 捐赠必须指明已证明安全的临时张量，不能捐赠持久缓存。基础与融合语义算子可以并存；图改写须有等价性测试。维护带检查的调用点清单，并逐项说明低层入口例外理由，公开 provider 选择记录。
-
-**验收：** 现有正确性套件、六个最大上下文用例、正式 CUDA 对冻结 TileLang 算子门禁，以及全部 12 组 REQ-PERF-001/002 均通过。每组维持吞吐 95%、TTFT 110% 和极差 10% 规则。不新增编译提速百分比要求。生产模型/GPU 集成测试必须覆盖四类 fullgraph 单元和手工图重放，包括变化的 decode 元数据。
-
-## REQ-LEARN-001 — 交互代码之旅 (2026-10-08)
-
-**状态:** 用户确认; 12 个完整章节已实现.
-**范围:** 仓库教学, 与推理服务独立.
-
-在 code-journey/ 维护真正使用 Twine 的网站. 12 个章节方向各对应一个完整页面,
-覆盖当前实际推理经过的核心代码逻辑, 设计决策和实现方法.
-阅读选项记录兴趣并解析未读内部前置章节; 逐步解释陌生概念,
-说明所有显示字段, 参数和变量.
-默认读者熟悉 Rust 和 Python 的基础语法, 讲解聚焦推理行为, 项目职责与设计决策.
-
-使用 LXGW WenKai, Fira Code Nerd Font 与 KaTeX, 保留普通技术文档字号
-(桌面 / 手机正文 17/16px), 持久化亮暗主题, 阅读与实验进度.
-中文正文采用半角标点和指定空格, 应用 Humanizer-zh,
-在固定内网端口 18084 提供预览.
-
-所有页面跳转采用无序列表, 每项列出条件与目标, 参考用户提供的 Matrix67 示例.
-只有明确已理解并继续的选项才完成本章, 复习和地图保留阅读中.
-迁移旧短文访问记录时, 不把访问视为已完成新扩写章节.
-
-从当前文件提取源码, 去除节选全部公共缩进, 保留相对缩进, 真实行号和完整文件摘要.
-显示与复制的节选包含所引用元素的原始文档注释 / docstring 和所附属性 / 装饰器.
-显示与复制使用规范后的节选. 提供 Rust / Python / CUDA 清晰高亮,
-本地完整源码页和键盘滚动. 维护文件到章节的覆盖清单,
-构建拒绝缺少默认运行代码覆盖, 锚点失配或显示字段缺少说明.
-
-**验收:** 检查全部 12 章路线, 条件和目标列表, 前置关系与兴趣,
-完成与复习的进度区别, 迁移, 刷新, 重置与返回历史.
-核对五组真实 Rust CPU 轨迹 (784/785/1568/1569/32768),
-公式, 字体, 桌面 / 手机布局, 所有显示字段和控制台健康.
-测试文档与元数据保留, 确认基础语法说明已移除,
-以及 Rust / Python / tab / 空白行去公共缩进, Clipboard API 与 HTTP 备用路径
-的规范节选复制, 源码摘要和行号, 所有完整源码 URL 及 >=4.5:1 代码对比度.
-查看实际截图并对照指定阅读和列表风格. CPU 合成反馈用于解释调度,
-GPU 正确性与性能证据仍来自项目既有验收记录.
+这些组合共 12 行.
+每行吞吐至少达到冻结 EngineCore 基线的 95%.
+两侧使用相同 token, 采样, 输出数量以及可比的有效缓存容量.
+记录源码, 环境和实际缓存身份.
+
+## REQ-PERF-002: TTFT 与测量
+
+每行 TTFT 至多为基线的 110%.
+在预先 token 化 batch 共同提交, 请求注册之前启动单调时钟.
+调用方收到该请求第一个保留的输出 token 时停止其时钟.
+包括引擎排队, 调度, 传输和采样.
+排除 HTTP, tokenization, 加载和预热.
+每次重复取请求 TTFT 的最大值, 再取这些最大值的中位数作为该行统计量.
+GPU prefill 时间和冷启动延迟单独报告.
+
+至少执行 2 次完整预热和 5 次测量重复.
+普通和 MTP 测量重置前缀复用.
+Prefix 行为每请求预置恰好 32144 个可复用 token.
+两个引擎的吞吐和 TTFT 均要求 `(max-min)/median <= 0.10`.
+超过波动限制时调查并重跑完整集合.
+保留排除的尝试及原因; 不挑选单次重复.
+测量中发生编译, 新 graph capture, 干扰或源码变化会使该次尝试失效.
+修复失败; 仅在用户授权后修改门槛.
+
+冻结基线使用官方 vLLM 源码 `e9f169d16b9408bb9ae44f75072b91a5521d733c`.
+原始基线 SHA-256 为 `fa3729f1a2ce160235b45df75542774d628dac7af963f01d673353fb419df8fd`.
+正式比较使用完整原始数据.
+新服务器按同一协议及匹配条件重新测量基线.
+历史可移植摘要用于查阅和离线分析.
+
+后续性能策略目标是通过 roofline 分析确定门槛, 与 vLLM 解耦.
+在独立需求替代之前, 现有门槛继续有效.
+
+## REQ-CONTEXT-001: 上下文与显存
+
+支持输入与输出合计 262144 token.
+普通和 MTP4 模式, batch 1, 2, 4, 完成输入 258048, 输出 4096 的用例.
+这些运行不得发生 OOM 或重计算抢占.
+保持 32768-token 步预算和 784-token 块.
+记录性能和 GPU 显存峰值; 不增加额外比率门槛.
+覆盖长上下文前缀恢复和约束解码.
+
+## 功能需求
+
+| ID | 合同 |
+|---|---|
+| REQ-FUNC-001 | 在 32768-token 预算内分块 prefill; 保存对齐的 GDN checkpoint. |
+| REQ-FUNC-002 | 每步先调度活跃解码, 再调度新 prefill. |
+| REQ-FUNC-003 | 使用链式哈希前缀复用, LRU 淘汰和协调的 FA / GDN group. |
+| REQ-FUNC-004 | 优先抢占较晚接纳的运行请求; 重计算保留已接受历史, 清除未验证草稿. |
+| REQ-FUNC-005 | 提供 MTP4, 显式返回保留 token 和新草稿 ID; 保持 BF16 GDN 状态和 block784. |
+
+## REQ-ACC-001: 数值精度
+
+实际 GQA 和 GDN 推理路径与独立 CPU FP64 参考比较.
+覆盖 prefill, decode, 分块边界和 recurrent state.
+使用实际舍入后的输入.
+BF16 输出使用 `atol=rtol=0.03`.
+Recurrent state 的 NRMSE 至多 1%, 最大绝对误差至多为参考峰值的 2%.
+保留路径相关容差和现有测试.
+展示连贯文本, MTP 和前缀命中.
+完整模型 token 相等不作为门槛.
+
+## REQ-RUNNER-002: 独立运行时
+
+使用项目实现和独立库.
+项目构建, 测试和推理不得安装, 导入或链接 vLLM.
+不得依赖其 checkout, 旧环境或编译缓存.
+旧 adapter 已移除; [ADR-002](decisions/ADR-002-gpuworker-adapter.zh.md) 和 [ADR-005](decisions/ADR-005-v2-model-runner.zh.md) 记录替代关系.
+`REQ-RUNNER-001` 已退役, 由本需求替代.
+按依赖顺序选择兼容的稳定版本, 固定已验证版本.
+保留移植代码的来源和许可证.
+未来架构, 多 GPU, 其他 NVIDIA GPU 和 DSpark 只写简要扩展说明.
+
+## REQ-OBS-001: 诊断
+
+提供 UTC 时间戳, 单调时长, run / request / step 关联和可配置日志级别.
+默认级别避免逐步 I/O.
+Debug 日志暴露调度, 缓存, 传输和 worker 时长.
+区分主机时间与 CUDA 内核时间.
+Profiling 需显式选择.
+
+## 服务需求
+
+| ID | 合同 |
+|---|---|
+| REQ-SERVE-001 | 提供文本 Chat Completions 和 Responses, 流式响应, 工具, 历史, usage, 模型发现, 查询和删除. |
+| REQ-SERVE-002 | 提供 off/low/medium/high/xhigh 思考; 默认 medium, high 映射为 xhigh, none 映射为 off. |
+| REQ-SERVE-003 | 两种 API 分别完成真实 oh-my-pi 任务, 开启 MTP, 实际读文件, 回传工具结果并给出有依据的答案. |
+| REQ-SERVE-004 | 采样前施加 JSON / Schema / strict-tool mask, 包括 MTP 草稿和 bonus token; 拒绝不支持的 schema. |
+| REQ-SERVE-005 | 检查排队, 准备, TTFT, 输出速率, 缓存和草稿计数, 不增加 HTTP 吞吐门槛. |
+
+[服务合同](serving.zh.md) 定义支持的参数, XML 限制, 存储限制和错误.
+单独使用 scripted worker 不能证明真实模型验收.
+
+## REQ-KERNEL-001: 冻结 TileLang 比较
+
+项目内 Triton 到 TileLang 的迁移已完成.
+保留已验收的 TileLang 实现, 作为 `REQ-KERNEL-002` 的冻结比较对象.
+第三方内部实现不属于迁移范围.
+固定的 TileFoundry fork 用于开发.
+大幅修改 fork 前先讨论.
+临时调优放在仓库外.
+旧 Triton 后端不提供验收门槛.
+
+## REQ-KERNEL-002: CUDA 与 PTX
+
+B200 使用项目内 CUDA C++ 内核, 可包含 inline PTX.
+允许 CUTLASS.
+CUDA 为默认后端; TileLang 需显式选择, 不做静默回退.
+保留独立精度, 框架, 上下文和真实服务门槛.
+
+在 12 个工作负载内静态推导每个实现路径的最大合法调用.
+相同配置去重.
+实现路径不同的阶段分别保留.
+不独立最大化无法同时出现的维度, 不以动态 tracing 选择正式用例.
+每个用例必须稳定快于冻结 TileLang; 无最低百分比增益.
+至少 3 轮, 每轮 20 个交错配对.
+CUDA 每轮中位数必须更快.
+配对节省时间的单侧 95% 置信下界必须为正.
+等价融合链包括所有必要复制和 reduction.
+
+正式用例, 测试框架和汇总证据保留在仓库内.
+原始 trace 和临时调优保留在仓库外.
+Profiling 与验收计时分开.
+缺少计数器时明确报告, 不豁免门槛.
+使用 [内核流程](kernels.zh.md).
+
+## REQ-IR-001: Semantic IR
+
+拥有 Qwen target 和 MTP 路径中项目 CUDA 及关键 FlashInfer 算子的语义和 provider 选择.
+普通 PyTorch 算子, embedding, reshape 和 `F.linear` 不在此算子清单内.
+每个算子具有 PyTorch 参考, shape / dtype 合同, mutation schema 和静态选择的 provider.
+Provider 选择使用 phase, shape, dtype, layout 和 device metadata.
+Provider 失败即报错; reference 只作为显式 debug 选项.
+
+使用 `torch.compile(fullgraph=True)` 编译 prefill, target decode, MTP draft 和四步 proposal.
+Provider lowering 前保留语义节点.
+主机规划, 分配, 调度和 ZMQ 保留在这些单元外.
+手动 CUDA Graph 包含编译单元; 禁用编译器管理的 graph.
+保留持久写入顺序, capture 恢复和显存保护.
+Activation donation 需要对指定临时值的证明; 持久缓存不能被 donation.
+Graph rewrite 需要等价测试和注明例外原因的调用点清单.
+
+验收包括全部现有精度测试, 6 个上下文用例, 正式算子用例和 12 个性能行.
+真实模型测试必须覆盖全部 4 个编译单元, 以及 metadata 变化后的 graph replay.
+不增加编译加速百分比门槛.
+
+## REQ-LEARN-001: 交互教程
+
+在 `code-journey/` 维护真正的 Twine 教程, 包含 12 个完整中文章节.
+通过实际源码讲解核心推理逻辑, 决策和实现.
+阅读选项用于了解兴趣和处理内部前置知识.
+解释展示的字段, 参数和变量; 默认读者熟悉基础 Rust 和 Python 语法.
+
+使用 LXGW WenKai, Fira Code Nerd Font, KaTeX, 正文字号为桌面 / 移动端 17/16px.
+保留主题选择和阅读 / 实验进度.
+中文使用半角标点及指定空格; 应用 Humanizer-zh.
+按用户要求在端口 18084 提供预览.
+服务器地址和进程信息记入 `LOCAL.md`.
+
+所有页面跳转使用条件无序列表.
+只有显式完成选项会完成章节.
+复习 / 地图访问保留阅读进度; 旧短 passage 迁移为访问记录.
+从当前源码提取附带文档, 属性和 decorator 的片段.
+删除公共前导缩进; 保留相对缩进, 行号和完整文件哈希.
+展示与复制的片段一致, 提供清晰高亮, 完整源码页和键盘滚动.
+构建时拒绝缺失的源码覆盖, anchor 和记录字段解释.
+
+测试 12 条路线, 前置知识, 选项, 完成, 迁移, 重启, 刷新和后退历史.
+测试 5 个真实 Rust CPU trace: 784, 785, 1568, 1569, 32768 token.
+测试字体, 公式, 字段, console 健康, 桌面 / 移动布局和两种主题.
+测试片段文档, 缩进规范, 剪贴板路径, 源码哈希, 行 anchor, URL 和至少 4.5:1 的代码对比度.
+截图需对照要求的阅读样式检查.
+CPU 合成反馈展示调度; GPU 证据使用独立验收记录.
+
+## REQ-DOC-001: 文档与可移植性
+
+项目自有英文 Markdown 遵循 ASD-STE100 Issue 9 规则和词典.
+维护完整中文译文, 技术术语表, 自动检查和独立语义审查.
+保留有用的当前信息和关键历史决策.
+主机信息记入被忽略的 `LOCAL.md`, 原始证据放在被忽略的本地存储.
+Rust, Python, 脚本和测试统一使用环境变量和 CLI 参数.
+清理当前跟踪内容; 保留 Git 历史.
+
+## REQ-OUT-SCOPE-001: 后续范围
+
+当前范围不包括多模态输入, CPU KV swap, 多 GPU, 超过 1 的 tensor parallelism, gRPC, LoRA 和生产打包.
+仅记录扩展点, 不增加空接口或未经测试的支持声明.

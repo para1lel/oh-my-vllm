@@ -1,5 +1,9 @@
-# Rust build output. Lives inside the repo because the root disk is nearly full;
-# CARGO_TARGET_DIR points here.
+# Local maintenance and original measurement records.
+/LOCAL.md
+/.local/
+/.venv/
+
+# Rust build output.
 target/
 **/*.rs.bk
 
@@ -36,6 +40,5 @@ flamegraph.svg
 *.swp
 .DS_Store
 
-# Benchmark scratch. Results we want to keep are committed under
-# bench/baseline/ explicitly; everything else under bench/ is transient.
+# Temporary benchmark output. Portable summaries are in bench/evidence/.
 bench/scratch/

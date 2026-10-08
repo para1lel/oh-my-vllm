@@ -1,25 +1,32 @@
-# ADR-006：拥有 GPU 执行运行时
+# ADR-006: 独立 GPU 运行时
 
-日期：2026-09-21。状态：用户已批准，已实现。验收证据见 ../acceptance.md。
+日期: 2026-09-21. 状态: accepted, 已实现.
+本决策替代 [ADR-002](ADR-002-gpuworker-adapter.zh.md) 和 [ADR-005](ADR-005-v2-model-runner.zh.md).
 
 ## 决策
 
-保留 Rust 服务、调度和逻辑 KV 所有权，以及 Python GPU 执行。用小型项目自有实现和独立库替代 vLLM 集成。可改编选定上游代码并保留来源和许可证，但不能整套复制框架。最终构建、测试和服务不依赖 vLLM 包、源码检出、已编译算子、旧 conda 环境或构建缓存。过渡阶段可继续使用旧适配器。
+保持 Rust 服务, 调度, 逻辑 KV 和 Python GPU 执行.
+使用小型项目实现和独立库, 替代 vLLM 运行时依赖.
+只在保留来源和许可证时移植选定代码; 不整体复制框架.
+构建, 测试和推理必须不依赖 vLLM package, checkout, 旧环境或编译缓存.
+只有单独获授权的基线采集器存在隔离例外.
 
-从 GPU 工具链和 tensor 运行时开始，按依赖顺序选择较新、兼容的稳定版本，验证后固定组合。允许使用系统驱动和正常工作的 CUDA/编译工具；高层库放在 conda oh-my-vllm。除非显式修订本决策，不使用 nightly 依赖。
+按依赖顺序选择兼容稳定版本, 固定已验证组合.
+使用主机驱动和可用 CUDA / 编译器工具, 高层库安装在项目环境中.
+实际主机位置记入 `LOCAL.md`.
 
-优先调查风险最高的边界：FP8 权重/scale 语义、GQA、GDN 递归和 MTP 状态回滚。随后集成模型加载、请求/缓存状态、采样、计算图执行和服务工具。FP64 观测点与实际执行路径同步迁移，保持参考实现独立。
+## 影响
 
-每个里程碑由相关正确性测试和独立审查把关。热路径修改附带针对性性能检查；执行链完成和最终验收时需要完整九组验收（已于 2026-09-21 达成；当前门槛为 REQ-PERF-001/002 的十二组矩阵）。记录中间性能缺口。仅对比 2026-09-19 原始冻结 EngineCore 基线，门槛 >=95%；不重跑原生 vLLM，不增加相对 V2 的门槛。
+项目拥有 FP8 weight/scale, GQA/GDN, MTP rollback, loading, cache state, sampling, graph 和服务 adapter.
+保留实际路径独立 FP64 参考和全部现有功能.
+每个里程碑独立审查, 测量受影响热路径.
+原 9 行验收已达到; 当前分母是刷新后的 12 行基线.
+[需求](../requirements.zh.md) 和 [验收](../acceptance.zh.md) 定义有效范围和实测身份.
 
-## 设计参考
+## 后续边界
 
-- https://docs.vllm.ai/en/latest/design/model_runner_v2/ ：持久请求状态、增量更新、GPU 元数据和明确的计算图生命周期。
-- https://docs.vllm.ai/en/latest/design/vllm_ir/ ：将算子语义与实现分离；不要为单模型任务构建通用编译器 IR。
-- https://docs.vllm.ai/en/latest/design/cuda_graphs/ ：计算图捕获与编译分离，使用稳定 buffer 和明确执行 shape。
-
-## 未来扩展（非当前实现要求）
-
-让模型/权重映射、设备 kernel、缓存状态及执行流程保持可读且集中。需要不同模型和 NVIDIA GPU 时，再添加具体实现。单机多 GPU 可围绕相同 Rust 调度契约添加 rank 本地权重/状态和 collective。PD 分离及多机执行不在范围内。不要添加推测性的空接口。
-
-DSpark 主要指 /data0/shared/Qwen3.8-27B-DSpark。配置声明五层 BF16 GQA draft 模型，target 特征层 [5,19,33,47,61]、confidence 和 Markov head、七个 proposal，以及含 bonus 的八个验证 token。draft 的 block_size=7、training_block_size=16 不是 784 的 KV 页大小。未来集成需要独立 draft 状态、target hidden feature，以及可变验证/提交/回滚处理。确切特征提取和 token 映射届时验证；checkpoint README 不能代替本地验收。
+新架构和 GPU 后端在声明支持前需要具体合同和测试.
+多 GPU 需要 rank-local state 和 collective, Rust 保持调度所有权.
+DSpark 实现必须具备独立 draft state, target hidden feature 和可变 verification/commit/rollback.
+其 5 层 BF16 设计, feature index 和 block 区别见 [架构](../architecture.zh.md#扩展边界).
+本轮不添加空接口或多节点支持.

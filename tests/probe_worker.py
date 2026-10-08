@@ -1,4 +1,4 @@
-#!/data0/shared/dongwu.chen/conda-envs/oh-my-vllm/bin/python
+#!/usr/bin/env python3
 """Actual independent-model operator probes; opt-in eager diagnostics only."""
 
 import json

@@ -12,11 +12,9 @@ edition = "2024"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-# Keep versions aligned with vLLM's rust/Cargo.toml so that vendored crates
-# (engine-core-client, tokenizer, chat) can be dropped in without a resolver
-# conflict later.
+# Pin the compatible workspace dependencies.
 anyhow = "1.0.98"
-clap = { version = "4.5.40", features = ["derive"] }
+clap = { version = "4.5.40", features = ["derive", "env"] }
 rustc-hash = "2.1.1"
 rmp-serde = "1.3.1"
 serde = { version = "1.0.228", features = ["derive"] }

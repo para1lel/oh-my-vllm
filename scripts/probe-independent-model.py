@@ -8,6 +8,7 @@ with-gpu.sh and with-env.sh using the target oh-my-vllm Python environment.
 import argparse
 import importlib.util
 import json
+import os
 import sys
 
 import torch
@@ -18,7 +19,12 @@ from transformers import AutoTokenizer
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="/data0/shared/Qwen3.8-27B-FP8")
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("OH_MY_VLLM_MODEL"),
+        required=not bool(os.environ.get("OH_MY_VLLM_MODEL")),
+        help="checkpoint path; defaults to OH_MY_VLLM_MODEL",
+    )
     parser.add_argument("--max-tokens", type=int, default=32)
     args = parser.parse_args()
     if args.max_tokens <= 0:
