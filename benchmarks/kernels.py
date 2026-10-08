@@ -85,6 +85,7 @@ def main():
         protocol=(
             "Complete static maximum-shape operations; three independent warm rounds, "
             "twenty alternating-order pairs/round,100 graph repetitions/sample. "
+            "External timing events inside each graph exclude host submission gaps. "
             "No profiler during timing. Fixtures use immutable sources and isolated "
             "repeatable destinations; DSpark append timing shares one cache after "
             "independent-cache verification. Before timing, compare both backends' "

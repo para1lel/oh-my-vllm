@@ -115,6 +115,10 @@ scripts/with-env.sh python benchmarks/kernels.py --list
 scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda python benchmarks/kernels.py --output "$EVIDENCE_DIR/operators.json"
 ```
 
+Graph 内部的 external CUDA Event 包围全部 100 次完整操作.
+计时区间排除 graph replay 前后的主机提交停顿.
+采集器等待 graph 结束 event 后才读取耗时.
+
 使用仓库外可写的 `EVIDENCE_DIR`.
 `--operations` 选择诊断子集; 不完整覆盖或 dirty source 不能通过完整矩阵.
 GPU 干扰和源码变化使采集失效.

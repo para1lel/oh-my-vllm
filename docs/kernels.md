@@ -121,6 +121,10 @@ scripts/with-env.sh python benchmarks/kernels.py --list
 scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda python benchmarks/kernels.py --output "$EVIDENCE_DIR/operators.json"
 ```
 
+The collector records external CUDA Events before and after all 100 full operations in each graph.
+The interval does not include host submission gaps before or after graph replay.
+The collector waits for the graph's end event before it reads elapsed time.
+
 Use an external writable `EVIDENCE_DIR`.
 `--operations` selects diagnostic subsets. Partial coverage or dirty source cannot pass the full matrix.
 GPU contention and source changes invalidate collection.

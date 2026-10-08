@@ -200,6 +200,31 @@ The service collection on `1bcf5d5` passed constraints, Chat/Responses lifecycle
 All owned workers and the service port were released. Semantic reviews record answer errors and citation limits in the external evidence.
 New full collections will use the committed CUDA update.
 
+## Device timing verification
+
+The full operator collection on `353c94a` passed 230 numerical checks.
+Two statistical speed checks failed. The append case had less CUDA time in all three rounds.
+The Q/K case had more CUDA time in its first round.
+The full failed collection stays in external storage.
+
+The timer on `353c94a` recorded events with different host calls before and after graph submission.
+Host submission gaps can enter the elapsed time. The recorded spikes do not identify their cause.
+The new timer records external events before and after all 100 operations in each graph.
+
+A control used 10 ms host gaps before and after replay.
+The initial timer changed from 2.18576 to 202.39872 microseconds for each operation.
+The new timer changed from 1.63360 to 1.64576 microseconds.
+Graph examination found two event nodes at the two ends of the full chain of 100 kernel nodes.
+
+The first diagnostic's node counter used the wrong DOT label pattern and failed its assertion.
+A different validation keeps the original records and checks the graph chain and hashes.
+Two GPU tests passed with 20 ms host gaps before or after replay and full graph-node checks.
+
+Runtime files and the loaded CUDA module stay the same as `353c94a`.
+Its service collection passed all six client groups, with the two OMP tool loops and long-context prefix reuse.
+All service processes and the service port were released.
+New formal timing will use a clean commit with the corrected collector.
+
 ## Open work
 
 - Complete user review of the expanded tutorial and address specific teaching gaps.

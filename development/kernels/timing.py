@@ -34,22 +34,30 @@ def measure(reference, candidate, *, rounds=3, pairs=20, repeats=100):
     keep isolated destination pools. Keep returned tensors alive during capture.
     The graph includes complete
     production operations, including required snapshots and reduction kernels.
-    CUDA Event times exclude graph launch host overhead and fixture construction.
+    External timing events are captured around all operations in each graph.
+    A replay orders both timestamps on the device, excluding host submission
+    gaps before or after replay as well as fixture construction.
     """
     if min(rounds, pairs, repeats) <= 0:
         raise ValueError("positive measurement counts required")
     graphs = []
     outputs = []
+    events = []
     for function in (reference, candidate):
         for _ in range(10):
             output = function()
         torch.cuda.synchronize()
         graph = torch.cuda.CUDAGraph()
+        start = torch.cuda.Event(enable_timing=True, external=True)
+        end = torch.cuda.Event(enable_timing=True, external=True)
         with torch.cuda.graph(graph):
+            start.record()
             for _ in range(repeats):
                 output = function()
+            end.record()
         outputs.append(output)
         graphs.append(graph)
+        events.append((start, end))
     results = []
     for round_index in range(rounds):
         for graph in graphs:
@@ -61,11 +69,8 @@ def measure(reference, candidate, *, rounds=3, pairs=20, repeats=100):
             times = [None, None]
             order = (0, 1) if (round_index + pair_index) % 2 == 0 else (1, 0)
             for index in order:
-                start = torch.cuda.Event(enable_timing=True)
-                end = torch.cuda.Event(enable_timing=True)
-                start.record()
+                start, end = events[index]
                 graphs[index].replay()
-                end.record()
                 end.synchronize()
                 times[index] = start.elapsed_time(end) / repeats
             samples.append(times)
