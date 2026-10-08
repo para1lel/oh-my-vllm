@@ -119,6 +119,15 @@ Graph 内部的 external CUDA Event 包围全部 100 次完整操作.
 计时区间排除 graph replay 前后的主机提交停顿.
 采集器等待 graph 结束 event 后才读取耗时.
 
+无状态 Q/K 计时先做独立数值校验, 再使用共享 graph pool 和 capture stream.
+两个完整函数保留各自的两次输出分配. 串行 replay 之间不使用输出值.
+采集器检查当前输出与上一次调用输出存储的 alias.
+它检查全部 100 次调用的对应输出地址一致, 输出与输入存储范围不重叠.
+
+计时结束后还检查全部输入存储字节. Graph 和 stream 保留到最终同步完成.
+
+DSpark append 以外的可变用例沿用不同目标 pool.
+
 使用仓库外可写的 `EVIDENCE_DIR`.
 `--operations` 选择诊断子集; 不完整覆盖或 dirty source 不能通过完整矩阵.
 GPU 干扰和源码变化使采集失效.

@@ -132,7 +132,22 @@ def main():
                     case["configuration"], shared_append_destination=True
                 )
                 witnesses = ()
-            raw = measure(reference, candidate)
+            pool_audit = None
+            if operation == "qk":
+                # Independent output verification above precedes shared-pool
+                # timing. Each whole operation allocates its original outputs.
+                del reference, candidate, witnesses
+                reference, candidate, timing_inputs = fixture(
+                    case["configuration"], qk_inputs=True
+                )
+                witnesses = ()
+                pool_audit = {}
+                raw = measure(
+                    reference, candidate, qk_inputs=timing_inputs, audit=pool_audit
+                )
+                del timing_inputs
+            else:
+                raw = measure(reference, candidate)
             report["cuda_build_provenance"] = provenance(
                 require_loaded=True, require_compiler=True
             )
@@ -148,8 +163,11 @@ def main():
                     timing_destination=(
                         "shared_append_cache"
                         if operation == "dspark_append"
+                        else "shared_qk_output_pool"
+                        if operation == "qk"
                         else "independent_returns_and_mutable_pools"
                     ),
+                    timing_pool_audit=pool_audit,
                     variant_dispatch=variant_dispatch,
                     raw_pairs_ms=raw,
                     comparison=decision,

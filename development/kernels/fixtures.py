@@ -27,7 +27,9 @@ ENTRIES = {
 }
 
 
-def fixture(config, *, seed=784, observe=False, shared_append_destination=False):
+def fixture(
+    config, *, seed=784, observe=False, shared_append_destination=False, qk_inputs=False
+):
     """Share immutable inputs; allocate isolated mutable destination pools.
 
     Sources never alias written destinations, so warmup/capture/replay preserve
@@ -42,6 +44,8 @@ def fixture(config, *, seed=784, observe=False, shared_append_destination=False)
         raise ValueError(
             "shared append destinations are only for timing after output verification"
         )
+    if qk_inputs and (observe or config["operation"] != "qk"):
+        raise ValueError("Q/K timing inputs require prior independent verification")
     generator = torch.Generator(device="cuda").manual_seed(seed)
     operation = config["operation"]
     module, entry = ENTRIES[operation]
@@ -53,6 +57,8 @@ def fixture(config, *, seed=784, observe=False, shared_append_destination=False)
     def package(reference_call, candidate_call, witnesses=()):
         if observe:
             return reference_call, candidate_call, witnesses
+        if qk_inputs:
+            return reference_call, candidate_call, args
         return reference_call, candidate_call
 
     def random(*shape, dtype=torch.bfloat16):

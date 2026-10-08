@@ -72,6 +72,17 @@ class RuntimeConfig:
             raise ValueError("DSpark confidence threshold must be in [0,1)")
         object.__setattr__(self, "speculative_mode", mode)
 
+    def target_graph_budget(self) -> tuple[int, dict[str, int]]:
+        """Bound target graph budgets independently from physical model caches.
+
+        Adaptive DSpark uses more token/query shapes than fixed-count MTP.
+        A comparison keeps both single-mode budgets, with protected family floors.
+        All budgets retain the graph cache's device-memory headroom checks.
+        """
+        if self.comparison:
+            return 96, {"target": 16, "target_dspark": 32}
+        return (64 if self.speculative_mode == "dspark" else 32), {}
+
     def decode_graph_key(self, token_counts: list[int], extent: int) -> tuple:
         """Include the per-request query bound in the captured attention shape.
 
@@ -196,7 +207,10 @@ class OhMyVllmWorker:
                 )
             self.caches.append(cache)
         self.attention = PagedAttention()
+        capacity, floors = self.config.target_graph_budget()
         self.graph_cache = GraphCache(
+            capacity=capacity,
+            family_floors=floors,
             free_bytes=lambda: torch.cuda.mem_get_info()[0],
             reserved_bytes=lambda: torch.cuda.memory_reserved(),
         )

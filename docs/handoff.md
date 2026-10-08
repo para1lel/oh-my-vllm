@@ -240,6 +240,26 @@ New numerical checks include 624, 1023, and 1024 rows and negative zero.
 Twenty GPU checks passed, with FP32 underflow, overflow, nonfinite values, and FP64 Q/K and GDN references.
 Full operator and service collections will use the new committed source and loaded module.
 
+## Target graph budgets and Q/K timing
+
+The shared 32-entry target graph cache caused capture eviction during the batch-four paired collection.
+The interrupted collection keeps its records. Source stayed the same, and all owned workers were released.
+
+Ordinary/MTP target budgets stay at 32. DSpark has 64 entries. A comparison worker has 96 entries.
+Comparison family floors are 16 for target and 32 for target-feature graphs. These floors are minimum protected counts.
+
+The device-memory guard stays at 4 GiB. New formal measurements must show no capture or compilation during measured work.
+
+Q/K timing first checks numerical output with different allocations.
+Whole stateless functions then use one graph pool and stream, with matching destination addresses for each captured call.
+Each whole Q/K call has two output allocations. The collector checks aliases with the previous output and input-storage bytes.
+Keep the graphs and stream until final synchronization. Other operations keep their prior timing contracts.
+
+The six formal Q/K shapes passed a diagnostic numerical and statistical comparison.
+The CPU collection passed 539 tests and 70 subtests. Selected graph-timing GPU tests and all eight hooks passed.
+The interrupted full GPU selection is not acceptance evidence. Its task-owned descendants were stopped.
+New service, paired, operator, boundary, and framework collections stay open on the committed correction.
+
 ## Open work
 
 The first paired collection completed batch 1, then failed to bind the batch 2 IPC address.

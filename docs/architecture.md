@@ -247,8 +247,10 @@ Persistent cache writes keep ordering. Activation donation is currently absent.
 
 The single-use BF16 SiLU-to-FP8 rewrite has equivalence tests.
 
-Target graphs have a 32-entry budget.
-Ordinary/MTP4 target and DSpark target-feature graphs have different family keys and memory pools in that budget.
+Ordinary/MTP4 target graphs have 32 entries. DSpark target-feature graphs have 64 entries.
+A comparison worker has 96 entries, with family floors of 16 for target and 32 for target-feature graphs.
+The modes have different family keys and memory pools. The 4 GiB capture-headroom check stays active.
+
 DSpark proposal graphs have a different 16-entry cache and pool.
 DSpark context injection with at most 32 rows uses a different pool and an eight-entry cache.
 

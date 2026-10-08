@@ -125,6 +125,15 @@ The collector records external CUDA Events before and after all 100 full operati
 The interval does not include host submission gaps before or after graph replay.
 The collector waits for the graph's end event before it reads elapsed time.
 
+Stateless Q/K timing uses one shared graph pool and capture stream after independent numerical verification.
+Each whole function keeps its two output allocations. Do not use the output values between serial replays.
+The collector checks for aliases with the previous call's output storage.
+It checks matching output addresses for all 100 calls and disjoint output/input storage.
+
+It also checks all input-storage bytes after timing. Keep the graphs and stream until final synchronization.
+
+Mutable cases other than DSpark append keep different destination pools.
+
 Use an external writable `EVIDENCE_DIR`.
 `--operations` selects diagnostic subsets. Partial coverage or dirty source cannot pass the full matrix.
 GPU contention and source changes invalidate collection.

@@ -234,8 +234,10 @@ DSpark 增加 target feature, context injection, backbone, Markov step 和 greed
 持久 cache 写入保留顺序; 当前没有 activation donation.
 单次使用的 BF16 SiLU-to-FP8 rewrite 有等价测试.
 
-Target graph 预算为 32 条目.
-普通 / MTP4 target 和 DSpark target feature graph 在这一预算内使用独立 family key 和内存 pool.
+普通 / MTP4 target graph 使用 32 条目. DSpark target feature graph 使用 64 条目.
+比较 worker 使用 96 条目, target family 下限为 16, target feature family 下限为 32.
+两种模式使用独立 family key 和内存 pool. Capture 保留 4 GiB 显存余量检查.
+
 DSpark proposal graph 使用独立的 16 条目 cache 和 pool.
 至多 32 row 的 DSpark context injection 使用独立 pool 和 8 条目 cache.
 预热和 capture 备份目标 KV slot, 在 `finally` 恢复; replay 提交当前输入.
