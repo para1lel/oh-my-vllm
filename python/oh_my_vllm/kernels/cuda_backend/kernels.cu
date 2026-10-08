@@ -826,8 +826,17 @@ __global__ void __launch_bounds__(Threads, 1)
   for (int j = 0; j < 4; ++j) {
     av[j] = __bfloat1622float2(reinterpret_cast<__nv_bfloat162 *>(a.value)[j]);
     bv[j] = __bfloat1622float2(reinterpret_cast<__nv_bfloat162 *>(b.value)[j]);
-    as = __fadd2_rn(as, __fmul2_rn(av[j], av[j]));
-    bs = __fadd2_rn(bs, __fmul2_rn(bv[j], bv[j]));
+    auto aq = __fmul2_rn(av[j], av[j]);
+    auto bk = __fmul2_rn(bv[j], bv[j]);
+    // The first squared values are nonnegative, including positive zero.
+    // Avoid the initial add to zero on the latency-sensitive short-row path.
+    if (Threads == 128 && j == 0) {
+      as = aq;
+      bs = bk;
+    } else {
+      as = __fadd2_rn(as, aq);
+      bs = __fadd2_rn(bs, bk);
+    }
   }
   float2 sums = make_float2(as.x + as.y, bs.x + bs.y);
   if constexpr (Joint) {

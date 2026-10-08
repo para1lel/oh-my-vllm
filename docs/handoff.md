@@ -225,6 +225,21 @@ Its service collection passed all six client groups, with the two OMP tool loops
 All service processes and the service port were released.
 New formal timing will use a clean commit with the corrected collector.
 
+## Short-input Q/K verification
+
+The operator collection on `49579b4` passed 230 numerical cases and 229 speed cases.
+The CUDA median for one Q/K round was 1.12 nanoseconds more than the TileLang median.
+The full failed collection stays in external storage.
+
+The new short-input Q/K path uses the first multiplication result without an initial addition to zero.
+All subsequent FP32 sums and the BF16 output rounding stay the same.
+The long-input path and fallback kernel stay the same.
+
+All six Q/K diagnostic cases passed numerical and speed checks with the production module.
+New numerical checks include 624, 1023, and 1024 rows and negative zero.
+Twenty GPU checks passed, with FP32 underflow, overflow, nonfinite values, and FP64 Q/K and GDN references.
+Full operator and service collections will use the new committed source and loaded module.
+
 ## Open work
 
 - Complete user review of the expanded tutorial and address specific teaching gaps.

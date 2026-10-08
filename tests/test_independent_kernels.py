@@ -73,18 +73,61 @@ def inputs(tokens, strided=False):
     return q, k, v, g, beta
 
 
-@pytest.mark.parametrize("tokens", [1, 7, 129, 2048, 4096])
+@pytest.mark.parametrize("tokens", [1, 7, 129, 624, 1023, 1024, 2048, 4096])
 @pytest.mark.parametrize("strided", [False, True])
 def test_prefill_qk_normalization_fp64(tokens, strided):
     q, k, *_ = inputs(tokens, strided)
     q[0, 0] = 0
     k[0, 0] *= 1e-5
+    q[-1, -1] = -0.0
+    k[-1, -1] = -0.0
     for actual, source in zip(gdn.normalize_qk(q, k), (q, k), strict=True):
         source = source.cpu().double()
         expected = source * torch.rsqrt(source.square().sum(-1, keepdim=True) + 1e-6)
         torch.testing.assert_close(
             actual.cpu().double(), expected, atol=0.002, rtol=0.004
         )
+        assert torch.signbit(actual[-1, -1]).all()
+
+
+@pytest.mark.parametrize("tokens", [1, 624])
+def test_packed_qk_preserves_fp32_first_square_edge_values(tokens):
+    """Keep FP32 underflow/overflow, nonfinite values, and signed-zero output."""
+    packed = torch.ones(tokens, 10240, device="cuda", dtype=torch.bfloat16)
+    q = packed[:, :2048].view(tokens, 16, 128)
+    k = packed[:, 2048:4096].view(tokens, 16, 128)
+    limits = torch.finfo(torch.bfloat16)
+    values = torch.tensor(
+        [
+            0.0,
+            -0.0,
+            limits.smallest_normal / 128,
+            -limits.smallest_normal / 128,
+            limits.smallest_normal,
+            -limits.smallest_normal,
+            2.0**-70,
+            -(2.0**-70),
+            limits.max,
+            -limits.max,
+            float("inf"),
+            -float("inf"),
+            float("nan"),
+        ],
+        device="cuda",
+        dtype=torch.bfloat16,
+    )
+    q[:, : len(values), :8] = values[None, :, None]
+    k[:, : len(values), :8] = values.flip(0)[None, :, None]
+    for actual, source in zip(gdn.normalize_qk(q, k), (q, k), strict=True):
+        source = source.cpu().float()
+        # This reference keeps the existing FP32 multiplication boundaries,
+        # including overflow; a mathematical FP64 norm has a different scope.
+        expected = source * torch.rsqrt(source.square().sum(-1, keepdim=True) + 1e-6)
+        expected = expected.to(torch.bfloat16).float()
+        actual = actual.cpu().float()
+        torch.testing.assert_close(actual, expected, atol=0, rtol=0.004, equal_nan=True)
+        zeros = expected.eq(0)
+        assert torch.equal(torch.signbit(actual[zeros]), torch.signbit(source[zeros]))
 
 
 def test_native_prefix_attention_fp64_and_mixed_lengths():
