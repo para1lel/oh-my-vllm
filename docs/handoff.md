@@ -1,5 +1,42 @@
 # Handoff — 2026-10-08
 
+## Code excerpt documentation and reader prerequisites (2026-10-08)
+
+Code-journey excerpts now start at the referenced element's attached Rust
+documentation/attributes or Python decorators. Request.token_ids includes all
+four original documentation lines; counters and scheduled-output records retain
+their original comments too. Display and copy use the same dedented excerpt,
+with the starting source line moved to match the retained context. Python
+dataclass field validation still runs when a decorator precedes the class.
+
+Removed the shared Rust/Python syntax primers and basic-language descriptions
+from source guides. The entry page now assumes familiarity with both languages;
+field responsibilities, inference concepts, library aliases and implementation
+decisions remain explained. README and REQ-LEARN-001 have matching English and
+Chinese updates.
+
+Validation: ten Node tests cover indentation, attached field documentation,
+block comments with blank paragraphs, multiline metadata with quoted delimiters,
+Python docstrings and neighboring-element boundaries. All eight Playwright
+Chromium tests passed, including actual
+token_ids text and line 27, documentation copying, absence of language primers,
+all twelve chapters/fields, both themes and desktop/mobile layout. Inspected
+the light desktop and dark mobile documentation screenshots with view_image.
+Browser plugin was unavailable, so the existing Playwright workflow supplied
+browser validation. Independent review passed after fixing and retesting a
+multiline-documentation/metadata boundary finding; all 27 current source
+excerpts still match their original text and starting lines.
+
+Workspace Rust tests (58/39/26), fmt, hard line width, Clippy and Ruff format/check
+passed; all 47 Python files were unchanged. The CPU trace crate test, fmt and
+Clippy passed. Python CPU/GPU suites and operator/framework benchmarks were not
+rerun because inference implementations are unchanged. No GPU program was
+launched. The explicitly requested static preview remains on port 18084,
+Node PID 1367241, http://10.30.64.14:18084/ (HTTP 200); PID record:
+/tmp/oh-my-vllm-code-journey-18084.pid. Screenshot evidence is outside the repo
+under code-journey-qa/docs-update/. GPU compute and owned browser children were
+absent at the final resource check. Next: user review of the updated excerpts.
+
 ## Twelve complete code-journey chapters (2026-10-08)
 
 Replaced the short introductory passages with one substantial page for each of

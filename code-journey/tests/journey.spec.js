@@ -188,11 +188,12 @@ test('every chapter, displayed field and formula works at mobile document sizes'
     const missing = await page.locator('article details').evaluateAll((details) => details.flatMap((detail) => {
       const source = detail.querySelector('pre code').cloneNode(true); source.querySelectorAll('.line-number').forEach((line) => line.remove());
       const text = source.textContent;
-      const fields = [...text.matchAll(text.startsWith('class ') ? /^    (\w+): /gm : /^\s*pub\s+(\w+)\s*:/gm)].map((match) => match[1]);
+      const fields = [...text.matchAll(/^class /m.test(text) ? /^    (\w+): /gm : /^\s*pub\s+(\w+)\s*:/gm)].map((match) => match[1]);
       const guide = detail.querySelector('.field-guide') || detail.previousElementSibling;
       return fields.filter((field) => ![...guide.querySelectorAll('tbody tr')].some((row) => row.cells[0].textContent === field && row.cells[1].textContent && row.cells[2].textContent));
     }));
     expect(missing, id).toEqual([]);
+    await expect(page.locator('.syntax-guide')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), id).toBeLessThanOrEqual(390);
     if (id === 'Requests') {
       await expect(page.getByRole('table', { name: 'Request 的 9 个字段', exact: true }).locator('tbody tr')).toHaveCount(9);
@@ -203,8 +204,35 @@ test('every chapter, displayed field and formula works at mobile document sizes'
   }
   const prose = await page.evaluate(() => [...document.querySelectorAll('tw-passagedata')].map((p) => p.textContent).join('\n') + JSON.stringify(SugarCube.setup.journeyData.sourceNotes));
   expect(prose).not.toMatch(/[，。！？；：、“”‘’（）【】]/u);
+  expect(prose).not.toMatch(/pub 表示|struct 定义|fn 定义|def 定义|缩进表示|收集位置与命名参数|u64 是 64 位/);
   const fonts = await page.evaluate(() => ({ prose: document.fonts.check('500 16px "LXGW WenKai"'), code: document.fonts.check('400 13px "Fira Code Nerd Font"') }));
   expect(fonts).toEqual({ prose: true, code: true });
+  expect(errors).toEqual([]);
+});
+
+test('field documentation is rendered and copied with no language primer', async ({ page, context }) => {
+  const errors = monitor(page);
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await openChapter(page, 'Basics');
+  const expected = '/// Prompt tokens plus all accepted output tokens so far.\n///\n/// Does NOT include unverified MTP draft tokens; those live in\n/// `draft_token_ids` and are concatenated by `num_tokens_with_spec()`.\npub token_ids: Vec<u32>,';
+  await page.getByText('展开 token_ids 的源码与说明', { exact: true }).click();
+  const block = page.locator('details').filter({ hasText: '展开 token_ids' }).locator('.code-block');
+  const source = await page.evaluate(() => SugarCube.setup.journeyData.snippets.tokenHistory);
+  expect(source.text).toBe(expected);
+  expect(source.line).toBe(27);
+  const shown = await block.locator('code').evaluate((node) => {
+    const copy = node.cloneNode(true); copy.querySelectorAll('.line-number').forEach((line) => line.remove()); return copy.textContent;
+  });
+  expect(shown).toBe(expected);
+  await block.getByRole('button', { name: '复制 Rust 代码' }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(expected);
+  await expect(page.locator('.syntax-guide')).toHaveCount(0);
+  await snapshot(page, 'documented-token-history-light', block);
+  await page.getByRole('button', { name: '切换到暗色模式' }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await snapshot(page, 'documented-token-history-mobile-dark', block);
+  await expect(page.locator('.error, .katex-error')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

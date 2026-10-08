@@ -3,7 +3,7 @@
 使用真正的 Twine / SugarCube 2.37.3 与 Tweego 2.1.1 构建的中文教程.
 12 个完整章节沿当前推理流程讲解 HTTP 输入, 调度, 缓存, 模型计算和输出,
 再展开编译与验证. 每章连接问题背景, 执行步骤, 设计取舍, 字段变量说明和当前源码.
-文章只依赖教程内部已经读过的前置章节.
+默认读者熟悉 Rust 和 Python 的基础语法. 推理概念通过教程内部的前置章节逐步介绍.
 
 ## 阅读与运行
 
@@ -83,6 +83,8 @@ src/source-specs.mjs 选择节选, src/source-notes.mjs 解释所有显示字段
 手机字段表按含义和用途纵向排列, 保留标签.
 
 scripts/excerpt.mjs 去掉非空行公共空白前缀, 规范空白行.
+节选保留元素所附的文档注释, Rust 属性与 Python 装饰器,
+以及选定代码内的 Python docstring.
 相对缩进, 原始行号与完整文件摘要保留. 显示与复制使用去公共缩进后的节选,
 完整源码页保留完整文件. Shiki 4.5.0 在构建时高亮, 阅读无需运行时高亮器.
 代码区域可键盘横向滚动, Clipboard API 与 HTTP 选区备用路径都复制显示代码.
@@ -96,8 +98,9 @@ scripts/excerpt.mjs 去掉非空行公共空白前缀, 规范空白行.
     scripts/with-env.sh cargo fmt --manifest-path code-journey/trace/Cargo.toml --check
     scripts/with-env.sh cargo clippy --manifest-path code-journey/trace/Cargo.toml --all-targets -- -D warnings
 
-npm test 先运行 Node 的 Rust / Python, tab, 相对缩进和空白行测试,
-再执行固定版本 Chromium 工作流. Playwright 检查全部 12 章路线, 兴趣和前置关系,
+npm test 先运行 Node 的文档与元数据边界, Rust / Python, tab, 相对缩进和空白行测试,
+再执行固定版本 Chromium 工作流. Playwright 检查文档注释的显示与复制,
+确认基础语法说明已移除, 并检查全部 12 章路线, 兴趣和前置关系,
 条件无序跳转, 完成与复习, 进度迁移, 五组调度轨迹, 亮暗 / 刷新 / 重置 / 返回,
 所有显示字段, 公式, 字体和手机溢出. 同时核对节选与源码摘要和行号,
 两条复制路径的去缩进文本, 代码对比度 >=4.5:1, 键盘滚动,

@@ -1,8 +1,3 @@
-export const readingSyntax = {
-  rust: "Rust 中 pub 表示可访问, struct 定义记录, fn 定义函数, -> 标注返回类型. usize 用于数量和下标, u32 / u64 是非负整数类型. Vec<T> 是列表, Option<T> 表示有值 (Some) 或无值 (None). 冒号后是类型. self 表示当前对象, & 表示借用引用, let 定义变量, mut 表示可修改. if / else 选择分支, return 返回结果. len() 取列表长度; a..b 表示从 a 到 b 之前的区间. #[derive(Debug)] 为记录自动提供调试打印能力.",
-  python: "Python 中 def 定义函数, self 表示当前对象, 参数名后的冒号可标注类型, -> 标注返回类型. 行末冒号引出缩进的代码块. list[int] 是整数列表, int | None 表示整数或空值. len() 取长度, for 遍历列表, if 判断条件, raise ValueError 拒绝非法输入. 缩进表示语句属于哪个分支.",
-};
-
 export const sourceNotes = {
   tokenHistory: {
     title: "token_ids: 请求的 token 历史",
@@ -19,7 +14,7 @@ export const sourceNotes = {
   },
   request: {
     title: "Request 的 9 个字段",
-    intro: "Request 是 Rust 为一条请求保存的状态记录. u64 是 64 位无符号整数. RequestId 是 u64 请求编号, BlockHash 是用 u64 保存的前缀摘要. 块是固定长度的历史片段, 本项目每块 784 个 token; 前缀摘要用于查找这些片段的缓存. MTP (Multi-Token Prediction) 先提出多个候选 token, 再由目标模型验证; 尚待验证的候选叫作草稿.",
+    intro: "Request 是 Rust 为一条请求保存的状态记录. RequestId 标识请求, BlockHash 保存前缀摘要. 块是固定长度的历史片段, 本项目每块 784 个 token; 前缀摘要用于查找这些片段的缓存. MTP (Multi-Token Prediction) 先提出多个候选 token, 再由目标模型验证; 尚待验证的候选叫作草稿.",
     entries: [
       ["id", "这条请求的唯一编号, 类型是 RequestId.", "把调度计划, 缓存分配, worker 返回结果和取消操作对应到同一条请求."],
       ["prompt_len", "最初提示词的 token 数, 请求创建时确定.", "即使历史继续增长也保留原值. token_ids.len() 减去它, 得到已生成的 token 数."],
@@ -43,9 +38,9 @@ export const sourceNotes = {
   },
   waiting: {
     title: "waiting 队列的字段与局部变量",
-    intro: "先从队首取请求, 检查暂停和并发上限, 再查可复用前缀并计算本轮片段. VecDeque 是可从两端操作的队列. FA (full attention, 全注意力) 按位置保存读取历史的数值, 每页覆盖 784 个 token. GDN 保存随输入更新的历史状态, 状态槽是一份状态的存放位置, 快照是指定时刻保存的状态副本. 调度器同时管理这两类缓存, 后面的缓存章节会展开它们的计算方式.",
+    intro: "先从队首取请求, 检查暂停和并发上限, 再查可复用前缀并计算本轮片段. FA (full attention, 全注意力) 按位置保存读取历史的数值, 每页覆盖 784 个 token. GDN 保存随输入更新的历史状态, 状态槽是一份状态的存放位置, 快照是指定时刻保存的状态副本. 调度器同时管理这两类缓存, 后面的缓存章节会展开它们的计算方式.",
     entries: [
-      ["self.waiting / req", "等待队列, 以及这次从队首取出的 Request.", "pop_front() 取队首; 暂时无法执行时, push_front(req) 将它放回队首."],
+      ["self.waiting / req", "等待队列, 以及这次从队首取出的 Request.", "保持先来先服务的顺序. 暂时无法执行时放回队首, 下一轮继续检查."],
       ["self.paused / req.id", "暂时停止推进的请求编号集合, 以及当前请求编号.", "客户端读取过慢时, 输出缓冲区会积压. 暂停集合让调度器跳过这些请求, 保留后续继续的机会."],
       ["paused_waiting", "本轮取出但仍暂停的请求队列.", "暂存这些请求, 让后面的请求有机会被检查; 之后重新接回等待队列."],
       ["self.running / max_num_seqs", "持有缓存的运行队列, 以及可同时运行的请求数上限.", "达到上限就结束新请求接纳, 即使 token_budget 仍有余额."],
@@ -57,7 +52,7 @@ export const sourceNotes = {
   },
   aligned: {
     title: "aligned_prefill 的参数与边界计算",
-    intro: "函数接收一个候选输入片段, 返回允许派发的 token 数. usize 的除法在这里是整数除法; saturating_sub() 在被减数较小时返回 0, 避免无符号下溢.",
+    intro: "函数将候选输入片段调整到可恢复的缓存边界, 返回本轮允许派发的 token 数.",
     entries: [
       ["self / request", "调度器自身, 以及要处理的 Request.", "self 提供缓存块大小和配置; request 提供提示词长度与已确认历史."],
       ["start / count", "本轮在完整历史中的起点, 以及预算初步允许的输入数量.", "候选区间是 [start, start + count). 返回值可因边界约束而缩短."],
@@ -107,7 +102,7 @@ export const sourceNotes = {
   },
   worker: {
     title: "execute_model 入口中的消息字段与状态",
-    intro: "这段 Python 代码先处理清理通知, 再核对输入数量. SchedulerOutput 是调度消息; WorkerOutput 是返回消息. MTP 控制器保存草稿相关状态.",
+    intro: "execute_model 使用 torch.inference_mode 关闭梯度记录, 减少推理中的自动求导开销. 入口先处理清理通知, 再核对输入数量. SchedulerOutput 是调度消息; WorkerOutput 是返回消息. MTP 控制器保存草稿相关状态.",
     entries: [
       ["scheduled / scheduled.scheduled", "函数接收的一轮消息, 以及其中本轮执行的请求列表.", "消息对象与内部列表名称相近. 内部列表的每项是 ScheduledRequest."],
       ["finished_request_ids / rid", "需要清理的请求编号列表, 以及循环当前处理的编号.", "unregister_request(rid) 删除 worker 保存的历史, 采样器和状态记录."],
@@ -152,7 +147,7 @@ export const sourceNotes = {
       ["req.num_computed_tokens / scheduled_end", "已提交缓存位置, 以及本轮候选结束位置.", "普通生成时直接推进到 scheduled_end. MTP 还需要扣掉候选草稿, 再加回已接受部分."],
       ["scheduled_drafts / result.num_accepted_draft_tokens", "本轮实际计算的草稿数量, 以及通过验证的草稿数量.", "只保留被确认的缓存进度. 当前普通生成示例中两者都为 0."],
       ["req.num_in_flight_tokens", "尚未提交的本轮输入计数.", "提交完成后清零, 表示这一轮已结清."],
-      ["result.token_ids / req.max_tokens / req.num_generated_tokens()", "确认的输出列表, 允许生成的上限, 以及已生成的数量.", "saturating_sub() 求剩余额度; truncate() 将输出裁到这个额度, 避免超过用户的输出限制."],
+      ["result.token_ids / req.max_tokens / req.num_generated_tokens()", "确认的输出列表, 允许生成的上限, 以及已生成的数量.", "按剩余输出额度裁剪确认结果, 保证输出数量不超过用户的限制."],
       ["token / req.is_finished() / req.append_token(token)", "当前输出 ID, 是否已达到输出上限的判断, 以及追加操作.", "逐个追加到已确认历史. 达到上限就停止循环; 新追加的最后一个 token 由之后的 decode 计算缓存."],
       ["req.draft_token_ids.clear()", "清空请求保存的旧草稿列表.", "旧草稿本轮已经完成验证. 后续代码再安装 worker 提供的新草稿; 普通生成仍为空."],
     ],
@@ -207,7 +202,7 @@ Object.assign(sourceNotes, {
     ],
   },
   modelForward: {
-    title: "forward 与 logits 的输入和中间量", intro: "F 是 torch.nn.functional. embedding 按 token ID 查向量; zip(..., strict=True) 要求模型层数与缓存数相等.",
+    title: "forward 与 logits 的输入和中间量", intro: "F 是 torch.nn.functional. embedding 按 token ID 查向量. 每层读取对应缓存, 模型层数与缓存数必须一致.",
     entries: [
       ["self / tokens / batch / caches", "模型, 输入 ID 向量, 本轮元数据, 每层的缓存列表.", "tokens 的每行变成 5120 维特征; batch 指定位置与状态读写."],
       ["hidden", "当前层的 token 特征矩阵.", "按层更新; 最后归一化后交给词表投影."],
@@ -218,7 +213,7 @@ Object.assign(sourceNotes, {
     ],
   },
   modelFA: {
-    title: "FA 的投影, 门控与缓存", intro: "reshape 调整数组维度, flatten 合并维度, sigmoid 将门值映射到 0 与 1 之间. ... 表示保留前面的所有维度.",
+    title: "FA 的投影, 门控与缓存", intro: "FA 将输入投影为 Q, K, V 和输出门. Q/K 归一化后应用 RoPE, K/V 写入页式缓存, 门值调节各注意力头的输出.",
     entries: [
       ["self / x / batch / cache", "当前层, 输入特征, 位置和页表计划, 此层 KV 池.", "每个 token 的 5120 维特征变成注意力输出, 页表决定历史来源."],
       ["packed / self.qkv", "合并的投影结果与 FP8 投影权重.", "14336 列包含 Q/门控 12288 列和 K/V 各 1024 列."],
@@ -228,7 +223,7 @@ Object.assign(sourceNotes, {
     ],
   },
   modelGDN: {
-    title: "GDN 的卷积和递归状态", intro: "split 按给定列数切分. Q/K 的 16 个头扩成 48 个值头, 每头 128 维; self.ba 同时产生更新门和衰减参数.",
+    title: "GDN 的卷积和递归状态", intro: "Q/K 的 16 个头扩成 48 个值头, 每头 128 维; self.ba 同时产生更新门和衰减参数.",
     entries: [
       ["self / x / batch / cache", "当前层, 输入特征, 状态计划, 两个缓存池.", "用当前输入与已提交状态计算下一特征和候选状态."],
       ["conv_pool / state_pool", "最近三个卷积输入与递归矩阵池.", "源槽提供历史; 写槽保存本段末尾或逐 token 的候选."],
@@ -272,7 +267,7 @@ Object.assign(sourceNotes, {
     ],
   },
   irDispatch: {
-    title: "语义操作的两条调用路径", intro: "*args 和 **kwargs 收集位置与命名参数. Any 表示接口接收多种参数类型; Operation 的选择器仍检查实际元数据.",
+    title: "语义操作的两条调用路径", intro: "Operation 为同一语义操作提供 eager 执行与编译捕获两条路径. 选择器根据输入的形状, 类型和设备确定具体实现.",
     entries: [
       ["self / args / kwargs", "当前 Operation 与本次调用参数.", "同一语义入口兼容 eager 调用与编译捕获."],
       ["torch.compiler.is_compiling() / self.ir_op", "是否正在捕获图, 与语义节点入口.", "编译时保留语义节点, 由 lowering 选择具体 provider."],
@@ -280,7 +275,7 @@ Object.assign(sourceNotes, {
     ],
   },
   measurement: {
-    title: "summarize 的检查与汇总", intro: "runs 是完整重复测量列表. statistics.median 取中位数, math.isfinite 检查有限数值. 返回字典按 TTFT 与吞吐分别保存统计.",
+    title: "summarize 的检查与汇总", intro: "runs 保存完整重复测量. 先检查每次运行的完成数量和指标, 再分别汇总 TTFT 与吞吐的中位数和相对极差.",
     entries: [
       ["runs / batch_size / output_len / minimum", "测量列表, 批大小, 每请求输出长度, 最少重复次数.", "默认要求至少 5 次, 每次完成 batch_size 乘 output_len 个输出."],
       ["row / times / t", "一次测量, 其中每请求的 TTFT 列表, 当前时间.", "检查数量, 有限正值, 完整输出与零抢占."],

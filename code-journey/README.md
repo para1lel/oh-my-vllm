@@ -5,6 +5,8 @@ and Tweego 2.1.1. Twelve complete chapters follow the current inference flow fro
 HTTP input through scheduling, cache management, model computation and output,
 then explain compilation and verification. Each chapter connects the problem,
 execution steps, design decisions, field/variable guides and current source.
+Readers are assumed to know basic Rust and Python syntax. Inference concepts
+are introduced through the tutorial's internal prerequisites.
 
 ## Read and run
 
@@ -96,8 +98,10 @@ rejects unexplained displayed public Rust fields or Python dataclass fields.
 Mobile meaning/purpose tables stack with labels.
 
 scripts/excerpt.mjs removes the shared literal whitespace prefix from nonblank
-excerpt lines and normalizes blank rows. Relative indentation, original source
-line numbers and full-file hashes remain. Display and copy use the normalized
+excerpt lines and normalizes blank rows. Excerpts retain attached documentation,
+Rust attributes and Python decorators; Python body docstrings remain in the
+selected body. Relative indentation, original source line numbers and full-file
+hashes remain. Display and copy use the normalized
 excerpt; complete source pages preserve the full file. Shiki 4.5.0 tokenizes at
 build time, with no runtime highlighter. Focusable code regions scroll locally.
 Clipboard API and an HTTP selection fallback both copy the displayed code.
@@ -111,8 +115,10 @@ With the static listener running:
     scripts/with-env.sh cargo fmt --manifest-path code-journey/trace/Cargo.toml --check
     scripts/with-env.sh cargo clippy --manifest-path code-journey/trace/Cargo.toml --all-targets -- -D warnings
 
-npm test first runs Node tests for Rust/Python, tabs, relative indentation and
-blank lines, then the pinned Chromium workflow. Playwright checks all twelve
+npm test first runs Node tests for documentation/metadata boundaries,
+Rust/Python, tabs, relative indentation and blank lines, then the pinned Chromium
+workflow. Playwright checks displayed/copied field documentation and the absence
+of language primers, plus all twelve
 chapter routes, interest and prerequisites, conditional unordered navigation,
 completion versus review, progress migration, all five scheduler cases,
 light/dark/refresh/reset/history, every displayed field, formulas, fonts and

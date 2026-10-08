@@ -118,7 +118,6 @@ summary { cursor: pointer; color: var(--small-link); text-decoration: underline;
 .lab .primary:hover, .lab .primary:disabled { background: #2f784b; color: white; border: 0; }
 .field-guide { margin: 24px 0; }
 .field-guide p { font-size: 16px; }
-.syntax-guide, .field-guide .syntax-guide { font-size: 14px; line-height: 1.8; color: var(--muted); }
 .field-table, .example-table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.8; margin: 18px 0 24px; }
 .field-table { table-layout: fixed; }
 .field-table th, .field-table td, .example-table th, .example-table td { text-align: left; vertical-align: top; padding: 12px 10px; border-bottom: 1px solid var(--line); }

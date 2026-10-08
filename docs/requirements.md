@@ -380,6 +380,8 @@ directions is one complete chapter, covering the logic, design decisions and
 implementation of core code traversed by current inference. Reading choices
 record interests and resolve unread internal prerequisites; introduce unfamiliar
 concepts and explain every displayed field, parameter and variable.
+Assume familiarity with basic Rust and Python syntax; focus explanations on
+inference behavior, project-specific roles and design decisions.
 
 Use LXGW WenKai, Fira Code Nerd Font and KaTeX. Preserve technical-document sizes
 (17/16px desktop/mobile prose), persistent light/dark selection and reading/trace
@@ -394,6 +396,8 @@ of newly expanded chapters.
 
 Extract source from current files, remove all common leading excerpt indentation
 while retaining relative indentation, real line numbers and full-file hashes.
+Include the referenced element's original documentation comments/docstrings
+and attached attributes/decorators in the displayed and copied excerpt.
 Display and copy the normalized excerpt. Provide readable Rust/Python/CUDA
 highlighting, local complete-source pages and keyboard scrolling. Maintain a
 file-to-chapter coverage manifest; reject missing default-runtime coverage,
@@ -403,7 +407,8 @@ missing anchors or unexplained displayed record fields during the build.
 prerequisites/interest, progress completion versus review, migration, refresh,
 restart and backward history. Verify all five actual Rust CPU traces
 (784/785/1568/1569/32768), formulas, fonts, desktop/mobile layout, every displayed
-field and console health. Test dedentation for Rust/Python/tabs/blank rows,
+field and console health. Test documentation/metadata inclusion and the absence
+of language primers, dedentation for Rust/Python/tabs/blank rows,
 normalized source copying through Clipboard API and the HTTP fallback, source
 hashes/line anchors, every full-source URL and >=4.5:1 code contrast. Inspect
 rendered screenshots against the requested reading/list style. CPU synthetic

@@ -4,10 +4,10 @@ import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCodeHighlighter } from "./highlight.mjs";
-import { sourceNotes, readingSyntax } from "../src/source-notes.mjs";
+import { sourceNotes } from "../src/source-notes.mjs";
 import { specifications } from "../src/source-specs.mjs";
 import { chapters, coverage } from "../src/curriculum.mjs";
-import { dedent } from "./excerpt.mjs";
+import { extractExcerpt } from "./excerpt.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repo = resolve(root, "..");
@@ -63,16 +63,9 @@ const snippets = {};
 const highlighter = await createCodeHighlighter();
 for (const [key, [path, begin, end, limit = 48]] of Object.entries(specifications)) {
   const source = await readFile(resolve(repo, path), "utf8");
-  const start = source.indexOf(begin);
-  if (start < 0) throw new Error("Missing source anchor: " + key);
-  let stop = end ? source.indexOf(end, start + begin.length) : source.length;
-  if (stop < 0) {
-    if (key === "commit") stop = source.indexOf("        // Remove finished", start);
-    if (stop < 0) throw new Error("Missing end anchor: " + key);
-  }
-  const lines = source.slice(start, stop).trimEnd().split("\n").slice(0, limit);
-  const originalText = lines.join("\n");
-  const text = dedent(originalText);
+  const language = path.endsWith(".rs") ? "rust" : "python";
+  const excerpt = extractExcerpt(source, { begin, end, limit, language });
+  const { text } = excerpt;
   const notes = sourceNotes[key];
   if (!notes || !notes.entries.length || notes.entries.some((entry) => entry.length !== 3 || entry.some((value) => !value.trim()))) {
     throw new Error("Missing source explanation: " + key);
@@ -80,16 +73,14 @@ for (const [key, [path, begin, end, limit = 48]] of Object.entries(specification
   for (const [, field] of text.matchAll(/^\s*pub\s+(\w+)\s*:/gm)) {
     if (!notes.entries.some(([name]) => name === field)) throw new Error("Undocumented field: " + key + "." + field);
   }
-  if (text.startsWith("class ")) {
+  if (/^class /m.test(text)) {
     for (const [, field] of text.matchAll(/^    (\w+): /gm)) {
       if (!notes.entries.some(([name]) => name === field)) throw new Error("Undocumented field: " + key + "." + field);
     }
   }
-  const language = path.endsWith(".rs") ? "rust" : "python";
   snippets[key] = {
     path,
-    line: source.slice(0, start).split("\n").length,
-    text, originalText, language,
+    ...excerpt, language,
     tokens: highlighter.highlight(text, language),
     sha256: createHash("sha256").update(source).digest("hex"),
   };
@@ -106,7 +97,7 @@ const trace = JSON.parse(execFileSync(resolve(repo, "scripts/with-env.sh"), [
   "cargo", "run", "--quiet", "--locked", "--manifest-path", resolve(root, "trace/Cargo.toml"),
 ], { cwd: repo, encoding: "utf8" }));
 const data = {
-  snippets, alignmentPreview, trace, sourceNotes, readingSyntax, chapters,
+  snippets, alignmentPreview, trace, sourceNotes, chapters,
   coverage: sourceCoverage,
   sourceRevision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim(),
 };

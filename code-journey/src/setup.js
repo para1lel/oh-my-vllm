@@ -234,7 +234,7 @@ setup.codeBlock = function (source, preview = false) {
   block.append(toolbar, pre);
   return block;
 };
-setup.sourceGuide = function (key, withSyntax = false) {
+setup.sourceGuide = function (key) {
   const notes = setup.journeyData.sourceNotes[key];
   const section = document.createElement("section");
   section.className = "field-guide";
@@ -244,12 +244,6 @@ setup.sourceGuide = function (key, withSyntax = false) {
   const intro = document.createElement("p");
   intro.textContent = notes.intro;
   section.append(heading, intro);
-  if (withSyntax) {
-    const syntax = document.createElement("p");
-    syntax.className = "syntax-guide";
-    syntax.textContent = setup.journeyData.readingSyntax[setup.journeyData.snippets[key].language];
-    section.appendChild(syntax);
-  }
   const table = document.createElement("table");
   table.className = "field-table";
   table.setAttribute("aria-label", notes.title);
@@ -296,13 +290,7 @@ Macro.add("source", {
     caption.textContent = source.path + ":" + source.line + " / SHA-256 " + source.sha256.slice(0, 12);
     details.appendChild(caption);
     details.appendChild(setup.codeBlock(source));
-    if (includeGuide) details.appendChild(setup.sourceGuide(key, true));
-    else {
-      const syntax = document.createElement("p");
-      syntax.className = "syntax-guide";
-      syntax.textContent = setup.journeyData.readingSyntax[source.language];
-      details.appendChild(syntax);
-    }
+    if (includeGuide) details.appendChild(setup.sourceGuide(key));
     this.output.appendChild(details);
   },
 });
