@@ -126,6 +126,15 @@ Clients save received responses before subsequent assertions.
 Cancellation keeps a failed result during response persistence and signal-handler restoration.
 The first service worker exited and released its GPU resources and service port.
 
+The second service attempt passed twelve constraint cases and Chat lifecycle cases on source `46f7529`.
+The OMP Chat client completed twelve tool calls and exited with status 0.
+Its scheduler read stopped before the `schedule()` definition. The source-content check failed.
+The task text tells the agent to read the scheduler definition and worker class, with explicit read ranges when necessary.
+The validator keeps its source-content and tool-result checks.
+
+Each attempt keeps its original records.
+The second service released all owned processes, GPU resources, and its port. Its source identity stayed the same.
+
 An earlier thirteen-chapter tutorial build passed ten Node tests, nine Playwright tests, and the Rust trace test.
 Trace formatting and Clippy passed.
 Browser plugin not available: the configured Playwright Chromium supplied browser verification.

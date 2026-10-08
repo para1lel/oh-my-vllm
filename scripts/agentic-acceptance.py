@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Run the documented read-only OMP task against an already running local service.
+"""Run the read-only OMP task against a real MTP4 or DSpark service.
 
-Launch that service with scripts/with-gpu.sh and --num-speculative-tokens 4.
-This script records client evidence; real MTP counters must also be checked in
-server logs. It never substitutes a scripted worker for inference acceptance.
+Launch the service through scripts/with-gpu.sh and select its speculative mode.
+The evidence checks real source reads, forwarded tool results, the last answer,
+and the active-mode counters in server logs.
 """
 
 import argparse
@@ -32,6 +32,10 @@ TASK = (
     " Read at least crates/scheduler/src/lib.rs and "
     "python/oh_my_vllm/worker/model_runner.py with the read tool before writing "
     "the final answer; directory listings alone do not count."
+    " Include the Rust pub fn schedule(...) definition and the Python "
+    "class OhMyVllmWorker declaration with its initialization code."
+    " Use explicit read line ranges if the tool returns only a source outline."
+    " Do not finish until both source sections have been read."
     " Cite these two source filenames in the final answer."
 )
 

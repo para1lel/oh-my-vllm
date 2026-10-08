@@ -125,6 +125,15 @@ OMP Chat client 约 250 秒后以状态 0 退出.
 取消时保留失败结果, 覆盖响应持久化及信号 handler 恢复期间.
 首次服务 worker 已退出并释放 GPU 资源及服务端口.
 
+第二次服务尝试在源码 `46f7529` 上通过 12 项约束 case 和 Chat 生命周期 case.
+OMP Chat client 完成 12 次工具调用, 以状态 0 退出.
+它读取的 scheduler 范围在 `schedule()` 定义之前结束, 源码内容检查失败.
+任务文字要求读取 scheduler 定义和 worker class, 必要时使用显式行号范围.
+校验器保留源码内容和工具结果检查.
+
+每次尝试保留各自原始记录.
+第二次服务释放全部所属进程, GPU 资源和端口, 源码身份保持相同.
+
 较早的 13 章教程构建通过 10 个 Node 测试, 9 个 Playwright 测试和 Rust trace 测试.
 Trace 格式和 Clippy 通过.
 Browser plugin not available: 使用已配置的 Playwright Chromium 验证浏览器.
