@@ -155,6 +155,14 @@ No long-context service case ran in this attempt.
 Source stayed the same. All owned processes, GPU resources, and the port were released.
 Selected service checks passed 63 CPU tests.
 
+The fourth service attempt passed twelve constraint cases on source `fb432c6`.
+The shared-batch check failed for two short requests. The attempt's content, storage, cancellation, and release checks completed without error.
+The test starts its two clients together and tells the model to supply longer output.
+The same-batch, output content, cancellation, and release checks stay active.
+Run this test with a GPU service to show shared scheduling.
+
+Source stayed the same. The fourth service released all owned processes, GPU resources, and its port.
+
 An earlier thirteen-chapter tutorial build passed ten Node tests, nine Playwright tests, and the Rust trace test.
 Trace formatting and Clippy passed.
 Browser plugin not available: the configured Playwright Chromium supplied browser verification.

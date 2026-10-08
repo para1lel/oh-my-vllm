@@ -154,6 +154,14 @@ HTTP 请求含有 item ID 时, ID 必须一致.
 源码保持相同. 全部所属进程, GPU 资源和端口已释放.
 选定服务检查通过 63 个 CPU 测试.
 
+第四次服务尝试在源码 `fb432c6` 上通过 12 项约束 case.
+两个短请求的共享 batch 检查失败, 该次尝试的内容, 存储, 取消和释放检查均没有错误.
+测试让两个客户端同时开始, 并要求较长输出.
+同一 batch, 输出内容, 取消和释放检查继续有效.
+使用 GPU 服务运行此测试, 证明共享调度.
+
+源码保持相同. 第四次服务释放全部所属进程, GPU 资源和端口.
+
 较早的 13 章教程构建通过 10 个 Node 测试, 9 个 Playwright 测试和 Rust trace 测试.
 Trace 格式和 Clippy 通过.
 Browser plugin not available: 使用已配置的 Playwright Chromium 验证浏览器.

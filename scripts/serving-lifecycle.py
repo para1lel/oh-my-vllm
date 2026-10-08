@@ -1,6 +1,6 @@
 """Exercise real serving thinking, state, mixed batching and disconnect recovery.
 
-Run against a UUID-pinned MTP4 service. Check server cancellation/MTP logs too.
+Run against a UUID-pinned MTP4 or DSpark service. Check mode and cleanup logs.
 """
 
 import argparse
@@ -8,6 +8,7 @@ import concurrent.futures
 import json
 import re
 import sys
+import threading
 import time
 import urllib.error
 from pathlib import Path
@@ -112,13 +113,21 @@ def run(args, attempt):
         raise AssertionError("deleted response still exists")
     results["stored"] = [first, second]
 
-    def mixed(constrained):
-        body = generation_body(
-            args.api,
-            "Return a JSON object with n equal to 123."
-            if constrained
-            else "计算 12+13,只回答结果。",
-        )
+    def mixed(constrained, extended=False):
+        if extended:
+            prompt = (
+                "Return a JSON object with n equal to 123 and values containing "
+                "every integer from 1 through 128. Include the entire array."
+                if constrained
+                else "List every integer from 1 through 128, one per line."
+            )
+        else:
+            prompt = (
+                "Return a JSON object with n equal to 123."
+                if constrained
+                else "计算 12+13,只回答结果。"
+            )
+        body = generation_body(args.api, prompt, max_tokens=2048 if extended else 128)
         if constrained:
             if args.api == "chat":
                 body["response_format"] = {"type": "json_object"}
@@ -134,8 +143,16 @@ def run(args, attempt):
                 raise ValueError("mixed plain response has incorrect content")
         return result
 
+    barrier = threading.Barrier(2)
+
+    def concurrent_mixed(constrained):
+        # Keep both requests active long enough to observe real shared scheduling.
+        # Short scalar answers can finish before the other request is registered.
+        barrier.wait(timeout=10)
+        return mixed(constrained, extended=True)
+
     with concurrent.futures.ThreadPoolExecutor(2) as pool:
-        results["mixed"] = list(pool.map(mixed, [True, False]))
+        results["mixed"] = list(pool.map(concurrent_mixed, [True, False]))
     mixed_ids = {int(result["id"].rsplit("_", 1)[1]) for result in results["mixed"]}
     body = generation_body(
         args.api, "Write a very long essay about mathematics.", max_tokens=8192
