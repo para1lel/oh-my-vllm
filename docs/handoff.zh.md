@@ -107,7 +107,11 @@ Eager 与 compiled DSpark smoke run 各保留 64 个输出 token.
 其中 DSpark batch1 边界实际完成 258048 个输入 token 和 4096 个输出 token, 无 OOM 或重算抢占.
 通用 benchmark result 遗漏 mode 字段, 导致校验器拒绝该行.
 另一失败来自停止该尝试时中断的普通 batch2 运行.
-Benchmark result 现已记录 `speculative_mode`, 完整 GPU 采集仍待执行.
+Benchmark result 现已记录 `speculative_mode`.
+
+第二次完整 GPU 采集通过 285 个测试, 513 个 CPU 测试未选中.
+ordinary / MTP4 / DSpark 的 9 项边界 case 在 batch 1, 2, 4 下通过, 没有 OOM 或重算抢占.
+GPU runtime 源码保持在实现版本 `46f7529`.
 
 首次 DSpark 服务尝试通过 12 项约束 case 和 Chat 生命周期 case.
 OMP Chat client 约 250 秒后以状态 0 退出.
@@ -134,6 +138,22 @@ OMP Chat client 完成 12 次工具调用, 以状态 0 退出.
 每次尝试保留各自原始记录.
 第二次服务释放全部所属进程, GPU 资源和端口, 源码身份保持相同.
 
+第三次服务尝试在源码 `7e2d618` 上通过 12 项约束 case 和 Chat / Responses 生命周期 case.
+OMP Chat 通过工具结果检查. OMP Responses 完成 12 次工具调用, 以状态 0 退出.
+Responses 校验失败, 因为 OMP 在客户端记录中保留 `call_id|item_id`, 在 HTTP 请求中保留 `call_id`.
+
+校验器把这些 ID 与记录中的工具调用, read 路径和输出比较.
+HTTP 请求含有 item ID 时, ID 必须一致.
+校验器拒绝能对应多个已记录工具调用的 ID.
+
+原始 Responses 记录通过 CPU 重验, 失败尝试保留原有结果.
+重验在客户端运行后计算服务日志 offset.
+新服务运行必须在客户端启动前记录 offset.
+
+这次尝试未运行长上下文服务 case.
+源码保持相同. 全部所属进程, GPU 资源和端口已释放.
+选定服务检查通过 63 个 CPU 测试.
+
 较早的 13 章教程构建通过 10 个 Node 测试, 9 个 Playwright 测试和 Rust trace 测试.
 Trace 格式和 Clippy 通过.
 Browser plugin not available: 使用已配置的 Playwright Chromium 验证浏览器.
@@ -149,7 +169,7 @@ Browser plugin not available: 使用已配置的 Playwright Chromium 验证浏�
 批准含义及完整翻译忠实度仍需审查, 见 [写作规则](writing.zh.md).
 
 Responses 服务验收, 长上下文服务验收, 230-case 算子采集和 12-row 性能采集尚未完成.
-3-row DSpark / MTP4 配对比较, 9 项上下文边界运行和完整 GPU 回归也仍待执行.
+3-row DSpark / MTP4 配对比较和 9 项 release-binary 上下文边界运行也仍待执行.
 当前源码性能仍需新一轮完整采集. 历史验收保留对应的实测源码与配置范围.
 按用户要求, 这些 DSpark 比较统计没有验收门槛.
 原有 12 项 workload 门槛及正确性, 显存, 重算, 稳态和证据合同继续有效.
@@ -158,7 +178,7 @@ Responses 服务验收, 长上下文服务验收, 230-case 算子采集和 12-ro
 
 - 用户审阅扩展教程, 修正阅读中发现的具体教学缺口.
 - 添加选值的派生证据, 保留文本 / 工具历史来源, 哈希和已调度 / 接受草稿数.
-- 在源码保持不变时完成剩余服务, 算子, 性能, 配对比较, 上下文及 GPU 回归采集.
+- 在源码保持不变时完成剩余服务, 算子, 性能, 配对比较及 release-binary 上下文采集.
 - 按 [审计](audit.zh.md) 的 `PY-04`, 在实测显存压力下测试跨形状 262k graph eviction/recapture.
 - 在扩大长期 worker 支持结论前, 证明持续 shape 变化下 compiler storage 有界.
 - `PY-06` host overlap 工作以测量为依据; pinned readback 实验没有明显完整调用净收益.

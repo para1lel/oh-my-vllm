@@ -64,6 +64,58 @@ def source_read_path(argument: str) -> dict:
     }
 
 
+def wire_source_reads(
+    success: dict, history: list[dict], api: str, issued_calls: dict
+) -> dict:
+    """Bind OMP's Responses call/item pair to the recorded wire call ID."""
+    identities = {}
+    for item in history:
+        if item.get("type") != "function_call":
+            continue
+        try:
+            arguments = json.loads(item.get("arguments", ""))
+        except (TypeError, ValueError):
+            arguments = None
+        identity = (
+            item.get("id"),
+            item.get("name"),
+            json.dumps(arguments, sort_keys=True, ensure_ascii=False),
+        )
+        identities.setdefault(item.get("call_id"), set()).add(identity)
+    bound = {}
+    for client_call, source in success.items():
+        wire_call = client_call
+        if api == "responses" and "|" in client_call:
+            parts = client_call.split("|")
+            if len(parts) != 2 or not all(parts):
+                continue
+            call, item_id = parts
+            definitions = identities.get(call, set())
+            if len(definitions) > 1:
+                raise ValueError("ambiguous wire function-call definition")
+            if not definitions or client_call not in issued_calls:
+                continue
+            item, name, encoded_arguments = next(iter(definitions))
+            arguments = json.loads(encoded_arguments)
+            issued = issued_calls[client_call]
+            if len(issued) != 1 or (name, encoded_arguments) not in issued:
+                raise ValueError(
+                    "issued source-read call differs from the HTTP request"
+                )
+            if (
+                name != "read"
+                or not isinstance(arguments, dict)
+                or arguments.get("path") != source["original_path"]
+                or item not in (None, item_id)
+            ):
+                continue
+            wire_call = parts[0]
+        if wire_call in bound:
+            raise ValueError("ambiguous source-read tool call identity")
+        bound[wire_call] = source | {"client_tool_call_id": client_call}
+    return bound
+
+
 def validate_agent_evidence(events: list[dict], requests: list[dict], api: str) -> dict:
     """Prove successful source reads and their use in the final model request."""
     required = {
@@ -71,6 +123,7 @@ def validate_agent_evidence(events: list[dict], requests: list[dict], api: str) 
         "python/oh_my_vllm/worker/model_runner.py": r"\bclass\s+OhMyVllmWorker\b",
     }
     starts, successful, results, assistants = {}, {}, {}, []
+    issued_calls = {}
     for event in events:
         kind = event.get("type")
         if kind == "tool_execution_start" and event.get("toolName") == "read":
@@ -97,6 +150,20 @@ def validate_agent_evidence(events: list[dict], requests: list[dict], api: str) 
                 results[message.get("toolCallId")] = message
             elif message.get("role") == "assistant":
                 assistants.append(message)
+                for item in message.get("content", []):
+                    if item.get("type") == "toolCall" and isinstance(
+                        item.get("id"), str
+                    ):
+                        issued_calls.setdefault(item["id"], set()).add(
+                            (
+                                item.get("name"),
+                                json.dumps(
+                                    item.get("arguments"),
+                                    sort_keys=True,
+                                    ensure_ascii=False,
+                                ),
+                            )
+                        )
     success = {call: record for call, record in successful.items() if call in results}
     if {record["path"] for record in success.values()} != set(required):
         raise ValueError("OMP must successfully read both required source files")
@@ -125,6 +192,7 @@ def validate_agent_evidence(events: list[dict], requests: list[dict], api: str) 
         history = body.get("messages" if api == "chat" else "input", [])
         if not isinstance(history, list):
             continue
+        bound_reads = wire_source_reads(success, history, api, issued_calls)
         forwarded = {}
         forwarded_reads = []
         for item in history:
@@ -143,17 +211,19 @@ def validate_agent_evidence(events: list[dict], requests: list[dict], api: str) 
                 forwarded_text = "\n".join(item.get("text", "") for item in content)
             else:
                 forwarded_text = str(content)
-            if call in success and success[call]["text"] in forwarded_text:
+            if call in bound_reads and bound_reads[call]["text"] in forwarded_text:
+                source = bound_reads[call]
                 read = {
                     "tool_call_id": call,
-                    "path": success[call]["path"],
-                    "original_path": success[call]["original_path"],
-                    "line_range": success[call]["line_range"],
+                    "client_tool_call_id": source["client_tool_call_id"],
+                    "path": source["path"],
+                    "original_path": source["original_path"],
+                    "line_range": source["line_range"],
                     "forwarded_output_sha256": hashlib.sha256(
                         serialized.encode()
                     ).hexdigest(),
                 }
-                forwarded[success[call]["path"]] = read
+                forwarded[source["path"]] = read
                 forwarded_reads.append(read)
         if set(forwarded) == set(required):
             return {

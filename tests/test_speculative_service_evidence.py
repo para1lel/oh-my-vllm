@@ -117,6 +117,179 @@ def test_omp_source_reads_are_forwarded_to_the_matching_final_model_request(api)
     assert len(result["source_reads"]) == 2
 
 
+def composite_agent_evidence():
+    events, requests = agent_evidence("responses")
+    history = requests[0]["request"]["input"]
+    for index in range(2):
+        call, item = f"call_{index}", f"fc_{index}"
+        for event in events[index * 3 : index * 3 + 3]:
+            target = event.get("message", event)
+            target["toolCallId"] = f"{call}|{item}"
+        history.insert(
+            index * 2,
+            {
+                "type": "function_call",
+                "call_id": call,
+                "id": item,
+                "name": "read",
+                "arguments": json.dumps({"path": events[index * 3]["args"]["path"]}),
+            },
+        )
+    events.insert(
+        0,
+        {
+            "type": "message_end",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "toolCall",
+                        "id": f"call_{index}|fc_{index}",
+                        "name": "read",
+                        "arguments": {"path": events[index * 3]["args"]["path"]},
+                    }
+                    for index in range(2)
+                ],
+            },
+        },
+    )
+    return events, requests
+
+
+def test_omp_responses_compound_identity_is_bound_to_both_recorded_wire_ids():
+    events, requests = composite_agent_evidence()
+    result = agentic.validate_agent_evidence(events, requests, "responses")
+    read = result["source_reads"]["crates/scheduler/src/lib.rs"]
+    assert read["tool_call_id"] == "call_0"
+    assert read["client_tool_call_id"] == "call_0|fc_0"
+    assert result["tool_results_in_final_model_request"]
+
+
+def test_omp_responses_omitted_item_ids_are_bound_to_recorded_client_tool_calls():
+    events, requests = composite_agent_evidence()
+    for item in requests[0]["request"]["input"]:
+        if item.get("type") == "function_call":
+            del item["id"]
+    result = agentic.validate_agent_evidence(events, requests, "responses")
+    assert result["source_reads"]["crates/scheduler/src/lib.rs"][
+        "client_tool_call_id"
+    ] == ("call_0|fc_0")
+
+
+@pytest.mark.parametrize("failure", ["unissued_item", "wrong_source", "wrong_tool"])
+def test_omp_responses_omitted_item_ids_cannot_substitute_other_client_evidence(
+    failure,
+):
+    events, requests = composite_agent_evidence()
+    history = requests[0]["request"]["input"]
+    del history[0]["id"]
+    if failure == "unissued_item":
+        events[0]["message"]["content"][0]["id"] = "call_0|fc_unrelated"
+    elif failure == "wrong_source":
+        history[0]["arguments"] = json.dumps({"path": "README.md"})
+    else:
+        history[0]["name"] = "grep"
+    with pytest.raises(
+        ValueError, match=r"not forwarded|issued source-read call differs"
+    ):
+        agentic.validate_agent_evidence(events, requests, "responses")
+
+
+def test_omp_responses_wire_item_id_also_needs_the_actual_client_issued_call():
+    events, requests = composite_agent_evidence()
+    del events[0]
+    with pytest.raises(ValueError, match="not forwarded"):
+        agentic.validate_agent_evidence(events, requests, "responses")
+
+
+@pytest.mark.parametrize("failure", ["wrong_source", "wrong_tool"])
+def test_omp_responses_client_issued_call_name_and_arguments_must_match(failure):
+    events, requests = composite_agent_evidence()
+    issued = events[0]["message"]["content"][0]
+    if failure == "wrong_source":
+        issued["arguments"]["path"] = "README.md"
+    else:
+        issued["name"] = "grep"
+    with pytest.raises(ValueError, match="issued source-read call differs"):
+        agentic.validate_agent_evidence(events, requests, "responses")
+
+
+@pytest.mark.parametrize("failure", ["wrong_source", "wrong_item", "wrong_tool"])
+def test_omp_responses_conflicting_wire_call_definitions_are_rejected(failure):
+    events, requests = composite_agent_evidence()
+    history = requests[0]["request"]["input"]
+    conflicting = copy.deepcopy(history[0])
+    if failure == "wrong_source":
+        conflicting["arguments"] = json.dumps({"path": "README.md"})
+    elif failure == "wrong_item":
+        conflicting["id"] = "fc_unrelated"
+    else:
+        conflicting["name"] = "grep"
+    history.append(conflicting)
+    with pytest.raises(ValueError, match="ambiguous wire"):
+        agentic.validate_agent_evidence(events, requests, "responses")
+
+
+def test_omp_responses_identical_wire_call_history_keeps_the_same_binding():
+    events, requests = composite_agent_evidence()
+    history = requests[0]["request"]["input"]
+    history.append(copy.deepcopy(history[0]))
+    assert agentic.validate_agent_evidence(events, requests, "responses")[
+        "tool_results_in_final_model_request"
+    ]
+
+
+@pytest.mark.parametrize(
+    "failure", ["wrong_item", "wrong_call", "missing_call", "modified_result"]
+)
+def test_omp_responses_compound_identity_rejects_unbound_or_changed_evidence(failure):
+    events, requests = composite_agent_evidence()
+    history = requests[0]["request"]["input"]
+    if failure == "wrong_item":
+        history[0]["id"] = "fc_unrelated"
+    elif failure == "wrong_call":
+        history[0]["call_id"] = "call_unrelated"
+    elif failure == "missing_call":
+        del history[0]
+    else:
+        history[1]["output"] = "changed source contents"
+    with pytest.raises(ValueError, match="not forwarded"):
+        agentic.validate_agent_evidence(events, requests, "responses")
+
+
+def test_omp_compound_identity_is_not_stripped_for_chat():
+    events, requests = agent_evidence("chat")
+    for event in events[:3]:
+        event.get("message", event)["toolCallId"] += "|fc_0"
+    with pytest.raises(ValueError, match="not forwarded"):
+        agentic.validate_agent_evidence(events, requests, "chat")
+
+
+def test_omp_responses_ambiguous_client_identity_does_not_pass():
+    source = {
+        "path": "crates/scheduler/src/lib.rs",
+        "original_path": "crates/scheduler/src/lib.rs",
+        "text": "pub fn schedule() {}",
+    }
+    success = {"call_0": source, "call_0|fc_0": source}
+    history = [
+        {
+            "type": "function_call",
+            "call_id": "call_0",
+            "id": "fc_0",
+            "name": "read",
+            "arguments": json.dumps({"path": source["original_path"]}),
+        }
+    ]
+    with pytest.raises(ValueError, match="ambiguous"):
+        agentic.wire_source_reads(
+            success,
+            history,
+            "responses",
+            {"call_0|fc_0": {("read", json.dumps({"path": source["original_path"]}))}},
+        )
+
+
 @pytest.mark.parametrize("api", ["chat", "responses"])
 @pytest.mark.parametrize("suffix", [":31-320", ":31"])
 def test_omp_source_read_ranges_keep_identity_and_forwarded_result(api, suffix):

@@ -108,7 +108,11 @@ The first full GPU attempt passed 66 tests and four subtests, with two failed ca
 Its DSpark batch-one boundary completed 258048 input tokens and 4096 output tokens, without OOM or recompute preemption.
 The validator rejected that row because the generic benchmark result omitted the mode field.
 The other failure was an ordinary batch-two run interrupted when the attempt stopped.
-The benchmark result records `speculative_mode`. The full GPU collection stays open.
+The benchmark result records `speculative_mode`.
+
+The second full GPU collection passed 285 tests, with 513 CPU tests deselected.
+Its nine ordinary/MTP4/DSpark boundary cases passed at batches 1, 2, and 4 without OOM or recompute preemption.
+The GPU runtime source stayed at implementation `46f7529`.
 
 The first DSpark service attempt passed twelve constraint cases and the Chat lifecycle cases.
 The OMP Chat client exited with status 0 after about 250 seconds.
@@ -135,6 +139,22 @@ The validator keeps its source-content and tool-result checks.
 Each attempt keeps its original records.
 The second service released all owned processes, GPU resources, and its port. Its source identity stayed the same.
 
+The third service attempt passed twelve constraint cases and the Chat and Responses lifecycle cases on source `7e2d618`.
+OMP Chat passed its tool-result checks. OMP Responses completed twelve tool calls and exited with status 0.
+Responses validation failed because OMP keeps `call_id|item_id` in client records and `call_id` in HTTP requests.
+
+The validator compares those IDs with recorded tool calls, read paths, and output.
+If an HTTP request has an item ID, the IDs must agree.
+It rejects IDs that match more than one recorded tool call.
+
+CPU revalidation passed for the original Responses records. The failed attempt keeps its original result.
+The revalidation calculates its server-log offset after the client run.
+A new service run must record the offset before the client starts.
+
+No long-context service case ran in this attempt.
+Source stayed the same. All owned processes, GPU resources, and the port were released.
+Selected service checks passed 63 CPU tests.
+
 An earlier thirteen-chapter tutorial build passed ten Node tests, nine Playwright tests, and the Rust trace test.
 Trace formatting and Clippy passed.
 Browser plugin not available: the configured Playwright Chromium supplied browser verification.
@@ -150,7 +170,7 @@ The document hook checks pairing, protected commands, numbers, glossary definiti
 Approved meanings and full translation fidelity still depend on review, as [writing rules](writing.md) specify.
 
 Responses service acceptance, long-context service acceptance, the 230-case operator collection, and twelve-row performance collection are not complete.
-The three-row paired DSpark/MTP4 comparison, nine context-boundary runs, and full GPU regression are also open.
+The three-row paired DSpark/MTP4 comparison and nine release-binary context-boundary runs are also open.
 Current-source performance still depends on a new full collection. Historical acceptance keeps its measured source and configuration.
 The user directed that these DSpark comparison statistics have no acceptance gate.
 The original twelve workload gates and correctness, memory, recompute, steady-state, and evidence contracts stay active.
@@ -159,7 +179,7 @@ The original twelve workload gates and correctness, memory, recompute, steady-st
 
 - Complete user review of the expanded tutorial and address specific teaching gaps.
 - Add derived selection evidence with its text/tool-history sources, hashes, and scheduled/accepted draft counts.
-- Complete the open service, operator, performance, paired-comparison, context, and GPU regression collections on unchanged source.
+- Complete the open service, operator, performance, paired-comparison, and release-binary context collections on unchanged source.
 - Test cross-shape 262k graph eviction/recapture with measured memory pressure, as `PY-04` specifies in [audit](audit.md).
 - Show bounded compiler storage with sustained shape changes before a broader long-lived-worker claim.
 - Keep `PY-06` host-overlap work measurement-driven. The pinned readback experiment showed no material full-call gain.
