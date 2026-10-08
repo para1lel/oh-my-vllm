@@ -86,7 +86,8 @@ def main():
             "Complete static maximum-shape operations; three independent warm rounds, "
             "twenty alternating-order pairs/round,100 graph repetitions/sample. "
             "No profiler during timing. Fixtures use immutable sources and isolated "
-            "repeatable destinations. Before timing, compare both backends' "
+            "repeatable destinations; DSpark append timing shares one cache after "
+            "independent-cache verification. Before timing, compare both backends' "
             "returns and written cache/state slots at existing tolerances."
         ),
         coverage=dict(
@@ -121,6 +122,15 @@ def main():
                 if variant_before is not None
                 else None
             )
+            if operation == "dspark_append":
+                # The full append is idempotent with immutable K/V. Identical
+                # destinations remove allocator-address bandwidth bias. The
+                # numerical gate above still compares independent caches.
+                del reference, candidate, witnesses
+                reference, candidate = fixture(
+                    case["configuration"], shared_append_destination=True
+                )
+                witnesses = ()
             raw = measure(reference, candidate)
             report["cuda_build_provenance"] = provenance(
                 require_loaded=True, require_compiler=True
@@ -134,6 +144,11 @@ def main():
                 dict(
                     **case,
                     output_verification=output_verification,
+                    timing_destination=(
+                        "shared_append_cache"
+                        if operation == "dspark_append"
+                        else "independent_returns_and_mutable_pools"
+                    ),
                     variant_dispatch=variant_dispatch,
                     raw_pairs_ms=raw,
                     comparison=decision,
@@ -145,7 +160,7 @@ def main():
                 decision["paired_mean_gain_ms"],
                 flush=True,
             )
-            del reference, candidate
+            del reference, candidate, witnesses
             torch.cuda.empty_cache()
             save()
         assert_gpu_exclusive(hardware["gpu"], os.getpgrp())

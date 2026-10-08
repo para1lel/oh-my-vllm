@@ -92,6 +92,21 @@ DSpark 为 target verification 和草稿算子增加静态补充 shape.
 `dspark_tilelang_reference.py` 提供不同的 DSpark 性能比较对象.
 独立 FP64 PyTorch 参考提供数值比较.
 新用例包括 BF16 hidden RMS 舍入, head-128 YaRN Q / K preparation, context append 和 7-row 草稿 attention.
+DSpark hidden RMS 使用 vector load 和成对 BF16 乘法.
+每次 normalization 和 multiplication 保留规定的 BF16 舍入.
+Q / K preparation 在 register 中保留 rotary 的两个半部, 每对 sine / cosine 只计算一次.
+小规模调用每个 head 使用 64 个线程, 大规模调用每个 head 使用一个 warp.
+
+Context append 对地址对齐且 storage 互不重叠的 tensor 使用 128-bit load / store.
+容量检查选择 32-bit 或 64-bit 地址除法.
+Kernel 在除法前检查 slot 范围.
+Kernel 在计算缓存地址前读取源数据.
+其他 layout 使用 CUDA `append` 操作.
+
+相同 K / V 和 slot 的重复 context append 写入相同字节.
+计时阶段的两个操作使用相同目标缓存, 消除缓存地址差异.
+数值校验在计时前使用独立缓存, 最初 147 项用例保留其 fixture 契约.
+
 每个新用例沿用完整输出, cache write, 3 轮, 20 个配对和置信下界门槛.
 当前源码的补充算子性能验收待测.
 

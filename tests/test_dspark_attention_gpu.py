@@ -190,3 +190,109 @@ def test_attention_maximum_context_uniform_query_uses_all_live_pages():
     )
     expected = torch.full_like(actual, (total + 7) / (length + 7))
     torch.testing.assert_close(actual, expected, atol=0.003, rtol=0.003)
+
+
+@pytest.mark.parametrize("weight_dtype", [torch.bfloat16, torch.float32])
+@pytest.mark.parametrize("unaligned", ["input", "weight"])
+def test_hidden_rms_unaligned_view_keeps_storage(weight_dtype, unaligned):
+    generator = torch.Generator().manual_seed(107)
+    arguments = [
+        torch.randn(7, 5120, generator=generator).bfloat16().cuda(),
+        torch.randn(5120, generator=generator).to(weight_dtype).cuda(),
+    ]
+    index = 0 if unaligned == "input" else 1
+    original = arguments[index]
+    storage = torch.full(
+        (original.numel() + 2,), 123, dtype=original.dtype, device="cuda"
+    )
+    arguments[index] = storage[1:-1].view(original.shape)
+    arguments[index].copy_(original)
+    before = storage.clone()
+    expected = _reference_rms(*(x.cpu() for x in arguments), 1e-6)
+    actual = rms_norm(*arguments)
+    torch.testing.assert_close(
+        actual.cpu().double(), expected.double(), atol=0.03, rtol=0.03
+    )
+    torch.testing.assert_close(storage, before, atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("rows", [3, 1371])
+@pytest.mark.parametrize("index_dtype", [torch.int32, torch.int64])
+def test_norm_rope_generic_heads_unaligned_strided_tail(rows, index_dtype):
+    generator = torch.Generator().manual_seed(115)
+    width = 3 * 128 + 256
+    storage = torch.full((rows * width + 2,), 123, dtype=torch.bfloat16, device="cuda")
+    packed = storage[1:-1].view(rows, width)
+    packed.copy_(torch.randn(rows, width, generator=generator).bfloat16())
+    x = packed[:, : 3 * 128].view(rows, 3, 128)
+    before = storage.clone()
+    weight = torch.randn(128, generator=generator).bfloat16().float().cuda()
+    positions = torch.arange(262144 - rows, 262144, dtype=index_dtype, device="cuda")
+    frequency = (1e7 ** (-torch.arange(64, dtype=torch.float32) / 64) / 32).cuda()
+    factor = 1 + 0.1 * math.log(32)
+    expected = _reference_norm(
+        x.cpu(), weight.cpu(), positions.cpu(), frequency.cpu(), factor, 1e-6
+    )
+    actual = normalize_rope(x, weight, positions, frequency, factor)
+    torch.testing.assert_close(
+        actual.cpu().double(), expected.double(), atol=0.03, rtol=0.03
+    )
+    torch.testing.assert_close(storage, before, atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("index_dtype", [torch.int32, torch.int64])
+@pytest.mark.parametrize(
+    "rows,layout",
+    [
+        (7, "aligned"),
+        (4101, "aligned"),
+        (7, "unaligned"),
+        (4101, "unaligned"),
+        (7, "alias"),
+        (7, "wide_cache"),
+    ],
+)
+def test_append_layout_tail_negative_slots_and_canaries(rows, layout, index_dtype):
+    from oh_my_vllm.ir.dspark import _reference_append
+
+    generator = torch.Generator().manual_seed(163)
+    pages = (784 + rows + 783) // 784 + 1
+    if layout == "wide_cache":
+        pages = 84
+    shape = (pages, 2, 784, 8, 128)
+    storages = []
+
+    def allocate(shape):
+        if layout != "unaligned":
+            return torch.empty(shape, dtype=torch.bfloat16, device="cuda")
+        storage = torch.full(
+            (math.prod(shape) + 2,), 123, dtype=torch.bfloat16, device="cuda"
+        )
+        storages.append(storage)
+        return storage[1:-1].view(shape)
+
+    cache = allocate(shape)
+    cache.fill_(-17)
+    if layout == "alias":
+        key, value = cache[0, 0, :rows], cache[0, 1, :rows]
+    else:
+        key, value = allocate((rows, 8, 128)), allocate((rows, 8, 128))
+    key.copy_(torch.randn(rows, 8, 128, generator=generator).bfloat16())
+    value.copy_(torch.randn(rows, 8, 128, generator=generator).bfloat16())
+    base = 65536 if layout == "wide_cache" else 784
+    slots = torch.arange(base, base + rows, dtype=index_dtype, device="cuda")
+    slots[0], slots[-1] = -1, -2
+    key_before, value_before = key.clone(), value.clone()
+    expected = cache.cpu().clone()
+    _reference_append(expected, key.cpu(), value.cpu(), slots.cpu())
+    append(cache, key, value, slots)
+    torch.testing.assert_close(cache.cpu(), expected, atol=0, rtol=0)
+    torch.testing.assert_close(key, key_before, atol=0, rtol=0)
+    torch.testing.assert_close(value, value_before, atol=0, rtol=0)
+    for storage in storages:
+        torch.testing.assert_close(
+            storage[[0, -1]],
+            torch.full((2,), 123, dtype=torch.bfloat16, device="cuda"),
+            atol=0,
+            rtol=0,
+        )

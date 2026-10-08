@@ -28,6 +28,7 @@ _FUNCTIONS = (
     "attention_merge",
     "dspark_norm_rope",
     "dspark_rms_norm",
+    "dspark_append",
     "dspark_attention_partial",
     "dspark_attention_merge",
 )

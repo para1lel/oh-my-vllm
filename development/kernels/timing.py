@@ -27,9 +27,12 @@ def reference_operator(module, name):
 
 
 def measure(reference, candidate, *, rounds=3, pairs=20, repeats=100):
-    """Callables must use fixed inputs and repeatable, isolated destination state.
+    """Callables use fixed inputs and repeatable destination state.
 
-    Keep returned tensors alive during capture. The graph includes complete
+    DSpark append can share a destination after independent output verification:
+    its immutable K/V and slots repeat the same writes. Other mutable fixtures
+    keep isolated destination pools. Keep returned tensors alive during capture.
+    The graph includes complete
     production operations, including required snapshots and reduction kernels.
     CUDA Event times exclude graph launch host overhead and fixture construction.
     """

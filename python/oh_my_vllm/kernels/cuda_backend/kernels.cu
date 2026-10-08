@@ -1769,45 +1769,166 @@ void attention_merge(TensorView partial, TensorView lse, TensorView out) {
 
 // DSpark keeps the retained prefix in pages and the bidirectional seven-row
 // noise block in separate tensors. No noise KV is written to the shared pages.
+template <bool Wide, bool Narrow>
+__global__ void __launch_bounds__(128, 1) dspark_append_kernel(
+    const __nv_bfloat16 *__restrict__ key, const __nv_bfloat16 *__restrict__ value,
+    __nv_bfloat16 *__restrict__ cache, const void *__restrict__ slots, int rows, int64_t capacity) {
+  constexpr int Width = 1024;
+  int token = blockIdx.x, column = threadIdx.x & 127;
+  uint4 k, v;
+  const auto *source_k = reinterpret_cast<const uint4 *>(key + int64_t(token) * Width);
+  const auto *source_v = reinterpret_cast<const uint4 *>(value + int64_t(token) * Width);
+  // Independent source reads overlap the slot load and address arithmetic.
+  // All source rows exist even when a negative slot suppresses its cache write.
+  asm volatile("ld.global.v4.u32 {%0,%1,%2,%3}, [%4];" : "=r"(k.x), "=r"(k.y),
+               "=r"(k.z), "=r"(k.w) : "l"(source_k + column) : "memory");
+  asm volatile("ld.global.v4.u32 {%0,%1,%2,%3}, [%4];" : "=r"(v.x), "=r"(v.y),
+               "=r"(v.z), "=r"(v.w) : "l"(source_v + column) : "memory");
+  int64_t slot = index_at(slots, Wide, token);
+  if (static_cast<uint64_t>(slot) >= static_cast<uint64_t>(capacity)) {
+    if (slot >= 0)
+      asm volatile("trap;");
+    return;
+  }
+  // Host dispatch proves a nonnegative slot fits int32 before narrowing.
+  int64_t page, within;
+  if constexpr (Narrow) {
+    uint32_t index = static_cast<uint32_t>(slot);
+    page = index / 784;
+    within = index % 784;
+  } else {
+    page = slot / 784;
+    within = slot % 784;
+  }
+  int64_t offset = (page * 1568 + within) * Width;
+  auto *destination_k = reinterpret_cast<uint4 *>(cache + offset);
+  auto *destination_v = reinterpret_cast<uint4 *>(cache + offset + 784 * Width);
+  destination_k[column] = k;
+  destination_v[column] = v;
+}
+
+template <bool Wide>
+void launch_dspark_append(TensorView key, TensorView value, TensorView cache,
+                          TensorView slots, cudaStream_t stream) {
+  int rows = key.size(0);
+#define DS_APPEND(Narrow)                                                         \
+  dspark_append_kernel<Wide, Narrow><<<rows, 128, 0, stream>>>( \
+      static_cast<const __nv_bfloat16 *>(key.data_ptr()),                               \
+      static_cast<const __nv_bfloat16 *>(value.data_ptr()),                             \
+      static_cast<__nv_bfloat16 *>(cache.data_ptr()), slots.data_ptr(), rows,            \
+      cache.size(0) * 784)
+  if (cache.size(0) * 784 <= 2147483647) {
+    DS_APPEND(true);
+  } else {
+    DS_APPEND(false);
+  }
+#undef DS_APPEND
+}
+
+void dspark_append(TensorView key, TensorView value, TensorView cache, TensorView slots) {
+  bool fast = key.ndim() == 3 && key.size(1) == 8 && key.size(2) == 128 &&
+              aligned(key, 16) && aligned(value, 16) && aligned(cache, 16) &&
+              disjoint_storage(cache, key) && disjoint_storage(cache, value) &&
+              disjoint_storage(cache, slots);
+  if (!fast) {
+    // Preserve the generic operation for unaligned or overlapping views.
+    append(key, value, cache, slots);
+    return;
+  }
+  auto stream = stream_for(key, "dspark_append");
+  if (slots.dtype().bits == 64) {
+    launch_dspark_append<true>(key, value, cache, slots, stream);
+  } else {
+    launch_dspark_append<false>(key, value, cache, slots, stream);
+  }
+  finish_cuda_launch(stream, "dspark_append");
+  record_variant(kAppend, true);
+}
+
+template <int Heads, int Warps, bool Wide, bool Small = false>
 __global__ void dspark_norm_rope_kernel(
     const __nv_bfloat16 *__restrict__ x, const float *__restrict__ weight,
     const void *__restrict__ positions, const float *__restrict__ inv_freq,
-    __nv_bfloat16 *__restrict__ output, int heads, int64_t row_stride, bool position64,
+    __nv_bfloat16 *__restrict__ output, int rows, int heads, int64_t row_stride,
     float attention_factor, float epsilon) {
-  int head_row = blockIdx.x, token = head_row / heads, head = head_row % heads;
-  int col = threadIdx.x, lane = col & 31, warp = col / 32;
+  constexpr int Lanes = Small ? 64 : 32, Columns = 128 / Lanes;
+  int head_row = Small ? blockIdx.x : blockIdx.x * Warps + threadIdx.x / 32;
+  if (head_row >= rows)
+    return;
+  int count = Heads == 0 ? heads : Heads;
+  int token = head_row / count, head = head_row % count;
+  int lane = Small ? threadIdx.x : threadIdx.x & 31;
   const auto *row = x + static_cast<int64_t>(token) * row_stride + head * 128;
-  float value = __bfloat162float(row[col]);
-  float sum = warp_sum(value * value);
-  __shared__ float sums[4], inverse;
-  if (lane == 0)
-    sums[warp] = sum;
-  __syncthreads();
-  if (warp == 0) {
-    sum = warp_sum(lane < 4 ? sums[lane] : 0.f);
-    if (lane == 0)
-      inverse = rsqrtf(sum / 128.f + epsilon);
+  float values[Columns], sum = 0.f;
+#pragma unroll
+  for (int j = 0; j < Columns; ++j) {
+    values[j] = __bfloat162float(row[lane + j * Lanes]);
+    sum += values[j] * values[j];
   }
-  __syncthreads();
-  int other_col = col < 64 ? col + 64 : col - 64;
-  float normalized = __bfloat162float(__float2bfloat16_rn(value * inverse));
-  float other = __bfloat162float(__float2bfloat16_rn(__bfloat162float(row[other_col]) * inverse));
-  float multiplier = __bfloat162float(__float2bfloat16_rn(weight[col]));
-  float other_multiplier = __bfloat162float(__float2bfloat16_rn(weight[other_col]));
-  normalized = __bfloat162float(__float2bfloat16_rn(normalized * multiplier));
-  other = __bfloat162float(__float2bfloat16_rn(other * other_multiplier));
-  double phase = static_cast<double>(index_at(positions, position64, token)) *
-                 static_cast<double>(inv_freq[col % 64]);
-  constexpr double tau = 6.283185307179586476925286766559;
-  phase -= nearbyint(phase / tau) * tau;
-  float cosine = __bfloat162float(
-      __float2bfloat16_rn(cosf(static_cast<float>(phase)) * attention_factor));
-  float sine = __bfloat162float(
-      __float2bfloat16_rn(sinf(static_cast<float>(phase)) * attention_factor));
-  float first = __bfloat162float(__float2bfloat16_rn(normalized * cosine));
-  float second = __bfloat162float(__float2bfloat16_rn(other * sine));
-  output[static_cast<int64_t>(head_row) * 128 + col] =
-      __float2bfloat16_rn(col < 64 ? first - second : first + second);
+  sum = warp_sum(sum);
+  if constexpr (Small) {
+    __shared__ float partial[2];
+    if ((lane & 31) == 0)
+      partial[lane / 32] = sum;
+    __syncthreads();
+    sum = partial[0] + partial[1];
+  }
+  float inverse = rsqrtf(sum / 128.f + epsilon);
+  __nv_bfloat16 weighted[Columns];
+#pragma unroll
+  for (int j = 0; j < Columns / 2; ++j) {
+    auto normalized = __floats2bfloat162_rn(values[j] * inverse,
+                                            values[j + Columns / 2] * inverse);
+    auto multiplier = __floats2bfloat162_rn(weight[lane + j * Lanes],
+                                            weight[lane + (j + Columns / 2) * Lanes]);
+    auto result = __hmul2_rn(normalized, multiplier);
+    weighted[j] = __low2bfloat16(result);
+    weighted[j + Columns / 2] = __high2bfloat16(result);
+  }
+  // A lane owns both NeoX halves. Reuse the trigonometry without another load.
+#pragma unroll
+  for (int j = 0; j < Columns / 2; ++j) {
+    int column = lane + j * Lanes;
+    double phase = static_cast<double>(index_at(positions, Wide, token)) *
+                   static_cast<double>(inv_freq[column]);
+    constexpr double tau = 6.283185307179586476925286766559;
+    phase -= nearbyint(phase / tau) * tau;
+    float sine, cosine;
+    sincosf(static_cast<float>(phase), &sine, &cosine);
+    auto pair = __halves2bfloat162(weighted[j], weighted[j + Columns / 2]);
+    auto c = __float2bfloat16_rn(cosine * attention_factor);
+    auto v = __float2bfloat16_rn(sine * attention_factor);
+    auto own_cos = __hmul2_rn(pair, __halves2bfloat162(c, c));
+    auto own_sin = __hmul2_rn(pair, __halves2bfloat162(v, v));
+    auto *destination = output + static_cast<int64_t>(head_row) * 128;
+    destination[column] = __hsub_rn(__low2bfloat16(own_cos), __high2bfloat16(own_sin));
+    destination[column + 64] = __hadd_rn(__high2bfloat16(own_cos), __low2bfloat16(own_sin));
+  }
+}
+
+template <int Heads, bool Wide>
+void launch_dspark_norm(TensorView x, TensorView weight, TensorView positions,
+                        TensorView inv_freq, TensorView output, float factor,
+                        float epsilon, cudaStream_t stream) {
+  int rows = x.size(0) * x.size(1);
+#define DS_NORM(W)                                                                      \
+  dspark_norm_rope_kernel<Heads, W, Wide><<<(rows + W - 1) / W, W * 32, 0, stream>>>(      \
+      static_cast<const __nv_bfloat16 *>(x.data_ptr()),                                  \
+      static_cast<const float *>(weight.data_ptr()), positions.data_ptr(),              \
+      static_cast<const float *>(inv_freq.data_ptr()),                                  \
+      static_cast<__nv_bfloat16 *>(output.data_ptr()), rows, x.size(1), x.stride(0),       \
+      factor, epsilon)
+  if (rows >= 4096) {
+    DS_NORM(4);
+  } else {
+    dspark_norm_rope_kernel<Heads, 1, Wide, true><<<rows, 64, 0, stream>>>(
+        static_cast<const __nv_bfloat16 *>(x.data_ptr()),
+        static_cast<const float *>(weight.data_ptr()), positions.data_ptr(),
+        static_cast<const float *>(inv_freq.data_ptr()),
+        static_cast<__nv_bfloat16 *>(output.data_ptr()), rows, x.size(1), x.stride(0),
+        factor, epsilon);
+  }
+#undef DS_NORM
 }
 
 void dspark_norm_rope(TensorView x, TensorView weight, TensorView positions,
@@ -1817,12 +1938,22 @@ void dspark_norm_rope(TensorView x, TensorView weight, TensorView positions,
   TVM_FFI_ICHECK(weight.numel() == 128 && inv_freq.numel() == 64);
   TVM_FFI_ICHECK(is_index_dtype(positions) && positions.numel() == x.size(0));
   auto stream = stream_for(x, "dspark_norm_rope");
-  dspark_norm_rope_kernel<<<x.size(0) * x.size(1), 128, 0, stream>>>(
-      static_cast<const __nv_bfloat16 *>(x.data_ptr()),
-      static_cast<const float *>(weight.data_ptr()), positions.data_ptr(),
-      static_cast<const float *>(inv_freq.data_ptr()),
-      static_cast<__nv_bfloat16 *>(output.data_ptr()), x.size(1), x.stride(0),
-      positions.dtype().bits == 64, attention_factor, epsilon);
+#define DS_NORM_HEADS(H)                                                                \
+  if (positions.dtype().bits == 64) {                                                   \
+    launch_dspark_norm<H, true>(x, weight, positions, inv_freq, output,                  \
+                                attention_factor, epsilon, stream);                    \
+  } else {                                                                             \
+    launch_dspark_norm<H, false>(x, weight, positions, inv_freq, output,                 \
+                                 attention_factor, epsilon, stream);                   \
+  }
+  if (x.size(1) == 8) {
+    DS_NORM_HEADS(8)
+  } else if (x.size(1) == 32) {
+    DS_NORM_HEADS(32)
+  } else {
+    DS_NORM_HEADS(0)
+  }
+#undef DS_NORM_HEADS
   finish_cuda_launch(stream, "dspark_norm_rope");
 }
 
@@ -2076,19 +2207,30 @@ __global__ void dspark_attention_partial_kernel(
   }
 }
 
+template <typename Weight, int Threads, int Vector, bool Streaming>
 __global__ void dspark_rms_norm_kernel(const __nv_bfloat16 *__restrict__ input,
-                                      const void *__restrict__ weight,
+                                      const Weight *__restrict__ weight,
                                       __nv_bfloat16 *__restrict__ output,
-                                      bool weight_float, float epsilon) {
-  constexpr int Width = 5120, Threads = 256, Chunks = Width / Threads;
+                                      float epsilon) {
+  constexpr int Width = 5120, Chunks = Width / (Threads * Vector);
+  static_assert(Width % (Threads * Vector) == 0);
   int row = blockIdx.x, lane = threadIdx.x & 31;
-  float values[Chunks], total = 0.f;
+  float values[Chunks][Vector], partial_sums[Vector] = {};
 #pragma unroll
   for (int i = 0; i < Chunks; ++i) {
-    values[i] = __bfloat162float(input[static_cast<int64_t>(row) * Width +
-                                       threadIdx.x + i * Threads]);
-    total += values[i] * values[i];
+    int column = threadIdx.x * Vector + i * Threads * Vector;
+    auto loaded = load_aligned_vector<__nv_bfloat16, Vector>(
+        input + static_cast<int64_t>(row) * Width + column);
+#pragma unroll
+    for (int j = 0; j < Vector; ++j) {
+      values[i][j] = __bfloat162float(loaded.value[j]);
+      partial_sums[j] += values[i][j] * values[i][j];
+    }
   }
+  float total = 0.f;
+#pragma unroll
+  for (int j = 0; j < Vector; ++j)
+    total += partial_sums[j];
   total = warp_sum(total);
   __shared__ float sums[Threads / 32];
   if (lane == 0)
@@ -2098,15 +2240,54 @@ __global__ void dspark_rms_norm_kernel(const __nv_bfloat16 *__restrict__ input,
   float inverse = rsqrtf(total * (1.f / Width) + epsilon);
 #pragma unroll
   for (int i = 0; i < Chunks; ++i) {
-    int column = threadIdx.x + i * Threads;
-    __nv_bfloat16 multiplier = weight_float
-      ? __float2bfloat16_rn(static_cast<const float *>(weight)[column])
-      : static_cast<const __nv_bfloat16 *>(weight)[column];
-    // Qwen3 rounds normalized activations before multiplying checkpoint BF16.
-    __nv_bfloat16 normalized = __float2bfloat16_rn(values[i] * inverse);
-    output[static_cast<int64_t>(row) * Width + column] =
-      __float2bfloat16_rn(__bfloat162float(normalized) * __bfloat162float(multiplier));
+    int column = threadIdx.x * Vector + i * Threads * Vector;
+    auto multipliers = load_aligned_vector<Weight, Vector>(weight + column);
+    AlignedVector<__nv_bfloat16, Vector> result;
+    // Preserve the two checkpoint BF16 roundings with packed multiplication.
+#pragma unroll
+    for (int j = 0; j < Vector; j += 2) {
+      if constexpr (Vector == 1) {
+        auto normalized = __float2bfloat16_rn(values[i][j] * inverse);
+        auto multiplier = __float2bfloat16_rn(float(multipliers.value[j]));
+        result.value[j] = __hmul_rn(normalized, multiplier);
+      } else {
+        auto normalized = __floats2bfloat162_rn(values[i][j] * inverse,
+                                                values[i][j + 1] * inverse);
+        __nv_bfloat162 multiplier;
+        if constexpr (std::is_same_v<Weight, float>) {
+          multiplier = __floats2bfloat162_rn(multipliers.value[j], multipliers.value[j + 1]);
+        } else {
+          multiplier = __halves2bfloat162(multipliers.value[j], multipliers.value[j + 1]);
+        }
+        auto product = __hmul2_rn(normalized, multiplier);
+        result.value[j] = __low2bfloat16(product);
+        result.value[j + 1] = __high2bfloat16(product);
+      }
+    }
+    auto *destination = output + static_cast<int64_t>(row) * Width + column;
+    store_rms_vector<Vector, Streaming>(destination, result);
   }
+}
+
+template <typename Weight>
+void launch_dspark_rms(TensorView input, TensorView weight, TensorView output,
+                       float epsilon, cudaStream_t stream) {
+#define DS_RMS(T, V, S)                                                                     \
+  dspark_rms_norm_kernel<Weight, T, V, S><<<input.size(0), T, 0, stream>>>(                   \
+      static_cast<const __nv_bfloat16 *>(input.data_ptr()),                              \
+      static_cast<const Weight *>(weight.data_ptr()),                                    \
+      static_cast<__nv_bfloat16 *>(output.data_ptr()), epsilon)
+  if (aligned(input, 16) && aligned(output, 16) && aligned(weight, sizeof(Weight) * 8)) {
+    if (input.size(0) >= 4096) {
+      DS_RMS(256, 4, true);
+    } else {
+      DS_RMS(256, 4, false);
+    }
+  } else {
+    // Contiguous views can have an odd BF16 storage offset.
+    DS_RMS(256, 1, false);
+  }
+#undef DS_RMS
 }
 
 void dspark_rms_norm(TensorView input, TensorView weight, TensorView output, double epsilon) {
@@ -2116,9 +2297,11 @@ void dspark_rms_norm(TensorView input, TensorView weight, TensorView output, dou
   TVM_FFI_ICHECK(has_dtype(input, kDLBfloat, 16) && has_dtype(output, kDLBfloat, 16) &&
                 (has_dtype(weight, kDLBfloat, 16) || has_dtype(weight, kDLFloat, 32)));
   auto stream = stream_for(input, "dspark_rms_norm");
-  dspark_rms_norm_kernel<<<input.size(0), 256, 0, stream>>>(
-      static_cast<const __nv_bfloat16 *>(input.data_ptr()), weight.data_ptr(),
-      static_cast<__nv_bfloat16 *>(output.data_ptr()), has_dtype(weight, kDLFloat, 32), epsilon);
+  if (has_dtype(weight, kDLFloat, 32)) {
+    launch_dspark_rms<float>(input, weight, output, epsilon, stream);
+  } else {
+    launch_dspark_rms<__nv_bfloat16>(input, weight, output, epsilon, stream);
+  }
   finish_cuda_launch(stream, "dspark_rms_norm");
 }
 

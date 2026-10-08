@@ -183,6 +183,23 @@ Current-source performance still depends on a new full collection. Historical ac
 The user directed that these DSpark comparison statistics have no acceptance gate.
 The original twelve workload gates and correctness, memory, recompute, steady-state, and evidence contracts stay active.
 
+## CUDA kernel verification milestone
+
+The DSpark CUDA update passed 49 GPU tests, with five CPU tests deselected.
+It includes 20 new layout, address, and cache-write cases.
+Selected fixture, output, comparison, and provenance checks passed 35 CPU tests, with ten GPU tests deselected.
+All eight repository hooks passed.
+
+Another agent checked BF16 rounding, NeoX pairs, slot ranges, address division, and source reads before cache writes.
+A diagnostic showed that different destination addresses changed append bandwidth.
+The reference used less time before the address exchange. CUDA used less time after the address exchange.
+The append collector now verifies different caches first and uses the same cache for timing.
+The pinned reference, initial 147 case IDs, and three-round statistical gates stay the same.
+
+The service collection on `1bcf5d5` passed constraints, Chat/Responses lifecycles, the two OMP clients, and long-context prefix reuse.
+All owned workers and the service port were released. Semantic reviews record answer errors and citation limits in the external evidence.
+New full collections will use the committed CUDA update.
+
 ## Open work
 
 - Complete user review of the expanded tutorial and address specific teaching gaps.

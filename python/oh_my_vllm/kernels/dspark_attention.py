@@ -175,7 +175,7 @@ def _append_cuda(cache, key, value, slots):
         raise ValueError(
             "DSpark context append inputs must be contiguous on one CUDA device"
         )
-    compiled().append(key, value, cache, slots)
+    compiled().dspark_append(key, value, cache, slots)
 
 
 def _validate_attention(query, cache, tables, context_lengths, block_key, block_value):

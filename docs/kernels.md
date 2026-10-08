@@ -98,6 +98,21 @@ The original case IDs and eight pinned TileLang files stay unchanged.
 Independent references from FP64 PyTorch supply the numerical comparison.
 The new cases include BF16 hidden RMS rounding, head-128 YaRN Q/K preparation, context append, and seven-row draft attention.
 
+DSpark hidden RMS uses vector loads and packed BF16 multiplication.
+Each normalization and multiplication keeps its specified BF16 rounding.
+Q/K preparation keeps the two rotary halves in registers and calculates each sine/cosine pair one time.
+Small invocations use 64 threads for each head. Large invocations use one warp for each head.
+
+Context append uses 128-bit loads/stores for aligned tensors with disjoint storage.
+A capacity check selects 32-bit or 64-bit address division.
+The kernel checks the slot range before division.
+The kernel reads source data before it calculates the cache address.
+Other layouts use the CUDA `append` operation.
+
+Context append with the same K/V and slots writes the same bytes each time.
+For timing, the two operations use the same destination cache to remove cache-address differences.
+Numerical verification uses different caches before timing. The initial 147 cases keep their fixture contract.
+
 Each new case has the same full-output, cache-write, three-round, twenty-pair, and confidence-bound gates.
 Current-source supplemental operator performance acceptance results are not available.
 

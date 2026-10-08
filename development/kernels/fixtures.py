@@ -27,13 +27,21 @@ ENTRIES = {
 }
 
 
-def fixture(config, *, seed=784, observe=False):
+def fixture(config, *, seed=784, observe=False, shared_append_destination=False):
     """Share immutable inputs; allocate isolated mutable destination pools.
 
     Sources never alias written destinations, so warmup/capture/replay preserve
     identical effective inputs. Production-required snapshots stay in the call.
     A local CUDA generator makes construction reproducible for every caller.
+    DSpark append timing can share a cache because immutable K/V and slots
+    repeat the same writes. Numerical verification keeps independent caches.
     """
+    if shared_append_destination and (
+        observe or config["operation"] != "dspark_append"
+    ):
+        raise ValueError(
+            "shared append destinations are only for timing after output verification"
+        )
     generator = torch.Generator(device="cuda").manual_seed(seed)
     operation = config["operation"]
     module, entry = ENTRIES[operation]
@@ -78,7 +86,7 @@ def fixture(config, *, seed=784, observe=False):
         pool = torch.empty(
             (n + 1567) // 784, 2, 784, 8, 128, device="cuda", dtype=torch.bfloat16
         )
-        other = torch.empty_like(pool)
+        other = pool if shared_append_destination else torch.empty_like(pool)
         return package(
             lambda: reference(pool, key, value, slots),
             lambda: candidate(other, key, value, slots),
