@@ -84,6 +84,12 @@ Prepare 和 execute 回复回显 `rpc_id`; 丢弃迟到的已取消 prepare 回�
 调度器在 sequence 和 token 预算下先处理运行请求, 再处理等待请求.
 对齐 prefill 在 784-token 边界保存可复用 GDN checkpoint.
 32768-token prompt 分为 32144 和 624 token.
+
+成功分配至少一页的 prefill 片段后, 后续因对齐缩为一个 token 的 prefill 可以等到下一轮.
+仅在剩余预算无法到达下一个 checkpoint 或 prefill 终点时采用这一条件.
+纯 decode 轮次, 草稿验证, 可到达的 checkpoint 和最后尾部保持推进.
+配置 token 预算不足一页时也保持推进.
+
 所需逻辑容量无法容纳的请求会被拒绝.
 
 分配先移除过期对齐状态, 只读统计所需容量.
@@ -135,7 +141,8 @@ FP8 activation 使用逐行 128-value scale.
 启动入口在调用者 stream 上选择 PDL.
 至少 2048 行的宽 gate/up 矩阵使用八 tile swizzle, 改善 cache 局部性.
 至少 32144 行的 34816 by 5120 gate/up 矩阵在 two-SM 路径使用 swizzle 16.
-该路径使用五级流水与列主序激活和权重 scales.
+该路径使用 256 元素的 K tile, 三级流水与列主序激活和权重 scales.
+Scale 分组仍为 128 元素. K-major 布局参考保持 128 元素的 K tile 与五级流水.
 其他大型投影保持 K-major scales 与自动级数选择.
 
 在 624 到 2496 行范围内, 五种 one-SM 投影形状使用沿输出列维度含两个 block 的 CTA cluster.

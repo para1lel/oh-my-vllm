@@ -1,5 +1,13 @@
 # 验收证据索引
 
+[K tile 与调度诊断](../bench/evidence/2026-10-10-fp8-k-tile-scheduling-diagnosis.json) 适用于从 `9c336e9` 开始的 dirty-source 修改.
+四项受影响完整操作用例通过数值与速度检查. 二十项 GPU 投影检查和四十七项调度器测试通过.
+记录保留六项完整操作候选, 九组未采用候选, 每次启动十五项计数器和原始摘要.
+
+五组完整输出调度诊断在公平性修正前完成, 使用此前的调度器条件.
+一次 DSpark batch-2 尝试未通过外部进程保护. 当前源码的完整采集仍待执行.
+
+
 
 [Scale 与流水级数诊断](../bench/evidence/2026-10-10-fp8-scale-stage-diagnosis.json) 适用于 `8d7d18b` 后续的 dirty-source 修改.
 四项受影响完整操作用例通过数值与速度检查. 三十项 GPU 投影检查通过.

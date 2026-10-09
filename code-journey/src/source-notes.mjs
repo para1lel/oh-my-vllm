@@ -56,6 +56,7 @@ export const sourceNotes = {
       ["self.config", "调度器保存的配置.", "提供每轮 token 上限与同时运行的请求数量上限."],
       ["max_num_batched_tokens", "每轮所有请求的输入 token 总数上限.", "实验配置为 32768. 它限制一轮的计算量, 不限制整条请求的总长度."],
       ["token_budget", "这一轮还可派发的输入数量.", "从配置上限开始, 每派发一个片段就扣除片段长度."],
+      ["has_prefill_chunk", "本轮已成功分配至少一页 prefill 片段的标记.", "只有实际分配后才设为 true. decode 或草稿验证输入不会设置该标记, 只有这类输入的轮次让小片段继续推进."],
     ],
   },
   waiting: {
@@ -70,6 +71,7 @@ export const sourceNotes = {
       ["fa_hit / mb_hit / hit_len", "命中的 FA 页, GDN 快照, 以及两类缓存共同可用的前缀 token 数.", "从 hit_len 开始计算剩余历史. 缓存命中需要可恢复的模型状态, 才能跳过对应的输入."],
       ["total_tokens / remaining", "已确认历史加草稿的长度, 以及扣除命中前缀后的长度.", "num_tokens_with_spec() 将草稿也计入输入; remaining 是本次尚需安排的总量."],
       ["token_budget / to_schedule", "本轮剩余预算, 以及经过块边界调整后的输入数量.", "先取 remaining 与预算中的较小值, 再用 aligned_prefill 选定实际片段. 结果为 0 时结束本轮接纳."],
+      ["has_prefill_chunk / prefill_end", "本轮已分配整页 prefill 的标记, 以及需批量计算的历史终点.", "满足 defer_aligned_prefill 条件时将当前请求放回队首. 成功分配整页片段后才更新标记."],
     ],
   },
   aligned: {
@@ -86,6 +88,17 @@ export const sourceNotes = {
       ["next_boundary", "start 所在页之后的第一个页边界.", "起点在页中间时, 先安排到这个边界, 便于保存可恢复状态."],
       ["stop", "当前检查的候选边界.", "只有 start < stop < end 时才缩短片段. 边界等于 end 时保留现有长度."],
       ["end.saturating_sub(start)", "调整后的片段长度, 也是函数返回值.", "count 大于 0 时保证至少返回 1, 让较小预算或未对齐位置也能推进."],
+    ],
+  },
+  deferredPrefill: {
+    title: "何时延后对齐产生的单行 prefill", intro: "先选片段, 再决定是否在下一轮执行. 判断发生在缓存分配前, 因而等待请求此时不占 FA 页或 GDN 槽.",
+    entries: [
+      ["self / request", "调度器与当前请求.", "提供每轮预算上限, 页大小, 原始提示词和已确认历史."],
+      ["start / count", "输入片段的绝对起点与 aligned_prefill 返回的长度.", "count 为 1 时才可能延后, 草稿验证和 decode 仍按各自的历史区间推进."],
+      ["budget", "本轮尚可使用的输入行数.", "与剩余 prefill 长度和下一页边界比较, 判断本轮能否到达恢复点或结束提示词."],
+      ["has_prefill_chunk", "本轮已成功分配至少一页 prefill 的布尔标记.", "它为 true 时才考虑延后. 纯 decode, 草稿验证和此前的小片段都保留正输入推进."],
+      ["block / prefill_end", "每页 token 数与批量计算历史的终点.", "prefill_end 取 prompt_len 与已确认历史长度减 1 的较大值, 同时支持抢占重算."],
+      ["block - start % block", "从起点到下一页边界所需的 token 数.", "预算不足这段距离, 且本轮无法完成 prefill 时, 一行片段留到下一轮."],
     ],
   },
   output: {

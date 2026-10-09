@@ -65,7 +65,7 @@ Use [kernel development](kernels.md#analysis-and-profiling) for the command and 
 ## Large operator tuning
 
 Use effective model shapes before a tile search.
-Record elapsed time, DRAM and L2 throughput, L2 hit rate, register count, shared storage, occupancy, and warp stalls.
+Record elapsed time, DRAM and L2 throughput, L2 hit rate, register count, shared storage, occupancy, local-memory sectors, and warp stalls.
 Use HIR estimates to select a hypothesis. Verify it with CUDA Events and Nsight counters.
 An occupancy increase alone is not a latency result.
 
@@ -111,7 +111,7 @@ Its DRAM throughput was 46.34%, SM throughput was 74.66%, and occupancy was 57.8
 These counters came from a different profiler replay.
 Short-output model diagnosis after this fusion had a prefill median of about 1.39 s.
 
-K=256 GEMM tiles, smaller M tiles, and two-SM down projections did not show a stable paired gain.
+Paired time checks rejected previous K=256 candidates with K-major scales, smaller M tiles, and two-SM down projections.
 They are excluded from dispatch. Keep unsuccessful attempts in external evidence storage.
 N=256 tiles increased the large gate/up diagnostic time from about 6.72 to 19.39 ms.
 Dispatch does not use these tiles.
@@ -185,7 +185,8 @@ The [phase progress record](../bench/evidence/2026-10-10-phase-progress.json) ke
 
 ## Large gate/up scale and stage selection
 
-The current two-SM gate/up path uses five pipeline stages at M at least 32144, N 34816, and K 5120.
+The current two-SM gate/up path uses K256 tiles and three pipeline stages at M at least 32144, N 34816, and K 5120.
+The previous K128 path used five stages.
 Swizzle stays 16.
 
 A stage comparison kept this swizzle and changed seven automatic stages to five explicit stages.
@@ -213,7 +214,7 @@ Thirty GPU checks passed. These include changed input and scales, side-stream gr
 Four affected full-operation cases passed numerical and speed checks with the full operator timing protocol.
 These dirty-source diagnostics do not supply the full current-source 317-case or fifteen-row verdict.
 
-The current GEMM profile uses 168 registers and 160256 dynamic shared-memory bytes, with 11.72% occupancy.
+The previous K128 GEMM profiling run used 168 registers and 160256 dynamic shared-memory bytes, with 11.72% occupancy.
 Its L2 hit rate is 88.60%, and DRAM traffic is about 5.489 GB.
 The previous automatic seven-stage, swizzle-16 profile used 210432 dynamic shared-memory bytes and the same occupancy.
 
@@ -294,3 +295,56 @@ Wall spreads were about 0.294% and 0.695%.
 Prefix-hit ratios were about 3.699 and 3.027, with spreads about 12.598% and 1.070%.
 The batch-1 prefix group failed the two diagnostic gates. Keep that full group for investigation.
 All four groups used two full warmups and five measurements. Full 4096-output phase acceptance stays pending.
+
+## K tiles and local-memory traffic
+
+The [K-tile and scheduling diagnosis](../bench/evidence/2026-10-10-fp8-k-tile-scheduling-diagnosis.json) keeps candidate timing, source identities, counters, and original hashes.
+
+The large MN gate/up path uses K256 tiles and three stages. Its scale groups keep 128 elements.
+Each tile computes, scales, and adds two groups in the previous order.
+The K-major layout reference keeps K128 tiles and five stages.
+Other projections keep their previous configuration.
+
+The measurements compare full operations with residual RMS, FP8 quantization, scale packing, padding, and GEMM.
+Three rounds use twenty pairs and one hundred operations inside each timed graph.
+Each sample replays the graph once. Full outputs and residual sums stay bitwise equal.
+
+At 32144 and 32290 rows, mean time decreased by about 0.487 and 0.487 ms.
+The one-sided 95% lower bounds are about 0.480 and 0.478 ms.
+Two-stage candidates increased time at each shape. Three stages passed each round at each shape.
+
+The next counter values come from the prototype replay. That replay has no baseline loaded-library hash at measurement time.
+A different CUDA and pinned TileLang replay records the loaded CUDA libraries.
+
+A different Nsight replay keeps fifteen counters for each launch, with local-memory read and write sectors.
+Each GEMM uses 168 registers and 11.72% occupancy.
+Dynamic shared storage increases from 160256 to 185344 bytes.
+Local reads decrease from 39207168 to 1096704 sectors. Local writes decrease from 4983712 to 14208 sectors.
+
+DRAM traffic changes from 5501504256 to 5492587776 bytes.
+L2 hit rate changes from 88.57% to 88.06%.
+These observations identify local-memory traffic changes. Paired full-operation measurements supply the timing result.
+The canonical model keeps the same required rows, scale groups, and parameter ranges.
+
+A large-shape TileFoundry report uses 32144 rows, width 5120, and 34816 output columns.
+Its logical FP32 dequantization model has 11459845160960 matmul operations.
+The report counts logical intermediate arrays. It does not model native FP8 group accumulation, cache reuse, or CUDA placement.
+Its roofline estimates do not supply framework acceptance bounds.
+
+Smaller M64 tiles decreased registers and shared storage but kept about 11.8% observed occupancy and increased time.
+N256, different two-SM tiles, K-split reduction, and sequential or parallel KV splits also increased time.
+MN scale and stage candidates at 624 to 2496 rows keep their primitive scope.
+Scale packing and quantization are not in those measurements.
+
+## Aligned prefill and mixed requests
+
+After a successful prefill chunk of at least one block, a later rounded one-token prefill can wait for the next step.
+The checks compare the available budget with the checkpoint distance and `prefill_end - start`.
+The budget must be less than each distance.
+The checks run before cache allocation and keep queue order.
+
+Decode-only steps and speculative verification keep the positive-input fallback.
+Multi-step tests include new and continued prefill with ordinary decode and four or seven drafts.
+Reachable checkpoints and final tails keep progress.
+Configured token budgets less than one block also keep progress.
+The production token budget stays 32768 and block size stays 784.

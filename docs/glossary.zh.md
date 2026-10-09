@@ -172,6 +172,8 @@
 | `K-major scale` | 名词 | 相邻归约分块索引在存储中连续的 FP32 scale 布局. |
 | `CTA cluster` | 名词 | 一组共同执行并可使用硬件 multicast 的 CUDA thread block. |
 | `TMA multicast` | 名词 | Tensor Memory Accelerator 将一个输入 tile 传输到 CTA cluster 中每个 block 的共享内存. |
+| `register spill` | 名词 | 寄存器存储不足时, 将线程局部值存入 local memory 的行为. |
+| `sector` | 名词 | NVIDIA profiler 统计的 32 字节访存单位. |
 
 ## 维护
 

@@ -34,90 +34,58 @@ DSpark CUDA 内核保留规定的 BF16 舍入及长位置 YaRN 精度.
 设置 `OH_MY_VLLM_MODEL` 或 `--model`, DSpark 另用 `OH_MY_VLLM_DRAFT_MODEL` 或 `--draft-model`.
 命令见[开发指南](development.zh.md), 所有权及缓存契约见[架构](architecture.zh.md).
 
-## 性能实现进行中
+## 正在实施的性能工作
 
-采集器采用十五项固定负载, 记录各请求的提交, 首 token 和末 token 边界.
-Prefill 与 decode 独立检查墙钟时延和理论下界.
-模型计入参数流量, 共享执行资源和语义依赖.
+收集器使用十五项固定负载, 逐请求记录提交, 首 token 和末 token 边界.
+Prefill 与 decode 分别检查墙钟时延和理论下界.
+规范模型计入必要参数读取, 共享资源, 语义依赖, 有效 query, KV 区间, state 与草稿.
+独立数学审查和 fail-closed 操作检查通过. 当前源码的完整采集仍待执行.
 
-执行 trace 记录有效 query, KV 长度, 状态槽和草稿工作.
-GPU event 区间仅用于诊断.
-规范模型已完成独立数学审查, 并检查调度一致性, 缺失证据时拒绝验收.
-完整十五项采集待完成.
+执行使用 CUDA Graph, 多个 CUDA stream 和 PDL.
+GDN 准备汇合独立 gate 分支. 有界 prefill 图恢复 FA 和 GDN 写入.
+Allocator 拓扑复用使诊断 capture storage 从 29.13 降至 7.82 GB.
+Prefill capture 仅在至少有 32 GiB 空闲显存时开始. Replay 命中保持原路径.
 
-执行采用 CUDA Graph, 多个 CUDA stream 和 PDL.
-自有 group-scaled FP8 GEMM 保持 checkpoint FP32 scales, 控制 stream 与 launch.
-GDN 准备汇合独立 gate 分支. 有界 prefill graph 恢复 FA 与 GDN 写入.
-Allocator topology reuse 将诊断中的 prefill 捕获存储从 29.13 降至 7.82 GB.
+自有 FP8 GEMM 保持 checkpoint FP32 scales, 控制自身 stream 和启动.
+大型 MN gate/up 使用 K256 tile, 三级流水和 swizzle 16. K-major 布局参考保持 K128 tile 与五级流水.
+成对完整操作测量保持逐位输出.
+在 32144 和 32290 行时, 平均耗时均减少约 0.487 ms.
+[性能诊断指南](profiling.zh.md) 记录计数器, 已选配置和未采用的候选.
 
-大型 GEMM, 卷积, 量化与 gated RMS 调度使用已测量的候选.
-[性能诊断](profiling.zh.md) 记录选择, 计数器与被排除的候选.
-MLP gate/up 路径将残差 RMS 与 FP8 量化合并, 并使用之前的 GEMM. 至多 32 行使用之前的 CUDA 链.
-其二十项 GPU 检查通过, 包括旧链输出精确一致, 图输入变化和非法存储拒绝.
-扩展后的算子矩阵保留全部原有 230 项, 增加十六项融合投影与二十八项其余 FP8 投影用例.
+四项受影响完整操作用例通过数值与速度检查.
+[K tile 与调度诊断](../bench/evidence/2026-10-10-fp8-k-tile-scheduling-diagnosis.json) 保留源码身份, 每次启动十五项计数器, 实际加载库的摘要和原始摘要.
 
-GDN 值使用从 packed 行读取的向量复制. FP32 递归 batch 2 和 4 使用实测的 row/warp tile. 大型较窄 QKV/Z 与 down 投影分别使用 swizzle 16 和 8. 持久化 MTP 和目标最终 prefill 省去未使用的历史 attention 与 MLP 输出, 保留必需 KV, 目标边界特征和验证采样行. 独立 context 图恢复 capture, 并验证完整 replay 元数据. 规范模型计入相同的有效行, 不重叠的参数切片和绝对 MTP KV 范围.
+五种投影在 624 到 2496 行时使用两个 block 的 CTA cluster 与 TMA multicast.
+残差 RMS 和 GDN 输出在指定舍入点融合归一化与 FP8 量化.
+小型归一化投影保持原 CUDA 整链.
+GDN value 使用 packed 行的向量复制. FP32 递归 batch 2 和 4 使用实测选择的 row/warp tile.
 
-离线注册向 Python 共享输出预算. Proposer 为调度器的 bonus token 预留额度.
+持久化 MTP 和目标最终 prefill 移除未使用的历史 attention 与 MLP 输出.
+它们保留必要 KV, 边界特征和验证样本.
+不同 context graph 恢复 capture, 验证完整 replay metadata.
+规范计算保持实际行, 不相交参数片段和绝对 MTP KV 区间.
 
-当前完整 CPU collection 通过 748 项测试, 取消选择 430 项 GPU 测试, 通过 65 项 subtest.
-采集开始后才加入后续的 GPU twin 测试.
-后续共同尾部检查通过 52 项, 包括跨请求地址复用与边界前写入排除.
-要求的 Rust 测试, 格式, 行宽和 Clippy 检查通过.
-当前归一化投影 GPU 检查通过三十项. 教程检查通过十项节选测试与九项浏览器测试.
-选中输出和 GDN 复制检查保留此前标明的源码范围.
+仅在成功分配至少一页 prefill 后, 因对齐缩为一个 token 的 prefill 才会等待下一轮.
+纯 decode 轮次和草稿验证保持正输入推进.
+生产 token 预算仍为 32768. 四十七项调度器测试通过, 覆盖新 prefill, 连续 prefill, 四个/七个草稿和 checkpoint 推进.
 
-`c56ca40` 采集完成十五项阶段负载中的七项.
-七项 prefill 均未通过, 倍率约为 3.007 至 3.846, 波动均低于 10%.
-全部 301 项算子通过数值检查. 四项速度检查失败.
-同一 GPU 测试集通过 383 项. 九项容量测试因外部进程检查而失败.
-[验收](acceptance.zh.md) 记录这些源码限制和原始失败.
+源码 `9c336e9` 完成八项有效完整输出阶段负载.
+四项的两个阶段通过: 普通解码 batch 1, MTP4 batch 1 和 2, DSpark batch 1.
+普通解码 batch 2 和 4, MTP4 batch 4, DSpark batch 2 的 prefill 失败, decode 通过.
+另一次 MTP4 batch-2 尝试未通过缓存审计. 保留该次尝试及其原因.
 
-残差 RMS 在 128 至 2047 行使用 streaming store.
-GDN gates 在 128 至 4095 行使用 128 线程.
-至多 32 行的归一化投影使用之前的 CUDA 链.
-大型 two-SM gate/up 使用五级流水, swizzle 16 与列主序 scales.
-所选形状至少 32144 行, 34816 个输出列, 宽度为 5120.
-每次调用打包当前 checkpoint scales. 物理行容量按四行对齐, 清零至多三行尾部.
-理论工作保持有效行数, 排除 padding 与打包开销.
+后续 dirty-source 调度诊断在公平性修正前完成五组完整输出负载.
+DSpark batch 2 未通过外部进程保护. 这些尝试不提供当前源码验收.
+上述负载中所有任务所属 worker 已退出.
 
-三十项 GPU 检查通过, 包括侧流重放, scales 变化, 以及错误布局和 pitch 拒绝.
-四项受影响完整操作用例按完整的单项计时协议通过数值与速度检查.
-[Scale 与流水级数诊断](../bench/evidence/2026-10-10-fp8-scale-stage-diagnosis.json) 保留成对候选, 硬件计数器与原始哈希.
+当前 CPU 采集通过 748 项测试, 未选择 435 项 GPU 测试, 另有 65 项 subtest 通过.
+二十项 GPU 投影检查通过, 覆盖 graph 输入和原始 scales 的修改, 布局一致性与存储检查.
+Rust workspace 测试, 格式, 行宽, Clippy, Ruff 和文档检查通过.
+教程通过十项节选测试和九项浏览器测试.
 
-短输出诊断中, 普通 batch 1 和 4 的 prefill 倍率约为 2.947 和 3.035.
-前缀命中倍率约为 3.873 和 3.145. 这些诊断使用十六个输出 token.
-完整阶段验收保持 4096 个输出, 仍待完成.
-
-五种中等行数 one-SM 投影在 624 到 2496 行使用包含两个 block 的 CTA cluster.
-TMA multicast 保持算术和理论计算量不变.
-十五项受影响完整操作用例和十八项 GPU 重放/布局检查通过.
-随后八项测试增加了激活 scale 不变检查.
-
-[cluster 诊断](../bench/evidence/2026-10-10-fp8-cluster-diagnosis.json) 对三十五项完整操作进行比较. 它保留从另一轮重放采集的硬件计数器.
-十六输出 token 的前缀命中 prefill 下界比值在 batch 1 和 4 约为 3.657 和 3.044.
-完整的当前源码阶段, 算子, 容量和服务集合仍待执行.
-
-Prefill capture 现在要求 32 GiB 空闲显存. Replay 命中保持既有路径.
-使用该保护时, 三项 dirty-source DSpark 容量检查在 batch 1, 2, 4 完成输入 258048 和输出 4096.
-它们没有重算抢占或 OOM. 其源码早于最新的小行数与 swizzle 修改.
-当前完整阶段, 算子, 九项容量和服务采集仍待完成.
-
-[验收索引](acceptance.zh.md) 保留算子, 边界, 成对比较和服务测量, 并标明源码范围.
-317 项算子用例和九项 262144-token 边界用例继续有效.
-完整服务验证继续有效.
-
-四十八项受影响算子用例按完整逐项协议通过数值与速度检查.
-
-GDN 输出在之前的 GEMM 前融合 gated RMS 与 FP8 量化.
-Kernel 保持 BF16 舍入和 packed 输入 stride. 新增十六项完整操作用例全部通过数值, 调度与速度检查.
-二十项 GPU 检查通过. 三项 CPU twin 检查与一项 GPU twin 检查通过.
-之前的 301 项用例对象与父版本源码保持相同.
-
-[门控投影诊断](../bench/evidence/2026-10-10-gated-projection-diagnosis.json) 保留候选计时, 硬件计数器与原始哈希.
-十六输出的普通 prefill 在 batch 1 和 4 时, 倍率约为 2.897 和 2.984.
-前缀命中倍率约为 3.699 和 3.027. 前缀 batch-1 波动约为 12.598%, 因此该完整诊断组未通过两个门槛.
-当前源码的完整阶段, 算子, 容量与服务采集仍待完成.
+317 项算子, 十五项阶段负载, 九项容量负载和完整服务检查继续有效.
+此前 dirty-source DSpark 容量结果无 OOM 或重算抢占, 但早于后续 kernel 修改.
+[验收](acceptance.zh.md) 记录源码范围和原始尝试. 当前源码容量与服务采集仍待执行.
 
 ## 文档与证据
 

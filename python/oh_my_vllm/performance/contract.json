@@ -45,7 +45,7 @@
     "kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
     "kernels/cuda_backend/__init__.py": "0d5604eb96f763a219b6b640245dfd734f566be5ac6d5c956224e920a74f67fe",
     "kernels/cuda_backend/groupwise.py": "aacfabfe02aa45bd4bd6b8658a61763da20ad38b0ded57ac4a1ac89a0fb4806f",
-    "kernels/cuda_backend/groupwise_fp8.cu": "398c01d23c2e3303c752c71b84670c79cd541bf269d25951c652977410aa8264",
+    "kernels/cuda_backend/groupwise_fp8.cu": "8d6eb849f96c59d2e0c91e1cb3e703fa2b60b9cf663db2f4eacbd1f2ab3413ec",
     "kernels/cuda_backend/kernels.cu": "a5afb4e6f72a1f5cd61c02d7593156e9566f68fb9a7d9cc6bf730d797df9cfbd",
     "kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
     "kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",

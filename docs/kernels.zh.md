@@ -172,6 +172,7 @@ HIR arithmetic, memory 和 roofline 输出是估算.
 Observation 工具通过 Nsight Compute 分别 profile 完整后端操作.
 Warmup 和 JIT 位于 NVTX range 外.
 缺失或非有限 requested counter 会使 observation 失败.
+所需 counter 包括 local-memory 读取和写入的 sector 数, 用于识别寄存器 spill 流量.
 报告分别标识估算, counter, resource 和源码身份.
 不提供验收计时样本.
 

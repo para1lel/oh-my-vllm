@@ -179,6 +179,7 @@ The analysis topology is not the device placement.
 The observation tool profiles full backend operations independently with Nsight Compute.
 The NVTX range does not include warmup or JIT.
 Missing or nonfinite requested counters fail the observation run.
+The requested counters include local-memory read and write sectors to identify register-spill traffic.
 
 The report labels estimates, counters, resources, and source identity independently.
 It supplies no acceptance timing samples.

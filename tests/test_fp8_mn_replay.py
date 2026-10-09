@@ -22,7 +22,7 @@ def replay_stream():
         torch.cuda.synchronize()
 
 
-@pytest.mark.parametrize("rows", [32145, 32290])
+@pytest.mark.parametrize("rows", [32144, 32145, 32290, 32768])
 @pytest.mark.parametrize("pdl", [False, True])
 def test_graph_reads_changed_original_scales_and_inputs(
     rows, pdl, replay_stream, monkeypatch

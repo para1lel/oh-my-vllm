@@ -1085,6 +1085,267 @@ fn aligned_prefill_never_stalls_unaligned_start() {
     );
 }
 
+#[test]
+fn production_prefill_defers_unaligned_admission_without_allocating_slots() {
+    let config = SchedulerConfig {
+        max_num_batched_tokens: 32768,
+        max_num_seqs: 4,
+        enable_mtp: false,
+        mtp_draft_len: 0,
+    };
+    let kv = HybridCoordinator::new(500, 784, false, 0).with_mamba_capacity(16);
+    let mut scheduler = Scheduler::new(config, kv);
+    for id in 1..=4 {
+        assert!(scheduler.add_request(make_req(id, 32768, 1)));
+    }
+    let first = scheduler.schedule();
+    assert_eq!(first.scheduled.len(), 1);
+    assert_eq!(first.num_batched_tokens, 32144);
+    assert_eq!(scheduler.waiting.len(), 3);
+    for id in 2..=4 {
+        assert!(scheduler.kv.full_attn_blocks(id).is_empty());
+        assert!(scheduler.kv.mamba_blocks(id).is_empty());
+    }
+    apply(
+        &mut scheduler,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                request_id: 1,
+                token_ids: Vec::new(),
+                num_accepted_draft_tokens: 0,
+                new_draft_token_ids: Vec::new(),
+            }],
+        },
+    );
+    let second = scheduler.schedule();
+    assert_eq!(second.num_batched_tokens, 32768);
+    assert_eq!(
+        second
+            .scheduled
+            .iter()
+            .map(|request| (request.request_id, request.token_ids.len()))
+            .collect::<Vec<_>>(),
+        vec![(1, 624), (2, 32144)]
+    );
+}
+
+#[test]
+fn continued_prefill_uses_next_step_when_alignment_consumes_the_remainder() {
+    let mut scheduler = make_scheduler(64, 6);
+    assert!(scheduler.add_request(make_req(1, 8, 1)));
+    assert!(scheduler.add_request(make_req(2, 16, 1)));
+    scheduler.running = std::mem::take(&mut scheduler.waiting);
+    for request in &mut scheduler.running {
+        request.status = crate::RequestStatus::Running;
+    }
+    for final_chunk in [false, true] {
+        let step = scheduler.schedule();
+        assert_eq!(step.scheduled.len(), 1);
+        assert_eq!(step.scheduled[0].request_id, 1);
+        assert_eq!(step.num_batched_tokens, 4);
+        assert!(scheduler.kv.full_attn_blocks(2).is_empty());
+        apply(
+            &mut scheduler,
+            WorkerOutput {
+                outputs: vec![RequestOutput {
+                    request_id: 1,
+                    token_ids: if final_chunk {
+                        vec![42]
+                    } else {
+                        Vec::new()
+                    },
+                    num_accepted_draft_tokens: 0,
+                    new_draft_token_ids: Vec::new(),
+                }],
+            },
+        );
+    }
+    let next = scheduler.schedule();
+    assert_eq!(next.scheduled.len(), 1);
+    assert_eq!(next.scheduled[0].request_id, 2);
+    assert_eq!(next.scheduled[0].num_computed_tokens, 0);
+    assert_eq!(next.num_batched_tokens, 4);
+}
+
+#[test]
+fn one_token_checkpoint_and_final_tail_keep_their_schedule() {
+    let scheduler = make_scheduler(64, 8);
+    let request = make_req(1, 16, 1);
+    assert!(!scheduler.defer_aligned_prefill(&request, 3, 1, 1, true));
+    assert!(!scheduler.defer_aligned_prefill(&request, 15, 1, 1, true));
+    assert!(!scheduler.defer_aligned_prefill(&request, 16, 1, 1, true));
+    assert!(!scheduler.defer_aligned_prefill(&request, 0, 1, 1, false));
+}
+
+#[test]
+fn sub_block_budget_keeps_concurrent_prefill_progress() {
+    let mut scheduler = make_scheduler(64, 3);
+    assert!(scheduler.add_request(make_req(1, 2, 1)));
+    assert!(scheduler.add_request(make_req(2, 16, 1)));
+    let step = scheduler.schedule();
+    assert_eq!(step.num_batched_tokens, 3);
+    assert_eq!(
+        step.scheduled
+            .iter()
+            .map(|request| request.token_ids.len())
+            .collect::<Vec<_>>(),
+        vec![2, 1]
+    );
+}
+
+#[test]
+fn decode_steps_keep_new_prefill_progress_before_decode_finishes() {
+    let mut scheduler = make_scheduler(128, 4);
+    assert!(scheduler.add_request(make_req(1, 4, 64)));
+    assert_eq!(scheduler.schedule().num_batched_tokens, 4);
+    apply(
+        &mut scheduler,
+        WorkerOutput {
+            outputs: vec![dummy_output(1)],
+        },
+    );
+    let mut prefill = make_req(2, 32, 1);
+    for token in &mut prefill.token_ids {
+        *token += 1000;
+    }
+    assert!(scheduler.add_request(prefill));
+    for (computed, count) in [(0, 1), (1, 3), (4, 1), (5, 3), (8, 1), (9, 3)] {
+        let step = scheduler.schedule();
+        assert_eq!(step.scheduled.len(), 2);
+        assert_eq!(step.scheduled[0].request_id, 1);
+        assert_eq!(step.scheduled[0].token_ids.len(), 1);
+        assert_eq!(step.scheduled[1].request_id, 2);
+        assert_eq!(step.scheduled[1].num_computed_tokens, computed);
+        assert_eq!(step.scheduled[1].token_ids.len(), count);
+        assert!(step.preempted_request_ids.is_empty());
+        apply(
+            &mut scheduler,
+            WorkerOutput {
+                outputs: vec![
+                    dummy_output(1),
+                    RequestOutput {
+                        request_id: 2,
+                        token_ids: Vec::new(),
+                        num_accepted_draft_tokens: 0,
+                        new_draft_token_ids: Vec::new(),
+                    },
+                ],
+            },
+        );
+    }
+    assert_eq!(scheduler.running.len(), 2);
+}
+
+#[test]
+fn decode_steps_keep_continued_prefill_progress() {
+    let mut scheduler = make_scheduler(128, 8);
+    assert!(scheduler.add_request(make_req(1, 4, 64)));
+    let mut prefill = make_req(2, 32, 1);
+    for token in &mut prefill.token_ids {
+        *token += 1000;
+    }
+    assert!(scheduler.add_request(prefill));
+    assert_eq!(scheduler.schedule().num_batched_tokens, 8);
+    apply(
+        &mut scheduler,
+        WorkerOutput {
+            outputs: vec![
+                dummy_output(1),
+                RequestOutput {
+                    request_id: 2,
+                    token_ids: Vec::new(),
+                    num_accepted_draft_tokens: 0,
+                    new_draft_token_ids: Vec::new(),
+                },
+            ],
+        },
+    );
+    scheduler.config.max_num_batched_tokens = 4;
+    for (computed, count) in [(4, 1), (5, 3), (8, 1), (9, 3), (12, 1), (13, 3)] {
+        let step = scheduler.schedule();
+        assert_eq!(step.scheduled.len(), 2);
+        assert_eq!(step.scheduled[0].token_ids.len(), 1);
+        assert_eq!(step.scheduled[1].request_id, 2);
+        assert_eq!(step.scheduled[1].num_computed_tokens, computed);
+        assert_eq!(step.scheduled[1].token_ids.len(), count);
+        assert!(step.preempted_request_ids.is_empty());
+        apply(
+            &mut scheduler,
+            WorkerOutput {
+                outputs: vec![
+                    dummy_output(1),
+                    RequestOutput {
+                        request_id: 2,
+                        token_ids: Vec::new(),
+                        num_accepted_draft_tokens: 0,
+                        new_draft_token_ids: Vec::new(),
+                    },
+                ],
+            },
+        );
+    }
+}
+
+#[test]
+fn speculative_verification_keeps_new_prefill_progress() {
+    for draft_count in [4, 7] {
+        let mut kv = make_coord(128);
+        kv.set_speculative_blocks(draft_count);
+        let mut scheduler = Scheduler::new(
+            SchedulerConfig {
+                max_num_batched_tokens: draft_count + 4,
+                max_num_seqs: 4,
+                enable_mtp: true,
+                mtp_draft_len: draft_count,
+            },
+            kv,
+        );
+        assert!(scheduler.add_request(make_req(1, 4, 64)));
+        scheduler.schedule();
+        let decode_output = || RequestOutput {
+            request_id: 1,
+            token_ids: vec![42],
+            num_accepted_draft_tokens: 0,
+            new_draft_token_ids: vec![10; draft_count],
+        };
+        apply(
+            &mut scheduler,
+            WorkerOutput {
+                outputs: vec![decode_output()],
+            },
+        );
+        let mut prefill = make_req(2, 32, 1);
+        for token in &mut prefill.token_ids {
+            *token += 1000;
+        }
+        assert!(scheduler.add_request(prefill));
+        for (computed, count) in [(0, 1), (1, 3), (4, 1)] {
+            let step = scheduler.schedule();
+            assert_eq!(step.scheduled.len(), 2);
+            assert_eq!(step.scheduled[0].request_id, 1);
+            assert_eq!(step.scheduled[0].token_ids.len(), draft_count + 1);
+            assert_eq!(step.scheduled[1].request_id, 2);
+            assert_eq!(step.scheduled[1].num_computed_tokens, computed);
+            assert_eq!(step.scheduled[1].token_ids.len(), count);
+            assert!(step.preempted_request_ids.is_empty());
+            apply(
+                &mut scheduler,
+                WorkerOutput {
+                    outputs: vec![
+                        decode_output(),
+                        RequestOutput {
+                            request_id: 2,
+                            token_ids: Vec::new(),
+                            num_accepted_draft_tokens: 0,
+                            new_draft_token_ids: Vec::new(),
+                        },
+                    ],
+                },
+            );
+        }
+    }
+}
+
 // ── SCH-04: over-capacity requests are rejected at admission ─────────────────
 
 #[test]

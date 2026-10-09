@@ -1735,6 +1735,29 @@
       "forms": [
         "TMA multicast"
       ]
+    },
+    {
+      "term": "register spill",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Storage of thread-local values in local memory when register storage is not sufficient.",
+      "translation": "寄存器存储不足时, 将线程局部值存入 local memory 的行为.",
+      "forms": [
+        "register spill",
+        "register spills",
+        "register-spill"
+      ]
+    },
+    {
+      "term": "sector",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "A 32-byte memory-access unit counted by the NVIDIA profiler.",
+      "translation": "NVIDIA profiler 统计的 32 字节访存单位.",
+      "forms": [
+        "sector",
+        "sectors"
+      ]
     }
   ]
 }

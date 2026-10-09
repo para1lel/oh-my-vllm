@@ -90,6 +90,8 @@ METRICS = (
     "dram__bytes.sum",
     "lts__throughput.avg.pct_of_peak_sustained_elapsed",
     "lts__t_sector_hit_rate.pct",
+    "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum",
+    "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum",
     "sm__warps_active.avg.pct_of_peak_sustained_active",
     "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum",
     "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",

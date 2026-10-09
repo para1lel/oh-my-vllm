@@ -37,101 +37,55 @@ Use [development](development.md) for commands and [architecture](architecture.m
 ## Performance implementation in progress
 
 The collector uses fifteen fixed workloads and per-request submission, first-token, and last-token boundaries.
-Prefill and decode have separate wall-time and theoretical-bound checks.
-The model counts parameter traffic, shared execution resources, and semantic dependencies.
-
-The execution trace records effective queries, KV lengths, state slots, and draft work.
-GPU event intervals stay diagnostic.
-The canonical model has mathematical review by another agent and fail-closed schedule checks.
-The full fifteen-row collection is pending.
+Prefill and decode have different wall-time and theoretical-bound checks.
+The canonical model counts required parameter traffic, shared resources, semantic dependencies, effective queries, KV ranges, states, and drafts.
+Independent mathematical review and fail-closed operation checks passed. The full current-source collection stays pending.
 
 Execution uses CUDA Graph, multiple CUDA streams, and PDL.
-Owned group-scaled FP8 GEMM keeps checkpoint FP32 scales and controls its stream and launch.
-GDN preparation joins a separate gate branch. Bounded prefill graphs restore FA and GDN writes.
-Allocator topology reuse decreases diagnostic prefill capture storage from 29.13 to 7.82 GB.
+GDN preparation joins a different gate branch. Bounded prefill graphs restore FA and GDN writes.
+Allocator topology reuse decreases diagnostic capture storage from 29.13 to 7.82 GB.
+Prefill capture can start only with at least 32 GiB of free GPU memory. Replay hits keep their previous path.
 
-Large GEMM, convolution, quantization, and gated RMS dispatch use measured candidates.
-[Profiling](profiling.md) records choices, counters, and rejected candidates.
-The MLP gate/up path uses one operation for residual RMS and FP8 quantization, with the previous GEMM. At most 32 rows use the previous CUDA chain.
-Its twenty GPU checks passed, with outputs equal to the previous chain, changed graph inputs, and rejected storage.
-The extended operator matrix keeps all 230 previous cases and adds sixteen fused and twenty-eight other FP8 projection cases.
+Owned FP8 GEMM keeps checkpoint FP32 scales and controls its stream and launch.
+Large MN gate/up uses K256 tiles, three stages, and swizzle 16. The K-major layout reference keeps K128 tiles and five stages.
+Paired full-operation measurements kept outputs bitwise equal.
+Mean time decreased by about 0.487 ms at 32144 and 32290 rows.
+The [profiling guide](profiling.md) records counters, selected configurations, and rejected candidates.
 
-GDN values use a vector copy from packed rows.
-FP32 recurrent batches 2 and 4 use measured row/warp tiles.
-Large narrow QKV/Z projections use swizzle 16.
-Large down projections use swizzle 8.
+Four affected full-operation cases passed numerical and speed checks.
+The [K-tile and scheduling diagnosis](../bench/evidence/2026-10-10-fp8-k-tile-scheduling-diagnosis.json) keeps source identities, fifteen counters per launch, loaded-library hashes, and original hashes.
+
+Five projections at 624 to 2496 rows use two-block CTA clusters and TMA multicast.
+Residual RMS and GDN output fuse normalization with FP8 quantization at their specified rounding points.
+Small normalized projections keep the previous CUDA chain.
+GDN values use a vector copy from packed rows. FP32 recurrent batches 2 and 4 use measured row/warp tiles.
 
 Persistent MTP and final target prefill remove unused historical attention and MLP output.
-They keep required KV, target boundary features, and verification samples.
-Different context graphs restore captures and validate complete replay metadata.
+They keep required KV, boundary features, and verification samples.
+Different context graphs restore captures and validate full replay metadata.
+Canonical work keeps logical rows, disjoint parameter slices, and absolute MTP KV ranges.
 
-The canonical model counts the same required rows, disjoint parameter slices, and absolute MTP KV ranges.
+A rounded one-token prefill can wait only after a successful prefill chunk of at least one block.
+Decode-only steps and speculative verification keep positive-input progress.
+The production token budget stays 32768. Forty-seven scheduler tests passed, with new and continued prefill, four/seven drafts, and checkpoint progress.
 
-Offline registration shares the output budget with Python. Proposers reserve the scheduler's bonus token.
+Source `9c336e9` completed eight valid full-output phase rows.
+Four passed the two phases: ordinary batch 1, MTP4 batches 1 and 2, and DSpark batch 1.
+Ordinary batches 2 and 4, MTP4 batch 4, and DSpark batch 2 failed prefill and passed decode.
+A different MTP4 batch-2 attempt failed the cache audit. Keep that attempt and its reason.
 
-The current full CPU collection passed 748 tests, with 430 GPU tests deselected and 65 subtests passed.
-Collection started before the subsequent GPU twin test was added.
-Subsequent common-tail checks passed 52 tests. These include cross-request address reuse and pre-boundary write exclusion.
+Subsequent dirty-source scheduling diagnosis completed five full-output groups before the fairness correction.
+DSpark batch 2 failed its external-process guard. These attempts do not supply current-source acceptance.
+All task-owned workers from those groups exited.
 
-Required Rust tests, format, line width, and Clippy checks passed.
-The current normalized-projection GPU checks passed thirty tests. Tutorial checks passed ten excerpt tests and nine browser tests.
-Selected-output and GDN copy checks keep their stated previous source scope.
+The current CPU collection passed 748 tests, with 435 GPU tests deselected and 65 subtests passed.
+Twenty GPU projection checks passed, with changed graph inputs and original scales, layout equivalence, and storage checks.
+Rust workspace tests, format, line width, Clippy, Ruff, and document checks passed.
+Tutorial checks passed ten excerpt tests and nine browser tests.
 
-The `c56ca40` collection completed seven of fifteen phase rows.
-All seven failed prefill, with ratios from about 3.007 to 3.846 and spreads less than 10%.
-
-All 301 operator cases passed numerical checks. Four failed speed checks.
-The same GPU suite passed 383 tests. Nine capacity tests failed external-process guards.
-
-[Acceptance](acceptance.md) records these source limits and original failures.
-
-Residual RMS uses streaming stores at 128 to 2047 rows.
-GDN gates use 128 threads at 128 to 4095 rows.
-At most 32 normalized-projection rows use the previous CUDA chain.
-
-Large two-SM gate/up uses five pipeline stages, swizzle 16, and column-major scales.
-The selected shape has at least 32144 rows, 34816 output columns, and width 5120.
-Each call packs current checkpoint scales. Physical row capacity has four-row alignment, with at most three cleared tail rows.
-Theoretical work keeps logical rows and excludes padding and packing overhead.
-
-Thirty GPU checks passed, with side-stream replay, changed scales, and rejected layouts and pitches.
-Four affected full-operation cases passed numerical and speed checks with the full per-case timing protocol.
-The [scale and stage diagnosis](../bench/evidence/2026-10-10-fp8-scale-stage-diagnosis.json) keeps paired candidates, hardware counters, and original hashes.
-
-Short-output diagnosis has prefill ratios of about 2.947 and 3.035 for ordinary batches 1 and 4.
-Prefix-hit ratios are about 3.873 and 3.145. These diagnostics keep sixteen output tokens.
-Full phase acceptance keeps 4096 outputs and stays pending.
-
-Five one-SM projections use two-block CTA clusters at 624 to 2496 rows.
-TMA multicast keeps the same arithmetic and theoretical work.
-Fifteen affected full-operation cases and eighteen GPU replay/layout checks passed.
-A subsequent eight-test collection checked that activation scales stay the same.
-
-The [cluster diagnosis](../bench/evidence/2026-10-10-fp8-cluster-diagnosis.json) compares thirty-five full operations. It keeps hardware counters from a different replay.
-Sixteen-output prefix-hit prefill ratios are about 3.657 and 3.044 at batches 1 and 4.
-Full current-source phase, operator, capacity, and service collections stay pending.
-
-Prefill capture now has a 32 GiB free-memory guard. Replay hits keep their existing path.
-With this guard, three dirty-source DSpark capacity checks completed input 258048 and output 4096 at batches 1, 2, and 4.
-
-They had zero recompute preemptions and no OOM. Their source is from before the subsequent small-row and swizzle changes.
-The current full phase, operator, nine-case capacity, and service collections stay pending.
-
-The [acceptance index](acceptance.md) keeps operator, boundary, paired, and service measurements with their source scope.
-The 317 operator cases and nine 262144-token boundary cases stay active.
-Complete service verification stays active.
-
-Forty-eight affected operator cases passed numerical and speed checks with the full per-case protocol.
-
-GDN output now fuses gated RMS and FP8 quantization before the previous GEMM.
-The kernel keeps BF16 rounding and packed input strides. All sixteen added full-operation cases passed numerical, dispatch, and speed checks.
-Twenty GPU checks passed. Three CPU twin checks and one GPU twin check passed.
-The previous 301 case objects stay equal to their parent source.
-
-The [gated projection diagnosis](../bench/evidence/2026-10-10-gated-projection-diagnosis.json) keeps candidate timing, hardware counters, and original hashes.
-Sixteen-output ordinary prefill ratios are about 2.897 and 2.984 at batches 1 and 4.
-Prefix-hit ratios are about 3.699 and 3.027. Batch-1 prefix spread is about 12.598%, so that full diagnostic group failed the two gates.
-Full current-source phase, operator, capacity, and service collections stay pending.
+The 317 operator cases, fifteen phase rows, nine capacity cases, and full service checks stay active.
+Previous dirty-source DSpark capacity results have no OOM or recompute preemption, but precede subsequent kernel changes.
+[Acceptance](acceptance.md) records source limits and original attempts. Current-source capacity and service collections stay pending.
 
 ## Documents and evidence
 

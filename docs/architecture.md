@@ -86,6 +86,12 @@ See the Rust and Python protocol definitions for wire names and defaults.
 The scheduler handles running requests before waiting requests with sequence and token budgets.
 Aligned prefill materializes reusable GDN checkpoints at 784-token boundaries.
 A 32768-token prompt splits into 32144 and 624 tokens.
+
+After a successful prefill allocation of at least one block, a later rounded one-token prefill can wait for the next step.
+This applies only when the available budget cannot reach the next checkpoint or the prefill end.
+Decode-only steps, speculative verification, reachable checkpoints, and final tails keep forward progress.
+Configured token budgets less than one block also keep progress.
+
 The scheduler rejects requests that cannot fit their required logical capacity.
 
 Allocation first removes obsolete aligned state and counts required capacity with read-only pool access.
@@ -140,7 +146,8 @@ The launcher selects PDL on the caller stream.
 
 Wide gate/up matrices with at least 2048 rows use an eight-tile swizzle for cache locality.
 At least 32144 rows use swizzle 16 for the two-SM, 34816 by 5120 gate/up matrix.
-This path uses five pipeline stages and column-major activation and weight scales.
+This path uses K tiles of 256 elements, three pipeline stages, and column-major activation and weight scales.
+Scale groups keep 128 elements. The K-major layout reference keeps K tiles of 128 elements and five stages.
 Other large projections keep K-major scales and automatic stage selection.
 
 At 624 to 2496 rows, five one-SM projection shapes use a CTA cluster with two blocks along the output-column dimension.

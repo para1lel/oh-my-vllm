@@ -1,5 +1,13 @@
 # Acceptance evidence index
 
+The [K-tile and scheduling diagnosis](../bench/evidence/2026-10-10-fp8-k-tile-scheduling-diagnosis.json) applies to dirty-source changes from `9c336e9`.
+Four affected full-operation cases passed numerical and speed checks. Twenty GPU projection checks and forty-seven scheduler tests passed.
+The record keeps six full-operation candidates, nine rejected candidate groups, fifteen counters per launch, and original hashes.
+
+Five full-output scheduling diagnostic groups completed before the fairness correction, with the previous scheduler condition.
+A DSpark batch-2 attempt failed its external-process guard. The full current-source collections stay pending.
+
+
 
 The [scale and stage diagnosis](../bench/evidence/2026-10-10-fp8-scale-stage-diagnosis.json) applies to subsequent dirty-source changes from `8d7d18b`.
 Four affected full-operation cases passed numerical and speed checks. Thirty GPU projection checks passed.

@@ -124,6 +124,32 @@ impl Scheduler {
             0
         })
     }
+
+    /// Defer a rounded one-token prefill after a block-sized prefill chunk.
+    ///
+    /// A later step can reach the next aligned checkpoint without adding a
+    /// one-token sequence to a large GPU batch. Keep single-token decode,
+    /// final prompt tails, reachable checkpoints, and sub-block configurations.
+    /// Decode-only and speculative steps keep the progress fallback.
+    fn defer_aligned_prefill(
+        &self,
+        request: &Request,
+        start: usize,
+        count: usize,
+        budget: usize,
+        has_prefill_chunk: bool,
+    ) -> bool {
+        let block = self.kv.block_size();
+        let prefill_end = request
+            .prompt_len
+            .max(request.token_ids.len().saturating_sub(1));
+        has_prefill_chunk
+            && count == 1
+            && self.config.max_num_batched_tokens >= block
+            && prefill_end.saturating_sub(start) > budget
+            && budget < block - start % block
+    }
+
     pub fn new(config: SchedulerConfig, kv: HybridCoordinator) -> Self {
         Self {
             config,
@@ -242,6 +268,7 @@ impl Scheduler {
             ..Default::default()
         };
         let mut token_budget = self.config.max_num_batched_tokens;
+        let mut has_prefill_chunk = false;
 
         // ── phase 1: running requests (decode / continued prefill) ────────────
         //
@@ -259,7 +286,15 @@ impl Scheduler {
                 req.num_computed_tokens,
                 tokens_needed.min(token_budget),
             );
-            if to_schedule == 0 {
+            if to_schedule == 0
+                || self.defer_aligned_prefill(
+                    &req,
+                    req.num_computed_tokens,
+                    to_schedule,
+                    token_budget,
+                    has_prefill_chunk,
+                )
+            {
                 still_running.push_back(req);
                 continue;
             }
@@ -287,6 +322,9 @@ impl Scheduler {
 
             match alloc {
                 Some(_) => {
+                    let prefill_end = req.prompt_len.max(req.token_ids.len().saturating_sub(1));
+                    has_prefill_chunk |= req.num_computed_tokens < prefill_end
+                        && to_schedule >= self.kv.block_size();
                     let fa_table = self.kv.full_attn_blocks(req.id).to_vec();
                     let mb_table = self.kv.mamba_blocks(req.id).to_vec();
                     // Combine confirmed + draft tokens so the worker receives the full
@@ -337,7 +375,15 @@ impl Scheduler {
             let total_tokens = req.num_tokens_with_spec();
             let remaining = total_tokens - hit_len;
             let to_schedule = self.aligned_prefill(&req, hit_len, remaining.min(token_budget));
-            if to_schedule == 0 {
+            if to_schedule == 0
+                || self.defer_aligned_prefill(
+                    &req,
+                    hit_len,
+                    to_schedule,
+                    token_budget,
+                    has_prefill_chunk,
+                )
+            {
                 self.waiting.push_front(req);
                 break;
             }
@@ -354,6 +400,9 @@ impl Scheduler {
 
             match alloc {
                 Some(_) => {
+                    let prefill_end = req.prompt_len.max(req.token_ids.len().saturating_sub(1));
+                    has_prefill_chunk |=
+                        hit_len < prefill_end && to_schedule >= self.kv.block_size();
                     // Build the block table: hit blocks (from add_local_computed_blocks,
                     // which registered them inside allocate_slots) plus new blocks.
                     // The coordinator tracks per-request blocks internally; expose them.

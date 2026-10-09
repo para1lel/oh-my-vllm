@@ -172,6 +172,8 @@ Proper product names, source identifiers, and protocol text keep their initial f
 | `K-major scale` | noun | FP32 scale layout with adjacent reduction-block indices contiguous in storage. |
 | `CTA cluster` | noun | Group of CUDA thread blocks that run together and can use hardware multicast. |
 | `TMA multicast` | noun | Tensor Memory Accelerator transfer of one input tile to shared memory in each block of a CTA cluster. |
+| `register spill` | noun | Storage of thread-local values in local memory when register storage is not sufficient. |
+| `sector` | noun | A 32-byte memory-access unit counted by the NVIDIA profiler. |
 
 ## Maintenance
 
