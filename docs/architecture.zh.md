@@ -242,8 +242,8 @@ DSpark proposal graph 使用独立的 16 条目 cache 和 pool.
 至多 32 row 的 DSpark context injection 使用独立 pool 和 32 条目 cache.
 预热和 capture 备份目标 KV slot, 在 `finally` 恢复; replay 提交当前输入.
 更大的 context injection 使用编译单元, 不进行手动 capture.
-单独运行的 MTP draft / proposal 共享 32 条目, 下限分别为 16 和 4.
-比较 worker 使用 64 条目, 下限分别为 32 和 8.
+MTP draft / proposal 的默认共享预算为 64 条目, 下限分别为 32 和 8.
+此预算同时适用于独立运行和比较 worker.
 缓存预算已满时, 替换接纳需要 4 次观察.
 衰减计数必须超过最冷可淘汰条目的 2 倍.
 预算未满时允许首次 miss 就 capture.

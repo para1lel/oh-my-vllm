@@ -1,6 +1,6 @@
 # Current state and open work
 
-Updated: 2026-10-08.
+Updated: 2026-10-09.
 
 ## Current implementation
 
@@ -268,11 +268,33 @@ The full failed attempt keeps all samples and counters. All owned workers were r
 
 DSpark context graphs now have 32 entries for all legal row counts from 1 to 32.
 An MTP comparison worker uses 64 draft/proposal entries with floors of 32 and 8.
-A worker that runs only MTP keeps 32 entries with floors of 16 and 4.
+A worker that runs only MTP also uses 64 entries with floors of 32 and 8.
 The existing memory, admission, pool, and cooldown contracts stay active.
 
 Selected CPU tests passed 137 cases. New tests cover all context row shapes, comparison-family retention, and invalid budgets.
 Selected GPU graph checks and all eight hooks passed. Full acceptance stays open on the committed correction.
+
+## Standalone MTP graph budget
+
+The subsequent paired collection completed batches 1 and 2.
+Batch 4 used 36 draft graph keys and 8 proposal keys, with no recapture.
+Standalone MTP had a 32-entry budget, less than this 44-key set.
+
+The project stopped the collection before the source change and kept all records from this collection.
+The source stayed unchanged during the stopped collection. All owned processes and GPU resources were released.
+
+Default MTP now uses 64 entries in standalone and comparison workers.
+The family floors are 32 and 8. Memory admission, cooldown, and pool isolation stay active.
+Explicit 32-entry constructor calls stay available for diagnostics.
+
+CPU regressions use all 44 observed keys in three cycles.
+GPU checks cover 44 resident draft shapes and later resident replay.
+They set `free_bytes` to return zero and examine all fallback output rows.
+These checks use a small test model. Full model memory and service acceptance stay open.
+
+The full CPU collection passed 548 tests and 70 subtests, with 323 GPU tests deselected.
+Four GPU graph checks passed. The full-output fallback check passed again after its new assertion.
+The tutorial passed ten Node tests and nine Playwright tests.
 
 ## Open work
 

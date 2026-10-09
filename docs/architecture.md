@@ -256,8 +256,8 @@ DSpark context injection with at most 32 rows uses a different pool and a 32-ent
 
 Warmup and capture save destination KV slots and restore them in `finally`. Replay commits the current inputs.
 Larger context injection uses the compiled unit without manual capture.
-An MTP worker uses 32 draft/proposal entries with floors of 16 and 4.
-A comparison worker uses 64 entries with floors of 32 and 8.
+The default MTP draft/proposal budget is 64 entries, with floors of 32 and 8.
+This budget applies to standalone workers and comparison workers.
 
 At a full cache budget, replacement admission must have four observations.
 Its decayed count must be more than twice the coldest evictable entry.

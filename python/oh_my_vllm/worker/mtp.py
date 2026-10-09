@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 class MTP:
     def __init__(
-        self, model: Qwen, capacity: int, max_tokens: int, *, graph_capacity: int = 32
+        self, model: Qwen, capacity: int, max_tokens: int, *, graph_capacity: int = 64
     ) -> None:
         if graph_capacity not in (32, 64):
             raise ValueError("MTP graph capacity must be 32 or 64")

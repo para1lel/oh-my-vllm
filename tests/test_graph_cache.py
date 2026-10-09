@@ -669,7 +669,7 @@ def test_first_cuda_capture_failure_replaces_unowned_pool_handle():
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 @torch.inference_mode()
-def test_real_32_graph_pool_defers_late_capture_at_low_headroom():
+def test_real_64_graph_pool_keeps_44_shapes_then_defers_for_low_headroom():
     assert os.environ["CUDA_VISIBLE_DEVICES"].startswith("GPU-")
     assert torch.cuda.device_count() == 1
     assert "B200" in torch.cuda.get_device_name(0)
@@ -711,53 +711,62 @@ def test_real_32_graph_pool_defers_late_capture_at_low_headroom():
         for batch_size in range(1, 5)
         for total in range(batch_size, 5 * batch_size + 1)
     ]
-    for batch_size, total in shapes[:32]:
+    assert mtp.graph_cache.capacity == 64
+    assert len(shapes) == 44
+    for batch_size, total in shapes:
         run_shape(mtp, batch_size, total)
-    assert mtp.graph_cache.snapshot()["draft_resident"] == 32
-    assert mtp.graph_cache.snapshot()["draft_capture"] == 32
+    assert mtp.graph_cache.snapshot()["draft_resident"] == 44
+    assert mtp.graph_cache.snapshot()["draft_capture"] == 44
     mtp.graph_cache.free_bytes = lambda: 0
-    output = run_shape(mtp, *shapes[32])
+    output = run_shape(mtp, 5, 5)
     assert mtp.graph_cache.snapshot()["draft_headroom_eager"] == 1
     assert mtp.graph_cache.snapshot()["draft_eviction"] == 0
-    assert mtp.graph_cache.snapshot()["resident"] == 32
+    assert mtp.graph_cache.snapshot()["resident"] == 44
     mtp.attention.plan.assert_called_once()
-    torch.testing.assert_close(output[0], torch.full_like(output[0], 8))
+    torch.testing.assert_close(output, torch.full_like(output, 8))
     old_output = run_shape(mtp, *shapes[0])
     torch.testing.assert_close(old_output, torch.full_like(old_output, 8))
 
 
-def test_comparison_mtp_budget_keeps_draft_and_proposal_shapes():
+@pytest.mark.parametrize("graph_capacity", [None, 64])
+def test_native_mtp_budget_keeps_draft_and_proposal_shapes(graph_capacity):
     class Model:
         mtp = object()
         embedding = torch.zeros(1)
 
     with patch("oh_my_vllm.worker.mtp.MTPAttention"):
-        standalone = MTP(Model(), 1, 40960)
-        comparison = MTP(Model(), 1, 40960, graph_capacity=64)
-    assert standalone.graph_cache.capacity == 32
-    assert standalone.graph_cache.family_floors == {"draft": 16, "proposal": 4}
-    cache = comparison.graph_cache
+        options = {} if graph_capacity is None else {"graph_capacity": graph_capacity}
+        mtp = MTP(Model(), 1, 40960, **options)
+    cache = mtp.graph_cache
     assert cache.capacity == 64
     assert cache.family_floors == {"draft": 32, "proposal": 8}
     free = [8 << 30]
     cache.free_bytes = lambda: free[0]
+    # Full batch-four observations include 36 draft and eight proposal keys.
+    rows_by_request_count = {
+        1: range(1, 6),
+        2: (2, 4, 6, 7, 9, 10),
+        3: (3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15),
+        4: (4, *range(8, 21)),
+    }
     shapes = [
         ("draft", (rows, requests, 36864))
-        for requests in range(1, 5)
-        for rows in range(requests, requests * 5 + 1)
-    ][:33]
+        for requests, row_counts in rows_by_request_count.items()
+        for rows in row_counts
+    ]
     shapes += [
         ("proposal", (requests, extent))
-        for requests in range(1, 4)
-        for extent in (32768, 36864)
+        for requests in range(1, 5)
+        for extent in (36864, 40960)
     ]
+    assert len(shapes) == 44
     for _ in range(3):
         for family, key in shapes:
             assert cache.should_use(family, key)
             cache.get_or_create(family, key, object)
     stats = cache.snapshot()
-    assert stats["draft_capture"] == 33
-    assert stats["proposal_capture"] == 6
+    assert stats["draft_capture"] == 36
+    assert stats["proposal_capture"] == 8
     for family in ("draft", "proposal"):
         assert stats[f"{family}_eviction"] == 0
         assert stats[f"{family}_recent_recapture"] == 0
@@ -765,6 +774,17 @@ def test_comparison_mtp_budget_keeps_draft_and_proposal_shapes():
     free[0] = 0
     assert not cache.should_use("draft", (20, 4, 40960))
     assert cache.should_use(*shapes[0])
+
+
+def test_explicit_diagnostic_mtp_budget_remains_supported():
+    class Model:
+        mtp = object()
+        embedding = torch.zeros(1)
+
+    with patch("oh_my_vllm.worker.mtp.MTPAttention"):
+        mtp = MTP(Model(), 1, 40960, graph_capacity=32)
+    assert mtp.graph_cache.capacity == 32
+    assert mtp.graph_cache.family_floors == {"draft": 16, "proposal": 4}
 
 
 @pytest.mark.parametrize("capacity", [0, 1, 31, 33, 65])

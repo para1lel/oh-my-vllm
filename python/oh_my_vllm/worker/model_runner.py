@@ -225,7 +225,6 @@ class OhMyVllmWorker:
                 self.model,
                 self.logical_num_blocks,
                 self.config.max_model_len,
-                graph_capacity=64 if self.config.comparison else 32,
             )
             if self.config.speculative_mode == "mtp" or self.config.comparison
             else None
