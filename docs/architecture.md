@@ -138,6 +138,7 @@ Larger FP8 batches use the owned SM100 CUTLASS launcher.
 It keeps arbitrary FP32 block scales, FP32 accumulation, and BF16 output.
 The launcher selects PDL on the caller stream.
 Wide gate/up matrices with at least 2048 rows use an eight-tile swizzle for cache locality.
+At least 32144 rows use swizzle 16 for the two-SM, 34816 by 5120 gate/up matrix.
 Ordinary projections without scales use `F.linear`.
 
 
@@ -145,10 +146,10 @@ This avoids the observed FlashInfer CUTLASS instability at 17 through 32 rows.
 Small BF16 vocabulary projections use FlashInfer CuTe-DSL GEMM.
 
 Residual/RMS and SiLU/FP8 fusions keep the existing BF16 rounding points.
-For more than one row, the MLP gate/up path uses one CUDA kernel for residual RMS and activation quantization.
+For more than 32 rows, the MLP gate/up path uses one CUDA kernel for residual RMS and activation quantization.
 It writes the BF16 residual sum and keeps the normalized BF16 value in registers before FP8 conversion.
 The projection keeps its previous GEMM provider and scale layout.
-One row uses the previous CUDA residual RMS and quantization chain.
+At most 32 rows use the previous CUDA residual RMS and quantization chain.
 
 Convolution, GDN, and RMS accept packed projection strides and return dense outputs.
 GDN prefill normalizes Q/K explicitly with FP32 norms and BF16 output.
@@ -300,7 +301,7 @@ Pools are shared in each graph family, with different target/draft/proposal fami
 Capture restores persistent state and FA writes. Output copies precede pool reuse.
 
 Target prefill has different eight-entry ordinary and DSpark families.
-These families capture fixed query/context sizes with native or ragged attention and at least 12 GiB capture headroom.
+These families capture fixed query/context sizes with native or ragged attention and at least 32 GiB capture headroom.
 KV pages, state slots, tokens, and attention metadata stay dynamic.
 Warmup and capture restore all destination FA/GDN values in `finally`.
 Replay validates all metadata replacements and restores captured bindings before copies.

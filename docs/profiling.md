@@ -78,13 +78,13 @@ Full-model phase collection supplies framework acceptance.
 
 | Optimization | Diagnostic observation | Selection |
 |---|---|---|
-| FP8 gate/up GEMM traversal | At 32144 by 34816 by 5120, DRAM was 75.04% and L2 hits were 26.10%. Swizzle 8 changed median time from 9.235 to 6.989 ms. | Swizzle 8 for M at least 2048 and N at least 32768. |
+| FP8 gate/up GEMM traversal | At 32144 by 34816 by 5120, DRAM was 75.04% and L2 hits were 26.10%. Swizzle 8 changed median time from 9.235 to 6.989 ms. | Swizzle 8 for M at least 2048 and N at least 32768. At M at least 32144, the 34816 by 5120 two-SM path uses swizzle 16. |
 | Small FP8 gate/up GEMM | At M 624, one-SM time was about 0.141 ms and two-SM time was about 0.170 ms. | Use two-SM tiles at M at least 4096 for the wide projection. |
 | Four-channel convolution | At 32144 rows, scalar time was 1.603 ms and vector time was 0.624 ms. Warp instructions decreased from 1.484 billion to 0.589 billion. | Four adjacent channels per thread, eight rows for large inputs, four rows for smaller inputs. |
 | SiLU and FP8 quantization | At 32144 rows, one-row time was 1.130 ms and four-row time was 0.711 ms. At 624 rows, two-row time was 0.0165 ms. | Four rows per warp for large inputs. Use two rows for smaller model inputs. |
 | Gated RMS | At 32144 token rows, one-row time was 0.399 ms and four-row time was 0.310 ms. | Four rows per warp for large inputs. Use one row for small inputs. |
 | Residual RMS and FP8 quantization | At 32144 by 5120, the two operations took 0.325 ms and the fused operation took 0.195 ms. | Keep residual and normalized BF16 rounding. Remove the read and write of the normalized array. |
-| Single-row normalized projection | One-row gate/up diagnostic time was about 0.03431 ms with fusion and 0.03319 ms with the previous CUDA chain. | Use the previous CUDA chain for one row. |
+| Small normalized projection | One-row gate/up diagnostic time was about 0.03431 ms with fusion and 0.03319 ms with the previous CUDA chain. | Use the previous CUDA chain for at most 32 rows. |
 | Narrow FP8 traversal | At M 32144, QKV/Z changed from 3.451 to 3.307 ms and down changed from 3.563 to 3.437 ms. | At M at least 32144, use swizzle 16 for N/K 16384/5120 and swizzle 8 for N/K 5120/17408. |
 | Strided GDN value copy | At 32144 rows and stride 10240, the median changed from 0.42002 to 0.12376 ms. | Copy eight adjacent BF16 values per lane, with 256 threads. |
 | FP32 recurrent tile | Batch 2 changed from 3.80272 to 3.05744 microseconds. Batch 4 changed from 5.21184 to 4.54240 microseconds. | Batch 2 uses eight rows and one warp. Batch 4 uses two rows and four warps. |
@@ -140,3 +140,44 @@ The source-contract check passed.
 
 MTP short-output prefill had a median of about 1.379 s.
 Formal phase verdicts use the fixed 4096-output workloads.
+
+
+The [dispatch diagnosis](../bench/evidence/2026-10-10-dispatch-diagnosis.json) keeps source identities, profile counters, and original hashes.
+
+
+## Subsequent operator diagnosis
+
+Residual RMS at 128 to 2047 rows uses streaming stores with the same 256-thread, four-value tile.
+At 624 rows, diagnostic time changed from about 4.028 to 3.717 microseconds.
+
+The different full-operation profile kept about 12.8 MB of DRAM traffic.
+Its warp instruction count changed from 1412736 to 1178112. Register count changed from 48 to 44 against pinned TileLang.
+
+GDN gates at 128 to 4095 rows use 128 threads. Small and large dispatch keep their previous tiles.
+
+The small-row chain comparison used three rounds with twenty pairs and one hundred graph repetitions per sample.
+At 8, 16, and 32 rows, the previous CUDA chain saved about 0.672, 0.538, and 0.692 microseconds against fusion.
+
+All three time-saved confidence lower bounds were positive. Full outputs were equal.
+
+A two-SM gate/up candidate changed stage count and swizzle together. Its mean time saved was about 0.210 ms.
+The production choice keeps automatic seven-stage storage. A subsequent diagnosis changed only swizzle from 8 to 16.
+
+It used three rounds with twenty pairs and ten graph repetitions per sample.
+Mean time saved was about 0.104 ms, with one-sided 95% lower bound about 0.094 ms. Outputs were equal at zero absolute and relative tolerances.
+
+The profiles kept 168 registers, 210432 shared-memory bytes, and 11.72% occupancy.
+L2 hits changed from 81.78% to 88.73%. DRAM traffic changed from 8.161 to 5.507 GB.
+
+The two profiles have all thirteen requested metrics. Profiler replay durations do not supply the timing verdict.
+
+A full prefix-hit graph profile used 32768 input tokens, a 32144-token prefix, and sixteen outputs.
+Across fourteen graph replays, the sum of FP8 projection kernel times is about 21.707 ms per replay.
+
+The sum of attention kernel times is about 6.337 ms per replay.
+These sums do not measure a critical path because branches can overlap.
+
+They identify projection and attention work for subsequent tuning. Formal workloads keep 4096 outputs.
+
+FP8-to-BF16 conversion with BF16 GEMM increased full projection time. Dispatch keeps FP8 checkpoint weights and FP32 scales.
+The [phase progress record](../bench/evidence/2026-10-10-phase-progress.json) keeps the failed full-output phase and operator measurements.

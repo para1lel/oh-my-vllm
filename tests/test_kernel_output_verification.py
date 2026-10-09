@@ -41,12 +41,13 @@ def test_verification_rejects_missing_or_mismatched_returns():
         verify("norm", lambda: torch.ones(1), lambda: torch.ones(1).half())
 
 
-def test_verification_uses_exact_copy_tolerances():
+@pytest.mark.parametrize("operation", ["prepare_attention", "prepare_context"])
+def test_verification_uses_exact_copy_tolerances(operation):
     value = torch.tensor([1.0])
     changed = torch.tensor([1.001])
     with pytest.raises(AssertionError, match="written_value"):
         verify(
-            "prepare_attention",
+            operation,
             lambda: value,
             lambda: value,
             (("written_value", lambda: value, lambda: changed),),

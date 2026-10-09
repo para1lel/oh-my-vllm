@@ -1,0 +1,2635 @@
+{
+  "schema": 1,
+  "kind": "derived",
+  "scope": "Dirty-source operator diagnosis and three DSpark capacity checks. The complete current-source framework, operator, and service collections stay pending.",
+  "formal_acceptance": false,
+  "source_commit": "c56ca403e109ac44401004c6acb005f73bdc3a23",
+  "small_projection": {
+    "scope": "Previous CUDA chain versus fused CUDA chain. Both timing labels name CUDA implementations.",
+    "protocol": "Three rounds, twenty alternating pairs per round, one hundred graph repetitions per sample.",
+    "rows": [
+      {
+        "rows": 8,
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.03411695957183838,
+              "cuda_ms": 0.03344815969467163
+            },
+            {
+              "tilelang_ms": 0.03411072015762329,
+              "cuda_ms": 0.03344367980957032
+            },
+            {
+              "tilelang_ms": 0.03411664009094238,
+              "cuda_ms": 0.03344383955001831
+            }
+          ],
+          "paired_mean_gain_ms": 0.0006723732948303218,
+          "gain_lower_95_ms": 0.0006611148516337069,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "rows": 16,
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.034170720577239994,
+              "cuda_ms": 0.03363391995429993
+            },
+            {
+              "tilelang_ms": 0.03416623950004578,
+              "cuda_ms": 0.033616639375686645
+            },
+            {
+              "tilelang_ms": 0.03416704058647156,
+              "cuda_ms": 0.033632639646530155
+            }
+          ],
+          "paired_mean_gain_ms": 0.0005377974907557164,
+          "gain_lower_95_ms": 0.0005304321845372514,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "rows": 32,
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.03461824059486389,
+              "cuda_ms": 0.033932960033416754
+            },
+            {
+              "tilelang_ms": 0.034621599912643436,
+              "cuda_ms": 0.03394160032272339
+            },
+            {
+              "tilelang_ms": 0.034945440292358396,
+              "cuda_ms": 0.03423743963241577
+            }
+          ],
+          "paired_mean_gain_ms": 0.0006915680170059202,
+          "gain_lower_95_ms": 0.0006753760178883874,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      }
+    ],
+    "timing_labels": {
+      "tilelang_ms": "Fused CUDA chain",
+      "cuda_ms": "Previous CUDA chain"
+    }
+  },
+  "residual_rms": {
+    "shape": [
+      624,
+      5120
+    ],
+    "scope": "Native timing diagnosis and separate full-operation profile against pinned TileLang.",
+    "estimated": {
+      "kind": "estimated",
+      "source": "TileFoundry HIR",
+      "symbol": "add_norm",
+      "report": "# analysis target=nvidia.b200_sxm module=Operators function=add_norm topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:20480@logical,20480@total,20480@cta;f32:81922@logical,81922@total,81922@cta other-ops=special:2@logical,2@total,2@cta\n# traffic traffic=gmem:r409624/w327704@total,r409624/w327704@cta;rmem:r4/w0@total,r4/w0@cta\n# peak-footprint=gmem:163848;rmem:0\n# roofline ideal-ns=97 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef add_norm(\n    x: Tensor[(2, 5120), \"bf16\"],\n    residual: Tensor[(2, 5120), \"bf16\"],\n    weight: Tensor[(5120,), \"f32\"]\n):\n    v0 = cast(x, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v1 = cast(residual, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v2 = add(v0, v1)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r81920/w40960@total,r81920/w40960@cta; roofline ideal-ns=17 bound-by=memory\n    v3 = cast(v2, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    v4 = cast(v3, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v5 = unary(v4, kind=\"square\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w40960@total,r40960/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v6 = reduce(v5, axes=(-1,), keepdim=True, kind=\"mean\")  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w8@total,r40960/w8@cta; roofline ideal-ns=6 bound-by=memory\n    v0_2 = 1e-06  # Tensor[(), \"f32\", \"umat\"]\n    v7 = add(v6, v0_2)  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = unary(v7, kind=\"rsqrt\")  # Tensor[(2, 1), \"f32\"]; compute-cost other-ops=special:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta; roofline ideal-ns=1 bound-by=memory\n    v9 = mul(v4, v8)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40968/w40960@total,r40968/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v10 = mul(v9, weight)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r61440/w40960@total,r61440/w40960@cta; roofline ideal-ns=14 bound-by=memory\n    v11 = cast(v10, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    return (v3, v11)\n",
+      "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+    },
+    "measured": {
+      "tilelang": [
+        {
+          "name": "dram__bytes.sum",
+          "value": 12808704.0,
+          "unit": "byte"
+        },
+        {
+          "name": "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+          "value": 14.56,
+          "unit": "%"
+        },
+        {
+          "name": "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum",
+          "value": 4776.0,
+          "unit": ""
+        },
+        {
+          "name": "launch__registers_per_thread",
+          "value": 48.0,
+          "unit": "register/thread"
+        },
+        {
+          "name": "launch__shared_mem_per_block_dynamic",
+          "value": 1024.0,
+          "unit": "byte/block"
+        },
+        {
+          "name": "launch__shared_mem_per_block_static",
+          "value": 0.0,
+          "unit": "byte/block"
+        },
+        {
+          "name": "lts__t_sector_hit_rate.pct",
+          "value": 4.08,
+          "unit": "%"
+        },
+        {
+          "name": "lts__throughput.avg.pct_of_peak_sustained_elapsed",
+          "value": 21.25,
+          "unit": "%"
+        },
+        {
+          "name": "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+          "value": 18.5,
+          "unit": "%"
+        },
+        {
+          "name": "sm__warps_active.avg.pct_of_peak_sustained_active",
+          "value": 45.49,
+          "unit": "%"
+        },
+        {
+          "name": "smsp__inst_executed.sum",
+          "value": 1412736.0,
+          "unit": "inst"
+        },
+        {
+          "name": "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
+          "value": 46.46,
+          "unit": "%"
+        },
+        {
+          "name": "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",
+          "value": 10.24,
+          "unit": "%"
+        }
+      ],
+      "cuda": [
+        {
+          "name": "dram__bytes.sum",
+          "value": 12806656.0,
+          "unit": "byte"
+        },
+        {
+          "name": "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+          "value": 14.0,
+          "unit": "%"
+        },
+        {
+          "name": "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum",
+          "value": 404.0,
+          "unit": ""
+        },
+        {
+          "name": "launch__registers_per_thread",
+          "value": 44.0,
+          "unit": "register/thread"
+        },
+        {
+          "name": "launch__shared_mem_per_block_dynamic",
+          "value": 0.0,
+          "unit": "byte/block"
+        },
+        {
+          "name": "launch__shared_mem_per_block_static",
+          "value": 32.0,
+          "unit": "byte/block"
+        },
+        {
+          "name": "lts__t_sector_hit_rate.pct",
+          "value": 2.31,
+          "unit": "%"
+        },
+        {
+          "name": "lts__throughput.avg.pct_of_peak_sustained_elapsed",
+          "value": 20.05,
+          "unit": "%"
+        },
+        {
+          "name": "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+          "value": 14.7,
+          "unit": "%"
+        },
+        {
+          "name": "sm__warps_active.avg.pct_of_peak_sustained_active",
+          "value": 47.32,
+          "unit": "%"
+        },
+        {
+          "name": "smsp__inst_executed.sum",
+          "value": 1178112.0,
+          "unit": "inst"
+        },
+        {
+          "name": "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
+          "value": 52.63,
+          "unit": "%"
+        },
+        {
+          "name": "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",
+          "value": 9.63,
+          "unit": "%"
+        }
+      ]
+    }
+  },
+  "gate_up": {
+    "shape": [
+      32144,
+      34816,
+      5120
+    ],
+    "scope": "Equal automatic seven-stage mainloops; only scheduler swizzle8 to16 changes.",
+    "protocol": "Three rounds, twenty alternating pairs per round, ten graph repetitions per sample.",
+    "comparison": {
+      "rounds": [
+        {
+          "tilelang_ms": 6.991982269287109,
+          "cuda_ms": 6.876441574096679
+        },
+        {
+          "tilelang_ms": 7.003084945678712,
+          "cuda_ms": 6.882215881347657
+        },
+        {
+          "tilelang_ms": 7.005459213256836,
+          "cuda_ms": 6.909278488159179
+        }
+      ],
+      "paired_mean_gain_ms": 0.1039895375569662,
+      "gain_lower_95_ms": 0.09372563680013028,
+      "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+      "passed": true
+    },
+    "numerical_check": "Equal at zero absolute and relative tolerances. The raw bitwise_equal flag was not an integer-bit comparison.",
+    "profile_metrics": {
+      "8": [
+        {
+          "name": "dram__bytes.sum",
+          "value": 8161018624.0,
+          "unit": "byte"
+        },
+        {
+          "name": "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+          "value": 11.59,
+          "unit": "%"
+        },
+        {
+          "name": "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum",
+          "value": 29244610.0,
+          "unit": ""
+        },
+        {
+          "name": "launch__registers_per_thread",
+          "value": 168.0,
+          "unit": "register/thread"
+        },
+        {
+          "name": "launch__shared_mem_per_block_dynamic",
+          "value": 210432.0,
+          "unit": "byte/block"
+        },
+        {
+          "name": "launch__shared_mem_per_block_static",
+          "value": 0.0,
+          "unit": "byte/block"
+        },
+        {
+          "name": "lts__t_sector_hit_rate.pct",
+          "value": 81.78,
+          "unit": "%"
+        },
+        {
+          "name": "lts__throughput.avg.pct_of_peak_sustained_elapsed",
+          "value": 52.36,
+          "unit": "%"
+        },
+        {
+          "name": "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+          "value": 58.34,
+          "unit": "%"
+        },
+        {
+          "name": "sm__warps_active.avg.pct_of_peak_sustained_active",
+          "value": 11.72,
+          "unit": "%"
+        },
+        {
+          "name": "smsp__inst_executed.sum",
+          "value": 2537495961.0,
+          "unit": "inst"
+        },
+        {
+          "name": "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
+          "value": 49.36,
+          "unit": "%"
+        },
+        {
+          "name": "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",
+          "value": 10.85,
+          "unit": "%"
+        }
+      ],
+      "16": [
+        {
+          "name": "dram__bytes.sum",
+          "value": 5506542336.0,
+          "unit": "byte"
+        },
+        {
+          "name": "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+          "value": 7.82,
+          "unit": "%"
+        },
+        {
+          "name": "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum",
+          "value": 29290843.0,
+          "unit": ""
+        },
+        {
+          "name": "launch__registers_per_thread",
+          "value": 168.0,
+          "unit": "register/thread"
+        },
+        {
+          "name": "launch__shared_mem_per_block_dynamic",
+          "value": 210432.0,
+          "unit": "byte/block"
+        },
+        {
+          "name": "launch__shared_mem_per_block_static",
+          "value": 0.0,
+          "unit": "byte/block"
+        },
+        {
+          "name": "lts__t_sector_hit_rate.pct",
+          "value": 88.73,
+          "unit": "%"
+        },
+        {
+          "name": "lts__throughput.avg.pct_of_peak_sustained_elapsed",
+          "value": 52.98,
+          "unit": "%"
+        },
+        {
+          "name": "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+          "value": 58.33,
+          "unit": "%"
+        },
+        {
+          "name": "sm__warps_active.avg.pct_of_peak_sustained_active",
+          "value": 11.72,
+          "unit": "%"
+        },
+        {
+          "name": "smsp__inst_executed.sum",
+          "value": 2537495799.0,
+          "unit": "inst"
+        },
+        {
+          "name": "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
+          "value": 49.39,
+          "unit": "%"
+        },
+        {
+          "name": "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",
+          "value": 10.81,
+          "unit": "%"
+        }
+      ]
+    }
+  },
+  "combined_candidate": {
+    "scope": "Changes automatic7 to explicit5 and swizzle8 to16 together. Time saved cannot be attributed to either change alone.",
+    "rows": [
+      {
+        "m": 32144,
+        "n": 34816,
+        "k": 5120,
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 7.0283760070800785,
+              "cuda_ms": 6.806403350830078
+            },
+            {
+              "tilelang_ms": 7.028246307373047,
+              "cuda_ms": 6.814368057250976
+            },
+            {
+              "tilelang_ms": 7.028167724609375,
+              "cuda_ms": 6.841526031494141
+            }
+          ],
+          "paired_mean_gain_ms": 0.21029326121012373,
+          "gain_lower_95_ms": 0.19913619995117202,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "m": 32144,
+        "n": 5120,
+        "k": 17408,
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 3.4405456542968746,
+              "cuda_ms": 3.4583278656005856
+            },
+            {
+              "tilelang_ms": 3.439952087402344,
+              "cuda_ms": 3.4547712326049806
+            },
+            {
+              "tilelang_ms": 3.4402671813964845,
+              "cuda_ms": 3.4456607818603517
+            }
+          ],
+          "paired_mean_gain_ms": -0.023358720143636047,
+          "gain_lower_95_ms": -0.0407345898946126,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": false
+        }
+      }
+    ]
+  },
+  "exact_context": {
+    "scope": "Eight filtered prepare_context cases with exact value-copy checks; current full301 acceptance remains pending.",
+    "cases": 8,
+    "selected_passed": true,
+    "interference": [],
+    "sources_sha256": {
+      "benchmarks/kernels.py": "0cf915f419bc8485eaae79bccb5a1175b692cd0a64d621ac4df4192d9702bdec",
+      "development/kernels/cases.py": "9d0afabaab15df4bcbff1d2d57d1c79a841634a76a29ecf6e573e28a61bcdba2",
+      "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+      "development/kernels/dspark-reference.json": "4e8b36447a947f065ded83b658743ecbf1f1bf8c283cf32a8e9e317f51590e05",
+      "development/kernels/fixtures.py": "d29f119e25b3b8635516c03452433be76a8a7788b08a76a888b22d22416c04eb",
+      "development/kernels/observations.py": "b418d9d3c58de0377d1dbd5660408327d289b9f789e283698d81526dd3f3d349",
+      "development/kernels/output_verification.py": "ca5ccc12de2285ddad16841c4810cac3b701d8c3aa83a1c7c74a4fc2687cf6a2",
+      "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+      "development/kernels/reference.py": "b6a80426e0854ba36a98c62f37809a67d1270d25c7b74eb2674438ca2ca26c92",
+      "development/kernels/semantics.py": "cbfaf6ac803384d9e1953e9757a4794c30c9c686c5ae8de228d9cce99b13baa4",
+      "development/kernels/tilelang-reference.json": "545c3d6f70ab290c4411b17513505fb3eb76014d6e3bd839081714668a7d49c9",
+      "development/kernels/timing.py": "f0a7193034c9c85231caa1c8c6d12ab0cefcb1987cacad420813c7421160ecd2",
+      "development/kernels/twins.py": "52ed6e65c6b44c0a54b5821af14f04cc5d2a38ec1123737457a21c4f95aa77d0",
+      "development/kernels/variant.py": "717e32bc7b93a3cca0513e567a75bd307c2f6ad121616b70b060e9089ded46d2",
+      "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+      "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+      "python/oh_my_vllm/ir/core.py": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+      "python/oh_my_vllm/ir/coverage.py": "339556d38f2b8733f48abc7e73ca04b1034ebae9f1f099b597b9d860330359f7",
+      "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+      "python/oh_my_vllm/ir/execution.py": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+      "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+      "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+      "python/oh_my_vllm/ir/gdn_prepare.py": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+      "python/oh_my_vllm/ir/logits.py": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+      "python/oh_my_vllm/ir/normalized_linear.py": "4a19b5496a9073d03f30234bb482f379aa186032d086b8b8e75854fe48dd3662",
+      "python/oh_my_vllm/ir/partial_attention.py": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+      "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+      "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+      "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+      "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+      "python/oh_my_vllm/kernels/attention.py": "667fd8f322a6f221c204477dc666cf030c88c26ed125e62759a78492cedacf3a",
+      "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+      "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+      "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+      "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "2903658a1ad52f721e8dc813306b1003751e8e3796855cddb913044c70b678e4",
+      "python/oh_my_vllm/kernels/cuda_backend/groupwise.py": "c48777698bcb6751dde85f7ab49735e6763d74f5e1909edaec7f97f9dd169981",
+      "python/oh_my_vllm/kernels/cuda_backend/groupwise_fp8.cu": "bb7b372e6b554a127d86599ddd3bfe7fc44e2fb5e087adc328f3558c2e9370c2",
+      "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "446c53dcd196cedbeb44e49576df07e4fcf2279283eb80cc1e5455676aca3896",
+      "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+      "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+      "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+      "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+      "python/oh_my_vllm/kernels/fp8.py": "cb69a4975e6ba9d6e5eed0963561f0bf55d1b9780af3219c647aac4f73d4d290",
+      "python/oh_my_vllm/kernels/gdn.py": "b449e439f5f524272578b05899b529de9b4eb73c7ab34fb35f9ae09b07e7af75",
+      "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+      "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+      "python/oh_my_vllm/kernels/partial_attention.py": "9d74993331ee37e48931d0600204009cf926ad4582db92e8f1e2f296ad0aa92a",
+      "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+      "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+      "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+      "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+      "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+      "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+      "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+      "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+      "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+      "python/oh_my_vllm/models/qwen.py": "007582a19d048d681162a94bda0f5677175e7665e736c65f1793addd4fa57c1b",
+      "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+    },
+    "rows": [
+      {
+        "id": "prepare_context-b9ead731a4",
+        "configuration": {
+          "operation": "prepare_context",
+          "tokens": 32144,
+          "index_dtype": "int64"
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": [
+            "written_key",
+            "written_value"
+          ]
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.26990559577941897,
+              "cuda_ms": 0.08708672046661377
+            },
+            {
+              "tilelang_ms": 0.26989679336547856,
+              "cuda_ms": 0.08707920074462891
+            },
+            {
+              "tilelang_ms": 0.26991120338439945,
+              "cuda_ms": 0.08708591938018799
+            }
+          ],
+          "paired_mean_gain_ms": 0.18282400067647298,
+          "gain_lower_95_ms": 0.18281226110458373,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "prepare_context-5011093f87",
+        "configuration": {
+          "operation": "prepare_context",
+          "tokens": 32768,
+          "index_dtype": "int64"
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": [
+            "written_key",
+            "written_value"
+          ]
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.2748230457305908,
+              "cuda_ms": 0.08904880046844482
+            },
+            {
+              "tilelang_ms": 0.274815845489502,
+              "cuda_ms": 0.08902559757232666
+            },
+            {
+              "tilelang_ms": 0.27478896141052245,
+              "cuda_ms": 0.08902944087982177
+            }
+          ],
+          "paired_mean_gain_ms": 0.18577432568868002,
+          "gain_lower_95_ms": 0.18575749890009563,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "prepare_context-1c8e9f73de",
+        "configuration": {
+          "operation": "prepare_context",
+          "tokens": 32143,
+          "index_dtype": "int64"
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": [
+            "written_key",
+            "written_value"
+          ]
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.27002127647399904,
+              "cuda_ms": 0.08691904067993164
+            },
+            {
+              "tilelang_ms": 0.27003807067871094,
+              "cuda_ms": 0.08691567897796632
+            },
+            {
+              "tilelang_ms": 0.27002272605895994,
+              "cuda_ms": 0.08691951751708984
+            }
+          ],
+          "paired_mean_gain_ms": 0.18311334466934204,
+          "gain_lower_95_ms": 0.1830979528427124,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "prepare_context-55906e1135",
+        "configuration": {
+          "operation": "prepare_context",
+          "tokens": 624,
+          "index_dtype": "int64"
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": [
+            "written_key",
+            "written_value"
+          ]
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.008140159845352173,
+              "cuda_ms": 0.0033041599392890928
+            },
+            {
+              "tilelang_ms": 0.008139200210571289,
+              "cuda_ms": 0.003308960050344467
+            },
+            {
+              "tilelang_ms": 0.008136639893054961,
+              "cuda_ms": 0.003304319977760315
+            }
+          ],
+          "paired_mean_gain_ms": 0.004833498641848564,
+          "gain_lower_95_ms": 0.004830890635649363,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "prepare_context-746b4ede1b",
+        "configuration": {
+          "operation": "prepare_context",
+          "tokens": 1248,
+          "index_dtype": "int64"
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": [
+            "written_key",
+            "written_value"
+          ]
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.012009440064430237,
+              "cuda_ms": 0.004522559940814972
+            },
+            {
+              "tilelang_ms": 0.012009279727935791,
+              "cuda_ms": 0.004525920003652572
+            },
+            {
+              "tilelang_ms": 0.012010719776153565,
+              "cuda_ms": 0.004524959921836853
+            }
+          ],
+          "paired_mean_gain_ms": 0.007485269278287888,
+          "gain_lower_95_ms": 0.007482101296385129,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "prepare_context-4d2b923ef7",
+        "configuration": {
+          "operation": "prepare_context",
+          "tokens": 2496,
+          "index_dtype": "int64"
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": [
+            "written_key",
+            "written_value"
+          ]
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.01956768035888672,
+              "cuda_ms": 0.0063571202754974365
+            },
+            {
+              "tilelang_ms": 0.019563519954681398,
+              "cuda_ms": 0.006350559890270233
+            },
+            {
+              "tilelang_ms": 0.01956223964691162,
+              "cuda_ms": 0.006352959871292115
+            }
+          ],
+          "paired_mean_gain_ms": 0.013209152072668076,
+          "gain_lower_95_ms": 0.013206522792577743,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "prepare_context-762eed0253",
+        "configuration": {
+          "operation": "prepare_context",
+          "tokens": 32288,
+          "index_dtype": "int64"
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": [
+            "written_key",
+            "written_value"
+          ]
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.270983362197876,
+              "cuda_ms": 0.08741456031799316
+            },
+            {
+              "tilelang_ms": 0.2709811210632324,
+              "cuda_ms": 0.08741456031799316
+            },
+            {
+              "tilelang_ms": 0.2709996795654297,
+              "cuda_ms": 0.08741408348083496
+            }
+          ],
+          "paired_mean_gain_ms": 0.18357632001241048,
+          "gain_lower_95_ms": 0.18356381289164225,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "prepare_context-0de9ee4f23",
+        "configuration": {
+          "operation": "prepare_context",
+          "tokens": 32290,
+          "index_dtype": "int64"
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": [
+            "written_key",
+            "written_value"
+          ]
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.2710503959655762,
+              "cuda_ms": 0.0874345588684082
+            },
+            {
+              "tilelang_ms": 0.2710209560394287,
+              "cuda_ms": 0.08743295669555665
+            },
+            {
+              "tilelang_ms": 0.2710294342041016,
+              "cuda_ms": 0.08743487834930419
+            }
+          ],
+          "paired_mean_gain_ms": 0.18359751303990682,
+          "gain_lower_95_ms": 0.18358593368530274,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      }
+    ]
+  },
+  "dspark_capacity": {
+    "scope": "Three dirty-source cases after the32GiB prefill capture guard. Source is from before subsequent small-row and swizzle changes; no final-nine-case claim.",
+    "rows": [
+      {
+        "batch_size": 1,
+        "input_len": 258048,
+        "output_len": 4096,
+        "output_tokens": 4096,
+        "elapsed_s": 214.388226598,
+        "preemptions": 0,
+        "proposed_draft_tokens": 4585,
+        "verified_draft_tokens": 4585,
+        "accepted_draft_tokens": 2769,
+        "max_allocated_bytes": 152574575104,
+        "max_reserved_bytes": 183721000960,
+        "cuda_source_sha256": "446c53dcd196cedbeb44e49576df07e4fcf2279283eb80cc1e5455676aca3896",
+        "gemm_source_sha256": "bb7b372e6b554a127d86599ddd3bfe7fc44e2fb5e087adc328f3558c2e9370c2"
+      },
+      {
+        "batch_size": 2,
+        "input_len": 258048,
+        "output_len": 4096,
+        "output_tokens": 8192,
+        "elapsed_s": 273.368122721,
+        "preemptions": 0,
+        "proposed_draft_tokens": 12785,
+        "verified_draft_tokens": 12785,
+        "accepted_draft_tokens": 6171,
+        "max_allocated_bytes": 151112600064,
+        "max_reserved_bytes": 187613315072,
+        "cuda_source_sha256": "446c53dcd196cedbeb44e49576df07e4fcf2279283eb80cc1e5455676aca3896",
+        "gemm_source_sha256": "bb7b372e6b554a127d86599ddd3bfe7fc44e2fb5e087adc328f3558c2e9370c2"
+      },
+      {
+        "batch_size": 4,
+        "input_len": 258048,
+        "output_len": 4096,
+        "output_tokens": 16384,
+        "elapsed_s": 399.284399311,
+        "preemptions": 0,
+        "proposed_draft_tokens": 29946,
+        "verified_draft_tokens": 29946,
+        "accepted_draft_tokens": 10300,
+        "max_allocated_bytes": 153111254016,
+        "max_reserved_bytes": 187630092288,
+        "cuda_source_sha256": "446c53dcd196cedbeb44e49576df07e4fcf2279283eb80cc1e5455676aca3896",
+        "gemm_source_sha256": "bb7b372e6b554a127d86599ddd3bfe7fc44e2fb5e087adc328f3558c2e9370c2"
+      }
+    ]
+  },
+  "prefix_graph_profile": {
+    "scope": "Separate Nsight Systems node-trace replay; sums can overlap and do not give phase critical-path time.",
+    "input_len": 32768,
+    "prefix_hit_tokens": 32144,
+    "output_len": 16,
+    "replays": 14,
+    "mean_fp8_projection_kernel_sum_ms": 21.707156571428573,
+    "mean_attention_kernel_sum_ms": 6.337209357142856
+  },
+  "current_required_operator_cases": 301,
+  "originals": [
+    {
+      "name": "profile-norm-streaming-20261010-attempt02.json",
+      "sha256": "34745777af482fddc2d0dc6142f81ca817a08520e0d31a8406f337840e4ea921"
+    },
+    {
+      "name": "auto-swizzle-paired-20261010.json",
+      "sha256": "a335b6cf2de7fb5b05428fe91fad8a81014be9f227079159cea79262b4ae267b"
+    },
+    {
+      "name": "stages-paired-confirm-20261010.json",
+      "sha256": "262de8c89d82aad0d92bedf5c82fb7a777a590fa70d6e677c31421e7752e7778"
+    },
+    {
+      "name": "small-fusion-chain-20261010-attempt02.json",
+      "sha256": "65458cbcb5b970cf400f9913524eae12f3f5734d6d61f599034b0e49c5ae6bd8"
+    },
+    {
+      "name": "operator-context-exact-attempt01.json",
+      "sha256": "8c6193a5780d95d7f46a8137f4206299b3e5347078ceb2cd93789100a6669765"
+    },
+    {
+      "name": "fp8-gateup-sw16-profile01-8.csv",
+      "sha256": "aeda76e83591d2d41d537fc3167fd9addfc4e4c54ee8f8f65be7cee73fa38b8b"
+    },
+    {
+      "name": "fp8-gateup-sw16-profile01-16.csv",
+      "sha256": "4a30785eb040702348b5ca3a53941518948d9b658c69dea000d80725d98b277a"
+    },
+    {
+      "name": "gpu-headroom32-dspark02-temp/test_max_context_length_2621440/dspark-1.log",
+      "sha256": "1453a28fd1be05b75356792f1f6457ee340ce491f47dd150cc2a3f40098de6da"
+    },
+    {
+      "name": "gpu-headroom32-dspark02-temp/test_max_context_length_2621441/dspark-2.log",
+      "sha256": "3870c56d556ab55d72ec925ca4eaae0ae6523dc6e824699a3cca72e6efbf8e1e"
+    },
+    {
+      "name": "gpu-headroom32-dspark02-temp/test_max_context_length_2621442/dspark-4.log",
+      "sha256": "843d4fd8c46e78f75af933bf9e9395cc8178e8aa0cb6e0e5106726d6b5e3999d"
+    },
+    {
+      "name": "gpu-headroom32-dspark02.log",
+      "sha256": "577ea2fce4ddb2a1643045986de2e39dada6a56db10098041dbf10186a7fc701"
+    },
+    {
+      "name": "full-model-prefix-profile19-source.json",
+      "sha256": "53d88f8078e053ff60d3f531e3bc3ff3407b4063a8338e8fa75019e995aca75a"
+    },
+    {
+      "name": "full-model-prefix-profile19.log",
+      "sha256": "576d37efcf8dc1061ce4c4f170b5e288d9ac70beddc16d323cbc181d84c2d8da"
+    },
+    {
+      "name": "prefix-profile19.nsys-rep",
+      "sha256": "a1b9a1da133829a3d11b20ff75c58740a50e2a16a54f74d9e17c8c700bd345bf"
+    },
+    {
+      "name": "prefix-profile19.sqlite",
+      "sha256": "2abb3ad081e20d4cb756b096fc24c8f7ba13d059dd90baa90ee9c54c0a945e79"
+    },
+    {
+      "name": "fp8-gateup-sw16-profile01.py",
+      "sha256": "987d38c5cf13b1248067395951937f32d6e3c54c5baed1cddbc5b6b689a61486"
+    },
+    {
+      "name": "auto-swizzle-paired-20261010.py",
+      "sha256": "faab04fae54f9d51ddd9d8d8b8efabf9c3e0ca5932e12a9102cb33a21ef6b8e2"
+    },
+    {
+      "name": "groupwise-tilen.cu",
+      "sha256": "9ddbe6cce86a19e01259ae5bbb5793ed993b5feebd3b1011801d210976c0c9f2"
+    },
+    {
+      "name": "groupwise-stages.cu",
+      "sha256": "bb6a9853b1b2b366757b2c88894e82bbeba69ce131369ad56f553fe5a8523b5f"
+    },
+    {
+      "name": "operator-small-dispatch-attempt03.json",
+      "sha256": "f54f86545e11a565513fb4dfbbd07a5a17819ee0fa3d317df89e016a7a0a61d6"
+    },
+    {
+      "name": "operator-small-dispatch-attempt03.log",
+      "sha256": "fa0842baaaf7c018ed57ede55ea65f015c50c5647cdc468057a92e075796f233"
+    },
+    {
+      "name": "operator-small-dispatch-attempt02.json",
+      "sha256": "7f3b905b0ea4d2b6ad2d34b4079d68f49e042d787b7f74f37505b484c800d527"
+    },
+    {
+      "name": "operator-small-dispatch-attempt02.log",
+      "sha256": "81e83d7f1562784ddbeda5aa19634dc63b7e4e659197ad470fb1e2c47c82fcff"
+    },
+    {
+      "name": "operator-small-dispatch-attempt01.json",
+      "sha256": "c08ad92b7b59745a6ba224191cf533d593bab4634532c8d7b1d60fd73961e30c"
+    },
+    {
+      "name": "operator-small-dispatch-attempt01.log",
+      "sha256": "ad6714ad0a7c1dfd58c344854be6ea7f6adbf5dcf235168bb24af78a00f83527"
+    },
+    {
+      "name": "gpu-normalized-milestone5-attempt01.log",
+      "sha256": "d270e1cd4aee1810e35ff004969f86744143f8813991fe6b21145702198ece2a"
+    },
+    {
+      "name": "cpu-milestone5-attempt02.log",
+      "sha256": "ce543e25054c3628b2ceb5cbea4ab741cb22c24615c0fb6c89da93f3f2967fca"
+    }
+  ],
+  "affected_operator_collection": {
+    "scope": "48 filtered cases with current small-row dispatch and auto7 swizzle16. Dirty-source diagnostic, not full301 acceptance.",
+    "selected_passed": true,
+    "interference": [],
+    "sources_sha256": {
+      "benchmarks/kernels.py": "0cf915f419bc8485eaae79bccb5a1175b692cd0a64d621ac4df4192d9702bdec",
+      "development/kernels/cases.py": "9d0afabaab15df4bcbff1d2d57d1c79a841634a76a29ecf6e573e28a61bcdba2",
+      "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+      "development/kernels/dspark-reference.json": "4e8b36447a947f065ded83b658743ecbf1f1bf8c283cf32a8e9e317f51590e05",
+      "development/kernels/fixtures.py": "d29f119e25b3b8635516c03452433be76a8a7788b08a76a888b22d22416c04eb",
+      "development/kernels/observations.py": "b418d9d3c58de0377d1dbd5660408327d289b9f789e283698d81526dd3f3d349",
+      "development/kernels/output_verification.py": "ca5ccc12de2285ddad16841c4810cac3b701d8c3aa83a1c7c74a4fc2687cf6a2",
+      "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+      "development/kernels/reference.py": "b6a80426e0854ba36a98c62f37809a67d1270d25c7b74eb2674438ca2ca26c92",
+      "development/kernels/semantics.py": "cbfaf6ac803384d9e1953e9757a4794c30c9c686c5ae8de228d9cce99b13baa4",
+      "development/kernels/tilelang-reference.json": "545c3d6f70ab290c4411b17513505fb3eb76014d6e3bd839081714668a7d49c9",
+      "development/kernels/timing.py": "f0a7193034c9c85231caa1c8c6d12ab0cefcb1987cacad420813c7421160ecd2",
+      "development/kernels/twins.py": "52ed6e65c6b44c0a54b5821af14f04cc5d2a38ec1123737457a21c4f95aa77d0",
+      "development/kernels/variant.py": "717e32bc7b93a3cca0513e567a75bd307c2f6ad121616b70b060e9089ded46d2",
+      "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+      "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+      "python/oh_my_vllm/ir/core.py": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+      "python/oh_my_vllm/ir/coverage.py": "339556d38f2b8733f48abc7e73ca04b1034ebae9f1f099b597b9d860330359f7",
+      "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+      "python/oh_my_vllm/ir/execution.py": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+      "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+      "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+      "python/oh_my_vllm/ir/gdn_prepare.py": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+      "python/oh_my_vllm/ir/logits.py": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+      "python/oh_my_vllm/ir/normalized_linear.py": "4a19b5496a9073d03f30234bb482f379aa186032d086b8b8e75854fe48dd3662",
+      "python/oh_my_vllm/ir/partial_attention.py": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+      "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+      "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+      "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+      "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+      "python/oh_my_vllm/kernels/attention.py": "667fd8f322a6f221c204477dc666cf030c88c26ed125e62759a78492cedacf3a",
+      "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+      "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+      "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+      "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "2903658a1ad52f721e8dc813306b1003751e8e3796855cddb913044c70b678e4",
+      "python/oh_my_vllm/kernels/cuda_backend/groupwise.py": "c48777698bcb6751dde85f7ab49735e6763d74f5e1909edaec7f97f9dd169981",
+      "python/oh_my_vllm/kernels/cuda_backend/groupwise_fp8.cu": "562d07aca0d44f4026344bb38214c9da3fb9d0bf62254b02d0e35a21a435f2d9",
+      "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "446c53dcd196cedbeb44e49576df07e4fcf2279283eb80cc1e5455676aca3896",
+      "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+      "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+      "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+      "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+      "python/oh_my_vllm/kernels/fp8.py": "d91feb1a5b4881c5358a5a4cf6c92ccdeb8c1234c7e56216d3c43f8e238bc88c",
+      "python/oh_my_vllm/kernels/gdn.py": "b449e439f5f524272578b05899b529de9b4eb73c7ab34fb35f9ae09b07e7af75",
+      "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+      "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+      "python/oh_my_vllm/kernels/partial_attention.py": "9d74993331ee37e48931d0600204009cf926ad4582db92e8f1e2f296ad0aa92a",
+      "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+      "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+      "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+      "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+      "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+      "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+      "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+      "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+      "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+      "python/oh_my_vllm/models/qwen.py": "007582a19d048d681162a94bda0f5677175e7665e736c65f1793addd4fa57c1b",
+      "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+    },
+    "protocol": "Complete static maximum-shape operations; three independent warm rounds, twenty alternating-order pairs/round,100 graph repetitions/sample. External timing events inside each graph exclude host submission gaps. No profiler during timing. Fixtures use immutable sources and repeatable destinations. DSpark append shares one cache after independent-cache verification. Stateless Q/K timing uses matching output-address sequences in one graph pool after independent verification; whole functions keep their output allocations. Other mutable destinations remain isolated. Before timing, compare both backends' returns and written cache/state slots at existing tolerances.",
+    "rows": [
+      {
+        "id": "add_norm-1cd0b34f33",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 32144,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.1905622386932373,
+              "cuda_ms": 0.1893678379058838
+            },
+            {
+              "tilelang_ms": 0.1905635166168213,
+              "cuda_ms": 0.18932031631469726
+            },
+            {
+              "tilelang_ms": 0.1905552005767822,
+              "cuda_ms": 0.18931167602539062
+            }
+          ],
+          "paired_mean_gain_ms": 0.0012168162663777668,
+          "gain_lower_95_ms": 0.0011907151540120461,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-001cbb614c",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 32144,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 10.01687713623047,
+              "cuda_ms": 7.1859304809570315
+            },
+            {
+              "tilelang_ms": 10.019895019531251,
+              "cuda_ms": 7.2015554809570315
+            },
+            {
+              "tilelang_ms": 10.045770568847656,
+              "cuda_ms": 7.178346557617187
+            }
+          ],
+          "paired_mean_gain_ms": 2.8224317728678385,
+          "gain_lower_95_ms": 2.801738840738932,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-20dd53c898",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 32144
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0082915198802948,
+              "cuda_ms": 0.006789599955081939
+            },
+            {
+              "tilelang_ms": 0.008293600082397462,
+              "cuda_ms": 0.006789119839668274
+            },
+            {
+              "tilelang_ms": 0.00828687995672226,
+              "cuda_ms": 0.006788959801197052
+            }
+          ],
+          "paired_mean_gain_ms": 0.0015025439858436583,
+          "gain_lower_95_ms": 0.0014991732736428579,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-27c6f00266",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 1,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.001902879998087883,
+              "cuda_ms": 0.0016345599293708802
+            },
+            {
+              "tilelang_ms": 0.0019033600389957428,
+              "cuda_ms": 0.0016331200301647187
+            },
+            {
+              "tilelang_ms": 0.001908480003476143,
+              "cuda_ms": 0.0016281599551439285
+            }
+          ],
+          "paired_mean_gain_ms": 0.0002746986572941144,
+          "gain_lower_95_ms": 0.00027038933336734767,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-c7061d06b7",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 1,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.03408576011657715,
+              "cuda_ms": 0.03306463956832886
+            },
+            {
+              "tilelang_ms": 0.034090560674667356,
+              "cuda_ms": 0.03306416034698487
+            },
+            {
+              "tilelang_ms": 0.03410399913787842,
+              "cuda_ms": 0.03306479930877686
+            }
+          ],
+          "paired_mean_gain_ms": 0.0010310504833857222,
+          "gain_lower_95_ms": 0.0010232851902643838,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-9710bbc960",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 1
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0011241599917411805,
+              "cuda_ms": 0.00071407999843359
+            },
+            {
+              "tilelang_ms": 0.0011244799941778185,
+              "cuda_ms": 0.0007134399935603143
+            },
+            {
+              "tilelang_ms": 0.0011259200051426887,
+              "cuda_ms": 0.0007152000069618225
+            }
+          ],
+          "paired_mean_gain_ms": 0.0004112480009595553,
+          "gain_lower_95_ms": 0.0004097226647039254,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-d38e95acda",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 32768,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.19430607795715332,
+              "cuda_ms": 0.19286736488342285
+            },
+            {
+              "tilelang_ms": 0.1942795181274414,
+              "cuda_ms": 0.1928033638000488
+            },
+            {
+              "tilelang_ms": 0.19429967880249022,
+              "cuda_ms": 0.19280688285827635
+            }
+          ],
+          "paired_mean_gain_ms": 0.0014756002426147467,
+          "gain_lower_95_ms": 0.0014431791305541974,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-f86fb32ba5",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 32768,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 10.209779663085937,
+              "cuda_ms": 7.296957092285156
+            },
+            {
+              "tilelang_ms": 10.235855102539062,
+              "cuda_ms": 7.304516296386719
+            },
+            {
+              "tilelang_ms": 10.2389013671875,
+              "cuda_ms": 7.3015658569335935
+            }
+          ],
+          "paired_mean_gain_ms": 2.9204825846354168,
+          "gain_lower_95_ms": 2.9016518046061197,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-cae0b44add",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 32768
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.008444959819316864,
+              "cuda_ms": 0.006910879909992218
+            },
+            {
+              "tilelang_ms": 0.008444799780845643,
+              "cuda_ms": 0.006910559833049774
+            },
+            {
+              "tilelang_ms": 0.00844400018453598,
+              "cuda_ms": 0.006910559833049774
+            }
+          ],
+          "paired_mean_gain_ms": 0.001547146668036779,
+          "gain_lower_95_ms": 0.0015330772995948792,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-c7cb824ce7",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 2,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0019102399796247483,
+              "cuda_ms": 0.0016329599916934967
+            },
+            {
+              "tilelang_ms": 0.0019116800278425215,
+              "cuda_ms": 0.0016332799941301346
+            },
+            {
+              "tilelang_ms": 0.0019100799411535265,
+              "cuda_ms": 0.001626879945397377
+            }
+          ],
+          "paired_mean_gain_ms": 0.00027986131360133485,
+          "gain_lower_95_ms": 0.00027797864625851314,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-4d4d440715",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 2,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.034002560377120974,
+              "cuda_ms": 0.03338655948638916
+            },
+            {
+              "tilelang_ms": 0.034008319377899165,
+              "cuda_ms": 0.033393919467926025
+            },
+            {
+              "tilelang_ms": 0.033992639780044555,
+              "cuda_ms": 0.03338832020759583
+            }
+          ],
+          "paired_mean_gain_ms": 0.0006086294651031494,
+          "gain_lower_95_ms": 0.0005996798674265538,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-c72bdad5d4",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 2
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.001125440001487732,
+              "cuda_ms": 0.0007126399874687195
+            },
+            {
+              "tilelang_ms": 0.0011288000270724297,
+              "cuda_ms": 0.00071407999843359
+            },
+            {
+              "tilelang_ms": 0.0011291200295090674,
+              "cuda_ms": 0.0007135999947786331
+            }
+          ],
+          "paired_mean_gain_ms": 0.00041457599898179375,
+          "gain_lower_95_ms": 0.00041262399405241014,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-0c6631a889",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 4,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0019055999815464019,
+              "cuda_ms": 0.0016556799411773682
+            },
+            {
+              "tilelang_ms": 0.0019041600078344345,
+              "cuda_ms": 0.0016571199893951416
+            },
+            {
+              "tilelang_ms": 0.0019043199717998505,
+              "cuda_ms": 0.0016571199893951416
+            }
+          ],
+          "paired_mean_gain_ms": 0.00025337065756320955,
+          "gain_lower_95_ms": 0.00025085865457852687,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-b0d226e89f",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 4,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.034438400268554686,
+              "cuda_ms": 0.03340335965156555
+            },
+            {
+              "tilelang_ms": 0.034436479806900025,
+              "cuda_ms": 0.03340864062309265
+            },
+            {
+              "tilelang_ms": 0.03444512009620666,
+              "cuda_ms": 0.03341024041175842
+            }
+          ],
+          "paired_mean_gain_ms": 0.001038042585055033,
+          "gain_lower_95_ms": 0.0010287093321482337,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-ee30f1b859",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 4
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0011452800035476685,
+              "cuda_ms": 0.0007358400151133537
+            },
+            {
+              "tilelang_ms": 0.0011457600072026252,
+              "cuda_ms": 0.0007358400151133537
+            },
+            {
+              "tilelang_ms": 0.0011460800096392632,
+              "cuda_ms": 0.0007369600236415863
+            }
+          ],
+          "paired_mean_gain_ms": 0.0004109653246899446,
+          "gain_lower_95_ms": 0.0004096799915035566,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-c3003e1746",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 5,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0019200000166893006,
+              "cuda_ms": 0.0016542399674654006
+            },
+            {
+              "tilelang_ms": 0.001913120001554489,
+              "cuda_ms": 0.0016521599888801575
+            },
+            {
+              "tilelang_ms": 0.0019206400215625763,
+              "cuda_ms": 0.0016537599265575409
+            }
+          ],
+          "paired_mean_gain_ms": 0.00026421332607666655,
+          "gain_lower_95_ms": 0.00026210132489601774,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-2b1e4e6d56",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 5,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.03437311887741089,
+              "cuda_ms": 0.033469920158386235
+            },
+            {
+              "tilelang_ms": 0.03437327980995178,
+              "cuda_ms": 0.03349215984344482
+            },
+            {
+              "tilelang_ms": 0.03437680006027222,
+              "cuda_ms": 0.033497279882431036
+            }
+          ],
+          "paired_mean_gain_ms": 0.0008884638547897341,
+          "gain_lower_95_ms": 0.0008750133911768592,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-eb9ecb7e6b",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 5
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.001162239983677864,
+              "cuda_ms": 0.0007369600236415863
+            },
+            {
+              "tilelang_ms": 0.0011611199751496316,
+              "cuda_ms": 0.0007355200126767159
+            },
+            {
+              "tilelang_ms": 0.0011612799763679503,
+              "cuda_ms": 0.0007345600053668023
+            }
+          ],
+          "paired_mean_gain_ms": 0.00042234133183956143,
+          "gain_lower_95_ms": 0.0004205066661039988,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-17cf75a750",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 10,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.001921759992837906,
+              "cuda_ms": 0.0016937600076198578
+            },
+            {
+              "tilelang_ms": 0.0019227200001478194,
+              "cuda_ms": 0.001695999950170517
+            },
+            {
+              "tilelang_ms": 0.0019227200001478194,
+              "cuda_ms": 0.001688160002231598
+            }
+          ],
+          "paired_mean_gain_ms": 0.00023282133291165037,
+          "gain_lower_95_ms": 0.00023039466639359794,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-cdce18afb6",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 10,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.034576640129089356,
+              "cuda_ms": 0.03361183881759643
+            },
+            {
+              "tilelang_ms": 0.034581599235534666,
+              "cuda_ms": 0.03362096071243286
+            },
+            {
+              "tilelang_ms": 0.03457888007164002,
+              "cuda_ms": 0.0336185610294342
+            }
+          ],
+          "paired_mean_gain_ms": 0.0009671091636021934,
+          "gain_lower_95_ms": 0.0009568427403767904,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-db0ed2a574",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 10
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0010921599715948106,
+              "cuda_ms": 0.0008825600147247315
+            },
+            {
+              "tilelang_ms": 0.001091040000319481,
+              "cuda_ms": 0.0008793599903583526
+            },
+            {
+              "tilelang_ms": 0.0010889600217342376,
+              "cuda_ms": 0.0008812800049781799
+            }
+          ],
+          "paired_mean_gain_ms": 0.00020698666572570803,
+          "gain_lower_95_ms": 0.00020526933049162233,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-28b801aed5",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 20,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0020032000541687013,
+              "cuda_ms": 0.001717119961977005
+            },
+            {
+              "tilelang_ms": 0.0020076800137758255,
+              "cuda_ms": 0.0017235199362039566
+            },
+            {
+              "tilelang_ms": 0.0020035199820995333,
+              "cuda_ms": 0.0017190399765968324
+            }
+          ],
+          "paired_mean_gain_ms": 0.0002833920170863469,
+          "gain_lower_95_ms": 0.0002811573495467504,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-8d76dedadb",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 20,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.034742879867553714,
+              "cuda_ms": 0.03369808077812195
+            },
+            {
+              "tilelang_ms": 0.03472655892372131,
+              "cuda_ms": 0.0337064003944397
+            },
+            {
+              "tilelang_ms": 0.0348256003856659,
+              "cuda_ms": 0.03377776026725769
+            }
+          ],
+          "paired_mean_gain_ms": 0.0010392747720082598,
+          "gain_lower_95_ms": 0.0010256803035736078,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-7c7a082031",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 20
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0011631999909877777,
+              "cuda_ms": 0.0009809600189328194
+            },
+            {
+              "tilelang_ms": 0.0011675199866294861,
+              "cuda_ms": 0.0009825600311160086
+            },
+            {
+              "tilelang_ms": 0.0011633599922060967,
+              "cuda_ms": 0.0009809600189328194
+            }
+          ],
+          "paired_mean_gain_ms": 0.00018254398678739864,
+          "gain_lower_95_ms": 0.00018050664414962132,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-d9c0a01fe2",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 8,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0019227200001478194,
+              "cuda_ms": 0.0016766399890184402
+            },
+            {
+              "tilelang_ms": 0.0019263999909162521,
+              "cuda_ms": 0.0016787200421094894
+            },
+            {
+              "tilelang_ms": 0.0019236800074577333,
+              "cuda_ms": 0.0016780799627304076
+            }
+          ],
+          "paired_mean_gain_ms": 0.0002471306696534157,
+          "gain_lower_95_ms": 0.00024512001375357313,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-3f3c652ecb",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 8,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.03441215991973877,
+              "cuda_ms": 0.03352992057800293
+            },
+            {
+              "tilelang_ms": 0.03439296007156372,
+              "cuda_ms": 0.03352992057800293
+            },
+            {
+              "tilelang_ms": 0.034412639141082765,
+              "cuda_ms": 0.03353440046310425
+            }
+          ],
+          "paired_mean_gain_ms": 0.0008810294469197592,
+          "gain_lower_95_ms": 0.0008689016103744513,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-effbdca2d5",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 8
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0011678400263190269,
+              "cuda_ms": 0.000875999964773655
+            },
+            {
+              "tilelang_ms": 0.0011667200177907944,
+              "cuda_ms": 0.0008772799745202064
+            },
+            {
+              "tilelang_ms": 0.0011665600165724755,
+              "cuda_ms": 0.0008779199793934822
+            }
+          ],
+          "paired_mean_gain_ms": 0.00029375467821955676,
+          "gain_lower_95_ms": 0.00029127467547853785,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-6e0219aefc",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 16,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.001975359991192818,
+              "cuda_ms": 0.0017155200242996217
+            },
+            {
+              "tilelang_ms": 0.001972479969263077,
+              "cuda_ms": 0.0017137599736452103
+            },
+            {
+              "tilelang_ms": 0.0019703999906778335,
+              "cuda_ms": 0.0017151999473571777
+            }
+          ],
+          "paired_mean_gain_ms": 0.0002591040233771006,
+          "gain_lower_95_ms": 0.0002567253684004148,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-7e291fd1a6",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 16,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.034537760019302366,
+              "cuda_ms": 0.03357391953468322
+            },
+            {
+              "tilelang_ms": 0.034542239904403686,
+              "cuda_ms": 0.03357455968856811
+            },
+            {
+              "tilelang_ms": 0.03454192042350769,
+              "cuda_ms": 0.03358415961265564
+            }
+          ],
+          "paired_mean_gain_ms": 0.0009699893792470299,
+          "gain_lower_95_ms": 0.0009628799359003699,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-9a64570b10",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 16
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0010820799693465233,
+              "cuda_ms": 0.0009579199925065041
+            },
+            {
+              "tilelang_ms": 0.0010814399644732476,
+              "cuda_ms": 0.0009595200046896935
+            },
+            {
+              "tilelang_ms": 0.001080160029232502,
+              "cuda_ms": 0.000955200009047985
+            }
+          ],
+          "paired_mean_gain_ms": 0.00012379732976357144,
+          "gain_lower_95_ms": 0.00012171199545264245,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-c7b8a73bb9",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 32,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.002006240040063858,
+              "cuda_ms": 0.0017220800369977952
+            },
+            {
+              "tilelang_ms": 0.0020075199753046037,
+              "cuda_ms": 0.0017193600535392762
+            },
+            {
+              "tilelang_ms": 0.0020083199441432954,
+              "cuda_ms": 0.0017188800126314164
+            }
+          ],
+          "paired_mean_gain_ms": 0.0002866879999637604,
+          "gain_lower_95_ms": 0.00028424534698327385,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-894b47d167",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 32,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0351747190952301,
+              "cuda_ms": 0.034028480052948
+            },
+            {
+              "tilelang_ms": 0.03517328023910522,
+              "cuda_ms": 0.034024319648742675
+            },
+            {
+              "tilelang_ms": 0.03567232012748718,
+              "cuda_ms": 0.03444128036499024
+            }
+          ],
+          "paired_mean_gain_ms": 0.0011652906735738113,
+          "gain_lower_95_ms": 0.0011434292395909628,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-76e8e07f4c",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 32
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0012244800105690955,
+              "cuda_ms": 0.0009820800274610519
+            },
+            {
+              "tilelang_ms": 0.0012256000190973282,
+              "cuda_ms": 0.0009824000298976898
+            },
+            {
+              "tilelang_ms": 0.00121568001806736,
+              "cuda_ms": 0.0009830400347709657
+            }
+          ],
+          "paired_mean_gain_ms": 0.00023451732968290647,
+          "gain_lower_95_ms": 0.00023183999210596082,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-a8eca15b2f",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 624,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0038369598984718326,
+              "cuda_ms": 0.0037305600941181186
+            },
+            {
+              "tilelang_ms": 0.0038361600041389465,
+              "cuda_ms": 0.003722880035638809
+            },
+            {
+              "tilelang_ms": 0.003838080018758774,
+              "cuda_ms": 0.0037300799787044524
+            }
+          ],
+          "paired_mean_gain_ms": 0.00011240530014038084,
+          "gain_lower_95_ms": 0.00010981325805187224,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-4424919b66",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 624,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.18968287467956543,
+              "cuda_ms": 0.1516537618637085
+            },
+            {
+              "tilelang_ms": 0.19135536193847658,
+              "cuda_ms": 0.1523054361343384
+            },
+            {
+              "tilelang_ms": 0.19165888786315918,
+              "cuda_ms": 0.1529259204864502
+            }
+          ],
+          "paired_mean_gain_ms": 0.038605082829793295,
+          "gain_lower_95_ms": 0.03782683610916138,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-230b55c57b",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 624
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0013868800550699235,
+              "cuda_ms": 0.0011822399869561196
+            },
+            {
+              "tilelang_ms": 0.001377440020442009,
+              "cuda_ms": 0.001183519996702671
+            },
+            {
+              "tilelang_ms": 0.0013865600526332855,
+              "cuda_ms": 0.0011844800040125849
+            }
+          ],
+          "paired_mean_gain_ms": 0.00020194134737054506,
+          "gain_lower_95_ms": 0.00019846400494376822,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-ea3a42f942",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 1248,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.006005759835243225,
+              "cuda_ms": 0.005669440031051636
+            },
+            {
+              "tilelang_ms": 0.006003360152244569,
+              "cuda_ms": 0.005660640001296997
+            },
+            {
+              "tilelang_ms": 0.006006399989128113,
+              "cuda_ms": 0.00566239982843399
+            }
+          ],
+          "paired_mean_gain_ms": 0.0003354080418745677,
+          "gain_lower_95_ms": 0.0003308853805065156,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-71424dc131",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 1248,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.30984543800354003,
+              "cuda_ms": 0.2875990390777588
+            },
+            {
+              "tilelang_ms": 0.3090779209136963,
+              "cuda_ms": 0.2885294342041016
+            },
+            {
+              "tilelang_ms": 0.30960304260253907,
+              "cuda_ms": 0.28744704246520997
+            }
+          ],
+          "paired_mean_gain_ms": 0.02139670880635579,
+          "gain_lower_95_ms": 0.02061383978525797,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-414c933c7a",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 1248
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.001470559984445572,
+              "cuda_ms": 0.001247200034558773
+            },
+            {
+              "tilelang_ms": 0.0014721599966287613,
+              "cuda_ms": 0.0012478400021791458
+            },
+            {
+              "tilelang_ms": 0.0014652800559997558,
+              "cuda_ms": 0.0012505599856376648
+            }
+          ],
+          "paired_mean_gain_ms": 0.00021921066815654437,
+          "gain_lower_95_ms": 0.00021572801222403845,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-6c841c61cc",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 2496,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.016756960153579713,
+              "cuda_ms": 0.015568960309028625
+            },
+            {
+              "tilelang_ms": 0.016760159730911255,
+              "cuda_ms": 0.015584799647331237
+            },
+            {
+              "tilelang_ms": 0.01675823986530304,
+              "cuda_ms": 0.01557103991508484
+            }
+          ],
+          "paired_mean_gain_ms": 0.0011850347121556601,
+          "gain_lower_95_ms": 0.0011766613324483237,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-a662bfad43",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 2496,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.587852954864502,
+              "cuda_ms": 0.5745683288574219
+            },
+            {
+              "tilelang_ms": 0.5837753677368165,
+              "cuda_ms": 0.5734404945373535
+            },
+            {
+              "tilelang_ms": 0.5912497520446778,
+              "cuda_ms": 0.5727315139770508
+            }
+          ],
+          "paired_mean_gain_ms": 0.014639459609985347,
+          "gain_lower_95_ms": 0.013357638676961258,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-032c38d108",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 2496
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0016414400190114973,
+              "cuda_ms": 0.0014299199730157851
+            },
+            {
+              "tilelang_ms": 0.001640320047736168,
+              "cuda_ms": 0.0014294400066137314
+            },
+            {
+              "tilelang_ms": 0.0016353599727153777,
+              "cuda_ms": 0.0014280000329017638
+            }
+          ],
+          "paired_mean_gain_ms": 0.00021019733200470606,
+          "gain_lower_95_ms": 0.0002081119989355405,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-8fa7f5b472",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 32288,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.19155216217041016,
+              "cuda_ms": 0.19018735885620117
+            },
+            {
+              "tilelang_ms": 0.19158095359802246,
+              "cuda_ms": 0.19018479347229006
+            },
+            {
+              "tilelang_ms": 0.19154720306396483,
+              "cuda_ms": 0.19019072532653808
+            }
+          ],
+          "paired_mean_gain_ms": 0.001366084734598797,
+          "gain_lower_95_ms": 0.0013425267537434907,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-1af844b0c0",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 32288,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 10.105422973632812,
+              "cuda_ms": 7.2613522338867185
+            },
+            {
+              "tilelang_ms": 10.119955444335936,
+              "cuda_ms": 7.2664010620117185
+            },
+            {
+              "tilelang_ms": 10.122388916015625,
+              "cuda_ms": 7.267291259765624
+            }
+          ],
+          "paired_mean_gain_ms": 2.8408925069173177,
+          "gain_lower_95_ms": 2.820649912516276,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-fe0ffa9ef4",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 32288
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.008339200019836426,
+              "cuda_ms": 0.006829439997673035
+            },
+            {
+              "tilelang_ms": 0.008343199789524079,
+              "cuda_ms": 0.006830559968948364
+            },
+            {
+              "tilelang_ms": 0.008329760134220123,
+              "cuda_ms": 0.006768959760665894
+            }
+          ],
+          "paired_mean_gain_ms": 0.001526320070028305,
+          "gain_lower_95_ms": 0.0015063307185967764,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm-16c7eea28c",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 32290,
+          "width": 5120
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.19157711982727052,
+              "cuda_ms": 0.19022448539733888
+            },
+            {
+              "tilelang_ms": 0.19158447265625,
+              "cuda_ms": 0.19019440650939942
+            },
+            {
+              "tilelang_ms": 0.19157360076904295,
+              "cuda_ms": 0.19017855644226073
+            }
+          ],
+          "paired_mean_gain_ms": 0.0013809318542480473,
+          "gain_lower_95_ms": 0.0013622274398803706,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-480dca28d6",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 32290,
+          "width": 5120,
+          "columns": 34816
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 10.126287536621094,
+              "cuda_ms": 7.267247009277344
+            },
+            {
+              "tilelang_ms": 10.100720520019532,
+              "cuda_ms": 7.2607467651367195
+            },
+            {
+              "tilelang_ms": 10.112816772460938,
+              "cuda_ms": 7.270918579101562
+            }
+          ],
+          "paired_mean_gain_ms": 2.8426311645507814,
+          "gain_lower_95_ms": 2.8215854187011717,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "gates-7f196271c1",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 32290
+        },
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.008330719769001007,
+              "cuda_ms": 0.0068291199207305905
+            },
+            {
+              "tilelang_ms": 0.00833488017320633,
+              "cuda_ms": 0.006827840209007263
+            },
+            {
+              "tilelang_ms": 0.008326880037784576,
+              "cuda_ms": 0.006829439997673034
+            }
+          ],
+          "paired_mean_gain_ms": 0.0014988800386587777,
+          "gain_lower_95_ms": 0.001495813429355621,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      }
+    ]
+  }
+}

@@ -143,9 +143,9 @@ def add_norm_linear(x, residual, gamma, weight, weight_scale):
     if x.shape[0] > 2**31 // 5120:
         raise ValueError("normalized FP8 input exceeds int32 flat offset range")
     _validate_weight(x, weight, weight_scale, 5120)
-    # At one row, the previous two-kernel CUDA chain is faster than fusion.
+    # At up to 32 rows, the previous CUDA chain is faster than fusion.
     # The explicit TileLang provider also uses its original complete chain.
-    if NAME != "cuda" or x.shape[0] == 1:
+    if NAME != "cuda" or x.shape[0] <= 32:
         from .normalization import add_rms_norm
 
         summed, normalized = add_rms_norm(x, residual, gamma)

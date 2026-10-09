@@ -61,7 +61,7 @@ Restored MTP boundary features have a named 10 KiB read per physical page.
 Features produced previously in the same prefill phase have free ideal retention.
 MTP incoming KV reads use physical positions `[1,end)`, with shared ranges merged by page.
 
-The equation version is `qwen38-dspark-b200-semantic-v3`.
+The equation version is `qwen38-dspark-b200-semantic-v4`.
 Typed FX metadata identifies shape queries and host-known proposal page addresses.
 These metadata operations have zero required GPU work in the relaxed implementation.
 Their execution time stays in wall time.
@@ -86,6 +86,20 @@ Different execution resources can overlap.
 
 The model removes submission or phase-start offsets when requests enter one interval at different times.
 This adjustment gives a bound for the longest individual request interval.
+
+Decode also has a bound from its common tail.
+Let `T` be the maximum first-token timestamp and `E` the maximum kept-token endpoint.
+Rust records those first-token timestamps before it schedules the next worker step.
+The common tail keeps only steps after the maximum first-token step.
+Each request still stops at its own validated endpoint.
+This work is in `[T,E]`, and `E-T` is at most the longest request decode interval.
+
+The tail uses the same parameter-range unions, feedback intervals, and hardware peaks.
+It starts a new final-write ledger and keeps the full initial cache credit.
+Subsequent allocation changes can invalidate its writes.
+Its resource bound has no phase-start offset adjustment.
+The decode bound is the maximum of the offset-adjusted bound and the common-tail bound.
+The two bounds do not add.
 
 ## Hardware limits
 

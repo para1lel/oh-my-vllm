@@ -134,16 +134,17 @@ FP8 activation 使用逐行 128-value scale.
 它保留任意 FP32 block scale, FP32 累积和 BF16 输出.
 启动入口在调用者 stream 上选择 PDL.
 至少 2048 行的宽 gate/up 矩阵使用八 tile swizzle, 改善 cache 局部性.
+至少 32144 行的 34816 by 5120 gate/up 矩阵在 two-SM 路径使用 swizzle 16.
 不带 scale 的普通 projection 使用 `F.linear`.
 
 这避开已观察到的 FlashInfer CUTLASS 在 17 至 32 row 的不稳定性.
 小批 BF16 vocabulary projection 使用 FlashInfer CuTe-DSL GEMM.
 
 Residual / RMS 和 SiLU / FP8 融合保留已有 BF16 舍入点.
-MLP gate/up 路径在超过一行时, 用一个 CUDA kernel 合并残差 RMS 与激活量化.
+MLP gate/up 路径在超过 32 行时, 用一个 CUDA kernel 合并残差 RMS 与激活量化.
 它写出 BF16 残差和, 在寄存器中保留归一化后的 BF16 值, 再转换为 FP8.
 投影保持之前的 GEMM provider 和 scale 布局.
-单行使用之前的 CUDA 残差 RMS 与量化链.
+至多 32 行使用之前的 CUDA 残差 RMS 与量化链.
 
 Convolution, GDN 和 RMS 接受 packed projection stride, 返回 dense output.
 GDN prefill 显式归一化 Q / K, 使用 FP32 norm 和 BF16 输出.
@@ -273,7 +274,7 @@ Resident graph 继续 replay.
 Capture 恢复持久状态和 FA 写入; 输出复制先于 pool 复用.
 
 Target prefill 为普通和 DSpark 模式各设独立的八条目 family.
-这些 family 捕获 query/context 大小固定的 native 或 ragged attention, 并保留至少 12 GiB capture 显存余量.
+这些 family 捕获 query/context 大小固定的 native 或 ragged attention, 并保留至少 32 GiB capture 显存余量.
 KV page, state slot, token 和 attention metadata 保持动态.
 预热与 capture 在 `finally` 中恢复所有目标 FA/GDN 值.
 Replay 先验证全部 metadata 替换, 在复制前恢复捕获的绑定.

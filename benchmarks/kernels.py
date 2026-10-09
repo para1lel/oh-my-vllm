@@ -51,6 +51,11 @@ def main():
         parser.error("--output required for measurements")
     if os.environ.get("OH_MY_VLLM_KERNEL_BACKEND") != "cuda":
         parser.error("set OH_MY_VLLM_KERNEL_BACKEND=cuda before starting Python")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    # Reserve the attempt before hardware initialization. Existing evidence
+    # must survive retries and concurrent collectors that use the same path.
+    with args.output.open("x"):
+        pass
     import torch
     from oh_my_vllm.kernels.cuda_backend import provenance, variant_launch_counts
     from oh_my_vllm.kernels.cuda_backend.groupwise import provenance as gemm_provenance
@@ -110,7 +115,6 @@ def main():
         estimates={},
         passed=False,
     )
-    args.output.parent.mkdir(parents=True, exist_ok=True)
 
     def save():
         args.output.write_text(json.dumps(report, indent=2) + "\n")

@@ -424,7 +424,9 @@ void gates(TensorView ba, TensorView log, TensorView bias, TensorView decay, Ten
   if (ba.size(0) == 0)
     return;
   auto stream = stream_for(ba, "gates");
-  launch_kernel(gates_kernel, (ba.size(0) * 48 + 255) / 256, 256, 0, stream,
+  // Medium rows benefit from twice as many blocks for the transcendental work.
+  int threads = ba.size(0) >= 128 && ba.size(0) < 4096 ? 128 : 256;
+  launch_kernel(gates_kernel, (ba.size(0) * 48 + threads - 1) / threads, threads, 0, stream,
       static_cast<const __nv_bfloat16 *>(ba.data_ptr()), static_cast<const float *>(log.data_ptr()),
       static_cast<const float *>(bias.data_ptr()), static_cast<float *>(decay.data_ptr()),
       static_cast<float *>(beta.data_ptr()), ba.size(0));
@@ -552,7 +554,11 @@ void launch_rms5120(TensorView x, TensorView residual, TensorView weight,
       RMS5120(false, 128, 4, false);
     }
   } else if (add) {
-    RMS5120(true, 256, 4, false);
+    if (x.size(0) >= 128) {
+      RMS5120(true, 256, 4, true);
+    } else {
+      RMS5120(true, 256, 4, false);
+    }
   } else {
     RMS5120(false, 256, 4, false);
   }

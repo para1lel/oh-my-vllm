@@ -23,6 +23,11 @@
 <p>权重与 scale 同样计入必要读取. 解码时, 当前 token 逐层使用模型参数, 读取次数取决于真正的 token 反馈与提议依赖. 重复 token 的 embedding 行按实际 ID 取并集. FA 读取按物理 KV 页的有效区间取并集, GDN 读取有效源状态; 接受和回滚决定哪些输出最终进入持久缓存.</p>
 <<math "H=\\frac{B_{\\mathrm{required}}}{7.7\\times10^{12}},\\quad S=\\max(L_{\\mathrm{DAG}},H,\\max_r C_r),\\quad L=\\max(0,S-\\Delta)">>
 <p>B_required 是最少必要 HBM 字节数, 7.7 TB/s 是采用的 B200 官方带宽, H 为 HBM 服务秒数. L_DAG 是保留真实依赖后的放松路径下界. S 是 batch 阶段跨度的资源下界, Delta 是同一阶段最晚起点与最早起点之差. Prefill 的起点是提交, decode 的起点是首 token. 扣除 Delta 后得到最长单请求区间的保守下界 L. 图上的依赖与单卡共享资源同时生效: 独立权重读取可以并行启动, 全部必要字节仍由同一块 GPU 的 HBM 提供.</p>
+<h2>交错 decode 的共同尾部怎样计算</h2>
+<p>起点错开较多时, 还可以单独分析所有请求都开始 decode 后的工作. 令 T 为最晚的首 token 时刻, E 为最晚的末 token 时刻. 最晚结束的请求从自身首 token 开始到 E, 因而其 decode 时长至少为 E - T. 共同尾部的必要工作必须在这个区间内完成, 它的资源下界可以约束 batch 最慢的 decode.</p>
+<<math "T=\\max_i t_{i,\\mathrm{first}},\\quad E=\\max_i t_{i,\\mathrm{last}},\\quad E-T\\le\\max_i D_i,\\quad L_{\\mathrm{decode}}=\\max(L_{\\mathrm{skew}},L_{\\mathrm{tail}})">>
+<p>i 是请求下标, t_i,first 与 t_i,last 是该请求的首 token 与末 token 时刻, D_i 是两者之差. L_decode 是 batch 最慢 decode 的下界. L_skew 是上一节扣除起点差的下界, L_tail 是共同尾部的资源下界. 两者描述同一阶段, 取最大值. analysis 从最晚首 token 所在 step 之后开始选取工作, 到每个请求自己的已完成末 step 为止. Rust 收到 worker 回应并登记该步的首末 token 后, 才提交下一步, 因而选中工作处于这些边界内.</p>
+<p>尾部另建物理写入账本, 给边界之前的缓存内容以理想驻留与容量抵扣. 尾部的新写入才能计入必要流量. 账本也观察其他请求的地址重分配, 避免把已被覆盖的旧 checkpoint 当作有效输出. 这套计算使用必要工作和理论峰值, GPU 实测耗时仍用于诊断.</p>
 <h2>缓存与低层执行有哪些理想化假设</h2>
 <p>当前路径分析将全部算术节点的服务时间放松为零, 包括 GEMM 与 GDN, 完整计算量由资源下界计入. 每个输入读取节点各自获得完整片上容量抵扣, 跨 step 的路径取最大值, 允许参数提前读取并与其他工作重叠. 这一分析保留依赖, 使用更宽松的服务假设.</p>
 <p>模型允许中间值融合并驻留片上, 给有限片上容量以理想复用, 未公开的片上带宽按无限处理. 源码明确识别 BF16 packed 运算和 FP8 转换; 当公开规格尚不能确定其吞吐单位或共享资源映射时, 对相应服务时间作零耗时放松, 同时报告操作数量. 这些假设让理论值更乐观, 文档列出其适用范围.</p>

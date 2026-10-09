@@ -11,7 +11,7 @@
 <<math "\\operatorname{RMSNorm}(x)_i = w_i x_i / \\sqrt{\\frac{1}{d}\\sum_{j=1}^{d}x_j^2+\\epsilon}">>
 <p>x 是一行特征, d 是该行维度, w 是归一化权重, i 与 j 是列下标. 归约在 FP32 完成, 输入和输出通常为 BF16. Checkpoint 对模型大部分 norm 权重加 1, GDN 的带门控 norm 使用 offset=False, 按自身权重加载.</p>
 <p>Layer.forward_residual 将残差相加与 RMS 合并: 整理本层输入, 执行注意力或 GDN, 再将这一分支加入残差并归一化, 最后执行 MLP. 返回新分支与保留残差, 下一层继续. 最后一层之后再做最终 add_rms_norm, 保持代码规定的 BF16 舍入位置.</p>
-<p>MLP 的 FP8 gate/up 投影使用 add_norm_fp8_linear. 它先把残差和舍入为 BF16, 在 FP32 计算 RMS 与 gamma 乘法, 再把归一化结果舍入为 BF16, 用这些值计算 128 元素分组的 FP8 数据与 scale. 多行时, CUDA 把归一化中间值留在寄存器, 随后调用原来的 GEMM; BF16 残差和仍写出, 供下一层读取. 单行测量显示融合较慢, 因而单行保持原来的 CUDA 残差 RMS 与量化链.</p>
+<p>MLP 的 FP8 gate/up 投影使用 add_norm_fp8_linear. 它先把残差和舍入为 BF16, 在 FP32 计算 RMS 与 gamma 乘法, 再把归一化结果舍入为 BF16, 用这些值计算 128 元素分组的 FP8 数据与 scale. 超过 32 行时, CUDA 把归一化中间值留在寄存器, 随后调用原来的 GEMM; BF16 残差和仍写出, 供下一层读取. 小行数的成对测量支持原来的 CUDA 链, 因而至多 32 行保持原来的残差 RMS 与量化路径.</p>
 <<source "normalizedLinear" "展开残差归一化与 FP8 投影的融合入口">>
 <h2>FP8 投影怎样减少矩阵计算成本</h2>
 <p>Linear 有两条分支: 权重有 scale 时使用 FP8 投影与 FP32 缩放系数, scale 为 None 时用普通 F.linear. GDN 的 b/a 投影属于后者, 两份 BF16 权重合成 96 列 (各 48 列) 的门参数. Checkpoint.linear 要求一起打包的投影都有 scale 或都无 scale, 避免把两种布局混合. Linear.silu 同样分别走普通 SiLU 后投影, 或融合 FP8 路线. FP8 是 8 位浮点格式, 表达范围和精度需要 scale 配合. 激活每行按 128 个元素分组量化到 E4M3FN, 权重按 128x128 分块缩放, 矩阵乘法组合二者 scale 得到 BF16 输出.</p>

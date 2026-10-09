@@ -3,7 +3,8 @@
 The first complete worker response belongs to prefill, including its proposals.
 Decode starts with that response's proposals and committed states available.
 Whole-batch resource work bounds a span; subtract phase-start skew to bound
-the longest individual request interval. GPU timings never supply model costs.
+the longest individual request interval. The common decode tail supplies a
+second contained resource bound. GPU timings never supply model costs.
 """
 
 from collections import defaultdict
@@ -14,7 +15,7 @@ from .dag import b200, retention_bytes
 from .memory import WriteLedger
 from .model import Model
 
-MODEL_VERSION = "qwen38-dspark-b200-semantic-v3"
+MODEL_VERSION = "qwen38-dspark-b200-semantic-v4"
 
 
 def _validate_draft_step(operations, scheduled, outputs, kept, run, mtp_cursor):
@@ -579,12 +580,18 @@ def analyze_trace(trace, runs):
         if mode == "dspark" and not {"dspark_inject", "dspark_backbone"} <= kinds:
             raise ValueError("DSpark workload has no complete draft execution")
         phases = {}
+        common_first = max(first for _, first, _ in boundaries.values())
         for phase in ("prefill", "decode"):
             work = defaultdict(float)
             relaxed_work = defaultdict(float)
             intervals = []
             prefill_reads = {}
             writes = WriteLedger()
+            tail_writes = WriteLedger()
+            tail_work = defaultdict(float)
+            tail_intervals = []
+            tail_path = 0
+            tail_steps = 0
             angle_seen = set()
             path = 0
             first_index = min(begin for begin, _, _ in boundaries.values())
@@ -600,6 +607,8 @@ def analyze_trace(trace, runs):
                     if operation["kind"] == "target":
                         for request in operation["requests"]:
                             writes.invalidate(request)
+                            if phase == "decode" and index > common_first:
+                                tail_writes.invalidate(request)
                 ids = {
                     rid
                     for rid, (begin, first, last) in boundaries.items()
@@ -641,6 +650,12 @@ def analyze_trace(trace, runs):
                 # relaxations suppress data produced earlier in this phase.
                 writes.target(operations[0]["requests"], operations[0]["state_dtype"])
                 writes.draft(operations[1:], operations[0]["requests"])
+                in_tail = phase == "decode" and index > common_first
+                if in_tail:
+                    tail_writes.target(
+                        operations[0]["requests"], operations[0]["state_dtype"]
+                    )
+                    tail_writes.draft(operations[1:], operations[0]["requests"])
                 for request in operations[0]["requests"]:
                     rid = request["request_id"]
                     if phase == "prefill" and index > boundaries[rid][0]:
@@ -673,6 +688,12 @@ def analyze_trace(trace, runs):
                         prefill_reads[name] = max(prefill_reads.get(name, 0), size)
                 if phase == "decode":
                     intervals.extend(ranges.values())
+                if in_tail:
+                    tail_steps += 1
+                    for resource, count in summary["work"].items():
+                        tail_work[resource] += count
+                    tail_intervals.extend(ranges.values())
+                    tail_path = max(tail_path, summary["critical_path_s"])
                 # Independent parameter prefetch can span worker invocations.
                 # Full repeated service stays in phase resource totals.
                 path = max(path, summary["critical_path_s"])
@@ -698,6 +719,27 @@ def analyze_trace(trace, runs):
                 max(starts) - min(starts),
                 path,
             )
+            if phase == "decode":
+                # Rust records all first-token boundaries before scheduling the
+                # next step. This work lies after their latest timestamp T and
+                # before the latest retained endpoint E. E-T is at most the
+                # longest per-request decode interval. Give the cut a fresh
+                # cache credit and exclude uncertified endpoint work as above.
+                tail = phase_resource_bound(
+                    hardware,
+                    tail_work,
+                    tail_intervals,
+                    tail_writes.bytes(),
+                    0,
+                    tail_path,
+                )
+                tail["first_step_exclusive"] = common_first
+                tail["selected_steps"] = tail_steps
+                details["skew_adjusted_lower_bound_s"] = details["lower_bound_s"]
+                details["common_tail_model"] = tail
+                details["lower_bound_s"] = max(
+                    details["lower_bound_s"], tail["lower_bound_s"]
+                )
             phases[phase] = details["lower_bound_s"]
             details["recognized_relaxed_operations"] = dict(relaxed_work)
             phases[phase + "_model"] = details

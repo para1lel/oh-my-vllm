@@ -2,29 +2,46 @@
 
 ## Phase-latency verification
 
-The fifteen-row collection for the current theoretical model is pending.
-The first diagnostic uses 32768 input and 16 output tokens, with two full warmups and five measured repetitions.
-It tests request boundaries and execution records.
-The formal output count is 4096.
-Use [requirements](requirements.md) for the current phase gates and [testing](testing.md) for collection commands.
+The full fifteen-row collection for the current source is pending.
+Use [requirements](requirements.md) for the phase gates and [testing](testing.md) for collection commands.
 
-The [owned-kernel and liveness diagnosis](../bench/evidence/2026-10-10-owned-tuning-liveness.json) keeps dirty-source experiments.
-Eighteen copy/recurrent cases and twenty-one selected-output cases passed their numerical and speed checks.
-They use the full per-case timing protocol, with no observed interference.
-Filtered coverage and changed source prevent a full operator acceptance claim.
-The current complete matrix has 301 cases. It keeps all 230 previous cases.
+The [phase and regression progress record](../bench/evidence/2026-10-10-phase-progress.json) applies to source `c56ca40`.
+Seven full rows used two warmups and five measurements, with 4096 output tokens per request.
 
-The ordinary short-output prefill median is `1.335786538 s`.
-Its revised necessary-work bound is `0.44175381006472536 s`, with ratio `3.02382573`.
-The source changed during this diagnostic, and its subsequent cost calculation bypassed the source-contract check.
-These values guide optimization. Formal acceptance must use a stable source and 4096 outputs.
+Ordinary batches 1, 2, and 4, MTP4 batches 1, 2, and 4, and prefix-hit batch 1 all failed the prefill gate.
+Prefill ratios were about 3.016, 3.063, 3.081, 3.007, 3.061, 3.073, and 3.846.
 
-The subsequent [FP8 cache-traversal diagnosis](../bench/evidence/2026-10-10-fp8-cache-traversal.json) passed the source-contract check.
-The source stayed the same during this diagnostic.
-Its short-output prefill median is `1.322744261 s`, with the same bound and ratio `2.994301873267811`.
-Its wall spread is `0.010685699735574266`.
-The output count is sixteen. This stays diagnostic.
+All seven prefill spreads were less than 10%.
+The stored semantic-v3 model also failed MTP4 batch-4 decode.
 
+The common-tail model has review by another agent. Subsequent collection must use its reviewed source contract.
+The original measurements and verdicts stay the same.
+
+The same source completed all 301 operator cases in three groups.
+All numerical checks passed. Four speed checks failed: `add_norm-a8eca15b2f`, `add_norm_fp8_linear-4d4d440715`, `add_norm_fp8_linear-b0d226e89f`, and `gates-032c38d108`.
+
+The GPU suite passed 383 tests. Nine context tests failed their external-process guard.
+These failures do not give capacity results. The record keeps the full failed attempts and source scope.
+
+The [owned-kernel and liveness diagnosis](../bench/evidence/2026-10-10-owned-tuning-liveness.json) keeps previous dirty-source experiments.
+Eighteen copy/recurrent cases and twenty-one selected-output cases passed numerical and speed checks.
+
+The [FP8 cache-traversal diagnosis](../bench/evidence/2026-10-10-fp8-cache-traversal.json) keeps a stable-source short-output experiment.
+It used input 32768 and output 16, with two warmups and five measurements.
+
+Its ordinary prefill median was `1.322744261 s`, with bound `0.44175381006472536 s` and ratio `2.994301873267811`.
+Its wall spread was `0.010685699735574266`.
+
+Filtered operator coverage and short outputs have diagnostic scope.
+The full 301-case matrix and fifteen phase workloads stay active.
+
+
+The [dispatch diagnosis](../bench/evidence/2026-10-10-dispatch-diagnosis.json) keeps subsequent dirty-source operator and three-case DSpark capacity measurements.
+These filtered and short-output records have diagnostic scope.
+
+
+Forty-eight affected operator cases passed numerical and speed checks with the full per-case protocol.
+Their source was dirty. The record keeps the previous failed and interrupted attempts.
 
 ## DSpark implementation and acceptance
 
@@ -118,7 +135,7 @@ The service admitted 52 requests. Fifty completed. Two cancellation tests aborte
 
 Chat used 13 tools and 8 HTTP model requests. Responses used 10 tools and 6 HTTP model requests.
 All model requests returned HTTP 200. Tool arguments are complete.
-Tool results stay unchanged in the first and final model requests after each tool call.
+Tool results stay the same in the first and final model requests after each tool call.
 The two clients read the full `schedule` definition at lines 236-400 and worker initialization at lines 103-125.
 
 The Python examples are the same as the source.

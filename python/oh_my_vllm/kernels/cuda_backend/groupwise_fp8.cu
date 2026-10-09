@@ -151,11 +151,13 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void* float_buffer, size_t float_buf
   fusion_args.beta = 0.0f;
 
   // The wide gate/up projection otherwise sweeps activation rows for each
-  // output tile. An eight-tile swizzle keeps nearby tiles in the same L2
+  // output tile. Shape-selected swizzles keep nearby tiles in the same L2
   // working set; arithmetic, scale granularity, and output rounding are equal.
+  const bool full_prefill_gate_up = m >= 32144 && n == 34816 && k == 5120 && MmaSM == 2;
   const bool full_prefill_qkvz = m >= 32144 && n == 16384 && k == 5120;
   const bool full_prefill_down = m >= 32144 && n == 5120 && k == 17408;
-  arguments.scheduler.max_swizzle_size = m >= 2048 && n >= 32768 ? 8 :
+  arguments.scheduler.max_swizzle_size = full_prefill_gate_up ? 16 :
+                                         m >= 2048 && n >= 32768 ? 8 :
                                          full_prefill_qkvz ? 16 :
                                          full_prefill_down ? 8 : 0;
 

@@ -1,0 +1,464 @@
+{
+  "schema": 1,
+  "kind": "derived",
+  "scope": "Seven completed rows of the fifteen-row collection; source c56ca40 and semantic-v3. Failures retained. Current-source acceptance remains pending.",
+  "passed": false,
+  "source_commit": "c56ca403e109ac44401004c6acb005f73bdc3a23",
+  "protocol": "Two complete warmups and five measurements per row; output4096; greedy synthetic token IDs; prefix32144 for prefix workloads.",
+  "rows": [
+    {
+      "workload": {
+        "mode": "mtp4",
+        "batch_size": 1,
+        "input_len": 32768,
+        "output_len": 4096
+      },
+      "diagnostic": false,
+      "status": "collected",
+      "phases": {
+        "prefill": {
+          "wall_median_s": 1.367084314,
+          "lower_bound_median_s": 0.45457258415536356,
+          "latency_ratio": 3.0074059933468376,
+          "wall_spread": 0.01350964955918585,
+          "passed": false
+        },
+        "decode": {
+          "wall_median_s": 10.519535664,
+          "lower_bound_median_s": 4.68241721865974,
+          "latency_ratio": 2.2466036606219024,
+          "wall_spread": 0.0020913866070426737,
+          "passed": true
+        }
+      },
+      "model_version": "qwen38-dspark-b200-semantic-v3",
+      "warmups": 2,
+      "measured_runs": 5,
+      "prefill_wall_s": [
+        1.361224421,
+        1.364322637,
+        1.379693251,
+        1.367084314,
+        1.372294242
+      ],
+      "decode_wall_s": [
+        10.527001974000001,
+        10.519535664,
+        10.509695658000002,
+        10.516193855000001,
+        10.531696074
+      ]
+    },
+    {
+      "workload": {
+        "mode": "mtp4",
+        "batch_size": 2,
+        "input_len": 32768,
+        "output_len": 4096
+      },
+      "diagnostic": false,
+      "status": "collected",
+      "phases": {
+        "prefill": {
+          "wall_median_s": 2.782948872,
+          "lower_bound_median_s": 0.9091450563779697,
+          "latency_ratio": 3.0610614362104736,
+          "wall_spread": 0.006202875364934017,
+          "passed": false
+        },
+        "decode": {
+          "wall_median_s": 12.988057903000001,
+          "lower_bound_median_s": 4.464129523953247,
+          "latency_ratio": 2.909426761322624,
+          "wall_spread": 0.059466161359012865,
+          "passed": true
+        }
+      },
+      "model_version": "qwen38-dspark-b200-semantic-v3",
+      "warmups": 2,
+      "measured_runs": 5,
+      "prefill_wall_s": [
+        2.782948872,
+        2.7776159160000002,
+        2.794878201,
+        2.781958284,
+        2.791555971
+      ],
+      "decode_wall_s": [
+        12.805316321,
+        12.866368367,
+        12.991999806,
+        13.577666268,
+        12.988057903000001
+      ]
+    },
+    {
+      "workload": {
+        "mode": "mtp4",
+        "batch_size": 4,
+        "input_len": 32768,
+        "output_len": 4096
+      },
+      "diagnostic": false,
+      "status": "collected",
+      "phases": {
+        "prefill": {
+          "wall_median_s": 5.587163513,
+          "lower_bound_median_s": 1.818288717631033,
+          "latency_ratio": 3.0727592701995454,
+          "wall_spread": 0.002077920392518924,
+          "passed": false
+        },
+        "decode": {
+          "wall_median_s": 17.031773489,
+          "lower_bound_median_s": 2.886965532749091,
+          "latency_ratio": 5.899541679938805,
+          "wall_spread": 0.07984712759821047,
+          "passed": false
+        }
+      },
+      "model_version": "qwen38-dspark-b200-semantic-v3",
+      "warmups": 2,
+      "measured_runs": 5,
+      "prefill_wall_s": [
+        5.587163513,
+        5.582360928,
+        5.580081805,
+        5.588969733,
+        5.591691486
+      ],
+      "decode_wall_s": [
+        17.059939001,
+        18.312929481,
+        17.00369737,
+        17.031773489,
+        16.95299129
+      ]
+    },
+    {
+      "workload": {
+        "mode": "ordinary",
+        "batch_size": 1,
+        "input_len": 32768,
+        "output_len": 4096
+      },
+      "diagnostic": false,
+      "status": "collected",
+      "phases": {
+        "prefill": {
+          "wall_median_s": 1.332537611,
+          "lower_bound_median_s": 0.44175381006472536,
+          "latency_ratio": 3.0164711217878524,
+          "wall_spread": 0.011115681747162343,
+          "passed": false
+        },
+        "decode": {
+          "wall_median_s": 35.73945161499999,
+          "lower_bound_median_s": 15.483942549211429,
+          "latency_ratio": 2.308162246237483,
+          "wall_spread": 0.02008764064803631,
+          "passed": true
+        }
+      },
+      "model_version": "qwen38-dspark-b200-semantic-v3",
+      "warmups": 2,
+      "measured_runs": 5,
+      "prefill_wall_s": [
+        1.328526869,
+        1.327946151,
+        1.332537611,
+        1.342758215,
+        1.3358411399999999
+      ],
+      "decode_wall_s": [
+        35.917143167,
+        35.605449328,
+        35.34888778,
+        35.73945161499999,
+        36.066809041
+      ]
+    },
+    {
+      "workload": {
+        "mode": "ordinary",
+        "batch_size": 2,
+        "input_len": 32768,
+        "output_len": 4096
+      },
+      "diagnostic": false,
+      "status": "collected",
+      "phases": {
+        "prefill": {
+          "wall_median_s": 2.7064884769999997,
+          "lower_bound_median_s": 0.8835075081966934,
+          "latency_ratio": 3.0633451916262153,
+          "wall_spread": 0.004344054334579065,
+          "passed": false
+        },
+        "decode": {
+          "wall_median_s": 39.008175967,
+          "lower_bound_median_s": 15.442867599843117,
+          "latency_ratio": 2.5259671310913965,
+          "wall_spread": 0.014430115073214083,
+          "passed": true
+        }
+      },
+      "model_version": "qwen38-dspark-b200-semantic-v3",
+      "warmups": 2,
+      "measured_runs": 5,
+      "prefill_wall_s": [
+        2.7064884769999997,
+        2.715326913,
+        2.714673799,
+        2.703804296,
+        2.70356978
+      ],
+      "decode_wall_s": [
+        39.407952965,
+        39.008175967,
+        38.870959372,
+        39.433851839999996,
+        38.997469613
+      ]
+    },
+    {
+      "workload": {
+        "mode": "ordinary",
+        "batch_size": 4,
+        "input_len": 32768,
+        "output_len": 4096
+      },
+      "diagnostic": false,
+      "status": "collected",
+      "phases": {
+        "prefill": {
+          "wall_median_s": 5.444141604,
+          "lower_bound_median_s": 1.7670136212684802,
+          "latency_ratio": 3.0809845144780676,
+          "wall_spread": 0.0022335236451355494,
+          "passed": false
+        },
+        "decode": {
+          "wall_median_s": 45.308800641,
+          "lower_bound_median_s": 15.379145139493508,
+          "latency_ratio": 2.946119581422468,
+          "wall_spread": 0.018240302619093086,
+          "passed": true
+        }
+      },
+      "model_version": "qwen38-dspark-b200-semantic-v3",
+      "warmups": 2,
+      "measured_runs": 5,
+      "prefill_wall_s": [
+        5.436797249,
+        5.444141604,
+        5.441565146,
+        5.448956868,
+        5.447472283
+      ],
+      "decode_wall_s": [
+        45.248997363,
+        46.075443598,
+        45.308800641,
+        45.318292879,
+        45.294561971
+      ]
+    },
+    {
+      "workload": {
+        "mode": "prefix",
+        "batch_size": 1,
+        "input_len": 32768,
+        "output_len": 4096
+      },
+      "diagnostic": false,
+      "status": "collected",
+      "phases": {
+        "prefill": {
+          "wall_median_s": 0.038674926,
+          "lower_bound_median_s": 0.010056775135687111,
+          "latency_ratio": 3.845658819869557,
+          "wall_spread": 0.04652642386439223,
+          "passed": false
+        },
+        "decode": {
+          "wall_median_s": 35.720964152,
+          "lower_bound_median_s": 15.483942549211429,
+          "latency_ratio": 2.3069682697717844,
+          "wall_spread": 0.012395723282155836,
+          "passed": true
+        }
+      },
+      "model_version": "qwen38-dspark-b200-semantic-v3",
+      "warmups": 2,
+      "measured_runs": 5,
+      "prefill_wall_s": [
+        0.038997661,
+        0.039753309,
+        0.038674926,
+        0.038390344,
+        0.037953903
+      ],
+      "decode_wall_s": [
+        35.842485427999996,
+        35.682797014,
+        35.720964152,
+        35.625128183,
+        36.06791537
+      ]
+    }
+  ],
+  "originals_sha256": {
+    "phase-c56ca40-mtp4-32768-1-attempt01.json": "f09ab751d18acab846e33551d57f903cb8af6effd31b69508c8c656190ea34a9",
+    "phase-c56ca40-mtp4-32768-1-attempt01.log": "a46f74873b0a253e2caacf536f310783b2db37be0cbc4d93ee5aba2581ba1fc8",
+    "phase-c56ca40-mtp4-32768-1-attempt01.trace.json": "9917925140d0aa6a2365cf31f148d1218ac76d1491faffffb2290fd6e443de61",
+    "phase-c56ca40-mtp4-32768-2-attempt01.json": "eaa68edc07fb6d943bec40345bec1ad0977820cb7cda875986795b2326327dfe",
+    "phase-c56ca40-mtp4-32768-2-attempt01.log": "ea3faf070fb3b8d86e7a8cf6d5e86aed72acf4313bce1132fb8bcc2acc36f7bc",
+    "phase-c56ca40-mtp4-32768-2-attempt01.trace.json": "f8afb037859ccb24010457e56a49bac2d3325d4e0d8b49ad65b5103605cef321",
+    "phase-c56ca40-mtp4-32768-4-attempt01.json": "d50226d02904000a0eacf2ab6ee9a5ebe4025cf91ac1cbfe13c1fd881eab0670",
+    "phase-c56ca40-mtp4-32768-4-attempt01.log": "7ab718e465eb5460501a3d0b4bd0473466d61f1544cf711efa83b36b49e5d1f8",
+    "phase-c56ca40-mtp4-32768-4-attempt01.trace.json": "7f076ac193baf29694a1231a414e7c9ee3c6a1c0ca1bbf6009704ccb6dbd7205",
+    "phase-c56ca40-ordinary-32768-1-attempt01.json": "53fcd6a4b3a9df98f025f5ad7704cad377fa4d62d50b88f7410f66772b522d08",
+    "phase-c56ca40-ordinary-32768-1-attempt01.log": "2a7d8e68f996a8ed8975ff4d719d30eeee0256e320da411f8825585d2b99f6e8",
+    "phase-c56ca40-ordinary-32768-1-attempt01.trace.json": "661c8b786f33c39decec8b21dfcff7e459b81620beb07118baada4980037280d",
+    "phase-c56ca40-ordinary-32768-2-attempt01.json": "7062d8dd3323a7fa69f4b8bbbcd9d8d3f864df77b29c393de87ef24ecd6d8ef9",
+    "phase-c56ca40-ordinary-32768-2-attempt01.log": "716de306b60330a8122e619b921e94ad15128b5555cf325551a9e15f5cfb42a4",
+    "phase-c56ca40-ordinary-32768-2-attempt01.trace.json": "4157b0cbbd2a3ebdd67c7fd09098f57d34adc1b94bcf24e5959b83d9c6e548c4",
+    "phase-c56ca40-ordinary-32768-4-attempt01.json": "89e9c69d257f7d183060eed03dbe93d4cc185cb97979678484cc0e2596d70b50",
+    "phase-c56ca40-ordinary-32768-4-attempt01.log": "5483e188dd6c88a5245850904ff46c6c07121b142843b10fca3442bb2f0f2027",
+    "phase-c56ca40-ordinary-32768-4-attempt01.trace.json": "97dbf08ebe90eba33d6a2128f0eefbb2aa5015a6ce38fc35b8cf118f42dd5183",
+    "phase-c56ca40-prefix-32768-1-attempt01.json": "f560bc92ad67f93336e584dbd5eaadce474aa1ef411317112c69b980f853316f",
+    "phase-c56ca40-prefix-32768-1-attempt01.log": "aedd676b697756dcb0b9dc43a7a545caa5206b45c5ddb73a67a4aeb68e2b514e",
+    "phase-c56ca40-prefix-32768-1-attempt01.trace.json": "88077496f318d30ae7650350852ca8e5dac6a5840c671fd98c83cbb534d2cc58",
+    "operator-301-group0-attempt01-results.json": "14f908b61a2807c47e1ae46ac00387768ade2868ead91b1ede4923fd7061c1c7",
+    "operator-301-group1-attempt02-results.json": "00ebee25dfe7a64e5f3ae0eab3ed1ab9ff24e26d70f6910db708554ed4ab8219",
+    "operator-301-group2-attempt01-results.json": "4c7dc7e7323785f146df17f628d0574bd3f6787591c9f5a98442cfb0a9fea7d7",
+    "capacity-and-gpu-suite-attempt02.log": "afaa2bfc63dc31dfc16c1a1956f8cacf8d5f1471dde004fb3f8982a164538273"
+  },
+  "operator_matrix": {
+    "cases": 301,
+    "numerical_passed": true,
+    "speed_passed": 297,
+    "speed_failures": [
+      {
+        "id": "add_norm-a8eca15b2f",
+        "configuration": {
+          "operation": "add_norm",
+          "tokens": 624,
+          "width": 5120
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.003840159922838211,
+              "cuda_ms": 0.004039680063724517
+            },
+            {
+              "tilelang_ms": 0.003840639889240265,
+              "cuda_ms": 0.0040414400398731225
+            },
+            {
+              "tilelang_ms": 0.0038444800674915314,
+              "cuda_ms": 0.004044000059366226
+            }
+          ],
+          "paired_mean_gain_ms": -0.000200512021780014,
+          "gain_lower_95_ms": -0.0002026613354682922,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": false
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-4d4d440715",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 2,
+          "width": 5120,
+          "columns": 34816
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0340990400314331,
+              "cuda_ms": 0.03430831909179688
+            },
+            {
+              "tilelang_ms": 0.03408352017402649,
+              "cuda_ms": 0.034289119243621824
+            },
+            {
+              "tilelang_ms": 0.03409520030021668,
+              "cuda_ms": 0.03428831934928894
+            }
+          ],
+          "paired_mean_gain_ms": -0.00020700772603352984,
+          "gain_lower_95_ms": -0.00021799433231353785,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": false
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-b0d226e89f",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 4,
+          "width": 5120,
+          "columns": 34816
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0343771207332611,
+              "cuda_ms": 0.03439776062965393
+            },
+            {
+              "tilelang_ms": 0.034358240365982055,
+              "cuda_ms": 0.034391679763793946
+            },
+            {
+              "tilelang_ms": 0.03435328006744384,
+              "cuda_ms": 0.03438511967658997
+            }
+          ],
+          "paired_mean_gain_ms": -2.735455830891985e-05,
+          "gain_lower_95_ms": -3.6789218584696326e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": false
+        }
+      },
+      {
+        "id": "gates-032c38d108",
+        "configuration": {
+          "operation": "gates",
+          "tokens": 2496
+        },
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 0.0016120000183582305,
+              "cuda_ms": 0.001647680029273033
+            },
+            {
+              "tilelang_ms": 0.001619199961423874,
+              "cuda_ms": 0.0016356800496578217
+            },
+            {
+              "tilelang_ms": 0.001605439931154251,
+              "cuda_ms": 0.0016462399810552597
+            }
+          ],
+          "paired_mean_gain_ms": -3.3023998141288743e-05,
+          "gain_lower_95_ms": -4.193065812190371e-05,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": false
+        }
+      }
+    ]
+  },
+  "gpu_checks": {
+    "passed": 383,
+    "capacity_interrupted": 9,
+    "capacity_direct_cause": "External contention on the selected GPU; no capacity verdict. DSpark batch1 also logged allocation retries before interruption.",
+    "source_commit": "c56ca403e109ac44401004c6acb005f73bdc3a23"
+  }
+}

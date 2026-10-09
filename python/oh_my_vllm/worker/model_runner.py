@@ -230,7 +230,9 @@ class OhMyVllmWorker:
             capacity=8,
             free_bytes=lambda: torch.cuda.mem_get_info()[0],
             reserved_bytes=lambda: torch.cuda.memory_reserved(),
-            min_capture_free_bytes=12 << 30,
+            # Ragged KV, feature outputs and restoration buffers coexist
+            # during capture. Keep headroom for the complete transient peak.
+            min_capture_free_bytes=32 << 30,
         )
         from oh_my_vllm.worker.mtp import MTP
 

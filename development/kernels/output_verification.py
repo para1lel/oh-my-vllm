@@ -15,7 +15,10 @@ _TOLERANCES = {
 
 
 def _tolerance(operation, path):
-    if operation == "prepare_attention" and path == "written_value":
+    if (
+        operation in ("prepare_attention", "prepare_context")
+        and path == "written_value"
+    ):
         return 0, 0
     if operation in ("add_norm", "add_norm_fp8_linear") and path == "return[0]":
         return 0, 0
