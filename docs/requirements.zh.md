@@ -92,8 +92,6 @@ DSpark 速度, 波动及置信界限不增加验收门槛.
 记录容量, allocated / reserved 显存峰值, compile / capture 审计和实际验证 / 接受的草稿数.
 接受率的分母是已调度草稿 token, 下一步返回的 proposal 使用另一计数.
 
-当前运行时代码的成对采集在 batch 1, 2 和 4 通过.
-当前运行时代码的算子, 边界, 框架和服务验收仍待完成.
 源码身份及测量范围见 [验收索引](acceptance.zh.md).
 采集流程见 [测试](testing.zh.md#dspark-比较).
 

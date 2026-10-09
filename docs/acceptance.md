@@ -1,6 +1,6 @@
 # Acceptance evidence index
 
-## DSpark paired measurements and open acceptance
+## DSpark implementation and acceptance
 
 The optional DSpark mode keeps fixed checkpoint weights and shares the target embedding and vocabulary head.
 Its cumulative confidence threshold is `0.2`. Set it to `0.0` to stop confidence truncation.
@@ -57,19 +57,101 @@ This comparison has no new DSpark TPS, TTFT, spread, or confidence-bound gate.
 The initial twelve ordinary/MTP4 workload gates and full operator gates stay active.
 The [attempt record](../bench/evidence/2026-10-09-dspark-attempt-history.json) keeps failed collections, diagnostics, original hashes, and verification limits.
 
-### Service and capacity scope
+### Current runtime operators and framework
 
-The [previous DSpark service record](../bench/evidence/2026-10-09-dspark-service-de1591b.json) applies to runtime `de1591b`.
-It passed six client groups with Chat and Responses: constraints, lifecycles, oh-my-pi tool loops, and long-context prefix reuse.
-Its summaries keep source-read limits and factual errors in model answers.
-The previous full GPU collection on `46f7529` passed 285 tests and nine 262144-token boundary cases.
+The [formal summary](../bench/evidence/2026-10-09-dspark-formal-suite.json) includes fifteen completed jobs from different original collections.
+It keeps each source, collector, original hash, cleanup records, and original parent status.
+The paired job used `e83674c`. The other jobs used `198b906`.
 
-Operator, boundary, twelve-row framework, and service acceptance for the current runtime wait for GPU availability.
-Collectors reject GPU contention. Original failed attempts and completed subtask records stay available with their source identities.
+The release binary, Python sources, and all runtime source blobs are the same in these parts.
+The loaded CUDA module also agrees. Documentation changes separate these source commits.
 
+The [operator record](../bench/evidence/2026-10-09-dspark-operators.json) passed all 230 cases with output and speed checks.
+It keeps the 147 original cases and eight pinned TileLang references, with 83 new cases.
+Each case has three sets of twenty pairs and one hundred graph repetitions per sample.
+
+All 690 CUDA time medians are less than the TileLang medians for the same case and set. Each one-sided 95% time-saved bound is positive.
+The smallest bound is `0.00000997330993413926 ms` for `quant-5b659364da`.
+An independent review checked full graph operations, shared Q/K output pools, unchanged inputs, and sequence hashes.
+
+The [framework record](../bench/evidence/2026-10-09-dspark-framework.json) passed all twelve original workload gates.
+Each row has two full warmups and five measurements.
+Each row keeps the baseline CPU affinity. Cache capacities are sufficient for the workloads in the two runtimes.
+Measured intervals had no capture or compilation, and recompute preemptions were zero.
+
+| Row | TPS/baseline | TTFT/baseline | TPS spread | TTFT spread |
+|---|---:|---:|---:|---:|
+| mtp-32768-1 | 100.43% | 95.55% | 0.18% | 0.33% |
+| mtp-32768-2 | 99.14% | 97.06% | 0.28% | 0.65% |
+| mtp-32768-4 | 98.95% | 97.25% | 0.16% | 0.46% |
+| ordinary-131072-1 | 115.15% | 92.38% | 0.44% | 0.80% |
+| ordinary-131072-2 | 113.48% | 93.07% | 0.35% | 0.38% |
+| ordinary-131072-4 | 109.74% | 94.43% | 0.13% | 0.18% |
+| ordinary-32768-1 | 117.91% | 94.26% | 0.23% | 0.81% |
+| ordinary-32768-2 | 118.28% | 97.95% | 0.79% | 0.54% |
+| ordinary-32768-4 | 115.56% | 95.58% | 0.14% | 0.24% |
+| prefix-32768-1 | 119.10% | 84.36% | 0.11% | 5.14% |
+| prefix-32768-2 | 125.52% | 81.48% | 0.17% | 4.37% |
+| prefix-32768-4 | 117.70% | 75.63% | 0.12% | 1.89% |
+
+The first complete prefix batch 1 set failed TTFT spread at 71.297937%.
+Two complete prefix batch 2 sets failed at 10.133552% and 10.285889%.
+The full new sets passed. No measurement was removed. The cause of the failed spreads stays unknown.
+
+Collections stopped before all measurements for a workload row have no performance result for that row.
+They keep GPU contention records.
+Original failed parent collections keep their failed status in the aggregate.
+
+### Current runtime context boundary
+
+The [boundary record](../bench/evidence/2026-10-09-dspark-context-boundary.json) passed all nine mode/batch combinations on `198b906`.
+Each request had input 258048 and output 4096, for total length 262144.
+Each row had `batch_size * 4096` kept output tokens, zero recompute preemptions, and no OOM.
+The table separates peak allocated memory from peak reserved memory.
+
+| Mode | Batch | Peak allocated (GiB) | Peak reserved (GiB) |
+|---|---:|---:|---:|
+| ordinary | 1 | 116.300 | 118.879 |
+| ordinary | 2 | 116.969 | 120.975 |
+| ordinary | 4 | 118.853 | 122.525 |
+| mtp4 | 1 | 112.695 | 114.611 |
+| mtp4 | 2 | 113.411 | 118.797 |
+| mtp4 | 4 | 115.291 | 127.305 |
+| dspark | 1 | 134.184 | 138.326 |
+| dspark | 2 | 134.948 | 138.854 |
+| dspark | 4 | 136.871 | 150.906 |
+
+### Service and test scope
+
+The [current service record](../bench/evidence/2026-10-09-dspark-service.json) applies to runtime `198b906` and passed six client groups.
+It passed twelve constraint cases and Chat/Responses lifecycle, oh-my-pi tool-loop, and long-context checks.
+The service admitted 52 requests. Fifty completed. Two cancellation tests aborted their requests. All 52 requests were released.
+
+Chat used 13 tools and 8 HTTP model requests. Responses used 10 tools and 6 HTTP model requests.
+All model requests returned HTTP 200. Tool arguments are complete.
+Tool results stay unchanged in the first and final model requests after each tool call.
+The two clients read the full `schedule` definition at lines 236-400 and worker initialization at lines 103-125.
+
+The Python examples are the same as the source.
+The Rust examples keep all executable lines, with 1 comment line removed for Chat and 3 for Responses.
+Chat gives 397 as the Rust end line, uses check commands without all required flags, and cites some documents without direct reads.
+Its semantic review keeps these errors. The Responses review found no important factual error, with comment and document-citation scope limits.
+Initial AGENTS context was available and correct for the two clients.
+
+Four long-context requests each had input 131099 and output 21, with strict JSON `{"n":123,"label":"verified"}`.
+The first Chat request had zero cached tokens. The other three had 130928 cached tokens.
+Each request verified 24 drafts and accepted 16. All task-owned service processes stopped, and the temporary listener was released.
+
+The independent suite review passed 440 checks. Chat and Responses have different semantic reviews.
+The startup record has `vllm_importable=false`. The post-execution loaded-module audit has no observed success record.
+
+The previous DSpark service collection on `de1591b` and full GPU collection on `46f7529` keep their historical source scope.
 The current graph-budget regression passed 548 CPU tests and 70 subtests, with 323 GPU tests deselected.
 Four GPU graph tests passed. The full-output fallback check passed again in 1 test.
-It uses a small test model. Full-model capacity and service checks will run again on the current runtime.
+These graph-budget tests use a small model. The current full-model boundary collection supplies the nine capacity checks above.
+
+The full 323-test GPU selection was not run again after the graph-budget changes.
+Graph-budget tests, full operator cases, full-model boundaries, and service checks test the changed paths.
 
 ## Historical acceptance
 
@@ -90,7 +172,7 @@ Release binary SHA-256: `90038fc7f9598e1e42f7beb8f04370463f3d1a33fb83b33a91f6698
 Loaded CUDA module SHA-256: `24bec3a7208ac09629d0a594940266dec2dfbb272c87e02e27c6a8196cd84318`.
 
 The [operator summary](../bench/evidence/2026-09-29-ir-operators.json) has 147 passing output and pinned-TileLang cases.
-Each case has three rounds of twenty pairs and one hundred graph repetitions per sample.
+Each case has three sets of twenty pairs and one hundred graph repetitions per sample.
 The mode order changes with each pair.
 The smallest positive one-sided 95% gain bound is `0.0000036639670530955112 ms`.
 Original external operator collector SHA-256 is `c6cdce051ea8fb50ec2e0adecde2ff0d132bd78456f829d14a3a3f49db3a5ab1`.
@@ -117,7 +199,7 @@ The table records ratios and spreads from the accepted full sets:
 
 Three previous full prefix-batch 1 attempts failed TTFT spread at 17.378%, 20.976%, and 20.177%.
 The fourth full 2+5 set passed.
-Six additional attempts stopped because of unrelated GPU processes.
+Six other attempts stopped because of unrelated GPU processes.
 The summary keeps rejected attempts and raw/log hashes.
 The isolated prefix TTFT spike cause stays unknown.
 
@@ -125,7 +207,7 @@ The audit cannot exclude silent in-memory recompilation or interference shorter 
 
 This source also passed 544 GPU tests, seventy subtests, and 303 CPU tests, with six maximum-context cases.
 Subsequent IR correctness changes passed 549 GPU tests, seventy subtests, and 308 CPU tests.
-The full 147-case and twelve-row performance collections were not repeated after those changes.
+The full 147-case and twelve-row performance collections were not run again after those changes.
 These historical results do not show current-HEAD performance.
 
 ## Context and service evidence

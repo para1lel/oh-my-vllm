@@ -40,9 +40,8 @@ Make a decision about a new candidate only with a new hypothesis and full-operat
 Dynamo's 4096 limits and 256-variant warnings do not show bounded compiler memory with indefinite shape changes.
 The log/cache audit cannot exclude silent in-memory recompilation.
 
-The paired comparison passed for the current runtime.
-Operator and twelve-row framework acceptance stay open.
-The collectors stopped subsequent work because of GPU contention from another task. All original failed records stay available.
+Current runtime paired, operator, twelve-row framework, boundary, and service acceptance passed.
+The [acceptance index](acceptance.md) keeps source scope and all original failed records.
 The roofline performance policy is future work with the existing gates still active.
 
 ## Closed finding index

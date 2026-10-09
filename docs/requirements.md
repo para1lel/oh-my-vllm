@@ -94,8 +94,6 @@ Compare loaded DSpark configuration and weight hashes with the requested checkpo
 Record capacities, peak allocated/reserved memory, compile/capture audit, and scheduled/accepted draft counts.
 Acceptance rate uses scheduled draft tokens as its denominator. Returned proposals for future steps are a different counter.
 
-The paired collection passed for the current runtime at batches 1, 2, and 4.
-Operator, boundary, framework, and service acceptance stay open for the current runtime.
 Use the [acceptance index](acceptance.md) for source identities and measured scope.
 See [testing](testing.md#dspark-comparison) for the collection procedure.
 

@@ -1,0 +1,975 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "2026-10-09-dspark-service.original.json",
+    "sha256": "98982597d2a5556750cf8894158ba0e27f278bbcaab306414105118bdee70e8b",
+    "bytes": 52933
+  },
+  "removed_fields": [],
+  "data": {
+    "kind": "source-bound service verification",
+    "source": {
+      "git_commit": "198b9065a6eef8dc0232c26e9afcc18d853acb44",
+      "git_status": "",
+      "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "binary_sha256": "4202db0d33251b705e1bedf65ec23bee979ec75377ee42ae7d9f30d0cc8c1072",
+      "python_sources_sha256": {
+        "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+        "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+        "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+        "python/oh_my_vllm/ir/core.py": "ff595eb490adfa1a7e04001131596bd459b5bc6f43dfb0f55b4cbcdf58ebecd8",
+        "python/oh_my_vllm/ir/coverage.py": "22bb5c8a3940a36e69efa013b15a1f5228e183d8663fcda9126dc36d69293d90",
+        "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+        "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+        "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+        "python/oh_my_vllm/ir/logits.py": "411d9aed99366d3388086a99eec48d7113d3f9153798f4e35f8329ae5ee3357f",
+        "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+        "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+        "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+        "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+        "python/oh_my_vllm/kernels/attention.py": "46ffe64c3b611ac9736f84da6defb43b5f05b35e93954cd12eb3ebe8f3070295",
+        "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+        "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+        "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+        "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "4fd28d7692ad38d583c186dcd6a4a8e7831a63d363b177d98892f16bafd10bf2",
+        "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+        "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+        "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+        "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+        "python/oh_my_vllm/kernels/fp8.py": "1d147b58b1c7219bea4e714b03c445c602128f5834c06b057d856e46629483d4",
+        "python/oh_my_vllm/kernels/gdn.py": "67c4870ba25837b5e21fbac00cb532c135aa4c4e719a1cb1873d4215281abd89",
+        "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+        "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+        "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+        "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+        "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+        "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+        "python/oh_my_vllm/models/qwen.py": "b184f8f86a31571aac46e15c20e98cb148254f6d4615f5c273c3fded9854c7a7",
+        "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+        "python/oh_my_vllm/worker/batch_plan.py": "38fdc0b7661e7a10716642d34ecd3f134f8dda297f67d604139ba23bf063e9a3",
+        "python/oh_my_vllm/worker/decode_graph.py": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+        "python/oh_my_vllm/worker/dspark.py": "a97ff0ab5687ed67a7470a07de4b02a69dc8a7940a6ac761e4c01d25c78251b6",
+        "python/oh_my_vllm/worker/dspark_graph.py": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+        "python/oh_my_vllm/worker/graph_cache.py": "475268d69747f00a8c4a3f3b8a59e1ad1c80d146d4e8d398b9ab868de584fc5e",
+        "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+        "python/oh_my_vllm/worker/model_runner.py": "932f9b3b029089a58713e2453c60bd7a8d1055fe0b934f4348108de61c2b48ad",
+        "python/oh_my_vllm/worker/mtp.py": "4979fea967b6b26e82dfbcff4d27b2ccea5409bb72c42c4bfcd977c1cafa927e",
+        "python/oh_my_vllm/worker/protocol.py": "a3a74a605a84da886893f46524ee6de55979161d4f4632fabcd2ad50fa10d65e",
+        "python/oh_my_vllm/worker/runtime.py": "4f5d693d61f12470a1c6a42d505b70f47efdc963827069e75f712a5bb47cca3c",
+        "python/oh_my_vllm/worker/sampler.py": "285b020850ac82a4265322ee59a69a7a5523bcb1834da3f29ba2ce4504d4804e",
+        "python/oh_my_vllm/worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
+        "python/oh_my_vllm/worker/serving.py": "9c631dd4f03d1c33648afe3f56e673f48e559213dac4d22e4bc3bf7c00ac30b3",
+        "python/oh_my_vllm/worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
+        "python/oh_my_vllm/worker/zmq_bridge.py": "0491ff1880ab0ca56e5a407b1e1d42e2e260b5ad7710bfe8cf9c8d5fad12a2de"
+      },
+      "runtime_sources_sha256": {
+        "crates/kv-cache/src/block.rs": "23ff6cdb70011da8ffceeacf37ae854471fb672323c0b50e482af2cee95370dd",
+        "crates/kv-cache/src/coordinator.rs": "8be1c00ba88607364c25081704e5b861cef0c32b1b62c5d8970dae00b4c7cf39",
+        "crates/kv-cache/src/group.rs": "9d892a01028624a5795e748aeaf5082c3e082a44167e72cafa442cb4f96654e9",
+        "crates/kv-cache/src/hash.rs": "8f02e9db9a89737abc58a6516e41786efb7026aa8cd9ed1cc03e433c9c80870c",
+        "crates/kv-cache/src/lib.rs": "e44822725ab148dc46afd3e1ee6a4389046a5bd9cf86a5fa45a373faace2a586",
+        "crates/kv-cache/src/pool.rs": "026f2dc4d6f90fe995c698afd1e2f8fc3affa3af1240ac4bb08254e9297b9d2b",
+        "crates/kv-cache/src/tests/coordinator_tests.rs": "831c7e7b0e274c253f1d7aaa9be441ad4d789a22e61eb1480a98ad0ab3ffd586",
+        "crates/scheduler/src/lib.rs": "a68c2b36970c260036b8bf14d25212045ecb7d6d40c80cccdc13d8f14df69c3d",
+        "crates/scheduler/src/output.rs": "51e6e2dc3adcdfe2d06b4ef6e3e4e6bf4d603f950170115a19b198937e392627",
+        "crates/scheduler/src/request.rs": "97ba273d416002286af05e00ca3f382fdc843660442db89d42f052160d8164f8",
+        "crates/scheduler/src/tests.rs": "edd2ac914642478da6ac57bde4da421c34f0725be678d281f409e87e7ac1efff",
+        "crates/zmq-worker/src/client.rs": "fa5ac46a853ffc96e7a045cf8e51a9e68ef2d3150d6aca34c91cf36bcbb1aa63",
+        "crates/zmq-worker/src/error.rs": "4ec88bc8c5f3fbcfb49c6bc6b71c41548c982de4f8c4a38bfcc5b5769fc9f572",
+        "crates/zmq-worker/src/lib.rs": "85e633a01b2aa955e33e1193551651d1fb182aefe277307203aca6d8841c0d4c",
+        "crates/zmq-worker/src/main.rs": "9d410d9a60060ad4a6a9993790518048714fd737d57d1a492ef97d2e4a63d7f8",
+        "crates/zmq-worker/src/protocol.rs": "e2c131ac771c31fb5fa76fc6028c8a8242f3edbd168f8fdccca5ab8747c49fd7",
+        "crates/zmq-worker/src/serving/events.rs": "c4a597f90b532667e1dd20b2479ccc98b19187ee389fde6ba3065d8c36291990",
+        "crates/zmq-worker/src/serving/mod.rs": "1b45ddc50249d90f84213ad54b90dd001970cc8d89c825aedff628c26e88346e",
+        "crates/zmq-worker/src/serving/parser.rs": "30dbc2149518c285591bd4739d212db7e60b5df3292cfaa519623e409edff086",
+        "crates/zmq-worker/src/serving/request.rs": "a2ade1316a6a62d00b407800b51f0e3df1e5bae6f9f7a277717ad9133d2382b4",
+        "crates/zmq-worker/src/spec_bench.rs": "54e916bb2e1acaaf1a85aee5c9a261f56102b9d89824feefd3ba9afa366aa8be",
+        "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+        "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+        "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+        "python/oh_my_vllm/ir/core.py": "ff595eb490adfa1a7e04001131596bd459b5bc6f43dfb0f55b4cbcdf58ebecd8",
+        "python/oh_my_vllm/ir/coverage.py": "22bb5c8a3940a36e69efa013b15a1f5228e183d8663fcda9126dc36d69293d90",
+        "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+        "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+        "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+        "python/oh_my_vllm/ir/logits.py": "411d9aed99366d3388086a99eec48d7113d3f9153798f4e35f8329ae5ee3357f",
+        "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+        "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+        "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+        "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+        "python/oh_my_vllm/kernels/attention.py": "46ffe64c3b611ac9736f84da6defb43b5f05b35e93954cd12eb3ebe8f3070295",
+        "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+        "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+        "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+        "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "4fd28d7692ad38d583c186dcd6a4a8e7831a63d363b177d98892f16bafd10bf2",
+        "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "757eb4a9a4efb0f9c138f601a99b24b035dc142d52ec9da45b82c1954d09be35",
+        "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+        "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+        "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+        "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+        "python/oh_my_vllm/kernels/fp8.py": "1d147b58b1c7219bea4e714b03c445c602128f5834c06b057d856e46629483d4",
+        "python/oh_my_vllm/kernels/gdn.py": "67c4870ba25837b5e21fbac00cb532c135aa4c4e719a1cb1873d4215281abd89",
+        "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+        "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+        "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+        "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+        "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+        "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+        "python/oh_my_vllm/models/qwen.py": "b184f8f86a31571aac46e15c20e98cb148254f6d4615f5c273c3fded9854c7a7",
+        "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+        "python/oh_my_vllm/worker/batch_plan.py": "38fdc0b7661e7a10716642d34ecd3f134f8dda297f67d604139ba23bf063e9a3",
+        "python/oh_my_vllm/worker/decode_graph.py": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+        "python/oh_my_vllm/worker/dspark.py": "a97ff0ab5687ed67a7470a07de4b02a69dc8a7940a6ac761e4c01d25c78251b6",
+        "python/oh_my_vllm/worker/dspark_graph.py": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+        "python/oh_my_vllm/worker/graph_cache.py": "475268d69747f00a8c4a3f3b8a59e1ad1c80d146d4e8d398b9ab868de584fc5e",
+        "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+        "python/oh_my_vllm/worker/model_runner.py": "932f9b3b029089a58713e2453c60bd7a8d1055fe0b934f4348108de61c2b48ad",
+        "python/oh_my_vllm/worker/mtp.py": "4979fea967b6b26e82dfbcff4d27b2ccea5409bb72c42c4bfcd977c1cafa927e",
+        "python/oh_my_vllm/worker/protocol.py": "a3a74a605a84da886893f46524ee6de55979161d4f4632fabcd2ad50fa10d65e",
+        "python/oh_my_vllm/worker/runtime.py": "4f5d693d61f12470a1c6a42d505b70f47efdc963827069e75f712a5bb47cca3c",
+        "python/oh_my_vllm/worker/sampler.py": "285b020850ac82a4265322ee59a69a7a5523bcb1834da3f29ba2ce4504d4804e",
+        "python/oh_my_vllm/worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
+        "python/oh_my_vllm/worker/serving.py": "9c631dd4f03d1c33648afe3f56e673f48e559213dac4d22e4bc3bf7c00ac30b3",
+        "python/oh_my_vllm/worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
+        "python/oh_my_vllm/worker/zmq_bridge.py": "0491ff1880ab0ca56e5a407b1e1d42e2e260b5ad7710bfe8cf9c8d5fad12a2de",
+        "benchmarks/baseline/enginecore.py": "36d03eefdd7a0768c59aa32c05f821ad9fdf7b70ecc5df64e25de6e6c63e8811",
+        "benchmarks/compare_vllm.py": "40496e5ad5ffed76566ae617d01fdd9e7a625405f49381dda55197e5713582f3",
+        "benchmarks/context_boundary.py": "3836ccb636c48cd8fee565176476974d509fe31c6b333a04d1ad08b5dec64868",
+        "benchmarks/kernels.py": "163f49b52a44094c46338ac5fd7a833618e447090541d5b227f687c58aeb0a09",
+        "benchmarks/measurement.py": "7ddc97ac3ffdffacce73c79d4e8a6cebb41f195792a4ba7bc349a55a8ae00a68",
+        "benchmarks/speculative.py": "18ace43d59b6c2002d7b51f8f893eb6394d721fc3865aa2777ffde763bfe8e7f",
+        "benchmarks/ttft.py": "719f6f61bf11dd8e314c0b99cde38d6afe457a75516682ace9446b8860aedda6",
+        "scripts/acceptance_proxy.py": "4ba7c67e8089f29141e6cdf7bb2022f4b671a39388307492350e77792c82bf37",
+        "scripts/agentic-acceptance.py": "6dafed49e1c21d77b1945feb4496d79e3808dccfdf90434c3fa5f4797ee56345",
+        "scripts/check_docs.py": "41617cf1ba7c6917dc21b01ca324913cd8a12f99c98f8f562ec5ba7cf65bf14f",
+        "scripts/check_rust_line_width.py": "462b2d094357a126463afa920fba6824754f80fddf06b7eaa2c29df2047d0238",
+        "scripts/export_evidence.py": "5958f8cc33fe37f11a348e95a3fcf770d7ebb5f4d79572c973add2d4eb3cded1",
+        "scripts/fix_whitespace.py": "cb01930887b4935512c557dc5137323f0ff5a71ab602fcd590b2c1988f48055b",
+        "scripts/long-context-acceptance.py": "1abe499731ff66030f17fd3816b7bb7ede7f6ae73b02803e707ba5ec4b87b215",
+        "scripts/probe-independent-model.py": "cacbf57f6044dcbd5f6ae01090557331f046b7d5c9a6656ee43ab705f679c7d2",
+        "scripts/serving-acceptance.py": "cd4f1d724a939dea1bf0fdb574a771aeaba504705e0fd0206b978e0de2d5243f",
+        "scripts/serving-lifecycle.py": "f87b607de195708fb5cda754d597f993d52250251150e9607c0467b9396f2ca9",
+        "scripts/serving_evidence.py": "a08eafd67e248e5a377aa23d20dd4d2ba11f4dc30eb3c74511b21e7c27a40d05",
+        "scripts/smoke-batch.py": "9abca334c7372a278249feed0b794c89b446aea76c933419f0da9ddcb8b35220",
+        "scripts/smoke-text.py": "5f1f6db6efdfdb22cee1edd91a30649a123f5ce7cf15025cc1e0782cee89cb92",
+        "scripts/test.sh": "36d9359fcbe97315d6d39f13f28bd4da0b6d5843ed7f05b7df19c461cfaa2595",
+        "scripts/with-env.sh": "86e6f3a69bb5aa7c6e3faf94ee0534be86109f4777261705215074e51161ebb5",
+        "scripts/with-gpu.sh": "a2a0d22c89a7dc837f5e8fc8e7ea5d6ccbee98d9b0445bd02b7088ec8ba822ec"
+      }
+    },
+    "configuration": {
+      "max_num_seqs": "32",
+      "max_num_batched_tokens": "32768",
+      "block_size": "784",
+      "max_model_len": "262144",
+      "num_speculative_tokens": "7",
+      "speculative_mode": "dspark",
+      "comparison": "false",
+      "dspark_confidence_threshold": "0.2",
+      "worker_fa_pool_blocks": "1400",
+      "worker_gdn_pool_blocks": "128",
+      "fa_pool_blocks": "1400",
+      "gdn_pool_blocks": "128"
+    },
+    "passed": true,
+    "source_unchanged": true,
+    "cleanup": {
+      "errors": [],
+      "owned_processes_remaining": 0,
+      "owned_gpu_processes_remaining": 0,
+      "temporary_port_released": true,
+      "server_returncode": 0
+    },
+    "clients": [
+      {
+        "api": "chat",
+        "passed": true,
+        "exit_code": 0,
+        "elapsed_s": 207.10528944502585,
+        "http_requests": 8,
+        "all_http_statuses_200": true,
+        "tool_calls": 13,
+        "read_calls": 10,
+        "source_reads": [
+          {
+            "path": "python/oh_my_vllm/worker/model_runner.py",
+            "line_range": null,
+            "forwarded_output_sha256": "66776d01d9391e42cae13fcf508b76245eb264a78805ff736ed844c2260be624"
+          },
+          {
+            "path": "crates/scheduler/src/lib.rs",
+            "line_range": [
+              236,
+              330
+            ],
+            "forwarded_output_sha256": "c5842c4890ccc61af6253a0bf315bce2d3d3b8599a1f61b03a99cfcb03742d9c"
+          }
+        ],
+        "final_answer_sha256": "dd4912ae344f88de3a7eff97ec44a4cc92229e2bf086ba075d37e71ce959577e",
+        "tool_results_in_final_model_request": true,
+        "draft_verification": [
+          {
+            "verified_draft_tokens": 171,
+            "accepted_draft_tokens": 88
+          },
+          {
+            "verified_draft_tokens": 203,
+            "accepted_draft_tokens": 134
+          },
+          {
+            "verified_draft_tokens": 257,
+            "accepted_draft_tokens": 159
+          },
+          {
+            "verified_draft_tokens": 392,
+            "accepted_draft_tokens": 242
+          },
+          {
+            "verified_draft_tokens": 252,
+            "accepted_draft_tokens": 160
+          },
+          {
+            "verified_draft_tokens": 126,
+            "accepted_draft_tokens": 92
+          },
+          {
+            "verified_draft_tokens": 97,
+            "accepted_draft_tokens": 61
+          },
+          {
+            "verified_draft_tokens": 3545,
+            "accepted_draft_tokens": 2871
+          }
+        ]
+      },
+      {
+        "api": "responses",
+        "passed": true,
+        "exit_code": 0,
+        "elapsed_s": 35.463308793026954,
+        "http_requests": 6,
+        "all_http_statuses_200": true,
+        "tool_calls": 10,
+        "read_calls": 8,
+        "source_reads": [
+          {
+            "path": "python/oh_my_vllm/worker/model_runner.py",
+            "line_range": null,
+            "forwarded_output_sha256": "66776d01d9391e42cae13fcf508b76245eb264a78805ff736ed844c2260be624"
+          },
+          {
+            "path": "crates/scheduler/src/lib.rs",
+            "line_range": [
+              200,
+              340
+            ],
+            "forwarded_output_sha256": "c4cba461390d07bb7c505f0c4aa8dcf5d2225936a93b20c3aa6dd523bc4ad147"
+          },
+          {
+            "path": "crates/scheduler/src/lib.rs",
+            "line_range": [
+              340,
+              400
+            ],
+            "forwarded_output_sha256": "f2f411792735298e998284f072ed128b5139656602a06eeb6f24e57b8bf401d3"
+          },
+          {
+            "path": "python/oh_my_vllm/worker/model_runner.py",
+            "line_range": [
+              103,
+              126
+            ],
+            "forwarded_output_sha256": "0c1348958e27fdbeb00da6b9bdae48dc3c6a2c427738ce1978dcfc9be677baa3"
+          }
+        ],
+        "final_answer_sha256": "7474dc1f0a8defbf76412d1b151913ceb932b54f10e939e704f40a6421e4b0f1",
+        "tool_results_in_final_model_request": true,
+        "draft_verification": [
+          {
+            "verified_draft_tokens": 132,
+            "accepted_draft_tokens": 78
+          },
+          {
+            "verified_draft_tokens": 131,
+            "accepted_draft_tokens": 88
+          },
+          {
+            "verified_draft_tokens": 259,
+            "accepted_draft_tokens": 171
+          },
+          {
+            "verified_draft_tokens": 364,
+            "accepted_draft_tokens": 204
+          },
+          {
+            "verified_draft_tokens": 330,
+            "accepted_draft_tokens": 208
+          },
+          {
+            "verified_draft_tokens": 4532,
+            "accepted_draft_tokens": 3386
+          }
+        ]
+      }
+    ],
+    "originals": [
+      {
+        "name": "constraints/attempt.json",
+        "sha256": "2dd53676433fac91ca753aaaa75910e88fcd2e0a165bc8ae28d0fdf1519f710a",
+        "bytes": 47129
+      },
+      {
+        "name": "constraints/chat-medium-json_object.json",
+        "sha256": "95144c20ea568a42a88ec3dfee8ff65d1b11ecda58f44b97d7cac4bdc5d0ba74",
+        "bytes": 1714
+      },
+      {
+        "name": "constraints/chat-medium-json_schema.json",
+        "sha256": "a9d238e8988fa06a7ed86f026f52cf35764285987605d3352d5e228dad0c73ee",
+        "bytes": 2234
+      },
+      {
+        "name": "constraints/chat-medium-tool.json",
+        "sha256": "d92f6603dbd8c991e05b08d2d09f27985df3ad75b558bd2aa12fde54dd5780b3",
+        "bytes": 2146
+      },
+      {
+        "name": "constraints/chat-off-json_object.json",
+        "sha256": "8a8c89bff1fafe677b67fb17d20d1fa2b3d9c7d12e59f6036bc3ad357cfde892",
+        "bytes": 1071
+      },
+      {
+        "name": "constraints/chat-off-json_schema.json",
+        "sha256": "1c91c722faa3e19a0a2d0cd82ccd8ae5ecc4e182b18a1b6e59ef89bd4dfd54df",
+        "bytes": 1596
+      },
+      {
+        "name": "constraints/chat-off-tool.json",
+        "sha256": "b1766adc2556c2bb217364b768ac5d045d3469338627d3124f736c2e9a7e5b75",
+        "bytes": 2026
+      },
+      {
+        "name": "constraints/responses-medium-json_object.json",
+        "sha256": "9b3a7eb04e45df12d4849980e4e502c8d0b461d99850d6075734908991fb17f5",
+        "bytes": 2627
+      },
+      {
+        "name": "constraints/responses-medium-json_schema.json",
+        "sha256": "ba0f4fe2db8d8dcd2af06afe681668cba1e8d604fbcc3cb3b654fbccc9ef92d0",
+        "bytes": 3608
+      },
+      {
+        "name": "constraints/responses-medium-tool.json",
+        "sha256": "b49cdfb927d167b36b151114f08f88ce6db675cfb8ef0b05de3c61045673cc86",
+        "bytes": 3507
+      },
+      {
+        "name": "constraints/responses-off-json_object.json",
+        "sha256": "2e1cde4462d95294976712d6e5e27dce935054a98dcf78019e49dae8083d89d3",
+        "bytes": 1811
+      },
+      {
+        "name": "constraints/responses-off-json_schema.json",
+        "sha256": "9dabdfe55519feedb11a4ca47fa3bbfbcce44ca97b0a493b7fbf916d09038b95",
+        "bytes": 2795
+      },
+      {
+        "name": "constraints/responses-off-tool.json",
+        "sha256": "3bcda56e27806e2700b21d784835ff3d2ad03abdca1dea4a78f5cf6116eac051",
+        "bytes": 2890
+      },
+      {
+        "name": "constraints/server-verification.json",
+        "sha256": "53bc7c9a6d564c5a5ba4e7c88ee046313bcf6ed60c05182ffdc457b0f6a7bf56",
+        "bytes": 1344
+      },
+      {
+        "name": "constraints.log",
+        "sha256": "050082f68def504ec60cb5aadf9ab81eae599830c2b004e62a225febbddee180",
+        "bytes": 851
+      },
+      {
+        "name": "independent-suite-review-01.json",
+        "sha256": "b024b7f44f31bb89b1fda215bbfa27610fa75948989598c552077fbe117d719c",
+        "bytes": 90703
+      },
+      {
+        "name": "independent-suite-review-02.json",
+        "sha256": "afd2bec91262ec56f6bad59862129866f06a179739f5260271859ec7c5894ef8",
+        "bytes": 91111
+      },
+      {
+        "name": "lifecycle-chat.json",
+        "sha256": "66fa343c2599cdd60efcaeed9237be7cd055b51824420aef950a4d5a6237dcc5",
+        "bytes": 38130
+      },
+      {
+        "name": "lifecycle-chat.log",
+        "sha256": "2a8497ab3dd8ccfd978f0770246ceac7022edf9b42e2f59d43004441adfe6b24",
+        "bytes": 77
+      },
+      {
+        "name": "lifecycle-responses.json",
+        "sha256": "62c7f675fbece7ccd14b4e7b44d6ccc3a1bf4c96a2953a83442feee63da1a279",
+        "bytes": 60276
+      },
+      {
+        "name": "lifecycle-responses.log",
+        "sha256": "2a8497ab3dd8ccfd978f0770246ceac7022edf9b42e2f59d43004441adfe6b24",
+        "bytes": 77
+      },
+      {
+        "name": "long-context.json",
+        "sha256": "378d19bcc9f4c0872b4a9f611aaff16739249e50ec72348bbacb28a5daa4354f",
+        "bytes": 7047000
+      },
+      {
+        "name": "long-context.log",
+        "sha256": "846f5325dc4b4f3cd1c6e208779c4f3dedc64dfee77b36bcedd9de1ad56e8bd4",
+        "bytes": 113
+      },
+      {
+        "name": "omp-chat/chat-http.json",
+        "sha256": "0011fdd983db4c274fa676348b0ffc7cd76a19fbd04758bf24a2b725b1fb6e6b",
+        "bytes": 459884
+      },
+      {
+        "name": "omp-chat/chat-run.json",
+        "sha256": "52689f6436dafd5f10d8e170ec4274970f22e82c7842ec9316814507d2897f73",
+        "bytes": 5153
+      },
+      {
+        "name": "omp-chat/chat.jsonl",
+        "sha256": "a32b616893fe910a21290de50923b94a7254e3de5b013fbd9f1c1c65e8874140",
+        "bytes": 819769
+      },
+      {
+        "name": "omp-chat/chat.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      {
+        "name": "omp-chat/semantic-review-01.json",
+        "sha256": "a0387c1801954a30b96fbcc9cf1891776bf1d37e87df76df357382e2ebe4e40c",
+        "bytes": 43968
+      },
+      {
+        "name": "omp-chat.log",
+        "sha256": "822c7c4c69c92c76e9b53fc7da97e68e251e092bdeee56d276a1a5ac42ba7913",
+        "bytes": 4468
+      },
+      {
+        "name": "omp-responses/responses-http.json",
+        "sha256": "a1c7f31e3cde09c835ec7982c881be9c81bac36526cfde97678a2260356fa414",
+        "bytes": 310706
+      },
+      {
+        "name": "omp-responses/responses-run.json",
+        "sha256": "30793ef00c8f08801896c72d3f6d9f56d0579f16db6aa3b188f169d2e1703d29",
+        "bytes": 5991
+      },
+      {
+        "name": "omp-responses/responses.jsonl",
+        "sha256": "02b4b74c0fbba90b1c80090f6e8bfc01e96e0ed2db0d3fef413eea2dd84aa250",
+        "bytes": 802518
+      },
+      {
+        "name": "omp-responses/responses.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      {
+        "name": "omp-responses/semantic-review-01.json",
+        "sha256": "d1f9abed78e86fe50ea9ba438f2cdd0196423520a84abd3ed897e7d6a0ac8877",
+        "bytes": 43823
+      },
+      {
+        "name": "omp-responses.log",
+        "sha256": "ca0fa7593552b0575c2fb763abb05446bde9329c2f24f69a80caef5b1bb656df",
+        "bytes": 5148
+      },
+      {
+        "name": "server.log",
+        "sha256": "f06a673024073d64dc5ff2ebfdd77bd55da33a8df6957f367081a647213f6f2d",
+        "bytes": 1006799
+      },
+      {
+        "name": "suite.json",
+        "sha256": "9a5687fc8623197f19e9e3b50fbb66324363101d9065ed3ebaeaf4a7a2c2316c",
+        "bytes": 53325
+      }
+    ],
+    "provenance": {
+      "git_commit": "198b9065a6eef8dc0232c26e9afcc18d853acb44",
+      "release_binary_sha256": "4202db0d33251b705e1bedf65ec23bee979ec75377ee42ae7d9f30d0cc8c1072",
+      "cuda_source_sha256": "757eb4a9a4efb0f9c138f601a99b24b035dc142d52ec9da45b82c1954d09be35",
+      "loaded_cuda_module": {
+        "nvcc_version": "Build cuda_13.1.r13.1/compiler.37061995_0",
+        "compiler_identity_source": "live",
+        "so_sha256": "09729aa0e90b5b95108a0f0ed66114a0371af0559a8f6152ae545311c19645d4"
+      },
+      "supervisor_sha256": "b1201cf1ba5dbf69ff77ad95d237d96a97c3c4cc4f07c8c1055b0e4d8a06f1b9",
+      "runtime_sources_sha256": {
+        "crates/kv-cache/src/block.rs": "23ff6cdb70011da8ffceeacf37ae854471fb672323c0b50e482af2cee95370dd",
+        "crates/kv-cache/src/coordinator.rs": "8be1c00ba88607364c25081704e5b861cef0c32b1b62c5d8970dae00b4c7cf39",
+        "crates/kv-cache/src/group.rs": "9d892a01028624a5795e748aeaf5082c3e082a44167e72cafa442cb4f96654e9",
+        "crates/kv-cache/src/hash.rs": "8f02e9db9a89737abc58a6516e41786efb7026aa8cd9ed1cc03e433c9c80870c",
+        "crates/kv-cache/src/lib.rs": "e44822725ab148dc46afd3e1ee6a4389046a5bd9cf86a5fa45a373faace2a586",
+        "crates/kv-cache/src/pool.rs": "026f2dc4d6f90fe995c698afd1e2f8fc3affa3af1240ac4bb08254e9297b9d2b",
+        "crates/kv-cache/src/tests/coordinator_tests.rs": "831c7e7b0e274c253f1d7aaa9be441ad4d789a22e61eb1480a98ad0ab3ffd586",
+        "crates/scheduler/src/lib.rs": "a68c2b36970c260036b8bf14d25212045ecb7d6d40c80cccdc13d8f14df69c3d",
+        "crates/scheduler/src/output.rs": "51e6e2dc3adcdfe2d06b4ef6e3e4e6bf4d603f950170115a19b198937e392627",
+        "crates/scheduler/src/request.rs": "97ba273d416002286af05e00ca3f382fdc843660442db89d42f052160d8164f8",
+        "crates/scheduler/src/tests.rs": "edd2ac914642478da6ac57bde4da421c34f0725be678d281f409e87e7ac1efff",
+        "crates/zmq-worker/src/client.rs": "fa5ac46a853ffc96e7a045cf8e51a9e68ef2d3150d6aca34c91cf36bcbb1aa63",
+        "crates/zmq-worker/src/error.rs": "4ec88bc8c5f3fbcfb49c6bc6b71c41548c982de4f8c4a38bfcc5b5769fc9f572",
+        "crates/zmq-worker/src/lib.rs": "85e633a01b2aa955e33e1193551651d1fb182aefe277307203aca6d8841c0d4c",
+        "crates/zmq-worker/src/main.rs": "9d410d9a60060ad4a6a9993790518048714fd737d57d1a492ef97d2e4a63d7f8",
+        "crates/zmq-worker/src/protocol.rs": "e2c131ac771c31fb5fa76fc6028c8a8242f3edbd168f8fdccca5ab8747c49fd7",
+        "crates/zmq-worker/src/serving/events.rs": "c4a597f90b532667e1dd20b2479ccc98b19187ee389fde6ba3065d8c36291990",
+        "crates/zmq-worker/src/serving/mod.rs": "1b45ddc50249d90f84213ad54b90dd001970cc8d89c825aedff628c26e88346e",
+        "crates/zmq-worker/src/serving/parser.rs": "30dbc2149518c285591bd4739d212db7e60b5df3292cfaa519623e409edff086",
+        "crates/zmq-worker/src/serving/request.rs": "a2ade1316a6a62d00b407800b51f0e3df1e5bae6f9f7a277717ad9133d2382b4",
+        "crates/zmq-worker/src/spec_bench.rs": "54e916bb2e1acaaf1a85aee5c9a261f56102b9d89824feefd3ba9afa366aa8be",
+        "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+        "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+        "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+        "python/oh_my_vllm/ir/core.py": "ff595eb490adfa1a7e04001131596bd459b5bc6f43dfb0f55b4cbcdf58ebecd8",
+        "python/oh_my_vllm/ir/coverage.py": "22bb5c8a3940a36e69efa013b15a1f5228e183d8663fcda9126dc36d69293d90",
+        "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+        "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+        "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+        "python/oh_my_vllm/ir/logits.py": "411d9aed99366d3388086a99eec48d7113d3f9153798f4e35f8329ae5ee3357f",
+        "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+        "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+        "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+        "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+        "python/oh_my_vllm/kernels/attention.py": "46ffe64c3b611ac9736f84da6defb43b5f05b35e93954cd12eb3ebe8f3070295",
+        "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+        "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+        "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+        "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "4fd28d7692ad38d583c186dcd6a4a8e7831a63d363b177d98892f16bafd10bf2",
+        "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "757eb4a9a4efb0f9c138f601a99b24b035dc142d52ec9da45b82c1954d09be35",
+        "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+        "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+        "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+        "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+        "python/oh_my_vllm/kernels/fp8.py": "1d147b58b1c7219bea4e714b03c445c602128f5834c06b057d856e46629483d4",
+        "python/oh_my_vllm/kernels/gdn.py": "67c4870ba25837b5e21fbac00cb532c135aa4c4e719a1cb1873d4215281abd89",
+        "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+        "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+        "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+        "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+        "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+        "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+        "python/oh_my_vllm/models/qwen.py": "b184f8f86a31571aac46e15c20e98cb148254f6d4615f5c273c3fded9854c7a7",
+        "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+        "python/oh_my_vllm/worker/batch_plan.py": "38fdc0b7661e7a10716642d34ecd3f134f8dda297f67d604139ba23bf063e9a3",
+        "python/oh_my_vllm/worker/decode_graph.py": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+        "python/oh_my_vllm/worker/dspark.py": "a97ff0ab5687ed67a7470a07de4b02a69dc8a7940a6ac761e4c01d25c78251b6",
+        "python/oh_my_vllm/worker/dspark_graph.py": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+        "python/oh_my_vllm/worker/graph_cache.py": "475268d69747f00a8c4a3f3b8a59e1ad1c80d146d4e8d398b9ab868de584fc5e",
+        "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+        "python/oh_my_vllm/worker/model_runner.py": "932f9b3b029089a58713e2453c60bd7a8d1055fe0b934f4348108de61c2b48ad",
+        "python/oh_my_vllm/worker/mtp.py": "4979fea967b6b26e82dfbcff4d27b2ccea5409bb72c42c4bfcd977c1cafa927e",
+        "python/oh_my_vllm/worker/protocol.py": "a3a74a605a84da886893f46524ee6de55979161d4f4632fabcd2ad50fa10d65e",
+        "python/oh_my_vllm/worker/runtime.py": "4f5d693d61f12470a1c6a42d505b70f47efdc963827069e75f712a5bb47cca3c",
+        "python/oh_my_vllm/worker/sampler.py": "285b020850ac82a4265322ee59a69a7a5523bcb1834da3f29ba2ce4504d4804e",
+        "python/oh_my_vllm/worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
+        "python/oh_my_vllm/worker/serving.py": "9c631dd4f03d1c33648afe3f56e673f48e559213dac4d22e4bc3bf7c00ac30b3",
+        "python/oh_my_vllm/worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
+        "python/oh_my_vllm/worker/zmq_bridge.py": "0491ff1880ab0ca56e5a407b1e1d42e2e260b5ad7710bfe8cf9c8d5fad12a2de",
+        "benchmarks/baseline/enginecore.py": "36d03eefdd7a0768c59aa32c05f821ad9fdf7b70ecc5df64e25de6e6c63e8811",
+        "benchmarks/compare_vllm.py": "40496e5ad5ffed76566ae617d01fdd9e7a625405f49381dda55197e5713582f3",
+        "benchmarks/context_boundary.py": "3836ccb636c48cd8fee565176476974d509fe31c6b333a04d1ad08b5dec64868",
+        "benchmarks/kernels.py": "163f49b52a44094c46338ac5fd7a833618e447090541d5b227f687c58aeb0a09",
+        "benchmarks/measurement.py": "7ddc97ac3ffdffacce73c79d4e8a6cebb41f195792a4ba7bc349a55a8ae00a68",
+        "benchmarks/speculative.py": "18ace43d59b6c2002d7b51f8f893eb6394d721fc3865aa2777ffde763bfe8e7f",
+        "benchmarks/ttft.py": "719f6f61bf11dd8e314c0b99cde38d6afe457a75516682ace9446b8860aedda6",
+        "scripts/acceptance_proxy.py": "4ba7c67e8089f29141e6cdf7bb2022f4b671a39388307492350e77792c82bf37",
+        "scripts/agentic-acceptance.py": "6dafed49e1c21d77b1945feb4496d79e3808dccfdf90434c3fa5f4797ee56345",
+        "scripts/check_docs.py": "41617cf1ba7c6917dc21b01ca324913cd8a12f99c98f8f562ec5ba7cf65bf14f",
+        "scripts/check_rust_line_width.py": "462b2d094357a126463afa920fba6824754f80fddf06b7eaa2c29df2047d0238",
+        "scripts/export_evidence.py": "5958f8cc33fe37f11a348e95a3fcf770d7ebb5f4d79572c973add2d4eb3cded1",
+        "scripts/fix_whitespace.py": "cb01930887b4935512c557dc5137323f0ff5a71ab602fcd590b2c1988f48055b",
+        "scripts/long-context-acceptance.py": "1abe499731ff66030f17fd3816b7bb7ede7f6ae73b02803e707ba5ec4b87b215",
+        "scripts/probe-independent-model.py": "cacbf57f6044dcbd5f6ae01090557331f046b7d5c9a6656ee43ab705f679c7d2",
+        "scripts/serving-acceptance.py": "cd4f1d724a939dea1bf0fdb574a771aeaba504705e0fd0206b978e0de2d5243f",
+        "scripts/serving-lifecycle.py": "f87b607de195708fb5cda754d597f993d52250251150e9607c0467b9396f2ca9",
+        "scripts/serving_evidence.py": "a08eafd67e248e5a377aa23d20dd4d2ba11f4dc30eb3c74511b21e7c27a40d05",
+        "scripts/smoke-batch.py": "9abca334c7372a278249feed0b794c89b446aea76c933419f0da9ddcb8b35220",
+        "scripts/smoke-text.py": "5f1f6db6efdfdb22cee1edd91a30649a123f5ce7cf15025cc1e0782cee89cb92",
+        "scripts/test.sh": "36d9359fcbe97315d6d39f13f28bd4da0b6d5843ed7f05b7df19c461cfaa2595",
+        "scripts/with-env.sh": "86e6f3a69bb5aa7c6e3faf94ee0534be86109f4777261705215074e51161ebb5",
+        "scripts/with-gpu.sh": "a2a0d22c89a7dc837f5e8fc8e7ea5d6ccbee98d9b0445bd02b7088ec8ba822ec"
+      },
+      "checkpoint": {
+        "config_sha256": "dd65fb1b01c2adea69512ff2990a79d58eb7fe2c7ea97375aa66f657a29a5bfd",
+        "weights_sha256": {
+          "model.safetensors": "2aff025f45823b40ebe726b9dfa40302f3512bd9a11c3a7347de32a567acd9a7"
+        }
+      },
+      "packages": {
+        "torch": "2.14.0",
+        "triton": "3.8.0",
+        "tilelang": "0.1.14",
+        "apache-tvm-ffi": "0.1.12",
+        "flashinfer-python": "0.6.18.post1",
+        "transformers": "5.17.0",
+        "tokenizers": "0.23.2",
+        "safetensors": "0.8.0",
+        "xgrammar": "0.2.7",
+        "pyzmq": "27.2.0",
+        "msgpack": "1.2.2"
+      },
+      "kernel_backend": "cuda",
+      "startup_vllm_importable": false,
+      "post_execution_loaded_module_audit_observed": false
+    },
+    "independent_review_counts": {
+      "client_groups": 6,
+      "constraint_cases": 12,
+      "admitted_generation_requests": 52,
+      "completed_generation_requests": 50,
+      "cancelled_generation_requests": 2,
+      "http_records": 58,
+      "storage_get_delete_records": 6
+    },
+    "independent_review_check_count": 440,
+    "independent_review_limitations": [
+      "Weight SHA is the actual worker loader record for the fixed checkpoint. The reviewer hashes config and verifies the known loaded weight SHA, but does not reread the full checkpoint.",
+      "The startup runtime record proves vLLM was not importable at initialization. No later loaded-module/library audit success record appears in the closed server log; a post-execution loaded-module audit is not claimed as observed evidence.",
+      "GPU cleanup is the original supervisor post-shutdown snapshot. The reviewer checks75 recorded process birth identities and closed port via procfs, without an active NVML query. Foreign GPU2 processes are outside task ownership.",
+      "Actual OMP tool starts/ends, forwarded tool-result model requests, final response identities, answer hashes and execution counters were checked. Separate semantic reviewers assess final answer facts, excerpt accuracy and read coverage; this report does not replace them.",
+      "Functional checks do not establish performance gates, stochastic distribution equivalence, or262144-token batches1/2/4 boundary acceptance. Those have different source-bound evidence.",
+      "Raw functional artifacts are hash-bound. OMP state databases and concurrently written semantic reports are excluded from this closed functional manifest.",
+      "Source was clean and unchanged during service execution. Current source files and the execution commit98 blob hashes match recorded runtime sources; later Markdown publication edits are independent of this evidence."
+    ],
+    "independent_suite_review_passed": true,
+    "independent_suite_review_file": "independent-suite-review-02.json",
+    "semantic_reviews": [
+      {
+        "api": "chat",
+        "service_tool_loop_review_passed": true,
+        "answer_fully_factually_correct": false,
+        "blocking_for_service_usability": false,
+        "code_excerpt_byte_exact": false,
+        "limitations": [
+          {
+            "issue": "The answer labels the Rust schedule definition as lines 236\u2013397; its real frozen-source range is 236\u2013400. The fenced excerpt omits one standalone empty comment.",
+            "correction": "Use 236\u2013400 for the definition (232\u2013400 including its preceding documentation). Apart from the standalone comment and common indentation, all executable statements and the rest of the comments match the full frozen function. The excerpt is nearly complete but not byte exact.",
+            "blocking_for_service_usability": false
+          },
+          {
+            "issue": "The answer cites handoff, acceptance, development, serving, requirements, testing and audit files that were not directly read during this Chat session.",
+            "correction": "Direct reads cover README.md, docs/architecture.md and the two required source files; AGENTS.md is fully available in initial system context. Most associated claims are supported by the directly read README/architecture or initial AGENTS, but the citation list must not be treated as evidence of direct reads of every cited file.",
+            "blocking_for_service_usability": false
+          },
+          {
+            "issue": "The Required checks sentence uses abbreviated command fragments such as cargo fmt --check and clippy -D warnings instead of the complete project commands.",
+            "correction": "Use the exact AGENTS commands through scripts/with-env.sh, including cargo fmt --all --check and cargo clippy --all-targets --all-features -- -D warnings, plus both Ruff format/check and the other required checks. The fenced build/start and DSpark startup commands themselves match README.md.",
+            "blocking_for_service_usability": false
+          },
+          {
+            "issue": "The completion-status paragraph describes the frozen README/architecture evidence state; it does not consume fresh external formal or service-08 completion records.",
+            "correction": "Retain the stated source/scope of those document claims. This model answer is not an acceptance record for newly completed external collectors or the full service-08 suite; those require the independent source-bound collector reviews.",
+            "blocking_for_service_usability": false
+          }
+        ],
+        "initial_AGENTS_context_supported": true,
+        "source_read_scope": {
+          "schedule_definition": [
+            236,
+            400
+          ],
+          "worker_initialization": [
+            103,
+            125
+          ],
+          "schedule_fully_read": true,
+          "actual_schedule_read": [
+            [
+              236,
+              400
+            ]
+          ],
+          "missing_schedule_read": null,
+          "rust_excerpt_byte_exact": false,
+          "python_excerpt_byte_exact": true
+        }
+      },
+      {
+        "api": "responses",
+        "service_tool_loop_review_passed": true,
+        "answer_fully_factually_correct": true,
+        "blocking_for_service_usability": false,
+        "code_excerpt_byte_exact": false,
+        "limitations": [
+          {
+            "issue": "The Rust fenced excerpt omits three explanatory block-table comments and is not byte-exact.",
+            "correction": "All executable lines and all method documentation match the full schedule definition after common-indent removal; original lines 357\u2013359 are the only omissions. Preserve this distinction when reporting excerpt fidelity.",
+            "blocking_for_service_usability": false
+          },
+          {
+            "issue": "Completion status is the status in the frozen repository documents, which still list current operator, boundary, framework, and service collection as open.",
+            "correction": "The agent faithfully reports the input documents. This answer cannot replace the independent final acceptance record produced after those collections complete.",
+            "blocking_for_service_usability": false
+          },
+          {
+            "issue": "Development, testing, serving, and acceptance documents are listed as README links rather than directly read source files.",
+            "correction": "The answer explicitly identifies them as README links. Launch commands are supported by actual README reads and complete initial AGENTS context. The directly read supporting documents are README, architecture, handoff, and both required source files.",
+            "blocking_for_service_usability": false
+          }
+        ],
+        "initial_AGENTS_context_supported": true,
+        "source_read_scope": {
+          "schedule_definition": [
+            236,
+            400
+          ],
+          "worker_initialization": [
+            103,
+            125
+          ],
+          "schedule_fully_read": true,
+          "actual_schedule_read": [
+            236,
+            400
+          ],
+          "missing_schedule_read": null,
+          "rust_excerpt_byte_exact": false,
+          "python_excerpt_byte_exact": true
+        }
+      }
+    ],
+    "constraints": {
+      "passed": true,
+      "cases": 12
+    },
+    "lifecycle": [
+      {
+        "api": "chat",
+        "passed": true,
+        "thinking_settings": [
+          "off",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "stored_response_count": 2,
+        "mixed_response_count": 2,
+        "same_batch": true,
+        "worker_released": true,
+        "draft_verification": [
+          {
+            "verified_draft_tokens": 7,
+            "accepted_draft_tokens": 1
+          },
+          {
+            "verified_draft_tokens": 28,
+            "accepted_draft_tokens": 23
+          },
+          {
+            "verified_draft_tokens": 33,
+            "accepted_draft_tokens": 25
+          },
+          {
+            "verified_draft_tokens": 49,
+            "accepted_draft_tokens": 27
+          },
+          {
+            "verified_draft_tokens": 45,
+            "accepted_draft_tokens": 27
+          },
+          {
+            "verified_draft_tokens": 10,
+            "accepted_draft_tokens": 0
+          },
+          {
+            "verified_draft_tokens": 7,
+            "accepted_draft_tokens": 2
+          },
+          {
+            "verified_draft_tokens": 357,
+            "accepted_draft_tokens": 352
+          },
+          {
+            "verified_draft_tokens": 486,
+            "accepted_draft_tokens": 480
+          },
+          {
+            "verified_draft_tokens": 7,
+            "accepted_draft_tokens": 1
+          }
+        ]
+      },
+      {
+        "api": "responses",
+        "passed": true,
+        "thinking_settings": [
+          "off",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "stored_response_count": 2,
+        "mixed_response_count": 2,
+        "same_batch": true,
+        "worker_released": true,
+        "draft_verification": [
+          {
+            "verified_draft_tokens": 7,
+            "accepted_draft_tokens": 1
+          },
+          {
+            "verified_draft_tokens": 35,
+            "accepted_draft_tokens": 22
+          },
+          {
+            "verified_draft_tokens": 33,
+            "accepted_draft_tokens": 25
+          },
+          {
+            "verified_draft_tokens": 51,
+            "accepted_draft_tokens": 42
+          },
+          {
+            "verified_draft_tokens": 61,
+            "accepted_draft_tokens": 38
+          },
+          {
+            "verified_draft_tokens": 6,
+            "accepted_draft_tokens": 0
+          },
+          {
+            "verified_draft_tokens": 7,
+            "accepted_draft_tokens": 2
+          },
+          {
+            "verified_draft_tokens": 357,
+            "accepted_draft_tokens": 352
+          },
+          {
+            "verified_draft_tokens": 488,
+            "accepted_draft_tokens": 480
+          },
+          {
+            "verified_draft_tokens": 7,
+            "accepted_draft_tokens": 1
+          }
+        ]
+      }
+    ],
+    "long_context": {
+      "passed": true,
+      "rows": [
+        {
+          "api": "chat/completions",
+          "repeat": 0,
+          "elapsed_s": 23.421662600012496,
+          "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f",
+          "usage": {
+            "completion_tokens": 21,
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "prompt_tokens": 131099,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 131120
+          },
+          "draft_verification": {
+            "verified_draft_tokens": 24,
+            "accepted_draft_tokens": 16
+          }
+        },
+        {
+          "api": "chat/completions",
+          "repeat": 1,
+          "elapsed_s": 0.41577851003967226,
+          "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f",
+          "usage": {
+            "completion_tokens": 21,
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "prompt_tokens": 131099,
+            "prompt_tokens_details": {
+              "cached_tokens": 130928
+            },
+            "total_tokens": 131120
+          },
+          "draft_verification": {
+            "verified_draft_tokens": 24,
+            "accepted_draft_tokens": 16
+          }
+        },
+        {
+          "api": "responses",
+          "repeat": 0,
+          "elapsed_s": 0.386960658011958,
+          "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f",
+          "usage": {
+            "input_tokens": 131099,
+            "input_tokens_details": {
+              "cached_tokens": 130928
+            },
+            "output_tokens": 21,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 131120
+          },
+          "draft_verification": {
+            "verified_draft_tokens": 24,
+            "accepted_draft_tokens": 16
+          }
+        },
+        {
+          "api": "responses",
+          "repeat": 1,
+          "elapsed_s": 0.38380571780726314,
+          "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f",
+          "usage": {
+            "input_tokens": 131099,
+            "input_tokens_details": {
+              "cached_tokens": 130928
+            },
+            "output_tokens": 21,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 131120
+          },
+          "draft_verification": {
+            "verified_draft_tokens": 24,
+            "accepted_draft_tokens": 16
+          }
+        }
+      ]
+    }
+  }
+}

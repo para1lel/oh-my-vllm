@@ -92,8 +92,6 @@ DSpark 至多提出 7 个 token, 原生 MTP4 保留 4-token 路径.
 阈值必须有限, 大于等于 0 且小于 1.
 HTTP 模式在 worker 生命周期内固定.
 只有 `spec-bench` 允许在空闲时切换 MTP / DSpark, 共享 target 权重和缓存.
-当前运行时代码的成对采集在 batch 1, 2 和 4 通过.
-当前运行时代码的算子, 边界, 框架和服务验收仍待完成.
 源码身份及测量范围见 [验收索引](acceptance.zh.md).
 
 ## 构建与检查

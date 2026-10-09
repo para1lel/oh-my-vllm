@@ -33,8 +33,6 @@ The initial `--dspark-confidence-threshold` setting is `0.2`. It limits cumulati
 It can return zero through seven candidates. Zero uses one target token for that step.
 Use `0.0` for fixed-count proposals up to seven. Output, context, and grammar limits can decrease the proposal count.
 
-The paired collection passed for the current runtime at batches 1, 2, and 4.
-Operator, boundary, framework, and service acceptance stay open for the current runtime.
 Use the [acceptance index](acceptance.md) for source identities and measured scope.
 
 ## API surface

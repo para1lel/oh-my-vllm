@@ -254,8 +254,6 @@ Verified drafts are scheduled candidates. Returned next-step proposals have a di
 The portable output is a derived summary. It cannot replace original evidence for comparison.
 Keep the original twelve vLLM performance gates active on the source after implementation.
 
-The paired collection passed for the current runtime at batches 1, 2, and 4.
-Operator, boundary, framework, and service acceptance stay open for the current runtime.
 Use the [acceptance index](acceptance.md) for source identities and measured scope.
 
 ## Context and service acceptance

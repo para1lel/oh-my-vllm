@@ -246,8 +246,6 @@ scripts/with-env.sh python benchmarks/speculative.py --input "$EVIDENCE_DIR/dspa
 Portable 输出是派生摘要, 不能替代比较所需的原始证据.
 最终源码仍需满足原有 12 个 vLLM 性能门槛.
 
-当前运行时代码的成对采集在 batch 1, 2 和 4 通过.
-当前运行时代码的算子, 边界, 框架和服务验收仍待完成.
 源码身份及测量范围见 [验收索引](acceptance.zh.md).
 
 ## 上下文与服务验收

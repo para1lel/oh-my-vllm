@@ -114,8 +114,6 @@ For timing, the two operations use the same destination cache to remove cache-ad
 Numerical verification uses different caches before timing. The initial 147 cases keep their numerical fixture contract.
 
 Each new case has the same full-output, cache-write, three-round, twenty-pair, and confidence-bound gates.
-The paired collection passed for the current runtime at batches 1, 2, and 4.
-Operator, boundary, framework, and service acceptance stay open for the current runtime.
 Use the [acceptance index](acceptance.md) for source identities and measured scope.
 
 ```bash

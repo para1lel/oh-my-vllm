@@ -288,6 +288,4 @@ Current interfaces make no such support claim.
 
 DSpark runtime support applies to the validated local checkpoint architecture.
 Different draft checkpoints must have new loading, semantic, numerical, and acceptance tests.
-The paired collection passed for the current runtime at batches 1, 2, and 4.
-Operator, boundary, framework, and service acceptance stay open for the current runtime.
 Use the [acceptance index](acceptance.md) for source identities and measured scope.

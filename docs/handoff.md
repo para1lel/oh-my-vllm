@@ -38,22 +38,31 @@ Use [development](development.md) for commands and [architecture](architecture.m
 
 The full CPU collection passed 548 tests and 70 subtests, with 323 GPU tests deselected.
 The graph-budget checks passed 4 GPU tests. The full-output check passed again in 1 test.
-The full GPU collection on `46f7529` passed 285 tests. It had nine boundary cases with total length 262144.
-Each result keeps its source and test scope.
+The full GPU collection on `46f7529` passed 285 tests. Each result keeps its source and test scope.
 
-The paired comparison on current runtime `e83674c` passed at batches 1, 2, and 4.
-Measured intervals had no capture or compilation. Input was 32768, output was 4096, and recompute preemptions were zero.
-Operator, boundary, twelve-row framework, and full service acceptance for the current runtime wait for GPU availability.
-GPU contention from another task stopped subsequent collections. The completed paired job and failed parent collections keep different statuses.
+The full 323-test GPU selection was not run again after the graph-budget changes.
+Graph-budget tests and full-model acceptance checks test the changed paths.
+
+The paired comparison on runtime `e83674c` passed at batches 1, 2, and 4.
+Input was 32768, output was 4096, and recompute preemptions were zero.
+All 90 measured intervals had zero capture or compilation.
+
+Runtime `198b906` passed 230 operator cases, twelve original framework performance rows, and nine 262144-token boundary cases.
+It also passed twelve constraint cases, the two API lifecycles, oh-my-pi tool loops, and four long-context HTTP requests.
+Its release binary, Python sources, and runtime source blobs are the same as those in the paired collection.
+
+The loaded CUDA module agrees. Documentation changes separate these source commits.
+
+The final formal record includes completed jobs from different original collections.
+Original failed parent collections keep their failed status. Full prefix sets failed TTFT spread before complete new sets passed.
+All samples stay available. The cause of the failed spreads stays unknown.
 
 See the [acceptance index](acceptance.md) for full results, source identities, original hashes, and failed attempts.
 Formal DSpark/MTP4 comparison reports TPS, TTFT, spread, acceptance, and paired confidence bounds with no DSpark TPS, TTFT, spread, or confidence-bound acceptance gates.
 The initial twelve workload gates and the operator speed gates stay active.
 
-The previous DSpark service collection on `de1591b` passed constraints, lifecycles, OMP tool loops, and long-context prefix reuse with the two APIs.
-Its reports keep factual answer errors and source-read scope. The service collection for the current runtime will verify these features again.
-
-Source stayed unchanged in the stopped collections. All task-owned processes and GPU resources were released.
+Experiments select any idle B200 and pin its UUID.
+Source stayed unchanged during each collection. All task-owned processes and GPU resources were released.
 No task-owned GPU worker or temporary service port stays active.
 The user-requested tutorial preview stays on port 18084 for chapter review.
 Ignored `LOCAL.md` holds its address, PID, and maintenance commands.
