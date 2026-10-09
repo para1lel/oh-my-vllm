@@ -22,7 +22,7 @@
 <p>worker 收到 target 验证结果后, 使用 PlannedRequest.commit 给出的 kept count 注入特征. count 只覆盖实际保留的输入行. 被拒绝候选的目标特征留在临时批结果中, context 注入跳过它们; DSpark next_position 更新到真正提交的 cursor.</p>
 <p>相同完整前缀命中的 FA 页编号可以直接读取已有 DSpark context 页. 新后缀写自己的页. 这里每个 context 来自同位置 token 的目标层输出, 因而跨 784 边界恢复使用页中数据; 第 10 章 MTP 还需保存的前一个 hidden 边界信息属于另一种输入构造.</p>
 <h2>七个 noise 位置怎样预测七个候选</h2>
-<p>令 cursor 等于本轮提交后的输入长度. 草稿 block 使用位置 cursor 至 cursor + 6, 输入为 anchor 加六个 MASK ID. MASK 的固定 ID 为 248070. 每行读取目标 embedding, 随后经过五层草稿网络和最后 RMSNorm, 第 j 行预测 cursor + j + 1 位置的候选.</p>
+<p>令 cursor 等于本轮提交后的输入长度. 草稿 block 使用位置 cursor 至 cursor + 6, 输入为 anchor 加六个 MASK ID. MASK 的固定 ID 为 248070. 每行读取目标 embedding, 随后经过五层草稿网络和最后 RMSNorm, 第 j 行预测 cursor + j + 1 位置的候选, j 的范围为 0 至 6.</p>
 <<math "\\mathrm{noise}=[a,\\mathrm{MASK},\\mathrm{MASK},\\mathrm{MASK},\\mathrm{MASK},\\mathrm{MASK},\\mathrm{MASK}],\\quad Q\\in\\mathbb{R}^{R\\times7\\times32\\times128}">>
 <p>a 是 anchor, R 是本轮提议请求数. 每层先对 block hidden 做 input RMS, 再得到 Q 和 noise K/V. 每个 Q 可以看到自己请求的全部已保留 context, 以及自己 block 的全部七行 noise K/V. 这种双向 block 用已知的 MASK 表示未来, 七个候选的抽样则由下一节 Markov 链顺序决定.</p>
 <p>noise K/V 保存在临时数组, attention 从持久页和临时 block 分别读取. 结束后临时数据释放, 下轮目标验证重新计算 anchor 和实际候选. 提议模型使用双向 noise, 目标验证的八行仍按各自因果终点读取, 较早的目标行只依赖此前候选.</p>
@@ -30,24 +30,28 @@
 <p>DSpark 的 RMS 先用 FP32 求均方与缩放, 将标准化结果舍入到 BF16, 再乘 checkpoint 的 BF16 权重并舍入. checkpoint 权重直接作为乘数. 自有 dspark_rms_norm 保留这两个舍入点, context 与 block 的 5120 维归一化都经过 Semantic IR.</p>
 <p>Q/K 的 128 维 head norm 随后接完整 NeoX RoPE: 前 64 维与后 64 维配对旋转. YaRN 使用 theta 10000000, factor 32, 原始上下文 8192, beta_fast 32 和 beta_slow 1, 插值与外推频率按维度混合. 内核用 FP64 计算给定 FP32 inverse frequency 与绝对位置的相位, 再保留 BF16 cos/sin 和乘加舍入.</p>
 <p>RMS, Q/K 准备, context append 和双源 attention 分别有语义操作, fake 形状与参考数学. append 声明修改 cache, attention 仅读 cache. CUDA split-KV 将长前缀分成局部段, 保存局部 softmax 归一化信息与加权结果, 再稳定合并, 避免构造完整七行对 262144 位置的注意力矩阵.</p>
+<p>5120 维 RMS 的一行由 256 个线程处理. 输入与输出按 16 字节对齐, BF16 权重按 16 字节或 FP32 权重按 32 字节对齐时, 每个线程一次读取四个 BF16 值, 分别累加四条 FP32 平方和, 再做 warp 与 block 归约. 这条向量路径的输入行数至少为 4096 时, 输出使用 streaming store, 提示缓存优先逐出这些 prefill 临时结果; 短 decode 使用普通 store. 未对齐的连续 view 使用逐值加载与普通 store, 两种路径保持前文的 BF16 舍入点.</p>
+<p>Q/K 的任务单位是一行 128 维 head. head 行数等于 token 数乘头数. 少于 4096 个 head 行时, 一个 block 的 64 个线程共同处理一个 head, 每线程持有一对 NeoX 前后半部值. head 行数至少为 4096 的输入用每个 warp 处理一个 head, 每 block 放四个 warp, 每线程持有两对值. 平方和及归约使用 FP32, 标准化与权重乘法各保留一次 BF16 舍入. 配对值留在寄存器中, 每对共用一次 cos/sin 计算, 随后分别按 BF16 乘法与加减法舍入.</p>
+<p>context append 的一行 K 或 V 为 8 × 128 = 1024 个 BF16 值. K, V 与目的 cache 均按 16 字节对齐, 且 cache 的存储范围不与 K, V 或 slots 的范围重叠时, 使用专用路径. 128 个线程各读取 K 的 16 字节和 V 的 16 字节, 先发出 K/V 源读取, 利用等待时间读取 slot 并计算目的地址. 负 slot 跳过写入, 超出容量的非负 slot 报错. 容量在有符号 32 位范围内时, 校验后的页号计算使用 32 位除法, 最终 BF16 元素偏移仍用 64 位, 再通过指针换算字节地址; 未对齐或重叠 view 回到通用 append.</p>
+
 <h2>Markov 怎样给每个位置加上前一个候选</h2>
 <p>五层 block 的输出先经过共享目标 head, 得到每个位置的 base logits. Markov 从前一个真实 ID 查出 256 维 latent, 再投影到 248320 维词表并加到 base logits. 第一位置使用 anchor, 后续位置使用刚刚提出的候选.</p>
 <<math "\\ell_k=\\ell_k^{\\mathrm{base}}+W_2 E_1(x_{k-1}),\\quad c_k=\\sigma(w_c^\\top\\operatorname{concat}(h_k,E_1(x_{k-1}))+b_c)">>
-<p>k 是候选序号, E_1 是 Markov embedding, W_2 是词表投影, h 是 block hidden, sigma 是 sigmoid. confidence 将 5120 维 hidden 与 256 维 latent 拼成 5376 维, 经过一个线性头输出预测的条件接受概率 c. 两个头都使用 checkpoint 的训练权重.</p>
+<p>k 是候选序号, 范围为 1 至 7, x_0 等于 anchor. E_1 是 Markov embedding, W_2 是词表投影, h 是 block hidden, sigma 是 sigmoid, w_c 是 5376 维 confidence 权重, b_c 是该头的偏置. confidence 将 5120 维 hidden 与 256 维 latent 拼成 5376 维, 经过一个线性头输出预测的条件接受概率 c. 两个头都使用 checkpoint 的训练权重.</p>
 <<source "dsparkHeads" "展开 Markov 与 confidence 的实际计算">>
 <h2>前缀置信度怎样决定提议长度</h2>
 <<math "s_0=1,\\quad s_k=s_{k-1}c_k,\\quad \\mathrm{stop}:s_k<\\tau">>
 <p>s 是当前前缀的预测存活概率, tau 的默认值为 0.2. 累积 confidence 第一次低于 0.2 就停止, 实际候选数为 0 至 7. 假设前三个 c 为 0.8, 0.5, 0.4, 三个 s 为 0.8, 0.4, 0.16, 所以提出两个候选. 首项 confidence 低于阈值时返回 0 个草稿, 下一步由目标执行单 token 解码.</p>
 <p>第 k 个 confidence 依赖此前候选, 在抽取 x_k 前决定是否继续. 随机模式的停止规则使用当时已知的前缀, 下一 token 按实际 q_k 抽取. greedy 的固定图可以先计算七步 Markov 链, 回读后从左向右检查 s, 只使用当前及此前的值.</p>
 <<source "dsparkStop" "展开逐步随机提议与置信度停止">>
-<p>默认 0.2 来自独立自然文本与工具历史的小样本参数比较, 适用范围由该调优记录说明. 完整负载表现仍由正式测量给出. 阈值 0 保留固定七步, 供调试与对照使用. 实际候选数还受剩余输出预算和目标上下文位置限制; 接近上限时, 同一七行 block 只返回验证范围内的合法候选.</p>
+<p>默认 0.2 来自独立自然文本与工具历史的小样本参数比较, 适用范围由该调优记录说明. 完整负载表现仍由正式测量给出. 阈值 0 关闭置信度截断, 保留至多七个候选, 供调试与对照使用. 实际候选数还受 grammar 终止, 剩余输出预算和目标上下文位置限制; 接近上限时, 同一七行 block 只返回验证范围内的合法候选.</p>
 <h2>greedy 与随机 q 怎样分别验证</h2>
-<p>温度为 0 且无惩罚或 grammar 时, greedy 路径在设备上逐步取最大分数 ID, 计算七个 confidence, 一次读回 token, score 和有效标志. 目标 greedy 输出与候选连续匹配时接受, 第一个不匹配位置保留目标 ID. 这条路径保存候选 ID, 按需使用随机路径才保留完整词表 q.</p>
+<p>本轮全部提议请求的温度都为 0, 且都无惩罚或 grammar 时, greedy 路径在设备上逐步取最大分数 ID, 计算七个 confidence, 一次读回 token, score 和有效标志. 目标 greedy 输出与候选连续匹配时接受, 第一个不匹配位置保留目标 ID. 这条路径保存候选 ID, 按需使用随机路径才保留完整词表 q.</p>
 <p>随机模式用用户的 temperature, top_k, top_p, 重复/频次/存在惩罚与当前语法掩码构造真实 q. 第 k 行的历史包含已经提交的 anchor 和前 k - 1 个候选. 提议使用独立 RNG stream, 目标 sampler 的 RNG 与持久 generated 在提议过程中保持原进度.</p>
 <<source "dsparkProposal" "展开候选记录及设备概率字段">>
 <p>draft_probabilities 检查下一轮实际验证候选等于原始提议的前缀, 返回对应的 device tensor 切片. Python 内部直接传给 verifier, ZMQ 消息只携带 ID 与实际结果. 如果调度预算只容纳前三个候选, 使用原来前三行 q 就能验证这段前缀.</p>
 <<math "\\alpha_k=\\min(1,p_k(x_k)/q_k(x_k)),\\quad r_k(v)=\\frac{\\max(p_k(v)-q_k(v),0)}{\\sum_u\\max(p_k(u)-q_k(u),0)}">>
-<p>p 是带相同用户规则的目标条件分布, q 是真实提议分布. verifier 抽取均匀随机数, 以 alpha 接受候选; 拒绝时从正残差 r 抽取替代 ID, 然后结束本轮. 全部候选接受后, 最后一行从目标 p 抽取 bonus. 接受概率和残差共同保证给定目标 logits 的采样分布.</p>
+<p>p 是带相同用户规则的目标条件分布, q 是真实提议分布, v 和 u 都是词表中的 token ID. 当正残差总质量大于 0 时, 分母将残差归一化为 r. verifier 抽取均匀随机数, 以 alpha 接受候选; 拒绝时从正残差 r 抽取替代 ID, 然后结束本轮. 全部候选接受后, 最后一行从目标 p 抽取 bonus. 接受概率和残差共同保证给定目标 logits 的采样分布.</p>
 <p>DSpark 和 MTP 的目标 GDN 验证 state 使用 BF16, 普通生成使用 FP32. 分布正确性的比较参考需要对齐目标 state 精度和用户采样变换, 才能得到同一条件下的 p. seed 可复现同一模式的抽样流程; DSpark 的接受随机数, 残差与 bonus 会使用不同于普通生成的 RNG 消耗顺序.</p>
 <<source "dsparkProbability" "展开完整概率接受, 残差与 bonus 抽样">>
 <p>随机模式将候选概率, PMF 总和, 有限值和可达目标行一起检查. 真正到达的无效分布会报错. GDN 和 FA 仍按最后保留输入选正式状态; 最后一个新输出等下一轮计算缓存, 与第 10 章的 commit 边界相同.</p>
@@ -57,20 +61,28 @@
 <h2>编译和图复用怎样保持缓存顺序</h2>
 <p>worker 将 context injection, backbone, greedy 链和 Markov step 分成编译单元. DSparkGraph 的静态输入包含 anchor/MASK ID, 七行绝对位置, context 页表和已保留长度. 新图先在捕获之外完成编译与预热, replay 复制动态输入后执行同一 GPU 流程.</p>
 <p>提议图只读取 context 页, 因而捕获与预热都保持这些页的内容. context injection 在提议之前完成, 同一 CUDA stream 保证先写后读. DSpark 提议使用有界 16 项图缓存与独立 pool, 图输出在该族下一次捕获或 replay 前消费. 目标特征图, MTP 图和 DSpark 图各自管理输出生命期.</p>
+<p>目标图的缓存预算按模式分配: 普通与 MTP4 各有 32 项, DSpark 有 64 项, 同时加载两种草稿的比较 worker 有 96 项. 每项保留一组静态形状的输入, 输出与执行图. DSpark 的候选长度会随请求变化, 需要覆盖更多总行数与查询上界组合. 比较缓存将 target family 的淘汰保护下限设为 16 项, target feature family 设为 32 项. 只有已有条目数超过本族下限时, 才能从该族淘汰; 下限不会主动触发捕获, 也不会将条目补满. 其余容量按热度分配. 这些数量限制缓存增长; 空闲显存不足 4 GiB 时停止新捕获, 已驻留图继续 replay. MTP 草稿与提议共用另一组默认 64 项预算, 淘汰保护下限分别为 32 与 8; 单独运行和比较模式使用相同预算.</p>
 <p>一次提交有 1 至 32 行特征时, context injection 还可以复用单独的 DSparkContextGraph. 新图先备份本次目的槽, 两轮预热后恢复, 捕获后也在 finally 恢复; 真正提交发生在随后 replay. replay 先检查全部输入的形状, 类型与设备, 再复制新的特征, 绝对位置和目的槽. 因而同一行数可以写不同请求的不同页, 捕获过程保留原缓存内容.</p>
 <<source "dsparkContextGraph" "展开 context 图的事务恢复与动态输入">>
-<p>context 图不返回活跃输出, 使用独立 pool 与最多 8 项缓存. 提议图和 context 图各自执行 GraphCache 的显存检查, 热度准入与重捕获冷却. 超过 32 行的预填充直接调用 compiled injection 单元; 显存不足或形状尚未准入时也使用该单元, CUDA 操作与缓存写入顺序保持相同.</p>
+<p>context 图不返回活跃输出, 使用独立 pool 与最多 32 项缓存, 覆盖支持的全部行数. 提议图和 context 图各自执行 GraphCache 的显存检查, 热度准入与重捕获冷却. 超过 32 行的预填充直接调用 compiled injection 单元; 显存不足或形状尚未准入时也使用该单元, CUDA 操作与缓存写入顺序保持相同.</p>
 <p>confidence 改变各请求的实际候选数. 目标验证图把真实最大输入行数向上归入 1, 2, 5, 8 中最小的安全 bucket, 将此上界加入 key 第四项. [1,3] 与 [2,2] 总行数和请求数相同, 上界分别为 5 与 2, 因而使用不同图; [1,4] 与 [2,3] 总行数同为 5, 上界同为 5, 可以共享. starts, 页表, 位置和状态槽仍按真实请求复制, 有效查询与候选数保持本轮实际长度.</p>
 <h2>服务配置与测量怎样证明实际路线</h2>
-<p>服务选择 <<icode "--speculative-mode dspark --num-speculative-tokens 7">>, 并用 <<icode "--draft-model">> 或 OH_MY_VLLM_DRAFT_MODEL 指定本地草稿目录. <<icode "--dspark-confidence-threshold">> 配置 tau, 默认 0.2, 显式设为 0 可保留固定七步. 启动消息与 RuntimeConfig 一起核对模式和数量. Chat, Responses, 流式输出, 工具与语法功能沿用既有服务路径.</p>
+<p>服务选择 <<icode "--speculative-mode dspark --num-speculative-tokens 7">>, 并用 <<icode "--draft-model">> 或 OH_MY_VLLM_DRAFT_MODEL 指定本地草稿目录. <<icode "--dspark-confidence-threshold">> 配置 tau, 公共 CLI 接受有限的 [0, 1) 值, 默认 0.2, 显式设为 0 可关闭置信度截断, 保留至多七个候选. 启动消息与 RuntimeConfig 一起核对模式和数量. Chat, Responses, 流式输出, 工具与语法功能沿用既有服务路径.</p>
 <p>比较命令让 MTP 与 DSpark 共用同进程目标权重, 各持自己的草稿缓存. 整批请求结束且完成清理后, 重建 Rust 前缀管理再切换模式, 避免把未注入该草稿模型的旧 FA 命中页当成它的 context. measured 阶段的实际验证数, 接受数和模式日志证明请求走过哪条路线.</p>
-<<math "\\mathrm{TPS}=\\frac{N_{\\mathrm{kept\ output}}}{t_{\\mathrm{batch\ finish}}-t_{\\mathrm{batch\ start}}},\\quad \\mathrm{acceptance}=\\frac{N_{\\mathrm{accepted\ drafts}}}{N_{\\mathrm{verified\ drafts}}}">>
+<<math "\\mathrm{TPS}=\\frac{N_{\\mathrm{kept\ output}}}{t_{\\mathrm{batch\ finish}}-t_{\\mathrm{batch\ start}}},\\quad \\mathrm{acceptance}=\\frac{N_{\\mathrm{accepted}}}{N_{\\mathrm{verified}}}">>
 <p>TPS 的分子是实际保留输出数. 接受率的分子是接受草稿数, 分母是实际送去验证的草稿数. 下一轮返回的提议数单独记录, 调度预算可能只容纳其中一部分. TPS 包含 prefill 与 decode 的完整引擎批耗时, 排除模型加载和预热. 接受率帮助解释目标轮数与草稿额外成本, 吞吐结果还需完整计时来判断.</p>
 <p>正式 DSpark 比较范围为输入 32768, 输出 4096, batch 1, 2, 4. 每个 batch 三轮, 每模式两次完整预热, 每轮五对交替顺序的正式测量. 报告每轮 TPS 中位数与相对极差, 分层配对 bootstrap 的单侧 95% 增益下界, 以及 TTFT. 当前 DSpark 比较收集实际表现, 用户暂未为它设定高于 MTP 的性能门槛. 既有十二行 vLLM 回归门槛仍保留.</p>
+<h2>接受率与每步接受数怎样一起看</h2>
+<p>自适应截断会改变接受率的分母. 设本轮最多可提议七个候选, confidence 使实际提议为两个, 两个都被调度验证, 其中一个被接受, 则本轮接受率为 1 / 2 = 50%, 每步接受数为 1. MTP 若送去四个并接受三个, 接受率为 3 / 4 = 75%, 每步接受数为 3. 要估计减少了多少目标调用, 还需计算每个目标步骤平均验证及接受多少候选.</p>
+<<math "\\bar n_{\\mathrm{verified}}=N_{\\mathrm{verified}}/N_{\\mathrm{steps}},\\quad \\bar n_{\\mathrm{accepted}}=N_{\\mathrm{accepted}}/N_{\\mathrm{steps}}">>
+<p>N_steps 是 Rust execute_batch 本次批执行的非空调度步骤数, 包含 prefill 与 decode; 分子汇总批内请求的候选计数. 同批请求可以共享一个步骤. 服务完成日志的 steps 按单个请求计数, 两种每步平均数须保留各自的统计范围. 跨 batch 比较时还须保留 batch_size, input_len 和 output_len. 接受率相近的两种模式, 也可能因草稿网络成本和验证行数而得到不同 TPS.</p>
+<p>下表来自运行时代码 <<icode "e83674c">> 的 formal-09 paired 子任务. 该子任务完整通过三种 batch 的比较与清理检查; 父采集随后执行边界任务时遇到其他任务的 GPU 争用而失败. 记录分别保留已完成子任务与父采集的状态.</p>
+<p>下表的 TPS 汇总每模式十五次正式测量, 取这十五个值的中位数. TTFT 先取每批内各请求的最大值, 再取十五批的中位数. 接受率及每步平均数使用全部十五批的总计数相除.</p>
+<div class="measurement-table-scroll" role="region" aria-label="MTP4 与 DSpark 配对测量结果" tabindex="0"><table class="example-table"><caption>输入 32768, 输出 4096, greedy, 每模式十五次正式测量</caption><thead><tr><th>Batch</th><th>模式</th><th>TPS</th><th>TTFT (s)</th><th>接受率</th><th>每步验证数</th><th>每步接受数</th></tr></thead><tbody><tr><td>1</td><td>MTP4</td><td>319.134</td><td>1.631171</td><td>90.647075%</td><td>3.980877</td><td>3.608549</td></tr><tr><td>1</td><td>DSpark</td><td>150.959</td><td>1.598959</td><td>72.105644%</td><td>1.313688</td><td>0.947243</td></tr><tr><td>2</td><td>MTP4</td><td>493.461</td><td>3.297708</td><td>80.736434%</td><td>7.413793</td><td>5.985632</td></tr><tr><td>2</td><td>DSpark</td><td>221.112</td><td>3.223185</td><td>63.357157%</td><td>1.854226</td><td>1.174785</td></tr><tr><td>4</td><td>MTP4</td><td>723.972</td><td>6.565200</td><td>75.358676%</td><td>14.667266</td><td>11.053058</td></tr><tr><td>4</td><td>DSpark</td><td>355.888</td><td>6.428824</td><td>56.250624%</td><td>3.394175</td><td>1.909245</td></tr></tbody></table></div>
 <p>调优 confidence 阈值时, BenchArgs 还支持 <<icode "bench --prompt-file">> 读取独立自然语料. 先用目标 tokenizer 把文本编码为 ID, 文件每行放一个请求的空格分隔 ID. 文件行数必须等于 batch_size, 每行 ID 数等于 input_len, ID 均在目标词表内. Rust 在启动 worker 前检查这些条件, 从而复用同一批执行计时与草稿计数.</p>
 <<source "benchPrompts" "展开自然语料输入的维度与词表检查">>
 <p>自然文本和工具上下文可以帮助比较不同阈值的接受长度与额外成本. 选定参数后, 再在独立正式负载上收集完整记录. spec-bench 保留既定的合成 ID, 32768 输入和 4096 输出, 调优输入与正式测量各自记录来源.</p>
-<p>完整服务功能与 DSpark 的 262144 上下文 batch 1, 2, 4 属于正确性和资源边界验收. 本章描述源码机制与测量范围, 具体吞吐结论由绑定源码, checkpoint 和硬件身份的正式记录给出. 当前这次扩展尚待完成全部性能收集.</p>
+<p>完整服务功能与 DSpark 的 262144 上下文 batch 1, 2, 4 属于正确性和资源边界验收. 本章描述源码机制与测量范围, 具体吞吐结论由绑定源码, checkpoint 和硬件身份的正式记录给出. 当前配对采集的三种 batch 均已完成, 正式区间没有捕获或编译活动. 算子, 当前源码的 262144 边界及完整服务验收等待 GPU 测试时段; 先前源码上的服务与边界结果各自保留其验证范围.</p>
 <<coverage>>
 <<chapterChoices>>
 </article>

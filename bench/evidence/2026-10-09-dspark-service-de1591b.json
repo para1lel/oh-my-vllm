@@ -1,0 +1,989 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "2026-10-09-dspark-service.original.json",
+    "sha256": "f99612dbad2a2505c08b69fe131a5fd3d76ecbc72f9d3d7ea5d903e91a13a3c0",
+    "bytes": 55172
+  },
+  "removed_fields": [],
+  "data": {
+    "kind": "source-bound service verification",
+    "source": {
+      "git_commit": "de1591b147f731d4d39fa94d8eb5fb088b2041c1",
+      "git_status": "",
+      "git_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "binary_sha256": "4202db0d33251b705e1bedf65ec23bee979ec75377ee42ae7d9f30d0cc8c1072",
+      "python_sources_sha256": {
+        "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+        "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+        "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+        "python/oh_my_vllm/ir/core.py": "ff595eb490adfa1a7e04001131596bd459b5bc6f43dfb0f55b4cbcdf58ebecd8",
+        "python/oh_my_vllm/ir/coverage.py": "22bb5c8a3940a36e69efa013b15a1f5228e183d8663fcda9126dc36d69293d90",
+        "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+        "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+        "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+        "python/oh_my_vllm/ir/logits.py": "411d9aed99366d3388086a99eec48d7113d3f9153798f4e35f8329ae5ee3357f",
+        "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+        "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+        "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+        "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+        "python/oh_my_vllm/kernels/attention.py": "46ffe64c3b611ac9736f84da6defb43b5f05b35e93954cd12eb3ebe8f3070295",
+        "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+        "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+        "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+        "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "4fd28d7692ad38d583c186dcd6a4a8e7831a63d363b177d98892f16bafd10bf2",
+        "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+        "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+        "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+        "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+        "python/oh_my_vllm/kernels/fp8.py": "1d147b58b1c7219bea4e714b03c445c602128f5834c06b057d856e46629483d4",
+        "python/oh_my_vllm/kernels/gdn.py": "67c4870ba25837b5e21fbac00cb532c135aa4c4e719a1cb1873d4215281abd89",
+        "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+        "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+        "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+        "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+        "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+        "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+        "python/oh_my_vllm/models/qwen.py": "b184f8f86a31571aac46e15c20e98cb148254f6d4615f5c273c3fded9854c7a7",
+        "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+        "python/oh_my_vllm/worker/batch_plan.py": "38fdc0b7661e7a10716642d34ecd3f134f8dda297f67d604139ba23bf063e9a3",
+        "python/oh_my_vllm/worker/decode_graph.py": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+        "python/oh_my_vllm/worker/dspark.py": "34b7014ac0f0aba620465a92a6e9321a5ba478533450b971bc4391afbed97485",
+        "python/oh_my_vllm/worker/dspark_graph.py": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+        "python/oh_my_vllm/worker/graph_cache.py": "475268d69747f00a8c4a3f3b8a59e1ad1c80d146d4e8d398b9ab868de584fc5e",
+        "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+        "python/oh_my_vllm/worker/model_runner.py": "78308a02b261173bd81ced30647adae476bfe0d727e71df2864cb5bf99faf2dd",
+        "python/oh_my_vllm/worker/mtp.py": "80ee37022f19d8f30ac395108c488861848e8806846792d2a7e2514d0f8ac6ca",
+        "python/oh_my_vllm/worker/protocol.py": "a3a74a605a84da886893f46524ee6de55979161d4f4632fabcd2ad50fa10d65e",
+        "python/oh_my_vllm/worker/runtime.py": "4f5d693d61f12470a1c6a42d505b70f47efdc963827069e75f712a5bb47cca3c",
+        "python/oh_my_vllm/worker/sampler.py": "285b020850ac82a4265322ee59a69a7a5523bcb1834da3f29ba2ce4504d4804e",
+        "python/oh_my_vllm/worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
+        "python/oh_my_vllm/worker/serving.py": "9c631dd4f03d1c33648afe3f56e673f48e559213dac4d22e4bc3bf7c00ac30b3",
+        "python/oh_my_vllm/worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
+        "python/oh_my_vllm/worker/zmq_bridge.py": "0491ff1880ab0ca56e5a407b1e1d42e2e260b5ad7710bfe8cf9c8d5fad12a2de"
+      },
+      "runtime_sources_sha256": {
+        "crates/kv-cache/src/block.rs": "23ff6cdb70011da8ffceeacf37ae854471fb672323c0b50e482af2cee95370dd",
+        "crates/kv-cache/src/coordinator.rs": "8be1c00ba88607364c25081704e5b861cef0c32b1b62c5d8970dae00b4c7cf39",
+        "crates/kv-cache/src/group.rs": "9d892a01028624a5795e748aeaf5082c3e082a44167e72cafa442cb4f96654e9",
+        "crates/kv-cache/src/hash.rs": "8f02e9db9a89737abc58a6516e41786efb7026aa8cd9ed1cc03e433c9c80870c",
+        "crates/kv-cache/src/lib.rs": "e44822725ab148dc46afd3e1ee6a4389046a5bd9cf86a5fa45a373faace2a586",
+        "crates/kv-cache/src/pool.rs": "026f2dc4d6f90fe995c698afd1e2f8fc3affa3af1240ac4bb08254e9297b9d2b",
+        "crates/kv-cache/src/tests/coordinator_tests.rs": "831c7e7b0e274c253f1d7aaa9be441ad4d789a22e61eb1480a98ad0ab3ffd586",
+        "crates/scheduler/src/lib.rs": "a68c2b36970c260036b8bf14d25212045ecb7d6d40c80cccdc13d8f14df69c3d",
+        "crates/scheduler/src/output.rs": "51e6e2dc3adcdfe2d06b4ef6e3e4e6bf4d603f950170115a19b198937e392627",
+        "crates/scheduler/src/request.rs": "97ba273d416002286af05e00ca3f382fdc843660442db89d42f052160d8164f8",
+        "crates/scheduler/src/tests.rs": "edd2ac914642478da6ac57bde4da421c34f0725be678d281f409e87e7ac1efff",
+        "crates/zmq-worker/src/client.rs": "fa5ac46a853ffc96e7a045cf8e51a9e68ef2d3150d6aca34c91cf36bcbb1aa63",
+        "crates/zmq-worker/src/error.rs": "4ec88bc8c5f3fbcfb49c6bc6b71c41548c982de4f8c4a38bfcc5b5769fc9f572",
+        "crates/zmq-worker/src/lib.rs": "85e633a01b2aa955e33e1193551651d1fb182aefe277307203aca6d8841c0d4c",
+        "crates/zmq-worker/src/main.rs": "9d410d9a60060ad4a6a9993790518048714fd737d57d1a492ef97d2e4a63d7f8",
+        "crates/zmq-worker/src/protocol.rs": "e2c131ac771c31fb5fa76fc6028c8a8242f3edbd168f8fdccca5ab8747c49fd7",
+        "crates/zmq-worker/src/serving/events.rs": "c4a597f90b532667e1dd20b2479ccc98b19187ee389fde6ba3065d8c36291990",
+        "crates/zmq-worker/src/serving/mod.rs": "1b45ddc50249d90f84213ad54b90dd001970cc8d89c825aedff628c26e88346e",
+        "crates/zmq-worker/src/serving/parser.rs": "30dbc2149518c285591bd4739d212db7e60b5df3292cfaa519623e409edff086",
+        "crates/zmq-worker/src/serving/request.rs": "a2ade1316a6a62d00b407800b51f0e3df1e5bae6f9f7a277717ad9133d2382b4",
+        "crates/zmq-worker/src/spec_bench.rs": "54e916bb2e1acaaf1a85aee5c9a261f56102b9d89824feefd3ba9afa366aa8be",
+        "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+        "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+        "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+        "python/oh_my_vllm/ir/core.py": "ff595eb490adfa1a7e04001131596bd459b5bc6f43dfb0f55b4cbcdf58ebecd8",
+        "python/oh_my_vllm/ir/coverage.py": "22bb5c8a3940a36e69efa013b15a1f5228e183d8663fcda9126dc36d69293d90",
+        "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+        "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+        "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+        "python/oh_my_vllm/ir/logits.py": "411d9aed99366d3388086a99eec48d7113d3f9153798f4e35f8329ae5ee3357f",
+        "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+        "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+        "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+        "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+        "python/oh_my_vllm/kernels/attention.py": "46ffe64c3b611ac9736f84da6defb43b5f05b35e93954cd12eb3ebe8f3070295",
+        "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+        "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+        "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+        "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "4fd28d7692ad38d583c186dcd6a4a8e7831a63d363b177d98892f16bafd10bf2",
+        "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "757eb4a9a4efb0f9c138f601a99b24b035dc142d52ec9da45b82c1954d09be35",
+        "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+        "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+        "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+        "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+        "python/oh_my_vllm/kernels/fp8.py": "1d147b58b1c7219bea4e714b03c445c602128f5834c06b057d856e46629483d4",
+        "python/oh_my_vllm/kernels/gdn.py": "67c4870ba25837b5e21fbac00cb532c135aa4c4e719a1cb1873d4215281abd89",
+        "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+        "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+        "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+        "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+        "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+        "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+        "python/oh_my_vllm/models/qwen.py": "b184f8f86a31571aac46e15c20e98cb148254f6d4615f5c273c3fded9854c7a7",
+        "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+        "python/oh_my_vllm/worker/batch_plan.py": "38fdc0b7661e7a10716642d34ecd3f134f8dda297f67d604139ba23bf063e9a3",
+        "python/oh_my_vllm/worker/decode_graph.py": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+        "python/oh_my_vllm/worker/dspark.py": "34b7014ac0f0aba620465a92a6e9321a5ba478533450b971bc4391afbed97485",
+        "python/oh_my_vllm/worker/dspark_graph.py": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+        "python/oh_my_vllm/worker/graph_cache.py": "475268d69747f00a8c4a3f3b8a59e1ad1c80d146d4e8d398b9ab868de584fc5e",
+        "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+        "python/oh_my_vllm/worker/model_runner.py": "78308a02b261173bd81ced30647adae476bfe0d727e71df2864cb5bf99faf2dd",
+        "python/oh_my_vllm/worker/mtp.py": "80ee37022f19d8f30ac395108c488861848e8806846792d2a7e2514d0f8ac6ca",
+        "python/oh_my_vllm/worker/protocol.py": "a3a74a605a84da886893f46524ee6de55979161d4f4632fabcd2ad50fa10d65e",
+        "python/oh_my_vllm/worker/runtime.py": "4f5d693d61f12470a1c6a42d505b70f47efdc963827069e75f712a5bb47cca3c",
+        "python/oh_my_vllm/worker/sampler.py": "285b020850ac82a4265322ee59a69a7a5523bcb1834da3f29ba2ce4504d4804e",
+        "python/oh_my_vllm/worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
+        "python/oh_my_vllm/worker/serving.py": "9c631dd4f03d1c33648afe3f56e673f48e559213dac4d22e4bc3bf7c00ac30b3",
+        "python/oh_my_vllm/worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
+        "python/oh_my_vllm/worker/zmq_bridge.py": "0491ff1880ab0ca56e5a407b1e1d42e2e260b5ad7710bfe8cf9c8d5fad12a2de",
+        "benchmarks/baseline/enginecore.py": "36d03eefdd7a0768c59aa32c05f821ad9fdf7b70ecc5df64e25de6e6c63e8811",
+        "benchmarks/compare_vllm.py": "40496e5ad5ffed76566ae617d01fdd9e7a625405f49381dda55197e5713582f3",
+        "benchmarks/context_boundary.py": "3836ccb636c48cd8fee565176476974d509fe31c6b333a04d1ad08b5dec64868",
+        "benchmarks/kernels.py": "2af5a17879d8a86d62ef859d2793c809f1f88204564b0b5be3b619bab296b3d7",
+        "benchmarks/measurement.py": "7ddc97ac3ffdffacce73c79d4e8a6cebb41f195792a4ba7bc349a55a8ae00a68",
+        "benchmarks/speculative.py": "5a0a999a662f4dfcfcd5c4c01af7f1c820e913381e4c7adeb55d40acd2814e9f",
+        "benchmarks/ttft.py": "719f6f61bf11dd8e314c0b99cde38d6afe457a75516682ace9446b8860aedda6",
+        "scripts/acceptance_proxy.py": "4ba7c67e8089f29141e6cdf7bb2022f4b671a39388307492350e77792c82bf37",
+        "scripts/agentic-acceptance.py": "6dafed49e1c21d77b1945feb4496d79e3808dccfdf90434c3fa5f4797ee56345",
+        "scripts/check_docs.py": "41617cf1ba7c6917dc21b01ca324913cd8a12f99c98f8f562ec5ba7cf65bf14f",
+        "scripts/check_rust_line_width.py": "462b2d094357a126463afa920fba6824754f80fddf06b7eaa2c29df2047d0238",
+        "scripts/export_evidence.py": "5958f8cc33fe37f11a348e95a3fcf770d7ebb5f4d79572c973add2d4eb3cded1",
+        "scripts/fix_whitespace.py": "cb01930887b4935512c557dc5137323f0ff5a71ab602fcd590b2c1988f48055b",
+        "scripts/long-context-acceptance.py": "1abe499731ff66030f17fd3816b7bb7ede7f6ae73b02803e707ba5ec4b87b215",
+        "scripts/probe-independent-model.py": "cacbf57f6044dcbd5f6ae01090557331f046b7d5c9a6656ee43ab705f679c7d2",
+        "scripts/serving-acceptance.py": "cd4f1d724a939dea1bf0fdb574a771aeaba504705e0fd0206b978e0de2d5243f",
+        "scripts/serving-lifecycle.py": "f87b607de195708fb5cda754d597f993d52250251150e9607c0467b9396f2ca9",
+        "scripts/serving_evidence.py": "a08eafd67e248e5a377aa23d20dd4d2ba11f4dc30eb3c74511b21e7c27a40d05",
+        "scripts/smoke-batch.py": "9abca334c7372a278249feed0b794c89b446aea76c933419f0da9ddcb8b35220",
+        "scripts/smoke-text.py": "5f1f6db6efdfdb22cee1edd91a30649a123f5ce7cf15025cc1e0782cee89cb92",
+        "scripts/test.sh": "36d9359fcbe97315d6d39f13f28bd4da0b6d5843ed7f05b7df19c461cfaa2595",
+        "scripts/with-env.sh": "86e6f3a69bb5aa7c6e3faf94ee0534be86109f4777261705215074e51161ebb5",
+        "scripts/with-gpu.sh": "a2a0d22c89a7dc837f5e8fc8e7ea5d6ccbee98d9b0445bd02b7088ec8ba822ec"
+      }
+    },
+    "configuration": {
+      "max_num_seqs": "32",
+      "max_num_batched_tokens": "32768",
+      "block_size": "784",
+      "max_model_len": "262144",
+      "num_speculative_tokens": "7",
+      "speculative_mode": "dspark",
+      "comparison": "false",
+      "dspark_confidence_threshold": "0.2",
+      "worker_fa_pool_blocks": "1400",
+      "worker_gdn_pool_blocks": "128",
+      "fa_pool_blocks": "1400",
+      "gdn_pool_blocks": "128"
+    },
+    "passed": true,
+    "source_unchanged": true,
+    "cleanup": {
+      "errors": [],
+      "owned_processes_remaining": 0,
+      "owned_gpu_processes_remaining": 0,
+      "temporary_port_released": true,
+      "server_returncode": 0
+    },
+    "clients": [
+      {
+        "api": "chat",
+        "passed": true,
+        "exit_code": 0,
+        "elapsed_s": 265.97781593492255,
+        "http_requests": 7,
+        "all_http_statuses_200": true,
+        "tool_calls": 17,
+        "read_calls": 9,
+        "source_reads": [
+          {
+            "path": "python/oh_my_vllm/worker/model_runner.py",
+            "line_range": null,
+            "forwarded_output_sha256": "cc23179a8196a9f93653bb47171ff329c3922fd4a362046e29ede531577730ec"
+          },
+          {
+            "path": "crates/scheduler/src/lib.rs",
+            "line_range": [
+              230,
+              330
+            ],
+            "forwarded_output_sha256": "2e970be3f74fb2bd2a7deca28e743548dff5eb8804da8d574c217f15a949fa62"
+          },
+          {
+            "path": "python/oh_my_vllm/worker/model_runner.py",
+            "line_range": [
+              92,
+              240
+            ],
+            "forwarded_output_sha256": "eb26b6e224f5c8e82e76cff2b258179a7209afa6e7c24bd90f4df31a0f92b10b"
+          },
+          {
+            "path": "crates/scheduler/src/lib.rs",
+            "line_range": [
+              334,
+              440
+            ],
+            "forwarded_output_sha256": "da2ff116a9c73f6d39b8e1dbcd905bea0ed13c93b6c1be291477b05f70a1729d"
+          }
+        ],
+        "final_answer_sha256": "bbb8187b1678a7662dfda676b0fb07c41cc6585c48a35a0f18fb18950ef3fbab",
+        "tool_results_in_final_model_request": true,
+        "draft_verification": [
+          {
+            "verified_draft_tokens": 680,
+            "accepted_draft_tokens": 413
+          },
+          {
+            "verified_draft_tokens": 380,
+            "accepted_draft_tokens": 257
+          },
+          {
+            "verified_draft_tokens": 685,
+            "accepted_draft_tokens": 456
+          },
+          {
+            "verified_draft_tokens": 493,
+            "accepted_draft_tokens": 313
+          },
+          {
+            "verified_draft_tokens": 408,
+            "accepted_draft_tokens": 257
+          },
+          {
+            "verified_draft_tokens": 495,
+            "accepted_draft_tokens": 274
+          },
+          {
+            "verified_draft_tokens": 5936,
+            "accepted_draft_tokens": 4260
+          }
+        ]
+      },
+      {
+        "api": "responses",
+        "passed": true,
+        "exit_code": 0,
+        "elapsed_s": 151.61725561507046,
+        "http_requests": 5,
+        "all_http_statuses_200": true,
+        "tool_calls": 9,
+        "read_calls": 7,
+        "source_reads": [
+          {
+            "path": "python/oh_my_vllm/worker/model_runner.py",
+            "line_range": null,
+            "forwarded_output_sha256": "cc23179a8196a9f93653bb47171ff329c3922fd4a362046e29ede531577730ec"
+          },
+          {
+            "path": "crates/scheduler/src/lib.rs",
+            "line_range": [
+              230,
+              320
+            ],
+            "forwarded_output_sha256": "c6cf19be2e84945d48b6fbc9875ea4e5936a076b6458934b71f2dc97c5bee409"
+          },
+          {
+            "path": "python/oh_my_vllm/worker/model_runner.py",
+            "line_range": [
+              92,
+              185
+            ],
+            "forwarded_output_sha256": "e4aa094844bb21e08bd481c45634bd19a88b4c24df99399f053b552f7c6acc25"
+          }
+        ],
+        "final_answer_sha256": "a63b8866203ef8995eb8b90dd117c53cdeaaef048c1fc62ba86cc4443a9403d9",
+        "tool_results_in_final_model_request": true,
+        "draft_verification": [
+          {
+            "verified_draft_tokens": 325,
+            "accepted_draft_tokens": 213
+          },
+          {
+            "verified_draft_tokens": 540,
+            "accepted_draft_tokens": 351
+          },
+          {
+            "verified_draft_tokens": 348,
+            "accepted_draft_tokens": 228
+          },
+          {
+            "verified_draft_tokens": 427,
+            "accepted_draft_tokens": 272
+          },
+          {
+            "verified_draft_tokens": 2797,
+            "accepted_draft_tokens": 2107
+          }
+        ]
+      }
+    ],
+    "originals": [
+      {
+        "name": "constraints/attempt.json",
+        "sha256": "a1d72f412d4545ba87187dcb547f0f4f08307b571ebaf0d40953bf42a7e45029",
+        "bytes": 47181
+      },
+      {
+        "name": "constraints/chat-medium-json_object.json",
+        "sha256": "dcf950921dda5ecc4e85678d8107fea8354ea9c7eca7555c825d30622fca07d9",
+        "bytes": 1716
+      },
+      {
+        "name": "constraints/chat-medium-json_schema.json",
+        "sha256": "c84e85ff68af21c694313b8a17cf31569ad89a0a8ee3fea7def493e7d9ea876f",
+        "bytes": 2235
+      },
+      {
+        "name": "constraints/chat-medium-tool.json",
+        "sha256": "95122df81a067d8c22c08fa4f83eabd1040506268b5f597521666fa0b05659e6",
+        "bytes": 2148
+      },
+      {
+        "name": "constraints/chat-off-json_object.json",
+        "sha256": "b86269096c6ae4c69caa1572862897183f06e14eee3ef7353269668abd0fc241",
+        "bytes": 1072
+      },
+      {
+        "name": "constraints/chat-off-json_schema.json",
+        "sha256": "18a43a9e14636785bc2c11405b5b880c0d9a38449660c0c9868217b458446287",
+        "bytes": 1597
+      },
+      {
+        "name": "constraints/chat-off-tool.json",
+        "sha256": "189274cf9bde15a7178feb6b0ea97104eabea17af2321ab2dc43657b46cdd2da",
+        "bytes": 2028
+      },
+      {
+        "name": "constraints/responses-medium-json_object.json",
+        "sha256": "312ccfabff85f4b3a264ecb62d5e9887265b8c30135cb078dcccfb1f58e1f595",
+        "bytes": 2630
+      },
+      {
+        "name": "constraints/responses-medium-json_schema.json",
+        "sha256": "cdfc772413168cf584d53e6f77de33c8ead5323094f4b0db97cb675ff93a09da",
+        "bytes": 3611
+      },
+      {
+        "name": "constraints/responses-medium-tool.json",
+        "sha256": "b2a9d83b51f1d6da0ce0650c199713a51054b25f8e762fec91baca1a27795631",
+        "bytes": 3512
+      },
+      {
+        "name": "constraints/responses-off-json_object.json",
+        "sha256": "afe9f5e46cff38f1d5cdd3a3dba8430740da668ecf46d47752126e8e635853ce",
+        "bytes": 1813
+      },
+      {
+        "name": "constraints/responses-off-json_schema.json",
+        "sha256": "2dfc82566dd016067a555d737e8d5fb1d5aef18a42cd3757556b94366ea0b8cb",
+        "bytes": 2796
+      },
+      {
+        "name": "constraints/responses-off-tool.json",
+        "sha256": "2473d11f48e53f5f2a379c5120acfec574c121ae549273fc2583854c597e7105",
+        "bytes": 2893
+      },
+      {
+        "name": "constraints/server-verification.json",
+        "sha256": "53bc7c9a6d564c5a5ba4e7c88ee046313bcf6ed60c05182ffdc457b0f6a7bf56",
+        "bytes": 1344
+      },
+      {
+        "name": "constraints.log",
+        "sha256": "409cf2ee4db640b0c420d5617b7d30fc97872c097aca98f5b9c1396959b03eac",
+        "bytes": 864
+      },
+      {
+        "name": "independent-suite-review-01.json",
+        "sha256": "b3722b2b2d4fb05498805fddbb35a12a58a1e1e79c900d56da45f514f7d5f6df",
+        "bytes": 40051
+      },
+      {
+        "name": "independent-suite-review-02.json",
+        "sha256": "efeaf3f5b43a27229b51668af396d50a7572430af1eba6304def3de8d735c161",
+        "bytes": 41028
+      },
+      {
+        "name": "lifecycle-chat.json",
+        "sha256": "3f43f07c9a7a4da4b1bb204055f07344b7460f2e6d8ba46ea74e452e2393b6ef",
+        "bytes": 38512
+      },
+      {
+        "name": "lifecycle-chat.log",
+        "sha256": "2a8497ab3dd8ccfd978f0770246ceac7022edf9b42e2f59d43004441adfe6b24",
+        "bytes": 77
+      },
+      {
+        "name": "lifecycle-responses.json",
+        "sha256": "7a29526337ddebf3190e16e4443876c9dc830c089a52ad547fb7da1cad98093e",
+        "bytes": 60717
+      },
+      {
+        "name": "lifecycle-responses.log",
+        "sha256": "2a8497ab3dd8ccfd978f0770246ceac7022edf9b42e2f59d43004441adfe6b24",
+        "bytes": 77
+      },
+      {
+        "name": "long-context.json",
+        "sha256": "92545ffe6b4e57d0a1ec9ea82eabc5c5f768c1754d673115a01af6bd621d865e",
+        "bytes": 7047016
+      },
+      {
+        "name": "long-context.log",
+        "sha256": "846f5325dc4b4f3cd1c6e208779c4f3dedc64dfee77b36bcedd9de1ad56e8bd4",
+        "bytes": 113
+      },
+      {
+        "name": "omp-chat/chat-http.json",
+        "sha256": "c5d77c7463415ff084ce8e9b65a497572b0a4138d39e340b7539d66a85d00779",
+        "bytes": 421543
+      },
+      {
+        "name": "omp-chat/chat-run.json",
+        "sha256": "3b8b0fdb98970d6ffac0ff045fc98c5aeb9f24ceb73d218152fa1a810c4547a0",
+        "bytes": 5978
+      },
+      {
+        "name": "omp-chat/chat.jsonl",
+        "sha256": "621fe703a0e5c6dcc67305b3e4cb19675dcb695572a997a1599a34956b62f545",
+        "bytes": 1216701
+      },
+      {
+        "name": "omp-chat/chat.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      {
+        "name": "omp-chat/semantic-review-01.json",
+        "sha256": "2351a14fa75ae0d8a989ee0fe25482e3d4719c974e4908f4f9009d742b5bf027",
+        "bytes": 28188
+      },
+      {
+        "name": "omp-chat.log",
+        "sha256": "d8cd933a874ce6986f83f99e641f8ece27a796dce3f2280bb3ccd7978f6ddc24",
+        "bytes": 5107
+      },
+      {
+        "name": "omp-responses/responses-http.json",
+        "sha256": "2b87cd491b7a1bd5df7162a3f3bec215e0064a0279b2955ecff015f7c3e5374f",
+        "bytes": 278507
+      },
+      {
+        "name": "omp-responses/responses-run.json",
+        "sha256": "d9a4276b6b71b9318f2859573d33a390be6d1e7186f96a43435e0843f37bc088",
+        "bytes": 5636
+      },
+      {
+        "name": "omp-responses/responses.jsonl",
+        "sha256": "85ff21cecca9448e5f48e63be7b28cdb30aa37c27facf8d0188b46a20726ee98",
+        "bytes": 781388
+      },
+      {
+        "name": "omp-responses/responses.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      {
+        "name": "omp-responses/semantic-review-01.json",
+        "sha256": "05f51ceafbfe51966316ca9bfdea851ed2e39f74775d6902dfeb47fa7cf3ae85",
+        "bytes": 22923
+      },
+      {
+        "name": "omp-responses.log",
+        "sha256": "a4b66e7e5dfdecfe6c9aa4ed311cf01b67e90eb08093790adf792b169a88d7e4",
+        "bytes": 4913
+      },
+      {
+        "name": "server.log",
+        "sha256": "2b6c0a192cab2deb976777bb6fd92dbfddc728ddce03800826eeb232fd9938b5",
+        "bytes": 1211300
+      },
+      {
+        "name": "suite.json",
+        "sha256": "bddb8d4adf6cd6823dfb5e0179dc3b92fb83584d8216088e87205ce4879c5152",
+        "bytes": 58338
+      }
+    ],
+    "provenance": {
+      "git_commit": "de1591b147f731d4d39fa94d8eb5fb088b2041c1",
+      "release_binary_sha256": "4202db0d33251b705e1bedf65ec23bee979ec75377ee42ae7d9f30d0cc8c1072",
+      "cuda_source_sha256": "757eb4a9a4efb0f9c138f601a99b24b035dc142d52ec9da45b82c1954d09be35",
+      "loaded_cuda_module": {
+        "nvcc_version": "Build cuda_13.1.r13.1/compiler.37061995_0",
+        "compiler_identity_source": "live",
+        "so_sha256": "09729aa0e90b5b95108a0f0ed66114a0371af0559a8f6152ae545311c19645d4"
+      },
+      "supervisor_sha256": "b1201cf1ba5dbf69ff77ad95d237d96a97c3c4cc4f07c8c1055b0e4d8a06f1b9",
+      "runtime_sources_sha256": {
+        "crates/kv-cache/src/block.rs": "23ff6cdb70011da8ffceeacf37ae854471fb672323c0b50e482af2cee95370dd",
+        "crates/kv-cache/src/coordinator.rs": "8be1c00ba88607364c25081704e5b861cef0c32b1b62c5d8970dae00b4c7cf39",
+        "crates/kv-cache/src/group.rs": "9d892a01028624a5795e748aeaf5082c3e082a44167e72cafa442cb4f96654e9",
+        "crates/kv-cache/src/hash.rs": "8f02e9db9a89737abc58a6516e41786efb7026aa8cd9ed1cc03e433c9c80870c",
+        "crates/kv-cache/src/lib.rs": "e44822725ab148dc46afd3e1ee6a4389046a5bd9cf86a5fa45a373faace2a586",
+        "crates/kv-cache/src/pool.rs": "026f2dc4d6f90fe995c698afd1e2f8fc3affa3af1240ac4bb08254e9297b9d2b",
+        "crates/kv-cache/src/tests/coordinator_tests.rs": "831c7e7b0e274c253f1d7aaa9be441ad4d789a22e61eb1480a98ad0ab3ffd586",
+        "crates/scheduler/src/lib.rs": "a68c2b36970c260036b8bf14d25212045ecb7d6d40c80cccdc13d8f14df69c3d",
+        "crates/scheduler/src/output.rs": "51e6e2dc3adcdfe2d06b4ef6e3e4e6bf4d603f950170115a19b198937e392627",
+        "crates/scheduler/src/request.rs": "97ba273d416002286af05e00ca3f382fdc843660442db89d42f052160d8164f8",
+        "crates/scheduler/src/tests.rs": "edd2ac914642478da6ac57bde4da421c34f0725be678d281f409e87e7ac1efff",
+        "crates/zmq-worker/src/client.rs": "fa5ac46a853ffc96e7a045cf8e51a9e68ef2d3150d6aca34c91cf36bcbb1aa63",
+        "crates/zmq-worker/src/error.rs": "4ec88bc8c5f3fbcfb49c6bc6b71c41548c982de4f8c4a38bfcc5b5769fc9f572",
+        "crates/zmq-worker/src/lib.rs": "85e633a01b2aa955e33e1193551651d1fb182aefe277307203aca6d8841c0d4c",
+        "crates/zmq-worker/src/main.rs": "9d410d9a60060ad4a6a9993790518048714fd737d57d1a492ef97d2e4a63d7f8",
+        "crates/zmq-worker/src/protocol.rs": "e2c131ac771c31fb5fa76fc6028c8a8242f3edbd168f8fdccca5ab8747c49fd7",
+        "crates/zmq-worker/src/serving/events.rs": "c4a597f90b532667e1dd20b2479ccc98b19187ee389fde6ba3065d8c36291990",
+        "crates/zmq-worker/src/serving/mod.rs": "1b45ddc50249d90f84213ad54b90dd001970cc8d89c825aedff628c26e88346e",
+        "crates/zmq-worker/src/serving/parser.rs": "30dbc2149518c285591bd4739d212db7e60b5df3292cfaa519623e409edff086",
+        "crates/zmq-worker/src/serving/request.rs": "a2ade1316a6a62d00b407800b51f0e3df1e5bae6f9f7a277717ad9133d2382b4",
+        "crates/zmq-worker/src/spec_bench.rs": "54e916bb2e1acaaf1a85aee5c9a261f56102b9d89824feefd3ba9afa366aa8be",
+        "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+        "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+        "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+        "python/oh_my_vllm/ir/core.py": "ff595eb490adfa1a7e04001131596bd459b5bc6f43dfb0f55b4cbcdf58ebecd8",
+        "python/oh_my_vllm/ir/coverage.py": "22bb5c8a3940a36e69efa013b15a1f5228e183d8663fcda9126dc36d69293d90",
+        "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+        "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+        "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+        "python/oh_my_vllm/ir/logits.py": "411d9aed99366d3388086a99eec48d7113d3f9153798f4e35f8329ae5ee3357f",
+        "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+        "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+        "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+        "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+        "python/oh_my_vllm/kernels/attention.py": "46ffe64c3b611ac9736f84da6defb43b5f05b35e93954cd12eb3ebe8f3070295",
+        "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+        "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+        "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+        "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "4fd28d7692ad38d583c186dcd6a4a8e7831a63d363b177d98892f16bafd10bf2",
+        "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "757eb4a9a4efb0f9c138f601a99b24b035dc142d52ec9da45b82c1954d09be35",
+        "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+        "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+        "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+        "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+        "python/oh_my_vllm/kernels/fp8.py": "1d147b58b1c7219bea4e714b03c445c602128f5834c06b057d856e46629483d4",
+        "python/oh_my_vllm/kernels/gdn.py": "67c4870ba25837b5e21fbac00cb532c135aa4c4e719a1cb1873d4215281abd89",
+        "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+        "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+        "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+        "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+        "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+        "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+        "python/oh_my_vllm/models/qwen.py": "b184f8f86a31571aac46e15c20e98cb148254f6d4615f5c273c3fded9854c7a7",
+        "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+        "python/oh_my_vllm/worker/batch_plan.py": "38fdc0b7661e7a10716642d34ecd3f134f8dda297f67d604139ba23bf063e9a3",
+        "python/oh_my_vllm/worker/decode_graph.py": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+        "python/oh_my_vllm/worker/dspark.py": "34b7014ac0f0aba620465a92a6e9321a5ba478533450b971bc4391afbed97485",
+        "python/oh_my_vllm/worker/dspark_graph.py": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+        "python/oh_my_vllm/worker/graph_cache.py": "475268d69747f00a8c4a3f3b8a59e1ad1c80d146d4e8d398b9ab868de584fc5e",
+        "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+        "python/oh_my_vllm/worker/model_runner.py": "78308a02b261173bd81ced30647adae476bfe0d727e71df2864cb5bf99faf2dd",
+        "python/oh_my_vllm/worker/mtp.py": "80ee37022f19d8f30ac395108c488861848e8806846792d2a7e2514d0f8ac6ca",
+        "python/oh_my_vllm/worker/protocol.py": "a3a74a605a84da886893f46524ee6de55979161d4f4632fabcd2ad50fa10d65e",
+        "python/oh_my_vllm/worker/runtime.py": "4f5d693d61f12470a1c6a42d505b70f47efdc963827069e75f712a5bb47cca3c",
+        "python/oh_my_vllm/worker/sampler.py": "285b020850ac82a4265322ee59a69a7a5523bcb1834da3f29ba2ce4504d4804e",
+        "python/oh_my_vllm/worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
+        "python/oh_my_vllm/worker/serving.py": "9c631dd4f03d1c33648afe3f56e673f48e559213dac4d22e4bc3bf7c00ac30b3",
+        "python/oh_my_vllm/worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
+        "python/oh_my_vllm/worker/zmq_bridge.py": "0491ff1880ab0ca56e5a407b1e1d42e2e260b5ad7710bfe8cf9c8d5fad12a2de",
+        "benchmarks/baseline/enginecore.py": "36d03eefdd7a0768c59aa32c05f821ad9fdf7b70ecc5df64e25de6e6c63e8811",
+        "benchmarks/compare_vllm.py": "40496e5ad5ffed76566ae617d01fdd9e7a625405f49381dda55197e5713582f3",
+        "benchmarks/context_boundary.py": "3836ccb636c48cd8fee565176476974d509fe31c6b333a04d1ad08b5dec64868",
+        "benchmarks/kernels.py": "2af5a17879d8a86d62ef859d2793c809f1f88204564b0b5be3b619bab296b3d7",
+        "benchmarks/measurement.py": "7ddc97ac3ffdffacce73c79d4e8a6cebb41f195792a4ba7bc349a55a8ae00a68",
+        "benchmarks/speculative.py": "5a0a999a662f4dfcfcd5c4c01af7f1c820e913381e4c7adeb55d40acd2814e9f",
+        "benchmarks/ttft.py": "719f6f61bf11dd8e314c0b99cde38d6afe457a75516682ace9446b8860aedda6",
+        "scripts/acceptance_proxy.py": "4ba7c67e8089f29141e6cdf7bb2022f4b671a39388307492350e77792c82bf37",
+        "scripts/agentic-acceptance.py": "6dafed49e1c21d77b1945feb4496d79e3808dccfdf90434c3fa5f4797ee56345",
+        "scripts/check_docs.py": "41617cf1ba7c6917dc21b01ca324913cd8a12f99c98f8f562ec5ba7cf65bf14f",
+        "scripts/check_rust_line_width.py": "462b2d094357a126463afa920fba6824754f80fddf06b7eaa2c29df2047d0238",
+        "scripts/export_evidence.py": "5958f8cc33fe37f11a348e95a3fcf770d7ebb5f4d79572c973add2d4eb3cded1",
+        "scripts/fix_whitespace.py": "cb01930887b4935512c557dc5137323f0ff5a71ab602fcd590b2c1988f48055b",
+        "scripts/long-context-acceptance.py": "1abe499731ff66030f17fd3816b7bb7ede7f6ae73b02803e707ba5ec4b87b215",
+        "scripts/probe-independent-model.py": "cacbf57f6044dcbd5f6ae01090557331f046b7d5c9a6656ee43ab705f679c7d2",
+        "scripts/serving-acceptance.py": "cd4f1d724a939dea1bf0fdb574a771aeaba504705e0fd0206b978e0de2d5243f",
+        "scripts/serving-lifecycle.py": "f87b607de195708fb5cda754d597f993d52250251150e9607c0467b9396f2ca9",
+        "scripts/serving_evidence.py": "a08eafd67e248e5a377aa23d20dd4d2ba11f4dc30eb3c74511b21e7c27a40d05",
+        "scripts/smoke-batch.py": "9abca334c7372a278249feed0b794c89b446aea76c933419f0da9ddcb8b35220",
+        "scripts/smoke-text.py": "5f1f6db6efdfdb22cee1edd91a30649a123f5ce7cf15025cc1e0782cee89cb92",
+        "scripts/test.sh": "36d9359fcbe97315d6d39f13f28bd4da0b6d5843ed7f05b7df19c461cfaa2595",
+        "scripts/with-env.sh": "86e6f3a69bb5aa7c6e3faf94ee0534be86109f4777261705215074e51161ebb5",
+        "scripts/with-gpu.sh": "a2a0d22c89a7dc837f5e8fc8e7ea5d6ccbee98d9b0445bd02b7088ec8ba822ec"
+      },
+      "checkpoint": {
+        "config_sha256": "dd65fb1b01c2adea69512ff2990a79d58eb7fe2c7ea97375aa66f657a29a5bfd",
+        "weights_sha256": {
+          "model.safetensors": "2aff025f45823b40ebe726b9dfa40302f3512bd9a11c3a7347de32a567acd9a7"
+        }
+      },
+      "packages": {
+        "torch": "2.14.0",
+        "triton": "3.8.0",
+        "tilelang": "0.1.14",
+        "apache-tvm-ffi": "0.1.12",
+        "flashinfer-python": "0.6.18.post1",
+        "transformers": "5.17.0",
+        "tokenizers": "0.23.2",
+        "safetensors": "0.8.0",
+        "xgrammar": "0.2.7",
+        "pyzmq": "27.2.0",
+        "msgpack": "1.2.2"
+      },
+      "kernel_backend": "cuda",
+      "startup_vllm_importable": false,
+      "post_execution_loaded_module_audit_observed": false
+    },
+    "independent_review_counts": {
+      "client_groups": 6,
+      "constraint_cases": 12,
+      "admitted_generation_requests": 50,
+      "completed_generation_requests": 48,
+      "cancelled_generation_requests": 2,
+      "http_records": 56,
+      "storage_get_delete_records": 6
+    },
+    "independent_review_check_count": 153,
+    "independent_review_limitations": [
+      "Weight SHA is the worker loader record, bound to stable file identities during loading. The reviewer rehashes config but does not rehash the full checkpoint during formal GPU collection.",
+      "The startup runtime record proves vLLM was not importable at initialization. The server log does not contain a later loaded-module/library audit success message; that shutdown audit is not claimed as observed evidence.",
+      "The empty GPU process query is the supervisor post-shutdown snapshot. Live review checks all recorded process birth identities and the closed port without an active NVML query during formal-04.",
+      "Functional serving/evidence checks do not establish operator performance, final end-to-end TPS, stochastic distribution equivalence, or 262144-token batch1/2/4 capacity acceptance."
+    ],
+    "independent_suite_review_passed": true,
+    "independent_suite_review_file": "independent-suite-review-02.json",
+    "semantic_reviews": [
+      {
+        "api": "chat",
+        "service_tool_loop_review_passed": true,
+        "answer_fully_factually_correct": false,
+        "blocking_for_service_usability": false,
+        "code_excerpt_byte_exact": false,
+        "limitations": [
+          {
+            "issue": "Rust\u4ee3\u7801\u5757\u662f\u5220\u8282\u548c\u683c\u5f0f\u91cd\u5199\u7684Signature and structure\uff0c\u4e0d\u662f\u51bb\u7ed3\u6e90\u7801\u7684\u9010\u5b57\u5b8c\u6574schedule\u5b9a\u4e49\u3002",
+            "correction": "\u5b9e\u9645\u6a21\u578b\u5df2\u8bfb\u5b8c\u6574236\u2013400\u5b9a\u4e49\u3002\u56de\u7b54\u5220\u53bbwaiting\u9636\u6bb5\u4e3b\u4f53\u548ctracing\u8bb0\u5f55\uff0c\u6539\u53d8\u90e8\u5206\u6ce8\u91ca\u53ca\u683c\u5f0f\uff0c\u4e14\u6807\u9898236\u2013408\u4e0e\u771f\u5b9e\u51fd\u6570236\u2013400\u4e0d\u7b26\uff1b\u5305\u542bdoc comments\u7684\u6e90\u7801\u8303\u56f4\u4e3a232\u2013400\u3002\u4e0d\u53ef\u628a\u8fd9\u6bb5\u7ed3\u6784\u793a\u4f8b\u6807\u4f5c\u9010\u5b57\u5b8c\u6574\u6e90\u7801\u3002",
+            "blocking_for_service_usability": false
+          },
+          {
+            "issue": "Python\u521d\u59cb\u5316\u4ee3\u7801\u6807\u9898\u519992\u2013117\uff0c\u540e\u7eedload_model/initialize_cache\u5408\u5e76\u6807\u4e3a128\u2013188\u3002",
+            "correction": "\u521d\u59cb\u5316\u4ee3\u7801\u5185\u5bb9\u9010\u5b57\u6b63\u786e\uff0c\u771f\u5b9e\u5b8c\u6574\u8303\u56f4\u4e3a92\u2013114\u3002load_model\u5728142\u5b9a\u4e49\uff0cinitialize_cache\u5728164\u5b9a\u4e49\u4e14\u4e3b\u4f53\u5ef6\u4f38\u5230188\u4e4b\u540e\uff1b128\u2013188\u4e0d\u80fd\u4f5c\u4e3a\u6240\u8ff0\u4e24\u65b9\u6cd5\u7684\u5b8c\u6574\u8303\u56f4\u3002",
+            "blocking_for_service_usability": false
+          },
+          {
+            "issue": "Not yet complete\u5217\u8868\u65e0source\u9650\u5b9a\u5730\u5217Responses\u548clong-context\u670d\u52a1\u9a8c\u6536\uff0c\u672a\u7ed3\u5408handoff\u540e\u6bb5\u5df2\u7ecf\u901a\u8fc7\u7684\u670d\u52a1\u8bb0\u5f55\u3002",
+            "correction": "handoff\u65e7\u5f00\u653e\u6bb5\u4fdd\u7559\u8fd9\u4e9b\u9879\u76ee\uff0c\u4f46\u540e\u6bb5\u660e\u786e1bcf5d5\u548c353c94a\u7684\u5b8c\u6574\u5386\u53f2\u670d\u52a1collection\u901a\u8fc7\u3002\u65b0de1591b\u6e90\u5728\u672c\u6b21\u56de\u7b54\u65f6\u4ecd\u91c7\u96c6\uff1b\u5e94\u533a\u5206\u5df2\u901a\u8fc7\u7684\u5386\u53f2source\u4e0e\u65b0\u6e90\u6b63\u5f0f\u670d\u52a1\u548c\u6027\u80fd\u91c7\u96c6\u4ecd\u5f00\u653e\u7684\u8303\u56f4\u3002",
+            "blocking_for_service_usability": false
+          },
+          {
+            "issue": "Semantic IR\u6bb5\u628acompiled units\u6982\u62ec\u4e3acaptured in manual CUDA Graphs\uff0c\u6ca1\u6709\u4fdd\u7559prefill\u548c\u8f83\u5927context injection\u7684\u9650\u5236\u3002",
+            "correction": "prefill\u4f7f\u7528compiled units\u800c\u4e0d\u8fdb\u884cmanual graph capture\uff1b\u8f83\u5927context injection\u4e5f\u4f7f\u7528compiled unit without manual capture\u3002\u901a\u7528\u6982\u62ec\u9700\u9650\u5b9a\u76f8\u5e94decode, draft, proposal graph\u65cf\u3002",
+            "blocking_for_service_usability": false
+          },
+          {
+            "issue": "\u56de\u7b54\u5f15\u7528docs/acceptance.md\uff0c\u5e76\u63d0\u53caaudit PY-04\uff0c\u4f46\u672c\u6b21\u6ca1\u6709\u76f4\u63a5\u5de5\u5177\u8bfb\u53d6\u8fd9\u4e24\u4efd\u6587\u4ef6\u3002",
+            "correction": "\u5b9e\u9645\u8bfb\u53d6\u7684handoff\u5df2\u7ecf\u652f\u6301\u5386\u53f2619c9d9\u6027\u80fd\u3001\u5f53\u524d\u5f00\u653e\u8303\u56f4\u548cPY-04\u63cf\u8ff0\uff1b\u5f15\u7528\u5185\u5bb9\u4e0e\u51bb\u7ed3\u6587\u4ef6\u76f8\u7b26\u3002\u4ecd\u9700\u533a\u5206\u76f4\u63a5read\u8bc1\u636e\u4e0e\u5b9e\u9645\u8bfb\u53d6\u6587\u4ef6\u4e2d\u5df2\u7ecf\u53ef\u89c1\u7684\u4e8b\u5b9e\u3002AGENTS\u5219\u5b8c\u6574\u5b58\u5728\u521d\u59cbsystem context\uff0c\u5f15\u7528\u5177\u6709\u5b9e\u9645\u6765\u6e90\u652f\u6301\u3002",
+            "blocking_for_service_usability": false
+          }
+        ],
+        "initial_AGENTS_context_supported": true,
+        "source_read_scope": {
+          "schedule_definition": [
+            236,
+            400
+          ],
+          "worker_initialization": [
+            92,
+            114
+          ],
+          "schedule_fully_read": true,
+          "actual_schedule_read": [
+            [
+              236,
+              333
+            ],
+            [
+              334,
+              400
+            ]
+          ],
+          "missing_schedule_read": null,
+          "rust_excerpt_byte_exact": false,
+          "python_excerpt_byte_exact": true
+        }
+      },
+      {
+        "api": "responses",
+        "service_tool_loop_review_passed": true,
+        "answer_fully_factually_correct": false,
+        "blocking_for_service_usability": false,
+        "code_excerpt_byte_exact": false,
+        "limitations": [
+          {
+            "issue": "\u672c\u6b21\u5b9e\u9645scheduler read\u53ea\u8986\u76d6229\u2013323\uff0c\u672a\u5b8c\u6574\u8bfb\u53d6schedule236\u2013400\u540e\u534a\u6bb5\u3002",
+            "correction": "230\u2013320\u8bf7\u6c42\u88abOMP\u6269\u5c55\u5230323\uff1b324\u2013400\u7684waiting\u9636\u6bb5\u4e3b\u4f53\u3001\u961f\u5217\u5408\u5e76\u548c\u7ed3\u675ftrace\u6ca1\u6709\u5b9e\u9645read\u8fd4\u56de\u3002read outline\u548cgrep\u53ea\u8865\u5145\u58f0\u660e\u4e0e\u6458\u8981\uff0c\u4e0d\u80fd\u66ff\u4ee3\u8fd9\u4e9b\u51fd\u6570\u5185\u5bb9\u3002worker92\u2013114\u521d\u59cb\u5316\u5b8c\u6574\u8bfb\u53d6\u3002",
+            "blocking_for_service_usability": false
+          },
+          {
+            "issue": "Rust\u793a\u4f8b\u5305\u542bellipsis comments\u7701\u7565\u6807\u8bb0\uff0c\u662f\u7f29\u5199\u7ed3\u6784\u793a\u4f8b\u800c\u975e\u5b8c\u6574\u6e90\u7801\u51fd\u6570\u3002",
+            "correction": "\u6807\u9898\u51fd\u6570\u884c236\u6b63\u786e\uff0cPython\u521d\u59cb\u5316\u9010\u5b57\u5339\u914d92\u2013114\u3002Rust\u53ea\u4fdd\u7559\u5f00\u5934\u548cphase\u6ce8\u91ca\uff0c\u7f3a\u5c11\u5b9e\u9645phase1 \u548c phase2\u53ca\u8fd4\u56deoutput\uff0c\u4e0d\u80fd\u5f53\u4f5c\u9010\u5b57\u5b8c\u6574\u6216\u53ef\u7f16\u8bd1\u7684\u5b9a\u4e49\uff1b\u7701\u7565\u5df2\u7531ellipsis comments\u660e\u786e\u8868\u793a\u3002",
+            "blocking_for_service_usability": false
+          },
+          {
+            "issue": "\u56de\u7b54\u79f0short-input Q/K\u548c\u65b0timer\u4fee\u597d\u4e24\u4e2a\u65e9\u671fspeedfail\uff0c\u5e76\u62ec\u53f7\u7ed1\u5b9averified on49579b4\u7684230 numerical+229 speed\u3002",
+            "correction": "353c94a\u7684230\u6570\u503c\u901a\u8fc7\u4f46\u4e24speedcase\u5931\u8d25\uff1b49579b4\u4ecd\u53ea\u901a\u8fc7229/230 speed\uff0cQ/K\u8fd8\u5b58\u5728\u5931\u8d25\u3002short-input Q/K\u4fee\u590d\u4e0e\u516dcase diagnostic\u5c5e\u4e8e\u5176\u540e\u7684\u5f53\u524dde1591b\u5de5\u4f5c\uff1b\u5f53\u65f6\u65b0\u7684full operator collection\u4ecd\u5f00\u653e\u3002",
+            "blocking_for_service_usability": false
+          },
+          {
+            "issue": "\u56de\u7b54\u5f15\u7528docs/development.md\u4f46\u672c\u6b21\u6ca1\u6709\u76f4\u63a5\u8bfb\u53d6\uff1b\u521d\u59cbAGENTS\u542bwrapper\u7ea6\u5b9a\u3002",
+            "correction": "README\u5b9e\u9645read\u652f\u6301serve\u547d\u4ee4\uff0c\u5b8c\u6574\u521d\u59cbAGENTS\u652f\u6301with-env/with-gpu\u548c\u6a21\u578b\u914d\u7f6e\u7ea6\u5b9a\uff1b\u8fd9\u4e9b\u4e8b\u5b9e\u4e0e\u51bb\u7ed3development\u6587\u4ef6\u76f8\u7b26\u3002\u5e94\u533a\u5206\u76f4\u63a5\u5de5\u5177\u8bfb\u53d6\u4e0e\u521d\u59cb\u4e0a\u4e0b\u6587\u6216\u5df2\u8bfbREADME\u7684\u652f\u6301\uff0c\u4e0d\u5c06\u672a\u663e\u5f0fread\u8ba4\u4f5c\u65e0\u6765\u6e90\u3002",
+            "blocking_for_service_usability": false
+          }
+        ],
+        "initial_AGENTS_context_supported": true,
+        "source_read_scope": {
+          "schedule_definition": [
+            236,
+            400
+          ],
+          "worker_initialization": [
+            92,
+            114
+          ],
+          "schedule_fully_read": false,
+          "actual_schedule_read": [
+            229,
+            323
+          ],
+          "missing_schedule_read": [
+            324,
+            400
+          ],
+          "rust_excerpt_byte_exact": false,
+          "python_excerpt_byte_exact": true
+        }
+      }
+    ],
+    "constraints": {
+      "passed": true,
+      "cases": 12
+    },
+    "lifecycle": [
+      {
+        "api": "chat",
+        "passed": true,
+        "thinking_settings": [
+          "off",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "stored_response_count": 2,
+        "mixed_response_count": 2,
+        "same_batch": true,
+        "worker_released": true,
+        "draft_verification": [
+          {
+            "verified_draft_tokens": 7,
+            "accepted_draft_tokens": 1
+          },
+          {
+            "verified_draft_tokens": 28,
+            "accepted_draft_tokens": 23
+          },
+          {
+            "verified_draft_tokens": 32,
+            "accepted_draft_tokens": 26
+          },
+          {
+            "verified_draft_tokens": 47,
+            "accepted_draft_tokens": 42
+          },
+          {
+            "verified_draft_tokens": 67,
+            "accepted_draft_tokens": 42
+          },
+          {
+            "verified_draft_tokens": 6,
+            "accepted_draft_tokens": 0
+          },
+          {
+            "verified_draft_tokens": 7,
+            "accepted_draft_tokens": 2
+          },
+          {
+            "verified_draft_tokens": 357,
+            "accepted_draft_tokens": 352
+          },
+          {
+            "verified_draft_tokens": 482,
+            "accepted_draft_tokens": 481
+          },
+          {
+            "verified_draft_tokens": 7,
+            "accepted_draft_tokens": 1
+          }
+        ]
+      },
+      {
+        "api": "responses",
+        "passed": true,
+        "thinking_settings": [
+          "off",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "stored_response_count": 2,
+        "mixed_response_count": 2,
+        "same_batch": true,
+        "worker_released": true,
+        "draft_verification": [
+          {
+            "verified_draft_tokens": 7,
+            "accepted_draft_tokens": 1
+          },
+          {
+            "verified_draft_tokens": 35,
+            "accepted_draft_tokens": 22
+          },
+          {
+            "verified_draft_tokens": 46,
+            "accepted_draft_tokens": 28
+          },
+          {
+            "verified_draft_tokens": 56,
+            "accepted_draft_tokens": 42
+          },
+          {
+            "verified_draft_tokens": 51,
+            "accepted_draft_tokens": 41
+          },
+          {
+            "verified_draft_tokens": 7,
+            "accepted_draft_tokens": 0
+          },
+          {
+            "verified_draft_tokens": 20,
+            "accepted_draft_tokens": 9
+          },
+          {
+            "verified_draft_tokens": 357,
+            "accepted_draft_tokens": 352
+          },
+          {
+            "verified_draft_tokens": 508,
+            "accepted_draft_tokens": 506
+          },
+          {
+            "verified_draft_tokens": 7,
+            "accepted_draft_tokens": 1
+          }
+        ]
+      }
+    ],
+    "long_context": {
+      "passed": true,
+      "rows": [
+        {
+          "api": "chat/completions",
+          "repeat": 0,
+          "elapsed_s": 8.896957219112664,
+          "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f",
+          "usage": {
+            "completion_tokens": 21,
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "prompt_tokens": 131099,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 131120
+          },
+          "draft_verification": {
+            "verified_draft_tokens": 25,
+            "accepted_draft_tokens": 15
+          }
+        },
+        {
+          "api": "chat/completions",
+          "repeat": 1,
+          "elapsed_s": 0.5079041111748666,
+          "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f",
+          "usage": {
+            "completion_tokens": 21,
+            "completion_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "prompt_tokens": 131099,
+            "prompt_tokens_details": {
+              "cached_tokens": 130928
+            },
+            "total_tokens": 131120
+          },
+          "draft_verification": {
+            "verified_draft_tokens": 25,
+            "accepted_draft_tokens": 15
+          }
+        },
+        {
+          "api": "responses",
+          "repeat": 0,
+          "elapsed_s": 5.611185523914173,
+          "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f",
+          "usage": {
+            "input_tokens": 131099,
+            "input_tokens_details": {
+              "cached_tokens": 130928
+            },
+            "output_tokens": 21,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 131120
+          },
+          "draft_verification": {
+            "verified_draft_tokens": 25,
+            "accepted_draft_tokens": 15
+          }
+        },
+        {
+          "api": "responses",
+          "repeat": 1,
+          "elapsed_s": 0.47106074006296694,
+          "prompt_sha256": "77a123b496d8ea6a33f19a8f0ff0ff3a324e82df3510c2a5f763da500a21c47f",
+          "usage": {
+            "input_tokens": 131099,
+            "input_tokens_details": {
+              "cached_tokens": 130928
+            },
+            "output_tokens": 21,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 131120
+          },
+          "draft_verification": {
+            "verified_draft_tokens": 25,
+            "accepted_draft_tokens": 15
+          }
+        }
+      ]
+    }
+  }
+}

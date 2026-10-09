@@ -49,7 +49,7 @@ GPU prefill 时间和冷启动延迟单独报告.
 普通和 MTP 测量重置前缀复用.
 Prefix 行为每请求预置恰好 32144 个可复用 token.
 两个引擎的吞吐和 TTFT 均要求 `(max-min)/median <= 0.10`.
-超过波动限制时调查并重跑完整集合.
+超过波动限制时调查并再次执行完整集合.
 保留排除的尝试及原因; 不挑选单次重复.
 测量中发生编译, 新 graph capture, 干扰或源码变化会使该次尝试失效.
 修复失败; 仅在用户授权后修改门槛.
@@ -68,7 +68,7 @@ Prefix 行为每请求预置恰好 32144 个可复用 token.
 比较同一最终源码和二进制中的可选 DSpark 与原生 MTP4.
 使用 32768 个输入 token, 4096 个保留输出 token, batch 为 1, 2, 4.
 使用相同的合成 token ID, greedy sampling 和固定输出数量, 忽略 EOS.
-EngineCore 吞吐包含注册, prefill, 调度, 传输, 采样和清理.
+框架批吞吐包含注册, prefill, 调度, 传输, 采样和清理.
 
 每个 batch 的比较 worker 共享 target 权重和物理 target 缓存.
 预热前加载两种草稿模型, 每次尝试前重置前缀复用.
@@ -92,7 +92,9 @@ DSpark 速度, 波动及置信界限不增加验收门槛.
 记录容量, allocated / reserved 显存峰值, compile / capture 审计和实际验证 / 接受的草稿数.
 接受率的分母是已调度草稿 token, 下一步返回的 proposal 使用另一计数.
 
-当前源码尚无 DSpark 性能验收结果.
+当前运行时代码的成对采集在 batch 1, 2 和 4 通过.
+当前运行时代码的算子, 边界, 框架和服务验收仍待完成.
+源码身份及测量范围见 [验收索引](acceptance.zh.md).
 采集流程见 [测试](testing.zh.md#dspark-比较).
 
 ## REQ-CONTEXT-001: 上下文与显存

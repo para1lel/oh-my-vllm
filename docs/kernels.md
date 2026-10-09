@@ -111,10 +111,12 @@ Other layouts use the CUDA `append` operation.
 
 Context append with the same K/V and slots writes the same bytes each time.
 For timing, the two operations use the same destination cache to remove cache-address differences.
-Numerical verification uses different caches before timing. The initial 147 cases keep their fixture contract.
+Numerical verification uses different caches before timing. The initial 147 cases keep their numerical fixture contract.
 
 Each new case has the same full-output, cache-write, three-round, twenty-pair, and confidence-bound gates.
-Current-source supplemental operator performance acceptance results are not available.
+The paired collection passed for the current runtime at batches 1, 2, and 4.
+Operator, boundary, framework, and service acceptance stay open for the current runtime.
+Use the [acceptance index](acceptance.md) for source identities and measured scope.
 
 ```bash
 scripts/with-env.sh python benchmarks/kernels.py --list

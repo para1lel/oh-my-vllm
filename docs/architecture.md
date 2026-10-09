@@ -267,7 +267,7 @@ Counts decay each 512 observations.
 The cache skips new captures with less than 4 GiB of free GPU memory.
 The worker still uses the compiled unit.
 Capture failures back off for 64 observations.
-A repeated MTP shape capture in a 4096-cache-decision window starts a shared 32768-decision capture cooldown.
+If MTP captures the same shape again in a 4096-cache-decision window, a shared 32768-decision capture cooldown starts.
 
 Resident graphs continue to replay.
 
@@ -288,4 +288,6 @@ Current interfaces make no such support claim.
 
 DSpark runtime support applies to the validated local checkpoint architecture.
 Different draft checkpoints must have new loading, semantic, numerical, and acceptance tests.
-Current-source DSpark performance and full target-model acceptance results are not available.
+The paired collection passed for the current runtime at batches 1, 2, and 4.
+Operator, boundary, framework, and service acceptance stay open for the current runtime.
+Use the [acceptance index](acceptance.md) for source identities and measured scope.

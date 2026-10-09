@@ -11,7 +11,7 @@ Performance evidence applies to its measured source, as specified in [acceptance
 Status: partial/open, severity P2.
 Graph families use bounded graph caches with shared pools, admission, eviction, free-memory guards, and capture restoration.
 The resident-graph 36k-to 40k transition completed with less than 4 GiB free memory.
-Repeated same-shape 262144 execution also completed without graph eviction or recapture.
+Same-shape 262144 executions also completed without graph eviction or recapture.
 These probes do not include cross-shape 262k eviction/recapture or all late-capture memory conditions.
 
 A future test must force eviction and recapture with measured memory pressure.
@@ -29,15 +29,20 @@ A trace or asynchronous API call alone does not show overlap or throughput impro
 ## KRN-06: Streaming store candidate
 
 Status: open with a rejected optimization, severity P2.
-The safe streaming-store candidate showed no stable net full-call gain.
-It was withdrawn.
-Reconsider only with a new hypothesis and full-operation measurements.
+The old KRN-06 candidate used streaming stores for native residual output.
+Its measurements showed no stable net full-call gain. The project rejected that proposed replacement.
+
+Current guarded store paths for native residual and DSpark hidden RMS stay in use.
+Make a decision about a new candidate only with a new hypothesis and full-operation measurements.
 
 ## Other evidence limits
 
 Dynamo's 4096 limits and 256-variant warnings do not show bounded compiler memory with indefinite shape changes.
 The log/cache audit cannot exclude silent in-memory recompilation.
-Later IR correctness fixes did not repeat the full 147-case/twelve-row performance gate.
+
+The paired comparison passed for the current runtime.
+Operator and twelve-row framework acceptance stay open.
+The collectors stopped subsequent work because of GPU contention from another task. All original failed records stay available.
 The roofline performance policy is future work with the existing gates still active.
 
 ## Closed finding index
@@ -102,6 +107,6 @@ Use the cited commits for implementation context and [testing](testing.md) for c
 
 Add a failing regression where practical, then make the fix and a review by another agent.
 Keep numerical tolerances and active gates unchanged.
-Repeat affected formal operator cases after device implementation changes.
-Repeat affected framework rows before you claim continued performance acceptance.
+Do affected formal operator cases again after device implementation changes.
+Do affected framework rows again before you claim continued performance acceptance.
 Update this status and [handoff](handoff.md), with open limitations.

@@ -94,7 +94,9 @@ The threshold must be finite, at least zero, and less than one.
 
 HTTP mode stays fixed for the worker lifetime.
 `spec-bench` alone can change MTP/DSpark modes when idle with shared target weights and caches.
-Current-source DSpark performance acceptance results are not available.
+The paired collection passed for the current runtime at batches 1, 2, and 4.
+Operator, boundary, framework, and service acceptance stay open for the current runtime.
+Use the [acceptance index](acceptance.md) for source identities and measured scope.
 
 ## Build and checks
 

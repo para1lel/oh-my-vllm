@@ -1,0 +1,108 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "2026-10-08-dspark-confidence-selection-export-input-02.json",
+    "sha256": "c5095142a25f14cf20ee2a672eb689c4eef72345228b83f57dd4ead8011e8321",
+    "bytes": 3524
+  },
+  "removed_fields": [
+    "data.originals[0].path",
+    "data.originals[1].path",
+    "data.originals[2].path",
+    "data.originals[3].path",
+    "data.originals[4].path",
+    "data.originals[5].path",
+    "data.originals[6].path",
+    "data.originals[7].path"
+  ],
+  "data": {
+    "selected_threshold": 0.2,
+    "selection_rule": "maximum median total-request TPS among predeclared thresholds 0, 0.05, 0.1, 0.2",
+    "scope": "two independent natural-text and source-tool-history requests; 32768 input tokens and 512 fixed greedy output tokens each; batch 2; two full warmups and two measurements per threshold",
+    "limitations": [
+      "Two measurements per threshold do not establish statistical superiority or a general optimum.",
+      "Thresholds 0.1 and 0.2 have closely matched medians.",
+      "Inputs are separate from formal synthetic-token acceptance inputs."
+    ],
+    "rows": [
+      {
+        "threshold": 0,
+        "median_output_tps": 177.2870020167371,
+        "accepted_draft_tokens": 1356,
+        "verified_draft_tokens": 4760,
+        "acceptance_rate": 0.2848739495798319
+      },
+      {
+        "threshold": 0.05,
+        "median_output_tps": 183.09662465933653,
+        "accepted_draft_tokens": 1346,
+        "verified_draft_tokens": 2994,
+        "acceptance_rate": 0.44956579826319304
+      },
+      {
+        "threshold": 0.1,
+        "median_output_tps": 184.19783659820075,
+        "accepted_draft_tokens": 1364,
+        "verified_draft_tokens": 2554,
+        "acceptance_rate": 0.5340642129992169
+      },
+      {
+        "threshold": 0.2,
+        "median_output_tps": 184.3232205665089,
+        "accepted_draft_tokens": 1350,
+        "verified_draft_tokens": 2160,
+        "acceptance_rate": 0.625
+      }
+    ],
+    "originals": [
+      {
+        "path": "<local-path>",
+        "sha256": "03c77f9524e1e3e4fe00de7e877405ba9b17f2e48437a06456c37407ace3730c",
+        "bytes": 299481
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "1314cb94de3c8e8f7a73788fd991c60f9c4e014829dd2ae7452449fd3c5fbd75",
+        "bytes": 4023
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "97a376110893de918ff779944371fa60fff3b173db9fe9b5b20899658ea1effc",
+        "bytes": 4422
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "2fb6ecd56b3b83c6947f96749e63f755171421ea01038da7b69eaa28100f4550",
+        "bytes": 3166
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "acb5251062f653a04e8f37d5e54732b563ff727516e5a6cb35407cb499907eda",
+        "bytes": 28504
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "5b465227bc9543fe729a101889e64aeffda89d5626d487c518a8d4ceba4895f5",
+        "bytes": 32204
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "f7fc26cf23b03e31242c2caa319aec49b37d59fb6ca1567d44b6b3850bc197a5",
+        "bytes": 29632
+      },
+      {
+        "path": "<local-path>",
+        "sha256": "d9fce74c6615dce2fc049ffe00cb96d197f38b3cb339b20db9a5bab55c96291a",
+        "bytes": 26178
+      }
+    ],
+    "kind": "parameter_selection_diagnostic",
+    "raw_artifact": {
+      "name": "calibration-03/selection.json",
+      "sha256": "7df5eb5e6d5bd0bda632eed23c990c141ea37bc07badcc9f6520409ba00faaed",
+      "bytes": 3363
+    }
+  }
+}

@@ -50,7 +50,7 @@ Use at least two full warmups and five measured repetitions.
 Reset prefix reuse for ordinary and MTP measurements.
 For prefix rows, seed exactly 32144 reusable tokens per request.
 The two engines must have `(max-min)/median <= 0.10` for throughput and TTFT.
-Investigate excess spread and repeat the full set.
+Do an investigation when spread is more than the limit and do the full set again.
 
 Keep excluded attempts and reasons. Do not select individual repetitions.
 Compilation, new graph capture, interference, or changing source invalidates a measured attempt.
@@ -70,7 +70,7 @@ The existing thresholds stay active until a new requirement replaces them.
 Compare optional DSpark with native MTP4 from the same source and binary after implementation.
 Use 32768 input tokens, 4096 kept output tokens, and batches 1, 2, and 4.
 Use the same synthetic token IDs, greedy sampling, and fixed output counts. Ignore EOS.
-Include registration, prefill, scheduling, transport, sampling, and cleanup in EngineCore throughput.
+Include registration, prefill, scheduling, transport, sampling, and cleanup in framework batch throughput.
 
 One comparison worker keeps the target weights and physical target caches for each batch.
 Load the two draft models before warmup. Reset prefix reuse before each attempt.
@@ -94,7 +94,9 @@ Compare loaded DSpark configuration and weight hashes with the requested checkpo
 Record capacities, peak allocated/reserved memory, compile/capture audit, and scheduled/accepted draft counts.
 Acceptance rate uses scheduled draft tokens as its denominator. Returned proposals for future steps are a different counter.
 
-Current-source DSpark performance acceptance results are not available.
+The paired collection passed for the current runtime at batches 1, 2, and 4.
+Operator, boundary, framework, and service acceptance stay open for the current runtime.
+Use the [acceptance index](acceptance.md) for source identities and measured scope.
 See [testing](testing.md#dspark-comparison) for the collection procedure.
 
 ## REQ-CONTEXT-001: Context and memory

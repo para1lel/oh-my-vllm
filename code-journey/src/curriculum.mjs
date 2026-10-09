@@ -19,7 +19,7 @@ export const chapters = {
 export const coverage = [
   ["DSpark", "python/oh_my_vllm/models/dspark.py", "class DSparkModel", "DSparkCheckpoint / DSparkModel: 加载, 双源计算与学习头", "校验固定配置与 62 个 BF16 张量, 绑定稳定文件的 SHA-256. 目标层特征投影为 context KV, 七个临时 noise 行经过五层双向注意力; Markov 根据前一候选修正 logits, confidence 预测接受概率."],
   ["DSpark", "python/oh_my_vllm/worker/dspark.py", "class DSpark:", "DSpark: 已保留特征注入与因果提议", "复用目标 FA 页编号, 只注入实际保留的输入. 贪心链保留在设备上, 随机链保存真实 q; 默认累计 confidence 阈值 0.2, 从首项起向右截断, 实际提议 0 至 7 个; grammar 临时前进后回滚."],
-  ["DSpark", "python/oh_my_vllm/worker/dspark_graph.py", "class DSparkContextGraph", "DSparkContextGraph / DSparkGraph: 提交与提议图", "小批量 context 图备份目的槽, 预热与捕获后恢复, replay 复制动态位置后正式写入; 单独 pool 与 8 项预算. 提议图仅读 context, 使用独立 16 项预算, 输出在同族下次捕获前消费."],
+  ["DSpark", "python/oh_my_vllm/worker/dspark_graph.py", "class DSparkContextGraph", "DSparkContextGraph / DSparkGraph: 提交与提议图", "小批量 context 图备份目的槽, 预热与捕获后恢复, replay 复制动态位置后正式写入; 单独 pool 与 32 项预算, 覆盖全部合法行数. 提议图仅读 context, 使用独立 16 项预算, 输出在同族下次捕获前消费."],
   ["DSpark", "python/oh_my_vllm/kernels/dspark_attention.py", "def attention(", "DSpark 准备, context 写入与双源 attention", "Q/K 使用完整 128 维 NeoX YaRN, 保留 Qwen3 BF16 舍入. 自有 CUDA 将持久前缀与七行 block 分开读取, split-KV 计算局部结果并稳定合并."],
   ["DSpark", "python/oh_my_vllm/ir/dspark.py", "def block_attention(", "DSpark 语义操作与参考", "为独立 RMS, Q/K/RoPE, context append 和双源 attention 注册参考, fake 元数据和 CUDA 实现. append 明确修改缓存, attention 仅读缓存."],
   ["DSpark", "python/oh_my_vllm/kernels/dspark_tilelang_reference.py", "def attention(", "新增 DSpark 操作的 TileLang 比较 provider", "实现同一双源注意力与 BF16 舍入契约, 为自有 CUDA 新增路径提供正式算子比较. 通过显式后端选择使用, 生产 CUDA 路径保持显式."],

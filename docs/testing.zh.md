@@ -156,7 +156,8 @@ scripts/with-gpu.sh scripts/with-env.sh python benchmarks/ttft.py --baseline "$E
 其他行按 label 替换 `--baseline` 文件. Harness 从该记录选择 mode, input/output length 和 batch.
 提取结果打印 label 和 CPU affinity; 采集时使用匹配的 CPU affinity.
 
-覆盖 ordinary/MTP4/prefix-hit 的 input32768, output4096, batch1/2/4, 以及相同 batch 的 ordinary input131072.
+对 ordinary/MTP4/prefix-hit 使用相同步骤, input32768, output4096, batch1/2/4.
+另测相同 batch 的 ordinary input131072.
 Candidate 默认使用 4200 个历史容量单位和 128 个 GDN slot.
 对应 1400 个 FA slot.
 校验实际 worker 和 scheduler 容量, 不只看 CLI 设置.
@@ -174,7 +175,7 @@ Spread 失败需调查并完整重跑.
 Log / cache 审计需显示测量处于稳态, 没有观察到编译或 capture.
 现有日志和缓存记录不能排除静默的内存内重新编译.
 性能运行禁用会改变执行的诊断功能.
-GPU-only prefill timing 不作为 EngineCore TTFT.
+框架比较使用完整批执行的 TTFT. GPU-only prefill 耗时的范围不同.
 
 `benchmarks/compare_vllm.py` 是历史 9 行工具, 校验固定的原始 SHA.
 早期 3 次重复产物不满足当前 5 次重复规则.
@@ -210,7 +211,7 @@ scripts/with-env.sh python benchmarks/speculative.py --input "$EVIDENCE_DIR/dspa
 采集器为每个 batch 启动一个比较 worker, 共享 target 权重和物理 target 缓存.
 每种模式在预热前加载草稿模型, 每次尝试重置前缀复用.
 使用 batch1/2/4, 输入 32768, 输出 4096, 合成 ID, greedy 采样, 忽略 EOS.
-EngineCore 吞吐包括注册, prefill, 传输和清理.
+框架批吞吐包括注册, prefill, 传输和清理.
 
 每个 batch 执行 3 轮.
 每轮每种模式执行 2 次完整预热和 5 个交替顺序的测量配对.
@@ -245,7 +246,9 @@ EngineCore 吞吐包括注册, prefill, 传输和清理.
 Portable 输出是派生摘要, 不能替代比较所需的原始证据.
 最终源码仍需满足原有 12 个 vLLM 性能门槛.
 
-当前源码尚无 DSpark 性能验收结果.
+当前运行时代码的成对采集在 batch 1, 2 和 4 通过.
+当前运行时代码的算子, 边界, 框架和服务验收仍待完成.
+源码身份及测量范围见 [验收索引](acceptance.zh.md).
 
 ## 上下文与服务验收
 
@@ -292,11 +295,11 @@ Lifecycle 工具必须在所提供日志中找到混合请求共享 batch, 以�
 检查服务日志中的正 MTP proposal 和 accepted draft 计数.
 这些测试完成后立即停止服务及其 worker.
 
-长上下文门槛检查 strict JSON 内容, 输入超过 131072, 重复前缀复用和逐请求正 MTP proposal.
+长上下文门槛检查 strict JSON 内容, 输入超过 131072, 首次请求之后的前缀复用和逐请求正 MTP proposal.
 按 [服务合同](serving.zh.md#验证) 分别完成两种 API 的真实 OMP 任务.
 要求实际读文件和工具结果, 不只看脚本成功.
 
-使用独立 DSpark worker 重复服务门槛:
+使用不同的 DSpark worker 再次执行服务门槛:
 
 ```bash
 scripts/with-gpu.sh scripts/with-env.sh env RUST_LOG=info,oh_my_vllm_zmq_worker::serving=debug target/release/oh-my-vllm-zmq-worker --socket /tmp/dspark-service-acceptance.ipc --max-model-len 262144 --num-gpu-blocks 4200 --mamba-blocks 128 --speculative-mode dspark serve > "$EVIDENCE_DIR/dspark-server.log" 2>&1

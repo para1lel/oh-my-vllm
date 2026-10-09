@@ -33,7 +33,9 @@ DSpark 至多 7 个草稿, 保持相同 target checkpoint, block784, API 和请�
 可返回 0 至 7 个 candidate, 返回 0 个时, 该步由目标执行单 token 解码.
 使用 `0.0` 保留至多 7 个固定数量 proposal. 输出, 上下文和 grammar 限制可减少 proposal 数量.
 
-当前源码的 DSpark 真实模型服务及性能验收待测.
+当前运行时代码的成对采集在 batch 1, 2 和 4 通过.
+当前运行时代码的算子, 边界, 框架和服务验收仍待完成.
+源码身份及测量范围见 [验收索引](acceptance.zh.md).
 
 ## API 范围
 

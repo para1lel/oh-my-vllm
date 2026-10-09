@@ -370,11 +370,12 @@ Object.assign(sourceNotes, {
     title: "context 图的备份, 流依赖和 replay 输入", intro: "1 至 32 行按行数复用同一图, 每轮位置与目的槽可以改变; 缓存所有者先检查逻辑页范围.",
     entries: [
       ["features / positions / slots", "BF16 特征行, int64 绝对位置和目的槽.", "捕获时克隆为静态输入, replay 先校验全部元数据再 copy."],
+      ["unit", "已编译的 context injection 函数.", "预热, 捕获与 replay 都用它写本轮 slots; 捕获事务恢复原值, 真正提交由后续 replay 完成."],
       ["caches / pages / offsets", "五层持久池, 本次目的页号与页内位置.", "只备份本次会写的行, 完整前缀和其他后缀位置保留."],
       ["saved / restore", "目的槽的原始 K/V 和恢复函数.", "预热后恢复, 捕获的 finally 再恢复; 异常也执行恢复."],
       ["stream / current", "预热流与调用者当前流.", "预热流先等待当前输入, 当前流随后等待预热写入, 再恢复缓存."],
       ["graph / pool / outputs", "手动 CUDA 图, 独立 context pool 与 None 输出.", "context injection 没有活跃返回张量, replay 执行真正提交."],
-      ["MAX_ROWS", "小批量捕获上限 32.", "更多行保持 compiled unit 路径, context 图缓存最多保留 8 项."],
+      ["MAX_ROWS", "小批量捕获上限 32.", "更多行保持 compiled unit 路径, context 图缓存最多保留 32 项, 覆盖全部合法行数."],
     ],
   },
   decodeGraphKey: {
@@ -404,6 +405,7 @@ Object.assign(sourceNotes, {
       ["base_logits", "共享目标 head 的当前行词表分数.", "BF16 head 分数加 BF16 Markov bias, 随后交给采样变换."],
       ["previous / latent", "前一个候选 ID 与 256 维 Markov embedding.", "当前 decision 只依赖已经提出的候选."],
       ["markov_w1 / markov_w2", "查询 embedding 与词表投影权重.", "得到当前 ID 对下一候选分布的学习偏置."],
+      ["confidence_weight / confidence_bias", "5376 维 confidence 权重与单个偏置.", "由 checkpoint 加载, 对拼接输入执行线性变换, 再用 sigmoid 得到条件接受概率."],
       ["confidence_input", "hidden 与 latent 的 5376 维拼接.", "传给带 bias 的单行线性 confidence 头."],
       ["confidence / sigmoid", "映射到 [0,1] 的预测条件接受概率.", "从首项起累乘并与默认 0.2 阈值比较, 决定是否抽取当前候选."],
     ],

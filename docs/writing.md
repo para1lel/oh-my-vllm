@@ -47,7 +47,7 @@ Use halfwidth punctuation in Chinese prose.
 Put a space before a left parenthesis and after other punctuation.
 Separate Chinese text, formulas, and English words with spaces.
 Source code, identifiers, URLs, and payloads keep their syntax.
-Apply Humanizer-zh to remove empty or repeated phrasing. Keep evidence strength unchanged.
+Apply Humanizer-zh to remove empty phrasing and phrases that give the same information. Keep evidence strength unchanged.
 
 Keep necessary negative constraints and limitations.
 

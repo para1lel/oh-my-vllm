@@ -160,7 +160,8 @@ scripts/with-gpu.sh scripts/with-env.sh python benchmarks/ttft.py --baseline "$E
 Select each other row by its label in `--baseline`. The harness uses that row's mode, input/output lengths, and batch.
 The extraction prints labels and CPU affinity. Use matching CPU affinity for collection.
 
-Repeat for ordinary/MTP4/prefix-hit at input 32768, output 4096, batches 1/2/4, and ordinary input 131072 at the same batches.
+Use the same procedure for ordinary/MTP4/prefix-hit with input 32768 and output 4096 at batches 1/2/4.
+Also test ordinary input 131072 at those batches.
 The candidate uses 4200 historical capacity units and 128 GDN slots by default.
 This gives 1400 FA slots.
 Make sure that observed worker and scheduler capacities match the requested settings.
@@ -172,14 +173,14 @@ Use two full warmups and five repetitions.
 Record each request's TTFT and fixed output count.
 Apply 95% throughput, 110% TTFT, and 10% spread limits to each row.
 
-A failed spread must have investigation and a full repeat.
+Do an investigation when the spread check fails and collect a new full set.
 Keep all rejected full attempts and interrupted runs.
 
 The collector records source, binary, Python file hashes, package versions, loaded CUDA module, and full logs.
 Log/cache audit must show steady-state measurement without observed compilation or capture.
 Available logs and cache records cannot exclude silent in-memory recompilation.
 Disable diagnostics that alter execution during performance runs.
-Never present GPU-only prefill timing as EngineCore TTFT.
+Use full-batch TTFT for framework comparison. GPU-only prefill time has a different scope.
 
 `benchmarks/compare_vllm.py` is a historical nine-row tool with an immutable original hash check.
 Its early three-repetition artifact does not meet the current five-repetition rule.
@@ -216,7 +217,7 @@ The collector starts one comparison worker per batch, with the same target weigh
 Each mode loads its draft model before warmup.
 Each attempt resets prefix reuse.
 Use batches 1/2/4, input 32768, output 4096, synthetic IDs, greedy sampling, and ignored EOS.
-EngineCore throughput includes registration, prefill, transport, and cleanup.
+Framework batch throughput includes registration, prefill, transport, and cleanup.
 
 Each batch has three rounds.
 Each round has two full warmups per mode and five measured pairs with alternating order.
@@ -253,7 +254,9 @@ Verified drafts are scheduled candidates. Returned next-step proposals have a di
 The portable output is a derived summary. It cannot replace original evidence for comparison.
 Keep the original twelve vLLM performance gates active on the source after implementation.
 
-Current-source DSpark performance acceptance results are not available.
+The paired collection passed for the current runtime at batches 1, 2, and 4.
+Operator, boundary, framework, and service acceptance stay open for the current runtime.
+Use the [acceptance index](acceptance.md) for source identities and measured scope.
 
 ## Context and service acceptance
 
@@ -301,12 +304,12 @@ The lifecycle tool must find a shared mixed-request batch and worker cancellatio
 Examine positive MTP proposals and accepted drafts in the server log.
 Stop the service and its worker immediately after these tests.
 
-The long-context gate checks strict JSON content, input more than 131072, repeated prefix reuse, and positive MTP proposals per request.
+The long-context gate checks strict JSON content, input more than 131072, prefix reuse after the first request, and positive MTP proposals per request.
 Complete OMP tasks with the target checkpoint through each API as specified in [service contracts](serving.md#verification).
 The tools must read files, and the model must receive their results.
 Script success alone is insufficient.
 
-Repeat the service gates with a different DSpark worker:
+Do the service gates again with a different DSpark worker:
 
 ```bash
 scripts/with-gpu.sh scripts/with-env.sh env RUST_LOG=info,oh_my_vllm_zmq_worker::serving=debug target/release/oh-my-vllm-zmq-worker --socket /tmp/dspark-service-acceptance.ipc --max-model-len 262144 --num-gpu-blocks 4200 --mamba-blocks 128 --speculative-mode dspark serve > "$EVIDENCE_DIR/dspark-server.log" 2>&1

@@ -1,0 +1,2038 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "attempt-history-09.json",
+    "sha256": "cbb82922cdc16766f31c227bb01e55ef4b9b424686cb63a2014d0a8718ebde01",
+    "bytes": 85681
+  },
+  "removed_fields": [],
+  "data": {
+    "diagnostic": true,
+    "scope": "Historical failed attempts, diagnostic tuning, and timer verification. Formal acceptance is recorded separately.",
+    "attempts": [
+      {
+        "name": "service-01",
+        "reason": "Original validator rejected positive OMP read ranges; later CPU revalidation passed. Startup source identity was recorded after launch. Diagnostic only.",
+        "files": [
+          {
+            "relative_name": "service-01/constraints/attempt.json",
+            "sha256": "fbb39e4d92f35ed18ea57e785475dae8d4b959614470ad57d7c6e0d690cb81eb",
+            "bytes": 46665
+          },
+          {
+            "relative_name": "service-01/constraints/chat-medium-json_object.json",
+            "sha256": "e5be968be85011340dd38fdfecaad54516f8a3f68ebee7d2d5a16bba9885d2c4",
+            "bytes": 1652
+          },
+          {
+            "relative_name": "service-01/constraints/chat-medium-json_schema.json",
+            "sha256": "58514a748b02789538643433a532e117ba9f8631c480555dc11eb17dc2ea3643",
+            "bytes": 2176
+          },
+          {
+            "relative_name": "service-01/constraints/chat-medium-tool.json",
+            "sha256": "c85cfc061d9546956919040cd71097c1c52ce7bdcbcdd8bab3c496c08783678e",
+            "bytes": 2148
+          },
+          {
+            "relative_name": "service-01/constraints/chat-off-json_object.json",
+            "sha256": "832ded299c27888c64d63666b36067b47932438fa3e20e1ee53c446b6e275227",
+            "bytes": 1072
+          },
+          {
+            "relative_name": "service-01/constraints/chat-off-json_schema.json",
+            "sha256": "388f23f24d826360ce2e93c1673f263ea0ba4d6ca4cb4294aecbe954fc90e316",
+            "bytes": 1597
+          },
+          {
+            "relative_name": "service-01/constraints/chat-off-tool.json",
+            "sha256": "997872dc6b5e27c8142715a5e9f2306c58a009b8bf8d5c3d6d099961fd9ef59d",
+            "bytes": 2027
+          },
+          {
+            "relative_name": "service-01/constraints/responses-medium-json_object.json",
+            "sha256": "98f317b7d0a523818c47eb6f82b0e7b0b0113b40ca35cab02a52464dd3b64aef",
+            "bytes": 2567
+          },
+          {
+            "relative_name": "service-01/constraints/responses-medium-json_schema.json",
+            "sha256": "48076a5ffefc33f0ca12cced6b9e791924dfe1ddc514987b05e41838176972f7",
+            "bytes": 3551
+          },
+          {
+            "relative_name": "service-01/constraints/responses-medium-tool.json",
+            "sha256": "68f96ca3fc97ee168d745def8157197c012bea87921241754d9287232cd31b19",
+            "bytes": 3512
+          },
+          {
+            "relative_name": "service-01/constraints/responses-off-json_object.json",
+            "sha256": "88013698cc65702c724be83dea96b2aeec720e22f0450184c78393ded83aac76",
+            "bytes": 1813
+          },
+          {
+            "relative_name": "service-01/constraints/responses-off-json_schema.json",
+            "sha256": "3dcbbadf1e85cd0525aa1b133ca79565e5e17bd1b7bc76316b8a93a5536c91b7",
+            "bytes": 2797
+          },
+          {
+            "relative_name": "service-01/constraints/responses-off-tool.json",
+            "sha256": "c47ce3f636df787608ee03495240d84717d8a1eae13c4590ebaaa28c2915a42a",
+            "bytes": 2893
+          },
+          {
+            "relative_name": "service-01/constraints/server-verification.json",
+            "sha256": "af0adb9f17dde3d5994a64fc1160d5bb484618d2749e370e9950de105f8b7c6c",
+            "bytes": 1344
+          },
+          {
+            "relative_name": "service-01/constraints.log",
+            "sha256": "71af374fd276186f8e33be7acb505ec37d4a5e4b94e6feabce4ade7b0d159927",
+            "bytes": 863
+          },
+          {
+            "relative_name": "service-01/lifecycle-chat.json",
+            "sha256": "4b0a67cc1f20d768b74608e10048c8ab0e0689d589749e09740d90d3c52fc65d",
+            "bytes": 35111
+          },
+          {
+            "relative_name": "service-01/lifecycle-chat.log",
+            "sha256": "2a8497ab3dd8ccfd978f0770246ceac7022edf9b42e2f59d43004441adfe6b24",
+            "bytes": 77
+          },
+          {
+            "relative_name": "service-01/omp-chat/chat-http.json",
+            "sha256": "e2f5f9c86712f852f0712ae8a9e7b80b4ece862a76105d78e30a34c342f5d9fc",
+            "bytes": 314297
+          },
+          {
+            "relative_name": "service-01/omp-chat/chat-run.json",
+            "sha256": "4f8408bf5e2a9ded21689197a24f39350cccd446e3d6f96c8c45e44a95d9b0c5",
+            "bytes": 1733
+          },
+          {
+            "relative_name": "service-01/omp-chat/chat.jsonl",
+            "sha256": "7165ce63998848e3257b337e5f739d70e4155f4495e686e80bbec823abe8466b",
+            "bytes": 879748
+          },
+          {
+            "relative_name": "service-01/omp-chat/chat.stderr",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "relative_name": "service-01/omp-chat/revalidation-exact-anchor.json",
+            "sha256": "bc511e5fecceeb2bcd4a77623441dbc9db4af610589a5be39d1397cb8095ea26",
+            "bytes": 2529
+          },
+          {
+            "relative_name": "service-01/omp-chat/revalidation-final.json",
+            "sha256": "5d9e6a570c2409f806dbc0c563c1bf7ddb05c0d75928b77a34ab41caaac24804",
+            "bytes": 3733
+          },
+          {
+            "relative_name": "service-01/omp-chat/revalidation.json",
+            "sha256": "f3463411f13ac13682062767638c57c4fec53505dbb3374249fd49da8b2460c0",
+            "bytes": 2394
+          },
+          {
+            "relative_name": "service-01/omp-chat.log",
+            "sha256": "4ab2dd097fef6c9ed79fd627cfebcc701d47275160e677fb5225af77f232e868",
+            "bytes": 1626
+          },
+          {
+            "relative_name": "service-01/runtime-source-observed.json",
+            "sha256": "7af27d24cd739c686655b700f0694e1093d2006040f3a857cd2c2ee58467fb00",
+            "bytes": 20700
+          },
+          {
+            "relative_name": "service-01/server.log",
+            "sha256": "cbaf6a4fb7c4cde736c3d45c82784d2986a364b2f801399ca6cac6516357585f",
+            "bytes": 443919
+          },
+          {
+            "relative_name": "service-01/suite.json",
+            "sha256": "e354fb0d167b236b176cfc2644f1dba89daa06ab581d02b7915ed7a06ee476de",
+            "bytes": 250499
+          }
+        ]
+      },
+      {
+        "name": "service-02",
+        "reason": "OMP Chat exited 0 but did not read the scheduler function definition. Required-source validation failed; no full service acceptance.",
+        "files": [
+          {
+            "relative_name": "service-02/constraints/attempt.json",
+            "sha256": "d2015865c8d468cc3e5f8ca7aefbac094de315dd7be9d1f088020a55330b1dfe",
+            "bytes": 47129
+          },
+          {
+            "relative_name": "service-02/constraints/chat-medium-json_object.json",
+            "sha256": "8a06fb295e81bb75305a51f6d4f6b00c50a82b7dbaec62316d371d16556db3d8",
+            "bytes": 1715
+          },
+          {
+            "relative_name": "service-02/constraints/chat-medium-json_schema.json",
+            "sha256": "0f1320cf27ec5a798cf1fe46667e3ac990342bde9f6e281349fa8fb715968e77",
+            "bytes": 2235
+          },
+          {
+            "relative_name": "service-02/constraints/chat-medium-tool.json",
+            "sha256": "57791b68f7ed2bf08d24b5dc59771797bb71f72e8069ae4f80055d8164dd933e",
+            "bytes": 2146
+          },
+          {
+            "relative_name": "service-02/constraints/chat-off-json_object.json",
+            "sha256": "198d679328171127a2595d9cdf85db62f8efddbdc2ad7912e1bd525b9db57221",
+            "bytes": 1072
+          },
+          {
+            "relative_name": "service-02/constraints/chat-off-json_schema.json",
+            "sha256": "17a549fd201b2abec8a8b3b93476bd49d50df3fb3778ebff279f1157d8abdaac",
+            "bytes": 1595
+          },
+          {
+            "relative_name": "service-02/constraints/chat-off-tool.json",
+            "sha256": "fea157765c2863a438913c351e66bc8eb5fe51fdf5bdfd700dffef9866688bf6",
+            "bytes": 2026
+          },
+          {
+            "relative_name": "service-02/constraints/responses-medium-json_object.json",
+            "sha256": "3d116edbc514cf5959da42cb6140f0910233a13d56796ae59e8f9e67ae0c3c64",
+            "bytes": 2627
+          },
+          {
+            "relative_name": "service-02/constraints/responses-medium-json_schema.json",
+            "sha256": "dd9525b01d0760a4e723c03ad64b8e9cb67691fef709af3d60ce3a6e7aa14c51",
+            "bytes": 3608
+          },
+          {
+            "relative_name": "service-02/constraints/responses-medium-tool.json",
+            "sha256": "e5ca77f694526f9ae9c4c223d2091c2df6ae4f7ce382311fc905f3cf23c13ce7",
+            "bytes": 3506
+          },
+          {
+            "relative_name": "service-02/constraints/responses-off-json_object.json",
+            "sha256": "c83c51cad7774dc9f343a02b4fa52112831c162f1c49ddd40c0d7d213af352b5",
+            "bytes": 1811
+          },
+          {
+            "relative_name": "service-02/constraints/responses-off-json_schema.json",
+            "sha256": "b9af94e064b39c264aa21eefde9e95d0677704aad77b4abef5448080a062b465",
+            "bytes": 2795
+          },
+          {
+            "relative_name": "service-02/constraints/responses-off-tool.json",
+            "sha256": "5fc8bff4f57f7f0fe3f10abef49807398fcd4919b5daeb921b9cd11af0a6bcb1",
+            "bytes": 2890
+          },
+          {
+            "relative_name": "service-02/constraints/server-verification.json",
+            "sha256": "13755b648f172beec2d84b2687fdceee25818d47d0b5bb3f1bf478d03f633409",
+            "bytes": 1344
+          },
+          {
+            "relative_name": "service-02/constraints.log",
+            "sha256": "8547e8a117b261938ea263464ac31f579930bd9caf3c3c422cb30e5d96753d2c",
+            "bytes": 851
+          },
+          {
+            "relative_name": "service-02/lifecycle-chat.json",
+            "sha256": "1a473b703e8995c8f95c9f6f635f7989d3359f2d968e509a73a859d4b523f4c4",
+            "bytes": 34723
+          },
+          {
+            "relative_name": "service-02/lifecycle-chat.log",
+            "sha256": "2a8497ab3dd8ccfd978f0770246ceac7022edf9b42e2f59d43004441adfe6b24",
+            "bytes": 77
+          },
+          {
+            "relative_name": "service-02/omp-chat/chat-http.json",
+            "sha256": "f55233de12afc03bba719e4b13e5d017982f140b8778c94d3131f81270217d5c",
+            "bytes": 477667
+          },
+          {
+            "relative_name": "service-02/omp-chat/chat-run.json",
+            "sha256": "26b03c54bd87189962e4e0091835a27cf23c67fb071872801bf4b10d50c7e989",
+            "bytes": 1733
+          },
+          {
+            "relative_name": "service-02/omp-chat/chat.jsonl",
+            "sha256": "e55f9069e540d225b6d53ad925e5f9c1b26317ab2500c1a0d1b041967ec64f2d",
+            "bytes": 1207267
+          },
+          {
+            "relative_name": "service-02/omp-chat/chat.stderr",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "relative_name": "service-02/omp-chat.log",
+            "sha256": "c0d8c6cecbf7f49ace5d6a18e5d00645da01e760a33e9b6963926a0bb95cb354",
+            "bytes": 1626
+          },
+          {
+            "relative_name": "service-02/server.log",
+            "sha256": "17e3a4e9078eee77581b3b51070f70f2eca021b8b2ee63502af2a730ea55d190",
+            "bytes": 472062
+          },
+          {
+            "relative_name": "service-02/suite.json",
+            "sha256": "cc4c32552005def5d011c4ffa80122e662a8d4fac7468e2acf816e33082992e6",
+            "bytes": 50587
+          }
+        ]
+      },
+      {
+        "name": "service-03",
+        "reason": "Chat agent and both lifecycle cases passed. Responses client exited 0; original validator failed compound client/wire ID binding. Independent source/tool review and two CPU revalidations passed. Long-context service cases did not run.",
+        "files": [
+          {
+            "relative_name": "service-03/constraints/attempt.json",
+            "sha256": "8490e1ee1e091e3aeb378620ad7feaaf2073320814a8307fcaa52ed07260616d",
+            "bytes": 47181
+          },
+          {
+            "relative_name": "service-03/constraints/chat-medium-json_object.json",
+            "sha256": "0742c0c43d8bb14d5d81ee6f7704b136a0ebae4edaee560b30f388bd22d9fb90",
+            "bytes": 1716
+          },
+          {
+            "relative_name": "service-03/constraints/chat-medium-json_schema.json",
+            "sha256": "77ed8c6ff28b32c360103134895df2e16c2b4cc44b5ae3e646d711cf7b379bbd",
+            "bytes": 2235
+          },
+          {
+            "relative_name": "service-03/constraints/chat-medium-tool.json",
+            "sha256": "03cc0443707200ccd3cd9b8db51c9ddd9b872910b1c3ba9c60f916c1c7c58bcb",
+            "bytes": 2147
+          },
+          {
+            "relative_name": "service-03/constraints/chat-off-json_object.json",
+            "sha256": "0de2eff945aca4e6416aa3c946803c741c646a3cb5272a05e24e001da50ab304",
+            "bytes": 1072
+          },
+          {
+            "relative_name": "service-03/constraints/chat-off-json_schema.json",
+            "sha256": "86f1a63738a04d2ae61eb766b5d92a56d4c7e5585fc17f79c5a32443b0479b55",
+            "bytes": 1596
+          },
+          {
+            "relative_name": "service-03/constraints/chat-off-tool.json",
+            "sha256": "df6180a7c202ca9e2db408e2f96f66f1d1f47531c787bc3e60ebd20a8a57430b",
+            "bytes": 2028
+          },
+          {
+            "relative_name": "service-03/constraints/responses-medium-json_object.json",
+            "sha256": "00d5e3524510fab53c0017afbeca320aedef0e22873c0c664ebe4faee7d82341",
+            "bytes": 2630
+          },
+          {
+            "relative_name": "service-03/constraints/responses-medium-json_schema.json",
+            "sha256": "c433a5989825ce061142780001658cb72f5c4cdfac69677e64bbc399019010aa",
+            "bytes": 3611
+          },
+          {
+            "relative_name": "service-03/constraints/responses-medium-tool.json",
+            "sha256": "8780b7ac4df14e17ef0adc8ea9bd6d051d08f822b3bdf49a87a1a8cb2d1861ba",
+            "bytes": 3512
+          },
+          {
+            "relative_name": "service-03/constraints/responses-off-json_object.json",
+            "sha256": "b7b0b50949885d98700e5e69f91f52622e5349e1c19a16599428ce512375b9a3",
+            "bytes": 1813
+          },
+          {
+            "relative_name": "service-03/constraints/responses-off-json_schema.json",
+            "sha256": "c0edeaeaade74ae7c51d64d515109d0c8acabbc203e06de5c67c988db1e26256",
+            "bytes": 2797
+          },
+          {
+            "relative_name": "service-03/constraints/responses-off-tool.json",
+            "sha256": "9ef02371781253d944f3aac4d465be8d565b58abf53a6a23077656d9cd13d1a1",
+            "bytes": 2893
+          },
+          {
+            "relative_name": "service-03/constraints/server-verification.json",
+            "sha256": "13755b648f172beec2d84b2687fdceee25818d47d0b5bb3f1bf478d03f633409",
+            "bytes": 1344
+          },
+          {
+            "relative_name": "service-03/constraints.log",
+            "sha256": "9f1c6b88eb6edb4a4f5ead693862432234edc12352a70438e34850af29595ec7",
+            "bytes": 863
+          },
+          {
+            "relative_name": "service-03/lifecycle-chat.json",
+            "sha256": "e42c576f59c2ef50785d0c9e96eadfb23194a3b5ca8a28c2da48f9857d4ed2d4",
+            "bytes": 34929
+          },
+          {
+            "relative_name": "service-03/lifecycle-chat.log",
+            "sha256": "2a8497ab3dd8ccfd978f0770246ceac7022edf9b42e2f59d43004441adfe6b24",
+            "bytes": 77
+          },
+          {
+            "relative_name": "service-03/lifecycle-responses.json",
+            "sha256": "e12c2772da99b6416c5f52983146f88a7279a6408aae63d97f3aa5fe4b846804",
+            "bytes": 56926
+          },
+          {
+            "relative_name": "service-03/lifecycle-responses.log",
+            "sha256": "2a8497ab3dd8ccfd978f0770246ceac7022edf9b42e2f59d43004441adfe6b24",
+            "bytes": 77
+          },
+          {
+            "relative_name": "service-03/omp-chat/chat-http.json",
+            "sha256": "daf2b583d69e2659e80e8e4802791bed280672f7da30632d21c9189aee903ab4",
+            "bytes": 370068
+          },
+          {
+            "relative_name": "service-03/omp-chat/chat-run.json",
+            "sha256": "4f97944e40fb45a17c5af5cd770c24091d07d232ea8e84ce89e7133111104a95",
+            "bytes": 5450
+          },
+          {
+            "relative_name": "service-03/omp-chat/chat.jsonl",
+            "sha256": "0b0fc458ec7d1574426c65b9f179df7851da238190fb4d2af3e9771d7bf0b3ae",
+            "bytes": 1035032
+          },
+          {
+            "relative_name": "service-03/omp-chat/chat.stderr",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "relative_name": "service-03/omp-chat/semantic-review-01.json",
+            "sha256": "c699ebd9d1f231260f857b9925ea93fae88f41998367a88321ac74467967bd1d",
+            "bytes": 3086
+          },
+          {
+            "relative_name": "service-03/omp-chat.log",
+            "sha256": "24d7237358782b6ca7381989c812f940783b011a6d5935a0cff881a8f83de274",
+            "bytes": 4655
+          },
+          {
+            "relative_name": "service-03/omp-responses/responses-http.json",
+            "sha256": "a63e5bd879cb04342d7818744322658362340b8bf56c50952456636fdfd6667e",
+            "bytes": 381507
+          },
+          {
+            "relative_name": "service-03/omp-responses/responses-run.json",
+            "sha256": "1754ef7026dafd763ea2924654c2371e19b1738b8233e0a4296b2d03bdf95f33",
+            "bytes": 2271
+          },
+          {
+            "relative_name": "service-03/omp-responses/responses.jsonl",
+            "sha256": "1257273aae68f2e12d3251b606d18d860968f28db1d507a0b2f8a99639b7ad3d",
+            "bytes": 1090146
+          },
+          {
+            "relative_name": "service-03/omp-responses/responses.stderr",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "bytes": 0
+          },
+          {
+            "relative_name": "service-03/omp-responses/revalidation-01.json",
+            "sha256": "5be16865166d3b0063e499e7bd12eca15c454ccc2c78dfecda87e5e369af584b",
+            "bytes": 4586
+          },
+          {
+            "relative_name": "service-03/omp-responses/revalidation-02.json",
+            "sha256": "0da152021146c152b4c1bd73097cd1b02309f6bdc9e87573ec756ebfe0ddac5f",
+            "bytes": 4743
+          },
+          {
+            "relative_name": "service-03/omp-responses/semantic-review-01.json",
+            "sha256": "0d15835279dc116f6660e7418a7a911555ab799ea68971439fcbde5aff7d85d8",
+            "bytes": 4006
+          },
+          {
+            "relative_name": "service-03/omp-responses.log",
+            "sha256": "df6a77af7fa0b7e47b0dd056629a6d2cf8e347e9e74c437f5b46befe48ac95c2",
+            "bytes": 2164
+          },
+          {
+            "relative_name": "service-03/server.log",
+            "sha256": "b1ece5292c330c713c576daec694cf58ef034151a6f82b18dfa2aa47847eacf7",
+            "bytes": 1121064
+          },
+          {
+            "relative_name": "service-03/suite.json",
+            "sha256": "7e437c5bd1a8bfc4f511c3106b8d5f58cd4a63b7be9997b05817eb0911eb9807",
+            "bytes": 52795
+          }
+        ]
+      },
+      {
+        "name": "service-04",
+        "reason": "Twelve constraint cases passed. The two short mixed requests did not share a scheduled batch. Other checked content/state/cancel/release results completed without error; full suite stopped.",
+        "files": [
+          {
+            "relative_name": "service-04/constraints/attempt.json",
+            "sha256": "56c793eeba5301c3002565a23080b9320022de5df6225e297256f962d79773aa",
+            "bytes": 47181
+          },
+          {
+            "relative_name": "service-04/constraints/chat-medium-json_object.json",
+            "sha256": "45f0a107cd1cc21a15d07a9d565e0361989d232b7aa388968584224a095418e3",
+            "bytes": 1716
+          },
+          {
+            "relative_name": "service-04/constraints/chat-medium-json_schema.json",
+            "sha256": "7f00efce205776b19b3352c027860c738060f15458f1d1342eb967972d057aaa",
+            "bytes": 2235
+          },
+          {
+            "relative_name": "service-04/constraints/chat-medium-tool.json",
+            "sha256": "ae7bd6148dfbcff0b1d330460604fe137c21fce53f8f03aed11cef2ecdcefa4b",
+            "bytes": 2148
+          },
+          {
+            "relative_name": "service-04/constraints/chat-off-json_object.json",
+            "sha256": "c7263c2fbb07f2eca50808a65697a2392de88e39949e51d6c7cab603aad4f183",
+            "bytes": 1073
+          },
+          {
+            "relative_name": "service-04/constraints/chat-off-json_schema.json",
+            "sha256": "9461b91efa1ded7bdedf751b09ccf9e77f97a2081b9570da3c9236cbb672401c",
+            "bytes": 1597
+          },
+          {
+            "relative_name": "service-04/constraints/chat-off-tool.json",
+            "sha256": "d08a1708760f294d27326923a39a4e2915f30dfe64814e4bed7e576de98a96c9",
+            "bytes": 2028
+          },
+          {
+            "relative_name": "service-04/constraints/responses-medium-json_object.json",
+            "sha256": "369b92761770a51aa3d2f3d9f99328dc15ec717878832950dda8d081787ab8b2",
+            "bytes": 2630
+          },
+          {
+            "relative_name": "service-04/constraints/responses-medium-json_schema.json",
+            "sha256": "bf8ff5b4116a11cb5b20b6943f8a647beb3e3ea775f3ee0b484c57d2ba563fb2",
+            "bytes": 3611
+          },
+          {
+            "relative_name": "service-04/constraints/responses-medium-tool.json",
+            "sha256": "65bb9ac4107829e49643107224b90aff3b45cfd0c9249a1ebb8b4d2cd0b7a123",
+            "bytes": 3511
+          },
+          {
+            "relative_name": "service-04/constraints/responses-off-json_object.json",
+            "sha256": "7dc6ceaa20b30af38f3409f7368b5af810e00896c87818bc3f96e7968d8c66e3",
+            "bytes": 1813
+          },
+          {
+            "relative_name": "service-04/constraints/responses-off-json_schema.json",
+            "sha256": "a2cd8d992859a7426ce5e6976e0d5d7ebc03cd2e5419acb1bb1e0dc3d3c65b78",
+            "bytes": 2797
+          },
+          {
+            "relative_name": "service-04/constraints/responses-off-tool.json",
+            "sha256": "a1bb78c51ac8743499c067da379a99b84c93d318e227a6740eafad06a6e00799",
+            "bytes": 2893
+          },
+          {
+            "relative_name": "service-04/constraints/server-verification.json",
+            "sha256": "13755b648f172beec2d84b2687fdceee25818d47d0b5bb3f1bf478d03f633409",
+            "bytes": 1344
+          },
+          {
+            "relative_name": "service-04/constraints.log",
+            "sha256": "0b97cca34ef6ba7da5a648270e2951731aa01974e9a7148b42556ccdefa3c852",
+            "bytes": 864
+          },
+          {
+            "relative_name": "service-04/lifecycle-chat.json",
+            "sha256": "b4fcc234830f53451126cff2536cf2a60b6fa91bc7d796085ccb2214eba7fc23",
+            "bytes": 33894
+          },
+          {
+            "relative_name": "service-04/lifecycle-chat.log",
+            "sha256": "5a65ca8ee43a467231f448f005a2d0399537e3540eac5856b16ac5283ffa6211",
+            "bytes": 529
+          },
+          {
+            "relative_name": "service-04/server.log",
+            "sha256": "4a758b1c08a0dd8d4a17f9027e6601c82e71e39249965300b7659a019e098db7",
+            "bytes": 151163
+          },
+          {
+            "relative_name": "service-04/suite.json",
+            "sha256": "c49db2cec81dbee8be74525e3ca422e1fe5f2447a4124fd9ae2d0054b9cb88a6",
+            "bytes": 44598
+          }
+        ]
+      },
+      {
+        "name": "gpu-full-01",
+        "reason": "DSpark batch-one boundary completed all outputs without OOM or recompute, but generic result lacked mode. Attempt stopped; batch-two ordinary was interrupted. Original failures retained.",
+        "files": [
+          {
+            "relative_name": "gpu-full-01/failure-reason.json",
+            "sha256": "d7ac47dcd0979c078b61cbbf1b801ad302642ae540a2d34fa3f59d6af5c676e6",
+            "bytes": 372
+          },
+          {
+            "relative_name": "gpu-full-01/pytest.log",
+            "sha256": "e44fa1f8d18ee9207d7fc807b8bf57562a37564d0b2f565bd3ba6cd5450ec042",
+            "bytes": 11838
+          },
+          {
+            "relative_name": "gpu-full-01/test_max_context_length_2621440-ordinary-1.log",
+            "sha256": "d8e622ef07d8b1019f2decac39ad89d773c71ae87e5cb27c8c8ab4e40f292f05",
+            "bytes": 9456
+          },
+          {
+            "relative_name": "gpu-full-01/test_max_context_length_2621441-mtp4-1.log",
+            "sha256": "cce19e23530dcf7c7a8dbebb9488887ebd13122a3be5b24b57aa141e9666c751",
+            "bytes": 16834
+          },
+          {
+            "relative_name": "gpu-full-01/test_max_context_length_2621442-dspark-1.log",
+            "sha256": "d7b113063ae95439193d1c25eb2a5c2d66c13fabd6e2f36f5105a359f0f37c7e",
+            "bytes": 22023
+          },
+          {
+            "relative_name": "gpu-full-01/test_max_context_length_2621443-ordinary-2.log",
+            "sha256": "22de11f094f96b2c13526a3e7d20a4578caab8b6d61dd22acd5d39ab9d8a77d6",
+            "bytes": 10358
+          },
+          {
+            "relative_name": "gpu-full-01/test_max_context_length_2621444-mtp4-2.log",
+            "sha256": "185fff78f02927a70bba52f1ce554705c098067b0ce5e3facd0ff4af0d80f8aa",
+            "bytes": 6142
+          },
+          {
+            "relative_name": "gpu-full-01/test_max_context_length_262144current-mtp4-2.log",
+            "sha256": "185fff78f02927a70bba52f1ce554705c098067b0ce5e3facd0ff4af0d80f8aa",
+            "bytes": 6142
+          }
+        ]
+      },
+      {
+        "name": "calibration-01",
+        "reason": "Input preparation diagnostics failed; not formal acceptance.",
+        "files": [
+          {
+            "relative_name": "calibration-01/collector.log",
+            "sha256": "2a680f3f6b006486e455d892dea29294f7d974b0f5744d2ae80b9b60213dec96",
+            "bytes": 1506
+          },
+          {
+            "relative_name": "calibration-01/explore-bs1-dspark-0.log",
+            "sha256": "d2cbaf8487975d7014ed516c05a71225192152e28ec311c046c3d35e8c2c38f3",
+            "bytes": 46
+          }
+        ]
+      },
+      {
+        "name": "calibration-02",
+        "reason": "Obsolete exact-query graph keys had excessive capture activity. Interrupted and excluded from threshold selection.",
+        "files": [
+          {
+            "relative_name": "calibration-02/collector.log",
+            "sha256": "6a0e6b4436b68488f0cbc037e386610d957e94967a516aa35c97c9977ca03ba6",
+            "bytes": 3435
+          },
+          {
+            "relative_name": "calibration-02/explore-bs1-dspark-0.05.log",
+            "sha256": "68dba19bc51c1aef7cb08ca1fa1f499fb634a9364c02560da2e7c690b4214ecc",
+            "bytes": 33135
+          },
+          {
+            "relative_name": "calibration-02/explore-bs1-dspark-0.1.log",
+            "sha256": "c60647d927f872b1a4c648caef6d551df68734c6a26c801ba3f9a6c64b5aa93d",
+            "bytes": 37942
+          },
+          {
+            "relative_name": "calibration-02/explore-bs1-dspark-0.2.log",
+            "sha256": "e35d9bcb77c6b0b831864cc514ad3d4e0e7eafd3efd3a934d52e5b561e50d5bd",
+            "bytes": 12886
+          },
+          {
+            "relative_name": "calibration-02/explore-bs1-dspark-0.log",
+            "sha256": "9040bd0b5035991df4fea9d9d0c5b132b255dc07ac9545966e5dd6b6aeba1da8",
+            "bytes": 25919
+          },
+          {
+            "relative_name": "calibration-02/explore-results.json",
+            "sha256": "d2688860c50d9a11c67ea5b51162aac99927fb5ec1cc2a27b6bc1a1c6cf242a9",
+            "bytes": 3301
+          },
+          {
+            "relative_name": "calibration-02/interruption-reason.json",
+            "sha256": "ca2151adec85d6c4ca7a1affdae2b69f722e19fbee07f129f9c37881792f3b75",
+            "bytes": 214
+          }
+        ]
+      },
+      {
+        "name": "formal-01",
+        "reason": "All230 numerical checks passed;26 speed gates failed before kernel optimization. A CPU regression job overlapped the first part of this timing attempt. No paired, release-boundary, or framework job ran.",
+        "files": [
+          {
+            "relative_name": "formal-01/operators/operators-collector.log",
+            "sha256": "4219ae00c5845dc67939a94c735b565228b16abfe32c6336d95fdf0918c0177e",
+            "bytes": 15301
+          },
+          {
+            "relative_name": "formal-01/operators/result.json",
+            "sha256": "b37258215f5f123d0ddc3bebeb18e28b9c152c1452a7e5f83a448c19a40398df",
+            "bytes": 1653166
+          },
+          {
+            "relative_name": "formal-01/suite.json",
+            "sha256": "07b0afeb84ded1bea82ea92901b6d8654a6b6e5f0b4528bce68cbbc8af4690d4",
+            "bytes": 14435
+          }
+        ]
+      },
+      {
+        "name": "kernel-diagnostics-01",
+        "reason": "Original tuning logs, including rejected layouts and build/import failures. These runs are diagnostics, not formal acceptance.",
+        "files": [
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-append-address-01.log",
+            "sha256": "1539f938e283aefd4842a229fe9e73a311ae3333f075c648d1b9cd4ba48bfc13",
+            "bytes": 2110
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-append-perf-11.log",
+            "sha256": "f1185cbf069b3874925fb4630f0c810545ec1cf768a0a66d1675d121b56a38dd",
+            "bytes": 739
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-append-perf-12.log",
+            "sha256": "21fab5333241a5cabd0b8a41cf9e6a6a45758cf0c61b46cc8617b18dc72da1b1",
+            "bytes": 739
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-vector-perf-01.log",
+            "sha256": "200be1fbb6b5d57617bc6ff1ed8319d17a9c961e1ead73732b579025f2609624",
+            "bytes": 1798
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-vector-perf-02.log",
+            "sha256": "30f06b7e44be76af2a33735dbc4bea8ee8eaefeda687dc4efc6dc377add375a3",
+            "bytes": 315
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-vector-perf-02b.log",
+            "sha256": "a7f8ea099cd7a19a31c00216245454513b5839a84bb7c27578f857bcaad64536",
+            "bytes": 6607
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-vector-perf-02c.log",
+            "sha256": "e92f93055b6a33e192bb2517ac9da3d614b23a64641eb79e1d81166a03a8b35d",
+            "bytes": 1790
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-vector-perf-03.log",
+            "sha256": "240227c4608af109fdf4c04653cbee2c0d633bac03dd8c225e7475be10728a44",
+            "bytes": 1782
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-vector-perf-04.log",
+            "sha256": "f1cafcff9dc36aefbe118fcb423dc1533a1fbc8cc1d9dd797d3fedad3a1dd8a9",
+            "bytes": 7170
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-vector-perf-04b.log",
+            "sha256": "1a80faf8268797c95f14ccfe6a62ddde7fa6bb14564a958681cc938c77fcdb71",
+            "bytes": 1780
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-vector-perf-05.log",
+            "sha256": "c6f2b384e5312980405adc36d4cf16c30265db61cb53340b1bf5e825961d1fa4",
+            "bytes": 1783
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-vector-perf-06.log",
+            "sha256": "96e64d3b9826a0c67f98b5d2806de213f0946123bdb49e43d974c4da11fab5a7",
+            "bytes": 1777
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-vector-perf-07.log",
+            "sha256": "622f3311d71daac122287b13b30970782e82c35e8298a53b26e7032b36c1c056",
+            "bytes": 1780
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-vector-perf-08.log",
+            "sha256": "ee644a218a25509d7ed1ca4ca20c6f3e57bb6cc74bf4fd8c49dee4692e036204",
+            "bytes": 1781
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-vector-perf-09.log",
+            "sha256": "a2cbe6592de4e5a96894490a916946da2768e848bb8f1be0d26a3f1da61fbd29",
+            "bytes": 1780
+          },
+          {
+            "relative_name": "kernel-diagnostics-01/dspark-vector-perf-10.log",
+            "sha256": "eb361baefd0c5aff8741e3b2de39d19b848bcb070cda28b8165909c33b2ea6ec",
+            "bytes": 1781
+          }
+        ]
+      },
+      {
+        "name": "kernel-append-11",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "kernel-append-11.json",
+            "sha256": "80e79eae342b6ccc4272a51a7bf9c551acb71618de411dbe779b67d4c1185a9c",
+            "bytes": 57946
+          }
+        ]
+      },
+      {
+        "name": "kernel-append-12",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "kernel-append-12.json",
+            "sha256": "66fb78921b47e4121d03e803943333735d62007d1a2ef688391fab55c80f81c0",
+            "bytes": 57945
+          }
+        ]
+      },
+      {
+        "name": "kernel-vector-01",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "kernel-vector-01.json",
+            "sha256": "bdc943b89e5b7aa726b46425123a5acfb279c7bae6c724adac2b0e8658225932",
+            "bytes": 200650
+          }
+        ]
+      },
+      {
+        "name": "kernel-vector-02",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "kernel-vector-02.json",
+            "sha256": "55880940edcd61035bfac9cff3710ca54d1c61fcbce311b327ff5f72937d679f",
+            "bytes": 25296
+          }
+        ]
+      },
+      {
+        "name": "kernel-vector-02b",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "kernel-vector-02b.json",
+            "sha256": "53192e72c5ad32076d2f41060596e57ae6a941d26054b993fed281404cf13dd7",
+            "bytes": 200730
+          }
+        ]
+      },
+      {
+        "name": "kernel-vector-03",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "kernel-vector-03.json",
+            "sha256": "06a973e816a17e72c3816ab325deaf6bfbb16b388992ab22386a6431961c2b6c",
+            "bytes": 200765
+          }
+        ]
+      },
+      {
+        "name": "kernel-vector-04",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "kernel-vector-04.json",
+            "sha256": "b60bc5bcb9a6b990575cf18f54fb1e5c5afd44a185e4a64162d7d6591b20e034",
+            "bytes": 25917
+          }
+        ]
+      },
+      {
+        "name": "kernel-vector-04b",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "kernel-vector-04b.json",
+            "sha256": "a6b17db425d61390680440fc9a748176e8953536741ffaf07234e5f191cfd2b7",
+            "bytes": 200727
+          }
+        ]
+      },
+      {
+        "name": "kernel-vector-05",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "kernel-vector-05.json",
+            "sha256": "6d9c68341bf62666c8e18356fd31977e360e0ec212910633f8b2e621f20500f9",
+            "bytes": 200763
+          }
+        ]
+      },
+      {
+        "name": "kernel-vector-06",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "kernel-vector-06.json",
+            "sha256": "ddb9f3f5923a62e15e886f75d683654f658dabc2f537b8f4f013b12033934b87",
+            "bytes": 200725
+          }
+        ]
+      },
+      {
+        "name": "kernel-vector-07",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "kernel-vector-07.json",
+            "sha256": "0c76f85de22dc3f60cdb6d732b07b921fc59d7795fc26b81a4658f811c723eac",
+            "bytes": 200771
+          }
+        ]
+      },
+      {
+        "name": "kernel-vector-08",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "kernel-vector-08.json",
+            "sha256": "fd2c8be0851de21750032f8b65553070be9760d8f5faef16403252cdb82c12a0",
+            "bytes": 200774
+          }
+        ]
+      },
+      {
+        "name": "kernel-vector-09",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "kernel-vector-09.json",
+            "sha256": "43e65104e338893cde17316997b0521d19ba9c7f85409854e5fbcd97e01e8731",
+            "bytes": 200736
+          }
+        ]
+      },
+      {
+        "name": "kernel-vector-10",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "kernel-vector-10.json",
+            "sha256": "5e31c20ebad20d21df69d4f8b6f1a24439bc053d92159d2e88fada64ecaf2f50",
+            "bytes": 200753
+          }
+        ]
+      },
+      {
+        "name": "append-address-01",
+        "reason": "Tuning diagnostic with its complete timing/verification data, kept without selecting individual repetitions.",
+        "files": [
+          {
+            "relative_name": "append-address-01.json",
+            "sha256": "bce2d89f94089588b920557f24815ef3217c323dff5ce7b8e33723489871d247",
+            "bytes": 24729
+          }
+        ]
+      },
+      {
+        "name": "formal-02",
+        "reason": "All 230 numerical cases pass. DSpark append has three faster CUDA medians but a nonpositive confidence lower bound. Q/K has a slower CUDA median in round one and a nonpositive bound. Whole failed collection retained; source and cleanup verified.",
+        "files": [
+          {
+            "relative_name": "formal-02/operators/operators-collector.log",
+            "sha256": "ab3e0497688ca36b85fa133025719cca581f058c964d704732a49ea22d5bf5d1",
+            "bytes": 11679
+          },
+          {
+            "relative_name": "formal-02/operators/result.json",
+            "sha256": "b656eb551727e9dad77c7b48954681ad0bae54d72d86161c508c83d3b7fa12a6",
+            "bytes": 1669076
+          },
+          {
+            "relative_name": "formal-02/suite.json",
+            "sha256": "02bd02853ed99b3a4830d28d6fadd9aadbec388c9c867df03c4e51e6ab83dea8",
+            "bytes": 14435
+          }
+        ]
+      },
+      {
+        "name": "timing-event-diagnostic-01",
+        "reason": "Original diagnostic assertion failed because the DOT label counter was incorrect. Revalidation separately binds the original result and all eight DOT hashes, proves all 100 kernels between the two external events, and preserves the original failure. It proves host submission gaps can enter the old timer, but does not identify the formal-02 spike cause.",
+        "files": [
+          {
+            "relative_name": "timing-event-diagnostic-01/inside-0.0-0.dot",
+            "sha256": "2264d3e38babe3a6ae2a8f0177ae5328117f5ff644a83929662b899277e44058",
+            "bytes": 48596
+          },
+          {
+            "relative_name": "timing-event-diagnostic-01/inside-0.0-1.dot",
+            "sha256": "a8ca9bdec353c61dfbb9f2d43387676e5d43ef000d365b25ff907dfd749a076d",
+            "bytes": 48596
+          },
+          {
+            "relative_name": "timing-event-diagnostic-01/inside-0.01-0.dot",
+            "sha256": "27da8a43f9f9516a72b7bfbb0710b96860cf8e7d6cae6dcaeb04902df257f020",
+            "bytes": 48596
+          },
+          {
+            "relative_name": "timing-event-diagnostic-01/inside-0.01-1.dot",
+            "sha256": "8648d4a08dba3e27315901bab792ad9006cf6ae0d46cd2132b725a82f1196735",
+            "bytes": 48596
+          },
+          {
+            "relative_name": "timing-event-diagnostic-01/outside-0.0-0.dot",
+            "sha256": "fe0bf7ba6ed0154e5bb9e7ff523620117aeeac26be4618e5fc7b1fdd4193b8c1",
+            "bytes": 47875
+          },
+          {
+            "relative_name": "timing-event-diagnostic-01/outside-0.0-1.dot",
+            "sha256": "a5f7e28fb9fdd58a5796b142cbbd70e854e6f4b89b4074c842a7a4b4cc1d6d63",
+            "bytes": 47875
+          },
+          {
+            "relative_name": "timing-event-diagnostic-01/outside-0.01-0.dot",
+            "sha256": "3001c48b768804be1d8c2b5259c08e088b77b0b5097d9b10d9ce8d73aadad3be",
+            "bytes": 47875
+          },
+          {
+            "relative_name": "timing-event-diagnostic-01/outside-0.01-1.dot",
+            "sha256": "e622bb1c7f0cc2e27a1c0796bb89234c111fd1f8dd6cc82caf9f106b55470d58",
+            "bytes": 47875
+          },
+          {
+            "relative_name": "timing-event-diagnostic-01/result.json",
+            "sha256": "c89bdd1ca1dc929e26f9b0768b79265bf9c28fa136342047c49838e48839d8f9",
+            "bytes": 24983
+          },
+          {
+            "relative_name": "timing-event-diagnostic-01/scope-validation-01.json",
+            "sha256": "ab6416a4b98586a288ba17c43efb60d9964bc98ca042e362d98a35dfaa848553",
+            "bytes": 3013
+          }
+        ]
+      },
+      {
+        "name": "timer-import-attempt",
+        "reason": "First controlled diagnostic failed to import project modules. The external diagnostic then supplied the repository import path. No original log was changed.",
+        "files": [
+          {
+            "relative_name": "timing-milestone-01/dspark-event-diagnostic-01.log",
+            "sha256": "37f955b13d43af2ba9d0e90b2fb629284c4999719b9ef694e27b3e0189ccade9",
+            "bytes": 356
+          }
+        ]
+      },
+      {
+        "name": "timer-gpu-verification",
+        "reason": "Two GPU tests with 20 ms host delays and all eight hooks pass. Runtime and CUDA module stay unchanged from 353c94a; the new collector is committed as 49579b4.",
+        "files": [
+          {
+            "relative_name": "timing-milestone-01/dspark-event-diagnostic-01.log",
+            "sha256": "37f955b13d43af2ba9d0e90b2fb629284c4999719b9ef694e27b3e0189ccade9",
+            "bytes": 356
+          },
+          {
+            "relative_name": "timing-milestone-01/dspark-event-timer-gpu-01.log",
+            "sha256": "658be9b83c67c039214a3e2f0a97108cb8313d6a67e7364622539b7e4dbb2450",
+            "bytes": 192
+          },
+          {
+            "relative_name": "timing-milestone-01/dspark-precommit-timing-01.log",
+            "sha256": "fdb3ff4366ebdd6730d12f24f821eb5256c65958043f49f5ad19f3427fa45cd5",
+            "bytes": 640
+          },
+          {
+            "relative_name": "timing-milestone-01/scope.json",
+            "sha256": "ac0b51b2e1e4506c5ed0910115ffccb20bf4fddf0f732c9829200d06125d2af7",
+            "bytes": 959
+          }
+        ]
+      },
+      {
+        "name": "formal-03",
+        "reason": "230 numerical checks pass, 229 speed checks pass. Q/K round two CUDA median is 1.12 ns more than TileLang while the paired confidence lower bound is positive. The complete original collection remains failed, with source and cleanup proof.",
+        "files": [
+          {
+            "relative_name": "formal-03/operators/operators-collector.log",
+            "bytes": 11687,
+            "sha256": "9d3093df1cb0c108a8fc9b60c3f461904b380f86e73fa009e6478a20f98c1cad"
+          },
+          {
+            "relative_name": "formal-03/operators/result.json",
+            "bytes": 1669122,
+            "sha256": "a41bc44079b92fbfccd8f357521f1a30a9094a6afbfad541d18612786ec8fb08"
+          },
+          {
+            "relative_name": "formal-03/suite.json",
+            "bytes": 14434,
+            "sha256": "e37614b69a9bbc3a448c03f0aaeed066afb1529c8d3114ec5adf4001e18c0e92"
+          }
+        ]
+      },
+      {
+        "name": "qk-layout-01",
+        "reason": "All layouts and shape records retained. Independent 128-thread joint kernel had the same SASS as production but different module shared-memory metadata. This does not prove a performance cause.",
+        "files": [
+          {
+            "relative_name": "qk-layout-01.json",
+            "bytes": 191769,
+            "sha256": "dd1db720f6b3dc593784db65a11101b0b314d2eb7378db8238b21e74a6975119"
+          },
+          {
+            "relative_name": "qk-layout-candidates.cu",
+            "bytes": 5509,
+            "sha256": "4f0b964bebb5a401a6af578ab7135ea5260b992b25dd0ac21cfc40342cfee661"
+          },
+          {
+            "relative_name": "qk-milestone-01/dspark-qk-layout-01.log",
+            "bytes": 12589,
+            "sha256": "b33ccbc6b80f2e8a29130d4b110cc45ecec8d03658e50410a2a472476329c797"
+          }
+        ]
+      },
+      {
+        "name": "qk-offset-01",
+        "reason": "Temporary diagnostic failed numerical verification because its old-offset branch shadowed an outer variable. Production was not changed. The failed source and log are retained.",
+        "files": [
+          {
+            "relative_name": "qk-offset-candidates.cu",
+            "bytes": 4875,
+            "sha256": "368a60e312e188e94824ac68fe89740237907b0d0a878d93d40c74a079fb5e7a"
+          },
+          {
+            "relative_name": "qk-milestone-01/dspark-qk-offset-01.log",
+            "bytes": 844,
+            "sha256": "4c54fda0063a5fdee4ab9e3eea9c153409a57e5eb4a3c354ea66806e4908c000"
+          }
+        ]
+      },
+      {
+        "name": "qk-offset-02",
+        "reason": "Corrected diagnostic verifies outputs but shows no reliable gain from the different address expression. Production does not use it.",
+        "files": [
+          {
+            "relative_name": "qk-offset-02.json",
+            "bytes": 127837,
+            "sha256": "db6db9934507deefe60f7827688b04864d9908049c2738fab982f1d6d228fc85"
+          },
+          {
+            "relative_name": "qk-offset-candidates-02.cu",
+            "bytes": 4868,
+            "sha256": "adfef6e9cf63fdaff3377c5b55802151a750ae485fef1b90ccc29bb576637437"
+          },
+          {
+            "relative_name": "qk-milestone-01/dspark-qk-offset-02.log",
+            "bytes": 8419,
+            "sha256": "81ed65d7dec97788115035f9ffe6eee61d3e74a11862d5ff13503a980fefbc2e"
+          }
+        ]
+      },
+      {
+        "name": "qk-sum-01",
+        "reason": "All three sum variants retained. Only first add-to-zero removal is used on the short-input production path. The reordered sum tree is not used.",
+        "files": [
+          {
+            "relative_name": "qk-sum-01.json",
+            "bytes": 96027,
+            "sha256": "a3a70d01cdee1f8c2ed69d0c7ea366c58d4b1a07946def198a1663c8897914d0"
+          },
+          {
+            "relative_name": "qk-sum-candidates.cu",
+            "bytes": 4771,
+            "sha256": "f11556f1e335cdd6d9f6be4496be96f5cf15ca18ac745579966f08ee14fcc134"
+          },
+          {
+            "relative_name": "qk-milestone-01/dspark-qk-sum-01.log",
+            "bytes": 6350,
+            "sha256": "8301f2e244c1e903e5e991e4a6acf59d3715d409c87a5d08230b370cda16fd07"
+          }
+        ]
+      },
+      {
+        "name": "qk-production-verification",
+        "reason": "Six whole-operation production Q/K diagnostics pass, followed by 20 selected GPU checks and eight hooks. Supplemental edge checks keep BF16-rounded FP32 output, zero absolute tolerance, and signed zeros. This is implementation verification, not full formal acceptance.",
+        "files": [
+          {
+            "relative_name": "qk-production-01.json",
+            "bytes": 67558,
+            "sha256": "0a538dfd53f66f531e176f37789af786cf4df759a5a3e2421f8c91d6e24e2825"
+          },
+          {
+            "relative_name": "qk-milestone-01/dspark-precommit-qk-01.log",
+            "bytes": 640,
+            "sha256": "fdb3ff4366ebdd6730d12f24f821eb5256c65958043f49f5ad19f3427fa45cd5"
+          },
+          {
+            "relative_name": "qk-milestone-01/dspark-precommit-qk-02.log",
+            "bytes": 640,
+            "sha256": "fdb3ff4366ebdd6730d12f24f821eb5256c65958043f49f5ad19f3427fa45cd5"
+          },
+          {
+            "relative_name": "qk-milestone-01/dspark-qk-gdn-gpu-01.log",
+            "bytes": 208,
+            "sha256": "99d604006b715e00e9180e252adafc4f444c8645046c712346085e3d83ebed36"
+          },
+          {
+            "relative_name": "qk-milestone-01/dspark-qk-gdn-gpu-02.log",
+            "bytes": 208,
+            "sha256": "1cf6fa92a48b881776ad1b426a3567ac4e973f354b5562c28c67d2eb9c02efa9"
+          },
+          {
+            "relative_name": "qk-milestone-01/dspark-qk-gdn-gpu-03.log",
+            "bytes": 208,
+            "sha256": "c94f2d7d000e8e85cf4ae314bebdb931aa55070079039d614b5289d5f949560a"
+          },
+          {
+            "relative_name": "qk-milestone-01/dspark-qk-layout-01.log",
+            "bytes": 12589,
+            "sha256": "b33ccbc6b80f2e8a29130d4b110cc45ecec8d03658e50410a2a472476329c797"
+          },
+          {
+            "relative_name": "qk-milestone-01/dspark-qk-offset-01.log",
+            "bytes": 844,
+            "sha256": "4c54fda0063a5fdee4ab9e3eea9c153409a57e5eb4a3c354ea66806e4908c000"
+          },
+          {
+            "relative_name": "qk-milestone-01/dspark-qk-offset-02.log",
+            "bytes": 8419,
+            "sha256": "81ed65d7dec97788115035f9ffe6eee61d3e74a11862d5ff13503a980fefbc2e"
+          },
+          {
+            "relative_name": "qk-milestone-01/dspark-qk-production-01.log",
+            "bytes": 728,
+            "sha256": "a20c37d61301790f909f50e6ca26674e7ac9a37b0f32fb4853515bb54a02bf6d"
+          },
+          {
+            "relative_name": "qk-milestone-01/dspark-qk-sum-01.log",
+            "bytes": 6350,
+            "sha256": "8301f2e244c1e903e5e991e4a6acf59d3715d409c87a5d08230b370cda16fd07"
+          },
+          {
+            "relative_name": "qk-milestone-01/edge-validation-01.json",
+            "bytes": 381,
+            "sha256": "d76a1d0c0bc193e01392d96fdd7d001ae8f4b435a706ed02685826bbb82c6592"
+          },
+          {
+            "relative_name": "qk-milestone-01/scope-completion-01.json",
+            "bytes": 425,
+            "sha256": "934d0923849d2fc1c9ee89c6972dd6a6477c8996a2f8f25fdafaf43a1a89f81a"
+          },
+          {
+            "relative_name": "qk-milestone-01/scope.json",
+            "bytes": 944,
+            "sha256": "fd8ac8c00e4f6deca560eaf2122aa8e54375657c8cfff55309ff244e7bdfe5b3"
+          }
+        ]
+      },
+      {
+        "name": "formal-04",
+        "reason": "230 numerical checks pass, 228 speed checks pass. The two failed confidence bounds keep all raw spikes and all three faster CUDA medians. No cause is assigned to the spikes. Full original attempt and cleanup are retained.",
+        "files": [
+          {
+            "relative_name": "formal-04/operators/operators-collector.log",
+            "sha256": "f077a313a3d44039fdba9a03db57a623a8ca79593bad738504b62feeaab00927",
+            "bytes": 11673
+          },
+          {
+            "relative_name": "formal-04/operators/result.json",
+            "sha256": "007ae1e50c367d5912b33b3f81d4bcb9f71773ddb18b4c3b45ce26d0f340aaaa",
+            "bytes": 1669201
+          },
+          {
+            "relative_name": "formal-04/suite.json",
+            "sha256": "f5dbfc57251639f097b7c122cf5327d973d82c8e40edafa9282bb468d8a32c38",
+            "bytes": 14435
+          }
+        ]
+      },
+      {
+        "name": "formal-05",
+        "reason": "Batch 1 completed all 42 phases. Batch 2 failed before Python worker startup because the same Unix IPC path retained its closed listener entry. Full attempt is failed, not acceptance. Collector-only correction uses separate addresses; runtime and binary remain unchanged.",
+        "files": [
+          {
+            "relative_name": "formal-05/paired/logs/speculative-attempt-_u1icqkw/batch-1.log",
+            "sha256": "e5618ea066f2f2e6e34581a0946bc68440060965540d7f991ebdc711139f9695",
+            "bytes": 71727
+          },
+          {
+            "relative_name": "formal-05/paired/logs/speculative-attempt-_u1icqkw/batch-2.log",
+            "sha256": "d35c309edfca1ae9feb3ca03b42b8676380d5a5dcb745a385c14ccf74f138956",
+            "bytes": 206
+          },
+          {
+            "relative_name": "formal-05/paired/paired-collector.log",
+            "sha256": "2e03f4b8e257b38ec82a9d429181925b399d0da9b97fac93d089181f16c34781",
+            "bytes": 1311
+          },
+          {
+            "relative_name": "formal-05/paired/portable.json",
+            "sha256": "6acaba230f00bb675c6a4fc47cc59eac25ce3f507d68d4e931071c51d29b7a02",
+            "bytes": 191753
+          },
+          {
+            "relative_name": "formal-05/paired/result.json",
+            "sha256": "6318002b87b168fea67e87b896456ac4751ffe4e8875d04aea42fe5b8cd33f1b",
+            "bytes": 190051
+          },
+          {
+            "relative_name": "formal-05/suite.json",
+            "sha256": "316de2586cfa7f7b4ded1282de96190adeda7fcfed264bb6dc193b6212d7a707",
+            "bytes": 14846
+          }
+        ]
+      },
+      {
+        "name": "poll-timing-01",
+        "reason": "ABBA all-GPU and selected-GPU process-query diagnostic. All queries valid, no material tails or reliable difference. Short Q/K measurements contain zero query polls. No production monitor change follows this diagnostic.",
+        "files": [
+          {
+            "relative_name": "diagnose-poll-timing.py",
+            "sha256": "34cc3307157c290888f0d5251863c5e9f862c65e957fa415fae35f982bb4c078",
+            "bytes": 2784
+          },
+          {
+            "relative_name": "poll-timing-01.json",
+            "sha256": "230c8f8ef084fbc5a493b31315585ded5c1cda6cb17c1a837e4d050d78eeabf9",
+            "bytes": 542764
+          },
+          {
+            "relative_name": "timing-watch-candidate.py",
+            "sha256": "1d3b489569e9f0d421c77e045f72c859bf42930fccb7d23160b9b86aee1c56db",
+            "bytes": 3496
+          }
+        ]
+      },
+      {
+        "name": "poll-timing-02",
+        "reason": "BAAB repeat with independent numerical checks, source and loaded-module binding, all raw query snapshots and host graph intervals. No reliable effect from query selection. All short Q/K medians reverse relative to the prior diagnostic without any polls; no causal claim.",
+        "files": [
+          {
+            "relative_name": "diagnose-poll-timing-02.py",
+            "sha256": "c163b30c3fadbbcbb1d730b279b0be137b3870e030faf89f95bdd0f6a799f506",
+            "bytes": 3550
+          },
+          {
+            "relative_name": "poll-timing-02.json",
+            "sha256": "f9e8b0dafc0745660116a5a7e9be76e3470cd4f7f709f4c4a2b1a47f2de9f135",
+            "bytes": 579313
+          }
+        ]
+      },
+      {
+        "name": "service-07-review-predicate",
+        "reason": "The first independent suite review required literal continuation text 731, but the valid model output used Markdown emphasis. Review 02 corrects that predicate and retains review 01 and its hash. Original service suite unchanged.",
+        "files": [
+          {
+            "relative_name": "service-07/independent-suite-review-01.json",
+            "sha256": "b3722b2b2d4fb05498805fddbb35a12a58a1e1e79c900d56da45f514f7d5f6df",
+            "bytes": 40051
+          },
+          {
+            "relative_name": "service-07/independent-suite-review-02.json",
+            "sha256": "efeaf3f5b43a27229b51668af396d50a7572430af1eba6304def3de8d735c161",
+            "bytes": 41028
+          }
+        ]
+      },
+      {
+        "name": "formal-06",
+        "reason": "Interrupted after batch-four measured capture/compile activity. Shared target graph cache had 43 family keys and 32 entries. Batch-one and batch-two records remain complete but this matrix is not full acceptance. Supervisor kept source unchanged and released owned processes; records are unchanged.",
+        "files": [
+          {
+            "relative_name": "formal-06/paired/logs/speculative-attempt-b_916kv5/batch-1.log",
+            "sha256": "be291f2f24ad588e151f7aa3e53a554ef51456bdc1773d6b4d85078aa5c26d19",
+            "bytes": 71699
+          },
+          {
+            "relative_name": "formal-06/paired/logs/speculative-attempt-b_916kv5/batch-2.log",
+            "sha256": "13fe86d087f4e8fb0cc24066a172530bb956053c7952f3be68532d1d26e8091b",
+            "bytes": 82797
+          },
+          {
+            "relative_name": "formal-06/paired/logs/speculative-attempt-b_916kv5/batch-4.log",
+            "sha256": "148afb3f2e98aa1fa32baf05b0eee101cf9fa814f641058d7c8d64c48ec74364",
+            "bytes": 92790
+          },
+          {
+            "relative_name": "formal-06/paired/paired-collector.log",
+            "sha256": "db2da88383328ba6bc82e9a0949c530d939ca9cc5d5380e486a6fc2c9c3479df",
+            "bytes": 879
+          },
+          {
+            "relative_name": "formal-06/paired/portable.json",
+            "sha256": "261471eeca2c93fa90f205ae97eb291ced50944ffadc88fd9cf21b01e193cc26",
+            "bytes": 286813
+          },
+          {
+            "relative_name": "formal-06/paired/result.json",
+            "sha256": "26f8a2e631711323578faef52937fc09e0c9d62003efbcec48f8831962448450",
+            "bytes": 284028
+          },
+          {
+            "relative_name": "formal-06/suite.json",
+            "sha256": "9eace96fcb70a609e65a795f1bb33e621c0e8c4289f2158f5b91380fd9aff179",
+            "bytes": 14839
+          }
+        ]
+      },
+      {
+        "name": "qk-shared-01",
+        "reason": "Diagnostic only: six unchanged formal Q/K shapes passed independent numerical and three-round speed checks with shared graph-pool output addresses, complete graph chains, and unchanged packed inputs. All output pointer pairs match. This is not the 230-case formal collection.",
+        "files": [
+          {
+            "relative_name": "diagnose-qk-shared.py",
+            "sha256": "bbff9fdafbb2fe97ac6317eba8c5972e290e4a3cdc1e3f468225f2fc24265f93",
+            "bytes": 4901
+          },
+          {
+            "relative_name": "qk-shared-01.json",
+            "sha256": "63ef0014f261dd259ea26db82ccb5708f6da10f1d6ef85f2c8b978c16a51ee1f",
+            "bytes": 300296
+          },
+          {
+            "relative_name": "qk-shared-01-1248-0.dot",
+            "sha256": "449c798d4fb3e36086d8b5b562fe06b329c1e731d95acb1943a53319b360e84d",
+            "bytes": 42690
+          },
+          {
+            "relative_name": "qk-shared-01-1248-1.dot",
+            "sha256": "ce098f01e12d30c58d33f0a23160f9b2021ae556b882d1f73fb4468ce4856523",
+            "bytes": 47290
+          },
+          {
+            "relative_name": "qk-shared-01-2496-0.dot",
+            "sha256": "1285fbeb58a8852753540c1c27c335adaef803a20714a9f31a07d1c8468d2192",
+            "bytes": 42996
+          },
+          {
+            "relative_name": "qk-shared-01-2496-1.dot",
+            "sha256": "1d4204e0aa5213c1eb9cdb0ad2b915f5ec0fb23bcc7fb0b3950a4cca3b8d6f54",
+            "bytes": 47596
+          },
+          {
+            "relative_name": "qk-shared-01-32144-0.dot",
+            "sha256": "0d0bf6f23c159b149d3ce55a69d18985774118ada97caca9877f285582ca5cfe",
+            "bytes": 43096
+          },
+          {
+            "relative_name": "qk-shared-01-32144-1.dot",
+            "sha256": "f61a374f1ec781cfd1c8ebb5596775d32687a88262e584812190f5925e17be79",
+            "bytes": 47696
+          },
+          {
+            "relative_name": "qk-shared-01-32288-0.dot",
+            "sha256": "b5e576b8ed0a1dc4cc8667515c1323f78b627e3728a5a2ad92eae1d212367644",
+            "bytes": 43096
+          },
+          {
+            "relative_name": "qk-shared-01-32288-1.dot",
+            "sha256": "a151ae4202c9916eb1fcb4c39b98c67dacb65e9dcec9a3865d9332d48ae07bd5",
+            "bytes": 47696
+          },
+          {
+            "relative_name": "qk-shared-01-32768-0.dot",
+            "sha256": "30d20b75679b6dd3d87872bbc770d9192de22d2a6e949381b1af214efbbdbd98",
+            "bytes": 43096
+          },
+          {
+            "relative_name": "qk-shared-01-32768-1.dot",
+            "sha256": "56592a0f5bc1bd22642f3b670aa4cf72eaa0cd5a5d109473d947091187fe300a",
+            "bytes": 47696
+          },
+          {
+            "relative_name": "qk-shared-01-624-0.dot",
+            "sha256": "b09a2f35891e2870e34c85cb2ea391d04fa1ffdda9712aeb08cc68fbd9fb72df",
+            "bytes": 42690
+          },
+          {
+            "relative_name": "qk-shared-01-624-1.dot",
+            "sha256": "3c90b49010de73c94a398108038b92df708a48f04ddd5408a8d62fac8fde7a9c",
+            "bytes": 47290
+          }
+        ]
+      },
+      {
+        "name": "qk-pool-milestone-01",
+        "reason": "Correctness/regression milestone, not acceptance timing. Kept accidental broad GPU test selection and cancellation records. Run04 capture-state failure retained without a proven causal attribution. Run07 DOT checks failed because graphs were already reset; run08 saves DOT before reset and passed all ten selected GPU tests. CPU collection passed 539 tests and 70 subtests. Graph resource cleanup and final test-only cleanup wording received independent review. All hook records retained.",
+        "files": [
+          {
+            "relative_name": "qk-pool-milestone-01/dspark-cache-pool-cpu-tests-01.log",
+            "sha256": "fe8b3efece0f1fea131ea6c9dfd8e1a84a8c35c2d350a6dc441bb1c9b31d0b80",
+            "bytes": 782
+          },
+          {
+            "relative_name": "qk-pool-milestone-01/dspark-cache-pool-hooks-01.log",
+            "sha256": "fdb3ff4366ebdd6730d12f24f821eb5256c65958043f49f5ad19f3427fa45cd5",
+            "bytes": 640
+          },
+          {
+            "relative_name": "qk-pool-milestone-01/dspark-cache-pool-hooks-02.log",
+            "sha256": "fdb3ff4366ebdd6730d12f24f821eb5256c65958043f49f5ad19f3427fa45cd5",
+            "bytes": 640
+          },
+          {
+            "relative_name": "qk-pool-milestone-01/dspark-cache-pool-hooks-03.log",
+            "sha256": "fdb3ff4366ebdd6730d12f24f821eb5256c65958043f49f5ad19f3427fa45cd5",
+            "bytes": 640
+          },
+          {
+            "relative_name": "qk-pool-milestone-01/dspark-cache-pool-hooks-04.log",
+            "sha256": "fdb3ff4366ebdd6730d12f24f821eb5256c65958043f49f5ad19f3427fa45cd5",
+            "bytes": 640
+          },
+          {
+            "relative_name": "qk-pool-milestone-01/dspark-qk-pool-gpu-tests-01.log",
+            "sha256": "76c32125f2fafcf98e39ed2ecda3dc655cb2a7cc866af5113eb059498d8c4830",
+            "bytes": 168
+          },
+          {
+            "relative_name": "qk-pool-milestone-01/dspark-qk-pool-gpu-tests-02.log",
+            "sha256": "751d769bbda83ee2969339c38af8033bc302a50e9bebca951f6933383679ca33",
+            "bytes": 282
+          },
+          {
+            "relative_name": "qk-pool-milestone-01/dspark-qk-pool-gpu-tests-03.log",
+            "sha256": "655807058b6d61508f492082d4f6b3f9abd3667c9ea2a815ed0f395f7141512c",
+            "bytes": 282
+          },
+          {
+            "relative_name": "qk-pool-milestone-01/dspark-qk-pool-gpu-tests-04.log",
+            "sha256": "64c367ea9604d4fd646808e8e0a98325b5ea0c9093ad70c79f17f0ca3cef6a68",
+            "bytes": 7622
+          },
+          {
+            "relative_name": "qk-pool-milestone-01/dspark-qk-pool-gpu-tests-05.log",
+            "sha256": "4966fc664dd3e1f7458239fdb7cba7273e0d61410300ba01e860092d07f5556d",
+            "bytes": 282
+          },
+          {
+            "relative_name": "qk-pool-milestone-01/dspark-qk-pool-gpu-tests-06.log",
+            "sha256": "cdb5afc080edd1f7814954d50be25a31c4d3b3ba9ddb92f6a28f31211ea7b48a",
+            "bytes": 282
+          },
+          {
+            "relative_name": "qk-pool-milestone-01/dspark-qk-pool-gpu-tests-07.log",
+            "sha256": "0f9a79a09fa2c396f409151364aa0dbbe4b27263042ecb41d03dae3e9d13c9a9",
+            "bytes": 22841
+          },
+          {
+            "relative_name": "qk-pool-milestone-01/dspark-qk-pool-gpu-tests-08.log",
+            "sha256": "e33bd72b1529bfce727378e7b775ac84918eeadb6578aca9e8f8225ef3869609",
+            "bytes": 282
+          },
+          {
+            "relative_name": "qk-test-selection-cancel-01.json",
+            "sha256": "58bace813e77964494abc59d086cd53f40d988c3eb1cf54c1a75d215b33a4bb5",
+            "bytes": 16382
+          },
+          {
+            "relative_name": "qk-test-selection-cleanup-02.json",
+            "sha256": "36b51cd2249aaf9649fc4cd27a0aa31c72682ae2082c5b140c134a838bc35397",
+            "bytes": 610
+          }
+        ]
+      },
+      {
+        "name": "formal-07",
+        "reason": "Full paired matrix has all 42 phases for batches 1,2,4 and no target graph recapture. The matrix fails its measured-work audit: native draft/proposal and DSpark context recaptures create nine measured capture/compile records in batch four. Acceptance counts are kept as diagnostics. No boundary/framework group ran. Source/supervisor/dependency unchanged; owned-process/GPU cleanup empty.",
+        "files": [
+          {
+            "relative_name": "formal-07/paired/logs/speculative-attempt-m_uay1kw/batch-1.log",
+            "sha256": "9e7ee0905f1257466c25e080503bff3c8e5f26d8ad7d408f10d80963e21e6338",
+            "bytes": 71692
+          },
+          {
+            "relative_name": "formal-07/paired/logs/speculative-attempt-m_uay1kw/batch-2.log",
+            "sha256": "2a8c6a6253e069afd69638f4250bddb77a53f631d5280320b15d5e87a1e2f694",
+            "bytes": 82795
+          },
+          {
+            "relative_name": "formal-07/paired/logs/speculative-attempt-m_uay1kw/batch-4.log",
+            "sha256": "b2b821f3fe6bc25f98e94e0aa4fa97a89112be2ace5165dd0fb2e26de5d2989c",
+            "bytes": 109564
+          },
+          {
+            "relative_name": "formal-07/paired/paired-collector.log",
+            "sha256": "92615e7cf1ccd7ce5fa93fc8d6b57d40cdff789b0b06e3b18e5ce5f8f6207ced",
+            "bytes": 695
+          },
+          {
+            "relative_name": "formal-07/paired/portable.json",
+            "sha256": "10185255bda6813ce5fecfc1b9a695d34c83ebcfa7602a54a0e49e0a1fae7ba4",
+            "bytes": 485834
+          },
+          {
+            "relative_name": "formal-07/paired/result.json",
+            "sha256": "6a4b58c375946111cf32f08e3b9315dbfceafc38c660243f276e1941abe861b2",
+            "bytes": 479670
+          },
+          {
+            "relative_name": "formal-07/suite.json",
+            "sha256": "0412dae6031eed2ed2b3ddd0fe4b0f07e427dec7d228d1676e614a3d47ec2ba2",
+            "bytes": 14845
+          }
+        ]
+      },
+      {
+        "name": "draft-budget-milestone-01",
+        "reason": "Comparison-only native MTP budget64/floors32,8; standalone32/floors16,4. DSpark context32 covers all supported row counts. Selected137 CPU and seven GPU graph tests passed. First hooks failure for an unused test variable is kept; corrected full hooks passed. These are regression checks, not formal performance acceptance.",
+        "files": [
+          {
+            "relative_name": "draft-budget-milestone-01/dspark-draft-budget-cpu-01.log",
+            "sha256": "d7c0f3c9cfde7578cdcb0dc20ebe4e3a14f89f1f6f69fd3aa0ddcc5fe1c8ea3d",
+            "bytes": 268
+          },
+          {
+            "relative_name": "draft-budget-milestone-01/dspark-draft-budget-gpu-01.log",
+            "sha256": "bf228b8e740dbf354e50651ce00c2dc123c27b18ab5047a3260ac473c995e8fd",
+            "bytes": 280
+          },
+          {
+            "relative_name": "draft-budget-milestone-01/dspark-draft-budget-hooks-01.log",
+            "sha256": "624f36adee1a90a3b2c9ca617c60faeec4acc2ba632d11289201fe56cfaa4a5e",
+            "bytes": 1939
+          },
+          {
+            "relative_name": "draft-budget-milestone-01/dspark-draft-budget-hooks-02.log",
+            "sha256": "fdb3ff4366ebdd6730d12f24f821eb5256c65958043f49f5ad19f3427fa45cd5",
+            "bytes": 640
+          }
+        ]
+      },
+      {
+        "name": "formal-08",
+        "reason": "Intentionally stopped on clean 0cb8056 after complete batches1/2 and partial batch4. Current batch4 used36 MTP draft +8 proposal keys, more than standalone budget32; independently reviewed structural risk, not an observed standalone formal gate failure. Source and supervisor stayed unchanged and all owned processes/GPU resources released. All original partial samples retained.",
+        "files": [
+          {
+            "relative_name": "formal-08/cancellation-standalone-budget-01.json",
+            "sha256": "d2b0f24708899d6fb8f92adf722bbc775625a20fafe108139e384e2c57967d62",
+            "bytes": 564
+          },
+          {
+            "relative_name": "formal-08/paired/logs/speculative-attempt-o9g_l91g/batch-1.log",
+            "sha256": "35e83a78cf38fab0e193e58a0db2233f6fd3c24d70cb031278fca59f7c1cc2b4",
+            "bytes": 71670
+          },
+          {
+            "relative_name": "formal-08/paired/logs/speculative-attempt-o9g_l91g/batch-2.log",
+            "sha256": "95e0b3e096482bc6b9fb516d96fbcfa352ea2408c2957acd4c510ccb2089b397",
+            "bytes": 82820
+          },
+          {
+            "relative_name": "formal-08/paired/logs/speculative-attempt-o9g_l91g/batch-4.log",
+            "sha256": "a1bc32579bb2f705e01f6afdc84b578c6b2a9ef095230cdc00bd8f79b7e090ac",
+            "bytes": 62090
+          },
+          {
+            "relative_name": "formal-08/paired/paired-collector.log",
+            "sha256": "db2da88383328ba6bc82e9a0949c530d939ca9cc5d5380e486a6fc2c9c3479df",
+            "bytes": 879
+          },
+          {
+            "relative_name": "formal-08/paired/portable.json",
+            "sha256": "cd0393df841f24b797c685d63e90be77a3815ae558d9e90b4d9d59576c24acff",
+            "bytes": 286824
+          },
+          {
+            "relative_name": "formal-08/paired/result.json",
+            "sha256": "40780ad73c7b3d6fd1ddd62b71fd8ce15a27917d82ddc31c175790cedce7ec9e",
+            "bytes": 284039
+          },
+          {
+            "relative_name": "formal-08/suite.json",
+            "sha256": "47207154604f0b697b29f53ae83948cbb7ff79a70e417f75555491486fad3d2d",
+            "bytes": 14838
+          }
+        ]
+      },
+      {
+        "name": "standalone-budget-milestone-01",
+        "reason": "Default standalone and paired MTP budget64/floors32,8; explicit32 remains a diagnostic constructor option. Observed36 draft+8 proposal keys are retained across three cycles. Full548 CPU and70 subtests passed with323 GPU deselected; four real lightweight-model graph cases and stronger all-row fallback assertion passed; Node10 and Playwright9; all eight hooks passed. New full-model and formal performance acceptance remains separate.",
+        "files": [
+          {
+            "relative_name": "standalone-budget-milestone-01/commit-message.txt",
+            "sha256": "972a62e8ccf0e19a0f96762d18c888f01c2fbaeb9ed7b8288cde6ce897d76a70",
+            "bytes": 1082
+          },
+          {
+            "relative_name": "standalone-budget-milestone-01/cpu-01.log",
+            "sha256": "ac4703f8b8f4313c989712d69db4b8fe3d729a8dceb461b16d96867b617d0ae3",
+            "bytes": 187
+          },
+          {
+            "relative_name": "standalone-budget-milestone-01/full-cpu-01.log",
+            "sha256": "84957b5347f3bb35010f7e282b11f9daa17c47958d6c380a39beddd6527bbc00",
+            "bytes": 782
+          },
+          {
+            "relative_name": "standalone-budget-milestone-01/gpu-01.log",
+            "sha256": "37cf9e1d1019ff9dd9e6f5bbd30abd5801a00b2480a261d884230bdbe3619b6a",
+            "bytes": 207
+          },
+          {
+            "relative_name": "standalone-budget-milestone-01/gpu-02.log",
+            "sha256": "da2a2990d548bce84afcf4271a575e1d736578bd678901296bad03e3b55f55bf",
+            "bytes": 207
+          },
+          {
+            "relative_name": "standalone-budget-milestone-01/hooks-01.log",
+            "sha256": "fdb3ff4366ebdd6730d12f24f821eb5256c65958043f49f5ad19f3427fa45cd5",
+            "bytes": 640
+          },
+          {
+            "relative_name": "standalone-budget-milestone-01/hooks-02.log",
+            "sha256": "fdb3ff4366ebdd6730d12f24f821eb5256c65958043f49f5ad19f3427fa45cd5",
+            "bytes": 640
+          },
+          {
+            "relative_name": "standalone-budget-milestone-01/tutorial-build-01.log",
+            "sha256": "9e6ee6d80b5e2876c0980df7cad57aaa25a9a8e14417d145709d2f3f1f58edb4",
+            "bytes": 123
+          },
+          {
+            "relative_name": "standalone-budget-milestone-01/tutorial-test-01.log",
+            "sha256": "eb013a1e0d82b9f5c22d2bffdc02360cc6dc417dcb437965c93bd564e8b3d88b",
+            "bytes": 2386
+          }
+        ]
+      },
+      {
+        "name": "formal-09",
+        "reason": "Current e83674c paired job completed at all three batches with clean timing and owned cleanup. Its parent failed on the subsequent boundary job due to foreign GPU contention. Original parent failure is unchanged; independently completed paired scope is recorded separately.",
+        "files": [
+          {
+            "relative_name": "formal-09/boundary/boundary-collector.log",
+            "sha256": "b7da23fb4bd60116845a286e968a27f6d5a59ebd91e8358dddb51ba02f6ce603",
+            "bytes": 1101
+          },
+          {
+            "relative_name": "formal-09/boundary/logs/ordinary-1.log",
+            "sha256": "386bee9a765ca360ff39c68081790661a383b5e7b9d590b91de5666b6f136226",
+            "bytes": 4883
+          },
+          {
+            "relative_name": "formal-09/paired/logs/speculative-attempt-7gq868gy/batch-1.log",
+            "sha256": "af19f599db351f399d0f552347b5c000cf74ef75ed3d89c84202d2842c752eff",
+            "bytes": 71708
+          },
+          {
+            "relative_name": "formal-09/paired/logs/speculative-attempt-7gq868gy/batch-2.log",
+            "sha256": "e96fa313a62d45af3d6c3c890e8dbc7a73ceb4ab4560cbc6773905ce8d756b39",
+            "bytes": 82797
+          },
+          {
+            "relative_name": "formal-09/paired/logs/speculative-attempt-7gq868gy/batch-4.log",
+            "sha256": "04787cb878b18d49e4d4f77f318f233970202c928e5471f5ed173549a69b470a",
+            "bytes": 106465
+          },
+          {
+            "relative_name": "formal-09/paired/paired-collector.log",
+            "sha256": "b07fd8f4907588b6d9b40144307aada77591ec35937c5772f3b58a0077b10862",
+            "bytes": 8971
+          },
+          {
+            "relative_name": "formal-09/paired/portable.json",
+            "sha256": "f8c7794b514f8817ebc28422d342486fa1bf1cf7cd477ff8799f4bfd18b26357",
+            "bytes": 493569
+          },
+          {
+            "relative_name": "formal-09/paired/result.json",
+            "sha256": "abd5e657053de46d6b797e77584ccac1dfedfcd13772fd287b6dfa8f7cdfc7c8",
+            "bytes": 486901
+          },
+          {
+            "relative_name": "formal-09/suite.json",
+            "sha256": "34418ab4600a8ca6f673108eb99cbfdde8136ef114d8cfba2c8d708d6bd4573b",
+            "bytes": 16090
+          }
+        ]
+      },
+      {
+        "name": "formal-10",
+        "reason": "Operator collector stopped for foreign GPU contention on unchanged e83674c. It is a failed attempt, not operator acceptance. Source, supervisor and dependency identities stayed unchanged; owned cleanup was empty.",
+        "files": [
+          {
+            "relative_name": "formal-10/operators/operators-collector.log",
+            "sha256": "a3aaf5426e7cba7ffd1b5e9586068689c637873b4e601d7202dcb6e581b6f262",
+            "bytes": 561
+          },
+          {
+            "relative_name": "formal-10/suite.json",
+            "sha256": "6b094ff55d15449e477603f373b379bf996f68c9510488f0ae7c9f16f60dab92",
+            "bytes": 14751
+          }
+        ]
+      },
+      {
+        "name": "formal09-independent-review-01",
+        "reason": "Initial independent validator rejected an allowed zero-byte checkpoint metadata file. The original rejection is retained. Corrected metadata and strict positive weight checks passed 368 checks, limited to the completed paired job.",
+        "files": [
+          {
+            "relative_name": "formal09-paired-review-attempt-01.json",
+            "sha256": "fd33422cb3030a110704a8909abfac1211c617855690edd08d506000cbf4ce9c",
+            "bytes": 627
+          },
+          {
+            "relative_name": "review-formal09-paired-attempt-01.py",
+            "sha256": "fd764276b7b22e9c63515d6c1b50124d81b9256df0140934323201a403ee9ccd",
+            "bytes": 19453
+          },
+          {
+            "relative_name": "formal09-paired-independent-review-01.json",
+            "sha256": "c5665de24244a9a98381813996f3644f74e5047af1485e3b20e0e3a06217532e",
+            "bytes": 168646
+          },
+          {
+            "relative_name": "review-formal09-paired.py",
+            "sha256": "557faefcdd00b3b674f24eb2b595db8ae295e718633fe04c5301d56ab168d063",
+            "bytes": 19609
+          },
+          {
+            "relative_name": "formal09-paired-parent-snapshot-01.json",
+            "sha256": "34418ab4600a8ca6f673108eb99cbfdde8136ef114d8cfba2c8d708d6bd4573b",
+            "bytes": 16090
+          }
+        ]
+      },
+      {
+        "name": "current-document-milestone-01",
+        "reason": "Documents distinguish current paired acceptance, historical service/GPU results, and pending current operator/boundary/framework/service gates. Initial environment and STE invocation failures, mobile table overflow and stale formula/field count assertions are retained. Final tutorial Node10/browser9 and all eight hooks passed. Fail-closed aggregation negative fixtures reject missing/null/cancelled/failed-job records and optimized Python before export.",
+        "files": [
+          {
+            "relative_name": "current-doc-milestone-01/aggregation-fixture-cancelled-01/suite.json",
+            "sha256": "1ae487015e0ff3b2568ab7fb6291aa318a5a5a20ab9072023595d20c39b76bb5",
+            "bytes": 16100
+          },
+          {
+            "relative_name": "current-doc-milestone-01/aggregation-fixture-failed-selected-job-01/suite.json",
+            "sha256": "34418ab4600a8ca6f673108eb99cbfdde8136ef114d8cfba2c8d708d6bd4573b",
+            "bytes": 16090
+          },
+          {
+            "relative_name": "current-doc-milestone-01/aggregation-fixture-missing-01/suite.json",
+            "sha256": "2257744ee46417901b0f87c3609949ad2ae9d93e7dad62995bc85b6aa03a3b39",
+            "bytes": 16063
+          },
+          {
+            "relative_name": "current-doc-milestone-01/aggregation-fixture-null-01/suite.json",
+            "sha256": "13d8f9e40ac64c166a8577f0da1f15c0509e0f256d6abd61e2b3c92975b0eb86",
+            "bytes": 16092
+          },
+          {
+            "relative_name": "current-doc-milestone-01/aggregation-negative-validation-01.json",
+            "sha256": "c06cb862c9724cce60a28e876397d23faa08a87636f4ae0665b7ef93a18536b5",
+            "bytes": 644
+          },
+          {
+            "relative_name": "current-doc-milestone-01/aggregation-rejection-cancelled-01.log",
+            "sha256": "4a03e675e3107220e43734f8eafdd5cc023358ca163a53953f13b1aefd8d7ebe",
+            "bytes": 245
+          },
+          {
+            "relative_name": "current-doc-milestone-01/aggregation-rejection-failed-selected-job-01.log",
+            "sha256": "afb86266d3da8a16e5affa2c184044888155b90b75cb3bef11801973b0c8a152",
+            "bytes": 535
+          },
+          {
+            "relative_name": "current-doc-milestone-01/aggregation-rejection-missing-01.log",
+            "sha256": "167ab7ce5878f4e6997157d0cb9b12f18cff0b07aa712aedc359c0ae168c2083",
+            "bytes": 256
+          },
+          {
+            "relative_name": "current-doc-milestone-01/aggregation-rejection-null-01.log",
+            "sha256": "4a03e675e3107220e43734f8eafdd5cc023358ca163a53953f13b1aefd8d7ebe",
+            "bytes": 245
+          },
+          {
+            "relative_name": "current-doc-milestone-01/docs-tutorial-independent-review-01.json",
+            "sha256": "bd03bfb09ffafe9a9571c351f6f755f268ec269fcef93a9188ca1d184fe10804",
+            "bytes": 13003
+          },
+          {
+            "relative_name": "current-doc-milestone-01/hooks-01.log",
+            "sha256": "fdb3ff4366ebdd6730d12f24f821eb5256c65958043f49f5ad19f3427fa45cd5",
+            "bytes": 640
+          },
+          {
+            "relative_name": "current-doc-milestone-01/hooks-02.log",
+            "sha256": "fdb3ff4366ebdd6730d12f24f821eb5256c65958043f49f5ad19f3427fa45cd5",
+            "bytes": 640
+          },
+          {
+            "relative_name": "current-doc-milestone-01/initial-invocation-errors-01.json",
+            "sha256": "8823a62e6e359ade0ee436075aeb46a72c7a3285f3e3df8f2745ae1bd1810f0d",
+            "bytes": 818
+          },
+          {
+            "relative_name": "current-doc-milestone-01/optimized-export-rejection-01.log",
+            "sha256": "a1e1117b5d81b2d8565f624c958669de8d605a8aa84bfff6858b95f357db5c3e",
+            "bytes": 335
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/documented-token-history-light.png",
+            "sha256": "adc3021e06aab76467a85596ed5cb6ee86fe0e324b995cfe932811893b209615",
+            "bytes": 19899
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/documented-token-history-mobile-dark.png",
+            "sha256": "779a566d78c7672b783d52d192542689768ba1b7f0c09fc94fec4e3e72cef7bf",
+            "bytes": 13179
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/dspark-desktop-dark.png",
+            "sha256": "237e311604f819c96535a7fa08117cd519e3bd85b7e04abaf71a049d53d84261",
+            "bytes": 298462
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/dspark-desktop-light.png",
+            "sha256": "87ba7a4823fb50c005fe0144825cbd05507a2cdeac61a4076a14fc26348bcc9a",
+            "bytes": 240109
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/dspark-mobile-dark.png",
+            "sha256": "c6b1a2876a447d01aa20387d10e203ca4d017420d21b234e0829cf40869c07e3",
+            "bytes": 310667
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/dspark-mobile-light.png",
+            "sha256": "1f130b9c9589749b1d52fb072ae983f7f4065b5aa0784a5c8a8cedc60cf7b2d9",
+            "bytes": 316726
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/twelve-chapters-budget-dark.png",
+            "sha256": "c926e6327c2898d8ec78290ae1a5088a025f28822d88c4eedcc51f3044b88824",
+            "bytes": 26703
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/twelve-chapters-budget-light.png",
+            "sha256": "c1209e30040da1f01569c1a297543966104ead251cec8fe6535e5cd0c88b6c27",
+            "bytes": 30219
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/twelve-chapters-dedented-python-dark.png",
+            "sha256": "897a113e5084c46fcecf18bd063ece271d14cd6c265321fd81f5a0368e27a2b7",
+            "bytes": 57931
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/twelve-chapters-dedented-rust-dark.png",
+            "sha256": "35427a23213c58bbfeb131e2e53e7d363873f1eaf56991b3b1861b3a0dd61f01",
+            "bytes": 90826
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/twelve-chapters-dedented-rust-light.png",
+            "sha256": "4865285cd36b203d497dbc5558651f95cc4f0ecd8c2dfaed2395f5738b3c6efa",
+            "bytes": 87796
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/twelve-chapters-fields-mobile.png",
+            "sha256": "284dd7e0e2458447292b25baf8638d6a9cb2cd74a7807c98118d522fac178f6e",
+            "bytes": 248613
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/twelve-chapters-full-source-dark.png",
+            "sha256": "fd4f038c00f304981d0f6751432d8cfeb8c76b09e2e15e6f65a9a1765e26f11e",
+            "bytes": 160219
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/twelve-chapters-full-source-light.png",
+            "sha256": "059caf65b23aa9e016b5a4b0c67d9ec8764dfc3840fe3824902018842efd4cda",
+            "bytes": 158479
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/twelve-chapters-home-light.png",
+            "sha256": "a77f250f4328d73820a8534a311da13a6917f873c85bb23e277573a766dcfbe8",
+            "bytes": 221227
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/twelve-chapters-map-light.png",
+            "sha256": "74cdbde805560b9fa8f0051e1414f40d860f0d558ad4ecb9a13698c7c896a113",
+            "bytes": 234427
+          },
+          {
+            "relative_name": "current-doc-milestone-01/screenshots/twelve-chapters-model-mobile.png",
+            "sha256": "b93effb1a868a21d248c8c5fc3dfab95dc708bba03ba28283cff7d8f540fd0b8",
+            "bytes": 128469
+          },
+          {
+            "relative_name": "current-doc-milestone-01/tutorial-build-01.log",
+            "sha256": "9e6ee6d80b5e2876c0980df7cad57aaa25a9a8e14417d145709d2f3f1f58edb4",
+            "bytes": 123
+          },
+          {
+            "relative_name": "current-doc-milestone-01/tutorial-build-02.log",
+            "sha256": "9e6ee6d80b5e2876c0980df7cad57aaa25a9a8e14417d145709d2f3f1f58edb4",
+            "bytes": 123
+          },
+          {
+            "relative_name": "current-doc-milestone-01/tutorial-build-03.log",
+            "sha256": "9e6ee6d80b5e2876c0980df7cad57aaa25a9a8e14417d145709d2f3f1f58edb4",
+            "bytes": 123
+          },
+          {
+            "relative_name": "current-doc-milestone-01/tutorial-build-04.log",
+            "sha256": "9e6ee6d80b5e2876c0980df7cad57aaa25a9a8e14417d145709d2f3f1f58edb4",
+            "bytes": 123
+          },
+          {
+            "relative_name": "current-doc-milestone-01/tutorial-test-01.log",
+            "sha256": "fb7d22448e3b02071fe0539400613e86f1229791f4bea454ec5a93ab0aa2c796",
+            "bytes": 5060
+          },
+          {
+            "relative_name": "current-doc-milestone-01/tutorial-test-02.log",
+            "sha256": "8bc93ffd3bb54275f91e9baca118f3cfbbcac3ae05c14a024efeb13d1d31cd41",
+            "bytes": 4187
+          },
+          {
+            "relative_name": "current-doc-milestone-01/tutorial-test-03.log",
+            "sha256": "cdc3e2ef2ad080226c94d56235b32693e505fc5450e0600ab009f7ffdbef0cba",
+            "bytes": 2385
+          },
+          {
+            "relative_name": "current-doc-milestone-01/tutorial-test-04.log",
+            "sha256": "8089cc513a78322c1608849f75e57c151a5d140b46fbc0411fef6bf52761794e",
+            "bytes": 2385
+          },
+          {
+            "relative_name": "current-doc-milestone-01/tutorial-test-failure-01.log",
+            "sha256": "fb7d22448e3b02071fe0539400613e86f1229791f4bea454ec5a93ab0aa2c796",
+            "bytes": 5060
+          }
+        ]
+      },
+      {
+        "name": "published-evidence-review-01",
+        "reason": "Portable exports independently reproduced with the standard exporter. Corrected literal wording assertions retain earlier 01/02 report attempts. Final03 passes125checks with zero host leaks and zero blockers.",
+        "files": [
+          {
+            "relative_name": "published-dspark-evidence-independent-review-01.json",
+            "sha256": "0269239a96ddf3c897e16a61643d2695c661e488d21881afbc72e3ff844cc565",
+            "bytes": 30055
+          },
+          {
+            "relative_name": "published-dspark-evidence-independent-review-02.json",
+            "sha256": "312f1e6c56fe15962c3a7f5fed06b5af7b8326c38d3ba858ed7fcf43a5dbf516",
+            "bytes": 30139
+          },
+          {
+            "relative_name": "published-dspark-evidence-independent-review-03.json",
+            "sha256": "9e80ce4f0d6f04c617ebd2dc326f9bb3d141f638de193fc48f9b4f87b16ce3c3",
+            "bytes": 30085
+          }
+        ]
+      }
+    ],
+    "previous_ledger": {
+      "name": "attempt-history-08.json",
+      "sha256": "f6b15d0f8f818cea6e181daa756d759b1f42b11c0776d46baf5de80beb67fb49",
+      "bytes": 70895
+    }
+  }
+}

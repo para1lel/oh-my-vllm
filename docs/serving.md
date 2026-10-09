@@ -33,7 +33,9 @@ The initial `--dspark-confidence-threshold` setting is `0.2`. It limits cumulati
 It can return zero through seven candidates. Zero uses one target token for that step.
 Use `0.0` for fixed-count proposals up to seven. Output, context, and grammar limits can decrease the proposal count.
 
-Current-source DSpark target-model service and performance acceptance results are not available.
+The paired collection passed for the current runtime at batches 1, 2, and 4.
+Operator, boundary, framework, and service acceptance stay open for the current runtime.
+Use the [acceptance index](acceptance.md) for source identities and measured scope.
 
 ## API surface
 
@@ -201,7 +203,7 @@ Examine measured queue/preparation time, TTFT, rate, steps, prefix reuse, and ve
 Completion logs keep `proposed_draft_tokens` as a legacy alias for the scheduled-candidate count.
 Use the active mode in `BENCH_CONFIG` and the explicit `--speculative-mode` acceptance option.
 
-Repeat constraints, mixed-batch/cancellation, and long-context checks for native MTP4 and DSpark through the two APIs.
+Do constraints, mixed-batch/cancellation, and long-context checks again for native MTP4 and DSpark with the two APIs.
 There is no additional HTTP throughput gate.
 Script exit status or a scripted worker alone does not show target-model acceptance.
 See [testing](testing.md) and [acceptance](acceptance.md).

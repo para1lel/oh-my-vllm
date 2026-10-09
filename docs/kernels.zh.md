@@ -105,10 +105,12 @@ Kernel 在计算缓存地址前读取源数据.
 
 相同 K / V 和 slot 的重复 context append 写入相同字节.
 计时阶段的两个操作使用相同目标缓存, 消除缓存地址差异.
-数值校验在计时前使用独立缓存, 最初 147 项用例保留其 fixture 契约.
+数值校验在计时前使用独立缓存, 最初 147 项用例保留其数值 fixture 契约.
 
 每个新用例沿用完整输出, cache write, 3 轮, 20 个配对和置信下界门槛.
-当前源码的补充算子性能验收待测.
+当前运行时代码的成对采集在 batch 1, 2 和 4 通过.
+当前运行时代码的算子, 边界, 框架和服务验收仍待完成.
+源码身份及测量范围见 [验收索引](acceptance.zh.md).
 
 ```bash
 scripts/with-env.sh python benchmarks/kernels.py --list

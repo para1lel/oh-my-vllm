@@ -14,7 +14,7 @@ This allowed early scheduler and MTP tests with the target checkpoint.
 The independent runtime removed the adapter and its vLLM dependency.
 Block IDs now directly address FA/GDN slots.
 The historical CLI capacity unit stays, but the old physical mapping does not.
-Separate GDN capacity avoids repeated unused state allocation.
+GDN capacity has its own limit to prevent the allocation of unused state again and again.
 Keep the [original evidence](../../bench/evidence/2026-09-19-acceptance.json) as historical scope only.
 
 The current twelve-row denominator and project implementation supersede its early acceptance.

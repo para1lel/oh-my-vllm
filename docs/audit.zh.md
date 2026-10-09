@@ -11,7 +11,7 @@
 状态: partial/open, 严重性 P2.
 Graph family 使用有界 graph 条目缓存和共享 pool, 配合接纳, 淘汰, 空闲显存保护和 capture 恢复.
 Resident-graph36k-to40k 转换在空闲显存少于 4 GiB 时完成.
-同形状 262144 重复执行也完成, 无 graph eviction 或 recapture.
+同形状 262144 的多次执行也完成, 无 graph eviction 或 recapture.
 这些 probe 不覆盖跨形状 262k eviction/recapture 或全部 late-capture 显存条件.
 
 后续测试需在实测显存压力下触发真实 eviction 和 recapture.
@@ -29,15 +29,20 @@ Trace 或异步 API 调用本身不能证明 overlap 或吞吐改善.
 ## KRN-06: Streaming store 候选
 
 状态: open, 优化候选已拒绝, 严重性 P2.
-安全的 streaming-store 候选没有稳定的完整调用净收益.
-已撤回.
-只有新假设和完整操作测量支持时才重新考虑.
+KRN-06 旧候选为原生 residual 输出使用 streaming store.
+其测量未显示稳定的完整调用净收益. 项目拒绝了该替换方案.
+
+当前带条件限制的原生 residual 和 DSpark hidden RMS store 路径继续使用.
+只有新假设和完整操作测量支持时才对新候选作出决定.
 
 ## 其他证据限制
 
 Dynamo 的 4096 限制和 256-variant warning 不能证明无限 shape 变化下编译器内存有界.
 Log/cache 审计不能排除静默内存内重新编译.
-后续 IR 正确性修复没有重跑完整 147-case / 12-row 性能门槛.
+
+当前运行时代码的成对比较已完成.
+算子及十二行框架验收仍待完成.
+采集器因其他任务的 GPU 争用停止后续采集, 全部失败原始记录保留.
 Roofline 性能策略是后续工作, 当前门槛继续有效.
 
 ## 已关闭问题索引
@@ -102,6 +107,6 @@ Roofline 性能策略是后续工作, 当前门槛继续有效.
 
 可行时先添加失败回归, 然后修复并独立审查.
 保持数值容差和有效门槛不变.
-Device 实现修改后重跑受影响正式算子用例.
-声称性能验收持续成立前重跑受影响框架工作负载.
+Device 实现修改后再次执行受影响的正式算子用例.
+声称性能验收持续成立前再次执行受影响框架工作负载.
 更新本状态和 [交接](handoff.zh.md), 包括剩余限制.
