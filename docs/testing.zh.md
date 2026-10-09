@@ -109,6 +109,12 @@ scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda pytho
 
 将 `EVIDENCE_DIR` 设置为仓库外的可写证据目录.
 测试框架使用 `development/kernels/cases.py` 中的静态用例.
+
+使用 `--operations NAME` 选择算子族.
+为每个所选用例 ID 给出 `--case-id ID`.
+少于 274 个用例 ID 的选择报告 `coverage.complete=false`, 并保持完整的逐用例协议.
+矩阵验收前, 全部 274 个用例 ID 必须通过.
+
 计时前校验完整输出和实际写入缓存.
 每个用例需要 3 轮, 每轮 20 个交错配对, CUDA 每轮中位数更快.
 节省时间的 hierarchical-bootstrap 单侧 95% 下界必须为正.

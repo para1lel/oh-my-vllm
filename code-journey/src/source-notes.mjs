@@ -1,4 +1,15 @@
 export const sourceNotes = {
+  normalizedLinear: {
+    title: "融合投影的特征, 权重与 scale", intro: "残差相加先舍入为 BF16, RMS 在 FP32 归约, 归一化结果再舍入为 BF16. 量化使用这一舍入后的值, 两份输出都有独立存储.",
+    entries: [
+      ["x", "当前计算分支的 BF16 [行数, 5120] 特征.", "与先前残差相加, 得到进入 MLP 的完整特征."],
+      ["residual", "相同形状的 BF16 累积残差.", "融合操作返回新的残差和, 下一层继续使用."],
+      ["gamma", "5120 个 FP32 RMS 乘数.", "逐列调节归一化值; 加载时已包含 norm 权重的 offset."],
+      ["weight", "FP8 [输出列数, 5120] 投影权重.", "MLP 的 gate/up 合并为 34816 列."],
+      ["scale", "FP32 [输出列数/128, 40] 权重缩放系数.", "每项对应权重的 128x128 块, 与激活的每行 128 元素 scale 一起用于 GEMM."],
+      ["_OP", "add_norm_fp8_linear 的语义操作对象.", "选择 native 数学参考或当前 CUDA / TileLang provider, 返回残差和与 BF16 投影."],
+    ],
+  },
   tokenHistory: {
     title: "token_ids: 请求的 token 历史",
     intro: "这是 Request 记录中的一个字段. 这里的列表保存提示词和已经确认的输出, 每个整数对应词表中的一个片段.",

@@ -53,6 +53,8 @@ def test_verification_uses_exact_copy_tolerances():
         )
     with pytest.raises(AssertionError, match=r"return\[0\]"):
         verify("add_norm", lambda: (value, value), lambda: (changed, value))
+    with pytest.raises(AssertionError, match=r"return\[0\]"):
+        verify("add_norm_fp8_linear", lambda: (value, value), lambda: (changed, value))
 
 
 @pytest.mark.parametrize("column_major", [False, True])

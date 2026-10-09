@@ -40,6 +40,12 @@ SITES = (
     Site("models/qwen.py", "Layer.delta_attention", "rms_norm", "rms_norm"),
     Site("models/qwen.py", "Layer.forward_residual", "rms_norm", "rms_norm"),
     Site("models/qwen.py", "Layer.forward_residual", "add_rms_norm", "add_rms_norm"),
+    Site(
+        "models/qwen.py",
+        "Layer.forward_residual",
+        "add_norm_fp8_linear",
+        "add_norm_fp8_linear",
+    ),
     Site("models/qwen.py", "Qwen.forward", "add_rms_norm", "add_rms_norm"),
     Site("models/qwen.py", "Qwen.forward_features", "add_rms_norm", "add_rms_norm"),
     Site("models/qwen.py", "Qwen.draft", "rms_norm", "rms_norm"),

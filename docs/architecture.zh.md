@@ -140,6 +140,11 @@ FP8 activation 使用逐行 128-value scale.
 小批 BF16 vocabulary projection 使用 FlashInfer CuTe-DSL GEMM.
 
 Residual / RMS 和 SiLU / FP8 融合保留已有 BF16 舍入点.
+MLP gate/up 路径在超过一行时, 用一个 CUDA kernel 合并残差 RMS 与激活量化.
+它写出 BF16 残差和, 在寄存器中保留归一化后的 BF16 值, 再转换为 FP8.
+投影保持之前的 GEMM provider 和 scale 布局.
+单行使用之前的 CUDA 残差 RMS 与量化链.
+
 Convolution, GDN 和 RMS 接受 packed projection stride, 返回 dense output.
 GDN prefill 显式归一化 Q / K, 使用 FP32 norm 和 BF16 输出.
 整数 metadata 按每个 target / draft group 使用一个传输 buffer.

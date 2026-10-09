@@ -2564,3 +2564,139 @@ void dspark_attention_merge(TensorView partial, TensorView lse, TensorView outpu
 #undef DSPARK_MERGE
   finish_cuda_launch(stream, "dspark_attention_merge");
 }
+
+template <bool Residual, int Threads, int Vector, bool Streaming>
+__global__ void norm_quant5120_kernel(const __nv_bfloat16 *__restrict__ x,
+                               const __nv_bfloat16 *__restrict__ residual,
+                               const float *__restrict__ w,
+                               __nv_fp8_e4m3 *__restrict__ out, float *__restrict__ scales, bool column, int rows,
+                               __nv_bfloat16 *__restrict__ summed, float eps) {
+  pdl_dependency_wait();
+  pdl_launch_next();
+  static_assert(Threads % 32 == 0 && 5120 % (Threads * Vector) == 0);
+  constexpr int Chunks = 5120 / (Threads * Vector);
+  int row = blockIdx.x, lane = threadIdx.x & 31;
+  float values[Chunks][Vector], total = 0;
+#pragma unroll
+  for (int chunk = 0; chunk < Chunks; ++chunk) {
+    int col = chunk * Threads * Vector + threadIdx.x * Vector;
+    auto q = load_aligned_vector<__nv_bfloat16, Vector>(
+        x + static_cast<int64_t>(row) * 5120 + col);
+    AlignedVector<__nv_bfloat16, Vector> r;
+    if constexpr (Residual)
+      r = load_aligned_vector<__nv_bfloat16, Vector>(
+          residual + static_cast<int64_t>(row) * 5120 + col);
+    if constexpr (Residual) {
+#pragma unroll
+      for (int j = 0; j < Vector; j += 2) {
+        auto pair = __hadd2(__halves2bfloat162(q.value[j], q.value[j + 1]),
+                            __halves2bfloat162(r.value[j], r.value[j + 1]));
+        q.value[j] = __low2bfloat16(pair);
+        q.value[j + 1] = __high2bfloat16(pair);
+      }
+    }
+#pragma unroll
+    for (int j = 0; j < Vector; ++j) {
+      float v = __bfloat162float(q.value[j]);
+      values[chunk][j] = v;
+      total += v * v;
+    }
+    if constexpr (Residual)
+      store_rms_vector<Vector, Streaming>(summed + static_cast<int64_t>(row) * 5120 + col, q);
+  }
+  total = warp_sum(total);
+  __shared__ float partial[Threads / 32];
+  if (lane == 0)
+    partial[threadIdx.x / 32] = total;
+  __syncthreads();
+  total = warp_sum(lane < Threads / 32 ? partial[lane] : 0.f);
+  float inv = rsqrtf(total * (1.f / 5120.f) + eps);
+#pragma unroll
+  for (int chunk = 0; chunk < Chunks; ++chunk) {
+    int col = chunk * Threads * Vector + threadIdx.x * Vector;
+    auto weight = load_aligned_vector<float, Vector>(w + col);
+    float value[Vector], maximum = 0;
+#pragma unroll
+    for (int j = 0; j < Vector; ++j) {
+      value[j] = __bfloat162float(__float2bfloat16_rn(values[chunk][j] * inv * weight.value[j]));
+      maximum = fmaxf(maximum, fabsf(value[j]));
+    }
+    unsigned mask = Vector == 8 ? (lane < 16 ? 0xffffu : 0xffff0000u) : 0xffffffffu;
+    maximum = __uint_as_float(__reduce_max_sync(mask, __float_as_uint(maximum)));
+    float scale = __fdiv_rn(fmaxf(maximum, 1e-10f), 448.f);
+    int group = col / 128;
+    if (lane % (128 / Vector) == 0)
+      scales[column ? group * rows + row : row * 40 + group] = scale;
+    float inverse = 0.f;
+    asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(inverse) : "f"(scale));
+#pragma unroll
+    for (int j = 0; j < Vector; ++j) {
+      float divided;
+      if (isfinite(maximum)) {
+        float magnitude = fabsf(value[j]);
+        float initial = magnitude * inverse;
+        float corrected = __fmaf_rn(__fmaf_rn(-initial, scale, magnitude), inverse, initial);
+        divided = copysignf(corrected, value[j]);
+      } else {
+        divided = __fdiv_rn(value[j], scale);
+      }
+      value[j] = fminf(448.f, fmaxf(-448.f, divided));
+    }
+#pragma unroll
+    for (int j = 0; j < Vector; j += 4)
+      reinterpret_cast<uint32_t *>(out)[(static_cast<int64_t>(row) * 5120 + col + j) / 4] =
+        __nv_fp8x4_e4m3(make_float4(value[j],value[j+1],value[j+2],value[j+3])).__x;
+  }
+}
+
+void rms_quantize(TensorView x, TensorView residual, TensorView weight,
+                  TensorView data, TensorView scales, TensorView summed, bool column) {
+  for (auto tensor : {residual, weight, data, scales, summed})
+    TVM_FFI_ICHECK(same_cuda_device(tensor, x)) << "RMS quantization device mismatch";
+  TVM_FFI_ICHECK(x.ndim() == 2 && x.size(1) == 5120 && x.size(0) > 0 &&
+                 residual.ndim() == 2 && residual.size(0) == x.size(0) && residual.size(1) == 5120 &&
+                 summed.ndim() == 2 && summed.size(0) == x.size(0) && summed.size(1) == 5120 &&
+                 data.ndim() == 2 && data.size(0) == x.size(0) && data.size(1) == 5120 &&
+                 scales.ndim() == 2 && scales.size(0) == x.size(0) && scales.size(1) == 40 &&
+                 weight.ndim() == 1 && weight.size(0) == 5120)
+      << "RMS quantization requires model-width matrices and scales";
+  TVM_FFI_ICHECK(has_dtype(x, kDLBfloat, 16) && has_dtype(residual, kDLBfloat, 16) &&
+                 has_dtype(summed, kDLBfloat, 16) && has_dtype(data, kDLFloat8_e4m3fn, 8) &&
+                 has_dtype(weight, kDLFloat, 32) && has_dtype(scales, kDLFloat, 32))
+      << "RMS quantization requires BF16 inputs, FP8 data, and FP32 weights/scales";
+  for (auto tensor : {x, residual, summed, data})
+    TVM_FFI_ICHECK(tensor.stride(1) == 1 && tensor.stride(0) == 5120)
+        << "RMS quantization requires contiguous matrices";
+  TVM_FFI_ICHECK(weight.stride(0) == 1 &&
+                 scales.stride(0) == (column ? 1 : 40) &&
+                 scales.stride(1) == (column ? x.size(0) : 1))
+      << "RMS quantization scale layout mismatch";
+  TVM_FFI_ICHECK(fits_int32_flat_offsets(x, false) &&
+                 aligned(x, 16) && aligned(residual, 16) && aligned(weight, 32) &&
+                 aligned(summed, 16) && aligned(data, 8))
+      << "RMS quantization offset or alignment is invalid";
+  TVM_FFI_ICHECK(disjoint_storage(data, x) && disjoint_storage(data, residual) && disjoint_storage(data, weight) &&
+                 disjoint_storage(data, summed) && disjoint_storage(data, scales) &&
+                 disjoint_storage(summed, x) && disjoint_storage(summed, residual) &&
+                 disjoint_storage(summed, weight) && disjoint_storage(summed, scales) &&
+                 disjoint_storage(scales, x) && disjoint_storage(scales, residual) && disjoint_storage(scales, weight))
+      << "RMS quantization outputs overlap inputs or each other";
+  auto stream = stream_for(x, "rms_quantize");
+#define RMS_QUANT(T, V, S)                                                            \
+  launch_kernel(norm_quant5120_kernel<true, T, V, S>, x.size(0), T, 0, stream,            \
+      static_cast<const __nv_bfloat16 *>(x.data_ptr()),                                 \
+      static_cast<const __nv_bfloat16 *>(residual.data_ptr()),                          \
+      static_cast<const float *>(weight.data_ptr()),                                   \
+      static_cast<__nv_fp8_e4m3 *>(data.data_ptr()),                                     \
+      static_cast<float *>(scales.data_ptr()), column, static_cast<int>(x.size(0)),      \
+      static_cast<__nv_bfloat16 *>(summed.data_ptr()), 1e-6f)
+  if (x.size(0) >= 4096) {
+    RMS_QUANT(320, 8, false);
+  } else if (x.size(0) >= 2048) {
+    RMS_QUANT(128, 4, true);
+  } else {
+    RMS_QUANT(256, 4, false);
+  }
+#undef RMS_QUANT
+  finish_cuda_launch(stream, "rms_quantize");
+}

@@ -55,6 +55,9 @@ def cases():
                 n = sum(shape)
                 add(workload, "norm", tokens=n, width=5120)
                 add(workload, "add_norm", tokens=n, width=5120)
+                add(
+                    workload, "add_norm_fp8_linear", tokens=n, width=5120, columns=34816
+                )
                 add(workload, "gated_norm", tokens=n, heads=48, width=128)
                 # Layer.full_attention is shared by target and MTP. The actual
                 # projection chain now fuses Q/K RMS/RoPE, V.contiguous(), and
@@ -64,6 +67,23 @@ def cases():
                 for width in (5120, 6144):
                     add(workload, "quant", tokens=n, width=width, column=n <= 32)
                 add(workload, "silu_quant", tokens=n, width=17408, column=n <= 32)
+                if n > 32:
+                    # Other owned regular FP8 projections. Target and MTP use
+                    # the same dimensions; <=32 keeps the unchanged TRT backend.
+                    for columns, width, silu in (
+                        (16384, 5120, False),
+                        (14336, 5120, False),
+                        (5120, 6144, False),
+                        (5120, 17408, True),
+                    ):
+                        add(
+                            workload,
+                            "fp8_linear",
+                            tokens=n,
+                            width=width,
+                            columns=columns,
+                            silu=silu,
+                        )
                 add(workload, "gates", tokens=n)
                 add(workload, "convolution", counts=shape)
                 if phase == "prefill":

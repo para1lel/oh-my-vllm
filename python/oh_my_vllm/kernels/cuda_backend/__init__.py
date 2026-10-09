@@ -13,6 +13,7 @@ from pathlib import Path
 _FUNCTIONS = (
     "variant_launch_count",
     "quantize",
+    "rms_quantize",
     "silu_mul",
     "gates",
     "rms",

@@ -10,6 +10,8 @@ ENTRIES = {
     "prepare_attention": ("attention_prepare", "prepare_attention"),
     "norm": ("normalization", "rms_norm"),
     "add_norm": ("normalization", "add_rms_norm"),
+    "add_norm_fp8_linear": ("fp8", "add_norm_linear"),
+    "fp8_linear": ("fp8", "linear"),
     "gated_norm": ("normalization", "rms_norm"),
     "norm_rope": ("normalization", "rms_rotary"),
     "quant": ("fp8", "quantize"),
@@ -143,6 +145,28 @@ def fixture(
                     lambda: other[slots // 784, 1, slots % 784],
                 ),
             ),
+        )
+    elif operation == "fp8_linear":
+        args = (
+            random(n, config["width"] * (2 if config["silu"] else 1)),
+            random(config["columns"], config["width"]).to(torch.float8_e4m3fn),
+            torch.rand(
+                config["columns"] // 128,
+                config["width"] // 128,
+                device="cuda",
+                generator=generator,
+            )
+            * 0.01,
+        )
+        kwargs = dict(silu_gate=config["silu"])
+    elif operation == "add_norm_fp8_linear":
+        args = (
+            random(n, 5120),
+            random(n, 5120),
+            random(5120, dtype=torch.float32),
+            random(config["columns"], 5120).to(torch.float8_e4m3fn),
+            torch.rand(config["columns"] // 128, 40, device="cuda", generator=generator)
+            * 0.01,
         )
     elif operation in ("norm", "add_norm"):
         x, w = random(n, 5120), random(5120, dtype=torch.float32)

@@ -145,6 +145,11 @@ This avoids the observed FlashInfer CUTLASS instability at 17 through 32 rows.
 Small BF16 vocabulary projections use FlashInfer CuTe-DSL GEMM.
 
 Residual/RMS and SiLU/FP8 fusions keep the existing BF16 rounding points.
+For more than one row, the MLP gate/up path uses one CUDA kernel for residual RMS and activation quantization.
+It writes the BF16 residual sum and keeps the normalized BF16 value in registers before FP8 conversion.
+The projection keeps its previous GEMM provider and scale layout.
+One row uses the previous CUDA residual RMS and quantization chain.
+
 Convolution, GDN, and RMS accept packed projection strides and return dense outputs.
 GDN prefill normalizes Q/K explicitly with FP32 norms and BF16 output.
 Integer metadata transfers use one buffer per target/draft group.

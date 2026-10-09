@@ -225,6 +225,66 @@ class Operators:
         return quant(silu(x))  # noqa: F821
 
     @func
+    def add_norm_fp8_linear(
+        x: Tensor[(2, 5120), DType.bf16],
+        residual: Tensor[(2, 5120), DType.bf16],
+        gamma: Tensor[(5120,), DType.f32],
+        weight: Tensor[(256, 5120), DType.fp8e4m3],
+        weight_scale: Tensor[(2, 40), DType.f32],
+    ):
+        # Logical dequantization/matmul is representative HIR, not the native
+        # FP8 Tensor Core group-accumulation or phase-latency equation set.
+        summed, normalized = add_norm(x, residual, gamma)  # noqa: F821
+        values = tf.reshape(tf.cast(normalized, "f32"), (2, 40, 128))
+        maximum = tf.reduce(values, (-1,), True, "abs_max")
+        scale = tf.clamp(maximum, 1e-10, INFINITY) / 448.0
+        data = tf.cast(tf.clamp(values / scale, -448.0, 448.0), "fp8e4m3")
+        activations = tf.reshape(tf.cast(data, "f32") * scale, (2, 5120))
+        expanded = tf.repeat_interleave(weight_scale, 128, axis=0)
+        expanded = tf.repeat_interleave(expanded, 128, axis=1)
+        weights = tf.cast(weight, "f32") * expanded
+        return summed, tf.cast(
+            tf.matmul(activations, tf.transpose(weights, (1, 0))), "bf16"
+        )
+
+    @func
+    def fp8_linear(
+        x: Tensor[(2, 5120), DType.bf16],
+        weight: Tensor[(256, 5120), DType.fp8e4m3],
+        weight_scale: Tensor[(2, 40), DType.f32],
+    ):
+        # Logical dequantization is an HIR estimate, not native Tensor Core work.
+        values = tf.reshape(tf.cast(x, "f32"), (2, 40, 128))
+        maximum = tf.reduce(values, (-1,), True, "abs_max")
+        scale = tf.clamp(maximum, 1e-10, INFINITY) / 448.0
+        data = tf.cast(tf.clamp(values / scale, -448.0, 448.0), "fp8e4m3")
+        activations = tf.reshape(tf.cast(data, "f32") * scale, (2, 5120))
+        expanded = tf.repeat_interleave(weight_scale, 128, axis=0)
+        expanded = tf.repeat_interleave(expanded, 128, axis=1)
+        weights = tf.cast(weight, "f32") * expanded
+        return tf.cast(tf.matmul(activations, tf.transpose(weights, (1, 0))), "bf16")
+
+    @func
+    def fp8_silu_linear(
+        packed: Tensor[(2, 34816), DType.bf16],
+        weight: Tensor[(256, 17408), DType.fp8e4m3],
+        weight_scale: Tensor[(2, 136), DType.f32],
+    ):
+        gate = tf.cast(tf.silu(tf.cast(packed[:, :17408], "f32")), "bf16")
+        rounded = tf.cast(
+            tf.cast(gate, "f32") * tf.cast(packed[:, 17408:], "f32"), "bf16"
+        )
+        values = tf.reshape(tf.cast(rounded, "f32"), (2, 136, 128))
+        maximum = tf.reduce(values, (-1,), True, "abs_max")
+        scale = tf.clamp(maximum, 1e-10, INFINITY) / 448.0
+        data = tf.cast(tf.clamp(values / scale, -448.0, 448.0), "fp8e4m3")
+        activations = tf.reshape(tf.cast(data, "f32") * scale, (2, 17408))
+        expanded = tf.repeat_interleave(weight_scale, 128, axis=0)
+        expanded = tf.repeat_interleave(expanded, 128, axis=1)
+        weights = tf.cast(weight, "f32") * expanded
+        return tf.cast(tf.matmul(activations, tf.transpose(weights, (1, 0))), "bf16")
+
+    @func
     def qk(q: Tensor[(2, 2, 128), DType.bf16], k: Tensor[(2, 2, 128), DType.bf16]):
         qf = tf.cast(q, "f32")
         kf = tf.cast(k, "f32")

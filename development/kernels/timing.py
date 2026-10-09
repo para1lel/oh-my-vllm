@@ -7,6 +7,16 @@ def reference_operator(module, name):
     """Bind the whole frozen operation, including Python-side copies/allocations."""
     from importlib import import_module
 
+    if (module, name) == ("fp8", "add_norm_linear"):
+        # Compose original frozen kernels. The reference files and pin stay equal.
+        normalization = reference_operator("normalization", "add_rms_norm")
+        projection = reference_operator("fp8", "linear")
+
+        def frozen_chain(x, residual, gamma, weight, scale):
+            summed, normalized = normalization(x, residual, gamma)
+            return summed, projection(normalized, weight, scale)
+
+        return frozen_chain
     if module == "dspark_attention":
         path = "oh_my_vllm.kernels.dspark_tilelang_reference"
         function = getattr(import_module(path), name)

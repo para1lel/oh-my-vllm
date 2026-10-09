@@ -8,6 +8,7 @@
 <<source "irDispatch" "展开语义操作的 eager 与编译分派">>
 <h2>各语义模块具体负责什么</h2>
 <p>fp8 定义激活量化和 FP8 投影, 包括带 SiLU 门的版本. pointwise 定义 SiLU 乘法, GDN gates, RMS 和残差归一化. recurrent 定义卷积及 GDN 更新, 将持久 pool 标成会修改的参数. state 定义完整 Q/K 归一化, RoPE 和 KV 写入链.</p>
+<p>normalized_linear 将残差 RMS 和 FP8 投影连接为一个语义操作. 多行 CUDA provider 先融合加法, RMS 与量化, 删除归一化数组的设备存储写入和再次读取. 它保留原链的 BF16 舍入与 GEMM 路由, 使算子融合与第 8 章的数学定义一致. 单行按实测选择原 CUDA 两步链, 同一语义操作保持相同的输入与返回契约.</p>
 <p>attention 用 CPU 计划句柄表示 wrapper 与固定路由, 动态表和长度仍作为显式张量输入. gdn_prefill 返回长序列输出与最终状态, 再按有序 index_copy_ 写回持久池. logits 定义小行数词表矩阵投影. 参考实现提供数学对照, 生产 provider 有显式优先级与支持条件.</p>
 <p>优先级在第一次选择后冻结, 选择只依据元数据和声明路由. 编译器为实际读取的静态条件建立 guard (适用条件检查), 动态页表内容不决定 provider. 不支持的配置或缺少实现会报错, 保持实际执行路线可核对.</p>
 <h2>fullgraph 编译怎样完成 lowering</h2>

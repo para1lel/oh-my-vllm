@@ -1771,6 +1771,761 @@
       ],
       "experiment_source_sha256": "a57969cf0515b67ee0860a77730fd4f5ef0908f4b8fe87ece3fedfcf4016610c",
       "candidate_binary_sha256": "e726ebe1ae3d84df364999c00ab0452f35b7f223084dda585436911f3b0d3c9d"
+    },
+    {
+      "original_name": "norm-quant-tune01.json",
+      "original_sha256": "db36fad287f7303b5ed12ab4c1d6681ba0ea249632126afff7a425f99ac05220",
+      "base_commit": "e52ba82",
+      "candidate_source_sha256": "782bfa3155633d841aa8d393b668eb157a0367f5297349405eb605d2021cbcf3",
+      "candidate_so_sha256": "d01150676c887ce9c4c1bf93a10ceee1a709a347b9cc8b4012bcc38dc4e3c6e6",
+      "scope": "Residual/plain RMS plus FP8 quantization; plain RMS candidate is diagnostic only; ten shuffled rounds, forty graph replays per sample; pre-timing exact data/scales/sum checks",
+      "measurements": [
+        {
+          "n": 1,
+          "add": false,
+          "cfg": 0,
+          "ms": [
+            0.005230399966239929,
+            0.004241599887609482,
+            0.0042087998241186145,
+            0.004320000112056732,
+            0.004491199925541878,
+            0.004740799963474274,
+            0.00427279993891716,
+            0.004662400111556053,
+            0.0043079998344182965,
+            0.004568799957633018
+          ],
+          "median_ms": 0.004405600018799305
+        },
+        {
+          "n": 1,
+          "add": false,
+          "cfg": 1,
+          "ms": [
+            0.004407199844717979,
+            0.004604800045490265,
+            0.0046408001333475115,
+            0.004845599830150604,
+            0.004523200169205666,
+            0.004211200028657913,
+            0.004546400159597397,
+            0.004196799919009208,
+            0.005028799921274185,
+            0.00414160005748272
+          ],
+          "median_ms": 0.004534800164401531
+        },
+        {
+          "n": 1,
+          "add": true,
+          "cfg": 0,
+          "ms": [
+            0.00488319993019104,
+            0.004212800040841102,
+            0.0042663998901844025,
+            0.004227200150489807,
+            0.0042304001748561856,
+            0.0045368000864982605,
+            0.004248800128698349,
+            0.004519199952483177,
+            0.004185599833726883,
+            0.004575999826192856
+          ],
+          "median_ms": 0.004257600009441376
+        },
+        {
+          "n": 1,
+          "add": true,
+          "cfg": 1,
+          "ms": [
+            0.004315999895334243,
+            0.004504799842834473,
+            0.0045368000864982605,
+            0.0046328000724315645,
+            0.00453759990632534,
+            0.004446399956941604,
+            0.004550400003790855,
+            0.004195199906826019,
+            0.004545599967241287,
+            0.004189600050449371
+          ],
+          "median_ms": 0.004520799964666367
+        },
+        {
+          "n": 8,
+          "add": false,
+          "cfg": 0,
+          "ms": [
+            0.004652800038456917,
+            0.004241599887609482,
+            0.004285600036382675,
+            0.004233599826693535,
+            0.004204799979925155,
+            0.00544239990413189,
+            0.004756800085306168,
+            0.004646399989724159,
+            0.004204000160098076,
+            0.004940000176429748
+          ],
+          "median_ms": 0.004466000013053417
+        },
+        {
+          "n": 8,
+          "add": false,
+          "cfg": 1,
+          "ms": [
+            0.004332000017166137,
+            0.004588799923658371,
+            0.00483039990067482,
+            0.00467119999229908,
+            0.004494399949908257,
+            0.004348799958825112,
+            0.004825599864125252,
+            0.004255200177431107,
+            0.004502400010824204,
+            0.004228800162672996
+          ],
+          "median_ms": 0.00449839998036623
+        },
+        {
+          "n": 8,
+          "add": true,
+          "cfg": 0,
+          "ms": [
+            0.006583199650049209,
+            0.006212799996137619,
+            0.006106400117278099,
+            0.006264799833297729,
+            0.006175199896097184,
+            0.0065760001540184024,
+            0.006288799643516541,
+            0.006347200274467469,
+            0.006220800057053566,
+            0.006641600281000137
+          ],
+          "median_ms": 0.006276799738407135
+        },
+        {
+          "n": 8,
+          "add": true,
+          "cfg": 1,
+          "ms": [
+            0.004323200136423111,
+            0.004596799984574318,
+            0.005899199843406677,
+            0.004950400069355964,
+            0.004630399867892265,
+            0.004220800101757049,
+            0.004907200112938881,
+            0.0042247999459505085,
+            0.005208799988031388,
+            0.0042479999363422396
+          ],
+          "median_ms": 0.004613599926233292
+        },
+        {
+          "n": 624,
+          "add": false,
+          "cfg": 0,
+          "ms": [
+            0.010636799782514573,
+            0.010329599678516387,
+            0.010331200063228607,
+            0.01032399982213974,
+            0.010371199995279311,
+            0.010659199953079224,
+            0.010367199778556824,
+            0.010683999955654144,
+            0.010345599800348281,
+            0.010651999711990356
+          ],
+          "median_ms": 0.010369199886918068
+        },
+        {
+          "n": 624,
+          "add": false,
+          "cfg": 1,
+          "ms": [
+            0.006304799765348435,
+            0.006604799628257751,
+            0.006579200178384781,
+            0.006610400229692459,
+            0.00671359971165657,
+            0.00623759999871254,
+            0.006611199676990509,
+            0.0062919996678829195,
+            0.006623999774456024,
+            0.006287200003862381
+          ],
+          "median_ms": 0.006591999903321266
+        },
+        {
+          "n": 624,
+          "add": true,
+          "cfg": 0,
+          "ms": [
+            0.011002399772405625,
+            0.010382399708032609,
+            0.010356800258159637,
+            0.010338400304317475,
+            0.010326399654150008,
+            0.0106175996363163,
+            0.01035040020942688,
+            0.010655999928712846,
+            0.01032480001449585,
+            0.010636000335216523
+          ],
+          "median_ms": 0.010369599983096122
+        },
+        {
+          "n": 624,
+          "add": true,
+          "cfg": 1,
+          "ms": [
+            0.008575200289487838,
+            0.008530399948358535,
+            0.008776800334453582,
+            0.008522400259971618,
+            0.008531200140714646,
+            0.008275999873876571,
+            0.008581600338220596,
+            0.00823040008544922,
+            0.00854559987783432,
+            0.008235999941825866
+          ],
+          "median_ms": 0.008530800044536591
+        },
+        {
+          "n": 2048,
+          "add": false,
+          "cfg": 0,
+          "ms": [
+            0.016892799735069276,
+            0.016577599942684172,
+            0.01648000031709671,
+            0.016469599306583406,
+            0.01648879945278168,
+            0.01720480024814606,
+            0.016499200463294984,
+            0.017123199999332428,
+            0.016564799845218657,
+            0.016979199647903443
+          ],
+          "median_ms": 0.016571199893951415
+        },
+        {
+          "n": 2048,
+          "add": false,
+          "cfg": 1,
+          "ms": [
+            0.01446399986743927,
+            0.014747999608516693,
+            0.014761599898338317,
+            0.01475680023431778,
+            0.01473200023174286,
+            0.014382399618625641,
+            0.014746400713920593,
+            0.014389599859714507,
+            0.014714400470256805,
+            0.014424000680446625
+          ],
+          "median_ms": 0.014723200350999832
+        },
+        {
+          "n": 2048,
+          "add": true,
+          "cfg": 0,
+          "ms": [
+            0.022501599788665772,
+            0.021933600306510925,
+            0.02186640053987503,
+            0.021751199662685395,
+            0.02197919934988022,
+            0.022536000609397887,
+            0.021862399578094483,
+            0.022475199401378633,
+            0.021675199270248413,
+            0.022650399804115297
+          ],
+          "median_ms": 0.021956399828195573
+        },
+        {
+          "n": 2048,
+          "add": true,
+          "cfg": 1,
+          "ms": [
+            0.01571439951658249,
+            0.01653040051460266,
+            0.017205600440502167,
+            0.01677280068397522,
+            0.016763199865818024,
+            0.015974399447441102,
+            0.01666000038385391,
+            0.01576880067586899,
+            0.016672800481319427,
+            0.015388000011444091
+          ],
+          "median_ms": 0.016595200449228284
+        },
+        {
+          "n": 8192,
+          "add": false,
+          "cfg": 0,
+          "ms": [
+            0.06342319846153259,
+            0.06231039762496948,
+            0.06229760050773621,
+            0.06213039755821228,
+            0.06226400136947632,
+            0.06312879920005798,
+            0.06223359704017639,
+            0.06295120120048522,
+            0.06233680248260498,
+            0.0632311999797821
+          ],
+          "median_ms": 0.06232360005378723
+        },
+        {
+          "n": 8192,
+          "add": false,
+          "cfg": 1,
+          "ms": [
+            0.04520399868488312,
+            0.04586319923400879,
+            0.04603039920330047,
+            0.046068000793457034,
+            0.04594799876213074,
+            0.04517199993133545,
+            0.046061599254608156,
+            0.045176801085472104,
+            0.0458871990442276,
+            0.04516719877719879
+          ],
+          "median_ms": 0.045875199139118195
+        },
+        {
+          "n": 8192,
+          "add": true,
+          "cfg": 0,
+          "ms": [
+            0.08648239970207214,
+            0.08612800240516663,
+            0.08607280254364014,
+            0.08620319962501526,
+            0.08622320294380188,
+            0.08729119896888733,
+            0.08617039918899536,
+            0.08721200227737427,
+            0.08625199794769287,
+            0.08720399737358094
+          ],
+          "median_ms": 0.08623760044574738
+        },
+        {
+          "n": 8192,
+          "add": true,
+          "cfg": 1,
+          "ms": [
+            0.05538560152053833,
+            0.05565919876098633,
+            0.05565440058708191,
+            0.05620959997177124,
+            0.05630080103874206,
+            0.055378401279449464,
+            0.05638239979743957,
+            0.055404800176620486,
+            0.056403201818466184,
+            0.055264800786972046
+          ],
+          "median_ms": 0.05565679967403412
+        },
+        {
+          "n": 32144,
+          "add": false,
+          "cfg": 0,
+          "ms": [
+            0.23214640617370605,
+            0.23117520809173583,
+            0.2311000108718872,
+            0.23126399517059326,
+            0.2309720039367676,
+            0.23123679161071778,
+            0.23101279735565186,
+            0.23151121139526368,
+            0.23101279735565186,
+            0.23141438961029054
+          ],
+          "median_ms": 0.2312059998512268
+        },
+        {
+          "n": 32144,
+          "add": false,
+          "cfg": 1,
+          "ms": [
+            0.15467840433120728,
+            0.15626319646835327,
+            0.15585520267486572,
+            0.15586400032043457,
+            0.1560088038444519,
+            0.1541704058647156,
+            0.15527520179748536,
+            0.15426160097122193,
+            0.15563600063323973,
+            0.1542240023612976
+          ],
+          "median_ms": 0.15545560121536256
+        },
+        {
+          "n": 32144,
+          "add": true,
+          "cfg": 0,
+          "ms": [
+            0.32554240226745607,
+            0.32555599212646485,
+            0.3251231908798218,
+            0.3255192041397095,
+            0.32532238960266113,
+            0.3255295991897583,
+            0.32521519660949705,
+            0.3253191947937012,
+            0.32528080940246584,
+            0.3256767988204956
+          ],
+          "median_ms": 0.3254207968711853
+        },
+        {
+          "n": 32144,
+          "add": true,
+          "cfg": 1,
+          "ms": [
+            0.19486479759216307,
+            0.1957479953765869,
+            0.19544240236282348,
+            0.1954200029373169,
+            0.19527679681777954,
+            0.19474639892578124,
+            0.19551440477371215,
+            0.19589680433273315,
+            0.1954624056816101,
+            0.19474799633026124
+          ],
+          "median_ms": 0.1954312026500702
+        }
+      ]
+    },
+    {
+      "original_name": "fp8-tilen256-tune01.json",
+      "original_sha256": "0157d011654259b4d81552d446e64c1c8542a08b5b432ab5aaf65ae31f199a88",
+      "candidate_source_sha256": "991298828bff0b66dfb87ae73104ad495140e303f510164132644b47d77f964e",
+      "base_commit": "e52ba82",
+      "scope": "Rejected N=256 CUTLASS candidate, ten shuffled rounds, thirty graph replays per sample; pre-timing exact-output checks",
+      "measurements": [
+        {
+          "m": 32144,
+          "n": 34816,
+          "k": 5120,
+          "tile": 128,
+          "sm": 1,
+          "ms": [
+            6.749767557779948,
+            6.739407857259114,
+            6.744683837890625,
+            6.8137939453125,
+            6.801776123046875,
+            7.02885996500651,
+            7.078687032063802,
+            7.072683715820313,
+            6.81454823811849,
+            7.067198689778646
+          ]
+        },
+        {
+          "m": 32144,
+          "n": 34816,
+          "k": 5120,
+          "tile": 128,
+          "sm": 2,
+          "ms": [
+            7.016269938151042,
+            6.682701619466146,
+            7.002949523925781,
+            6.715229797363281,
+            6.691805013020834,
+            7.06843007405599,
+            6.7241770426432295,
+            6.678877766927084,
+            6.688226318359375,
+            7.063380432128906
+          ]
+        },
+        {
+          "m": 32144,
+          "n": 34816,
+          "k": 5120,
+          "tile": 256,
+          "sm": 1,
+          "ms": [
+            19.99019571940104,
+            20.007318115234376,
+            19.99521484375,
+            20.044268798828124,
+            19.986151123046874,
+            19.629888916015624,
+            19.629105631510416,
+            20.192144775390624,
+            20.018892415364583,
+            19.996077473958334
+          ]
+        },
+        {
+          "m": 32144,
+          "n": 34816,
+          "k": 5120,
+          "tile": 256,
+          "sm": 2,
+          "ms": [
+            19.606831868489582,
+            19.24021199544271,
+            19.240350341796876,
+            19.616585286458335,
+            19.684334309895835,
+            19.540022786458334,
+            19.226310221354165,
+            19.767997233072915,
+            19.220263671875,
+            19.224794514973958
+          ]
+        },
+        {
+          "m": 32144,
+          "n": 16384,
+          "k": 5120,
+          "tile": 128,
+          "sm": 1,
+          "ms": [
+            3.348258209228516,
+            3.3379188537597657,
+            3.4514676411946614,
+            3.3521161397298176,
+            3.3680437723795573,
+            3.663873036702474,
+            3.8301289876302085,
+            3.9216822306315104,
+            3.428153483072917,
+            3.631384531656901
+          ]
+        },
+        {
+          "m": 32144,
+          "n": 16384,
+          "k": 5120,
+          "tile": 128,
+          "sm": 2,
+          "ms": [
+            4.2390281677246096,
+            4.163184102376302,
+            4.422004191080729,
+            4.125083669026693,
+            4.155229949951172,
+            4.440899149576823,
+            4.33521474202474,
+            4.066278330485026,
+            4.530210367838541,
+            4.377225748697916
+          ]
+        },
+        {
+          "m": 32144,
+          "n": 16384,
+          "k": 5120,
+          "tile": 256,
+          "sm": 1,
+          "ms": [
+            10.198553466796875,
+            10.281493123372396,
+            10.036317952473958,
+            10.16252950032552,
+            10.088791910807291,
+            9.373167928059896,
+            9.369878133138021,
+            9.890916951497395,
+            9.819425455729167,
+            10.357063802083333
+          ]
+        },
+        {
+          "m": 32144,
+          "n": 16384,
+          "k": 5120,
+          "tile": 256,
+          "sm": 2,
+          "ms": [
+            10.097693888346354,
+            9.223548380533854,
+            9.224208577473958,
+            10.161929321289062,
+            9.842234293619791,
+            9.896561686197916,
+            9.22441914876302,
+            9.981412760416667,
+            9.224521891276042,
+            9.224398803710937
+          ]
+        },
+        {
+          "m": 624,
+          "n": 34816,
+          "k": 5120,
+          "tile": 128,
+          "sm": 1,
+          "ms": [
+            0.12907626628875732,
+            0.12917333443959553,
+            0.12912960052490235,
+            0.12913920084635416,
+            0.1293951988220215,
+            0.13081599871317545,
+            0.13088213602701823,
+            0.13112959861755372,
+            0.13006079991658528,
+            0.13054933547973632
+          ]
+        },
+        {
+          "m": 624,
+          "n": 34816,
+          "k": 5120,
+          "tile": 128,
+          "sm": 2,
+          "ms": [
+            0.14848853747049967,
+            0.1503594716389974,
+            0.14924906094868978,
+            0.1495039939880371,
+            0.14928746223449707,
+            0.1492095947265625,
+            0.1492746671040853,
+            0.14938027064005535,
+            0.15023786226908367,
+            0.1494047959645589
+          ]
+        },
+        {
+          "m": 624,
+          "n": 34816,
+          "k": 5120,
+          "tile": 256,
+          "sm": 1,
+          "ms": [
+            0.4318623860677083,
+            0.435317325592041,
+            0.4344533284505208,
+            0.43132158915201824,
+            0.4314016024271647,
+            0.4315199851989746,
+            0.4313173294067383,
+            0.4370815912882487,
+            0.4437173207600911,
+            0.4346549352010091
+          ]
+        },
+        {
+          "m": 624,
+          "n": 34816,
+          "k": 5120,
+          "tile": 256,
+          "sm": 2,
+          "ms": [
+            0.5121216138203939,
+            0.5168544133504231,
+            0.5067157427469889,
+            0.5058613459269206,
+            0.5063743909200032,
+            0.5060277303059896,
+            0.5059370676676432,
+            0.5068895975748698,
+            0.5138016064961751,
+            0.5293749491373698
+          ]
+        },
+        {
+          "m": 624,
+          "n": 16384,
+          "k": 5120,
+          "tile": 128,
+          "sm": 1,
+          "ms": [
+            0.0674336036046346,
+            0.0672917366027832,
+            0.0671509345372518,
+            0.06703146298726399,
+            0.0671061356862386,
+            0.06524906555811565,
+            0.06547733147939046,
+            0.06533759832382202,
+            0.06716799736022949,
+            0.06537066698074341
+          ]
+        },
+        {
+          "m": 624,
+          "n": 16384,
+          "k": 5120,
+          "tile": 128,
+          "sm": 2,
+          "ms": [
+            0.07615040143330892,
+            0.07906986872355143,
+            0.07641599973042806,
+            0.07887146472930909,
+            0.07869439919789632,
+            0.07606399854024251,
+            0.0789568026860555,
+            0.07891093095143636,
+            0.07879146734873453,
+            0.07591786384582519
+          ]
+        },
+        {
+          "m": 624,
+          "n": 16384,
+          "k": 5120,
+          "tile": 256,
+          "sm": 1,
+          "ms": [
+            0.26314560572306317,
+            0.2578506628672282,
+            0.2575818697611491,
+            0.2577397346496582,
+            0.2577226638793945,
+            0.2588511943817139,
+            0.2581589380900065,
+            0.2576522668202718,
+            0.2580138683319092,
+            0.25758934020996094
+          ]
+        },
+        {
+          "m": 624,
+          "n": 16384,
+          "k": 5120,
+          "tile": 256,
+          "sm": 2,
+          "ms": [
+            0.2576224009195964,
+            0.2575274626413981,
+            0.2577418645222982,
+            0.25800426801045734,
+            0.2572810649871826,
+            0.25760960578918457,
+            0.2580992062886556,
+            0.2575445334116618,
+            0.25803200403849286,
+            0.25743680000305175
+          ]
+        }
+      ]
     }
   ],
   "profiles": [
@@ -2338,6 +3093,853 @@
             "unit": "%"
           }
         ]
+      }
+    },
+    {
+      "original_name": "norm-quant-profile02-fused.csv",
+      "original_sha256": "fdb2c787bdd6c5daf5d99fe896c520af2608787774f9a9e8a140ac934758082f",
+      "scope": "Residual RMS/FP8 fused, 32144 by 5120; separate profiler replay",
+      "cuda_source_sha256": "b326cd1fb7604734b42999de8f92c52cd5b614d5185f3167300ece861a453613",
+      "so_sha256": "853b91d6072a93c45bf5c673747b2382a6652ca8a116f78886019567f960e3cc",
+      "metrics": [
+        {
+          "Kernel Name": "void norm_quant5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_fp8_e4m3 *, float *, bool, int, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "dram__bytes.sum",
+          "Metric Unit": "byte",
+          "Metric Value": "1119492864"
+        },
+        {
+          "Kernel Name": "void norm_quant5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_fp8_e4m3 *, float *, bool, int, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "46.34"
+        },
+        {
+          "Kernel Name": "void norm_quant5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_fp8_e4m3 *, float *, bool, int, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "launch__registers_per_thread",
+          "Metric Unit": "register/thread",
+          "Metric Value": "40"
+        },
+        {
+          "Kernel Name": "void norm_quant5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_fp8_e4m3 *, float *, bool, int, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "launch__shared_mem_per_block_dynamic",
+          "Metric Unit": "byte/block",
+          "Metric Value": "0"
+        },
+        {
+          "Kernel Name": "void norm_quant5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_fp8_e4m3 *, float *, bool, int, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "launch__shared_mem_per_block_static",
+          "Metric Unit": "byte/block",
+          "Metric Value": "64"
+        },
+        {
+          "Kernel Name": "void norm_quant5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_fp8_e4m3 *, float *, bool, int, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "lts__t_sector_hit_rate.pct",
+          "Metric Unit": "%",
+          "Metric Value": "3.80"
+        },
+        {
+          "Kernel Name": "void norm_quant5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_fp8_e4m3 *, float *, bool, int, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "lts__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "38.17"
+        },
+        {
+          "Kernel Name": "void norm_quant5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_fp8_e4m3 *, float *, bool, int, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "74.66"
+        },
+        {
+          "Kernel Name": "void norm_quant5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_fp8_e4m3 *, float *, bool, int, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "sm__warps_active.avg.pct_of_peak_sustained_active",
+          "Metric Unit": "%",
+          "Metric Value": "57.87"
+        },
+        {
+          "Kernel Name": "void norm_quant5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_fp8_e4m3 *, float *, bool, int, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "smsp__inst_executed.sum",
+          "Metric Unit": "inst",
+          "Metric Value": "152041120"
+        },
+        {
+          "Kernel Name": "void norm_quant5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_fp8_e4m3 *, float *, bool, int, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
+          "Metric Unit": "%",
+          "Metric Value": "21.50"
+        },
+        {
+          "Kernel Name": "void norm_quant5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_fp8_e4m3 *, float *, bool, int, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",
+          "Metric Unit": "%",
+          "Metric Value": "7.56"
+        }
+      ]
+    },
+    {
+      "original_name": "norm-quant-profile01-base.csv",
+      "original_sha256": "19956764c6d1dd87a19c9cef493b9b897f9ddac0e7df024e418f342a0faac7a4",
+      "scope": "Residual RMS/FP8 base, 32144 by 5120; separate profiler replay",
+      "cuda_source_sha256": "b326cd1fb7604734b42999de8f92c52cd5b614d5185f3167300ece861a453613",
+      "so_sha256": "853b91d6072a93c45bf5c673747b2382a6652ca8a116f78886019567f960e3cc",
+      "metrics": [
+        {
+          "Kernel Name": "void rms5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_bfloat16 *, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "73.84"
+        },
+        {
+          "Kernel Name": "void rms5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_bfloat16 *, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "launch__registers_per_thread",
+          "Metric Unit": "register/thread",
+          "Metric Value": "38"
+        },
+        {
+          "Kernel Name": "void rms5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_bfloat16 *, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "launch__shared_mem_per_block_dynamic",
+          "Metric Unit": "byte/block",
+          "Metric Value": "0"
+        },
+        {
+          "Kernel Name": "void rms5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_bfloat16 *, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "launch__shared_mem_per_block_static",
+          "Metric Unit": "byte/block",
+          "Metric Value": "64"
+        },
+        {
+          "Kernel Name": "void rms5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_bfloat16 *, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "lts__t_sector_hit_rate.pct",
+          "Metric Unit": "%",
+          "Metric Value": "0.06"
+        },
+        {
+          "Kernel Name": "void rms5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_bfloat16 *, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "38.46"
+        },
+        {
+          "Kernel Name": "void rms5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_bfloat16 *, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "sm__warps_active.avg.pct_of_peak_sustained_active",
+          "Metric Unit": "%",
+          "Metric Value": "56.76"
+        },
+        {
+          "Kernel Name": "void rms5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_bfloat16 *, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "smsp__inst_executed.sum",
+          "Metric Unit": "inst",
+          "Metric Value": "56573440"
+        },
+        {
+          "Kernel Name": "void rms5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_bfloat16 *, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
+          "Metric Unit": "%",
+          "Metric Value": "52.19"
+        },
+        {
+          "Kernel Name": "void rms5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *, __nv_bfloat16 *, __nv_bfloat16 *, float)",
+          "Block Size": "(320, 1, 1)",
+          "Grid Size": "(32144, 1, 1)",
+          "Metric Name": "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",
+          "Metric Unit": "%",
+          "Metric Value": "18.32"
+        },
+        {
+          "Kernel Name": "void quantize_kernel<__nv_bfloat16, 0, 0, 4, 0, 5120, 1>(const T1 *, __nv_fp8_e4m3 *, float *, int, int)",
+          "Block Size": "(128, 1, 1)",
+          "Grid Size": "(2009, 40, 1)",
+          "Metric Name": "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "29.38"
+        },
+        {
+          "Kernel Name": "void quantize_kernel<__nv_bfloat16, 0, 0, 4, 0, 5120, 1>(const T1 *, __nv_fp8_e4m3 *, float *, int, int)",
+          "Block Size": "(128, 1, 1)",
+          "Grid Size": "(2009, 40, 1)",
+          "Metric Name": "launch__registers_per_thread",
+          "Metric Unit": "register/thread",
+          "Metric Value": "29"
+        },
+        {
+          "Kernel Name": "void quantize_kernel<__nv_bfloat16, 0, 0, 4, 0, 5120, 1>(const T1 *, __nv_fp8_e4m3 *, float *, int, int)",
+          "Block Size": "(128, 1, 1)",
+          "Grid Size": "(2009, 40, 1)",
+          "Metric Name": "launch__shared_mem_per_block_dynamic",
+          "Metric Unit": "byte/block",
+          "Metric Value": "0"
+        },
+        {
+          "Kernel Name": "void quantize_kernel<__nv_bfloat16, 0, 0, 4, 0, 5120, 1>(const T1 *, __nv_fp8_e4m3 *, float *, int, int)",
+          "Block Size": "(128, 1, 1)",
+          "Grid Size": "(2009, 40, 1)",
+          "Metric Name": "launch__shared_mem_per_block_static",
+          "Metric Unit": "byte/block",
+          "Metric Value": "0"
+        },
+        {
+          "Kernel Name": "void quantize_kernel<__nv_bfloat16, 0, 0, 4, 0, 5120, 1>(const T1 *, __nv_fp8_e4m3 *, float *, int, int)",
+          "Block Size": "(128, 1, 1)",
+          "Grid Size": "(2009, 40, 1)",
+          "Metric Name": "lts__t_sector_hit_rate.pct",
+          "Metric Unit": "%",
+          "Metric Value": "4.86"
+        },
+        {
+          "Kernel Name": "void quantize_kernel<__nv_bfloat16, 0, 0, 4, 0, 5120, 1>(const T1 *, __nv_fp8_e4m3 *, float *, int, int)",
+          "Block Size": "(128, 1, 1)",
+          "Grid Size": "(2009, 40, 1)",
+          "Metric Name": "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "74.51"
+        },
+        {
+          "Kernel Name": "void quantize_kernel<__nv_bfloat16, 0, 0, 4, 0, 5120, 1>(const T1 *, __nv_fp8_e4m3 *, float *, int, int)",
+          "Block Size": "(128, 1, 1)",
+          "Grid Size": "(2009, 40, 1)",
+          "Metric Name": "sm__warps_active.avg.pct_of_peak_sustained_active",
+          "Metric Unit": "%",
+          "Metric Value": "89.46"
+        },
+        {
+          "Kernel Name": "void quantize_kernel<__nv_bfloat16, 0, 0, 4, 0, 5120, 1>(const T1 *, __nv_fp8_e4m3 *, float *, int, int)",
+          "Block Size": "(128, 1, 1)",
+          "Grid Size": "(2009, 40, 1)",
+          "Metric Name": "smsp__inst_executed.sum",
+          "Metric Unit": "inst",
+          "Metric Value": "100932160"
+        },
+        {
+          "Kernel Name": "void quantize_kernel<__nv_bfloat16, 0, 0, 4, 0, 5120, 1>(const T1 *, __nv_fp8_e4m3 *, float *, int, int)",
+          "Block Size": "(128, 1, 1)",
+          "Grid Size": "(2009, 40, 1)",
+          "Metric Name": "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
+          "Metric Unit": "%",
+          "Metric Value": "50.41"
+        },
+        {
+          "Kernel Name": "void quantize_kernel<__nv_bfloat16, 0, 0, 4, 0, 5120, 1>(const T1 *, __nv_fp8_e4m3 *, float *, int, int)",
+          "Block Size": "(128, 1, 1)",
+          "Grid Size": "(2009, 40, 1)",
+          "Metric Name": "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",
+          "Metric Unit": "%",
+          "Metric Value": "2.11"
+        }
+      ]
+    }
+  ],
+  "hir_estimates": [
+    {
+      "original_name": "norm-quant-hir01.json",
+      "original_sha256": "d1887838c83de352b9823f2e9fc28d9829b1a7b230857b0c6f2cd7f5eefb8f48",
+      "reports": {
+        "add_norm": {
+          "kind": "estimated",
+          "source": "TileFoundry HIR",
+          "symbol": "add_norm",
+          "report": "# analysis target=nvidia.b200_sxm module=Operators function=add_norm topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:20480@logical,20480@total,20480@cta;f32:81922@logical,81922@total,81922@cta other-ops=special:2@logical,2@total,2@cta\n# traffic traffic=gmem:r409624/w327704@total,r409624/w327704@cta;rmem:r4/w0@total,r4/w0@cta\n# peak-footprint=gmem:163848;rmem:0\n# roofline ideal-ns=97 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef add_norm(\n    x: Tensor[(2, 5120), \"bf16\"],\n    residual: Tensor[(2, 5120), \"bf16\"],\n    weight: Tensor[(5120,), \"f32\"]\n):\n    v0 = cast(x, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v1 = cast(residual, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v2 = add(v0, v1)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r81920/w40960@total,r81920/w40960@cta; roofline ideal-ns=17 bound-by=memory\n    v3 = cast(v2, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    v4 = cast(v3, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v5 = unary(v4, kind=\"square\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w40960@total,r40960/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v6 = reduce(v5, axes=(-1,), keepdim=True, kind=\"mean\")  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w8@total,r40960/w8@cta; roofline ideal-ns=6 bound-by=memory\n    v0_2 = 1e-06  # Tensor[(), \"f32\", \"umat\"]\n    v7 = add(v6, v0_2)  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = unary(v7, kind=\"rsqrt\")  # Tensor[(2, 1), \"f32\"]; compute-cost other-ops=special:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta; roofline ideal-ns=1 bound-by=memory\n    v9 = mul(v4, v8)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40968/w40960@total,r40968/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v10 = mul(v9, weight)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r61440/w40960@total,r61440/w40960@cta; roofline ideal-ns=14 bound-by=memory\n    v11 = cast(v10, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    return (v3, v11)\n",
+          "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+        },
+        "quant": {
+          "kind": "estimated",
+          "source": "TileFoundry HIR",
+          "symbol": "quant",
+          "report": "# analysis target=nvidia.b200_sxm module=Operators function=quant topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=f32:2056@logical,2056@total,2056@cta;fp8e4m3:512@logical,512@total,512@cta\n# traffic traffic=gmem:r9264/w6704@total,r9264/w6704@cta;rmem:r4/w0@total,r4/w0@cta\n# peak-footprint=gmem:5136;rmem:0\n# roofline ideal-ns=3 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef quant(\n    x: Tensor[(2, 256), \"bf16\"]\n):\n    v0 = cast(x, dtype=\"f32\")  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r1024/w2048@total,r1024/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v1 = reshape(v0, new_shape=(2, 2, 128))  # Tensor[(2, 2, 128), \"f32\"]; compute-cost; traffic; roofline\n    v2 = reduce(v1, axes=(-1,), keepdim=True, kind=\"abs_max\")  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w16@total,r2048/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v3 = clamp(v2, min_val=1e-10, max_val=1e999)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta; roofline ideal-ns=1 bound-by=balanced\n    v0_2 = 448.0  # Tensor[(), \"f32\", \"umat\"]\n    v4 = div(v3, v0_2)  # Tensor[(2, 2, 1), \"f32\"]; compute-cost flops=f32:4@logical,4@total,4@cta; traffic traffic=gmem:r16/w16@total,r16/w16@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v5 = div(v1, v4)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2064/w2048@total,r2064/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v6 = clamp(v5, min_val=-448.0, max_val=448.0)  # Tensor[(2, 2, 128), \"f32\"]; compute-cost flops=f32:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w2048@total,r2048/w2048@cta; roofline ideal-ns=1 bound-by=balanced\n    v7 = cast(v6, dtype=\"fp8e4m3\")  # Tensor[(2, 2, 128), \"fp8e4m3\"]; compute-cost flops=fp8e4m3:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w512@total,r2048/w512@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = reshape(v7, new_shape=(2, 256))  # Tensor[(2, 256), \"fp8e4m3\"]; compute-cost; traffic; roofline\n    v9 = reshape(v4, new_shape=(2, 2))  # Tensor[(2, 2), \"f32\"]; compute-cost; traffic; roofline\n    return (v8, v9)\n",
+          "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+        }
+      },
+      "scope": "Representative separate residual RMS and quantization HIR; not native traffic or phase bound"
+    }
+  ],
+  "chain_diagnostics": [
+    {
+      "original_name": "norm-quant-one-row-chain02.json",
+      "original_sha256": "dd5612aecf63f8c0b82cfb5395274a8a807641f8dfc293c4904644c63aeb0dff",
+      "script_sha256": "43cbc46ea3d0074f31c255858cef5ccd0aeabaa3eceadecc910f61ccd0acf0f8",
+      "scope": "Single-row gate/up comparison for dispatch selection, before one-row unfused dispatch; complete chains, three rounds of twenty pairs, one hundred captured repetitions per sample; not current-source formal acceptance",
+      "data": {
+        "fused": {
+          "raw_pairs_ms": [
+            [
+              [
+                0.033899519443511966,
+                0.03432287931442261
+              ],
+              [
+                0.03392352104187012,
+                0.034349119663238524
+              ],
+              [
+                0.03388672113418579,
+                0.034285759925842284
+              ],
+              [
+                0.03391711950302124,
+                0.034325439929962155
+              ],
+              [
+                0.033915200233459473,
+                0.0342524790763855
+              ],
+              [
+                0.03395103931427002,
+                0.034341440200805665
+              ],
+              [
+                0.03392704010009766,
+                0.03431360006332398
+              ],
+              [
+                0.03391232013702392,
+                0.03426975965499878
+              ],
+              [
+                0.03386336088180542,
+                0.0342409610748291
+              ],
+              [
+                0.033931839466094973,
+                0.034296319484710694
+              ],
+              [
+                0.03390239953994751,
+                0.034319360256195065
+              ],
+              [
+                0.0339139199256897,
+                0.034258880615234376
+              ],
+              [
+                0.03391776084899902,
+                0.03428128004074096
+              ],
+              [
+                0.03387104034423828,
+                0.034289600849151614
+              ],
+              [
+                0.0338812804222107,
+                0.0342956805229187
+              ],
+              [
+                0.03511392116546631,
+                0.0343014407157898
+              ],
+              [
+                0.03385951995849609,
+                0.034964799880981445
+              ],
+              [
+                0.03386496067047119,
+                0.0342960000038147
+              ],
+              [
+                0.03388479948043823,
+                0.034358079433441165
+              ],
+              [
+                0.03386015892028808,
+                0.034327681064605715
+              ]
+            ],
+            [
+              [
+                0.03389568090438843,
+                0.03433727979660034
+              ],
+              [
+                0.03390592098236084,
+                0.03431679964065552
+              ],
+              [
+                0.033920319080352784,
+                0.03431648015975952
+              ],
+              [
+                0.03390016078948974,
+                0.034289278984069825
+              ],
+              [
+                0.03391808032989502,
+                0.034336960315704344
+              ],
+              [
+                0.03386336088180542,
+                0.034361279010772704
+              ],
+              [
+                0.033879361152648925,
+                0.034308478832244874
+              ],
+              [
+                0.03390624046325683,
+                0.0343120002746582
+              ],
+              [
+                0.033880000114440915,
+                0.03428447961807251
+              ],
+              [
+                0.03388223886489868,
+                0.034335999488830565
+              ],
+              [
+                0.03389120101928711,
+                0.03431456089019776
+              ],
+              [
+                0.03388576030731201,
+                0.03425823926925659
+              ],
+              [
+                0.03386944055557251,
+                0.03432512044906616
+              ],
+              [
+                0.033887040615081784,
+                0.0343286395072937
+              ],
+              [
+                0.033898561000823973,
+                0.03429663896560669
+              ],
+              [
+                0.03392672061920166,
+                0.03430655956268311
+              ],
+              [
+                0.033894400596618655,
+                0.03431807994842529
+              ],
+              [
+                0.03388767957687378,
+                0.03431648015975952
+              ],
+              [
+                0.03385951995849609,
+                0.03431360006332398
+              ],
+              [
+                0.033845438957214355,
+                0.03433216094970703
+              ]
+            ],
+            [
+              [
+                0.033899519443511966,
+                0.034335360527038575
+              ],
+              [
+                0.03394592046737671,
+                0.034350719451904294
+              ],
+              [
+                0.03387200117111206,
+                0.03429536104202271
+              ],
+              [
+                0.033903679847717284,
+                0.03432415962219238
+              ],
+              [
+                0.03392767906188965,
+                0.03433504104614258
+              ],
+              [
+                0.033880000114440915,
+                0.03428895950317383
+              ],
+              [
+                0.03392544031143188,
+                0.034279680252075194
+              ],
+              [
+                0.033902719020843505,
+                0.034255039691925046
+              ],
+              [
+                0.033901441097259524,
+                0.03433504104614258
+              ],
+              [
+                0.03390464067459106,
+                0.03434175968170166
+              ],
+              [
+                0.03395807981491089,
+                0.03431871891021729
+              ],
+              [
+                0.03391999959945679,
+                0.034272000789642335
+              ],
+              [
+                0.033924798965454105,
+                0.03424576044082642
+              ],
+              [
+                0.033903679847717284,
+                0.03435456037521362
+              ],
+              [
+                0.03386368036270142,
+                0.034287679195404056
+              ],
+              [
+                0.033878400325775146,
+                0.034337599277496335
+              ],
+              [
+                0.03391232013702392,
+                0.03427232027053833
+              ],
+              [
+                0.03390399932861328,
+                0.034327681064605715
+              ],
+              [
+                0.033885118961334226,
+                0.03427232027053833
+              ],
+              [
+                0.033941121101379396,
+                0.03430912017822266
+              ]
+            ]
+          ],
+          "comparison": {
+            "rounds": [
+              {
+                "tilelang_ms": 0.033907359838485716,
+                "cuda_ms": 0.03429888010025024
+              },
+              {
+                "tilelang_ms": 0.03388944029808044,
+                "cuda_ms": 0.03431648015975952
+              },
+              {
+                "tilelang_ms": 0.033903839588165285,
+                "cuda_ms": 0.03431391954421997
+              }
+            ],
+            "paired_mean_gain_ms": -0.00039982918898264576,
+            "gain_lower_95_ms": -0.00043338139851888043,
+            "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+            "passed": false
+          }
+        },
+        "unfused_cuda": {
+          "raw_pairs_ms": [
+            [
+              [
+                0.03391168117523193,
+                0.03316544055938721
+              ],
+              [
+                0.033937280178070066,
+                0.03318399906158447
+              ],
+              [
+                0.03388416051864624,
+                0.033184640407562256
+              ],
+              [
+                0.03392607927322388,
+                0.03318655967712402
+              ],
+              [
+                0.03392640113830567,
+                0.033127360343933106
+              ],
+              [
+                0.03387871980667114,
+                0.03314079999923706
+              ],
+              [
+                0.0339465594291687,
+                0.03326911926269531
+              ],
+              [
+                0.03390624046325683,
+                0.03316767930984497
+              ],
+              [
+                0.033947200775146485,
+                0.03318144083023071
+              ],
+              [
+                0.03390496015548706,
+                0.03322400093078613
+              ],
+              [
+                0.033888959884643556,
+                0.03324671983718872
+              ],
+              [
+                0.0339084792137146,
+                0.03319391965866089
+              ],
+              [
+                0.03386431932449341,
+                0.03312864065170288
+              ],
+              [
+                0.033878400325775146,
+                0.033170878887176514
+              ],
+              [
+                0.033906559944152835,
+                0.033201279640197756
+              ],
+              [
+                0.03390399932861328,
+                0.033190720081329346
+              ],
+              [
+                0.033893120288848874,
+                0.03323168039321899
+              ],
+              [
+                0.033920319080352784,
+                0.03318943977355957
+              ],
+              [
+                0.033908159732818605,
+                0.03322304010391235
+              ],
+              [
+                0.03392127990722656,
+                0.0331712007522583
+              ]
+            ],
+            [
+              [
+                0.0339468789100647,
+                0.03324608087539673
+              ],
+              [
+                0.033905599117279056,
+                0.03324127912521362
+              ],
+              [
+                0.033882880210876466,
+                0.03320031881332398
+              ],
+              [
+                0.033861439228057864,
+                0.03318943977355957
+              ],
+              [
+                0.03388063907623291,
+                0.0331494402885437
+              ],
+              [
+                0.033858559131622314,
+                0.03320800065994263
+              ],
+              [
+                0.033888959884643556,
+                0.033163199424743654
+              ],
+              [
+                0.03394752025604248,
+                0.03321023941040039
+              ],
+              [
+                0.03388576030731201,
+                0.03316864013671875
+              ],
+              [
+                0.03390592098236084,
+                0.0331881594657898
+              ],
+              [
+                0.03390496015548706,
+                0.03322911977767944
+              ],
+              [
+                0.033886399269104,
+                0.033192319869995116
+              ],
+              [
+                0.03386528015136719,
+                0.03320159912109375
+              ],
+              [
+                0.033903679847717284,
+                0.03319103956222534
+              ],
+              [
+                0.03392800092697144,
+                0.03320703983306885
+              ],
+              [
+                0.033899519443511966,
+                0.033214399814605715
+              ],
+              [
+                0.03396224021911621,
+                0.03315295934677124
+              ],
+              [
+                0.033901119232177736,
+                0.033152000904083254
+              ],
+              [
+                0.03387775897979736,
+                0.033180160522460936
+              ],
+              [
+                0.03390496015548706,
+                0.03316544055938721
+              ]
+            ],
+            [
+              [
+                0.033896000385284425,
+                0.03322688102722168
+              ],
+              [
+                0.0339244794845581,
+                0.033250560760498045
+              ],
+              [
+                0.03387712001800537,
+                0.03318207979202271
+              ],
+              [
+                0.03388351917266846,
+                0.033190720081329346
+              ],
+              [
+                0.033913600444793704,
+                0.03318144083023071
+              ],
+              [
+                0.0338368010520935,
+                0.03316096067428589
+              ],
+              [
+                0.03391808032989502,
+                0.03315968036651611
+              ],
+              [
+                0.033907520771026614,
+                0.033127360343933106
+              ],
+              [
+                0.033899519443511966,
+                0.033197760581970215
+              ],
+              [
+                0.033897600173950194,
+                0.03328864097595215
+              ],
+              [
+                0.033898561000823973,
+                0.03318207979202271
+              ],
+              [
+                0.033866240978240966,
+                0.03315072059631348
+              ],
+              [
+                0.0338812804222107,
+                0.03321856021881103
+              ],
+              [
+                0.0339302396774292,
+                0.03313983917236328
+              ],
+              [
+                0.033920319080352784,
+                0.03321568012237549
+              ],
+              [
+                0.033913600444793704,
+                0.033150079250335696
+              ],
+              [
+                0.033911359310150144,
+                0.033186240196228026
+              ],
+              [
+                0.033901119232177736,
+                0.03313087940216065
+              ],
+              [
+                0.033895039558410646,
+                0.03318367958068848
+              ],
+              [
+                0.03390496015548706,
+                0.0331657600402832
+              ]
+            ]
+          ],
+          "comparison": {
+            "rounds": [
+              {
+                "tilelang_ms": 0.03390735983848572,
+                "cuda_ms": 0.03318560004234314
+              },
+              {
+                "tilelang_ms": 0.03390031933784485,
+                "cuda_ms": 0.03319167971611023
+              },
+              {
+                "tilelang_ms": 0.03390031933784485,
+                "cuda_ms": 0.03318207979202271
+              }
+            ],
+            "paired_mean_gain_ms": 0.0007136479218800861,
+            "gain_lower_95_ms": 0.0007041278282801304,
+            "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+            "passed": true
+          }
+        }
       }
     }
   ]

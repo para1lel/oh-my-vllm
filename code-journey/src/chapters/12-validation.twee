@@ -36,7 +36,7 @@
 <h2>算子调优怎样解释一个失败的阶段</h2>
 <p>development.kernels.observations 将 TileFoundry 的 HIR 计算量, 流量和 roofline 估计与 Nsight 硬件计数器分开记录. 大矩阵检查 Tensor Core 利用率, DRAM 流量, L2 命中率, 寄存器和共享内存占用, occupancy 与 warp stall. occupancy 表示活跃 warp 相对硬件上限的比例, stall 描述当前指令等待数据或资源的原因.</p>
 <p>例如大 GEMM 的 DRAM 使用较高, L2 命中率较低, 可以先测试 tile 遍历和 swizzle 是否减少重复读取. 寄存器溢出则提示部分临时值进入 local memory, 需要检查 tile 和流水资源. 候选实现先检查完整数值与缓存写入, 再做同条件交错计时, 最后检查完整请求和长上下文容量.</p>
-<p>230 项 CUDA 与固定 TileLang 的数值及速度门槛继续独立执行. cases.py 从生产预算, 784-token 页, 批大小和验证行数推导最大形状. 每个正式算子案例核对完整返回与修改区域, 在三轮二十对交错测量中检查速度, 保护已采用的 CUDA 实现.</p>
+<p>274 项 CUDA 与固定 TileLang 的数值及速度门槛独立执行: 原有 230 项保持, 增加 16 项残差 RMS/FP8 gate/up 整链和 28 项其余自有 FP8 投影. cases.py 从生产预算, 784-token 页, 批大小和验证行数推导最大形状. 每个正式算子案例核对完整返回与修改区域, 在三轮二十对交错测量中检查速度, 保护已采用的 CUDA 实现.</p>
 <h2>证据怎样绑定源码与运行环境</h2>
 <p>framework 收集器核对提交过且保持不变的源码, Rust 二进制的构建输入摘要, checkpoint 内容, 硬件身份和实际 FA/GDN 容量. runtime_contract 绑定语义路径, 外部 provider 和 CUTLASS/CCCL 模板; 实际加载库的摘要与编译参数必须匹配. 未识别的 GPU 操作会阻止正式验收.</p>
 <p>measurement.audit 检查 measured 起点后的编译和图捕获日志, 并检查缓存文件变化. 原始记录与 profiling 保存在本地或外部目录, 仓库保存可移植的测量摘要和原始 SHA. 每个结论标明源码, 配置, 负载和检查范围.</p>

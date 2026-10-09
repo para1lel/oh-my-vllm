@@ -111,6 +111,12 @@ scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda pytho
 
 Set `EVIDENCE_DIR` to a writable evidence directory in an external directory.
 The harness uses static cases from `development/kernels/cases.py`.
+
+Use `--operations NAME` to select an operation family.
+Give `--case-id ID` for each selected case ID.
+A selection with less than 274 case IDs reports `coverage.complete=false` and keeps the full per-case protocol.
+All 274 case IDs must pass before matrix acceptance.
+
 It verifies full output and written caches before timing.
 Each case must have three rounds of twenty interleaved pairs and faster CUDA medians in all rounds.
 The hierarchical-bootstrap one-sided 95% bound on time saved must be positive.

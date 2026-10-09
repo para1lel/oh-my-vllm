@@ -29,13 +29,18 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--operations", nargs="+")
+    parser.add_argument("--case-id", action="append", default=[])
     parser.add_argument("--list", action="store_true")
     args = parser.parse_args()
     matrix = cases()
+    unknown = set(args.case_id) - {case["id"] for case in matrix}
+    if unknown:
+        parser.error(f"unknown case IDs: {sorted(unknown)}")
     selected = [
         c
         for c in matrix
-        if not args.operations or c["configuration"]["operation"] in args.operations
+        if (not args.operations or c["configuration"]["operation"] in args.operations)
+        and (not args.case_id or c["id"] in args.case_id)
     ]
     if not selected:
         parser.error("no matching cases")
@@ -191,6 +196,12 @@ def main():
         if failures:
             raise RuntimeError(failures[0])
         for operation in sorted({r["configuration"]["operation"] for r in selected}):
+            if operation == "fp8_linear":
+                report["estimates"][operation] = {
+                    "plain": analyze("fp8_linear"),
+                    "silu": analyze("fp8_silu_linear"),
+                }
+                continue
             symbol = {"convolution": "convolution", "recurrent": "recurrent"}.get(
                 operation, operation
             )

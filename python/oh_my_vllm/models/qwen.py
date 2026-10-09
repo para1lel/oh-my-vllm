@@ -18,6 +18,7 @@ from oh_my_vllm.ir import fp8
 from oh_my_vllm.ir.gdn_prefill import gdn_prefill
 from oh_my_vllm.ir.gdn_prepare import gdn_prepare
 from oh_my_vllm.ir.logits import logits_gemm
+from oh_my_vllm.ir.normalized_linear import add_norm_fp8_linear
 from oh_my_vllm.ir.pointwise import add_rms_norm, rms_norm, silu_mul
 from oh_my_vllm.ir.recurrent import gdn_recurrent
 from oh_my_vllm.ir.state import prepare_attention
@@ -215,8 +216,17 @@ class Layer:
             result = self.full_attention(normalized, batch, cache)
         else:
             result = self.delta_attention(normalized, batch, cache)
-        residual, normalized = add_rms_norm(result, residual, self.post_norm)
-        packed = self.gate_up(normalized)
+        if self.gate_up.scale is None:
+            residual, normalized = add_rms_norm(result, residual, self.post_norm)
+            packed = self.gate_up(normalized)
+        else:
+            residual, packed = add_norm_fp8_linear(
+                result,
+                residual,
+                self.post_norm,
+                self.gate_up.weight,
+                self.gate_up.scale,
+            )
         return self.down.silu(packed), residual
 
     def __call__(

@@ -52,10 +52,13 @@ Allocator topology reuse decreases diagnostic prefill capture storage from 29.13
 
 Large GEMM, convolution, quantization, and gated RMS dispatch use measured candidates.
 [Profiling](profiling.md) records choices, counters, and rejected candidates.
+The MLP gate/up path uses one operation for residual RMS and FP8 quantization, with the previous GEMM. One row uses the previous CUDA chain.
+Its twenty GPU checks passed, with outputs equal to the previous chain, changed graph inputs, and rejected storage.
+The extended operator matrix keeps all 230 previous cases and adds sixteen fused and twenty-eight other FP8 projection cases.
+
 Offline registration shares the output budget with Python. Proposers reserve the scheduler's bonus token.
 
-The CPU collection passed 655 tests and 65 subtests, with 345 GPU tests deselected.
-Six new exception-restoration tests also passed in a selected CPU collection.
+The current CPU collection passed 687 tests and 65 subtests, with 365 GPU tests deselected.
 The affected GPU collection passed 104 tests.
 Tutorial validation passed ten excerpt tests and nine browser tests.
 
@@ -64,7 +67,7 @@ This interval still exceeds three times the current bound of about 0.453 s.
 Formal performance uses output 4096. Full operator, boundary, and service regressions are pending.
 
 The [acceptance index](acceptance.md) keeps operator, boundary, paired, and service measurements with their source scope.
-The 230 operator cases and nine 262144-token boundary cases stay active.
+The 274 operator cases and nine 262144-token boundary cases stay active.
 Complete service verification stays active.
 
 ## Documents and evidence
@@ -79,7 +82,7 @@ Ignored `LOCAL.md` holds its address, PID, and maintenance commands.
 
 ## Open work
 
-- Finish the source-contract review after the last implementation change.
+- Finish source-contract review after subsequent implementation changes. The current fusion has independent review.
 - Complete fifteen phase-latency rows, then optimize failing paths and run full affected sets again.
 - Run tutorial checks after subsequent source changes.
 - Run applicable numerical, operator, context, and service regressions after inference changes.

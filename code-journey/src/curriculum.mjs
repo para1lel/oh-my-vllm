@@ -17,6 +17,7 @@ export const chapters = {
 // Each record is checked against the current source, then shown in its chapter.
 // Layout: chapter, file, source anchor, responsibility, implementation and decision.
 export const coverage = [
+  ["Compilation", "python/oh_my_vllm/ir/normalized_linear.py", "def add_norm_fp8_linear(", "残差归一化与 FP8 投影的融合契约", "返回 BF16 残差和及其归一化投影. native 按原链保留两处 BF16 舍入, 多行 CUDA 将归一化结果留在寄存器中量化, 单行使用原 CUDA 链; GEMM 和 128 元素 scale 保持原来的契约."],
   ["DSpark", "python/oh_my_vllm/models/dspark.py", "class DSparkModel", "DSparkCheckpoint / DSparkModel: 加载, 双源计算与学习头", "校验固定配置与 62 个 BF16 张量, 绑定稳定文件的 SHA-256. 目标层特征投影为 context KV, 七个临时 noise 行经过五层双向注意力; Markov 根据前一候选修正 logits, confidence 预测接受概率."],
   ["DSpark", "python/oh_my_vllm/worker/dspark.py", "class DSpark:", "DSpark: 已保留特征注入与因果提议", "复用目标 FA 页编号, 只注入实际保留的输入. 贪心链保留在设备上, 随机链保存真实 q; 默认累计 confidence 阈值 0.2, 从首项起向右截断, 实际提议 0 至 7 个; grammar 临时前进后回滚."],
   ["DSpark", "python/oh_my_vllm/worker/dspark_graph.py", "class DSparkContextGraph", "DSparkContextGraph / DSparkGraph: 提交与提议图", "小批量 context 图备份目的槽, 预热与捕获后恢复, replay 复制动态位置后正式写入; 单独 pool 与 32 项预算, 覆盖全部合法行数. 提议图仅读 context, 使用独立 16 项预算, 输出在同族下次捕获前消费."],

@@ -140,7 +140,12 @@ def collect(case_id, ncu):
         source_status=subprocess.check_output(
             ["git", "status", "--porcelain"], cwd=ROOT, text=True
         ),
-        estimated=analyze(case["configuration"]["operation"]),
+        estimated=analyze(
+            "fp8_silu_linear"
+            if case["configuration"]["operation"] == "fp8_linear"
+            and case["configuration"]["silu"]
+            else case["configuration"]["operation"]
+        ),
         measured={},
         limitation="Profiler replay only; not timing or performance acceptance",
     )
