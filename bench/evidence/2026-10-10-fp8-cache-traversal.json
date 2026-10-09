@@ -1,0 +1,871 @@
+{
+  "artifact_kind": "derived_diagnostic_summary",
+  "formal_acceptance": false,
+  "base_commit": "871fa86",
+  "scope": "Dirty-source FP8 traversal tuning and short-output full-model diagnosis; separate profiler replays; formal 4096-output acceptance pending.",
+  "originals": [
+    {
+      "name": "fp8-swizzle-smallN-confirm06.json",
+      "bytes": 9028,
+      "sha256": "ceb9dfcff09ab4d5db71f73aae75a0de2c3b4e3603c4996da2174a72c380434e"
+    },
+    {
+      "name": "probe16-liveness-cost-diagnostic01.json",
+      "bytes": 8429,
+      "sha256": "ad31f8ef1cdfeb9c39925125981c7232aff50f3243866c24083e1c42744966dc"
+    },
+    {
+      "name": "full-model-probe16-source.json",
+      "bytes": 22943,
+      "sha256": "bbcd6a24f7e0c26b70c48b45cf8013972036a0cb17f57cd6c1e9ab774ddc8b13"
+    },
+    {
+      "name": "fp8-narrow-profile01-qkvz-4.csv",
+      "bytes": 22863,
+      "sha256": "dc590649ed937e595dd5c5cf956f915c55c6ace84089d55386f4aac6dbceed30"
+    },
+    {
+      "name": "fp8-narrow-profile01-qkvz-16.csv",
+      "bytes": 22862,
+      "sha256": "9d76fd95eba570065d6ba6e881b56523cc9d42554328c892629cb6f0fdd697d6"
+    },
+    {
+      "name": "fp8-narrow-profile01-down-4.csv",
+      "bytes": 22854,
+      "sha256": "b220c251f3eccc328eefe76ec5f47efb5521ca9242d814f2a35dbb8b0d8b2b1f"
+    },
+    {
+      "name": "fp8-narrow-profile01-down-8.csv",
+      "bytes": 22854,
+      "sha256": "48257b588f9e710b7e163735b5c030eb28ed8871d7df237624ab9c2743d3d69f"
+    }
+  ],
+  "timing_candidates": [
+    {
+      "m": 32144,
+      "n": 16384,
+      "k": 5120,
+      "sm": 1,
+      "swizzle": 4,
+      "raster": 0,
+      "ms": [
+        3.343028259277344,
+        3.4317598978678387,
+        3.4747189839680988,
+        3.369525400797526,
+        3.454390462239583,
+        3.4840789794921876,
+        3.462937672932943,
+        3.536171722412109,
+        3.4474688212076825,
+        3.4310038248697916
+      ]
+    },
+    {
+      "m": 32144,
+      "n": 16384,
+      "k": 5120,
+      "sm": 1,
+      "swizzle": 4,
+      "raster": 2,
+      "ms": [
+        3.535261789957682,
+        3.5189791361490887,
+        3.36781005859375,
+        3.4054527282714844,
+        3.489371744791667,
+        3.5019989013671875,
+        3.4635350545247396,
+        3.473763275146484,
+        3.53544438680013,
+        3.4686505635579428
+      ]
+    },
+    {
+      "m": 32144,
+      "n": 16384,
+      "k": 5120,
+      "sm": 1,
+      "swizzle": 8,
+      "raster": 0,
+      "ms": [
+        3.124663543701172,
+        3.400462849934896,
+        3.320629374186198,
+        3.465618133544922,
+        3.2883702596028646,
+        3.3869908650716147,
+        3.327409108479818,
+        3.353962707519531,
+        3.396136474609375,
+        3.4054049173990886
+      ]
+    },
+    {
+      "m": 32144,
+      "n": 16384,
+      "k": 5120,
+      "sm": 1,
+      "swizzle": 8,
+      "raster": 2,
+      "ms": [
+        3.416101328531901,
+        3.2990155537923176,
+        3.3540265401204428,
+        3.452611287434896,
+        3.413030497233073,
+        3.3203893025716145,
+        3.329046376546224,
+        3.3540982564290363,
+        3.328155771891276,
+        3.3412757873535157
+      ]
+    },
+    {
+      "m": 32144,
+      "n": 16384,
+      "k": 5120,
+      "sm": 1,
+      "swizzle": 16,
+      "raster": 0,
+      "ms": [
+        3.235429382324219,
+        3.3085344950358073,
+        3.34541753133138,
+        3.27225824991862,
+        3.306194051106771,
+        3.392279561360677,
+        3.383861287434896,
+        3.3030410766601563,
+        3.268548329671224,
+        3.3091583251953125
+      ]
+    },
+    {
+      "m": 32144,
+      "n": 16384,
+      "k": 5120,
+      "sm": 1,
+      "swizzle": 16,
+      "raster": 2,
+      "ms": [
+        3.4122474670410154,
+        3.2805193583170573,
+        3.4308095296223957,
+        3.293770599365234,
+        3.4382006327311196,
+        3.2663167317708335,
+        3.32359135945638,
+        3.3698997497558594,
+        3.3622057596842447,
+        3.305594635009766
+      ]
+    },
+    {
+      "m": 32144,
+      "n": 5120,
+      "k": 17408,
+      "sm": 1,
+      "swizzle": 4,
+      "raster": 0,
+      "ms": [
+        3.465894317626953,
+        3.5612085978190104,
+        3.551801554361979,
+        3.5821993509928385,
+        3.5613141377766926,
+        3.5829813639322916,
+        3.56519775390625,
+        3.6111882527669272,
+        3.5657867431640624,
+        3.552313486735026
+      ]
+    },
+    {
+      "m": 32144,
+      "n": 5120,
+      "k": 17408,
+      "sm": 1,
+      "swizzle": 4,
+      "raster": 2,
+      "ms": [
+        3.595392100016276,
+        3.5887967427571614,
+        3.5773897806803387,
+        3.542876688639323,
+        3.571985117594401,
+        3.556227111816406,
+        3.5598101298014324,
+        3.5851712544759113,
+        3.588609059651693,
+        3.5865152994791667
+      ]
+    },
+    {
+      "m": 32144,
+      "n": 5120,
+      "k": 17408,
+      "sm": 1,
+      "swizzle": 8,
+      "raster": 0,
+      "ms": [
+        3.1663230895996093,
+        3.471715291341146,
+        3.403320566813151,
+        3.5037737528483075,
+        3.4176310221354167,
+        3.445697021484375,
+        3.42802251180013,
+        3.411263020833333,
+        3.4621920267740887,
+        3.488669840494792
+      ]
+    },
+    {
+      "m": 32144,
+      "n": 5120,
+      "k": 17408,
+      "sm": 1,
+      "swizzle": 8,
+      "raster": 2,
+      "ms": [
+        3.5026901245117186,
+        3.39521484375,
+        3.4011754353841144,
+        3.4232800801595054,
+        3.4457855224609375,
+        3.416767883300781,
+        3.4299392700195312,
+        3.4058260599772137,
+        3.4305193583170572,
+        3.431954193115234
+      ]
+    },
+    {
+      "m": 32144,
+      "n": 5120,
+      "k": 17408,
+      "sm": 1,
+      "swizzle": 16,
+      "raster": 0,
+      "ms": [
+        3.3680681864420574,
+        3.4273910522460938,
+        3.4723307291666665,
+        3.4443392435709637,
+        3.4303082784016925,
+        3.465575408935547,
+        3.4576576232910154,
+        3.4446123758951823,
+        3.444443766276042,
+        3.431557210286458
+      ]
+    },
+    {
+      "m": 32144,
+      "n": 5120,
+      "k": 17408,
+      "sm": 1,
+      "swizzle": 16,
+      "raster": 2,
+      "ms": [
+        3.4790613810221354,
+        3.444627126057943,
+        3.4730453491210938,
+        3.429132843017578,
+        3.478644307454427,
+        3.4442838033040366,
+        3.433868916829427,
+        3.463204193115234,
+        3.4957567850748696,
+        3.4369300842285155
+      ]
+    },
+    {
+      "m": 32768,
+      "n": 16384,
+      "k": 5120,
+      "sm": 1,
+      "swizzle": 4,
+      "raster": 0,
+      "ms": [
+        3.3967862447102863,
+        3.5605748494466147,
+        3.528741455078125,
+        3.5040351867675783,
+        3.521495564778646,
+        3.533433532714844,
+        3.4986122131347654,
+        3.5919904073079425,
+        3.5346036275227863,
+        3.5108629862467446
+      ]
+    },
+    {
+      "m": 32768,
+      "n": 16384,
+      "k": 5120,
+      "sm": 1,
+      "swizzle": 4,
+      "raster": 2,
+      "ms": [
+        3.5686772664388022,
+        3.5763519287109373,
+        3.4580459594726562,
+        3.53557866414388,
+        3.528874715169271,
+        3.5387807210286457,
+        3.5295008341471354,
+        3.541101837158203,
+        3.5899274190266928,
+        3.5348917643229165
+      ]
+    },
+    {
+      "m": 32768,
+      "n": 16384,
+      "k": 5120,
+      "sm": 1,
+      "swizzle": 8,
+      "raster": 0,
+      "ms": [
+        3.175273640950521,
+        3.488542938232422,
+        3.3699071248372396,
+        3.4774805704752603,
+        3.3787755330403644,
+        3.4692906697591144,
+        3.3859883626302083,
+        3.3652384440104166,
+        3.488170623779297,
+        3.496449025472005
+      ]
+    },
+    {
+      "m": 32768,
+      "n": 16384,
+      "k": 5120,
+      "sm": 1,
+      "swizzle": 8,
+      "raster": 2,
+      "ms": [
+        3.512251790364583,
+        3.3767606099446614,
+        3.412755076090495,
+        3.4959017435709634,
+        3.467670440673828,
+        3.3749343872070314,
+        3.3581387837727865,
+        3.405389912923177,
+        3.377862294514974,
+        3.386802164713542
+      ]
+    },
+    {
+      "m": 32768,
+      "n": 16384,
+      "k": 5120,
+      "sm": 1,
+      "swizzle": 16,
+      "raster": 0,
+      "ms": [
+        3.312041473388672,
+        3.3187647501627606,
+        3.3876884460449217,
+        3.3223861694335937,
+        3.3679189046223956,
+        3.444597371419271,
+        3.439630889892578,
+        3.344378662109375,
+        3.331010182698568,
+        3.3628555297851563
+      ]
+    },
+    {
+      "m": 32768,
+      "n": 16384,
+      "k": 5120,
+      "sm": 1,
+      "swizzle": 16,
+      "raster": 2,
+      "ms": [
+        3.4132158915201822,
+        3.3263809204101564,
+        3.4435498555501303,
+        3.3591039021809896,
+        3.4340810139973956,
+        3.31909662882487,
+        3.358727518717448,
+        3.444134521484375,
+        3.43797124226888,
+        3.3764907836914064
+      ]
+    },
+    {
+      "m": 32768,
+      "n": 5120,
+      "k": 17408,
+      "sm": 1,
+      "swizzle": 4,
+      "raster": 0,
+      "ms": [
+        3.51910400390625,
+        3.6347872416178384,
+        3.6224543253580728,
+        3.6485814412434894,
+        3.6284138997395834,
+        3.6318687438964843,
+        3.6194091796875,
+        3.672319030761719,
+        3.6222740173339845,
+        3.646990966796875
+      ]
+    },
+    {
+      "m": 32768,
+      "n": 5120,
+      "k": 17408,
+      "sm": 1,
+      "swizzle": 4,
+      "raster": 2,
+      "ms": [
+        3.6668553670247395,
+        3.6998016357421877,
+        3.62608642578125,
+        3.627129618326823,
+        3.6262613932291665,
+        3.5591412862141927,
+        3.647934977213542,
+        3.641778055826823,
+        3.682539621988932,
+        3.6312469482421874
+      ]
+    },
+    {
+      "m": 32768,
+      "n": 5120,
+      "k": 17408,
+      "sm": 1,
+      "swizzle": 8,
+      "raster": 0,
+      "ms": [
+        3.2856374104817707,
+        3.4882901509602866,
+        3.4811604817708335,
+        3.5308769226074217,
+        3.472942860921224,
+        3.5674837748209636,
+        3.4746111551920573,
+        3.4760587056477865,
+        3.497131856282552,
+        3.536437225341797
+      ]
+    },
+    {
+      "m": 32768,
+      "n": 5120,
+      "k": 17408,
+      "sm": 1,
+      "swizzle": 8,
+      "raster": 2,
+      "ms": [
+        3.5668042500813804,
+        3.458598327636719,
+        3.4760831197102866,
+        3.5153717041015624,
+        3.536199442545573,
+        3.4804468790690106,
+        3.4880650838216147,
+        3.462254842122396,
+        3.4882230122884113,
+        3.502453358968099
+      ]
+    },
+    {
+      "m": 32768,
+      "n": 5120,
+      "k": 17408,
+      "sm": 1,
+      "swizzle": 16,
+      "raster": 0,
+      "ms": [
+        3.4118006388346354,
+        3.467415364583333,
+        3.5473472595214846,
+        3.5032981872558593,
+        3.4763402303059894,
+        3.603583017985026,
+        3.544938659667969,
+        3.4904469807942706,
+        3.4914090474446615,
+        3.478865051269531
+      ]
+    },
+    {
+      "m": 32768,
+      "n": 5120,
+      "k": 17408,
+      "sm": 1,
+      "swizzle": 16,
+      "raster": 2,
+      "ms": [
+        3.540868377685547,
+        3.502178192138672,
+        3.5352020263671875,
+        3.4924385070800783,
+        3.532043711344401,
+        3.488652801513672,
+        3.4931210835774738,
+        3.542047882080078,
+        3.5282613118489583,
+        3.4974090576171877
+      ]
+    }
+  ],
+  "profiler": [
+    {
+      "original_name": "fp8-narrow-profile01-qkvz-4.csv",
+      "separate_replay": true,
+      "metrics": [
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "dram__bytes.sum",
+          "Metric Unit": "byte",
+          "Metric Value": "6344508928"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "19.45"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "launch__registers_per_thread",
+          "Metric Unit": "register/thread",
+          "Metric Value": "168"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "launch__shared_mem_per_block_allocated",
+          "Metric Unit": "byte/block",
+          "Metric Value": "202240"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "lts__t_sector_hit_rate.pct",
+          "Metric Unit": "%",
+          "Metric Value": "75.95"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "59.14"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "sm__warps_active.avg.pct_of_peak_sustained_active",
+          "Metric Unit": "%",
+          "Metric Value": "12.50"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
+          "Metric Unit": "%",
+          "Metric Value": "43.24"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",
+          "Metric Unit": "%",
+          "Metric Value": "13.56"
+        }
+      ]
+    },
+    {
+      "original_name": "fp8-narrow-profile01-qkvz-16.csv",
+      "separate_replay": true,
+      "metrics": [
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "dram__bytes.sum",
+          "Metric Unit": "byte",
+          "Metric Value": "2829342720"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "8.64"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "launch__registers_per_thread",
+          "Metric Unit": "register/thread",
+          "Metric Value": "168"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "launch__shared_mem_per_block_allocated",
+          "Metric Unit": "byte/block",
+          "Metric Value": "202240"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "lts__t_sector_hit_rate.pct",
+          "Metric Unit": "%",
+          "Metric Value": "89.92"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "58.99"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "sm__warps_active.avg.pct_of_peak_sustained_active",
+          "Metric Unit": "%",
+          "Metric Value": "12.50"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
+          "Metric Unit": "%",
+          "Metric Value": "43.49"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",
+          "Metric Unit": "%",
+          "Metric Value": "13.55"
+        }
+      ]
+    },
+    {
+      "original_name": "fp8-narrow-profile01-down-4.csv",
+      "separate_replay": true,
+      "metrics": [
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "dram__bytes.sum",
+          "Metric Unit": "byte",
+          "Metric Value": "6439278080"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "20.21"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "launch__registers_per_thread",
+          "Metric Unit": "register/thread",
+          "Metric Value": "168"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "launch__shared_mem_per_block_allocated",
+          "Metric Unit": "byte/block",
+          "Metric Value": "202240"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "lts__t_sector_hit_rate.pct",
+          "Metric Unit": "%",
+          "Metric Value": "76.33"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "64.63"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "sm__warps_active.avg.pct_of_peak_sustained_active",
+          "Metric Unit": "%",
+          "Metric Value": "12.50"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
+          "Metric Unit": "%",
+          "Metric Value": "43.57"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",
+          "Metric Unit": "%",
+          "Metric Value": "14.66"
+        }
+      ]
+    },
+    {
+      "original_name": "fp8-narrow-profile01-down-8.csv",
+      "separate_replay": true,
+      "metrics": [
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "dram__bytes.sum",
+          "Metric Unit": "byte",
+          "Metric Value": "3826056448"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "12.03"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "launch__registers_per_thread",
+          "Metric Unit": "register/thread",
+          "Metric Value": "168"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "launch__shared_mem_per_block_allocated",
+          "Metric Unit": "byte/block",
+          "Metric Value": "202240"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "lts__t_sector_hit_rate.pct",
+          "Metric Unit": "%",
+          "Metric Value": "84.95"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+          "Metric Unit": "%",
+          "Metric Value": "64.74"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "sm__warps_active.avg.pct_of_peak_sustained_active",
+          "Metric Unit": "%",
+          "Metric Value": "12.50"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
+          "Metric Unit": "%",
+          "Metric Value": "43.44"
+        },
+        {
+          "Kernel Name": "void device_kernel<GemmUniversal<tuple<int, int, int, int>, CollectiveMma<MainloopSm100TmaUmmaWarpSpecializedBlockwiseScaling<5, 5, 4, tuple<C<1>, C<1>, C<1>>, Sm100>, tuple<C<128>, C<128>, C<128>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<1>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, float_e4m3_t, tuple<tuple<long, C<1>, long>, Layout<tuple<tuple<C<128>, int>, tuple<C<128>, int>, int>, tuple<tuple<C<0>, int>, tuple<C<0>, C<1>>, int>>>, TiledMMA<MMA_Atom<MMA_Traits<SM100_MMA_F8F6F4_SS, float_e4m3_t, float_e4m3_t, float, C<128>, C<128>, integral_constant<Major, 0>, integral_constant<Major, 0>, integral_constant<ScaleIn, 0>, integral_constant<ScaleIn, 0>>>, Layout<tuple<C<1>, C<1>, C<1>>, tuple<C<0>, C<0>, C<0>>>, tuple<Underscore, Underscore, Underscore>>, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity, tuple<SM90_TMA_LOAD, TiledCopy<Copy_Atom<SM80_CP_ASYNC_CACHEALWAYS<float, float>, float>, Layout<tuple<C<32>, C<1>>, tuple<C<1>, C<0>>>, tuple<C<32>>>>, ComposedLayout<Swizzle<3, 4, 3>, smem_ptr_flag_bits<8>, Layout<tuple<C<8>, C<128>>, tuple<C<128>, C<1>>>>, void, identity>, CollectiveEpilogue<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, bfloat16_t, tuple<long, C<1>, long>, bfloat16_t, tuple<long, C<1>, long>, FusionCallbacks<Sm100TmaWarpSpecialized<4, 2, 32, 1, 0>, LinearCombination<bfloat16_t, float, bfloat16_t, float, 2>, tuple<C<128>, C<128>, C<128>>, tuple<Layout<C<128>, C<1>>, Layout<C<32>, C<1>>>, >, SM100_TMEM_LOAD_32dp32b32x, SM90_TMA_LOAD, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, SM90_TMA_STORE, ComposedLayout<Swizzle<2, 4, 3>, smem_ptr_flag_bits<16>, Layout<tuple<C<8>, C<32>>, tuple<C<32>, C<1>>>>, AutoVectorizingCopyWithAssumedAlignment<128>, AutoVectorizingCopyWithAssumedAlignment<128>>, void, void>>(Params)",
+          "Metric Name": "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",
+          "Metric Unit": "%",
+          "Metric Value": "14.69"
+        }
+      ]
+    }
+  ],
+  "short_output": {
+    "input_tokens": 32768,
+    "output_tokens": 16,
+    "batch_size": 1,
+    "warmups": 2,
+    "measurements": 5,
+    "source_unchanged": true,
+    "source_contract_checked": true,
+    "model_version": "qwen38-dspark-b200-semantic-v3",
+    "wall_s": [
+      1.322744261,
+      1.319393393,
+      1.318363263,
+      1.332497711,
+      1.328040161
+    ],
+    "bound_s": [
+      0.44175381006472536,
+      0.44175381006472536,
+      0.44175381006472536,
+      0.44175381006472536,
+      0.44175381006472536
+    ],
+    "wall_median_s": 1.322744261,
+    "bound_median_s": 0.44175381006472536,
+    "ratio": 2.994301873267811,
+    "spread": 0.010685699735574266,
+    "source": {
+      "git_commit": "871fa86b94f157a55ae90cec29051bda0ee79449",
+      "git_diff_sha256": "0420cfd3362a8bb1ac63ab3d28e54cde4b2e88e146b87c73fabb916e6a18845f",
+      "binary_sha256": "eaf677121a48db023ffa9df40fe56cdd8af59196552926a29693b3c665e3060c",
+      "rust_sources_sha256": "cdb9bfccb68d281a096bb12884eb60ba64d385a7b7dceb73efe560649322ad56",
+      "python_sources_sha256": {
+        "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+        "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+        "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+        "python/oh_my_vllm/ir/core.py": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+        "python/oh_my_vllm/ir/coverage.py": "339556d38f2b8733f48abc7e73ca04b1034ebae9f1f099b597b9d860330359f7",
+        "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+        "python/oh_my_vllm/ir/execution.py": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+        "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+        "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+        "python/oh_my_vllm/ir/gdn_prepare.py": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+        "python/oh_my_vllm/ir/logits.py": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+        "python/oh_my_vllm/ir/normalized_linear.py": "4a19b5496a9073d03f30234bb482f379aa186032d086b8b8e75854fe48dd3662",
+        "python/oh_my_vllm/ir/partial_attention.py": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+        "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+        "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+        "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+        "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+        "python/oh_my_vllm/kernels/attention.py": "667fd8f322a6f221c204477dc666cf030c88c26ed125e62759a78492cedacf3a",
+        "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+        "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+        "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+        "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "2903658a1ad52f721e8dc813306b1003751e8e3796855cddb913044c70b678e4",
+        "python/oh_my_vllm/kernels/cuda_backend/groupwise.py": "c48777698bcb6751dde85f7ab49735e6763d74f5e1909edaec7f97f9dd169981",
+        "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+        "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+        "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+        "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+        "python/oh_my_vllm/kernels/fp8.py": "8653f68a34e1bf334302fc8d5f1b569f742d5d192dbbe456dbfbf077ecda475c",
+        "python/oh_my_vllm/kernels/gdn.py": "b449e439f5f524272578b05899b529de9b4eb73c7ab34fb35f9ae09b07e7af75",
+        "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+        "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+        "python/oh_my_vllm/kernels/partial_attention.py": "9d74993331ee37e48931d0600204009cf926ad4582db92e8f1e2f296ad0aa92a",
+        "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+        "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+        "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+        "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+        "python/oh_my_vllm/models/qwen.py": "007582a19d048d681162a94bda0f5677175e7665e736c65f1793addd4fa57c1b",
+        "python/oh_my_vllm/performance/__init__.py": "6257cfe9138fe50806e314b884dc8f914214e332885e7390634c6c3a0a96a081",
+        "python/oh_my_vllm/performance/analysis.py": "6f35a8281fe7d46c5e9fceeb241100638e488ed652f64b4dfd64ba827a3fd8ad",
+        "python/oh_my_vllm/performance/coverage.py": "9528f8a8b5da7fecf3e2abe76454ad167a8bf69d493abed640191a5659df54d3",
+        "python/oh_my_vllm/performance/dag.py": "b599801e85cd0a6442ea2c140e36b85c1c44bee58fe621e8a3419554cc574540",
+        "python/oh_my_vllm/performance/execution.py": "eaec032faeb26b5e3887199003420f6d753fcd0fbf862d192eaaa28f906f14e8",
+        "python/oh_my_vllm/performance/memory.py": "02a64c4fc12f5d4eb84eff7c8c0090e6e44eb6018be2672d4ed5169789b212ea",
+        "python/oh_my_vllm/performance/model.py": "f44ee8ff2670216efc466c8188a72acdbb9c228d0400093e9e3b506bd0a33e66",
+        "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+        "python/oh_my_vllm/worker/batch_plan.py": "38fdc0b7661e7a10716642d34ecd3f134f8dda297f67d604139ba23bf063e9a3",
+        "python/oh_my_vllm/worker/decode_graph.py": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+        "python/oh_my_vllm/worker/dspark.py": "454c967c062ec842c53736f6115ec54b9aea0f39959c996fcd6c25c26637f6de",
+        "python/oh_my_vllm/worker/dspark_graph.py": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+        "python/oh_my_vllm/worker/graph_cache.py": "1aa13b93a06c12ed30f458d253d88bf6b66d11ad4c477fcb1d937624db4d941e",
+        "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+        "python/oh_my_vllm/worker/model_runner.py": "6f25e611c66af1594d022dfd36c589628e00e88137bc1e4a4936e00db38a57bf",
+        "python/oh_my_vllm/worker/mtp.py": "3892ba9efaba0e568ce798bb19f411d6d8259fd958cd6fd29ec3ee5911888824",
+        "python/oh_my_vllm/worker/mtp_context_graph.py": "e59aefabeaf5e44bf4b59516d8fff90532b596aa3e08bc2c29456b6b82db36bf",
+        "python/oh_my_vllm/worker/prefill_graph.py": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
+        "python/oh_my_vllm/worker/protocol.py": "a3a74a605a84da886893f46524ee6de55979161d4f4632fabcd2ad50fa10d65e",
+        "python/oh_my_vllm/worker/runtime.py": "ebad0c00284f2d74349de9d410773c7e09b8371205f65e0c716c57875046e294",
+        "python/oh_my_vllm/worker/sampler.py": "0d1f14464dbd57284b5de997317c29c242a94c56c2d620bfb38a0301f9fb465b",
+        "python/oh_my_vllm/worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
+        "python/oh_my_vllm/worker/serving.py": "9c631dd4f03d1c33648afe3f56e673f48e559213dac4d22e4bc3bf7c00ac30b3",
+        "python/oh_my_vllm/worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
+        "python/oh_my_vllm/worker/zmq_bridge.py": "ba8d80bc083559da3641a7bf0afdb8c716f524b2d97507d58966d8247d1f4139"
+      }
+    }
+  }
+}

@@ -19,6 +19,12 @@ Its revised necessary-work bound is `0.44175381006472536 s`, with ratio `3.02382
 The source changed during this diagnostic, and its subsequent cost calculation bypassed the source-contract check.
 These values guide optimization. Formal acceptance must use a stable source and 4096 outputs.
 
+The subsequent [FP8 cache-traversal diagnosis](../bench/evidence/2026-10-10-fp8-cache-traversal.json) passed the source-contract check.
+The source stayed the same during this diagnostic.
+Its short-output prefill median is `1.322744261 s`, with the same bound and ratio `2.994301873267811`.
+Its wall spread is `0.010685699735574266`.
+The output count is sixteen. This stays diagnostic.
+
 
 ## DSpark implementation and acceptance
 

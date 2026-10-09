@@ -58,7 +58,9 @@ The extended operator matrix keeps all 230 previous cases and adds sixteen fused
 
 GDN values use a vector copy from packed rows.
 FP32 recurrent batches 2 and 4 use measured row/warp tiles.
-Large narrow QKV/Z and down projections use swizzle 4.
+Large narrow QKV/Z projections use swizzle 16.
+Large down projections use swizzle 8.
+
 Persistent MTP and final target prefill remove unused historical attention and MLP output.
 They keep required KV, target boundary features, and verification samples.
 Different context graphs restore captures and validate complete replay metadata.
@@ -73,8 +75,11 @@ The GDN copy/compiled-unit collection passed twenty-three tests.
 Diagnostic operator groups passed eighteen copy/recurrent cases and twenty-one selected-output cases.
 Tutorial validation passed ten excerpt tests and nine browser tests.
 
-Short-output diagnosis uses input 32768 and output 16. Its ordinary prefill median is about 1.336 s.
-Its revised required-work bound is about 0.442 s, with ratio 3.024.
+Short-output diagnosis uses input 32768 and output 16. Its ordinary prefill median is about 1.323 s.
+Its revised required-work bound is about 0.442 s, with ratio 2.994 and wall spread about 1.07%.
+The source stayed the same during this diagnostic.
+The source-contract check passed.
+
 MTP short-output prefill has a median of about 1.379 s.
 Formal performance uses output 4096. Full operator, boundary, and service regressions are pending.
 

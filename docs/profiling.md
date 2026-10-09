@@ -85,11 +85,19 @@ Full-model phase collection supplies framework acceptance.
 | Gated RMS | At 32144 token rows, one-row time was 0.399 ms and four-row time was 0.310 ms. | Four rows per warp for large inputs. Use one row for small inputs. |
 | Residual RMS and FP8 quantization | At 32144 by 5120, the two operations took 0.325 ms and the fused operation took 0.195 ms. | Keep residual and normalized BF16 rounding. Remove the read and write of the normalized array. |
 | Single-row normalized projection | One-row gate/up diagnostic time was about 0.03431 ms with fusion and 0.03319 ms with the previous CUDA chain. | Use the previous CUDA chain for one row. |
-| Narrow FP8 traversal | At M 32144, swizzle 4 saved about 0.104 ms for QKV/Z and 0.123 ms for down projection. | Swizzle 4 at M at least 32144 for N/K 16384/5120 and 5120/17408. |
+| Narrow FP8 traversal | At M 32144, QKV/Z changed from 3.451 to 3.307 ms and down changed from 3.563 to 3.437 ms. | At M at least 32144, use swizzle 16 for N/K 16384/5120 and swizzle 8 for N/K 5120/17408. |
 | Strided GDN value copy | At 32144 rows and stride 10240, the median changed from 0.42002 to 0.12376 ms. | Copy eight adjacent BF16 values per lane, with 256 threads. |
 | FP32 recurrent tile | Batch 2 changed from 3.80272 to 3.05744 microseconds. Batch 4 changed from 5.21184 to 4.54240 microseconds. | Batch 2 uses eight rows and one warp. Batch 4 uses two rows and four warps. |
 
 The table uses diagnostic operator microbenchmarks and a different profiler replay.
+
+The [FP8 cache-traversal diagnosis](../bench/evidence/2026-10-10-fp8-cache-traversal.json) has ten randomized rounds with thirty graph replays per sample.
+At M 32144, QKV/Z L2 hits changed from 75.95% to 89.92%, and DRAM bytes changed from 6.345 to 2.829 GB.
+Down L2 hits changed from 76.33% to 84.95%, and DRAM bytes changed from 6.439 to 3.826 GB.
+The profiles kept 168 registers per thread, 202240 shared-memory bytes, and 12.50% occupancy.
+Different profiler replays supply these counters.
+Candidate outputs were equal at zero absolute and relative tolerances.
+
 Short-output full-model diagnosis has a different scope.
 They do not supply the fifteen-row phase verdict.
 The convolution vector path had zero shared-memory bank conflicts.
@@ -124,9 +132,11 @@ The full 301-case regression stays active.
 Reports record different loaded module identities for owned pointwise CUDA and FP8 GEMM.
 
 Short-output diagnosis uses 32768 input tokens and sixteen outputs.
-Ordinary prefill had a median of about 1.336 s after selected-output computation.
+Ordinary prefill had a median of about 1.323 s after the selected FP8 traversal.
 Its revised required-work bound was about 0.442 s.
-The ratio was about 3.024. Further optimization is required.
+The ratio was about 2.994, and the wall spread was about 1.07%.
+The source stayed the same during this diagnostic.
+The source-contract check passed.
 
 MTP short-output prefill had a median of about 1.379 s.
 Formal phase verdicts use the fixed 4096-output workloads.

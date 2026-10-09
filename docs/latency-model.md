@@ -58,7 +58,7 @@ Q/gate and K/V parameter ranges have different, disjoint read identities.
 Terminal requests keep registered full prefix pages.
 The model removes draft context and hidden work with no subsequent consumer.
 Restored MTP boundary features have a named 10 KiB read per physical page.
-Features produced earlier in the same prefill phase have free ideal retention.
+Features produced previously in the same prefill phase have free ideal retention.
 MTP incoming KV reads use physical positions `[1,end)`, with shared ranges merged by page.
 
 The equation version is `qwen38-dspark-b200-semantic-v3`.
