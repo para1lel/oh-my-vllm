@@ -14,7 +14,7 @@ from .dag import b200, retention_bytes
 from .memory import WriteLedger
 from .model import Model
 
-MODEL_VERSION = "qwen38-dspark-b200-semantic-v1"
+MODEL_VERSION = "qwen38-dspark-b200-semantic-v3"
 
 
 def _validate_draft_step(operations, scheduled, outputs, kept, run, mtp_cursor):
@@ -51,11 +51,16 @@ def _validate_draft_step(operations, scheduled, outputs, kept, run, mtp_cursor):
                 "contexts",
                 "tables",
                 "unique_token_ids_per_request",
+                "token_ids_per_request",
+                "output_rows",
             ),
             "mtp_proposal_graph": ("contexts", "tables", "tokens"),
             "mtp_logits": (),
         }[kind]
-        if kind == "mtp_forward" and "incoming_contexts" in op:
+        if kind == "mtp_forward" and any(
+            field in op
+            for field in ("incoming_contexts", "live_queries", "live_output_rows")
+        ):
             raise ValueError("raw MTP trace contains derived incoming ranges")
         if any(len(op[field]) != len(requests) for field in fields):
             raise ValueError("draft invocation metadata length differs")
@@ -129,9 +134,13 @@ def _validate_draft_step(operations, scheduled, outputs, kept, run, mtp_cursor):
             raise ValueError("persistent MTP geometry differs from progress")
         budget = (
             min(4, remaining, limit - computed)
-            if out["kept"] and end == computed + 1
+            if out["kept"] and not out.get("finished", False) and end == computed + 1
             else 0
         )
+        if op["output_rows"][i] != ([end - first - 1] if budget > 0 else []):
+            raise ValueError(
+                "persistent MTP output selection differs from eligible endpoint"
+            )
         proposal = records[1:]
         if proposal and proposal[0][0] == "mtp_proposal_graph":
             _, op, i = proposal[0]
@@ -158,6 +167,7 @@ def _validate_draft_step(operations, scheduled, outputs, kept, run, mtp_cursor):
                     or op["queries"][i] != 1
                     or op["contexts"][i] != computed + (position + 1) // 2
                     or op["tables"][i] != target["fa_block_table"]
+                    or op["output_rows"][i] != [0]
                 ):
                     raise ValueError(
                         "ephemeral MTP geometry differs from proposal position"
@@ -165,8 +175,13 @@ def _validate_draft_step(operations, scheduled, outputs, kept, run, mtp_cursor):
         for kind, op, i in records:
             if kind == "mtp_forward":
                 tokens = op["unique_token_ids_per_request"][i]
-                if len(tokens) > op["queries"][i] or any(
-                    type(t) is not int or not 0 <= t < 248320 for t in tokens
+                token_rows = op["token_ids_per_request"][i]
+                if (
+                    len(token_rows) != op["queries"][i]
+                    or sorted(set(token_rows)) != tokens
+                    or any(type(t) is not int for t in token_rows)
+                    or len(tokens) > op["queries"][i]
+                    or any(type(t) is not int or not 0 <= t < 248320 for t in tokens)
                 ):
                     raise ValueError("MTP embedding rows exceed invocation geometry")
 
@@ -367,6 +382,8 @@ def select_operation(operation, ids):
         "tables",
         "anchors",
         "unique_token_ids_per_request",
+        "token_ids_per_request",
+        "output_rows",
         "tokens",
         "candidates",
     ):
@@ -408,6 +425,7 @@ def phase_operations(step, ids, boundaries, index, phase):
 
 def step_work(hardware, weights, operations, *, phase=None, angle_seen=None):
     """Count target, fixed-weight draft, sampling, and persistent updates once."""
+    operations = required_outputs(operations)
     model = Model(hardware, weights, angle_seen=angle_seen)
     model.phase = phase
     parent = None
@@ -435,6 +453,59 @@ def step_work(hardware, weights, operations, *, phase=None, angle_seen=None):
     if parent is None:
         raise ValueError("missing target operation")
     return model.bounds(parent)
+
+
+def required_outputs(operations):
+    """Derive useful final features and persistent draft rows from consumers.
+
+    Finished requests keep only registered full prefix pages. Target verification
+    rows still produce all required samples, including rejected candidates.
+    Runtime padding, zero-filled final features, and discarded context outputs
+    cannot increase the canonical work or parameter traffic.
+    """
+    operations = deepcopy(operations)
+    targets = {r["request_id"]: r for r in operations[0]["requests"]}
+    live = {
+        rid: set(range(r["query"] - r["sample_rows"], r["query"]))
+        for rid, r in targets.items()
+    }
+    for op in operations[1:]:
+        if op["kind"] not in ("mtp_forward", "dspark_inject"):
+            continue
+        counts = list(op["queries"])
+        for i, rid in enumerate(op["requests"]):
+            r = targets[rid]
+            if r.get("terminal", False) and (
+                op["kind"] == "dspark_inject" or op["persistent"]
+            ):
+                end = WriteLedger.retained_end(r)
+                counts[i] = max(
+                    0, min(op["contexts"][i] + counts[i], end) - op["contexts"][i]
+                )
+            if op["kind"] == "mtp_forward" and op["persistent"]:
+                first = op["contexts"][i] - r["context"] - 1
+                live[rid].update(
+                    range(max(0, first), min(r["query"], first + counts[i]))
+                )
+        if op["kind"] == "mtp_forward":
+            op["live_queries"] = counts
+            op["live_output_rows"] = [
+                [row for row in rows if row < count]
+                for rows, count in zip(op["output_rows"], counts, strict=True)
+            ]
+        else:
+            op["queries"], op["rows"] = counts, sum(counts)
+    for rid, r in targets.items():
+        if r.get("mtp", False) and r.get("checkpoint_copies_completed", True):
+            end = r["context"] + r["kept_rows"]
+            if r.get("terminal", False):
+                end = min(end, WriteLedger.retained_end(r))
+            live[rid].update(
+                boundary - r["context"] - 1
+                for boundary in range((r["context"] // 784 + 1) * 784, end + 1, 784)
+            )
+        r["final_output_rows"] = sorted(live[rid])
+    return operations
 
 
 def phase_resource_bound(hardware, work, read_intervals, writes, start_skew, path):

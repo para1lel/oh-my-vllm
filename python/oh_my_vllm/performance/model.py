@@ -6,6 +6,7 @@ incoming reads and final live writes use independent capacity credits.
 """
 
 from collections import defaultdict
+from itertools import groupby
 
 from .dag import Dag, Node
 
@@ -18,6 +19,7 @@ class Model:
         self.reads = {}
         self.epoch = 0
         self.phase = None
+        self.target_requests = []
         self.angles = {}
         self.angle_seen = set() if angle_seen is None else angle_seen
         self.relaxed_native = defaultdict(int)
@@ -104,33 +106,30 @@ class Model:
             convert_fp32_bf16=rows * width * (1 + int(floating_residual)),
         )
 
-    def linear(self, name, parent, rows):
+    def linear(self, name, parent, rows, *, first=0, last=None, activation=None):
         # Packed project Linear has a .weight key. DSpark has raw matrices.
         weight_name = name + ".weight" if name + ".weight" in self.weights else name
         spec = self.weights[weight_name]
         if len(spec["shape"]) != 2 or rows <= 0:
             raise ValueError("unsupported matrix shape")
         n, k = spec["shape"]
+        last = n if last is None else last
+        if not 0 <= first < last <= n or (
+            spec["dtype"] == "torch.float8_e4m3fn" and (first % 128 or last % 128)
+        ):
+            raise ValueError("invalid checkpoint matrix row range")
+        sliced = first != 0 or last != n
+        n = last - first
         dtype = spec["dtype"]
-        weights = [self.read(weight_name)]
-        activation = parent
+        suffix = f"[{first}:{last}]" if sliced else ""
+        element_bytes = 1 if dtype == "torch.float8_e4m3fn" else 2
+        weights = [self.read(weight_name + suffix, n * k * element_bytes)]
+        quantized = parent if activation is None else activation
         if dtype == "torch.float8_e4m3fn":
             scale = name + ".scale"
-            weights.append(self.read(scale))
-            activation = self.node(
-                name + ":quantize",
-                (parent,),
-                # Direct scaled rounding needs one multiplication per value
-                # and one scale multiplication per group. Refinement FMAs and
-                # explicit clips are implementation overhead, not a floor.
-                simt_fp32=rows * k + rows * (k // 128),
-                sfu=rows * (k // 128),
-                convert_bf16_fp32=rows * k,
-            )
-            self.relaxed_native["fp32_to_fp8"] += rows * k
-            # REDUX can perform several logical comparisons in one instruction.
-            # Its published throughput/resource mapping is unresolved.
-            self.relaxed_native["fp8_group_max_comparisons"] += rows * k
+            weights.append(self.read(scale + suffix, n // 128 * (k // 128) * 4))
+            if activation is None:
+                quantized = self.quantize(name, parent, rows, k)
             # One product of the two scales and one scaled accumulation per
             # output and K group; padding and repeated CTA loads add no work.
             groups = k // 128
@@ -142,10 +141,27 @@ class Model:
         else:
             raise ValueError(f"unsupported matrix precision: {dtype}")
         return self.node(
-            name + ":matmul",
-            (activation, *weights),
+            name + suffix + ":matmul",
+            (quantized, *weights),
             **{resource: 2 * rows * n * k, "simt_fp32": scale_work},
         )
+
+    def quantize(self, name, parent, rows, k):
+        activation = self.node(
+            name + ":quantize",
+            (parent,),
+            # Direct scaled rounding needs one multiplication per value
+            # and one scale multiplication per group. Refinement FMAs and
+            # explicit clips are implementation overhead, not a floor.
+            simt_fp32=rows * k + rows * (k // 128),
+            sfu=rows * (k // 128),
+            convert_bf16_fp32=rows * k,
+        )
+        self.relaxed_native["fp32_to_fp8"] += rows * k
+        # REDUX can perform several logical comparisons in one instruction.
+        # Its published throughput/resource mapping is unresolved.
+        self.relaxed_native["fp8_group_max_comparisons"] += rows * k
+        return activation
 
     def attention(
         self,
@@ -159,6 +175,7 @@ class Model:
         dim,
         tables,
         incoming_contexts=None,
+        first_position=0,
     ):
         if len(queries) != len(contexts):
             raise ValueError("attention sequence metadata mismatch")
@@ -169,7 +186,9 @@ class Model:
         cached = self.read(
             name + ":incoming_kv",
             unique_context_tokens(
-                contexts if incoming_contexts is None else incoming_contexts, tables
+                contexts if incoming_contexts is None else incoming_contexts,
+                tables,
+                first=first_position,
             )
             * 2
             * kv_heads
@@ -193,10 +212,10 @@ class Model:
             sfu=heads * sum(queries),
         )
 
-    def target_layer(self, prefix, parent, requests, *, state_bytes, mtp=False):
+    def target_layer(
+        self, prefix, parent, requests, *, state_bytes, mtp=False, output_rows=None
+    ):
         rows = sum(r["query"] for r in requests)
-        queries = [r["query"] for r in requests]
-        contexts = [r["context"] for r in requests]
         normalized = self.norm(
             prefix + ".input_norm",
             parent,
@@ -205,7 +224,20 @@ class Model:
             residual=not (mtp or prefix == "target.layers.0"),
         )
         if prefix + ".qkv.weight" in self.weights:
-            projected = self.linear(prefix + ".qkv", normalized, rows)
+            selected = (
+                [list(range(r["query"])) for r in requests]
+                if output_rows is None
+                else output_rows
+            )
+            quantized = self.quantize(prefix + ".qkv", normalized, rows, 5120)
+            kv = self.linear(
+                prefix + ".qkv",
+                normalized,
+                rows,
+                first=12288,
+                last=14336,
+                activation=quantized,
+            )
             angles = self.rope_angles(
                 "target_rope",
                 [
@@ -218,29 +250,62 @@ class Model:
                 ],
                 32,
             )
-            prepared = self.node(
-                prefix + ":norm_rope",
+            prepared_kv = self.node(
+                prefix + ":k_norm_rope",
                 (
-                    projected,
-                    self.read(prefix + ".q_norm"),
+                    kv,
                     self.read(prefix + ".k_norm"),
                     angles,
                 ),
-                simt_fp32=rows * 28 * (4 * 256 + 1 + 6 * 32),
-                sfu=rows * 28,
+                simt_fp32=rows * 4 * (4 * 256 + 1 + 6 * 32),
+                sfu=rows * 4,
             )
+            live = []
+            for r, indices in zip(requests, selected, strict=True):
+                for _, grouped in groupby(
+                    enumerate(indices), lambda item: item[1] - item[0]
+                ):
+                    contiguous = [row for _, row in grouped]
+                    first = contiguous[0]
+                    live.append(
+                        dict(
+                            r,
+                            query=len(contiguous),
+                            context=r["context"] + first,
+                            position_start=r.get("position_start", r["context"])
+                            + first,
+                            incoming_context=r.get("incoming_context", r["context"]),
+                        )
+                    )
+            rows = sum(r["query"] for r in live)
+            if not rows:
+                return prepared_kv
+            projected = self.linear(
+                prefix + ".qkv",
+                normalized,
+                rows,
+                first=0,
+                last=12288,
+                activation=quantized,
+            )
+            prepared = self.node(
+                prefix + ":q_norm_rope",
+                (projected, self.read(prefix + ".q_norm"), angles),
+                simt_fp32=rows * 24 * (4 * 256 + 1 + 6 * 32),
+                sfu=rows * 24,
+            )
+            prepared = self.node(prefix + ":attention_inputs", (prepared, prepared_kv))
             attended = self.attention(
                 prefix,
                 prepared,
-                queries,
-                contexts,
+                [r["query"] for r in live],
+                [r["context"] for r in live],
                 heads=24,
                 kv_heads=4,
                 dim=256,
-                tables=[r["fa_block_table"] for r in requests],
-                incoming_contexts=[
-                    r.get("incoming_context", r["context"]) for r in requests
-                ],
+                tables=[r["fa_block_table"] for r in live],
+                incoming_contexts=[r["incoming_context"] for r in live],
+                first_position=int(mtp),
             )
             gated = self.node(
                 prefix + ":output_gate",
@@ -442,13 +507,18 @@ class Model:
                 parent,
                 requests,
                 state_bytes=4 if state_dtype == "torch.float32" else 2,
+                output_rows=[r["final_output_rows"] for r in requests]
+                if layer == 63
+                else None,
             )
             if "dspark.fc" in self.weights and layer in (5, 19, 33, 47, 61):
                 self.relaxed_native["bf16_add"] += rows * 5120
                 taps.append(self.node(f"target:feature:{layer}", (parent,)))
         if taps:
             self.features = self.node("target:features", tuple(taps))
-        parent = self.norm("target.norm", parent, rows, 5120, residual=True)
+        final_rows = sum(len(r["final_output_rows"]) for r in requests)
+        if final_rows:
+            parent = self.norm("target.norm", parent, final_rows, 5120, residual=True)
         samples = sum(r["sample_rows"] for r in requests)
         if samples:
             logits = self.linear("target.head", parent, samples)
@@ -495,6 +565,8 @@ class Model:
 
     def dspark_inject(self, operation, parent):
         rows = operation["rows"]
+        if not rows:
+            return parent
         angles = self.rope_angles(
             "dspark",
             [
@@ -603,12 +675,13 @@ class Model:
                 if position == 0
                 else [row[position - 1] for row in operation["candidates"]]
             )
-            latent = self.embedding(previous_ids, markov=True, parents=(previous,))
+            feedback = parent if position == 0 else previous
+            latent = self.embedding(previous_ids, markov=True, parents=(feedback,))
             markov = self.linear("dspark.markov_w2", latent, batch)
             self.relaxed_native["bf16_add"] += batch * 248320
             logits = self.node(
                 f"dspark:markov_add:{position}",
-                (markov, base, previous),
+                (markov, base) if position == 0 else (markov, base, previous),
             )
             confidence_input = self.node(
                 f"dspark:confidence_input:{position}", (hidden, latent)
@@ -632,6 +705,8 @@ class Model:
     def mtp_forward(self, operation, parent):
         """One true draft epoch; parameter traffic has a new retention boundary."""
         self.epoch += 1
+        live_queries = operation.get("live_queries", operation["queries"])
+        outputs = operation.get("live_output_rows", [[*range(q)] for q in live_queries])
         requests = [
             {
                 "query": q,
@@ -641,30 +716,78 @@ class Model:
                 "state_source": 0,
                 "fa_block_table": table,
                 "incoming_context": incoming,
+                "output_rows": selected,
             }
-            for q, c, table, incoming in zip(
-                operation["queries"],
+            for q, c, table, incoming, selected in zip(
+                live_queries,
                 operation["contexts"],
                 operation["tables"],
-                operation.get(
-                    "incoming_contexts", [max(0, c - 1) for c in operation["contexts"]]
-                ),
+                operation.get("incoming_contexts", operation["contexts"]),
+                outputs,
                 strict=True,
             )
+            if q
         ]
-        rows = sum(operation["queries"])
+        rows = sum(live_queries)
+        if not rows:
+            return parent
         if self.phase == "prefill":
             for request in requests:
                 request["incoming_context"] = 0
-        embedded = self.embedding(operation["unique_token_ids"])
+        if "token_ids_per_request" in operation:
+            ids = set().union(
+                *(
+                    set(tokens[:count])
+                    for tokens, count in zip(
+                        operation["token_ids_per_request"], live_queries, strict=True
+                    )
+                )
+            )
+        else:
+            ids = operation["unique_token_ids"]
+        embedded = self.embedding(ids)
         embedded = self.norm("target.mtp_embedding_norm", embedded, rows, 5120)
+        targets = {r["request_id"]: r for r in self.target_requests}
+        restored = []
+        for rid, context, table, count in zip(
+            operation.get("requests", [None] * len(live_queries)),
+            operation["contexts"],
+            operation["tables"],
+            live_queries,
+            strict=True,
+        ):
+            if rid is None:
+                continue
+            target = targets[rid]
+            if count and context > 0 and context == target["context"]:
+                if context % 784:
+                    raise ValueError("restored MTP feature is away from a boundary")
+                page = table[context // 784 - 1]
+                internal = (
+                    self.phase == "prefill" and target.get("incoming_context") == 0
+                )
+                restored.append(
+                    self.read(f"mtp_hidden:page:{page}", 0 if internal else 5120 * 2)
+                )
+        if restored:
+            parent = self.node(
+                "mtp:hidden_sources", tuple(dict.fromkeys((parent, *restored)))
+            )
         normalized = self.norm("target.mtp_hidden_norm", parent, rows, 5120)
         joined = self.node("mtp:joined", (embedded, normalized))
         projected = self.linear("target.mtp_fc", joined, rows)
         result = self.target_layer(
-            "target.mtp", projected, requests, state_bytes=2, mtp=True
+            "target.mtp",
+            projected,
+            requests,
+            state_bytes=2,
+            mtp=True,
+            output_rows=[r["output_rows"] for r in requests],
         )
-        return self.norm("target.mtp_norm", result, rows, 5120, residual=True)
+        final_rows = sum(len(r["output_rows"]) for r in requests)
+        if final_rows:
+            return self.norm("target.mtp_norm", result, final_rows, 5120, residual=True)
+        return result
 
     def mtp_logits(self, parent, rows):
         logits = self.linear("target.head", parent, rows)
@@ -688,17 +811,28 @@ class Model:
         return parent
 
 
-def unique_context_tokens(contexts, tables):
+def unique_context_tokens(contexts, tables, *, first=0):
     """Union physical page ranges; shared prefix reads count once per layer."""
     if len(contexts) != len(tables):
         raise ValueError("cache table metadata mismatch")
-    pages = {}
+    if first not in (0, 1):
+        raise ValueError("invalid first cache position")
+    pages = defaultdict(list)
     for count, table in zip(contexts, tables, strict=True):
         if type(count) is not int or count < 0 or len(table) * 784 < count:
             raise ValueError("invalid effective cache length")
-        for index in range((count + 783) // 784):
+        for index in range(first // 784, (count + 783) // 784):
             page = table[index]
             if type(page) is not int or page <= 0:
                 raise ValueError("invalid physical page")
-            pages[page] = max(pages.get(page, 0), min(784, count - index * 784))
-    return sum(pages.values())
+            left = max(first, index * 784) - index * 784
+            right = min(784, count - index * 784)
+            if right > left:
+                pages[page].append((left, right))
+    total = 0
+    for ranges in pages.values():
+        end = 0
+        for left, right in sorted(ranges):
+            total += max(0, right - max(left, end))
+            end = max(end, right)
+    return total

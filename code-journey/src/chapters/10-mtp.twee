@@ -25,6 +25,10 @@
 <p>连续四草稿提议可使用 ProposalGraph: 初始选择后, 其余 MTP 步骤在固定执行图内推进, 减少 Python 往返. 图内使用已分配地址, 需要后续草稿对应的缓存位置已经可写.</p>
 <p>接近页或分配边界时, 逐步提议路径检查剩余可写范围并缩短草稿, 等调度器下一轮重新分配. MTP 自身使用 Rust 提供的块表, 不独立扩展逻辑池. validate_state 核对 MTP 计算位置与边界恢复条件, propose 保存和读取边界 hidden. forget 在完成和抢占时移除请求位置记录, 持久缓存页由 Rust 引用管理回收.</p>
 <p>MTP 增加额外计算与候选状态, 接受率和形状决定它的收益. 第 12 章把 MTP4 与普通生成分别纳入正确性, 长上下文和性能验收. 第 11 章先解释目标, 草稿和提议三种图如何捕获与复用.</p>
+<h2>持久 context 为什么只计算端点输出</h2>
+<p>MTP 在位置 p 使用目标模型的 hidden[p-1] 和 token[p]. 因而旧 MTP 输出无需向下一 context 行传递. 所有有效位置仍产生 K/V, 当前满足输出与草稿预算的请求端点才计算 Q, attention 和 MLP. 缓存恢复时保存的目标边界特征提供第一行输入; 冷请求从位置 1 开始, 对应位置 0 的目标特征.</p>
+<p>长 context 采用 draft_context 与 MTPContextGraph, 选中下标在进入 GPU 单元前规划. attention 的 first 为 1, 因果范围是 [1, 当前位置 + 1). 图有独立内存池, 默认最多 8 项, 捕获前保留 12 GiB 余量. 预热和捕获会写 K/V, 所以先备份目的行, 并在 finally 恢复. 重放先检查全部 shape, dtype, device 和 attention extent, 再复制 token, hidden, 位置, 写槽与选中页表.</p>
+<p>只更新缓存而没有输出的图, 可以在行数相同时复用不同位置与页编号. 有输出的图还区分选中行和 attention extent. 各请求的端点按真实拼接区间归属, 选中顺序直接决定返回顺序. 短 decode 仍使用原有草稿图, 图族日志把持久 context 与逐 token 提议分别记录.</p>
 <<coverage>>
 <<chapterChoices>>
 </article>

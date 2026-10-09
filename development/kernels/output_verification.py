@@ -41,7 +41,9 @@ def _compare(operation, path, expected, actual):
             and expected.stride() != actual.stride()
         ):
             raise AssertionError(f"{operation}/{path}: scale stride mismatch")
-        if operation == "recurrent" and path == "written_state":
+        if (operation == "recurrent" and path == "written_state") or (
+            operation == "gdn_prefill" and path == "return[1]"
+        ):
             error = actual.float() - expected.float()
             if not torch.isfinite(error).all():
                 raise AssertionError(f"{operation}/{path}: nonfinite state error")

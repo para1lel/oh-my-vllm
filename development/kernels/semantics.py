@@ -170,6 +170,47 @@ class Operators:
         return rope(normalized, positions)  # noqa: F821
 
     @func
+    def prepare_query(
+        packed: Tensor[(2, 12288), DType.bf16],
+        weight: Tensor[(256,), DType.f32],
+        positions: Tensor[(2,), DType.i64],
+    ):
+        return norm_rope(  # noqa: F821
+            tf.reshape(packed, (2, 24, 512))[:, :, :256], weight, positions
+        )
+
+    @func
+    def prepare_context(
+        packed: Tensor[(2, 2048), DType.bf16],
+        weight: Tensor[(256,), DType.f32],
+        positions: Tensor[(2,), DType.i64],
+        old_k: Tensor[(783, 4, 256), DType.bf16],
+        old_v: Tensor[(783, 4, 256), DType.bf16],
+    ):
+        key = tf.cast(tf.reshape(packed[:, :1024], (2, 4, 256)), "f32")
+        mean = tf.reduce(tf.square(key), (-1,), True, "mean")
+        normalized = tf.cast(key * tf.rsqrt(mean + 1e-6) * weight, "bf16")
+        exponents = tf.cast(tf.arange(Tensor[(32,), DType.i64]), "f32") * (-2.0 / 64.0)
+        angle = tf.reshape(tf.cast(positions, "f32"), (2, 1, 1)) * tf.reshape(
+            tf.exp(exponents * 16.11809565095832), (1, 1, 32)
+        )
+        left, right = (
+            tf.cast(normalized[:, :, :32], "f32"),
+            tf.cast(normalized[:, :, 32:64], "f32"),
+        )
+        rotated = tf.concat(
+            [
+                tf.cast(left * tf.cos(angle) - right * tf.sin(angle), "bf16"),
+                tf.cast(right * tf.cos(angle) + left * tf.sin(angle), "bf16"),
+                normalized[:, :, 64:],
+            ],
+            axis=2,
+        )
+        return tf.concat([old_k, rotated], axis=0), tf.concat(
+            [old_v, tf.reshape(packed[:, 1024:], (2, 4, 256))], axis=0
+        )
+
+    @func
     def prepare_attention(
         packed: Tensor[(2, 14336), DType.bf16],
         qw: Tensor[(256,), DType.f32],
@@ -319,6 +360,47 @@ class Operators:
         updated = decayed + tf.reshape(residual, (6, 128, 1)) * kh
         output = tf.cast(tf.reduce(updated * qh, (-1,), False, "sum"), "bf16")
         return tf.reshape(output, (1, 6, 128)), updated
+
+    @func
+    def prefill_delta(
+        q: Tensor[(1, 2, 128), DType.bf16],
+        k: Tensor[(1, 2, 128), DType.bf16],
+        v: Tensor[(1, 6, 128), DType.bf16],
+        g: Tensor[(1, 6), DType.f32],
+        beta: Tensor[(1, 6), DType.f32],
+        state: Tensor[(6, 128, 128), DType.f32],
+    ):
+        qh = tf.reshape(tf.repeat_interleave(tf.cast(q, "f32"), 3, axis=1), (6, 1, 128))
+        kh = tf.reshape(tf.repeat_interleave(tf.cast(k, "f32"), 3, axis=1), (6, 1, 128))
+        decayed = state * tf.reshape(tf.exp(g), (6, 1, 1))
+        recalled = tf.reduce(decayed * kh, (-1,), False, "sum")
+        residual = (tf.reshape(tf.cast(v, "f32"), (6, 128)) - recalled) * tf.reshape(
+            beta, (6, 1)
+        )
+        updated = decayed + tf.reshape(residual, (6, 128, 1)) * kh
+        output = tf.cast(tf.reduce(updated * qh, (-1,), False, "sum") * Q_SCALE, "bf16")
+        return tf.reshape(output, (1, 6, 128)), updated
+
+    @func
+    def gdn_prefill(
+        q: Tensor[(2, 2, 128), DType.bf16],
+        k: Tensor[(2, 2, 128), DType.bf16],
+        v: Tensor[(2, 6, 128), DType.bf16],
+        g: Tensor[(2, 6), DType.f32],
+        beta: Tensor[(2, 6), DType.f32],
+        state: Tensor[(6, 128, 128), DType.f32],
+    ):
+        # Logical unrolled recurrence with prefill's normalized BF16 inputs.
+        # Native CuTe chunk arithmetic and strided-copy traffic need counters;
+        # this representative HIR does not describe those implementation costs.
+        nq, nk = qk(q, k)  # noqa: F821
+        o0, s0 = prefill_delta(  # noqa: F821
+            nq[:1, :, :], nk[:1, :, :], v[:1, :, :], g[:1, :], beta[:1, :], state
+        )
+        o1, s1 = prefill_delta(  # noqa: F821
+            nq[1:, :, :], nk[1:, :, :], v[1:, :, :], g[1:, :], beta[1:, :], s0
+        )
+        return tf.concat([o0, o1], axis=0), s1
 
     @func
     def recurrent(

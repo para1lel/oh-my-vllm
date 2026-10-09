@@ -8,6 +8,8 @@ from development.kernels.timing import reference_operator
 
 ENTRIES = {
     "prepare_attention": ("attention_prepare", "prepare_attention"),
+    "prepare_context": ("partial_attention", "prepare_context"),
+    "prepare_query": ("partial_attention", "prepare_query"),
     "norm": ("normalization", "rms_norm"),
     "add_norm": ("normalization", "add_rms_norm"),
     "add_norm_fp8_linear": ("fp8", "add_norm_linear"),
@@ -18,6 +20,7 @@ ENTRIES = {
     "silu_quant": ("fp8", "quantize"),
     "gates": ("elementwise", "delta_gates"),
     "qk": ("gdn", "normalize_qk"),
+    "gdn_prefill": ("gdn", "prefill"),
     "recurrent": ("gdn", "recurrent"),
     "convolution": ("convolution", "causal_conv"),
     "append": ("attention", "append"),
@@ -122,17 +125,35 @@ def fixture(
             random(batch, 7, 8, 128),
             random(batch, 7, 8, 128),
         )
-    elif operation == "prepare_attention":
-        packed = random(n, 14336)
+    elif operation in ("prepare_attention", "prepare_context", "prepare_query"):
+        packed = random(
+            n,
+            {
+                "prepare_attention": 14336,
+                "prepare_context": 2048,
+                "prepare_query": 12288,
+            }[operation],
+        )
         qw, kw = random(256, dtype=torch.float32), random(256, dtype=torch.float32)
         dtype = getattr(torch, config["index_dtype"])
         positions = torch.arange(n, device="cuda", dtype=dtype)
         slots = positions + 784
+        if operation == "prepare_query":
+            return package(
+                lambda: reference(packed, qw, positions),
+                lambda: candidate(packed, qw, positions),
+            )
         pool = torch.empty(1400, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
         other = torch.empty_like(pool)
+
+        def run(function, destination):
+            if operation == "prepare_context":
+                return function(packed, kw, positions, destination, slots)
+            return function(packed, qw, kw, positions, destination, slots)
+
         return package(
-            lambda: reference(packed, qw, kw, positions, pool, slots),
-            lambda: candidate(packed, qw, kw, positions, other, slots),
+            lambda: run(reference, pool),
+            lambda: run(candidate, other),
             (
                 (
                     "written_key",
@@ -199,6 +220,22 @@ def fixture(
         args = (
             packed[:, :2048].view(n, 16, 128),
             packed[:, 2048:4096].view(n, 16, 128),
+        )
+    elif operation == "gdn_prefill":
+        counts = config["counts"]
+        n = sum(counts)
+        offsets = [0]
+        for count in counts:
+            offsets.append(offsets[-1] + count)
+        packed = random(n, 10240)
+        args = (
+            packed[:, :2048].view(n, 16, 128),
+            packed[:, 2048:4096].view(n, 16, 128),
+            packed[:, 4096:].view(n, 48, 128),
+            -torch.rand(n, 48, device="cuda", generator=generator) * 0.1,
+            torch.rand(n, 48, device="cuda", generator=generator),
+            random(len(counts), 48, 128, 128, dtype=torch.float32) * 0.01,
+            metadata(offsets, torch.int32),
         )
     elif operation in ("recurrent", "convolution"):
         counts = config["counts"]

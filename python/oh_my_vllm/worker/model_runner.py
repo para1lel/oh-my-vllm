@@ -464,6 +464,31 @@ class OhMyVllmWorker:
             prefill_tokens=sum(len(p.writes) for p in plans if p.prefill),
         )
         token_tensor = metadata[7]
+        selected = [
+            starts[i] + row for i, p in enumerate(plans) for row in p.sample_indices
+        ]
+        if (
+            not decode_only
+            and len(selected) < len(ids)
+            and (self._proposer() is None or self._is_dspark())
+        ):
+            # MTP consumes historical target hidden rows; ordinary and DSpark
+            # consume only logits here. DSpark feature taps precede layer 63.
+            batch.output_indices = device_tensor(selected, dtype=torch.int64)
+            if selected:
+                from oh_my_vllm.worker.decode_graph import DecodeAttention
+
+                selected_tables = device_page_tables(
+                    [p.request.fa_block_table for p in plans],
+                    (extent + BLOCK - 1) // BLOCK,
+                    counts=[len(p.sample_indices) for p in plans],
+                )
+                lengths = device_tensor(
+                    [positions[row] + 1 for row in selected], dtype=torch.int32
+                )
+                batch.output_attention = DecodeAttention(
+                    selected_tables, lengths, extent
+                )
         hidden = None
         graph_logits = None
         features = None
@@ -531,6 +556,7 @@ class OhMyVllmWorker:
                 tuple(len(p.writes) for p in plans),
                 tuple(p.request.num_computed_tokens for p in plans),
                 batch.prefill_sequences,
+                tuple(selected) if batch.output_indices is not None else None,
             )
             prefill_family = "prefill_dspark" if self._is_dspark() else "prefill"
             if self.prefill_graph_cache.should_use(prefill_family, prefill_key):
@@ -573,9 +599,6 @@ class OhMyVllmWorker:
                 hidden, features = self.feature_unit(token_tensor, batch, self.caches)
             else:
                 hidden = self.forward_unit(token_tensor, batch, self.caches)
-        selected = [
-            starts[i] + row for i, p in enumerate(plans) for row in p.sample_indices
-        ]
         logits = None
         if selected:
             if graph_logits is None:
@@ -815,6 +838,10 @@ class OhMyVllmWorker:
             logger.info(
                 "MTP graph cache",
                 extra={"fields": self.mtp.graph_cache.snapshot()},
+            )
+            logger.info(
+                "MTP context graph cache",
+                extra={"fields": self.mtp.context_graph_cache.snapshot()},
             )
         if self.dspark is not None:
             logger.info(

@@ -33,6 +33,39 @@ Parameter metadata specifies loaded tensors, with converted scales.
 The model counts each required parameter buffer and the selected embedding rows.
 It does not use checkpoint disk size as GPU traffic.
 
+### Required output rows
+
+Previous rows supply K/V for future attention.
+Only selected rows supply final hidden features and logits.
+Selection keeps all verification samples, with rejected candidates.
+Native MTP also keeps target rows used by its context input and registered boundary features.
+
+At the target's last FA layer, all required rows perform input normalization and K/V projection.
+Selected rows perform Q/gate projection, attention, output projection, MLP, and final normalization.
+DSpark feature taps precede this layer.
+A configured feature tap at layer 63 keeps the full layer output.
+
+Persistent MTP normalizes target-hidden and embedding inputs, then applies FC to each required context row.
+Each such row supplies K/V. Only selected endpoints supply draft hidden output.
+Subsequent context rows receive target hidden, so discarded previous draft hidden has no consumer.
+Temporary proposal rows keep their full output.
+
+For `R` context rows and `S` output rows, QKV Tensor work is `2*5120*(2048*R+12288*S)`.
+FP8 input quantization counts once for `R` rows.
+A second implementation quantization for selected rows is overhead.
+Q/gate and K/V parameter ranges have different, disjoint read identities.
+
+Terminal requests keep registered full prefix pages.
+The model removes draft context and hidden work with no subsequent consumer.
+Restored MTP boundary features have a named 10 KiB read per physical page.
+Features produced earlier in the same prefill phase have free ideal retention.
+MTP incoming KV reads use physical positions `[1,end)`, with shared ranges merged by page.
+
+The equation version is `qwen38-dspark-b200-semantic-v3`.
+Typed FX metadata identifies shape queries and host-known proposal page addresses.
+These metadata operations have zero required GPU work in the relaxed implementation.
+Their execution time stays in wall time.
+
 ## Dependencies and shared resources
 
 Semantic nodes keep activation, token, and state dependencies.

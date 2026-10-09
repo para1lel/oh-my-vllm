@@ -1,5 +1,6 @@
 """Full model compile units inside the existing manual CUDA Graph lifecycle."""
 
+import json
 import os
 
 import pytest
@@ -245,6 +246,12 @@ def test_full_model_prefill_target_and_mtp_compile_units():
         4096,
         compile_model=True,
     )
+    from oh_my_vllm.performance import execution
+    from oh_my_vllm.performance.coverage import metadata_covers
+
+    metadata = [json.loads(row) for row in execution._GRAPH_METADATA]
+    for operation in ("_operator.floordiv", "_operator.mod"):
+        assert metadata_covers("proposal_graph", operation, metadata)
     proposals = proposal_graph.replay(draft_hidden, mtp_position, proposal_tables)
     eager_proposals = eager_proposal_graph.replay(
         draft_hidden, mtp_position, proposal_tables

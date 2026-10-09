@@ -223,6 +223,7 @@ class GraphCache:
             "target",
             "draft",
             "proposal",
+            "mtp_context",
             "target_dspark",
             "dspark",
             "dspark_context",

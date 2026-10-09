@@ -72,7 +72,8 @@ An occupancy increase alone is not a latency result.
 Swizzle selection used five randomized timing rounds.
 SM selection and the subsequent swizzle confirmation used ten rounds with random order.
 Candidates must keep rounding, scales, and persistent writes equal.
-The previous 230 cases, sixteen fused cases, and twenty-eight other FP8 projection cases supply operator acceptance.
+The 301 cases supply operator acceptance.
+They keep the previous 230 cases and add fused projection, FP8 projection, full GDN prefill, and selected-output preparation cases.
 Full-model phase collection supplies framework acceptance.
 
 | Optimization | Diagnostic observation | Selection |
@@ -84,6 +85,9 @@ Full-model phase collection supplies framework acceptance.
 | Gated RMS | At 32144 token rows, one-row time was 0.399 ms and four-row time was 0.310 ms. | Four rows per warp for large inputs. Use one row for small inputs. |
 | Residual RMS and FP8 quantization | At 32144 by 5120, the two operations took 0.325 ms and the fused operation took 0.195 ms. | Keep residual and normalized BF16 rounding. Remove the read and write of the normalized array. |
 | Single-row normalized projection | One-row gate/up diagnostic time was about 0.03431 ms with fusion and 0.03319 ms with the previous CUDA chain. | Use the previous CUDA chain for one row. |
+| Narrow FP8 traversal | At M 32144, swizzle 4 saved about 0.104 ms for QKV/Z and 0.123 ms for down projection. | Swizzle 4 at M at least 32144 for N/K 16384/5120 and 5120/17408. |
+| Strided GDN value copy | At 32144 rows and stride 10240, the median changed from 0.42002 to 0.12376 ms. | Copy eight adjacent BF16 values per lane, with 256 threads. |
+| FP32 recurrent tile | Batch 2 changed from 3.80272 to 3.05744 microseconds. Batch 4 changed from 5.21184 to 4.54240 microseconds. | Batch 2 uses eight rows and one warp. Batch 4 uses two rows and four warps. |
 
 The table uses diagnostic operator microbenchmarks and a different profiler replay.
 Short-output full-model diagnosis has a different scope.
@@ -103,3 +107,26 @@ K=256 GEMM tiles, smaller M tiles, and two-SM down projections did not show a st
 They are excluded from dispatch. Keep unsuccessful attempts in external evidence storage.
 N=256 tiles increased the large gate/up diagnostic time from about 6.72 to 19.39 ms.
 Dispatch does not use these tiles.
+
+GDN copy candidate measurements used ten rounds with random order and forty graph replays per sample.
+Recurrent candidate measurements used ten rounds and one hundred operations in timed graphs.
+Recurrent outputs and states stayed bitwise equal.
+The copy profile changed DRAM throughput from 16.00% to 58.00%.
+The selected copy used 18 registers per thread and 65.56% occupancy.
+
+Long-scoreboard stalls were 68.14%, and L2 hits were 0.01%.
+Different profile replays supply these counters.
+
+Selected-output paths keep all required K/V and remove unused historical attention and MLP output.
+Complete-operation comparison passed twenty-one selected cases with three rounds and twenty pairs per round.
+The source was dirty, so these measurements are diagnostic.
+The full 301-case regression stays active.
+Reports record different loaded module identities for owned pointwise CUDA and FP8 GEMM.
+
+Short-output diagnosis uses 32768 input tokens and sixteen outputs.
+Ordinary prefill had a median of about 1.336 s after selected-output computation.
+Its revised required-work bound was about 0.442 s.
+The ratio was about 3.024. Further optimization is required.
+
+MTP short-output prefill had a median of about 1.379 s.
+Formal phase verdicts use the fixed 4096-output workloads.

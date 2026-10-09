@@ -12,6 +12,36 @@ from .backend import NAME, kernel
 _normalize_qk = kernel("gdn", "_normalize_qk")
 
 
+def _contiguous_values(values: torch.Tensor) -> torch.Tensor:
+    """Copy packed value rows with aligned vectors before GDN prefill.
+
+    Keep an already contiguous tensor. The CUDA path copies eight BF16 values
+    per thread; other layouts use PyTorch's complete contiguous copy.
+    """
+    if values.is_contiguous():
+        return values
+    if (
+        NAME == "cuda"
+        and values.dtype == torch.bfloat16
+        and values.is_cuda
+        and values.ndim == 3
+        and 0 < values.numel() <= 2**31
+        and values.shape[0] < 2**31
+        and values.stride(2) == 1
+        and values.stride(1) == values.shape[2]
+        and values.shape[1] * values.shape[2] % 8 == 0
+        and values.stride(0) >= values.shape[1] * values.shape[2]
+        and values.stride(0) % 8 == 0
+        and values.data_ptr() % 16 == 0
+    ):
+        from .cuda_backend import compiled
+
+        output = torch.empty_like(values, memory_format=torch.contiguous_format)
+        compiled().contiguous_bf16_rows(values.flatten(1), output.flatten(1))
+        return output
+    return values.contiguous()
+
+
 def normalize_qk(q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """Normalize packed GDN inputs without FP32 intermediate tensors.
 
@@ -194,7 +224,7 @@ def prefill(
     return chunk_gated_delta_rule(
         q=q.contiguous(),
         k=k.contiguous(),
-        v=v.contiguous(),
+        v=_contiguous_values(v),
         g=log_decay.float().exp().contiguous(),
         beta=beta.float().contiguous(),
         initial_state=initial_state,

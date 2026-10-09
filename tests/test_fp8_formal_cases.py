@@ -26,12 +26,14 @@ def test_owned_fp8_matrix_covers_all_distinct_projection_chains():
         (rows, columns, width, silu)
         for rows in shapes
         for columns, width, silu in (
+            (2048, 5120, False),
             (16384, 5120, False),
             (14336, 5120, False),
             (5120, 6144, False),
             (5120, 17408, True),
         )
     }
+    expected.add((32143, 2048, 5120, False))
     observed = {
         (config["tokens"], config["columns"], config["width"], config["silu"])
         for case in cases()
@@ -45,6 +47,38 @@ def test_owned_fp8_matrix_covers_all_distinct_projection_chains():
     ]
     assert len(fused) == 16
     assert {c["tokens"] for c in fused if c["tokens"] > 32} == set(shapes)
+
+
+def test_full_gdn_prefill_covers_only_prefill_rows():
+    configurations = {
+        tuple(case["configuration"]["counts"])
+        for case in cases()
+        if case["configuration"]["operation"] == "gdn_prefill"
+    }
+    assert configurations == {
+        (624,),
+        (624, 624),
+        (624, 624, 624, 624),
+        (32144,),
+        (144, 32144),
+        (624, 32144),
+    }
+    assert len(cases()) == 301
+
+
+def test_partial_preparation_includes_cold_mtp_and_live_verification_maxima():
+    context = {
+        case["configuration"]["tokens"]
+        for case in cases()
+        if case["configuration"]["operation"] == "prepare_context"
+    }
+    query = {
+        case["configuration"]["tokens"]
+        for case in cases()
+        if case["configuration"]["operation"] == "prepare_query"
+    }
+    assert context == {624, 1248, 2496, 32143, 32144, 32288, 32290, 32768}
+    assert query == {1, 2, 4, 9, 25}
 
 
 def test_case_filter_selects_exact_ids_and_rejects_typos():

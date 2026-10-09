@@ -22,6 +22,8 @@ def test_coverage_rejects_direct_backend_call_through_allowed_type_import(tmp_pa
         "worker/mtp.py",
         "worker/dspark.py",
         "worker/dspark_graph.py",
+        "worker/mtp_context_graph.py",
+        "worker/prefill_graph.py",
     }:
         destination = tmp_path / file
         destination.parent.mkdir(parents=True, exist_ok=True)

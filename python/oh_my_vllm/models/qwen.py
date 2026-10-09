@@ -19,6 +19,7 @@ from oh_my_vllm.ir.gdn_prefill import gdn_prefill
 from oh_my_vllm.ir.gdn_prepare import gdn_prepare
 from oh_my_vllm.ir.logits import logits_gemm
 from oh_my_vllm.ir.normalized_linear import add_norm_fp8_linear
+from oh_my_vllm.ir.partial_attention import prepare_context, prepare_query
 from oh_my_vllm.ir.pointwise import add_rms_norm, rms_norm, silu_mul
 from oh_my_vllm.ir.recurrent import gdn_recurrent
 from oh_my_vllm.ir.state import prepare_attention
@@ -84,6 +85,19 @@ class Linear:
             return self(silu_mul(packed))
         return fp8.linear(packed, self.weight, self.scale, silu_gate=True)
 
+    def rows(self, first: int, last: int) -> Linear:
+        """View complete 128-row checkpoint blocks without changing their scales."""
+        if not 0 <= first < last <= self.weight.shape[0] or (
+            self.scale is not None and (first % 128 or last % 128)
+        ):
+            raise ValueError(
+                "projection rows must contain complete checkpoint scale blocks"
+            )
+        return Linear(
+            self.weight[first:last],
+            None if self.scale is None else self.scale[first // 128 : last // 128],
+        )
+
 
 @dataclass
 class AttentionBatch:
@@ -101,6 +115,8 @@ class Batch(AttentionBatch):
     final_state_writes: torch.Tensor
     prefill_sequences: int
     prefill_tokens: int
+    output_indices: torch.Tensor | None = None
+    output_attention: object | None = None
 
     def delta(
         self,
@@ -216,6 +232,9 @@ class Layer:
             result = self.full_attention(normalized, batch, cache)
         else:
             result = self.delta_attention(normalized, batch, cache)
+        return self.mlp_residual(result, residual)
+
+    def mlp_residual(self, result, residual):
         if self.gate_up.scale is None:
             residual, normalized = add_rms_norm(result, residual, self.post_norm)
             packed = self.gate_up(normalized)
@@ -228,6 +247,34 @@ class Layer:
                 self.gate_up.scale,
             )
         return self.down.silu(packed), residual
+
+    def forward_selected(
+        self, x, batch, cache, indices, output_attention, residual=None
+    ):
+        """Keep every K/V row and compute branch outputs only for selected rows.
+
+        Historical hidden outputs of the last FA layer have no subsequent model
+        consumer. Persistent MTP also needs only an eligible endpoint output:
+        each later context row receives target hidden, not past draft hidden.
+        Selection and attention metadata are planned before this GPU unit.
+        """
+        if self.kind != "full_attention":
+            raise ValueError("output selection requires a full-attention layer")
+        if residual is None:
+            residual, normalized = x, rms_norm(x, self.input_norm)
+        else:
+            residual, normalized = add_rms_norm(x, residual, self.input_norm)
+        kv = self.qkv.rows(12288, 14336)(normalized)
+        prepare_context(kv, self.k_norm, batch.positions, cache, batch.fa_slots)
+        residual = residual.index_select(0, indices)
+        if indices.numel() == 0:
+            return residual, residual
+        packed = self.qkv.rows(0, 12288)(normalized.index_select(0, indices))
+        q = prepare_query(packed, self.q_norm, batch.positions.index_select(0, indices))
+        gate = packed.reshape(-1, 24, 512)[..., 256:]
+        attended = output_attention(q, cache)
+        result = self.out((attended * gate.sigmoid()).flatten(1))
+        return self.mlp_residual(result, residual)
 
     def __call__(
         self, x: torch.Tensor, batch: Batch, cache: LayerCache
@@ -310,9 +357,27 @@ class Qwen:
     ) -> torch.Tensor:
         hidden = F.embedding(tokens, self.embedding)
         residual = None
-        for layer, cache in zip(self.layers, caches, strict=True):
+        for index, (layer, cache) in enumerate(zip(self.layers, caches, strict=True)):
+            if index == 63 and batch.output_indices is not None:
+                return self._selected_final(hidden, residual, batch, cache)
             hidden, residual = layer.forward_residual(hidden, batch, cache, residual)
         return add_rms_norm(hidden, residual, self.norm)[1]
+
+    def _selected_final(self, hidden, residual, batch, cache):
+        selected, residual = self.layers[-1].forward_selected(
+            hidden,
+            batch,
+            cache,
+            batch.output_indices,
+            batch.output_attention,
+            residual,
+        )
+        if batch.output_indices.numel():
+            selected = add_rms_norm(selected, residual, self.norm)[1]
+        # Keep the caller's row addresses. Only selected rows can be sampled;
+        # other final-hidden rows have no consumer in this execution mode.
+        result = hidden.new_zeros(hidden.shape)
+        return result.index_copy_(0, batch.output_indices, selected)
 
     def logits(self, hidden: torch.Tensor) -> torch.Tensor:
         if hidden.shape[0] <= 32:
@@ -335,6 +400,13 @@ class Qwen:
         residual = None
         features = []
         for index, (layer, cache) in enumerate(zip(self.layers, caches, strict=True)):
+            if (
+                index == 63
+                and batch.output_indices is not None
+                and 63 not in self.feature_layer_ids
+            ):
+                final = self._selected_final(hidden, residual, batch, cache)
+                return final, torch.cat(features, -1)
             hidden, residual = layer.forward_residual(hidden, batch, cache, residual)
             if index in self.feature_layer_ids:
                 features.append(hidden + residual)
@@ -353,4 +425,18 @@ class Qwen:
         hidden = rms_norm(hidden, self.mtp_hidden_norm)
         hidden = self.mtp_fc(torch.cat((embedded, hidden), -1))
         hidden, residual = self.mtp.forward_residual(hidden, batch, cache)
+        return add_rms_norm(hidden, residual, self.mtp_norm)[1]
+
+    def draft_context(self, tokens, hidden, batch, cache, indices, output_attention):
+        """Append persistent context and return only live endpoint features."""
+        embedded = rms_norm(
+            F.embedding(tokens, self.embedding), self.mtp_embedding_norm
+        )
+        hidden = rms_norm(hidden, self.mtp_hidden_norm)
+        hidden = self.mtp_fc(torch.cat((embedded, hidden), -1))
+        hidden, residual = self.mtp.forward_selected(
+            hidden, batch, cache, indices, output_attention
+        )
+        if indices.numel() == 0:
+            return hidden
         return add_rms_norm(hidden, residual, self.mtp_norm)[1]

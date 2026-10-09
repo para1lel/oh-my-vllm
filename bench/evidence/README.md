@@ -9,6 +9,11 @@ The `removed_fields` list identifies redacted fields.
 Host paths, GPU identities, CPU core IDs, commands, and raw logs stay in local or external storage.
 Hashed key suffixes keep redacted dictionary keys distinct.
 
+Files with `artifact_kind="derived_diagnostic_summary"` use a different scope.
+They keep experiment names, original hashes, selected measurements, and verification limits.
+They have `formal_acceptance=false`.
+The [owned-kernel and liveness summary](2026-10-10-owned-tuning-liveness.json) uses this format.
+
 ## Export
 
 ```bash

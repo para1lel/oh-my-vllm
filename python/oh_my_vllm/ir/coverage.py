@@ -40,16 +40,26 @@ SITES = (
     Site("models/qwen.py", "Layer.delta_attention", "rms_norm", "rms_norm"),
     Site("models/qwen.py", "Layer.forward_residual", "rms_norm", "rms_norm"),
     Site("models/qwen.py", "Layer.forward_residual", "add_rms_norm", "add_rms_norm"),
+    Site("models/qwen.py", "Layer.forward_selected", "add_rms_norm", "add_rms_norm"),
+    Site("models/qwen.py", "Layer.forward_selected", "rms_norm", "rms_norm"),
+    Site(
+        "models/qwen.py", "Layer.forward_selected", "prepare_context", "prepare_context"
+    ),
+    Site("models/qwen.py", "Layer.forward_selected", "prepare_query", "prepare_query"),
+    Site("models/qwen.py", "Layer.mlp_residual", "add_rms_norm", "add_rms_norm"),
     Site(
         "models/qwen.py",
-        "Layer.forward_residual",
+        "Layer.mlp_residual",
         "add_norm_fp8_linear",
         "add_norm_fp8_linear",
     ),
     Site("models/qwen.py", "Qwen.forward", "add_rms_norm", "add_rms_norm"),
+    Site("models/qwen.py", "Qwen._selected_final", "add_rms_norm", "add_rms_norm"),
     Site("models/qwen.py", "Qwen.forward_features", "add_rms_norm", "add_rms_norm"),
     Site("models/qwen.py", "Qwen.draft", "rms_norm", "rms_norm"),
     Site("models/qwen.py", "Qwen.draft", "add_rms_norm", "add_rms_norm"),
+    Site("models/qwen.py", "Qwen.draft_context", "rms_norm", "rms_norm"),
+    Site("models/qwen.py", "Qwen.draft_context", "add_rms_norm", "add_rms_norm"),
     Site("models/qwen.py", "Qwen.logits", "logits_gemm", "logits_gemm"),
     Site("models/dspark.py", "rms_norm", "dspark_rms_norm", "dspark_rms_norm"),
     Site("models/dspark.py", "DSparkModel.inject", "rms_norm", "dspark_rms_norm"),
@@ -109,6 +119,11 @@ DIRECT_IMPORT_EXCEPTIONS = {
         "MTPAttention",
     ): "host MTP planning outside the compiled unit",
     (
+        "worker/prefill_graph.py",
+        "oh_my_vllm.kernels.attention",
+        "PagedAttention",
+    ): "host prefill planning before graph capture",
+    (
         "worker/decode_graph.py",
         "oh_my_vllm.kernels.decode_attention",
         "decode",
@@ -165,6 +180,8 @@ def check_coverage(package_root: Path, registered: set[str]) -> None:
         "worker/decode_graph.py",
         "worker/dspark.py",
         "worker/dspark_graph.py",
+        "worker/mtp_context_graph.py",
+        "worker/prefill_graph.py",
     }
     used_exceptions = set()
     for file in high_level_files:

@@ -31,11 +31,16 @@ class MTPPlanTest(unittest.TestCase):
             *,
             request_ids=None,
             persistent=False,
+            output_indices=None,
         ):
             self.calls.append(
                 (list(tokens), hidden.clone(), list(starts), tables, list(positions))
             )
-            return torch.zeros(len(tokens), 5120, dtype=torch.bfloat16)
+            return torch.zeros(
+                len(tokens) if output_indices is None else len(output_indices),
+                5120,
+                dtype=torch.bfloat16,
+            )
 
         self.mtp._run = run
 

@@ -181,7 +181,7 @@ Object.assign(sourceNotes, {
     ],
   },
   batchFields: {
-    title: "AttentionBatch 与 Batch 的 10 个字段", intro: "Tensor 是多维数组. 每轮将多条请求的输入拼接成 token 行; starts 标出每条请求的区间, 其余向量按请求或 token 行对应.",
+    title: "AttentionBatch 与 Batch 的 12 个字段", intro: "Tensor 是多维数组. 每轮将多条请求的输入拼接成 token 行; starts 标出每条请求的区间, 其余向量按请求或 token 行对应.",
     entries: [
       ["positions", "每个 token 在其完整历史中的位置.", "供 RoPE 和因果长度使用, 从 0 开始."],
       ["fa_slots", "每个 token 的 FA 物理写入槽.", "页编号乘 784 再加页内偏移, 负值跳过写入."],
@@ -193,6 +193,8 @@ Object.assign(sourceNotes, {
       ["final_state_writes", "每请求本段结束的状态写槽.", "长 prefill 返回最终状态后, index_copy_ 写到这些位置."],
       ["prefill_sequences", "批内位于前面的 prefill 请求数.", "将批切为 prefill 与 decode/验证两部分, 分别调用长序列和递归实现."],
       ["prefill_tokens", "前面 prefill 请求的输入总行数.", "用它切分 Q/K/V; starts 的后半部分减去它后成为局部下标."],
+      ["output_indices", "最后 FA 层需要产生完整输出的行下标, 默认 None.", "普通与 DSpark prefill 只为采样行计算 Q, attention 和 MLP; 所有输入行的 K/V 仍写入缓存. None 保留完整路径."],
+      ["output_attention", "为这些选中行准备的 DecodeAttention, 默认 None.", "页表逐选中行展开, 因果终点等于该行位置加 1, 与 output_indices 一一对应."],
     ],
   },
   poolTouch: {
@@ -225,6 +227,18 @@ Object.assign(sourceNotes, {
       ["layer / cache / self.layers", "当前层, 该层缓存, 64 层列表.", "一一对应执行 FA 或 GDN 计算."],
       ["self.embedding / self.norm / self.head", "词嵌入矩阵, 最后 RMS 权重, 词表投影矩阵.", "embedding 查输入; norm 整理幅度; head 产生 248320 个词表分数."],
       ["hidden.shape[0] / logits_gemm / F.linear", "输入行数, 小行数投影核, 通用矩阵投影.", "最多 32 行用 CuTe-DSL, 更多行走 F.linear 后转 FP32."],
+      ["index / batch.output_indices / self._selected_final", "当前层号, 所需输出行和最后层的选中计算入口.", "第 63 层可保留全部 K/V 并只产生需要的最终特征. 返回数组仍按原输入行寻址, 采样器只读取选中行."],
+    ],
+  },
+  selectedAttention: {
+    title: "全部 K/V 与选中输出怎样分别计算", intro: "R 个历史输入都要提供未来 attention 的 K/V, 当前只需要 S 个位置的输出. indices 指定这 S 个位置, 规划在进入编译单元前完成.",
+    entries: [
+      ["x / residual / normalized", "当前分支, 延迟相加的残差, 归一化输入.", "全部 R 行保留原来的 BF16 舍入, 供 K/V 投影使用."],
+      ["cache / batch / indices / output_attention", "持久 KV 池, 位置与写槽, 选中行下标, 相应注意力计划.", "K/V 按全部位置写入, 查询按 indices 的顺序读取相应前缀."],
+      ["self.qkv.rows(12288, 14336) / kv / prepare_context", "checkpoint 中的 K/V 权重区间, 投影结果和写入入口.", "2048 列覆盖四个 K 头与四个 V 头, 每头 256 维. 原 FP8 scale 按 128 行完整切片."],
+      ["self.qkv.rows(0, 12288) / packed / prepare_query", "Q 与输出门的权重区间, 选中投影和 Q 准备入口.", "只处理 S 行, Q 使用归一化与 RoPE, 其余 256 列提供每头的 gate."],
+      ["q / gate / attended / result", "选中查询, 输出门, attention 结果和输出投影.", "24 个 Q 头各有 256 维; sigmoid(gate) 调节 attention, 投影回 5120 维."],
+      ["self.mlp_residual / indices.numel()", "选中行的残差与 MLP 路径, 选中行数.", "S 为零时只完成持久 K/V 更新; S 为正时返回 S 行分支与残差."],
     ],
   },
   modelFA: {

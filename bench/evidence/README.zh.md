@@ -11,6 +11,11 @@
 
 ## 导出
 
+`artifact_kind="derived_diagnostic_summary"` 的文件采用不同范围.
+它们保存实验名称, 原始哈希, 所选测量值和验证限制.
+其 `formal_acceptance=false`.
+[自有算子与输出需求摘要](2026-10-10-owned-tuning-liveness.json) 使用这一格式.
+
 ```bash
 scripts/with-env.sh python scripts/export_evidence.py --input "$EVIDENCE_DIR/original.json" --output "$EVIDENCE_DIR/summary.json"
 ```

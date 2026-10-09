@@ -6,6 +6,7 @@ from pathlib import Path
 
 _CURRENT = None
 _GRAPH_OPERATIONS = set()
+_GRAPH_METADATA = set()
 
 
 def tracing():
@@ -38,13 +39,88 @@ def _target_name(target):
     return f"{module}.{name}" if module and name else str(target)
 
 
+def _example(node):
+    if not hasattr(node, "meta"):
+        return node
+    return node.meta.get("example_value", node.meta.get("val"))
+
+
+def _shape_result(value):
+    import torch
+
+    if type(value) is int or isinstance(value, torch.SymInt):
+        return "dimension"
+    if isinstance(value, (torch.Size, tuple, list)) and all(
+        type(item) is int or isinstance(item, torch.SymInt) for item in value
+    ):
+        return "shape"
+    return "unrecognized"
+
+
+def _metadata_description(unit, node, target):
+    """Describe metadata operations without inspecting device tensor values.
+
+    The reviewed proposal unit derives pages from host-known positions, before
+    token-dependent MTP computation. Other integer division remains unknown.
+    Every occurrence retains its type and consumers, including rejected ones.
+    """
+    import torch
+
+    receiver = _example(node.args[0]) if node.args else None
+    result = _example(node)
+    description = {
+        "unit": unit,
+        "target": target,
+        "node": node.name,
+        "receiver_tensor": isinstance(receiver, torch.Tensor),
+    }
+    if target == "call_method:size":
+        description.update(category="shape_query", result_kind=_shape_result(result))
+        return description
+    description.update(
+        category="host_known_page_address",
+        divisor=node.args[1]
+        if len(node.args) == 2 and type(node.args[1]) is int
+        else None,
+        receiver_dtype=str(receiver.dtype)
+        if isinstance(receiver, torch.Tensor)
+        else None,
+        receiver_device=receiver.device.type
+        if isinstance(receiver, torch.Tensor)
+        else None,
+        receiver_rank=receiver.ndim if isinstance(receiver, torch.Tensor) else None,
+        result_dtype=str(result.dtype) if isinstance(result, torch.Tensor) else None,
+        result_device=result.device.type if isinstance(result, torch.Tensor) else None,
+        result_rank=result.ndim if isinstance(result, torch.Tensor) else None,
+        same_shape=(
+            tuple(map(str, receiver.shape)) == tuple(map(str, result.shape))
+            if isinstance(receiver, torch.Tensor) and isinstance(result, torch.Tensor)
+            else False
+        ),
+        consumers=sorted(
+            _target_name(user.target)
+            if user.op == "call_function"
+            else f"{user.op}:{user.target}"
+            for user in node.users
+        ),
+    )
+    return description
+
+
 def observe_graph(unit, graph):
-    """Keep the pre-provider GPU operation inventory for fail-closed validation."""
+    """Keep the pre-provider inventory and typed metadata for strict validation."""
     for node in graph.nodes:
         if node.op == "call_function":
-            _GRAPH_OPERATIONS.add((unit, _target_name(node.target)))
+            target = _target_name(node.target)
         elif node.op not in ("placeholder", "output", "get_attr"):
-            _GRAPH_OPERATIONS.add((unit, f"{node.op}:{node.target}"))
+            target = f"{node.op}:{node.target}"
+        else:
+            continue
+        _GRAPH_OPERATIONS.add((unit, target))
+        if target in ("_operator.floordiv", "_operator.mod", "call_method:size"):
+            _GRAPH_METADATA.add(
+                json.dumps(_metadata_description(unit, node, target), sort_keys=True)
+            )
 
 
 class ExecutionTrace:
@@ -127,6 +203,7 @@ class ExecutionTrace:
             "runtime_contract": self.contract,
             "incomplete": incomplete,
             "graph_operations": sorted(_GRAPH_OPERATIONS),
+            "graph_metadata": [json.loads(row) for row in sorted(_GRAPH_METADATA)],
             "steps": self.rows,
         }
         from dataclasses import asdict

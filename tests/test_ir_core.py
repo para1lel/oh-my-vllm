@@ -182,7 +182,7 @@ def test_compile_log_is_emitted_once_per_actual_lowering(caplog, monkeypatch):
     from oh_my_vllm.ir import core
 
     # Keep this test focused on backend entry, independent of Inductor latency.
-    monkeypatch.setattr(core, "lower_to_inductor", lambda graph, _: graph.forward)
+    monkeypatch.setattr(core, "lower_to_inductor", lambda graph, _, **kw: graph.forward)
     unit = compile_forward(lambda x: x.sin() + 7, unit="test_compile_log")
     with caplog.at_level(logging.INFO, logger=core.__name__):
         x = torch.ones(2, 4)

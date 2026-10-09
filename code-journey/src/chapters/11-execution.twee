@@ -32,6 +32,7 @@
 <p>attention.plan 会创建新 metadata 张量. replay 先核对所有新张量的形状与 dtype, 在 finally 恢复捕获时的绑定, 再把动态值复制到原存储. 规划失败后, 图仍指向原来保持存活的地址. 这个过程使物理页变化与图地址固定可以同时成立.</p>
 <p>prefill 图单独保留最多 8 个条目, 捕获前检查 12 GiB 余量. 长图包含多流分叉和汇合, 启动包装器默认启用 graph_capture_record_stream_reuse, 让 PyTorch 根据捕获图拓扑复用已释放的临时缓冲. 显式分配器配置可覆盖默认值, 运行证据记录有效设置.</p>
 <h2>GDN 的两条准备分支怎样并行</h2>
+<p>选中输出的 prefill 图把 output_indices 纳入 key, 并持有 output_attention 的固定页表与长度存储. MTPContextGraph 用独立的 mtp_context 图族保存长草稿 context, 同样限制为 8 项和 12 GiB 余量. 两种图在 replay 前验证所有动态张量, 防止先复制部分数据后才发现不兼容的输入.</p>
 <p>归一化输入同时进入两个独立分支. 主流执行 QKVZ 的 FP8 投影和因果卷积, 侧流执行 BA 的 BF16 投影与 delta gates. 两条分支都只依赖同一个输入, 因而可以在 GPU 上重叠. 随后的 GDN 更新要使用 Q/K/V, decay 和 beta, 所以先等待两边完成.</p>
 <p>ir.gdn_prepare 把这一整套准备过程登记为语义操作. 分叉前侧流等待输入所在流, 涉及的张量记录使用流以维持存储寿命; finally 中主流等待侧流, 输出在汇合后返回. 图捕获记录同样的依赖. OH_MY_VLLM_MULTI_STREAM=0 提供同算子的串行诊断路径.</p>
 <h2>PDL 怎样提前启动依赖消费者</h2>
@@ -46,6 +47,8 @@
 <<math "m=\\max_s l_s,\\quad w_s=2^{l_s-m},\\quad o=\\frac{\\sum_s w_s o_s}{\\sum_s w_s}">>
 <p>s 是分片下标, l_s 是该分片概率归一化量的 log2, CUDA 实现以 exp2 计算权重. 对没有有效位置的分片处理负无穷, 所有权重为零时输出零. 主机入口按布局, 位置整数类型和分片数量分派模板, 检查设备与形状, 并保留实际变体计数和复制统计.</p>
 <h2>构建来源和冻结比较路径怎样记录</h2>
+<p>GDN prefill 的 V 是 packed 投影中的非连续视图. 自有 CUDA 按每行真实 stride 读取, 每个 lane 复制八个 BF16 的原始位, 减少通用逐元素复制的访存指令. 256 线程配置由完整复制链计时与 DRAM 指标选择. FP32 递归 batch 2 采用每线程八行和一个 warp, batch 4 采用两行和四个 warp, 改变资源分配并保留原计算与舍入顺序.</p>
+<p>大 QKV/Z 与 down 投影在 M 至少为 32144, 形状分别为 N=16384, K=5120 和 N=5120, K=17408 时使用 swizzle 4. 大 gate/up 仍使用 swizzle 8. 按实际尺寸选择减少了其他 shape 的回退风险, 正式用例继续覆盖完整生产形状.</p>
 <p>compiled 以 CUDA 源码, torch 版本和编译器身份生成缓存摘要, 通过 TVM FFI 构建并加载共享库. FFI 是跨语言函数接口, 这里把 Python 调用接到 CUDA 主机入口. 加载前后核对库文件摘要, provenance 记录实际源码, NVCC 路径版本与加载文件.</p>
 <p>显式选择 tilelang 时使用冻结比较实现, 覆盖 FP8 量化, attention append/decode, 卷积, 逐元素与归一化, GDN 归一化/递归等同一算子契约. 这些参考模块用于已有比较证据; 默认推理使用 CUDA. 项目调用的 FlashInfer, CuTe 与 TVM FFI 按独立库接口使用, 不引入 vLLM 执行依赖.</p>
 <p>编译, 图捕获与具体 kernel 分派都留下可检查记录. 运行身份与正式算子用例因此能回答这一轮究竟执行了哪份实现, 下一章把这些信息组织成验收流程.</p>

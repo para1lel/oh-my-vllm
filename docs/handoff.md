@@ -1,6 +1,6 @@
 # Current state and open work
 
-Updated: 2026-10-09.
+Updated: 2026-10-10.
 
 ## Current implementation
 
@@ -56,18 +56,30 @@ The MLP gate/up path uses one operation for residual RMS and FP8 quantization, w
 Its twenty GPU checks passed, with outputs equal to the previous chain, changed graph inputs, and rejected storage.
 The extended operator matrix keeps all 230 previous cases and adds sixteen fused and twenty-eight other FP8 projection cases.
 
+GDN values use a vector copy from packed rows.
+FP32 recurrent batches 2 and 4 use measured row/warp tiles.
+Large narrow QKV/Z and down projections use swizzle 4.
+Persistent MTP and final target prefill remove unused historical attention and MLP output.
+They keep required KV, target boundary features, and verification samples.
+Different context graphs restore captures and validate complete replay metadata.
+
+The canonical model counts the same required rows, disjoint parameter slices, and absolute MTP KV ranges.
+
 Offline registration shares the output budget with Python. Proposers reserve the scheduler's bonus token.
 
-The current CPU collection passed 687 tests and 65 subtests, with 365 GPU tests deselected.
-The affected GPU collection passed 104 tests.
+The current CPU collection passed 733 tests and 65 subtests, with 392 GPU tests deselected.
+Selected-output GPU checks passed nine tests, with changed pages, positions, slots, and hidden input.
+The GDN copy/compiled-unit collection passed twenty-three tests.
+Diagnostic operator groups passed eighteen copy/recurrent cases and twenty-one selected-output cases.
 Tutorial validation passed ten excerpt tests and nine browser tests.
 
-Short-output diagnosis uses input 32768 and output 16. Its latest ordinary prefill median is about 1.39 s.
-This interval still exceeds three times the current bound of about 0.453 s.
+Short-output diagnosis uses input 32768 and output 16. Its ordinary prefill median is about 1.336 s.
+Its revised required-work bound is about 0.442 s, with ratio 3.024.
+MTP short-output prefill has a median of about 1.379 s.
 Formal performance uses output 4096. Full operator, boundary, and service regressions are pending.
 
 The [acceptance index](acceptance.md) keeps operator, boundary, paired, and service measurements with their source scope.
-The 274 operator cases and nine 262144-token boundary cases stay active.
+The 301 operator cases and nine 262144-token boundary cases stay active.
 Complete service verification stays active.
 
 ## Documents and evidence
@@ -82,7 +94,7 @@ Ignored `LOCAL.md` holds its address, PID, and maintenance commands.
 
 ## Open work
 
-- Finish source-contract review after subsequent implementation changes. The current fusion has independent review.
+- Finish source-contract review after subsequent implementation changes. Current selected-output and cost-model changes have independent review.
 - Complete fifteen phase-latency rows, then optimize failing paths and run full affected sets again.
 - Run tutorial checks after subsequent source changes.
 - Run applicable numerical, operator, context, and service regressions after inference changes.

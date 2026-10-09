@@ -8,6 +8,17 @@ It tests request boundaries and execution records.
 The formal output count is 4096.
 Use [requirements](requirements.md) for the current phase gates and [testing](testing.md) for collection commands.
 
+The [owned-kernel and liveness diagnosis](../bench/evidence/2026-10-10-owned-tuning-liveness.json) keeps dirty-source experiments.
+Eighteen copy/recurrent cases and twenty-one selected-output cases passed their numerical and speed checks.
+They use the full per-case timing protocol, with no observed interference.
+Filtered coverage and changed source prevent a full operator acceptance claim.
+The current complete matrix has 301 cases. It keeps all 230 previous cases.
+
+The ordinary short-output prefill median is `1.335786538 s`.
+Its revised necessary-work bound is `0.44175381006472536 s`, with ratio `3.02382573`.
+The source changed during this diagnostic, and its subsequent cost calculation bypassed the source-contract check.
+These values guide optimization. Formal acceptance must use a stable source and 4096 outputs.
+
 
 ## DSpark implementation and acceptance
 

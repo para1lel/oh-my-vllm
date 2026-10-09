@@ -742,6 +742,7 @@ __device__ const double rotary_frequency[32] = {
     0x1.7961810874aa1p-18, 0x1.c8198c91f9fc4p-19, 0x1.139e9527f964ap-19, 0x1.4d1c97f4e952dp-20,
     0x1.9298ace36f12dp-21, 0x1.e69338f8adcd5p-22, 0x1.26091b11c865ep-22, 0x1.635e883bbc810p-23};
 
+template <int Mode = 0>
 __global__ void prepare_attention_kernel(const __nv_bfloat16 *packed, const float *qw,
                                          const float *kw, const void *positions,
                                          __nv_bfloat16 *cache, const void *slots,
@@ -750,11 +751,15 @@ __global__ void prepare_attention_kernel(const __nv_bfloat16 *packed, const floa
   pdl_dependency_wait();
   pdl_launch_next();
   int row = blockIdx.x * 4 + threadIdx.x / 32, lane = threadIdx.x & 31;
-  if (row >= n * 28)
+  constexpr int heads = Mode == 1 ? 4 : Mode == 2 ? 24 : 28;
+  constexpr int width = Mode == 1 ? 2048 : Mode == 2 ? 12288 : 14336;
+  if (row >= n * heads)
     return;
-  int token = row / 28, head = row % 28;
-  bool key = head >= 24;
-  int64_t offset = (int64_t)token * 14336 + (key ? 12288 + (head - 24) * 256 : head * 512);
+  int token = row / heads, head = row % heads;
+  bool key = Mode == 1 || (Mode == 0 && head >= 24);
+  int key_head = Mode == 1 ? head : head - 24;
+  int64_t offset = (int64_t)token * width +
+      (key ? (Mode == 1 ? 0 : 12288) + key_head * 256 : head * 512);
   const float *weight = key ? kw : qw;
   float values[8], total = 0;
 #pragma unroll
@@ -779,12 +784,13 @@ __global__ void prepare_attention_kernel(const __nv_bfloat16 *packed, const floa
       return;
     if (slot >= capacity)
       asm volatile("trap;");
-    int64_t dst = ((slot / 784) * 1568 + slot % 784) * 1024 + (head - 24) * 256;
+    int64_t dst = ((slot / 784) * 1568 + slot % 784) * 1024 + key_head * 256;
 #pragma unroll
     for (int j = 0; j < 8; ++j) {
       cache[dst + lane + j * 32] = __float2bfloat16_rn(values[j]);
       cache[dst + 802816 + lane + j * 32] =
-          packed[(int64_t)token * 14336 + 13312 + (head - 24) * 256 + lane + j * 32];
+          packed[(int64_t)token * width + (Mode == 1 ? 1024 : 13312) +
+                 key_head * 256 + lane + j * 32];
     }
   } else {
 #pragma unroll
@@ -795,12 +801,68 @@ __global__ void prepare_attention_kernel(const __nv_bfloat16 *packed, const floa
 void prepare_attention(TensorView p, TensorView qw, TensorView kw, TensorView pos, TensorView cache,
                        TensorView slots, TensorView out) {
   auto stream = stream_for(p, "prepare_attention");
-  launch_kernel(prepare_attention_kernel, (p.size(0) * 28 + 3) / 4, 128, 0, stream,
+  launch_kernel(prepare_attention_kernel<0>, (p.size(0) * 28 + 3) / 4, 128, 0, stream,
       (const __nv_bfloat16 *)p.data_ptr(), (const float *)qw.data_ptr(),
       (const float *)kw.data_ptr(), pos.data_ptr(), (__nv_bfloat16 *)cache.data_ptr(),
       slots.data_ptr(), (__nv_bfloat16 *)out.data_ptr(), p.size(0), cache.size(0) * 784,
       pos.dtype().bits == 64, slots.dtype().bits == 64);
   finish_cuda_launch(stream, "prepare_attention");
+}
+
+bool disjoint_storage(TensorView output, TensorView input);
+void check_partial_prepare(TensorView p, TensorView weight, TensorView pos, int width) {
+  TVM_FFI_ICHECK(same_cuda_device(p, p) && same_cuda_device(weight, p) &&
+                 same_cuda_device(pos, p) && has_dtype(p, kDLBfloat, 16) &&
+                 has_dtype(weight, kDLFloat, 32) && is_index_dtype(pos))
+      << "partial attention preparation requires BF16 data and FP32 norm on one GPU";
+  TVM_FFI_ICHECK(p.ndim() == 2 && p.size(1) == width && p.size(0) > 0 &&
+                 p.size(0) <= ((int64_t(1) << 31) - 1) / 28 &&
+                 p.stride(0) == width && p.stride(1) == 1 &&
+                 weight.ndim() == 1 && weight.size(0) == 256 && weight.stride(0) == 1 &&
+                 pos.ndim() == 1 && pos.size(0) == p.size(0) && pos.stride(0) == 1)
+      << "partial attention preparation requires contiguous model shapes";
+}
+void prepare_context(TensorView p, TensorView kw, TensorView pos, TensorView cache,
+                     TensorView slots) {
+  check_partial_prepare(p, kw, pos, 2048);
+  TVM_FFI_ICHECK(same_cuda_device(cache, p) && has_dtype(cache, kDLBfloat, 16) &&
+                 cache.ndim() == 5 && cache.size(0) > 0 && cache.size(1) == 2 &&
+                 cache.size(2) == 784 && cache.size(3) == 4 && cache.size(4) == 256)
+      << "context preparation requires model KV cache";
+  int64_t stride = 1;
+  for (int axis = 4; axis >= 0; --axis) {
+    TVM_FFI_ICHECK(cache.stride(axis) == stride) << "context cache must be contiguous";
+    stride *= cache.size(axis);
+  }
+  TVM_FFI_ICHECK(same_cuda_device(slots, p) && is_index_dtype(slots) &&
+                 slots.ndim() == 1 && slots.size(0) == p.size(0) && slots.stride(0) == 1)
+      << "context preparation needs one integer slot per row";
+  for (auto input : {p, kw, pos, slots})
+    TVM_FFI_ICHECK(disjoint_storage(cache, input)) << "context cache overlaps input";
+  auto stream = stream_for(p, "prepare_context");
+  launch_kernel(prepare_attention_kernel<1>, p.size(0), 128, 0, stream,
+      (const __nv_bfloat16 *)p.data_ptr(), (const float *)kw.data_ptr(),
+      (const float *)kw.data_ptr(), pos.data_ptr(), (__nv_bfloat16 *)cache.data_ptr(),
+      slots.data_ptr(), (__nv_bfloat16 *)nullptr, p.size(0), cache.size(0) * 784,
+      pos.dtype().bits == 64, slots.dtype().bits == 64);
+  finish_cuda_launch(stream, "prepare_context");
+}
+
+void prepare_query(TensorView p, TensorView qw, TensorView pos, TensorView out) {
+  check_partial_prepare(p, qw, pos, 12288);
+  TVM_FFI_ICHECK(same_cuda_device(out, p) && has_dtype(out, kDLBfloat, 16) &&
+                 out.ndim() == 3 && out.size(0) == p.size(0) && out.size(1) == 24 &&
+                 out.size(2) == 256 && out.stride(0) == 6144 && out.stride(1) == 256 &&
+                 out.stride(2) == 1) << "query preparation requires contiguous model output";
+  for (auto input : {p, qw, pos})
+    TVM_FFI_ICHECK(disjoint_storage(out, input)) << "query output overlaps input";
+  auto stream = stream_for(p, "prepare_query");
+  launch_kernel(prepare_attention_kernel<2>, (p.size(0) * 24 + 3) / 4, 128, 0, stream,
+      (const __nv_bfloat16 *)p.data_ptr(), (const float *)qw.data_ptr(),
+      (const float *)qw.data_ptr(), pos.data_ptr(), (__nv_bfloat16 *)nullptr,
+      (const void *)nullptr, (__nv_bfloat16 *)out.data_ptr(), p.size(0), 0,
+      pos.dtype().bits == 64, false);
+  finish_cuda_launch(stream, "prepare_query");
 }
 
 __global__ void rms_rope_kernel(const __nv_bfloat16 *__restrict__ x,
@@ -1005,6 +1067,44 @@ bool disjoint_storage(TensorView output, TensorView input) {
   auto second = reinterpret_cast<uintptr_t>(input.data_ptr());
   return first + tensor_span_bytes(output) <= second || second + tensor_span_bytes(input) <= first;
 }
+
+__global__ void contiguous_bf16_rows_kernel(const uint4 *__restrict__ input,
+                                            uint4 *__restrict__ output,
+                                            int64_t rows, int width, int64_t stride) {
+  pdl_dependency_wait();
+  int64_t index = static_cast<int64_t>(blockIdx.x) * 256 + threadIdx.x;
+  if (index < rows * width) {
+    int64_t row = index / width, column = index % width;
+    output[index] = input[row * stride + column];
+  }
+  pdl_launch_next();
+}
+
+void contiguous_bf16_rows(TensorView input, TensorView output) {
+  TVM_FFI_ICHECK(same_cuda_device(input, input) && same_cuda_device(output, input) &&
+                 has_dtype(input, kDLBfloat, 16) && has_dtype(output, kDLBfloat, 16))
+      << "CUDA row copy requires BF16 tensors on one CUDA device";
+  TVM_FFI_ICHECK(input.ndim() == 2 && output.ndim() == 2 &&
+                 fits_int32_flat_offsets(input, false) &&
+                 output.size(0) == input.size(0) && output.size(1) == input.size(1) &&
+                 input.stride(1) == 1 && input.stride(0) >= input.size(1) &&
+                 output.stride(1) == 1 && output.stride(0) == output.size(1))
+      << "CUDA row copy requires nonempty dense BF16 rows and a contiguous output";
+  TVM_FFI_ICHECK(input.size(1) % 8 == 0 && input.stride(0) % 8 == 0 &&
+                 reinterpret_cast<uintptr_t>(input.data_ptr()) % 16 == 0 &&
+                 reinterpret_cast<uintptr_t>(output.data_ptr()) % 16 == 0)
+      << "CUDA row copy requires aligned eight-value vectors";
+  TVM_FFI_ICHECK(disjoint_storage(output, input))
+      << "CUDA row copy requires disjoint input and output storage";
+  auto stream = stream_for(input, "contiguous_bf16_rows");
+  int64_t vectors = input.numel() / 8;
+  launch_kernel(contiguous_bf16_rows_kernel, (vectors + 255) / 256, 256, 0, stream,
+                static_cast<const uint4 *>(input.data_ptr()),
+                static_cast<uint4 *>(output.data_ptr()), input.size(0),
+                static_cast<int>(input.size(1) / 8), input.stride(0) / 8);
+  finish_cuda_launch(stream, "contiguous_bf16_rows");
+}
+
 template <typename State, int Rows, int Warps>
 __global__ void
 recurrent_vector_kernel(const __nv_bfloat16 *__restrict__ q, const __nv_bfloat16 *__restrict__ k,
@@ -1238,9 +1338,13 @@ void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, Tenso
         VECTOR_REC(__nv_bfloat16, 4, 2);
       }
     } else {
-      if (reads.size(0) <= 2) {
+      if (reads.size(0) == 1) {
         VECTOR_REC(float, 2, 2);
+      } else if (reads.size(0) == 2) {
+        VECTOR_REC(float, 8, 1);
       } else if (reads.size(0) == 3) {
+        VECTOR_REC(float, 2, 4);
+      } else if (reads.size(0) == 4) {
         VECTOR_REC(float, 2, 4);
       } else {
         VECTOR_REC(float, 4, 2);

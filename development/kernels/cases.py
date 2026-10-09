@@ -71,6 +71,7 @@ def cases():
                     # Other owned regular FP8 projections. Target and MTP use
                     # the same dimensions; <=32 keeps the unchanged TRT backend.
                     for columns, width, silu in (
+                        (2048, 5120, False),
                         (16384, 5120, False),
                         (14336, 5120, False),
                         (5120, 6144, False),
@@ -84,9 +85,29 @@ def cases():
                             columns=columns,
                             silu=silu,
                         )
+                    add(workload, "prepare_context", tokens=n, index_dtype="int64")
+                    if mode == "mtp" and batch == 1:
+                        # Initial MTP context excludes token position zero.
+                        add(
+                            workload,
+                            "prepare_context",
+                            tokens=32143,
+                            index_dtype="int64",
+                        )
+                        add(
+                            workload,
+                            "fp8_linear",
+                            tokens=32143,
+                            width=5120,
+                            columns=2048,
+                            silu=False,
+                        )
                 add(workload, "gates", tokens=n)
                 add(workload, "convolution", counts=shape)
                 if phase == "prefill":
+                    add(
+                        workload, "gdn_prefill", counts=tuple(c for c in shape if c > 1)
+                    )
                     add(workload, "qk", tokens=sum(c for c in shape if c > 1))
                 else:
                     add(
@@ -98,6 +119,11 @@ def cases():
                         else "float32",
                     )
             # Three active sequences have a distinct GDN tile/thread dispatch.
+            # Partial target prefill can contain one endpoint plus the other
+            # active verification rows. MTP context keeps at most one endpoint
+            # per request. Pure decode uses the existing full preparation path.
+            selected_rows = 1 + 8 * (batch - 1) if mode == "dspark" else batch
+            add(workload, "prepare_query", tokens=selected_rows, index_dtype="int64")
             if batch == 4:
                 add(
                     workload,

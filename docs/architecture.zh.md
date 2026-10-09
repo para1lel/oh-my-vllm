@@ -255,6 +255,10 @@ DSpark proposal graph 使用独立的 16 条目 cache 和 pool.
 更大的 context injection 使用编译单元, 不进行手动 capture.
 MTP draft / proposal 的默认共享预算为 64 条目, 下限分别为 32 和 8.
 此预算同时适用于独立运行和比较 worker.
+
+长持久化 MTP context 使用独立的八条目 cache 与 pool, 保留 12 GiB capture 显存余量. 选中末行使用起点为 1 的自有 decode attention. Capture 备份将写入的 FA 槽, 在预热和捕获之后恢复. Replay 在任何复制之前验证全部 tensor 形状, 类型和 device. 只建立缓存的图可在不同位置与页地址间复用相同 query 形状. Capture 日志与 `mtp_context` 计数器标识这些活动.
+
+普通和 DSpark prefill 通过 `Batch.output_indices` 与 `Batch.output_attention` 选择目标最终输出. 第 63 层保留全部必需 K/V 行, 对选中行计算 attention 与 MLP. MTP 保留供 context 和边界特征使用的目标 hidden. 第 63 层 feature tap 保留完整层输出. 语义操作 `prepare_context` 和 `prepare_query` 分开描述持久写入与有效查询, CUDA 实现保持完整准备 kernel 的 BF16 舍入与 FP64 相位计算.
 缓存预算已满时, 替换接纳需要 4 次观察.
 衰减计数必须超过最冷可淘汰条目的 2 倍.
 预算未满时允许首次 miss 就 capture.

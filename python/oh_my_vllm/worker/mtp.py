@@ -8,6 +8,7 @@ prefix hash; boundary rows no longer depend on a token outside that prefix.
 
 import logging
 import os
+from bisect import bisect_right
 from itertools import pairwise
 
 import torch
@@ -45,6 +46,11 @@ class MTP:
             compile_forward(model.draft, unit="mtp_draft")
             if self.compile_model
             else getattr(model, "draft", None)
+        )
+        self.context_unit = (
+            compile_forward(model.draft_context, unit="mtp_context")
+            if self.compile_model
+            else getattr(model, "draft_context", None)
         )
         self.logits_unit = (
             compile_forward(model.logits, unit="model_logits")
@@ -85,6 +91,13 @@ class MTP:
         # private pool even though captures within each family may share one.
         self.draft_graph_pool = None
         self.proposal_graph_pool = None
+        self.context_graph_pool = None
+        self.context_graph_cache = GraphCache(
+            capacity=8,
+            free_bytes=self.graph_cache.free_bytes,
+            reserved_bytes=self.graph_cache.reserved_bytes,
+            min_capture_free_bytes=12 << 30,
+        )
 
     def forget(self, request_id: int) -> None:
         self.next_position.pop(request_id, None)
@@ -110,7 +123,15 @@ class MTP:
         positions: list[int],
         request_ids: list[int] | None = None,
         persistent: bool = False,
+        output_indices: list[int] | None = None,
     ) -> torch.Tensor:
+        selected = (
+            list(range(len(tokens))) if output_indices is None else output_indices
+        )
+        if len(selected) != len(set(selected)) or any(
+            type(row) is not int or not 0 <= row < len(tokens) for row in selected
+        ):
+            raise ValueError("MTP output indices must name distinct input rows")
         if tracing():
             record(
                 "mtp_forward",
@@ -118,11 +139,16 @@ class MTP:
                 unique_token_ids_per_request=[
                     sorted(set(tokens[a:b])) for a, b in pairwise(starts)
                 ],
+                token_ids_per_request=[tokens[a:b] for a, b in pairwise(starts)],
                 queries=[b - a for a, b in pairwise(starts)],
                 contexts=[positions[a] for a in starts[:-1]],
                 tables=tables,
                 requests=request_ids,
                 persistent=persistent,
+                output_rows=[
+                    [row - a for row in selected if a <= row < b]
+                    for a, b in pairwise(starts)
+                ],
             )
         decode_mode = max(b - a for a, b in pairwise(starts)) <= 5
         slots = [
@@ -134,6 +160,10 @@ class MTP:
             [positions, slots, tokens], device=self.device
         )
         batch = AttentionBatch(position_tensor, slot_tensor, self.attention)
+        if persistent and not decode_mode:
+            return self._run_context(
+                token_tensor, hidden, batch, starts, tables, positions, selected
+            )
         if decode_mode and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1":
             from oh_my_vllm.worker.decode_graph import DraftGraph
 
@@ -185,11 +215,68 @@ class MTP:
 
                 graph = self.graph_cache.get_or_create("draft", key, capture)
                 if graph is not None:
-                    return graph.replay(
+                    result = graph.replay(
                         token_tensor, graph_hidden, batch, tables_tensor, starts_tensor
                     )
+                    return result[selected] if output_indices is not None else result
         self.attention.plan(starts, tables, positions)
-        return self.draft_unit(token_tensor, hidden, batch, self.cache)
+        result = self.draft_unit(token_tensor, hidden, batch, self.cache)
+        return result[selected] if output_indices is not None else result
+
+    def _run_context(self, tokens, hidden, batch, starts, tables, positions, selected):
+        from oh_my_vllm.worker.decode_graph import DecodeAttention
+        from oh_my_vllm.worker.mtp_context_graph import MTPContextGraph
+
+        indices = device_tensor(selected, device=self.device, dtype=torch.int64)
+        extent = min(self.max_tokens, ((max(positions) + 4096) // 4096) * 4096)
+        attention = None
+        if selected:
+            selected_tables = [
+                tables[bisect_right(starts, row) - 1] for row in selected
+            ]
+            attention = DecodeAttention(
+                device_page_tables(selected_tables, (extent + BLOCK - 1) // BLOCK),
+                device_tensor(
+                    [positions[row] + 1 for row in selected],
+                    device=self.device,
+                    dtype=torch.int32,
+                ),
+                extent,
+            )
+            attention.first = 1
+        key = (
+            tuple(b - a for a, b in pairwise(starts)),
+            tuple(selected),
+            extent if selected else 0,
+        )
+        if self.compile_model and self.context_graph_cache.should_use(
+            "mtp_context", key
+        ):
+
+            def capture():
+                logger.info("Capture MTP context graph: %s", key)
+                if self.context_graph_pool is None:
+                    self.context_graph_pool = torch.cuda.graph_pool_handle()
+                try:
+                    return MTPContextGraph(
+                        self.model,
+                        self.cache,
+                        tokens,
+                        hidden,
+                        batch,
+                        indices,
+                        attention,
+                        pool=self.context_graph_pool,
+                    )
+                except Exception:
+                    if not self.context_graph_cache.has_family("mtp_context"):
+                        self.context_graph_pool = None
+                    raise
+
+            graph = self.context_graph_cache.get_or_create("mtp_context", key, capture)
+            if graph is not None:
+                return graph.replay(tokens, hidden, batch, indices, attention)
+        return self.context_unit(tokens, hidden, batch, self.cache, indices, attention)
 
     def _proposal_graph(self, hidden: torch.Tensor, eligible) -> list[list[int]] | None:
         # All three subsequent writes must fit Rust's private allocated pages.
@@ -343,10 +430,11 @@ class MTP:
             positions,
             request_ids=forward_requests,
             persistent=True,
+            output_indices=selected,
         )
         if not eligible:
             return proposals
-        last_hidden = draft_hidden[selected]
+        last_hidden = draft_hidden
         graph_tokens = self._proposal_graph(last_hidden, eligible)
         if graph_tokens is not None:
             for (rid, _, _, _), row in zip(eligible, graph_tokens, strict=True):

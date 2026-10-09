@@ -35,6 +35,13 @@ class PrefillGraph:
             },
             attention=self.attention,
         )
+        if batch.output_attention is not None:
+            from oh_my_vllm.worker.decode_graph import DecodeAttention
+
+            selected = batch.output_attention
+            self.batch.output_attention = DecodeAttention(
+                selected.tables.clone(), selected.lengths.clone(), selected.extent
+            )
         self.graph = torch.cuda.CUDAGraph()
         state_slots = batch.state_writes.unique()
         state_slots = state_slots[state_slots >= 0]
@@ -71,6 +78,18 @@ class PrefillGraph:
 
     @torch.inference_mode()
     def replay(self, tokens, batch, plan):
+        selected = batch.output_attention
+        if selected is not None:
+            captured = self.batch.output_attention
+            if (
+                captured is None
+                or captured.extent != selected.extent
+                or captured.tables.shape != selected.tables.shape
+                or captured.lengths.shape != selected.lengths.shape
+            ):
+                raise ValueError("selected attention shape changed after capture")
+            captured.tables.copy_(selected.tables)
+            captured.lengths.copy_(selected.lengths)
         self.tokens.copy_(tokens)
         for f in fields(batch):
             value = getattr(batch, f.name)

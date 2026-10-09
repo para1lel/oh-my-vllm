@@ -29,6 +29,15 @@ def reference_operator(module, name):
         from oh_my_vllm.kernels.attention_prepare import tilelang_prepare
 
         return tilelang_prepare
+    if module == "partial_attention":
+        from oh_my_vllm.kernels.partial_attention import (
+            tilelang_context,
+            tilelang_query,
+        )
+
+        return {"prepare_context": tilelang_context, "prepare_query": tilelang_query}[
+            name
+        ]
     path = f"oh_my_vllm.kernels.tilelang_reference.{module}"
     function = getattr(import_module(path), name)
     if function.__module__ != path:

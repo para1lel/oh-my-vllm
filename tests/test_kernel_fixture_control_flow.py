@@ -10,6 +10,8 @@ from development.kernels import fixtures
 
 CONFIGURATIONS = {
     "prepare_attention": {"tokens": 2, "index_dtype": "int64"},
+    "prepare_context": {"tokens": 2, "index_dtype": "int64"},
+    "prepare_query": {"tokens": 2, "index_dtype": "int64"},
     "norm": {"tokens": 2},
     "add_norm": {"tokens": 2},
     "add_norm_fp8_linear": {"tokens": 2, "columns": 34816},
@@ -20,6 +22,7 @@ CONFIGURATIONS = {
     "silu_quant": {"tokens": 2, "width": 17408, "column": True},
     "gates": {"tokens": 2},
     "qk": {"tokens": 2},
+    "gdn_prefill": {"counts": (129, 3)},
     "recurrent": {"counts": (2, 1), "state_dtype": "bfloat16"},
     "convolution": {"counts": (2, 1)},
     "append": {"tokens": 2},

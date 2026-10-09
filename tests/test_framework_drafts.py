@@ -38,6 +38,8 @@ def draft_step(mode, *, remaining=7):
                 tables=[[1]],
                 unique_token_ids_per_request=[[7]],
                 persistent=True,
+                output_rows=[[0] if remaining else []],
+                token_ids_per_request=[[7]],
             )
         ]
         if remaining == 4:
@@ -65,6 +67,8 @@ def draft_step(mode, *, remaining=7):
                             tables=[[1]],
                             unique_token_ids_per_request=[[8]],
                             persistent=False,
+                            output_rows=[[0]],
+                            token_ids_per_request=[[8]],
                         ),
                         dict(kind="mtp_logits", requests=[1], rows=1),
                     ]
@@ -147,6 +151,8 @@ def test_mtp_page_boundary_defers_then_restores_one_row():
             tables=[[1, 2]],
             unique_token_ids_per_request=[[7]],
             persistent=True,
+            output_rows=[[]],
+            token_ids_per_request=[[7, 7]],
         )
     )
     _validate_draft_step(*args)

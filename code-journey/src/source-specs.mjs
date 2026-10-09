@@ -1,4 +1,5 @@
 export const specifications = {
+  selectedAttention: ["python/oh_my_vllm/models/qwen.py", "    def forward_selected(", "    def __call__(", 55],
   normalizedLinear: ["python/oh_my_vllm/ir/normalized_linear.py", "def add_norm_fp8_linear(", null],
   dsparkConfig: ["python/oh_my_vllm/models/dspark.py", "class DSparkConfig:", "    @property", 40],
   dsparkFeatures: ["python/oh_my_vllm/models/qwen.py", "    def forward_features(", "    def draft(", 40],

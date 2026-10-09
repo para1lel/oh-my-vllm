@@ -38,7 +38,12 @@ def analyze(symbol):
             source="TileFoundry HIR",
             symbol=symbol,
             report=output.read_text(),
-            limitation="Representative HIR shape; not native layout or FP64 phase cost",
+            limitation=(
+                "Representative unrolled GDN recurrence; not native CuTe chunk "
+                "arithmetic or strided-copy traffic"
+                if symbol == "gdn_prefill"
+                else "Representative HIR shape; not native layout or FP64 phase cost"
+            ),
         )
 
 
@@ -82,6 +87,10 @@ METRICS = (
     "launch__shared_mem_per_block_static",
     "sm__throughput.avg.pct_of_peak_sustained_elapsed",
     "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+    "dram__bytes.sum",
+    "lts__throughput.avg.pct_of_peak_sustained_elapsed",
+    "lts__t_sector_hit_rate.pct",
+    "sm__warps_active.avg.pct_of_peak_sustained_active",
     "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum",
     "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
     "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",

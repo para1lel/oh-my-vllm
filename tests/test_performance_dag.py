@@ -73,6 +73,16 @@ def test_resource_model_copies_mappings_and_rejects_invalid_bytes():
 
 def test_shared_prefix_pages_and_partial_ranges_are_read_once():
     assert unique_context_tokens([1000, 1000], [[1, 2], [1, 3]]) == 784 + 216 * 2
+
+
+@pytest.mark.parametrize("length", [784, 785])
+def test_mtp_incoming_ranges_keep_physical_position_one(length):
+    assert unique_context_tokens(
+        [length, length], [[1, 2], [3, 2]], first=1
+    ) == 2 * 783 + (length - 784)
+    assert unique_context_tokens(
+        [length, length], [[1, 2], [1, 3]], first=1
+    ) == 783 + 2 * (length - 784)
     assert unique_context_tokens([900, 1000], [[1, 2], [1, 2]]) == 1000
     with pytest.raises(ValueError):
         unique_context_tokens([1000], [[1]])

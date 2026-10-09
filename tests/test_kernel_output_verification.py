@@ -78,6 +78,15 @@ def test_recurrent_state_tolerance_is_per_slot():
         verify("recurrent", lambda: old_state, lambda: old_state, witnesses)
 
 
+def test_gdn_prefill_final_state_tolerance_is_per_sequence():
+    output = torch.ones(4, 1, 128, dtype=torch.bfloat16)
+    old = torch.tensor([[[1.0] * 10], [[100.0] * 10]])
+    new = old.clone()
+    new[0, 0, 0] += 0.5
+    with pytest.raises(AssertionError, match=r"return\[1\]\[0\]"):
+        verify("gdn_prefill", lambda: (output, old), lambda: (output, new))
+
+
 def _smallest_formal_case(operation):
     matching = [c for c in cases() if c["configuration"]["operation"] == operation]
     return min(
@@ -98,6 +107,7 @@ def _smallest_formal_case(operation):
         "prepare_attention",
         "convolution",
         "recurrent",
+        "gdn_prefill",
         "quant",
         "attention",
         "append",

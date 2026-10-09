@@ -354,12 +354,15 @@ def _rewrite_silu_fp8_linear(graph_module: torch.fx.GraphModule) -> int:
 
 
 def lower_to_inductor(
-    graph_module: torch.fx.GraphModule, example_inputs: Sequence[Any]
+    graph_module: torch.fx.GraphModule,
+    example_inputs: Sequence[Any],
+    *,
+    unit: str = "compiled",
 ) -> Callable[..., Any]:
     """Select providers from FX metadata, then compile the lowered graph."""
     from oh_my_vllm.performance.execution import observe_graph
 
-    observe_graph("compiled", graph_module.graph)
+    observe_graph(unit, graph_module.graph)
     fused_silu = _rewrite_silu_fp8_linear(graph_module)
     selections: list[tuple[str, str, str]] = []
     for node in graph_module.graph.nodes:
@@ -421,7 +424,7 @@ def compile_forward(
 
     def lower(graph_module: torch.fx.GraphModule, inputs: Sequence[Any]):
         LOG.info("Compilation started: IR unit %s", label)
-        compiled = lower_to_inductor(graph_module, inputs)
+        compiled = lower_to_inductor(graph_module, inputs, unit=label)
         _COMPILED_GRAPHS[label] += 1
         count = _COMPILED_GRAPHS[label]
         if count % 256 == 0:

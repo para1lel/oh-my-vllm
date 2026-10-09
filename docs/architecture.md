@@ -270,6 +270,20 @@ Larger context injection uses the compiled unit without manual capture.
 The default MTP draft/proposal budget is 64 entries, with floors of 32 and 8.
 This budget applies to standalone workers and comparison workers.
 
+Long persistent MTP context uses a different eight-entry cache and pool, with 12 GiB capture headroom.
+Its selected endpoints use owned decode attention with first position 1.
+Capture saves written FA slots and restores them after warmup and capture.
+Replay validates all tensor shapes, types, and devices before copies.
+Cache-only graphs reuse the same query shape across positions and page addresses.
+Capture logs and `mtp_context` counters identify their activity.
+
+Ordinary and DSpark prefill select final target outputs through `Batch.output_indices` and `Batch.output_attention`.
+Layer 63 keeps all required K/V rows and computes attention and MLP for selected rows.
+MTP keeps target hidden needed by its context and boundary features.
+Feature tap 63 keeps complete layer output.
+The semantic `prepare_context` and `prepare_query` operations define persistent writes and required queries.
+Their CUDA implementations keep the full preparation kernel's BF16 rounding and FP64 phase arithmetic.
+
 At a full cache budget, replacement admission must have four observations.
 Its decayed count must be more than twice the coldest evictable entry.
 An available budget lets capture start on the first miss.

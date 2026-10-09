@@ -80,6 +80,8 @@ IR_OPERATIONS = {
     "logits_gemm",
     "planned_attention",
     "prepare_attention",
+    "prepare_context",
+    "prepare_query",
     "rms_norm",
     "silu_mul",
     "dspark_rms_norm",
@@ -113,6 +115,7 @@ METHODS = {
     "squeeze",
     "argmax",
     "max",
+    "new_zeros",
 }
 STEP_OPERATIONS = {
     "target",
@@ -124,6 +127,60 @@ STEP_OPERATIONS = {
     "dspark_backbone",
     "execution_route",
 }
+
+
+def metadata_covers(unit, target, descriptions):
+    """Recognize every typed occurrence, without a global arithmetic allowlist.
+
+    Proposal positions and tables are host-known in the reviewed source unit.
+    Their address calculation can move to the host in the ideal implementation.
+    Tensor size queries return shape values, with no GPU computation/readback.
+    """
+    rows = [
+        row
+        for row in descriptions
+        if (row.get("unit"), row.get("target")) == (unit, target)
+    ]
+    if not rows:
+        return False
+    for row in rows:
+        if row.get("receiver_tensor") is not True:
+            return False
+        if target == "call_method:size":
+            if row.get("category") != "shape_query" or row.get("result_kind") not in (
+                "dimension",
+                "shape",
+            ):
+                return False
+            continue
+        consumers = row.get("consumers")
+        expected = (
+            "_operator.getitem" if target == "_operator.floordiv" else "_operator.add"
+        )
+        if (
+            unit != "proposal_graph"
+            or target not in ("_operator.floordiv", "_operator.mod")
+            or row.get("category") != "host_known_page_address"
+            or type(row.get("divisor")) is not int
+            or row["divisor"] != 784
+            or any(
+                row.get(name) != "torch.int64"
+                for name in ("receiver_dtype", "result_dtype")
+            )
+            or any(
+                row.get(name) != "cuda" for name in ("receiver_device", "result_device")
+            )
+            or any(
+                type(row.get(name)) is not int or row[name] != 1
+                for name in ("receiver_rank", "result_rank")
+            )
+            or row.get("same_shape") is not True
+            or not isinstance(consumers, list)
+            or not consumers
+            or any(consumer != expected for consumer in consumers)
+        ):
+            return False
+    return True
 
 
 def validate_weights(weights):
@@ -261,6 +318,12 @@ def validate_inventory(trace):
     for unit, target in trace["graph_operations"]:
         target = target.removeprefix("torch._ops.")
         if target in FUNCTIONS:
+            continue
+        if target in (
+            "_operator.floordiv",
+            "_operator.mod",
+            "call_method:size",
+        ) and metadata_covers(unit, target, trace.get("graph_metadata", [])):
             continue
         if (
             target.startswith("call_method:")

@@ -53,6 +53,7 @@ def main():
         parser.error("set OH_MY_VLLM_KERNEL_BACKEND=cuda before starting Python")
     import torch
     from oh_my_vllm.kernels.cuda_backend import provenance, variant_launch_counts
+    from oh_my_vllm.kernels.cuda_backend.groupwise import provenance as gemm_provenance
 
     from development.kernels.fixtures import fixture
     from development.kernels.observations import analyze
@@ -159,6 +160,15 @@ def main():
             report["cuda_build_provenance"] = provenance(
                 require_loaded=True, require_compiler=True
             )
+            report["cuda_gemm_build_provenance"] = gemm_provenance()
+            if (
+                operation in ("fp8_linear", "add_norm_fp8_linear")
+                and case["configuration"]["tokens"] > 32
+                and report["cuda_gemm_build_provenance"] is None
+            ):
+                raise RuntimeError(
+                    "owned FP8 measurement lacks its loaded CUDA module identity"
+                )
             decision = compare(raw)
             if failures or sources() != initial_sources:
                 raise RuntimeError(
