@@ -168,6 +168,9 @@
 | `occupancy` | 名词 | 活跃 GPU warp 数与硬件 warp 容量之比. |
 | `REDUX` | 名词 | 执行资源契约单独规定的 PTX warp reduction 指令. |
 | `feedback interval` | 名词 | 两个 token 反馈边界之间的语义工作, 使用一次理想 cache 抵扣. |
+| `pipeline stage` | 名词 | 用于使 GEMM 输入传输与计算并行执行的一块 shared-memory buffer. |
+| `column-major scale` | 名词 | 相邻行索引在存储中连续的 FP32 scale 布局. |
+| `K-major scale` | 名词 | 相邻归约分块索引在存储中连续的 FP32 scale 布局. |
 
 ## 维护
 

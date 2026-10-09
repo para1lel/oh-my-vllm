@@ -1,5 +1,11 @@
 # Acceptance evidence index
 
+
+The [scale and stage diagnosis](../bench/evidence/2026-10-10-fp8-scale-stage-diagnosis.json) applies to subsequent dirty-source changes from `8d7d18b`.
+Four affected full-operation cases passed numerical and speed checks. Thirty GPU projection checks passed.
+The record keeps stage and full scale-layout comparisons, all profiler counters, and sixteen-output full-model diagnosis.
+The full current-source phase, operator, capacity, and service collections stay pending.
+
 ## Phase-latency verification
 
 The full fifteen-row collection for the current source is pending.

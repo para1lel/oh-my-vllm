@@ -64,7 +64,8 @@ def linear(
     input_width = x.shape[1] // 2 if silu_gate else x.shape[1]
     _validate_weight(x, weight, weight_scale, input_width)
     # Small TRT-LLM GEMM uses column-major activation scales.
-    data, scale = quantize(x, column_major=x.shape[0] <= 32, silu_gate=silu_gate)
+    column = x.shape[0] <= 32 or _large_mn_projection(x.shape[0], weight)
+    data, scale = quantize(x, column_major=column, silu_gate=silu_gate)
     return _project_quantized(data, scale, weight, weight_scale)
 
 
@@ -87,24 +88,43 @@ def _validate_weight(x, weight, weight_scale, input_width):
         )
 
 
-def _project_quantized(data, scale, weight, weight_scale):
+def _large_mn_projection(rows, weight):
+    """Select the measured full gate/up shape, with four-row scale alignment."""
+    return NAME == "cuda" and rows >= 32144 and weight.shape == (34816, 5120)
+
+
+def _project_quantized(data, scale, weight, weight_scale, *, logical_rows=None):
     """Project validated row-major FP8 data without a second quantization."""
     from flashinfer.gemm import gemm_fp8_nt_groupwise
 
     # TRT-LLM's independent FlashInfer backend is faster for decode and avoids
     # CUTLASS SM100's nondeterministic 17..32-row low-latency path. Its activation
     # scales are column-major; checkpoint weight scales remain row-major.
-    small = data.shape[0] <= 32
+    rows = data.shape[0] if logical_rows is None else logical_rows
+    small = rows <= 32
     if NAME == "cuda" and not small:
         from .cuda_backend.groupwise import gemm
 
-        return gemm(
+        mn = _large_mn_projection(rows, weight)
+        if mn:
+            padded = (rows + 3) // 4 * 4
+            if data.shape[0] < padded:
+                # The unfused public projection has compact quantization output.
+                # The fused model path writes into padded storage directly.
+                data = torch.nn.functional.pad(data, (0, 0, 0, padded - rows))
+                scale = torch.nn.functional.pad(scale.T, (0, padded - rows)).T
+            # Read the supplied scales on every call and graph replay. A hidden
+            # cached transpose would miss subsequent changes to this tensor.
+            weight_scale = weight_scale.T.contiguous().T
+        output = gemm(
             data,
             weight,
             scale,
             weight_scale,
             mma_sm=2 if data.shape[0] >= 4096 and weight.shape[0] >= 32768 else 1,
+            scale_major_k=not mn,
         )
+        return output[:rows] if mn else output
     return gemm_fp8_nt_groupwise(
         data,
         weight,
@@ -152,12 +172,21 @@ def add_norm_linear(x, residual, gamma, weight, weight_scale):
         return summed, linear(normalized, weight, weight_scale)
     from .cuda_backend import compiled
 
-    data = torch.empty_like(x, dtype=torch.float8_e4m3fn)
-    column = x.shape[0] <= 32
-    shape = (40, x.shape[0]) if column else (x.shape[0], 40)
+    rows = x.shape[0]
+    column = _large_mn_projection(rows, weight)
+    physical = (rows + 3) // 4 * 4 if column else rows
+    data = torch.empty((physical, 5120), device=x.device, dtype=torch.float8_e4m3fn)
+    shape = (40, physical) if column else (physical, 40)
     scales = torch.empty(shape, device=x.device, dtype=torch.float32)
     if column:
         scales = scales.T
     summed = torch.empty_like(x)
-    compiled().rms_quantize(x, residual, gamma, data, scales, summed, column)
-    return summed, _project_quantized(data, scales, weight, weight_scale)
+    compiled().rms_quantize(
+        x, residual, gamma, data[:rows], scales[:rows], summed, column
+    )
+    if physical != rows:
+        data[rows:].zero_()
+        scales[rows:].zero_()
+    return summed, _project_quantized(
+        data, scales, weight, weight_scale, logical_rows=rows
+    )

@@ -144,7 +144,7 @@ def _workspace(device: torch.device) -> torch.Tensor:
     return _WORKSPACES[key]
 
 
-def gemm(a, weight, scale_a, scale_weight, *, mma_sm=1):
+def gemm(a, weight, scale_a, scale_weight, *, mma_sm=1, scale_major_k=True):
     """Run regular M > 32 GEMM with explicit PDL and caller-stream initialization."""
     with torch.cuda.device(a.device):
         module = compiled()
@@ -160,5 +160,6 @@ def gemm(a, weight, scale_a, scale_weight, *, mma_sm=1):
         _workspace(a.device),
         mma_sm,
         execution_policy().pdl,
+        scale_major_k,
     )
     return output

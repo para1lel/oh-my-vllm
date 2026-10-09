@@ -168,6 +168,9 @@ Proper product names, source identifiers, and protocol text keep their initial f
 | `occupancy` | noun | Active GPU warps divided by the hardware warp capacity. |
 | `REDUX` | noun | PTX warp reduction instruction with a separately specified execution-resource contract. |
 | `feedback interval` | noun | Semantic work between token feedback boundaries used for one ideal cache credit. |
+| `pipeline stage` | noun | One shared-memory buffer for GEMM input transfers that run in parallel with computation. |
+| `column-major scale` | noun | FP32 scale layout with adjacent row indices contiguous in storage. |
+| `K-major scale` | noun | FP32 scale layout with adjacent reduction-block indices contiguous in storage. |
 
 ## Maintenance
 

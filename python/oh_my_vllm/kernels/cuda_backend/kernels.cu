@@ -2679,7 +2679,7 @@ template <bool Residual, int Threads, int Vector, bool Streaming>
 __global__ void norm_quant5120_kernel(const __nv_bfloat16 *__restrict__ x,
                                const __nv_bfloat16 *__restrict__ residual,
                                const float *__restrict__ w,
-                               __nv_fp8_e4m3 *__restrict__ out, float *__restrict__ scales, bool column, int rows,
+                               __nv_fp8_e4m3 *__restrict__ out, float *__restrict__ scales, bool column, int scale_rows,
                                __nv_bfloat16 *__restrict__ summed, float eps) {
   pdl_dependency_wait();
   pdl_launch_next();
@@ -2736,7 +2736,7 @@ __global__ void norm_quant5120_kernel(const __nv_bfloat16 *__restrict__ x,
     float scale = __fdiv_rn(fmaxf(maximum, 1e-10f), 448.f);
     int group = col / 128;
     if (lane % (128 / Vector) == 0)
-      scales[column ? group * rows + row : row * 40 + group] = scale;
+      scales[column ? group * scale_rows + row : row * 40 + group] = scale;
     float inverse = 0.f;
     asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(inverse) : "f"(scale));
 #pragma unroll
@@ -2779,7 +2779,9 @@ void rms_quantize(TensorView x, TensorView residual, TensorView weight,
         << "RMS quantization requires contiguous matrices";
   TVM_FFI_ICHECK(weight.stride(0) == 1 &&
                  scales.stride(0) == (column ? 1 : 40) &&
-                 scales.stride(1) == (column ? x.size(0) : 1))
+                 (column ? scales.stride(1) >= x.size(0) &&
+                           scales.stride(1) - x.size(0) <= 3
+                         : scales.stride(1) == 1))
       << "RMS quantization scale layout mismatch";
   TVM_FFI_ICHECK(fits_int32_flat_offsets(x, false) &&
                  aligned(x, 16) && aligned(residual, 16) && aligned(weight, 32) &&
@@ -2798,7 +2800,8 @@ void rms_quantize(TensorView x, TensorView residual, TensorView weight,
       static_cast<const __nv_bfloat16 *>(residual.data_ptr()),                          \
       static_cast<const float *>(weight.data_ptr()),                                   \
       static_cast<__nv_fp8_e4m3 *>(data.data_ptr()),                                     \
-      static_cast<float *>(scales.data_ptr()), column, static_cast<int>(x.size(0)),      \
+      static_cast<float *>(scales.data_ptr()), column,                                 \
+      static_cast<int>(column ? scales.stride(1) : x.size(0)),                          \
       static_cast<__nv_bfloat16 *>(summed.data_ptr()), 1e-6f)
   if (x.size(0) >= 4096) {
     RMS_QUANT(320, 8, false);

@@ -1,0 +1,4166 @@
+{
+  "schema": 1,
+  "kind": "derived",
+  "formal_acceptance": false,
+  "scope": "Dirty-source stage/scale diagnosis and four complete-operation cases. Final fifteen phase rows, complete 301 operators, nine capacity cases, and services are pending.",
+  "source_commit": "8d7d18b50462baa4a540a3ee362ff57f070bb512",
+  "hardware": {
+    "model": "NVIDIA B200",
+    "driver": "590.48.01",
+    "max_sm_clock_hz": 1965000000
+  },
+  "stage_selection": {
+    "diagnostic": true,
+    "m": 32144,
+    "n": 34816,
+    "k": 5120,
+    "sm": 2,
+    "old_stages": 7,
+    "new_stages": 5,
+    "swizzle": 16,
+    "repetitions": 10,
+    "comparison": {
+      "rounds": [
+        {
+          "tilelang_ms": 6.7939201354980465,
+          "cuda_ms": 6.673794937133789
+        },
+        {
+          "tilelang_ms": 6.784899139404297,
+          "cuda_ms": 6.683590316772461
+        },
+        {
+          "tilelang_ms": 6.813425445556641,
+          "cuda_ms": 6.698457717895508
+        }
+      ],
+      "paired_mean_gain_ms": 0.11952185312906899,
+      "gain_lower_95_ms": 0.1141322580973307,
+      "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+      "passed": true
+    },
+    "bitwise_equal": true
+  },
+  "scale_selection": {
+    "scope": "Complete RMS, FP8 quantization, stateless weight-scale packing, general padding, and GEMM. Production fusion writes directly into aligned storage.",
+    "protocol": "Three rounds, twenty pairs per round, one hundred graph repetitions per sample.",
+    "rows": [
+      {
+        "rows": 32144,
+        "physical_rows": 32144,
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 6.939174499511719,
+              "cuda_ms": 6.7574395751953125
+            },
+            {
+              "tilelang_ms": 6.952819213867187,
+              "cuda_ms": 6.766142272949219
+            },
+            {
+              "tilelang_ms": 6.957630310058594,
+              "cuda_ms": 6.770011596679687
+            }
+          ],
+          "paired_mean_gain_ms": 0.18716384887695314,
+          "gain_lower_95_ms": 0.18532926432291671,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        },
+        "integer_bits_equal": true
+      },
+      {
+        "rows": 32290,
+        "physical_rows": 32292,
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 7.0088809204101565,
+              "cuda_ms": 6.962837219238281
+            },
+            {
+              "tilelang_ms": 7.0107861328125,
+              "cuda_ms": 6.9642727661132815
+            },
+            {
+              "tilelang_ms": 7.010872497558594,
+              "cuda_ms": 6.965540466308594
+            }
+          ],
+          "paired_mean_gain_ms": 0.046317830403645815,
+          "gain_lower_95_ms": 0.04421184285481772,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        },
+        "integer_bits_equal": true
+      }
+    ]
+  },
+  "stage_operator": {
+    "source_commit": "8d7d18b50462baa4a540a3ee362ff57f070bb512",
+    "sources_sha256": {
+      "benchmarks/kernels.py": "12599b5c8735c248771a2b6c64c977401cc2cae609e05f14ee36084019a3877d",
+      "development/kernels/cases.py": "9d0afabaab15df4bcbff1d2d57d1c79a841634a76a29ecf6e573e28a61bcdba2",
+      "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+      "development/kernels/dspark-reference.json": "4e8b36447a947f065ded83b658743ecbf1f1bf8c283cf32a8e9e317f51590e05",
+      "development/kernels/fixtures.py": "d29f119e25b3b8635516c03452433be76a8a7788b08a76a888b22d22416c04eb",
+      "development/kernels/observations.py": "b418d9d3c58de0377d1dbd5660408327d289b9f789e283698d81526dd3f3d349",
+      "development/kernels/output_verification.py": "8b77e70b92b335c192f10f36c84d457e3f8be510dca6e4c9b29599957161d8a4",
+      "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+      "development/kernels/reference.py": "b6a80426e0854ba36a98c62f37809a67d1270d25c7b74eb2674438ca2ca26c92",
+      "development/kernels/semantics.py": "cbfaf6ac803384d9e1953e9757a4794c30c9c686c5ae8de228d9cce99b13baa4",
+      "development/kernels/tilelang-reference.json": "545c3d6f70ab290c4411b17513505fb3eb76014d6e3bd839081714668a7d49c9",
+      "development/kernels/timing.py": "f0a7193034c9c85231caa1c8c6d12ab0cefcb1987cacad420813c7421160ecd2",
+      "development/kernels/twins.py": "52ed6e65c6b44c0a54b5821af14f04cc5d2a38ec1123737457a21c4f95aa77d0",
+      "development/kernels/variant.py": "717e32bc7b93a3cca0513e567a75bd307c2f6ad121616b70b060e9089ded46d2",
+      "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+      "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+      "python/oh_my_vllm/ir/core.py": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+      "python/oh_my_vllm/ir/coverage.py": "339556d38f2b8733f48abc7e73ca04b1034ebae9f1f099b597b9d860330359f7",
+      "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+      "python/oh_my_vllm/ir/execution.py": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+      "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+      "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+      "python/oh_my_vllm/ir/gdn_prepare.py": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+      "python/oh_my_vllm/ir/logits.py": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+      "python/oh_my_vllm/ir/normalized_linear.py": "4a19b5496a9073d03f30234bb482f379aa186032d086b8b8e75854fe48dd3662",
+      "python/oh_my_vllm/ir/partial_attention.py": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+      "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+      "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+      "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+      "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+      "python/oh_my_vllm/kernels/attention.py": "667fd8f322a6f221c204477dc666cf030c88c26ed125e62759a78492cedacf3a",
+      "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+      "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+      "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+      "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "2903658a1ad52f721e8dc813306b1003751e8e3796855cddb913044c70b678e4",
+      "python/oh_my_vllm/kernels/cuda_backend/groupwise.py": "c48777698bcb6751dde85f7ab49735e6763d74f5e1909edaec7f97f9dd169981",
+      "python/oh_my_vllm/kernels/cuda_backend/groupwise_fp8.cu": "92f28ad74f748f848c91231671b060e7a188e8298a16484d5dffd13c021934b0",
+      "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "446c53dcd196cedbeb44e49576df07e4fcf2279283eb80cc1e5455676aca3896",
+      "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+      "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+      "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+      "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+      "python/oh_my_vllm/kernels/fp8.py": "d91feb1a5b4881c5358a5a4cf6c92ccdeb8c1234c7e56216d3c43f8e238bc88c",
+      "python/oh_my_vllm/kernels/gdn.py": "b449e439f5f524272578b05899b529de9b4eb73c7ab34fb35f9ae09b07e7af75",
+      "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+      "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+      "python/oh_my_vllm/kernels/partial_attention.py": "9d74993331ee37e48931d0600204009cf926ad4582db92e8f1e2f296ad0aa92a",
+      "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+      "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+      "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+      "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+      "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+      "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+      "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+      "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+      "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+      "python/oh_my_vllm/models/qwen.py": "007582a19d048d681162a94bda0f5677175e7665e736c65f1793addd4fa57c1b",
+      "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+    },
+    "reference": {
+      "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+      "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+      "files": {
+        "__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+        "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+      },
+      "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+      "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690",
+      "dspark_supplemental": {
+        "schema": 1,
+        "frozen_reference_manifest_sha256": "545c3d6f70ab290c4411b17513505fb3eb76014d6e3bd839081714668a7d49c9",
+        "files": {
+          "dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3"
+        },
+        "scope": [
+          "checkpoint BF16 hidden RMS rounding",
+          "head-128 full YaRN Q/K norm and rotation",
+          "retained context KV append using the original generic frozen append",
+          "seven-row bidirectional context-plus-block attention"
+        ],
+        "lineage": "Original generic RMS/decode algorithms adapted for the distinct DSpark semantics; the original eight frozen files remain byte-identical.",
+        "numerical_golden": "Independent FP64 PyTorch references in oh_my_vllm.ir.dspark; supplemental TileLang is the performance comparator.",
+        "preserved_original_case_ids": [
+          "add_norm-0c6631a889",
+          "add_norm-16c7eea28c",
+          "add_norm-17cf75a750",
+          "add_norm-1cd0b34f33",
+          "add_norm-27c6f00266",
+          "add_norm-28b801aed5",
+          "add_norm-6c841c61cc",
+          "add_norm-8fa7f5b472",
+          "add_norm-a8eca15b2f",
+          "add_norm-c3003e1746",
+          "add_norm-c7cb824ce7",
+          "add_norm-d38e95acda",
+          "add_norm-ea3a42f942",
+          "attention-0ebf3559b6",
+          "attention-166a4bce77",
+          "attention-2b7ac478c8",
+          "attention-302aa28608",
+          "attention-39a3371fd0",
+          "attention-4705faca24",
+          "attention-4fbadf5691",
+          "attention-5d1d8dd9c4",
+          "attention-6ee6a06e37",
+          "attention-764772a69f",
+          "attention-80f93685bd",
+          "attention-86c02993e7",
+          "attention-a6899c8eba",
+          "attention-c426ebd5d5",
+          "attention-d3973698ea",
+          "attention-e3bf2f1708",
+          "convolution-0febb0c2f0",
+          "convolution-2e3c4391cd",
+          "convolution-445867aff2",
+          "convolution-647f178fc3",
+          "convolution-669242bf59",
+          "convolution-75d71689d9",
+          "convolution-8f95316330",
+          "convolution-acc1f1fa4a",
+          "convolution-accdf72929",
+          "convolution-c4c3ff2aef",
+          "convolution-cdeba28a40",
+          "convolution-ea757c8cde",
+          "convolution-ff7930b7b7",
+          "gated_norm-37b6f09e50",
+          "gated_norm-526cd44715",
+          "gated_norm-730a8e2832",
+          "gated_norm-a20f3afb37",
+          "gated_norm-a3ae6d7d9e",
+          "gated_norm-bdec59c631",
+          "gated_norm-bf1c454402",
+          "gated_norm-c04fc8e4ea",
+          "gated_norm-cdfb1224cc",
+          "gated_norm-cf3f37cb9e",
+          "gated_norm-cf90127954",
+          "gated_norm-d88b128193",
+          "gated_norm-fc1b4f5fca",
+          "gates-032c38d108",
+          "gates-20dd53c898",
+          "gates-230b55c57b",
+          "gates-414c933c7a",
+          "gates-7c7a082031",
+          "gates-7f196271c1",
+          "gates-9710bbc960",
+          "gates-c72bdad5d4",
+          "gates-cae0b44add",
+          "gates-db0ed2a574",
+          "gates-eb9ecb7e6b",
+          "gates-ee30f1b859",
+          "gates-fe0ffa9ef4",
+          "norm-1953a6389d",
+          "norm-1e2a1a065f",
+          "norm-214c77fddf",
+          "norm-3f7d78bda0",
+          "norm-7d0299aa63",
+          "norm-80dce647f9",
+          "norm-82d8a65dcf",
+          "norm-8f0939a3eb",
+          "norm-9690ce8dc3",
+          "norm-b75ec1a7a2",
+          "norm-c2c1f928be",
+          "norm-ea1e7c720d",
+          "norm-effe245bd2",
+          "prepare_attention-15fddb117a",
+          "prepare_attention-2123658257",
+          "prepare_attention-396e3971a6",
+          "prepare_attention-409a17bee0",
+          "prepare_attention-50d5f5fd1d",
+          "prepare_attention-53663d6020",
+          "prepare_attention-70856729ec",
+          "prepare_attention-7eb9ea324c",
+          "prepare_attention-831ee3469c",
+          "prepare_attention-857fc001ea",
+          "prepare_attention-c7a5f6c559",
+          "prepare_attention-e2b930a517",
+          "prepare_attention-e3ad7889b2",
+          "qk-12fc3a9e63",
+          "qk-2bc130d5f3",
+          "qk-2fdf585888",
+          "qk-df607783e7",
+          "qk-ee1062c676",
+          "qk-f930cef0b5",
+          "quant-0413ce3ad4",
+          "quant-0a7394ccef",
+          "quant-0ab771f274",
+          "quant-0e5f3a0b2e",
+          "quant-0eea55c864",
+          "quant-14b2b04fc3",
+          "quant-317bf37c2b",
+          "quant-31fe1ff1c4",
+          "quant-38a4f3d421",
+          "quant-4e026ac5b2",
+          "quant-5b659364da",
+          "quant-6b2b789e0f",
+          "quant-6f964d5026",
+          "quant-78967ef6bb",
+          "quant-7a2c2961c3",
+          "quant-9c9c4ad938",
+          "quant-a83ee98240",
+          "quant-ab0ac5c4e5",
+          "quant-b6aca61c7f",
+          "quant-c7c5a33dd2",
+          "quant-c908ceb94f",
+          "quant-cacaef771f",
+          "quant-cb18873355",
+          "quant-cba5ed9729",
+          "quant-effc981768",
+          "quant-f70208e990",
+          "recurrent-041544e32f",
+          "recurrent-2a62969158",
+          "recurrent-36a6d98675",
+          "recurrent-38fd6bd99e",
+          "recurrent-4b9de1f8fa",
+          "recurrent-5a418230e1",
+          "recurrent-e73333aa6f",
+          "recurrent-fe8f9e7511",
+          "silu_quant-07d0318c78",
+          "silu_quant-3d777559ac",
+          "silu_quant-6ddda81d2c",
+          "silu_quant-6e2b085b5c",
+          "silu_quant-71ac03b9bc",
+          "silu_quant-7e22ac4193",
+          "silu_quant-7ed9c30e04",
+          "silu_quant-a089c70b05",
+          "silu_quant-a828b90cc9",
+          "silu_quant-ab0edc82bb",
+          "silu_quant-bdb6037d89",
+          "silu_quant-e81d00f9c2",
+          "silu_quant-fbdf53e4ed"
+        ],
+        "preserved_original_case_ids_sha256": "2f2d818f81380383832af55ce0f2d6124310727b7fc030afbb8728e9ebf30d9b"
+      }
+    },
+    "scope": "Four selected complete-operation cases from a dirty source. Full 301-case coverage is pending.",
+    "protocol": "Complete static maximum-shape operations; three independent warm rounds, twenty alternating-order pairs/round,100 graph repetitions/sample. External timing events inside each graph exclude host submission gaps. No profiler during timing. Fixtures use immutable sources and repeatable destinations. DSpark append shares one cache after independent-cache verification. Stateless Q/K timing uses matching output-address sequences in one graph pool after independent verification; whole functions keep their output allocations. Other mutable destinations remain isolated. Before timing, compare both backends' returns and written cache/state slots at existing tolerances.",
+    "coverage": {
+      "complete": false,
+      "selected": [
+        "add_norm_fp8_linear-001cbb614c",
+        "add_norm_fp8_linear-f86fb32ba5",
+        "add_norm_fp8_linear-1af844b0c0",
+        "add_norm_fp8_linear-480dca28d6"
+      ]
+    },
+    "selected_passed": true,
+    "rows": [
+      {
+        "id": "add_norm_fp8_linear-001cbb614c",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 32144,
+          "width": 5120,
+          "columns": 34816
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "mtp-32768-1",
+          "dspark-32768-1",
+          "ordinary-131072-1"
+        ],
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "timing_destination": "independent_returns_and_mutable_pools",
+        "timing_pool_audit": null,
+        "variant_dispatch": null,
+        "raw_pairs_ms": [
+          [
+            [
+              9.955140991210937,
+              7.150432739257813
+            ],
+            [
+              9.93813232421875,
+              7.023321533203125
+            ],
+            [
+              9.893324584960938,
+              7.1120147705078125
+            ],
+            [
+              10.021165161132812,
+              7.027025756835937
+            ],
+            [
+              9.93272216796875,
+              7.171941528320312
+            ],
+            [
+              9.926288452148437,
+              7.0267333984375
+            ],
+            [
+              9.90056884765625,
+              7.125809326171875
+            ],
+            [
+              9.985924682617188,
+              7.0466070556640625
+            ],
+            [
+              9.920311279296875,
+              7.139903564453125
+            ],
+            [
+              9.922379760742187,
+              7.048095092773438
+            ],
+            [
+              9.978997802734375,
+              7.180782470703125
+            ],
+            [
+              9.90216064453125,
+              7.038330078125
+            ],
+            [
+              9.981401977539063,
+              7.167861328125
+            ],
+            [
+              9.902079467773438,
+              7.03830322265625
+            ],
+            [
+              9.949187622070312,
+              7.1441015625
+            ],
+            [
+              9.961287231445313,
+              7.039146728515625
+            ],
+            [
+              9.9698095703125,
+              7.13635009765625
+            ],
+            [
+              9.87244140625,
+              7.046110229492188
+            ],
+            [
+              9.978158569335937,
+              7.152059936523438
+            ],
+            [
+              9.929716186523438,
+              7.056104125976563
+            ]
+          ],
+          [
+            [
+              9.94120361328125,
+              7.059324340820313
+            ],
+            [
+              9.90085693359375,
+              7.153905639648437
+            ],
+            [
+              9.98507568359375,
+              7.054769897460938
+            ],
+            [
+              9.885988159179687,
+              7.173291015625
+            ],
+            [
+              9.991074829101562,
+              7.045736083984375
+            ],
+            [
+              9.89239501953125,
+              7.1517486572265625
+            ],
+            [
+              10.006021728515625,
+              7.0501470947265625
+            ],
+            [
+              9.882434692382812,
+              7.1213330078125
+            ],
+            [
+              9.937158813476563,
+              7.052026977539063
+            ],
+            [
+              9.906726684570312,
+              7.147376708984375
+            ],
+            [
+              9.889461669921875,
+              7.061482543945313
+            ],
+            [
+              9.895330810546875,
+              7.146135864257812
+            ],
+            [
+              9.891503295898438,
+              7.057075805664063
+            ],
+            [
+              9.922056884765626,
+              7.16011962890625
+            ],
+            [
+              9.825785522460938,
+              7.061343383789063
+            ],
+            [
+              9.920996704101562,
+              7.173826293945313
+            ],
+            [
+              9.900542602539062,
+              7.03201904296875
+            ],
+            [
+              9.90126220703125,
+              7.152216186523438
+            ],
+            [
+              9.935131225585938,
+              7.057310791015625
+            ],
+            [
+              9.935270385742188,
+              7.176303100585938
+            ]
+          ],
+          [
+            [
+              9.916779174804688,
+              7.174089965820312
+            ],
+            [
+              9.959183959960937,
+              7.0543505859375
+            ],
+            [
+              9.894210205078124,
+              7.167762451171875
+            ],
+            [
+              9.981475219726562,
+              7.054813232421875
+            ],
+            [
+              9.918972778320313,
+              7.208720092773437
+            ],
+            [
+              9.890886840820313,
+              7.085341796875
+            ],
+            [
+              9.898114624023437,
+              7.232098388671875
+            ],
+            [
+              10.044186401367188,
+              7.063218994140625
+            ],
+            [
+              9.946636962890626,
+              7.2314599609375
+            ],
+            [
+              9.962388305664062,
+              7.0534423828125
+            ],
+            [
+              9.95029052734375,
+              7.189209594726562
+            ],
+            [
+              9.917802124023437,
+              7.060800170898437
+            ],
+            [
+              9.932738647460937,
+              7.158759765625
+            ],
+            [
+              9.896141967773438,
+              7.055355224609375
+            ],
+            [
+              9.9230712890625,
+              7.153558959960938
+            ],
+            [
+              9.978104858398437,
+              7.033322143554687
+            ],
+            [
+              9.917930297851562,
+              7.1629443359375
+            ],
+            [
+              9.876058959960938,
+              7.057481689453125
+            ],
+            [
+              9.926497802734374,
+              7.1527197265625
+            ],
+            [
+              10.01777587890625,
+              7.035030517578125
+            ]
+          ]
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 9.935427246093749,
+              "cuda_ms": 7.084059448242188
+            },
+            {
+              "tilelang_ms": 9.90399444580078,
+              "cuda_ms": 7.091407775878906
+            },
+            {
+              "tilelang_ms": 9.924784545898437,
+              "cuda_ms": 7.119030761718751
+            }
+          ],
+          "paired_mean_gain_ms": 2.8262286071777343,
+          "gain_lower_95_ms": 2.804275390625,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-f86fb32ba5",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 32768,
+          "width": 5120,
+          "columns": 34816
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "ordinary-32768-4",
+          "mtp-32768-2",
+          "mtp-32768-4",
+          "dspark-32768-2",
+          "dspark-32768-4"
+        ],
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "timing_destination": "independent_returns_and_mutable_pools",
+        "timing_pool_audit": null,
+        "variant_dispatch": null,
+        "raw_pairs_ms": [
+          [
+            [
+              10.061071166992187,
+              7.247975463867188
+            ],
+            [
+              10.08094482421875,
+              7.1375494384765625
+            ],
+            [
+              10.110471801757813,
+              7.29364990234375
+            ],
+            [
+              10.11909423828125,
+              7.145696411132812
+            ],
+            [
+              10.099828491210937,
+              7.26878662109375
+            ],
+            [
+              10.046773681640625,
+              7.145332641601563
+            ],
+            [
+              10.06610107421875,
+              7.296578979492187
+            ],
+            [
+              10.127605590820313,
+              7.149096069335937
+            ],
+            [
+              10.0830419921875,
+              7.263720703125
+            ],
+            [
+              10.045220336914063,
+              7.131857299804688
+            ],
+            [
+              10.110838623046876,
+              7.255512084960937
+            ],
+            [
+              10.12065673828125,
+              7.14411376953125
+            ],
+            [
+              10.08585205078125,
+              7.052998046875
+            ],
+            [
+              10.065679321289062,
+              7.144586791992188
+            ],
+            [
+              10.096425170898437,
+              7.234541015625
+            ],
+            [
+              10.09659912109375,
+              7.142811279296875
+            ],
+            [
+              9.856118774414062,
+              7.262241821289063
+            ],
+            [
+              10.075728149414063,
+              7.143258666992187
+            ],
+            [
+              10.030433959960938,
+              7.304011840820312
+            ],
+            [
+              10.154082641601562,
+              7.146196899414062
+            ]
+          ],
+          [
+            [
+              10.089254760742188,
+              7.121688232421875
+            ],
+            [
+              10.09176025390625,
+              7.25238037109375
+            ],
+            [
+              10.120186767578126,
+              7.134325561523437
+            ],
+            [
+              10.090025024414063,
+              7.264242553710938
+            ],
+            [
+              10.090241088867188,
+              7.148358154296875
+            ],
+            [
+              10.082974853515625,
+              7.238004760742188
+            ],
+            [
+              10.154951782226563,
+              7.132284545898438
+            ],
+            [
+              10.095546875,
+              7.224371337890625
+            ],
+            [
+              10.091316528320313,
+              7.123500366210937
+            ],
+            [
+              10.095444946289062,
+              7.27097900390625
+            ],
+            [
+              10.047057495117187,
+              7.150421752929687
+            ],
+            [
+              10.065452270507812,
+              7.257372436523437
+            ],
+            [
+              10.1550439453125,
+              7.129976196289062
+            ],
+            [
+              10.091168212890626,
+              7.2729425048828125
+            ],
+            [
+              10.169270629882812,
+              7.1420458984375
+            ],
+            [
+              10.028334350585938,
+              7.276962890625
+            ],
+            [
+              10.093823852539062,
+              7.134371337890625
+            ],
+            [
+              10.094742431640626,
+              7.30835205078125
+            ],
+            [
+              10.05989013671875,
+              7.140635375976562
+            ],
+            [
+              10.101846313476562,
+              7.260797729492188
+            ]
+          ],
+          [
+            [
+              10.053795776367188,
+              7.13007568359375
+            ],
+            [
+              10.0884423828125,
+              7.144384765625
+            ],
+            [
+              10.076110229492187,
+              7.224869384765625
+            ],
+            [
+              10.08400146484375,
+              7.127886962890625
+            ],
+            [
+              10.074596557617188,
+              7.28815673828125
+            ],
+            [
+              10.065363159179688,
+              7.12547607421875
+            ],
+            [
+              10.044859008789063,
+              7.2795037841796875
+            ],
+            [
+              10.07968017578125,
+              7.1251898193359375
+            ],
+            [
+              10.100430297851563,
+              7.248495483398438
+            ],
+            [
+              10.048005981445312,
+              7.122255859375
+            ],
+            [
+              10.06968994140625,
+              7.28235595703125
+            ],
+            [
+              10.115499267578125,
+              7.130242919921875
+            ],
+            [
+              10.094414672851563,
+              7.26807373046875
+            ],
+            [
+              10.166524658203125,
+              7.125396118164063
+            ],
+            [
+              10.086420288085938,
+              7.249351196289062
+            ],
+            [
+              10.040712280273437,
+              7.152739868164063
+            ],
+            [
+              10.04358154296875,
+              7.357445068359375
+            ],
+            [
+              10.084290771484374,
+              7.124442138671875
+            ],
+            [
+              10.08243408203125,
+              7.273104858398438
+            ],
+            [
+              10.0961767578125,
+              7.144078369140625
+            ]
+          ]
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 10.084447021484376,
+              "cuda_ms": 7.147646484375
+            },
+            {
+              "tilelang_ms": 10.091538391113282,
+              "cuda_ms": 7.187396545410156
+            },
+            {
+              "tilelang_ms": 10.08105712890625,
+              "cuda_ms": 7.148562316894532
+            }
+          ],
+          "paired_mean_gain_ms": 2.886964599609375,
+          "gain_lower_95_ms": 2.865945515950521,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-1af844b0c0",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 32288,
+          "width": 5120,
+          "columns": 34816
+        },
+        "workloads": [
+          "ordinary-131072-2"
+        ],
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "timing_destination": "independent_returns_and_mutable_pools",
+        "timing_pool_audit": null,
+        "variant_dispatch": null,
+        "raw_pairs_ms": [
+          [
+            [
+              9.943115234375,
+              7.17698486328125
+            ],
+            [
+              10.119575805664063,
+              7.086865844726563
+            ],
+            [
+              9.994065551757812,
+              7.2189453125
+            ],
+            [
+              9.971908569335938,
+              7.119927978515625
+            ],
+            [
+              9.98717529296875,
+              7.237809448242188
+            ],
+            [
+              9.973787231445312,
+              7.1107550048828125
+            ],
+            [
+              9.978350830078124,
+              7.245059204101563
+            ],
+            [
+              10.039324951171874,
+              7.121583251953125
+            ],
+            [
+              9.95193603515625,
+              7.2240667724609375
+            ],
+            [
+              9.912714233398438,
+              7.089265747070312
+            ],
+            [
+              9.992567138671875,
+              7.25099365234375
+            ],
+            [
+              10.028786010742188,
+              7.0807470703125
+            ],
+            [
+              10.002313232421875,
+              7.208624267578125
+            ],
+            [
+              10.028701782226562,
+              7.086029052734375
+            ],
+            [
+              9.98212890625,
+              7.228345947265625
+            ],
+            [
+              9.98566162109375,
+              7.114714965820313
+            ],
+            [
+              9.9950927734375,
+              7.2353973388671875
+            ],
+            [
+              9.959166259765626,
+              7.115211791992188
+            ],
+            [
+              9.984811401367187,
+              7.205617065429688
+            ],
+            [
+              9.9997900390625,
+              7.098223876953125
+            ]
+          ],
+          [
+            [
+              9.995867309570313,
+              7.117816162109375
+            ],
+            [
+              9.992113037109375,
+              7.202716064453125
+            ],
+            [
+              10.118118286132812,
+              7.089432983398438
+            ],
+            [
+              9.9975732421875,
+              7.18895263671875
+            ],
+            [
+              10.013612670898437,
+              7.102723999023437
+            ],
+            [
+              9.982208251953125,
+              7.24693115234375
+            ],
+            [
+              10.014695434570312,
+              7.126871948242187
+            ],
+            [
+              10.009193115234375,
+              7.24864990234375
+            ],
+            [
+              10.073026733398438,
+              7.091041259765625
+            ],
+            [
+              9.990078735351563,
+              7.246236572265625
+            ],
+            [
+              10.04376953125,
+              7.122005615234375
+            ],
+            [
+              9.986490478515625,
+              7.240592041015625
+            ],
+            [
+              9.995932006835938,
+              7.0854730224609375
+            ],
+            [
+              9.987227172851563,
+              7.190811767578125
+            ],
+            [
+              9.99275146484375,
+              7.116951293945313
+            ],
+            [
+              9.990841064453125,
+              7.230953979492187
+            ],
+            [
+              10.018125610351563,
+              7.143956909179687
+            ],
+            [
+              10.00992431640625,
+              7.207896728515625
+            ],
+            [
+              10.147794799804688,
+              7.125264282226563
+            ],
+            [
+              9.999261474609375,
+              7.192608032226563
+            ]
+          ],
+          [
+            [
+              10.007059936523438,
+              7.020732421875
+            ],
+            [
+              10.076001586914062,
+              7.141863403320312
+            ],
+            [
+              9.809401245117188,
+              7.24697998046875
+            ],
+            [
+              9.96052734375,
+              7.1453009033203125
+            ],
+            [
+              9.98852783203125,
+              7.202559204101562
+            ],
+            [
+              9.991146240234375,
+              7.14235107421875
+            ],
+            [
+              9.995635375976562,
+              7.2094677734375
+            ],
+            [
+              10.02763916015625,
+              7.132351684570312
+            ],
+            [
+              9.983212890625,
+              7.264719848632812
+            ],
+            [
+              9.980588989257813,
+              7.1490087890625
+            ],
+            [
+              10.02542236328125,
+              7.1936328125
+            ],
+            [
+              9.93080810546875,
+              7.113773803710938
+            ],
+            [
+              9.983541259765625,
+              7.333370971679687
+            ],
+            [
+              9.969344482421874,
+              7.105394287109375
+            ],
+            [
+              10.035050659179687,
+              7.1592041015625
+            ],
+            [
+              9.954991455078124,
+              7.142736206054687
+            ],
+            [
+              10.002381591796874,
+              7.163362426757812
+            ],
+            [
+              10.011447143554687,
+              7.129269409179687
+            ],
+            [
+              9.9752880859375,
+              7.2531005859375
+            ],
+            [
+              9.992060546875,
+              7.102225952148437
+            ]
+          ]
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 9.986418457031249,
+              "cuda_ms": 7.149284057617187
+            },
+            {
+              "tilelang_ms": 9.998417358398438,
+              "cuda_ms": 7.166454772949219
+            },
+            {
+              "tilelang_ms": 9.989837036132812,
+              "cuda_ms": 7.147154846191406
+            }
+          ],
+          "paired_mean_gain_ms": 2.832753224690755,
+          "gain_lower_95_ms": 2.810235117594401,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-480dca28d6",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 32290,
+          "width": 5120,
+          "columns": 34816
+        },
+        "workloads": [
+          "ordinary-131072-4"
+        ],
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "timing_destination": "independent_returns_and_mutable_pools",
+        "timing_pool_audit": null,
+        "variant_dispatch": null,
+        "raw_pairs_ms": [
+          [
+            [
+              10.002432250976563,
+              7.244083251953125
+            ],
+            [
+              10.003853759765626,
+              7.11044189453125
+            ],
+            [
+              9.799550170898437,
+              7.1796636962890625
+            ],
+            [
+              9.955291748046875,
+              7.124712524414062
+            ],
+            [
+              9.981791381835938,
+              7.268069458007813
+            ],
+            [
+              10.032265625,
+              7.114794921875
+            ],
+            [
+              9.979085083007812,
+              7.236552734375
+            ],
+            [
+              10.025223388671876,
+              7.124593505859375
+            ],
+            [
+              9.986151123046875,
+              7.28717041015625
+            ],
+            [
+              9.980841064453125,
+              7.122278442382813
+            ],
+            [
+              9.990150756835938,
+              7.283980712890625
+            ],
+            [
+              9.95931640625,
+              7.081176147460938
+            ],
+            [
+              10.001935424804687,
+              7.075626220703125
+            ],
+            [
+              10.023392944335937,
+              7.110734252929688
+            ],
+            [
+              9.846197509765625,
+              7.22555419921875
+            ],
+            [
+              10.039046020507813,
+              7.154068603515625
+            ],
+            [
+              10.003099975585938,
+              7.2556494140625
+            ],
+            [
+              9.91008056640625,
+              7.12833251953125
+            ],
+            [
+              9.978989868164062,
+              7.209105224609375
+            ],
+            [
+              9.901144409179688,
+              7.11817138671875
+            ]
+          ],
+          [
+            [
+              10.018051147460938,
+              7.086201782226563
+            ],
+            [
+              9.979445190429688,
+              7.229702758789062
+            ],
+            [
+              9.988241577148438,
+              7.08798828125
+            ],
+            [
+              9.982608642578125,
+              7.2209716796875
+            ],
+            [
+              9.980740356445313,
+              7.116803588867188
+            ],
+            [
+              9.98310791015625,
+              7.191090087890625
+            ],
+            [
+              10.018104248046875,
+              7.086596069335937
+            ],
+            [
+              9.997311401367188,
+              7.188599853515625
+            ],
+            [
+              10.059366455078125,
+              7.086766357421875
+            ],
+            [
+              9.978904418945312,
+              7.260585327148437
+            ],
+            [
+              9.958705444335937,
+              7.1051873779296875
+            ],
+            [
+              9.994693603515625,
+              7.18034912109375
+            ],
+            [
+              10.07320556640625,
+              7.106256713867188
+            ],
+            [
+              9.809185180664063,
+              7.189208374023438
+            ],
+            [
+              10.081800537109375,
+              7.112681884765625
+            ],
+            [
+              10.003512573242187,
+              7.1938323974609375
+            ],
+            [
+              9.993677368164063,
+              7.0869683837890625
+            ],
+            [
+              9.978952026367187,
+              7.207855224609375
+            ],
+            [
+              9.935147705078125,
+              7.088521118164063
+            ],
+            [
+              9.984760131835937,
+              7.215153198242188
+            ]
+          ],
+          [
+            [
+              9.940343017578124,
+              7.22171142578125
+            ],
+            [
+              9.969619750976562,
+              7.10492919921875
+            ],
+            [
+              9.963948974609375,
+              7.264342651367188
+            ],
+            [
+              9.936755981445312,
+              7.1134228515625
+            ],
+            [
+              9.988428955078126,
+              7.217489013671875
+            ],
+            [
+              10.101282348632813,
+              7.090083618164062
+            ],
+            [
+              9.990156860351563,
+              7.235040283203125
+            ],
+            [
+              9.991539916992188,
+              7.085797729492188
+            ],
+            [
+              9.991532592773437,
+              7.260442504882812
+            ],
+            [
+              10.02703369140625,
+              7.123172607421875
+            ],
+            [
+              9.978479614257813,
+              7.21643310546875
+            ],
+            [
+              9.982366333007812,
+              7.100455322265625
+            ],
+            [
+              10.015265502929687,
+              7.177946166992188
+            ],
+            [
+              9.960338745117188,
+              7.11273193359375
+            ],
+            [
+              9.989087524414062,
+              7.272364501953125
+            ],
+            [
+              9.937083129882813,
+              7.108052368164063
+            ],
+            [
+              9.987728881835938,
+              7.212555541992187
+            ],
+            [
+              9.970819091796875,
+              7.112559814453125
+            ],
+            [
+              9.993848266601562,
+              7.242611694335937
+            ],
+            [
+              9.931553955078124,
+              7.084730834960937
+            ]
+          ]
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 9.983971252441407,
+              "cuda_ms": 7.141200561523437
+            },
+            {
+              "tilelang_ms": 9.986500854492188,
+              "cuda_ms": 7.148576354980468
+            },
+            {
+              "tilelang_ms": 9.985047607421876,
+              "cuda_ms": 7.150559387207031
+            }
+          ],
+          "paired_mean_gain_ms": 2.8165603637695313,
+          "gain_lower_95_ms": 2.7919112243652346,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      }
+    ]
+  },
+  "mn_stage_operator": {
+    "source_commit": "8d7d18b50462baa4a540a3ee362ff57f070bb512",
+    "sources_sha256": {
+      "benchmarks/kernels.py": "12599b5c8735c248771a2b6c64c977401cc2cae609e05f14ee36084019a3877d",
+      "development/kernels/cases.py": "9d0afabaab15df4bcbff1d2d57d1c79a841634a76a29ecf6e573e28a61bcdba2",
+      "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+      "development/kernels/dspark-reference.json": "4e8b36447a947f065ded83b658743ecbf1f1bf8c283cf32a8e9e317f51590e05",
+      "development/kernels/fixtures.py": "d29f119e25b3b8635516c03452433be76a8a7788b08a76a888b22d22416c04eb",
+      "development/kernels/observations.py": "b418d9d3c58de0377d1dbd5660408327d289b9f789e283698d81526dd3f3d349",
+      "development/kernels/output_verification.py": "8b77e70b92b335c192f10f36c84d457e3f8be510dca6e4c9b29599957161d8a4",
+      "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+      "development/kernels/reference.py": "b6a80426e0854ba36a98c62f37809a67d1270d25c7b74eb2674438ca2ca26c92",
+      "development/kernels/semantics.py": "cbfaf6ac803384d9e1953e9757a4794c30c9c686c5ae8de228d9cce99b13baa4",
+      "development/kernels/tilelang-reference.json": "545c3d6f70ab290c4411b17513505fb3eb76014d6e3bd839081714668a7d49c9",
+      "development/kernels/timing.py": "f0a7193034c9c85231caa1c8c6d12ab0cefcb1987cacad420813c7421160ecd2",
+      "development/kernels/twins.py": "52ed6e65c6b44c0a54b5821af14f04cc5d2a38ec1123737457a21c4f95aa77d0",
+      "development/kernels/variant.py": "717e32bc7b93a3cca0513e567a75bd307c2f6ad121616b70b060e9089ded46d2",
+      "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+      "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+      "python/oh_my_vllm/ir/core.py": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+      "python/oh_my_vllm/ir/coverage.py": "339556d38f2b8733f48abc7e73ca04b1034ebae9f1f099b597b9d860330359f7",
+      "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+      "python/oh_my_vllm/ir/execution.py": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+      "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+      "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+      "python/oh_my_vllm/ir/gdn_prepare.py": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+      "python/oh_my_vllm/ir/logits.py": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+      "python/oh_my_vllm/ir/normalized_linear.py": "4a19b5496a9073d03f30234bb482f379aa186032d086b8b8e75854fe48dd3662",
+      "python/oh_my_vllm/ir/partial_attention.py": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+      "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+      "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+      "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+      "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+      "python/oh_my_vllm/kernels/attention.py": "667fd8f322a6f221c204477dc666cf030c88c26ed125e62759a78492cedacf3a",
+      "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+      "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+      "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+      "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "2903658a1ad52f721e8dc813306b1003751e8e3796855cddb913044c70b678e4",
+      "python/oh_my_vllm/kernels/cuda_backend/groupwise.py": "aacfabfe02aa45bd4bd6b8658a61763da20ad38b0ded57ac4a1ac89a0fb4806f",
+      "python/oh_my_vllm/kernels/cuda_backend/groupwise_fp8.cu": "195fce05d797f6d1b98d1cf433e7c1c446f59841692c2c74566fb88daa5c0f42",
+      "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "9e8123362f6c8873ff27e7103d410194c348c92c6ffa62e9197bfde570a119d5",
+      "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+      "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+      "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+      "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+      "python/oh_my_vllm/kernels/fp8.py": "780a21cd9a5273a85d704d13c0cbde3d73615d011a596af6f7c30743beefd0b1",
+      "python/oh_my_vllm/kernels/gdn.py": "b449e439f5f524272578b05899b529de9b4eb73c7ab34fb35f9ae09b07e7af75",
+      "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+      "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+      "python/oh_my_vllm/kernels/partial_attention.py": "9d74993331ee37e48931d0600204009cf926ad4582db92e8f1e2f296ad0aa92a",
+      "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+      "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+      "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+      "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+      "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+      "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+      "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+      "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+      "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+      "python/oh_my_vllm/models/qwen.py": "007582a19d048d681162a94bda0f5677175e7665e736c65f1793addd4fa57c1b",
+      "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+    },
+    "reference": {
+      "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+      "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+      "files": {
+        "__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+        "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+      },
+      "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+      "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690",
+      "dspark_supplemental": {
+        "schema": 1,
+        "frozen_reference_manifest_sha256": "545c3d6f70ab290c4411b17513505fb3eb76014d6e3bd839081714668a7d49c9",
+        "files": {
+          "dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3"
+        },
+        "scope": [
+          "checkpoint BF16 hidden RMS rounding",
+          "head-128 full YaRN Q/K norm and rotation",
+          "retained context KV append using the original generic frozen append",
+          "seven-row bidirectional context-plus-block attention"
+        ],
+        "lineage": "Original generic RMS/decode algorithms adapted for the distinct DSpark semantics; the original eight frozen files remain byte-identical.",
+        "numerical_golden": "Independent FP64 PyTorch references in oh_my_vllm.ir.dspark; supplemental TileLang is the performance comparator.",
+        "preserved_original_case_ids": [
+          "add_norm-0c6631a889",
+          "add_norm-16c7eea28c",
+          "add_norm-17cf75a750",
+          "add_norm-1cd0b34f33",
+          "add_norm-27c6f00266",
+          "add_norm-28b801aed5",
+          "add_norm-6c841c61cc",
+          "add_norm-8fa7f5b472",
+          "add_norm-a8eca15b2f",
+          "add_norm-c3003e1746",
+          "add_norm-c7cb824ce7",
+          "add_norm-d38e95acda",
+          "add_norm-ea3a42f942",
+          "attention-0ebf3559b6",
+          "attention-166a4bce77",
+          "attention-2b7ac478c8",
+          "attention-302aa28608",
+          "attention-39a3371fd0",
+          "attention-4705faca24",
+          "attention-4fbadf5691",
+          "attention-5d1d8dd9c4",
+          "attention-6ee6a06e37",
+          "attention-764772a69f",
+          "attention-80f93685bd",
+          "attention-86c02993e7",
+          "attention-a6899c8eba",
+          "attention-c426ebd5d5",
+          "attention-d3973698ea",
+          "attention-e3bf2f1708",
+          "convolution-0febb0c2f0",
+          "convolution-2e3c4391cd",
+          "convolution-445867aff2",
+          "convolution-647f178fc3",
+          "convolution-669242bf59",
+          "convolution-75d71689d9",
+          "convolution-8f95316330",
+          "convolution-acc1f1fa4a",
+          "convolution-accdf72929",
+          "convolution-c4c3ff2aef",
+          "convolution-cdeba28a40",
+          "convolution-ea757c8cde",
+          "convolution-ff7930b7b7",
+          "gated_norm-37b6f09e50",
+          "gated_norm-526cd44715",
+          "gated_norm-730a8e2832",
+          "gated_norm-a20f3afb37",
+          "gated_norm-a3ae6d7d9e",
+          "gated_norm-bdec59c631",
+          "gated_norm-bf1c454402",
+          "gated_norm-c04fc8e4ea",
+          "gated_norm-cdfb1224cc",
+          "gated_norm-cf3f37cb9e",
+          "gated_norm-cf90127954",
+          "gated_norm-d88b128193",
+          "gated_norm-fc1b4f5fca",
+          "gates-032c38d108",
+          "gates-20dd53c898",
+          "gates-230b55c57b",
+          "gates-414c933c7a",
+          "gates-7c7a082031",
+          "gates-7f196271c1",
+          "gates-9710bbc960",
+          "gates-c72bdad5d4",
+          "gates-cae0b44add",
+          "gates-db0ed2a574",
+          "gates-eb9ecb7e6b",
+          "gates-ee30f1b859",
+          "gates-fe0ffa9ef4",
+          "norm-1953a6389d",
+          "norm-1e2a1a065f",
+          "norm-214c77fddf",
+          "norm-3f7d78bda0",
+          "norm-7d0299aa63",
+          "norm-80dce647f9",
+          "norm-82d8a65dcf",
+          "norm-8f0939a3eb",
+          "norm-9690ce8dc3",
+          "norm-b75ec1a7a2",
+          "norm-c2c1f928be",
+          "norm-ea1e7c720d",
+          "norm-effe245bd2",
+          "prepare_attention-15fddb117a",
+          "prepare_attention-2123658257",
+          "prepare_attention-396e3971a6",
+          "prepare_attention-409a17bee0",
+          "prepare_attention-50d5f5fd1d",
+          "prepare_attention-53663d6020",
+          "prepare_attention-70856729ec",
+          "prepare_attention-7eb9ea324c",
+          "prepare_attention-831ee3469c",
+          "prepare_attention-857fc001ea",
+          "prepare_attention-c7a5f6c559",
+          "prepare_attention-e2b930a517",
+          "prepare_attention-e3ad7889b2",
+          "qk-12fc3a9e63",
+          "qk-2bc130d5f3",
+          "qk-2fdf585888",
+          "qk-df607783e7",
+          "qk-ee1062c676",
+          "qk-f930cef0b5",
+          "quant-0413ce3ad4",
+          "quant-0a7394ccef",
+          "quant-0ab771f274",
+          "quant-0e5f3a0b2e",
+          "quant-0eea55c864",
+          "quant-14b2b04fc3",
+          "quant-317bf37c2b",
+          "quant-31fe1ff1c4",
+          "quant-38a4f3d421",
+          "quant-4e026ac5b2",
+          "quant-5b659364da",
+          "quant-6b2b789e0f",
+          "quant-6f964d5026",
+          "quant-78967ef6bb",
+          "quant-7a2c2961c3",
+          "quant-9c9c4ad938",
+          "quant-a83ee98240",
+          "quant-ab0ac5c4e5",
+          "quant-b6aca61c7f",
+          "quant-c7c5a33dd2",
+          "quant-c908ceb94f",
+          "quant-cacaef771f",
+          "quant-cb18873355",
+          "quant-cba5ed9729",
+          "quant-effc981768",
+          "quant-f70208e990",
+          "recurrent-041544e32f",
+          "recurrent-2a62969158",
+          "recurrent-36a6d98675",
+          "recurrent-38fd6bd99e",
+          "recurrent-4b9de1f8fa",
+          "recurrent-5a418230e1",
+          "recurrent-e73333aa6f",
+          "recurrent-fe8f9e7511",
+          "silu_quant-07d0318c78",
+          "silu_quant-3d777559ac",
+          "silu_quant-6ddda81d2c",
+          "silu_quant-6e2b085b5c",
+          "silu_quant-71ac03b9bc",
+          "silu_quant-7e22ac4193",
+          "silu_quant-7ed9c30e04",
+          "silu_quant-a089c70b05",
+          "silu_quant-a828b90cc9",
+          "silu_quant-ab0edc82bb",
+          "silu_quant-bdb6037d89",
+          "silu_quant-e81d00f9c2",
+          "silu_quant-fbdf53e4ed"
+        ],
+        "preserved_original_case_ids_sha256": "2f2d818f81380383832af55ce0f2d6124310727b7fc030afbb8728e9ebf30d9b"
+      }
+    },
+    "scope": "Four selected complete-operation cases from a dirty source. Full 301-case coverage is pending.",
+    "protocol": "Complete static maximum-shape operations; three independent warm rounds, twenty alternating-order pairs/round,100 graph repetitions/sample. External timing events inside each graph exclude host submission gaps. No profiler during timing. Fixtures use immutable sources and repeatable destinations. DSpark append shares one cache after independent-cache verification. Stateless Q/K timing uses matching output-address sequences in one graph pool after independent verification; whole functions keep their output allocations. Other mutable destinations remain isolated. Before timing, compare both backends' returns and written cache/state slots at existing tolerances.",
+    "coverage": {
+      "complete": false,
+      "selected": [
+        "add_norm_fp8_linear-001cbb614c",
+        "add_norm_fp8_linear-f86fb32ba5",
+        "add_norm_fp8_linear-1af844b0c0",
+        "add_norm_fp8_linear-480dca28d6"
+      ]
+    },
+    "selected_passed": true,
+    "rows": [
+      {
+        "id": "add_norm_fp8_linear-001cbb614c",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 32144,
+          "width": 5120,
+          "columns": 34816
+        },
+        "workloads": [
+          "ordinary-32768-1",
+          "mtp-32768-1",
+          "dspark-32768-1",
+          "ordinary-131072-1"
+        ],
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "timing_destination": "independent_returns_and_mutable_pools",
+        "timing_pool_audit": null,
+        "variant_dispatch": null,
+        "raw_pairs_ms": [
+          [
+            [
+              9.950796508789063,
+              6.909452514648438
+            ],
+            [
+              9.867798461914063,
+              6.825021362304687
+            ],
+            [
+              9.890388793945313,
+              6.938223876953125
+            ],
+            [
+              9.925918579101562,
+              6.83409423828125
+            ],
+            [
+              9.8945947265625,
+              6.984974365234375
+            ],
+            [
+              9.927706909179687,
+              6.834940795898437
+            ],
+            [
+              9.907078247070313,
+              6.937196655273437
+            ],
+            [
+              9.866287231445312,
+              6.8504791259765625
+            ],
+            [
+              9.903875122070312,
+              6.990244140625
+            ],
+            [
+              10.022244873046875,
+              6.846312255859375
+            ],
+            [
+              9.9251171875,
+              6.9887646484375
+            ],
+            [
+              9.909200439453125,
+              6.8604052734375
+            ],
+            [
+              9.946416625976562,
+              6.9505078125
+            ],
+            [
+              9.99216796875,
+              6.857258911132813
+            ],
+            [
+              9.898910522460938,
+              6.954712524414062
+            ],
+            [
+              9.97553466796875,
+              6.860572509765625
+            ],
+            [
+              9.909132080078125,
+              6.97516845703125
+            ],
+            [
+              9.869417724609375,
+              6.86302001953125
+            ],
+            [
+              9.964443359375,
+              6.948304443359375
+            ],
+            [
+              9.920582885742187,
+              6.862772216796875
+            ]
+          ],
+          [
+            [
+              9.909424438476563,
+              6.871384887695313
+            ],
+            [
+              9.93536376953125,
+              6.97108642578125
+            ],
+            [
+              9.921690063476563,
+              6.893660888671875
+            ],
+            [
+              9.933425903320312,
+              6.945451049804688
+            ],
+            [
+              9.93899169921875,
+              6.8652783203125
+            ],
+            [
+              9.918395385742187,
+              7.004098510742187
+            ],
+            [
+              9.97929443359375,
+              6.8674560546875
+            ],
+            [
+              9.867007446289062,
+              6.958111572265625
+            ],
+            [
+              9.963003540039063,
+              6.86888916015625
+            ],
+            [
+              9.928010864257812,
+              7.012229614257812
+            ],
+            [
+              9.874993286132813,
+              6.869551391601562
+            ],
+            [
+              9.89376953125,
+              7.001341552734375
+            ],
+            [
+              9.921245727539063,
+              6.8689208984375
+            ],
+            [
+              9.91108642578125,
+              7.016145629882812
+            ],
+            [
+              9.914669799804688,
+              6.871862182617187
+            ],
+            [
+              9.909021606445313,
+              6.955440063476562
+            ],
+            [
+              9.893526611328125,
+              6.88078125
+            ],
+            [
+              9.941265869140626,
+              6.965253295898438
+            ],
+            [
+              9.884063110351562,
+              6.87309814453125
+            ],
+            [
+              9.893933715820312,
+              7.000784301757813
+            ]
+          ],
+          [
+            [
+              10.026478271484375,
+              6.959826049804687
+            ],
+            [
+              9.93218994140625,
+              6.871756591796875
+            ],
+            [
+              9.905888061523438,
+              6.957354125976562
+            ],
+            [
+              9.89898193359375,
+              6.870205688476562
+            ],
+            [
+              9.943597412109375,
+              6.9627008056640625
+            ],
+            [
+              9.913595581054688,
+              6.877695922851562
+            ],
+            [
+              9.913494873046876,
+              6.963919677734375
+            ],
+            [
+              9.926639404296875,
+              6.874447631835937
+            ],
+            [
+              9.93689208984375,
+              6.999652709960937
+            ],
+            [
+              10.024148559570312,
+              6.872899780273437
+            ],
+            [
+              9.94179443359375,
+              6.990693359375
+            ],
+            [
+              9.85718994140625,
+              6.8808966064453125
+            ],
+            [
+              9.918831176757813,
+              6.98016357421875
+            ],
+            [
+              9.919342041015625,
+              6.880167236328125
+            ],
+            [
+              9.9406396484375,
+              6.966547241210938
+            ],
+            [
+              9.917860107421875,
+              6.8764404296875
+            ],
+            [
+              9.902166137695312,
+              6.9576171875
+            ],
+            [
+              9.863316650390624,
+              6.8768212890625
+            ],
+            [
+              9.922503662109374,
+              6.989932250976563
+            ],
+            [
+              9.910880126953124,
+              6.874259033203125
+            ]
+          ]
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 9.914891662597656,
+              "cuda_ms": 6.886236267089844
+            },
+            {
+              "tilelang_ms": 9.916532592773438,
+              "cuda_ms": 6.9195559692382815
+            },
+            {
+              "tilelang_ms": 9.919086608886719,
+              "cuda_ms": 6.919125366210937
+            }
+          ],
+          "paired_mean_gain_ms": 3.0033162943522136,
+          "gain_lower_95_ms": 2.9853269144694012,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-f86fb32ba5",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 32768,
+          "width": 5120,
+          "columns": 34816
+        },
+        "workloads": [
+          "ordinary-32768-2",
+          "ordinary-32768-4",
+          "mtp-32768-2",
+          "mtp-32768-4",
+          "dspark-32768-2",
+          "dspark-32768-4"
+        ],
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "timing_destination": "independent_returns_and_mutable_pools",
+        "timing_pool_audit": null,
+        "variant_dispatch": null,
+        "raw_pairs_ms": [
+          [
+            [
+              10.099652099609376,
+              7.02126220703125
+            ],
+            [
+              10.064760131835937,
+              6.925663452148438
+            ],
+            [
+              10.083042602539063,
+              7.082027587890625
+            ],
+            [
+              10.09835205078125,
+              6.922532958984375
+            ],
+            [
+              10.085684814453124,
+              7.05466796875
+            ],
+            [
+              10.102489013671875,
+              6.947073364257813
+            ],
+            [
+              10.07052490234375,
+              7.049502563476563
+            ],
+            [
+              10.117536010742187,
+              6.944368286132812
+            ],
+            [
+              10.078876953125,
+              7.0577935791015625
+            ],
+            [
+              10.036550903320313,
+              6.9482269287109375
+            ],
+            [
+              10.084259033203125,
+              7.041180419921875
+            ],
+            [
+              10.020997924804687,
+              6.95051025390625
+            ],
+            [
+              10.091265258789063,
+              7.0388421630859375
+            ],
+            [
+              10.11003173828125,
+              6.95081787109375
+            ],
+            [
+              10.095372314453124,
+              7.059317016601563
+            ],
+            [
+              10.143029174804688,
+              6.948762817382812
+            ],
+            [
+              10.099655151367188,
+              7.070911254882812
+            ],
+            [
+              10.119443969726563,
+              6.949728393554688
+            ],
+            [
+              10.099200439453124,
+              7.081704711914062
+            ],
+            [
+              10.071213989257812,
+              6.94722900390625
+            ]
+          ],
+          [
+            [
+              10.089595336914062,
+              6.959642944335937
+            ],
+            [
+              10.079383544921875,
+              7.04738525390625
+            ],
+            [
+              10.0784765625,
+              6.960293579101562
+            ],
+            [
+              10.09958984375,
+              7.06358642578125
+            ],
+            [
+              10.187015991210938,
+              6.955281372070313
+            ],
+            [
+              10.009800415039063,
+              7.076362915039063
+            ],
+            [
+              10.165222778320313,
+              6.958593139648437
+            ],
+            [
+              10.077413940429688,
+              7.06856201171875
+            ],
+            [
+              10.070585327148438,
+              6.959686279296875
+            ],
+            [
+              10.03547607421875,
+              6.9861181640625
+            ],
+            [
+              10.100574340820312,
+              6.948079223632813
+            ],
+            [
+              10.086103515625,
+              7.037897338867188
+            ],
+            [
+              10.1462890625,
+              6.949923706054688
+            ],
+            [
+              10.060723266601563,
+              7.049954223632812
+            ],
+            [
+              10.08214599609375,
+              6.950115966796875
+            ],
+            [
+              10.087040405273438,
+              7.085829467773437
+            ],
+            [
+              10.111727294921875,
+              6.950635375976563
+            ],
+            [
+              10.087112426757812,
+              7.064059448242188
+            ],
+            [
+              10.079711303710937,
+              6.953038330078125
+            ],
+            [
+              10.055664672851563,
+              7.046559448242188
+            ]
+          ],
+          [
+            [
+              10.1109228515625,
+              7.060281982421875
+            ],
+            [
+              10.236594848632812,
+              6.958634033203125
+            ],
+            [
+              10.090789794921875,
+              7.10105712890625
+            ],
+            [
+              10.082137451171874,
+              6.95897705078125
+            ],
+            [
+              10.1025732421875,
+              7.054282836914062
+            ],
+            [
+              10.091925048828125,
+              6.9576177978515625
+            ],
+            [
+              10.102676391601562,
+              7.052991943359375
+            ],
+            [
+              10.10845947265625,
+              6.949299926757813
+            ],
+            [
+              10.088439331054687,
+              7.070979614257812
+            ],
+            [
+              10.199996948242188,
+              6.9472808837890625
+            ],
+            [
+              10.098848876953125,
+              7.0599432373046875
+            ],
+            [
+              10.075718383789063,
+              6.951700439453125
+            ],
+            [
+              10.074500732421875,
+              7.043001098632812
+            ],
+            [
+              10.088882446289062,
+              6.941282958984375
+            ],
+            [
+              10.0874169921875,
+              7.04728759765625
+            ],
+            [
+              10.091710815429687,
+              6.946771240234375
+            ],
+            [
+              10.070746459960937,
+              7.053200073242188
+            ],
+            [
+              10.13225341796875,
+              6.9572381591796875
+            ],
+            [
+              10.090400390625,
+              7.043489379882812
+            ],
+            [
+              10.064721069335938,
+              6.978740234375
+            ]
+          ]
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 10.093318786621094,
+              "cuda_ms": 6.9860400390625
+            },
+            {
+              "tilelang_ms": 10.084124755859374,
+              "cuda_ms": 6.9732058715820315
+            },
+            {
+              "tilelang_ms": 10.09125030517578,
+              "cuda_ms": 7.010870666503906
+            }
+          ],
+          "paired_mean_gain_ms": 3.0908920084635416,
+          "gain_lower_95_ms": 3.0746593017578125,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-1af844b0c0",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 32288,
+          "width": 5120,
+          "columns": 34816
+        },
+        "workloads": [
+          "ordinary-131072-2"
+        ],
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "timing_destination": "independent_returns_and_mutable_pools",
+        "timing_pool_audit": null,
+        "variant_dispatch": null,
+        "raw_pairs_ms": [
+          [
+            [
+              9.99718017578125,
+              7.005357055664063
+            ],
+            [
+              9.962678833007812,
+              6.918260498046875
+            ],
+            [
+              9.9918603515625,
+              7.0370263671875
+            ],
+            [
+              9.967484741210937,
+              6.92109130859375
+            ],
+            [
+              9.984995727539063,
+              6.998222045898437
+            ],
+            [
+              9.97861328125,
+              6.919047241210937
+            ],
+            [
+              9.994032592773438,
+              7.0464544677734375
+            ],
+            [
+              10.258673095703125,
+              6.920120849609375
+            ],
+            [
+              9.969274291992187,
+              7.028898315429688
+            ],
+            [
+              9.959474487304687,
+              6.919598388671875
+            ],
+            [
+              9.992802124023438,
+              7.002039794921875
+            ],
+            [
+              10.00040771484375,
+              6.925867309570313
+            ],
+            [
+              9.980792236328124,
+              7.06775634765625
+            ],
+            [
+              9.997622680664062,
+              6.939830932617188
+            ],
+            [
+              10.003704833984376,
+              6.989490966796875
+            ],
+            [
+              9.92647705078125,
+              6.91982666015625
+            ],
+            [
+              9.989044799804688,
+              7.004205932617188
+            ],
+            [
+              9.974281005859375,
+              6.922877807617187
+            ],
+            [
+              9.9879736328125,
+              7.016324462890625
+            ],
+            [
+              9.983901977539062,
+              6.917823486328125
+            ]
+          ],
+          [
+            [
+              10.06361328125,
+              6.920499877929688
+            ],
+            [
+              9.991167602539063,
+              7.002337036132812
+            ],
+            [
+              10.003204345703125,
+              6.9307403564453125
+            ],
+            [
+              9.97751953125,
+              7.0255975341796875
+            ],
+            [
+              9.96380859375,
+              6.921067504882813
+            ],
+            [
+              9.979925537109375,
+              7.011616821289063
+            ],
+            [
+              9.975135498046875,
+              6.92521728515625
+            ],
+            [
+              9.976635131835938,
+              7.028661499023437
+            ],
+            [
+              9.988441772460938,
+              6.917164306640625
+            ],
+            [
+              9.972847900390626,
+              7.0138922119140625
+            ],
+            [
+              9.963687133789062,
+              6.923279418945312
+            ],
+            [
+              9.991900634765624,
+              7.049887084960938
+            ],
+            [
+              9.957535400390626,
+              6.922066650390625
+            ],
+            [
+              9.97625244140625,
+              6.980074462890625
+            ],
+            [
+              9.93607177734375,
+              6.920015869140625
+            ],
+            [
+              9.954296875,
+              7.006449584960937
+            ],
+            [
+              9.981419067382813,
+              6.922314453125
+            ],
+            [
+              9.991488037109375,
+              7.039219970703125
+            ],
+            [
+              9.960835571289062,
+              6.921026611328125
+            ],
+            [
+              9.985154418945312,
+              7.005517578125
+            ]
+          ],
+          [
+            [
+              9.918402099609375,
+              6.994833984375
+            ],
+            [
+              9.967657470703125,
+              6.923883666992188
+            ],
+            [
+              9.986077270507813,
+              7.001102294921875
+            ],
+            [
+              9.979434204101562,
+              6.923817138671875
+            ],
+            [
+              9.988151245117187,
+              7.000982666015625
+            ],
+            [
+              9.98164794921875,
+              6.931538696289063
+            ],
+            [
+              9.99098876953125,
+              7.03869140625
+            ],
+            [
+              9.959591064453125,
+              6.922280883789062
+            ],
+            [
+              9.989113159179688,
+              7.0223455810546875
+            ],
+            [
+              10.057566528320313,
+              6.922249145507813
+            ],
+            [
+              9.98546630859375,
+              7.024764404296875
+            ],
+            [
+              9.968731079101563,
+              6.9243115234375
+            ],
+            [
+              9.987782592773437,
+              7.019351196289063
+            ],
+            [
+              9.972194213867187,
+              6.921701049804687
+            ],
+            [
+              9.9775732421875,
+              7.013401489257813
+            ],
+            [
+              9.983283081054687,
+              6.923447875976563
+            ],
+            [
+              9.9816259765625,
+              7.0375048828125
+            ],
+            [
+              10.066174926757812,
+              6.91693603515625
+            ],
+            [
+              9.975773315429688,
+              7.026597900390625
+            ],
+            [
+              9.9974072265625,
+              6.916940307617187
+            ]
+          ]
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 9.986484680175781,
+              "cuda_ms": 6.9646609497070315
+            },
+            {
+              "tilelang_ms": 9.977077331542969,
+              "cuda_ms": 6.955407409667968
+            },
+            {
+              "tilelang_ms": 9.982465515136719,
+              "cuda_ms": 6.963186340332031
+            }
+          ],
+          "paired_mean_gain_ms": 3.0165568237304687,
+          "gain_lower_95_ms": 3.002346415201823,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      },
+      {
+        "id": "add_norm_fp8_linear-480dca28d6",
+        "configuration": {
+          "operation": "add_norm_fp8_linear",
+          "tokens": 32290,
+          "width": 5120,
+          "columns": 34816
+        },
+        "workloads": [
+          "ordinary-131072-4"
+        ],
+        "output_verification": {
+          "passed": true,
+          "compared_tensors": 2,
+          "witnessed_writes": []
+        },
+        "timing_destination": "independent_returns_and_mutable_pools",
+        "timing_pool_audit": null,
+        "variant_dispatch": null,
+        "raw_pairs_ms": [
+          [
+            [
+              9.998655395507813,
+              7.051118774414062
+            ],
+            [
+              9.994937133789062,
+              6.928577270507812
+            ],
+            [
+              10.01969482421875,
+              7.040046997070313
+            ],
+            [
+              9.909336547851563,
+              6.932310791015625
+            ],
+            [
+              9.995198364257812,
+              7.028749389648437
+            ],
+            [
+              10.04837890625,
+              6.929685668945313
+            ],
+            [
+              9.986920776367187,
+              7.03644287109375
+            ],
+            [
+              10.0733544921875,
+              6.931157836914062
+            ],
+            [
+              9.977036743164062,
+              7.055419311523438
+            ],
+            [
+              9.999039306640626,
+              6.9545965576171875
+            ],
+            [
+              9.978560180664063,
+              7.054521484375
+            ],
+            [
+              9.93320068359375,
+              6.926441650390625
+            ],
+            [
+              9.991931762695312,
+              7.020770874023437
+            ],
+            [
+              10.015780639648437,
+              6.98878662109375
+            ],
+            [
+              9.945867919921875,
+              7.017216796875
+            ],
+            [
+              9.958513793945313,
+              6.954772338867188
+            ],
+            [
+              9.979395141601563,
+              7.0909326171875
+            ],
+            [
+              9.914476318359375,
+              7.00117919921875
+            ],
+            [
+              10.002421264648438,
+              7.058795776367187
+            ],
+            [
+              9.93953125,
+              6.949956665039062
+            ]
+          ],
+          [
+            [
+              10.037227172851562,
+              6.9314794921875
+            ],
+            [
+              9.795711059570312,
+              7.066915893554688
+            ],
+            [
+              10.005775146484375,
+              6.9257666015625
+            ],
+            [
+              9.98757080078125,
+              7.052426147460937
+            ],
+            [
+              10.007045288085937,
+              6.936201782226562
+            ],
+            [
+              9.9741943359375,
+              7.069539184570313
+            ],
+            [
+              9.975075073242188,
+              6.951914672851562
+            ],
+            [
+              10.006140747070312,
+              6.8533935546875
+            ],
+            [
+              10.15210693359375,
+              6.908857421875
+            ],
+            [
+              10.037670288085938,
+              6.921593017578125
+            ],
+            [
+              10.019797973632812,
+              6.921010131835938
+            ],
+            [
+              9.862369995117188,
+              6.997586059570312
+            ],
+            [
+              10.0295166015625,
+              6.948499145507813
+            ],
+            [
+              9.987366333007813,
+              7.03415283203125
+            ],
+            [
+              10.135656127929687,
+              6.93501220703125
+            ],
+            [
+              9.969594116210937,
+              7.080130615234375
+            ],
+            [
+              9.914412841796874,
+              6.927052612304688
+            ],
+            [
+              9.991348876953126,
+              7.014857177734375
+            ],
+            [
+              9.964402465820312,
+              6.938377075195312
+            ],
+            [
+              9.979324340820312,
+              7.060372924804687
+            ]
+          ],
+          [
+            [
+              10.022713623046876,
+              6.87790771484375
+            ],
+            [
+              9.938252563476562,
+              6.940581665039063
+            ],
+            [
+              10.012814331054688,
+              6.944345092773437
+            ],
+            [
+              9.987532958984374,
+              6.9388580322265625
+            ],
+            [
+              10.01884521484375,
+              7.076737670898438
+            ],
+            [
+              9.970403442382812,
+              6.956238403320312
+            ],
+            [
+              10.063531494140625,
+              7.074696044921875
+            ],
+            [
+              9.985269165039062,
+              6.9403125
+            ],
+            [
+              10.00448486328125,
+              7.018746337890625
+            ],
+            [
+              10.000547485351563,
+              6.912461547851563
+            ],
+            [
+              9.9988818359375,
+              7.056221923828125
+            ],
+            [
+              10.01392578125,
+              6.941751098632812
+            ],
+            [
+              9.990432739257812,
+              7.056885986328125
+            ],
+            [
+              10.027808227539062,
+              6.928074340820313
+            ],
+            [
+              9.988617553710938,
+              7.061261596679688
+            ],
+            [
+              10.019923706054687,
+              6.942821655273438
+            ],
+            [
+              10.013172607421875,
+              6.865934448242188
+            ],
+            [
+              9.9771923828125,
+              6.92639892578125
+            ],
+            [
+              10.003928833007812,
+              7.100714111328125
+            ],
+            [
+              9.91297119140625,
+              6.92347900390625
+            ]
+          ]
+        ],
+        "comparison": {
+          "rounds": [
+            {
+              "tilelang_ms": 9.98942626953125,
+              "cuda_ms": 7.009197998046876
+            },
+            {
+              "tilelang_ms": 9.989459838867187,
+              "cuda_ms": 6.943438110351563
+            },
+            {
+              "tilelang_ms": 10.002238159179687,
+              "cuda_ms": 6.942286376953125
+            }
+          ],
+          "paired_mean_gain_ms": 3.008912363688151,
+          "gain_lower_95_ms": 2.9841731363932293,
+          "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+          "passed": true
+        }
+      }
+    ]
+  },
+  "profile": {
+    "source_commit": "8d7d18b50462baa4a540a3ee362ff57f070bb512",
+    "sources_sha256": {
+      "benchmarks/kernels.py": "12599b5c8735c248771a2b6c64c977401cc2cae609e05f14ee36084019a3877d",
+      "development/kernels/cases.py": "9d0afabaab15df4bcbff1d2d57d1c79a841634a76a29ecf6e573e28a61bcdba2",
+      "development/kernels/comparison.py": "204cfc76f8800f0f606b46dbcc2c321fde568075f57063835ba808090040e71a",
+      "development/kernels/dspark-reference.json": "4e8b36447a947f065ded83b658743ecbf1f1bf8c283cf32a8e9e317f51590e05",
+      "development/kernels/fixtures.py": "d29f119e25b3b8635516c03452433be76a8a7788b08a76a888b22d22416c04eb",
+      "development/kernels/observations.py": "b418d9d3c58de0377d1dbd5660408327d289b9f789e283698d81526dd3f3d349",
+      "development/kernels/output_verification.py": "8b77e70b92b335c192f10f36c84d457e3f8be510dca6e4c9b29599957161d8a4",
+      "development/kernels/profile_worker.py": "b68ae525200c3fed5e7c3269bb0da7311a5fe2b42f2eceada2b35b3bd4e353ed",
+      "development/kernels/reference.py": "b6a80426e0854ba36a98c62f37809a67d1270d25c7b74eb2674438ca2ca26c92",
+      "development/kernels/semantics.py": "cbfaf6ac803384d9e1953e9757a4794c30c9c686c5ae8de228d9cce99b13baa4",
+      "development/kernels/tilelang-reference.json": "545c3d6f70ab290c4411b17513505fb3eb76014d6e3bd839081714668a7d49c9",
+      "development/kernels/timing.py": "f0a7193034c9c85231caa1c8c6d12ab0cefcb1987cacad420813c7421160ecd2",
+      "development/kernels/twins.py": "52ed6e65c6b44c0a54b5821af14f04cc5d2a38ec1123737457a21c4f95aa77d0",
+      "development/kernels/variant.py": "717e32bc7b93a3cca0513e567a75bd307c2f6ad121616b70b060e9089ded46d2",
+      "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+      "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+      "python/oh_my_vllm/ir/core.py": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+      "python/oh_my_vllm/ir/coverage.py": "339556d38f2b8733f48abc7e73ca04b1034ebae9f1f099b597b9d860330359f7",
+      "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+      "python/oh_my_vllm/ir/execution.py": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+      "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+      "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+      "python/oh_my_vllm/ir/gdn_prepare.py": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+      "python/oh_my_vllm/ir/logits.py": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+      "python/oh_my_vllm/ir/normalized_linear.py": "4a19b5496a9073d03f30234bb482f379aa186032d086b8b8e75854fe48dd3662",
+      "python/oh_my_vllm/ir/partial_attention.py": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+      "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+      "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+      "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+      "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+      "python/oh_my_vllm/kernels/attention.py": "667fd8f322a6f221c204477dc666cf030c88c26ed125e62759a78492cedacf3a",
+      "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+      "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+      "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+      "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "2903658a1ad52f721e8dc813306b1003751e8e3796855cddb913044c70b678e4",
+      "python/oh_my_vllm/kernels/cuda_backend/groupwise.py": "aacfabfe02aa45bd4bd6b8658a61763da20ad38b0ded57ac4a1ac89a0fb4806f",
+      "python/oh_my_vllm/kernels/cuda_backend/groupwise_fp8.cu": "195fce05d797f6d1b98d1cf433e7c1c446f59841692c2c74566fb88daa5c0f42",
+      "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": "9e8123362f6c8873ff27e7103d410194c348c92c6ffa62e9197bfde570a119d5",
+      "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+      "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+      "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+      "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+      "python/oh_my_vllm/kernels/fp8.py": "780a21cd9a5273a85d704d13c0cbde3d73615d011a596af6f7c30743beefd0b1",
+      "python/oh_my_vllm/kernels/gdn.py": "b449e439f5f524272578b05899b529de9b4eb73c7ab34fb35f9ae09b07e7af75",
+      "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+      "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+      "python/oh_my_vllm/kernels/partial_attention.py": "9d74993331ee37e48931d0600204009cf926ad4582db92e8f1e2f296ad0aa92a",
+      "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+      "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+      "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+      "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+      "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+      "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+      "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+      "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+      "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+      "python/oh_my_vllm/models/qwen.py": "007582a19d048d681162a94bda0f5677175e7665e736c65f1793addd4fa57c1b",
+      "requirements/runtime.txt": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a"
+    },
+    "reference": {
+      "commit": "02bf35f98ceb6b40a2a813aa3e0cccbfa9067600",
+      "kernel_implementation_commit": "da75c02bd9e01556436877acba3243636dec80d6",
+      "files": {
+        "__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+        "attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+        "convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+        "decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+        "elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+        "fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+        "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+        "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+      },
+      "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+      "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690",
+      "dspark_supplemental": {
+        "schema": 1,
+        "frozen_reference_manifest_sha256": "545c3d6f70ab290c4411b17513505fb3eb76014d6e3bd839081714668a7d49c9",
+        "files": {
+          "dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3"
+        },
+        "scope": [
+          "checkpoint BF16 hidden RMS rounding",
+          "head-128 full YaRN Q/K norm and rotation",
+          "retained context KV append using the original generic frozen append",
+          "seven-row bidirectional context-plus-block attention"
+        ],
+        "lineage": "Original generic RMS/decode algorithms adapted for the distinct DSpark semantics; the original eight frozen files remain byte-identical.",
+        "numerical_golden": "Independent FP64 PyTorch references in oh_my_vllm.ir.dspark; supplemental TileLang is the performance comparator.",
+        "preserved_original_case_ids": [
+          "add_norm-0c6631a889",
+          "add_norm-16c7eea28c",
+          "add_norm-17cf75a750",
+          "add_norm-1cd0b34f33",
+          "add_norm-27c6f00266",
+          "add_norm-28b801aed5",
+          "add_norm-6c841c61cc",
+          "add_norm-8fa7f5b472",
+          "add_norm-a8eca15b2f",
+          "add_norm-c3003e1746",
+          "add_norm-c7cb824ce7",
+          "add_norm-d38e95acda",
+          "add_norm-ea3a42f942",
+          "attention-0ebf3559b6",
+          "attention-166a4bce77",
+          "attention-2b7ac478c8",
+          "attention-302aa28608",
+          "attention-39a3371fd0",
+          "attention-4705faca24",
+          "attention-4fbadf5691",
+          "attention-5d1d8dd9c4",
+          "attention-6ee6a06e37",
+          "attention-764772a69f",
+          "attention-80f93685bd",
+          "attention-86c02993e7",
+          "attention-a6899c8eba",
+          "attention-c426ebd5d5",
+          "attention-d3973698ea",
+          "attention-e3bf2f1708",
+          "convolution-0febb0c2f0",
+          "convolution-2e3c4391cd",
+          "convolution-445867aff2",
+          "convolution-647f178fc3",
+          "convolution-669242bf59",
+          "convolution-75d71689d9",
+          "convolution-8f95316330",
+          "convolution-acc1f1fa4a",
+          "convolution-accdf72929",
+          "convolution-c4c3ff2aef",
+          "convolution-cdeba28a40",
+          "convolution-ea757c8cde",
+          "convolution-ff7930b7b7",
+          "gated_norm-37b6f09e50",
+          "gated_norm-526cd44715",
+          "gated_norm-730a8e2832",
+          "gated_norm-a20f3afb37",
+          "gated_norm-a3ae6d7d9e",
+          "gated_norm-bdec59c631",
+          "gated_norm-bf1c454402",
+          "gated_norm-c04fc8e4ea",
+          "gated_norm-cdfb1224cc",
+          "gated_norm-cf3f37cb9e",
+          "gated_norm-cf90127954",
+          "gated_norm-d88b128193",
+          "gated_norm-fc1b4f5fca",
+          "gates-032c38d108",
+          "gates-20dd53c898",
+          "gates-230b55c57b",
+          "gates-414c933c7a",
+          "gates-7c7a082031",
+          "gates-7f196271c1",
+          "gates-9710bbc960",
+          "gates-c72bdad5d4",
+          "gates-cae0b44add",
+          "gates-db0ed2a574",
+          "gates-eb9ecb7e6b",
+          "gates-ee30f1b859",
+          "gates-fe0ffa9ef4",
+          "norm-1953a6389d",
+          "norm-1e2a1a065f",
+          "norm-214c77fddf",
+          "norm-3f7d78bda0",
+          "norm-7d0299aa63",
+          "norm-80dce647f9",
+          "norm-82d8a65dcf",
+          "norm-8f0939a3eb",
+          "norm-9690ce8dc3",
+          "norm-b75ec1a7a2",
+          "norm-c2c1f928be",
+          "norm-ea1e7c720d",
+          "norm-effe245bd2",
+          "prepare_attention-15fddb117a",
+          "prepare_attention-2123658257",
+          "prepare_attention-396e3971a6",
+          "prepare_attention-409a17bee0",
+          "prepare_attention-50d5f5fd1d",
+          "prepare_attention-53663d6020",
+          "prepare_attention-70856729ec",
+          "prepare_attention-7eb9ea324c",
+          "prepare_attention-831ee3469c",
+          "prepare_attention-857fc001ea",
+          "prepare_attention-c7a5f6c559",
+          "prepare_attention-e2b930a517",
+          "prepare_attention-e3ad7889b2",
+          "qk-12fc3a9e63",
+          "qk-2bc130d5f3",
+          "qk-2fdf585888",
+          "qk-df607783e7",
+          "qk-ee1062c676",
+          "qk-f930cef0b5",
+          "quant-0413ce3ad4",
+          "quant-0a7394ccef",
+          "quant-0ab771f274",
+          "quant-0e5f3a0b2e",
+          "quant-0eea55c864",
+          "quant-14b2b04fc3",
+          "quant-317bf37c2b",
+          "quant-31fe1ff1c4",
+          "quant-38a4f3d421",
+          "quant-4e026ac5b2",
+          "quant-5b659364da",
+          "quant-6b2b789e0f",
+          "quant-6f964d5026",
+          "quant-78967ef6bb",
+          "quant-7a2c2961c3",
+          "quant-9c9c4ad938",
+          "quant-a83ee98240",
+          "quant-ab0ac5c4e5",
+          "quant-b6aca61c7f",
+          "quant-c7c5a33dd2",
+          "quant-c908ceb94f",
+          "quant-cacaef771f",
+          "quant-cb18873355",
+          "quant-cba5ed9729",
+          "quant-effc981768",
+          "quant-f70208e990",
+          "recurrent-041544e32f",
+          "recurrent-2a62969158",
+          "recurrent-36a6d98675",
+          "recurrent-38fd6bd99e",
+          "recurrent-4b9de1f8fa",
+          "recurrent-5a418230e1",
+          "recurrent-e73333aa6f",
+          "recurrent-fe8f9e7511",
+          "silu_quant-07d0318c78",
+          "silu_quant-3d777559ac",
+          "silu_quant-6ddda81d2c",
+          "silu_quant-6e2b085b5c",
+          "silu_quant-71ac03b9bc",
+          "silu_quant-7e22ac4193",
+          "silu_quant-7ed9c30e04",
+          "silu_quant-a089c70b05",
+          "silu_quant-a828b90cc9",
+          "silu_quant-ab0edc82bb",
+          "silu_quant-bdb6037d89",
+          "silu_quant-e81d00f9c2",
+          "silu_quant-fbdf53e4ed"
+        ],
+        "preserved_original_case_ids_sha256": "2f2d818f81380383832af55ce0f2d6124310727b7fc030afbb8728e9ebf30d9b"
+      }
+    },
+    "scope": "Separate Nsight Compute replay. Profile times do not supply acceptance timing.",
+    "estimated": {
+      "kind": "estimated",
+      "source": "TileFoundry HIR",
+      "symbol": "add_norm_fp8_linear",
+      "report": "# analysis target=nvidia.b200_sxm module=Operators function=add_norm_fp8_linear topology=cta\n# selection requested=compute-cost,memory,roofline executed=compute-cost,memory,roofline\n# compute-cost flops=bf16:20992@logical,20992@total,20992@cta;f32:8007842@logical,8007842@total,8007842@cta;fp8e4m3:10240@logical,10240@total,10240@cta other-ops=special:2@logical,2@total,2@cta\n# traffic traffic=gmem:r23012952/w21559256@total,r23012952/w21559256@cta;rmem:r8/w0@total,r8/w0@cta\n# peak-footprint=gmem:11971200;rmem:0\n# roofline ideal-ns=5810 bound-by=memory\n\nfrom __future__ import annotations\n\nfrom tilefoundry import func\nfrom tilefoundry.dsl import Tensor\nfrom tilefoundry.dsl.tf import *  # noqa: F401, F403\n\n@func\ndef add_norm_fp8_linear(\n    x: Tensor[(2, 5120), \"bf16\"],\n    residual: Tensor[(2, 5120), \"bf16\"],\n    gamma: Tensor[(5120,), \"f32\"],\n    weight: Tensor[(256, 5120), \"fp8e4m3\"],\n    weight_scale: Tensor[(2, 40), \"f32\"]\n):\n    v0 = cast(x, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v1 = cast(residual, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v2 = add(v0, v1)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r81920/w40960@total,r81920/w40960@cta; roofline ideal-ns=17 bound-by=memory\n    v3 = cast(v2, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    v4 = cast(v3, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v5 = unary(v4, kind=\"square\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w40960@total,r40960/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v6 = reduce(v5, axes=(-1,), keepdim=True, kind=\"mean\")  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w8@total,r40960/w8@cta; roofline ideal-ns=6 bound-by=memory\n    v0_2 = 1e-06  # Tensor[(), \"f32\", \"umat\"]\n    v7 = add(v6, v0_2)  # Tensor[(2, 1), \"f32\"]; compute-cost flops=f32:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v8 = unary(v7, kind=\"rsqrt\")  # Tensor[(2, 1), \"f32\"]; compute-cost other-ops=special:2@logical,2@total,2@cta; traffic traffic=gmem:r8/w8@total,r8/w8@cta; roofline ideal-ns=1 bound-by=memory\n    v9 = mul(v4, v8)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40968/w40960@total,r40968/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v10 = mul(v9, gamma)  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r61440/w40960@total,r61440/w40960@cta; roofline ideal-ns=14 bound-by=memory\n    v11 = cast(v10, dtype=\"bf16\")  # Tensor[(2, 5120), \"bf16\"]; compute-cost flops=bf16:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w20480@total,r40960/w20480@cta; roofline ideal-ns=9 bound-by=memory\n    v12 = tuple_get_item((v3, v11), index=0)  # Tensor[(2, 5120), \"bf16\"]; compute-cost; traffic; roofline\n    v13 = tuple_get_item((v3, v11), index=1)  # Tensor[(2, 5120), \"bf16\"]; compute-cost; traffic; roofline\n    v14 = cast(v13, dtype=\"f32\")  # Tensor[(2, 5120), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r20480/w40960@total,r20480/w40960@cta; roofline ideal-ns=9 bound-by=memory\n    v15 = reshape(v14, new_shape=(2, 40, 128))  # Tensor[(2, 40, 128), \"f32\"]; compute-cost; traffic; roofline\n    v16 = reduce(v15, axes=(-1,), keepdim=True, kind=\"abs_max\")  # Tensor[(2, 40, 1), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w320@total,r40960/w320@cta; roofline ideal-ns=6 bound-by=memory\n    v17 = clamp(v16, min_val=1e-10, max_val=1e999)  # Tensor[(2, 40, 1), \"f32\"]; compute-cost flops=f32:80@logical,80@total,80@cta; traffic traffic=gmem:r320/w320@total,r320/w320@cta; roofline ideal-ns=1 bound-by=balanced\n    v2_2 = 448.0  # Tensor[(), \"f32\", \"umat\"]\n    v18 = div(v17, v2_2)  # Tensor[(2, 40, 1), \"f32\"]; compute-cost flops=f32:80@logical,80@total,80@cta; traffic traffic=gmem:r320/w320@total,r320/w320@cta;rmem:r4/w0@total,r4/w0@cta; roofline ideal-ns=1 bound-by=balanced\n    v19 = div(v15, v18)  # Tensor[(2, 40, 128), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r41280/w40960@total,r41280/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v20 = clamp(v19, min_val=-448.0, max_val=448.0)  # Tensor[(2, 40, 128), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w40960@total,r40960/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v21 = cast(v20, dtype=\"fp8e4m3\")  # Tensor[(2, 40, 128), \"fp8e4m3\"]; compute-cost flops=fp8e4m3:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r40960/w10240@total,r40960/w10240@cta; roofline ideal-ns=7 bound-by=memory\n    v22 = cast(v21, dtype=\"f32\")  # Tensor[(2, 40, 128), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r10240/w40960@total,r10240/w40960@cta; roofline ideal-ns=7 bound-by=memory\n    v23 = mul(v22, v18)  # Tensor[(2, 40, 128), \"f32\"]; compute-cost flops=f32:10240@logical,10240@total,10240@cta; traffic traffic=gmem:r41280/w40960@total,r41280/w40960@cta; roofline ideal-ns=11 bound-by=memory\n    v24 = reshape(v23, new_shape=(2, 5120))  # Tensor[(2, 5120), \"f32\"]; compute-cost; traffic; roofline\n    v25 = cast(weight, dtype=\"f32\")  # Tensor[(256, 5120), \"f32\"]; compute-cost flops=f32:1310720@logical,1310720@total,1310720@cta; traffic traffic=gmem:r1310720/w5242880@total,r1310720/w5242880@cta; roofline ideal-ns=855 bound-by=memory\n    v26 = repeat_interleave(weight_scale, repeats=128, axis=0)  # Tensor[(256, 40), \"f32\"]; compute-cost; traffic traffic=gmem:r320/w40960@total,r320/w40960@cta; roofline ideal-ns=6 bound-by=memory\n    v27 = repeat_interleave(v26, repeats=128, axis=1)  # Tensor[(256, 5120), \"f32\"]; compute-cost; traffic traffic=gmem:r40960/w5242880@total,r40960/w5242880@cta; roofline ideal-ns=689 bound-by=memory\n    v28 = mul(v25, v27)  # Tensor[(256, 5120), \"f32\"]; compute-cost flops=f32:1310720@logical,1310720@total,1310720@cta; traffic traffic=gmem:r10485760/w5242880@total,r10485760/w5242880@cta; roofline ideal-ns=2051 bound-by=memory\n    v29 = transpose(v28, perm=(1, 0))  # Tensor[(5120, 256), \"f32\"]; compute-cost; traffic traffic=gmem:r5242880/w5242880@total,r5242880/w5242880@cta; roofline ideal-ns=1367 bound-by=memory\n    v30 = matmul(v24, v29, a_layout=\"MK\", b_layout=\"KN\")  # Tensor[(2, 256), \"f32\"]; compute-cost flops=f32:5242880@logical,5242880@total,5242880@cta; traffic traffic=gmem:r5283840/w2048@total,r5283840/w2048@cta; roofline ideal-ns=689 bound-by=memory\n    v31 = cast(v30, dtype=\"bf16\")  # Tensor[(2, 256), \"bf16\"]; compute-cost flops=bf16:512@logical,512@total,512@cta; traffic traffic=gmem:r2048/w1024@total,r2048/w1024@cta; roofline ideal-ns=1 bound-by=balanced\n    return (v12, v31)\n",
+      "limitation": "Representative HIR shape; not native layout or FP64 phase cost"
+    },
+    "measured": {
+      "tilelang": [
+        {
+          "kernel_name_prefix": "kernel_kernel",
+          "kernel_name_sha256": "6c20359e45d4cd5935bc787cf5702713c11f4bf26881162824f02dba423e629b",
+          "metrics": {
+            "dram__bytes.sum": {
+              "value": 1268814848.0,
+              "unit": "byte"
+            },
+            "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 73.54,
+              "unit": "%"
+            },
+            "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+              "value": 145171.0,
+              "unit": ""
+            },
+            "launch__registers_per_thread": {
+              "value": 48.0,
+              "unit": "register/thread"
+            },
+            "launch__shared_mem_per_block_dynamic": {
+              "value": 1024.0,
+              "unit": "byte/block"
+            },
+            "launch__shared_mem_per_block_static": {
+              "value": 0.0,
+              "unit": "byte/block"
+            },
+            "lts__t_sector_hit_rate.pct": {
+              "value": 0.08,
+              "unit": "%"
+            },
+            "lts__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 58.41,
+              "unit": "%"
+            },
+            "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 50.39,
+              "unit": "%"
+            },
+            "sm__warps_active.avg.pct_of_peak_sustained_active": {
+              "value": 57.0,
+              "unit": "%"
+            },
+            "smsp__inst_executed.sum": {
+              "value": 72774016.0,
+              "unit": "inst"
+            },
+            "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+              "value": 41.26,
+              "unit": "%"
+            },
+            "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+              "value": 13.14,
+              "unit": "%"
+            }
+          }
+        },
+        {
+          "kernel_name_prefix": "kernel_kernel",
+          "kernel_name_sha256": "6c20359e45d4cd5935bc787cf5702713c11f4bf26881162824f02dba423e629b",
+          "metrics": {
+            "dram__bytes.sum": {
+              "value": 474682112.0,
+              "unit": "byte"
+            },
+            "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 17.29,
+              "unit": "%"
+            },
+            "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+              "value": 0.0,
+              "unit": ""
+            },
+            "launch__registers_per_thread": {
+              "value": 40.0,
+              "unit": "register/thread"
+            },
+            "launch__shared_mem_per_block_dynamic": {
+              "value": 0.0,
+              "unit": "byte/block"
+            },
+            "launch__shared_mem_per_block_static": {
+              "value": 0.0,
+              "unit": "byte/block"
+            },
+            "lts__t_sector_hit_rate.pct": {
+              "value": 46.44,
+              "unit": "%"
+            },
+            "lts__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 69.63,
+              "unit": "%"
+            },
+            "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 50.31,
+              "unit": "%"
+            },
+            "sm__warps_active.avg.pct_of_peak_sustained_active": {
+              "value": 65.59,
+              "unit": "%"
+            },
+            "smsp__inst_executed.sum": {
+              "value": 118567610.0,
+              "unit": "inst"
+            },
+            "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+              "value": 39.81,
+              "unit": "%"
+            },
+            "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+              "value": 15.94,
+              "unit": "%"
+            }
+          }
+        },
+        {
+          "kernel_name_prefix": "void cutlass::device_kernel<cutlass::GemmUniversal<cute::tuple<int, int, int, int>, cutlass::Collect",
+          "kernel_name_sha256": "c6f7c95177bf2fa0d04a85b9a3ee5b7a95ed832f5dbc0760e19ba4919f0933fe",
+          "metrics": {
+            "dram__bytes.sum": {
+              "value": 47845084928.0,
+              "unit": "byte"
+            },
+            "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 66.52,
+              "unit": "%"
+            },
+            "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+              "value": 29790301.0,
+              "unit": ""
+            },
+            "launch__registers_per_thread": {
+              "value": 168.0,
+              "unit": "register/thread"
+            },
+            "launch__shared_mem_per_block_dynamic": {
+              "value": 210432.0,
+              "unit": "byte/block"
+            },
+            "launch__shared_mem_per_block_static": {
+              "value": 0.0,
+              "unit": "byte/block"
+            },
+            "lts__t_sector_hit_rate.pct": {
+              "value": 25.98,
+              "unit": "%"
+            },
+            "lts__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 71.56,
+              "unit": "%"
+            },
+            "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 57.02,
+              "unit": "%"
+            },
+            "sm__warps_active.avg.pct_of_peak_sustained_active": {
+              "value": 11.72,
+              "unit": "%"
+            },
+            "smsp__inst_executed.sum": {
+              "value": 2518020035.0,
+              "unit": "inst"
+            },
+            "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+              "value": 50.32,
+              "unit": "%"
+            },
+            "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+              "value": 10.85,
+              "unit": "%"
+            }
+          }
+        }
+      ],
+      "cuda": [
+        {
+          "kernel_name_prefix": "void norm_quant5120_kernel<1, 320, 8, 0>(const __nv_bfloat16 *, const __nv_bfloat16 *, const float *",
+          "kernel_name_sha256": "edfe769c3a9fc42fb580112ce1e1f6d35c89decc95123d22f64313eb477936e1",
+          "metrics": {
+            "dram__bytes.sum": {
+              "value": 1119685632.0,
+              "unit": "byte"
+            },
+            "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 46.04,
+              "unit": "%"
+            },
+            "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+              "value": 17900.0,
+              "unit": ""
+            },
+            "launch__registers_per_thread": {
+              "value": 40.0,
+              "unit": "register/thread"
+            },
+            "launch__shared_mem_per_block_dynamic": {
+              "value": 0.0,
+              "unit": "byte/block"
+            },
+            "launch__shared_mem_per_block_static": {
+              "value": 64.0,
+              "unit": "byte/block"
+            },
+            "lts__t_sector_hit_rate.pct": {
+              "value": 5.41,
+              "unit": "%"
+            },
+            "lts__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 38.36,
+              "unit": "%"
+            },
+            "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 74.76,
+              "unit": "%"
+            },
+            "sm__warps_active.avg.pct_of_peak_sustained_active": {
+              "value": 57.87,
+              "unit": "%"
+            },
+            "smsp__inst_executed.sum": {
+              "value": 152041120.0,
+              "unit": "inst"
+            },
+            "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+              "value": 21.7,
+              "unit": "%"
+            },
+            "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+              "value": 7.61,
+              "unit": "%"
+            }
+          }
+        },
+        {
+          "kernel_name_prefix": "void at::elementwise_kernel<128, 2, void at::gpu_kernel_impl_nocast<at::direct_copy_kernel_cuda(at::",
+          "kernel_name_sha256": "bf8961db277e9f3cd57da9bea64248b49258db771ddfa2b2b2043f215227fbc6",
+          "metrics": {
+            "dram__bytes.sum": {
+              "value": 56320.0,
+              "unit": "byte"
+            },
+            "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 0.11,
+              "unit": "%"
+            },
+            "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+              "value": 0.0,
+              "unit": ""
+            },
+            "launch__registers_per_thread": {
+              "value": 20.0,
+              "unit": "register/thread"
+            },
+            "launch__shared_mem_per_block_dynamic": {
+              "value": 0.0,
+              "unit": "byte/block"
+            },
+            "launch__shared_mem_per_block_static": {
+              "value": 0.0,
+              "unit": "byte/block"
+            },
+            "lts__t_sector_hit_rate.pct": {
+              "value": 53.83,
+              "unit": "%"
+            },
+            "lts__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 1.45,
+              "unit": "%"
+            },
+            "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 0.33,
+              "unit": "%"
+            },
+            "sm__warps_active.avg.pct_of_peak_sustained_active": {
+              "value": 5.95,
+              "unit": "%"
+            },
+            "smsp__inst_executed.sum": {
+              "value": 14488.0,
+              "unit": "inst"
+            },
+            "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+              "value": 42.63,
+              "unit": "%"
+            },
+            "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+              "value": 19.79,
+              "unit": "%"
+            }
+          }
+        },
+        {
+          "kernel_name_prefix": "void cutlass::device_kernel<cutlass::GemmUniversal<cute::tuple<int, int, int, int>, cutlass::Collect",
+          "kernel_name_sha256": "bd28935d3a7474e7fd0703bc91c7cfbed23a7bbe60c431c8ee45151f112d4f71",
+          "metrics": {
+            "dram__bytes.sum": {
+              "value": 5488644608.0,
+              "unit": "byte"
+            },
+            "dram__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 8.34,
+              "unit": "%"
+            },
+            "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum": {
+              "value": 6604369.0,
+              "unit": ""
+            },
+            "launch__registers_per_thread": {
+              "value": 168.0,
+              "unit": "register/thread"
+            },
+            "launch__shared_mem_per_block_dynamic": {
+              "value": 160256.0,
+              "unit": "byte/block"
+            },
+            "launch__shared_mem_per_block_static": {
+              "value": 0.0,
+              "unit": "byte/block"
+            },
+            "lts__t_sector_hit_rate.pct": {
+              "value": 88.6,
+              "unit": "%"
+            },
+            "lts__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 56.86,
+              "unit": "%"
+            },
+            "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+              "value": 62.49,
+              "unit": "%"
+            },
+            "sm__warps_active.avg.pct_of_peak_sustained_active": {
+              "value": 11.72,
+              "unit": "%"
+            },
+            "smsp__inst_executed.sum": {
+              "value": 2522905350.0,
+              "unit": "inst"
+            },
+            "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+              "value": 41.83,
+              "unit": "%"
+            },
+            "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+              "value": 11.32,
+              "unit": "%"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "short_model": [
+    {
+      "raw_file": "milestone6-ordinary-32768-1-short01.json",
+      "source": {
+        "git_commit": "8d7d18b50462baa4a540a3ee362ff57f070bb512",
+        "rust_sources_sha256": "cdb9bfccb68d281a096bb12884eb60ba64d385a7b7dceb73efe560649322ad56",
+        "python_sources_sha256": {
+          "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+          "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+          "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+          "python/oh_my_vllm/ir/core.py": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+          "python/oh_my_vllm/ir/coverage.py": "339556d38f2b8733f48abc7e73ca04b1034ebae9f1f099b597b9d860330359f7",
+          "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+          "python/oh_my_vllm/ir/execution.py": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+          "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+          "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+          "python/oh_my_vllm/ir/gdn_prepare.py": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+          "python/oh_my_vllm/ir/logits.py": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+          "python/oh_my_vllm/ir/normalized_linear.py": "4a19b5496a9073d03f30234bb482f379aa186032d086b8b8e75854fe48dd3662",
+          "python/oh_my_vllm/ir/partial_attention.py": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+          "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+          "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+          "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+          "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+          "python/oh_my_vllm/kernels/attention.py": "667fd8f322a6f221c204477dc666cf030c88c26ed125e62759a78492cedacf3a",
+          "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+          "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+          "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+          "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "2903658a1ad52f721e8dc813306b1003751e8e3796855cddb913044c70b678e4",
+          "python/oh_my_vllm/kernels/cuda_backend/groupwise.py": "aacfabfe02aa45bd4bd6b8658a61763da20ad38b0ded57ac4a1ac89a0fb4806f",
+          "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+          "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+          "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+          "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+          "python/oh_my_vllm/kernels/fp8.py": "780a21cd9a5273a85d704d13c0cbde3d73615d011a596af6f7c30743beefd0b1",
+          "python/oh_my_vllm/kernels/gdn.py": "b449e439f5f524272578b05899b529de9b4eb73c7ab34fb35f9ae09b07e7af75",
+          "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+          "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+          "python/oh_my_vllm/kernels/partial_attention.py": "9d74993331ee37e48931d0600204009cf926ad4582db92e8f1e2f296ad0aa92a",
+          "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+          "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+          "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+          "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+          "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+          "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+          "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+          "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+          "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+          "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+          "python/oh_my_vllm/models/qwen.py": "007582a19d048d681162a94bda0f5677175e7665e736c65f1793addd4fa57c1b",
+          "python/oh_my_vllm/performance/__init__.py": "6257cfe9138fe50806e314b884dc8f914214e332885e7390634c6c3a0a96a081",
+          "python/oh_my_vllm/performance/analysis.py": "f100c06dbdad57d436a3c2872f515cec6ef74d9b3857a1a18d6275a589ab1a26",
+          "python/oh_my_vllm/performance/coverage.py": "9528f8a8b5da7fecf3e2abe76454ad167a8bf69d493abed640191a5659df54d3",
+          "python/oh_my_vllm/performance/dag.py": "b599801e85cd0a6442ea2c140e36b85c1c44bee58fe621e8a3419554cc574540",
+          "python/oh_my_vllm/performance/execution.py": "eaec032faeb26b5e3887199003420f6d753fcd0fbf862d192eaaa28f906f14e8",
+          "python/oh_my_vllm/performance/memory.py": "02a64c4fc12f5d4eb84eff7c8c0090e6e44eb6018be2672d4ed5169789b212ea",
+          "python/oh_my_vllm/performance/model.py": "f44ee8ff2670216efc466c8188a72acdbb9c228d0400093e9e3b506bd0a33e66",
+          "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+          "python/oh_my_vllm/worker/batch_plan.py": "38fdc0b7661e7a10716642d34ecd3f134f8dda297f67d604139ba23bf063e9a3",
+          "python/oh_my_vllm/worker/decode_graph.py": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+          "python/oh_my_vllm/worker/dspark.py": "454c967c062ec842c53736f6115ec54b9aea0f39959c996fcd6c25c26637f6de",
+          "python/oh_my_vllm/worker/dspark_graph.py": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+          "python/oh_my_vllm/worker/graph_cache.py": "1aa13b93a06c12ed30f458d253d88bf6b66d11ad4c477fcb1d937624db4d941e",
+          "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+          "python/oh_my_vllm/worker/model_runner.py": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
+          "python/oh_my_vllm/worker/mtp.py": "3892ba9efaba0e568ce798bb19f411d6d8259fd958cd6fd29ec3ee5911888824",
+          "python/oh_my_vllm/worker/mtp_context_graph.py": "e59aefabeaf5e44bf4b59516d8fff90532b596aa3e08bc2c29456b6b82db36bf",
+          "python/oh_my_vllm/worker/prefill_graph.py": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
+          "python/oh_my_vllm/worker/protocol.py": "a3a74a605a84da886893f46524ee6de55979161d4f4632fabcd2ad50fa10d65e",
+          "python/oh_my_vllm/worker/runtime.py": "ebad0c00284f2d74349de9d410773c7e09b8371205f65e0c716c57875046e294",
+          "python/oh_my_vllm/worker/sampler.py": "0d1f14464dbd57284b5de997317c29c242a94c56c2d620bfb38a0301f9fb465b",
+          "python/oh_my_vllm/worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
+          "python/oh_my_vllm/worker/serving.py": "9c631dd4f03d1c33648afe3f56e673f48e559213dac4d22e4bc3bf7c00ac30b3",
+          "python/oh_my_vllm/worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
+          "python/oh_my_vllm/worker/zmq_bridge.py": "ba8d80bc083559da3641a7bf0afdb8c716f524b2d97507d58966d8247d1f4139"
+        }
+      },
+      "mode": "ordinary",
+      "input_len": 32768,
+      "output_len": 16,
+      "batch_size": 1,
+      "prefix": false,
+      "status": "collected",
+      "prefill_wall_s": [
+        1.285683246,
+        1.301799483,
+        1.291962613,
+        1.303299142,
+        1.305363955
+      ],
+      "prefill_bounds_s": [
+        0.44175381006472536,
+        0.44175381006472536,
+        0.44175381006472536,
+        0.44175381006472536,
+        0.44175381006472536
+      ],
+      "prefill_median_wall_s": 1.301799483,
+      "prefill_median_bound_s": 0.44175381006472536,
+      "prefill_ratio": 2.946889089217502,
+      "prefill_spread_pct": 1.5118080208977902,
+      "source_stable": true,
+      "scope": "Two full warmups and five measurements, with sixteen output tokens. Diagnostic only."
+    },
+    {
+      "raw_file": "milestone6-ordinary-32768-4-short01.json",
+      "source": {
+        "git_commit": "8d7d18b50462baa4a540a3ee362ff57f070bb512",
+        "rust_sources_sha256": "cdb9bfccb68d281a096bb12884eb60ba64d385a7b7dceb73efe560649322ad56",
+        "python_sources_sha256": {
+          "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+          "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+          "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+          "python/oh_my_vllm/ir/core.py": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+          "python/oh_my_vllm/ir/coverage.py": "339556d38f2b8733f48abc7e73ca04b1034ebae9f1f099b597b9d860330359f7",
+          "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+          "python/oh_my_vllm/ir/execution.py": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+          "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+          "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+          "python/oh_my_vllm/ir/gdn_prepare.py": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+          "python/oh_my_vllm/ir/logits.py": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+          "python/oh_my_vllm/ir/normalized_linear.py": "4a19b5496a9073d03f30234bb482f379aa186032d086b8b8e75854fe48dd3662",
+          "python/oh_my_vllm/ir/partial_attention.py": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+          "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+          "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+          "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+          "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+          "python/oh_my_vllm/kernels/attention.py": "667fd8f322a6f221c204477dc666cf030c88c26ed125e62759a78492cedacf3a",
+          "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+          "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+          "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+          "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "2903658a1ad52f721e8dc813306b1003751e8e3796855cddb913044c70b678e4",
+          "python/oh_my_vllm/kernels/cuda_backend/groupwise.py": "aacfabfe02aa45bd4bd6b8658a61763da20ad38b0ded57ac4a1ac89a0fb4806f",
+          "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+          "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+          "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+          "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+          "python/oh_my_vllm/kernels/fp8.py": "780a21cd9a5273a85d704d13c0cbde3d73615d011a596af6f7c30743beefd0b1",
+          "python/oh_my_vllm/kernels/gdn.py": "b449e439f5f524272578b05899b529de9b4eb73c7ab34fb35f9ae09b07e7af75",
+          "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+          "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+          "python/oh_my_vllm/kernels/partial_attention.py": "9d74993331ee37e48931d0600204009cf926ad4582db92e8f1e2f296ad0aa92a",
+          "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+          "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+          "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+          "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+          "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+          "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+          "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+          "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+          "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+          "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+          "python/oh_my_vllm/models/qwen.py": "007582a19d048d681162a94bda0f5677175e7665e736c65f1793addd4fa57c1b",
+          "python/oh_my_vllm/performance/__init__.py": "6257cfe9138fe50806e314b884dc8f914214e332885e7390634c6c3a0a96a081",
+          "python/oh_my_vllm/performance/analysis.py": "f100c06dbdad57d436a3c2872f515cec6ef74d9b3857a1a18d6275a589ab1a26",
+          "python/oh_my_vllm/performance/coverage.py": "9528f8a8b5da7fecf3e2abe76454ad167a8bf69d493abed640191a5659df54d3",
+          "python/oh_my_vllm/performance/dag.py": "b599801e85cd0a6442ea2c140e36b85c1c44bee58fe621e8a3419554cc574540",
+          "python/oh_my_vllm/performance/execution.py": "eaec032faeb26b5e3887199003420f6d753fcd0fbf862d192eaaa28f906f14e8",
+          "python/oh_my_vllm/performance/memory.py": "02a64c4fc12f5d4eb84eff7c8c0090e6e44eb6018be2672d4ed5169789b212ea",
+          "python/oh_my_vllm/performance/model.py": "f44ee8ff2670216efc466c8188a72acdbb9c228d0400093e9e3b506bd0a33e66",
+          "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+          "python/oh_my_vllm/worker/batch_plan.py": "38fdc0b7661e7a10716642d34ecd3f134f8dda297f67d604139ba23bf063e9a3",
+          "python/oh_my_vllm/worker/decode_graph.py": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+          "python/oh_my_vllm/worker/dspark.py": "454c967c062ec842c53736f6115ec54b9aea0f39959c996fcd6c25c26637f6de",
+          "python/oh_my_vllm/worker/dspark_graph.py": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+          "python/oh_my_vllm/worker/graph_cache.py": "1aa13b93a06c12ed30f458d253d88bf6b66d11ad4c477fcb1d937624db4d941e",
+          "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+          "python/oh_my_vllm/worker/model_runner.py": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
+          "python/oh_my_vllm/worker/mtp.py": "3892ba9efaba0e568ce798bb19f411d6d8259fd958cd6fd29ec3ee5911888824",
+          "python/oh_my_vllm/worker/mtp_context_graph.py": "e59aefabeaf5e44bf4b59516d8fff90532b596aa3e08bc2c29456b6b82db36bf",
+          "python/oh_my_vllm/worker/prefill_graph.py": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
+          "python/oh_my_vllm/worker/protocol.py": "a3a74a605a84da886893f46524ee6de55979161d4f4632fabcd2ad50fa10d65e",
+          "python/oh_my_vllm/worker/runtime.py": "ebad0c00284f2d74349de9d410773c7e09b8371205f65e0c716c57875046e294",
+          "python/oh_my_vllm/worker/sampler.py": "0d1f14464dbd57284b5de997317c29c242a94c56c2d620bfb38a0301f9fb465b",
+          "python/oh_my_vllm/worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
+          "python/oh_my_vllm/worker/serving.py": "9c631dd4f03d1c33648afe3f56e673f48e559213dac4d22e4bc3bf7c00ac30b3",
+          "python/oh_my_vllm/worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
+          "python/oh_my_vllm/worker/zmq_bridge.py": "ba8d80bc083559da3641a7bf0afdb8c716f524b2d97507d58966d8247d1f4139"
+        }
+      },
+      "mode": "ordinary",
+      "input_len": 32768,
+      "output_len": 16,
+      "batch_size": 4,
+      "prefix": false,
+      "status": "collected",
+      "prefill_wall_s": [
+        5.330533172,
+        5.369255612,
+        5.366136521,
+        5.360769972,
+        5.362641812
+      ],
+      "prefill_bounds_s": [
+        1.7670136212684802,
+        1.7670136212684802,
+        1.7670136212684802,
+        1.7670136212684802,
+        1.7670136212684802
+      ],
+      "prefill_median_wall_s": 5.362641812,
+      "prefill_median_bound_s": 1.7670136212684802,
+      "prefill_ratio": 3.0348616147906875,
+      "prefill_spread_pct": 0.7220776877797542,
+      "source_stable": true,
+      "scope": "Two full warmups and five measurements, with sixteen output tokens. Diagnostic only."
+    },
+    {
+      "raw_file": "milestone6-prefix-32768-1-short01.json",
+      "source": {
+        "git_commit": "8d7d18b50462baa4a540a3ee362ff57f070bb512",
+        "rust_sources_sha256": "cdb9bfccb68d281a096bb12884eb60ba64d385a7b7dceb73efe560649322ad56",
+        "python_sources_sha256": {
+          "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+          "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+          "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+          "python/oh_my_vllm/ir/core.py": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+          "python/oh_my_vllm/ir/coverage.py": "339556d38f2b8733f48abc7e73ca04b1034ebae9f1f099b597b9d860330359f7",
+          "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+          "python/oh_my_vllm/ir/execution.py": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+          "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+          "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+          "python/oh_my_vllm/ir/gdn_prepare.py": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+          "python/oh_my_vllm/ir/logits.py": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+          "python/oh_my_vllm/ir/normalized_linear.py": "4a19b5496a9073d03f30234bb482f379aa186032d086b8b8e75854fe48dd3662",
+          "python/oh_my_vllm/ir/partial_attention.py": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+          "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+          "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+          "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+          "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+          "python/oh_my_vllm/kernels/attention.py": "667fd8f322a6f221c204477dc666cf030c88c26ed125e62759a78492cedacf3a",
+          "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+          "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+          "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+          "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "2903658a1ad52f721e8dc813306b1003751e8e3796855cddb913044c70b678e4",
+          "python/oh_my_vllm/kernels/cuda_backend/groupwise.py": "aacfabfe02aa45bd4bd6b8658a61763da20ad38b0ded57ac4a1ac89a0fb4806f",
+          "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+          "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+          "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+          "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+          "python/oh_my_vllm/kernels/fp8.py": "780a21cd9a5273a85d704d13c0cbde3d73615d011a596af6f7c30743beefd0b1",
+          "python/oh_my_vllm/kernels/gdn.py": "b449e439f5f524272578b05899b529de9b4eb73c7ab34fb35f9ae09b07e7af75",
+          "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+          "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+          "python/oh_my_vllm/kernels/partial_attention.py": "9d74993331ee37e48931d0600204009cf926ad4582db92e8f1e2f296ad0aa92a",
+          "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+          "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+          "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+          "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+          "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+          "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+          "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+          "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+          "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+          "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+          "python/oh_my_vllm/models/qwen.py": "007582a19d048d681162a94bda0f5677175e7665e736c65f1793addd4fa57c1b",
+          "python/oh_my_vllm/performance/__init__.py": "6257cfe9138fe50806e314b884dc8f914214e332885e7390634c6c3a0a96a081",
+          "python/oh_my_vllm/performance/analysis.py": "f100c06dbdad57d436a3c2872f515cec6ef74d9b3857a1a18d6275a589ab1a26",
+          "python/oh_my_vllm/performance/coverage.py": "9528f8a8b5da7fecf3e2abe76454ad167a8bf69d493abed640191a5659df54d3",
+          "python/oh_my_vllm/performance/dag.py": "b599801e85cd0a6442ea2c140e36b85c1c44bee58fe621e8a3419554cc574540",
+          "python/oh_my_vllm/performance/execution.py": "eaec032faeb26b5e3887199003420f6d753fcd0fbf862d192eaaa28f906f14e8",
+          "python/oh_my_vllm/performance/memory.py": "02a64c4fc12f5d4eb84eff7c8c0090e6e44eb6018be2672d4ed5169789b212ea",
+          "python/oh_my_vllm/performance/model.py": "f44ee8ff2670216efc466c8188a72acdbb9c228d0400093e9e3b506bd0a33e66",
+          "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+          "python/oh_my_vllm/worker/batch_plan.py": "38fdc0b7661e7a10716642d34ecd3f134f8dda297f67d604139ba23bf063e9a3",
+          "python/oh_my_vllm/worker/decode_graph.py": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+          "python/oh_my_vllm/worker/dspark.py": "454c967c062ec842c53736f6115ec54b9aea0f39959c996fcd6c25c26637f6de",
+          "python/oh_my_vllm/worker/dspark_graph.py": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+          "python/oh_my_vllm/worker/graph_cache.py": "1aa13b93a06c12ed30f458d253d88bf6b66d11ad4c477fcb1d937624db4d941e",
+          "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+          "python/oh_my_vllm/worker/model_runner.py": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
+          "python/oh_my_vllm/worker/mtp.py": "3892ba9efaba0e568ce798bb19f411d6d8259fd958cd6fd29ec3ee5911888824",
+          "python/oh_my_vllm/worker/mtp_context_graph.py": "e59aefabeaf5e44bf4b59516d8fff90532b596aa3e08bc2c29456b6b82db36bf",
+          "python/oh_my_vllm/worker/prefill_graph.py": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
+          "python/oh_my_vllm/worker/protocol.py": "a3a74a605a84da886893f46524ee6de55979161d4f4632fabcd2ad50fa10d65e",
+          "python/oh_my_vllm/worker/runtime.py": "ebad0c00284f2d74349de9d410773c7e09b8371205f65e0c716c57875046e294",
+          "python/oh_my_vllm/worker/sampler.py": "0d1f14464dbd57284b5de997317c29c242a94c56c2d620bfb38a0301f9fb465b",
+          "python/oh_my_vllm/worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
+          "python/oh_my_vllm/worker/serving.py": "9c631dd4f03d1c33648afe3f56e673f48e559213dac4d22e4bc3bf7c00ac30b3",
+          "python/oh_my_vllm/worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
+          "python/oh_my_vllm/worker/zmq_bridge.py": "ba8d80bc083559da3641a7bf0afdb8c716f524b2d97507d58966d8247d1f4139"
+        }
+      },
+      "mode": "ordinary",
+      "input_len": 32768,
+      "output_len": 16,
+      "batch_size": 1,
+      "prefix": true,
+      "status": "collected",
+      "prefill_wall_s": [
+        0.038945177,
+        0.039309349,
+        0.03799314,
+        0.037307798,
+        0.039095814
+      ],
+      "prefill_bounds_s": [
+        0.010056775135687111,
+        0.010056775135687111,
+        0.010056775135687111,
+        0.010056775135687111,
+        0.010056775135687111
+      ],
+      "prefill_median_wall_s": 0.038945177,
+      "prefill_median_bound_s": 0.010056775135687111,
+      "prefill_ratio": 3.8725313507110783,
+      "prefill_spread_pct": 5.139406607395821,
+      "source_stable": true,
+      "scope": "Two full warmups and five measurements, with sixteen output tokens. Diagnostic only."
+    },
+    {
+      "raw_file": "milestone6-prefix-32768-4-short01.json",
+      "source": {
+        "git_commit": "8d7d18b50462baa4a540a3ee362ff57f070bb512",
+        "rust_sources_sha256": "cdb9bfccb68d281a096bb12884eb60ba64d385a7b7dceb73efe560649322ad56",
+        "python_sources_sha256": {
+          "python/oh_my_vllm/__init__.py": "5f91c23ce2631af6f0340b88024384545b804aef362ada6004e349661953c998",
+          "python/oh_my_vllm/ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
+          "python/oh_my_vllm/ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+          "python/oh_my_vllm/ir/core.py": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+          "python/oh_my_vllm/ir/coverage.py": "339556d38f2b8733f48abc7e73ca04b1034ebae9f1f099b597b9d860330359f7",
+          "python/oh_my_vllm/ir/dspark.py": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+          "python/oh_my_vllm/ir/execution.py": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+          "python/oh_my_vllm/ir/fp8.py": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+          "python/oh_my_vllm/ir/gdn_prefill.py": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+          "python/oh_my_vllm/ir/gdn_prepare.py": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+          "python/oh_my_vllm/ir/logits.py": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+          "python/oh_my_vllm/ir/normalized_linear.py": "4a19b5496a9073d03f30234bb482f379aa186032d086b8b8e75854fe48dd3662",
+          "python/oh_my_vllm/ir/partial_attention.py": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+          "python/oh_my_vllm/ir/pointwise.py": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+          "python/oh_my_vllm/ir/recurrent.py": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+          "python/oh_my_vllm/ir/state.py": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+          "python/oh_my_vllm/kernels/__init__.py": "358051cba71a245ed0ceb85686e788311df2d52251bc23e72b3cd66624ec054f",
+          "python/oh_my_vllm/kernels/attention.py": "667fd8f322a6f221c204477dc666cf030c88c26ed125e62759a78492cedacf3a",
+          "python/oh_my_vllm/kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+          "python/oh_my_vllm/kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
+          "python/oh_my_vllm/kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+          "python/oh_my_vllm/kernels/cuda_backend/__init__.py": "2903658a1ad52f721e8dc813306b1003751e8e3796855cddb913044c70b678e4",
+          "python/oh_my_vllm/kernels/cuda_backend/groupwise.py": "aacfabfe02aa45bd4bd6b8658a61763da20ad38b0ded57ac4a1ac89a0fb4806f",
+          "python/oh_my_vllm/kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+          "python/oh_my_vllm/kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+          "python/oh_my_vllm/kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
+          "python/oh_my_vllm/kernels/elementwise.py": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+          "python/oh_my_vllm/kernels/fp8.py": "780a21cd9a5273a85d704d13c0cbde3d73615d011a596af6f7c30743beefd0b1",
+          "python/oh_my_vllm/kernels/gdn.py": "b449e439f5f524272578b05899b529de9b4eb73c7ab34fb35f9ae09b07e7af75",
+          "python/oh_my_vllm/kernels/mtp_attention.py": "738de3499b74c56fc8c27ef385baaed95e4289374fb40800c627f23172be32d9",
+          "python/oh_my_vllm/kernels/normalization.py": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+          "python/oh_my_vllm/kernels/partial_attention.py": "9d74993331ee37e48931d0600204009cf926ad4582db92e8f1e2f296ad0aa92a",
+          "python/oh_my_vllm/kernels/tilelang_reference/__init__.py": "601991901a71a8a9d7d4f4e62a916c83b46e7cb4a79a1b2cd4469ace63b461e3",
+          "python/oh_my_vllm/kernels/tilelang_reference/attention.py": "16a32385d099c21bb7471019b231c6f3784840158f79fbae38ac0a746cd4cb79",
+          "python/oh_my_vllm/kernels/tilelang_reference/convolution.py": "d3648d74565fc1842d77af9c799d7458e7d89725b9cc0ee8708ae16707fe4a50",
+          "python/oh_my_vllm/kernels/tilelang_reference/decode_attention.py": "9e7286643960ec913eea17248968f472741ffc237bb970ce2f5c33ef369c0af2",
+          "python/oh_my_vllm/kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
+          "python/oh_my_vllm/kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
+          "python/oh_my_vllm/kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
+          "python/oh_my_vllm/kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
+          "python/oh_my_vllm/models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+          "python/oh_my_vllm/models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+          "python/oh_my_vllm/models/qwen.py": "007582a19d048d681162a94bda0f5677175e7665e736c65f1793addd4fa57c1b",
+          "python/oh_my_vllm/performance/__init__.py": "6257cfe9138fe50806e314b884dc8f914214e332885e7390634c6c3a0a96a081",
+          "python/oh_my_vllm/performance/analysis.py": "f100c06dbdad57d436a3c2872f515cec6ef74d9b3857a1a18d6275a589ab1a26",
+          "python/oh_my_vllm/performance/coverage.py": "9528f8a8b5da7fecf3e2abe76454ad167a8bf69d493abed640191a5659df54d3",
+          "python/oh_my_vllm/performance/dag.py": "b599801e85cd0a6442ea2c140e36b85c1c44bee58fe621e8a3419554cc574540",
+          "python/oh_my_vllm/performance/execution.py": "eaec032faeb26b5e3887199003420f6d753fcd0fbf862d192eaaa28f906f14e8",
+          "python/oh_my_vllm/performance/memory.py": "02a64c4fc12f5d4eb84eff7c8c0090e6e44eb6018be2672d4ed5169789b212ea",
+          "python/oh_my_vllm/performance/model.py": "f44ee8ff2670216efc466c8188a72acdbb9c228d0400093e9e3b506bd0a33e66",
+          "python/oh_my_vllm/worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+          "python/oh_my_vllm/worker/batch_plan.py": "38fdc0b7661e7a10716642d34ecd3f134f8dda297f67d604139ba23bf063e9a3",
+          "python/oh_my_vllm/worker/decode_graph.py": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+          "python/oh_my_vllm/worker/dspark.py": "454c967c062ec842c53736f6115ec54b9aea0f39959c996fcd6c25c26637f6de",
+          "python/oh_my_vllm/worker/dspark_graph.py": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+          "python/oh_my_vllm/worker/graph_cache.py": "1aa13b93a06c12ed30f458d253d88bf6b66d11ad4c477fcb1d937624db4d941e",
+          "python/oh_my_vllm/worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+          "python/oh_my_vllm/worker/model_runner.py": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
+          "python/oh_my_vllm/worker/mtp.py": "3892ba9efaba0e568ce798bb19f411d6d8259fd958cd6fd29ec3ee5911888824",
+          "python/oh_my_vllm/worker/mtp_context_graph.py": "e59aefabeaf5e44bf4b59516d8fff90532b596aa3e08bc2c29456b6b82db36bf",
+          "python/oh_my_vllm/worker/prefill_graph.py": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
+          "python/oh_my_vllm/worker/protocol.py": "a3a74a605a84da886893f46524ee6de55979161d4f4632fabcd2ad50fa10d65e",
+          "python/oh_my_vllm/worker/runtime.py": "ebad0c00284f2d74349de9d410773c7e09b8371205f65e0c716c57875046e294",
+          "python/oh_my_vllm/worker/sampler.py": "0d1f14464dbd57284b5de997317c29c242a94c56c2d620bfb38a0301f9fb465b",
+          "python/oh_my_vllm/worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
+          "python/oh_my_vllm/worker/serving.py": "9c631dd4f03d1c33648afe3f56e673f48e559213dac4d22e4bc3bf7c00ac30b3",
+          "python/oh_my_vllm/worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
+          "python/oh_my_vllm/worker/zmq_bridge.py": "ba8d80bc083559da3641a7bf0afdb8c716f524b2d97507d58966d8247d1f4139"
+        }
+      },
+      "mode": "ordinary",
+      "input_len": 32768,
+      "output_len": 16,
+      "batch_size": 4,
+      "prefix": true,
+      "status": "collected",
+      "prefill_wall_s": [
+        0.125952603,
+        0.126507406,
+        0.125927046,
+        0.127157939,
+        0.128843506
+      ],
+      "prefill_bounds_s": [
+        0.040227100542748445,
+        0.040227100542748445,
+        0.040227100542748445,
+        0.040227100542748445,
+        0.040227100542748445
+      ],
+      "prefill_median_wall_s": 0.126507406,
+      "prefill_median_bound_s": 0.040227100542748445,
+      "prefill_ratio": 3.144830333112459,
+      "prefill_spread_pct": 2.305367007525243,
+      "source_stable": true,
+      "scope": "Two full warmups and five measurements, with sixteen output tokens. Diagnostic only."
+    }
+  ],
+  "gpu_checks": {
+    "passed": 30,
+    "scope": "Twenty existing normalized-projection checks and ten MN alignment/side-stream/replay/rejection checks."
+  },
+  "rejected": {
+    "unpadded_mn": "CUTLASS scale transfers require physical row capacity divisible by four. Both odd boundary fixtures use aligned capacity in the selected implementation.",
+    "bf16": "Prepared BF16 primitives did not show a stable complete-projection gain. No BF16 checkpoint copy or precision change is selected."
+  },
+  "originals": [
+    {
+      "file": "auto-stage5-paired-20261010.json",
+      "sha256": "a15cdd727b9f679dc5c5418f89b337aa800ab51230f9be2b68b942db47189a5e"
+    },
+    {
+      "file": "auto-stage5-paired-20261010.log",
+      "sha256": "2877a3ee2521a6fc34507b2793cbb3c4ac6ccb24a70c8ce7e74464f17652adc4"
+    },
+    {
+      "file": "auto-stage5-paired-20261010.py",
+      "sha256": "46762f1250f014d6e1dce2076520fced86624c5cd9653661ae2fa4bcb483a3ed"
+    },
+    {
+      "file": "full-model-milestone6-probe01.py",
+      "sha256": "99dea9678b3371e5d6bc651bc92b072d9632f69da995bef666c40df89c9f6404"
+    },
+    {
+      "file": "gpu-mn-replay-attempt02.log",
+      "sha256": "5add8470068afdd61958eb80b716d4e7fc97159e927189114add500a7e7ee101"
+    },
+    {
+      "file": "groupwise-scale-mn-stages.cu",
+      "sha256": "b2ef0a42ce8bb2096ad648f1dad5061cf6b2ba9a7626e88638ef4d71c8036823"
+    },
+    {
+      "file": "groupwise-scale-mn.cu",
+      "sha256": "463e8555e89572be761e159e4543fd7e2868ff652e56b7ba04b9f09fb6fbcba9"
+    },
+    {
+      "file": "milestone6-cargo01.log",
+      "sha256": "fe0be45a9f884603ef76c67636cd653ef3872bd3c5c806412a624622fdbe18ca"
+    },
+    {
+      "file": "milestone6-clippy01.log",
+      "sha256": "59639588a6f1826f129cbcd121edc07279dab94786f5fa5bde6b3439b2e845cc"
+    },
+    {
+      "file": "milestone6-cpu01.log",
+      "sha256": "d05ed2ad06e2c8edea154115d8213983c252fa628033792abbf3d5a850acab42"
+    },
+    {
+      "file": "milestone6-cpu02.log",
+      "sha256": "5d02545e4fc2f8d562573d83473696221f4df7b490edf71969ee8c2e7edbf557"
+    },
+    {
+      "file": "milestone6-ordinary-32768-1-short01.json",
+      "sha256": "1b1a6ee242f6b3217f805745760151bb36cb1a11d1318f880301630bdca5fa54"
+    },
+    {
+      "file": "milestone6-ordinary-32768-1-short01.log",
+      "sha256": "0eaaf4043b9af2b3685ce46a75ad3fddebd75dcca2e3e47282c31f962e27c7b0"
+    },
+    {
+      "file": "milestone6-ordinary-32768-1-short01.trace.json",
+      "sha256": "5cbc5cdba9d12f524cf2216eaca705233d34b88bf5dac7448898a5f3a51f3675"
+    },
+    {
+      "file": "milestone6-ordinary-32768-4-short01.json",
+      "sha256": "d04c28973f92158c44e8092d74a953dea7e10f0045a11edf3861a47d6742806f"
+    },
+    {
+      "file": "milestone6-ordinary-32768-4-short01.log",
+      "sha256": "e1ac538f03b482503b2da74f5425adeb323852a1b23c0179021ce075c85f95e0"
+    },
+    {
+      "file": "milestone6-ordinary-32768-4-short01.trace.json",
+      "sha256": "31862e1455c1be113cae9b994df3e0d9bad62cb1c099e5edafb18ed1e4f0af16"
+    },
+    {
+      "file": "milestone6-prefix-32768-1-short01.json",
+      "sha256": "80fb9185a50144513c91ddf46082bb739fb3786d7608bc242f50427fa341a7a8"
+    },
+    {
+      "file": "milestone6-prefix-32768-1-short01.log",
+      "sha256": "993314c760b8730d392fedebdbdc7c4f3fd2a283564a8d258ac045f46d037cf6"
+    },
+    {
+      "file": "milestone6-prefix-32768-1-short01.trace.json",
+      "sha256": "202aa5de1d1a94514d77b2299ab3ec283f3a366d2a694c20075a3a07d4f16900"
+    },
+    {
+      "file": "milestone6-prefix-32768-4-short01.json",
+      "sha256": "206b16c1921c6f5ece68bc9cb24f7b9fbf0755bee4e21598abf83cf8f20e2a59"
+    },
+    {
+      "file": "milestone6-prefix-32768-4-short01.log",
+      "sha256": "536bcaf8c69b8fa31bf074c651406a34c33c645fe4e4cd5bd465cf51c0b62fb9"
+    },
+    {
+      "file": "milestone6-prefix-32768-4-short01.trace.json",
+      "sha256": "786a0e2846aed3a1479807a57f4abfeb4fb5cb1de87e31910a18a8210f76f5f8"
+    },
+    {
+      "file": "operator-mn-stage5-attempt01.json",
+      "sha256": "91f303ff647eb44d20b5d25955830de979bb395937c7a62f01976dbca8962b33"
+    },
+    {
+      "file": "operator-mn-stage5-attempt01.log",
+      "sha256": "8468bd2095aefac9e4e45844674e02fb1a1de9bc5930ed6178b64bd9fef6cdc0"
+    },
+    {
+      "file": "operator-mn-stage5-profile01.json",
+      "sha256": "7724e47adb8a8a98f6375ff46706af44f502673ddb83edb1ce81f8893bf015a4"
+    },
+    {
+      "file": "operator-mn-stage5-profile01.log",
+      "sha256": "aa238ddef36a0c8e2996b3c05c5e0c5b16337ab8263f1843ddee62574a42b68c"
+    },
+    {
+      "file": "operator-stage5-attempt01.log",
+      "sha256": "b46fd4e18e8acdc15f722bb45c031e8b0de06c5d534e394257902f1f55260815"
+    },
+    {
+      "file": "operator-stage5-attempt02.json",
+      "sha256": "8145c590069289505875ceb74725a18bcf6ddc32a410a4eae632716ecb5c386c"
+    },
+    {
+      "file": "operator-stage5-attempt02.log",
+      "sha256": "c2560fcb867f51be411819cc8645fa8bca28d70d608f958003490bbde1b0732f"
+    },
+    {
+      "file": "prepacked-bf16-paired-20261010.json",
+      "sha256": "d1df831419904b082e388af5f231b0340a075683910025d2dfbfea5b007744a9"
+    },
+    {
+      "file": "prepacked-bf16-paired-20261010.log",
+      "sha256": "f41306d7eba34ef88768d9c46487a57161b1fe111d825d54b1583f2ba5164fb9"
+    },
+    {
+      "file": "prepacked-bf16-paired-20261010.py",
+      "sha256": "259fa0932875be354edf4fc0e0af8d895776dc2629aecaf877a75e1936a33cb3"
+    },
+    {
+      "file": "scale-mn-boundary-20261010.log",
+      "sha256": "5b90f7fc2c3fccdda8b0fc0e191478c8f96205a45100d2f5e6e18159191b83b4"
+    },
+    {
+      "file": "scale-mn-boundary-20261010.py",
+      "sha256": "f6bfac1ba07b422d4a59874c204e26fcf60f8a0d001cb7e60635e884531a124d"
+    },
+    {
+      "file": "scale-mn-build-20261010.json",
+      "sha256": "747116450c2d450046dc807dbdc85bff1bbfd67e6c3f42660f1b490419e1338f"
+    },
+    {
+      "file": "scale-mn-build-20261010.log",
+      "sha256": "6b3fc5f5f818e21b9e740750384c586a67f868e2e71e3f51c978c5587d4a0b07"
+    },
+    {
+      "file": "scale-mn-build-20261010.py",
+      "sha256": "a1d63ed864096b88e543396b6243f274d9016bdbd1d347fdcef7b4fa261dce4f"
+    },
+    {
+      "file": "scale-mn-full-projection-20261010.json",
+      "sha256": "7f0a36be6f34ef8ee3343f04cc8db7ae821e1c6651c948a18df8b42b6c0e7a10"
+    },
+    {
+      "file": "scale-mn-full-projection-20261010.log",
+      "sha256": "12d11f5c45128597dd4a5d7a4eb522b649774b08a2d7af0234ebd79c6985f32b"
+    },
+    {
+      "file": "scale-mn-full-projection-20261010.py",
+      "sha256": "77b9c4af295504ae4ee1742f0c4ff29746f806d9b0adde15e6c7464b6bdfec3d"
+    },
+    {
+      "file": "scale-mn-padded-boundary-20261010.json",
+      "sha256": "dcec81e46c175eff636b22e36937ead641158d329b5008e27ee77f61c60bc1c2"
+    },
+    {
+      "file": "scale-mn-padded-boundary-20261010.log",
+      "sha256": "490224555f9a1d236ee6d8c07ba41d506d2799d311557fac11e3e78d4a3c3473"
+    },
+    {
+      "file": "scale-mn-padded-boundary-20261010.py",
+      "sha256": "b58e2e2dedeeb3a76f1e43562ff11190794812ab812f95962acf37b0014d2bb4"
+    },
+    {
+      "file": "scale-mn-paired-20261010.json",
+      "sha256": "6649589d70f511b8a014c6d79a2a837f6a605f42bffc4d1e82ad5438537c66ae"
+    },
+    {
+      "file": "scale-mn-paired-20261010.log",
+      "sha256": "cfeabb105a3d1e8263ce31e5f054e8e896150d9e62c0ef189f56b09958cfc3be"
+    },
+    {
+      "file": "scale-mn-paired-20261010.py",
+      "sha256": "310e481121bf82df266afd9bf8b24a6ff55eb96f07aceb3ab29ad099a86549f7"
+    },
+    {
+      "file": "scale-mn-stages-build-20261010.json",
+      "sha256": "3a7b8375b6e2ef3afec1b154d801ca8e9fc5071dc8b26b23cd1713f8654f6cc5"
+    },
+    {
+      "file": "scale-mn-stages-build-20261010.log",
+      "sha256": "697eb0d2755a26c1cb2207cc5cdc97e9ef7e17fb965627f63a6d3ae9519e0c68"
+    },
+    {
+      "file": "scale-mn-stages-build-20261010.py",
+      "sha256": "49c31ea332804dcc8356a630efc5011435b492519e6c3c1071f2cce1b03d9943"
+    }
+  ]
+}

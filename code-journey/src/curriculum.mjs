@@ -102,7 +102,7 @@ export const coverage = [
   ["Compilation", "python/oh_my_vllm/ir/gdn_prepare.py", "def gdn_prepare(", "GDN 两条独立准备分支", "主流执行 QKVZ 投影与因果卷积, 侧流执行 BA 投影与 gates. 分叉前等待输入, 汇合后交给状态更新."],
   ["Compilation", "python/oh_my_vllm/worker/prefill_graph.py", "class PrefillGraph", "固定 prefill 形状与动态地址", "按 query/context 形状捕获, 更新 token, FA 页和 GDN 槽. 预热与捕获恢复缓存, metadata 重规划在失败后保留捕获存储."],
   ["Compilation", "python/oh_my_vllm/kernels/cuda_backend/groupwise.py", "def gemm(", "自有 FP8 GEMM 构建与工作区", "绑定 CUDA 源码和模板摘要, 固定各流工作区地址, 显式传递 PDL. 大投影按经过测量的调度参数执行."],
-  ["Compilation", "python/oh_my_vllm/kernels/cuda_backend/groupwise_fp8.cu", "void groupwise_fp8(", "SM100 FP8 GEMM 的 CUDA 入口", "保留 128-token scale 分块与 FP32 累加, 检查 dtype/stride/设备. 初始化使用调用者流, 启动显式启用 PDL; 宽 gate/up 默认使用 swizzle 8; 至少 32144 行的 34816 by 5120 two-SM 投影使用 swizzle 16."],
+  ["Compilation", "python/oh_my_vllm/kernels/cuda_backend/groupwise_fp8.cu", "void groupwise_fp8(", "SM100 FP8 GEMM 的 CUDA 入口", "保留 128-token scale 分块与 FP32 累加, 检查 dtype/stride/设备. 初始化使用调用者流, 启动显式启用 PDL; 宽 gate/up 默认使用 swizzle 8; 至少 32144 行的 34816 by 5120 two-SM 投影使用 swizzle 16, 五级流水与列主序 scale; 物理行对齐到四, 每次重新打包原 scale 并裁剪有效输出."],
   ["Validation", "benchmarks/measurement.py", "def audit(", "运行身份与测量阶段审计", "记录硬件和缓存身份, 查找 measured 阶段的编译/捕获日志, 审计编译缓存的文件变化, 核实预热完成后的稳定执行."],
   ["Validation", "development/kernels/cases.py", "def cases(", "算子最大形状用例", "静态推导生产路径边界, 将 shape 与布局纳入正式算子验收, 与冻结 TileLang 比较; 微调脚本和原始 profiling 留在仓库外."],
 ];

@@ -137,8 +137,11 @@ At most 32 FP8 projection rows use TRT-LLM GEMM from a third-party library.
 Larger FP8 batches use the owned SM100 CUTLASS launcher.
 It keeps arbitrary FP32 block scales, FP32 accumulation, and BF16 output.
 The launcher selects PDL on the caller stream.
+
 Wide gate/up matrices with at least 2048 rows use an eight-tile swizzle for cache locality.
 At least 32144 rows use swizzle 16 for the two-SM, 34816 by 5120 gate/up matrix.
+This path uses five pipeline stages and column-major activation and weight scales.
+Other large projections keep K-major scales and automatic stage selection.
 Ordinary projections without scales use `F.linear`.
 
 
@@ -148,8 +151,15 @@ Small BF16 vocabulary projections use FlashInfer CuTe-DSL GEMM.
 Residual/RMS and SiLU/FP8 fusions keep the existing BF16 rounding points.
 For more than 32 rows, the MLP gate/up path uses one CUDA kernel for residual RMS and activation quantization.
 It writes the BF16 residual sum and keeps the normalized BF16 value in registers before FP8 conversion.
-The projection keeps its previous GEMM provider and scale layout.
+The projection keeps its previous GEMM provider and mathematical scale values.
 At most 32 rows use the previous CUDA residual RMS and quantization chain.
+
+The large gate/up path rounds physical row capacity to a multiple of four for scale alignment.
+Its fused kernel writes logical rows directly into that storage.
+Each call clears at most three tail rows and packs 43520 bytes of checkpoint scales.
+
+Graph replay reads changed checkpoint scales. The output view keeps only logical rows.
+Padding and scale packing are implementation overhead. They do not increase the theoretical bound.
 
 Convolution, GDN, and RMS accept packed projection strides and return dense outputs.
 GDN prefill normalizes Q/K explicitly with FP32 norms and BF16 output.

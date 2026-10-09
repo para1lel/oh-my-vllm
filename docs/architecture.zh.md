@@ -135,6 +135,8 @@ FP8 activation 使用逐行 128-value scale.
 启动入口在调用者 stream 上选择 PDL.
 至少 2048 行的宽 gate/up 矩阵使用八 tile swizzle, 改善 cache 局部性.
 至少 32144 行的 34816 by 5120 gate/up 矩阵在 two-SM 路径使用 swizzle 16.
+该路径使用五级流水与列主序激活和权重 scales.
+其他大型投影保持 K-major scales 与自动级数选择.
 不带 scale 的普通 projection 使用 `F.linear`.
 
 这避开已观察到的 FlashInfer CUTLASS 在 17 至 32 row 的不稳定性.
@@ -143,8 +145,14 @@ FP8 activation 使用逐行 128-value scale.
 Residual / RMS 和 SiLU / FP8 融合保留已有 BF16 舍入点.
 MLP gate/up 路径在超过 32 行时, 用一个 CUDA kernel 合并残差 RMS 与激活量化.
 它写出 BF16 残差和, 在寄存器中保留归一化后的 BF16 值, 再转换为 FP8.
-投影保持之前的 GEMM provider 和 scale 布局.
+投影保持之前的 GEMM provider 与数学上的 scale 值.
 至多 32 行使用之前的 CUDA 残差 RMS 与量化链.
+
+大型 gate/up 路径将物理行容量向上取整到四的倍数, 满足 scale 对齐.
+融合 kernel 将实际行直接写入该存储.
+每次调用清零至多三行尾部, 并打包 43520 字节的 checkpoint scales.
+Graph 重放读取变化后的 checkpoint scales. 输出 view 只保留实际行.
+Padding 与 scale 打包属于实现开销, 不增加理论下界.
 
 Convolution, GDN 和 RMS 接受 packed projection stride, 返回 dense output.
 GDN prefill 显式归一化 Q / K, 使用 FP32 norm 和 BF16 输出.

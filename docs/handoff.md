@@ -69,11 +69,11 @@ The canonical model counts the same required rows, disjoint parameter slices, an
 
 Offline registration shares the output budget with Python. Proposers reserve the scheduler's bonus token.
 
-The last full CPU collection passed 741 tests and 65 subtests, with 392 GPU tests deselected.
+The current full CPU collection passed 741 tests, with 402 GPU tests deselected.
 Subsequent common-tail checks passed 52 tests. These include cross-request address reuse and pre-boundary write exclusion.
 
 Required Rust tests, format, line width, and Clippy checks passed.
-The current normalized-projection GPU checks passed twenty tests. Tutorial checks passed ten excerpt tests and nine browser tests.
+The current normalized-projection GPU checks passed thirty tests. Tutorial checks passed ten excerpt tests and nine browser tests.
 Selected-output and GDN copy checks keep their stated previous source scope.
 
 The `c56ca40` collection completed seven of fifteen phase rows.
@@ -88,10 +88,18 @@ Residual RMS uses streaming stores at 128 to 2047 rows.
 GDN gates use 128 threads at 128 to 4095 rows.
 At most 32 normalized-projection rows use the previous CUDA chain.
 
-Large two-SM gate/up keeps automatic seven-stage storage and selects swizzle 16.
-Its paired diagnosis changed only swizzle and showed about 0.104 ms mean time saved.
+Large two-SM gate/up uses five pipeline stages, swizzle 16, and column-major scales.
+The selected shape has at least 32144 rows, 34816 output columns, and width 5120.
+Each call packs current checkpoint scales. Physical row capacity has four-row alignment, with at most three cleared tail rows.
+Theoretical work keeps logical rows and excludes padding and packing overhead.
 
-The one-sided 95% lower bound was about 0.094 ms. Outputs were equal at zero absolute and relative tolerances.
+Thirty GPU checks passed, with side-stream replay, changed scales, and rejected layouts and pitches.
+Four affected full-operation cases passed numerical and speed checks with the full per-case timing protocol.
+The [scale and stage diagnosis](../bench/evidence/2026-10-10-fp8-scale-stage-diagnosis.json) keeps paired candidates, hardware counters, and original hashes.
+
+Short-output diagnosis has prefill ratios of about 2.947 and 3.035 for ordinary batches 1 and 4.
+Prefix-hit ratios are about 3.873 and 3.145. These diagnostics keep sixteen output tokens.
+Full phase acceptance keeps 4096 outputs and stays pending.
 
 Prefill capture now has a 32 GiB free-memory guard. Replay hits keep their existing path.
 With this guard, three dirty-source DSpark capacity checks completed input 258048 and output 4096 at batches 1, 2, and 4.

@@ -161,7 +161,7 @@ At 8, 16, and 32 rows, the previous CUDA chain saved about 0.672, 0.538, and 0.6
 All three time-saved confidence lower bounds were positive. Full outputs were equal.
 
 A two-SM gate/up candidate changed stage count and swizzle together. Its mean time saved was about 0.210 ms.
-The production choice keeps automatic seven-stage storage. A subsequent diagnosis changed only swizzle from 8 to 16.
+A subsequent diagnosis kept automatic seven-stage storage and changed only swizzle from 8 to 16.
 
 It used three rounds with twenty pairs and ten graph repetitions per sample.
 Mean time saved was about 0.104 ms, with one-sided 95% lower bound about 0.094 ms. Outputs were equal at zero absolute and relative tolerances.
@@ -181,3 +181,42 @@ They identify projection and attention work for subsequent tuning. Formal worklo
 
 FP8-to-BF16 conversion with BF16 GEMM increased full projection time. Dispatch keeps FP8 checkpoint weights and FP32 scales.
 The [phase progress record](../bench/evidence/2026-10-10-phase-progress.json) keeps the failed full-output phase and operator measurements.
+
+
+## Large gate/up scale and stage selection
+
+The current two-SM gate/up path uses five pipeline stages at M at least 32144, N 34816, and K 5120.
+Swizzle stays 16.
+
+A stage comparison kept this swizzle and changed seven automatic stages to five explicit stages.
+Three rounds used twenty pairs and ten graph repetitions per sample.
+Mean time saved was about 0.120 ms. The one-sided 95% lower bound was about 0.114 ms.
+Outputs stayed bitwise equal.
+
+Column-major scales decrease scale-transfer overhead for this large shape. Other projections keep K-major scales.
+Checkpoint weights and public FP32 scales keep their values and layout.
+Each call packs 43520 bytes of weight scales, so graph replay reads subsequent scale changes.
+The fused quantization kernel writes into physical storage with row capacity rounded up to a multiple of four.
+
+Each call clears at most three tail rows and returns only the logical output rows.
+Padding, packing, and tail clearing do not increase the theoretical bound.
+
+A full-operation candidate comparison included residual RMS, quantization, scale packing, padding, and GEMM.
+Three rounds used twenty pairs and one hundred graph repetitions per sample.
+
+At M 32144, mean time saved was about 0.187 ms, with a one-sided 95% lower bound of about 0.185 ms.
+At M 32290, the values were about 0.046 ms and 0.044 ms.
+The candidate outputs and residual sums stayed bitwise equal.
+The candidate used a copy into padded storage. The production fused path writes directly into the aligned storage.
+
+Thirty GPU checks passed. These include changed input and scales, side-stream graph replay, and rejected scale layouts and pitches.
+Four affected full-operation cases passed numerical and speed checks with the full operator timing protocol.
+These dirty-source diagnostics do not supply the full current-source 301-case or fifteen-row verdict.
+
+The current GEMM profile uses 168 registers and 160256 dynamic shared-memory bytes, with 11.72% occupancy.
+Its L2 hit rate is 88.60%, and DRAM traffic is about 5.489 GB.
+The previous automatic seven-stage, swizzle-16 profile used 210432 dynamic shared-memory bytes and the same occupancy.
+
+These different replays identify resource use. The timing comparisons supply the timing verdict.
+The TileFoundry report uses a representative HIR shape. It does not show the full native FP8 GEMM shape or layout.
+The [scale and stage diagnosis](../bench/evidence/2026-10-10-fp8-scale-stage-diagnosis.json) keeps each launch's thirteen counters, estimates, and source identities.

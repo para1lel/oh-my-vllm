@@ -1681,6 +1681,39 @@
       "forms": [
         "feedback interval"
       ]
+    },
+    {
+      "term": "pipeline stage",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "One shared-memory buffer for GEMM input transfers that run in parallel with computation.",
+      "translation": "用于使 GEMM 输入传输与计算并行执行的一块 shared-memory buffer.",
+      "forms": [
+        "pipeline stage",
+        "pipeline stages"
+      ]
+    },
+    {
+      "term": "column-major scale",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "FP32 scale layout with adjacent row indices contiguous in storage.",
+      "translation": "相邻行索引在存储中连续的 FP32 scale 布局.",
+      "forms": [
+        "column-major scale",
+        "column-major scales"
+      ]
+    },
+    {
+      "term": "K-major scale",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "FP32 scale layout with adjacent reduction-block indices contiguous in storage.",
+      "translation": "相邻归约分块索引在存储中连续的 FP32 scale 布局.",
+      "forms": [
+        "K-major scale",
+        "K-major scales"
+      ]
     }
   ]
 }

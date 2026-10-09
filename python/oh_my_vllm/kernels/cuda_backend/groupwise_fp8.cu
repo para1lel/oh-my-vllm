@@ -44,7 +44,7 @@ namespace gemm {
 using namespace cute;
 
 template <int ScaleGranularityM, int ScaleGranularityN, int ScaleGranularityK, bool ScaleMajorK,
-          int MmaSM, typename DTypeIn, typename DTypeOut>
+          int MmaSM, typename DTypeIn, typename DTypeOut, int PipelineStages = 0>
 cudaError_t CutlassGroupwiseScaledGEMMSM100(void* float_buffer, size_t float_buffer_size_in_bytes,
                                             DTypeIn* A_ptr, DTypeIn* B_ptr, float* SFA_ptr,
                                             float* SFB_ptr, DTypeOut* D_ptr, int m, int n, int k,
@@ -104,8 +104,10 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void* float_buffer, size_t float_buf
       cutlass::arch::Sm100, cutlass::arch::OpClassTensorOp, ElementA,
       cute::tuple<LayoutA, LayoutSFA>, AlignmentA, ElementB, cute::tuple<LayoutB, LayoutSFB>,
       AlignmentB, ElementAccumulator, MmaTileShape_MNK, ClusterShape_MNK,
-      cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(
-          sizeof(typename CollectiveEpilogue::SharedStorage))>,
+      std::conditional_t<PipelineStages == 0,
+          cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(
+              sizeof(typename CollectiveEpilogue::SharedStorage))>,
+          cutlass::gemm::collective::StageCount<PipelineStages>>,
       cutlass::gemm::KernelScheduleSm100Blockwise>::CollectiveOp;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
@@ -187,7 +189,7 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void* float_buffer, size_t float_buf
 // has numerical and performance evidence.
 void groupwise_fp8(TensorView a, TensorView weight, TensorView scale_a,
                    TensorView scale_weight, TensorView output,
-                   TensorView workspace, int64_t mma_sm, bool pdl) {
+                   TensorView workspace, int64_t mma_sm, bool pdl, bool scale_major_k) {
   auto device = a.device();
   TVM_FFI_ICHECK(device.device_type == kDLCUDA)
       << "owned groupwise FP8 requires CUDA tensors";
@@ -224,15 +226,23 @@ void groupwise_fp8(TensorView a, TensorView weight, TensorView scale_a,
     auto d = tensor.device();
     TVM_FFI_ICHECK(d.device_type == device.device_type && d.device_id == device.device_id);
     TVM_FFI_ICHECK(tensor.dtype().lanes == 1);
-    TVM_FFI_ICHECK(tensor.stride(tensor.ndim() - 1) == 1);
-    if (tensor.ndim() == 2)
-      TVM_FFI_ICHECK(tensor.stride(0) == tensor.size(1));
+    if (!scale_major_k && tensor.ndim() == 2 && tensor.dtype().code == kDLFloat) {
+      TVM_FFI_ICHECK(tensor.stride(0) == 1 && tensor.stride(1) == tensor.size(0) &&
+                     tensor.stride(1) % 4 == 0)
+          << "MN scale layout requires four-float leading alignment";
+    } else {
+      TVM_FFI_ICHECK(tensor.stride(tensor.ndim() - 1) == 1);
+      if (tensor.ndim() == 2)
+        TVM_FFI_ICHECK(tensor.stride(0) == tensor.size(1));
+    }
     TVM_FFI_ICHECK(reinterpret_cast<uintptr_t>(tensor.data_ptr()) % 16 == 0);
   }
-  auto run = [&](auto sm) {
+  TVM_FFI_ICHECK(scale_major_k || (mma_sm == 2 && m >= 32144 && n == 34816 && k == 5120))
+      << "MN scales require the full two-SM gate/up shape";
+  auto run = [&](auto sm, auto stages, auto major_k) {
     return oh_my_vllm::gemm::CutlassGroupwiseScaledGEMMSM100<
-        1, 128, 128, true, decltype(sm)::value, cutlass::float_e4m3_t,
-        cutlass::bfloat16_t>(
+        1, 128, 128, decltype(major_k)::value, decltype(sm)::value, cutlass::float_e4m3_t,
+        cutlass::bfloat16_t, decltype(stages)::value>(
         workspace.data_ptr(), workspace.size(0),
         static_cast<cutlass::float_e4m3_t*>(a.data_ptr()),
         static_cast<cutlass::float_e4m3_t*>(weight.data_ptr()),
@@ -257,8 +267,18 @@ void groupwise_fp8(TensorView a, TensorView weight, TensorView scale_a,
     TVM_FFI_ICHECK(prior == cudaSuccess)
         << "groupwise FP8 prior execution error: " << cudaGetErrorString(prior);
   }
-  auto status = mma_sm == 1 ? run(std::integral_constant<int, 1>{})
-                            : run(std::integral_constant<int, 2>{});
+  // The full two-SM gate/up shape saves time with five mainloop stages.
+  // Other shapes keep the template's automatic storage calculation.
+  auto status = mma_sm == 1 ? run(std::integral_constant<int, 1>{},
+                                std::integral_constant<int, 0>{}, std::true_type{})
+                : m >= 32144 && n == 34816 && k == 5120
+                    ? (scale_major_k
+                         ? run(std::integral_constant<int, 2>{},
+                               std::integral_constant<int, 5>{}, std::true_type{})
+                         : run(std::integral_constant<int, 2>{},
+                               std::integral_constant<int, 5>{}, std::false_type{}))
+                    : run(std::integral_constant<int, 2>{},
+                          std::integral_constant<int, 0>{}, std::true_type{});
   TVM_FFI_ICHECK(status == cudaSuccess) << cudaGetErrorString(status);
   if (debug) {
     auto result = cudaStreamSynchronize(stream);
