@@ -190,3 +190,54 @@ def add_norm_linear(x, residual, gamma, weight, weight_scale):
     return summed, _project_quantized(
         data, scales, weight, weight_scale, logical_rows=rows
     )
+
+
+def gated_norm_linear(x, gamma, gate, weight, weight_scale):
+    """Project gated RMS features with the original BF16 rounding boundary.
+
+    x and gate are BF16 [rows,48,128] with packed token strides allowed.
+    gamma is the FP32 head multiplier. The FP8 checkpoint weight is [N,6144]
+    with FP32 [N/128,48] scales. Outputs are independent BF16 [rows,N] storage.
+    """
+    if (
+        x.ndim != 3
+        or x.shape[1:] != (48, 128)
+        or x.numel() == 0
+        or gate.shape != x.shape
+        or gamma.shape != (128,)
+    ):
+        raise ValueError("gated FP8 projection requires nonempty [rows,48,128] heads")
+    if x.dtype != torch.bfloat16 or gate.dtype != x.dtype:
+        raise ValueError("gated FP8 projection input and gate must be BF16")
+    if gamma.dtype != torch.float32:
+        raise ValueError("gated FP8 projection gamma must be FP32")
+    if any(not t.is_cuda or t.device != x.device for t in (x, gate, gamma)):
+        raise ValueError("gated FP8 inputs must share one CUDA device")
+    if (
+        any(
+            t.stride(0) < 6144 or t.stride(1) != 128 or t.stride(2) != 1
+            for t in (x, gate)
+        )
+        or not gamma.is_contiguous()
+    ):
+        raise ValueError("gated FP8 inputs require contiguous heads and gamma")
+    if x.shape[0] > 2**31 // 6144:
+        raise ValueError("gated FP8 input exceeds int32 flat offset range")
+    _validate_weight(x, weight, weight_scale, 6144)
+    if NAME != "cuda":
+        from .normalization import rms_norm
+
+        normalized = rms_norm(x, gamma, gate=gate)
+        return linear(normalized.flatten(1), weight, weight_scale)
+    from .cuda_backend import compiled
+
+    rows = x.shape[0]
+    column = rows <= 32
+    data = torch.empty((rows, 6144), device=x.device, dtype=torch.float8_e4m3fn)
+    scales = torch.empty(
+        (48, rows) if column else (rows, 48), device=x.device, dtype=torch.float32
+    )
+    if column:
+        scales = scales.T
+    compiled().gated_quantize(x, gamma, gate, data, scales, column)
+    return _project_quantized(data, scales, weight, weight_scale)

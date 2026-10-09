@@ -38,6 +38,12 @@ SITES = (
     Site("ir/gdn_prepare.py", "_kernel_prepare", "delta_gates", "delta_gates"),
     Site("ir/gdn_prepare.py", "_kernel_prepare", "linear", "fp8_linear"),
     Site("models/qwen.py", "Layer.delta_attention", "rms_norm", "rms_norm"),
+    Site(
+        "models/qwen.py",
+        "Layer.delta_attention",
+        "gated_norm_fp8_linear",
+        "gated_norm_fp8_linear",
+    ),
     Site("models/qwen.py", "Layer.forward_residual", "rms_norm", "rms_norm"),
     Site("models/qwen.py", "Layer.forward_residual", "add_rms_norm", "add_rms_norm"),
     Site("models/qwen.py", "Layer.forward_selected", "add_rms_norm", "add_rms_norm"),

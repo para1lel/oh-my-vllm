@@ -69,6 +69,7 @@ def runtime_contract():
 
 IR_OPERATIONS = {
     "add_norm_fp8_linear",
+    "gated_norm_fp8_linear",
     "add_rms_norm",
     "causal_conv",
     "delta_gates",

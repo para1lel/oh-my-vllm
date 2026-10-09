@@ -15,6 +15,7 @@ ENTRIES = {
     "add_norm_fp8_linear": ("fp8", "add_norm_linear"),
     "fp8_linear": ("fp8", "linear"),
     "gated_norm": ("normalization", "rms_norm"),
+    "gated_norm_fp8_linear": ("fp8", "gated_norm_linear"),
     "norm_rope": ("normalization", "rms_rotary"),
     "quant": ("fp8", "quantize"),
     "silu_quant": ("fp8", "quantize"),
@@ -196,6 +197,15 @@ def fixture(
         x = random(n, 48, 128)
         gate = random(n, 16384)[:, 10240:].view(n, 48, 128)
         args, kwargs = (x, random(128, dtype=torch.float32)), {"gate": gate}
+    elif operation == "gated_norm_fp8_linear":
+        args = (
+            random(n, 48, 128),
+            random(128, dtype=torch.float32),
+            random(n, 16384)[:, 10240:].view(n, 48, 128),
+            random(config["columns"], 6144).to(torch.float8_e4m3fn),
+            torch.rand(config["columns"] // 128, 48, device="cuda", generator=generator)
+            * 0.01,
+        )
     elif operation == "norm_rope":
         heads = config["heads"]
         packed = random(n, 14336)

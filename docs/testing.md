@@ -114,8 +114,8 @@ The harness uses static cases from `development/kernels/cases.py`.
 
 Use `--operations NAME` to select an operation family.
 Give `--case-id ID` for each selected case ID.
-A selection with less than 301 case IDs reports `coverage.complete=false` and keeps the full per-case protocol.
-All 301 case IDs must pass before matrix acceptance.
+A selection with less than 317 case IDs reports `coverage.complete=false` and keeps the full per-case protocol.
+All 317 case IDs must pass before matrix acceptance.
 
 It verifies full output and written caches before timing.
 Each case must have three rounds of twenty interleaved pairs and faster CUDA medians in all rounds.

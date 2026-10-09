@@ -18,7 +18,7 @@ from oh_my_vllm.ir import fp8
 from oh_my_vllm.ir.gdn_prefill import gdn_prefill
 from oh_my_vllm.ir.gdn_prepare import gdn_prepare
 from oh_my_vllm.ir.logits import logits_gemm
-from oh_my_vllm.ir.normalized_linear import add_norm_fp8_linear
+from oh_my_vllm.ir.normalized_linear import add_norm_fp8_linear, gated_norm_fp8_linear
 from oh_my_vllm.ir.partial_attention import prepare_context, prepare_query
 from oh_my_vllm.ir.pointwise import add_rms_norm, rms_norm, silu_mul
 from oh_my_vllm.ir.recurrent import gdn_recurrent
@@ -214,6 +214,14 @@ class Layer:
             v.reshape(-1, 48, 128),
         )
         out = batch.delta(q, k, v, decay, beta, state_pool)
+        if self.out.scale is not None:
+            return gated_norm_fp8_linear(
+                out,
+                self.gate_norm,
+                z.reshape(-1, 48, 128),
+                self.out.weight,
+                self.out.scale,
+            )
         out = rms_norm(out, self.gate_norm, gate=z.reshape(-1, 48, 128))
         return self.out(out.flatten(1))
 

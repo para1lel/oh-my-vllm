@@ -52,7 +52,8 @@ void launch_kernel(Kernel kernel, dim3 grid, dim3 block, size_t shared,
 // A relaxed atomic keeps variants observable across Python/worker threads.
 // Keep this order in sync with _VARIANT_OPERATIONS in cuda_backend/__init__.py.
 enum VariantOperation {
-  kNorm, kAddNorm, kGatedNorm, kQk, kRecurrent, kAppend, kConvolution, kVariantCount
+  kNorm, kAddNorm, kGatedNorm, kQk, kRecurrent, kAppend, kConvolution,
+  kGatedNormFp8Linear, kVariantCount
 };
 std::atomic<int64_t> variant_launches[kVariantCount][2]{};
 void record_variant(int operation, bool fast) {
@@ -2812,4 +2813,122 @@ void rms_quantize(TensorView x, TensorView residual, TensorView weight,
   }
 #undef RMS_QUANT
   finish_cuda_launch(stream, "rms_quantize");
+}
+
+// Keep the gated RMS reduction and its BF16 result rounding in registers.
+// Each head is one complete 128-value FP8 group. The quantization keeps
+// arbitrary FP32 scales and the previous corrected scale division.
+template <int RowsPerWarp, bool Column>
+__global__ void gated_quant128_kernel(const __nv_bfloat16 *__restrict__ x,
+                                     const float *__restrict__ gamma,
+                                     const __nv_bfloat16 *__restrict__ gate,
+                                     __nv_fp8_e4m3 *__restrict__ data,
+                                     float *__restrict__ scales, int tokens,
+                                     int64_t x_stride, int64_t gate_stride) {
+  pdl_dependency_wait();
+  pdl_launch_next();
+  int lane = threadIdx.x & 31;
+  float weight[4];
+#pragma unroll
+  for (int j = 0; j < 4; ++j)
+    weight[j] = gamma[lane + j * 32];
+#pragma unroll
+  for (int r = 0; r < RowsPerWarp; ++r) {
+    int row = blockIdx.x * 4 * RowsPerWarp + (threadIdx.x / 32) * RowsPerWarp + r;
+    if (row >= tokens * 48)
+      continue;
+    int token = row / 48, head = row % 48;
+    int64_t offset = static_cast<int64_t>(token) * x_stride + head * 128;
+    int64_t gate_offset = static_cast<int64_t>(token) * gate_stride + head * 128;
+    float values[4], total = 0;
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+      float value = __bfloat162float(x[offset + lane + j * 32]);
+      values[j] = value;
+      total += value * value;
+    }
+    float inv = rsqrtf(warp_sum(total) * (1.f / 128.f) + 1e-6f), maximum = 0;
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+      float g = __bfloat162float(gate[gate_offset + lane + j * 32]);
+      float e = __expf(-fabsf(g));
+      float sigmoid = __fdividef(g >= 0.f ? 1.f : e, 1.f + e);
+      float value = values[j] * inv * weight[j];
+      values[j] = __bfloat162float(__float2bfloat16_rn(value * (g * sigmoid)));
+      maximum = fmaxf(maximum, fabsf(values[j]));
+    }
+    maximum = __uint_as_float(__reduce_max_sync(0xffffffff, __float_as_uint(maximum)));
+    float scale = __fdiv_rn(fmaxf(maximum, 1e-10f), 448.f);
+    if (lane == 0)
+      scales[Column ? head * tokens + token : row] = scale;
+    float inverse;
+    asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(inverse) : "f"(scale));
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+      float divided;
+      if (isfinite(maximum)) {
+        float magnitude = fabsf(values[j]), initial = magnitude * inverse;
+        float corrected = __fmaf_rn(__fmaf_rn(-initial, scale, magnitude), inverse, initial);
+        divided = copysignf(corrected, values[j]);
+      } else {
+        divided = __fdiv_rn(values[j], scale);
+      }
+      divided = fminf(448.f, fmaxf(-448.f, divided));
+      data[static_cast<int64_t>(row) * 128 + lane + j * 32] = __nv_fp8_e4m3(divided);
+    }
+  }
+}
+
+void gated_quantize(TensorView x, TensorView gamma, TensorView gate,
+                    TensorView data, TensorView scales, bool column) {
+  for (auto tensor : {gamma, gate, data, scales})
+    TVM_FFI_ICHECK(same_cuda_device(tensor, x)) << "gated quantization device mismatch";
+  TVM_FFI_ICHECK(x.ndim() == 3 && x.size(0) > 0 && x.size(1) == 48 && x.size(2) == 128 &&
+                 gate.ndim() == 3 && gate.size(0) == x.size(0) &&
+                 gate.size(1) == 48 && gate.size(2) == 128 &&
+                 gamma.ndim() == 1 && gamma.size(0) == 128 &&
+                 data.ndim() == 2 && data.size(0) == x.size(0) && data.size(1) == 6144 &&
+                 scales.ndim() == 2 && scales.size(0) == x.size(0) && scales.size(1) == 48)
+      << "gated quantization requires model heads, output data, and scales";
+  TVM_FFI_ICHECK(has_dtype(x, kDLBfloat, 16) && has_dtype(gate, kDLBfloat, 16) &&
+                 has_dtype(gamma, kDLFloat, 32) && has_dtype(data, kDLFloat8_e4m3fn, 8) &&
+                 has_dtype(scales, kDLFloat, 32))
+      << "gated quantization requires BF16 input/gate, FP8 data, and FP32 gamma/scales";
+  TVM_FFI_ICHECK(x.stride(0) >= 6144 && x.stride(1) == 128 && x.stride(2) == 1 &&
+                 gate.stride(0) >= 6144 && gate.stride(1) == 128 && gate.stride(2) == 1 &&
+                 gamma.stride(0) == 1 && data.stride(0) == 6144 && data.stride(1) == 1 &&
+                 scales.stride(0) == (column ? 1 : 48) &&
+                 scales.stride(1) == (column ? x.size(0) : 1))
+      << "gated quantization layout mismatch";
+  constexpr int64_t max_offset = (int64_t(1) << 62) - 1;
+  TVM_FFI_ICHECK(fits_int32_flat_offsets(data, false) &&
+                 x.stride(0) <= max_offset / x.size(0) &&
+                 gate.stride(0) <= max_offset / x.size(0) &&
+                 aligned(x, 2) && aligned(gate, 2) && aligned(gamma, 4) && aligned(scales, 4))
+      << "gated quantization offset or alignment is invalid";
+  for (auto input : {x, gamma, gate})
+    TVM_FFI_ICHECK(disjoint_storage(data, input) && disjoint_storage(scales, input))
+        << "gated quantization outputs overlap inputs";
+  TVM_FFI_ICHECK(disjoint_storage(data, scales))
+      << "gated quantization outputs overlap each other";
+  auto stream = stream_for(x, "gated_quantize");
+#define GATED_QUANT(R, C)                                                           \
+  launch_kernel(gated_quant128_kernel<R, C>,                                        \
+      (x.size(0) * 48 + 4 * R - 1) / (4 * R), 128, 0, stream,                       \
+      static_cast<const __nv_bfloat16 *>(x.data_ptr()),                              \
+      static_cast<const float *>(gamma.data_ptr()),                                 \
+      static_cast<const __nv_bfloat16 *>(gate.data_ptr()),                           \
+      static_cast<__nv_fp8_e4m3 *>(data.data_ptr()),                                  \
+      static_cast<float *>(scales.data_ptr()), static_cast<int>(x.size(0)),          \
+      x.stride(0), gate.stride(0))
+  if (column) {
+    GATED_QUANT(1, true);
+  } else if (x.size(0) >= 32144) {
+    GATED_QUANT(4, false);
+  } else {
+    GATED_QUANT(2, false);
+  }
+#undef GATED_QUANT
+  finish_cuda_launch(stream, "gated_quantize");
+  record_variant(kGatedNormFp8Linear, true);
 }

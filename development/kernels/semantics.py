@@ -289,6 +289,31 @@ class Operators:
         )
 
     @func
+    def gated_norm_fp8_linear(
+        x: Tensor[(2, 48, 128), DType.bf16],
+        gamma: Tensor[(128,), DType.f32],
+        gate: Tensor[(2, 48, 128), DType.bf16],
+        weight: Tensor[(256, 6144), DType.fp8e4m3],
+        weight_scale: Tensor[(2, 48), DType.f32],
+    ):
+        # Logical dequantization is an HIR estimate, not native Tensor Core work.
+        values = tf.cast(x, "f32")
+        mean = tf.reduce(tf.square(values), (-1,), True, "mean")
+        normalized = tf.cast(
+            values * tf.rsqrt(mean + 1e-6) * gamma * tf.silu(tf.cast(gate, "f32")),
+            "bf16",
+        )
+        groups = tf.reshape(tf.cast(normalized, "f32"), (2, 48, 128))
+        maximum = tf.reduce(groups, (-1,), True, "abs_max")
+        scale = tf.clamp(maximum, 1e-10, INFINITY) / 448.0
+        data = tf.cast(tf.clamp(groups / scale, -448.0, 448.0), "fp8e4m3")
+        activations = tf.reshape(tf.cast(data, "f32") * scale, (2, 6144))
+        expanded = tf.repeat_interleave(weight_scale, 128, axis=0)
+        expanded = tf.repeat_interleave(expanded, 128, axis=1)
+        weights = tf.cast(weight, "f32") * expanded
+        return tf.cast(tf.matmul(activations, tf.transpose(weights, (1, 0))), "bf16")
+
+    @func
     def fp8_linear(
         x: Tensor[(2, 5120), DType.bf16],
         weight: Tensor[(256, 5120), DType.fp8e4m3],

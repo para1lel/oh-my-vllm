@@ -161,6 +161,15 @@ It writes the BF16 residual sum and keeps the normalized BF16 value in registers
 The projection keeps its previous GEMM provider and mathematical scale values.
 At most 32 rows use the previous CUDA residual RMS and quantization chain.
 
+Scaled GDN output uses fused gated RMS and FP8 quantization before its previous GEMM.
+Each token has 48 heads of width 128. The kernel keeps the gated RMS BF16 rounding before FP8 conversion.
+
+It accepts packed token strides and removes the intermediate BF16 array.
+Column-major activation scales use one head row per warp.
+K-major scales use two head rows per warp with less than 32144 token rows, and four with at least 32144.
+PDL waits before input reads. The caller stream owns the launch and output lifetime.
+Unscaled GDN output keeps BF16 normalization and its ordinary projection.
+
 The large gate/up path rounds physical row capacity to a multiple of four for scale alignment.
 Its fused kernel writes logical rows directly into that storage.
 Each call clears at most three tail rows and packs 43520 bytes of checkpoint scales.

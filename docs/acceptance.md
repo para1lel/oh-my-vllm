@@ -13,6 +13,11 @@ The record keeps Nsight counters, HIR estimates for R2 and N256, rejected candid
 
 ## Phase-latency verification
 
+The [gated projection diagnosis](../bench/evidence/2026-10-10-gated-projection-diagnosis.json) applies to dirty-source changes from `d95be77`.
+Sixteen affected full-operation cases passed numerical, dispatch, and speed checks. Twenty gated GPU checks and one GPU twin check passed.
+The record keeps twenty-four candidate rows, thirteen counters per launch, HIR estimates, and four sixteen-output model groups.
+Prefix-hit batch 1 failed the two diagnostic gates. The full 317-case and fifteen-row collections stay pending.
+
 The full fifteen-row collection for the current source is pending.
 Use [requirements](requirements.md) for the phase gates and [testing](testing.md) for collection commands.
 
@@ -44,7 +49,7 @@ Its ordinary prefill median was `1.322744261 s`, with bound `0.44175381006472536
 Its wall spread was `0.010685699735574266`.
 
 Filtered operator coverage and short outputs have diagnostic scope.
-The full 301-case matrix and fifteen phase workloads stay active.
+The full 317-case matrix and fifteen phase workloads stay active.
 
 
 The [dispatch diagnosis](../bench/evidence/2026-10-10-dispatch-diagnosis.json) keeps subsequent dirty-source operator and three-case DSpark capacity measurements.

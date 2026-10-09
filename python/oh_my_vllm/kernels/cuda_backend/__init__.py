@@ -14,6 +14,7 @@ _FUNCTIONS = (
     "variant_launch_count",
     "quantize",
     "rms_quantize",
+    "gated_quantize",
     "silu_mul",
     "gates",
     "rms",
@@ -44,6 +45,7 @@ _VARIANT_OPERATIONS = (
     "recurrent",
     "append",
     "convolution",
+    "gated_norm_fp8_linear",
 )
 _BASE_CUDA_FLAGS = ("-O3", "--generate-code=arch=compute_100a,code=sm_100a")
 _MANIFEST = "oh_my_vllm_cuda.provenance.json"

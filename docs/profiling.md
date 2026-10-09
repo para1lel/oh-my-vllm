@@ -72,7 +72,7 @@ An occupancy increase alone is not a latency result.
 Swizzle selection used five randomized timing rounds.
 SM selection and the subsequent swizzle confirmation used ten rounds with random order.
 Candidates must keep rounding, scales, and persistent writes equal.
-The 301 cases supply operator acceptance.
+The 317 cases supply operator acceptance.
 They keep the previous 230 cases and add fused projection, FP8 projection, full GDN prefill, and selected-output preparation cases.
 Full-model phase collection supplies framework acceptance.
 
@@ -128,7 +128,7 @@ Different profile replays supply these counters.
 Selected-output paths keep all required K/V and remove unused historical attention and MLP output.
 Complete-operation comparison passed twenty-one selected cases with three rounds and twenty pairs per round.
 The source was dirty, so these measurements are diagnostic.
-The full 301-case regression stays active.
+The full 317-case regression stays active.
 Reports record different loaded module identities for owned pointwise CUDA and FP8 GEMM.
 
 Short-output diagnosis uses 32768 input tokens and sixteen outputs.
@@ -211,7 +211,7 @@ The candidate used a copy into padded storage. The production fused path writes 
 
 Thirty GPU checks passed. These include changed input and scales, side-stream graph replay, and rejected scale layouts and pitches.
 Four affected full-operation cases passed numerical and speed checks with the full operator timing protocol.
-These dirty-source diagnostics do not supply the full current-source 301-case or fifteen-row verdict.
+These dirty-source diagnostics do not supply the full current-source 317-case or fifteen-row verdict.
 
 The current GEMM profile uses 168 registers and 160256 dynamic shared-memory bytes, with 11.72% occupancy.
 Its L2 hit rate is 88.60%, and DRAM traffic is about 5.489 GB.
@@ -255,3 +255,42 @@ The hybrid candidate preallocated output. Only the previous operation included o
 
 Compact-KV attention decreased time by small amounts at batches 1 and 2, and increased time at batch 4. Native paged attention stays selected.
 TRT increased full gate/up time at 624, 1248, and 2496 rows. The FP16 softmax candidate has an SM107 guard and failed that guard on B200.
+
+## Gated RMS and FP8 output projection
+
+The GDN output path fuses gated RMS and activation quantization, then uses its previous GEMM.
+The BF16 rounding point stays before FP8 conversion. Packed inputs and checkpoint scales keep their values.
+This removes one intermediate BF16 array and one launch.
+
+The [gated projection diagnosis](../bench/evidence/2026-10-10-gated-projection-diagnosis.json) keeps twenty-four full-operation candidate rows and sixteen affected formal cases.
+Candidate timing uses three rounds, twenty pairs per round, and one hundred operations inside each timed graph.
+Each sample replays that graph once. All candidates kept FP8 bytes, scales, and outputs bitwise equal to the previous CUDA chain.
+
+At 32144 rows, four head rows per warp decreased mean full-operation time by about 0.153 ms.
+The one-sided 95% lower bound was about 0.151 ms.
+At 624, 1248, and 2496 rows, two head rows per warp decreased mean time by about 4.816, 8.666, and 18.187 microseconds.
+Their lower bounds were about 4.806, 8.578, and 17.911 microseconds.
+
+Column-major scales use one head row per warp. Four head rows per warp increased time at 1, 8, and 32 token rows.
+
+All sixteen affected cases passed numerical, dispatch, and speed checks with the full per-case protocol.
+The matrix keeps the previous 301 cases and adds sixteen gated output cases, for 317 cases.
+Twenty GPU checks passed, with packed views, changed graph inputs, bitwise output equality with the previous CUDA chain, and rejected storage.
+One subsequent GPU twin check passed at the existing TileLang tolerances.
+
+The different Nsight replay used 32 registers, zero dynamic shared storage, and 94.19% occupancy for fused gated quantization.
+It had 979841280 DRAM bytes and 23.63% L2 hits.
+The GEMM used 168 registers, 201216 dynamic shared-memory bytes, 12.51% occupancy, and 546286080 DRAM bytes.
+Its L2 hit rate was 95.20%. Each launch has all thirteen requested counters.
+
+TileFoundry estimates use R2, N256, 48 heads, and K6144. They do not show native GEMM resource layout.
+
+HIR twins supply adapters for all HIR functions. The GDN recurrence example takes normalized Q/K and keeps FP32 state.
+Full GDN timing keeps its existing frozen chunked reference. Prototype records do not contain the library hash at measurement time.
+
+Sixteen-output ordinary prefill ratios were about 2.897 and 2.984 at batches 1 and 4.
+Wall spreads were about 0.294% and 0.695%.
+
+Prefix-hit ratios were about 3.699 and 3.027, with spreads about 12.598% and 1.070%.
+The batch-1 prefix group failed the two diagnostic gates. Keep that full group for investigation.
+All four groups used two full warmups and five measurements. Full 4096-output phase acceptance stays pending.

@@ -17,6 +17,7 @@ CONFIGURATIONS = {
     "add_norm_fp8_linear": {"tokens": 2, "columns": 34816},
     "fp8_linear": {"tokens": 624, "width": 17408, "columns": 5120, "silu": True},
     "gated_norm": {"tokens": 2},
+    "gated_norm_fp8_linear": {"tokens": 2, "columns": 5120},
     "norm_rope": {"tokens": 2, "heads": 24},
     "quant": {"tokens": 2, "width": 5120, "column": True},
     "silu_quant": {"tokens": 2, "width": 17408, "column": True},

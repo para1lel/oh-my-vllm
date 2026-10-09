@@ -1,4 +1,15 @@
 export const sourceNotes = {
+  gatedLinear: {
+    title: "门控归一化投影的五个输入", intro: "每个 GDN 头有 128 个值, 刚好组成一个 FP8 scale 分组. 融合先将带 SiLU 门的 RMS 结果舍入为 BF16, 再量化这一结果.",
+    entries: [
+      ["x", "GDN 输出, BF16 [行数, 48, 128].", "每个头独立计算均方根, token 行可以来自 packed 视图."],
+      ["gamma", "128 个 FP32 RMS 乘数.", "所有头使用相同的逐维权重, checkpoint.norm 用 offset=False 读取原权重."],
+      ["gate", "BF16 [行数, 48, 128] 输出门.", "来自 QKVZ 的 z 部分, 其 SiLU 值乘到归一化结果上."],
+      ["weight", "FP8 [输出列数, 6144] checkpoint 权重.", "把 48 个头合并为 6144 维, 再投影到目标隐藏维度 5120."],
+      ["scale", "FP32 [输出列数/128, 48] checkpoint scale.", "每项对应 128x128 权重块, 与每行 128 元素的激活 scale 一同用于 GEMM."],
+      ["_GATED_OP", "gated_norm_fp8_linear 的语义操作对象.", "返回独立且连续的 BF16 [行数, 输出列数] 张量."],
+    ],
+  },
   normalizedLinear: {
     title: "融合投影的特征, 权重与 scale", intro: "残差相加先舍入为 BF16, RMS 在 FP32 归约, 归一化结果再舍入为 BF16. 量化使用这一舍入后的值, 两份输出都有独立存储.",
     entries: [

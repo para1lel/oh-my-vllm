@@ -63,7 +63,35 @@ def test_full_gdn_prefill_covers_only_prefill_rows():
         (144, 32144),
         (624, 32144),
     }
-    assert len(cases()) == 301
+    assert len(cases()) == 317
+
+
+def test_gated_projection_covers_all_model_rows_and_keeps_previous_case_count():
+    expected = {
+        1,
+        2,
+        4,
+        5,
+        8,
+        10,
+        16,
+        20,
+        32,
+        624,
+        1248,
+        2496,
+        32144,
+        32288,
+        32290,
+        32768,
+    }
+    observed = {
+        case["configuration"]["tokens"]
+        for case in cases()
+        if case["configuration"]["operation"] == "gated_norm_fp8_linear"
+    }
+    assert observed == expected
+    assert len(cases()) - len(observed) == 301
 
 
 def test_partial_preparation_includes_cold_mtp_and_live_verification_maxima():

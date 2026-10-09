@@ -155,6 +155,14 @@ MLP gate/up 路径在超过 32 行时, 用一个 CUDA kernel 合并残差 RMS �
 投影保持之前的 GEMM provider 与数学上的 scale 值.
 至多 32 行使用之前的 CUDA 残差 RMS 与量化链.
 
+带 scale 的 GDN 输出先融合 gated RMS 与 FP8 量化, 再使用之前的 GEMM.
+每个 token 有 48 个 head, 每个宽度为 128. Kernel 在转换为 FP8 前保留 gated RMS 的 BF16 舍入.
+它接受 packed token stride, 省去 BF16 中间数组.
+列主序激活 scales 每 warp 处理一个 head 行.
+K 主序 scales 在少于 32144 个 token 行时每 warp 处理两个 head 行, 达到该边界时处理四个 head 行.
+PDL 在读取输入前等待. 调用者流负责 launch 与输出生命周期.
+不带 scale 的 GDN 输出保持 BF16 归一化与普通投影.
+
 大型 gate/up 路径将物理行容量向上取整到四的倍数, 满足 scale 对齐.
 融合 kernel 将实际行直接写入该存储.
 每次调用清零至多三行尾部, 并打包 43520 字节的 checkpoint scales.

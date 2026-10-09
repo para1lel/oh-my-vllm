@@ -59,6 +59,7 @@ def cases():
                     workload, "add_norm_fp8_linear", tokens=n, width=5120, columns=34816
                 )
                 add(workload, "gated_norm", tokens=n, heads=48, width=128)
+                add(workload, "gated_norm_fp8_linear", tokens=n, columns=5120)
                 # Layer.full_attention is shared by target and MTP. The actual
                 # projection chain now fuses Q/K RMS/RoPE, V.contiguous(), and
                 # append. Batch.positions/fa_slots and DraftGraph buffers are

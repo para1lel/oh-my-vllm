@@ -69,7 +69,8 @@ The canonical model counts the same required rows, disjoint parameter slices, an
 
 Offline registration shares the output budget with Python. Proposers reserve the scheduler's bonus token.
 
-The current full CPU collection passed 741 tests, with 410 GPU tests deselected.
+The current full CPU collection passed 748 tests, with 430 GPU tests deselected and 65 subtests passed.
+Collection started before the subsequent GPU twin test was added.
 Subsequent common-tail checks passed 52 tests. These include cross-request address reuse and pre-boundary write exclusion.
 
 Required Rust tests, format, line width, and Clippy checks passed.
@@ -117,10 +118,20 @@ They had zero recompute preemptions and no OOM. Their source is from before the 
 The current full phase, operator, nine-case capacity, and service collections stay pending.
 
 The [acceptance index](acceptance.md) keeps operator, boundary, paired, and service measurements with their source scope.
-The 301 operator cases and nine 262144-token boundary cases stay active.
+The 317 operator cases and nine 262144-token boundary cases stay active.
 Complete service verification stays active.
 
 Forty-eight affected operator cases passed numerical and speed checks with the full per-case protocol.
+
+GDN output now fuses gated RMS and FP8 quantization before the previous GEMM.
+The kernel keeps BF16 rounding and packed input strides. All sixteen added full-operation cases passed numerical, dispatch, and speed checks.
+Twenty GPU checks passed. Three CPU twin checks and one GPU twin check passed.
+The previous 301 case objects stay equal to their parent source.
+
+The [gated projection diagnosis](../bench/evidence/2026-10-10-gated-projection-diagnosis.json) keeps candidate timing, hardware counters, and original hashes.
+Sixteen-output ordinary prefill ratios are about 2.897 and 2.984 at batches 1 and 4.
+Prefix-hit ratios are about 3.699 and 3.027. Batch-1 prefix spread is about 12.598%, so that full diagnostic group failed the two gates.
+Full current-source phase, operator, capacity, and service collections stay pending.
 
 ## Documents and evidence
 

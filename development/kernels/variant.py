@@ -1,7 +1,15 @@
 """Fail-closed CUDA host-dispatch checks for formal model-shape fixtures."""
 
 REQUIRED_FAST = frozenset(
-    ("norm", "add_norm", "gated_norm", "qk", "recurrent", "convolution")
+    (
+        "norm",
+        "add_norm",
+        "gated_norm",
+        "qk",
+        "recurrent",
+        "convolution",
+        "gated_norm_fp8_linear",
+    )
 )
 
 

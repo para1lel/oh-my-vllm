@@ -34,6 +34,11 @@
 <<math "S'_t=e^{g_t}S_{t-1},\\quad \\Delta_t=\\beta_t(v_t-S'_tk_t),\\quad S_t=S'_t+\\Delta_t k_t^{\\mathsf T},\\quad o_t=S_tq_t/\\sqrt{128}">>
 <p>g 是 log-decay, beta 是更新门, q/k/v 是当前头向量. 衰减先减少旧状态幅度, delta 修正状态对当前 k 的预测, 外积将两个 128 维向量变成 128x128 矩阵, 每项是对应向量项的乘积, 把修正写入状态, 再用 q 读出结果. 输出经每头带 SiLU(z) 门控的 RMSNorm, 投影回隐藏维度.</p>
 <p>短 decode 与验证使用自有递归 CUDA 实现, 根据候选槽保存各位置状态. planner 将多于一个输入且没有草稿的片段归为 prefill, 使用 FlashInfer 批量算法, 初始状态来自 state_reads, 最终状态写 final_state_writes. Q/K 在调用前显式归一化, log-decay 转成乘法衰减, 两条路线共享同一数学契约.</p>
+<h2>门控 RMS 怎样直接进入 FP8 输出投影</h2>
+<p>GDN 有 48 个头, 每个头 128 维, 合并后的宽度为 6144. 每头独立做 RMSNorm, 乘 gamma 与 SiLU(z), 再将结果舍入为 BF16. FP8 量化从这个 BF16 值求每组最大绝对值和 scale, 输出投影将 6144 维变回 5120 维. 这两个舍入层次决定了融合应该保留哪些中间值.</p>
+<p>当前 gated_norm_fp8_linear 在寄存器中保留门控 RMS 的 BF16 结果, 随即量化, 省去整块 BF16 中间数组的写入与再次读取. 每个 128 维头就是一个激活 scale 分组, 一个 warp 可以完成归约与量化. 不同行数使用每个 warp 处理一, 二或四个头行的配置, 由完整链计时选择. 权重, FP32 scale, FP32 累加与 BF16 投影输出保持原定义.</p>
+<<source "gatedLinear" "展开门控归一化投影的接口与字段文档">>
+<p>至多 32 行时, 激活 scale 沿行索引连续, 配合原 TRT 投影; 更多行保持 K-major scale 与自有 CUTLASS 投影. 自有 CUDA 入口在读取 x, gamma 和 gate 前等待 PDL 依赖, 按真实 token stride 读取 packed 视图, 并检查输出与输入存储分离. 捕获后的图更新输入值, 继续使用同一地址和同一数学契约.</p>
 <h2>词表投影何时执行</h2>
 <p>forward 得到本轮所有 hidden, planner 只选需要产生输出的行. 最多 32 行的词表投影走独立 CuTe-DSL GEMM, 更多行走 F.linear 后转 FP32. 中间 prefill 不需要采样, 避免为无需输出的行构造完整词表分数.</p>
 <p>模型计算一路携带位置, 页表, 状态读写槽和序列边界. 数值公式说明每层算什么, 这些元数据说明从谁的历史读, 将结果写到哪里. 下一章将词表分数变成保留的 ID 与可见输出.</p>

@@ -244,7 +244,7 @@ CUTLASS is permitted.
 CUDA is the default. TileLang is an explicit comparison choice with no silent fallback.
 Apply accuracy, framework, context, and model service gates independently.
 
-Statically derive the largest legal invocation of each implementation path in each of the twelve workloads.
+Statically derive the largest legal invocation of each implementation path in each of the fifteen workloads.
 Deduplicate identical configurations.
 Use different phases where implementation paths differ.
 Do not independently maximize incompatible dimensions or use dynamic tracing for formal case selection.

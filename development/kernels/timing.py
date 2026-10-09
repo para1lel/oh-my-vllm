@@ -7,6 +7,15 @@ def reference_operator(module, name):
     """Bind the whole frozen operation, including Python-side copies/allocations."""
     from importlib import import_module
 
+    if (module, name) == ("fp8", "gated_norm_linear"):
+        normalization = reference_operator("normalization", "rms_norm")
+        projection = reference_operator("fp8", "linear")
+
+        def frozen_gated_chain(x, gamma, gate, weight, scale):
+            normalized = normalization(x, gamma, gate=gate)
+            return projection(normalized.flatten(1), weight, scale)
+
+        return frozen_gated_chain
     if (module, name) == ("fp8", "add_norm_linear"):
         # Compose original frozen kernels. The reference files and pin stay equal.
         normalization = reference_operator("normalization", "add_rms_norm")
