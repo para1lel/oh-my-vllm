@@ -155,7 +155,7 @@ Its warp instruction count changed from 1412736 to 1178112. Register count chang
 
 GDN gates at 128 to 4095 rows use 128 threads. Small and large dispatch keep their previous tiles.
 
-The small-row chain comparison used three rounds with twenty pairs and one hundred graph repetitions per sample.
+The small-row chain comparison used three rounds with twenty pairs and one hundred operation repetitions inside each timed graph. Each sample replays that graph once.
 At 8, 16, and 32 rows, the previous CUDA chain saved about 0.672, 0.538, and 0.692 microseconds against fusion.
 
 All three time-saved confidence lower bounds were positive. Full outputs were equal.
@@ -202,7 +202,7 @@ Each call clears at most three tail rows and returns only the logical output row
 Padding, packing, and tail clearing do not increase the theoretical bound.
 
 A full-operation candidate comparison included residual RMS, quantization, scale packing, padding, and GEMM.
-Three rounds used twenty pairs and one hundred graph repetitions per sample.
+Three rounds used twenty pairs and one hundred operation repetitions inside each timed graph. Each sample replays that graph once.
 
 At M 32144, mean time saved was about 0.187 ms, with a one-sided 95% lower bound of about 0.185 ms.
 At M 32290, the values were about 0.046 ms and 0.044 ms.
@@ -220,3 +220,38 @@ The previous automatic seven-stage, swizzle-16 profile used 210432 dynamic share
 These different replays identify resource use. The timing comparisons supply the timing verdict.
 The TileFoundry report uses a representative HIR shape. It does not show the full native FP8 GEMM shape or layout.
 The [scale and stage diagnosis](../bench/evidence/2026-10-10-fp8-scale-stage-diagnosis.json) keeps each launch's thirteen counters, estimates, and source identities.
+
+## Projection CTA clusters at 624 to 2496 rows
+
+The five shape-selected one-SM projections use a two-block CTA cluster at 624 to 2496 rows.
+[Architecture](architecture.md#target-computation-and-attention) specifies their N/K pairs.
+TMA multicast supplies a shared activation tile to the two output-column blocks.
+The previous arithmetic, K-major scales, automatic stages, PDL, and caller stream stay the same.
+
+The [cluster diagnosis](../bench/evidence/2026-10-10-fp8-cluster-diagnosis.json) compares thirty-five full operations and ten GEMM primitives.
+Full operations include RMS or SiLU, quantization, allocation, and GEMM.
+The measurements use three rounds, twenty pairs per round, and one hundred operation repetitions inside each timed graph. Each sample replays that graph once.
+All full-operation outputs were bitwise equal. The rows include 625, 1023, 2047, and 2048, across the swizzle boundary.
+
+For gate/up, mean time decreased by about 8.544, 20.496, and 32.252 microseconds at 624, 1248, and 2496 rows.
+The one-sided 95% lower bounds were about 7.988, 19.321, and 30.663 microseconds.
+
+Fifteen affected static cases passed numerical and speed checks with the full per-case protocol.
+Eighteen GPU checks passed, with changed graph inputs, scales, PDL settings, and row boundaries.
+A subsequent eight-test collection also checked that activation scales stay the same.
+
+A different R624 profiling run shows 168 registers, 201216 dynamic shared-memory bytes, and 11.83% occupancy for the owned GEMM.
+Its L2 hit rate is 72.90%, with 215003648 DRAM bytes and 36.52% long-scoreboard stalls.
+The record keeps thirteen counters for each launch of the CUDA and pinned TileLang operations.
+The TileFoundry HIR uses R2 and N256. It does not show the full native GEMM resource layout.
+
+Sixteen-output prefix-hit diagnosis has prefill medians of 36.778 and 122.464 ms for batches 1 and 4.
+The bound ratios are about 3.657 and 3.044. Spreads are about 6.537% and 1.206%.
+These diagnostics do not supply the fifteen-row, 4096-output verdict.
+Prototype build records do not contain the library hash at measurement time.
+
+Hybrid scale layouts and N64 tiles did not pass the primitive speed checks. Those experiments did not include scale packing.
+The hybrid candidate preallocated output. Only the previous operation included output allocation.
+
+Compact-KV attention decreased time by small amounts at batches 1 and 2, and increased time at batch 4. Native paged attention stays selected.
+TRT increased full gate/up time at 624, 1248, and 2496 rows. The FP16 softmax candidate has an SM107 guard and failed that guard on B200.

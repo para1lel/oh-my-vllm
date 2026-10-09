@@ -142,6 +142,13 @@ Wide gate/up matrices with at least 2048 rows use an eight-tile swizzle for cach
 At least 32144 rows use swizzle 16 for the two-SM, 34816 by 5120 gate/up matrix.
 This path uses five pipeline stages and column-major activation and weight scales.
 Other large projections keep K-major scales and automatic stage selection.
+
+At 624 to 2496 rows, five one-SM projection shapes use a CTA cluster with two blocks along the output-column dimension.
+The N/K pairs are 34816/5120, 16384/5120, 14336/5120, 5120/17408, and 5120/6144.
+TMA multicast sends the same activation tile to the two blocks.
+Each block computes different output columns. Scales, accumulation, rounding, PDL, and the caller stream keep their previous contracts.
+Theoretical work keeps the same logical rows and parameter ranges.
+
 Ordinary projections without scales use `F.linear`.
 
 

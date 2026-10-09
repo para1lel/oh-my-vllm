@@ -60,7 +60,7 @@ GDN 值使用从 packed 行读取的向量复制. FP32 递归 batch 2 和 4 使�
 
 离线注册向 Python 共享输出预算. Proposer 为调度器的 bonus token 预留额度.
 
-当前完整 CPU collection 通过 741 项测试, 取消选择 402 项 GPU 测试.
+当前完整 CPU collection 通过 741 项测试, 取消选择 410 项 GPU 测试.
 后续共同尾部检查通过 52 项, 包括跨请求地址复用与边界前写入排除.
 要求的 Rust 测试, 格式, 行宽和 Clippy 检查通过.
 当前归一化投影 GPU 检查通过三十项. 教程检查通过十项节选测试与九项浏览器测试.
@@ -87,6 +87,15 @@ GDN gates 在 128 至 4095 行使用 128 线程.
 短输出诊断中, 普通 batch 1 和 4 的 prefill 倍率约为 2.947 和 3.035.
 前缀命中倍率约为 3.873 和 3.145. 这些诊断使用十六个输出 token.
 完整阶段验收保持 4096 个输出, 仍待完成.
+
+五种中等行数 one-SM 投影在 624 到 2496 行使用包含两个 block 的 CTA cluster.
+TMA multicast 保持算术和理论计算量不变.
+十五项受影响完整操作用例和十八项 GPU 重放/布局检查通过.
+随后八项测试增加了激活 scale 不变检查.
+
+[cluster 诊断](../bench/evidence/2026-10-10-fp8-cluster-diagnosis.json) 对三十五项完整操作进行比较. 它保留从另一轮重放采集的硬件计数器.
+十六输出 token 的前缀命中 prefill 下界比值在 batch 1 和 4 约为 3.657 和 3.044.
+完整的当前源码阶段, 算子, 容量和服务集合仍待执行.
 
 Prefill capture 现在要求 32 GiB 空闲显存. Replay 命中保持既有路径.
 使用该保护时, 三项 dirty-source DSpark 容量检查在 batch 1, 2, 4 完成输入 258048 和输出 4096.

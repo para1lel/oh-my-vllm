@@ -137,6 +137,13 @@ FP8 activation 使用逐行 128-value scale.
 至少 32144 行的 34816 by 5120 gate/up 矩阵在 two-SM 路径使用 swizzle 16.
 该路径使用五级流水与列主序激活和权重 scales.
 其他大型投影保持 K-major scales 与自动级数选择.
+
+在 624 到 2496 行范围内, 五种 one-SM 投影形状使用沿输出列维度含两个 block 的 CTA cluster.
+N/K 组合为 34816/5120, 16384/5120, 14336/5120, 5120/17408 和 5120/6144.
+TMA multicast 将同一激活 tile 发送到两个 block.
+每个 block 计算不同的输出列. scale, 累加, 舍入, PDL 和调用者流保持原契约.
+理论计算量保持相同的有效行数和参数范围.
+
 不带 scale 的普通 projection 使用 `F.linear`.
 
 这避开已观察到的 FlashInfer CUTLASS 在 17 至 32 row 的不稳定性.

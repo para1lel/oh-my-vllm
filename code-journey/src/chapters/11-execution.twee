@@ -41,6 +41,10 @@
 <p>大型 FP8 GEMM 使用项目维护的 SM100 CUTLASS CUDA 入口. 它保持原有 FP8 数据, 128 维 scale 分块, FP32 累加与 BF16 输出, 同时显式控制初始化 stream 和 PDL. 小行数继续采用已验证的 TRT 路径, 词表 CuTe-DSL GEMM 也传递 PDL 设置.</p>
 <p>宽 gate/up 投影从 M=2048 起使用八 tile swizzle; 当 M 至少 32144, N=34816, K=5120 时, two-SM 路径使用 swizzle 16 与五级流水. 流水级数表示用于重叠输入传输与计算的 shared-memory buffer 层数. swizzle 改变相邻 tile 的遍历布局, 让它们更容易复用 L2 内的数据, 矩阵运算与舍入保持一致. 第 12 章说明如何用缓存命中, HBM 流量和同条件计时选择这类参数, 再核对完整模型效果.</p>
 <p>该大型 gate/up 路径还使用列主序 scale, 让相邻行的缩放值在存储中连续, 减少 scale 的传输开销. 公开权重和 scale 保持 checkpoint 布局; 每次调用将 43520 字节的权重 scale 重新打包, 图重放也能读到 scale 的修改. 激活 scale 的行跨度需要四行对齐, 因而物理行容量向上取整到四的倍数. 融合 RMS 量化直接写入这块存储, 每次清零至多三行尾部, GEMM 返回后裁剪到实际行数. 这些补齐与打包只算实现开销, 理论下界仍按实际有效行计算.</p>
+<h2>中等行数投影怎样复用同一激活 tile</h2>
+<p>前缀命中 32144 token 后, 32768 token 的输入还剩 624 行要计算. batch 2 和 4 分别合并为 1248 和 2496 行. 在这些尺寸上, GEMM 沿输出列切成许多 tile, 相邻列 tile 会读取相同的激活块. CTA 是 cooperative thread array, 即一个协作执行的 CUDA thread block; CTA cluster 将几个 block 放在同一协作范围内, 由 TMA (Tensor Memory Accelerator) 将同一输入 tile multicast 到各 block 的共享内存.</p>
+<p>这里 one-SM 指每个 tile 的 Tensor Core 计算使用一个 SM (Streaming Multiprocessor, GPU 的计算单元). 当前 one-SM 路径在 624 到 2496 行采用沿 N 维含两个 block 的 cluster. 一个 block 计算一组输出列, 另一个计算相邻列, 二者复用激活传输. 适用的 N/K 组合为 34816/5120, 16384/5120, 14336/5120, 5120/17408 和 5120/6144, 分别覆盖 gate/up, GDN QKVZ, FA QKV, MLP down 和 GDN output 投影. N 是输出宽度, K 是输入宽度. 行数范围和投影形状共同决定路由, 大 prefill 的 two-SM 配置继续按自己的测量选择.</p>
+<p>cluster 改变输入传输与 block 协作, 仍使用相同的 K-major scale, FP32 累加与 BF16 输出. 三十五项完整操作比较计入 RMS 或 SiLU, 量化, 分配与 GEMM, 检查输出逐位相同, 并覆盖 2047 到 2048 行的 swizzle 边界. 第 12 章所述的 Nsight 指标用于核对资源变化, 独立成对计时用于选择配置; 理论下界仍按相同有效行与参数读取计算.</p>
 <h2>自有 CUDA 算子如何实现这些契约</h2>
 <p>kernels.backend 在进程级选择默认 CUDA 后端. cuda_backend.factory_for 为量化, SiLU, gates, RMS, 残差 RMS, RoPE, RMS/RoPE, append, 注意力准备, 卷积, Q/K 归一化, GDN 递归和 decode partial/merge 建立入口. 所有调用使用调用者当前 CUDA 流, 保持与 PyTorch 操作的顺序.</p>
 <p>kernels.cu 用 warp (32 个线程的执行组) 做求和或最大值归约, 用向量读写减少访存指令. RMS 与量化每组计算归约和 scale; packed 投影视图按真实 token stride 取值; Q/K 准备链合并归一化, RoPE 和缓存写入; 卷积读取最近三项并保存候选; GDN 按头更新矩阵, 将所需位置写入 pool.</p>

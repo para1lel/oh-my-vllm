@@ -157,7 +157,6 @@
 | `share` | 动词 | 不同软件执行路径使用相同物理模型权重, tensor 存储或 graph 内存 pool. |
 | `bidirectional attention` | 名词 | 读取已接受 context KV 及全部 7 个临时 proposal KV row 的草稿 attention. |
 | `synthetic token IDs` | 名词 | 按固定索引公式生成的基准输入 ID, 不包含自然语言文本或 tokenization. |
-
 | `DAG` | 名词 | 语义操作及其数据依赖构成的有向无环图. |
 | `HBM` | 名词 | 保存参数与持久数据的 GPU 高带宽内存. |
 | `SFU` | 名词 | 执行指定原生特殊函数指令的 GPU 资源. |
@@ -171,6 +170,8 @@
 | `pipeline stage` | 名词 | 用于使 GEMM 输入传输与计算并行执行的一块 shared-memory buffer. |
 | `column-major scale` | 名词 | 相邻行索引在存储中连续的 FP32 scale 布局. |
 | `K-major scale` | 名词 | 相邻归约分块索引在存储中连续的 FP32 scale 布局. |
+| `CTA cluster` | 名词 | 一组共同执行并可使用硬件 multicast 的 CUDA thread block. |
+| `TMA multicast` | 名词 | Tensor Memory Accelerator 将一个输入 tile 传输到 CTA cluster 中每个 block 的共享内存. |
 
 ## 维护
 

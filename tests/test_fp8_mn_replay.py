@@ -13,7 +13,13 @@ pytestmark = [
 
 @pytest.fixture(scope="module")
 def replay_stream():
-    return torch.cuda.Stream()
+    from oh_my_vllm.kernels.cuda_backend import groupwise
+
+    # Preserve worker-lifetime scratch while this module owns a test stream.
+    with pytest.MonkeyPatch.context() as context:
+        context.setattr(groupwise, "_WORKSPACES", {})
+        yield torch.cuda.Stream()
+        torch.cuda.synchronize()
 
 
 @pytest.mark.parametrize("rows", [32145, 32290])

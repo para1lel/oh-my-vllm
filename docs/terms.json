@@ -1714,6 +1714,27 @@
         "K-major scale",
         "K-major scales"
       ]
+    },
+    {
+      "term": "CTA cluster",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Group of CUDA thread blocks that run together and can use hardware multicast.",
+      "translation": "一组共同执行并可使用硬件 multicast 的 CUDA thread block.",
+      "forms": [
+        "CTA cluster",
+        "CTA clusters"
+      ]
+    },
+    {
+      "term": "TMA multicast",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Tensor Memory Accelerator transfer of one input tile to shared memory in each block of a CTA cluster.",
+      "translation": "Tensor Memory Accelerator 将一个输入 tile 传输到 CTA cluster 中每个 block 的共享内存.",
+      "forms": [
+        "TMA multicast"
+      ]
     }
   ]
 }

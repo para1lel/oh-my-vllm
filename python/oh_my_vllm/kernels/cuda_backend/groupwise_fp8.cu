@@ -44,7 +44,8 @@ namespace gemm {
 using namespace cute;
 
 template <int ScaleGranularityM, int ScaleGranularityN, int ScaleGranularityK, bool ScaleMajorK,
-          int MmaSM, typename DTypeIn, typename DTypeOut, int PipelineStages = 0>
+          int MmaSM, typename DTypeIn, typename DTypeOut, int PipelineStages = 0,
+          int ClusterN = 1>
 cudaError_t CutlassGroupwiseScaledGEMMSM100(void* float_buffer, size_t float_buffer_size_in_bytes,
                                             DTypeIn* A_ptr, DTypeIn* B_ptr, float* SFA_ptr,
                                             float* SFB_ptr, DTypeOut* D_ptr, int m, int n, int k,
@@ -78,7 +79,7 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void* float_buffer, size_t float_buf
   using ElementCompute = float;
 
   using MmaTileShape_MNK = Shape<cute::Int<MmaSM * 128>, _128, _128>;
-  using ClusterShape_MNK = Shape<cute::Int<MmaSM>, _1, _1>;
+  using ClusterShape_MNK = Shape<cute::Int<MmaSM>, cute::Int<ClusterN>, _1>;
 
   // NOTE(Zihao):: UMMA::Major::MN, UMMA::Major::MN is the fastest configuration.
 
@@ -239,10 +240,10 @@ void groupwise_fp8(TensorView a, TensorView weight, TensorView scale_a,
   }
   TVM_FFI_ICHECK(scale_major_k || (mma_sm == 2 && m >= 32144 && n == 34816 && k == 5120))
       << "MN scales require the full two-SM gate/up shape";
-  auto run = [&](auto sm, auto stages, auto major_k) {
+  auto run = [&](auto sm, auto stages, auto major_k, auto cluster_n) {
     return oh_my_vllm::gemm::CutlassGroupwiseScaledGEMMSM100<
         1, 128, 128, decltype(major_k)::value, decltype(sm)::value, cutlass::float_e4m3_t,
-        cutlass::bfloat16_t, decltype(stages)::value>(
+        cutlass::bfloat16_t, decltype(stages)::value, decltype(cluster_n)::value>(
         workspace.data_ptr(), workspace.size(0),
         static_cast<cutlass::float_e4m3_t*>(a.data_ptr()),
         static_cast<cutlass::float_e4m3_t*>(weight.data_ptr()),
@@ -269,16 +270,27 @@ void groupwise_fp8(TensorView a, TensorView weight, TensorView scale_a,
   }
   // The full two-SM gate/up shape saves time with five mainloop stages.
   // Other shapes keep the template's automatic storage calculation.
-  auto status = mma_sm == 1 ? run(std::integral_constant<int, 1>{},
-                                std::integral_constant<int, 0>{}, std::true_type{})
+  // Measured medium projections multicast activation tiles across two N CTAs.
+  // Keep the original scale layout, pipeline stages, swizzle, and arithmetic.
+  const bool medium_projection = m >= 624 && m <= 2496 &&
+      ((k == 5120 && (n == 34816 || n == 16384 || n == 14336)) ||
+       (n == 5120 && (k == 17408 || k == 6144)));
+  auto status = mma_sm == 1
+                    ? (medium_projection
+                         ? run(std::integral_constant<int, 1>{},
+                               std::integral_constant<int, 0>{}, std::true_type{},
+                               std::integral_constant<int, 2>{})
+                         : run(std::integral_constant<int, 1>{},
+                               std::integral_constant<int, 0>{}, std::true_type{},
+                               std::integral_constant<int, 1>{}))
                 : m >= 32144 && n == 34816 && k == 5120
                     ? (scale_major_k
                          ? run(std::integral_constant<int, 2>{},
-                               std::integral_constant<int, 5>{}, std::true_type{})
+                               std::integral_constant<int, 5>{}, std::true_type{}, std::integral_constant<int, 1>{})
                          : run(std::integral_constant<int, 2>{},
-                               std::integral_constant<int, 5>{}, std::false_type{}))
+                               std::integral_constant<int, 5>{}, std::false_type{}, std::integral_constant<int, 1>{}))
                     : run(std::integral_constant<int, 2>{},
-                          std::integral_constant<int, 0>{}, std::true_type{});
+                          std::integral_constant<int, 0>{}, std::true_type{}, std::integral_constant<int, 1>{});
   TVM_FFI_ICHECK(status == cudaSuccess) << cudaGetErrorString(status);
   if (debug) {
     auto result = cudaStreamSynchronize(stream);

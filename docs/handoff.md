@@ -69,7 +69,7 @@ The canonical model counts the same required rows, disjoint parameter slices, an
 
 Offline registration shares the output budget with Python. Proposers reserve the scheduler's bonus token.
 
-The current full CPU collection passed 741 tests, with 402 GPU tests deselected.
+The current full CPU collection passed 741 tests, with 410 GPU tests deselected.
 Subsequent common-tail checks passed 52 tests. These include cross-request address reuse and pre-boundary write exclusion.
 
 Required Rust tests, format, line width, and Clippy checks passed.
@@ -100,6 +100,15 @@ The [scale and stage diagnosis](../bench/evidence/2026-10-10-fp8-scale-stage-dia
 Short-output diagnosis has prefill ratios of about 2.947 and 3.035 for ordinary batches 1 and 4.
 Prefix-hit ratios are about 3.873 and 3.145. These diagnostics keep sixteen output tokens.
 Full phase acceptance keeps 4096 outputs and stays pending.
+
+Five one-SM projections use two-block CTA clusters at 624 to 2496 rows.
+TMA multicast keeps the same arithmetic and theoretical work.
+Fifteen affected full-operation cases and eighteen GPU replay/layout checks passed.
+A subsequent eight-test collection checked that activation scales stay the same.
+
+The [cluster diagnosis](../bench/evidence/2026-10-10-fp8-cluster-diagnosis.json) compares thirty-five full operations. It keeps hardware counters from a different replay.
+Sixteen-output prefix-hit prefill ratios are about 3.657 and 3.044 at batches 1 and 4.
+Full current-source phase, operator, capacity, and service collections stay pending.
 
 Prefill capture now has a 32 GiB free-memory guard. Replay hits keep their existing path.
 With this guard, three dirty-source DSpark capacity checks completed input 258048 and output 4096 at batches 1, 2, and 4.

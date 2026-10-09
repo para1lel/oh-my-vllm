@@ -6,6 +6,11 @@ Four affected full-operation cases passed numerical and speed checks. Thirty GPU
 The record keeps stage and full scale-layout comparisons, all profiler counters, and sixteen-output full-model diagnosis.
 The full current-source phase, operator, capacity, and service collections stay pending.
 
+The [CTA cluster diagnosis](../bench/evidence/2026-10-10-fp8-cluster-diagnosis.json) applies to subsequent dirty-source changes from `d4e0f1c`.
+Fifteen affected full-operation cases passed numerical and speed checks. Eighteen GPU replay and layout checks passed.
+The record compares thirty-five full operations with output allocation and bitwise output checks.
+The record keeps Nsight counters, HIR estimates for R2 and N256, rejected candidates, and sixteen-output prefix-hit measurements.
+
 ## Phase-latency verification
 
 The full fifteen-row collection for the current source is pending.
