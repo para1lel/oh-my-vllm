@@ -7,8 +7,6 @@ Date: 2026-09-22. Status: accepted and implemented.
 Use batch-submission-to-first-kept-token TTFT with per-request monotonic clocks.
 Include registration, queue time, scheduling, transport, and sampling.
 Use the median of five repetition maxima after two full warmups.
-The twelve rows must meet 95% throughput,110% TTFT, and 10% spread limits.
-Pin baseline source `e9f169d16b9408bb9ae44f75072b91a5521d733c` in its isolated environment.
 
 Keep total context 262144, block 784, state dtypes, and numerical tolerances.
 Add `--mamba-blocks` for different Rust GDN allocation and Python tensor capacity.
@@ -27,10 +25,8 @@ Block IDs directly address their own group tensors.
 
 Future automatic sizing must keep admission, prefix, reference, and eviction invariants with Rust allocation ownership.
 
-The two engines must keep the full workload resident without preemption.
-Match effective token capacity, CPU affinity, and GPU model/memory/driver.
-A matching raw block-count integer does not show equivalent capacity.
+The full workload must stay resident without preemption.
+Record effective token capacity, CPU affinity, and GPU model/memory/driver.
+FA and GDN capacities use different units.
 Record full configuration and measured source identity.
 See [requirements](../requirements.md), [testing](../testing.md), and [acceptance](../acceptance.md).
-
-The future roofline policy does not change this active protocol.

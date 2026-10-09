@@ -16,9 +16,10 @@ from safetensors import safe_open
 
 from oh_my_vllm.ir import fp8
 from oh_my_vllm.ir.gdn_prefill import gdn_prefill
+from oh_my_vllm.ir.gdn_prepare import gdn_prepare
 from oh_my_vllm.ir.logits import logits_gemm
-from oh_my_vllm.ir.pointwise import add_rms_norm, delta_gates, rms_norm, silu_mul
-from oh_my_vllm.ir.recurrent import causal_conv, gdn_recurrent
+from oh_my_vllm.ir.pointwise import add_rms_norm, rms_norm, silu_mul
+from oh_my_vllm.ir.recurrent import gdn_recurrent
 from oh_my_vllm.ir.state import prepare_attention
 from oh_my_vllm.kernels import attention
 from oh_my_vllm.kernels.mtp_attention import MTPAttention
@@ -175,15 +176,19 @@ class Layer:
         self, x: torch.Tensor, batch: Batch, cache: tuple[torch.Tensor, torch.Tensor]
     ) -> torch.Tensor:
         conv_pool, state_pool = cache
-        mixed, z = self.qkvz(x).split([10240, 6144], -1)
-        mixed = causal_conv(
-            mixed,
+        mixed, z, decay, beta = gdn_prepare(
+            x,
+            self.qkvz.weight,
+            self.qkvz.scale,
+            self.ba.weight,
             self.conv,
             conv_pool,
             batch.sequence_ids,
             batch.starts,
             batch.state_reads,
             batch.state_writes,
+            self.a_log,
+            self.dt_bias,
         )
         q, k, v = mixed.split([2048, 2048, 6144], -1)
         q, k, v = (
@@ -191,7 +196,6 @@ class Layer:
             k.reshape(-1, 16, 128),
             v.reshape(-1, 48, 128),
         )
-        decay, beta = delta_gates(self.ba(x), self.a_log, self.dt_bias)
         out = batch.delta(q, k, v, decay, beta, state_pool)
         out = rms_norm(out, self.gate_norm, gate=z.reshape(-1, 48, 128))
         return self.out(out.flatten(1))

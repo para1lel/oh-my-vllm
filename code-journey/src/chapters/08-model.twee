@@ -13,7 +13,7 @@
 <p>Layer.forward_residual 将残差相加与 RMS 合并: 整理本层输入, 执行注意力或 GDN, 再将这一分支加入残差并归一化, 最后执行 MLP. 返回新分支与保留残差, 下一层继续. 最后一层之后再做最终 add_rms_norm, 保持代码规定的 BF16 舍入位置.</p>
 <h2>FP8 投影怎样减少矩阵计算成本</h2>
 <p>Linear 有两条分支: 权重有 scale 时使用 FP8 投影与 FP32 缩放系数, scale 为 None 时用普通 F.linear. GDN 的 b/a 投影属于后者, 两份 BF16 权重合成 96 列 (各 48 列) 的门参数. Checkpoint.linear 要求一起打包的投影都有 scale 或都无 scale, 避免把两种布局混合. Linear.silu 同样分别走普通 SiLU 后投影, 或融合 FP8 路线. FP8 是 8 位浮点格式, 表达范围和精度需要 scale 配合. 激活每行按 128 个元素分组量化到 E4M3FN, 权重按 128x128 分块缩放, 矩阵乘法组合二者 scale 得到 BF16 输出.</p>
-<p>FlashInfer 是提供 GPU 推理算子的独立库, TRT-LLM 是其调用的 TensorRT-LLM kernel 路线, CUTLASS 提供 CUDA 矩阵乘法模板实现. GEMM 表示通用矩阵乘法, CuTe-DSL 用 Python 描述这类 GPU kernel. kernels.fp8.linear 根据行数选择独立 FlashInfer 实现: 最多 32 行使用 TRT-LLM 和列优先激活 scale, 更多行使用 CUTLASS 与行优先 scale. 较大行数和输出列数还决定矩阵乘法配置. 显式路由保留经过验证的数值与性能行为.</p>
+<p>FlashInfer 是提供 GPU 推理算子的独立库, TRT-LLM 是其调用的 TensorRT-LLM kernel 路线, CUTLASS 提供 CUDA 矩阵乘法模板实现. GEMM 表示通用矩阵乘法, CuTe-DSL 用 Python 描述这类 GPU kernel. kernels.fp8.linear 根据行数选择独立 FlashInfer 实现: 最多 32 行使用 TRT-LLM 和列优先激活 scale, 更多行使用项目维护的 SM100 CUTLASS CUDA 入口与行优先 scale. 此入口显式控制 PDL 和大投影的 tile 调度. 较大行数和输出列数还决定矩阵乘法配置. 显式路由保留经过验证的数值与性能行为.</p>
 <p>MLP 先合并 gate 与 up 投影, 用 SiLU(gate) 乘 up, 再经 down 投影回 5120 维. <<imath "\\operatorname{SiLU}(x)=x\\sigma(x)">>, 其中 <<imath "\\sigma(x)=1/(1+e^{-x})">>, 输出位于 0 和 1 之间. 语义层保留中间 BF16 舍入, 编译阶段可以在满足使用条件时融合量化与 SiLU, 减少中间读写.</p>
 <h2>FA 如何生成 Q/K/V 并读取历史</h2>
 <p>Q 是当前位置查询, K 是历史匹配特征, V 是读出的内容. 合并 qkv 投影产生 14336 列: Q 与 gate 合计 12288, K 和 V 各 1024. 每个查询头的 512 列前半为 Q, 后半为 gate. 24 个查询头共用 4 个 KV 头, 每个 KV 头对应 6 个查询头.</p>

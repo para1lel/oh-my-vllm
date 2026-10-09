@@ -1,9 +1,9 @@
 # Profiling 与诊断
 
-用测量定位吞吐或 TTFT 差距来源.
+用测量定位 prefill 与 decode 时延差距.
 Profiling 与正式计时分开.
 TileFoundry 的 arithmetic, memory 和 roofline 结果是估算.
-[需求](requirements.zh.md) 中后续 roofline 门槛尚未替代当前验收协议.
+使用 [需求](requirements.zh.md) 中的阶段时延协议.
 
 ## 日志与关联
 
@@ -56,3 +56,34 @@ Warmup/JIT 保留在 NVTX range 外.
 原始 profiler CSV 放在 Git 外.
 取消时停止所属 profiler 进程组.
 命令和限制见 [内核开发](kernels.zh.md#分析与-profiling).
+
+
+## 大型算子调优
+
+先使用模型的有效尺寸, 再搜索 tile.
+记录时延, DRAM 与 L2 吞吐, L2 命中率, 寄存器数量, shared storage, occupancy 和 warp 等待.
+用 HIR 估计选择假设, 再用 CUDA Events 与 Nsight 计数器验证.
+Occupancy 增加本身不能说明时延改善.
+
+Swizzle 选择使用五轮随机顺序计时.
+SM 选择与后续 swizzle 确认使用十轮随机顺序计时.
+候选必须保持相同的舍入, scales 与持久写入.
+固定的 230 项门槛用于算子验收, 完整模型阶段采集用于框架验收.
+
+| 优化 | 诊断观察 | 选择 |
+|---|---|---|
+| FP8 gate/up GEMM 遍历 | 在 32144 by 34816 by 5120 时, DRAM 为 75.04%, L2 命中为 26.10%. Swizzle 8 将时延中位数从 9.235 改为 6.989 ms. | M 至少 2048 且 N 至少 32768 时使用 swizzle 8. |
+| 小型 FP8 gate/up GEMM | M 为 624 时, one-SM 约 0.141 ms, two-SM 约 0.170 ms. | 宽投影在 M 至少 4096 时使用 two-SM tile. |
+| 四通道卷积 | 32144 行时, scalar 为 1.603 ms, vector 为 0.624 ms. Warp 指令从 1.484 billion 减为 0.589 billion. | 每线程四个相邻通道; 大型输入八行, 较小输入四行. |
+| SiLU 与 FP8 量化 | 32144 行时, 单行版本为 1.130 ms, 四行版本为 0.711 ms. 624 行时, 两行版本为 0.0165 ms. | 大型输入每 warp 四行; 较小模型输入两行. |
+| Gated RMS | 32144 token 行时, 单行版本为 0.399 ms, 四行版本为 0.310 ms. | 大型输入每 warp 四行; 小型输入单行. |
+
+表格使用诊断算子微基准与独立 profiler replay.
+短输出完整模型诊断属于不同范围.
+它们不提供十五项阶段验收的判定.
+卷积 vector 路径的 shared-memory bank conflict 为零.
+其 DRAM 吞吐为 15.80%, SM 吞吐为 83.38%, short-scoreboard 等待为 2.43%.
+该 profile 支持指令与 shared-memory 开销减少的解释.
+
+K=256 GEMM tile, 较小 M tile 和 two-SM down 投影没有表现出稳定的成对增益.
+调度不使用这些候选. 失败尝试保存在外部证据目录.

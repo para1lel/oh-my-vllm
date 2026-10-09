@@ -14,7 +14,6 @@ MTP 使用 BF16 GDN 状态, 普通执行使用 FP32.
 Rust 保留 speculative slot, 保护前一已接受状态直到下一次执行消费它.
 Worker 返回保留的 target token, 接受草稿数量和下一批草稿.
 Rust 只回滚已调度且被拒绝的草稿.
-匹配基线使用相同状态精度.
 
 ## 影响
 

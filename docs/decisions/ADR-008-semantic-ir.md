@@ -36,8 +36,7 @@ No activation donation is currently enabled.
 ## Verification and alternatives
 
 Target-model integration includes four compiled units and changed-metadata graph replay.
-The full correctness/context suites,147 operator cases, and twelve framework rows passed on the identified source.
-Three full prefix-batch 1 attempts failed spread. The fourth full collection passed.
+The acceptance index gives correctness, context, and operator evidence with its source scope.
 Compilation success alone was not performance acceptance.
 
 See [acceptance](../acceptance.md) and [open limits](../audit.md).

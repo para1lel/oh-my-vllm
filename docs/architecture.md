@@ -132,8 +132,14 @@ See [ADR-003](decisions/ADR-003-mtp-state-slots.md) and [ADR-007](decisions/ADR-
 
 The loader validates head dimension 256, rotary dimension 64, theta 10000000, and RMS epsilon `1e-6`.
 FP8 activations use per-row 128-value scales.
-At most 32 FP8 projection rows use TRT-LLM GEMM from a third-party library. Larger FP8 batches use CUTLASS.
+At most 32 FP8 projection rows use TRT-LLM GEMM from a third-party library.
+
+Larger FP8 batches use the owned SM100 CUTLASS launcher.
+It keeps arbitrary FP32 block scales, FP32 accumulation, and BF16 output.
+The launcher selects PDL on the caller stream.
+Wide gate/up matrices with at least 2048 rows use an eight-tile swizzle for cache locality.
 Ordinary projections without scales use `F.linear`.
+
 
 This avoids the observed FlashInfer CUTLASS instability at 17 through 32 rows.
 Small BF16 vocabulary projections use FlashInfer CuTe-DSL GEMM.
@@ -261,7 +267,7 @@ This budget applies to standalone workers and comparison workers.
 
 At a full cache budget, replacement admission must have four observations.
 Its decayed count must be more than twice the coldest evictable entry.
-An available budget permits capture on the first miss.
+An available budget lets capture start on the first miss.
 
 Counts decay each 512 observations.
 The cache skips new captures with less than 4 GiB of free GPU memory.
@@ -273,11 +279,48 @@ Resident graphs continue to replay.
 
 Pools are shared in each graph family, with different target/draft/proposal families and no overlapping replay.
 Capture restores persistent state and FA writes. Output copies precede pool reuse.
-Prefill uses compiled units without manual graph capture.
+
+Target prefill has different eight-entry ordinary and DSpark families.
+These families capture fixed query/context sizes with native or ragged attention and at least 12 GiB capture headroom.
+KV pages, state slots, tokens, and attention metadata stay dynamic.
+Warmup and capture restore all destination FA/GDN values in `finally`.
+Replay validates all metadata replacements and restores captured bindings before copies.
+
+FA 2 prefill uses the compiled path.
 Dynamo limits are 4096 with warnings at 256.
 
 These limits do not show bounded compiler memory with indefinite shape changes.
 See [open audit work](audit.md).
+
+## CUDA streams and PDL
+
+The GDN preparation operation has two branches from the same normalized input.
+The origin stream computes the FP8 QKV/Z projection and convolution.
+One side stream computes the BF16 decay/beta projection and gates.
+The side stream waits for the input and joins the origin on success or failure.
+Stream records keep tensors alive until their consumers finish.
+The branches do not share a writable FP8 workspace.
+
+Owned pointwise CUDA launches use programmatic stream serialization.
+The producer trigger lets a dependent grid start.
+The consumer waits before dependent activation or state reads.
+The owned CUTLASS launcher enables the same dependent-launch protocol.
+PDL does not guarantee concurrent residency.
+CUDA Graph capture records the fork/join and dependent launches.
+
+The default allocator uses `graph_capture_record_stream_reuse:True` for joined graph frontiers.
+An explicit `PYTORCH_ALLOC_CONF` takes precedence, then the legacy `PYTORCH_CUDA_ALLOC_CONF` value.
+The wrapper normalizes the selected value to `PYTORCH_ALLOC_CONF`.
+[Development](development.md) lists diagnostic switches.
+
+## Phase model
+
+`performance/` maps observed semantic work to official compute and HBM limits.
+Rust records request submission, first-token, and last-token times and the corresponding steps.
+The binary has a build stamp for Cargo inputs and Rust sources.
+The collector validates this stamp, source identities, checkpoints, loaded libraries, and separate repetition intervals.
+Unknown GPU work blocks acceptance.
+See the [latency model](latency-model.md).
 
 ## Extension boundaries
 

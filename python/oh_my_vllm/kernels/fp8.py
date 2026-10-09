@@ -83,6 +83,16 @@ def linear(
     # scales are column-major; checkpoint weight scales remain row-major.
     small = x.shape[0] <= 32
     data, scale = quantize(x, column_major=small, silu_gate=silu_gate)
+    if NAME == "cuda" and not small:
+        from .cuda_backend.groupwise import gemm
+
+        return gemm(
+            data,
+            weight,
+            scale,
+            weight_scale,
+            mma_sm=2 if x.shape[0] >= 4096 and weight.shape[0] >= 32768 else 1,
+        )
     return gemm_fp8_nt_groupwise(
         data,
         weight,

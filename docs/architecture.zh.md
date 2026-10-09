@@ -128,8 +128,14 @@ FA page 0 为 null page.
 
 Loader 校验 head dimension 256, rotary dimension 64, theta 10000000 和 RMS epsilon `1e-6`.
 FP8 activation 使用逐行 128-value scale.
-最多 32 个 FP8 projection row 使用独立 TRT-LLM GEMM; 更大的 FP8 batch 使用 CUTLASS.
+最多 32 个 FP8 projection row 使用第三方库的 TRT-LLM GEMM.
+
+更大的 FP8 batch 使用自有 SM100 CUTLASS 启动入口.
+它保留任意 FP32 block scale, FP32 累积和 BF16 输出.
+启动入口在调用者 stream 上选择 PDL.
+至少 2048 行的宽 gate/up 矩阵使用八 tile swizzle, 改善 cache 局部性.
 不带 scale 的普通 projection 使用 `F.linear`.
+
 这避开已观察到的 FlashInfer CUTLASS 在 17 至 32 row 的不稳定性.
 小批 BF16 vocabulary projection 使用 FlashInfer CuTe-DSL GEMM.
 
@@ -256,10 +262,47 @@ Resident graph 继续 replay.
 
 各 graph family 内共享 pool, target / draft / proposal family 独立, replay 不重叠.
 Capture 恢复持久状态和 FA 写入; 输出复制先于 pool 复用.
-Prefill 使用编译单元, 不做手动 graph capture.
+
+Target prefill 为普通和 DSpark 模式各设独立的八条目 family.
+这些 family 捕获 query/context 大小固定的 native 或 ragged attention, 并保留至少 12 GiB capture 显存余量.
+KV page, state slot, token 和 attention metadata 保持动态.
+预热与 capture 在 `finally` 中恢复所有目标 FA/GDN 值.
+Replay 先验证全部 metadata 替换, 在复制前恢复捕获的绑定.
+
+FA 2 prefill 使用编译路径.
 Dynamo 限制为 4096, 在 256 时警告.
 这些限制不能证明无限 shape 变化下编译器内存有界.
 参见 [开放审计工作](audit.zh.md).
+
+## CUDA stream 与 PDL
+
+GDN preparation 操作从同一归一化输入分出两条分支.
+Origin stream 计算 FP8 QKV/Z 投影与 convolution.
+一个 side stream 计算 BF16 decay/beta 投影与 gate.
+Side stream 等待输入, 并在成功或失败时汇合到 origin.
+Stream 记录让 tensor 存活到其消费者完成.
+两条分支不共用可写的 FP8 workspace.
+
+自有 pointwise CUDA 启动使用 programmatic stream serialization.
+Producer trigger 允许依赖的 grid 开始.
+Consumer 在读取依赖的 activation 或 state 之前等待.
+自有 CUTLASS 启动入口启用同一 dependent-launch 协议.
+PDL 不保证并发驻留.
+CUDA Graph capture 记录 fork/join 与 dependent launch.
+
+默认 allocator 为已汇合的 graph frontier 使用 `graph_capture_record_stream_reuse:True`.
+显式 `PYTORCH_ALLOC_CONF` 优先, 其次是旧变量 `PYTORCH_CUDA_ALLOC_CONF` 的值.
+包装脚本将所选值统一为 `PYTORCH_ALLOC_CONF`.
+诊断开关见 [Development](development.zh.md).
+
+## 阶段模型
+
+`performance/` 将观测到的语义工作映射到官方计算与 HBM 上限.
+Rust 记录请求提交, 首 token 和末 token 的时刻及其对应 step.
+二进制包含 Cargo 输入与 Rust 源码的构建标记.
+采集器验证该标记, 源码身份, checkpoint, 已加载库及各自独立的重复区间.
+未知 GPU 工作会阻止验收.
+参见 [时延模型](latency-model.zh.md).
 
 ## 扩展边界
 

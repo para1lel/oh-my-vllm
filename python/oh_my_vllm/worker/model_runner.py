@@ -10,6 +10,7 @@ import torch
 from oh_my_vllm.ir import compile_forward
 from oh_my_vllm.kernels.attention import PagedAttention
 from oh_my_vllm.models.qwen import Batch, Qwen
+from oh_my_vllm.performance.execution import certify_feedback, record, tracing
 from oh_my_vllm.worker.batch_plan import BLOCK, plan_request, validate_batch
 from oh_my_vllm.worker.graph_cache import GraphCache
 from oh_my_vllm.worker.protocol import RequestOutput, SchedulerOutput, WorkerOutput
@@ -102,6 +103,9 @@ class RuntimeConfig:
 
 class OhMyVllmWorker:
     def __init__(self, config: RuntimeConfig):
+        from oh_my_vllm.ir.execution import execution_policy
+
+        self.execution_policy = execution_policy()
         if config.num_gpu_blocks < 6 or config.max_model_len <= 0:
             raise ValueError("invalid runtime capacity")
         self.config = config
@@ -218,6 +222,16 @@ class OhMyVllmWorker:
         # capture scratch separate from the draft and proposal graph families.
         self.graph_pool = None
         self.dspark_graph_pool = None
+        self.prefill_graph_pool = None
+        self.prefill_dspark_graph_pool = None
+        # Large activation captures have a separate, small resident budget and
+        # a larger headroom requirement than decode/verification captures.
+        self.prefill_graph_cache = GraphCache(
+            capacity=8,
+            free_bytes=lambda: torch.cuda.mem_get_info()[0],
+            reserved_bytes=lambda: torch.cuda.memory_reserved(),
+            min_capture_free_bytes=12 << 30,
+        )
         from oh_my_vllm.worker.mtp import MTP
 
         self.mtp = (
@@ -353,6 +367,33 @@ class OhMyVllmWorker:
             return WorkerOutput(registration_errors)
         validate_batch(plans)
         plans.sort(key=lambda p: not p.prefill)
+        if tracing():
+            record(
+                "target",
+                requests=[
+                    {
+                        "request_id": p.request.request_id,
+                        "query": len(p.writes),
+                        "unique_token_ids": sorted(set(p.request.token_ids)),
+                        "fa_block_table": p.request.fa_block_table,
+                        "context": p.request.num_computed_tokens,
+                        "prefill": p.prefill,
+                        "drafts": len(p.drafts),
+                        "sample_rows": len(p.sample_indices),
+                        "plain_greedy": self.samplers[
+                            p.request.request_id
+                        ].plain_greedy,
+                        "state_source": p.source,
+                        "state_destinations": [w for w in p.writes if w > 0],
+                        "state_row_writes": p.writes,
+                        "mamba_block_table": p.request.mamba_block_table,
+                    }
+                    for p in plans
+                ],
+                state_dtype="torch.bfloat16"
+                if self.config.speculative_tokens
+                else "torch.float32",
+            )
         ids, positions, sequence_ids, writes, slots, pages = [], [], [], [], [], []
         starts, page_starts, last_lengths = [0], [0], []
         for sequence, plan in enumerate(plans):
@@ -423,6 +464,7 @@ class OhMyVllmWorker:
             prefill_tokens=sum(len(p.writes) for p in plans if p.prefill),
         )
         token_tensor = metadata[7]
+        hidden = None
         graph_logits = None
         features = None
         if use_graph:
@@ -478,7 +520,55 @@ class OhMyVllmWorker:
             else:
                 hidden, graph_logits = graph.replay(token_tensor, batch, tables)
                 features = graph.features if self._is_dspark() else None
-        if graph_logits is None:
+        if (
+            not decode_only
+            and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1"
+            and (self.attention.native or self.attention.ragged)
+        ):
+            from oh_my_vllm.worker.prefill_graph import PrefillGraph
+
+            prefill_key = (
+                tuple(len(p.writes) for p in plans),
+                tuple(p.request.num_computed_tokens for p in plans),
+                batch.prefill_sequences,
+            )
+            prefill_family = "prefill_dspark" if self._is_dspark() else "prefill"
+            if self.prefill_graph_cache.should_use(prefill_family, prefill_key):
+                attention_plan = self.attention._ir_reference_plan
+
+                def capture_prefill():
+                    logger.info(
+                        "Capture prefill graph: queries=%s contexts=%s",
+                        *prefill_key[:2],
+                    )
+                    pool_name = (
+                        "prefill_dspark_graph_pool"
+                        if self._is_dspark()
+                        else "prefill_graph_pool"
+                    )
+                    if getattr(self, pool_name) is None:
+                        setattr(self, pool_name, torch.cuda.graph_pool_handle())
+                    try:
+                        return PrefillGraph(
+                            self.model,
+                            self.caches,
+                            token_tensor,
+                            batch,
+                            attention_plan,
+                            pool=getattr(self, pool_name),
+                            capture_features=self._is_dspark(),
+                        )
+                    except Exception:
+                        if not self.prefill_graph_cache.has_family(prefill_family):
+                            setattr(self, pool_name, None)
+                        raise
+
+                graph = self.prefill_graph_cache.get_or_create(
+                    prefill_family, prefill_key, capture_prefill
+                )
+                if graph is not None:
+                    hidden, features = graph.replay(token_tensor, batch, attention_plan)
+        if hidden is None:
             if self._is_dspark():
                 hidden, features = self.feature_unit(token_tensor, batch, self.caches)
             else:
@@ -516,6 +606,26 @@ class OhMyVllmWorker:
             successful_counts,
             successful_outputs,
         ) = self._commit_plans(plans, starts, logits, greedy, masks, mask_errors)
+        if tracing():
+            committed_counts = {
+                p.request.request_id: count
+                for p, count in zip(successful_plans, successful_counts, strict=True)
+            }
+            record(
+                "commit",
+                copies=copies,
+                outputs=[
+                    {
+                        "request_id": o.request_id,
+                        "kept": len(o.token_ids),
+                        "computed": committed_counts.get(o.request_id, 0),
+                        "accepted": o.num_accepted_draft_tokens,
+                        "finished": o.finish_reason is not None,
+                        "state_source": self.sources.get(o.request_id),
+                    }
+                    for o in results
+                ],
+            )
         if copies:
             sources, destinations = (
                 device_tensor(values, device="cuda")
@@ -540,7 +650,7 @@ class OhMyVllmWorker:
                     *draft_args, samplers=self.samplers, serving=self.serving
                 )
                 if self._is_dspark()
-                else proposer.propose(*draft_args)
+                else proposer.propose(*draft_args, samplers=self.samplers)
             )
             for output in successful_outputs:
                 output.new_draft_token_ids = drafts[output.request_id]
@@ -684,6 +794,7 @@ class OhMyVllmWorker:
             torch.cat([rows for _, rows, _ in drawn]) if len(drawn) > 1 else drawn[0][1]
         )
         host_rows = device_rows.tolist()
+        certify_feedback()
         sampled = {}
         offset = 0
         for index, _, count in drawn:
@@ -695,6 +806,10 @@ class OhMyVllmWorker:
         logger.info(
             "Target graph cache",
             extra={"fields": self.graph_cache.snapshot()},
+        )
+        logger.info(
+            "Prefill graph cache",
+            extra={"fields": self.prefill_graph_cache.snapshot()},
         )
         if self.mtp is not None:
             logger.info(
@@ -726,6 +841,7 @@ class OhMyVllmWorker:
         self.sources.clear()
         self.computed.clear()
         self.graph_cache.clear()
+        self.prefill_graph_cache.clear()
         self.caches = []
         self.model = None
         self.attention = None

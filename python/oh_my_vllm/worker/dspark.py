@@ -11,6 +11,7 @@ import torch
 
 from oh_my_vllm.ir import compile_forward
 from oh_my_vllm.models.dspark import DSparkModel
+from oh_my_vllm.performance.execution import certify_feedback, record, tracing
 from oh_my_vllm.worker.batch_plan import BLOCK, PlannedRequest
 from oh_my_vllm.worker.graph_cache import GraphCache
 from oh_my_vllm.worker.protocol import RequestOutput
@@ -305,7 +306,8 @@ class DSpark:
                 remaining = self.max_tokens - cursor - 1
                 if sampler is not None:
                     remaining = min(
-                        remaining, sampler.params.max_tokens - len(sampler.generated)
+                        remaining,
+                        sampler.params.max_tokens - len(sampler.generated) - 1,
                     )
                 limit = min(config.block_size, remaining)
                 if limit > 0:
@@ -325,6 +327,14 @@ class DSpark:
                         )
                     )
         if kept_features:
+            if tracing():
+                record(
+                    "dspark_inject",
+                    rows=len(positions),
+                    requests=[p.request.request_id for p in plans],
+                    queries=counts,
+                    contexts=[p.request.num_computed_tokens for p in plans],
+                )
             position_tensor, slot_tensor = device_vectors(
                 [positions, slots], device=self.device
             )
@@ -339,6 +349,25 @@ class DSpark:
             matcher is None and (sampler is None or sampler.plain_greedy)
             for _, _, _, _, _, sampler, matcher in eligible
         )
+        trace_operation = None
+        if tracing():
+            trace_operation = record(
+                "dspark_backbone",
+                rows_per_request=config.block_size,
+                anchors=[anchor for _, _, _, anchor, _, _, _ in eligible],
+                tables=[table for _, table, _, _, _, _, _ in eligible],
+                contexts=[cursor for _, _, cursor, _, _, _, _ in eligible],
+                incoming_contexts=[
+                    next(
+                        p.request.num_computed_tokens
+                        for p in plans
+                        if p.request.request_id == rid
+                    )
+                    for rid, _, _, _, _, _, _ in eligible
+                ],
+                requests=[rid for rid, _, _, _, _, _, _ in eligible],
+                greedy=greedy,
+            )
         results = self._run(
             [anchor for _, _, _, anchor, _, _, _ in eligible],
             [cursor for _, _, cursor, _, _, _, _ in eligible],
@@ -352,6 +381,11 @@ class DSpark:
             rows = torch.stack(
                 (tokens.float(), confidence.float(), valid.float()), -1
             ).tolist()
+            certify_feedback()
+            if trace_operation is not None:
+                trace_operation["candidates"] = [
+                    [int(item[0]) for item in row] for row in rows
+                ]
             for item, row in zip(eligible, rows, strict=True):
                 rid, _, _, _, limit, _, _ = item
                 survival = 1.0

@@ -18,7 +18,7 @@
 <p>GPU 启动许多短 kernel 时, CPU 派发也会占时间. CUDA Graph 记录同一形状的一串启动与依赖, 后续 replay 重用它们. 图内数组地址固定, 但每次输入 ID, 位置, 页表和状态槽可以变化, 重放前用 copy_ 更新固定缓冲.</p>
 <<source "graphReplay" "展开 DecodeGraph 重放前的数据更新">>
 <p>DecodeGraph 处理目标计算, DraftGraph 处理单个 MTP 层, ProposalGraph 处理连续草稿提议. DecodeAttention 在图内准备动态长度和分组查询元数据, starts 也按本轮内容复制, 让一个图能服务不同请求.</p>
-<p>捕获本身会运行计算, 写到 FA 和 GDN 持久缓存. 因而初始化先备份候选写区域及会覆盖的 FA 行, 预热编译单元后恢复, 再同步并捕获, 最后在 finally 再次恢复. 图缓存只保存可供后续真实执行的结构, 捕获试跑的状态不会变成请求进度.</p>
+<p>捕获本身会运行计算, 写到 FA 和 GDN 持久缓存. 因而初始化先备份候选写区域及会覆盖的 FA 行, 预热编译单元后恢复, 再同步并捕获, 最后在 finally 再次恢复. 恢复完成后, 请求继续从原来的状态执行.</p>
 <h2>GraphCache 如何限制数量和内存</h2>
 <p>目标图默认上限 32, MTP 草稿和提议共享另一组默认上限 64. 各图族使用独立内存池, 捕获前保留 4 GiB 余量. shape 首次命中记录频率, 空间满时要求新形状反复出现且比冷条目更热, 草稿和提议的淘汰保护下限分别为 32 与 8, 只有已有条目数超过本族下限时才允许从该族淘汰.</p>
 <p>替换先成功构造新图, 再释放旧图, 捕获失败时旧条目继续保留, 错误向上报告并记录重试冷却. 频率周期衰减, 防止很久以前的热点永久占位. MTP 在短窗口反复捕获时进入共享冷却, 已有图仍可重放, 控制分组形状变化造成的捕获开销.</p>
@@ -26,6 +26,18 @@
 <<source "decodeGraphKey" "展开目标图 key 的静态形状边界">>
 <p>例如两个 DSpark 请求分别有 1 行和 3 行, 或分别有 2 行和 2 行, 总数都为 4, 请求数都为 2. 最大行数分别为 3 和 2, 安全 query 上界分别为 5 和 2, 所以第四项区分这两个图. 两个请求的行数为 [1,4] 或 [2,3] 时, 总数都为 5, 安全上界都为 5, 可以共享图.</p>
 <p>目标 GQA 每个 KV 头对应 6 个 Q 头. 四个 query 上界对应至多 6, 12, 30 和 48 行分组查询, 分别适合 8, 16, 32 和 64 行 kernel tile. bucket 保留安全形状并减少冷编译变体, 真实 starts 和因果长度继续限制各请求的有效行. ID 与状态地址作为动态内容复制, 当前请求继续读写自己的缓存.</p>
+<h2>prefill 图怎样重用形状与存储</h2>
+<p>PrefillGraph 处理 native 或 ragged attention 的固定 query/context 形状. 图内只保留 hidden 和 DSpark 所需的特征, 采样随后选择需要的行做词表投影. key 包含每请求 query 数, 每请求已有 context 长度和 prefill 请求数; token IDs, FA 页和 GDN 槽作为动态内容更新.</p>
+<p>attention.plan 会创建新 metadata 张量. replay 先核对所有新张量的形状与 dtype, 在 finally 恢复捕获时的绑定, 再把动态值复制到原存储. 规划失败后, 图仍指向原来保持存活的地址. 这个过程使物理页变化与图地址固定可以同时成立.</p>
+<p>prefill 图单独保留最多 8 个条目, 捕获前检查 12 GiB 余量. 长图包含多流分叉和汇合, 启动包装器默认启用 graph_capture_record_stream_reuse, 让 PyTorch 根据捕获图拓扑复用已释放的临时缓冲. 显式分配器配置可覆盖默认值, 运行证据记录有效设置.</p>
+<h2>GDN 的两条准备分支怎样并行</h2>
+<p>归一化输入同时进入两个独立分支. 主流执行 QKVZ 的 FP8 投影和因果卷积, 侧流执行 BA 的 BF16 投影与 delta gates. 两条分支都只依赖同一个输入, 因而可以在 GPU 上重叠. 随后的 GDN 更新要使用 Q/K/V, decay 和 beta, 所以先等待两边完成.</p>
+<p>ir.gdn_prepare 把这一整套准备过程登记为语义操作. 分叉前侧流等待输入所在流, 涉及的张量记录使用流以维持存储寿命; finally 中主流等待侧流, 输出在汇合后返回. 图捕获记录同样的依赖. OH_MY_VLLM_MULTI_STREAM=0 提供同算子的串行诊断路径.</p>
+<h2>PDL 怎样提前启动依赖消费者</h2>
+<p>PDL 是 Programmatic Dependent Launch. 普通依赖启动通常等待生产者整个 kernel 结束, PDL 允许生产者发出 grid dependency 信号后提前调度消费者. 消费者在读取依赖数据之前调用 cudaGridDependencySynchronize, 保证数据已经发布. 提前获得执行机会可以覆盖启动或独立准备成本, 实际重叠程度由 GPU 资源决定.</p>
+<p>自有 CUDA 入口使用 cudaLaunchKernelEx, 显式指定 programmatic stream serialization 属性. 当前点算子在读取输入之前等待依赖, 随后允许下个 kernel 提前调度. CUDA Graph 捕获保留这些启动属性与依赖. OH_MY_VLLM_CUDA_PDL=0 提供关闭 PDL 的独立进程对照.</p>
+<p>大型 FP8 GEMM 使用项目维护的 SM100 CUTLASS CUDA 入口. 它保持原有 FP8 数据, 128 维 scale 分块, FP32 累加与 BF16 输出, 同时显式控制初始化 stream 和 PDL. 小行数继续采用已验证的 TRT 路径, 词表 CuTe-DSL GEMM 也传递 PDL 设置.</p>
+<p>大 gate/up 投影的 tile 调度采用八 tile swizzle. swizzle 改变相邻 tile 的遍历布局, 让它们更容易复用 L2 内的数据, 矩阵运算与舍入保持一致. 第 12 章说明如何用缓存命中, HBM 流量和同条件计时选择这类参数, 再核对完整模型效果.</p>
 <h2>自有 CUDA 算子如何实现这些契约</h2>
 <p>kernels.backend 在进程级选择默认 CUDA 后端. cuda_backend.factory_for 为量化, SiLU, gates, RMS, 残差 RMS, RoPE, RMS/RoPE, append, 注意力准备, 卷积, Q/K 归一化, GDN 递归和 decode partial/merge 建立入口. 所有调用使用调用者当前 CUDA 流, 保持与 PyTorch 操作的顺序.</p>
 <p>kernels.cu 用 warp (32 个线程的执行组) 做求和或最大值归约, 用向量读写减少访存指令. RMS 与量化每组计算归约和 scale; packed 投影视图按真实 token stride 取值; Q/K 准备链合并归一化, RoPE 和缓存写入; 卷积读取最近三项并保存候选; GDN 按头更新矩阵, 将所需位置写入 pool.</p>

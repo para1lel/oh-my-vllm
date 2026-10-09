@@ -13,7 +13,6 @@ Rust 负责服务, 调度和逻辑 KV 缓存; Python 负责 GPU 计算.
 - 普通, MTP4 和 DSpark 边界测试覆盖 batch 1, 2, 4, 无 OOM 和重计算抢占.
 - 保留 [需求](docs/requirements.zh.md) 中全部有效验收条件.
 - 项目构建, 测试和推理独立于 vLLM 代码, 环境和构建缓存.
-- 隔离基线采集器仅用于单独获授权的基线工作.
 - 项目内核使用 CUDA; 保留冻结的 TileLang 比较实现.
 - 正式算子用例, 测试框架和汇总证据保留在仓库内.
 - 临时实验和原始 profiling trace 放在仓库外.

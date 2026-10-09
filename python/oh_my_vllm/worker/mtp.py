@@ -15,6 +15,7 @@ import torch
 from oh_my_vllm.ir import compile_forward
 from oh_my_vllm.kernels.mtp_attention import MTPAttention
 from oh_my_vllm.models.qwen import AttentionBatch, Qwen
+from oh_my_vllm.performance.execution import certify_feedback, record, tracing
 from oh_my_vllm.worker.batch_plan import BLOCK, PlannedRequest
 from oh_my_vllm.worker.graph_cache import GraphCache
 from oh_my_vllm.worker.protocol import RequestOutput
@@ -107,7 +108,22 @@ class MTP:
         starts: list[int],
         tables: list[list[int]],
         positions: list[int],
+        request_ids: list[int] | None = None,
+        persistent: bool = False,
     ) -> torch.Tensor:
+        if tracing():
+            record(
+                "mtp_forward",
+                unique_token_ids=sorted(set(tokens)),
+                unique_token_ids_per_request=[
+                    sorted(set(tokens[a:b])) for a, b in pairwise(starts)
+                ],
+                queries=[b - a for a, b in pairwise(starts)],
+                contexts=[positions[a] for a in starts[:-1]],
+                tables=tables,
+                requests=request_ids,
+                persistent=persistent,
+            )
         decode_mode = max(b - a for a, b in pairwise(starts)) <= 5
         slots = [
             table[p // BLOCK] * BLOCK + p % BLOCK
@@ -223,7 +239,21 @@ class MTP:
         graph = self.graph_cache.get_or_create("proposal", key, capture)
         if graph is None:
             return None
-        return graph.replay(hidden, positions, tables).tolist()
+        trace_operation = None
+        if tracing():
+            trace_operation = record(
+                "mtp_proposal_graph",
+                contexts=[computed for _, _, computed, _ in eligible],
+                tables=[table for _, table, _, _ in eligible],
+                rows=len(eligible),
+                draft_steps=3,
+                requests=[rid for rid, _, _, _ in eligible],
+            )
+        tokens = graph.replay(hidden, positions, tables).tolist()
+        certify_feedback()
+        if trace_operation is not None:
+            trace_operation["tokens"] = tokens
+        return tokens
 
     def propose(
         self,
@@ -233,6 +263,8 @@ class MTP:
         hidden: torch.Tensor,
         histories: dict[int, list[int]],
         outputs: list[RequestOutput],
+        *,
+        samplers=None,
     ) -> dict[int, list[int]]:
         # Retain target boundary features alongside the FA page that owns them.
         rows, pages = [], []
@@ -247,6 +279,7 @@ class MTP:
                 rows
             ]
         tokens, positions, tables, parts, query_starts = [], [], [], [], [0]
+        forward_requests = []
         eligible, selected = [], []
         for i, (plan, count, output) in enumerate(
             zip(plans, counts, outputs, strict=True)
@@ -274,6 +307,7 @@ class MTP:
             tokens.extend(histories[rid][first:end])
             positions.extend(range(first, end))
             tables.append(req.fa_block_table)
+            forward_requests.append(rid)
             query_starts.append(len(tokens))
             self.next_position[rid] = end
             if (
@@ -281,13 +315,34 @@ class MTP:
                 and output.finish_reason is None
                 and end == computed + 1
             ):
-                eligible.append((rid, req.fa_block_table, computed, limit))
-                selected.append(len(tokens) - 1)
+                remaining = (
+                    4
+                    if samplers is None
+                    else samplers[rid].params.max_tokens
+                    - len(samplers[rid].generated)
+                    - 1
+                )
+                if remaining > 0:
+                    eligible.append(
+                        (
+                            rid,
+                            req.fa_block_table,
+                            computed,
+                            min(limit, computed + remaining),
+                        )
+                    )
+                    selected.append(len(tokens) - 1)
         proposals = {p.request.request_id: [] for p in plans}
         if not tokens:
             return proposals
         draft_hidden = self._run(
-            tokens, torch.cat(parts, 0), query_starts, tables, positions
+            tokens,
+            torch.cat(parts, 0),
+            query_starts,
+            tables,
+            positions,
+            request_ids=forward_requests,
+            persistent=True,
         )
         if not eligible:
             return proposals
@@ -297,7 +352,10 @@ class MTP:
             for (rid, _, _, _), row in zip(eligible, graph_tokens, strict=True):
                 proposals[rid] = row
             return proposals
+        if tracing():
+            record("mtp_logits", rows=len(eligible), requests=[e[0] for e in eligible])
         next_tokens = self.logits_unit(last_hidden).argmax(-1).tolist()
+        certify_feedback()
         for (rid, _, _, _), token in zip(eligible, next_tokens, strict=True):
             proposals[rid].append(token)
         for step in range(1, 4):
@@ -320,8 +378,14 @@ class MTP:
                 list(range(len(active) + 1)),
                 tables,
                 positions,
+                request_ids=[e[0] for e in eligible],
             )
+            if tracing():
+                record(
+                    "mtp_logits", rows=len(eligible), requests=[e[0] for e in eligible]
+                )
             next_tokens = self.logits_unit(last_hidden).argmax(-1).tolist()
+            certify_feedback()
             for (rid, _, _, _), token in zip(eligible, next_tokens, strict=True):
                 proposals[rid].append(token)
         return proposals

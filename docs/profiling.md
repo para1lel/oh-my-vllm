@@ -1,9 +1,9 @@
 # Profiling and diagnostics
 
-Use measurements to identify the source of throughput or TTFT gaps.
+Use measurements to identify prefill and decode latency gaps.
 Keep profiling isolated from formal timing.
 TileFoundry arithmetic, memory, and roofline results are estimates.
-The future roofline gate in [requirements](requirements.md) does not replace the current acceptance protocol yet.
+Use the phase-latency protocol in [requirements](requirements.md).
 
 ## Logs and correlation
 
@@ -20,7 +20,7 @@ Keep raw logs and traces in external storage.
 Formal collection examines FlashInfer, third-party Triton, TileLang, and native CUDA cache trees, with text files.
 Unset or missing required roots fail the audit.
 Finish compilation and capture before measured repetitions.
-Source and cache hashes bind the observed run.
+Source and cache hashes identify the observed run.
 The audit cannot exclude silent in-memory recompilation or arbitrarily short interference between process polls.
 
 See [testing](testing.md) and [acceptance](acceptance.md).
@@ -60,3 +60,34 @@ Raw profiler CSV stays in external storage.
 
 Cancellation stops the owned profiler process group.
 Use [kernel development](kernels.md#analysis-and-profiling) for the command and limitations.
+
+
+## Large operator tuning
+
+Use effective model shapes before a tile search.
+Record elapsed time, DRAM and L2 throughput, L2 hit rate, register count, shared storage, occupancy, and warp stalls.
+Use HIR estimates to select a hypothesis. Verify it with CUDA Events and Nsight counters.
+An occupancy increase alone is not a latency result.
+
+Swizzle selection used five randomized timing rounds.
+SM selection and the later swizzle confirmation used ten randomized rounds.
+Candidates must keep rounding, scales, and persistent writes equal.
+The fixed 230-case gate supplies operator acceptance. Full-model phase collection supplies framework acceptance.
+
+| Optimization | Diagnostic observation | Selection |
+|---|---|---|
+| FP8 gate/up GEMM traversal | At 32144 by 34816 by 5120, DRAM was 75.04% and L2 hits were 26.10%. Swizzle 8 changed median time from 9.235 to 6.989 ms. | Swizzle 8 for M at least 2048 and N at least 32768. |
+| Small FP8 gate/up GEMM | At M 624, one-SM time was about 0.141 ms and two-SM time was about 0.170 ms. | Use two-SM tiles at M at least 4096 for the wide projection. |
+| Four-channel convolution | At 32144 rows, scalar time was 1.603 ms and vector time was 0.624 ms. Warp instructions decreased from 1.484 billion to 0.589 billion. | Four adjacent channels per thread, eight rows for large inputs, four rows for smaller inputs. |
+| SiLU and FP8 quantization | At 32144 rows, one-row time was 1.130 ms and four-row time was 0.711 ms. At 624 rows, two-row time was 0.0165 ms. | Four rows per warp for large inputs. Use two rows for smaller model inputs. |
+| Gated RMS | At 32144 token rows, one-row time was 0.399 ms and four-row time was 0.310 ms. | Four rows per warp for large inputs. Use one row for small inputs. |
+
+The table uses diagnostic operator microbenchmarks and separate profiler replay.
+Short-output full-model diagnosis has a different scope.
+They do not supply the fifteen-row phase verdict.
+The convolution vector path had zero shared-memory bank conflicts.
+Its DRAM throughput was 15.80%, SM throughput was 83.38%, and short-scoreboard stalls were 2.43%.
+This profile supports the decrease in instruction and shared-memory overhead.
+
+K=256 GEMM tiles, smaller M tiles, and two-SM down projections did not show a stable paired gain.
+They are excluded from dispatch. Keep unsuccessful attempts in external evidence storage.

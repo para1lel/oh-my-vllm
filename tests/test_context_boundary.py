@@ -197,7 +197,7 @@ def test_boundary_termination_reaches_owned_cleanup(monkeypatch, termination_sig
 def test_boundary_signal_during_spawn_reaps_process_group(
     monkeypatch, tmp_path, termination_signal
 ):
-    from benchmarks import compare_vllm
+    from benchmarks import common
 
     real_popen = subprocess.Popen
     started = []
@@ -209,12 +209,12 @@ def test_boundary_signal_during_spawn_reaps_process_group(
         return process
 
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
-    monkeypatch.setattr(compare_vllm.subprocess, "Popen", signal_during_spawn)
+    monkeypatch.setattr(common.subprocess, "Popen", signal_during_spawn)
     with (
         pytest.raises(InterruptedError, match="cancelled"),
         boundary._reap_on_termination() as cancelled,
     ):
-        compare_vllm.run_engine(
+        common.run_engine(
             [sys.executable, "-c", "import time; time.sleep(30)"],
             log_path=tmp_path / "spawn.log",
             cancelled=cancelled,

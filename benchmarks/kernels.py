@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from compare_vllm import assert_gpu_exclusive  # noqa: E402
+from common import assert_gpu_exclusive  # noqa: E402
 from measurement import hardware_identity  # noqa: E402
 
 from development.kernels.cases import UNUSED, cases  # noqa: E402

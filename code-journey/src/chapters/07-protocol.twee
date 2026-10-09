@@ -5,7 +5,7 @@
 <p>RustMessage 与 PythonMessage 用 type 区分消息种类. prepare 和 execute 及其回复用 rpc_id 对应一次调用, init, register, abort 和 shutdown 按各自类型处理. request_id 标识长期生成请求, rpc_id 标识准备或执行的一次往返. 两个编号服务于不同生命周期, 一次 execute 可以含多个 request_id.</p>
 <p>msgpack 把带类型的记录编码成字节, ZMQ DEALER 传送这些字节. 通信依次经历 init / ready, register, prepare / prepared, execute / execute_result, abort 和 shutdown 等消息. Rust 的 WorkerClient 检查回复类型与编号. Bench 通过 register 直接安装合成 token 提示词, Serve 通过 prepare 构建模板与采样状态. 协议错误通过有类型的 Error 返回引擎.</p>
 <h2>启动字段怎样映射到运行配置</h2>
-<p>init 除了模型和缓存容量, 还带有固定页大小与并行数量. ready 回复实际 logical_num_blocks 与 mamba_blocks, Rust 用它们核对两类池. prepare 携带 rpc_id, request_id 和统一输入 request, prepared 返回相同 rpc_id 与 prompt_token_ids. register 直接发送 request_id 与 prompt_token_ids, abort 按 request_id 清理.</p>
+<p>init 除了模型和缓存容量, 还带有固定页大小与并行数量. ready 回复实际 logical_num_blocks 与 mamba_blocks, Rust 用它们核对两类池. prepare 携带 rpc_id, request_id 和统一输入 request, prepared 返回相同 rpc_id 与 prompt_token_ids. register 直接发送 request_id, prompt_token_ids 与可选 max_tokens, abort 按 request_id 清理.</p>
 <<source "wireInit" "展开 init 的 7 个启动字段">>
 <h2>执行计划每个字段携带什么</h2>
 <p>长期 Request 留在调度器, ScheduledRequest 只描述本轮输入. SchedulerOutput 组合所有片段, 本轮总量, 完成和抢占编号. cache_hit_tokens 在 Rust 中统计前缀命中, 序列化执行输入时省去这个统计字段.</p>
@@ -15,6 +15,10 @@
 <<source "batchOutput" "展开 SchedulerOutput 定义" false>>
 <p>prefill_token_ids 在首次或重新接纳时提供完整确认历史. token_ids 是实际本轮片段, num_computed_tokens 是它的绝对起点. FA 与 Mamba 块表是两类缓存地址, 两边都检查编号与容量.</p>
 <p>例如历史 <<icode "[17, 92, 6, 42]">>, 已计算 3 个, 普通 decode 输入为 <<icode "[42]">>, 起点为 3. Python 核对这正是 histories[3], 再根据块表和已提交源槽执行.</p>
+<h3>注册请求时共享输出预算</h3>
+<p>Rust 先检查请求能否进入调度器, 再发送 register. Python 保存完整输入历史与采样器. max_tokens 让两侧知道相同的输出上限, 接近结束时缩短草稿, 并为下一轮目标采样预留一个 token. 例如只剩 2 个输出位置时, 最多验证 1 个草稿.</p>
+<<source "wireRegister" "展开注册字段与输出预算">>
+
 <<source "wireExecute" "展开 execute 的 6 个传输字段">>
 <h2>输出如何回到正确请求</h2>
 <p>Python 的 RequestOutput 还带有文字增量, 结束原因, 推理 token 数和请求错误. 桥接编码器组织这些字段, Rust 客户端将调度结果与服务输出分别交给对应层. Rust 调度用的 WorkerOutput 是结果列表, 每条 RequestOutput 保留编号, 输出 ID, 接受草稿数与新草稿.</p>

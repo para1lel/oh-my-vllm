@@ -40,12 +40,16 @@ def append(
 class PagedAttention:
     """One batch plan shared by all full-attention layers for this execution."""
 
-    def __init__(self, device: str | torch.device = "cuda") -> None:
+    def __init__(self, device: str | torch.device = "cuda", *, workspace=None) -> None:
         from flashinfer import BatchPrefillWithPagedKVCacheWrapper
 
         from oh_my_vllm.ir.attention import register_plan
 
-        self.workspace = torch.empty(128 << 20, device=device, dtype=torch.uint8)
+        self.workspace = (
+            torch.empty(128 << 20, device=device, dtype=torch.uint8)
+            if workspace is None
+            else workspace
+        )
         self.wrapper = BatchPrefillWithPagedKVCacheWrapper(
             self.workspace, "NHD", backend="fa2"
         )

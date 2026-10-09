@@ -10,7 +10,6 @@ Use small project implementations and third-party libraries instead of a vLLM ru
 Port selected code only with provenance and licenses. Do not copy the framework wholesale.
 Builds, tests, and inference must work without vLLM packages, checkout, old environment, or compiled caches.
 
-Only the independently authorized baseline collector has an isolated exception.
 
 Select compatible stable dependencies in dependency order and pin the combination with satisfactory compatibility tests.
 Use the host driver and working CUDA/compiler tools, with higher-level libraries in the project environment.
@@ -21,7 +20,6 @@ Keep host locations in `LOCAL.md`.
 The project controls FP8 weight/scales, GQA/GDN, MTP rollback, loading, cache state, sampling, graphs, and service adapters.
 Keep inference-path independent references with FP64 computation and all existing features.
 Review each milestone and measure affected hot paths.
-The initial nine-row acceptance was met. The current denominator is the refreshed twelve-row baseline.
 
 [Requirements](../requirements.md) and [acceptance](../acceptance.md) define active scope and measured identity.
 

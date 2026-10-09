@@ -13,5 +13,4 @@ The transition kept offline/service features, MTP, masks, prefix reuse, and canc
 
 The project runner keeps these state and lifetime contracts with project-owned code.
 No V2 adapter, vLLM scheduler, or legacy runner stays.
-The initial nine-row acceptance is historical and superseded by the twelve-row protocol.
 Use [architecture](../architecture.md), [requirements](../requirements.md), and [acceptance](../acceptance.md) for active behavior.

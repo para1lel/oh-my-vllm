@@ -323,3 +323,15 @@ def test_greedy_mode_does_not_keep_a_vocabulary_probability_matrix():
     assert worker.proposals[1].probabilities is None
     with pytest.raises(ValueError, match="unavailable"):
         worker.draft_probabilities(1, drafts)
+
+
+@pytest.mark.parametrize("remaining", [0, 1, 2, 4, 8])
+def test_proposer_reserves_the_scheduler_bonus_output(remaining):
+    worker, model = make_worker()
+    sampler = RequestSampler(
+        SamplingParams(max_tokens=10, temperature=0), [0, 1], "cpu", vocab_size=11
+    )
+    sampler.commit([2] * (10 - remaining))
+    result = proposal(worker, samplers={1: sampler})
+    assert len(result[1]) == min(7, max(0, remaining - 1))
+    assert len(model.calls) == int(remaining > 1)

@@ -134,7 +134,11 @@ def greedy_rows(logits: torch.Tensor) -> list[list[int]]:
     if logits.ndim != 2 or logits.numel() == 0:
         raise ValueError("greedy logits must be a nonempty matrix")
     values, tokens = logits.max(-1)
-    return torch.stack((tokens, torch.isfinite(values).to(torch.int64)), -1).tolist()
+    rows = torch.stack((tokens, torch.isfinite(values).to(torch.int64)), -1).tolist()
+    from oh_my_vllm.performance.execution import certify_feedback
+
+    certify_feedback()
+    return rows
 
 
 def verify_rows(rows: Sequence[Sequence[int]], drafts: Sequence[int]) -> list[int]:

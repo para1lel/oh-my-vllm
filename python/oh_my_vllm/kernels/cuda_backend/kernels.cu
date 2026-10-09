@@ -12,6 +12,42 @@
 
 using tvm::ffi::TensorView;
 
+#ifndef OH_MY_VLLM_ENABLE_PDL
+#define OH_MY_VLLM_ENABLE_PDL 1
+#endif
+
+// Every participating consumer waits before activation or mutable-state reads.
+// Triggering permits another grid to start; the wait establishes visibility.
+__device__ __forceinline__ void pdl_dependency_wait() {
+#if OH_MY_VLLM_ENABLE_PDL && __CUDA_ARCH__ >= 900
+  cudaGridDependencySynchronize();
+#endif
+}
+
+__device__ __forceinline__ void pdl_launch_next() {
+#if OH_MY_VLLM_ENABLE_PDL && __CUDA_ARCH__ >= 900
+  cudaTriggerProgrammaticLaunchCompletion();
+#endif
+}
+
+template <typename Kernel, typename... Args>
+void launch_kernel(Kernel kernel, dim3 grid, dim3 block, size_t shared,
+                   cudaStream_t stream, Args... args) {
+  cudaLaunchConfig_t config{};
+  config.gridDim = grid;
+  config.blockDim = block;
+  config.dynamicSmemBytes = shared;
+  config.stream = stream;
+  cudaLaunchAttribute attribute{};
+  attribute.id = cudaLaunchAttributeProgrammaticStreamSerialization;
+  attribute.val.programmaticStreamSerializationAllowed = OH_MY_VLLM_ENABLE_PDL;
+  config.attrs = &attribute;
+  config.numAttrs = 1;
+  auto status = cudaLaunchKernelEx(&config, kernel, args...);
+  TVM_FFI_ICHECK(status == cudaSuccess)
+      << "CUDA extended launch failed: " << cudaGetErrorString(status);
+}
+
 // Host dispatches include direct calls and CUDA Graph capture, but not replay.
 // A relaxed atomic keeps variants observable across Python/worker threads.
 // Keep this order in sync with _VARIANT_OPERATIONS in cuda_backend/__init__.py.
@@ -120,6 +156,8 @@ template <typename Input, bool Silu, bool Column, int RowsPerWarp, bool Flat = f
           bool Aligned = false>
 __global__ void quantize_kernel(const Input *__restrict__ x, __nv_fp8_e4m3 *__restrict__ out,
                                 float *__restrict__ scales, int rows, int runtime_width) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   const int width = Width ? Width : runtime_width;
   const int lane = threadIdx.x & 31;
   const int groups = width / 128;
@@ -202,18 +240,20 @@ void launch_quantize(TensorView x, TensorView out, TensorView scales, bool colum
                      cudaStream_t stream) {
   int rows = out.size(0), width = out.size(1);
 #define CALL(S, C, R, T)                                                                           \
-  quantize_kernel<Input, S, C, R, false, Width, Aligned>                                           \
-      <<<dim3((rows + (T / 32) * R - 1) / ((T / 32) * R), width / 128), T, 0, stream>>>(           \
+  launch_kernel(quantize_kernel<Input, S, C, R, false, Width, Aligned>, dim3((rows + (T / 32) * R - 1) / ((T / 32) * R), width / 128), T, 0, stream,            \
           static_cast<const Input *>(x.data_ptr()), static_cast<__nv_fp8_e4m3 *>(out.data_ptr()),  \
           static_cast<float *>(scales.data_ptr()), rows, width)
 #define LAUNCH(S, C)                                                                               \
   if (width / 128 > 65535 || (rows >= 4 && rows < 128) ||                                         \
       (rows == 1 && width == 6144 && C && !S)) {                                                  \
-    quantize_kernel<Input, S, C, 1, true, Width, Aligned>                                          \
-        <<<(rows * (width / 128) + 3) / 4, 128, 0, stream>>>(                                      \
+    launch_kernel(quantize_kernel<Input, S, C, 1, true, Width, Aligned>, (rows * (width / 128) + 3) / 4, 128, 0, stream,                                       \
             static_cast<const Input *>(x.data_ptr()),                                              \
             static_cast<__nv_fp8_e4m3 *>(out.data_ptr()), static_cast<float *>(scales.data_ptr()), \
             rows, width);                                                                          \
+  } else if (S && rows >= 4096 && Width == 17408) {                                                 \
+    CALL(S, C, 4, 128);                                                                            \
+  } else if (S && rows >= 128 && Width == 17408) {                                                  \
+    CALL(S, C, 2, 128);                                                                            \
   } else if (S && rows >= 128) {                                                                   \
     CALL(S, C, 1, 128);                                                                            \
   } else if (rows >= 128) {                                                                        \
@@ -302,6 +342,8 @@ void quantize(TensorView x, TensorView out, TensorView scales, bool column, bool
 }
 __global__ void silu_kernel(const __nv_bfloat16 *__restrict__ x, __nv_bfloat16 *__restrict__ out,
                             int rows, int width) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i >= rows * width)
     return;
@@ -329,7 +371,7 @@ void silu_mul(TensorView x, TensorView out) {
   int n = out.size(0) * out.size(1);
   if (!n)
     return;
-  silu_kernel<<<(n + 255) / 256, 256, 0, stream>>>(static_cast<const __nv_bfloat16 *>(x.data_ptr()),
+  launch_kernel(silu_kernel, (n + 255) / 256, 256, 0, stream, static_cast<const __nv_bfloat16 *>(x.data_ptr()),
                                                    static_cast<__nv_bfloat16 *>(out.data_ptr()),
                                                    out.size(0), out.size(1));
   finish_cuda_launch(stream, "silu_mul");
@@ -348,6 +390,8 @@ __device__ int64_t index_at(const void *data, bool wide, int index) {
 __global__ void gates_kernel(const __nv_bfloat16 *__restrict__ ba, const float *__restrict__ log,
                              const float *__restrict__ bias, float *__restrict__ decay,
                              float *__restrict__ beta, int n) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i >= n * 48)
     return;
@@ -380,7 +424,7 @@ void gates(TensorView ba, TensorView log, TensorView bias, TensorView decay, Ten
   if (ba.size(0) == 0)
     return;
   auto stream = stream_for(ba, "gates");
-  gates_kernel<<<(ba.size(0) * 48 + 255) / 256, 256, 0, stream>>>(
+  launch_kernel(gates_kernel, (ba.size(0) * 48 + 255) / 256, 256, 0, stream,
       static_cast<const __nv_bfloat16 *>(ba.data_ptr()), static_cast<const float *>(log.data_ptr()),
       static_cast<const float *>(bias.data_ptr()), static_cast<float *>(decay.data_ptr()),
       static_cast<float *>(beta.data_ptr()), ba.size(0));
@@ -419,6 +463,8 @@ __global__ void rms5120_kernel(const __nv_bfloat16 *__restrict__ x,
                                const float *__restrict__ w,
                                __nv_bfloat16 *__restrict__ out,
                                __nv_bfloat16 *__restrict__ summed, float eps) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   static_assert(Threads % 32 == 0 && 5120 % (Threads * Vector) == 0);
   constexpr int Chunks = 5120 / (Threads * Vector);
   int row = blockIdx.x, lane = threadIdx.x & 31;
@@ -481,7 +527,7 @@ void launch_rms5120(TensorView x, TensorView residual, TensorView weight,
                     float epsilon) {
   auto stream = stream_for(x, add ? "add_norm" : "norm");
 #define RMS5120(R, Threads, Vector, Streaming)                                            \
-  rms5120_kernel<R, Threads, Vector, Streaming><<<x.size(0), Threads, 0, stream>>>(       \
+  launch_kernel(rms5120_kernel<R, Threads, Vector, Streaming>, x.size(0), Threads, 0, stream,        \
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),                        \
       static_cast<const __nv_bfloat16 *>(residual.data_ptr()),                 \
       static_cast<const float *>(weight.data_ptr()),                           \
@@ -520,32 +566,43 @@ struct Strides {
 // Fixed model head width retains the input values across the reduction.
 // The stable sigmoid keeps the fast division denominator in [1, 2], including
 // extreme finite BF16 gates; it does not round the gate activation to BF16.
+template <int RowsPerWarp>
 __global__ void gated_rms128_kernel(const __nv_bfloat16 *__restrict__ x,
                                     const float *__restrict__ weight,
                                     const __nv_bfloat16 *__restrict__ gate,
                                     __nv_bfloat16 *__restrict__ out, int rows,
                                     Strides xs, Strides gs, float epsilon) {
-  int lane = threadIdx.x & 31, row = blockIdx.x * 4 + threadIdx.x / 32;
-  if (row >= rows)
-    return;
-  int64_t offset = (row / 48) * xs.token + (row % 48) * xs.head;
-  int64_t goffset = (row / 48) * gs.token + (row % 48) * gs.head;
-  float values[4], total = 0;
+  pdl_dependency_wait();
+  pdl_launch_next();
+  int lane = threadIdx.x & 31;
+  float w[4];
 #pragma unroll
-  for (int j = 0; j < 4; ++j) {
-    float v = __bfloat162float(x[offset + (lane + j * 32) * xs.dim]);
-    values[j] = v;
-    total += v * v;
-  }
-  float inv = rsqrtf(warp_sum(total) * (1.f / 128.f) + epsilon);
+  for (int j = 0; j < 4; ++j)
+    w[j] = weight[lane + j * 32];
 #pragma unroll
-  for (int j = 0; j < 4; ++j) {
-    int col = lane + j * 32;
-    float g = __bfloat162float(gate[goffset + col * gs.dim]);
-    float e = __expf(-fabsf(g));
-    float sigmoid = __fdividef(g >= 0.f ? 1.f : e, 1.f + e);
-    float v = values[j] * inv * weight[col];
-    out[static_cast<int64_t>(row) * 128 + col] = __float2bfloat16_rn(v * (g * sigmoid));
+  for (int r = 0; r < RowsPerWarp; ++r) {
+    int row = blockIdx.x * 4 * RowsPerWarp + (threadIdx.x / 32) * RowsPerWarp + r;
+    if (row >= rows)
+      continue;
+    int64_t offset = (row / 48) * xs.token + (row % 48) * xs.head;
+    int64_t goffset = (row / 48) * gs.token + (row % 48) * gs.head;
+    float values[4], total = 0;
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+      float v = __bfloat162float(x[offset + (lane + j * 32) * xs.dim]);
+      values[j] = v;
+      total += v * v;
+    }
+    float inv = rsqrtf(warp_sum(total) * (1.f / 128.f) + epsilon);
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+      int col = lane + j * 32;
+      float g = __bfloat162float(gate[goffset + col * gs.dim]);
+      float e = __expf(-fabsf(g));
+      float sigmoid = __fdividef(g >= 0.f ? 1.f : e, 1.f + e);
+      float v = values[j] * inv * w[j];
+      out[static_cast<int64_t>(row) * 128 + col] = __float2bfloat16_rn(v * (g * sigmoid));
+    }
   }
 }
 
@@ -557,6 +614,8 @@ __global__ void rms_kernel(const __nv_bfloat16 *__restrict__ x,
                            __nv_bfloat16 *__restrict__ summed, int rows,
                            int heads, int width, Strides xs, Strides gs,
                            float epsilon) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   int lane = threadIdx.x & 31;
   int row = Large ? blockIdx.x : blockIdx.x * 4 + threadIdx.x / 32;
   if (row >= rows)
@@ -608,17 +667,23 @@ void rms(TensorView x, TensorView weight, TensorView gate, TensorView out, doubl
   Strides gs{gate.stride(0), gate.stride(1), gate.stride(2)};
   if (gated && h == 48 && d == 128) {
     auto stream = stream_for(x, "gated_norm");
-    gated_rms128_kernel<<<(rows + 3) / 4, 128, 0, stream>>>(
-        static_cast<const __nv_bfloat16 *>(x.data_ptr()),
-        static_cast<const float *>(weight.data_ptr()),
-        static_cast<const __nv_bfloat16 *>(gate.data_ptr()),
-        static_cast<__nv_bfloat16 *>(out.data_ptr()), rows, xs, gs, epsilon);
+#define GATED_RMS(R)                                                                               \
+    launch_kernel(gated_rms128_kernel<R>, (rows + 4 * R - 1) / (4 * R), 128, 0, stream,             \
+      static_cast<const __nv_bfloat16 *>(x.data_ptr()), static_cast<const float *>(weight.data_ptr()), \
+      static_cast<const __nv_bfloat16 *>(gate.data_ptr()), static_cast<__nv_bfloat16 *>(out.data_ptr()), \
+      rows, xs, gs, static_cast<float>(epsilon))
+    if (rows >= 4096 * 48) {
+      GATED_RMS(4);
+    } else {
+      GATED_RMS(1);
+    }
+#undef GATED_RMS
     finish_cuda_launch(stream, "gated_norm");
     record_variant(kGatedNorm, true);
     return;
   }
 #define RMS(L, G)                                                                                  \
-  rms_kernel<L, G, false><<<L ? rows : (rows + 3) / 4, L ? 256 : 128, 0, stream>>>(                 \
+  launch_kernel(rms_kernel<L, G, false>, L ? rows : (rows + 3) / 4, L ? 256 : 128, 0, stream,                  \
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),                                            \
       static_cast<const float *>(weight.data_ptr()),                                               \
       static_cast<const __nv_bfloat16 *>(gate.data_ptr()),                                         \
@@ -650,12 +715,12 @@ void add_rms(TensorView x, TensorView residual, TensorView weight, TensorView su
     return;
   }
   auto stream = stream_for(x, "add_norm");
-  rms_kernel<true, false, true><<<rows, 256, 0, stream>>>(
+  launch_kernel(rms_kernel<true, false, true>, rows, 256, 0, stream,
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),
       static_cast<const float *>(weight.data_ptr()),
       static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
       static_cast<__nv_bfloat16 *>(out.data_ptr()), static_cast<__nv_bfloat16 *>(summed.data_ptr()),
-      rows, 1, d, {d, d, 1}, {d, d, 1}, 1e-6f);
+      rows, 1, d, Strides{d, d, 1}, Strides{d, d, 1}, 1e-6f);
   finish_cuda_launch(stream, "add_norm");
   record_variant(kAddNorm, false);
 }
@@ -682,6 +747,8 @@ __global__ void prepare_attention_kernel(const __nv_bfloat16 *packed, const floa
                                          __nv_bfloat16 *cache, const void *slots,
                                          __nv_bfloat16 *out, int n, int64_t capacity, bool pw,
                                          bool sw) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   int row = blockIdx.x * 4 + threadIdx.x / 32, lane = threadIdx.x & 31;
   if (row >= n * 28)
     return;
@@ -728,7 +795,7 @@ __global__ void prepare_attention_kernel(const __nv_bfloat16 *packed, const floa
 void prepare_attention(TensorView p, TensorView qw, TensorView kw, TensorView pos, TensorView cache,
                        TensorView slots, TensorView out) {
   auto stream = stream_for(p, "prepare_attention");
-  prepare_attention_kernel<<<(p.size(0) * 28 + 3) / 4, 128, 0, stream>>>(
+  launch_kernel(prepare_attention_kernel, (p.size(0) * 28 + 3) / 4, 128, 0, stream,
       (const __nv_bfloat16 *)p.data_ptr(), (const float *)qw.data_ptr(),
       (const float *)kw.data_ptr(), pos.data_ptr(), (__nv_bfloat16 *)cache.data_ptr(),
       slots.data_ptr(), (__nv_bfloat16 *)out.data_ptr(), p.size(0), cache.size(0) * 784,
@@ -740,6 +807,8 @@ __global__ void rms_rope_kernel(const __nv_bfloat16 *__restrict__ x,
                                 const float *__restrict__ weight,
                                 const void *__restrict__ positions, __nv_bfloat16 *__restrict__ out,
                                 int rows, int heads, Strides xs, bool wide) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   int row = blockIdx.x * 4 + threadIdx.x / 32;
   int lane = threadIdx.x & 31;
   if (row >= rows)
@@ -770,16 +839,18 @@ __global__ void rms_rope_kernel(const __nv_bfloat16 *__restrict__ x,
 void rms_rope(TensorView x, TensorView weight, TensorView positions, TensorView out) {
   int rows = x.size(0) * x.size(1);
   auto stream = stream_for(x, "rms_rope");
-  rms_rope_kernel<<<(rows + 3) / 4, 128, 0, stream>>>(
+  launch_kernel(rms_rope_kernel, (rows + 3) / 4, 128, 0, stream,
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),
       static_cast<const float *>(weight.data_ptr()), positions.data_ptr(),
       static_cast<__nv_bfloat16 *>(out.data_ptr()), rows, x.size(1),
-      {x.stride(0), x.stride(1), x.stride(2)}, positions.dtype().bits == 64);
+      Strides{x.stride(0), x.stride(1), x.stride(2)}, positions.dtype().bits == 64);
   finish_cuda_launch(stream, "rms_rope");
 }
 __global__ void rope_kernel(const __nv_bfloat16 *__restrict__ x, const void *__restrict__ positions,
                             __nv_bfloat16 *__restrict__ out, int n, int h, int d, int rotary,
                             double theta, bool wide) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i >= n * h * d)
     return;
@@ -796,7 +867,7 @@ __global__ void rope_kernel(const __nv_bfloat16 *__restrict__ x, const void *__r
 void rope(TensorView x, TensorView positions, TensorView out, int64_t rotary, double theta) {
   int n = x.size(0), h = x.size(1), d = x.size(2);
   auto stream = stream_for(x, "rope");
-  rope_kernel<<<(n * h * d + 255) / 256, 256, 0, stream>>>(
+  launch_kernel(rope_kernel, (n * h * d + 255) / 256, 256, 0, stream,
       static_cast<const __nv_bfloat16 *>(x.data_ptr()), positions.data_ptr(),
       static_cast<__nv_bfloat16 *>(out.data_ptr()), n, h, d, rotary, theta,
       positions.dtype().bits == 64);
@@ -814,6 +885,8 @@ template <int Threads, bool Joint>
 __global__ void __launch_bounds__(Threads, 1)
     model_qk_kernel(const __nv_bfloat16 *__restrict__ q, const __nv_bfloat16 *__restrict__ k,
                     __nv_bfloat16 *__restrict__ oq, __nv_bfloat16 *__restrict__ ok) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   static_assert(Threads == 128 || Threads == 256);
   // Fixed16-head rows fill every CTA, so no partial-head mask is needed.
 
@@ -864,6 +937,8 @@ __global__ void __launch_bounds__(Threads, 1)
 __global__ void qk_kernel(const __nv_bfloat16 *__restrict__ q, const __nv_bfloat16 *__restrict__ k,
                           __nv_bfloat16 *__restrict__ oq, __nv_bfloat16 *__restrict__ ok, int rows,
                           int heads, int64_t qs, int64_t ks) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   int row = blockIdx.x * 4 + threadIdx.x / 32, lane = threadIdx.x & 31;
   if (row >= rows)
     return;
@@ -889,7 +964,7 @@ void normalize_qk(TensorView q, TensorView k, TensorView oq, TensorView ok) {
   auto stream = stream_for(q, "normalize_qk");
   if (packed) {
 #define MODEL_QK(T, J)                                                                             \
-  model_qk_kernel<T, J><<<q.size(0) * (256 / T), T, 0, stream>>>(                                   \
+  launch_kernel(model_qk_kernel<T, J>, q.size(0) * (256 / T), T, 0, stream,                                    \
       static_cast<const __nv_bfloat16 *>(q.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(k.data_ptr()),                                            \
       static_cast<__nv_bfloat16 *>(oq.data_ptr()), static_cast<__nv_bfloat16 *>(ok.data_ptr()))
@@ -906,7 +981,7 @@ void normalize_qk(TensorView q, TensorView k, TensorView oq, TensorView ok) {
     return;
   }
   int rows = q.size(0) * q.size(1);
-  qk_kernel<<<(rows + 3) / 4, 128, 0, stream>>>(
+  launch_kernel(qk_kernel, (rows + 3) / 4, 128, 0, stream,
       static_cast<const __nv_bfloat16 *>(q.data_ptr()),
       static_cast<const __nv_bfloat16 *>(k.data_ptr()), static_cast<__nv_bfloat16 *>(oq.data_ptr()),
       static_cast<__nv_bfloat16 *>(ok.data_ptr()), rows, q.size(1), q.stride(0), k.stride(0));
@@ -938,6 +1013,8 @@ recurrent_vector_kernel(const __nv_bfloat16 *__restrict__ q, const __nv_bfloat16
                         const void *__restrict__ starts, const void *__restrict__ reads,
                         const void *__restrict__ writes, bool sw, bool rw, bool ww,
                         __nv_bfloat16 *__restrict__ out, int64_t qs, int64_t ks, int64_t vs) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   static_assert(128 % (Rows * Warps * 2) == 0);
   constexpr int hq = 16, hv = 48;
   int seq = blockIdx.x, head = blockIdx.y, lane = threadIdx.x & 15;
@@ -1020,6 +1097,8 @@ __global__ void recurrent_kernel(const __nv_bfloat16 *q, const __nv_bfloat16 *k,
                                  State *pool, const void *starts, const void *reads,
                                  const void *writes, bool sw, bool rw, bool ww, __nv_bfloat16 *out,
                                  int hq, int hv, int64_t qs, int64_t ks, int64_t vs) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   int seq = blockIdx.x, head = blockIdx.y, lane = threadIdx.x & 31;
   int first_v = blockIdx.z * 16 + threadIdx.x / 32 * 4;
   int qhead = head / (hv / hq);
@@ -1143,8 +1222,7 @@ void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, Tenso
   auto stream = stream_for(q, "recurrent");
   if (vector) {
 #define VECTOR_REC(S, R, W)                                                                        \
-  recurrent_vector_kernel<S, R, W>                                                                 \
-      <<<dim3(reads.size(0), 48, 128 / (R * W * 2)), W * 32, 0, stream>>>(                          \
+  launch_kernel(recurrent_vector_kernel<S, R, W>, dim3(reads.size(0), 48, 128 / (R * W * 2)), W * 32, 0, stream,                           \
           static_cast<const __nv_bfloat16 *>(q.data_ptr()),                                        \
           static_cast<const __nv_bfloat16 *>(k.data_ptr()),                                        \
           static_cast<const __nv_bfloat16 *>(v.data_ptr()),                                        \
@@ -1175,7 +1253,7 @@ void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, Tenso
   }
   dim3 grid(reads.size(0), v.size(1), 8);
 #define REC(S)                                                                                     \
-  recurrent_kernel<S><<<grid, 128, 0, stream>>>(                                                    \
+  launch_kernel(recurrent_kernel<S>, grid, 128, 0, stream,                                                     \
       static_cast<const __nv_bfloat16 *>(q.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(k.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(v.data_ptr()),                                            \
@@ -1196,6 +1274,8 @@ void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, Tenso
 template <bool Vector>
 __global__ void append_kernel(const __nv_bfloat16 *k, const __nv_bfloat16 *v, __nv_bfloat16 *cache,
                               const void *slots, int width, int64_t capacity, bool wide) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   int token = blockIdx.x;
   int64_t slot = index_at(slots, wide, token);
   if (slot < 0)
@@ -1224,8 +1304,7 @@ void append(TensorView k, TensorView v, TensorView cache, TensorView slots) {
                 reinterpret_cast<uintptr_t>(cache.data_ptr()) % 16 == 0;
   auto stream = stream_for(k, "append");
 #define APPEND(V)                                                                                  \
-  append_kernel<V>                                                                                 \
-      <<<k.size(0), 128, 0, stream>>>(static_cast<const __nv_bfloat16 *>(k.data_ptr()),             \
+  launch_kernel(append_kernel<V>, k.size(0), 128, 0, stream, static_cast<const __nv_bfloat16 *>(k.data_ptr()),             \
                                              static_cast<const __nv_bfloat16 *>(v.data_ptr()),     \
                                              static_cast<__nv_bfloat16 *>(cache.data_ptr()),       \
                                              slots.data_ptr(), width, cache.size(0) * 784,         \
@@ -1247,6 +1326,8 @@ model_convolution_kernel(const __nv_bfloat16 *__restrict__ x,
                          const void *__restrict__ ids, const void *__restrict__ starts,
                          const __nv_bfloat16 *__restrict__ sources, const void *__restrict__ writes,
                          __nv_bfloat16 *__restrict__ out, int n, bool iw, bool sw, bool ww) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   constexpr int c = 10240, stride = 16384;
   int channel = blockIdx.y * 128 + threadIdx.x;
   if (channel >= c)
@@ -1278,12 +1359,72 @@ model_convolution_kernel(const __nv_bfloat16 *__restrict__ x,
     out[static_cast<int64_t>(token) * c + channel] = __float2bfloat16_rn(activated);
   }
 }
+// Four adjacent channels share token metadata and aligned activation loads.
+// Keep the scalar tap order, activation formula, and snapshot writes.
+template <int Rows>
+__global__ void vector_model_convolution_kernel(
+    const __nv_bfloat16 *__restrict__ x, const __nv_bfloat16 *__restrict__ weight,
+    __nv_bfloat16 *__restrict__ pool, const void *__restrict__ ids,
+    const void *__restrict__ starts, const __nv_bfloat16 *__restrict__ sources,
+    const void *__restrict__ writes, __nv_bfloat16 *__restrict__ out,
+    int n, bool iw, bool sw, bool ww) {
+  pdl_dependency_wait();
+  pdl_launch_next();
+  constexpr int c = 10240, stride = 16384, channels = 4;
+  int channel = (blockIdx.y * 128 + threadIdx.x) * channels;
+  float w[channels][4];
+#pragma unroll
+  for (int j = 0; j < channels; ++j) {
+    auto packed = *reinterpret_cast<const Four<__nv_bfloat16> *>(weight + (channel + j) * 4);
+#pragma unroll
+    for (int tap = 0; tap < 4; ++tap)
+      w[j][tap] = __bfloat162float(packed.values[tap]);
+  }
+#pragma unroll
+  for (int i = 0; i < Rows; ++i) {
+    int token = blockIdx.x * Rows + i;
+    if (token >= n)
+      continue;
+    int64_t seq = index_at(ids, iw, token), first = index_at(starts, sw, seq);
+    int64_t target = index_at(writes, ww, token);
+    float total[channels] = {};
+#pragma unroll
+    for (int tap = 0; tap < 4; ++tap) {
+      int64_t pos = token + tap - 3;
+      Four<__nv_bfloat16> packed;
+      if (pos >= first) {
+        packed = *reinterpret_cast<const Four<__nv_bfloat16> *>(x + pos * stride + channel);
+      } else {
+#pragma unroll
+        for (int j = 0; j < channels; ++j)
+          packed.values[j] = sources[(seq * c + channel + j) * 3 + pos - first + 3];
+      }
+#pragma unroll
+      for (int j = 0; j < channels; ++j) {
+        auto value = packed.values[j];
+        total[j] += __bfloat162float(value) * w[j][tap];
+        if (tap > 0 && target >= 0)
+          pool[(target * c + channel + j) * 3 + tap - 1] = value;
+      }
+    }
+    Four<__nv_bfloat16> result;
+#pragma unroll
+    for (int j = 0; j < channels; ++j) {
+      float e = __expf(-fabsf(total[j]));
+      float value = total[j] * __fdividef(total[j] >= 0.f ? 1.f : e, 1.f + e);
+      result.values[j] = __float2bfloat16_rn(value);
+    }
+    *reinterpret_cast<Four<__nv_bfloat16> *>(out + static_cast<int64_t>(token) * c + channel) = result;
+  }
+}
 template <int Rows>
 __global__ void convolution_kernel(const __nv_bfloat16 *x, const __nv_bfloat16 *weight,
                                    __nv_bfloat16 *pool, const void *ids, const void *starts,
                                    const __nv_bfloat16 *sources, const void *writes,
                                    __nv_bfloat16 *out, int n, int c, int64_t stride, bool iw,
                                    bool sw, bool ww) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   int channel = blockIdx.y * 128 + threadIdx.x;
   if (channel >= c)
     return;
@@ -1320,9 +1461,29 @@ void convolution(TensorView x, TensorView weight, TensorView pool, TensorView id
   for (auto input : {x, weight, ids, starts, sources, writes})
     model = model && disjoint_storage(pool, input);
   auto stream = stream_for(x, "convolution");
+  if (model && n >= 128 && reinterpret_cast<uintptr_t>(x.data_ptr()) % 8 == 0 &&
+      reinterpret_cast<uintptr_t>(out.data_ptr()) % 8 == 0) {
+#define VECTOR_CONV(R)                                                                             \
+    launch_kernel(vector_model_convolution_kernel<R>, dim3((n + R - 1) / R, 20), 128, 0, stream,    \
+      static_cast<const __nv_bfloat16 *>(x.data_ptr()),                                             \
+      static_cast<const __nv_bfloat16 *>(weight.data_ptr()),                                        \
+      static_cast<__nv_bfloat16 *>(pool.data_ptr()), ids.data_ptr(), starts.data_ptr(),              \
+      static_cast<const __nv_bfloat16 *>(sources.data_ptr()), writes.data_ptr(),                    \
+      static_cast<__nv_bfloat16 *>(out.data_ptr()), n, ids.dtype().bits == 64,                        \
+      starts.dtype().bits == 64, writes.dtype().bits == 64)
+    if (n >= 4096) {
+      VECTOR_CONV(8);
+    } else {
+      VECTOR_CONV(4);
+    }
+#undef VECTOR_CONV
+    finish_cuda_launch(stream, "convolution");
+    record_variant(kConvolution, true);
+    return;
+  }
   if (model) {
 #define MODEL_CONV(R)                                                                              \
-  model_convolution_kernel<R><<<dim3((n + R - 1) / R, 80), 128, 0, stream>>>(                       \
+  launch_kernel(model_convolution_kernel<R>, dim3((n + R - 1) / R, 80), 128, 0, stream,                        \
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(weight.data_ptr()),                                       \
       static_cast<__nv_bfloat16 *>(pool.data_ptr()), ids.data_ptr(), starts.data_ptr(),            \
@@ -1342,7 +1503,7 @@ void convolution(TensorView x, TensorView weight, TensorView pool, TensorView id
     return;
   }
 #define CONV(R)                                                                                    \
-  convolution_kernel<R><<<dim3((n + R - 1) / R, (c + 127) / 128), 128, 0, stream>>>(                \
+  launch_kernel(convolution_kernel<R>, dim3((n + R - 1) / R, (c + 127) / 128), 128, 0, stream,                 \
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(weight.data_ptr()),                                       \
       static_cast<__nv_bfloat16 *>(pool.data_ptr()), ids.data_ptr(), starts.data_ptr(),            \
@@ -1450,6 +1611,8 @@ attention_partial_kernel(const __nv_bfloat16 *__restrict__ query,
                          float *__restrict__ partial, float *__restrict__ lse, int runtime_h,
                          int runtime_hk, int table_width, int splits, int first, bool tw, bool lw,
                          bool sw, int query_tiles, int max_query_len) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   constexpr int BQ = Grouped ? 32 : 16, BK = Grouped ? 64 : 32;
   constexpr int RowGroups = BQ / 8, ScoreTiles = BQ * BK / 512, AccTiles = BQ / 2;
   const int h = ModelShape ? 24 : runtime_h, hk = ModelShape ? 4 : runtime_hk;
@@ -1680,7 +1843,7 @@ void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorV
   dim3 grid((grouped ? starts.size(0) - 1 : q.size(0)) * tiles, hk, splits);
 #define ATTENTION(M, G, B)                                                                         \
   configure_attention_shared_memory<M, G, Position, B>(shared_bytes);                             \
-  attention_partial_kernel<M, G, Position, B><<<grid, 128, shared_bytes, stream>>>(                 \
+  launch_kernel(attention_partial_kernel<M, G, Position, B>, grid, 128, shared_bytes, stream,                  \
       static_cast<const __nv_bfloat16 *>(q.data_ptr()),                                            \
       static_cast<const __nv_bfloat16 *>(cache.data_ptr()), tables.data_ptr(), lengths.data_ptr(), \
       starts.data_ptr(), static_cast<float *>(partial.data_ptr()),                                 \
@@ -1727,6 +1890,8 @@ template <int Splits>
 __global__ void attention_merge_kernel(const float *__restrict__ partial,
                                        const float *__restrict__ lse,
                                        __nv_bfloat16 *__restrict__ out) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   int row = blockIdx.x, tid = threadIdx.x, lane = tid & 31, warp = tid / 32;
   __shared__ float weights[Splits], scratch[8];
   float log = tid < Splits ? lse[row * Splits + tid] : -INFINITY;
@@ -1761,7 +1926,7 @@ __global__ void attention_merge_kernel(const float *__restrict__ partial,
 void attention_merge(TensorView partial, TensorView lse, TensorView out) {
   auto stream = stream_for(out, "attention_merge");
 #define MERGE(S)                                                                                   \
-  attention_merge_kernel<S><<<lse.size(0) * lse.size(1), 128, 0, stream>>>(                         \
+  launch_kernel(attention_merge_kernel<S>, lse.size(0) * lse.size(1), 128, 0, stream,                          \
       static_cast<const float *>(partial.data_ptr()), static_cast<const float *>(lse.data_ptr()),  \
       static_cast<__nv_bfloat16 *>(out.data_ptr()))
   if (lse.size(2) == 16) {
@@ -1782,6 +1947,8 @@ template <bool Wide, bool Narrow>
 __global__ void __launch_bounds__(128, 1) dspark_append_kernel(
     const __nv_bfloat16 *__restrict__ key, const __nv_bfloat16 *__restrict__ value,
     __nv_bfloat16 *__restrict__ cache, const void *__restrict__ slots, int rows, int64_t capacity) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   constexpr int Width = 1024;
   int token = blockIdx.x, column = threadIdx.x & 127;
   uint4 k, v;
@@ -1821,7 +1988,7 @@ void launch_dspark_append(TensorView key, TensorView value, TensorView cache,
                           TensorView slots, cudaStream_t stream) {
   int rows = key.size(0);
 #define DS_APPEND(Narrow)                                                         \
-  dspark_append_kernel<Wide, Narrow><<<rows, 128, 0, stream>>>( \
+  launch_kernel(dspark_append_kernel<Wide, Narrow>, rows, 128, 0, stream,  \
       static_cast<const __nv_bfloat16 *>(key.data_ptr()),                               \
       static_cast<const __nv_bfloat16 *>(value.data_ptr()),                             \
       static_cast<__nv_bfloat16 *>(cache.data_ptr()), slots.data_ptr(), rows,            \
@@ -1860,6 +2027,8 @@ __global__ void dspark_norm_rope_kernel(
     const void *__restrict__ positions, const float *__restrict__ inv_freq,
     __nv_bfloat16 *__restrict__ output, int rows, int heads, int64_t row_stride,
     float attention_factor, float epsilon) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   constexpr int Lanes = Small ? 64 : 32, Columns = 128 / Lanes;
   int head_row = Small ? blockIdx.x : blockIdx.x * Warps + threadIdx.x / 32;
   if (head_row >= rows)
@@ -1921,7 +2090,7 @@ void launch_dspark_norm(TensorView x, TensorView weight, TensorView positions,
                         float epsilon, cudaStream_t stream) {
   int rows = x.size(0) * x.size(1);
 #define DS_NORM(W)                                                                      \
-  dspark_norm_rope_kernel<Heads, W, Wide><<<(rows + W - 1) / W, W * 32, 0, stream>>>(      \
+  launch_kernel(dspark_norm_rope_kernel<Heads, W, Wide>, (rows + W - 1) / W, W * 32, 0, stream,       \
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),                                  \
       static_cast<const float *>(weight.data_ptr()), positions.data_ptr(),              \
       static_cast<const float *>(inv_freq.data_ptr()),                                  \
@@ -1930,7 +2099,7 @@ void launch_dspark_norm(TensorView x, TensorView weight, TensorView positions,
   if (rows >= 4096) {
     DS_NORM(4);
   } else {
-    dspark_norm_rope_kernel<Heads, 1, Wide, true><<<rows, 64, 0, stream>>>(
+    launch_kernel(dspark_norm_rope_kernel<Heads, 1, Wide, true>, rows, 64, 0, stream,
         static_cast<const __nv_bfloat16 *>(x.data_ptr()),
         static_cast<const float *>(weight.data_ptr()), positions.data_ptr(),
         static_cast<const float *>(inv_freq.data_ptr()),
@@ -2015,6 +2184,8 @@ __global__ void dspark_attention_partial_kernel(
     const __nv_bfloat16 *__restrict__ block_key, const __nv_bfloat16 *__restrict__ block_value,
     float *__restrict__ partial, float *__restrict__ lse, int table_width, int cache_pages,
     int splits) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   constexpr int BQ = 32, BK = 64, Buffers = 1;
   constexpr int RowGroups = BQ / 8, ScoreTiles = BQ * BK / 512, AccTiles = BQ / 4;
   constexpr int h = 32, hk = 8;
@@ -2221,6 +2392,8 @@ __global__ void dspark_rms_norm_kernel(const __nv_bfloat16 *__restrict__ input,
                                       const Weight *__restrict__ weight,
                                       __nv_bfloat16 *__restrict__ output,
                                       float epsilon) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   constexpr int Width = 5120, Chunks = Width / (Threads * Vector);
   static_assert(Width % (Threads * Vector) == 0);
   int row = blockIdx.x, lane = threadIdx.x & 31;
@@ -2282,7 +2455,7 @@ template <typename Weight>
 void launch_dspark_rms(TensorView input, TensorView weight, TensorView output,
                        float epsilon, cudaStream_t stream) {
 #define DS_RMS(T, V, S)                                                                     \
-  dspark_rms_norm_kernel<Weight, T, V, S><<<input.size(0), T, 0, stream>>>(                   \
+  launch_kernel(dspark_rms_norm_kernel<Weight, T, V, S>, input.size(0), T, 0, stream,                    \
       static_cast<const __nv_bfloat16 *>(input.data_ptr()),                              \
       static_cast<const Weight *>(weight.data_ptr()),                                    \
       static_cast<__nv_bfloat16 *>(output.data_ptr()), epsilon)
@@ -2326,7 +2499,7 @@ void dspark_attention_partial(TensorView query, TensorView cache, TensorView tab
   auto stream = stream_for(query, "dspark_attention_partial");
   constexpr int shared_bytes = (32 * 128 + 2 * 64 * 128 + 32 * 64) * 2 + 8 * 32 * 4;
   dim3 grid(query.size(0), 8, lse.size(2));
-  dspark_attention_partial_kernel<<<grid, 128, shared_bytes, stream>>>(
+  launch_kernel(dspark_attention_partial_kernel, grid, 128, shared_bytes, stream,
       static_cast<const __nv_bfloat16 *>(query.data_ptr()),
       static_cast<const __nv_bfloat16 *>(cache.data_ptr()),
       static_cast<const int *>(tables.data_ptr()), static_cast<const int *>(contexts.data_ptr()),
@@ -2340,6 +2513,8 @@ template <int Splits>
 __global__ void dspark_attention_merge_kernel(const float *__restrict__ partial,
                                        const float *__restrict__ lse,
                                        __nv_bfloat16 *__restrict__ out) {
+  pdl_dependency_wait();
+  pdl_launch_next();
   int row = blockIdx.x, tid = threadIdx.x, lane = tid & 31, warp = tid / 32;
   __shared__ float weights[Splits], scratch[8];
   float log = tid < Splits ? lse[row * Splits + tid] : -INFINITY;
@@ -2377,7 +2552,7 @@ __global__ void dspark_attention_merge_kernel(const float *__restrict__ partial,
 void dspark_attention_merge(TensorView partial, TensorView lse, TensorView output) {
   auto stream = stream_for(output, "dspark_attention_merge");
 #define DSPARK_MERGE(S) \
-  dspark_attention_merge_kernel<S><<<lse.size(0) * lse.size(1), 128, 0, stream>>>( \
+  launch_kernel(dspark_attention_merge_kernel<S>, lse.size(0) * lse.size(1), 128, 0, stream,  \
       static_cast<const float *>(partial.data_ptr()), static_cast<const float *>(lse.data_ptr()), \
       static_cast<__nv_bfloat16 *>(output.data_ptr()))
   if (lse.size(2) == 16) {

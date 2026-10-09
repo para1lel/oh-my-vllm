@@ -286,6 +286,7 @@ async fn run() -> Result<()> {
         worker_gdn_pool_blocks = client.mamba_blocks,
         fa_pool_blocks = blocks,
         gdn_pool_blocks = cli.mamba_blocks.unwrap_or(blocks),
+        rust_sources_sha256 = env!("OH_MY_VLLM_RUST_SOURCES_SHA256"),
         "BENCH_CONFIG"
     );
     let mut scheduler = Scheduler::new(
@@ -387,7 +388,8 @@ async fn run() -> Result<()> {
                             "\"initial_prefix_hit_tokens\":{},\"preemptions\":{},",
                             "\"proposed_draft_tokens\":{},\"verified_draft_tokens\":{},",
                             "\"accepted_draft_tokens\":{},",
-                            "\"ttft_s\":{:?}}}"
+                            "\"ttft_s\":{:?},\"request_phases\":{},",
+                            "\"cleanup_s\":{}}}"
                         ),
                         if iteration >= args.warmup {
                             "BENCH_RESULT"
@@ -408,7 +410,9 @@ async fn run() -> Result<()> {
                         result.proposed_draft_tokens,
                         result.verified_draft_tokens,
                         result.accepted_draft_tokens,
-                        result.ttft_s
+                        result.ttft_s,
+                        serde_json::to_string(&result.request_phases)?,
+                        result.cleanup_s
                     );
                 }
             }
@@ -422,6 +426,8 @@ struct BatchResult {
     outputs: BTreeMap<u64, Vec<u32>>,
     elapsed: f64,
     ttft_s: Vec<f64>,
+    request_phases: Vec<RequestPhases>,
+    cleanup_s: f64,
     steps: usize,
     prefix_hit_tokens: usize,
     initial_prefix_hit_tokens: usize,
@@ -430,6 +436,20 @@ struct BatchResult {
     accepted_draft_tokens: usize,
     /// Candidate tokens actually present in executed verification inputs.
     verified_draft_tokens: usize,
+}
+
+/// Caller-observed token boundaries, relative to the batch monotonic clock.
+#[derive(serde::Serialize)]
+struct RequestPhases {
+    request_id: u64,
+    /// Submission precedes registration and includes the request's queue time.
+    submitted_s: f64,
+    /// Receipt of the first kept output token after scheduler validation.
+    first_token_s: f64,
+    /// Receipt of the last kept output token, before finished-request cleanup.
+    last_token_s: f64,
+    first_step: usize,
+    last_step: usize,
 }
 
 async fn execute_batch(
@@ -443,6 +463,11 @@ async fn execute_batch(
     let started = Instant::now();
     let mut outputs = BTreeMap::<u64, Vec<u32>>::new();
     let mut first_tokens = BTreeMap::<u64, f64>::new();
+    let mut submitted = BTreeMap::<u64, f64>::new();
+    let mut last_tokens = BTreeMap::<u64, f64>::new();
+    let mut first_steps = BTreeMap::new();
+    let mut last_steps = BTreeMap::new();
+    let cleanup_s;
     let mut pending = prompts.iter().peekable();
     let mut steps: usize = 0;
     let mut prefix_hit_tokens = 0;
@@ -459,11 +484,21 @@ async fn execute_batch(
             for prompt in pending.by_ref() {
                 let id = *next_id;
                 *next_id += 1;
-                client.register_request(id, prompt.clone()).await;
+                submitted.insert(
+                    id,
+                    if arrival_interval == 0 {
+                        0.0
+                    } else {
+                        started.elapsed().as_secs_f64()
+                    },
+                );
                 if !scheduler.add_request(Request::new(id, prompt.clone(), max_tokens, vec![])) {
                     tracing::error!(id, "prompt rejected: exceeds pool capacity");
                     continue;
                 }
+                client
+                    .register_request_with_limit(id, prompt.clone(), max_tokens)
+                    .await;
                 outputs.insert(id, vec![]);
                 prompt_lengths.insert(id, prompt.len());
                 awaiting_first_schedule.insert(id);
@@ -510,9 +545,11 @@ async fn execute_batch(
             let result = scheduler.update(result)?;
             for output in result.outputs {
                 if !output.token_ids.is_empty() {
-                    first_tokens
-                        .entry(output.request_id)
-                        .or_insert_with(|| started.elapsed().as_secs_f64());
+                    let received = started.elapsed().as_secs_f64();
+                    first_tokens.entry(output.request_id).or_insert(received);
+                    first_steps.entry(output.request_id).or_insert(steps);
+                    last_tokens.insert(output.request_id, received);
+                    last_steps.insert(output.request_id, steps);
                 }
                 outputs
                     .get_mut(&output.request_id)
@@ -522,9 +559,11 @@ async fn execute_batch(
         }
         if scheduler.num_running() + scheduler.num_waiting() == 0 && pending.peek().is_none() {
             let cleanup = scheduler.schedule();
+            let cleanup_started = Instant::now();
             client
                 .execute_one_step(&[], &cleanup.finished_request_ids, &[], 0)
                 .await?;
+            cleanup_s = cleanup_started.elapsed().as_secs_f64();
             break;
         }
     }
@@ -542,7 +581,22 @@ async fn execute_batch(
         "missing first-token timestamp"
     );
     Ok(BatchResult {
-        ttft_s: first_tokens.into_values().collect(),
+        ttft_s: first_tokens
+            .iter()
+            .map(|(id, first)| first - submitted[id])
+            .collect(),
+        request_phases: first_tokens
+            .iter()
+            .map(|(id, first)| RequestPhases {
+                request_id: *id,
+                submitted_s: submitted[id],
+                first_token_s: *first,
+                last_token_s: last_tokens[id],
+                first_step: first_steps[id],
+                last_step: last_steps[id],
+            })
+            .collect(),
+        cleanup_s,
         outputs,
         elapsed,
         steps,

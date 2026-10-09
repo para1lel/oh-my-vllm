@@ -44,13 +44,11 @@ See [architecture](docs/architecture.md) for the draft algorithm and target veri
 - [Interactive tutorial](code-journey/README.md): thirteen Chinese chapters with project source and scheduler experiments.
 - [Contribution rules](CONTRIBUTING.md): checks and commit procedure.
 
-The latest full operator and framework measurements apply to source `619c9d9`.
-Subsequent correctness changes have different test coverage.
-The [acceptance index](docs/acceptance.md) identifies each measurement's scope.
-
+The [acceptance index](docs/acceptance.md) identifies each measurement's source and test scope.
+Framework performance uses fifteen prefill/decode rows and theoretical resource limits.
 Project builds, tests, and inference use no vLLM implementation.
-The independently authorized baseline collector uses an isolated vLLM environment.
-Portable evidence contains historical measurements. Formal comparison must use full original records and matching conditions.
+Formal verification uses full original records.
+
 Keep server-specific setup in ignored `LOCAL.md`.
 
 [中文](README.zh.md)

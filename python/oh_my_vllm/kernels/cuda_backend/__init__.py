@@ -48,6 +48,17 @@ _loaded_so_sha256: str | None = None
 _loaded_nvcc_path: Path | None = None
 _loaded_nvcc_version: str | None = None
 _loaded_compiler_source: str | None = None
+_loaded_pdl: bool | None = None
+_loaded_source_sha256: str | None = None
+_loaded_build_input_sha256: str | None = None
+
+
+def _pdl_flag() -> str:
+    """Compile separate PDL and ordinary-launch variants for controlled tests."""
+    value = os.environ.get("OH_MY_VLLM_CUDA_PDL", "1")
+    if value not in ("0", "1"):
+        raise ValueError("OH_MY_VLLM_CUDA_PDL must be 0 or 1")
+    return f"-DOH_MY_VLLM_ENABLE_PDL={value}"
 
 
 def _nvcc_identity() -> tuple[Path | None, str]:
@@ -93,7 +104,7 @@ def _build_input_digest(cuda_source: str, torch_version: str) -> str:
     inputs = {
         "cuda_source_sha256": hashlib.sha256(cuda_source.encode()).hexdigest(),
         "functions": _FUNCTIONS,
-        "cuda_flags": _BASE_CUDA_FLAGS,
+        "cuda_flags": (*_BASE_CUDA_FLAGS, _pdl_flag()),
         "sm": "sm_100a",
         "tvm_cuda_target": _effective_cuda_target(),
         "backend": "cuda",
@@ -186,15 +197,26 @@ def _cached_manifest(digest: str, expected_nvcc_path: Path | None) -> dict:
 
 
 def _record_loaded(
-    so_path: Path, sha: str, nvcc_path: Path, version: str, source: str
+    so_path: Path,
+    sha: str,
+    nvcc_path: Path,
+    version: str,
+    source: str,
+    pdl: bool,
+    cuda_source_sha256: str,
+    build_input_sha256: str,
 ) -> None:
     global _loaded_so_path, _loaded_so_sha256, _loaded_nvcc_path
-    global _loaded_nvcc_version, _loaded_compiler_source
+    global _loaded_nvcc_version, _loaded_compiler_source, _loaded_pdl
+    global _loaded_source_sha256, _loaded_build_input_sha256
     _loaded_so_path = so_path
     _loaded_so_sha256 = sha
     _loaded_nvcc_path = nvcc_path
     _loaded_nvcc_version = version
     _loaded_compiler_source = source
+    _loaded_pdl = pdl
+    _loaded_source_sha256 = cuda_source_sha256
+    _loaded_build_input_sha256 = build_input_sha256
     print(
         "CUDA_BUILD_PROVENANCE " + json.dumps(provenance(require_loaded=True)),
         file=sys.stderr,
@@ -220,6 +242,9 @@ def provenance(*, require_loaded: bool = False, require_compiler: bool = False) 
         "compiler_identity_source": _loaded_compiler_source,
         "so_path": str(path) if path is not None else None,
         "so_sha256": _loaded_so_sha256,
+        "pdl": _loaded_pdl,
+        "source_sha256": _loaded_source_sha256,
+        "build_input_sha256": _loaded_build_input_sha256,
     }
 
 
@@ -237,6 +262,7 @@ def variant_launch_counts() -> dict[str, dict[str, int]]:
 
 @cache
 def compiled():
+    """Load one worker-lifetime variant; compare policies in separate processes."""
     import torch
     from tvm_ffi import load_module
     from tvm_ffi.cpp import build_inline
@@ -251,6 +277,7 @@ def compiled():
     if torch.cuda.get_device_capability() != (10, 0):
         raise RuntimeError("the CUDA custom-kernel backend requires B200/SM100")
     cuda_source = Path(__file__).with_name("kernels.cu").read_text()
+    pdl_flag = _pdl_flag()
     input_digest = _build_input_digest(cuda_source, torch.__version__)
     nvcc_path, nvcc_version = _nvcc_identity()
     if nvcc_path is None or nvcc_version.startswith("nvcc-unavailable:"):
@@ -265,6 +292,9 @@ def compiled():
             Path(record["nvcc_path"]),
             record["nvcc_version"],
             "manifest",
+            pdl_flag.endswith("=1"),
+            hashlib.sha256(cuda_source.encode()).hexdigest(),
+            input_digest,
         )
         return module
     compiler_key = hashlib.sha256(f"{nvcc_path}\n{nvcc_version}".encode()).hexdigest()[
@@ -278,6 +308,7 @@ def compiled():
             backend="cuda",
             extra_cuda_cflags=[
                 *_BASE_CUDA_FLAGS,
+                pdl_flag,
                 f"-DOH_MY_VLLM_NVCC_ID_{compiler_key}",
             ],
         )
@@ -298,7 +329,16 @@ def compiled():
         nvcc_version = "nvcc-changed-during-build"
     else:
         _write_manifest(so_path, input_digest, nvcc_path, nvcc_version, after)
-    _record_loaded(so_path, after, nvcc_path, nvcc_version, "live")
+    _record_loaded(
+        so_path,
+        after,
+        nvcc_path,
+        nvcc_version,
+        "live",
+        pdl_flag.endswith("=1"),
+        hashlib.sha256(cuda_source.encode()).hexdigest(),
+        input_digest,
+    )
     return module
 
 

@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 
 from .core import Operation, TensorSpec
+from .execution import execution_policy
 
 
 def _fake_logits(hidden: torch.Tensor, head: torch.Tensor) -> torch.Tensor:
@@ -36,7 +37,9 @@ _native_logits.register_fake(_fake_logits)
 def _flashinfer_logits(hidden: torch.Tensor, head: torch.Tensor) -> torch.Tensor:
     from flashinfer.gemm import mm_bf16
 
-    return mm_bf16(hidden, head.T, backend="cute-dsl").float()
+    return mm_bf16(
+        hidden, head.T, backend="cute-dsl", pdl=execution_policy().pdl
+    ).float()
 
 
 _flashinfer_logits.register_fake(_fake_logits)

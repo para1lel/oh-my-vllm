@@ -1,13 +1,13 @@
 # ADR-009: 可选 DSpark 模式
 
-状态: 有效设计. 当前源码尚无性能及完整真实模型验收结果.
+状态: 有效. [验收索引](../acceptance.zh.md) 记录测量源码身份及范围.
 
 ## 背景
 
 原生 MTP4 通过 target 模型的 MTP 层提供 4 个草稿 token.
 使用本地 DSpark checkpoint, 在相同源码上比较其与原生 MTP4 的吞吐.
 两种 HTTP API 必须在此模式完成真实 OMP 工具任务.
-既有普通 / MTP4 性能, 上下文, 精度和服务门槛继续有效.
+所有模式使用阶段时延, 上下文, 精度和服务门槛.
 
 DSpark 使用 5 层 BF16 GQA, 从 0 开始编号的 target 层输出 `(5,19,33,47,61)`, 以及 Markov / confidence head.
 至多提出 7 个 token, 由 target 使用 8-row verification.

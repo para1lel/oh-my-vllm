@@ -89,7 +89,7 @@ Eager 模式关闭 capture, 让诊断复制观察真实请求.
 
 ## 验收用 release binary
 
-TTFT harness 读取仓库 `target/release/oh-my-vllm-zmq-worker`.
+阶段时延采集器 读取仓库 `target/release/oh-my-vllm-zmq-worker`.
 显式使用此目录, 防止其他构建位置或旧 binary 改变实测候选:
 
 ```bash
@@ -120,83 +120,45 @@ Normalization, Q / K, recurrent 和 convolution 校验要求 1 次 fast, 0 次 g
 
 ## 框架性能
 
-当前 12 行协议使用 `benchmarks/ttft.py`.
-它接受单行完整原始基线, 包括 hardware, configuration, warmup, repetition 和 measurement audit.
-历史刷新产物包含多个 row; 提取其中原始 baseline row, 不改变字段.
-原主机使用保存的完整记录, 其他服务器重新采集匹配基线.
-提取前, 将 `BASELINE_COLLECTION` 设为完整的刷新基线集合.
-序列化规则和哈希断言保留每个归档行的字节身份.
-不要提供可移植摘要.
-
-```python
-import hashlib
-import json
-import os
-from pathlib import Path
-
-collection = json.loads(Path(os.environ["BASELINE_COLLECTION"]).read_text())
-assert "artifact_kind" not in collection, "use the full original collection"
-output = Path(os.environ["EVIDENCE_DIR"])
-output.mkdir(parents=True, exist_ok=True)
-for row in collection["rows"]:
-    raw = (json.dumps(row["artifact"], indent=2) + "\n").encode()
-    assert hashlib.sha256(raw).hexdigest() == row["sha256"]
-    (output / f"baseline-{row['label']}.json").write_bytes(raw)
-    print(row["label"], row["artifact"]["hardware"]["cpu_affinity"])
-```
-
-比较前明确拒绝可移植摘要.
-
-设置 `EVIDENCE_DIR`, 模型和匹配的 CPU affinity 后, 单行命令为:
+构建当前 release 二进制, 为每次尝试指定新的外部输出路径.
+从 [要求](requirements.zh.md#req-perf-001-阶段时延) 中选择十五行之一.
 
 ```bash
-scripts/with-gpu.sh scripts/with-env.sh python benchmarks/ttft.py --baseline "$EVIDENCE_DIR/baseline-ordinary-32768-1.json" --output "$EVIDENCE_DIR/candidate-row.json"
+scripts/with-gpu.sh scripts/with-env.sh python -m benchmarks.framework --mode ordinary --batch-size 1 --input-len 32768 --output "$EVIDENCE_DIR/ordinary-32768-1.json"
 ```
 
-其他行按 label 替换 `--baseline` 文件. Harness 从该记录选择 mode, input/output length 和 batch.
-提取结果打印 label 和 CPU affinity; 采集时使用匹配的 CPU affinity.
+使用 `ordinary`, `mtp4`, `prefix` 和 `dspark` 模式, 输入 32768, batch 为 1/2/4.
+普通模式另测输入 131072, batch 相同.
+DSpark 通过 `OH_MY_VLLM_DRAFT_MODEL` 或 `--draft-model` 指定 checkpoint.
+输出数量为 4096. 每次尝试执行两次完整预热和五次正式测量.
+前缀行必须为每个请求命中 32144 个 token.
+其他行在每次重复前重置前缀复用.
 
-对 ordinary/MTP4/prefix-hit 使用相同步骤, input32768, output4096, batch1/2/4.
-另测相同 batch 的 ordinary input131072.
-Candidate 默认使用 4200 个历史容量单位和 128 个 GDN slot.
-对应 1400 个 FA slot.
-校验实际 worker 和 scheduler 容量, 不只看 CLI 设置.
-基线容量需让相同工作负载驻留, 无抢占.
+采集器记录每个请求的提交, 首 token, 末 token 和 step 边界.
+从各请求自己的边界独立计算 prefill 和 decode.
+每次重复分别取各阶段最长的请求区间.
+清理在末 token 之后执行, 使用独立计时字段.
 
-匹配 CPU affinity 和 GPU 型号, 显存, 驱动.
-比较器还要求相同 model / configuration 和冻结基线源码身份.
-使用 2 次完整预热和 5 次重复.
-记录每个请求 TTFT 和固定输出数量.
-每行应用 95% 吞吐, 110% TTFT 和 10% spread 门槛.
-Spread 失败需调查并完整重跑.
-保留全部拒收完整尝试和中断运行.
+Worker 缓存有效形状, 状态访问, 草稿运算和编译运算身份.
+在正式请求执行后写出 trace.
+正式分析使用规范成本模型和官方峰值.
+未识别的运算阻止验收.
+GPU event 区间是用于诊断的 stream 区间, 可能包含主机提交间隙.
 
-采集器记录源码, binary, Python 文件哈希, package 版本, 加载 CUDA 模块和完整日志.
-Log / cache 审计需显示测量处于稳态, 没有观察到编译或 capture.
-现有日志和缓存记录不能排除静默的内存内重新编译.
-性能运行禁用会改变执行的诊断功能.
-框架比较使用完整批执行的 TTFT. GPU-only prefill 耗时的范围不同.
+每个阶段的墙钟中位数最多为其理论下界中位数的三倍.
+墙钟时延的相对极差最多为 10%.
+保留完整失败集和中断尝试. 调查后重新执行整组测量.
 
-`benchmarks/compare_vllm.py` 是历史 9 行工具, 校验固定的原始 SHA.
-早期 3 次重复产物不满足当前 5 次重复规则.
-工具要求显式 `--baseline-json`, 从不启动 vLLM.
-旧验收不作为当前性能比较分母.
+每次尝试绑定源码, 二进制, checkpoint 字节, CUDA module, 硬件, 容量和运行时包.
+采集期间保持源码不变.
+编译 / cache 审计必须显示稳定执行.
+现有日志无法排除全部静默内存编译.
+原始日志和 trace 放在外部目录.
+审阅使用可移植摘要. 正式验证使用完整原始记录.
 
-## 隔离基线采集
-
-基线采集器是唯一获授权依赖 vLLM 的工具.
-使用独立 interpreter, checkout 和 cache.
-不通过项目环境包装脚本调用它.
-将 `BASELINE_PYTHON` 和 `BASELINE_CHECKOUT` 设置为隔离安装位置:
-
-```bash
-scripts/with-gpu.sh "$BASELINE_PYTHON" benchmarks/baseline/enginecore.py --checkout "$BASELINE_CHECKOUT" --model "$OH_MY_VLLM_MODEL" --mode ordinary --batch-size 1 --input-len 32768 --output-len 4096 --output "$EVIDENCE_DIR/baseline-row.json"
-```
-
-采集器要求冻结提交和未修改 checkout.
-记录实际容量和完整测量身份.
-新源码 revision 需要单独批准的基线策略.
-基线 cache 与项目 cache 隔离.
+未提交源码的实验使用 `--diagnostic`.
+诊断记录不提供正式验收结论.
+Profiling 与正式计时独立执行.
 
 ## DSpark 比较
 
@@ -244,7 +206,6 @@ scripts/with-env.sh python benchmarks/speculative.py --input "$EVIDENCE_DIR/dspa
 
 实际验证草稿为已调度 candidate, 返回的下一步 proposal 使用独立诊断计数.
 Portable 输出是派生摘要, 不能替代比较所需的原始证据.
-最终源码仍需满足原有 12 个 vLLM 性能门槛.
 
 源码身份及测量范围见 [验收索引](acceptance.zh.md).
 

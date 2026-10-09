@@ -64,6 +64,11 @@ Supply `WorkerConfig.model_path` explicitly for direct Rust library calls.
 | `TVM_FFI_CUDA_ARCH_LIST` | CUDA architecture. Default `10.0a` for B200. |
 | `OH_MY_VLLM_KERNEL_BACKEND` | Explicit `cuda` or pinned `tilelang` backend. |
 | `OH_MY_VLLM_ENFORCE_EAGER` | Explicit diagnostic mode when set to `1`. |
+| `OH_MY_VLLM_MULTI_STREAM` | GDN branch streams. Default `1`. Diagnostic `0` disables them. |
+| `OH_MY_VLLM_CUDA_PDL` | Owned CUDA programmatic launch. Default `1`. Diagnostic `0` disables it. |
+| `OH_MY_VLLM_GPU_UUID` | Optional idle B200 selection for `scripts/with-gpu.sh`. |
+| `PYTORCH_ALLOC_CONF` | Explicit allocator options. This name takes precedence over the legacy name. |
+| `PYTORCH_CUDA_ALLOC_CONF` | Legacy allocator options when the new name is unset. |
 | `OMP_NUM_THREADS` | Host thread count. Default `1`. |
 
 The default cache suffix is `oh-my-vllm/tilelang-ffi012` for compatibility with the library combination with satisfactory compatibility tests.
@@ -71,6 +76,13 @@ Different subdirectories hold FlashInfer, third-party Triton, TileLang, and nati
 First use can compile kernels or download versioned FlashInfer GEMM cubins.
 Runtime identity records library versions and rejects accidental vLLM imports or mapped libraries.
 Do not use accuracy probes or eager overrides during performance acceptance.
+
+When the two allocator variables are unset, the wrapper sets `graph_capture_record_stream_reuse:True`.
+This option uses graph dependencies to reuse storage during capture with multiple streams.
+Explicit settings, with an empty value, take precedence.
+The wrapper removes the legacy alias after selection. Trace identity records the allocator backend.
+
+Set stream and PDL options before worker initialization. Formal collection must have the two options enabled.
 
 ## Draft mode selection
 
@@ -134,5 +146,5 @@ See [kernel development](kernels.md).
 Keep host paths, addresses, selected process IDs, cache locations, and maintenance commands in ignored `LOCAL.md`.
 Ignored `.local/evidence/` holds full measurements from original evidence.
 The tracked [evidence index](acceptance.md) identifies portable summaries and original hashes.
-New servers must have their own model location, compatible environment, GPU selection, and baseline collection.
+New servers must have their own model location, compatible environment, GPU selection, and current-source measurement.
 The repository contains no host-specific default model or environment location.

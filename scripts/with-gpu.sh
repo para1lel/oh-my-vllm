@@ -9,8 +9,15 @@ fi
 while true; do
     inventory=$(nvidia-smi --query-gpu=uuid,name,memory.used,utilization.gpu --format=csv,noheader,nounits)
     processes=$(nvidia-smi --query-compute-apps=gpu_uuid --format=csv,noheader,nounits)
+    requested_present=false
     while IFS=, read -r uuid name memory utilization; do
         uuid=${uuid// /}
+        [[ -z ${OH_MY_VLLM_GPU_UUID:-} || "$uuid" == "$OH_MY_VLLM_GPU_UUID" ]] || continue
+        requested_present=true
+        if [[ -n ${OH_MY_VLLM_GPU_UUID:-} && "$name" != *B200* ]]; then
+            echo "requested GPU is not a B200" >&2
+            exit 2
+        fi
         [[ "$name" == *B200* ]] || continue
         [[ "$memory" =~ ^[[:space:]]*[0-9]+$ && "$utilization" =~ ^[[:space:]]*[0-9]+$ ]] || continue
         (( memory <= 64 && utilization == 0 )) || continue
@@ -29,6 +36,10 @@ while true; do
         fi
         exec {gpu_lock}>&-
     done <<< "$inventory"
+    if [[ -n ${OH_MY_VLLM_GPU_UUID:-} && "$requested_present" == false ]]; then
+        echo "requested GPU UUID is not in the device inventory" >&2
+        exit 2
+    fi
     echo "$(date -u +%FT%TZ) waiting for an idle B200" >&2
     sleep 10
 done

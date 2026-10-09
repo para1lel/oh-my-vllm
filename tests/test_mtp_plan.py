@@ -4,6 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 import torch
 from oh_my_vllm.worker.batch_plan import PlannedRequest
 from oh_my_vllm.worker.mtp import MTP
@@ -21,7 +22,16 @@ class MTPPlanTest(unittest.TestCase):
             self.mtp = MTP(model, 8, 4096)
         self.calls = []
 
-        def run(tokens, hidden, starts, tables, positions):
+        def run(
+            tokens,
+            hidden,
+            starts,
+            tables,
+            positions,
+            *,
+            request_ids=None,
+            persistent=False,
+        ):
             self.calls.append(
                 (list(tokens), hidden.clone(), list(starts), tables, list(positions))
             )
@@ -87,3 +97,28 @@ class MTPPlanTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.parametrize("remaining", [0, 1, 2, 3, 4, 6])
+def test_mtp_proposals_obey_remaining_output_budget(remaining):
+    case = MTPPlanTest()
+    case.setUp()
+    history = list(range(102))
+    req = ScheduledRequest(1, [100], 100, [1], [])
+    plan = PlannedRequest(req, 0, [], [], [], False)
+    case.mtp.next_position[1] = 101
+    sampler = SimpleNamespace(
+        params=SimpleNamespace(max_tokens=10), generated=[0] * (10 - remaining)
+    )
+    result = case.mtp.propose(
+        [plan],
+        [0, 1],
+        [1],
+        torch.zeros(1, 5120, dtype=torch.bfloat16),
+        {1: history},
+        [RequestOutput(1, [101])],
+        samplers={1: sampler},
+    )
+    assert len(result[1]) == min(4, max(0, remaining - 1))
+    for _, _, _, _, positions in case.calls:
+        assert max(positions) <= max(101, 100 + remaining)

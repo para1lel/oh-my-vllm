@@ -1,7 +1,7 @@
-"""Compare current-source DSpark and native MTP4 EngineCore measurements.
+"""Compare current-source DSpark and native MTP4 framework measurements.
 
-This protocol reports paired TPS, spread, and confidence bounds. Existing vLLM
-regression gates stay unchanged. Raw records are required for a valid decision.
+This protocol reports paired TPS, spread, and confidence bounds.
+Phase-latency gates apply separately. Raw records are required for a valid decision.
 """
 
 import argparse
@@ -22,7 +22,7 @@ from pathlib import Path
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from benchmarks.compare_vllm import (
+from benchmarks.common import (
     parse_rows,
     run_engine,
     runtime_identity,

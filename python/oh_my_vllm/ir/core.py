@@ -357,6 +357,9 @@ def lower_to_inductor(
     graph_module: torch.fx.GraphModule, example_inputs: Sequence[Any]
 ) -> Callable[..., Any]:
     """Select providers from FX metadata, then compile the lowered graph."""
+    from oh_my_vllm.performance.execution import observe_graph
+
+    observe_graph("compiled", graph_module.graph)
     fused_silu = _rewrite_silu_fp8_linear(graph_module)
     selections: list[tuple[str, str, str]] = []
     for node in graph_module.graph.nodes:
@@ -404,6 +407,9 @@ def compile_forward(
     function: Callable[..., Any], *, unit: str | None = None
 ) -> Callable[..., Any]:
     """Compile one declared GPU forward unit; graph breaks are errors."""
+    from .execution import execution_policy
+
+    execution_policy()
     torch._dynamo.config.recompile_limit = max(
         torch._dynamo.config.recompile_limit, _RECOMPILE_LIMIT
     )

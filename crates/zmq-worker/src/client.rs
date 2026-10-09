@@ -313,6 +313,27 @@ impl WorkerClient {
     /// Send failures are non-fatal: the worker may have already exited, and the
     /// next `execute_one_step` will detect the dead worker via `recv_with_child`.
     pub async fn register_request(&mut self, request_id: u64, prompt_token_ids: Vec<u32>) {
+        self.send_registration(request_id, prompt_token_ids, None)
+            .await;
+    }
+
+    /// Register a request with the same output budget as the Rust scheduler.
+    pub async fn register_request_with_limit(
+        &mut self,
+        request_id: u64,
+        prompt_token_ids: Vec<u32>,
+        max_tokens: usize,
+    ) {
+        self.send_registration(request_id, prompt_token_ids, Some(max_tokens))
+            .await;
+    }
+
+    async fn send_registration(
+        &mut self,
+        request_id: u64,
+        prompt_token_ids: Vec<u32>,
+        max_tokens: Option<usize>,
+    ) {
         debug!(
             request_id,
             input_tokens = prompt_token_ids.len(),
@@ -321,6 +342,7 @@ impl WorkerClient {
         let msg = RustMessage::Register(RegisterMsg {
             request_id,
             prompt_token_ids,
+            max_tokens,
         });
         if let Err(e) = Self::send_raw(&mut self.sock, &msg).await {
             warn!(request_id, "register send failed: {e}");

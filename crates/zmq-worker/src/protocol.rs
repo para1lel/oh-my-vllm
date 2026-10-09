@@ -46,6 +46,9 @@ pub struct InitMsg {
 pub struct RegisterMsg {
     pub request_id: u64,
     pub prompt_token_ids: Vec<u32>,
+    /// Output budget shared with Python sampling and speculative proposal limits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]
@@ -149,6 +152,23 @@ pub fn decode(bytes: &[u8]) -> Result<PythonMessage, rmp_serde::decode::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn register_output_budget_is_optional_on_the_wire() {
+        for budget in [None, Some(16)] {
+            let bytes = encode(&RustMessage::Register(RegisterMsg {
+                request_id: 1,
+                prompt_token_ids: vec![2],
+                max_tokens: budget,
+            }))
+            .unwrap();
+            let value: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+            assert_eq!(
+                value.get("max_tokens"),
+                budget.map(|n| serde_json::json!(n)).as_ref()
+            );
+        }
+    }
 
     #[test]
     fn execute_wire_contains_only_live_cache_fields() {

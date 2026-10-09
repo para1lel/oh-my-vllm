@@ -23,47 +23,92 @@ Use block size 784 on all production paths.
 Use FA group 0 and GDN group 1 with `mamba_cache_mode="align"`.
 Set the checkpoint location through `OH_MY_VLLM_MODEL` or `--model`.
 
-## REQ-PERF-001: Throughput
+## REQ-EXEC-001: GPU execution
+
+Use CUDA Graph, multiple CUDA streams, and Programmatic Dependent Launch (PDL) for model computation.
+Use semantic operations and tensor/state access to define graph dependencies.
+Independent branches can run in parallel.
+PDL consumers must wait before they read producer output.
+
+Keep graph capture restoration, cache ownership, and bounded graph storage.
+Tune execution with full-operation and framework measurements.
+Record the configuration, numerical checks, memory, and latency of each selected optimization.
+Use separate measurements to identify graph, stream, and PDL effects.
+The phase-latency and operator gates stay active.
+
+## REQ-PERF-001: Phase latency
 
 | Mode | Input tokens | Output tokens | Batch sizes |
 |---|---:|---:|---|
-| ordinary, MTP4, prefix-hit | 32768 | 4096 | 1, 2, 4 |
+| ordinary, MTP4, prefix-hit, DSpark | 32768 | 4096 | 1, 2, 4 |
 | ordinary | 131072 | 4096 | 1, 2, 4 |
 
-These combinations make twelve rows.
-Each row must have throughput of at least 95% of the pinned EngineCore baseline.
-Use identical tokens, sampling, output counts, and comparable effective cache capacities.
-Record source, environment, and reported cache identities.
+These combinations make fifteen rows.
+Use synthetic token IDs, greedy sampling, and fixed output counts with ignored EOS.
+Reset prefix reuse before each repetition.
+For prefix-hit rows, seed 32144 reusable tokens per request.
+Keep each full workload resident with zero recompute preemptions.
 
-## REQ-PERF-002: TTFT and measurement
+Record submission, first kept token, and last kept token for each request.
+Prefill is submission to the first token. Decode is the first token to the last token.
+For each repetition, use the maximum request prefill interval and maximum request decode interval.
+Use each request's own boundaries when phases overlap in a batch.
 
-Each row must have TTFT of at most 110% of the baseline.
-Start the monotonic clock at the same pretokenized batch submission, before request registration.
-Stop each request's clock when the caller receives its first kept output token.
-Include engine queue time, scheduling, transport, and sampling.
-Exclude HTTP, tokenization, loading, and warmup.
+Include registration, queue time, scheduling, Python, transport, and sampling.
+Exclude loading, tokenization, HTTP, and warmup.
 
-Use the median of per-repetition maximum request TTFTs as the row statistic.
-Report GPU prefill time and cold latency independently.
 
-Use at least two full warmups and five measured repetitions.
-Reset prefix reuse for ordinary and MTP measurements.
-For prefix rows, seed exactly 32144 reusable tokens per request.
-The two engines must have `(max-min)/median <= 0.10` for throughput and TTFT.
-Do an investigation when spread is more than the limit and do the full set again.
+Record full batch time, cleanup time, TPS, acceptance rate, and GPU diagnostics independently.
 
-Keep excluded attempts and reasons. Do not select individual repetitions.
-Compilation, new graph capture, interference, or changing source invalidates a measured attempt.
-Fix failures. Change thresholds only with user authorization.
+For each phase, the wall-time median must be at most three times the theoretical lower-bound median.
+The wall-time spread must be at most 10%.
 
-The pinned baseline uses official vLLM source `e9f169d16b9408bb9ae44f75072b91a5521d733c`.
-Original baseline SHA-256 is `fa3729f1a2ce160235b45df75542774d628dac7af963f01d673353fb419df8fd`.
-Use full original data for formal comparison.
-On a new server, measure a new baseline with the same protocol and matching conditions.
-Historical portable summaries are for reference and offline analysis.
+## REQ-PERF-002: Theoretical model and measurement
 
-The next performance-policy goal derives thresholds from roofline analysis instead of vLLM measurements.
-The existing thresholds stay active until a new requirement replaces them.
+Use a fixed semantic DAG with data, token, layer, and persistent-state dependencies.
+Independent branches can run in parallel.
+CUDA stream order supplies no extra dependency.
+Record effective queries, KV lengths, state access, drafts, verification, and rollback for each executed step.
+Canonical rules must stay the same when kernels split or fuse.
+
+The theoretical lower bound is the maximum of these limits:
+
+- The semantic DAG critical path.
+- Necessary HBM traffic divided by the official single-GPU bandwidth.
+- Necessary work on each shared execution resource divided by its official peak rate.
+
+Include parameter reads, scales, model computation, GPU sampling, KV/state updates, drafts, and rejected verification rows.
+Use the precision and execution resource of each operation.
+Count all seven DSpark backbone rows when the algorithm executes seven rows.
+Keep padding, repeated transfers, and unnecessary computation in overhead diagnostics.
+They must not increase the theoretical bound.
+
+Use single-GPU, dense B200 peaks: FP8 Tensor 4.5 PFLOPS, BF16 Tensor 2.25 PFLOPS, FP32 75 TFLOPS, and FP64 37 TFLOPS.
+Use HBM bandwidth 7.7 TB/s.
+Use published instruction rates for other known execution resources.
+Record hardware identity, peak sources, operation rules, and model version.
+Measured rates and empirical efficiency factors cannot increase the bound.
+
+Use ideal cache reuse and fused intermediate storage on chip.
+Use finite storage capacities to calculate minimum necessary HBM traffic.
+Unpublished on-chip bandwidth is infinite in this relaxation.
+Identify all GPU operations. An unidentified operation blocks acceptance.
+
+Use two full warmups and five measured repetitions per row.
+Calculate a new bound from each repetition's executed schedule.
+Apply these two independent checks to prefill and decode:
+
+```text
+median(wall_time) <= 3 * median(theoretical_lower_bound)
+(max(wall_time) - min(wall_time)) / median(wall_time) <= 0.10
+```
+
+Keep complete failed sets and interrupted attempts with their reasons.
+Do an investigation of a failure and run the full set again.
+Do not select samples.
+Compilation, graph capture, interference, or source changes invalidate measured work.
+Connect each attempt to source, binary, environment, CUDA module, configuration, and checkpoint identities.
+Portable summaries cannot replace original records for formal verification.
 
 ## REQ-PERF-003: DSpark and native MTP4
 
@@ -77,15 +122,14 @@ Load the two draft models before warmup. Reset prefix reuse before each attempt.
 For each batch, use three rounds.
 Each round has two full warmups per mode and five measured pairs with alternating mode order.
 
-Report these statistics for each batch:
+Record these statistics for each batch:
 
 - Each mode's throughput median and spread in each round.
 - Each round's DSpark median difference from MTP4.
 - The hierarchical paired-bootstrap one-sided 95% lower bound on throughput gain.
 
-Report TTFT and its spread.
+Record TTFT and its spread.
 Do not add a DSpark speed, spread, or confidence-bound acceptance gate for this comparison.
-The twelve existing vLLM throughput and TTFT gates stay active.
 Keep each failed or interrupted attempt and its full raw records.
 Compilation or graph capture during measured work invalidates an attempt.
 
@@ -214,7 +258,7 @@ Equivalent fused chains include all required copies and reductions.
 Keep formal cases, the harness, and summarized evidence in the repository.
 Keep raw traces and temporary tuning in an external directory.
 Profile independently from acceptance timing.
-Report unavailable counters. Keep the gates active.
+Record unavailable counters. Keep the gates active.
 Use [kernel procedures](kernels.md).
 
 DSpark adds independently derived supplemental operator cases.
@@ -240,7 +284,7 @@ Keep ordered persistent writes, capture restoration, and memory guards.
 Any activation donation must have proof for the named temporary. Persistent caches cannot be donated.
 Graph rewrites must have equivalence tests and an exception-aware call-site inventory.
 
-Acceptance includes all existing accuracy tests, ordinary/MTP4 context cases, formal operator cases, and twelve performance rows.
+Acceptance includes all existing accuracy tests, ordinary/MTP4 context cases, formal operator cases, and fifteen phase-latency rows.
 Add DSpark boundary, service, supplemental operator, and paired-performance cases.
 A target-model test must exercise all four compiled units and graph replay with changed metadata.
 There is no new compile-speedup percentage gate.

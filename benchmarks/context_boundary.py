@@ -14,12 +14,12 @@ from contextlib import contextmanager
 from pathlib import Path
 
 if __package__:
-    from benchmarks.compare_vllm import parse_rows, run_engine, source_identity
+    from benchmarks.common import parse_rows, run_engine, source_identity
     from benchmarks.measurement import hardware_identity
 else:
     # Direct `python benchmarks/context_boundary.py` has benchmarks/ on sys.path.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from benchmarks.compare_vllm import parse_rows, run_engine, source_identity
+    from benchmarks.common import parse_rows, run_engine, source_identity
     from benchmarks.measurement import hardware_identity
 
 ROOT = Path(__file__).resolve().parents[1]

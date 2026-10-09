@@ -14,7 +14,6 @@ Use BF16 GDN state for MTP and FP32 for ordinary execution.
 Rust reserves speculative slots and protects the previously accepted state until the next execution consumes it.
 The worker returns kept target tokens, accepted draft counts, and next drafts.
 Rust rolls back only scheduled rejected drafts.
-The matching baseline uses the same state precision.
 
 ## Consequences
 

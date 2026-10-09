@@ -279,15 +279,14 @@ Object.assign(sourceNotes, {
     ],
   },
   measurement: {
-    title: "summarize 的检查与汇总", intro: "runs 保存完整重复测量. 先检查每次运行的完成数量和指标, 再分别汇总 TTFT 与吞吐的中位数和相对极差.",
+    title: "phase_verdict 的两个独立条件", intro: "每个阶段各有五个墙钟时间和五个理论下界. 分别取中位数, 再检查时延倍率与墙钟相对极差.",
     entries: [
-      ["runs / batch_size / output_len / minimum", "测量列表, 批大小, 每请求输出长度, 最少重复次数.", "默认要求至少 5 次, 每次完成 batch_size 乘 output_len 个输出."],
-      ["row / times / t", "一次测量, 其中每请求的 TTFT 列表, 当前时间.", "检查数量, 有限正值, 完整输出与零抢占."],
-      ["values / ttft_s / output_tps", "待汇总数组, 首次输出秒数, 每秒输出数量.", "每次取最慢请求的 TTFT, 保留该次实际吞吐."],
-      ["key / v / median / spread", "指标名, 重复值列表, 中位数, 相对极差.", "spread = (max - min) / median, 用来发现不稳定测量."],
+      ["wall / lower", "该阶段五次实际秒数和五次理论秒数.", "长度必须都为 5, 每项都是有限正数."],
+      ["median / bound / spread", "墙钟中位数, 下界中位数, 墙钟相对极差.", "倍率使用两个中位数的比值, spread 等于极差除以墙钟中位数."],
+      ["wall_median_s / lower_bound_median_s", "两组值各自的中位秒数.", "保留原始量, 使倍率和门槛可以重新核算."],
+      ["latency_ratio / wall_spread / passed", "实际与理论中位数的比值, 波动比例, 阶段结果.", "倍率最高为 3, 波动最高为 10%, 两项同时满足才通过."],
     ],
-  },
-});
+  },});
 
 Object.assign(sourceNotes, {
   wireInit: {
@@ -304,6 +303,14 @@ Object.assign(sourceNotes, {
       ["draft_model_path", "独立 DSpark 本地目录.", "映射为 RuntimeConfig.draft_model, 检查配置与权重后加载."],
       ["comparison", "同进程比较是否预加载两个 proposer.", "普通服务只加载选择的模式; 比较命令可在空闲时切换."],
       ["dspark_confidence_threshold", "前缀累积置信度阈值, 默认 0.2.", "独立自然文本 / 工具历史小样本选定; 首项未达到阈值可返回 0 草稿, 完整负载表现另行测量."],
+    ],
+  },
+  wireRegister: {
+    title: "RegisterMsg 的 3 个字段", intro: "离线请求在 Rust 接纳后向 Python 注册. 两侧共享输出预算, 草稿只计算下一轮可以验证的数量.",
+    entries: [
+      ["request_id", "Rust 分配的请求编号.", "Python 用它保存历史和采样器, 清理通知也使用同一编号."],
+      ["prompt_token_ids", "预先分词的完整输入 token ID 列表.", "提供接受历史的起点, 让 Python 核对后续调度片段."],
+      ["max_tokens", "可选的输出 token 数量上限.", "离线入口传入与 Rust 相同的上限, 使用 greedy 和 ignore-EOS. 省略时沿用兼容默认值. MTP 与 DSpark 额外为下一轮目标采样预留一个输出 token, 避免生成会被调度器丢弃的草稿."],
     ],
   },
   wireExecute: {

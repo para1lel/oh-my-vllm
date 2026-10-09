@@ -12,7 +12,7 @@ import msgpack
 import zmq
 from oh_my_vllm.worker.protocol import RequestOutput, WorkerOutput
 from oh_my_vllm.worker.serving import RequestValidationError
-from oh_my_vllm.worker.zmq_bridge import serve
+from oh_my_vllm.worker.zmq_bridge import _register_request, serve
 
 
 class FakeAdapter:
@@ -70,6 +70,33 @@ class FakeWorker:
 
 
 class BridgeAbortTest(unittest.TestCase):
+    def test_offline_output_budget_reaches_sampling(self):
+        for limit in (None, 1, 16, 4096):
+            with self.subTest(limit=limit):
+                worker = FakeWorker()
+                _register_request(
+                    worker,
+                    {"request_id": 1, "prompt_token_ids": [2], "max_tokens": limit},
+                )
+                params = worker.samplers[1]
+                if limit is None:
+                    self.assertIsNone(params)
+                else:
+                    self.assertEqual(params.max_tokens, limit)
+                    self.assertEqual(params.temperature, 0)
+                    self.assertTrue(params.ignore_eos)
+
+    def test_invalid_offline_budget_does_not_register(self):
+        for limit in (0, -1, True, 1.5, "16"):
+            with self.subTest(limit=limit):
+                worker = FakeWorker()
+                with self.assertRaisesRegex(ValueError, "positive integer"):
+                    _register_request(
+                        worker,
+                        {"request_id": 1, "prompt_token_ids": [2], "max_tokens": limit},
+                    )
+                self.assertEqual(worker.histories, {})
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="oh-my-vllm-bridge-")
         self.context = zmq.Context()

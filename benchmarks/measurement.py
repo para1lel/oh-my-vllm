@@ -1,4 +1,4 @@
-"""Evidence checks shared by the isolated collector and independent comparator."""
+"""Source and steady-state checks shared by independent GPU collectors."""
 
 import datetime
 import hashlib
@@ -6,8 +6,6 @@ import os
 import re
 import subprocess
 from pathlib import Path
-
-FROZEN_SHA = "e9f169d16b9408bb9ae44f75072b91a5521d733c"
 
 
 def _sha256_file(path):
@@ -35,6 +33,19 @@ def hardware_identity():
             ],
             text=True,
         ).strip(),
+        "max_sm_clock_hz": 1e6
+        * float(
+            subprocess.check_output(
+                [
+                    "nvidia-smi",
+                    "-i",
+                    gpu,
+                    "--query-gpu=clocks.max.sm",
+                    "--format=csv,noheader,nounits",
+                ],
+                text=True,
+            ).strip()
+        ),
     }
 
 

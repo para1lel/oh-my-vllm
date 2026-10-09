@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-path = Path(__file__).resolve().parents[1] / "benchmarks/compare_vllm.py"
+path = Path(__file__).resolve().parents[1] / "benchmarks/common.py"
 spec = importlib.util.spec_from_file_location("benchmark_process", path)
 process_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(process_module)

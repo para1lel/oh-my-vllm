@@ -9,7 +9,6 @@
 使用小型项目实现和独立库, 替代 vLLM 运行时依赖.
 只在保留来源和许可证时移植选定代码; 不整体复制框架.
 构建, 测试和推理必须不依赖 vLLM package, checkout, 旧环境或编译缓存.
-只有单独获授权的基线采集器存在隔离例外.
 
 按依赖顺序选择兼容稳定版本, 固定已验证组合.
 使用主机驱动和可用 CUDA / 编译器工具, 高层库安装在项目环境中.
@@ -20,7 +19,6 @@
 项目拥有 FP8 weight/scale, GQA/GDN, MTP rollback, loading, cache state, sampling, graph 和服务 adapter.
 保留实际路径独立 FP64 参考和全部现有功能.
 每个里程碑独立审查, 测量受影响热路径.
-原 9 行验收已达到; 当前分母是刷新后的 12 行基线.
 [需求](../requirements.zh.md) 和 [验收](../acceptance.zh.md) 定义有效范围和实测身份.
 
 ## 后续边界

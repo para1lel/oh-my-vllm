@@ -15,5 +15,3 @@ Adapter 将 Rust block table, 调度 token 和请求状态转换为 worker 输�
 Block ID 现在直接寻址 FA / GDN slot.
 历史 CLI 容量单位保留, 旧 physical 映射已移除.
 GDN 容量有独立限制, 用于避免反复分配未使用状态.
-[原始证据](../../bench/evidence/2026-09-19-acceptance.json) 只保留对应历史范围.
-当前 12 行分母和独立实现替代其早期验收.

@@ -24,6 +24,7 @@ class GraphCache:
         synchronize: Callable[[], None] | None = None,
         free_bytes: Callable[[], int] | None = None,
         reserved_bytes: Callable[[], int] | None = None,
+        min_capture_free_bytes: int = MIN_CAPTURE_FREE_BYTES,
     ) -> None:
         floors = dict(family_floors or {})
         if (
@@ -35,6 +36,7 @@ class GraphCache:
             or failure_cooldown < 0
             or churn_window_decisions <= 0
             or churn_cooldown_decisions < 0
+            or min_capture_free_bytes < 0
             or any(value < 0 for value in floors.values())
             or sum(floors.values()) > capacity
         ):
@@ -51,6 +53,7 @@ class GraphCache:
         self.synchronize = synchronize or torch.cuda.synchronize
         self.free_bytes = free_bytes
         self.reserved_bytes = reserved_bytes
+        self.min_capture_free_bytes = min_capture_free_bytes
         self.graphs: OrderedDict[tuple[str, tuple], object] = OrderedDict()
         self.probation: OrderedDict[tuple[str, tuple], int] = OrderedDict()
         self.recent_captures: OrderedDict[tuple[str, tuple], int] = OrderedDict()
@@ -105,7 +108,7 @@ class GraphCache:
         self.retry_after.pop(combined, None)
         if (
             self.free_bytes is not None
-            and self.free_bytes() < self.MIN_CAPTURE_FREE_BYTES
+            and self.free_bytes() < self.min_capture_free_bytes
         ):
             self.counters[f"{family}_headroom_eager"] += 1
             return False
@@ -140,7 +143,7 @@ class GraphCache:
             return None
         if (
             self.free_bytes is not None
-            and self.free_bytes() < self.MIN_CAPTURE_FREE_BYTES
+            and self.free_bytes() < self.min_capture_free_bytes
         ):
             self.counters[f"{family}_headroom_eager"] += 1
             return None
@@ -152,7 +155,7 @@ class GraphCache:
             self.synchronize()
         if self.free_bytes is not None:
             free = self.free_bytes()
-            if free < self.MIN_CAPTURE_FREE_BYTES:
+            if free < self.min_capture_free_bytes:
                 self.counters[f"{family}_headroom_eager"] += 1
                 return None
             metric = f"{family}_min_capture_free_bytes"
@@ -223,6 +226,8 @@ class GraphCache:
             "target_dspark",
             "dspark",
             "dspark_context",
+            "prefill",
+            "prefill_dspark",
         ):
             result[f"{family}_resident"] = counts[family]
             for metric in (

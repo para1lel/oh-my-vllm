@@ -1581,6 +1581,106 @@
       "forms": [
         "synthetic token IDs"
       ]
+    },
+    {
+      "term": "DAG",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Directed acyclic graph of semantic operations and their data dependencies.",
+      "translation": "语义操作及其数据依赖构成的有向无环图.",
+      "forms": [
+        "DAG"
+      ]
+    },
+    {
+      "term": "HBM",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "GPU high-bandwidth memory that holds parameters and persistent data.",
+      "translation": "保存参数与持久数据的 GPU 高带宽内存.",
+      "forms": [
+        "HBM"
+      ]
+    },
+    {
+      "term": "SFU",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "GPU execution resource for specified native special-function instructions.",
+      "translation": "执行指定原生特殊函数指令的 GPU 资源.",
+      "forms": [
+        "SFU"
+      ]
+    },
+    {
+      "term": "TMEM",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "SM100 tensor memory for Tensor Core operands and accumulators.",
+      "translation": "保存 Tensor Core 操作数与累积结果的 SM100 tensor memory.",
+      "forms": [
+        "TMEM"
+      ]
+    },
+    {
+      "term": "PDL",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "CUDA programmatic dependent launch with producer triggers and consumer data waits.",
+      "translation": "通过 producer trigger 和 consumer 数据等待实现的 CUDA programmatic dependent launch.",
+      "forms": [
+        "PDL"
+      ]
+    },
+    {
+      "term": "CUDA stream",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "GPU command queue with explicit cross-stream dependency events.",
+      "translation": "通过显式跨 stream 依赖事件连接的 GPU 命令队列.",
+      "forms": [
+        "CUDA stream"
+      ]
+    },
+    {
+      "term": "swizzle",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Tile traversal or address permutation that changes cache locality or memory-bank access.",
+      "translation": "改变 cache 局部性或 memory-bank 访问的 tile 遍历或地址排列.",
+      "forms": [
+        "swizzle"
+      ]
+    },
+    {
+      "term": "occupancy",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Active GPU warps divided by the hardware warp capacity.",
+      "translation": "活跃 GPU warp 数与硬件 warp 容量之比.",
+      "forms": [
+        "occupancy"
+      ]
+    },
+    {
+      "term": "REDUX",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "PTX warp reduction instruction with a separately specified execution-resource contract.",
+      "translation": "执行资源契约单独规定的 PTX warp reduction 指令.",
+      "forms": [
+        "REDUX"
+      ]
+    },
+    {
+      "term": "feedback interval",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Semantic work between token feedback boundaries used for one ideal cache credit.",
+      "translation": "两个 token 反馈边界之间的语义工作, 使用一次理想 cache 抵扣.",
+      "forms": [
+        "feedback interval"
+      ]
     }
   ]
 }

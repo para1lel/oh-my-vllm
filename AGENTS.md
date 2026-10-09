@@ -13,7 +13,6 @@ Keep all existing features and numerical tolerances.
 - Keep ordinary, MTP4, and DSpark boundary tests at batches 1, 2, and 4 free of OOM and recompute preemption.
 - Keep each active criterion in [requirements](docs/requirements.md).
 - Keep project builds, tests, and inference free of vLLM dependencies code, environments, and build caches.
-- Use the isolated baseline collector only for independently authorized baseline work.
 - Use CUDA for project kernels. Keep the pinned TileLang comparison.
 - Keep formal operator cases, the harness, and summarized evidence in the repository.
 - Keep temporary experiments and raw profiling traces in an external directory.

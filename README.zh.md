@@ -44,13 +44,11 @@ scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --s
 - [交互教程](code-journey/README.zh.md): 13 个中文章节, 使用真实源码和调度实验.
 - [贡献规则](CONTRIBUTING.zh.md): 检查和提交流程.
 
-最近一次完整算子和框架测量适用于源码 `619c9d9`.
-后续正确性修改有独立的测试覆盖.
-[验收索引](docs/acceptance.zh.md) 标明每次测量的适用范围.
-
+[验收索引](docs/acceptance.zh.md) 标明每次测量的源码和测试范围.
+框架性能采用十五行 prefill / decode 测量和理论资源下界.
 项目构建, 测试和推理均不使用 vLLM 实现.
-单独获授权的基线采集器使用隔离的 vLLM 环境.
-可移植证据包含历史测量; 正式比较需要完整原始记录以及匹配的运行条件.
+正式验证使用完整原始记录.
+
 服务器专属配置记入被忽略的 `LOCAL.md`.
 
 [English](README.md)

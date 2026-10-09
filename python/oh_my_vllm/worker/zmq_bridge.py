@@ -12,7 +12,8 @@ Message envelope (msgpack dict):
      "mamba_blocks": int | None,
      "block_size": int, "tensor_parallel_size": int, "max_model_len": int,
      "num_speculative_tokens": int}
-    {"type": "register", "request_id": int, "prompt_token_ids": list[int]}
+    {"type": "register", "request_id": int, "prompt_token_ids": list[int],
+     "max_tokens": int | None}
     {"type": "prepare", "rpc_id": int, "request_id": int, "request": dict}
     {"type": "execute", "rpc_id": int, "step_id": int, "scheduled": [
        {"request_id": int, "token_ids": list[int],
@@ -58,12 +59,31 @@ from dataclasses import dataclass
 import msgpack
 import zmq
 
+from oh_my_vllm.performance.execution import ExecutionTrace
 from oh_my_vllm.worker.logging_utils import configure_logging
 from oh_my_vllm.worker.model_runner import OhMyVllmWorker, RuntimeConfig
 from oh_my_vllm.worker.protocol import ScheduledRequest, SchedulerOutput, WorkerOutput
+from oh_my_vllm.worker.sampling import SamplingParams
 from oh_my_vllm.worker.serving import RequestValidationError
 
 logger = logging.getLogger("oh_my_vllm.worker.zmq_bridge")
+
+
+def _register_request(worker, message):
+    """Share the scheduler's output budget without changing legacy registration."""
+    limit = message.get("max_tokens")
+    if limit is not None and (type(limit) is not int or limit <= 0):
+        raise ValueError("max_tokens must be a positive integer")
+    params = (
+        SamplingParams(limit, temperature=0, ignore_eos=True)
+        if limit is not None
+        else None
+    )
+    worker.register_request(
+        request_id=message["request_id"],
+        prompt_token_ids=list(message["prompt_token_ids"]),
+        sampling_params=params,
+    )
 
 
 @dataclass
@@ -370,10 +390,7 @@ def serve(socket_addr: str) -> None:
                     )
                     continue
                 try:
-                    worker.register_request(
-                        request_id=msg["request_id"],
-                        prompt_token_ids=list(msg["prompt_token_ids"]),
-                    )
+                    _register_request(worker, msg)
                 except Exception:
                     logger.exception(
                         "register failed for request %s", msg["request_id"]
@@ -396,7 +413,14 @@ def serve(socket_addr: str) -> None:
                     started = time.perf_counter_ns()
                     sched_out = _decode_scheduler_output(msg)
                     decoded = time.perf_counter_ns()
-                    worker_out = worker.execute_model(sched_out)
+                    trace = getattr(worker, "semantic_trace", None)
+                    if trace is not None:
+                        trace.begin(msg["step_id"], worker.config.speculative_mode)
+                    try:
+                        worker_out = worker.execute_model(sched_out)
+                    finally:
+                        if trace is not None:
+                            trace.end()
                     executed = time.perf_counter_ns()
                     reply = _encode_worker_output(worker_out)
                     reply["rpc_id"] = msg["rpc_id"]
@@ -439,6 +463,8 @@ def serve(socket_addr: str) -> None:
                     preparer.close()
                     preparer = None
                 if worker is not None:
+                    if getattr(worker, "semantic_trace", None) is not None:
+                        worker.semantic_trace.save()
                     worker.shutdown()
                 break
 
@@ -448,6 +474,11 @@ def serve(socket_addr: str) -> None:
     finally:
         if preparer is not None:
             preparer.close()
+        if worker is not None and getattr(worker, "semantic_trace", None) is not None:
+            # Host metadata survives controlled failures without querying a
+            # device that may already have reported a CUDA fault.
+            with suppress(Exception):
+                worker.semantic_trace.save(incomplete=True)
         sock.close()
         ctx.term()
 
@@ -473,6 +504,7 @@ def _handle_init(msg: dict) -> OhMyVllmWorker:
     worker.init_device()
     worker.load_model()
     worker.initialize_cache()
+    worker.semantic_trace = ExecutionTrace(worker)
     return worker
 
 

@@ -158,6 +158,17 @@
 | `bidirectional attention` | 名词 | 读取已接受 context KV 及全部 7 个临时 proposal KV row 的草稿 attention. |
 | `synthetic token IDs` | 名词 | 按固定索引公式生成的基准输入 ID, 不包含自然语言文本或 tokenization. |
 
+| `DAG` | 名词 | 语义操作及其数据依赖构成的有向无环图. |
+| `HBM` | 名词 | 保存参数与持久数据的 GPU 高带宽内存. |
+| `SFU` | 名词 | 执行指定原生特殊函数指令的 GPU 资源. |
+| `TMEM` | 名词 | 保存 Tensor Core 操作数与累积结果的 SM100 tensor memory. |
+| `PDL` | 名词 | 通过 producer trigger 和 consumer 数据等待实现的 CUDA programmatic dependent launch. |
+| `CUDA stream` | 名词 | 通过显式跨 stream 依赖事件连接的 GPU 命令队列. |
+| `swizzle` | 名词 | 改变 cache 局部性或 memory-bank 访问的 tile 遍历或地址排列. |
+| `occupancy` | 名词 | 活跃 GPU warp 数与硬件 warp 容量之比. |
+| `REDUX` | 名词 | 执行资源契约单独规定的 PTX warp reduction 指令. |
+| `feedback interval` | 名词 | 两个 token 反馈边界之间的语义工作, 使用一次理想 cache 抵扣. |
+
 ## 维护
 
 只有批准词典无法准确表达相同技术含义时才新增技术名词或动词.

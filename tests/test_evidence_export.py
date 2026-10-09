@@ -51,11 +51,11 @@ def test_formal_comparison_explicitly_rejects_derived_evidence():
     import sys
 
     sys.path.insert(0, str(ROOT / "benchmarks"))
-    from ttft import compare
+    from framework import assess
 
     summary = export.derive(b'{"output_tps": 90}', "original.json")
     with pytest.raises(ValueError, match="original raw evidence"):
-        compare(summary, summary)
+        assess(summary)
 
 
 def test_redaction_collisions_fail_instead_of_losing_values():

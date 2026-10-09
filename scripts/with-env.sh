@@ -25,5 +25,13 @@ export TILELANG_CACHE_DIR="${TILELANG_CACHE_DIR:-$RUNTIME_CACHE/tilelang}"
 export TVM_FFI_CACHE_DIR="${TVM_FFI_CACHE_DIR:-$RUNTIME_CACHE/native-cuda}"
 export TVM_FFI_CUDA_ARCH_LIST="${TVM_FFI_CUDA_ARCH_LIST:-10.0a}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
+# Reuse buffers after joined stream frontiers during long CUDA Graph captures.
+# An explicit allocator configuration remains authoritative for experiments.
+if [[ ! ${PYTORCH_ALLOC_CONF+x} ]]; then
+	export PYTORCH_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF-graph_capture_record_stream_reuse:True}"
+fi
+export PYTORCH_ALLOC_CONF
+# PyTorch checks the legacy alias first. Keep one authoritative configuration.
+unset PYTORCH_CUDA_ALLOC_CONF
 
 exec "$@"

@@ -91,7 +91,7 @@ Keep these probes and eager mode disabled for performance acceptance.
 
 ## Release binary for acceptance
 
-The TTFT harness reads repository `target/release/oh-my-vllm-zmq-worker`.
+The phase-latency collector reads repository `target/release/oh-my-vllm-zmq-worker`.
 Set this directory explicitly. The harness must use the candidate binary from this build:
 
 ```bash
@@ -123,85 +123,47 @@ Use [kernel development](kernels.md) for provenance and profiling separation.
 
 ## Framework performance
 
-Use `benchmarks/ttft.py` for the current twelve-row protocol.
-It accepts one full baseline row from original evidence with hardware, configuration, warmups, repetitions, and measurement audit.
-The refreshed historical artifact groups rows. Extract its baseline row from original evidence with all its fields unchanged.
-Use the kept full record on the measurement host or collect a new matching baseline on another server.
-
-Set `BASELINE_COLLECTION` to the full refreshed collection before this extraction.
-The serialization and hash assertion keep each archived row's byte identity.
-Do not supply a portable summary.
-
-```python
-import hashlib
-import json
-import os
-from pathlib import Path
-
-collection = json.loads(Path(os.environ["BASELINE_COLLECTION"]).read_text())
-assert "artifact_kind" not in collection, "use the full original collection"
-output = Path(os.environ["EVIDENCE_DIR"])
-output.mkdir(parents=True, exist_ok=True)
-for row in collection["rows"]:
-    raw = (json.dumps(row["artifact"], indent=2) + "\n").encode()
-    assert hashlib.sha256(raw).hexdigest() == row["sha256"]
-    (output / f"baseline-{row['label']}.json").write_bytes(raw)
-    print(row["label"], row["artifact"]["hardware"]["cpu_affinity"])
-```
-
-Portable summaries are rejected before comparison.
-
-Set `EVIDENCE_DIR`, the model, and matching CPU affinity before this command:
+Build the current release binary and set a new external output path for each attempt.
+Select one of the fifteen rows in [requirements](requirements.md#req-perf-001-phase-latency).
 
 ```bash
-scripts/with-gpu.sh scripts/with-env.sh python benchmarks/ttft.py --baseline "$EVIDENCE_DIR/baseline-ordinary-32768-1.json" --output "$EVIDENCE_DIR/candidate-row.json"
+scripts/with-gpu.sh scripts/with-env.sh python -m benchmarks.framework --mode ordinary --batch-size 1 --input-len 32768 --output "$EVIDENCE_DIR/ordinary-32768-1.json"
 ```
 
-Select each other row by its label in `--baseline`. The harness uses that row's mode, input/output lengths, and batch.
-The extraction prints labels and CPU affinity. Use matching CPU affinity for collection.
+Use modes `ordinary`, `mtp4`, `prefix`, and `dspark` with input 32768 and batches 1/2/4.
+Use ordinary input 131072 with the same batches.
+Set `OH_MY_VLLM_DRAFT_MODEL` or `--draft-model` for DSpark.
+Output count is 4096. Each attempt has two full warmups and five measured repetitions.
 
-Use the same procedure for ordinary/MTP4/prefix-hit with input 32768 and output 4096 at batches 1/2/4.
-Also test ordinary input 131072 at those batches.
-The candidate uses 4200 historical capacity units and 128 GDN slots by default.
-This gives 1400 FA slots.
-Make sure that observed worker and scheduler capacities match the requested settings.
-Baseline capacity must keep the same workload resident without preemption.
+Prefix rows must hit 32144 tokens per request.
+Other rows reset prefix reuse before each repetition.
 
-Match CPU affinity and GPU model, memory, and driver.
-The comparator also must use matching model/configuration and pinned baseline source identity.
-Use two full warmups and five repetitions.
-Record each request's TTFT and fixed output count.
-Apply 95% throughput, 110% TTFT, and 10% spread limits to each row.
+The collector records each request's submission, first token, last token, and step boundaries.
+It calculates prefill and decode independently from those boundaries.
+Each repetition uses the maximum request interval for each phase.
+Cleanup follows the last token and has a different timing field.
 
-Do an investigation when the spread check fails and collect a new full set.
-Keep all rejected full attempts and interrupted runs.
+The worker buffers effective shapes, state access, draft operations, and compiled operation identities.
+It writes the trace after measured request execution.
+Formal analysis uses the canonical model and official peaks.
+Unidentified operations block acceptance.
+GPU event intervals are diagnostic stream intervals. They can include host submission gaps.
 
-The collector records source, binary, Python file hashes, package versions, loaded CUDA module, and full logs.
-Log/cache audit must show steady-state measurement without observed compilation or capture.
-Available logs and cache records cannot exclude silent in-memory recompilation.
-Disable diagnostics that alter execution during performance runs.
-Use full-batch TTFT for framework comparison. GPU-only prefill time has a different scope.
+Each phase must have a wall-time median at most three times its theoretical lower-bound median.
+Its wall-time spread must be at most 10%.
+Keep complete failures and interrupted attempts. Investigate and run the full set again.
 
-`benchmarks/compare_vllm.py` is a historical nine-row tool with an immutable original hash check.
-Its early three-repetition artifact does not meet the current five-repetition rule.
-It must use explicit `--baseline-json` and never starts vLLM.
-Do not use its old acceptance as the current performance denominator.
+Bind source, binary, checkpoint bytes, CUDA module, hardware, capacities, and runtime packages to the attempt.
+Keep source unchanged during collection.
+Compile/cache audit must show steady-state execution.
+Available logs cannot exclude all silent in-memory compilation.
+Keep raw logs and traces in external storage.
 
-## Isolated baseline collection
+Use portable summaries for review. Formal verification uses full original records.
 
-The baseline collector is the only authorized vLLM-dependent tool.
-Use an isolated interpreter, checkout, and cache.
-Do not invoke it through the project environment wrapper.
-Set `BASELINE_PYTHON` and `BASELINE_CHECKOUT` to your isolated installation:
-
-```bash
-scripts/with-gpu.sh "$BASELINE_PYTHON" benchmarks/baseline/enginecore.py --checkout "$BASELINE_CHECKOUT" --model "$OH_MY_VLLM_MODEL" --mode ordinary --batch-size 1 --input-len 32768 --output-len 4096 --output "$EVIDENCE_DIR/baseline-row.json"
-```
-
-The collector must use the pinned commit and an unchanged checkout.
-It records reported capacities and full measurement identity.
-A new source revision must have an independently approved baseline policy.
-Keep baseline caches isolated from project caches.
+Use `--diagnostic` for uncommitted-source experiments.
+Diagnostic records do not supply formal acceptance.
+Profile independently from measured acceptance.
 
 ## DSpark comparison
 
@@ -221,7 +183,7 @@ Framework batch throughput includes registration, prefill, transport, and cleanu
 
 Each batch has three rounds.
 Each round has two full warmups per mode and five measured pairs with alternating order.
-Report each mode's throughput median and spread in each round.
+Record each mode's throughput median and spread in each round.
 Record the DSpark median difference from native MTP4 and the one-sided 95% hierarchical paired-bootstrap lower bound on throughput gain.
 TTFT and its spread are reported.
 
@@ -252,7 +214,6 @@ It does not accept `--prompt-file`. Use different inputs for threshold experimen
 
 Verified drafts are scheduled candidates. Returned next-step proposals have a different diagnostic counter.
 The portable output is a derived summary. It cannot replace original evidence for comparison.
-Keep the original twelve vLLM performance gates active on the source after implementation.
 
 Use the [acceptance index](acceptance.md) for source identities and measured scope.
 

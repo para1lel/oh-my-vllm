@@ -63,6 +63,11 @@ vLLM 及其缓存与项目运行时隔离.
 | `TVM_FFI_CUDA_ARCH_LIST` | CUDA 架构; B200 默认 `10.0a`. |
 | `OH_MY_VLLM_KERNEL_BACKEND` | 显式选择 `cuda` 或冻结 `tilelang`. |
 | `OH_MY_VLLM_ENFORCE_EAGER` | 设置为 `1` 时启用显式诊断模式. |
+| `OH_MY_VLLM_MULTI_STREAM` | GDN 分支 stream. 默认 `1`; 诊断值 `0` 禁用. |
+| `OH_MY_VLLM_CUDA_PDL` | 自有 CUDA programmatic launch. 默认 `1`; 诊断值 `0` 禁用. |
+| `OH_MY_VLLM_GPU_UUID` | 可选的空闲 B200 选择, 供 `scripts/with-gpu.sh` 使用. |
+| `PYTORCH_ALLOC_CONF` | 显式 allocator 选项; 此名称优先于旧名称. |
+| `PYTORCH_CUDA_ALLOC_CONF` | 新名称未设置时使用的旧 allocator 选项. |
 | `OMP_NUM_THREADS` | 主机线程数量; 默认 `1`. |
 
 默认缓存后缀为 `oh-my-vllm/tilelang-ffi012`, 与已验证库组合兼容.
@@ -70,6 +75,12 @@ vLLM 及其缓存与项目运行时隔离.
 首次使用可能编译内核或下载带版本的 FlashInfer GEMM cubin.
 运行时身份记录库版本, 拒绝意外 vLLM 导入或映射库.
 性能验收期间不启用精度 probe 或 eager override.
+
+两个 allocator 变量均未设置时, 包装脚本设置 `graph_capture_record_stream_reuse:True`.
+此选项依据 graph 依赖, 在多 stream 捕获期间复用存储.
+显式设置优先, 包括空值.
+选择后包装脚本移除旧别名. Trace 身份记录 allocator backend.
+在 worker 初始化前设置 stream 与 PDL 选项. 正式采集必须启用两项选项.
 
 ## 草稿模式选择
 
@@ -132,5 +143,5 @@ scripts/with-env.sh tilefoundry --help
 主机路径, 地址, 选定进程 ID, 缓存位置和维护命令放在被忽略的 `LOCAL.md` 中.
 被忽略的 `.local/evidence/` 保存完整原始测量.
 跟踪的 [证据索引](acceptance.zh.md) 标明可移植摘要和原始哈希.
-新服务器需要自己的模型位置, 兼容环境, GPU 选择和基线采集.
+新服务器需要自己的模型位置, 兼容环境, GPU 选择和当前源码测量.
 仓库不含主机专属的默认模型或环境位置.

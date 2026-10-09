@@ -1,13 +1,13 @@
 # ADR-009: Optional DSpark mode
 
-Status: active design. Current-source performance and full target-model acceptance results are not available.
+Status: active. The [acceptance index](../acceptance.md) gives measured source identities and scope.
 
 ## Context
 
 Native MTP4 supplies four draft tokens through the target model's MTP layer.
 Use the local DSpark checkpoint. Compare its throughput with native MTP4 on the same source.
 The two HTTP APIs must complete OMP tool tasks with the target checkpoint in this mode.
-Existing ordinary/MTP4 performance, context, accuracy, and service gates stay active.
+All modes use the phase-latency, context, accuracy, and service gates.
 
 DSpark uses five BF16 GQA layers, zero-based target layer outputs `(5,19,33,47,61)`, and Markov/confidence heads.
 It proposes at most seven tokens for eight-row target verification.

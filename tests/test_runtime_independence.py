@@ -15,10 +15,6 @@ class IndependenceTest(unittest.TestCase):
     def test_owned_executable_sources_never_import_vllm(self):
         for folder in ("python", "tests", "scripts", "benchmarks"):
             for path in (ROOT / folder).rglob("*.py"):
-                # User-authorized isolated reference collection, never imported by
-                # project execution/tests. Other benchmark code stays independent.
-                if path == ROOT / "benchmarks/baseline/enginecore.py":
-                    continue
                 for node in ast.walk(ast.parse(path.read_text())):
                     names = []
                     if isinstance(node, ast.Import):

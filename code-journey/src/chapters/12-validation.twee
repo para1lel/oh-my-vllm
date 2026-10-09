@@ -1,33 +1,46 @@
 :: Validation
 <article>
 <<chapterHeader>>
-<h2>从一条状态变化到完整回答</h2>
-<p>验证先看请求状态: 派发范围是否来自确认历史, 结果数量是否符合契约, computed 是否停在实际提交边界, 完成与取消是否释放引用. Rust 的 scheduler 与 kv-cache 测试覆盖预算, 前缀, 抢占, 草稿和边界, serving 测试覆盖输入整理, 输出解析, 事件与慢客户端.</p>
-<p>Python planner 与 sampler 的 CPU 测试检查历史对应, 地址别名, 逐行草稿验证, 概率筛选与语法回滚. 模型与 GPU 测试再检查投影, FA, 卷积和 GDN 的数值行为, 普通与 MTP 的实际输出, 缓存恢复和页边界. 多层验证将状态错误和数值错误定位到较小范围.</p>
-<h2>算子正确性怎样连接最大形状</h2>
-<p>Semantic IR 提供参考数学, fake 元数据与修改声明. CUDA 测试用这些契约检查结果和被修改区域, 包括 packed stride, 非对齐缓存视图, 每 token 因果终点与候选状态. GDN 的高精度参考按 FP64 推进, 与生产状态精度的容差分别检查.</p>
-<p>development/kernels/cases.py 静态推导正式最大形状, 来自生产预算, 页大小, 批大小与验证行数. 例如 32768 输入的首段为 32144, 尾部和另一长请求混批会出现 624 + 32144; 更长输入还出现其他页边界余量. 正式算子 harness 按这些形状测正确性与耗时, 对每个必需最大形状稳定比较冻结 TileLang.</p>
-<p>ir.coverage.check_coverage 扫描模型的语义调用点, 核对操作注册与允许的低层导入. 新代码绕过语义入口时, 覆盖检查能指出遗漏. 本教程构建另做文件到章节的覆盖检查, 解决阅读导航的归属问题.</p>
-<h2>长上下文验证检查什么</h2>
-<p>项目要求输入加输出最高 262144 token. 普通与 MTP4 在 batch 1, 2, 4 的边界运行都要完成, 无 OOM (GPU 内存不足) 和重算抢占. FA 页数随历史增长, GDN 候选与图捕获也占内存, 所以长上下文检查需要观察完整池和执行图, 同时保持 block_size 为 784.</p>
-<p>内存检查与模型正确性同时进行. 单次分配成功不能代表整条输出能完成, 正式边界运行需走到结束并检查输出数量, 抢占计数与清理. MTP 被拒候选后的恢复状态也必须继续得到正确结果.</p>
-<h2>TTFT 与吞吐分别计算什么</h2>
-<p>TTFT (Time To First Token) 是从测量起点到首个保留输出的时间. 本项目 EngineCore 基准由 benchmarks/ttft.py 启动 Rust Bench, 在引擎提交与生成链上计时, 排除模型加载和预热. 每个请求保留自己的首次输出时间, 每轮取最慢请求的 TTFT.</p>
-<<math "\\mathrm{TTFT}_i=t_{i,\\mathrm{first}}-t_{\\mathrm{start}},\\quad R=\\frac{N_{\\mathrm{output}}}{t_{\\mathrm{finish}}-t_{\\mathrm{start}}}">>
-<p>i 是请求下标, start 是该次批测量起点, first 是该请求首个确认输出, finish 是整轮结束, N 是整轮实际输出 token 数, R 的单位为 token/s. HTTP 客户端还会包含输入准备, 网络与流式输出时间, 比较记录需要使用相同计时范围.</p>
-<p>正式 12 个负载来自四个方向, 每个方向 batch 为 1, 2, 4: 普通 32768 输入, MTP4 32768 输入, 前缀复用 32768 输入, 普通 131072 输入; 输出都为 4096. 前缀负载另检查命中长度与来源, 普通和 MTP 分别记录.</p>
-<h2>重复测量和门槛如何验收</h2>
-<p>每个负载至少两次完整预热, 五次正式重复. summarize 检查每请求 TTFT 为有限正值, 实际输出数恰好等于 batch_size 乘 output_len, 抢占为零, 吞吐有效. 再计算重复值的中位数与相对极差.</p>
-<<source "measurement" "展开重复测量检查与统计代码">>
-<<math "\\mathrm{spread}=\\frac{\\max(x)-\\min(x)}{\\operatorname{median}(x)},\\quad \\rho_R=R_{\\mathrm{ours}}/R_{\\mathrm{baseline}},\\quad \\rho_T=T_{\\mathrm{ours}}/T_{\\mathrm{baseline}}">>
-<p>x 是同一指标的重复测量列表, R 是吞吐中位数, T 是最慢请求 TTFT 的重复中位数. 任一指标 spread 超过 10% 需要调查并重测. 每一行要求吞吐比至少 95%, TTFT 比最高 110%, 用逐行检查保护不同批大小与路线.</p>
-<p>基线来自已经冻结版本的隔离 vLLM 环境, 只由基线工具使用. 项目构建, 测试和推理保持独立环境, compare 核对同一负载, 模型, 实际缓存容量, GPU 型号/内存/驱动与 CPU 亲和性. 历史结果随当时源码版本保留, 阅读教程不会产生新的性能数字.</p>
-<h2>如何确定测量时已经进入稳定执行</h2>
-<p>measurement.audit 读取 BENCH_PHASE 日志的 measured 起点, 检查其后有无编译或图捕获. 同时审计编译缓存根目录, 文件摘要和时间变化, 确认正式阶段执行的是预热完成后的实现. runtime 与 CUDA provenance 记录解释器, 包, 编译器和实际加载库.</p>
-<p>正式运行先用 scripts/with-gpu.sh 等待空闲 B200 并固定 UUID, 再用 scripts/with-env.sh 进入项目环境. 运行记录保存原始重复结果与汇总, 正式证据放入仓库, 临时调优脚本和原始 profiling 留在仓库外. 完成后停掉该次启动的服务器与 worker, 核对进程与 GPU 资源已释放.</p>
-<h2>从完整调用链回看一条请求</h2>
-<p>HTTP 输入经 normalize 和模板分词变成历史, Rust 按预算与两类缓存分配片段, ZMQ 交给 worker. planner 核对地址, Batch 携带位置与读写槽, Qwen 经过 FP8 投影和 FA/GDN 层, sampler 选择 ID, Generation 裁切并解码, 双方提交状态, Parser 与 Output 形成流式响应.</p>
-<p>MTP 在这条链中加入提议和多行验证, Semantic IR 与 CUDA Graph 改进具体执行, 验证代码检查每个状态与数值契约. 你现在可以根据关心的条件回到对应章节, 打开源码定位完整实现, 从入口逐层追踪一次实际推理.</p>
+<h2>验证一条请求的状态与数值</h2>
+<p>正确性从请求入口一直检查到完成. Rust 测试核对输入整理, 调度预算, FA/GDN 分配, 前缀命中, 在途进度和返回数量. Python planner 核对确认历史与 GPU 地址, sampler 检查候选接受, 概率筛选, 语法状态和停止条件. GPU 测试比较完整输出与被修改的缓存区域, 包括 packed stride, 候选回滚和长位置 RoPE.</p>
+<p>Semantic IR 为每个操作提供数学参考, 输出元数据和修改声明. ir.coverage 检查模型调用点是否经过登记的语义入口. 本教程另外把每个项目自有核心文件连接到讲解章节; 两种检查分别保证执行契约与阅读覆盖.</p>
+<h2>十五项性能负载与九项容量负载</h2>
+<p>性能验收有五组输入, 每组 batch 为 1, 2, 4, 共十五项: 普通解码 32768, MTP4 32768, 前缀命中 32768, 普通解码 131072, DSpark 32768. 每个请求保留 4096 个输出 token. 输入采用固定合成 token IDs, 贪心采样并忽略 EOS. 前缀组逐请求检查命中 32144 个 token, 其余组检查冷缓存.</p>
+<p>容量验收覆盖普通解码, MTP4 和 DSpark, 各自 batch 1, 2, 4. 每个请求输入 258048 个 token, 输出 4096 个 token, 总长度为 262144. 九项都要完整完成, 无 OOM 和重算抢占. OOM 表示 GPU 内存不足; 重算抢占表示缓存被释放后再次计算旧历史. 检查同时保留 784-token 页, 16 层 FA 和 48 层 GDN align 状态规则.</p>
+<h2>逐请求划分 prefill 与 decode</h2>
+<p>一个 batch 中, 请求可能分批进入 GPU. Rust 为每个请求记录提交, 首个保留 token 和最后一个保留 token 的时刻, 同时记录首末输出对应的调度 step. prefill 从提交到首 token, decode 从首 token 到末 token. 每次重复分别取 batch 内最慢的 prefill 与最慢的 decode.</p>
+<<math "P_i=t_{i,\\mathrm{first}}-t_{i,\\mathrm{submit}},\\quad D_i=t_{i,\\mathrm{last}}-t_{i,\\mathrm{first}},\\quad P=\\max_i P_i,\\quad D=\\max_i D_i">>
+<p>i 是请求编号, P_i 与 D_i 是该请求的阶段秒数, P 与 D 是该次 batch 的验收值. 例如两个请求的首 token 分别出现在第 2 s 和第 6 s, 末 token 分别在第 15 s 和第 14 s, 两个 decode 分别为 13 s 和 8 s, 因而 batch 的 decode 为 13 s.</p>
+<p>墙钟范围包含 Rust 调度, Python, ZMQ 和采样. 模型加载, tokenization, HTTP 与预热在范围外. 完整 batch 耗时, cleanup, TPS 和 CUDA Event 区间另外报告. cleanup 是结果生成之后释放请求与 worker 状态的时间. GPU Event 区间帮助定位设备执行, 阶段验收使用上述墙钟边界.</p>
+<h2>真实调度怎样变成计算图</h2>
+<p>performance.execution 在主机已有信息上记录每次 target 计算的有效 query 数, context 长度, FA 页表, GDN 源槽与逐行写槽, 采样行和提交数量. MTP 记录持久 forward 与后续提议; DSpark 记录接受特征注入和七行并行 backbone. 记录保存在内存, 请求结束后再写文件, 避免测量中逐步写日志.</p>
+<p>performance.analysis 将这些记录与 Rust 的请求编号和首末 step 对应. prefill 纳入该请求首 token 之前的计算, decode 纳入其后的计算. 已有 token readback 同时标记 GPU 完成边界, 因此末 token 返回后仍在异步运行的更新由诊断记录解释. 这一标记复用原本的设备到主机传输.</p>
+<p>DAG 是有向无环图: 节点表示必要计算或读取, 边表示数据依赖. Q/K/V 投影要读取输入与权重, attention 要使用 Q/K/V, 下一层要读取上一层结果. 下一 token 依赖已接受 token 和状态; MTP 与 DSpark 的草稿和目标验证也遵循这些依赖. 独立分支允许理想并行, CUDA stream 的启动顺序不增加数学依赖.</p>
+<h2>每种执行资源怎样给出延迟下界</h2>
+<p>矩阵乘法 A 的形状为 M 乘 K, 权重 B 的形状为 N 乘 K, 输出为 M 乘 N. 一次乘加按两次浮点操作计数, 所以必要工作为 2MNK. FP8 与 BF16 矩阵乘法共用 Tensor Core, 因而两种精度按各自理论速率计算时间后相加. FP32 算术, SFU 特殊函数与其他执行资源另算, 允许不同资源理想重叠.</p>
+<<math "C_{\\mathrm{tensor}}=\\frac{F_{\\mathrm{FP8}}}{4.5\\times10^{15}}+\\frac{F_{\\mathrm{BF16}}}{2.25\\times10^{15}},\\quad C_r=\\frac{W_r}{R_r}">>
+<p>F 是必要浮点操作数, W_r 是资源 r 的必要工作, R_r 是它的官方理论速率. B200 的 FP8 非稀疏峰值为 4.5 PFLOPS. BF16 采用稀疏峰值 4.5 PFLOPS 除以 2 得到的乐观值 2.25 PFLOPS; 官方表的非稀疏一栏舍入为 2.2 PFLOPS. FP32 为 75 TFLOPS, FP64 为 37 TFLOPS. SFU 包括倒数平方根与指数等原生函数, 使用 SM 数量, 官方每周期吞吐和硬件最高时钟计算. 测量速度用于诊断.</p>
+<p>权重与 scale 同样计入必要读取. 解码时, 当前 token 逐层使用模型参数, 读取次数取决于真正的 token 反馈与提议依赖. 重复 token 的 embedding 行按实际 ID 取并集. FA 读取按物理 KV 页的有效区间取并集, GDN 读取有效源状态; 接受和回滚决定哪些输出最终进入持久缓存.</p>
+<<math "H=\\frac{B_{\\mathrm{required}}}{7.7\\times10^{12}},\\quad S=\\max(L_{\\mathrm{DAG}},H,\\max_r C_r),\\quad L=\\max(0,S-\\Delta)">>
+<p>B_required 是最少必要 HBM 字节数, 7.7 TB/s 是采用的 B200 官方带宽, H 为 HBM 服务秒数. L_DAG 是保留真实依赖后的放松路径下界. S 是 batch 阶段跨度的资源下界, Delta 是同一阶段最晚起点与最早起点之差. Prefill 的起点是提交, decode 的起点是首 token. 扣除 Delta 后得到最长单请求区间的保守下界 L. 图上的依赖与单卡共享资源同时生效: 独立权重读取可以并行启动, 全部必要字节仍由同一块 GPU 的 HBM 提供.</p>
+<h2>缓存与低层执行有哪些理想化假设</h2>
+<p>当前路径分析将全部算术节点的服务时间放松为零, 包括 GEMM 与 GDN, 完整计算量由资源下界计入. 每个输入读取节点各自获得完整片上容量抵扣, 跨 step 的路径取最大值, 允许参数提前读取并与其他工作重叠. 这一分析保留依赖, 使用更宽松的服务假设.</p>
+<p>模型允许中间值融合并驻留片上, 给有限片上容量以理想复用, 未公开的片上带宽按无限处理. 源码明确识别 BF16 packed 运算和 FP8 转换; 当公开规格尚不能确定其吞吐单位或共享资源映射时, 对相应服务时间作零耗时放松, 同时报告操作数量. 这些假设让理论值更乐观, 文档列出其适用范围.</p>
+<p>performance.memory 维护物理写入账本. 同一工作槽只保留最后有效版本, 被拒绝的候选属于临时状态. Rust 为未使用的 lookahead 槽重新分配地址时, 旧 checkpoint 也失效. 同一个 batch 中其他阶段的请求仍可能覆盖这些地址, 因而账本观察整个阶段跨度内的分配与写入.</p>
+<p>必要草稿和被拒绝的验证行属于算法工作. DSpark 即使只选择两个候选, 已执行的七行 backbone 仍参与分析. 图的空 padding, 重复搬运和额外无用计算只增加开销. 计算规则按语义组织, 算子拆分或融合后保持同一数学范围.</p>
+<h2>两个阶段怎样独立判定</h2>
+<p>每项负载完整预热两次, 正式测量五次. 每次根据实际调度重新计算两个阶段的下界. framework.phase_verdict 对五个墙钟值和五个理论值分别取中位数, 再检查倍率与墙钟波动.</p>
+<<source "measurement" "展开阶段中位数与波动的判定代码">>
+<<math "\\operatorname{median}(T)\\le3\\operatorname{median}(L),\\quad \\frac{\\max(T)-\\min(T)}{\\operatorname{median}(T)}\\le0.10">>
+<p>T 是同一阶段的五个墙钟值, L 是对应的五个理论下界. prefill 与 decode 各自通过这两项条件. 某项失败时, 保存整组记录, 调查后重测完整组. TPS, TTFT 和草稿接受率帮助解释表现; 正式性能结论来自两个阶段的独立判定.</p>
+<h2>算子调优怎样解释一个失败的阶段</h2>
+<p>development.kernels.observations 将 TileFoundry 的 HIR 计算量, 流量和 roofline 估计与 Nsight 硬件计数器分开记录. 大矩阵检查 Tensor Core 利用率, DRAM 流量, L2 命中率, 寄存器和共享内存占用, occupancy 与 warp stall. occupancy 表示活跃 warp 相对硬件上限的比例, stall 描述当前指令等待数据或资源的原因.</p>
+<p>例如大 GEMM 的 DRAM 使用较高, L2 命中率较低, 可以先测试 tile 遍历和 swizzle 是否减少重复读取. 寄存器溢出则提示部分临时值进入 local memory, 需要检查 tile 和流水资源. 候选实现先检查完整数值与缓存写入, 再做同条件交错计时, 最后检查完整请求和长上下文容量.</p>
+<p>230 项 CUDA 与固定 TileLang 的数值及速度门槛继续独立执行. cases.py 从生产预算, 784-token 页, 批大小和验证行数推导最大形状. 每个正式算子案例核对完整返回与修改区域, 在三轮二十对交错测量中检查速度, 保护已采用的 CUDA 实现.</p>
+<h2>证据怎样绑定源码与运行环境</h2>
+<p>framework 收集器核对提交过且保持不变的源码, Rust 二进制的构建输入摘要, checkpoint 内容, 硬件身份和实际 FA/GDN 容量. runtime_contract 绑定语义路径, 外部 provider 和 CUTLASS/CCCL 模板; 实际加载库的摘要与编译参数必须匹配. 未识别的 GPU 操作会阻止正式验收.</p>
+<p>measurement.audit 检查 measured 起点后的编译和图捕获日志, 并检查缓存文件变化. 原始记录与 profiling 保存在本地或外部目录, 仓库保存可移植的测量摘要和原始 SHA. 每个结论标明源码, 配置, 负载和检查范围.</p>
+<p>完整服务检查还覆盖 Chat, Responses, streaming, tools, thinking, 约束生成和取消, 包括 DSpark serving oh-my-pi agents. 性能测试, 容量测试与真实服务分别检查不同边界. 运行结束后释放该次启动的 worker 和临时服务端口.</p>
 <<coverage>>
 <<chapterChoices>>
 </article>

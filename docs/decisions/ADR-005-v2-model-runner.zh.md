@@ -13,5 +13,4 @@ Rust 保持已接受历史, 缓存所有权和调度.
 
 独立 runner 通过项目代码保留这些状态和生命周期合同.
 V2 adapter, vLLM scheduler 和 legacy runner 均已移除.
-原 9 行验收属于历史, 由 12 行协议替代.
 有效行为以 [架构](../architecture.zh.md), [需求](../requirements.zh.md) 和 [验收](../acceptance.zh.md) 为准.
