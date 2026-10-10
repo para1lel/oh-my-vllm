@@ -1,5 +1,6 @@
 """Bounded CUDA graph admission and eviction for long-lived workers."""
 
+import gc
 from collections import Counter, OrderedDict
 from collections.abc import Callable
 
@@ -24,6 +25,8 @@ class GraphCache:
         synchronize: Callable[[], None] | None = None,
         free_bytes: Callable[[], int] | None = None,
         reserved_bytes: Callable[[], int] | None = None,
+        release_memory: Callable[[], None] | None = None,
+        release_family: Callable[[str], None] | None = None,
         min_capture_free_bytes: int = MIN_CAPTURE_FREE_BYTES,
     ) -> None:
         floors = dict(family_floors or {})
@@ -53,6 +56,8 @@ class GraphCache:
         self.synchronize = synchronize or torch.cuda.synchronize
         self.free_bytes = free_bytes
         self.reserved_bytes = reserved_bytes
+        self.release_memory = release_memory
+        self.release_family = release_family
         self.min_capture_free_bytes = min_capture_free_bytes
         self.graphs: OrderedDict[tuple[str, tuple], object] = OrderedDict()
         self.probation: OrderedDict[tuple[str, tuple], int] = OrderedDict()
@@ -84,6 +89,36 @@ class GraphCache:
             default=None,
         )
 
+    def trim_for_headroom(self) -> None:
+        """Release cold graphs at a synchronized boundary before allocating.
+
+        Pressure may override family floors. The last owner of a family must
+        release its pool handle before a later capture creates a fresh pool.
+        Releasing allocator reservations does not release still-live outputs.
+        """
+        if (
+            self.release_memory is None
+            or self.free_bytes is None
+            or self.free_bytes() >= self.min_capture_free_bytes
+        ):
+            return
+        if not self.graphs:
+            return
+        self.synchronize()
+        while self.graphs and self.free_bytes() < self.min_capture_free_bytes:
+            victim = min(self.graphs, key=lambda key: self.frequencies[key])
+            family = victim[0]
+            self.graphs.pop(victim)
+            self.frequencies.pop(victim, None)
+            self.counters[f"{family}_pressure_eviction"] += 1
+            if not self.has_family(family) and self.release_family is not None:
+                self.release_family(family)
+            # Backend executable owners may contain Python cycles. Collect
+            # these before asking the allocator to release retired graph pools.
+            gc.collect()
+            if self.release_memory is not None:
+                self.release_memory()
+
     def should_use(self, family: str, key: tuple) -> bool:
         """Admit only sustained misses hotter than an evictable resident."""
         combined = family, key
@@ -106,6 +141,7 @@ class GraphCache:
             self.counters[f"{family}_capture_failure_eager"] += 1
             return False
         self.retry_after.pop(combined, None)
+        self.trim_for_headroom()
         if (
             self.free_bytes is not None
             and self.free_bytes() < self.min_capture_free_bytes
@@ -141,6 +177,7 @@ class GraphCache:
         if self.clock <= self.churn_cooldown_until:
             self.counters[f"{family}_churn_eager"] += 1
             return None
+        self.trim_for_headroom()
         if (
             self.free_bytes is not None
             and self.free_bytes() < self.min_capture_free_bytes
@@ -185,6 +222,8 @@ class GraphCache:
             # briefly over capacity only inside this synchronous transaction.
             self.graphs.pop(victim)
             self.counters[f"{victim[0]}_eviction"] += 1
+            if not self.has_family(victim[0]) and self.release_family is not None:
+                self.release_family(victim[0])
         self.probation.pop(combined, None)
         self.retry_after.pop(combined, None)
         if victim is not None:
@@ -212,7 +251,12 @@ class GraphCache:
         counts = Counter(name for name, _ in self.graphs)
         result = {
             "resident": len(self.graphs),
+            "capacity": self.capacity,
             "probation": len(self.probation),
+            "probation_capacity": self.probation_capacity,
+            "capture_history": len(self.recent_captures),
+            "capture_history_capacity": self.recent_capacity,
+            "frequency_entries": len(self.frequencies),
             "capture_history_overflow": self.counters["capture_history_overflow"],
             "probation_eviction": self.counters["probation_eviction"],
             "retry_cooldown": len(self.retry_after),
@@ -235,6 +279,7 @@ class GraphCache:
                 "hit",
                 "capture",
                 "eviction",
+                "pressure_eviction",
                 "budget_eager",
                 "headroom_eager",
                 "capture_failure_eager",
@@ -248,7 +293,13 @@ class GraphCache:
         return result
 
     def clear(self) -> None:
+        if self.graphs:
+            self.synchronize()
+        families = {family for family, _ in self.graphs}
         self.graphs.clear()
+        if self.release_family is not None:
+            for family in families:
+                self.release_family(family)
         self.probation.clear()
         self.recent_captures.clear()
         self.frequencies.clear()

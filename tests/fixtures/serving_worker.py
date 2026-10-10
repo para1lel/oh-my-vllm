@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -58,6 +59,12 @@ def main():
             continue
         kind = message["type"]
         if kind == "init":
+            if path := os.environ.get("OH_MY_VLLM_FIXTURE_CHILDREN"):
+                child = subprocess.Popen(
+                    [sys.executable, "-c", "import time; time.sleep(300)"]
+                )
+                with Path(path).open("a") as output:
+                    output.write(f"{os.getpid()} {child.pid}\n")
             adapter = ServingAdapter(
                 message["model_path"], 248320, message["max_model_len"]
             )
@@ -125,6 +132,19 @@ def main():
                     "prompt_len": len(prompt),
                     "fail": "worker-fail" in text,
                     "fatal": "worker-fatal" in text,
+                    "oom": "worker-oom" in text,
+                    "error_mode": next(
+                        (
+                            mode
+                            for mode in (
+                                "unknown-error",
+                                "duplicate-error",
+                                "error-with-tokens",
+                            )
+                            if mode in text
+                        ),
+                        None,
+                    ),
                     "hold": "hold-active" in text,
                     "slow_execute": "slow-execute" in text,
                     "flood": "flood-active" in text,
@@ -189,6 +209,7 @@ def main():
                     requests[rid]["source"] = None
             outputs = []
             fatal = False
+            failure_kind = "internal"
             for scheduled in message["scheduled"]:
                 rid = scheduled["request_id"]
                 if path := os.environ.get("OH_MY_VLLM_FIXTURE_STEPS"):
@@ -220,9 +241,24 @@ def main():
                         100,
                         4,
                     )
-                if state["fatal"]:
+                if state["fatal"] or state["oom"]:
                     fatal = True
+                    failure_kind = "oom" if state["oom"] else "internal"
                     break
+                if state["error_mode"]:
+                    output = {
+                        "request_id": rid + 1000000
+                        if state["error_mode"] == "unknown-error"
+                        else rid,
+                        "token_ids": [7]
+                        if state["error_mode"] == "error-with-tokens"
+                        else [],
+                        "error": "fixture invalid error frame",
+                    }
+                    outputs.append(output)
+                    if state["error_mode"] == "duplicate-error":
+                        outputs.append(output.copy())
+                    continue
                 if state["fail"]:
                     outputs.append(
                         {
@@ -299,12 +335,35 @@ def main():
                 )
             )
             reply = (
-                {"type": "error", "message": "fixture worker failure"}
+                {
+                    "type": "error",
+                    "kind": failure_kind,
+                    "message": "fixture worker failure",
+                }
                 if fatal
                 else {"type": "execute_result", "outputs": outputs}
             )
             reply["rpc_id"] = message["rpc_id"]
             publish_blocks()
+        elif kind == "stats":
+            reply = {
+                "type": "stats_result",
+                "rpc_id": message["rpc_id"],
+                "stats": {
+                    "requests": {
+                        "histories": len(requests),
+                        "samplers": len(requests),
+                        "sources": len(block_owners),
+                        "computed": len(block_owners),
+                        "generations": len(adapter.generations),
+                        "mtp": 0,
+                        "dspark": 0,
+                    },
+                    "graphs": {},
+                    "compile": {},
+                    "gpu": {"allocated_bytes": 0, "reserved_bytes": 0},
+                },
+            }
         elif kind == "shutdown":
             publish_blocks()
             if path := os.environ.get("OH_MY_VLLM_FIXTURE_SHUTDOWN"):

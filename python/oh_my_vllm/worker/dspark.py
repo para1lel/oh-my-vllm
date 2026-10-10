@@ -94,6 +94,10 @@ class DSpark:
                 if self.device.type == "cuda"
                 else None
             ),
+            release_memory=torch.cuda.empty_cache
+            if self.device.type == "cuda"
+            else None,
+            release_family=self._release_graph_pool,
         )
         self.graph_pool = None
         # Context commits have no live outputs. Keep their admission budget and
@@ -105,8 +109,28 @@ class DSpark:
             churn_cooldown_decisions=32768,
             free_bytes=self.graph_cache.free_bytes,
             reserved_bytes=self.graph_cache.reserved_bytes,
+            release_memory=self.graph_cache.release_memory,
+            release_family=self._release_graph_pool,
         )
         self.context_graph_pool = None
+
+    def _release_graph_pool(self, family: str) -> None:
+        setattr(
+            self,
+            {"dspark": "graph_pool", "dspark_context": "context_graph_pool"}[family],
+            None,
+        )
+
+    def release(self) -> None:
+        self.graph_cache.clear()
+        self.context_graph_cache.clear()
+        self.next_position.clear()
+        self.proposals.clear()
+        self.generators.clear()
+        self.graph_pool = self.context_graph_pool = None
+        self.inject_unit = self.backbone_unit = self.greedy_unit = self.step_unit = None
+        self.model = None
+        self.cache = []
 
     def forget(self, request_id: int) -> None:
         self.next_position.pop(request_id, None)

@@ -16,6 +16,9 @@ pub enum RustMessage {
     },
     Execute(ExecuteMsg),
     Abort(AbortMsg),
+    Stats {
+        rpc_id: u64,
+    },
     Shutdown,
 }
 
@@ -86,6 +89,10 @@ pub enum PythonMessage {
         prompt_token_ids: Vec<u32>,
     },
     Error(ErrorMsg),
+    StatsResult {
+        rpc_id: u64,
+        stats: serde_json::Value,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -127,6 +134,8 @@ pub enum WorkerErrorKind {
     Validation,
     #[default]
     Internal,
+    Oom,
+    Device,
 }
 
 // ── encode / decode helpers ───────────────────────────────────────────────────

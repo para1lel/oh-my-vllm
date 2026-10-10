@@ -28,6 +28,10 @@
 <h2>慢客户端与 Responses 历史怎样管理</h2>
 <p>StreamBuffer 暂存待发送事件并跟踪字节数. 通道满时暂停该请求调度, 缓存保留; 积压排空且通道恢复低水位后再 resume. 额外 pending 限制为 1024 个事件与 8 MiB, 首次积压开始计时, 结束后的排空沿用同一 30 秒截止点. 断连或超限则结束请求并释放归属.</p>
 <p>Responses Store 按配置限制条目数, 总字节数与过期时间, 容量紧张时逐条回收旧记录. Output.history 保存可重放的对话内容, normalize 引用 previous_response_id 时接回先前对话. 对话历史按 ID 与工具记录重建, 然后重新经过模板和分词流程.</p>
+<p>HTTP middleware 在读取请求 body 前取得准入 Lease. Lease 让输入准备, 引擎请求, 输出 body 和完成后的 drain 共用一次资源 reservation; 最后一个持有者释放后才归还容量. Queue permit 限制尚未开始处理的请求, live permit 限制已开始处理但尚未释放全部输出资源的请求, 因而完成后缓慢读取的客户端继续占用 live 名额.</p>
+<<source "admissionLease" "展开 HTTP 输入前的资源 reservation">>
+<p>Budget 另外统计 request_state_bytes, 用编码后的输入, 历史和输出尺寸保留容量. 在复制 previous_response_id 的祖先历史前先检查预算, 追加输出时继续增加 reservation, 避免绕过准入队列建立许多历史副本. 这项编码预算与实际进程 RSS 分别记录: JSON 树, allocator 和 Python 对象也占主机内存.</p>
+<p>请求 deadline 从 HTTP 准入开始, 覆盖排队, 准备和生成. 过载请求明确拒绝, 已排队但超时的请求不再进入 Python 准备. 独立的 backpressure deadline 限制慢 stream 的积压时间, 它与请求总 deadline 一起保护长期服务的资源寿命.</p>
 <p>从 logits 到概率, 保留 ID, 安全文字, 解析项, API 事件的每一步都有明确状态. 模型算出的候选只有通过停止与长度裁切后才成为正式历史, HTTP 接收到的片段也要符合当前输出项的结构.</p>
 <<coverage>>
 <<chapterChoices>>

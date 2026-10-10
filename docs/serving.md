@@ -44,6 +44,7 @@ Use the [acceptance index](acceptance.md) for source identities and measured sco
 | `POST /v1/responses` | JSON items or typed SSE, text, tools, full history, and `previous_response_id`. |
 | `GET /v1/responses/{id}` | Stored response retrieval. |
 | `DELETE /v1/responses/{id}` | Stored response deletion. |
+| `GET /diagnostics` | Service health, resource reservations, cache counts, and the latest worker memory snapshot. |
 
 Inputs are text-only with one completion per request.
 Unknown fields and unsupported features, with logprobs, background mode, and automatic truncation, produce errors.
@@ -56,7 +57,7 @@ Sampling supplies temperature, top_p, top_k, seed, and frequency/presence/repeti
 Checkpoint defaults are temperature `1`, top_p `.95`, and top_k `20`.
 Offline Run/Bench use greedy sampling, fixed output length, and ignore EOS.
 
-Tool choice permits auto, none, required, and a named function.
+Tool choice can be auto, none, required, or a named function.
 Multiple calls are permitted unless `parallel_tool_calls=false`.
 The service generates tool calls. OMP executes them and returns results.
 
@@ -148,15 +149,27 @@ Object/allocation overhead is additional.
 
 Use `--response-ttl-seconds`, `--response-capacity`, and `--response-max-bytes` for changes.
 Evict oldest records at capacity. Oversized records fail.
-Unknown, deleted, or expired IDs return 404. Restart invalidates IDs.
+Unknown, deleted, or expired IDs return 404. An HTTP server restart invalidates stored IDs.
+Worker replacement keeps stored histories but clears logical KV.
 
 Concurrent continuations copy snapshots.
 Ancestor deletion keeps already-started requests and stored children.
 
+Reserve request capacity before the HTTP body is read or an ancestor history is copied.
+Stored-response retrieval uses the same capacity reservation before its response copy.
+The reservation stays with the engine, HTTP body, and completed stream drain until all owners release it.
+Completed streams with slow readers thus keep a live request slot.
+
+The encoded request state budget is 512 MiB by default. Use `--request-state-max-bytes` to change it.
+This budget uses conservative multiples of serialized input, history, and output sizes.
+JSON tree storage, allocator overhead, and Python objects use additional memory. Measure RSS independently of this budget.
+
 | Resource | Default limit |
 |---|---:|
 | HTTP body | 8 MiB |
+| Queued reservations / live reservations | 64 / 64 |
 | Admission channel / active requests | 64 / 64 |
+| Encoded request state reservations | 512 MiB |
 | Scheduled sequences | 32 |
 | Stream channel | 256 events |
 | Pending stream queue | 1024 events or 8 MiB serialized bytes |
@@ -164,6 +177,8 @@ Ancestor deletion keeps already-started requests and stored children.
 | Request timeout | 600 seconds |
 | Prepare/step RPC deadline | 120 seconds |
 | Shared shutdown grace | 35 seconds |
+| Worker replacement attempts | 5 |
+| Worker memory snapshot interval | 30 seconds |
 
 A full channel pauses its request and starts a monotonic backpressure deadline.
 Pending events keep order, with final events.
@@ -171,15 +186,41 @@ Resume generation after the pending queue empties and at least 128 channel slots
 Sparse reads do not reset the deadline.
 Disconnect marks cancellation immediately. The next engine check applies it.
 
-Deadline checks occur between operations. RPCs or blocked sends can delay cancellation.
+The absolute request deadline starts before body reading. It includes queue wait, preparation, and generation.
+Expired queued requests cannot start preparation.
+Overload returns 503. A request that exceeds the logical KV capacity returns 413.
+
+Deadline checks occur between operations. RPCs or blocked sends can make cancellation occur later.
 Background CPU preparation itself does not block this check.
-Paused requests keep KV when capacity permits. Priority preemption can still evict them.
+Paused requests keep KV when capacity is available. Priority preemption can still evict them.
 
 Request-local validation or generation failures affect that request alone.
-Fatal CUDA/device/worker failures fail pending requests and make later submissions unavailable until restart.
+A GPU transaction that fails before completion prevents further use of the worker state.
+CUDA OOM, device faults, worker exit, and invalid execution replies fail affected requests and start worker recovery.
+The HTTP listener stays alive. New generation requests receive 503 during recovery.
+
+The service stops the old worker and its owned process group before it loads a replacement.
+It clears the scheduler and all logical cache identities for the old worker.
+The replacement must report the same capacities. Its new epoch lets new admission start.
+
+The default recovery limit is five launch attempts. Wait intervals are 1, 2, 4, 8, and 16 seconds.
+For a larger `--worker-restart-attempts` value, each wait interval is at most 30 seconds.
+After all recovery attempts fail, HTTP stays available and generation stays unavailable.
+Streams report failure explicitly. The service does not automatically replay output or tool calls.
+
 Ctrl-C and SIGTERM close streams and request worker shutdown.
 HTTP drain and worker cleanup share the `--shutdown-grace-seconds` deadline, which the user can set.
 Stalled readers disconnect at deadline. Kernels have no individual preemption.
+
+An uncatchable Rust SIGKILL causes the parent-death mechanism to send SIGKILL to the direct GPU worker.
+For whole-group cleanup after that signal, use an external process supervisor.
+Normal shutdown and worker recovery have owned-group cleanup.
+
+`GET /diagnostics` supplies Rust request, reservation, storage, and KV counts with the latest Python resource snapshot.
+Use `--diagnostics-interval-seconds` to change the default 30-second snapshot interval.
+The worker reports each request-state map, graph cache, compiler cache, host RSS, and GPU allocated/reserved bytes.
+Per-request `SERVING_REQUEST_METRIC` logs use UTC identities and monotonic queue/processing durations.
+Processing starts before Python preparation and ends when generation completes. HTTP drain has a different lifetime.
 
 ## Verification
 

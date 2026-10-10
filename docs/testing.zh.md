@@ -256,6 +256,72 @@ OMP 脚本通过临时记录代理转发真实客户端 HTTP, 请求 body 保持
 失败时保留已收响应及明确错误记录.
 Lifecycle stream 保留断连前已读取的 SSE frame.
 
+## 长时 agentic 服务
+
+日常 CPU 和 GPU 命令跳过重型 soak test. 长时服务验收需显式启动.
+使用专用 MTP4 或 DSpark 服务, 新的外部结果目录及当前 release binary.
+保持源码不变. Collector 检查运行 executable, 源码哈希, worker epoch 及进程身份.
+
+```bash
+scripts/with-env.sh python scripts/agentic-soak.py --mode mtp --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output-dir "$EVIDENCE_DIR/mtp-soak"
+scripts/with-env.sh python scripts/agentic-soak.py --mode dspark --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/dspark-server.log" --output-dir "$EVIDENCE_DIR/dspark-soak"
+```
+
+各命令连接对应模式的服务. 采集结束后立即停止该服务和 worker.
+Collector 管理 4 个 OMP 客户端及临时记录代理, 不管理传入的服务.
+将 OMP 安装到 `PATH`, 或通过 `--omp` 指定.
+固定的开发工具包含 Matplotlib, 用于导出独立 SVG/PNG 图.
+
+每种模式至少完成 500 个正常模型请求, 并至少持续 3600 秒.
+4 个真实 OMP agent 通过 Chat 和 Responses 使用 read 工具. 转发的工具结果和 response ID 必须一致.
+共享的 4-slot 上限限制并行模型调用. 负载使用可复用前缀和变化的输入长度.
+正常采集前先运行 2 个短预热 epoch. 预热和故意 probe 使用单独记录.
+预热任务上限为 900 秒. 正常任务上限为 210 秒.
+`--warmup-task-timeout` 和 `--task-timeout` 分别设置对应阶段的 OMP 任务与 proxy 传输上限.
+
+预热时间不计入正常采集要求的 3600 秒.
+其 deadline 为 `30 + 3 * drain_timeout + 2 * (warmup_epoch_seconds + warmup_task_timeout)` 秒.
+保留实际预热时间和完整失败记录.
+
+每个正常 epoch 默认准入任务 300 秒, 随后排空活动请求.
+取消和慢客户端 probe 使用单独记录. 正常请求不得发生意外失败, OOM 或 worker 重启.
+周期性资源 snapshot 的数量和字节上限必须有效. 排空后 Rust/Python 请求状态必须为空.
+Collector 单调时长及服务正常请求的时间跨度均须满足时长要求.
+
+排空后, 每个逻辑池必须有 `blocks - 1` 个空闲块. 缓存块可继续留在前缀索引中, 供驱逐时复用.
+Block 0 是 null block, 始终保持分配.
+
+正常采集的后半段至少保留 6 个 idle snapshot.
+缓存预热后, 比较该后半段起始和结束窗口的中位数.
+GPU allocated / reserved 或设备占用增长超过 64 MiB 与 5% 中较大者时需调查.
+主机 RSS 增长超过 128 MiB 与 5% 中较大者时需调查.
+保留完整时间序列, drift 和 trend 估计. 内存审计失败时先调查, 再重新完整采集.
+
+设备 HBM 占用使用 worker 设备 snapshot 中的 `total_bytes - free_bytes`.
+它包含 Torch allocated / reserved 计数之外的设备存储. Collector 单独保存活跃及排空状态的内存曲线, 与请求 TPS 分开.
+
+全部正常完成模型请求绘入图中, 横轴使用框架开始准备请求的时刻.
+纵轴使用输出 token 数除以开始处理至生成完成的墙钟时间.
+排队时间, 取消请求和失败分别报告. Soak 不设性能门槛.
+缩短的 smoke test 使用 `--diagnostic`. 诊断记录不能通过正式 soak 验收.
+
+## 真实 OOM 下的 worker 恢复
+
+故障注入与正常 soak 流量使用不同记录. 日常命令也跳过这项真实模型 collector.
+在空闲 B200 上显式运行:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh python scripts/serving-recovery.py --mode mtp --output-dir "$EVIDENCE_DIR/recovery-mtp"
+scripts/with-gpu.sh scripts/with-env.sh python scripts/serving-recovery.py --mode dspark --output-dir "$EVIDENCE_DIR/recovery-dspark"
+```
+
+测试在外部建立 worker launcher, 使用 `tests/fixtures/worker_faults.py`.
+生产路径不导入故障 injector. 每个 marker 在 worker 重建前后只允许一次显式故障.
+在采样, 接受状态提交, 草稿生成和 graph capture 后测试真实 CUDA allocator OOM.
+HTTP 继续存活, stream 明确报告失败, 旧前缀失效, 单次 worker 替换后验证 Chat/Responses 正常服务.
+确认恢复后的 cold 请求不会命中旧 KV identity, 然后验证新前缀复用.
+Collector 管理并停止服务, worker 进程组及临时 IPC endpoint.
+
 ## 教程与清理
 
 使用 [code-journey](../code-journey/README.zh.md#验证) 中的检查.

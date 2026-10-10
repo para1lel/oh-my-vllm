@@ -18,6 +18,7 @@ use crate::{
 
 // ── minimal CacheRequest impl ────────────────────────────────────────────────
 
+#[derive(Clone)]
 struct Req {
     id: RequestId,
     num_tokens: usize,
@@ -170,6 +171,7 @@ fn full_attn_prefix_hit_reuses_blocks() {
     c.new_step_starts();
     c.allocate_slots(&req1, (vec![], vec![]), 0, 16, 0, false)
         .expect("first alloc");
+    c.commit_cache(&req1.clone().with_computed(16));
     // Simulate the forward pass completing: advance computed tokens, then call
     // cache_blocks by driving another allocate_slots step that will register
     // the blocks.
@@ -227,6 +229,7 @@ fn mamba_hit_uses_rightmost_checkpoint() {
     let (fa0, mb0) = c
         .allocate_slots(&req1, (vec![], vec![]), 0, 8, 0, false)
         .expect("prefill");
+    c.commit_cache(&req1.clone().with_computed(8));
 
     // After prefill the Mamba group has 1 state block. Simulate the compute
     // completing and drive a decode step so cache_blocks runs.
@@ -307,6 +310,7 @@ fn freed_blocks_return_to_pool() {
     c.new_step_starts();
     c.allocate_slots(&req, (vec![], vec![]), 0, 8, 0, false)
         .expect("alloc");
+    c.commit_cache(&req.clone().with_computed(8));
     let free_mid = c.pool().num_free_blocks();
     assert!(
         free_mid < free_before,
@@ -464,6 +468,7 @@ fn speculative_prefix_hit_allocates_private_state_and_draft_slots() {
         kv.allocate_slots(&req, (vec![], vec![]), 0, 784, 0, false)
             .unwrap();
         let checkpoint = kv.mamba_blocks(1)[0];
+        kv.commit_cache(&req.clone().with_computed(784));
         kv.free(1);
         kv.new_step_starts();
         let req2 = Req::new(2, 785).with_hashes(hashes);
@@ -521,6 +526,7 @@ fn independent_state_pool_preserves_prefix_and_capacity() {
     );
     assert_eq!(c.full_attn_blocks(1).len(), 8);
     assert!(c.mamba_blocks(1).iter().all(|id| *id < 3));
+    c.commit_cache(&req.clone().with_computed(tokens.len()));
     c.free(1);
     c.new_step_starts();
     let extended: Vec<u32> = tokens.iter().copied().chain([99]).collect();

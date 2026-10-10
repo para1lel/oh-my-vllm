@@ -1,4 +1,37 @@
 export const sourceNotes = {
+  cachePublish: {
+    title: "提交前缀时检查哪个计算边界", intro: "每条请求只暂存本轮新增的完整边界, 提交时无需重新扫描全部长历史. GPU 结果验证后才调用此方法.",
+    entries: [
+      ["request_id", "当前请求的唯一编号.", "取得该请求尚未发布的边界列表, 其他请求的边界保持原状态."],
+      ["computed", "验证与接受处理后的已计算 token 数.", "只有终点不超过此数量的完整页才可发布, 被拒草稿区间不能发布."],
+      ["pool", "保存物理 block 引用和前缀索引的 BlockPool.", "commit_cache_block 将对应条目标为可被新请求查询的已提交状态."],
+      ["pending_cache / pending", "按 request_id 保存的待提交边界, 及当前请求的可变列表.", "处理后保留仍未完成的条目, 列表为空时删除请求 key."],
+      ["index / id / completed_blocks", "边界所在逻辑页下标, 物理 block 编号及已完成的整页数量.", "index 小于 completed_blocks 时发布对应 id, 其余条目继续等待实际完成."],
+      ["self.block_size", "每页的 token 数, 生产值为 784.", "第 index 页的完整终点为 (index + 1) * block_size."],
+    ],
+  },
+  compilerBudget: {
+    title: "主机调用前怎样管理编译变体预算", intro: "Dynamo 按 Python code object 与输入守卫管理编译变体. CompilerCache 保存项目持有的 code identity 和变体数量, 手动捕获图仍由其 owner 管理.",
+    entries: [
+      ["code / ident", "本次编译 callable 的 CodeType 对象及其 identity.", "使用对象身份区分结构相同的 code, 与固定版本 Dynamo 的键一致."],
+      ["self.codes / state", "按最近使用顺序排列的项目 code 表及当前条目.", "CodeState.variants 保存存活变体数, frame_ids 保存属于项目的编译帧编号."],
+      ["saturated / self.per_code", "当前 code 是否达到变体上限, 及单 code 的数量预算.", "达到上限后在允许淘汰的主机边界移除当前 code 的整组 specialization."],
+      ["total / self.capacity", "项目所有 code 的存活变体总数及总预算.", "总量达到上限时先淘汰最早使用的 code, 为新变体留出容量."],
+      ["self.code_capacity", "同时保存的 code identity 数量上限.", "新 code 加入前检查容量, 防止动态 closure 的身份表持续增长."],
+      ["is_current_stream_capturing / _reset", "当前 CUDA stream 是否正在 capture, 及淘汰指定 code 的方法.", "capture 内保留已经预热的 specialization, 清理在可重新编译的主机调用边界执行."],
+    ],
+  },
+  admissionLease: {
+    title: "HTTP 输入前保留哪些准入资源", intro: "每个 Lease 的 clone 共用一次 reservation. 请求, 输出 body 和 drain 全部释放后, 才归还对应字节与数量名额.",
+    entries: [
+      ["timeout / epoch", "请求总时限及当前 worker 世代编号.", "deadline 从此刻开始, epoch 防止恢复前排队的请求进入新 worker."],
+      ["queued", "准入等待队列的 OwnedSemaphorePermit.", "数量达到上限时立即拒绝, 开始准备后转为 live 名额."],
+      ["received / received_unix_s", "单调准入时刻及对应 UTC Unix 秒数.", "单调时刻计算 deadline 和排队耗时, UTC 时刻关联服务记录."],
+      ["LeaseInner / LeaseState", "共享生命周期记录及受锁保护的 reservation 状态.", "bytes 记录编码预算, queued 和 live 分别保存两类数量 permit."],
+      ["deadline", "received 加 timeout 得到的绝对截止点.", "同一个截止点覆盖读取 body, 排队, 准备和生成."],
+      ["HTTP_BODY_BYTES / resize", "读取输入前预留的 body 容量及更新字节 reservation 的方法.", "先通过 Budget 的总字节检查, 再让 HTTP 解析读取 body."],
+    ],
+  },
   gatedLinear: {
     title: "门控归一化投影的五个输入", intro: "每个 GDN 头有 128 个值, 刚好组成一个 FP8 scale 分组. 融合先将带 SiLU 门的 RMS 结果舍入为 BF16, 再量化这一结果.",
     entries: [

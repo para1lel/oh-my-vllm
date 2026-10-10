@@ -14,11 +14,12 @@ Python 负责 GPU tensor 和计算.
 6. Python 构建 batch plan, 启动 target 和所选草稿模式的 GPU 单元.
 7. Python 返回保留 token, 下一批草稿和可选服务输出.
 8. Rust 在状态变化前校验完整回复.
-9. Rust 提交已接受历史, 结束或重新调度请求, 提供输出.
+9. Rust 提交已接受历史和 prefix identity, 结束或重新调度请求, 提供输出.
 
 取消在已完成的引擎操作之间生效.
 Finished-only execution 会刷新待处理的 Python 清理, 包括没有剩余工作时.
-请求局部失败只停止该请求; worker / device 失败停止引擎.
+请求局部失败只停止该请求. Worker / device 失败停止受影响请求, 使该 worker 状态失效.
+HTTP supervisor 保留 listener, 清空逻辑缓存, 重建 worker 后重新准入.
 Rust 子进程管理和 Linux parent-death signal 防止遗留 Python worker.
 
 ## Rust 模块
@@ -56,7 +57,7 @@ Rust 子进程管理和 Linux parent-death signal 防止遗留 Python worker.
 
 Rust 绑定 `ipc://<socket_path>`; 唯一 Python worker 连接它.
 消息为带 `type` 字段的 msgpack dictionary.
-Prepare 和 execute 回复回显 `rpc_id`; 丢弃迟到的已取消 prepare 回复.
+Prepare, execute 和 stats 回复回显 `rpc_id`; 丢弃迟到的已取消 prepare 回复.
 `register` 和 `abort` 无回复.
 
 | 消息 | 字段和作用 |
@@ -68,13 +69,16 @@ Prepare 和 execute 回复回显 `rpc_id`; 丢弃迟到的已取消 prepare 回�
 | `execute` | `rpc_id`, `step_id`, `scheduled`, `finished_request_ids`, `preempted_request_ids`, `num_batched_tokens`; 计算选定工作. |
 | Scheduled row | `request_id`, `token_ids`, `num_computed_tokens`, `prefill_token_ids`, `fa_block_table`, `mamba_block_table`. |
 | `execute_result` | `rpc_id`, `outputs`; 返回 output row. |
+| `stats` / `stats_result` | `rpc_id` / `rpc_id`, `stats`; 返回请求状态计数, 缓存计数及内存测量. |
 | Output row | `request_id`, `token_ids`, `num_accepted_draft_tokens`, `new_draft_token_ids`; 可选 `error`, `text`, `finish_reason`, `reasoning_tokens`. |
-| `error` | `message`, 可选 `rpc_id` 和 `kind`; 区分 validation 和 internal 失败. |
+| `error` | `message`, 可选 `rpc_id` 和 `kind`; 区分 validation, internal, OOM 和 device 失败. |
 | `abort` / `shutdown` | Abort 带 `request_id`; 释放请求状态 / 停止 worker. |
 
 `prefill_token_ids` 在接纳或重计算时包含完整已接受历史.
 普通解码保持增量; 草稿单独保留.
-初始化错误不带关联 ID 和 kind; 执行错误的 kind 默认 internal.
+
+初始化错误不带关联 ID. 缺失的错误 kind 默认为 internal.
+OOM 和 device 失败使用明确的 kind. Execute 抛出的异常使 worker 失效, 包括已有部分状态修改的情况.
 缺失注册产生请求局部执行错误.
 精确 wire 名称和默认值以 Rust 和 Python 协议定义为准.
 
@@ -94,7 +98,7 @@ Prepare 和 execute 回复回显 `rpc_id`; 丢弃迟到的已取消 prepare 回�
 分配先移除过期对齐状态, 只读统计所需容量.
 容量检查包含 watermark.
 任何 group 分配新块前, 先 touch 全部复用块.
-随后分配新块, 注册完整缓存块.
+随后分配新块, 暂存完整缓存 identity.
 这一顺序防止空闲队列重复计数复用块.
 
 容量不足时, Rust 从队尾抢占较晚接纳的运行请求, 重试较早请求.
@@ -102,6 +106,7 @@ Prepare 和 execute 回复回显 `rpc_id`; 丢弃迟到的已取消 prepare 回�
 Victim 按接纳顺序返回等待队列.
 重计算重置 computed cursor, 保留已接受历史并清除草稿.
 事务提交前校验输出 ID, 调度数量, token 范围, 接受草稿和错误.
+提交只发布已完成且被接受计算所覆盖的完整前缀边界.
 
 ## 缓存 group 与前缀复用
 
@@ -124,6 +129,13 @@ FA page 0 为 null page.
 协调器将该前缀与可用 GDN checkpoint 协调.
 结果为兼容 FA / GDN 命中长度的最小值.
 引用保护活跃块; 空闲队列淘汰最久未使用的缓存条目.
+
+`cache_committed` 区分已完成缓存内容与暂存 identity.
+查询只返回已提交条目. 相同 hash 的 pending 副本不会遮住已提交副本.
+
+各 group 在 `pending_cache` 中保存新边界, 直到经过验证的计算覆盖这些边界.
+失败和取消移除未提交 identity. 请求释放后, 成功提交的前缀仍可保留.
+逻辑驱逐复用固定 GPU arena 中的 tensor slot. Graph 和临时分配使用不同内存预算.
 
 普通 GDN 状态为 FP32; MTP 和 DSpark GDN 状态为 BF16.
 状态 layout 为 `[slot,48,128,128]`; convolution 状态为 BF16 `[slot,10240,3]`.
@@ -300,7 +312,11 @@ MTP draft / proposal 的默认共享预算为 64 条目, 下限分别为 32 和 
 衰减计数必须超过最冷可淘汰条目的 2 倍.
 预算未满时允许首次 miss 就 capture.
 计数每 512 次观察衰减.
-空闲 GPU 显存少于 4 GiB 时, cache 跳过新 capture.
+显存压力下, cache 在分配前同步并释放冷 graph owner.
+压力驱逐可越过 family floor. 最后一个 family owner 离开时释放 pool handle.
+Garbage collection 先释放引用循环, allocator 再返还空闲 reservation.
+空闲 GPU 显存仍少于 4 GiB 时, cache 跳过新 capture.
+
 Worker 仍执行编译单元.
 Capture 失败后退避 64 次观察.
 同一 MTP shape 在 4096 次 cache decision 内再次 capture, 会启动共享的 32768-decision capture cooldown.
@@ -316,9 +332,22 @@ KV page, state slot, token 和 attention metadata 保持动态.
 Replay 先验证全部 metadata 替换, 在复制前恢复捕获的绑定.
 
 FA 2 prefill 使用编译路径.
-Dynamo 限制为 4096, 在 256 时警告.
-这些限制不能证明无限 shape 变化下编译器内存有界.
-参见 [开放审计工作](audit.zh.md).
+`ir/cache.py` 限制项目 Dynamo 变体总数为 256, 单 code 变体数为 64, code identity 数为 32.
+在主机调用边界按 code object 淘汰整组 specialization.
+单 code 预算满时淘汰当前 code 的整组变体. 总预算满时淘汰最近最少使用的 code.
+Capture 保留已预热的 specialization.
+之后的主机调用需要已淘汰 shape 时, 重新使用 `fullgraph=True` 编译.
+有范围的淘汰保留外部编译条目和固定版本的执行合同.
+
+项目模块 registry 最多 256 项. 每个 callable 保留最多 64 个最近的 executable owner.
+捕获图对象独立于编译器 registry 淘汰, 保留自身必需的 executable owner.
+因此, 变体上限不包括 resident graph 持有的全部 executable owner.
+
+Provider 选择记录使用 2048 项 LRU. Rewrite 记录最多 256 项, 编译计数最多 128 个标签.
+仅在显式 trace 选项启用时记录 semantic graph inventory.
+
+Shutdown 释放 graph pool, executable owner, 绑定模型 callable, 请求状态及项目编译器根引用.
+参见 [服务上限](serving.zh.md#存储与资源限制) 和 [ADR-011](decisions/ADR-011-bounded-serving-and-worker-recovery.zh.md).
 
 ## CUDA stream 与 PDL
 

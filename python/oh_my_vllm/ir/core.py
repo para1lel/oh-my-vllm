@@ -10,7 +10,8 @@ selection so a compiled graph cannot silently retain an obsolete provider.
 from __future__ import annotations
 
 import logging
-from collections import Counter
+import os
+from collections import Counter, OrderedDict, deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -19,14 +20,19 @@ import torch
 from torch._subclasses.fake_tensor import FakeTensor
 from torch.fx.node import map_arg
 
+from .cache import COMPILER_CACHE
+
 LOG = logging.getLogger(__name__)
 
 # The manual target/draft/proposal graph cache deliberately retains many static
 # token extents. Dynamo shares recompile counters by Python code object even
 # when each graph has a distinct closure. Raise both its resident and lifetime
 # limits; do not let Dynamo silently run eager when either limit is reached.
-# Host specialization and manual graph closures can still exhaust this bound.
+# Owned code caches retire their specializations before these limits are reached.
 _RECOMPILE_LIMIT = 4096
+_SELECTION_CAPACITY = 2048
+_REWRITE_CAPACITY = 256
+_UNIT_CAPACITY = 128
 
 
 @dataclass(frozen=True)
@@ -67,8 +73,8 @@ class TensorSpec:
 
 _OPERATIONS: dict[str, Operation] = {}
 _TARGETS: dict[Any, Operation] = {}
-_SELECTIONS: dict[tuple[str, str, str], Selection] = {}
-_REWRITES: list[Rewrite] = []
+_SELECTIONS: OrderedDict[tuple[str, str, str], Selection] = OrderedDict()
+_REWRITES: deque[Rewrite] = deque(maxlen=_REWRITE_CAPACITY)
 _COMPILED_GRAPHS: Counter[str] = Counter()
 
 
@@ -225,7 +231,32 @@ def compiled_graph_counts() -> Mapping[str, int]:
 
 
 def _record_selection(operation: str, provider: str, phase: str, key: str) -> None:
-    _SELECTIONS[(phase, operation, key)] = Selection(operation, provider, phase, key)
+    ident = phase, operation, key
+    _SELECTIONS[ident] = Selection(operation, provider, phase, key)
+    _SELECTIONS.move_to_end(ident)
+    if len(_SELECTIONS) > _SELECTION_CAPACITY:
+        _SELECTIONS.popitem(last=False)
+
+
+def compiler_snapshot() -> dict:
+    """Bounded compiler diagnostics; no tensor or model references are returned."""
+    return {
+        **COMPILER_CACHE.snapshot(),
+        "selection_entries": len(_SELECTIONS),
+        "selection_capacity": _SELECTION_CAPACITY,
+        "rewrite_entries": len(_REWRITES),
+        "rewrite_capacity": _REWRITE_CAPACITY,
+        "compiled_graph_counts": compiled_graph_counts(),
+        "unit_capacity": _UNIT_CAPACITY,
+    }
+
+
+def clear_compiler_caches() -> None:
+    """Release worker-owned compiler state after its graph/callable owners stop."""
+    COMPILER_CACHE.clear()
+    _SELECTIONS.clear()
+    _REWRITES.clear()
+    _COMPILED_GRAPHS.clear()
 
 
 def _to_static(value: Any) -> Any:
@@ -362,7 +393,8 @@ def lower_to_inductor(
     """Select providers from FX metadata, then compile the lowered graph."""
     from oh_my_vllm.performance.execution import observe_graph
 
-    observe_graph(unit, graph_module.graph)
+    if os.environ.get("OH_MY_VLLM_SEMANTIC_TRACE"):
+        observe_graph(unit, graph_module.graph)
     fused_silu = _rewrite_silu_fp8_linear(graph_module)
     selections: list[tuple[str, str, str]] = []
     for node in graph_module.graph.nodes:
@@ -421,10 +453,22 @@ def compile_forward(
     )
     torch._inductor.config.triton.cudagraphs = False
     label = unit or getattr(function, "__qualname__", type(function).__name__)
+    underlying = getattr(function, "__func__", function)
+    code = getattr(underlying, "__code__", None)
+    if code is None:
+        raise TypeError("forward units must expose a Python code object")
+    owners = deque(maxlen=COMPILER_CACHE.per_code)
 
     def lower(graph_module: torch.fx.GraphModule, inputs: Sequence[Any]):
+        from torch._inductor.codecache import PyCodeCache
+
         LOG.info("Compilation started: IR unit %s", label)
+        module_start = len(PyCodeCache.modules)
         compiled = lower_to_inductor(graph_module, inputs, unit=label)
+        owners.append(compiled)
+        COMPILER_CACHE.compiled(code, module_start)
+        if label not in _COMPILED_GRAPHS and len(_COMPILED_GRAPHS) >= _UNIT_CAPACITY:
+            _COMPILED_GRAPHS.pop(next(iter(_COMPILED_GRAPHS)))
         _COMPILED_GRAPHS[label] += 1
         count = _COMPILED_GRAPHS[label]
         if count % 256 == 0:
@@ -436,4 +480,14 @@ def compile_forward(
             )
         return compiled
 
-    return torch.compile(function, backend=lower, fullgraph=True)
+    compiled = torch.compile(function, backend=lower, fullgraph=True)
+    COMPILER_CACHE.bind_backend(compiled, lower)
+
+    def invoke(*args, **kwargs):
+        COMPILER_CACHE.before_call(code)
+        return compiled(*args, **kwargs)
+
+    # Captured graphs retain these executable owners independently of Dynamo
+    # caches. This avoids relying on CUmodule lifetime after registry eviction.
+    invoke.execution_owners = owners
+    return invoke

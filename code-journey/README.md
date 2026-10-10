@@ -37,13 +37,13 @@ It shows scheduling and submission, without model output or GPU performance clai
 | 3 | Request history, batching, reply validation, and commit. |
 | 4 | Token budgets and aligned prefill. |
 | 5 | FA/GDN layout, allocation, and CPU planning. |
-| 6 | Prefix hashes, references, queues, and preemption. |
-| 7 | ZMQ, registration, preparation, cancellation, and failures. |
+| 6 | Prefix hashes, commit before publication, references, queues, and preemption. |
+| 7 | ZMQ, registration, preparation, cancellation, and worker reconstruction. |
 | 8 | Loading, FP8/ordinary projections, residuals, FA, GDN, and logits. |
-| 9 | Sampling, grammar, stopping, parsing, and streams. |
+| 9 | Sampling, grammar, stopping, parsing, admission limits, and streams. |
 | 10 | MTP proposals, grouped verification, and state ownership. |
-| 11 | Semantic IR, lowering, graph caches, and CUDA kernels. |
-| 12 | Correctness, maximum shapes, TTFT, throughput, and measurement audit. |
+| 11 | Semantic IR, lowering, compiler and graph cache limits, and CUDA kernels. |
+| 12 | Correctness, maximum shapes, phase latency, agentic soak, and measurement audit. |
 | 13 | DSpark feature taps, context KV, seven proposals, confidence, probability verification, and measurement. |
 
 `src/curriculum.mjs` maps each substantive runtime Rust/Python/CUDA file to a chapter and entry symbol.

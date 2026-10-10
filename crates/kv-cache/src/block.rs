@@ -58,6 +58,8 @@ pub struct KVCacheBlock {
     /// is smaller for a cached partial block. Meaningless when `block_hash` is
     /// `None`.
     block_hash_num_tokens: u32,
+    /// Only a completed and validated worker step can publish this identity.
+    cache_committed: bool,
     prev_free: u32,
     next_free: u32,
     /// The null block (id 0) is handed out as padding for un-computed slots. It is
@@ -71,6 +73,7 @@ impl KVCacheBlock {
             ref_cnt: 0,
             block_hash: None,
             block_hash_num_tokens: 0,
+            cache_committed: false,
             prev_free: NULL,
             next_free: NULL,
             is_null: false,
@@ -99,6 +102,19 @@ impl KVCacheBlock {
         assert!(num_tokens > 0, "a cached block must cover >=1 token");
         self.block_hash = Some(hash);
         self.block_hash_num_tokens = num_tokens;
+        self.cache_committed = true;
+    }
+
+    pub fn stage_cache(&mut self) {
+        self.cache_committed = false;
+    }
+
+    pub fn commit_cache(&mut self) {
+        self.cache_committed = self.block_hash.is_some();
+    }
+
+    pub fn cache_is_committed(&self) -> bool {
+        self.cache_committed
     }
 
     /// Drop the prefix-cache identity, e.g. when the block is evicted and reused.
@@ -106,6 +122,7 @@ impl KVCacheBlock {
     pub fn reset_block_hash(&mut self) {
         self.block_hash = None;
         self.block_hash_num_tokens = 0;
+        self.cache_committed = false;
     }
 
     /// Whether the block is currently linked into the free queue.

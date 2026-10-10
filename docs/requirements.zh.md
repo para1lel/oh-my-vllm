@@ -199,6 +199,52 @@ Profiling 需显式选择.
 OMP 证据必须显示两次源码读取, 结果回传, 继续生成及使用读取结果的答案.
 通过 response ID 与服务日志核对实际模式及已验证草稿.
 
+## REQ-SERVE-006: 资源上限与缓存正确性
+
+请求准入, 队列, 历史副本, 输出缓冲及已完成 stream 的 drain 必须遵守明确的数量和字节上限.
+复制历史或准备请求前先保留容量.
+请求 deadline 从准入时开始, 包含排队时间.
+暂时过载返回可重试错误. 超过支持容量的请求明确拒绝.
+
+失败必须明确报告, 包括开始流式输出后的失败.
+
+只有经过验证的 GPU 结果提交对应状态后, 才发布 prefix identity.
+LRU 驱逐必须保护仍被引用的 block. 失败或取消后清除未提交的 identity.
+逻辑 KV 驱逐复用固定 GPU arena, 不释放该 arena 的 HBM 存储.
+Graph entry, 编译器 metadata, response record 及 shutdown 引用必须遵守各自的资源上限.
+
+## REQ-SERVE-007: Worker 恢复
+
+GPU OOM 或 worker 失败后, HTTP 进程继续存活.
+Device state 无法安全复用时, 让受影响请求失败并重建 worker.
+重新准入前清除该 worker 的全部逻辑 cache identity.
+恢复期间报告暂时不可用. 恢复尝试与 shutdown 等待均遵守既定上限.
+已经提供 stream 输出的请求不自动重放.
+
+测试 OOM, 部分状态修改, 共享前缀及恢复后的再次服务.
+
+## REQ-SERVE-008: 长时 agentic 服务
+
+分别对 MTP4 和 DSpark 运行 soak test.
+每种模式至少持续 1 小时, 并完成至少 500 个正常模型请求.
+使用 4 个并行 oh-my-pi agent, 模型请求最大并行度为 4.
+覆盖两种 API, 工具循环, 前缀复用及变化的请求长度.
+取消, 慢客户端, 过载及故障测试使用单独的记录.
+正常请求不得发生意外 OOM, worker 重启或请求失败.
+
+周期性停止新准入, 排空活跃工作.
+预热后检查请求状态释放, 缓存上限, 主机 RSS 及 GPU allocated / reserved 内存.
+保留完整内存时间序列. 缓存预热后仍持续增长时调查原因.
+单独的故障测试验证 worker 恢复及旧逻辑 KV identity 失效.
+
+README 每种模式发布一张散点图. 每个点对应一个正常完成的模型请求.
+横轴为框架开始准备请求的时刻.
+纵轴为输出 token 数除以从开始处理到生成完成的墙钟时间.
+排队时间, 取消与失败请求单独报告.
+
+这项测试不设性能门槛. 日常测试命令默认跳过这项重型测试.
+推理路径修改后, 按 `REQ-PERF-001` 重测受影响的阶段性能行.
+
 ## REQ-KERNEL-001: 冻结 TileLang 比较
 
 项目内 Triton 到 TileLang 的迁移已完成.

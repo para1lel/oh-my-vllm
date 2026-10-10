@@ -205,6 +205,7 @@ class DecodeGraph:
             torch.cuda.synchronize()
             with torch.cuda.graph(self.graph, pool=pool):
                 self.hidden, self.logits, self.features = unit()
+            self.execution_owners = tuple(getattr(unit, "execution_owners", ()))
         finally:
             restore()
 
@@ -261,6 +262,7 @@ class DraftGraph:
             torch.cuda.synchronize()
             with torch.cuda.graph(self.graph, pool=pool):
                 self.hidden = unit()
+            self.execution_owners = tuple(getattr(unit, "execution_owners", ()))
         finally:
             cache[pages, :, offsets] = saved
 
@@ -334,6 +336,7 @@ class ProposalGraph:
             torch.cuda.synchronize()
             with torch.cuda.graph(self.graph, pool=pool):
                 self.tokens = unit()
+            self.execution_owners = tuple(getattr(unit, "execution_owners", ()))
         finally:
             cache[pages, :, offsets] = saved
 

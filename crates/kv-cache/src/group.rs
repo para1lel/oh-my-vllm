@@ -124,6 +124,8 @@ pub struct GroupManager {
     /// these, because the block's contents are written by a forward pass that has
     /// not run yet.
     cached_blocks_this_step: FxHashSet<BlockHashWithGroupId>,
+    /// Newly staged checkpoint identities, bounded by the request's block table.
+    pending_cache: FxHashMap<RequestId, Vec<(usize, u32)>>,
 }
 
 #[inline]
@@ -145,11 +147,16 @@ impl GroupManager {
             allocated_block_reqs: FxHashSet::default(),
             last_state_block_idx: FxHashMap::default(),
             cached_blocks_this_step: FxHashSet::default(),
+            pending_cache: FxHashMap::default(),
         }
     }
 
     pub fn set_speculative_blocks(&mut self, count: usize) {
         self.num_speculative_blocks = count;
+    }
+
+    pub fn speculative_blocks(&self) -> usize {
+        self.num_speculative_blocks
     }
 
     #[inline]
@@ -448,12 +455,32 @@ impl GroupManager {
 
         for &(idx, id) in &to_cache {
             let key = BlockHashWithGroupId::new(hashes[idx], self.group_id);
-            pool.cache_block(id, key, ((idx + 1) * self.block_size) as u32);
+            pool.stage_cache_block(id, key, ((idx + 1) * self.block_size) as u32);
             if self.kind == GroupKind::MambaAlign {
                 self.cached_blocks_this_step.insert(key);
             }
         }
+        self.pending_cache.entry(rid).or_default().extend(to_cache);
         self.num_cached_block.insert(rid, num_full);
+    }
+
+    /// Publish only boundaries covered by validated, completed GPU computation.
+    pub fn commit_cache(&mut self, request_id: RequestId, computed: usize, pool: &mut BlockPool) {
+        let Some(pending) = self.pending_cache.get_mut(&request_id) else {
+            return;
+        };
+        let completed_blocks = computed / self.block_size;
+        pending.retain(|&(index, id)| {
+            if index < completed_blocks {
+                pool.commit_cache_block(id);
+                false
+            } else {
+                true
+            }
+        });
+        if pending.is_empty() {
+            self.pending_cache.remove(&request_id);
+        }
     }
 
     /// Free blocks the group will no longer read, replacing them with nulls.
@@ -534,6 +561,7 @@ impl GroupManager {
         self.num_cached_block.remove(&request_id);
         self.allocated_block_reqs.remove(&request_id);
         self.last_state_block_idx.remove(&request_id);
+        self.pending_cache.remove(&request_id);
         if let Some(mut blocks) = self.req_to_blocks.remove(&request_id) {
             // Tail-first, so deep blocks are evicted before the shallow prefixes
             // that other requests are more likely to share.

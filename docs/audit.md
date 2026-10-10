@@ -9,7 +9,9 @@ Performance evidence applies to its measured source, as specified in [acceptance
 ## PY-04: Graph memory and shape changes
 
 Status: partial/open, severity P2.
-Graph families use bounded graph caches with shared pools, admission, eviction, free-memory guards, and capture restoration.
+Graph families use graph caches with capacity limits, shared pools, admission, eviction, free-memory guards, and capture restoration.
+Pressure eviction can remove a family's last graph and pool handle. Synchronization, garbage collection, and allocator release precede recapture.
+
 The resident-graph 36k-to 40k transition completed with less than 4 GiB free memory.
 Same-shape 262144 ordinary/MTP4 executions also completed without graph eviction or recapture.
 These probes do not include cross-shape 262k eviction/recapture or all late-capture memory conditions.
@@ -37,8 +39,25 @@ Make a decision about a new candidate only with a new hypothesis and full-operat
 
 ## Other evidence limits
 
-Dynamo's 4096 limits and 256-variant warnings do not show bounded compiler memory with indefinite shape changes.
-The log/cache audit cannot exclude silent in-memory recompilation.
+The worker now limits owned Dynamo variants to 256, variants per code object to 64, and code objects to 32.
+Owned Inductor modules have a separate 256-entry limit. Captured graphs keep their necessary execution owners with the graph-cache limits enforced.
+Provider selections, rewrite records, and compile counter labels also have fixed limits.
+The regression tests check eviction and graph replay after eviction.
+
+The long-duration MTP4/DSpark collection must still show stable RSS and GPU memory with changing inputs.
+Counters with limits alone do not show memory stability. See [long-duration testing](testing.md#long-duration-agentic-service).
+
+## Serving resource corrections
+
+Prefix blocks enter lookup only after validated worker output commits their state.
+Failed pending blocks cannot become shared prefixes. RPC output IDs are validated before error storage changes.
+Admission leases keep queued requests, live requests, encoded state reservations, and completed stream drains at or below their limits.
+Their byte accounting excludes JSON allocator overhead. RSS has a separate memory audit.
+
+Worker failure invalidates its logical KV and reconstructs the worker while HTTP stays available.
+Affected streams report failure without replay. Process birth records protect cleanup from PID reuse.
+The allocator-OOM collector checks failure stages, cache invalidation, successful service after recovery, and process cleanup.
+Current acceptance is limited to completed measurements. New phase and soak collections are pending.
 
 Phase, operator, boundary, and service evidence keeps its measured source scope.
 The [acceptance index](acceptance.md) keeps source scope and all original failed records.

@@ -16,7 +16,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1083,6 +1083,16 @@ class HttpTests(unittest.TestCase):
             ]
         self.assertEqual(events[-1]["type"], "error")
         self.assertEqual(events[-1]["message"], "fixture request failure")
+        metrics = [
+            json.loads(line.split("SERVING_REQUEST_METRIC ", 1)[1])
+            for line in (self.directory / "server.log").read_text().splitlines()
+            if "SERVING_REQUEST_METRIC " in line
+        ]
+        failed = [
+            row for row in metrics if row["response_id"] == events[0]["response"]["id"]
+        ]
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(failed[0]["status"], "failed")
         with self.request("/responses", self.base(True)) as response:
             self.assertEqual(json.load(response)["status"], "completed")
 
@@ -1109,7 +1119,258 @@ class HttpTests(unittest.TestCase):
             self.assertIn("response.incomplete", remaining)
             self.assertNotIn('"type":"error"', remaining)
 
-    def test_z_worker_failure_is_terminal(self):
+    def diagnostics(self):
+        with urllib.request.urlopen(
+            self.url.removesuffix("/v1") + "/diagnostics", timeout=5
+        ) as reply:
+            return json.load(reply)
+
+    @contextmanager
+    def resource_server(
+        self, name, *arguments, worker_children=None, worker_steps=None
+    ):
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            port = listener.getsockname()[1]
+        log_path = self.directory / (name + ".log")
+        with log_path.open("w") as log:
+            environment = os.environ | {
+                "OH_MY_VLLM_WORKER_PYTHON": str(self.directory / "worker"),
+                "CUDA_VISIBLE_DEVICES": "",
+            }
+            if worker_children is not None:
+                environment["OH_MY_VLLM_FIXTURE_CHILDREN"] = str(worker_children)
+            if worker_steps is not None:
+                environment["OH_MY_VLLM_FIXTURE_STEPS"] = str(worker_steps)
+            process = subprocess.Popen(
+                [
+                    str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                    "--socket",
+                    str(self.directory / (name + ".ipc")),
+                    "serve",
+                    "--listen",
+                    f"127.0.0.1:{port}",
+                    "--diagnostics-interval-seconds",
+                    "1",
+                    *arguments,
+                ],
+                env=environment,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+            )
+            try:
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        self.fail(log_path.read_text())
+                    try:
+                        with urllib.request.urlopen(
+                            f"http://127.0.0.1:{port}/v1/models", timeout=0.2
+                        ):
+                            break
+                    except (OSError, urllib.error.URLError):
+                        time.sleep(0.05)
+                else:
+                    self.fail("resource fixture did not start")
+                yield port, log_path
+            finally:
+                if process.poll() is None:
+                    os.killpg(process.pid, signal.SIGINT)
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.wait()
+
+    def test_host_reservation_precedes_body_read_and_recovers_after_disconnect(self):
+        with self.resource_server(
+            "body-budget", "--request-state-max-bytes", str(8 << 20)
+        ) as (port, log):
+            address = f"http://127.0.0.1:{port}"
+            stalled = socket.create_connection(("127.0.0.1", port), timeout=5)
+            try:
+                stalled.sendall(
+                    b"POST /v1/responses HTTP/1.1\r\nHost: localhost\r\n"
+                    b"Content-Type: application/json\r\nContent-Length: 100\r\n\r\n{"
+                )
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline:
+                    with urllib.request.urlopen(
+                        address + "/diagnostics", timeout=1
+                    ) as reply:
+                        snapshot = json.load(reply)
+                    if snapshot["queued_reservations"] == 1:
+                        break
+                    time.sleep(0.02)
+                self.assertEqual(snapshot["request_state_bytes"], 8 << 20)
+                request = urllib.request.Request(
+                    address + "/v1/responses",
+                    data=json.dumps(self.base(True)).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                with self.assertRaises(urllib.error.HTTPError) as failure:
+                    urllib.request.urlopen(request, timeout=3)
+                self.assertEqual(failure.exception.code, 503)
+            finally:
+                stalled.close()
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                with urllib.request.urlopen(
+                    address + "/diagnostics", timeout=1
+                ) as reply:
+                    snapshot = json.load(reply)
+                if snapshot["request_state_bytes"] == 0:
+                    break
+                time.sleep(0.02)
+            self.assertEqual(snapshot["request_state_bytes"], 0)
+            with urllib.request.urlopen(request, timeout=5) as reply:
+                self.assertEqual(json.load(reply)["status"], "completed")
+            metrics = [
+                json.loads(line.split("SERVING_REQUEST_METRIC ", 1)[1])
+                for line in log.read_text().splitlines()
+                if "SERVING_REQUEST_METRIC " in line
+            ]
+            self.assertEqual(len(metrics), 1)
+            metric = metrics[0]
+            self.assertGreater(metric["output_tokens"], 0)
+            self.assertGreater(metric["processing_seconds"], 0)
+            self.assertGreaterEqual(metric["queue_seconds"], 0)
+            self.assertAlmostEqual(
+                metric["generation_completed_unix_s"]
+                - metric["processing_started_unix_s"],
+                metric["processing_seconds"],
+                delta=0.02,
+            )
+
+    def test_body_deadline_releases_admission_without_starting_worker_preparation(self):
+        with self.resource_server("body-timeout", "--request-timeout-seconds", "1") as (
+            port,
+            log,
+        ):
+            with socket.create_connection(("127.0.0.1", port), timeout=3) as stalled:
+                started = time.monotonic()
+                stalled.sendall(
+                    b"POST /v1/responses HTTP/1.1\r\nHost: localhost\r\n"
+                    b"Content-Type: application/json\r\nContent-Length: 100\r\n\r\n{"
+                )
+                response = stalled.recv(4096)
+                self.assertIn(b"503 Service Unavailable", response)
+                self.assertLess(time.monotonic() - started, 2)
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/diagnostics", timeout=1
+            ) as reply:
+                snapshot = json.load(reply)
+            self.assertEqual(snapshot["request_state_bytes"], 0)
+            self.assertEqual(snapshot["queued_reservations"], 0)
+            self.assertEqual(snapshot["restarts"], 0)
+            self.assertNotIn("request admitted", log.read_text())
+
+    def test_stored_response_retrieval_shares_the_host_admission_budget(self):
+        with self.resource_server(
+            "retrieval-budget", "--request-state-max-bytes", str(8 << 20)
+        ) as (port, _):
+            address = f"http://127.0.0.1:{port}"
+            request = urllib.request.Request(
+                address + "/v1/responses",
+                data=json.dumps(self.base(True)).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(request, timeout=5) as reply:
+                response_id = json.load(reply)["id"]
+            retrieval = address + "/v1/responses/" + response_id
+            with socket.create_connection(("127.0.0.1", port), timeout=3) as stalled:
+                stalled.sendall(
+                    b"POST /v1/responses HTTP/1.1\r\nHost: localhost\r\n"
+                    b"Content-Type: application/json\r\nContent-Length: 100\r\n\r\n{"
+                )
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline:
+                    with urllib.request.urlopen(address + "/diagnostics") as reply:
+                        snapshot = json.load(reply)
+                    if snapshot["queued_reservations"] == 1:
+                        break
+                    time.sleep(0.02)
+                self.assertEqual(snapshot["request_state_bytes"], 8 << 20)
+                with self.assertRaises(urllib.error.HTTPError) as failure:
+                    urllib.request.urlopen(retrieval, timeout=3)
+                self.assertEqual(failure.exception.code, 503)
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                try:
+                    with urllib.request.urlopen(retrieval, timeout=3) as reply:
+                        restored = json.load(reply)
+                    break
+                except urllib.error.HTTPError as error:
+                    self.assertEqual(error.code, 503)
+                    time.sleep(0.02)
+            else:
+                self.fail("retrieval admission did not release after disconnect")
+            self.assertEqual(restored["id"], response_id)
+            self.assertEqual(restored["status"], "completed")
+
+    def test_owned_worker_compiler_children_exit_on_recovery_and_shutdown(self):
+        children = self.directory / "compiler-children"
+        children.unlink(missing_ok=True)
+        owned = []
+        try:
+            with self.resource_server("compiler-cleanup", worker_children=children) as (
+                port,
+                _,
+            ):
+                address = f"http://127.0.0.1:{port}"
+                worker_pid, child_pid = map(
+                    int, children.read_text().splitlines()[0].split()
+                )
+                self.assertEqual(os.getpgid(worker_pid), worker_pid)
+                self.assertEqual(os.getpgid(child_pid), worker_pid)
+                owned.extend(open_pidfd(pid) for pid in (worker_pid, child_pid))
+                request = urllib.request.Request(
+                    address + "/v1/responses",
+                    data=json.dumps(self.base(True, input="worker-oom")).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                with self.assertRaises(urllib.error.HTTPError):
+                    urllib.request.urlopen(request, timeout=5)
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    with urllib.request.urlopen(address + "/diagnostics") as reply:
+                        snapshot = json.load(reply)
+                    if snapshot["status"] == "running" and snapshot["epoch"] == 2:
+                        break
+                    time.sleep(0.05)
+                self.assertEqual(snapshot["epoch"], 2)
+                self.assertEqual(snapshot["status"], "running")
+                self.assertEqual(len(select.select(owned, [], [], 2)[0]), 2)
+                new_worker, new_child = map(
+                    int, children.read_text().splitlines()[1].split()
+                )
+                self.assertNotEqual(new_worker, worker_pid)
+                self.assertEqual(os.getpgid(new_child), new_worker)
+                owned.extend(open_pidfd(pid) for pid in (new_worker, new_child))
+            self.assertEqual(len(select.select(owned, [], [], 2)[0]), 4)
+        finally:
+            for fd in owned:
+                if not select.select([fd], [], [], 0)[0]:
+                    with suppress(ProcessLookupError):
+                        signal.pidfd_send_signal(fd, signal.SIGKILL)
+                os.close(fd)
+
+    def wait_recovery(self, old_epoch):
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            snapshot = self.diagnostics()
+            if (
+                snapshot["status"] == "running"
+                and snapshot["epoch"] > old_epoch
+                and snapshot["worker"]
+            ):
+                return snapshot
+            time.sleep(0.05)
+        self.fail("worker did not recover: " + json.dumps(snapshot))
+
+    def test_z_worker_failure_replaces_worker_and_keeps_http_process_running(self):
+        before = self.diagnostics()
         with self.request(
             "/responses", self.base(True, input="worker-fatal", stream=True)
         ) as response:
@@ -1122,6 +1383,51 @@ class HttpTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as error:
             self.request("/responses", self.base(True))
         self.assertEqual(error.exception.code, 503)
+        after = self.wait_recovery(before["epoch"])
+        self.assertEqual(after["server_pid"], before["server_pid"])
+        self.assertNotEqual(after["worker_pid"], before["worker_pid"])
+        self.assertEqual(after["restarts"], before["restarts"] + 1)
+        with self.request("/responses", self.base(True)) as response:
+            self.assertEqual(json.load(response)["status"], "completed")
+
+    def test_worker_oom_recovers_with_cold_kv_and_zero_old_request_state(self):
+        prompt = "shared cache prefix " * 900
+        payload = self.base(True, input=prompt, max_output_tokens=1, store=False)
+        for _ in range(2):
+            with self.request("/responses", payload) as response:
+                seeded = json.load(response)
+        self.assertGreater(seeded["usage"]["input_tokens_details"]["cached_tokens"], 0)
+        before = self.diagnostics()
+        with self.request(
+            "/responses", self.base(True, input="worker-oom", stream=True)
+        ) as response:
+            self.assertIn("worker failed", response.read().decode())
+        after = self.wait_recovery(before["epoch"])
+        self.assertNotEqual(after["worker_pid"], before["worker_pid"])
+        self.assertTrue(
+            all(value == 0 for value in after["worker"]["requests"].values())
+        )
+        with self.request("/responses", payload) as response:
+            resumed = json.load(response)
+        self.assertEqual(resumed["usage"]["input_tokens_details"]["cached_tokens"], 0)
+        self.assertIsNone(self.process.poll())
+
+    def test_invalid_error_frames_recover_without_accumulating_unknown_request_state(
+        self,
+    ):
+        for mode in ("unknown-error", "duplicate-error", "error-with-tokens"):
+            with self.subTest(mode=mode):
+                before = self.diagnostics()
+                with self.request(
+                    "/responses", self.base(True, input=mode, stream=True)
+                ) as response:
+                    self.assertIn("worker failed", response.read().decode())
+                after = self.wait_recovery(before["epoch"])
+                self.assertTrue(
+                    all(value == 0 for value in after["worker"]["requests"].values())
+                )
+                with self.request("/responses", self.base(True)) as response:
+                    self.assertEqual(json.load(response)["status"], "completed")
 
     def test_y_active_limit_returns_503(self):
         streams = []
@@ -1161,6 +1467,104 @@ class HttpTests(unittest.TestCase):
                 self.fail(
                     "active request capacity did not recover after stream closure"
                 )
+
+    def test_disconnect_during_execute_emits_cancelled_metric_for_both_apis(self):
+        for responses in (False, True):
+            api = "responses" if responses else "chat"
+            with self.subTest(api=api):
+                steps = self.directory / f"disconnect-{api}-steps"
+                with self.resource_server(f"disconnect-{api}", worker_steps=steps) as (
+                    port,
+                    log,
+                ):
+                    payload = self.base(responses, stream=True, reasoning_effort="off")
+                    if responses:
+                        payload.update(
+                            input="long slow-execute",
+                            max_output_tokens=1500,
+                            reasoning={"effort": "off"},
+                            store=False,
+                        )
+                    else:
+                        payload.update(
+                            messages=[{"role": "user", "content": "long slow-execute"}],
+                            max_tokens=1500,
+                        )
+                    endpoint = "/responses" if responses else "/chat/completions"
+                    request = urllib.request.Request(
+                        f"http://127.0.0.1:{port}/v1" + endpoint,
+                        data=json.dumps(payload).encode(),
+                        headers={"Content-Type": "application/json"},
+                    )
+                    response_id = None
+                    with urllib.request.urlopen(request, timeout=5) as stream:
+                        while line := stream.readline():
+                            if not line.startswith(b"data: "):
+                                continue
+                            event = json.loads(line[6:])
+                            if responses:
+                                if event["type"] == "response.created":
+                                    response_id = event["response"]["id"]
+                                visible = event[
+                                    "type"
+                                ] == "response.output_text.delta" and bool(
+                                    event["delta"]
+                                )
+                            else:
+                                response_id = event["id"]
+                                visible = bool(
+                                    event["choices"][0]["delta"].get("content")
+                                )
+                            if visible:
+                                break
+                        else:
+                            self.fail("fixture stream had no visible output")
+                        before = len(steps.read_text().splitlines())
+                        deadline = time.monotonic() + 3
+                        while time.monotonic() < deadline:
+                            if len(steps.read_text().splitlines()) > before:
+                                break
+                            time.sleep(0.01)
+                        else:
+                            self.fail("fixture did not begin the next execute call")
+                        stream.fp.raw._sock.shutdown(socket.SHUT_RDWR)
+                    deadline = time.monotonic() + 5
+                    metric = None
+                    while time.monotonic() < deadline:
+                        metrics = [
+                            json.loads(line.split("SERVING_REQUEST_METRIC ", 1)[1])
+                            for line in log.read_text().splitlines()
+                            if "SERVING_REQUEST_METRIC " in line
+                        ]
+                        matches = [
+                            row for row in metrics if row["response_id"] == response_id
+                        ]
+                        if matches:
+                            self.assertEqual(len(matches), 1)
+                            metric = matches[0]
+                            break
+                        time.sleep(0.02)
+                    self.assertIsNotNone(metric, "disconnect had no terminal metric")
+                    self.assertEqual(metric["api"], api)
+                    self.assertEqual(metric["status"], "cancelled")
+                    self.assertGreater(metric["output_tokens"], 0)
+                    self.assertLess(metric["output_tokens"], 1500)
+                    self.assertIn("client disconnected", log.read_text())
+                    deadline = time.monotonic() + 3
+                    while time.monotonic() < deadline:
+                        with urllib.request.urlopen(
+                            f"http://127.0.0.1:{port}/diagnostics", timeout=3
+                        ) as reply:
+                            snapshot = json.load(reply)
+                        if (
+                            snapshot["active_requests"] == 0
+                            and snapshot["request_state_bytes"] == 0
+                        ):
+                            break
+                        time.sleep(0.02)
+                    self.assertEqual(snapshot["active_requests"], 0)
+                    self.assertEqual(snapshot["request_state_bytes"], 0)
+                    self.assertEqual(snapshot["restarts"], 0)
 
     def test_cancel_does_not_break_other_request(self):
         cleanup = self.directory / "cleanup"

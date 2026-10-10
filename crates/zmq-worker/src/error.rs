@@ -16,6 +16,12 @@ pub enum Error {
     #[error("Python worker returned an error: {0}")]
     WorkerError(String),
 
+    #[error("Python worker ran out of memory: {0}")]
+    WorkerOom(String),
+
+    #[error("Python worker reported a device failure: {0}")]
+    WorkerDevice(String),
+
     #[error("invalid request rejected by Python worker: {0}")]
     WorkerValidation(String),
 

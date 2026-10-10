@@ -241,6 +241,71 @@ fn prefix_cache_hit_reduces_scheduled_tokens() {
 }
 
 #[test]
+fn failed_pending_prefill_never_becomes_a_prefix_hit_on_the_next_step() {
+    for separate in [false, true] {
+        let mut kv = HybridCoordinator::new(16, 784, true, 0);
+        if separate {
+            kv = kv.with_mamba_capacity(8);
+        }
+        let mut sched = Scheduler::new(
+            SchedulerConfig {
+                max_num_batched_tokens: 784,
+                max_num_seqs: 4,
+                enable_mtp: false,
+                mtp_draft_len: 0,
+            },
+            kv,
+        );
+        let prompt = vec![7; 785];
+        assert!(sched.add_request(Request::new(1, prompt.clone(), 1, vec![])));
+        assert!(sched.add_request(Request::new(2, prompt, 1, vec![])));
+        let first = sched.schedule();
+        assert_eq!(first.scheduled.len(), 1);
+        assert_eq!(first.scheduled[0].request_id, 1);
+        assert_eq!(first.num_batched_tokens, 784);
+        // The worker never writes these slots, and returns a request-local error.
+        sched.abort(1);
+        apply(&mut sched, WorkerOutput { outputs: vec![] });
+        let second = sched.schedule();
+        assert_eq!(second.scheduled[0].request_id, 2);
+        assert_eq!(second.scheduled[0].num_computed_tokens, 0);
+        assert_eq!(second.cache_hit_tokens, 0);
+        sched.abort(2);
+        assert_eq!(sched.kv.pool().num_free_blocks(), 15);
+    }
+}
+
+#[test]
+fn malformed_output_does_not_publish_pending_prefix_and_keeps_valid_history() {
+    let mut sched = make_scheduler(64, 4);
+    assert!(sched.add_request(make_req(1, 9, 1)));
+    sched.schedule();
+    apply(
+        &mut sched,
+        WorkerOutput {
+            outputs: vec![RequestOutput {
+                token_ids: vec![],
+                ..dummy_output(1)
+            }],
+        },
+    );
+    sched.schedule();
+    assert!(
+        sched
+            .update(WorkerOutput {
+                outputs: vec![dummy_output(1)],
+            })
+            .is_err()
+    );
+    sched.abort(1);
+    assert!(sched.add_request(make_req(2, 9, 1)));
+    let batch = sched.schedule();
+    // The first successful boundary stays reusable. The failed second one does not.
+    assert_eq!(batch.scheduled[0].num_computed_tokens, 4);
+    assert_eq!(batch.cache_hit_tokens, 4);
+}
+
+#[test]
 fn generated_full_block_remains_a_prefix_hit_for_new_request() {
     let mut sched = make_scheduler(128, 256);
     assert!(sched.add_request(make_req(1, 3, 2)));

@@ -30,10 +30,13 @@ impl CachedBlocks {
     /// The block to serve on a cache hit. Any of them is correct — they hold
     /// identical KV content — so pick the first deterministically.
     #[inline]
-    fn first(&self) -> u32 {
+    fn first_committed(&self, queue: &FreeKVCacheBlockQueue) -> Option<u32> {
         match self {
-            Self::One(id) => *id,
-            Self::Many(ids) => ids[0],
+            Self::One(id) => queue.block(*id).cache_is_committed().then_some(*id),
+            Self::Many(ids) => ids
+                .iter()
+                .copied()
+                .find(|&id| queue.block(id).cache_is_committed()),
         }
     }
 
@@ -135,7 +138,9 @@ impl BlockPool {
     /// [`Self::touch`] it to claim it.
     #[inline]
     pub fn get_cached_block(&self, hash: BlockHashWithGroupId) -> Option<u32> {
-        self.cached.get(&hash).map(CachedBlocks::first)
+        self.cached
+            .get(&hash)
+            .and_then(|entry| entry.first_committed(&self.free_queue))
     }
 
     /// Allocate `n` fresh blocks with `ref_cnt = 1`.
@@ -208,7 +213,10 @@ impl BlockPool {
             assert!(block.ref_cnt > 0, "freeing block {id} with ref_cnt 0");
             block.ref_cnt -= 1;
             if block.ref_cnt == 0 {
-                if block.block_hash().is_none() || !self.enable_caching {
+                if !block.cache_is_committed() {
+                    self.maybe_evict_cached_block(id);
+                    evict_first.push(id);
+                } else if block.block_hash().is_none() || !self.enable_caching {
                     evict_first.push(id);
                 } else {
                     evict_last.push(id);
@@ -243,6 +251,24 @@ impl BlockPool {
             .or_insert(CachedBlocks::One(block_id));
     }
 
+    /// Reserve an identity while its block still needs a successful GPU step.
+    /// Lookups exclude this block until the scheduler validates and commits it.
+    pub fn stage_cache_block(
+        &mut self,
+        block_id: u32,
+        hash: BlockHashWithGroupId,
+        num_tokens: u32,
+    ) {
+        self.cache_block(block_id, hash, num_tokens);
+        if self.enable_caching {
+            self.free_queue.block_mut(block_id).stage_cache();
+        }
+    }
+
+    pub fn commit_cache_block(&mut self, block_id: u32) {
+        self.free_queue.block_mut(block_id).commit_cache();
+    }
+
     /// Drop the whole prefix cache.
     ///
     /// Refuses while any block other than the null block is referenced, because
@@ -272,6 +298,36 @@ mod tests {
 
     fn hash(v: u64) -> BlockHashWithGroupId {
         BlockHashWithGroupId::new(BlockHash(v), 0)
+    }
+
+    #[test]
+    fn staged_cache_is_invisible_until_commit_and_aborted_entries_are_removed() {
+        let mut pool = BlockPool::new(8, true);
+        let ids = pool.get_new_blocks(2).unwrap();
+        pool.stage_cache_block(ids[0], hash(1), 784);
+        pool.stage_cache_block(ids[1], hash(2), 784);
+        assert_eq!(pool.get_cached_block(hash(1)), None);
+        pool.commit_cache_block(ids[0]);
+        assert_eq!(pool.get_cached_block(hash(1)), Some(ids[0]));
+        pool.free_blocks(&[ids[1], ids[0]]);
+        assert_eq!(pool.get_cached_block(hash(2)), None);
+        assert_eq!(pool.num_cached_entries(), 1);
+        assert_eq!(pool.num_free_blocks(), 7);
+    }
+
+    #[test]
+    fn same_hash_pending_block_cannot_hide_a_committed_shared_prefix() {
+        let mut pool = BlockPool::new(8, true);
+        let ids = pool.get_new_blocks(2).unwrap();
+        pool.stage_cache_block(ids[0], hash(1), 784);
+        pool.cache_block(ids[1], hash(1), 784);
+        assert_eq!(pool.get_cached_block(hash(1)), Some(ids[1]));
+        pool.touch(&[ids[1]]);
+        pool.free_blocks(&ids);
+        assert_eq!(pool.get_cached_block(hash(1)), Some(ids[1]));
+        assert_eq!(pool.block(ids[1]).ref_cnt, 1);
+        pool.free_blocks(&[ids[1]]);
+        assert_eq!(pool.num_free_blocks(), 7);
     }
 
     #[test]

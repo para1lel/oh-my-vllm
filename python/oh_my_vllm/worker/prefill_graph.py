@@ -73,6 +73,7 @@ class PrefillGraph:
             torch.cuda.synchronize()
             with torch.cuda.graph(self.graph, pool=pool):
                 self.hidden, self.features = unit()
+            self.execution_owners = tuple(unit.execution_owners)
         finally:
             restore()
 

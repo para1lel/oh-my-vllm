@@ -32,6 +32,8 @@ Start with [requirements](requirements.md), [architecture](architecture.md), and
 | [ADR-007](decisions/ADR-007-ttft-and-cache-capacities.md) | Active: TTFT protocol and different FA/GDN capacities. |
 | [ADR-008](decisions/ADR-008-semantic-ir.md) | Active: semantic operations and compiled GPU units. |
 | [ADR-009](decisions/ADR-009-dspark-optional-mode.md) | Active: optional DSpark mode and acceptance with source identities. |
+| [ADR-010](decisions/ADR-010-phase-latency-and-execution.md) | Active: theoretical phase bounds and GPU execution contracts. |
+| [ADR-011](decisions/ADR-011-bounded-serving-and-worker-recovery.md) | Active: resource limits, committed prefixes, and worker recovery. |
 
 Architecture includes the former design document.
 Current work includes the former plan.

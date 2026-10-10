@@ -58,6 +58,12 @@
 <p>framework 收集器核对提交过且保持不变的源码, Rust 二进制的构建输入摘要, checkpoint 内容, 硬件身份和实际 FA/GDN 容量. runtime_contract 绑定语义路径, 外部 provider 和 CUTLASS/CCCL 模板; 实际加载库的摘要与编译参数必须匹配. 未识别的 GPU 操作会阻止正式验收.</p>
 <p>measurement.audit 检查 measured 起点后的编译和图捕获日志, 并检查缓存文件变化. 原始记录与 profiling 保存在本地或外部目录, 仓库保存可移植的测量摘要和原始 SHA. 每个结论标明源码, 配置, 负载和检查范围.</p>
 <p>完整服务检查还覆盖 Chat, Responses, streaming, tools, thinking, 约束生成和取消, 包括 DSpark serving oh-my-pi agents. 性能测试, 容量测试与真实服务分别检查不同边界. 运行结束后释放该次启动的 worker 和临时服务端口.</p>
+<h2>四个真实 agent 怎样验证长期稳定服务</h2>
+<p>agentic-soak 为 MTP4 和 DSpark 分别运行至少一小时, 每种模式完成至少 500 个正常模型请求. 四个并行 oh-my-pi agent 使用真实 read 工具, 把读取结果传回 Chat 或 Responses 的下一轮输入. 记录代理核对工具调用, 转发内容和 response ID, 服务日志提供框架真正开始准备请求的时刻及生成完成时间.</p>
+<<math "R_i=\\frac{N_{i,\\mathrm{output}}}{t_{i,\\mathrm{complete}}-t_{i,\\mathrm{prepare}}}">>
+<p><<imath "i">> 表示一条正常完成的模型请求, <<imath "N_{i,\\mathrm{output}}">> 为保留输出 token 数, <<imath "t_{i,\\mathrm{prepare}}">> 为开始准备的时刻, <<imath "t_{i,\\mathrm{complete}}">> 为生成完成的时刻. README 每种模式放一张散点图, 横坐标使用 <<imath "t_{i,\\mathrm{prepare}}">>, 纵坐标使用 <<imath "R_i">>. 持续时长用服务单调时钟测量, 横轴时刻用 UTC 记录. 请求进入准入队列到开始准备的等待时间另报, 网络排空不计入生成时间, 取消和失败使用单独记录.</p>
+<p>测试周期性停止新请求, 排空当前请求, 检查 Rust 的活动请求, reservation 和 drain, 以及 Python 的 history, sampler 和 proposer 状态是否释放. GPU allocated 表示仍有张量 owner 的分配量, reserved 表示 PyTorch allocator 向 GPU 保留的存储, 设备占用还包括驱动和其他 GPU 库的分配, 由 total_bytes 减 free_bytes 得到. RSS 表示主机进程的驻留内存. 缓存预热可使这些值有界增长, 排空后的时间序列用于判断它们是否趋于稳定.</p>
+<p>正常负载要求无意外 OOM, worker 重启或请求失败. 过载, 取消, 慢客户端和真实 OOM 注入单独验证错误报告与恢复, 新 worker 的首次请求还要证明不会通过旧逻辑 identity 访问旧 KV 状态. 这项长时测试不设性能门槛, 日常命令默认跳过; 十五项阶段门槛继续独立验收.</p>
 <<coverage>>
 <<chapterChoices>>
 </article>

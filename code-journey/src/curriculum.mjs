@@ -17,6 +17,12 @@ export const chapters = {
 // Each record is checked against the current source, then shown in its chapter.
 // Layout: chapter, file, source anchor, responsibility, implementation and decision.
 export const coverage = [
+  ["Sampling", "crates/zmq-worker/src/serving/resources.rs", "pub struct Budget", "Budget / Lease: 准入, 字节预算与输出寿命", "读取 body 与复制历史前保留容量, queue 与 live 名额分别保护等待和处理中的请求. Lease 共享 owner 直到 HTTP body 与 drain 释放, 绝对 deadline 包括排队."],
+  ["Protocol", "python/oh_my_vllm/worker/errors.py", "def transactional_step(", "transactional_step: 失效 GPU 事务的错误边界", "区分 OOM, device 与 internal 故障, 未完成 execute 标为不可继续使用. Bridge 发送错误后退出, Rust supervisor 以新 worker 和空逻辑缓存恢复."],
+  ["Compilation", "python/oh_my_vllm/ir/cache.py", "class CompilerCache", "CompilerCache: 项目编译变体和模块的有界寿命", "按 code identity 限制 specialization 数量, 只清理项目持有的编译记录. 主机调用边界按 code 淘汰整组变体: 单 code 饱和时清当前组, 总预算满时选最近最少使用的 code. Capture 内保留已预热变体, 已捕获图继续由其 owner 管理."],
+  ["Validation", "benchmarks/agentic_soak.py", "def run_task(", "四个真实 OMP agent 的长时采集", "四条 agent lane 交替使用 Chat / Responses, read 结果进入后续模型请求. 正常持续时长和请求数量同时满足要求, 周期排空资源, 取消和慢读取另存记录."],
+  ["Validation", "benchmarks/agentic_soak_analysis.py", "def bind_points(", "请求图表和资源稳定性的证据核对", "用 response ID 关联服务开始准备时刻, 生成完成耗时与输出数量. 保留全部正常点, 检查资源上限和排空后的内存增长, 原始记录独立于可移植摘要."],
+  ["Validation", "benchmarks/agentic_soak_proxy.py", "class ModelSlots", "记录代理与四并发模型请求上限", "磁盘保存转发请求和 SSE response identity, 四个共享 slot 限制真正的模型调用并发, 代理和 agent 子进程在结束时释放."],
   ["Model", "python/oh_my_vllm/kernels/partial_attention.py", "def prepare_context(", "全部 context 与选中 query 的 CUDA 准备", "context 只归一化四个 K 头, 应用 FP64 相位的 RoPE 并写入全部 K/V; query 为选中行准备 24 个 Q 头. 两者保留完整准备链的 BF16 舍入, 使用调用者 CUDA 流与 PDL."],
   ["Compilation", "python/oh_my_vllm/ir/partial_attention.py", "def prepare_context(", "选中输出的语义契约", "context 声明修改缓存, query 返回 BF16 Q. fake 实现检查形状和位置整数类型, native 数学参考与 CUDA provider 对应同一 checkpoint 区间."],
   ["Compilation", "python/oh_my_vllm/worker/mtp_context_graph.py", "class MTPContextGraph", "持久 MTP context 的有界捕获", "完整 K/V 与选中端点在独立图中执行. 捕获前保存 FA 目的行并在 finally 恢复, replay 先验证所有张量的形状, dtype 和设备, 再复制动态内容. context 注意力从位置 1 开始."],
@@ -82,7 +88,7 @@ export const coverage = [
   ["Compilation", "python/oh_my_vllm/ir/gdn_prefill.py", "def gdn_prefill(", "GDN 长序列语义", "返回输出和最终状态, 后续有序 index_copy_ 写回持久 pool. FlashInfer provider 和参考实现使用同一初始状态与序列偏移契约."],
   ["Compilation", "python/oh_my_vllm/ir/logits.py", "def logits_gemm(", "词表投影语义", "声明 hidden 与 head 的矩阵乘法, 小行数用独立 CuTe-DSL GEMM, 输出 FP32 分数供采样."],
   ["Compilation", "python/oh_my_vllm/worker/decode_graph.py", "class DecodeGraph", "DecodeAttention / DecodeGraph / DraftGraph / ProposalGraph", "固定形状与内存地址, replay 复制当前 ID, 位置, 表和读写槽. 捕获前备份会修改的缓存, 最后恢复; 三图族各用独立内存池."],
-  ["Compilation", "python/oh_my_vllm/worker/graph_cache.py", "class GraphCache", "GraphCache: 有界捕获与替换", "图缓存满时要求新形状多次出现且更热, 保留族下限和 4 GiB 捕获余量. 替换成功后才释放旧图, MTP 重捕获触发共享冷却."],
+  ["Compilation", "python/oh_my_vllm/worker/graph_cache.py", "class GraphCache", "GraphCache: 有界捕获与替换", "常规替换要求新形状反复出现且更热, 成功后才释放旧图. 内存压力下同步回收冷图及最后的 pool owner, 必要时越过族下限, 捕获前重新检查余量."],
   ["Compilation", "python/oh_my_vllm/kernels/backend.py", "def kernel(", "kernel: 进程级 CUDA / TileLang 选择", "默认 CUDA; 显式 tilelang 用冻结比较实现. 缺少 CUDA 入口直接报错, 运行过程中保持同一后端选择."],
   ["Compilation", "python/oh_my_vllm/kernels/cuda_backend/__init__.py", "def compiled():", "compiled / factory_for / provenance", "以 CUDA 入口, 全部功能头, 编译器和 torch 版本生成缓存摘要, TVM FFI 编译并导出 CUDA 入口. 所有调用使用调用者的 CUDA 流, 记录加载来源和变体计数."],
   ["Compilation", "python/oh_my_vllm/kernels/cuda_backend/kernels.cu", "#include", "原生 CUDA 的单一构建入口", "按依赖顺序包含十个功能头, 在同一次 TVM FFI 构建中导出主机函数. 各功能模块共用 PDL, 启动检查与存储契约."],

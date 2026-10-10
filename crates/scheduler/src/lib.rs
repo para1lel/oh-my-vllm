@@ -36,6 +36,7 @@ pub struct UpdateError {
 // ── config ────────────────────────────────────────────────────────────────────
 
 /// Scheduler construction parameters.
+#[derive(Clone)]
 pub struct SchedulerConfig {
     /// Maximum total tokens across all requests in a single step.
     pub max_num_batched_tokens: usize,
@@ -73,6 +74,13 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
+    pub fn empty_like(&self) -> Self {
+        Self::new(self.config.clone(), self.kv.empty_like())
+    }
+
+    pub fn cache_resource_counts(&self) -> (usize, usize, usize, usize, usize, usize) {
+        self.kv.resource_counts()
+    }
     pub fn reset_prefix_cache(&mut self) -> bool {
         self.running.is_empty() && self.waiting.is_empty() && self.kv.reset_prefix_cache()
     }
@@ -575,6 +583,7 @@ impl Scheduler {
             if req.is_finished() {
                 finished_ids.push(req.id);
             }
+            self.kv.commit_cache(req);
         }
 
         self.finished_ids.extend_from_slice(&finished_ids);

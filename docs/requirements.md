@@ -30,7 +30,7 @@ Use semantic operations and tensor/state access to define graph dependencies.
 Independent branches can run in parallel.
 PDL consumers must wait before they read producer output.
 
-Keep graph capture restoration, cache ownership, and bounded graph storage.
+Keep graph capture restoration, cache ownership, and graph storage limits.
 Tune execution with full-operation and framework measurements.
 Record the configuration, numerical checks, memory, and latency of each selected optimization.
 Use separate measurements to identify graph, stream, and PDL effects.
@@ -82,7 +82,7 @@ The theoretical lower bound is the maximum of these limits:
 Include parameter reads, scales, model computation, GPU sampling, KV/state updates, drafts, and rejected verification rows.
 Use the precision and execution resource of each operation.
 Count all seven DSpark backbone rows when the algorithm executes seven rows.
-Keep padding, repeated transfers, and unnecessary computation in overhead diagnostics.
+Keep padding, transfers that occur again and again, and unnecessary computation in overhead diagnostics.
 They must not increase the theoretical bound.
 
 Use single-GPU, dense B200 peaks: FP8 Tensor 4.5 PFLOPS, BF16 Tensor 2.25 PFLOPS, FP32 75 TFLOPS, and FP64 37 TFLOPS.
@@ -202,9 +202,55 @@ Compare loaded DSpark configuration and weight hashes with the requested checkpo
 
 [Service contracts](serving.md) define supported parameters, XML restrictions, storage limits, and errors.
 Scripted workers alone cannot show target-model acceptance.
-For each draft mode, test the two APIs, constraints, cancellation, mixed batches, and long-context prefix reuse.
+For each draft mode, run tests for the two APIs, constraints, cancellation, mixed batches, and long-context prefix reuse.
 OMP evidence must show two source reads, forwarded results, continued generation, and an answer that uses those results.
 Compare response IDs with server logs for the active mode and scheduled drafts.
+
+## REQ-SERVE-006: Resource limits and cache integrity
+
+Keep request admission, queues, history copies, output buffers, and completed stream drains at or below explicit count and byte limits.
+Check and take capacity before history copies or request preparation.
+The request deadline starts at admission and includes queue time.
+Reject temporary overload with a retryable error. Reject a request that exceeds the supported capacity.
+
+Report failures explicitly. This includes failures after stream output starts.
+
+Publish prefix identities only after a validated GPU result commits the corresponding state.
+Keep referenced blocks safe during LRU eviction. Clear uncommitted identities after failure or cancellation.
+Logical KV eviction reuses the fixed GPU arena. It does not release that arena's HBM storage.
+Keep graph entries, compiler metadata, response records, and shutdown references at or below their specified resource limits.
+
+## REQ-SERVE-007: Worker recovery
+
+Keep the HTTP process alive after a GPU OOM or worker failure.
+If device state cannot be reused safely, fail the affected requests and rebuild the worker.
+Clear all logical cache identities for that worker before new admission.
+Report temporary unavailability during recovery. Keep recovery attempts and shutdown waits at their specified limits.
+Do not replay requests that already supplied stream output.
+
+Run tests for OOM, partial state changes, shared prefixes, and successful service after recovery.
+
+## REQ-SERVE-008: Long-duration agentic service
+
+Run a soak test for MTP4 and DSpark independently.
+Each mode must run for at least one hour and complete at least 500 normal model requests.
+Use four parallel oh-my-pi agents and at most four concurrent model requests.
+Include the two APIs, tool loops, prefix reuse, and different request lengths.
+Run cancellation, slow-client, overload, and fault tests with separate records.
+Normal requests must have no unexpected OOM, worker restart, or request failure.
+
+At the specified intervals, stop new admissions and drain active work.
+Check released request state, cache limits, host RSS, and GPU allocated/reserved memory after warmup.
+Keep the complete memory time series. Investigate continued growth after cache warmup.
+Use a separate fault test to verify worker recovery and invalidation of old logical KV identities.
+
+Publish one scatter plot per mode in the README. Use one point per normally completed model request.
+The horizontal axis is the framework processing start time, when request preparation starts.
+The vertical axis is output tokens divided by wall time from processing start to generation completion.
+Report queue time, cancelled requests, and failed requests separately.
+
+This test has no performance gate. Skip this heavy test by default in daily test commands.
+Measure affected phase workloads again with `REQ-PERF-001` after inference-path changes.
 
 ## REQ-KERNEL-001: Pinned TileLang comparison
 
@@ -296,10 +342,11 @@ Keep relative indentation, line numbers, and full-file hashes.
 Use identical displayed and copied excerpts, readable highlighting, full-source pages, and keyboard scrolling.
 Reject missing source coverage, anchors, and record-field explanations at build time.
 
-Test thirteen routes, prerequisites, choices, completion, migration, restart, refresh, and backward history.
-Test five Rust CPU traces: 784, 785, 1568, 1569, and 32768 tokens.
-Test fonts, formulas, fields, console health, desktop/mobile layout, and the two themes.
-Test excerpt documentation, dedentation, clipboard paths, source hashes, line anchors, URLs, and code contrast of at least 4.5:1.
+Run tests for thirteen routes, prerequisites, choices, completion, migration, restart, refresh, and backward history.
+Run tests for five Rust CPU traces: 784, 785, 1568, 1569, and 32768 tokens.
+Run tests for fonts, formulas, fields, console health, desktop/mobile layout, and the two themes.
+Run tests for excerpt documentation, dedentation, clipboard paths, source hashes, line anchors, and URLs.
+Check code contrast of at least 4.5:1.
 Examine screenshots against the requested reading style.
 
 Synthetic CPU feedback shows scheduling. GPU evidence has its own acceptance records.

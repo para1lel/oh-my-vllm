@@ -16,6 +16,47 @@ def add(cache, family, key):
     return cache.get_or_create(family, (key,), lambda: object())
 
 
+def test_memory_pressure_releases_last_pool_owner_before_recapture():
+    class Owner:
+        def __init__(self):
+            self.cycle = lambda: self
+
+    events = []
+    free = [10]
+    cache = GraphCache(
+        2,
+        min_capture_free_bytes=8,
+        free_bytes=lambda: free[0],
+        synchronize=lambda: events.append("drain"),
+        release_family=lambda family: events.append(f"release {family}"),
+        release_memory=lambda: free.__setitem__(0, 10),
+    )
+    owner = cache.get_or_create("target", (1,), Owner)
+    reference = weakref.ref(owner)
+    del owner
+    free[0] = 0
+    assert cache.should_use("target", (2,))
+    gc.collect()
+    assert reference() is None
+    assert events == ["drain", "release target"]
+    assert cache.snapshot()["target_pressure_eviction"] == 1
+    recreated = cache.get_or_create("target", (1,), Owner)
+    assert recreated is not None
+
+
+def test_clear_drains_before_destroying_graph_owners():
+    events = []
+
+    class Owner:
+        def __del__(self):
+            events.append("destroy")
+
+    cache = GraphCache(synchronize=lambda: events.append("drain"))
+    cache.get_or_create("target", (1,), Owner)
+    cache.clear()
+    assert events == ["drain", "destroy"]
+
+
 def test_lru_hit_probation_eviction_and_recent_recapture():
     synchronize = Mock()
     cache = GraphCache(2, admission_hits=2, admission_factor=0, synchronize=synchronize)
@@ -669,7 +710,7 @@ def test_first_cuda_capture_failure_replaces_unowned_pool_handle():
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 @torch.inference_mode()
-def test_real_64_graph_pool_keeps_44_shapes_then_defers_for_low_headroom():
+def test_real_64_graph_pool_releases_44_shapes_then_recaptures_after_pressure():
     assert os.environ["CUDA_VISIBLE_DEVICES"].startswith("GPU-")
     assert torch.cuda.device_count() == 1
     assert "B200" in torch.cuda.get_device_name(0)
@@ -714,18 +755,39 @@ def test_real_64_graph_pool_keeps_44_shapes_then_defers_for_low_headroom():
     assert mtp.graph_cache.capacity == 64
     assert len(shapes) == 44
     for batch_size, total in shapes:
-        run_shape(mtp, batch_size, total)
+        retained_output = run_shape(mtp, batch_size, total)
+    expected_output = retained_output.clone()
     assert mtp.graph_cache.snapshot()["draft_resident"] == 44
     assert mtp.graph_cache.snapshot()["draft_capture"] == 44
+    old_pool = mtp.draft_graph_pool
+    assert old_pool is not None
+    graph_owners = [weakref.ref(owner) for owner in mtp.graph_cache.graphs.values()]
+    free_bytes = mtp.graph_cache.free_bytes
     mtp.graph_cache.free_bytes = lambda: 0
     output = run_shape(mtp, 5, 5)
     assert mtp.graph_cache.snapshot()["draft_headroom_eager"] == 1
     assert mtp.graph_cache.snapshot()["draft_eviction"] == 0
-    assert mtp.graph_cache.snapshot()["resident"] == 44
+    assert mtp.graph_cache.snapshot()["draft_pressure_eviction"] == 44
+    assert mtp.graph_cache.snapshot()["resident"] == 0
+    assert mtp.draft_graph_pool is None
+    assert all(reference() is None for reference in graph_owners)
     mtp.attention.plan.assert_called_once()
     torch.testing.assert_close(output, torch.full_like(output, 8))
+    torch.testing.assert_close(retained_output, expected_output)
+    mtp.graph_cache.free_bytes = free_bytes
     old_output = run_shape(mtp, *shapes[0])
     torch.testing.assert_close(old_output, torch.full_like(old_output, 8))
+    assert mtp.draft_graph_pool is not None and mtp.draft_graph_pool != old_pool
+    assert mtp.graph_cache.snapshot()["draft_resident"] == 1
+    assert mtp.graph_cache.snapshot()["draft_capture"] == 45
+    assert mtp.graph_cache.snapshot()["draft_recent_recapture"] == 1
+    replayed_output = run_shape(mtp, *shapes[0])
+    torch.testing.assert_close(replayed_output, torch.full_like(replayed_output, 8))
+    torch.testing.assert_close(retained_output, expected_output)
+    assert mtp.graph_cache.snapshot()["draft_capture"] == 45
+    assert mtp.graph_cache.snapshot()["draft_hit"] == 1
+    mtp.graph_cache.clear()
+    assert mtp.draft_graph_pool is None
 
 
 @pytest.mark.parametrize("graph_capacity", [None, 64])

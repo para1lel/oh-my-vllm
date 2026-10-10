@@ -1,5 +1,6 @@
 """Project-owned single-device GPU execution; Rust retains cache allocations."""
 
+import gc
 import logging
 import math
 import os
@@ -12,6 +13,12 @@ from oh_my_vllm.kernels.attention import PagedAttention
 from oh_my_vllm.models.qwen import Batch, Qwen
 from oh_my_vllm.performance.execution import certify_feedback, record, tracing
 from oh_my_vllm.worker.batch_plan import BLOCK, plan_request, validate_batch
+from oh_my_vllm.worker.errors import (
+    WorkerUnavailable,
+    failure_kind,
+    resource_operation,
+    transactional_step,
+)
 from oh_my_vllm.worker.graph_cache import GraphCache
 from oh_my_vllm.worker.protocol import RequestOutput, SchedulerOutput, WorkerOutput
 from oh_my_vllm.worker.runtime import identity, verify_loaded_modules
@@ -28,20 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 def _is_device_failure(error: Exception) -> bool:
-    if isinstance(error, (torch.cuda.OutOfMemoryError, torch.AcceleratorError)):
-        return True
-    message = str(error).lower()
-    return any(
-        marker in message
-        for marker in (
-            "cuda",
-            "cublas",
-            "cudnn",
-            "device-side assert",
-            "illegal memory",
-            "launch failure",
-        )
-    )
+    return failure_kind(error) in ("oom", "device")
 
 
 @dataclass(frozen=True)
@@ -121,6 +115,7 @@ class OhMyVllmWorker:
         self.logits_unit = None
         self.feature_unit = None
         self.dspark = None
+        self._failure = None
 
     def _is_dspark(self) -> bool:
         return (
@@ -198,6 +193,8 @@ class OhMyVllmWorker:
             family_floors=floors,
             free_bytes=lambda: torch.cuda.mem_get_info()[0],
             reserved_bytes=lambda: torch.cuda.memory_reserved(),
+            release_memory=torch.cuda.empty_cache,
+            release_family=self._release_graph_pool,
         )
         # Target outputs feed MTP before the next target replay. Keep target
         # capture scratch separate from the draft and proposal graph families.
@@ -214,6 +211,8 @@ class OhMyVllmWorker:
             # Ragged KV, feature outputs and restoration buffers coexist
             # during capture. Keep headroom for the complete transient peak.
             min_capture_free_bytes=32 << 30,
+            release_memory=torch.cuda.empty_cache,
+            release_family=self._release_graph_pool,
         )
         from oh_my_vllm.worker.mtp import MTP
 
@@ -254,12 +253,15 @@ class OhMyVllmWorker:
             raise RuntimeError("inconsistent allocated FA or GDN cache capacities")
         return fa.pop(), gdn.pop()
 
+    @resource_operation
     def register_request(
         self,
         request_id: int,
         prompt_token_ids: list[int],
         sampling_params: SamplingParams | None = None,
     ) -> None:
+        if getattr(self, "_failure", None) is not None:
+            raise WorkerUnavailable(self._failure)
         if request_id in self.histories:
             raise ValueError("duplicate request")
         if not prompt_token_ids or any(not 0 <= t < 248320 for t in prompt_token_ids):
@@ -272,12 +274,20 @@ class OhMyVllmWorker:
         self.samplers[request_id] = sampler
 
     def prepare_request(self, request_id: int, request: dict) -> list[int]:
+        if getattr(self, "_failure", None) is not None:
+            raise WorkerUnavailable(self._failure)
+        if request_id in self.histories:
+            raise ValueError("duplicate request")
         if self.serving is None:
             self.serving = ServingAdapter(
                 self.config.model, 248320, self.config.max_model_len
             )
         ids, params = self.serving.prepare(request_id, request)
-        self.register_request(request_id, ids, params)
+        try:
+            self.register_request(request_id, ids, params)
+        except Exception:
+            self.serving.generations.pop(request_id, None)
+            raise
         return ids
 
     def unregister_request(self, request_id: int) -> None:
@@ -290,6 +300,7 @@ class OhMyVllmWorker:
         if self.serving is not None:
             self.serving.generations.pop(request_id, None)
 
+    @transactional_step
     @torch.inference_mode()
     def execute_model(self, scheduled: SchedulerOutput) -> WorkerOutput:
         for rid in scheduled.finished_request_ids:
@@ -808,7 +819,105 @@ class OhMyVllmWorker:
             offset += count
         return sampled, errors
 
+    def _release_graph_pool(self, family: str) -> None:
+        attribute = {
+            "target": "graph_pool",
+            "target_dspark": "dspark_graph_pool",
+            "prefill": "prefill_graph_pool",
+            "prefill_dspark": "prefill_dspark_graph_pool",
+        }[family]
+        setattr(self, attribute, None)
+
+    def resource_snapshot(self) -> dict:
+        """Sample live resources only at an explicit, synchronized boundary."""
+        if getattr(self, "_failure", None) is not None:
+            raise WorkerUnavailable(self._failure)
+        from oh_my_vllm.ir.core import compiler_snapshot
+
+        torch.cuda.synchronize()
+        graph_caches = {
+            "target": self.graph_cache,
+            "prefill": self.prefill_graph_cache,
+        }
+        for name in ("mtp", "dspark"):
+            proposer = getattr(self, name, None)
+            if proposer is not None:
+                graph_caches[name] = proposer.graph_cache
+                graph_caches[f"{name}_context"] = proposer.context_graph_cache
+        requests = {
+            name: len(getattr(self, name))
+            for name in ("histories", "samplers", "sources", "computed")
+        }
+        requests["generations"] = (
+            len(self.serving.generations) if self.serving is not None else 0
+        )
+        for name in ("mtp", "dspark"):
+            proposer = getattr(self, name, None)
+            requests[f"{name}_next_position"] = len(
+                getattr(proposer, "next_position", {})
+            )
+        for name in ("proposals", "generators"):
+            requests[f"dspark_{name}"] = len(getattr(self.dspark, name, {}))
+        free, total = torch.cuda.mem_get_info()
+        with open("/proc/self/statm", encoding="ascii") as status:
+            rss = int(status.read().split()[1]) * os.sysconf("SC_PAGE_SIZE")
+        return {
+            "requests": requests,
+            "graphs": {name: cache.snapshot() for name, cache in graph_caches.items()},
+            "compile": compiler_snapshot(),
+            "gpu": {
+                "allocated_bytes": torch.cuda.memory_allocated(),
+                "reserved_bytes": torch.cuda.memory_reserved(),
+                "peak_allocated_bytes": torch.cuda.max_memory_allocated(),
+                "peak_reserved_bytes": torch.cuda.max_memory_reserved(),
+                "free_bytes": free,
+                "total_bytes": total,
+            },
+            "cpu": {"rss_bytes": rss},
+        }
+
+    def _release_resources(self) -> None:
+        """Drop every callable, graph, state, and pool owner after device drain."""
+        from oh_my_vllm.ir.core import clear_compiler_caches
+
+        self.histories.clear()
+        self.samplers.clear()
+        self.sources.clear()
+        self.computed.clear()
+        if self.serving is not None:
+            self.serving.generations.clear()
+        self.graph_cache.clear()
+        self.prefill_graph_cache.clear()
+        for name in ("mtp", "dspark"):
+            proposer = getattr(self, name, None)
+            if proposer is not None:
+                proposer.release()
+        self.forward_unit = None
+        self.logits_unit = None
+        self.feature_unit = None
+        for attribute in (
+            "graph_pool",
+            "dspark_graph_pool",
+            "prefill_graph_pool",
+            "prefill_dspark_graph_pool",
+        ):
+            setattr(self, attribute, None)
+        self.caches = []
+        self.model = None
+        self.attention = None
+        self.serving = None
+        self.mtp = None
+        self.dspark = None
+        clear_compiler_caches()
+        from oh_my_vllm.ir.execution import branch_stream
+
+        branch_stream.cache_clear()
+        gc.collect()
+
     def shutdown(self) -> None:
+        if getattr(self, "_failure", None) is not None:
+            raise WorkerUnavailable(self._failure)
+        torch.cuda.synchronize()
         logger.info(
             "Target graph cache",
             extra={"fields": self.graph_cache.snapshot()},
@@ -846,16 +955,5 @@ class OhMyVllmWorker:
         )
         verify_loaded_modules()
         logger.info("Independent runtime module/library audit passed")
-        self.histories.clear()
-        self.samplers.clear()
-        self.sources.clear()
-        self.computed.clear()
-        self.graph_cache.clear()
-        self.prefill_graph_cache.clear()
-        self.caches = []
-        self.model = None
-        self.attention = None
-        self.serving = None
-        self.mtp = None
-        self.dspark = None
+        self._release_resources()
         torch.cuda.empty_cache()

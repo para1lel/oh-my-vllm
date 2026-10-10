@@ -9,10 +9,16 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import msgpack
+import torch
 import zmq
 from oh_my_vllm.worker.protocol import RequestOutput, WorkerOutput
 from oh_my_vllm.worker.serving import RequestValidationError
-from oh_my_vllm.worker.zmq_bridge import _register_request, serve
+from oh_my_vllm.worker.zmq_bridge import (
+    _PrepareExecutor,
+    _PrepareJob,
+    _register_request,
+    serve,
+)
 
 
 class FakeAdapter:
@@ -65,11 +71,29 @@ class FakeWorker:
         self.executions += 1
         return WorkerOutput([RequestOutput(1, [self.executions])])
 
+    def resource_snapshot(self):
+        return {"requests": {"histories": len(self.histories)}}
+
     def shutdown(self):
         self.shutdown_calls += 1
 
 
 class BridgeAbortTest(unittest.TestCase):
+    def test_preparer_shutdown_never_writes_a_closed_reused_descriptor(self):
+        adapter = FakeAdapter()
+        executor = _PrepareExecutor(adapter)
+        executor.submit(_PrepareJob(1, 1, {"slow": True}))
+        self.assertTrue(adapter.entered.wait(1))
+        executor.close()
+        executor.close()
+        with patch("oh_my_vllm.worker.zmq_bridge.os.write") as write:
+            adapter.release.set()
+            executor.thread.join(1)
+            self.assertFalse(executor.thread.is_alive())
+            write.assert_not_called()
+        self.assertTrue(executor.completed.empty())
+        self.assertIsNone(executor.adapter)
+
     def test_offline_output_budget_reaches_sampling(self):
         for limit in (None, 1, 16, 4096):
             with self.subTest(limit=limit):
@@ -168,6 +192,48 @@ class BridgeAbortTest(unittest.TestCase):
                 self.assertEqual((reply["type"], reply["kind"]), ("error", kind))
                 self.assertEqual(reply["rpc_id"], rpc_id)
                 self.assertNotIn(rpc_id, self.worker.histories)
+
+    def test_first_prepare_validation_failure_keeps_preparer_alive(self):
+        self.prepare(89, 1, error="validation")
+        self.assertEqual(self.recv()["kind"], "validation")
+        self.prepare(90, 2)
+        reply = self.recv()
+        self.assertEqual((reply["type"], reply["rpc_id"]), ("prepared", 90))
+        self.assertIn(2, self.worker.histories)
+
+    def test_stats_rpc_is_correlated_and_does_not_execute_model(self):
+        self.send({"type": "stats", "rpc_id": 81})
+        reply = self.recv()
+        self.assertEqual((reply["type"], reply["rpc_id"]), ("stats_result", 81))
+        self.assertEqual(reply["stats"]["requests"]["histories"], 0)
+        self.assertEqual(reply["stats"]["preparation"], {"pending": 0, "cancelled": 0})
+        self.assertEqual(self.worker.executions, 0)
+
+    def test_oom_error_reply_stops_worker_before_another_step(self):
+        with patch.object(
+            self.worker,
+            "execute_model",
+            side_effect=torch.cuda.OutOfMemoryError("CUDA OOM"),
+        ) as execute:
+            self.execute(83)
+            reply = self.recv()
+            self.assertEqual(
+                (reply["type"], reply["kind"], reply["rpc_id"]), ("error", "oom", 83)
+            )
+            self.thread.join(1)
+            self.assertFalse(self.thread.is_alive())
+            execute.assert_called_once()
+            self.assertEqual(self.worker.shutdown_calls, 0)
+
+    def test_post_commit_internal_failure_also_stops_worker(self):
+        with patch.object(
+            self.worker, "execute_model", side_effect=ValueError("late failure")
+        ):
+            self.execute(84)
+            reply = self.recv()
+            self.assertEqual((reply["kind"], reply["rpc_id"]), ("internal", 84))
+            self.thread.join(1)
+            self.assertFalse(self.thread.is_alive())
 
     def test_abort_notifies_worker_without_unsolicited_reply(self):
         self.prepare(11, 7)

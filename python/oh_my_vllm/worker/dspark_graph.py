@@ -87,6 +87,7 @@ class DSparkContextGraph:
             )
             with torch.cuda.graph(self.graph, pool=pool):
                 self.outputs = unit(*inputs)
+            self.execution_owners = tuple(getattr(unit, "execution_owners", ()))
         finally:
             restore()
 
@@ -136,6 +137,7 @@ class DSparkGraph:
         )
         with torch.cuda.graph(self.graph, pool=pool):
             self.outputs = unit(*inputs)
+        self.execution_owners = tuple(getattr(unit, "execution_owners", ()))
 
     def replay(self, tokens, positions, tables, lengths):
         for destination, source in zip(

@@ -176,6 +176,13 @@
 | `sector` | 名词 | NVIDIA profiler 统计的 32 字节访存单位. |
 | `epilogue` | 名词 | 转换累加值并写入结果存储的 GEMM 输出阶段. |
 
+| `soak test` | 名词 | 通过多个 agent 请求和资源测量验证长时服务的测试. |
+| `processing start` | 名词 | 准入排队结束后, 框架开始准备请求的时间. |
+| `admission lease` | 名词 | 单个请求的数量与字节预留的共享 owner, 在最后一个 engine, body 或 drain owner 释放后归还容量. |
+| `worker epoch` | 名词 | 完成加载的一代 worker 的身份, 用于拒绝针对旧 worker 的准入. |
+| `compiler variant` | 名词 | 针对某个 code identity 和输入 metadata 编译的程序, 带有复用条件. |
+| `encoded state reservation` | 名词 | 为编码输入, 历史和输出的保守估计保留的字节容量. JSON, object 和 allocator 额外开销另计. |
+
 ## 维护
 
 只有批准词典无法准确表达相同技术含义时才新增技术名词或动词.

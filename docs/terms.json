@@ -1769,6 +1769,59 @@
         "epilogue",
         "epilogues"
       ]
+    },
+    {
+      "term": "soak test",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Long-duration service test with many agent requests and resource measurements.",
+      "translation": "通过多个 agent 请求和资源测量验证长时服务的测试.",
+      "forms": [
+        "soak test",
+        "soak tests"
+      ]
+    },
+    {
+      "term": "processing start",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Framework time when request preparation starts, after the admission queue wait.",
+      "translation": "准入排队结束后, 框架开始准备请求的时间.",
+      "forms": [
+        "processing start"
+      ]
+    },
+    {
+      "term": "admission lease",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Shared owner of one request's count and byte reservation, with release after the last engine, body, or drain owner.",
+      "translation": "单个请求的数量与字节预留的共享 owner, 在最后一个 engine, body 或 drain owner 释放后归还容量.",
+      "forms": ["admission lease", "admission leases"]
+    },
+    {
+      "term": "worker epoch",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Identity of one worker generation that completed loading, used to reject admissions for an old worker.",
+      "translation": "完成加载的一代 worker 的身份, 用于拒绝针对旧 worker 的准入.",
+      "forms": ["worker epoch", "worker epochs"]
+    },
+    {
+      "term": "compiler variant",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Program compiled for one code identity and input metadata, with conditions for its reuse.",
+      "translation": "针对某个 code identity 和输入 metadata 编译的程序, 带有复用条件.",
+      "forms": ["compiler variant", "compiler variants"]
+    },
+    {
+      "term": "encoded state reservation",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Byte capacity kept for conservative encoded input, history, and output estimates. JSON, object, and allocator overhead is additional.",
+      "translation": "为编码输入, 历史和输出的保守估计保留的字节容量. JSON, object 和 allocator 额外开销另计.",
+      "forms": ["encoded state reservation", "encoded state reservations"]
     }
   ]
 }

@@ -116,7 +116,9 @@ def wire_source_reads(
     return bound
 
 
-def validate_agent_evidence(events: list[dict], requests: list[dict], api: str) -> dict:
+def validate_agent_evidence(
+    events: list[dict], requests: list[dict], api: str, *, citation_check=None
+) -> dict:
     """Prove successful source reads and their use in the final model request."""
     required = {
         "crates/scheduler/src/lib.rs": r"\bpub\s+fn\s+schedule\s*\(",
@@ -179,7 +181,7 @@ def validate_agent_evidence(events: list[dict], requests: list[dict], api: str) 
         or final.get("stopReason") != "stop"
     ):
         raise ValueError("OMP final answer is missing or uses a different API/model")
-    if any(name not in answer for name in required):
+    if citation_check is None and any(name not in answer for name in required):
         raise ValueError("OMP final answer must cite both required source filenames")
     for request in requests:
         if request.get("response_status") != 200 or final.get(
@@ -226,6 +228,9 @@ def validate_agent_evidence(events: list[dict], requests: list[dict], api: str) 
                 forwarded[source["path"]] = read
                 forwarded_reads.append(read)
         if set(forwarded) == set(required):
+            citations = (
+                citation_check(answer, forwarded_reads) if citation_check else None
+            )
             return {
                 "source_reads": forwarded,
                 "successful_source_reads": forwarded_reads,
@@ -233,6 +238,7 @@ def validate_agent_evidence(events: list[dict], requests: list[dict], api: str) 
                 "final_answer_sha256": hashlib.sha256(answer.encode()).hexdigest(),
                 "tool_results_in_final_model_request": True,
                 "requires_semantic_answer_review": True,
+                **({"final_source_citations": citations} if citations else {}),
             }
     raise ValueError(
         "successful tool results were not forwarded to the final model request"

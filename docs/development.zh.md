@@ -19,7 +19,8 @@ uv pip check --python "$OH_MY_VLLM_CONDA_PREFIX/bin/python"
 export OH_MY_VLLM_MODEL="/path/to/Qwen3.8-27B-FP8"
 ```
 
-`requirements/tools.txt` 固定 pytest, Ruff, pre-commit, clang-format 及受约束依赖.
+`requirements/tools.txt` 固定 pytest, Ruff, pre-commit, clang-format, Matplotlib 及受约束依赖.
+Matplotlib 将 agentic soak 散点图导出为独立的 SVG 和 PNG 文件.
 验证工具修改后, 使用 runtime constraint 从 `requirements/tools.in` 重新生成.
 
 也可以使用现有 conda 环境.

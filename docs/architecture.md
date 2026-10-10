@@ -14,11 +14,12 @@ The [requirements](requirements.md) define accepted behavior. [decisions](README
 6. Python builds the batch plan and starts the target and selected draft GPU units.
 7. Python returns kept tokens, next drafts, and optional service output.
 8. Rust validates the full reply before state changes.
-9. Rust commits accepted history, completes or reschedules the request, and supplies output.
+9. Rust commits accepted history and prefix identities, completes or reschedules the request, and supplies output.
 
 Cancellation takes effect between completed engine operations.
 Finished-only execution flushes pending Python cleanup, even when no work stays.
-Request-local failures stop their request. Worker/device failures stop the engine.
+Request-local failures stop their request. Worker/device failures stop affected requests and invalidate that worker's state.
+The HTTP supervisor keeps its listener, clears logical caches, and reconstructs the worker before new admission.
 The Rust child owner and Linux parent-death signal prevent abandoned Python workers.
 
 ## Rust modules
@@ -41,7 +42,7 @@ The Rust child owner and Linux parent-death signal prevent abandoned Python work
 | `worker/batch_plan.py`, `tensors.py` | Validated CPU plans, slot selection, batched metadata transfer, and tensor views. |
 | `worker/mtp.py` | Proposals, verification, accepted-state retention, and checkpoint writes. |
 | `worker/dspark.py`, `worker/dspark_graph.py` | DSpark context, conditional proposals, confidence limits, and different proposal graphs. |
-| `worker/decode_graph.py`, `graph_cache.py` | Persistent inputs, transactional capture, bounded graph entries, and replay. |
+| `worker/decode_graph.py`, `graph_cache.py` | Persistent inputs, transactional capture, graph entry limits, and replay. |
 | `worker/serving.py`, `sampling.py`, `sampler.py` | Tokenization, XGrammar, sampling, detokenization, and output accounting. |
 | `models/qwen.py` | Checkpoint loading, 64-layer target, MTP layer, FP8/ordinary projections, and forward units. |
 | `models/dspark.py` | Local BF16 draft checkpoint, five GQA layers, target-feature projection, and Markov/confidence heads. |
@@ -56,7 +57,7 @@ All Python module paths are relative to `python/oh_my_vllm/`.
 
 Rust binds `ipc://<socket_path>`. The single Python worker connects.
 Messages are msgpack dictionaries with a `type` field.
-Prepare and execute replies echo `rpc_id`. Late cancelled prepare replies are discarded.
+Prepare, execute, and stats replies echo `rpc_id`. Late cancelled prepare replies are discarded.
 
 `register` and `abort` have no reply.
 
@@ -69,13 +70,16 @@ Prepare and execute replies echo `rpc_id`. Late cancelled prepare replies are di
 | `execute` | `rpc_id`, `step_id`, `scheduled`, `finished_request_ids`, `preempted_request_ids`, `num_batched_tokens`. Compute selected work. |
 | Scheduled row | `request_id`, `token_ids`, `num_computed_tokens`, `prefill_token_ids`, `fa_block_table`, `mamba_block_table`. |
 | `execute_result` | `rpc_id`, `outputs`. Return the output rows. |
+| `stats` / `stats_result` | `rpc_id` / `rpc_id`, `stats`. Return request-state counts, cache counts, and memory measurements. |
 | Output row | `request_id`, `token_ids`, `num_accepted_draft_tokens`, `new_draft_token_ids`. Optional `error`, `text`, `finish_reason`, `reasoning_tokens`. |
-| `error` | `message`, optional `rpc_id` and `kind`. Distinguish validation and internal failure. |
+| `error` | `message`, optional `rpc_id` and `kind`. Distinguish validation, internal, OOM, and device failure. |
 | `abort` / `shutdown` | `request_id` for abort. Release request state / stop the worker. |
 
 `prefill_token_ids` contains full accepted history on admission or recompute.
 Ordinary decode stays incremental. Drafts have different storage.
-Initialization errors omit correlation and kind. Execution errors default to internal kind.
+
+Initialization errors omit correlation. Missing error kinds default to internal.
+OOM and device failures use explicit kinds. Escaping execute failures invalidate the worker even after partial state changes.
 
 Missing registration becomes a request-local execution error.
 See the Rust and Python protocol definitions for wire names and defaults.
@@ -96,7 +100,7 @@ The scheduler rejects requests that cannot fit their required logical capacity.
 Allocation first removes obsolete aligned state and counts required capacity with read-only pool access.
 It includes the watermark in the capacity test.
 It touches all reused blocks before any group allocates new blocks.
-It then allocates new blocks and registers full cache blocks.
+It then allocates new blocks and stages full cache identities.
 This order prevents double-counting reused blocks in the free queue.
 
 On capacity failure, Rust preempts later-admitted running requests from the queue tail and retries earlier requests.
@@ -104,6 +108,7 @@ If no later victim stays, it preempts the current request.
 Victims return to the waiting queue in admission order.
 Recompute resets the computed cursor, keeps accepted history, and clears drafts.
 Output validation checks IDs, scheduled counts, token bounds, accepted drafts, and errors before a transactional commit.
+The commit publishes only full prefix boundaries covered by completed, accepted computation.
 
 ## Cache groups and prefix reuse
 
@@ -128,6 +133,13 @@ Each hash depends on preceding content. Resident blocks still must have a contig
 The coordinator reconciles that prefix with an available GDN checkpoint.
 The result is the minimum compatible FA/GDN hit length.
 References protect live blocks. The free queue evicts least-recently-used cache entries.
+
+`cache_committed` distinguishes completed cache contents from staged identities.
+Lookup returns only committed entries. A pending duplicate cannot hide a committed copy with the same hash.
+
+Each group keeps new boundaries in `pending_cache` until validated computation covers them.
+Failure and cancellation remove uncommitted identities. Successfully committed prefixes can stay after request release.
+Logical eviction reuses tensor slots in the fixed GPU arena. Graph and temporary allocations have different memory budgets.
 
 Ordinary GDN state is FP32. MTP and DSpark GDN state is BF16.
 The state layout is `[slot,48,128,128]`. Convolution state is BF16 `[slot,10240,3]`.
@@ -329,7 +341,11 @@ Its decayed count must be more than twice the coldest evictable entry.
 An available budget lets capture start on the first miss.
 
 Counts decay each 512 observations.
-The cache skips new captures with less than 4 GiB of free GPU memory.
+With memory pressure, the cache synchronizes and releases cold graph owners before allocation.
+Pressure eviction can pass family floors. It releases the pool handle when the last family owner leaves.
+Garbage collection releases cycles before the allocator returns free reservations.
+The cache skips new captures if free GPU memory still stays less than 4 GiB.
+
 The worker still uses the compiled unit.
 Capture failures back off for 64 observations.
 If MTP captures the same shape again in a 4096-cache-decision window, a shared 32768-decision capture cooldown starts.
@@ -346,10 +362,23 @@ Warmup and capture restore all destination FA/GDN values in `finally`.
 Replay validates all metadata replacements and restores captured bindings before copies.
 
 FA 2 prefill uses the compiled path.
-Dynamo limits are 4096 with warnings at 256.
+`ir/cache.py` keeps at most 256 owned Dynamo variants, 64 variants per code, and 32 code identities.
+It evicts a code object's complete specialization group at a host call boundary.
+A full per-code budget evicts that code. A full total budget evicts the least recently used code.
+Capture keeps its warmed specialization.
 
-These limits do not show bounded compiler memory with indefinite shape changes.
-See [open audit work](audit.md).
+Later host calls compile an evicted shape again with `fullgraph=True`.
+Scoped eviction keeps foreign compiler entries and the fixed-version execution contract.
+
+The owned module registry has at most 256 entries. Each callable keeps at most 64 recent executable owners.
+Captured graph objects keep their necessary executable owners independently of compiler registry eviction.
+The variant limit thus does not count all executable owners held by resident graphs.
+
+Provider selection records have a 2048-entry LRU. Rewrite records have 256 entries, and compilation counters have at most 128 labels.
+Semantic graph inventory records are active only with the explicit trace option.
+
+Shutdown releases graph pools, executable owners, bound model callables, request state, and owned compiler roots.
+See [service limits](serving.md#storage-and-resource-limits) and [ADR-011](decisions/ADR-011-bounded-serving-and-worker-recovery.md).
 
 ## CUDA streams and PDL
 

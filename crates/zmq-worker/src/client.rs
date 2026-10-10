@@ -4,10 +4,11 @@
 //! The scheduler calls `execute_one_step` once per inference step.
 
 use std::collections::BTreeSet;
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -79,6 +80,7 @@ impl Default for WorkerConfig {
 
 /// Handle to the running Python model worker.
 pub struct WorkerClient {
+    config: WorkerConfig,
     sock: DealerSendHalf,
     inbox: mpsc::Receiver<Result<crate::protocol::PythonMessage>>,
     reader: JoinHandle<()>,
@@ -103,37 +105,147 @@ impl Drop for WorkerClient {
 }
 
 /// Reap the owned worker on errors as well as normal shutdown.
-struct ManagedChild(Option<Child>);
+struct ManagedChild {
+    child: Option<Child>,
+    group_killed: bool,
+}
+static PENDING_REAPS: AtomicUsize = AtomicUsize::new(0);
 
 impl ManagedChild {
+    fn new(child: Child) -> Self {
+        Self {
+            child: Some(child),
+            group_killed: false,
+        }
+    }
+
     fn child(&mut self) -> &mut Child {
-        self.0
+        self.child
             .as_mut()
             .expect("worker child remains owned until drop")
+    }
+
+    fn kill_group(&mut self) -> std::io::Result<()> {
+        if !self.group_killed {
+            kill_worker_group(self.child())?;
+            self.group_killed = true;
+        }
+        Ok(())
+    }
+
+    fn has_exited(&mut self) -> std::io::Result<bool> {
+        #[cfg(target_os = "linux")]
+        {
+            // WNOWAIT leaves an exited leader unreaped. Its PID and process
+            // group cannot be reused before kill_group signals its descendants.
+            // SAFETY: waitid writes only to the initialized siginfo buffer;
+            // this scalar PID belongs to the still-owned unreaped child.
+            unsafe {
+                let mut info: libc::siginfo_t = std::mem::zeroed();
+                if libc::waitid(
+                    libc::P_PID,
+                    self.child().id(),
+                    &mut info,
+                    libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                ) == -1
+                {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(info.si_pid() != 0)
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        Ok(self.child().try_wait()?.is_some())
+    }
+}
+
+/// Every worker is a process-group leader. Its compiler children inherit that
+/// group, so cleanup cannot leave them behind when the Python leader exits.
+fn kill_worker_group(child: &mut Child) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        let group = i32::try_from(child.id()).map_err(std::io::Error::other)?;
+        // SAFETY: the child was launched into its own process group. kill sends
+        // a signal to that owned group and does not access Rust memory.
+        if unsafe { libc::kill(-group, libc::SIGKILL) } == -1 {
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() != Some(libc::ESRCH) {
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    child.kill()
+}
+
+fn worker_group_alive(pid: u32) -> std::io::Result<bool> {
+    #[cfg(target_os = "linux")]
+    {
+        // A killed descendant can remain a zombie until its new parent reaps
+        // it. Zombies own no execution state or memory and do not delay restart.
+        let group = pid.to_string();
+        for entry in std::fs::read_dir("/proc")? {
+            let entry = entry?;
+            if !entry
+                .file_name()
+                .to_string_lossy()
+                .bytes()
+                .all(|b| b.is_ascii_digit())
+            {
+                continue;
+            }
+            let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) else {
+                continue;
+            };
+            let Some((_, fields)) = stat.rsplit_once(") ") else {
+                continue;
+            };
+            let mut fields = fields.split_whitespace();
+            let state = fields.next();
+            let process_group = fields.nth(1);
+            if process_group == Some(group.as_str()) && !matches!(state, Some("Z" | "X")) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = pid;
+        Ok(false)
     }
 }
 
 impl Drop for ManagedChild {
     fn drop(&mut self) {
-        if let Some(mut child) = self.0.take() {
-            if child.try_wait().ok().flatten().is_some() {
-                return;
-            }
-            let _ = child.kill();
+        let _ = self.kill_group();
+        if let Some(child) = self.child.take() {
+            PENDING_REAPS.fetch_add(1, Ordering::SeqCst);
             // Waiting for a child can block; reap it off the Tokio executor.
             let child = Arc::new(Mutex::new(child));
             let waiter = Arc::clone(&child);
             if std::thread::Builder::new()
                 .name("oh-my-vllm-worker-reap".to_owned())
                 .spawn(move || {
-                    let _ = waiter.lock().unwrap().wait();
+                    reap_worker_group(&mut waiter.lock().unwrap());
+                    PENDING_REAPS.fetch_sub(1, Ordering::SeqCst);
                 })
                 .is_err()
             {
                 // If no waiter thread can start, still satisfy the reaping contract.
-                let _ = child.lock().unwrap().wait();
+                reap_worker_group(&mut child.lock().unwrap());
+                PENDING_REAPS.fetch_sub(1, Ordering::SeqCst);
             }
         }
+    }
+}
+
+fn reap_worker_group(child: &mut Child) {
+    let pid = child.id();
+    let _ = child.wait();
+    while worker_group_alive(pid).unwrap_or(true) {
+        std::thread::sleep(Duration::from_millis(20));
     }
 }
 
@@ -167,7 +279,7 @@ impl WorkerClient {
         info!("ZMQ DEALER socket bound at {addr}");
 
         // Fork the Python worker process.
-        let mut child = ManagedChild(Some({
+        let mut child = ManagedChild::new({
             let mut cmd = Command::new(&config.python_executable);
             cmd.args(["-m", "oh_my_vllm.worker.zmq_bridge", "--socket", &addr])
                 .env(
@@ -175,6 +287,8 @@ impl WorkerClient {
                     std::env::var("OH_MY_VLLM_RUN_ID")
                         .unwrap_or_else(|_| format!("pid-{}", std::process::id())),
                 );
+            #[cfg(unix)]
+            cmd.process_group(0);
             // SAFETY: prctl is async-signal-safe; no Rust objects are touched.
             // The child receives SIGKILL when the Rust parent exits, preventing
             // orphaned GPU worker processes.
@@ -200,7 +314,7 @@ impl WorkerClient {
                 });
             }
             cmd.spawn()?
-        }));
+        });
         info!("Python worker launched (pid {})", child.child().id());
 
         // Send the init message.  The Python process needs a moment to import
@@ -224,7 +338,7 @@ impl WorkerClient {
         let mut delay_ms = 100u64;
         let deadline = std::time::Instant::now() + config.init_timeout;
         loop {
-            if child.child().try_wait()?.is_some() {
+            if child.has_exited()? {
                 return Err(Error::WorkerDied);
             }
             let remaining = deadline.saturating_duration_since(Instant::now());
@@ -285,6 +399,7 @@ impl WorkerClient {
             }
         });
         Ok(Self {
+            config,
             sock: send,
             inbox,
             reader,
@@ -439,7 +554,7 @@ impl WorkerClient {
                     reply
                 }
                 Err(mpsc::error::TryRecvError::Empty) => {
-                    if self._child.child().try_wait()?.is_some() {
+                    if self._child.has_exited()? {
                         return Err(Error::WorkerDied);
                     }
                     return Ok(None);
@@ -453,13 +568,7 @@ impl WorkerClient {
             crate::protocol::PythonMessage::Prepared {
                 prompt_token_ids, ..
             } => Ok(prompt_token_ids),
-            crate::protocol::PythonMessage::Error(e) => {
-                if e.kind == crate::protocol::WorkerErrorKind::Validation {
-                    Err(Error::WorkerValidation(e.message))
-                } else {
-                    Err(Error::WorkerError(e.message))
-                }
-            }
+            crate::protocol::PythonMessage::Error(e) => Err(worker_error(e)),
             other => {
                 return Err(Error::UnexpectedMessageType(format!(
                     "wrong preparation reply type: {other:?}"
@@ -521,6 +630,7 @@ impl WorkerClient {
         );
         match reply {
             crate::protocol::PythonMessage::ExecuteResult(r) => {
+                validate_reply_ids(scheduled, &r.outputs)?;
                 if !self.serving_enabled
                     && let Some(error) = r.outputs.iter().find_map(|output| output.error.as_ref())
                 {
@@ -556,7 +666,7 @@ impl WorkerClient {
                         .collect(),
                 })
             }
-            crate::protocol::PythonMessage::Error(e) => Err(Error::WorkerError(e.message)),
+            crate::protocol::PythonMessage::Error(e) => Err(worker_error(e)),
             other => Err(Error::UnexpectedMessageType(format!("{other:?}"))),
         }
     }
@@ -567,7 +677,10 @@ impl WorkerClient {
         Self::send_raw(&mut self.sock, &RustMessage::Shutdown).await?;
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
-            if let Some(status) = self._child.child().try_wait()? {
+            if self._child.has_exited()? {
+                self._child.kill_group()?;
+                let status = self._child.child().try_wait()?.ok_or(Error::WorkerDied)?;
+                self.wait_for_worker_group().await?;
                 return if status.success() {
                     Ok(())
                 } else {
@@ -583,6 +696,75 @@ impl WorkerClient {
 
     // ── internal helpers ──────────────────────────────────────────────────────
 
+    pub fn configuration(&self) -> WorkerConfig {
+        self.config.clone()
+    }
+
+    pub fn process_id(&mut self) -> u32 {
+        self._child.child().id()
+    }
+
+    /// Reap the old GPU process before a replacement can allocate its caches.
+    pub async fn terminate(&mut self) -> Result<()> {
+        self.reader.abort();
+        self._child.kill_group()?;
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while self._child.child().try_wait()?.is_none() {
+            if Instant::now() >= deadline {
+                return Err(Error::Timeout);
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        self.wait_for_worker_group().await
+    }
+
+    async fn wait_for_worker_group(&mut self) -> Result<()> {
+        let pid = self._child.child().id();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while worker_group_alive(pid)? {
+            if Instant::now() >= deadline {
+                return Err(Error::Timeout);
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        Ok(())
+    }
+
+    pub async fn wait_for_reapers() -> Result<()> {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while PENDING_REAPS.load(Ordering::SeqCst) != 0 {
+            if Instant::now() >= deadline {
+                return Err(Error::Timeout);
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        Ok(())
+    }
+
+    pub async fn query_stats(&mut self) -> Result<serde_json::Value> {
+        self.rpc_id += 1;
+        let rpc_id = self.rpc_id;
+        Self::send_raw(&mut self.sock, &RustMessage::Stats { rpc_id }).await?;
+        match self.recv_for(rpc_id).await? {
+            crate::protocol::PythonMessage::StatsResult { stats, .. } => {
+                if serde_json::to_vec(&stats)
+                    .map_err(|error| Error::UnexpectedMessageType(error.to_string()))?
+                    .len()
+                    > 65536
+                {
+                    return Err(Error::UnexpectedMessageType(
+                        "oversized worker stats".to_owned(),
+                    ));
+                }
+                Ok(stats)
+            }
+            crate::protocol::PythonMessage::Error(error) => Err(worker_error(error)),
+            other => Err(Error::UnexpectedMessageType(format!(
+                "wrong stats reply: {other:?}"
+            ))),
+        }
+    }
+
     async fn recv_for(&mut self, expected: u64) -> Result<crate::protocol::PythonMessage> {
         if self.pending_prepare.is_some_and(|(_, id)| id == expected)
             && let Some(reply) = self.prepared_reply.take()
@@ -595,6 +777,7 @@ impl WorkerClient {
                 crate::protocol::PythonMessage::Prepared { rpc_id, .. } => *rpc_id,
                 crate::protocol::PythonMessage::ExecuteResult(result) => result.rpc_id,
                 crate::protocol::PythonMessage::Error(error) => error.rpc_id,
+                crate::protocol::PythonMessage::StatsResult { rpc_id, .. } => *rpc_id,
                 other => {
                     return Err(Error::UnexpectedMessageType(format!("{other:?}")));
                 }
@@ -608,6 +791,7 @@ impl WorkerClient {
                         self.pending_prepare.is_none_or(|(_, id)| id != expected)
                     }
                     crate::protocol::PythonMessage::Error(_) => true,
+                    crate::protocol::PythonMessage::StatsResult { .. } => true,
                     _ => false,
                 };
                 if !valid {
@@ -675,7 +859,7 @@ impl WorkerClient {
             tokio::select! {
                 reply = &mut receive => return reply,
                 _ = heartbeat.tick() => {
-                    if child.child().try_wait()?.is_some() { return Err(Error::WorkerDied); }
+                    if child.has_exited()? { return Err(Error::WorkerDied); }
                 }
             }
         }
@@ -687,7 +871,7 @@ impl WorkerClient {
             tokio::select! {
                 reply = self.inbox.recv() => return reply.ok_or(Error::WorkerDied)?,
                 _ = heartbeat.tick() => {
-                    if self._child.child().try_wait()?.is_some() {
+                    if self._child.has_exited()? {
                         return Err(Error::WorkerDied);
                     }
                 }
@@ -704,17 +888,86 @@ impl WorkerClient {
     }
 }
 
+fn worker_error(error: crate::protocol::ErrorMsg) -> Error {
+    use crate::protocol::WorkerErrorKind;
+    match error.kind {
+        WorkerErrorKind::Validation => Error::WorkerValidation(error.message),
+        WorkerErrorKind::Internal => Error::WorkerError(error.message),
+        WorkerErrorKind::Oom => Error::WorkerOom(error.message),
+        WorkerErrorKind::Device => Error::WorkerDevice(error.message),
+    }
+}
+
+/// Error rows obey the same complete, unique request-ID contract as token rows.
+fn validate_reply_ids(
+    scheduled: &[ScheduledRequest],
+    outputs: &[crate::protocol::RequestResultMsg],
+) -> Result<()> {
+    let expected: BTreeSet<_> = scheduled.iter().map(|request| request.request_id).collect();
+    let mut received = BTreeSet::new();
+    for output in outputs {
+        if !expected.contains(&output.request_id) || !received.insert(output.request_id) {
+            return Err(Error::UnexpectedMessageType(
+                "unknown or duplicate execution request ID".to_owned(),
+            ));
+        }
+        if output.error.is_some()
+            && (!output.token_ids.is_empty()
+                || output.num_accepted_draft_tokens != 0
+                || !output.new_draft_token_ids.is_empty())
+        {
+            return Err(Error::UnexpectedMessageType(
+                "error result contains successful token state".to_owned(),
+            ));
+        }
+    }
+    if received != expected {
+        return Err(Error::UnexpectedMessageType(
+            "missing execution request ID".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[test]
+    fn error_rows_have_complete_unique_known_ids_before_any_serving_state_is_written() {
+        use crate::protocol::RequestResultMsg;
+        let scheduled = vec![ScheduledRequest {
+            request_id: 7,
+            token_ids: vec![8],
+            prefill_token_ids: None,
+            num_computed_tokens: 0,
+            fa_block_table: vec![1],
+            mamba_block_table: vec![2],
+        }];
+        let row = |id, tokens: Vec<u32>| -> RequestResultMsg {
+            serde_json::from_value(serde_json::json!({
+                "request_id": id, "token_ids": tokens, "error": "failed",
+            }))
+            .unwrap()
+        };
+        assert!(validate_reply_ids(&scheduled, &[row(7, vec![])]).is_ok());
+        assert!(validate_reply_ids(&scheduled, &[row(8, vec![])]).is_err());
+        assert!(validate_reply_ids(&scheduled, &[row(7, vec![]), row(7, vec![])]).is_err());
+        assert!(validate_reply_ids(&scheduled, &[row(7, vec![9])]).is_err());
+        assert!(validate_reply_ids(&scheduled, &[]).is_err());
+    }
+
     #[cfg(target_os = "linux")]
     #[tokio::test(flavor = "current_thread")]
     async fn child_drop_reaps_without_blocking_the_executor() {
-        let child = Command::new("/bin/sleep").arg("10").spawn().unwrap();
+        let child = Command::new("/bin/sleep")
+            .arg("10")
+            .process_group(0)
+            .spawn()
+            .unwrap();
         let pid = child.id();
         let start = Instant::now();
-        drop(ManagedChild(Some(child)));
+        drop(ManagedChild::new(child));
         assert!(start.elapsed() < Duration::from_millis(250));
         timeout(Duration::from_secs(2), async {
             while PathBuf::from(format!("/proc/{pid}")).exists() {

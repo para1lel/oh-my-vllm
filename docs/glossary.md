@@ -176,6 +176,13 @@ Proper product names, source identifiers, and protocol text keep their initial f
 | `sector` | noun | A 32-byte memory-access unit counted by the NVIDIA profiler. |
 | `epilogue` | noun | GEMM output stage that converts accumulators and writes result storage. |
 
+| `soak test` | noun | Long-duration service test with many agent requests and resource measurements. |
+| `processing start` | noun | Framework time when request preparation starts, after the admission queue wait. |
+| `admission lease` | noun | Shared owner of one request's count and byte reservation, with release after the last engine, body, or drain owner. |
+| `worker epoch` | noun | Identity of one worker generation that completed loading, used to reject admissions for an old worker. |
+| `compiler variant` | noun | Program compiled for one code identity and input metadata, with conditions for its reuse. |
+| `encoded state reservation` | noun | Byte capacity kept for conservative encoded input, history, and output estimates. JSON, object, and allocator overhead is additional. |
+
 ## Maintenance
 
 Add a technical noun or verb only when the approved dictionary cannot express the same technical meaning accurately.

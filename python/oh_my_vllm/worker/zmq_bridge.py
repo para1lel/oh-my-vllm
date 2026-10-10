@@ -24,6 +24,7 @@ Message envelope (msgpack dict):
      "preempted_request_ids": list[int],
      "num_batched_tokens": int}
     {"type": "abort", "request_id": int}
+    {"type": "stats", "rpc_id": int}
     {"type": "shutdown"}
 
   Python → Rust:
@@ -36,7 +37,9 @@ Message envelope (msgpack dict):
                   "text": str | None,
                   "finish_reason": str | None,
                   "reasoning_tokens": int}, ...]}
-    {"type": "error", "rpc_id": int, "kind": "validation" | "internal",
+    {"type": "stats_result", "rpc_id": int, "stats": dict}
+    {"type": "error", "rpc_id": int,
+     "kind": "validation" | "internal" | "oom" | "device",
      "message": str}
 
 Run with::
@@ -60,6 +63,7 @@ import msgpack
 import zmq
 
 from oh_my_vllm.performance.execution import ExecutionTrace
+from oh_my_vllm.worker.errors import failure_kind
 from oh_my_vllm.worker.logging_utils import configure_logging
 from oh_my_vllm.worker.model_runner import OhMyVllmWorker, RuntimeConfig
 from oh_my_vllm.worker.protocol import ScheduledRequest, SchedulerOutput, WorkerOutput
@@ -130,10 +134,12 @@ class _PrepareExecutor:
                 while self.queued is None and not self.stopping:
                     self.condition.wait()
                 if self.stopping:
+                    self.adapter = None
                     return
                 job = self.queued
                 self.queued = None
                 self.running_id = job.request_id
+            result = None
             try:
                 result = self.adapter.prepare_inputs(job.request)
                 reply = (job, result, None)
@@ -141,18 +147,30 @@ class _PrepareExecutor:
                 reply = (job, None, exc)
             with self.condition:
                 self.running_id = None
-            self.completed.put(reply)
-            # A full pipe remains readable; shutdown may have closed it.
-            with suppress(BlockingIOError, OSError):
-                os.write(self.write_fd, b"x")
+                if self.stopping:
+                    self.adapter = None
+                    return
+                self.completed.put(reply)
+                # close() owns the same lock: the numeric FD cannot be closed
+                # and reused while the preparer writes its wakeup byte.
+                with suppress(BlockingIOError, OSError):
+                    os.write(self.write_fd, b"x")
+            del job, reply, result
 
     def close(self):
         with self.condition:
+            if self.stopping:
+                return
             self.stopping = True
             self.queued = None
             self.condition.notify()
-        os.close(self.read_fd)
-        os.close(self.write_fd)
+            os.close(self.read_fd)
+            os.close(self.write_fd)
+            while True:
+                try:
+                    self.completed.get_nowait()
+                except queue.Empty:
+                    break
 
 
 # ---------------------------------------------------------------------------
@@ -225,9 +243,25 @@ def serve(socket_addr: str) -> None:
     preparer: _PrepareExecutor | None = None
     preparing: set[int] = set()
     cancelled: set[int] = set()
+    terminating = False
 
     def send(reply: dict) -> None:
         sock.send(msgpack.packb(reply, use_bin_type=True))
+
+    def fail(error: Exception, rpc_id=None, *, fatal=False, message=None) -> None:
+        nonlocal terminating
+        kind = (
+            "validation"
+            if isinstance(error, RequestValidationError)
+            else failure_kind(error)
+        )
+        reply = {"type": "error", "kind": kind, "message": message or str(error)}
+        if rpc_id is not None:
+            reply["rpc_id"] = rpc_id
+        send(reply)
+        # CUDA work or host commits can precede a failure. Do not accept a
+        # second command in this process; Rust reconstructs the whole worker.
+        terminating = terminating or fatal or kind in ("oom", "device")
 
     def drain_prepared() -> None:
         if preparer is None:
@@ -250,18 +284,9 @@ def serve(socket_addr: str) -> None:
             if error is not None:
                 if not isinstance(error, RequestValidationError):
                     logger.error("prepare failed for request %s: %s", request_id, error)
-                send(
-                    {
-                        "type": "error",
-                        "rpc_id": job.rpc_id,
-                        "kind": (
-                            "validation"
-                            if isinstance(error, RequestValidationError)
-                            else "internal"
-                        ),
-                        "message": str(error),
-                    }
-                )
+                fail(error, job.rpc_id)
+                if terminating:
+                    return
                 continue
             registered = False
             try:
@@ -277,25 +302,22 @@ def serve(socket_addr: str) -> None:
                     }
                 )
             except Exception as exc:
-                if registered:
+                if registered and failure_kind(exc) == "internal":
                     worker.unregister_request(request_id)
                 logger.exception(
                     "prepare registration failed for request %s", request_id
                 )
-                send(
-                    {
-                        "type": "error",
-                        "rpc_id": job.rpc_id,
-                        "kind": "internal",
-                        "message": str(exc),
-                    }
-                )
+                fail(exc, job.rpc_id)
+                if terminating:
+                    return
 
     try:
-        while True:
+        while not terminating:
             events = dict(poller.poll(5000))
             if preparer is not None and preparer.read_fd in events:
                 drain_prepared()
+                if terminating:
+                    break
             if sock not in events:
                 if os.getppid() != parent_pid:
                     logger.info("Parent process died, exiting")
@@ -320,14 +342,10 @@ def serve(socket_addr: str) -> None:
                         )
                     )
                     logger.info("Worker ready")
-                except Exception:
+                except Exception as exc:
                     err = traceback.format_exc()
                     logger.error("Init failed:\n%s", err)
-                    sock.send(
-                        msgpack.packb(
-                            {"type": "error", "message": err}, use_bin_type=True
-                        )
-                    )
+                    fail(exc, fatal=True, message=err)
 
             elif msg_type == "prepare":
                 request_id = msg["request_id"]
@@ -354,14 +372,7 @@ def serve(socket_addr: str) -> None:
                     logger.exception(
                         "prepare dispatch failed for request %s", request_id
                     )
-                    send(
-                        {
-                            "type": "error",
-                            "rpc_id": msg["rpc_id"],
-                            "kind": "internal",
-                            "message": str(exc),
-                        }
-                    )
+                    fail(exc, msg["rpc_id"])
 
             elif msg_type == "register":
                 if worker is None:
@@ -374,10 +385,12 @@ def serve(socket_addr: str) -> None:
                     continue
                 try:
                     _register_request(worker, msg)
-                except Exception:
+                except Exception as exc:
                     logger.exception(
                         "register failed for request %s", msg["request_id"]
                     )
+                    if failure_kind(exc) in ("oom", "device"):
+                        fail(exc, msg.get("rpc_id"), fatal=True)
 
             elif msg_type == "execute":
                 if worker is None:
@@ -420,15 +433,29 @@ def serve(socket_addr: str) -> None:
                             }
                         },
                     )
-                except Exception:
+                except Exception as exc:
                     err = traceback.format_exc()
                     logger.error("execute_model failed:\n%s", err)
-                    sock.send(
-                        msgpack.packb(
-                            {"type": "error", "message": err, "rpc_id": msg["rpc_id"]},
-                            use_bin_type=True,
-                        )
+                    fail(exc, msg["rpc_id"], fatal=True, message=err)
+
+            elif msg_type == "stats":
+                try:
+                    if worker is None:
+                        raise RuntimeError("worker not initialised")
+                    stats = worker.resource_snapshot()
+                    stats["preparation"] = {
+                        "pending": len(preparing),
+                        "cancelled": len(cancelled),
+                    }
+                    send(
+                        {
+                            "type": "stats_result",
+                            "rpc_id": msg["rpc_id"],
+                            "stats": stats,
+                        }
                     )
+                except Exception as exc:
+                    fail(exc, msg["rpc_id"])
 
             elif msg_type == "abort":
                 request_id = msg["request_id"]

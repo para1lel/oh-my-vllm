@@ -36,13 +36,13 @@ CPU 实验使用 token42 的合成 worker 反馈.
 | 3 | 请求历史, batching, 回复校验和 commit. |
 | 4 | Token 预算与对齐 prefill. |
 | 5 | FA/GDN layout, 分配和 CPU planning. |
-| 6 | 前缀哈希, 引用, 队列和抢占. |
-| 7 | ZMQ, 注册, 准备, 取消和失败. |
+| 6 | 前缀哈希, 提交后发布, 引用, 队列和抢占. |
+| 7 | ZMQ, 注册, 准备, 取消和 worker 重建. |
 | 8 | 加载, FP8 / 普通 projection, residual, FA, GDN 和 logits. |
-| 9 | 采样, grammar, 停止, 解析和 stream. |
+| 9 | 采样, grammar, 停止, 解析, 准入上限和 stream. |
 | 10 | MTP proposal, grouped verification 和状态所有权. |
-| 11 | Semantic IR, lowering, graph cache 和 CUDA 内核. |
-| 12 | 正确性, 最大 shape, TTFT, 吞吐和测量审计. |
+| 11 | Semantic IR, lowering, compiler 和 graph cache 上限和 CUDA 内核. |
+| 12 | 正确性, 最大 shape, 阶段时延, agentic soak 和测量审计. |
 | 13 | DSpark 目标特征, context KV, 七候选提议, confidence, 概率验证和测量. |
 
 `src/curriculum.mjs` 将每个有实质内容的运行路径 Rust/Python/CUDA 文件映射到章节和入口符号.

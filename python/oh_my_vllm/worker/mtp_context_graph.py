@@ -44,6 +44,7 @@ class MTPContextGraph:
             torch.cuda.synchronize()
             with torch.cuda.graph(self.graph, pool=pool):
                 self.output = unit()
+            self.execution_owners = tuple(unit.execution_owners)
         finally:
             cache[pages, :, offsets] = saved
 

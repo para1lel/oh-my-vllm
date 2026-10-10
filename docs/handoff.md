@@ -20,9 +20,14 @@ Ordinary and MTP4 keep the six total-length 262144 boundary cases.
 CUDA Graph, multiple streams, and PDL control model execution.
 The native build uses ten operator headers. The GEMM build identifies its root header independently.
 
-All backend code files meet the 800-line limit. The pre-commit hook uses clang-format 23.1.3.
+All CUDA backend code files meet the 800-line limit. The pre-commit hook uses clang-format 23.1.3.
 Header content enters cache keys, loaded provenance, formal contracts, and profiler checks.
 Build and load checks reject changed inputs.
+
+Prefix cache publication follows validated state commit. Request admission and completed streams share resource leases with count and byte limits.
+The HTTP supervisor invalidates old logical KV and loads replacement workers without request replay.
+Graph pressure eviction releases unused pool owners. Compiler and diagnostic registries have fixed limits.
+[Service contracts](serving.md) specify resource budgets, recovery limits, and request timing.
 
 [Architecture](architecture.md) defines ownership and cache contracts.
 [Kernel development](kernels.md) gives module layout and selected configurations.
@@ -41,24 +46,47 @@ Their summary derives from complete raw logs. The larger failed collection keeps
 MTP4 and DSpark passed oh-my-pi tool loops through Chat and Responses, with normal shutdown audits.
 
 These collections use inference source `fabcede8c6e0e6e4fa2c90d5d97b1f98d9c7dfdb`.
-The final change updates the boundary collector, tests, documents, and tutorial without an inference change.
+They precede the current serving resource changes. The new collection must verify the changed inference source.
 [Acceptance](acceptance.md) gives original hashes, failed attempts, review scope, and limitations.
 
-The current CPU suite passed 760 tests and 94 subtests, with 442 GPU tests deselected.
+The previous CPU suite passed 760 tests and 94 subtests, with 442 GPU tests deselected.
 The GPU suite passed 436 tests with maximum-context cases deselected.
 Rust workspace tests, Clippy, formatting, line-width checks, Ruff, and document checks passed.
 The tutorial build, ten excerpt tests, and nine browser tests passed.
-All owned GPU workers exited. Temporary service ports were released.
+All owned GPU workers from that collection exited. Its temporary service ports were released.
 
 A different agent checked the CUDA split, header identities, load races, and formatter.
 The corrected Opus 5.5 audit supplied no new production selection.
 Packed-scale and pipeline candidates stay external diagnostics.
 [Profiling](profiling.md) records selected optimizations and measured results.
 
+### Serving resource validation
+
+The changed-source CPU collection passed 922 tests and 99 subtests, with 445 GPU tests deselected.
+Rust workspace tests passed 143 cases. Formatting, Clippy, line-width, Ruff, CUDA formatting, and document checks passed.
+The updated tutorial passed ten excerpt tests and nine browser tests.
+
+The GPU collection passed 437 tests and failed two tests that used old test contracts.
+The corrected graph-pool and compiled-metadata tests then passed together.
+Maximum-context cases were deselected in this collection. CUDA operator implementations did not change.
+
+A target-model MTP4 diagnostic passed genuine cancellation and slow-client completion through Chat and Responses.
+Final request state and resource leases were empty. Logical pools had only null block 0 allocated.
+All owned service processes exited. This short diagnostic supplies no long-duration acceptance.
+
+An MTP4 `after_commit` diagnostic reached CUDA allocator OOM after visible stream output.
+HTTP stayed alive, the stream reported failure, and one replacement worker completed Chat and Responses requests.
+The shared prefix was cold after recovery and hot on its next use. Final request state was empty and all owned processes exited.
+This diagnostic covers one fault stage. Complete two-mode fault, phase, and soak acceptance is pending.
+
 ## Open work
 
-- Test graph eviction and recapture with memory pressure, as `PY-04` specifies in [audit](audit.md).
-- Show bounded compiler storage when shapes change indefinitely and measure `PY-06` host overlap.
+- Verify `REQ-SERVE-006`, `REQ-SERVE-007`, and `REQ-SERVE-008` with current-source resource, allocator-OOM, and long-duration service collections.
+- Measure each of MTP4 and DSpark for at least 3600 seconds and 500 normal requests with four oh-my-pi agents.
+- Publish each mode's request scatter plot, then measure the fifteen phase workloads again on the changed inference source.
+- Keep earlier measurements limited to their recorded source scope until the new collection passes.
+- Run graph eviction and recapture tests with memory pressure, as `PY-04` specifies in [audit](audit.md).
+- Show compiler storage at or below its specified capacity limits when shapes change indefinitely and measure `PY-06` host overlap.
 - Complete user review of the tutorial.
 
 ## Tutorial preview

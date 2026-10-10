@@ -59,7 +59,7 @@ Use `--binary` to select a different build.
 Offline fixed output ignores EOS.
 
 `run --prompt-file PATH` reads whitespace-delimited token IDs, one request per line, with at most 32 requests.
-`--arrival-interval N` delays each admission by N scheduling steps.
+`--arrival-interval N` gives an interval of N scheduling steps between admissions.
 `--prefix-hit` first seeds the prompts and then must have positive cache hits.
 The global `--scheduler-blocks` limits the Rust pool. Its value must be at most the reported worker capacity.
 The `bench` subcommand also has `--warmup` and `--repetitions`.
@@ -262,6 +262,75 @@ They keep `passed=false` until the applicable contracts pass.
 Each received HTTP response is saved before content or log checks.
 Failures keep received responses and an explicit error record.
 Lifecycle streams keep the consumed SSE frames before disconnect.
+
+## Long-duration agentic service
+
+Daily CPU and GPU commands skip the heavy soak test. Start it explicitly for long-duration service acceptance.
+Use one dedicated MTP4 or DSpark service, a new external result directory, and the current release binary.
+Keep source unchanged. The collector checks the running executable, source hashes, worker epoch, and process identities.
+
+```bash
+scripts/with-env.sh python scripts/agentic-soak.py --mode mtp --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output-dir "$EVIDENCE_DIR/mtp-soak"
+scripts/with-env.sh python scripts/agentic-soak.py --mode dspark --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/dspark-server.log" --output-dir "$EVIDENCE_DIR/dspark-soak"
+```
+
+Run each command against its matching service. Stop that service and worker immediately after collection.
+The collector owns its four OMP clients and temporary recording proxies. It does not own the supplied service.
+Install OMP on `PATH` or supply `--omp`.
+The pinned development tools include Matplotlib for standalone SVG/PNG plots.
+
+Each mode must complete at least 500 normal model requests and run for at least 3600 seconds.
+The four OMP agents use read tools through Chat and Responses. Their forwarded tool results and response IDs must agree.
+A shared four-slot limit controls concurrent model calls. The workload uses reusable prefixes and different input lengths.
+
+Two short warmup epochs precede normal collection. Warmup and intentional probes have separate records.
+Warmup tasks have a 900-second limit. Normal tasks have a 210-second limit.
+`--warmup-task-timeout` and `--task-timeout` set the OMP task and proxy transport limits for each phase.
+
+Warmup time does not count toward the 3600-second normal collection.
+Its deadline is `30 + 3 * drain_timeout + 2 * (warmup_epoch_seconds + warmup_task_timeout)` seconds.
+Keep its elapsed time and complete failure records.
+
+Each normal epoch admits tasks for 300 seconds by default, then drains active requests.
+Cancellation and slow-client probes have separate records. Normal requests must have no unexpected failures, OOM, or worker restart.
+Periodic resource snapshots must have valid counts and byte limits. Drained Rust/Python request state must be empty.
+The collector's monotonic duration and the normal server request span must each meet the duration requirement.
+
+After drain, each logical pool must have `blocks - 1` free blocks. Cached blocks can stay in the prefix index for eviction.
+Block 0 is the null block and stays allocated.
+
+Keep at least six idle snapshots in the last half of normal collection.
+Compare the first and last median windows in that half after cache warmup.
+Investigate GPU allocated/reserved or device-used growth more than the larger of 64 MiB or 5%.
+Investigate host RSS growth more than the larger of 128 MiB or 5%.
+Keep the complete time series, drift, and trend estimates. Investigate a failed memory audit before a new complete collection.
+
+Device-used HBM is `total_bytes - free_bytes` from the worker's device snapshot.
+It includes device storage that Torch's allocated/reserved counters do not count.
+The collector saves active and drained memory curves independently of request TPS.
+
+Plot all normally completed model requests, with framework preparation start time on the horizontal axis.
+Use output tokens divided by processing-start-to-generation-completion wall time on the vertical axis.
+Report queue time, cancelled requests, and failures separately. The soak has no performance gate.
+Use `--diagnostic` for a shorter smoke test. Diagnostic records cannot pass formal soak acceptance.
+
+## Worker recovery with allocator OOM
+
+Fault injection has different records from normal soak traffic. Daily commands also skip this target-model collector.
+Run it explicitly on an idle B200:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh python scripts/serving-recovery.py --mode mtp --output-dir "$EVIDENCE_DIR/recovery-mtp"
+scripts/with-gpu.sh scripts/with-env.sh python scripts/serving-recovery.py --mode dspark --output-dir "$EVIDENCE_DIR/recovery-dspark"
+```
+
+The test creates an external worker launcher that uses `tests/fixtures/worker_faults.py`.
+Production imports no fault injector. Each marker lets one explicit fault occur across worker replacement.
+Run CUDA allocator OOM tests after sampling, accepted-state commit, proposal generation, and graph capture.
+
+Keep HTTP alive, report stream failure, invalidate old prefixes, and verify successful Chat/Responses service after one worker replacement.
+Make sure that a cold request after recovery cannot hit old KV identities, then verify new prefix reuse.
+The collector owns and stops its service, worker groups, and temporary IPC endpoints.
 
 ## Tutorial and cleanup
 

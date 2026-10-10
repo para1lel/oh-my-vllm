@@ -86,6 +86,10 @@ class MTP:
                 if self.device.type == "cuda"
                 else None
             ),
+            release_memory=torch.cuda.empty_cache
+            if self.device.type == "cuda"
+            else None,
+            release_family=self._release_graph_pool,
         )
         # Draft hidden states feed proposals. These families must not share a
         # private pool even though captures within each family may share one.
@@ -97,7 +101,30 @@ class MTP:
             free_bytes=self.graph_cache.free_bytes,
             reserved_bytes=self.graph_cache.reserved_bytes,
             min_capture_free_bytes=12 << 30,
+            release_memory=self.graph_cache.release_memory,
+            release_family=self._release_graph_pool,
         )
+
+    def _release_graph_pool(self, family: str) -> None:
+        setattr(
+            self,
+            {
+                "draft": "draft_graph_pool",
+                "proposal": "proposal_graph_pool",
+                "mtp_context": "context_graph_pool",
+            }[family],
+            None,
+        )
+
+    def release(self) -> None:
+        self.graph_cache.clear()
+        self.context_graph_cache.clear()
+        self.next_position.clear()
+        self.draft_graph_pool = self.proposal_graph_pool = self.context_graph_pool = (
+            None
+        )
+        self.draft_unit = self.context_unit = self.logits_unit = None
+        self.model = self.attention = self.cache = self.boundary_hidden = None
 
     def forget(self, request_id: int) -> None:
         self.next_position.pop(request_id, None)

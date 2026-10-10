@@ -10,6 +10,7 @@
 
 状态: partial/open, 严重性 P2.
 Graph family 使用有界 graph 条目缓存和共享 pool, 配合接纳, 淘汰, 空闲显存保护和 capture 恢复.
+压力驱逐可以移除某个 family 的最后一个 graph 及 pool handle. 再次捕获前先同步, 执行垃圾回收并释放 allocator 缓存.
 Resident-graph36k-to40k 转换在空闲显存少于 4 GiB 时完成.
 普通 / MTP4 同形状 262144 的多次执行也完成, 无 graph eviction 或 recapture.
 这些 probe 不覆盖跨形状 262k eviction/recapture 或全部 late-capture 显存条件.
@@ -37,8 +38,25 @@ KRN-06 旧候选为原生 residual 输出使用 streaming store.
 
 ## 其他证据限制
 
-Dynamo 的 4096 限制和 256-variant warning 不能证明无限 shape 变化下编译器内存有界.
-Log/cache 审计不能排除静默内存内重新编译.
+Worker 现在将自有 Dynamo variant 限为 256, 每个 code object 的 variant 限为 64, code object 限为 32.
+自有 Inductor module 另有 256 项上限. 已捕获 graph 在 graph-cache 上限内保留所需执行对象.
+Provider selection, rewrite record 和 compile counter label 也有固定上限.
+回归测试检查淘汰, 以及淘汰后 graph 重放的正确性.
+
+MTP4 / DSpark 持续测试仍需证明输入变化时 RSS 和 GPU 显存稳定.
+有界计数本身不能证明内存稳定. 见 [持续测试](testing.zh.md#长时-agentic-服务).
+
+## 服务资源修正
+
+Prefix block 只有在校验后的 worker 输出提交其状态后才进入查找.
+失败的待提交 block 不能成为共享前缀. RPC 输出 ID 在错误存储修改前完成校验.
+准入 lease 限制排队请求, 存活请求, 编码状态预留和已完成的 stream drain.
+字节计数不包含 JSON allocator 额外开销. RSS 单独接受内存审计.
+
+Worker 失败后使对应逻辑 KV 失效, 并在 HTTP 保持可用的情况下重建 worker.
+受影响的 stream 报告失败, 不重放. 进程出生记录保护清理过程, 避免 PID 复用导致误杀.
+Allocator-OOM 采集器检查故障阶段, 缓存失效, 恢复后的成功服务与进程清理.
+当前验收只适用于已完成的测量. 新阶段时延和持续服务采集尚待执行.
 
 阶段时延, 算子, 边界和服务证据保留各自的实测源码范围.
 [验收索引](acceptance.zh.md)保留源码范围及全部原始失败记录.

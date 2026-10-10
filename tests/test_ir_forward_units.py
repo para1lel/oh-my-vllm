@@ -106,9 +106,16 @@ def test_compiled_target_graph_replays_changed_native_page_tables():
 
 @pytest.mark.gpu
 @torch.inference_mode()
-def test_full_model_prefill_target_and_mtp_compile_units():
+def test_full_model_prefill_target_and_mtp_compile_units(tmp_path, monkeypatch):
     if not MODEL:
         pytest.skip("set OH_MY_VLLM_MODEL for full-model integration tests")
+    from oh_my_vllm.performance import execution
+
+    monkeypatch.setenv(
+        "OH_MY_VLLM_SEMANTIC_TRACE", str(tmp_path / "semantic-trace.json")
+    )
+    monkeypatch.setattr(execution, "_GRAPH_METADATA", set())
+    monkeypatch.setattr(execution, "_GRAPH_OPERATIONS", set())
     model = Qwen(MODEL, mtp=True)
     caches = []
     for kind in model.kinds:
@@ -246,7 +253,6 @@ def test_full_model_prefill_target_and_mtp_compile_units():
         4096,
         compile_model=True,
     )
-    from oh_my_vllm.performance import execution
     from oh_my_vllm.performance.coverage import metadata_covers
 
     metadata = [json.loads(row) for row in execution._GRAPH_METADATA]

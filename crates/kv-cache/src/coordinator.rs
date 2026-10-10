@@ -58,6 +58,33 @@ pub struct HybridCoordinator {
 }
 
 impl HybridCoordinator {
+    /// Rebuild logical ownership after a GPU worker is replaced. Cached tensor
+    /// addresses and every old reference become invalid at the worker boundary.
+    pub fn empty_like(&self) -> Self {
+        let mut replacement = Self::new(
+            self.pool.num_blocks(),
+            self.block_size,
+            self.pool.enable_caching(),
+            self.watermark_blocks,
+        );
+        if let Some(pool) = &self.mamba_pool {
+            replacement = replacement.with_mamba_capacity(pool.num_blocks());
+        }
+        replacement.set_speculative_blocks(self.mamba.speculative_blocks());
+        replacement
+    }
+
+    pub fn resource_counts(&self) -> (usize, usize, usize, usize, usize, usize) {
+        let mamba = self.mamba_pool.as_ref().unwrap_or(&self.pool);
+        (
+            self.pool.num_blocks() as usize,
+            self.pool.num_free_blocks(),
+            self.pool.num_cached_entries(),
+            mamba.num_blocks() as usize,
+            mamba.num_free_blocks(),
+            mamba.num_cached_entries(),
+        )
+    }
     /// Create a coordinator for a pool of `num_blocks` blocks.
     ///
     /// `block_size` must be the same for both groups (Qwen3.8: 784).
@@ -319,6 +346,19 @@ impl HybridCoordinator {
     }
 
     // ── request teardown ────────────────────────────────────────────────────
+
+    /// Make completed FA and GDN prefixes visible after the full worker reply
+    /// passes validation and the scheduler commits accepted history.
+    pub fn commit_cache(&mut self, request: &impl CacheRequest) {
+        let rid = request.request_id();
+        let computed = request.num_computed_tokens().min(request.num_tokens());
+        self.full_attn.commit_cache(rid, computed, &mut self.pool);
+        self.mamba.commit_cache(
+            rid,
+            computed,
+            self.mamba_pool.as_mut().unwrap_or(&mut self.pool),
+        );
+    }
 
     /// Free all blocks held for `request_id`.
     pub fn free(&mut self, request_id: RequestId) {
