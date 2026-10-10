@@ -4,133 +4,82 @@ Updated: 2026-10-11.
 
 ## Implementation
 
-Rust controls service, scheduling, and logical KV. Python controls one B200 GPU.
-Use block size 784, 16 FA layers, 48 GDN layers, and `mamba_cache_mode="align"`.
+Rust controls HTTP service, request scheduling, and logical KV cache. Python controls one B200 GPU.
+Use 784-token blocks, 16 FA layers, 48 GDN layers, and `mamba_cache_mode="align"`.
 The total input and output limit is 262144 tokens.
 
-Ordinary, MTP4, and DSpark are startup choices. The worker keeps the selected mode.
+Ordinary decoding, MTP4, and DSpark are startup choices.
 Chat, Responses, streams, tools, thinking settings, constraints, cancellation, and prefix reuse stay available.
-
-DSpark uses fixed weights and target features `(5,19,33,47,61)`.
-Markov proposals and cumulative confidence select zero through seven candidates. The initial threshold is `0.2`.
+DSpark keeps fixed weights and target features `(5,19,33,47,61)`.
+Its Markov proposals and cumulative confidence select zero through seven candidates, with initial threshold `0.2`.
 Stochastic acceptance uses `min(1,p/q)`, normalized `max(p-q,0)` after rejection, and a target bonus after full acceptance.
-DSpark context boundary tests and their acceptance requirement are removed.
-Ordinary and MTP4 keep the six total-length 262144 boundary cases.
 
 CUDA Graph, multiple streams, and PDL control model execution.
-The native build uses ten operator headers. The GEMM build identifies its root header independently.
+All owned CUDA backend code files meet the 800-line limit. The pre-commit hook uses clang-format 23.1.3.
+Header content enters build keys, load provenance, formal contracts, and profiler checks.
 
-All CUDA backend code files meet the 800-line limit. The pre-commit hook uses clang-format 23.1.3.
-Header content enters cache keys, loaded provenance, formal contracts, and profiler checks.
-Build and load checks reject changed inputs.
+Prefix identities enter lookup after validated worker state commit.
+Admission leases have count and byte limits for queued requests, prepared requests, encoded history, output state, and completed stream drains.
+The HTTP supervisor invalidates old logical KV and loads replacement workers after failure.
+Affected requests stop and report an error. Recovery keeps HTTP alive.
 
-Prefix cache publication follows validated state commit. Request admission and completed streams share resource leases with count and byte limits.
-The HTTP supervisor invalidates old logical KV and loads replacement workers without request replay.
-Graph pressure eviction releases unused pool owners. Compiler and diagnostic registries have fixed limits.
+Compiler metadata has count and byte limits. Graph caches have count limits for resident entries and check capture headroom.
+Compiler retirement starts garbage collection at safe host boundaries and keeps owners needed for resident graph replay.
+Prefill admission accounts for planned storage. Graph pressure eviction releases unused pool owners.
+DSpark graph recapture uses a cooldown for repeated shape changes.
 
-Project-owned FX source and FakeTensor metadata have count and byte limits.
-Compiler retirement starts Python garbage collection at safe host boundaries.
-Prefill graph admission uses planned storage instead of one threshold for all routes.
-[Service contracts](serving.md) specify resource budgets, recovery limits, and request timing.
-
-[Architecture](architecture.md) defines ownership and cache contracts.
-[Kernel development](kernels.md) gives module layout and selected configurations.
-[Development](development.md) gives environment and model configuration.
+[Architecture](architecture.md) specifies ownership and cache contracts.
+[Service contracts](serving.md) specify budgets, worker recovery, and request timing.
+[Development](development.md) gives portable environment selection. Keep host configuration in ignored `LOCAL.md`.
 
 ## Verification
 
-The fifteen phase rows passed with two full warmups and five measurements per workload.
-The [README table](../README.md#measured-performance) gives prefill latency, lower-bound ratios, decode TPS, and theoretical percentages.
-Prefix-hit prefill has no ratio gate. Its spread and decode checks passed.
+The phase, capacity, overload, recovery, and long-duration collections use source `706f1a6e7ce2b0188f07794cab574cbbf60f2927`.
+The final publication also corrects Markdown image checks.
+It keeps the measured inference code, release binary, and selected CUDA configurations.
+[Acceptance](acceptance.md) gives original hashes, source scope, failed attempts, and independent reviews.
 
-All 317 formal operator cases passed numerical and speed checks in one complete collection.
-A different agent calculated all round medians and confidence bounds again.
-The six ordinary/MTP4 capacity cases have full output, no OOM, and zero recompute preemptions.
-Their summary derives from complete raw logs. The larger failed collection keeps its original status.
-MTP4 and DSpark passed oh-my-pi tool loops through Chat and Responses, with normal shutdown audits.
+All fifteen phase workloads passed with two full warmups and five measurements per workload.
+A different review process calculated the full prefill and decode models again for all 75 measured schedules.
+The [README table](../README.md#measured-performance) gives latency, lower-bound ratios, decode TPS, and theoretical percentages.
+Prefix-hit prefill records its ratio. Its spread check and decode gates passed.
 
-These collections use inference source `fabcede8c6e0e6e4fa2c90d5d97b1f98d9c7dfdb`.
-These results apply to the code before the current serving resource changes. The new collection must verify the changed inference source.
-[Acceptance](acceptance.md) gives original hashes, failed attempts, review scope, and limitations.
+All six ordinary/MTP4 capacity cases produced full output at total length 262144, without OOM or recompute preemption.
+DSpark keeps phase, numerical, operator-speed, and service checks.
 
-The previous CPU suite passed 760 tests and 94 subtests, with 442 GPU tests deselected.
-The GPU suite passed 436 tests with maximum-context cases deselected.
-Rust workspace tests, Clippy, formatting, line-width checks, Ruff, and document checks passed.
-The tutorial build, ten excerpt tests, and nine browser tests passed.
-All owned GPU workers from that collection exited. Its temporary service ports were released.
+MTP4 completed 5135 normal requests in 3675.338 seconds.
+DSpark completed 3104 normal requests in 3665.792 seconds.
+Each collection used four oh-my-pi agents and completed the resource and late-period memory checks.
+The README has separate plots. The heavy test has no performance gate and daily commands skip it.
 
-A different agent checked the CUDA split, header identities, load races, and formatter.
-The corrected Opus 5.5 audit supplied no new production selection.
-Packed-scale and pipeline candidates stay external diagnostics.
-[Profiling](profiling.md) records selected optimizations and measured results.
+Two overload cases and eight allocator-OOM recovery cases passed.
+The fault stages cover accepted-state commit, graph capture, sampling, and proposal generation in each speculative mode.
+HTTP stayed alive. Replacement workers completed Chat and Responses with cold then reused prefixes.
+The independent reviews checked empty request state, resource release, raw hashes, and owned process exit.
 
-### Serving resource validation
+The full 317-case CUDA/TileLang collection uses source `fabcede8c6e0e6e4fa2c90d5d97b1f98d9c7dfdb`.
+Owned operator implementations and operator case, timing, and comparison files are unchanged from that collection.
+The ownership utility and IR have subsequent changes. Their source scope is separate.
+The current-source GPU checks cover compiler retirement, graph replay, allocator reclamation, and side-stream owner release.
 
-The changed-source CPU collection passed 922 tests and 99 subtests, with 445 GPU tests deselected.
-Rust workspace tests passed 143 cases. Formatting, Clippy, line-width, Ruff, CUDA formatting, and document checks passed.
-The updated tutorial passed ten excerpt tests and nine browser tests.
+The CPU suite at the measured source passed 1293 tests and 99 subtests, with 448 GPU tests deselected.
+The final document checker passed 14 regressions.
+Rust workspace tests passed 143 cases. The required pre-commit checks passed.
+The tutorial passed ten excerpt tests and nine browser tests.
 
-The GPU collection passed 437 tests and failed two tests that used old test contracts.
-The corrected graph-pool and compiled-metadata tests then passed together.
-Maximum-context cases were deselected in this collection. CUDA operator implementations did not change.
-
-A target-model MTP4 diagnostic passed genuine cancellation and slow-client completion through Chat and Responses.
-Final request state and resource leases were empty. Logical pools had only null block 0 allocated.
-All owned service processes exited. This short diagnostic supplies no long-duration acceptance.
-
-An MTP4 `after_commit` diagnostic reached CUDA allocator OOM after visible stream output.
-HTTP stayed alive, the stream reported failure, and one replacement worker completed Chat and Responses requests.
-The shared prefix was cold after recovery and hot on its next use. Final request state was empty and all owned processes exited.
-This diagnostic covers one fault stage. Complete two-mode fault, phase, and soak acceptance is pending.
-
-The current CPU suite passed 1289 tests and 99 subtests, with 448 GPU tests deselected.
-Rust workspace tests passed 143 cases. All pre-commit checks passed.
-
-A different agent examined protocol ends, client messages, server metrics, and the 2-second disconnect limit.
-The updated tutorial passed ten excerpt tests and nine browser tests.
-The source `a0109c9cdebbd142a5ae79109b54766dc3ee2464` has a complete MTP4 soak with 5733 normal requests in 3670.64 seconds.
-All MTP4 availability, resource, and memory checks passed.
-
-The DSpark soak completed 964 normal requests in 3643.13 seconds without request failure, OOM, or worker restart.
-Its GPU and HTTP memory checks passed. Its worker RSS check failed with 12.32% late-period median growth.
-
-The same source passed eight allocator-OOM recovery cases, with four stages per speculative mode.
-These results apply to the code before the next compiler metadata and graph-admission corrections.
-They do not supply acceptance for those corrections.
-All task-owned GPU workers and temporary service ports from these collections are closed.
-The full original records keep failed and stopped attempts.
-
-The changed IR passed CUDA Graph replay after compiler retirement and a cold recapture.
-Two graph-memory tests passed allocator reclamation and side-stream owner release.
-
-An isolated DSpark batch-four diagnostic passed six captures, twelve hits, and no pressure evictions over three executions.
-Saved FA/GDN bytes and generated tokens agreed across executions.
-It uses the reviewed admission files over `a0109c9cdebbd142a5ae79109b54766dc3ee2464`, with the previous IR.
-This diagnostic does not supply acceptance for the complete changed inference source.
-
-The source `5a3b0b699bf0322da34b6fe12b3d9f43c395ce52` has a failed DSpark soak with a correct output-limit response.
-The earlier collector rejected its final `length` answer. Its protocol, client, and completed server output counts agree at 2048.
-The original failed records keep their status. The corrected collector checks these counts and rejects pending tool calls.
-
-The independent collector review passed 455 focused CPU tests. All pre-commit checks passed.
-
-All task-owned workers and temporary ports from that collection are closed.
-New complete phase, capacity, recovery, and two-mode soak collections are pending.
+All task-owned GPU workers and temporary service listeners are closed.
+Original failed or cancelled attempts keep their status. One-hour observations apply to the measured workload and shapes.
 
 ## Open work
 
-- Verify `REQ-SERVE-006`, `REQ-SERVE-007`, and `REQ-SERVE-008` with current-source resource, allocator-OOM, and long-duration service collections.
-- Verify RSS stability after the compiler metadata and graph-admission corrections.
-- Measure DSpark batch-four phase latency with steady prefill graph replay.
-- Measure each of MTP4 and DSpark for at least 3600 seconds and 500 normal requests with four oh-my-pi agents.
-- Publish each mode's request scatter plot, then measure the fifteen phase workloads again on the changed inference source.
-- Keep earlier measurements limited to their recorded source scope until the new collection passes.
-- Run graph eviction and recapture tests with memory pressure, as `PY-04` specifies in [audit](audit.md).
-- Show compiler storage at or below its specified capacity limits when shapes change indefinitely and measure `PY-06` host overlap.
+- Extend `PY-04` to cross-shape graph eviction and recapture near the maximum supported context.
+- Measure `PY-06` host overlap before a change to dependent host waits.
+- Examine compiler storage with indefinitely changing shapes, using its fixed capacity contracts.
+- Keep the heavy soak test explicit and do affected phase workloads again after runtime changes.
 - Complete user review of the tutorial.
 
 ## Tutorial preview
 
 The user-requested tutorial preview stays on port 18084.
 Ignored `LOCAL.md` keeps its address, process identity, and maintenance commands.
-English Markdown and full Chinese translations give current code contracts. The tutorial has thirteen full Chinese chapters.
+The tutorial has thirteen Chinese chapters with current project source.

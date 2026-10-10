@@ -14,6 +14,11 @@ They keep experiment names, original hashes, selected measurements, and verifica
 They have `formal_acceptance=false`.
 The [owned-kernel and liveness summary](2026-10-10-owned-tuning-liveness.json) uses this format.
 
+The [current serving resource record](2026-10-11-serving-stability.json) gives fifteen phase rows and six capacity cases.
+It also gives two one-hour agentic collections and eight allocator-OOM recovery stages.
+The [README](../../README.md#measured-performance) gives the phase table and separate MTP4/DSpark request plots.
+Each result keeps its measured source and full original hash.
+
 ## Export
 
 ```bash

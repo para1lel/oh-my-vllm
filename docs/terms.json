@@ -1830,6 +1830,14 @@
       "meaning": "Python object references that return to their first object and can keep unused objects in memory.",
       "translation": "回到起始对象的 Python 对象引用, 可使不再使用的对象持续占用内存.",
       "forms": ["reference cycle", "reference cycles"]
+    },
+    {
+      "term": "normal request",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Model request assigned to the measured soak workload, excluding warmup and intentional probes.",
+      "translation": "分配给持续测试测量负载的模型请求, 不包含预热和有意安排的探测.",
+      "forms": ["normal request", "normal requests"]
     }
   ]
 }

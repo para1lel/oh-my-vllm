@@ -183,6 +183,7 @@ Proper product names, source identifiers, and protocol text keep their initial f
 | `compiler variant` | noun | Program compiled for one code identity and input metadata, with conditions for its reuse. |
 | `encoded state reservation` | noun | Byte capacity kept for conservative encoded input, history, and output estimates. JSON, object, and allocator overhead is additional. |
 | `reference cycle` | noun | Python object references that return to their first object and can keep unused objects in memory. |
+| `normal request` | noun | Model request assigned to the measured soak workload, excluding warmup and intentional probes. |
 
 ## Maintenance
 

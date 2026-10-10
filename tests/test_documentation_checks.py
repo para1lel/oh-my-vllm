@@ -102,6 +102,20 @@ def test_links_check_unicode_anchors_missing_targets_and_repository_boundary(tmp
     assert docs.link_issues(source, "[bad](target.md#fake-heading)", tmp_path)
 
 
+def test_images_do_not_add_prose_punctuation_and_keep_path_checks(tmp_path):
+    text = "# 请求图\n\n![MTP4 请求吞吐](requests.svg)\n"
+    source = tmp_path / "README.zh.md"
+    image = tmp_path / "requests.svg"
+    image.write_text("<svg xmlns='http://www.w3.org/2000/svg'/>")
+    assert docs.markdown_issues(text, chinese=True) == []
+    assert docs.link_issues(source, text, tmp_path) == []
+    image.unlink()
+    assert docs.link_issues(source, text, tmp_path) == [
+        "missing local link: requests.svg"
+    ]
+    assert docs.markdown_issues("错误!标点.", chinese=True)
+
+
 def test_host_checks_distinguish_identity_from_package_version():
     path = str(Path("/") / "home" / "fixture" / "model")
     uuid = "GPU-" + "abcdef01-1234"

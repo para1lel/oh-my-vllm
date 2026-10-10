@@ -17,7 +17,7 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 FENCE = re.compile(r"^```[^\n]*\n[\s\S]*?^```\s*$", re.M)
 INLINE = re.compile(r"`([^`\n]+)`")
-LINK = re.compile(r"\[([^\]]+)\]\(([^\s)]+)\)")
+LINK = re.compile(r"!?\[([^\]]+)\]\(([^\s)]+)\)")
 SENTENCE = re.compile(r"(?<=[.!?])(?:\s+|$)")
 WORDS = re.compile(r"[A-Za-z0-9]+(?:[-'/][A-Za-z0-9]+)*")
 HOST_PATH = re.compile(

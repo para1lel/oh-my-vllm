@@ -7,89 +7,154 @@ Originals supply formal verification. Portable summaries give results for readin
 
 ## Current collection
 
-The [source-bound record](../bench/evidence/2026-10-10-current-source-acceptance.json) uses source `fabcede8c6e0e6e4fa2c90d5d97b1f98d9c7dfdb`.
-The release binary SHA-256 is `4676eb10dde92d0349213980d618bc597543cf3e83769b9aa5cf504c5786f77d`.
-The record keeps original hashes, measurements, failed attempts, and reviews by different agents.
-The final collection-scope and document change keeps the measured inference sources and selected CUDA configurations.
+The [serving resource record](../bench/evidence/2026-10-11-serving-stability.json) uses source `706f1a6e7ce2b0188f07794cab574cbbf60f2927`.
+The release binary SHA-256 is `ceb58b4e6b248fc657b567fe82a9e2211d88d565a73cceaceffc7a1b944fd890`.
+The record keeps original hashes, measurements, failed attempts, and independent reviews.
+The final publication also corrects Markdown image checks.
+It keeps the measured inference code, binary, and selected CUDA configurations.
 
 ### Phase latency
 
 All fifteen workloads passed their active prefill and decode checks.
-Each workload has two full warmups and five complete measurements, with 4096 output tokens per request.
+Each workload has two full warmups and five full measurements, with 4096 output tokens per request.
 Prefix-hit rows reuse 32144 tokens. Other rows use cold prefixes.
 All measured requests have full output and zero recompute preemptions.
 
-Each row comes from one complete, continuous workload collection.
-The rows use the same measured source, binary, environment, capacity, and formal contract.
-Failed or canceled parent collections keep their original failed status.
-No row combines samples from different attempts.
+Each row comes from one full, continuous workload collection.
+The rows use the same source, binary, environment, capacity, and formal contract.
+The independent review calculated the full prefill and decode models again for all 75 measured schedules.
+It checked source identities, loaded modules, output, trace arithmetic, statistics, and owned worker exit.
+The two phase models include all required operations.
 
 The [README table](../README.md#measured-performance) gives prefill seconds, lower-bound ratios, decode TPS, and theoretical percentages.
-Prefix-hit prefill records its ratio without a latency gate. Its spread and decode gates stay active.
-Independent review checks execution records, trace arithmetic, source identities, statistics, and closed workers.
-The evidence records the scope of additional model replay separately.
+Prefix-hit prefill records its ratio. Its spread and decode gates passed.
+Decode TPS counts 4095 tokens per request because the first token belongs to prefill.
 
 ### Operator matrix
 
-All 317 unique canonical cases passed numerical and speed checks in one complete collection.
-The matrix keeps the original 230 cases and reference pins.
-A different agent calculated 951 round medians and all confidence bounds again from 19020 pairs.
-Each confidence calculation uses 10000 bootstrap samples.
-The calculated results are equal to the original results.
+The full 317-case CUDA/TileLang collection uses source `fabcede8c6e0e6e4fa2c90d5d97b1f98d9c7dfdb`.
+All numerical and speed checks passed. The matrix keeps the original 230 cases and reference pins.
+Owned operator implementations and operator case, timing, and comparison files are unchanged from that collection.
+The unchanged source proof covers `python/oh_my_vllm/kernels/`, `development/kernels/`, and `benchmarks/kernels.py`.
 
+The ownership utility and IR have subsequent changes. The old operator result keeps its original source scope.
+The [operator record](../bench/evidence/2026-10-10-current-source-acceptance.json) keeps its source, original hashes, and independent review.
+
+The review calculated 951 round medians and confidence bounds again from 19020 pairs.
+Each confidence calculation used 10000 bootstrap samples. The results agreed with the original record.
 Each timed graph contains 100 full operations. Each sample replays that graph once.
+The review checked full outputs, state writes, dispatch, loaded libraries, headers, templates, and pinned comparison sources.
 
-The review checks complete outputs, modified state, dispatch, loaded libraries, build inputs, and source headers.
-It also checks the installed template tree and pinned comparison sources.
-Two interrupted operator attempts keep their failed status.
+Five current-source GPU regressions passed in 19.39 seconds.
+They check compiler metadata retirement, existing graph replay, cold recapture, allocator reclamation, and side-stream owner release.
+They also check graph pressure recapture. Allocated memory decreased to its initial value.
+The independent review checked all 39 owned process exits and the full test logs.
 
 ### Context capacity
 
 The six ordinary/MTP4 cases passed input 258048 and output 4096 at batches 1, 2, and 4.
 They have no OOM or recompute preemption. Total length is 262144.
 Each case uses zero warmups and one cold repetition. Compilation and capture can occur during capacity collection.
-Capacity timing and memory observations do not supply statistical phase-performance results.
+Capacity timing and memory observations have this cold-run scope.
 
 | Mode | Batch | Peak allocated (GiB) | Peak reserved (GiB) |
 |---|---:|---:|---:|
-| ordinary | 1 | 120.625252 | 145.320312 |
-| ordinary | 2 | 120.625252 | 145.625000 |
-| ordinary | 4 | 121.479034 | 148.457031 |
-| mtp4 | 1 | 117.010298 | 143.238281 |
-| mtp4 | 2 | 117.010481 | 145.591797 |
-| mtp4 | 4 | 119.753355 | 146.867188 |
+| ordinary | 1 | 120.625252 | 144.326172 |
+| ordinary | 2 | 120.625252 | 146.617188 |
+| ordinary | 4 | 121.478909 | 145.777344 |
+| mtp4 | 1 | 117.010298 | 144.105469 |
+| mtp4 | 2 | 117.010298 | 144.169922 |
+| mtp4 | 4 | 119.754255 | 146.652344 |
 
-The six-row summary derives from complete raw logs in a failed larger collection.
-Its independent review checks each log, full output, memory, loaded modules, and worker exit.
-The larger collection keeps its failed status. It has no completed collector aggregate.
-DSpark context boundary tests and their acceptance requirement are removed.
+The six-row collector and its supervisor completed successfully.
+Two independent reviews checked full raw logs, source identities, full output, measured memory, worker exit, and removed IPC endpoints.
 DSpark keeps phase, numerical, operator-speed, and service acceptance.
 
-The target loader has no in-process weight-digest record.
-The original collector checks GPU exclusivity once per second and after exit.
-Interference fully between polls cannot be excluded.
+### Long-duration agentic service
 
-### Service and Python tests
+MTP4 and DSpark each completed at least 3600 seconds and 500 normal requests.
+Each collection used four oh-my-pi agents, with at most four model calls at the same time.
+Chat and Responses executed the required source reads and supplied their results in subsequent model input.
+Warmup, cancellation, slow clients, overload, and injected faults have separate records.
 
-MTP4 and DSpark each passed the two service APIs, twelve constraints, cancellation, mixed batches, and long-prefix reuse.
-The independent review compares 48 completed MTP4 requests and 46 completed DSpark requests with client records.
-Four oh-my-pi tasks read source, forward tool results, continue generation, and produce answers that use those results.
-The review checks 54 original artifact hashes and 1834 conditions.
+| Mode | Normal requests | Agent tasks | Normal duration (s) | Result |
+|---|---:|---:|---:|---|
+| MTP4 | 5135 | 2430 | 3675.338 | pass |
+| DSpark | 3104 | 1461 | 3665.792 | pass |
 
-Each suite has four long-prefix requests with input 131099.
-Cached-token counts are zero for the first request and 130928 for the other requests.
-These are functional observations. The performance and capacity collections supply their own acceptance.
-Normal shutdown audits passed. Owned workers exited and temporary service ports were released.
+Normal requests had no unexpected OOM, worker restart, or endpoint failure.
+Drained request maps and admission leases were empty. Each logical pool kept only null block 0 allocated.
+Graph counters stayed at or below their count limits. Compiler metadata stayed at or below its count and byte limits.
+Host RSS and GPU allocated, reserved, and device-used memory passed the last-half median checks.
 
-The proxy omits complete upstream SSE bodies. It keeps follow-up requests, tool results, reply identities, and answer hashes.
-Source reads can contain outline elisions. Generated line citations are approximate.
-The review did not reread complete model weights or the installed template tree for service collection.
+These medians use drained snapshots in the last temporal half.
+For those ordered samples, compare medians from the first and last halves.
+The full record keeps all five memory metrics and their specified allowances.
 
-The GPU suite passed 436 tests with maximum-context cases deselected.
-The current CPU suite passed 760 tests and 94 subtests, with 442 GPU tests deselected.
-Rust workspace tests, Clippy, formatting, line-width checks, Ruff, and document checks passed.
+| Mode | Initial late worker RSS median (GiB) | Final late worker RSS median (GiB) | Worker RSS growth (MiB) | GPU reserved growth (MiB) |
+|---|---:|---:|---:|---:|
+| MTP4 | 5.375099 | 5.546391 | 175.402344 | 48.000000 |
+| DSpark | 6.697308 | 6.697308 | 0.000000 | 830.000000 |
+
+The full raw review calculated each request point again from the server's processing start and monotonic processing interval.
+It parsed each saved SSE body again and compared terminal records, SDK messages, tool results, and server metrics.
+Output-limit answers keep their original `length` reason and separate counts.
+Their protocol, client, request budget, and completed server output counts must agree.
+
+The [README plots](../README.md#long-duration-agentic-service) use one point per normally completed model request.
+The horizontal axis is framework processing start. The vertical axis is output tokens divided by processing wall time.
+Queue time is separate. This heavy test has no performance gate, and daily commands skip it.
+
+Tracked SVG files use whitespace formatting. The record keeps original and published figure hashes separately.
+
+### Overload and allocator OOM
+
+MTP4 and DSpark passed the bounded-body overload test.
+It held 64 partial HTTP bodies. The next request received a retryable 503 response without an admission lease.
+After clients closed, request resources were empty and Chat and Responses returned the answer `25` without a worker restart.
+
+All eight allocator-OOM recovery cases passed.
+Each mode has faults after accepted-state commit, graph capture, sampling, and proposal generation.
+Each affected stream reported one error without a successful completion.
+The same HTTP process stayed alive and supplied 503 during recovery.
+One replacement worker served Chat and Responses, with cold then reused prefixes.
+Independent review checked original hashes, request state, resource limits, cache invalidation, and all owned process exits.
+
+### CPU checks and verification limits
+
+The frozen-source CPU suite passed 1293 tests and 99 subtests, with 448 GPU tests deselected.
+The final document checker passed 14 regressions, with image syntax and invalid-path checks.
+Rust workspace tests passed 143 cases. Formatting, Clippy, line-width, Ruff, CUDA formatting, and document checks passed.
 The tutorial build, ten excerpt tests, and nine browser tests passed.
-[Audit](audit.md) keeps cross-shape graph-memory and host-overlap work.
+
+Each long-duration result applies to its full one-hour workload and observed shapes.
+The [audit](audit.md) keeps maximum-context cross-shape graph recapture and host-overlap work open.
+Generated answer meaning and source citations have a separate diagnostic review.
+Executed reads and exact tool-result forwarding are required checks.
+
+The target loader has no in-process weight-digest record. Original collectors bind the checkpoint files separately.
+Phase GPU ownership checks occur once per second and after exit. Interference fully between polls cannot be excluded.
+The long-duration supervisor records other GPU processes and permits light foreign use.
+All owned GPU workers and temporary service listeners exited after collection.
+
+## Failed and cancelled collections
+
+Original failed or cancelled collections keep their original status and hashes in the current resource record.
+Their samples do not enter accepted phase rows or normal request plots.
+
+One MTP4 attempt stopped because its captured agent task lacked the two required source reads.
+The captured SSE and SDK message contain text through the output limit without tool calls.
+The unchanged full workload passed on a fresh attempt.
+Requests with the same body and cold diagnostic requests returned the required tool calls.
+The cold diagnostic did not execute those calls.
+
+The original attempt has no token trace before SSE conversion.
+The agent requests use the default sampling temperature `1.0` without a fixed seed.
+These observations apply to the captured outputs and stated verification scope.
+
+A stopped recovery collection completed one fault stage before GPU reassignment.
+The accepted collection runs all eight stages again. An interrupted overload collection keeps its foreign-process monitor failure.
+Original records keep earlier memory and collector failures. The current record identifies the corresponding runtime and collector corrections.
 
 ## Selected CUDA implementation
 
@@ -98,7 +163,7 @@ Header content enters build keys, load provenance, formal contracts, and profile
 The clang-format hook uses version 23.1.3.
 
 Five FP8 projections at 624 through 2496 rows use an owned paired TMEM accumulator and a direct BF16 epilogue.
-The full current operator collection verifies the selected implementation.
+The 317-case operator collection at `fabcede8c6e0e6e4fa2c90d5d97b1f98d9c7dfdb` verifies the selected implementation.
 The [accumulator diagnosis](../bench/evidence/2026-10-10-fp8-accumulator-observations.json) keeps its earlier measurements and profiler records.
 [Profiling](profiling.md) gives selected configurations, rejected candidates, and measured optimization results.
 The [owned CUDA audit](../bench/evidence/2026-10-10-owned-cuda-audit.json) records source checks and external tuning candidates.

@@ -16,7 +16,7 @@ The resident-graph 36k-to 40k transition completed with less than 4 GiB free mem
 Same-shape 262144 ordinary/MTP4 executions also completed without graph eviction or recapture.
 These probes do not include cross-shape 262k eviction/recapture or all late-capture memory conditions.
 
-A future test must force eviction and recapture with measured memory pressure.
+A future test must force cross-shape eviction and recapture at maximum context with measured memory pressure.
 Record before/after keys, counters, persistent-state equality, peak memory, and process cleanup.
 Review the workload before implementation to keep in the supported memory envelope.
 
@@ -44,8 +44,12 @@ Owned Inductor modules have a separate 256-entry limit. Captured graphs keep the
 Provider selections, rewrite records, and compile counter labels also have fixed limits.
 The regression tests check eviction and graph replay after eviction.
 
-The long-duration MTP4/DSpark collection must still show stable RSS and GPU memory with changing inputs.
-Counters with limits alone do not show memory stability. See [long-duration testing](testing.md#long-duration-agentic-service).
+Owned FX source and FakeTensor metadata have count and byte limits.
+Compiler retirement starts garbage collection at safe host boundaries.
+
+The current MTP4 and DSpark collections passed one-hour resource and memory checks with four agents.
+The results cover the observed input shapes. Measure indefinite shape changes in further collections.
+See [acceptance](acceptance.md) and [long-duration testing](testing.md#long-duration-agentic-service).
 
 ## Serving resource corrections
 
@@ -55,9 +59,10 @@ Admission leases keep queued requests, live requests, encoded state reservations
 Their byte accounting excludes JSON allocator overhead. RSS has a separate memory audit.
 
 Worker failure invalidates its logical KV and reconstructs the worker while HTTP stays available.
-Affected streams report failure without replay. Process birth records protect cleanup from PID reuse.
+Affected streams stop and report failure. Process birth records protect cleanup from PID reuse.
 The allocator-OOM collector checks failure stages, cache invalidation, successful service after recovery, and process cleanup.
-Current acceptance is limited to completed measurements. New phase and soak collections are pending.
+The current source passed fifteen phase rows, two one-hour agentic collections, and eight allocator-OOM recovery stages.
+The [acceptance index](acceptance.md) gives their source identities, original hashes, reviews, and limits.
 
 Phase, operator, boundary, and service evidence keeps its measured source scope.
 The [acceptance index](acceptance.md) keeps source scope and all original failed records.

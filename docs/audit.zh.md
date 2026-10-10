@@ -15,7 +15,7 @@ Resident-graph36k-to40k 转换在空闲显存少于 4 GiB 时完成.
 普通 / MTP4 同形状 262144 的多次执行也完成, 无 graph eviction 或 recapture.
 这些 probe 不覆盖跨形状 262k eviction/recapture 或全部 late-capture 显存条件.
 
-后续测试需在实测显存压力下触发真实 eviction 和 recapture.
+后续测试需在最大 context 和实测显存压力下强制跨 shape eviction 和 recapture.
 记录前后 key, counter, 持久状态一致性, 显存峰值和进程清理.
 实现前审查工作负载, 确保在支持的显存范围内.
 
@@ -43,8 +43,12 @@ Worker 现在将自有 Dynamo variant 限为 256, 每个 code object 的 variant
 Provider selection, rewrite record 和 compile counter label 也有固定上限.
 回归测试检查淘汰, 以及淘汰后 graph 重放的正确性.
 
-MTP4 / DSpark 持续测试仍需证明输入变化时 RSS 和 GPU 显存稳定.
-有界计数本身不能证明内存稳定. 见 [持续测试](testing.zh.md#长时-agentic-服务).
+自有 FX source 和 FakeTensor metadata 同时受数量与字节上限约束.
+Compiler retirement 在安全主机边界启动垃圾回收.
+
+当前 MTP4 和 DSpark 采集使用四个 agent, 通过一小时资源和内存检查.
+结果覆盖观测到的输入 shape. 无限变化的 shape 仍需进一步测量.
+见 [验收](acceptance.zh.md) 和 [持续测试](testing.zh.md#长时-agentic-服务).
 
 ## 服务资源修正
 
@@ -54,9 +58,10 @@ Prefix block 只有在校验后的 worker 输出提交其状态后才进入查�
 字节计数不包含 JSON allocator 额外开销. RSS 单独接受内存审计.
 
 Worker 失败后使对应逻辑 KV 失效, 并在 HTTP 保持可用的情况下重建 worker.
-受影响的 stream 报告失败, 不重放. 进程出生记录保护清理过程, 避免 PID 复用导致误杀.
+受影响的 stream 停止并报告失败. 进程出生记录保护清理过程, 避免 PID 复用导致误杀.
 Allocator-OOM 采集器检查故障阶段, 缓存失效, 恢复后的成功服务与进程清理.
-当前验收只适用于已完成的测量. 新阶段时延和持续服务采集尚待执行.
+当前源码通过十五项阶段负载, 两项一小时 agentic 采集和八项 allocator-OOM 恢复阶段.
+[验收索引](acceptance.zh.md) 给出源码身份, 原始 SHA, 审查和限制.
 
 阶段时延, 算子, 边界和服务证据保留各自的实测源码范围.
 [验收索引](acceptance.zh.md)保留源码范围及全部原始失败记录.
