@@ -42,6 +42,7 @@ from benchmarks.agentic_soak_analysis import (
     source_citations,
     task_budget,
 )
+from benchmarks.agentic_soak_protocol import attach_client_completions
 from benchmarks.agentic_soak_proxy import ModelSlots, disk_proxy, load_requests
 from benchmarks.evidence import observed_configuration, runtime_source_identity
 from scripts.serving_evidence import stream_identity
@@ -219,12 +220,14 @@ def run_task(
         "--print",
         prompt,
     ]
+    code = None
     try:
         with disk_proxy(
             args.base_url,
             directory / "wire",
             slots,
             request_timeout=task_budget(args, phase),
+            normal_completion=lambda: code == 0 and not stop.is_set(),
         ) as (proxy, _records):
             configuration = agentic.configuration(proxy)
             for provider in configuration["providers"].values():
@@ -243,6 +246,7 @@ def run_task(
             json.loads(line)
             for line in (directory / "events.jsonl").read_text().splitlines()
         ]
+        attach_client_completions(events, summary["requests"], api)
         summary["tool_verification"] = agentic.validate_agent_evidence(
             events, requests, api, citation_check=source_citations
         )

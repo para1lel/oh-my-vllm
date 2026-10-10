@@ -278,6 +278,19 @@ Collector 管理 4 个 OMP 客户端及临时记录代理, 不管理传入的服
 
 最后答案中的文件名与行号范围作为诊断信息记录.
 
+协议结束记录, 已完成的客户端消息和已完成的服务端 metric 必须使用相同的 response ID.
+这 3 项检查通过时, 协议结束后的 `ConnectionResetError` 或 `BrokenPipeError` 作为诊断信息保留.
+Chat 要求正确的 finish reason 和 `[DONE]`.
+Responses 要求 `response.completed`, 或原因是 `max_output_tokens` 的 `response.incomplete`.
+客户端 stop reason 必须与协议结束记录一致.
+
+客户端断连且已有正确的 finish reason 时, 代理最多等待 2 秒接收协议结束记录.
+失败或取消的任务立即关闭代理连接.
+
+记录 soak test 期间的其他 GPU 进程. 请求和资源检查通过时继续正常采集.
+结合其他进程的记录及 worker 分配计数, 分析设备 HBM 占用变化.
+15 项阶段负载使用没有其他进程的 GPU.
+
 正常采集前先运行 2 个短预热 epoch. 预热和故意 probe 使用单独记录.
 预热任务上限为 900 秒. 正常任务上限为 210 秒.
 `--warmup-task-timeout` 和 `--task-timeout` 分别设置对应阶段的 OMP 任务与 proxy 传输上限.

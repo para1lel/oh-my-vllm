@@ -285,6 +285,19 @@ A shared four-slot limit controls concurrent model calls. The workload uses reus
 
 File names and line ranges in the last answer are diagnostic records.
 
+Protocol end records, completed client messages, and completed server metrics must have the same response ID.
+Keep `ConnectionResetError` or `BrokenPipeError` after the protocol end as diagnostic records only when these 3 checks pass.
+Chat must have a correct finish reason and `[DONE]`.
+Responses must have `response.completed`, or `response.incomplete` with reason `max_output_tokens`.
+The client stop reason must be correct for the protocol end record.
+
+After a client disconnect with a correct finish reason, the proxy waits at most 2 seconds for the protocol end.
+Failed or cancelled tasks close their proxy connections immediately.
+
+Record other GPU processes during the soak test. Continue normal collection if request and resource checks pass.
+Examine changes in device-used HBM with the other processes' records and the worker allocation counters.
+Run the 15 phase workloads on a GPU with no other processes.
+
 Two short warmup epochs precede normal collection. Warmup and intentional probes have separate records.
 Warmup tasks have a 900-second limit. Normal tasks have a 210-second limit.
 `--warmup-task-timeout` and `--task-timeout` set the OMP task and proxy transport limits for each phase.

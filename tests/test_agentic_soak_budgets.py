@@ -53,9 +53,11 @@ def test_actual_agent_and_proxy_receive_phase_budget(
     captured = {}
 
     @contextmanager
-    def proxy(_url, _directory, _slots, *, request_timeout):
+    def proxy(_url, _directory, _slots, *, request_timeout, normal_completion):
         captured["http_timeout"] = request_timeout
+        assert normal_completion() is False
         yield "http://local/v1", []
+        assert normal_completion() is False  # Exit code 1 gets no completion grace.
 
     def omp(command, _state, _directory, _stop, timeout):
         captured["omp_duration"] = command[command.index("--max-time") + 1]

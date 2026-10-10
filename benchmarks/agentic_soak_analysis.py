@@ -9,6 +9,8 @@ import re
 import statistics
 from pathlib import Path
 
+from benchmarks.agentic_soak_transport import completed_transport_close
+
 METRIC_MARKER = "SERVING_REQUEST_METRIC "
 IDLE_COUNTS = (
     "active_requests",
@@ -260,7 +262,7 @@ def bind_points(
         for request in task["requests"]:
             if request.get("method") != "POST":
                 continue
-            if request.get("response_status") != 200 or request.get("error"):
+            if request.get("response_status") != 200:
                 raise ValueError("normal model request failed")
             identities = request.get("response_ids", [])
             if len(identities) != 1:
@@ -276,11 +278,18 @@ def bind_points(
                 )
             if metric["api"] != task["api"]:
                 raise ValueError("client API differs from server metric")
+            if request.get("error") and not completed_transport_close(
+                request, key, task["api"]
+            ):
+                raise ValueError(
+                    "normal model request failed: transport completion differs"
+                )
             points.append(
                 {
                     **metric,
                     "task": task["task_id"],
                     "lane": task["lane"],
+                    "post_terminal_transport_close": bool(request.get("error")),
                     "elapsed_minutes": (
                         metric["processing_started_unix_s"] - measured_start
                     )

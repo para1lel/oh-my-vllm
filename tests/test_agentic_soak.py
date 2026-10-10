@@ -312,7 +312,8 @@ def test_disk_proxy_preserves_wire_bodies_and_stream_identity(tmp_path):
             self.send_header("Content-Type", "text/event-stream")
             self.end_headers()
             self.wfile.write(
-                b'data: {"id":"chatcmpl_test_7","choices":[]}\n\ndata: [DONE]\n\n'
+                b'data: {"id":"chatcmpl_test_7","choices":'
+                b'[{"index":0,"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'
             )
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)

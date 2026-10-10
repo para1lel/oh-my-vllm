@@ -244,6 +244,9 @@ Check released request state, cache limits, host RSS, and GPU allocated/reserved
 Keep the complete memory time series. Investigate continued growth after cache warmup.
 Use a separate fault test to verify worker recovery and invalidation of old logical KV identities.
 
+Record other GPU processes during the soak test. Continue normal collection if request and resource checks pass.
+Run phase latency tests on a GPU with no other processes.
+
 Publish one scatter plot per mode in the README. Use one point per normally completed model request.
 The horizontal axis is the framework processing start time, when request preparation starts.
 The vertical axis is output tokens divided by wall time from processing start to generation completion.

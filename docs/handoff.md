@@ -79,6 +79,13 @@ HTTP stayed alive, the stream reported failure, and one replacement worker compl
 The shared prefix was cold after recovery and hot on its next use. Final request state was empty and all owned processes exited.
 This diagnostic covers one fault stage. Complete two-mode fault, phase, and soak acceptance is pending.
 
+The current CPU suite passed 1047 tests and 99 subtests, with 445 GPU tests deselected.
+Rust workspace tests passed 143 cases. All pre-commit checks passed.
+
+A different agent examined protocol ends, client messages, server metrics, and the 2-second disconnect limit.
+The updated tutorial passed ten excerpt tests and nine browser tests.
+Previous soak collections keep their failure records. New formal collections are pending.
+
 ## Open work
 
 - Verify `REQ-SERVE-006`, `REQ-SERVE-007`, and `REQ-SERVE-008` with current-source resource, allocator-OOM, and long-duration service collections.
