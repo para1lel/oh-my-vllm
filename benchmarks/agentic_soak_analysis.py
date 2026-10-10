@@ -51,7 +51,7 @@ def task_budget(args, phase: str) -> float:
 
 
 def source_citations(answer: str, reads: list[dict]) -> list[dict]:
-    """Bind literal citations to successful reads without rewriting the answer."""
+    """Require read file identities; retain reported ranges as diagnostics."""
     ranges, basenames = {}, {}
     for read in reads:
         path = read["path"]
@@ -81,24 +81,25 @@ def source_citations(answer: str, reads: list[dict]) -> list[dict]:
         name = Path(path).name
         for reference, cited_range in references:
             qualified = reference == path
-            shortened = (
-                reference == name
-                and len(basenames[name]) == 1
-                and cited_range is not None
-                and cited_range in actual_ranges
-            )
-            range_matches = (
-                cited_range is None
-                or None in actual_ranges
-                or cited_range in actual_ranges
-            )
-            if (qualified or shortened) and range_matches:
+            shortened = reference == name and len(basenames[name]) == 1
+            if qualified or shortened:
                 citations.append(
                     {
                         "path": path,
                         "reference": reference,
                         "line_range": list(cited_range) if cited_range else None,
-                        "style": "full_path" if qualified else "unique_basename_range",
+                        "actual_line_ranges": [
+                            list(value) if value else None
+                            for value in sorted(
+                                actual_ranges, key=lambda value: value or (0, 0)
+                            )
+                        ],
+                        "line_range_matches_read": (
+                            cited_range in actual_ranges
+                            if cited_range is not None and None not in actual_ranges
+                            else None
+                        ),
+                        "style": "full_path" if qualified else "unique_basename",
                     }
                 )
                 break

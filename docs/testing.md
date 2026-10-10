@@ -283,6 +283,9 @@ Each mode must complete at least 500 normal model requests and run for at least 
 The four OMP agents use read tools through Chat and Responses. Their forwarded tool results and response IDs must agree.
 A shared four-slot limit controls concurrent model calls. The workload uses reusable prefixes and different input lengths.
 
+The last answer must give the names of the source files that the agent reads.
+Line ranges in the answer are diagnostic records.
+
 Two short warmup epochs precede normal collection. Warmup and intentional probes have separate records.
 Warmup tasks have a 900-second limit. Normal tasks have a 210-second limit.
 `--warmup-task-timeout` and `--task-timeout` set the OMP task and proxy transport limits for each phase.
