@@ -155,8 +155,11 @@ Formal analysis uses the canonical model and official peaks.
 Unidentified operations block acceptance.
 GPU event intervals are diagnostic stream intervals. They can include host submission gaps.
 
-Each phase must have a wall-time median at most three times its theoretical lower-bound median.
+Except for prefix-hit prefill, each phase must have a wall-time median at most three times its theoretical lower-bound median.
 Its wall-time spread must be at most 10%.
+
+Record the prefix-hit prefill latency ratio without a three-times gate.
+Its spread check stays active. Prefix-hit decode keeps the three-times gate.
 Keep complete failures and interrupted attempts. Investigate and run the full set again.
 
 Bind source, binary, checkpoint bytes, CUDA module, hardware, capacities, and runtime packages to the attempt.

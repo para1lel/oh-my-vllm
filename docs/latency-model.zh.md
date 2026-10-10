@@ -141,7 +141,9 @@ Page 复用及其他请求的写入会使旧物理版本失效.
 
 `benchmarks/framework.py` 采集十五项固定负载, 每项完整预热两次并测量五次.
 每次测量都有根据自身 trace 推导的 prefill 和 decode 下界.
-每个阶段须满足 `median(wall) <= 3*median(bound)` 和 `(max(wall)-min(wall))/median(wall) <= 0.10`.
+除 prefix-hit prefill 外, 每个阶段须满足 `median(wall) <= 3*median(bound)`.
+记录 prefix-hit prefill 的倍率和检查结果, 不设时延门槛.
+每个阶段须满足 `(max(wall)-min(wall))/median(wall) <= 0.10`.
 TPS, 接受率, GPU 时间和 cleanup 用于诊断.
 
 采集器检查未变化的已提交源码, 二进制 Rust 构建标记, checkpoint, 已加载 CUDA 模块和稳态 cache 目录树.

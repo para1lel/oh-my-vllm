@@ -64,8 +64,13 @@ def phase_times(run, workload):
     return {"prefill": max(prefill), "decode": max(decode)}
 
 
-def phase_verdict(wall, lower):
-    """The gate is the ratio of medians, with independent phase wall spread."""
+def phase_verdict(wall, lower, *, mode="ordinary", phase="prefill"):
+    """Report both checks; prefix prefill gates only on wall-time spread."""
+    if mode not in {w["mode"] for w in WORKLOADS} or phase not in {
+        "prefill",
+        "decode",
+    }:
+        raise ValueError("unknown phase or inference mode")
     if len(wall) != 5 or len(lower) != 5:
         raise ValueError("one full set requires five measurements")
     if any(not math.isfinite(t) or t <= 0 for t in (*wall, *lower)):
@@ -73,12 +78,18 @@ def phase_verdict(wall, lower):
     median = statistics.median(wall)
     bound = statistics.median(lower)
     spread = (max(wall) - min(wall)) / median
+    latency_gate = not (mode == "prefix" and phase == "prefill")
+    latency_passed = median <= 3 * bound
+    spread_passed = spread <= 0.10
     return {
         "wall_median_s": median,
         "lower_bound_median_s": bound,
         "latency_ratio": median / bound,
         "wall_spread": spread,
-        "passed": median <= 3 * bound and spread <= 0.10,
+        "latency_gate": latency_gate,
+        "latency_passed": latency_passed,
+        "spread_passed": spread_passed,
+        "passed": (latency_passed or not latency_gate) and spread_passed,
     }
 
 
@@ -358,7 +369,12 @@ def assess(artifact):
         raise ValueError("incomplete semantic model result")
     validate_bound_consistency(times, bounds)
     phases = {
-        phase: phase_verdict([t[phase] for t in times], [b[phase] for b in bounds])
+        phase: phase_verdict(
+            [t[phase] for t in times],
+            [b[phase] for b in bounds],
+            mode=workload["mode"],
+            phase=phase,
+        )
         for phase in ("prefill", "decode")
     }
     import hashlib

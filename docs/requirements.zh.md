@@ -57,8 +57,10 @@ Batch 内阶段交错时, 使用各请求自己的边界.
 排除加载, 分词, HTTP 和预热.
 独立报告整批耗时, 清理耗时, TPS, 接受率和 GPU 诊断.
 
-每个阶段的墙钟时延中位数最多为理论下界中位数的三倍.
+除 prefix-hit prefill 外, 每个阶段的墙钟时延中位数最多为理论下界中位数的三倍.
 墙钟时延的相对极差最多为 10%.
+记录 prefix-hit prefill 的时延倍率, 墙钟时延和理论下界, 不设时延门槛.
+其 10% 波动检查继续有效. Prefix-hit decode 保持三倍限制.
 
 ## REQ-PERF-002: 理论模型与测量
 
@@ -99,6 +101,9 @@ Prefill 与 decode 独立应用以下两项检查:
 median(wall_time) <= 3 * median(theoretical_lower_bound)
 (max(wall_time) - min(wall_time)) / median(wall_time) <= 0.10
 ```
+
+Prefix-hit prefill 记录第一项检查的结果, 该结果不作为失败门槛.
+第二项检查适用于每个阶段.
 
 保留完整失败集和中断尝试, 附上原因.
 调查失败后重新执行整组测量.

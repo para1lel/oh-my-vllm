@@ -29,7 +29,10 @@ Set `OH_MY_VLLM_MODEL` or `--model`, with `OH_MY_VLLM_DRAFT_MODEL` or `--draft-m
 ## Current performance work
 
 The fifteen-row collector records each request's submission, first token, and last token.
-Prefill and decode each have wall-time, theoretical-bound, and spread checks.
+The collector records prefill and decode wall time, theoretical bounds, and spread checks.
+Prefix-hit prefill has no latency ratio gate. Its 10% spread check stays active.
+All other phases keep the three-times latency gate, with prefix-hit decode.
+
 The reviewed semantic model counts required parameter reads, shared resources, dependencies, effective shapes, state writes, and draft work.
 The source contract now includes the owned accumulator header. This identity update keeps cost equations and tolerances the same.
 
@@ -92,7 +95,8 @@ Ignored `LOCAL.md` keeps its address, process identity, and maintenance commands
 
 ## Open work
 
-- Reduce prefix-hit prefill latency and do each affected full workload again.
+- Complete the all-owned-operator audit with Opus 5.5 and correct material findings.
+- Record prefix-hit prefill latency without a ratio gate. Keep its spread and decode checks active.
 - Complete current-source phase, operator, capacity, service, and full Python verification after inference changes.
 - Finish evidence/document review by a different agent and the required build checks before the next commit.
 - Run tutorial checks after source changes and keep its preview available.

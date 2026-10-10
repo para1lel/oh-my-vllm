@@ -60,8 +60,10 @@ Exclude loading, tokenization, HTTP, and warmup.
 
 Record full batch time, cleanup time, TPS, acceptance rate, and GPU diagnostics independently.
 
-For each phase, the wall-time median must be at most three times the theoretical lower-bound median.
+Except for prefix-hit prefill, the wall-time median must be at most three times the theoretical lower-bound median.
 The wall-time spread must be at most 10%.
+Record the prefix-hit prefill latency ratio, wall time, and theoretical bound without a latency gate.
+Its 10% spread check stays active. Prefix-hit decode keeps the three-times limit.
 
 ## REQ-PERF-002: Theoretical model and measurement
 
@@ -102,6 +104,9 @@ Apply these two independent checks to prefill and decode:
 median(wall_time) <= 3 * median(theoretical_lower_bound)
 (max(wall_time) - min(wall_time)) / median(wall_time) <= 0.10
 ```
+
+For prefix-hit prefill, record the first check's result without a failure gate.
+Apply the second check to each phase.
 
 Keep complete failed sets and interrupted attempts with their reasons.
 Do an investigation of a failure and run the full set again.

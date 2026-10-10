@@ -160,7 +160,9 @@ The model thus counts mandatory traffic rather than observed kernel traffic.
 
 `benchmarks/framework.py` collects the fifteen fixed workloads with two complete warmups and five measurements.
 Each measurement has its own trace-derived prefill and decode bounds.
-Each phase must satisfy `median(wall) <= 3*median(bound)` and `(max(wall)-min(wall))/median(wall) <= 0.10`.
+Except for prefix-hit prefill, each phase must satisfy `median(wall) <= 3*median(bound)`.
+Record the prefix-hit prefill ratio and check result without a latency gate.
+Each phase must satisfy `(max(wall)-min(wall))/median(wall) <= 0.10`.
 TPS, acceptance rate, GPU time, and cleanup stay diagnostic.
 
 The collector checks unchanged committed source, the binary Rust build stamp, checkpoints, loaded CUDA modules, and steady-state cache trees.

@@ -37,7 +37,7 @@
 <p>每项负载完整预热两次, 正式测量五次. 每次根据实际调度重新计算两个阶段的下界. framework.phase_verdict 对五个墙钟值和五个理论值分别取中位数, 再检查倍率与墙钟波动.</p>
 <<source "measurement" "展开阶段中位数与波动的判定代码">>
 <<math "\\operatorname{median}(T)\\le3\\operatorname{median}(L),\\quad \\frac{\\max(T)-\\min(T)}{\\operatorname{median}(T)}\\le0.10">>
-<p>T 是同一阶段的五个墙钟值, L 是对应的五个理论下界. prefill 与 decode 各自通过这两项条件. 某项失败时, 保存整组记录, 调查后重测完整组. TPS, TTFT 和草稿接受率帮助解释表现; 正式性能结论来自两个阶段的独立判定.</p>
+<p>T 是同一阶段的五个墙钟值, L 是对应的五个理论下界. 普通解码, MTP4 和 DSpark 的 prefill 与 decode 各自检查这两项条件. Prefix-hit prefill 通常只处理较短的未命中尾部, 其耗时和倍率继续报告, 三倍倍率不作为交付门槛; 10% 波动检查仍然有效. Prefix-hit decode 继续检查两项条件. 某项有效门槛失败时, 保存整组记录, 调查后重测完整组. TPS, TTFT 和草稿接受率帮助解释表现.</p>
 <h2>算子调优怎样解释一个失败的阶段</h2>
 <p>development.kernels.observations 将 TileFoundry 的 HIR 计算量, 流量和 roofline 估计与 Nsight 硬件计数器分开记录. 大矩阵检查 Tensor Core 利用率, DRAM 流量, L2 命中率, 寄存器和共享内存占用, occupancy 与 warp stall. occupancy 表示活跃 warp 相对硬件上限的比例, stall 描述当前指令等待数据或资源的原因.</p>
 <p>例如大 GEMM 的 DRAM 使用较高, L2 命中率较低, 可以先测试 tile 遍历和 swizzle 是否减少重复读取. 寄存器溢出则提示部分临时值进入 local memory, 需要检查 tile 和流水资源. 候选实现先检查完整数值与缓存写入, 再做同条件交错计时, 最后检查完整请求和长上下文容量.</p>

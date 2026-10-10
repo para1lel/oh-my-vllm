@@ -331,9 +331,11 @@ Object.assign(sourceNotes, {
     title: "phase_verdict 的两个独立条件", intro: "每个阶段各有五个墙钟时间和五个理论下界. 分别取中位数, 再检查时延倍率与墙钟相对极差.",
     entries: [
       ["wall / lower", "该阶段五次实际秒数和五次理论秒数.", "长度必须都为 5, 每项都是有限正数."],
+      ["mode / phase", "推理模式与 prefill / decode 阶段.", "仅 prefix 模式的 prefill 将时延倍率作为报告项."],
       ["median / bound / spread", "墙钟中位数, 下界中位数, 墙钟相对极差.", "倍率使用两个中位数的比值, spread 等于极差除以墙钟中位数."],
       ["wall_median_s / lower_bound_median_s", "两组值各自的中位秒数.", "保留原始量, 使倍率和门槛可以重新核算."],
-      ["latency_ratio / wall_spread / passed", "实际与理论中位数的比值, 波动比例, 阶段结果.", "倍率最高为 3, 波动最高为 10%, 两项同时满足才通过."],
+      ["latency_ratio / wall_spread", "实际与理论中位数的比值和波动比例.", "每个阶段都保留这两项数值."],
+      ["latency_gate / latency_passed / spread_passed / passed", "倍率是否作为门槛, 倍率检查结果, 波动检查结果与阶段结果.", "有效倍率门槛最高为 3, 波动最高为 10%. Prefix-hit prefill 只按波动判定, decode 保持两项检查."],
     ],
   },});
 

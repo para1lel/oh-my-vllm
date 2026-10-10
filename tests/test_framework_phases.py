@@ -72,6 +72,36 @@ def test_wall_spread_is_a_phase_gate_with_exact_boundary():
         phase_verdict([1] * 4, [1] * 4)
 
 
+@pytest.mark.parametrize("mode", ["ordinary", "mtp4", "prefix", "dspark"])
+@pytest.mark.parametrize("phase", ["prefill", "decode"])
+def test_only_prefix_prefill_reports_ratio_without_a_latency_gate(mode, phase):
+    verdict = phase_verdict([4] * 5, [1] * 5, mode=mode, phase=phase)
+    exempt = mode == "prefix" and phase == "prefill"
+    assert verdict["latency_ratio"] == 4
+    assert not verdict["latency_passed"]
+    assert verdict["latency_gate"] is not exempt
+    assert verdict["spread_passed"]
+    assert verdict["passed"] is exempt
+
+
+def test_prefix_prefill_spread_and_complete_measurement_gates_stay_active():
+    args = {"mode": "prefix", "phase": "prefill"}
+    verdict = phase_verdict([3.7, 4, 4, 4, 4.3], [1] * 5, **args)
+    assert not verdict["latency_gate"]
+    assert not verdict["spread_passed"]
+    assert not verdict["passed"]
+    with pytest.raises(ValueError, match="five"):
+        phase_verdict([4] * 4, [1] * 4, **args)
+    with pytest.raises(ValueError, match="invalid"):
+        phase_verdict([4] * 5, [0] * 5, **args)
+
+
+@pytest.mark.parametrize("args", [{"mode": "unknown"}, {"phase": "cleanup"}])
+def test_unknown_gate_scope_is_rejected(args):
+    with pytest.raises(ValueError, match="unknown"):
+        phase_verdict([4] * 5, [1] * 5, **args)
+
+
 @pytest.mark.parametrize(
     "corruption", ["duplicate", "missing", "last", "partial", "preempt"]
 )

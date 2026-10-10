@@ -89,7 +89,7 @@ export const coverage = [
   ["Compilation", "python/oh_my_vllm/kernels/cuda_backend/__init__.py", "def compiled():", "compiled / factory_for / provenance", "以源码, 编译器和 torch 版本生成缓存摘要, TVM FFI 编译并导出 CUDA 入口. 所有调用使用调用者的 CUDA 流, 记录加载来源和变体计数."],
   ["Compilation", "python/oh_my_vllm/kernels/cuda_backend/kernels.cu", "TVM_FFI", "原生 CUDA 算子与主机入口", "实现量化, 归一化, RoPE/写 KV, 卷积, GDN 和 split-KV 注意力; 采用 warp 归约, 向量读写和形状分派, 并在主机入口检查布局与地址范围."],
   ["Validation", "python/oh_my_vllm/ir/coverage.py", "def check_coverage(", "check_coverage: 模型语义调用清单", "核对模型调用点与已注册操作, 审计低层直接导入例外, 防止某个新模型路径绕过语义层."],
-  ["Validation", "benchmarks/framework.py", "def phase_times(", "逐请求阶段计时与十五项验收", "保留提交, 首末 token 和调度 step, 分别聚合最慢 prefill/decode. 五次墙钟中位数最高为理论中位数的三倍, 波动最高 10%."],
+  ["Validation", "benchmarks/framework.py", "def phase_times(", "逐请求阶段计时与十五项验收", "保留提交, 首末 token 和调度 step, 分别聚合最慢 prefill/decode. 五次墙钟中位数最高为理论中位数的三倍, 波动最高 10%. Prefix-hit prefill 的倍率仅用于报告, 波动检查保持有效."],
   ["Validation", "benchmarks/common.py", "def source_identity(", "运行所有权与源码身份", "固定独立环境与 GPU UUID, 核对实际容量, Rust 构建输入和加载模块. 结束时清理该次进程组."],
   ["Validation", "crates/zmq-worker/build.rs", "fn main()", "Rust 二进制的构建输入摘要", "Cargo 配置, 锁文件和项目 Rust 源码进入 SHA-256. Bench 输出构建时摘要, 收集器与当前源码比较."],
   ["Validation", "python/oh_my_vllm/performance/execution.py", "class ExecutionTrace", "实际 step 的语义执行记录", "记录有效行, KV 长度, 状态地址和接受数量. 已有 token readback 标记已完成工作, CUDA Event 仅作诊断."],
