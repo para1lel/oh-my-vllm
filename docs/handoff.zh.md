@@ -1,60 +1,68 @@
-# 当前状态与开放工作
+# 当前状态与待办
 
-更新日期: 2026-10-10.
+更新时间: 2026-10-10.
 
 ## 实现
 
-Rust 控制服务, 调度和逻辑 KV. Python 控制单张 B200 GPU.
-块大小为 784, 包含 16 层 FA 和 48 层 GDN, 使用 `mamba_cache_mode="align"`.
+Rust 管理服务, 调度和逻辑 KV. Python 管理一块 B200 GPU.
+使用块大小 784, 16 层 FA, 48 层 GDN 和 `mamba_cache_mode="align"`.
 输入与输出的总长度上限为 262144 token.
 
-普通, MTP4 和 DSpark 都在启动时选定模式, worker 保持所选模式.
-Chat, Responses, 流式输出, 工具, thinking 设置, 约束, 取消和前缀复用保持可用.
+普通解码, MTP4 和 DSpark 在启动时选择. Worker 保持所选模式.
+Chat, Responses, streaming, tools, thinking 设置, 约束生成, 取消和前缀复用继续可用.
 
-DSpark 使用保持不变的权重及目标层特征 `(5,19,33,47,61)`.
-Markov proposal 和累计 confidence 选择零到七个候选, 初始阈值为 `0.2`.
-随机接受使用 `min(1,p/q)`, 拒绝后采用归一化的 `max(p-q,0)`, 全部接受后生成目标 bonus.
+DSpark 使用固定权重和 target features `(5,19,33,47,61)`.
+Markov proposal 与累计 confidence 选择零至七个候选. 初始阈值为 `0.2`.
+随机接受使用 `min(1,p/q)`, 拒绝后使用归一化的 `max(p-q,0)`, 全部接受后使用 target bonus.
+DSpark context boundary 测试及其验收要求已删除.
+普通解码和 MTP4 保留 6 个总长度 262144 边界用例.
 
-模型计算使用 CUDA Graph, 多流和 PDL.
-自有 native 构建使用十个算子头, 这些头使用相同的启动和存储检查.
-全部后端代码文件满足 800 行限制, pre-commit 钩子使用 clang-format 23.1.3.
+CUDA Graph, 多 CUDA stream 和 PDL 控制模型执行.
+Native 构建使用 10 个算子头文件. GEMM 构建独立识别其根头文件.
 
-头文件内容进入缓存键, 加载来源, 正式契约和 profiler 检查.
-构建和加载检查拒绝变化的输入, GEMM 构建独立标识其根目录头文件.
+全部后端代码文件满足 800 行上限. Pre-commit 钩子使用 clang-format 23.1.3.
+头文件内容进入缓存 key, 加载 provenance, 正式合同和 profiler 检查.
+构建与加载检查拒绝输入变化.
 
-[架构](architecture.zh.md) 定义所有权与缓存契约.
-[内核开发](kernels.zh.md) 说明模块划分和选定配置.
-[开发指南](development.zh.md) 给出环境与模型配置.
+[架构](architecture.zh.md) 定义所有权和缓存合同.
+[算子开发](kernels.zh.md) 记录模块划分及已选配置.
+[开发](development.zh.md) 记录环境和模型配置.
 
 ## 验证
 
-CPU 测试通过 766 项及 94 个子测试, 未选择 445 项 GPU 测试.
-GPU 测试通过 436 项, 九项最大上下文用例留待后续采集.
-50 条警告来自第三方弃用 API 及编译时循环优化建议.
-Rust workspace 测试, Clippy, 格式, 行宽, Ruff 和文档检查通过.
-教程构建, 十项片段测试和九项浏览器测试通过.
+15 个阶段性能行通过, 每项负载完整预热 2 次, 测量 5 次.
+[README 表格](../README.zh.md#性能实测) 给出 prefill 时延, 下界倍率, decode TPS 及理论百分比.
+Prefix-hit prefill 不设倍率门槛. 波动与 decode 检查通过.
 
-另一名 agent 检查了 CUDA 拆分, 未变化的函数 token, 头文件身份, 加载竞态和格式化.
-修正后的自有算子审计没有发现新的生产缺陷.
-Packed-scale 与流水候选属于诊断实验, 生产配置保持原样.
+317 个正式算子用例在一次完整采集中通过数值及速度检查.
+另一 agent 重算全部轮次中位数及置信下界.
+普通 / MTP4 的 6 个容量用例完整输出, 无 OOM, 重算抢占为零.
+摘要从完整原始日志派生. 较大的失败采集保持原始状态.
+MTP4 和 DSpark 通过 Chat 及 Responses 完成真实 oh-my-pi 工具循环, 正常关闭审计通过.
 
-性能验收前用当前源码完成 GPU, 阶段, 容量和服务采集.
-[验收](acceptance.zh.md) 记录每份证据的实测源码和验证限制.
-之后修改的源码需要重新验收.
+这些采集使用推理源码 `fabcede8c6e0e6e4fa2c90d5d97b1f98d9c7dfdb`.
+最后修改更新边界 collector, 测试, 文档和教程, 推理实现保持不变.
+[验收](acceptance.zh.md) 记录原始哈希, 失败尝试, 审查范围和限制.
 
-## 开放工作
+当前 CPU 测试通过 760 项和 94 个 subtest, 未纳入 442 项 GPU 测试.
+GPU 测试通过 436 项, 该次采集未纳入最大上下文用例.
+Rust workspace 测试, Clippy, 格式化, 行宽, Ruff 和文档检查通过.
+教程构建, 10 项片段测试和 9 项浏览器测试通过.
+全部自有 GPU worker 退出. 临时服务端口释放.
 
-- 重跑全部十五个阶段性能行, 每行两次完整预热和五次测量.
-- Prefix-hit prefill 的倍率仅记录, 保留波动和 decode 检查.
-- 重跑完整算子矩阵及全部九个总长度 262144 用例.
-- 通过两种服务 API 运行真实 oh-my-pi 工具循环, 核对 worker 退出审计.
-- 将实测表发布到 README, 由另一名 agent 完成证据审查.
-- 按 [审计](audit.zh.md) 中的 `PY-04`, 在 262k 显存压力下测试图逐出与重捕获.
-- 证明持续变化形状下的编译存储有界, 并测量 `PY-06` 主机重叠.
+另一 agent 检查 CUDA 拆分, 头文件身份, 加载竞争和格式化工具.
+修正后的 Opus 5.5 审计未新增生产选择.
+Packed-scale 和 pipeline 候选保留为外部诊断.
+[性能分析](profiling.zh.md) 记录已选优化及实测结果.
+
+## 待办
+
+- 按 [审计](audit.zh.md) 的 `PY-04`, 在显存压力下测试图淘汰和重新捕获.
+- 验证形状持续变化时编译器存储有界, 测量 `PY-06` 主机重叠.
 - 完成用户对教程的审阅.
 
 ## 教程预览
 
-按用户要求保留端口 18084 的教程预览.
+按用户要求, 教程预览继续使用端口 18084.
 被忽略的 `LOCAL.md` 记录地址, 进程身份和维护命令.
-英文 Markdown 及完整中文译文说明当前代码, 教程包含十三个完整中文章节.
+英文 Markdown 及完整中文翻译记录当前代码合同. 教程包含 13 个完整中文章节.

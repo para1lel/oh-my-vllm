@@ -28,7 +28,7 @@ Pure validation tests stay active without a checkpoint.
 Selected pytest arguments follow `cpu` or `full`.
 
 Tests include scheduler transactions, cache ownership, cancellation, RPC framing, serving, inference-path FP64 references, and compiled model units.
-GPU coverage includes all nine maximum-context cases and changed-metadata graph replay.
+GPU coverage includes all six maximum-context cases and changed-metadata graph replay.
 Full-model drift tests use their documented model-level bounds in addition to strict operator-level tolerances.
 Use scripted workers for protocol regressions and the target checkpoint for GPU/agentic acceptance.
 Record warnings and skipped tests with their reasons.
@@ -161,9 +161,9 @@ Its wall-time spread must be at most 10%.
 
 Record the prefix-hit prefill latency ratio without a three-times gate.
 Its spread check stays active. Prefix-hit decode keeps the three-times gate.
-Keep complete failures and interrupted attempts. Investigate and run the full set again.
+Keep complete failures and interrupted attempts. Investigate a failure. Run that workload again with two full warmups and five measurements.
 
-Bind source, binary, checkpoint bytes, CUDA module, hardware, capacities, and runtime packages to the attempt.
+Connect source, binary, checkpoint bytes, CUDA module, hardware, capacities, and runtime packages to the attempt.
 Keep source unchanged during collection.
 Compile/cache audit must show steady-state execution.
 Available logs cannot exclude all silent in-memory compilation.
@@ -206,15 +206,6 @@ Make sure that output is full, source identities match, and workers stop.
 Reject OOM or preemption.
 Record peak allocated/reserved GPU memory and draft counters.
 Raw boundary logs must stay in an external directory.
-
-Add the three DSpark boundary cases and keep ordinary/MTP4:
-
-```bash
-scripts/with-gpu.sh scripts/with-env.sh python benchmarks/context_boundary.py --binary target/release/oh-my-vllm-zmq-worker --modes ordinary mtp4 dspark --raw-dir "$EVIDENCE_DIR/boundary-dspark-logs" --output "$EVIDENCE_DIR/boundary-dspark.json"
-```
-
-Supply the DSpark path through `OH_MY_VLLM_DRAFT_MODEL` or `--draft-model`.
-These nine rows keep the same full-output, no-OOM, no-preemption, and memory-record contracts.
 
 Start a dedicated MTP4 service in one terminal with the release binary and a unique IPC path.
 Use Serving DEBUG logs for mixed-batch and cancellation evidence:

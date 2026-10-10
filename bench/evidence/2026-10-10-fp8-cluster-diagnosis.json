@@ -2,7 +2,7 @@
   "schema": 1,
   "kind": "derived",
   "formal_acceptance": false,
-  "scope": "Dirty-source CTA cluster diagnosis and fifteen affected operator cases. Final fifteen phase rows, complete 301 operators, nine capacity cases, and service collections are pending.",
+  "scope": "Dirty-source CTA cluster diagnosis and fifteen affected operator cases. Current-source acceptance has a separate record.",
   "source_commit": "d4e0f1cf736dfecf32a9173a3eef35db4b3f3a48",
   "hardware": {
     "model": "NVIDIA B200",

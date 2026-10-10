@@ -34,6 +34,41 @@ scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --s
 
 See [architecture](docs/architecture.md) for the draft algorithm and target verification.
 
+## Measured performance
+
+These fifteen workloads use source `fabcede8c6e0e6e4fa2c90d5d97b1f98d9c7dfdb` on one B200 per workload.
+Each request keeps 4096 output tokens. Each workload uses two full warmups and five measurements.
+Prefix-hit requests reuse 32144 tokens. Other rows use cold prefixes.
+
+Prefill covers request submission through the first token. Decode covers the first through the last token.
+Each repetition uses the longest request interval for each phase.
+Decode TPS is `4095 * batch / median(decode_wall_seconds)`.
+The theoretical percentage is `100 * median(decode_bound_seconds) / median(decode_wall_seconds)`.
+It gives the measured rate as a percentage of the theoretical maximum rate.
+
+| Mode | Input | Batch | Prefill (s) | Prefill ratio | Decode TPS | Theoretical (%) | Result |
+|---|---:|---:|---:|---:|---:|---:|---|
+| ordinary | 32768 | 1 | 1.268106 | 2.871 | 115.1 | 43.5 | pass |
+| ordinary | 32768 | 2 | 2.555269 | 2.892 | 219.4 | 45.0 | pass |
+| ordinary | 32768 | 4 | 5.224045 | 2.956 | 375.2 | 44.4 | pass |
+| mtp4 | 32768 | 1 | 1.310482 | 2.883 | 395.2 | 45.2 | pass |
+| mtp4 | 32768 | 2 | 2.615408 | 2.877 | 630.4 | 45.5 | pass |
+| mtp4 | 32768 | 4 | 5.328181 | 2.930 | 1010.4 | 43.5 | pass |
+| prefix | 32768 | 1 | 0.037446 | 3.723 | 115.5 | 43.7 | pass |
+| prefix | 32768 | 2 | 0.061593 | 3.062 | 219.7 | 45.0 | pass |
+| prefix | 32768 | 4 | 0.120962 | 3.007 | 399.7 | 47.3 | pass |
+| ordinary | 131072 | 1 | 7.059579 | 2.501 | 104.1 | 48.1 | pass |
+| ordinary | 131072 | 2 | 14.201501 | 2.516 | 166.5 | 48.0 | pass |
+| ordinary | 131072 | 4 | 28.825513 | 2.553 | 219.2 | 44.2 | pass |
+| dspark | 32768 | 1 | 1.279684 | 2.862 | 174.4 | 38.8 | pass |
+| dspark | 32768 | 2 | 2.540217 | 2.841 | 246.0 | 38.8 | pass |
+| dspark | 32768 | 4 | 5.292443 | 2.959 | 430.4 | 41.5 | pass |
+
+
+All active phase gates must pass. Prefix-hit prefill records its ratio without a three-times gate.
+Its 10% spread check and decode gate stay active.
+See [acceptance](docs/acceptance.md) for original hashes, failed attempts, independent review, and verification limits.
+
 ## Read
 
 - [Requirements](docs/requirements.md): scope and acceptance criteria.

@@ -11,7 +11,7 @@ Performance evidence applies to its measured source, as specified in [acceptance
 Status: partial/open, severity P2.
 Graph families use bounded graph caches with shared pools, admission, eviction, free-memory guards, and capture restoration.
 The resident-graph 36k-to 40k transition completed with less than 4 GiB free memory.
-Same-shape 262144 executions also completed without graph eviction or recapture.
+Same-shape 262144 ordinary/MTP4 executions also completed without graph eviction or recapture.
 These probes do not include cross-shape 262k eviction/recapture or all late-capture memory conditions.
 
 A future test must force eviction and recapture with measured memory pressure.
@@ -42,7 +42,7 @@ The log/cache audit cannot exclude silent in-memory recompilation.
 
 Phase, operator, boundary, and service evidence keeps its measured source scope.
 The [acceptance index](acceptance.md) keeps source scope and all original failed records.
-The fifteen-row phase-latency collection is in progress.
+The fifteen-row phase-latency collection passed. See the acceptance index for its source and review scope.
 
 ## Closed finding index
 

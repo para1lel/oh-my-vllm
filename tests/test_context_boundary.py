@@ -1,4 +1,4 @@
-"""REQ-CONTEXT-001: nine real B200 boundary rows and fail-closed evidence checks."""
+"""REQ-CONTEXT-001: six real B200 boundary rows and fail-closed evidence checks."""
 
 import json
 import os
@@ -22,11 +22,7 @@ def _log(batch_size=1, mode="mtp4", **changes):
         "proposed_draft_tokens": 4 if mode != "ordinary" else 0,
         "accepted_draft_tokens": 2 if mode != "ordinary" else 0,
         "verified_draft_tokens": 3 if mode != "ordinary" else 0,
-        "speculative_mode": "dspark"
-        if mode == "dspark"
-        else "mtp"
-        if mode == "mtp4"
-        else "none",
+        "speculative_mode": "mtp" if mode == "mtp4" else "none",
         "elapsed_s": 1.0,
         "output_tps": 123.0,
         "steps": 100,
@@ -77,39 +73,14 @@ def test_boundary_parser_rejects_impossible_peak_memory():
         boundary.validate_row(_log(), 1, "mtp4", 100)
 
 
-@pytest.mark.parametrize(
-    "changes",
-    [
-        {"verified_draft_tokens": 0},
-        {"verified_draft_tokens": 1},
-        {"verified_draft_tokens": None},
-        {"speculative_mode": "mtp"},
-    ],
-)
-def test_dspark_boundary_rejects_unverified_or_wrong_method(changes):
-    with pytest.raises(ValueError):
-        boundary.validate_row(_log(mode="dspark", **changes), 1, "dspark", 256)
+@pytest.mark.parametrize("mode", ["dspark", "invalid"])
+def test_boundary_run_row_rejects_unknown_mode_before_gpu_selection(monkeypatch, mode):
+    def unexpected_gpu_query():
+        pytest.fail("unsupported boundary mode must not select a GPU")
 
-
-def test_dspark_boundary_passes_explicit_draft_checkpoint(monkeypatch):
-    seen = []
-    monkeypatch.setattr(boundary, "hardware_identity", lambda: {"gpu": "GPU-test"})
-    monkeypatch.setattr(
-        boundary,
-        "run_engine",
-        lambda command, **_: seen.extend(command) or _log(mode="dspark"),
-    )
-    row = boundary.run_row(
-        Path("/unused/worker"),
-        1,
-        "dspark",
-        model="target",
-        draft_model="draft",
-        gpu_total_bytes=256,
-    )
-    assert row["verified_draft_tokens"] == 3
-    assert seen[seen.index("--speculative-mode") + 1] == "dspark"
-    assert seen[seen.index("--draft-model") + 1] == "draft"
+    monkeypatch.setattr(boundary, "hardware_identity", unexpected_gpu_query)
+    with pytest.raises(ValueError, match="unknown context-boundary row"):
+        boundary.run_row(Path("/unused/worker"), 1, mode, model="target")
 
 
 def test_boundary_direct_script_import_smoke():
@@ -303,29 +274,20 @@ def test_boundary_collector_rejects_raw_log_dir_inside_repo(monkeypatch, tmp_pat
 @pytest.mark.parametrize("mode", boundary.MODES)
 @pytest.mark.parametrize("batch_size", boundary.BATCH_SIZES)
 def test_max_context_length_262144(mode, batch_size, tmp_path):
-    """Run ordinary/MTP4/DSpark 258048+4096 on the outer UUID-pinned B200."""
+    """Run ordinary/MTP4 258048+4096 on the outer UUID-pinned B200."""
     binary_env = os.environ.get("OH_MY_VLLM_TEST_BINARY")
     assert binary_env, "run GPU boundary cases through scripts/test.sh full"
     binary = Path(binary_env)
     assert binary.is_file(), "scripts/test.sh must build the debug bench binary"
-    options = {}
-    if mode == "dspark":
-        draft = os.environ.get("OH_MY_VLLM_DRAFT_MODEL")
-        if not draft:
-            pytest.skip("DSpark boundary needs OH_MY_VLLM_DRAFT_MODEL")
-        options["draft_model"] = draft
     row = boundary.run_row(
         binary,
         batch_size,
         mode,
         model=os.environ["OH_MY_VLLM_MODEL"],
         raw_dir=tmp_path,
-        **options,
     )
     assert row["output_tokens"] == batch_size * 4096
     assert row["preemptions"] == 0
     assert row["max_reserved_bytes"] > 0
     if mode != "ordinary":
         assert row["proposed_draft_tokens"] > 0
-    if mode == "dspark":
-        assert row["verified_draft_tokens"] > 0

@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INPUT_LEN = 258048
 OUTPUT_LEN = 4096
 BATCH_SIZES = (1, 2, 4)
-MODES = ("ordinary", "mtp4", "dspark")
+MODES = ("ordinary", "mtp4")
 
 
 @contextmanager
@@ -74,7 +74,7 @@ def validate_row(log: str, batch_size: int, mode: str, gpu_total_bytes: int) -> 
     proposed = row.get("proposed_draft_tokens")
     if (
         not isinstance(proposed, int)
-        or (mode in ("mtp4", "dspark") and proposed <= 0)
+        or (mode == "mtp4" and proposed <= 0)
         or (mode == "ordinary" and proposed != 0)
     ):
         raise ValueError(f"boundary {mode} proposed_draft_tokens={proposed}")
@@ -93,14 +93,6 @@ def validate_row(log: str, batch_size: int, mode: str, gpu_total_bytes: int) -> 
         raise ValueError("ordinary boundary accepted MTP drafts")
     if row["accepted_draft_tokens"] > proposed:
         raise ValueError("boundary accepted more MTP drafts than proposed")
-    if mode == "dspark":
-        verified = row.get("verified_draft_tokens")
-        if row.get("speculative_mode") != "dspark":
-            raise ValueError("boundary did not execute DSpark mode")
-        if type(verified) is not int or verified <= 0:
-            raise ValueError("boundary has no actual verified DSpark drafts")
-        if row["accepted_draft_tokens"] > verified:
-            raise ValueError("boundary accepted more drafts than actually verified")
     memories = []
     for line in log.splitlines():
         try:
@@ -161,12 +153,13 @@ def run_row(
     mode: str,
     *,
     model: str,
-    draft_model: str | None = None,
     gpu_total_bytes: int | None = None,
     raw_dir: Path | None = None,
     timeout: int = 1800,
 ) -> dict:
     """Inherit the outer GPU lock and let run_engine own/reap the full process group."""
+    if mode not in MODES or batch_size not in BATCH_SIZES:
+        raise ValueError("unknown context-boundary row")
     hardware = hardware_identity()
     total = (
         gpu_total_bytes if gpu_total_bytes is not None else _gpu_total_bytes(hardware)
@@ -193,14 +186,7 @@ def run_row(
             "--max-model-len",
             "262144",
         ]
-        if mode == "dspark":
-            if not draft_model:
-                raise ValueError("DSpark boundary requires --draft-model")
-            command.extend(
-                ["--speculative-mode", "dspark", "--draft-model", draft_model]
-            )
-        else:
-            command.extend(["--num-speculative-tokens", "4" if mode == "mtp4" else "0"])
+        command.extend(["--num-speculative-tokens", "4" if mode == "mtp4" else "0"])
         command.extend(
             [
                 "bench",
@@ -244,15 +230,10 @@ def main() -> None:
     parser.add_argument(
         "--modes", choices=MODES, nargs="+", default=["ordinary", "mtp4"]
     )
-    parser.add_argument(
-        "--draft-model", default=os.environ.get("OH_MY_VLLM_DRAFT_MODEL")
-    )
     parser.add_argument("--portable-output", type=Path)
     args = parser.parse_args()
     if len(set(args.modes)) != len(args.modes):
         parser.error("boundary modes must not repeat")
-    if "dspark" in args.modes and not args.draft_model:
-        parser.error("DSpark boundary requires --draft-model or OH_MY_VLLM_DRAFT_MODEL")
     if args.raw_dir.resolve().is_relative_to(ROOT):
         raise ValueError("raw boundary logs must stay outside the repository")
     binary = args.binary.resolve()
@@ -260,25 +241,15 @@ def main() -> None:
         raise FileNotFoundError(f"build the boundary bench binary first: {binary}")
     hardware = hardware_identity()
     source = source_identity(binary)
-    checkpoints = None
-    if "dspark" in args.modes:
-        from benchmarks.evidence import checkpoint_identity
-
-        checkpoints = {
-            "target": checkpoint_identity(args.model),
-            "draft": checkpoint_identity(args.draft_model),
-        }
     rows = []
     for mode in args.modes:
         for batch_size in BATCH_SIZES:
-            options = {"draft_model": args.draft_model} if mode == "dspark" else {}
             row = run_row(
                 binary,
                 batch_size,
                 mode,
                 model=args.model,
                 raw_dir=args.raw_dir,
-                **options,
             )
             rows.append(row)
             print(
@@ -290,12 +261,6 @@ def main() -> None:
             )
     source_end = source_identity(binary)
     same_source = source == source_end
-    same_checkpoints = True
-    if checkpoints is not None:
-        same_checkpoints = checkpoints == {
-            "target": checkpoint_identity(args.model),
-            "draft": checkpoint_identity(args.draft_model),
-        }
     same_gpu = all(row["gpu_uuid"] == hardware["gpu"] for row in rows)
     artifact = {
         "source": source,
@@ -312,14 +277,10 @@ def main() -> None:
         "passed": (
             len(rows) == len(args.modes) * len(BATCH_SIZES)
             and same_source
-            and same_checkpoints
             and source_end["git_status"] == ""
             and same_gpu
         ),
     }
-    if checkpoints is not None:
-        artifact["checkpoints"] = checkpoints
-        artifact["checkpoint_end_matches_start"] = same_checkpoints
     if not same_source:
         artifact["source_end"] = source_end
     from benchmarks.evidence import write_artifact

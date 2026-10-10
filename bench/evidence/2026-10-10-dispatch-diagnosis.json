@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "kind": "derived",
-  "scope": "Dirty-source operator diagnosis and three DSpark capacity checks. The complete current-source framework, operator, and service collections stay pending.",
+  "scope": "Dirty-source operator diagnosis. Current-source acceptance has a separate record.",
   "formal_acceptance": false,
   "source_commit": "c56ca403e109ac44401004c6acb005f73bdc3a23",
   "small_projection": {
@@ -810,56 +810,6 @@
       }
     ]
   },
-  "dspark_capacity": {
-    "scope": "Three dirty-source cases after the32GiB prefill capture guard. Source is from before subsequent small-row and swizzle changes; no final-nine-case claim.",
-    "rows": [
-      {
-        "batch_size": 1,
-        "input_len": 258048,
-        "output_len": 4096,
-        "output_tokens": 4096,
-        "elapsed_s": 214.388226598,
-        "preemptions": 0,
-        "proposed_draft_tokens": 4585,
-        "verified_draft_tokens": 4585,
-        "accepted_draft_tokens": 2769,
-        "max_allocated_bytes": 152574575104,
-        "max_reserved_bytes": 183721000960,
-        "cuda_source_sha256": "446c53dcd196cedbeb44e49576df07e4fcf2279283eb80cc1e5455676aca3896",
-        "gemm_source_sha256": "bb7b372e6b554a127d86599ddd3bfe7fc44e2fb5e087adc328f3558c2e9370c2"
-      },
-      {
-        "batch_size": 2,
-        "input_len": 258048,
-        "output_len": 4096,
-        "output_tokens": 8192,
-        "elapsed_s": 273.368122721,
-        "preemptions": 0,
-        "proposed_draft_tokens": 12785,
-        "verified_draft_tokens": 12785,
-        "accepted_draft_tokens": 6171,
-        "max_allocated_bytes": 151112600064,
-        "max_reserved_bytes": 187613315072,
-        "cuda_source_sha256": "446c53dcd196cedbeb44e49576df07e4fcf2279283eb80cc1e5455676aca3896",
-        "gemm_source_sha256": "bb7b372e6b554a127d86599ddd3bfe7fc44e2fb5e087adc328f3558c2e9370c2"
-      },
-      {
-        "batch_size": 4,
-        "input_len": 258048,
-        "output_len": 4096,
-        "output_tokens": 16384,
-        "elapsed_s": 399.284399311,
-        "preemptions": 0,
-        "proposed_draft_tokens": 29946,
-        "verified_draft_tokens": 29946,
-        "accepted_draft_tokens": 10300,
-        "max_allocated_bytes": 153111254016,
-        "max_reserved_bytes": 187630092288,
-        "cuda_source_sha256": "446c53dcd196cedbeb44e49576df07e4fcf2279283eb80cc1e5455676aca3896",
-        "gemm_source_sha256": "bb7b372e6b554a127d86599ddd3bfe7fc44e2fb5e087adc328f3558c2e9370c2"
-      }
-    ]
-  },
   "prefix_graph_profile": {
     "scope": "Separate Nsight Systems node-trace replay; sums can overlap and do not give phase critical-path time.",
     "input_len": 32768,
@@ -898,18 +848,6 @@
     {
       "name": "fp8-gateup-sw16-profile01-16.csv",
       "sha256": "4a30785eb040702348b5ca3a53941518948d9b658c69dea000d80725d98b277a"
-    },
-    {
-      "name": "gpu-headroom32-dspark02-temp/test_max_context_length_2621440/dspark-1.log",
-      "sha256": "1453a28fd1be05b75356792f1f6457ee340ce491f47dd150cc2a3f40098de6da"
-    },
-    {
-      "name": "gpu-headroom32-dspark02-temp/test_max_context_length_2621441/dspark-2.log",
-      "sha256": "3870c56d556ab55d72ec925ca4eaae0ae6523dc6e824699a3cca72e6efbf8e1e"
-    },
-    {
-      "name": "gpu-headroom32-dspark02-temp/test_max_context_length_2621442/dspark-4.log",
-      "sha256": "843d4fd8c46e78f75af933bf9e9395cc8178e8aa0cb6e0e5106726d6b5e3999d"
     },
     {
       "name": "gpu-headroom32-dspark02.log",

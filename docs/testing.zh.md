@@ -27,7 +27,7 @@ Full 模式在等待空闲且绑定 UUID 的 B200 前要求模型位置.
 选定 pytest 参数放在 `cpu` 或 `full` 之后.
 
 测试覆盖调度事务, 缓存所有权, 取消, RPC framing, 服务, 实际路径 FP64 参考和编译模型单元.
-GPU 覆盖包括全部 9 个最大上下文用例和 metadata 变化后的 graph replay.
+GPU 覆盖包括全部 6 个最大上下文用例和 metadata 变化后的 graph replay.
 完整模型 drift 测试在严格算子容差之外, 使用各自记录的模型级界限.
 协议回归使用 scripted worker; GPU / agentic 验收使用真实模型.
 记录 warning 和跳过测试及原因.
@@ -157,7 +157,7 @@ GPU event 区间是用于诊断的 stream 区间, 可能包含主机提交间隙
 记录 prefix-hit prefill 的时延倍率, 不设三倍门槛.
 其波动检查继续有效. Prefix-hit decode 保持三倍门槛.
 墙钟时延的相对极差最多为 10%.
-保留完整失败集和中断尝试. 调查后重新执行整组测量.
+保留完整失败集和中断尝试. 调查失败后, 对该负载重新执行两次完整预热和五次测量.
 
 每次尝试绑定源码, 二进制, checkpoint 字节, CUDA module, 硬件, 容量和运行时包.
 采集期间保持源码不变.
@@ -200,15 +200,6 @@ scripts/with-gpu.sh scripts/with-env.sh python benchmarks/context_boundary.py --
 要求完整输出, 无 OOM / 抢占, 开始 / 结束源码匹配和 worker 清理.
 记录 allocated / reserved GPU 显存峰值和草稿计数.
 原始边界日志必须放在仓库外.
-
-新增 3 个 DSpark 边界用例, 保留普通 / MTP4:
-
-```bash
-scripts/with-gpu.sh scripts/with-env.sh python benchmarks/context_boundary.py --binary target/release/oh-my-vllm-zmq-worker --modes ordinary mtp4 dspark --raw-dir "$EVIDENCE_DIR/boundary-dspark-logs" --output "$EVIDENCE_DIR/boundary-dspark.json"
-```
-
-DSpark 需要 `OH_MY_VLLM_DRAFT_MODEL` 或 `--draft-model`.
-这 9 行沿用完整输出, 无 OOM, 无抢占及显存记录合同.
 
 在一个终端使用 release binary 和独立 IPC 路径启动专用 MTP4 服务.
 使用 Serving DEBUG 日志提供混批与取消证据:

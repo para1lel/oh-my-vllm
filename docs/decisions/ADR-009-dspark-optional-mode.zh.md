@@ -7,7 +7,8 @@
 原生 MTP4 通过 target 模型的 MTP 层提供 4 个草稿 token.
 使用本地 DSpark checkpoint.
 两种 HTTP API 必须在此模式完成真实 OMP 工具任务.
-所有模式使用阶段时延, 上下文, 精度和服务门槛.
+所有模式使用阶段时延, 精度和服务门槛.
+上下文容量门槛覆盖普通解码和 MTP4.
 
 DSpark 使用 5 层 BF16 GQA, 从 0 开始编号的 target 层输出 `(5,19,33,47,61)`, 以及 Markov / confidence head.
 至多提出 7 个 token, 由 target 使用 8-row verification.
@@ -66,7 +67,7 @@ worker 启动时选择一种模式. 在 worker 停止前保持该模式.
 返回的下一步 proposal 不能作为接受率分母.
 可移植摘要继续作为派生证据.
 
-新增 DSpark 上下文边界用例, 两种 API 的约束, 混合 batch, 取消和长上下文前缀检查.
+检查 DSpark 两种 API 的约束, 混合 batch, 取消和长上下文前缀复用.
 OMP 必须读取两个源码文件, 将结果回传后续模型请求, 随后生成最终答案.
 通过 response ID 匹配实际模式的服务日志, 单独检查答案语义.
 

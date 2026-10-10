@@ -7,7 +7,8 @@ Status: active. The [acceptance index](../acceptance.md) gives measured source i
 Native MTP4 supplies four draft tokens through the target model's MTP layer.
 Use the local DSpark checkpoint.
 The two HTTP APIs must complete OMP tool tasks with the target checkpoint in this mode.
-All modes use the phase-latency, context, accuracy, and service gates.
+All modes use the phase-latency, accuracy, and service gates.
+Context capacity gates cover ordinary decoding and MTP4.
 
 DSpark uses five BF16 GQA layers, zero-based target layer outputs `(5,19,33,47,61)`, and Markov/confidence heads.
 It proposes at most seven tokens for eight-row target verification.
@@ -26,7 +27,7 @@ Add explicit worker modes `none`, `mtp`, and `dspark`.
 Keep the legacy zero/four-token CLI behavior.
 Supply the DSpark checkpoint path through `OH_MY_VLLM_DRAFT_MODEL` or `--draft-model`.
 Validate the fixed architecture and all BF16 tensor names/shapes before execution.
-Bind loaded tensors to stable configuration/weight file hashes.
+Connect loaded tensors to stable configuration/weight file hashes.
 
 Rust keeps scheduling, allocation, prefix reuse, and rollback.
 Python calculates target features and DSpark proposals through project-owned model and IR code.
@@ -66,7 +67,7 @@ Record scheduled draft counts, accepted counts, compile/capture audit, capacitie
 Returned next-step proposals cannot supply the acceptance-rate denominator.
 Portable summaries stay derived evidence.
 
-Add DSpark context boundary cases, two-API constraints, mixed batches, cancellation, and long-context prefix checks.
+Check DSpark two-API constraints, mixed batches, cancellation, and long-context prefix reuse.
 OMP must read two source files and forward their results into a subsequent model request before its last answer.
 Compare response IDs with active-mode server logs and examine answer meaning after the automated checks.
 

@@ -3,7 +3,7 @@
   "kind": "derived",
   "formal_acceptance": false,
   "source_commit": "d95be7732879384640a1d12f54954a6a98e42a9b",
-  "scope": "Dirty-source gated RMS/FP8 fusion diagnosis and sixteen affected full-operation cases. Current fifteen phase rows, full 317 operators, nine capacity cases, and service collections stay pending.",
+  "scope": "Dirty-source gated RMS/FP8 fusion diagnosis and sixteen affected full-operation cases. Current-source acceptance has a separate record.",
   "hardware": {
     "model": "NVIDIA B200",
     "driver": "590.48.01",

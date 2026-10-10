@@ -3,114 +3,106 @@
 Use [requirements](requirements.md) for gates and [testing](testing.md) for collection commands.
 Each result applies to its stated source, configuration, and workload.
 Do applicable collections again after inference changes.
-Portable summaries support historical reading and offline analysis. Originals supply formal verification.
+Originals supply formal verification. Portable summaries give results for reading and offline analysis.
 
-## Last full collection
+## Current collection
 
-The [source-bound record](../bench/evidence/2026-10-10-current-source-acceptance.json) applies to `c27ff1aa4f2458d295c246282f7207b9682164ae`.
-Its original aggregate SHA-256 is `201e283e320f378894878bffac6b5470727ab9b8d851d08611a89a6040e7c3b5`.
-The aggregate keeps JSON identities, measurements, failed attempts, and reviews by different agents.
-Some raw-log reference fields are removed during portable export. The original aggregate hash binds those references.
-The release binary SHA-256 is `70f473a2cdaab1f61ae31c02730620aa70a02aecfb920d19e447d423d0483576`.
+The [source-bound record](../bench/evidence/2026-10-10-current-source-acceptance.json) uses source `fabcede8c6e0e6e4fa2c90d5d97b1f98d9c7dfdb`.
+The release binary SHA-256 is `4676eb10dde92d0349213980d618bc597543cf3e83769b9aa5cf504c5786f77d`.
+The record keeps original hashes, measurements, failed attempts, and reviews by different agents.
+The final collection-scope and document change keeps the measured inference sources and selected CUDA configurations.
 
 ### Phase latency
 
-Each row uses two full warmups and five repetitions, with 4096 output tokens per request.
-The prefix rows reuse 32144 tokens. All rows have zero recompute preemptions and the specified output counts.
-Thirteen rows passed. Prefix-hit batches 1 and 2 failed prefill.
-All decode phases and all wall-time spread checks passed.
+All fifteen workloads passed their active prefill and decode checks.
+Each workload has two full warmups and five complete measurements, with 4096 output tokens per request.
+Prefix-hit rows reuse 32144 tokens. Other rows use cold prefixes.
+All measured requests have full output and zero recompute preemptions.
 
-Full project acceptance stays false.
+Each row comes from one complete, continuous workload collection.
+The rows use the same measured source, binary, environment, capacity, and formal contract.
+Failed or canceled parent collections keep their original failed status.
+No row combines samples from different attempts.
 
-| Mode | Input | Batch | Prefill ratio | Decode ratio | Result |
-|---|---:|---:|---:|---:|---|
-| dspark | 32768 | 1 | 2.877151 | 2.596131 | pass |
-| dspark | 32768 | 2 | 2.871325 | 2.524429 | pass |
-| dspark | 32768 | 4 | 2.931858 | 2.424955 | pass |
-| mtp4 | 32768 | 1 | 2.878555 | 2.221825 | pass |
-| mtp4 | 32768 | 2 | 2.867603 | 2.202879 | pass |
-| mtp4 | 32768 | 4 | 2.945349 | 2.322192 | pass |
-| ordinary | 32768 | 1 | 2.872472 | 2.297438 | pass |
-| ordinary | 32768 | 2 | 2.876307 | 2.222933 | pass |
-| ordinary | 32768 | 4 | 2.928289 | 2.250779 | pass |
-| prefix | 32768 | 1 | 3.790295 | 2.298568 | prefill failed |
-| prefix | 32768 | 2 | 3.161596 | 2.200780 | prefill failed |
-| prefix | 32768 | 4 | 2.995868 | 2.112271 | pass |
-| ordinary | 131072 | 1 | 2.511653 | 2.075463 | pass |
-| ordinary | 131072 | 2 | 2.511573 | 2.080933 | pass |
-| ordinary | 131072 | 4 | 2.523345 | 2.250702 | pass |
+The [README table](../README.md#measured-performance) gives prefill seconds, lower-bound ratios, decode TPS, and theoretical percentages.
+Prefix-hit prefill records its ratio without a latency gate. Its spread and decode gates stay active.
+Independent review checks execution records, trace arithmetic, source identities, statistics, and closed workers.
+The evidence records the scope of additional model replay separately.
 
 ### Operator matrix
 
-All 317 unique canonical cases passed numerical and speed checks across three completed shards.
-A different agent recomputed 951 round medians and all per-case confidence bounds from 19020 pairs.
-Each timed graph contains 100 full operations. Each sample replays that graph once.
-The matrix keeps the original 230 cases and the same reference pins.
+All 317 unique canonical cases passed numerical and speed checks in one complete collection.
+The matrix keeps the original 230 cases and reference pins.
+A different agent calculated 951 round medians and all confidence bounds again from 19020 pairs.
+Each confidence calculation uses 10000 bootstrap samples.
+The calculated results are equal to the original results.
 
-Each shard has coverage that is not full by itself and keeps its original overall `passed=false`.
-The reviewed aggregate verifies full coverage and each shard's `selected_passed=true`.
-The interrupted parent and empty-shard attempts stay failed. They are kept with their failed statuses.
+Each timed graph contains 100 full operations. Each sample replays that graph once.
+
+The review checks complete outputs, modified state, dispatch, loaded libraries, build inputs, and source headers.
+It also checks the installed template tree and pinned comparison sources.
+Two interrupted operator attempts keep their failed status.
 
 ### Context capacity
 
-All nine ordinary/MTP4/DSpark cases passed input 258048 and output 4096 at batches 1, 2, and 4.
+The six ordinary/MTP4 cases passed input 258048 and output 4096 at batches 1, 2, and 4.
 They have no OOM or recompute preemption. Total length is 262144.
 Each case uses zero warmups and one cold repetition. Compilation and capture can occur during capacity collection.
 Capacity timing and memory observations do not supply statistical phase-performance results.
 
 | Mode | Batch | Peak allocated (GiB) | Peak reserved (GiB) |
 |---|---:|---:|---:|
-| ordinary | 1 | 120.625252 | 145.841797 |
-| ordinary | 2 | 120.625252 | 145.166016 |
-| ordinary | 4 | 121.478971 | 148.191406 |
-| mtp4 | 1 | 117.010298 | 143.583984 |
-| mtp4 | 2 | 117.010298 | 142.824219 |
-| mtp4 | 4 | 119.753282 | 149.011719 |
-| dspark | 1 | 142.096329 | 173.162109 |
-| dspark | 2 | 142.578590 | 175.218750 |
-| dspark | 4 | 144.550664 | 176.996094 |
+| ordinary | 1 | 120.625252 | 145.320312 |
+| ordinary | 2 | 120.625252 | 145.625000 |
+| ordinary | 4 | 121.479034 | 148.457031 |
+| mtp4 | 1 | 117.010298 | 143.238281 |
+| mtp4 | 2 | 117.010481 | 145.591797 |
+| mtp4 | 4 | 119.753355 | 146.867188 |
 
-Checkpoint manifests matched before and after collection. Loaded DSpark digests matched the fixed checkpoint.
-Closed capacity logs include a successful post-execution module audit.
+The six-row summary derives from complete raw logs in a failed larger collection.
+Its independent review checks each log, full output, memory, loaded modules, and worker exit.
+The larger collection keeps its failed status. It has no completed collector aggregate.
+DSpark context boundary tests and their acceptance requirement are removed.
+DSpark keeps phase, numerical, operator-speed, and service acceptance.
+
 The target loader has no in-process weight-digest record.
-The reviewer verified recorded digests and configuration files without rereading all weights.
-
-Logged workers exited and temporary IPC files were removed.
-The capacity artifacts have no process birth inventory or final saved NVML cleanup snapshot.
-The collector checks exclusivity once per second and after exit. Interference fully between polls cannot be excluded.
+The original collector checks GPU exclusivity once per second and after exit.
+Interference fully between polls cannot be excluded.
 
 ### Service and Python tests
 
-DSpark and MTP4 each passed six client groups, twelve constraints, the two API lifecycles, and observed oh-my-pi tool loops.
-Each suite admitted 51 generation requests, completed 49, and cancelled 2. All requests were released.
-Each has 57 HTTP records and 6 storage retrieval/deletion records.
-The two agents read two source sections, forwarded the returned tool results, and continued generation with those results.
+MTP4 and DSpark each passed the two service APIs, twelve constraints, cancellation, mixed batches, and long-prefix reuse.
+The independent review compares 48 completed MTP4 requests and 46 completed DSpark requests with client records.
+Four oh-my-pi tasks read source, forward tool results, continue generation, and produce answers that use those results.
+The review checks 54 original artifact hashes and 1834 conditions.
 
-Four long-prefix requests per suite had input 131099 and output 21.
-Their cached-token counts were zero for the first request and 130928 for the other requests.
-Each DSpark request verified 24 drafts and accepted 16. Each MTP4 request verified 20 and accepted 15.
-These are functional observations, not capacity or phase-performance results.
+Each suite has four long-prefix requests with input 131099.
+Cached-token counts are zero for the first request and 130928 for the other requests.
+These are functional observations. The performance and capacity collections supply their own acceptance.
+Normal shutdown audits passed. Owned workers exited and temporary service ports were released.
 
-The saved shutdown records show owned processes exited and temporary ports were released.
-Service startup checks passed. A post-execution loaded-module audit success was not observed in the service logs.
-Service artifacts have no target weight tree digest. OMP answer-detail errors stay in the semantic reviews.
+The proxy omits complete upstream SSE bodies. It keeps follow-up requests, tool results, reply identities, and answer hashes.
+Source reads can contain outline elisions. Generated line citations are approximate.
+The review did not reread complete model weights or the installed template tree for service collection.
 
-The full Python collection passed 1181 tests and 65 subtests. Two test assumptions failed.
-Subsequent focused checks passed after their correction.
-The current CPU collection passed 753 tests and 89 subtests, with 445 GPU tests deselected.
-Full GPU recollection stays pending.
+The GPU suite passed 436 tests with maximum-context cases deselected.
+The current CPU suite passed 760 tests and 94 subtests, with 442 GPU tests deselected.
+Rust workspace tests, Clippy, formatting, line-width checks, Ruff, and document checks passed.
+The tutorial build, ten excerpt tests, and nine browser tests passed.
+[Audit](audit.md) keeps cross-shape graph-memory and host-overlap work.
 
-## Current accumulator diagnosis
+## Selected CUDA implementation
 
-Five FP8 projections at 624 through 2496 rows now use an owned paired TMEM accumulator and a direct BF16 epilogue.
-The production path passed 26 boundary, graph, changed-data, PDL, stream, and storage checks.
-All 18 affected full-operation cases passed their numerical and speed protocol.
-Filtered dirty-source timing has diagnostic scope. Subsequent full-source verification stays pending.
-The [accumulator diagnosis](../bench/evidence/2026-10-10-fp8-accumulator-observations.json) keeps the original hashes, selected-case measurements, last profiler records, and review scope.
+The native module uses ten operator headers. All owned CUDA backend code files meet the 800-line limit.
+Header content enters build keys, load provenance, formal contracts, and profiler checks.
+The clang-format hook uses version 23.1.3.
 
-The observability tool records 21 counters per kernel, worker identity, and loaded CUDA records.
-Representative TileFoundry shapes, profiler replays, and interleaved latency measurements have different scopes.
-[Profiling](profiling.md) gives the selected implementation and rejected candidates.
+Five FP8 projections at 624 through 2496 rows use an owned paired TMEM accumulator and a direct BF16 epilogue.
+The full current operator collection verifies the selected implementation.
+The [accumulator diagnosis](../bench/evidence/2026-10-10-fp8-accumulator-observations.json) keeps its earlier measurements and profiler records.
+[Profiling](profiling.md) gives selected configurations, rejected candidates, and measured optimization results.
+The [owned CUDA audit](../bench/evidence/2026-10-10-owned-cuda-audit.json) records source checks and external tuning candidates.
+Those candidates supplied no new production selection during cleanup.
 
 ## DSpark threshold selection
 

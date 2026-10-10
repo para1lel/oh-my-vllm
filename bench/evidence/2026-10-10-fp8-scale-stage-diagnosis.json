@@ -2,7 +2,7 @@
   "schema": 1,
   "kind": "derived",
   "formal_acceptance": false,
-  "scope": "Dirty-source stage/scale diagnosis and four complete-operation cases. Final fifteen phase rows, complete 301 operators, nine capacity cases, and services are pending.",
+  "scope": "Dirty-source stage/scale diagnosis and four complete-operation cases. Current-source acceptance has a separate record.",
   "source_commit": "8d7d18b50462baa4a540a3ee362ff57f070bb512",
   "hardware": {
     "model": "NVIDIA B200",

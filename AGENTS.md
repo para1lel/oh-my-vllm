@@ -10,7 +10,7 @@ Keep all existing features and numerical tolerances.
 - Keep the production block size at 784 tokens.
 - Keep 16 FA layers and 48 GDN layers with `mamba_cache_mode="align"`.
 - Support 262144 total input and output tokens.
-- Keep ordinary, MTP4, and DSpark boundary tests at batches 1, 2, and 4 free of OOM and recompute preemption.
+- Keep ordinary and MTP4 boundary tests at batches 1, 2, and 4 free of OOM and recompute preemption.
 - Keep each active criterion in [requirements](docs/requirements.md).
 - Keep project builds, tests, and inference free of vLLM dependencies code, environments, and build caches.
 - Use CUDA for project kernels. Keep the pinned TileLang comparison.
@@ -51,7 +51,7 @@ Record that exception in `LOCAL.md` and its purpose in the handoff.
 3. Read [handoff](docs/handoff.md) and applicable directory rules.
 4. Read the task guides in this table.
 5. Make the authorized changes and applicable tests.
-6. Start an review by another sub-agent after each milestone.
+6. Start a review by another sub-agent after each milestone.
 7. Correct correctness, performance, and engineering findings before the commit.
 8. Update the handoff with results, verification limits, and open work.
 9. Stage only intentional paths.

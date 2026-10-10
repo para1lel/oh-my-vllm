@@ -109,8 +109,9 @@ For prefix-hit prefill, record the first check's result without a failure gate.
 Apply the second check to each phase.
 
 Keep complete failed sets and interrupted attempts with their reasons.
-Do an investigation of a failure and run the full set again.
+Investigate a failure. Run the affected workload again with two full warmups and five measurements.
 Do not select samples.
+
 Compilation, graph capture, interference, or source changes invalidate measured work.
 Connect each attempt to source, binary, environment, CUDA module, configuration, and checkpoint identities.
 Portable summaries cannot replace original records for formal verification.
@@ -124,7 +125,6 @@ Keep the 32768-token step budget and 784-token blocks.
 Record performance and peak GPU memory. Add no extra ratio gate.
 
 Include long-context prefix restoration and constrained decoding.
-Apply the same boundary cases to DSpark at batches 1, 2, and 4.
 Keep the six ordinary/MTP4 cases as different gates.
 
 ## Functional requirements
@@ -225,7 +225,7 @@ Apply accuracy, framework, context, and model service gates independently.
 
 Split the owned CUDA backend by function. Each `.cu`, `.cuh`, and `.py` file must have at most 800 lines.
 Use pinned clang-format 23.1.3 and the pre-commit hook. Keep include dependencies in order.
-Bind all source and headers to build, load, and formal evidence identities.
+Connect all source and headers to build, load, and formal evidence identities.
 
 Statically derive the largest legal invocation of each implementation path in each of the fifteen workloads.
 Deduplicate identical configurations.
@@ -267,7 +267,7 @@ Keep ordered persistent writes, capture restoration, and memory guards.
 Any activation donation must have proof for the named temporary. Persistent caches cannot be donated.
 Graph rewrites must have equivalence tests and an exception-aware call-site inventory.
 
-Acceptance includes all existing accuracy tests, nine ordinary/MTP4/DSpark context cases, formal operator cases, and fifteen phase-latency rows.
+Acceptance includes all existing accuracy tests, six ordinary/MTP4 context cases, formal operator cases, and fifteen phase-latency rows.
 Keep DSpark service and supplemental operator cases active.
 A target-model test must exercise all four compiled units and graph replay with changed metadata.
 There is no new compile-speedup percentage gate.

@@ -3,7 +3,7 @@
   "kind": "derived",
   "formal_acceptance": false,
   "source_commit": "9c336e99d816da72d5b5c87d6b031260371ca86e",
-  "scope": "Large MN gate/up tile and aligned-admission diagnosis. The final fifteen phase rows, full317 operator matrix, nine capacity cases, and service collections remain pending.",
+  "scope": "Large MN gate/up tile and aligned-admission diagnosis. Current-source acceptance has a separate record.",
   "hardware": {
     "model": "NVIDIA B200",
     "driver": "590.48.01",

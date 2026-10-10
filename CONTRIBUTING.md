@@ -28,7 +28,7 @@ Keep temporary tuning and raw traces in an external directory.
 
 ## Review and checks
 
-Start an review by another sub-agent after each milestone.
+Start a review by another sub-agent after each milestone.
 Correct its correctness, performance, and engineering findings before the commit.
 Complete the required [checks](AGENTS.md#required-checks) and applicable [tests](docs/testing.md).
 Use `scripts/with-env.sh` for environment selection.

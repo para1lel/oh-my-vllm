@@ -293,8 +293,8 @@ Sixteen-output ordinary prefill ratios were about 2.897 and 2.984 at batches 1 a
 Wall spreads were about 0.294% and 0.695%.
 
 Prefix-hit ratios were about 3.699 and 3.027, with spreads about 12.598% and 1.070%.
-The batch-1 prefix group failed the two diagnostic gates. Keep that full group for investigation.
-All four groups used two full warmups and five measurements. Full 4096-output phase acceptance stays pending.
+The batch-1 prefix spread exceeded 10%. These complete diagnostic samples stay in the original record.
+All four groups used two full warmups and five measurements. [Acceptance](acceptance.md) gives the full 4096-output results.
 
 ## K tiles and local-memory traffic
 
@@ -407,4 +407,4 @@ N64 compilation failed because the checkpoint scale granularity is 128 output co
 The last production short-output diagnosis used input 32768, prefix 32144, and output 16.
 With two warmups and five measurements, prefill medians were about 0.037355 and 0.063120 seconds at batches 1 and 2.
 Their required-work bounds were about 0.010057 and 0.020114 seconds.
-More tuning is necessary. Formal phase workloads keep 4096 outputs.
+These short-output observations have diagnostic scope. Formal phase workloads keep 4096 outputs.

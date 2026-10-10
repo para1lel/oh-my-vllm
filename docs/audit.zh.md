@@ -11,7 +11,7 @@
 状态: partial/open, 严重性 P2.
 Graph family 使用有界 graph 条目缓存和共享 pool, 配合接纳, 淘汰, 空闲显存保护和 capture 恢复.
 Resident-graph36k-to40k 转换在空闲显存少于 4 GiB 时完成.
-同形状 262144 的多次执行也完成, 无 graph eviction 或 recapture.
+普通 / MTP4 同形状 262144 的多次执行也完成, 无 graph eviction 或 recapture.
 这些 probe 不覆盖跨形状 262k eviction/recapture 或全部 late-capture 显存条件.
 
 后续测试需在实测显存压力下触发真实 eviction 和 recapture.
@@ -42,7 +42,7 @@ Log/cache 审计不能排除静默内存内重新编译.
 
 阶段时延, 算子, 边界和服务证据保留各自的实测源码范围.
 [验收索引](acceptance.zh.md)保留源码范围及全部原始失败记录.
-15 个阶段时延负载的采集与模型验证正在进行.
+15 个阶段时延负载通过. 源码身份和审查范围见验收索引.
 
 ## 已关闭问题索引
 
