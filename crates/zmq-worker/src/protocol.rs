@@ -15,10 +15,6 @@ pub enum RustMessage {
         request: serde_json::Value,
     },
     Execute(ExecuteMsg),
-    SetSpeculativeMode {
-        rpc_id: u64,
-        mode: String,
-    },
     Abort(AbortMsg),
     Shutdown,
 }
@@ -36,8 +32,6 @@ pub struct InitMsg {
     pub speculative_mode: Option<String>,
     /// DSpark checkpoint location, independent of the target model location.
     pub draft_model_path: Option<String>,
-    /// Load both proposers for the idle-only, shared-target comparison command.
-    pub comparison: bool,
     /// Minimum cumulative prefix confidence; zero retains the full legal draft.
     pub dspark_confidence_threshold: f64,
 }
@@ -90,10 +84,6 @@ pub enum PythonMessage {
     Prepared {
         rpc_id: u64,
         prompt_token_ids: Vec<u32>,
-    },
-    ModeChanged {
-        rpc_id: u64,
-        mode: String,
     },
     Error(ErrorMsg),
 }

@@ -11,8 +11,6 @@ use oh_my_vllm_zmq_worker::client::{WorkerClient, WorkerConfig};
 use tracing::{Instrument, info};
 use tracing_subscriber::EnvFilter;
 
-mod spec_bench;
-
 #[derive(Parser)]
 struct Cli {
     #[arg(long, env = "OH_MY_VLLM_MODEL")]
@@ -65,8 +63,6 @@ enum Cmd {
         prefix_hit: bool,
     },
     Bench(BenchArgs),
-    /// Interleaved native MTP4 / DSpark comparison on one shared target model.
-    SpecBench(spec_bench::SpecBenchArgs),
     Serve(oh_my_vllm_zmq_worker::serving::ServeArgs),
 }
 
@@ -165,9 +161,8 @@ async fn run() -> Result<()> {
             && (0.0..1.0).contains(&cli.dspark_confidence_threshold),
         "DSpark confidence threshold must be in [0,1)"
     );
-    let comparison = matches!(&cli.cmd, Cmd::SpecBench(_));
     let mode = cli.speculative_mode.clone().unwrap_or_else(|| {
-        if cli.num_speculative_tokens == 4 || comparison {
+        if cli.num_speculative_tokens == 4 {
             "mtp"
         } else {
             "none"
@@ -184,13 +179,6 @@ async fn run() -> Result<()> {
         cli.num_speculative_tokens == 0 || cli.num_speculative_tokens == speculative_tokens,
         "speculative token count disagrees with mode"
     );
-    if let Cmd::SpecBench(args) = &cli.cmd {
-        args.validate()?;
-        ensure!(
-            cli.max_model_len >= 36864,
-            "comparison requires at least 36864 tokens"
-        );
-    }
     // Reject malformed input before loading the model or allocating GPU memory.
     let run_prompts = if let Cmd::Run {
         tokens,
@@ -244,7 +232,6 @@ async fn run() -> Result<()> {
         num_speculative_tokens: speculative_tokens,
         speculative_mode: Some(mode.clone()),
         draft_model_path: cli.draft_model,
-        comparison,
         dspark_confidence_threshold: cli.dspark_confidence_threshold,
         ..WorkerConfig::default()
     })
@@ -275,12 +262,7 @@ async fn run() -> Result<()> {
         block_size = cli.block_size,
         max_model_len = cli.max_model_len,
         num_speculative_tokens = speculative_tokens,
-        speculative_mode = if comparison {
-            "comparison"
-        } else {
-            mode.as_str()
-        },
-        comparison,
+        speculative_mode = mode.as_str(),
         dspark_confidence_threshold = cli.dspark_confidence_threshold,
         worker_fa_pool_blocks = client.logical_num_blocks,
         worker_gdn_pool_blocks = client.mamba_blocks,
@@ -304,9 +286,6 @@ async fn run() -> Result<()> {
     let mut next_id = 1;
     match cli.cmd {
         Cmd::Serve(_) => unreachable!(),
-        Cmd::SpecBench(args) => {
-            spec_bench::run(&mut client, &mut scheduler, &mut next_id, args).await?;
-        }
         Cmd::Run {
             tokens: _,
             prompt_file: _,

@@ -115,37 +115,6 @@ Compilation, graph capture, interference, or source changes invalidate measured 
 Connect each attempt to source, binary, environment, CUDA module, configuration, and checkpoint identities.
 Portable summaries cannot replace original records for formal verification.
 
-## REQ-PERF-003: DSpark and native MTP4
-
-Compare optional DSpark with native MTP4 from the same source and binary after implementation.
-Use 32768 input tokens, 4096 kept output tokens, and batches 1, 2, and 4.
-Use the same synthetic token IDs, greedy sampling, and fixed output counts. Ignore EOS.
-Include registration, prefill, scheduling, transport, sampling, and cleanup in framework batch throughput.
-
-One comparison worker keeps the target weights and physical target caches for each batch.
-Load the two draft models before warmup. Reset prefix reuse before each attempt.
-For each batch, use three rounds.
-Each round has two full warmups per mode and five measured pairs with alternating mode order.
-
-Record these statistics for each batch:
-
-- Each mode's throughput median and spread in each round.
-- Each round's DSpark median difference from MTP4.
-- The hierarchical paired-bootstrap one-sided 95% lower bound on throughput gain.
-
-Record TTFT and its spread.
-Do not add a DSpark speed, spread, or confidence-bound acceptance gate for this comparison.
-Keep each failed or interrupted attempt and its full raw records.
-Compilation or graph capture during measured work invalidates an attempt.
-
-Bind records to source files, binary, Python environment, loaded CUDA module, runtime configuration, and checkpoint bytes.
-Compare loaded DSpark configuration and weight hashes with the requested checkpoint. They must agree.
-Record capacities, peak allocated/reserved memory, compile/capture audit, and scheduled/accepted draft counts.
-Acceptance rate uses scheduled draft tokens as its denominator. Returned proposals for future steps are a different counter.
-
-Use the [acceptance index](acceptance.md) for source identities and measured scope.
-See [testing](testing.md#dspark-comparison) for the collection procedure.
-
 ## REQ-CONTEXT-001: Context and memory
 
 Support input plus output up to 262144 tokens.
@@ -215,6 +184,12 @@ Debug logs show scheduler, cache, transport, and worker durations.
 Identify host time independently from CUDA kernel time.
 Make profiling an explicit choice.
 
+Record scheduled, accepted, and returned draft counts for each mode.
+Acceptance rate is total accepted drafts divided by total scheduled drafts.
+Returned next-step proposals have a different diagnostic counter.
+
+Compare loaded DSpark configuration and weight hashes with the requested checkpoint. They must agree.
+
 ## Service requirements
 
 | ID | Contract |
@@ -240,7 +215,6 @@ Use the pinned TileFoundry fork as a development tool.
 Discuss substantial fork changes before implementation.
 
 Keep temporary tuning in an external directory.
-The former Triton backend supplies no acceptance threshold.
 
 ## REQ-KERNEL-002: CUDA and PTX
 
@@ -248,6 +222,10 @@ Use owned CUDA C++ kernels with optional inline PTX for B200.
 CUTLASS is permitted.
 CUDA is the default. TileLang is an explicit comparison choice with no silent fallback.
 Apply accuracy, framework, context, and model service gates independently.
+
+Split the owned CUDA backend by function. Each `.cu`, `.cuh`, and `.py` file must have at most 800 lines.
+Use pinned clang-format 23.1.3 and the pre-commit hook. Keep include dependencies in order.
+Bind all source and headers to build, load, and formal evidence identities.
 
 Statically derive the largest legal invocation of each implementation path in each of the fifteen workloads.
 Deduplicate identical configurations.
@@ -289,8 +267,8 @@ Keep ordered persistent writes, capture restoration, and memory guards.
 Any activation donation must have proof for the named temporary. Persistent caches cannot be donated.
 Graph rewrites must have equivalence tests and an exception-aware call-site inventory.
 
-Acceptance includes all existing accuracy tests, ordinary/MTP4 context cases, formal operator cases, and fifteen phase-latency rows.
-Add DSpark boundary, service, supplemental operator, and paired-performance cases.
+Acceptance includes all existing accuracy tests, nine ordinary/MTP4/DSpark context cases, formal operator cases, and fifteen phase-latency rows.
+Keep DSpark service and supplemental operator cases active.
 A target-model test must exercise all four compiled units and graph replay with changed metadata.
 There is no new compile-speedup percentage gate.
 

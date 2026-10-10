@@ -175,6 +175,17 @@ def validate_profile_loads(records, backend, config, sources, gemm_inputs):
         source = "python/oh_my_vllm/kernels/cuda_backend/" + filename
         if record["source_sha256"] != sources.get(source):
             raise ValueError(f"profiler {key} source does not match collection")
+        if key == "pointwise":
+            prefix = "python/oh_my_vllm/kernels/cuda_backend/"
+            headers = {
+                path.removeprefix(prefix): digest
+                for path, digest in sources.items()
+                if path.startswith(prefix + "operators/") and path.endswith(".cuh")
+            }
+            if not headers or record.get("project_headers") != headers:
+                raise ValueError(
+                    "profiler CUDA operator headers differ from collection"
+                )
         if key == "gemm" and any(record.get(k) != v for k, v in gemm_inputs.items()):
             raise ValueError("profiler GEMM templates or build inputs differ")
         if key == "gemm":

@@ -363,23 +363,6 @@ def serve(socket_addr: str) -> None:
                         }
                     )
 
-            elif msg_type == "set_speculative_mode":
-                try:
-                    if worker is None or preparing:
-                        raise RuntimeError("mode switch requires an idle worker")
-                    worker.set_speculative_mode(msg["mode"])
-                    send(
-                        {
-                            "type": "mode_changed",
-                            "rpc_id": msg["rpc_id"],
-                            "mode": msg["mode"],
-                        }
-                    )
-                except Exception as exc:
-                    send(
-                        {"type": "error", "rpc_id": msg["rpc_id"], "message": str(exc)}
-                    )
-
             elif msg_type == "register":
                 if worker is None:
                     continue
@@ -490,15 +473,14 @@ def _handle_init(msg: dict) -> OhMyVllmWorker:
         raise ValueError("Only single-device inference is implemented")
     worker = OhMyVllmWorker(
         RuntimeConfig(
-            msg["model_path"],
-            msg.get("max_model_len", 65536),
-            msg["num_gpu_blocks"],
-            msg.get("num_speculative_tokens", 0),
-            msg.get("mamba_blocks"),
-            msg.get("speculative_mode"),
-            msg.get("draft_model_path"),
-            msg.get("comparison", False),
-            msg.get("dspark_confidence_threshold", 0.2),
+            model=msg["model_path"],
+            max_model_len=msg.get("max_model_len", 65536),
+            num_gpu_blocks=msg["num_gpu_blocks"],
+            speculative_tokens=msg.get("num_speculative_tokens", 0),
+            mamba_blocks=msg.get("mamba_blocks"),
+            speculative_mode=msg.get("speculative_mode"),
+            draft_model=msg.get("draft_model_path"),
+            dspark_confidence_threshold=msg.get("dspark_confidence_threshold", 0.2),
         )
     )
     worker.init_device()

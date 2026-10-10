@@ -1,0 +1,3199 @@
+{
+  "artifact_kind": "portable-derived-evidence",
+  "schema": 1,
+  "use": "historical reference and offline analysis; not formal comparison",
+  "original": {
+    "name": "milestone12-owned-cuda-audit-aggregate02.json",
+    "sha256": "c4ddbb86a780ce02764fd7d9fa5f39e8f2bbb4f81f09e91eaafd5ce75e7c9318",
+    "bytes": 152709
+  },
+  "removed_fields": [
+    "data.finding_dispositions.original_revision02_files.audit02.md.snapshot",
+    "data.finding_dispositions.original_revision02_files.findings02.json.snapshot",
+    "data.finding_dispositions.original_revision02_files.inventory02.json.snapshot",
+    "data.finding_dispositions.original_revision02_files.source-identity02.json.snapshot",
+    "data.finding_dispositions.original_revision02_files.status02.json.snapshot",
+    "data.finding_dispositions.original_revision02_files.validation02.json.snapshot",
+    "data.independent_review.corrected_revision03_dir",
+    "data.independent_review.original_revision02_files.audit02.md.snapshot",
+    "data.independent_review.original_revision02_files.findings02.json.snapshot",
+    "data.independent_review.original_revision02_files.inventory02.json.snapshot",
+    "data.independent_review.original_revision02_files.source-identity02.json.snapshot",
+    "data.independent_review.original_revision02_files.status02.json.snapshot",
+    "data.independent_review.original_revision02_files.validation02.json.snapshot",
+    "data.inventory.original_revision02_files.audit02.md.snapshot",
+    "data.inventory.original_revision02_files.findings02.json.snapshot",
+    "data.inventory.original_revision02_files.inventory02.json.snapshot",
+    "data.inventory.original_revision02_files.source-identity02.json.snapshot",
+    "data.inventory.original_revision02_files.status02.json.snapshot",
+    "data.inventory.original_revision02_files.validation02.json.snapshot",
+    "data.source_identity.original_revision02_files.source-identity02.json.snapshot",
+    "data.validation.original_revision02_files.audit02.md.snapshot",
+    "data.validation.original_revision02_files.findings02.json.snapshot",
+    "data.validation.original_revision02_files.inventory02.json.snapshot",
+    "data.validation.original_revision02_files.source-identity02.json.snapshot",
+    "data.validation.original_revision02_files.status02.json.snapshot",
+    "data.validation.original_revision02_files.validation02.json.snapshot"
+  ],
+  "data": {
+    "schema": 1,
+    "recorded_utc": "2026-10-10T04:56:42.100485+00:00",
+    "scope": "read-only owned CUDA operator audit and independently corrected source inventory",
+    "formal_acceptance": false,
+    "production_selection_changed": false,
+    "source_commit": "a5cc0ef0b17c48daf2c3191145b726cb1a2d84bb",
+    "prior_inference_commit": "a6b9bd27df13e7f6e58c879d08b68315c5d6ad8a",
+    "executor": {
+      "model": "Opus 5.5",
+      "canonical_model": "claude-opus-5-5",
+      "context_tokens": 1000000,
+      "effort": "medium",
+      "autocompact_tokens": 300000,
+      "runtime_reported_results": [
+        {
+          "name": "session.jsonl",
+          "subtype": "error_during_execution",
+          "is_error": true,
+          "turns": 38,
+          "model_usage": {
+            "claude-opus-5-5[1m]": {
+              "canonicalModel": "claude-opus-5-5",
+              "contextWindow": 1000000,
+              "maxOutputTokens": 128000
+            }
+          }
+        },
+        {
+          "name": "session-continue01.jsonl",
+          "subtype": "success",
+          "is_error": false,
+          "turns": 29,
+          "model_usage": {
+            "claude-opus-5-5[1m]": {
+              "canonicalModel": "claude-opus-5-5",
+              "contextWindow": 1000000,
+              "maxOutputTokens": 128000
+            }
+          }
+        },
+        {
+          "name": "session-revision01.jsonl",
+          "subtype": "success",
+          "is_error": false,
+          "turns": 42,
+          "model_usage": {
+            "claude-opus-5-5[1m]": {
+              "canonicalModel": "claude-opus-5-5",
+              "contextWindow": 1000000,
+              "maxOutputTokens": 128000
+            }
+          }
+        },
+        {
+          "name": "session-completion01.jsonl",
+          "subtype": "success",
+          "is_error": false,
+          "turns": 12,
+          "model_usage": {
+            "claude-opus-5-5[1m]": {
+              "canonicalModel": "claude-opus-5-5",
+              "contextWindow": 1000000,
+              "maxOutputTokens": 128000
+            }
+          }
+        }
+      ]
+    },
+    "count_scopes": {
+      "main_ffi_exports": 25,
+      "other_groupwise_ffi_exports": 1,
+      "all_ffi_exports": 26,
+      "host_counter_exports": 1,
+      "gpu_compute_exports": 25,
+      "owned_global_definitions_in_kernels_cu": 27,
+      "source_files_verified": 36,
+      "submitted_findings": 12,
+      "confirmed_new_production_correctness_defects": 0
+    },
+    "inventory": {
+      "schema": 3,
+      "artifact_kind": "independently_corrected_operator_inventory",
+      "record_timestamp_utc": "2026-10-10T04:48:30.662039Z",
+      "corrected_by": "independent reviewer (agent review_execution)",
+      "authorship_note": "Independent corrected derivative of Claude revision02; this is not Claude original wording. Raw revision02 and exact pre-correction snapshots remain unchanged.",
+      "commit_frozen": "a6b9bd27df13e7f6e58c879d08b68315c5d6ad8a",
+      "commit_current": "a5cc0ef0b17c48daf2c3191145b726cb1a2d84bb",
+      "original_revision02_files": {
+        "inventory02.json": {
+          "sha256": "5492c28e7a1255fc79995c8598ab59371b75cc07460f9f44dd3b4e807fe8d662",
+          "bytes": 26795,
+          "snapshot": "<local-path>"
+        },
+        "findings02.json": {
+          "sha256": "1bb2ecd22abc01c6a75886d882e1222d87ee143e31e71da2202236c5428c745b",
+          "bytes": 29384,
+          "snapshot": "<local-path>"
+        },
+        "audit02.md": {
+          "sha256": "b19073817291eda66c4e98c322af72b7463d567c1b1482119448ae50ece4cf48",
+          "bytes": 13855,
+          "snapshot": "<local-path>"
+        },
+        "source-identity02.json": {
+          "sha256": "21c2ec7a3b9b8774af5f525a3b37fd5ced17fdb9bbbc55f8680637584c9d67f1",
+          "bytes": 8537,
+          "snapshot": "<local-path>"
+        },
+        "validation02.json": {
+          "sha256": "7d072d8cc6f2ffab805dfd38e31d16d7fc330aedb8fe19e310a5f7c7fd6344ea",
+          "bytes": 3395,
+          "snapshot": "<local-path>"
+        },
+        "status02.json": {
+          "sha256": "ea3a8dccb9522cdf600d34489b2bf7577a12ec210fe71c306c7ef5268ea3694c",
+          "bytes": 1820,
+          "snapshot": "<local-path>"
+        }
+      },
+      "correction_basis": {
+        "review01": "claude-owned-audit-independent-review01.json",
+        "review01_sha256": "e03e11492a4f9c500541a7e15ca55dda69baa853a154307840651856a25971fd",
+        "scope": "Source inspection/AST/regex enumeration only; no GPU experiments or tests. All inference files unchanged across frozen/current commits."
+      },
+      "ffi_surface": {
+        "tvm_functions_module": {
+          "name": "oh_my_vllm_cuda",
+          "source": "python/oh_my_vllm/kernels/cuda_backend/__init__.py",
+          "count": 25,
+          "names": [
+            "variant_launch_count",
+            "quantize",
+            "rms_quantize",
+            "gated_quantize",
+            "silu_mul",
+            "gates",
+            "rms",
+            "add_rms",
+            "rms_rope",
+            "prepare_attention",
+            "prepare_context",
+            "prepare_query",
+            "rope",
+            "normalize_qk",
+            "contiguous_bf16_rows",
+            "recurrent",
+            "append",
+            "convolution",
+            "attention_partial",
+            "attention_merge",
+            "dspark_norm_rope",
+            "dspark_rms_norm",
+            "dspark_append",
+            "dspark_attention_partial",
+            "dspark_attention_merge"
+          ],
+          "entries": [
+            {
+              "export": "variant_launch_count",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 62
+              },
+              "kernels": [],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/__init__.py",
+                "function": "variant_launch_counts",
+                "line": 257
+              },
+              "kind": "host_observability"
+            },
+            {
+              "export": "quantize",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 309
+              },
+              "kernels": [
+                "quantize_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/fp8.py",
+                "function": "quantize",
+                "line": 10
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "rms_quantize",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 2763
+              },
+              "kernels": [
+                "norm_quant5120_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/fp8.py",
+                "function": "add_norm_linear",
+                "line": 140
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "gated_quantize",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 2882
+              },
+              "kernels": [
+                "gated_quant128_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/fp8.py",
+                "function": "gated_norm_linear",
+                "line": 195
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "silu_mul",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 356
+              },
+              "kernels": [
+                "silu_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/elementwise.py",
+                "function": "silu_mul",
+                "line": 10
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "gates",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 407
+              },
+              "kernels": [
+                "gates_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/elementwise.py",
+                "function": "delta_gates",
+                "line": 35
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "rms",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 664
+              },
+              "kernels": [
+                "rms5120_kernel",
+                "gated_rms128_kernel",
+                "rms_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/normalization.py",
+                "function": "rms_norm",
+                "line": 10
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "add_rms",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 716
+              },
+              "kernels": [
+                "rms5120_kernel",
+                "rms_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/normalization.py",
+                "function": "add_rms_norm",
+                "line": 119
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "rms_rope",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 908
+              },
+              "kernels": [
+                "rms_rope_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/normalization.py",
+                "function": "rms_rotary",
+                "line": 88
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "prepare_attention",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 808
+              },
+              "kernels": [
+                "prepare_attention_kernel<0>"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/attention_prepare.py",
+                "function": "prepare_attention",
+                "line": 26
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "prepare_context",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 832
+              },
+              "kernels": [
+                "prepare_attention_kernel<1>"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/partial_attention.py",
+                "function": "prepare_context",
+                "line": 23
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "prepare_query",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 858
+              },
+              "kernels": [
+                "prepare_attention_kernel<2>"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/partial_attention.py",
+                "function": "prepare_query",
+                "line": 32
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "rope",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 936
+              },
+              "kernels": [
+                "rope_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/normalization.py",
+                "function": "rotary",
+                "line": 50
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "normalize_qk",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 1029
+              },
+              "kernels": [
+                "model_qk_kernel",
+                "qk_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/gdn.py",
+                "function": "normalize_qk",
+                "line": 45
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "contiguous_bf16_rows",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 1090
+              },
+              "kernels": [
+                "contiguous_bf16_rows_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/gdn.py",
+                "function": "_contiguous_values",
+                "line": 15
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "recurrent",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 1265
+              },
+              "kernels": [
+                "recurrent_vector_kernel",
+                "recurrent_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/gdn.py",
+                "function": "recurrent",
+                "line": 91
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "append",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 1411
+              },
+              "kernels": [
+                "append_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/attention.py",
+                "function": "append",
+                "line": 10
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "convolution",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 1567
+              },
+              "kernels": [
+                "model_convolution_kernel",
+                "vector_model_convolution_kernel",
+                "convolution_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/convolution.py",
+                "function": "causal_conv",
+                "line": 10
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "attention_partial",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 1987
+              },
+              "kernels": [
+                "attention_partial_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/decode_attention.py",
+                "function": "decode",
+                "line": 31
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "attention_merge",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 2037
+              },
+              "kernels": [
+                "attention_merge_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/decode_attention.py",
+                "function": "decode",
+                "line": 31
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "dspark_norm_rope",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 2223
+              },
+              "kernels": [
+                "dspark_norm_rope_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/dspark_attention.py",
+                "function": "_normalize_rope_cuda",
+                "line": 147
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "dspark_rms_norm",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 2586
+              },
+              "kernels": [
+                "dspark_rms_norm_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/dspark_attention.py",
+                "function": "_rms_cuda",
+                "line": 46
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "dspark_append",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 2115
+              },
+              "kernels": [
+                "dspark_append_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/dspark_attention.py",
+                "function": "_append_cuda",
+                "line": 156
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "dspark_attention_partial",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 2601
+              },
+              "kernels": [
+                "dspark_attention_partial_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/dspark_attention.py",
+                "function": "_attention_cuda",
+                "line": 207
+              },
+              "kind": "owned_cuda_operation"
+            },
+            {
+              "export": "dspark_attention_merge",
+              "entry": {
+                "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+                "line": 2663
+              },
+              "kernels": [
+                "dspark_attention_merge_kernel"
+              ],
+              "wrapper": {
+                "path": "python/oh_my_vllm/kernels/dspark_attention.py",
+                "function": "_attention_cuda",
+                "line": 207
+              },
+              "kind": "owned_cuda_operation"
+            }
+          ]
+        },
+        "groupwise_fp8_module": {
+          "name": "oh_my_vllm_groupwise_fp8",
+          "count": 1,
+          "names": [
+            "groupwise_fp8"
+          ],
+          "source": "python/oh_my_vllm/kernels/cuda_backend/groupwise.py",
+          "entry": {
+            "export": "groupwise_fp8",
+            "entry": {
+              "path": "python/oh_my_vllm/kernels/cuda_backend/groupwise_fp8.cu",
+              "line": 207,
+              "text": "void groupwise_fp8(TensorView a, TensorView weight, TensorView scale_a,"
+            },
+            "wrapper": {
+              "path": "python/oh_my_vllm/kernels/cuda_backend/groupwise.py",
+              "function": "gemm",
+              "line": 158
+            },
+            "implementation": "Pinned CUTLASS base mainloop with selected owned paired scale-accumulation transform; independent final identity callback.",
+            "scope": "Not included in cuda_backend/__init__.py _FUNCTIONS; built as separate groupwise module."
+          }
+        },
+        "total_ffi_exports": 26,
+        "compute_ffi_exports": 25,
+        "host_observability_exports": 1,
+        "count_explanation": "_FUNCTIONS has25 entries, including24 compute entries and one host variant counter. Separate owned groupwise_fp8 adds one compute entry:26 total exports,25 compute exports."
+      },
+      "variant_operations": {
+        "count": 8,
+        "names": [
+          "norm",
+          "add_norm",
+          "gated_norm",
+          "qk",
+          "recurrent",
+          "append",
+          "convolution",
+          "gated_norm_fp8_linear"
+        ],
+        "semantics": "Host direct dispatch and graph capture choices; graph replay is deliberately excluded. These are not GPU execution-rate counters."
+      },
+      "cuda_native_kernels": [
+        {
+          "symbol": "quantize_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 158,
+          "ffi_exports": [
+            "quantize"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/fp8.py",
+              "function": "quantize",
+              "line": 10
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately",
+          "semantics": "BF16 finite quotient: one residual refinement with two nested RN FMA operations; FP16/FP32/nonfinite exact division. FP8 rounding equivalence is the finite BF16 claim, not FP32 division equivalence."
+        },
+        {
+          "symbol": "silu_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 344,
+          "ffi_exports": [
+            "silu_mul"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/elementwise.py",
+              "function": "silu_mul",
+              "line": 10
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "gates_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 391,
+          "ffi_exports": [
+            "gates"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/elementwise.py",
+              "function": "delta_gates",
+              "line": 35
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "rms5120_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 464,
+          "ffi_exports": [
+            "rms",
+            "add_rms"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/normalization.py",
+              "function": "rms_norm",
+              "line": 10
+            },
+            {
+              "path": "python/oh_my_vllm/kernels/normalization.py",
+              "function": "add_rms_norm",
+              "line": 119
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "gated_rms128_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 577,
+          "ffi_exports": [
+            "rms"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/normalization.py",
+              "function": "rms_norm",
+              "line": 10
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "rms_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 617,
+          "ffi_exports": [
+            "rms",
+            "add_rms"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/normalization.py",
+              "function": "rms_norm",
+              "line": 10
+            },
+            {
+              "path": "python/oh_my_vllm/kernels/normalization.py",
+              "function": "add_rms_norm",
+              "line": 119
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "prepare_attention_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 753,
+          "ffi_exports": [
+            "prepare_attention",
+            "prepare_context",
+            "prepare_query"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/attention_prepare.py",
+              "function": "prepare_attention",
+              "line": 26
+            },
+            {
+              "path": "python/oh_my_vllm/kernels/partial_attention.py",
+              "function": "prepare_context",
+              "line": 23
+            },
+            {
+              "path": "python/oh_my_vllm/kernels/partial_attention.py",
+              "function": "prepare_query",
+              "line": 32
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately",
+          "modes": [
+            {
+              "mode": 0,
+              "export": "prepare_attention",
+              "role": "full packed FA Q preparation and KV append"
+            },
+            {
+              "mode": 1,
+              "export": "prepare_context",
+              "role": "K-only context normalization/rotation and KV append"
+            },
+            {
+              "mode": 2,
+              "export": "prepare_query",
+              "role": "Q-only normalization/rotation"
+            }
+          ]
+        },
+        {
+          "symbol": "rms_rope_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 875,
+          "ffi_exports": [
+            "rms_rope"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/normalization.py",
+              "function": "rms_rotary",
+              "line": 88
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately",
+          "semantics": "FA 256-wide head RMS normalization and partial64 NeoX rotation; not GDN128 L2 normalization. Generic/fallback public helper; selected partial attention uses prepare_attention modes1/2."
+        },
+        {
+          "symbol": "rope_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 918,
+          "ffi_exports": [
+            "rope"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/normalization.py",
+              "function": "rotary",
+              "line": 50
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "model_qk_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 954,
+          "ffi_exports": [
+            "normalize_qk"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/gdn.py",
+              "function": "normalize_qk",
+              "line": 45
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately",
+          "semantics": "GDN128-head Q/K L2 normalization; packed16-head target specialization."
+        },
+        {
+          "symbol": "qk_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 1006,
+          "ffi_exports": [
+            "normalize_qk"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/gdn.py",
+              "function": "normalize_qk",
+              "line": 45
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately",
+          "semantics": "Generic GDN128-head Q/K L2 normalization fallback."
+        },
+        {
+          "symbol": "contiguous_bf16_rows_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 1078,
+          "ffi_exports": [
+            "contiguous_bf16_rows"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/gdn.py",
+              "function": "_contiguous_values",
+              "line": 15
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "after the copy loop"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately",
+          "semantics": "GDN packed V layout copy: kernels/gdn.py _contiguous_values -> prefill -> FlashInfer chunk_gated_delta_rule. No paged-FA compaction call chain."
+        },
+        {
+          "symbol": "recurrent_vector_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 1116,
+          "ffi_exports": [
+            "recurrent"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/gdn.py",
+              "function": "recurrent",
+              "line": 91
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "recurrent_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 1202,
+          "ffi_exports": [
+            "recurrent"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/gdn.py",
+              "function": "recurrent",
+              "line": 91
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "append_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 1386,
+          "ffi_exports": [
+            "append"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/attention.py",
+              "function": "append",
+              "line": 10
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "model_convolution_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 1434,
+          "ffi_exports": [
+            "convolution"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/convolution.py",
+              "function": "causal_conv",
+              "line": 10
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "vector_model_convolution_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 1476,
+          "ffi_exports": [
+            "convolution"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/convolution.py",
+              "function": "causal_conv",
+              "line": 10
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "convolution_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 1532,
+          "ffi_exports": [
+            "convolution"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/convolution.py",
+              "function": "causal_conv",
+              "line": 10
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "attention_partial_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 1718,
+          "ffi_exports": [
+            "attention_partial"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/decode_attention.py",
+              "function": "decode",
+              "line": 31
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately",
+          "semantics": "Target256-head split-KV attention with row-specific KV lengths and grouped bounds1..8; Buffers2 for ungrouped q.size(0)==4, Buffers1 otherwise. Next-tile cp.async prefetch exists in Buffers2."
+        },
+        {
+          "symbol": "attention_merge_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 2001,
+          "ffi_exports": [
+            "attention_merge"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/decode_attention.py",
+              "function": "decode",
+              "line": 31
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "dspark_append_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 2058,
+          "ffi_exports": [
+            "dspark_append"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/dspark_attention.py",
+              "function": "_append_cuda",
+              "line": 156
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "dspark_norm_rope_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 2136,
+          "ffi_exports": [
+            "dspark_norm_rope"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/dspark_attention.py",
+              "function": "_normalize_rope_cuda",
+              "line": 147
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately",
+          "semantics": "BF16 Q/K heads128, Q32 or K8 heads, full YaRN NeoX rotation with FP64 reduced phase and checkpoint BF16 normalization/multiplier rounding."
+        },
+        {
+          "symbol": "dspark_attention_partial_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 2292,
+          "ffi_exports": [
+            "dspark_attention_partial"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/dspark_attention.py",
+              "function": "_attention_cuda",
+              "line": 207
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately",
+          "semantics": "All seven local draft query rows see full own committed context plus all seven local draft K/V rows, fully bidirectional. BQ32/BK64/Buffers1. Mathematical scale equals 1 divided by sqrt(128); internal exp2 score multiplier equals log2(e) divided by sqrt(128), or 0.12751743082459868."
+        },
+        {
+          "symbol": "dspark_rms_norm_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 2502,
+          "ffi_exports": [
+            "dspark_rms_norm"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/dspark_attention.py",
+              "function": "_rms_cuda",
+              "line": 46
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "dspark_attention_merge_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 2624,
+          "ffi_exports": [
+            "dspark_attention_merge"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/dspark_attention.py",
+              "function": "_attention_cuda",
+              "line": 207
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "norm_quant5120_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 2680,
+          "ffi_exports": [
+            "rms_quantize"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/fp8.py",
+              "function": "add_norm_linear",
+              "line": 140
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        },
+        {
+          "symbol": "gated_quant128_kernel",
+          "file": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+          "definition_line": 2822,
+          "ffi_exports": [
+            "gated_quantize"
+          ],
+          "python_wrappers": [
+            {
+              "path": "python/oh_my_vllm/kernels/fp8.py",
+              "function": "gated_norm_linear",
+              "line": 195
+            }
+          ],
+          "pdl": {
+            "dependency_wait": "at kernel entry before input/state reads",
+            "trigger": "at kernel entry before bulk work"
+          },
+          "classification": "owned CUDA kernel source symbol; template instantiations are not counted separately"
+        }
+      ],
+      "kernel_count_summary": {
+        "native_global_source_symbols": 27,
+        "tvm_functions_exports": 25,
+        "separate_groupwise_exports": 1,
+        "all_ffi_exports": 26,
+        "compute_exports": 25,
+        "host_observability_exports": 1,
+        "template_instantiations": "Multiple per source symbol; not equated to native_global_source_symbols."
+      },
+      "fp8_gemm": {
+        "source": "python/oh_my_vllm/kernels/cuda_backend/groupwise_fp8.cu",
+        "python_entry": "kernels/cuda_backend/groupwise.py gemm",
+        "template": "CutlassGroupwiseScaledGEMMSM100<ScaleGranularityM,ScaleGranularityN,ScaleGranularityK,ScaleMajorK,MmaSM,DTypeIn,DTypeOut,PipelineStages,ClusterN,TileK,ConversionOnly>",
+        "tile_rule": "M=128*MmaSM,N=128,K=TileK; two-SM means M256/N128, not N256.",
+        "scale_rule": "ScaleMajorK=true means both A/B FP32 scales K-major. false means both MN-major. Public checkpoint weight scales remain row-major; stateless packing is in fp8.py for the selected large MN case.",
+        "default_public_argument": "groupwise.gemm(...,scale_major_k=True); production fp8._project_quantized explicitly passes not mn.",
+        "dispatch_paths": [
+          {
+            "condition": "mma_sm=1 and624<=M<=2496 and((K5120 and N34816/16384/14336) or(N5120 and K17408/6144))",
+            "tile": "M128/N128/K128",
+            "cluster": "M1/N2",
+            "stages": 5,
+            "scale": "K-major",
+            "mainloop": "PairedGroupwiseAccum<StandardMainloop>",
+            "epilogue": "Identity BF16 RNE callback; ConversionOnly=true"
+          },
+          {
+            "condition": "mma_sm=1 otherwise",
+            "tile": "M128/N128/K128",
+            "cluster": "M1/N1",
+            "stages": "automatic",
+            "scale": "K-major",
+            "mainloop": "StandardMainloop",
+            "epilogue": "Original LinearCombination(alpha1,beta0); ConversionOnly=false"
+          },
+          {
+            "condition": "mma_sm=2 and M>=32144,N34816,K5120,scale_major_k=true",
+            "tile": "M256/N128/K128",
+            "cluster": "M2/N1",
+            "stages": 5,
+            "scale": "K-major",
+            "mainloop": "StandardMainloop",
+            "epilogue": "Original LinearCombination"
+          },
+          {
+            "condition": "mma_sm=2 and M>=32144,N34816,K5120,scale_major_k=false",
+            "tile": "M256/N128/K256",
+            "cluster": "M2/N1",
+            "stages": 3,
+            "scale": "MN-major",
+            "mainloop": "StandardMainloop",
+            "epilogue": "Original LinearCombination"
+          },
+          {
+            "condition": "mma_sm=2 otherwise",
+            "tile": "M256/N128/K128",
+            "cluster": "M2/N1",
+            "stages": "automatic",
+            "scale": "K-major",
+            "mainloop": "StandardMainloop",
+            "epilogue": "Original LinearCombination"
+          }
+        ],
+        "production_selection": "Owned GEMM for M>32. mma_sm2 when physical M>=4096 and N>=32768. MN only for logical M>=32144 and exact weight(34816,5120); otherwise K-major. Small<=32 uses separate FlashInfer TRT backend.",
+        "workspace": "16B per stream, bounded4 streams/device. get_workspace_size(arguments) checked against allocation before initialize/run; larger future requirements fail closed.",
+        "stream_pdl": "gemm.initialize(arguments,workspace_ptr,caller_stream), then gemm.run(caller_stream,nullptr,pdl). Keep inherited CUTLASS PDL provider contract; no source synchronization change.",
+        "swizzle": "full two-SM gate/up16; else M>=2048 and N>=32768 ->8; else full QKVZ16; else full down8; otherwise0.",
+        "served_ir_operations": [
+          "fp8_linear",
+          "add_norm_fp8_linear",
+          "gated_norm_fp8_linear"
+        ],
+        "excluded_operation": "BF16 vocabulary logits_gemm uses FlashInfer mm_bf16(cute-dsl) or F.linear, never owned FP8."
+      },
+      "paired_groupwise_accum": {
+        "source": "python/oh_my_vllm/kernels/cuda_backend/groupwise_accum.cuh",
+        "role": "Mainloop scale-accumulator transform, separate from final epilogue",
+        "selected_scope": "Only one-SM medium branch described above",
+        "protocol": "Two independent N-tile TMEM loads into separate registers precede one wait. Preserve each output K-group ordering, FP32 scale multiply/FMA, final wait before pipeline release and final BF16 RNE conversion."
+      },
+      "ir_operations": [
+        "add_norm_fp8_linear",
+        "add_rms_norm",
+        "causal_conv",
+        "delta_gates",
+        "dspark_append",
+        "dspark_attention",
+        "dspark_norm_rope",
+        "dspark_rms_norm",
+        "fp8_linear",
+        "gated_norm_fp8_linear",
+        "gdn_prefill",
+        "gdn_prepare",
+        "gdn_recurrent",
+        "logits_gemm",
+        "planned_attention",
+        "prepare_attention",
+        "prepare_context",
+        "prepare_query",
+        "rms_norm",
+        "silu_mul"
+      ],
+      "graph_lifetime": {
+        "DecodeGraph": "worker/decode_graph.py",
+        "DraftGraph": "worker/decode_graph.py",
+        "ProposalGraph": "worker/decode_graph.py",
+        "PrefillGraph": "worker/prefill_graph.py",
+        "MTPContextGraph": "worker/mtp_context_graph.py",
+        "DSparkContextGraph": "worker/dspark_graph.py",
+        "DSparkGraph": "worker/dspark_graph.py"
+      },
+      "multi_stream": {
+        "source": "ir/gdn_prepare.py _kernel_prepare",
+        "fork": "side.wait_stream(origin) before side-stream gate branch",
+        "side": "BF16 ba projection and decay/beta gates",
+        "origin": "Owned FP8 QKVZ projection and causal convolution",
+        "join": "origin.wait_stream(side) in finally on success/exception; event dependency, not CPU synchronization",
+        "storage": "record_stream for side-consumed tensors and returned gates on origin",
+        "debug": "Existing OH_MY_VLLM_CUDA_DEBUG_SYNC eager mode supplies per-operation checks/synchronization; no default synchronization added."
+      },
+      "observability_scope": "Inventory proves source structure, not performance gains or a new measured capacity result."
+    },
+    "finding_dispositions": {
+      "legend": {
+        "severity": "correctness | high | medium | low | none",
+        "disposition": "confirmed_fact | unmeasured_tuning_hypothesis | false_positive | existing_contract | experimental_not_production",
+        "measured_scope": "explicitly distinguishes what has Nsight/numeric evidence vs code inspection only"
+      },
+      "findings": [
+        {
+          "id": "F01",
+          "title": "contiguous_bf16_rows_kernel fires PDL trigger after the copy loop — no proven downstream PDL overlap with current consumer",
+          "severity": "low",
+          "disposition": "unmeasured_tuning_hypothesis",
+          "category": "PDL integration / performance",
+          "file": "kernels/cuda_backend/kernels.cu",
+          "source_lines": "line 1081 (pdl_dependency_wait), lines 1083-1085 (copy loop), line 1087 (pdl_launch_next)",
+          "reachable_trigger": "GDN prefill when _contiguous_values matches the owned CUDA fast guard for packed BF16 V; other layouts use already-contiguous data or PyTorch contiguous().",
+          "evidence": {
+            "type": "code inspection",
+            "description": "The copy waits at entry and triggers after its loop. GDN._contiguous_values feeds chunk_gated_delta_rule, not FA2. The pinned GDN API has no PDL parameter and its SM100 CuTe launch supplies no explicit PDL enable flag. Earlier triggering alone has no demonstrated downstream overlap benefit. This is a placement fact and future integration question, not a current defect."
+          },
+          "original_finding_error": "Original F01 stated the consumer was 'paged FA2' and asserted that moving the trigger earlier would allow FA2 prolog overlap. Both claims are false. Consumer is FlashInfer chunk_gated_delta_rule, which uses no PDL.",
+          "recommended_fix": "No production change warranted given the current consumer. If a future GDN prefill consumer gains PDL support, revisit trigger placement at that time.",
+          "validation": "Any future PDL-capable consumer integration would require a Nsight Systems timeline comparison showing kernel prolog overlap before claiming benefit.",
+          "measured_scope": "Source inspection of placement/caller chain. No new latency comparison or PDL gain claimed."
+        },
+        {
+          "id": "F02",
+          "title": "FP8 GEMM workspace guard already exists — original finding was false positive",
+          "severity": "none",
+          "disposition": "false_positive",
+          "category": "correctness risk / memory safety — RESOLVED: not an issue",
+          "file": "kernels/cuda_backend/groupwise_fp8.cu",
+          "source_lines": "lines 185-186",
+          "reachable_trigger": "N/A — guard is present and active.",
+          "evidence": {
+            "type": "source verification",
+            "description": "groupwise_fp8.cu line 185: 'size_t workspace_size = Gemm::get_workspace_size(arguments);' and line 186: 'TVM_FFI_ICHECK(float_buffer_size_in_bytes >= workspace_size)'. The exact guard recommended in the original finding already exists in production. If a future dispatch change selects a configuration requiring more workspace, the check fails closed before any CUTLASS run.",
+            "source_line_185": "size_t workspace_size = Gemm::get_workspace_size(arguments);",
+            "source_line_186": "TVM_FFI_ICHECK(float_buffer_size_in_bytes >= workspace_size)"
+          },
+          "original_finding_error": "Original F02 recommended adding get_workspace_size() + capacity check. That guard already existed at lines 185-186.",
+          "recommended_fix": "No change needed. Existing guard is correct and already documented by the comment 'currently uses zero workspace; future nonzero requirements fail the guard.'",
+          "validation": "Source inspection complete.",
+          "measured_scope": "Guard existence confirmed by source. Actual runtime workspace_size value not measured (expected 0 for current dispatch paths)."
+        },
+        {
+          "id": "F03",
+          "title": "FP8 medium-projection high long-scoreboard stall rate — measured observation, root cause not proven",
+          "severity": "low",
+          "disposition": "unmeasured_tuning_hypothesis",
+          "category": "performance observation",
+          "file": "kernels/cuda_backend/groupwise_fp8.cu, groupwise_accum.cuh",
+          "source_lines": "CutlassGroupwiseScaledGEMMSM100 medium projection dispatch; PairedGroupwiseAccum mainloop",
+          "reachable_trigger": "Selected one-SM M624..2496 projection geometries. Under active batch1/2/4 workloads, these counts occur in prefill aggregates; ordinary/speculative decode projections use<=32 rows and the independent TRT backend.",
+          "evidence": {
+            "type": "existing measured Nsight counters plus source inspection",
+            "record": "milestone11-wide-observations01.json",
+            "record_sha256": "d3732369b9b6870925c658f41947124e68fc7e4f6fd41aa2b58e581128df7460",
+            "kernel_id": "1",
+            "shape": {
+              "m": 624,
+              "n": 34816,
+              "k": 5120
+            },
+            "description": "This a6b9bd2 profile matches current groupwise source/header bytes and loaded module. longSB35.26%, shortSB13.01%, issue_active46.29%, eligible0.65 average eligible warps per active scheduler cycle (raw unit warp), SM throughput62.91%, DRAM throughput13.51%, registers168, dynamic SMEM201216B, active-warps occupancy11.83%. Long-scoreboard is not an exclusive wall-time fraction or proof of TMEM latency. This record has no PC/SASS attribution of the dominant cause."
+          },
+          "original_finding_errors": [
+            "eligible0.65 was described as0.65%; raw unit is warp and the metric is per active scheduler cycle.",
+            "Long-scoreboard was asserted to establish TMEM latency and a unique SMEM remedy.",
+            "Original values lacked an explicit record binding. They are now verified current-source facts, not mislabelled C9 counters."
+          ],
+          "recommended_fix": "Retain the measured stall observation. If future work targets this shape, PC/SASS attribution is needed to identify the dominant stall source before attempting stage reduction or accumulator changes. The packed FP32 candidate (F04) provides a complementary direction with existing measurements.",
+          "validation": "Any tuning selection needs source-bound numerical and whole-operation timing checks; PC/SASS attribution can test the hypothesized pipeline cause before selecting an intervention.",
+          "measured_scope": "Current-source profile of M624/N34816/K5120 only. No all-shape or wall-time inference. The earlier portable C10 record with 33.95% and 0.56 warp is a separate valid measurement, not conflicting evidence."
+        },
+        {
+          "id": "F04",
+          "title": "Packed FP32 candidate:18 complete-operation comparisons,10 speed passes/8 failures;7 common GEMM geometries cover9 passing operations",
+          "severity": "low",
+          "disposition": "experimental_not_production",
+          "category": "performance opportunity / external experiment",
+          "file": "External: prefix-fp8-owned-packed01.cu, prefix-fp8-owned-packed-full-paired01.json",
+          "source_lines": "N/A (not in production source)",
+          "reachable_trigger": "N/A — not currently dispatched.",
+          "evidence": {
+            "type": "measured — external diagnostic prefix-fp8-owned-packed-full-paired01.json",
+            "description": "All 18 shapes bitwise correct. Speed results from packed_candidate_rows: passing shapes (speed_passed=true) are M624N34816K5120 normalized-gateup, M624N16384K5120 qkvz, M624N5120K17408 silu-down, M624N5120K6144 gated-out, M1248N5120K17408 silu-down, M1248N5120K6144 out, M1248N5120K6144 gated-out, M2496N5120K17408 silu-down, M2496N5120K6144 out, M2496N5120K6144 gated-out (10 total). Failing shapes (speed_passed=false): M624N14336K5120 qkv, M624N5120K6144 out, M1248N34816K5120 normalized-gateup, M1248N16384K5120 qkvz, M1248N14336K5120 qkv, M2496N34816K5120 normalized-gateup, M2496N16384K5120 qkvz, M2496N14336K5120 qkv (8 total). Failing geometries are not unknown; the JSON enumerates them. Seven common geometries covering nine complete operations share the passing config."
+          },
+          "original_finding_error": "Original F04 stated 'failing shapes not yet identified'; the external JSON fully enumerates them.",
+          "recommended_fix": "No production adoption is established. Geometry dispatch must cover all operations sharing the same GEMM: M624/N5120/K6144 cannot be selected from gated-out alone because plain out failed. Seven common geometries cover nine consistently passing operations, not all ten individual passes. Adoption requires independent production full-operation/framework validation.",
+          "validation": "Full-operation framework validation required before any production dispatch change.",
+          "measured_scope": "External diagnostic:18 complete-operation comparisons, all bitwise equal;10 positive paired speed gates/8 failures. Rows624/1248/2496. The7 common geometries cover9 operations because out and gated-out share each M/N/K. These medium cases do not validate two-SM or large MN dispatch."
+        },
+        {
+          "id": "F05",
+          "title": "Cluster4/8 multicast build03 failed metadata — no correctness or speed evidence",
+          "severity": "low",
+          "disposition": "experimental_not_production",
+          "category": "performance opportunity / incomplete external build",
+          "file": "External: prefix-fp8-multicast-cluster03.cu",
+          "source_lines": "N/A (not in production source)",
+          "reachable_trigger": "N/A — not currently dispatched.",
+          "evidence": {
+            "type": "build log inspection",
+            "description": "prefix-fp8-multicast-cluster03 compiled but build03 metadata construction raised FileNotFoundError for prefix-fp8-multicast-cluster03.cuh (the global filename replacement also changed the .cuh metadata path). The actual include is prefix-fp8-owned-packed01.cuh, which is correct. build04 metadata can reuse compiled module bytes. No numeric or speed tests run for this module. Prior ClusterN4/8 candidates from earlier milestones are separate and must not be generalized to this build."
+          },
+          "recommended_fix": "Fix build04 metadata path and run the 18-shape numeric+speed suite before any production dispatch claim.",
+          "validation": "18-shape numeric pass required first; then speed comparison vs. baseline cluster_n=2 at M624N34816K5120.",
+          "measured_scope": "UNMEASURED entirely. Build compilation reached linking stage; metadata construction failed."
+        },
+        {
+          "id": "F06",
+          "title": "variant_launch_counts() host-only scope is already documented — original finding was existing contract",
+          "severity": "none",
+          "disposition": "existing_contract",
+          "category": "observability — already handled",
+          "file": "kernels/cuda_backend/__init__.py",
+          "source_lines": "line 258 (docstring); kernels.cu lines 51, 59 (record_variant), 75 (begin_cuda_launch)",
+          "reachable_trigger": "N/A — behavior is documented and intentional.",
+          "evidence": {
+            "type": "source verification",
+            "description": "__init__.py line 258 docstring: 'Host variant choices; CUDA Graph replay does not re-enter host dispatch.' kernels.cu line 51 comment: '// Host dispatches include direct calls and CUDA Graph capture, but not replay.' record_variant() at line 59 increments atomics; begin_cuda_launch() at line 75 is a debug-error helper, not the counter site. The counters are deliberately host-dispatch+capture only; this is the specified contract, not a bug or oversight. Separate replay telemetry would be a new feature requiring a specific use case.",
+            "source_line_258": "Host variant choices; CUDA Graph replay does not re-enter host dispatch."
+          },
+          "original_finding_error": "Original F06 recommended adding documentation that already existed. Finding was based on treating an existing contract as undocumented.",
+          "recommended_fix": "No change needed.",
+          "validation": "Source inspection complete.",
+          "measured_scope": "N/A — observability contract, not a performance measurement."
+        },
+        {
+          "id": "F07",
+          "title": "DSpark attention draft block is fully bidirectional — no causal masking, matches reference",
+          "severity": "none",
+          "disposition": "false_positive",
+          "category": "correctness — confirmed correct",
+          "file": "kernels/cuda_backend/kernels.cu",
+          "source_lines": "lines 2315, 2380, 2389; ir/dspark.py line 104",
+          "reachable_trigger": "N/A — kernel behavior is correct.",
+          "evidence": {
+            "type": "source verification",
+            "description": "kernels.cu line 2315: 'const int context = contexts[seq], last = context + 7;' — last is invariant across all query rows. Line 2380: 'int length = row < end ? last : 0;' — length=last=context+7 for all valid rows (row<end). Score predicate: row<end && base+col<length. There is no col<=row cutoff; every valid draft row can attend every position in [context, context+7). ir/dspark.py line 104: 'out = torch.einsum(\"qhrk,khd->qhrd\", scores.softmax(-1), value)' — reference also applies no causal mask. tests/test_dspark_kernel_reference.py line 53 test explicitly verifies all queries see all noise rows.",
+            "source_line_2315": "const int context = contexts[seq], last = context + 7;",
+            "source_line_2380": "int length = row < end ? last : 0;"
+          },
+          "original_finding_error": "Original F07 claimed the kernel applies causal masking within the 7-row draft block while the reference does not. Both kernel and reference are fully bidirectional for valid rows; no divergence exists. Existing test at tests/test_dspark_kernel_reference.py line 53 explicitly covers this.",
+          "recommended_fix": "No change needed.",
+          "validation": "Source inspection and existing test coverage confirm correctness.",
+          "measured_scope": "N/A — correctness confirmed by source and test."
+        },
+        {
+          "id": "F08",
+          "title": "PrefillGraph transactional plan-swap handles expected exceptions correctly — low-probability residual risk noted, no action required",
+          "severity": "none",
+          "disposition": "existing_contract",
+          "category": "correctness — confirmed handled",
+          "file": "worker/prefill_graph.py",
+          "source_lines": "lines 113-128",
+          "reachable_trigger": "PrefillGraph.replay() when new batch has different tensor shapes. Rare in production due to graph keying.",
+          "evidence": {
+            "type": "source verification",
+            "description": "prefill_graph.py line 113 comment: '# A failed plan must leave all captured storage alive and bound. Check' — planning and validation occur inside try before any copy. Line 128: 'tensor.copy_(dynamic[name])' — copy only after all shape checks pass. tests/test_prefill_graph.py line 13: 'def test_failure_preserves_storage_then_valid_replay_succeeds(failure):' — existing test covers failed planner followed by valid replay. Same-shape same-device copy_ does not allocate and is not an OOM path.",
+            "source_line_113": "# A failed plan must leave all captured storage alive and bound. Check",
+            "source_line_128": "tensor.copy_(dynamic[name])"
+          },
+          "original_finding_error": "Original F08 described the exception handling as having a residual mid-copy risk. That analysis was correct but the finding itself noted the case 'should not raise OOM.' Independent review confirms the expected exception path is correctly handled with existing tests; the hypothetical device-failure mid-copy scenario has no demonstrated continued-replay or wrong-result path.",
+          "recommended_fix": "No change needed. Existing tests are adequate.",
+          "validation": "Source inspection and existing test coverage confirm.",
+          "measured_scope": "N/A — exception path analysis."
+        },
+        {
+          "id": "F09",
+          "title": "FP8 medium-projection low SM occupancy — observation merged with F03, root cause requires PC attribution",
+          "severity": "low",
+          "disposition": "unmeasured_tuning_hypothesis",
+          "category": "performance observation — see F03",
+          "file": "kernels/cuda_backend/groupwise_fp8.cu, groupwise_accum.cuh",
+          "source_lines": "groupwise_fp8.cu line 83 (ClusterShape_MNK); bench/evidence/2026-10-10-fp8-accumulator-observations.json",
+          "reachable_trigger": "All production medium projection GEMM calls (mma_sm=1, M624..2496, rows>32).",
+          "evidence": {
+            "type": "same current-source one-shape Nsight record as F03",
+            "record": "milestone11-wide-observations01.json",
+            "record_sha256": "d3732369b9b6870925c658f41947124e68fc7e4f6fd41aa2b58e581128df7460",
+            "kernel_id": "1",
+            "description": "SM throughput62.91%, occupancy11.83%, eligible0.65warp per active scheduler cycle, dynamic SMEM201216B, registers168. Medium ClusterM1/N2 and shared storage constrain concurrent CTA residence. This does not prove one exclusive performance cause or that only SMEM reduction can improve latency."
+          },
+          "original_finding_errors": [
+            "Wrong percentage unit for eligible warps.",
+            "Aggregate occupancy was turned into an exclusive SMEM root-cause claim.",
+            "Revision02 mixed values from two valid current-source profiles. This derivative binds all quoted values to the wide profile."
+          ],
+          "recommended_fix": "This observation is merged with F03. PC/SASS attribution is the prerequisite for any targeted intervention.",
+          "validation": "Any tuning selection needs source-bound numerical and whole-operation timing checks; PC/SASS attribution can test the hypothesized pipeline cause before selecting an intervention.",
+          "measured_scope": "Current-source profile of M624/N34816/K5120 only. No all-shape or wall-time inference. The earlier portable C10 record with 33.95% and 0.56 warp is a separate valid measurement, not conflicting evidence."
+        },
+        {
+          "id": "F10",
+          "title": "Multi-stream side-stream error attribution — eager debug mode already provides per-operation attribution",
+          "severity": "none",
+          "disposition": "existing_contract",
+          "category": "debuggability — already handled",
+          "file": "ir/gdn_prepare.py",
+          "source_lines": "line 155 (origin.wait_stream(side)); kernels.cu lines 75 (begin_cuda_launch), 93 (finish_cuda_launch), 100 (error message)",
+          "reachable_trigger": "Any GPU error on the side stream during multi_stream execution.",
+          "evidence": {
+            "type": "source verification",
+            "description": "gdn_prepare.py line 155: 'origin.wait_stream(side)' — wait_stream queues an event dependency and returns immediately on the CPU; async errors are not guaranteed to surface at this join point. kernels.cu line 93: 'void finish_cuda_launch(cudaStream_t stream, const char *operation)' with line 100: '<< operation << \" CUDA execution error observed after launch: \"' — OH_MY_VLLM_CUDA_DEBUG_SYNC eager mode already checks and synchronizes each owned operation individually with an operation label. The original recommendation to call torch.cuda.check_error() was incorrect: check_error(res:int) checks a supplied runtime return code, not a stream; calling it without an argument is not valid. Altering the default path to synchronize would eliminate overlap.",
+            "source_line_93": "void finish_cuda_launch(cudaStream_t stream, const char *operation) {",
+            "source_line_100": "<< operation << \" CUDA execution error observed after launch: \""
+          },
+          "original_finding_error": "Original F10 recommended 'torch.cuda.check_error()' for stream error attribution — check_error() takes an int return code, not a stream, so the recommendation was technically wrong. The existing OH_MY_VLLM_CUDA_DEBUG_SYNC mode already provides per-operation attribution without altering the default overlap path.",
+          "recommended_fix": "No default-path change needed. Existing eager debug mode (OH_MY_VLLM_CUDA_DEBUG_SYNC) is the correct tool for debugging side-stream errors.",
+          "validation": "Source inspection confirms existing debug infrastructure.",
+          "measured_scope": "N/A — error path analysis."
+        },
+        {
+          "id": "F11",
+          "title": "attention_partial_kernel double-buffering already present for batch=4 ungrouped — original blanket claim was false",
+          "severity": "none",
+          "disposition": "false_positive",
+          "category": "performance — already implemented for the relevant dispatch",
+          "file": "kernels/cuda_backend/kernels.cu",
+          "source_lines": "line 1782 (Buffers==2 branch), line 1949 (dispatch comment), line 1969 (ATTENTION macro with Buffers=2)",
+          "reachable_trigger": "Ungrouped decode with q.size(0)==4 already uses Buffers=2 (next-tile prefetch).",
+          "evidence": {
+            "type": "source verification",
+            "description": "kernels.cu line 1782: 'if constexpr (Buffers == 2) {' — next-tile cp.async prefetch via stage_kv is present and active for Buffers=2. Line 1949: '// Only four ungrouped queries benefit from double buffering on B200.' Line 1969: 'ATTENTION(true, false, 2);' dispatches Buffers=2 for ungrouped q.size(0)==4. Grouped decode (h==24&&hk==4) and other ungrouped batch sizes use Buffers=1 by deliberate dispatch decision. The short-prefix diagnostic 15 FA calls (6.0ms) are FlashInfer prefill calls, not measurements of this owned decode kernel.",
+            "source_line_1782": "if constexpr (Buffers == 2) {",
+            "source_line_1949": "// Only four ungrouped queries benefit from double buffering on B200.",
+            "source_line_1969": "ATTENTION(true, false, 2);"
+          },
+          "original_finding_error": "Original F11 claimed 'no double-buffered prefetch for the next KV tile.' Buffers=2 with stage_kv prefetch already exists and is dispatched for the relevant batch size. The Buffers=1 dispatch for grouped and other paths is a deliberate measured decision (line 1949), not an omission.",
+          "recommended_fix": "No change needed. If grouped or other batch sizes need double buffering, measure first — the dispatch comment at line 1949 indicates the B200 benefit applies specifically to four ungrouped queries.",
+          "validation": "Source inspection complete. Any extension to grouped paths requires separate whole-operation measurement.",
+          "measured_scope": "N/A — correctness of dispatch confirmed. Performance of the owned decode kernel at large contexts not separately profiled."
+        },
+        {
+          "id": "F12",
+          "title": "mma_sm=2 MN-major production path correct — experimental two-SM failure isolated to rejected code",
+          "severity": "none",
+          "disposition": "existing_contract",
+          "category": "correctness — confirmed safe",
+          "file": "kernels/cuda_backend/groupwise_fp8.cu",
+          "source_lines": "mma_sm=2 dispatch block; condition: m>=32144 && n==34816 && k==5120",
+          "reachable_trigger": "MN only for full gate/up logical M>=32144,N34816,K5120, explicitly selected by fp8._project_quantized. Public groupwise.gemm defaults scale_major_k=True; two-SM4096..32143 gate/up remains K-major.",
+          "evidence": {
+            "type": "source verification and diagnostic-scope separation",
+            "description": "ScaleMajorK=true maps both scales K-major;false maps both MN-major. FFI restricts MN to the large full two-SM gate/up shape. Standard K-major remains a valid production branch. The medium18 diagnostic rows624/1248/2496 are all below the production two-SM threshold4096, so they do not validate MN/two-SM. A rejected external N256 custom-scale-reader prototype does not establish a defect in the standard path."
+          },
+          "original_finding_error": "Original report swapped K-major and MN-major semantics (ScaleMajorK=True was called MN-major). Corrected: ScaleMajorK=True -> K-major, ScaleMajorK=False -> MN-major. Also: original report described SM=2 tiles as N256; actual tile is M256/N128 (MmaTileShape_MNK = Shape<MmaSM*128, 128, TileK>).",
+          "recommended_fix": "No production change. Use dedicated large MN/formal/replay evidence for that branch; medium18 supplies no such acceptance.",
+          "validation": "Dispatch/layout source facts verified. Existing tests/test_fp8_mn_replay.py and large formal cases have separate scope; this review reruns none and claims no new acceptance.",
+          "measured_scope": "Medium18 supports its own complete-operation results only. This review establishes no new large-M numerical/performance result."
+        }
+      ],
+      "confirmed_correct": [
+        {
+          "item": "PairedGroupwiseAccum TMEM fence ordering (C10 fix)",
+          "detail": "Two independent TMEM tile loads (epi_n and epi_n+1) before single fence_view_async_tmem_load(). PairedGroupwiseAccum is CollectiveMainloop (not CollectiveEpilogue) per groupwise_fp8.cu lines 125-126. All 18 shapes pass numeric and speed."
+        },
+        {
+          "item": "FP8 reciprocal in quantize_kernel",
+          "detail": "BF16 finite path: rcp.approx.ftz.f32 + one quotient-refinement step using two nested __fmaf_rn operations (kernels.cu lines 211, 224). FP16/FP32/nonfinite: exact __fdiv_rn. All production dtypes correctly covered."
+        },
+        {
+          "item": "DecodeGraph/PrefillGraph/DraftGraph/ProposalGraph transactional restore",
+          "detail": "finally blocks restore FA page rows and recurrent state slots in both capture and exception paths. PrefillGraph validates new plan shapes before any copy_. MTPContextGraph, DSparkContextGraph, DSparkGraph also exist (I12 correction)."
+        },
+        {
+          "item": "Multi-stream fork/join correctness",
+          "detail": "side.wait_stream(origin) before fork, origin.wait_stream(side) in finally, record_stream() for all side-stream-consumed tensors. Graph capture produces a real fork edge."
+        },
+        {
+          "item": "PDL wait ordering for all other owned kernels",
+          "detail": "Every owned kernel calls pdl_dependency_wait() at its top before reading inputs. Producer kernels call pdl_launch_next() early to allow downstream prolog overlap. Pattern is correct for all 25 _FUNCTIONS entries except contiguous_bf16_rows (see F01)."
+        },
+        {
+          "item": "Block784 slot arithmetic consistency",
+          "detail": "page=slot//784, offset=slot%784 throughout kernels.cu, ir/state.py native reference, ir/attention.py reference, ir/dspark.py reference, and decode graph subpage computation."
+        },
+        {
+          "item": "int64 position dtype guards",
+          "detail": "Position dtype guards present in IR fake implementations. dspark_norm_rope fake checks int32|int64. 262144-token path structurally supported."
+        },
+        {
+          "item": "rotary_frequency device declaration",
+          "detail": "kernels.cu line 742: '__device__ const double rotary_frequency[32]' — device scope, not __constant__ address space (I14 correction)."
+        },
+        {
+          "item": "logits_gemm is BF16-only",
+          "detail": "Vocabulary head in qwen.py uses logits_gemm IR op which routes to FlashInfer mm_bf16 (<=32 rows, ir/logits.py line 38) or F.linear (line 30). No owned FP8 path serves logits (I11 correction)."
+        },
+        {
+          "item": "IR Operation registry correctness",
+          "detail": "Registration/schema and priority configuration freeze at first selection. Capability dispatch still chooses a supported provider from that frozen configuration for each static argument geometry; one provider is not frozen across all future shapes. Schema/fullgraph checks are source facts."
+        }
+      ],
+      "fact_corrections_summary": [
+        "C1: _FUNCTIONS has exactly 25 entries. groupwise_fp8 is a separate TVM module. Names rms5120/gated_rms128/norm_quant5120/gated_quant128/decode_attention/dspark_attention/compiled/logits_gemm/groupwise_fp8_gemm/variant_launch_counts are NOT _FUNCTIONS exports.",
+        "C2: MmaTileShape_MNK=Shape<MmaSM*128,128,TileK>. SM=2 -> M256/N128 tiles, not N256.",
+        "C3: ScaleMajorK=True -> UMMA::Major::K (K-major). ScaleMajorK=False -> UMMA::Major::MN (MN-major). Original report swapped these.",
+        "C4: PairedGroupwiseAccum is CollectiveMainloop (groupwise_fp8.cu lines 125-126), not CollectiveEpilogue.",
+        "C5: F02 workspace guard already at lines 185-186. False positive.",
+        "C6: F06 variant_launch_counts docstring already documents host-only scope. Existing contract.",
+        "C7: F07 dspark_attention_partial_kernel is fully bidirectional, matches reference. No causal mask within draft block. False positive.",
+        "C8: F11 attention_partial_kernel has Buffers=2 path with stage_kv prefetch. Dispatched for ungrouped batch=4. False positive.",
+        "C9: F01 consumer is FlashInfer chunk_gated_delta_rule via gdn.py, not paged FA2.",
+        "I11: logits_gemm is BF16-only; no owned FP8 path.",
+        "I12: Graph lifetime inventory also includes MTPContextGraph, DSparkContextGraph, DSparkGraph.",
+        "I13: Python wrapper names: rms_norm(), add_rms_norm(), append(), quantize() etc. — not rms5120(), gated_rms128(), append_kv().",
+        "I14: rotary_frequency is __device__ const double, not __constant__.",
+        "C10: eligible unit is warp per active scheduler cycle, not%. Values 35.26%, 0.65 warp, and 62.91% are verified in milestone11-wide-observations01.json with current source/header/module identity. The 33.95% and 0.56 warp portable record is a separate valid C10 measurement.",
+        "I15:27 unique native globals. Preparation modes0/1/2 are one source symbol; generic convolution_kernel is included.",
+        "I16: Mathematical DSpark scale equals 1 divided by sqrt(128); exp2 multiplier equals log2(e) divided by sqrt(128), or 0.12751743.",
+        "I17: Real independent verification/correction UTC replaces future-Z timestamps only in derivatives; raw literals/snapshots preserved.",
+        "I18: Registry/priority configuration freezes, not one provider across all shapes."
+      ],
+      "schema": 3,
+      "artifact_kind": "independently_corrected_operator_findings",
+      "record_timestamp_utc": "2026-10-10T04:52:52.439574Z",
+      "corrected_by": "independent reviewer (agent review_execution)",
+      "authorship_note": "Independent corrected derivative, not Claude original wording. Raw02 and exact pre-correction snapshots are preserved.",
+      "commit_frozen": "a6b9bd27df13e7f6e58c879d08b68315c5d6ad8a",
+      "commit_current": "a5cc0ef0b17c48daf2c3191145b726cb1a2d84bb",
+      "original_revision02_files": {
+        "inventory02.json": {
+          "sha256": "5492c28e7a1255fc79995c8598ab59371b75cc07460f9f44dd3b4e807fe8d662",
+          "bytes": 26795,
+          "snapshot": "<local-path>"
+        },
+        "findings02.json": {
+          "sha256": "1bb2ecd22abc01c6a75886d882e1222d87ee143e31e71da2202236c5428c745b",
+          "bytes": 29384,
+          "snapshot": "<local-path>"
+        },
+        "audit02.md": {
+          "sha256": "b19073817291eda66c4e98c322af72b7463d567c1b1482119448ae50ece4cf48",
+          "bytes": 13855,
+          "snapshot": "<local-path>"
+        },
+        "source-identity02.json": {
+          "sha256": "21c2ec7a3b9b8774af5f525a3b37fd5ced17fdb9bbbc55f8680637584c9d67f1",
+          "bytes": 8537,
+          "snapshot": "<local-path>"
+        },
+        "validation02.json": {
+          "sha256": "7d072d8cc6f2ffab805dfd38e31d16d7fc330aedb8fe19e310a5f7c7fd6344ea",
+          "bytes": 3395,
+          "snapshot": "<local-path>"
+        },
+        "status02.json": {
+          "sha256": "ea3a8dccb9522cdf600d34489b2bf7577a12ec210fe71c306c7ef5268ea3694c",
+          "bytes": 1820,
+          "snapshot": "<local-path>"
+        }
+      },
+      "confirmed_production_correctness_defects": 0,
+      "wide_measurement_verification": {
+        "record": "milestone11-wide-observations01.json",
+        "record_sha256": "d3732369b9b6870925c658f41947124e68fc7e4f6fd41aa2b58e581128df7460",
+        "source_commit": "a6b9bd27df13e7f6e58c879d08b68315c5d6ad8a",
+        "source_status": "",
+        "case": {
+          "id": "add_norm_fp8_linear-4424919b66",
+          "configuration": {
+            "operation": "add_norm_fp8_linear",
+            "tokens": 624,
+            "width": 5120,
+            "columns": 34816
+          },
+          "workloads": [
+            "prefix-32768-1"
+          ]
+        },
+        "current_source_match": true,
+        "groupwise_sources_sha256": {
+          "python/oh_my_vllm/kernels/cuda_backend/groupwise.py": "e82feeb484a2c5810cfb6e0abf8a4909960022b17f6354dce226e17d0f998cca",
+          "python/oh_my_vllm/kernels/cuda_backend/groupwise_accum.cuh": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3",
+          "python/oh_my_vllm/kernels/cuda_backend/groupwise_fp8.cu": "41964cddfd455fdc1cb9b418adcacf74416bc08f9bb64259c8d0e219ee875dd7"
+        },
+        "loaded_gemm": {
+          "source_sha256": "41964cddfd455fdc1cb9b418adcacf74416bc08f9bb64259c8d0e219ee875dd7",
+          "headers_sha256": "9f8f986755b1af1d3a442eb905f1eb683a9be1906f7d424739a11c7f197e0e22",
+          "project_headers": {
+            "groupwise_accum.cuh": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3"
+          },
+          "build_input_sha256": "48d5d93354b4b9952702a6c0af6e4633ea0385f9a21c14beb3e263221f0bbe5f",
+          "so_sha256": "e3e475a15d2e91954cf02cf691197d0aa8e3c10e5326ef7ff7f4b83b5576a92e",
+          "module_bytes_verified": true
+        },
+        "gemm_kernel_id": "1",
+        "metrics": [
+          {
+            "ID": "1",
+            "Metric Name": "dram__bytes.sum",
+            "Metric Unit": "byte",
+            "Metric Value": "214094848"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+            "Metric Unit": "%",
+            "Metric Value": "13.51"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum",
+            "Metric Unit": "",
+            "Metric Value": "405408"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "l1tex__m_l1tex2xbar_write_bytes_mem_global_op_tma_st.sum",
+            "Metric Unit": "byte",
+            "Metric Value": "43450368"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "l1tex__m_xbar2l1tex_read_bytes_mem_global_op_tma_ld.sum",
+            "Metric Unit": "byte",
+            "Metric Value": "1771438080"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum",
+            "Metric Unit": "sector",
+            "Metric Value": "0"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum",
+            "Metric Unit": "sector",
+            "Metric Value": "0"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "launch__registers_per_thread",
+            "Metric Unit": "register/thread",
+            "Metric Value": "168"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "launch__shared_mem_per_block_dynamic",
+            "Metric Unit": "byte/block",
+            "Metric Value": "201216"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "launch__shared_mem_per_block_static",
+            "Metric Unit": "byte/block",
+            "Metric Value": "0"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "lts__t_bytes.sum",
+            "Metric Unit": "byte",
+            "Metric Value": "1399947328"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "lts__t_sector_hit_rate.pct",
+            "Metric Unit": "%",
+            "Metric Value": "72.70"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "lts__throughput.avg.pct_of_peak_sustained_elapsed",
+            "Metric Unit": "%",
+            "Metric Value": "41.70"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed",
+            "Metric Unit": "%",
+            "Metric Value": "51.05"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+            "Metric Unit": "%",
+            "Metric Value": "62.91"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "sm__warps_active.avg.pct_of_peak_sustained_active",
+            "Metric Unit": "%",
+            "Metric Value": "11.83"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "smsp__inst_executed.sum",
+            "Metric Unit": "inst",
+            "Metric Value": "47113025"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "smsp__issue_active.avg.pct_of_peak_sustained_active",
+            "Metric Unit": "%",
+            "Metric Value": "46.29"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
+            "Metric Unit": "%",
+            "Metric Value": "35.26"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",
+            "Metric Unit": "%",
+            "Metric Value": "13.01"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "smsp__warps_eligible.avg.per_cycle_active",
+            "Metric Unit": "warp",
+            "Metric Value": "0.65"
+          }
+        ],
+        "scope": "Existing independent one-shape normalized gate/up profile. No new GPU measurement; no unique stall-cause or framework-gain claim."
+      }
+    },
+    "source_identity": {
+      "schema": 3,
+      "artifact_kind": "independently_verified_operator_source_identity",
+      "record_timestamp_utc": "2026-10-10T04:48:30.770965Z",
+      "corrected_by": "independent reviewer (agent review_execution)",
+      "authorship_note": "This is a new independent frozen/current/working verification record. Its UTC is the actual verification time, not an inferred original-Claude authorship time.",
+      "commit_frozen": "a6b9bd27df13e7f6e58c879d08b68315c5d6ad8a",
+      "commit_current": "a5cc0ef0b17c48daf2c3191145b726cb1a2d84bb",
+      "original_revision02_files": {
+        "source-identity02.json": {
+          "sha256": "21c2ec7a3b9b8774af5f525a3b37fd5ced17fdb9bbbc55f8680637584c9d67f1",
+          "snapshot": "<local-path>",
+          "bytes": 8537
+        }
+      },
+      "original_reported_audit_timestamp": "2026-10-10T12:15:00Z",
+      "timestamp_correction": "Original12:15Z was in the future relative to04:45Z review; retain original literal only as provenance. This record timestamps the new independent verification.",
+      "files": {
+        "python/oh_my_vllm/ir/attention.py": {
+          "sha256_frozen_git": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+          "sha256_current_git": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+          "sha256_working_at_verification": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+          "frozen_current_working_equal": true,
+          "lines": 400,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/ir/core.py": {
+          "sha256_frozen_git": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+          "sha256_current_git": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+          "sha256_working_at_verification": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+          "frozen_current_working_equal": true,
+          "lines": 439,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/ir/coverage.py": {
+          "sha256_frozen_git": "56256503fc5573e5bf988a0588c13e34392e7f768b5c20dbd6c6fffc5f52cc5a",
+          "sha256_current_git": "56256503fc5573e5bf988a0588c13e34392e7f768b5c20dbd6c6fffc5f52cc5a",
+          "sha256_working_at_verification": "56256503fc5573e5bf988a0588c13e34392e7f768b5c20dbd6c6fffc5f52cc5a",
+          "frozen_current_working_equal": true,
+          "lines": 225,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/ir/dspark.py": {
+          "sha256_frozen_git": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+          "sha256_current_git": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+          "sha256_working_at_verification": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+          "frozen_current_working_equal": true,
+          "lines": 357,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/ir/execution.py": {
+          "sha256_frozen_git": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+          "sha256_current_git": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+          "sha256_working_at_verification": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+          "frozen_current_working_equal": true,
+          "lines": 38,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/ir/fp8.py": {
+          "sha256_frozen_git": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+          "sha256_current_git": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+          "sha256_working_at_verification": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+          "frozen_current_working_equal": true,
+          "lines": 198,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/ir/gdn_prefill.py": {
+          "sha256_frozen_git": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+          "sha256_current_git": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+          "sha256_working_at_verification": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+          "frozen_current_working_equal": true,
+          "lines": 132,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/ir/gdn_prepare.py": {
+          "sha256_frozen_git": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+          "sha256_current_git": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+          "sha256_working_at_verification": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+          "frozen_current_working_equal": true,
+          "lines": 224,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/ir/logits.py": {
+          "sha256_frozen_git": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+          "sha256_current_git": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+          "sha256_working_at_verification": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+          "frozen_current_working_equal": true,
+          "lines": 68,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/ir/normalized_linear.py": {
+          "sha256_frozen_git": "9a4ee73bbf7fb15c7a01c496a78f9d22683857caa779c620151b7eb7057c1f72",
+          "sha256_current_git": "9a4ee73bbf7fb15c7a01c496a78f9d22683857caa779c620151b7eb7057c1f72",
+          "sha256_working_at_verification": "9a4ee73bbf7fb15c7a01c496a78f9d22683857caa779c620151b7eb7057c1f72",
+          "frozen_current_working_equal": true,
+          "lines": 168,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/ir/partial_attention.py": {
+          "sha256_frozen_git": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+          "sha256_current_git": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+          "sha256_working_at_verification": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+          "frozen_current_working_equal": true,
+          "lines": 142,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/ir/pointwise.py": {
+          "sha256_frozen_git": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+          "sha256_current_git": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+          "sha256_working_at_verification": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+          "frozen_current_working_equal": true,
+          "lines": 292,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/ir/recurrent.py": {
+          "sha256_frozen_git": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+          "sha256_current_git": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+          "sha256_working_at_verification": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+          "frozen_current_working_equal": true,
+          "lines": 265,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/ir/state.py": {
+          "sha256_frozen_git": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+          "sha256_current_git": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+          "sha256_working_at_verification": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+          "frozen_current_working_equal": true,
+          "lines": 134,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/kernels/attention.py": {
+          "sha256_frozen_git": "667fd8f322a6f221c204477dc666cf030c88c26ed125e62759a78492cedacf3a",
+          "sha256_current_git": "667fd8f322a6f221c204477dc666cf030c88c26ed125e62759a78492cedacf3a",
+          "sha256_working_at_verification": "667fd8f322a6f221c204477dc666cf030c88c26ed125e62759a78492cedacf3a",
+          "frozen_current_working_equal": true,
+          "lines": 199,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "independent_canonical_closure"
+        },
+        "python/oh_my_vllm/kernels/attention_prepare.py": {
+          "sha256_frozen_git": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+          "sha256_current_git": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+          "sha256_working_at_verification": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
+          "frozen_current_working_equal": true,
+          "lines": 72,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "independent_canonical_closure"
+        },
+        "python/oh_my_vllm/kernels/convolution.py": {
+          "sha256_frozen_git": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+          "sha256_current_git": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+          "sha256_working_at_verification": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
+          "frozen_current_working_equal": true,
+          "lines": 64,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "independent_canonical_closure"
+        },
+        "python/oh_my_vllm/kernels/cuda_backend/__init__.py": {
+          "sha256_frozen_git": "0d5604eb96f763a219b6b640245dfd734f566be5ac6d5c956224e920a74f67fe",
+          "sha256_current_git": "0d5604eb96f763a219b6b640245dfd734f566be5ac6d5c956224e920a74f67fe",
+          "sha256_working_at_verification": "0d5604eb96f763a219b6b640245dfd734f566be5ac6d5c956224e920a74f67fe",
+          "frozen_current_working_equal": true,
+          "lines": 434,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/kernels/cuda_backend/groupwise.py": {
+          "sha256_frozen_git": "e82feeb484a2c5810cfb6e0abf8a4909960022b17f6354dce226e17d0f998cca",
+          "sha256_current_git": "e82feeb484a2c5810cfb6e0abf8a4909960022b17f6354dce226e17d0f998cca",
+          "sha256_working_at_verification": "e82feeb484a2c5810cfb6e0abf8a4909960022b17f6354dce226e17d0f998cca",
+          "frozen_current_working_equal": true,
+          "lines": 176,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/kernels/cuda_backend/groupwise_accum.cuh": {
+          "sha256_frozen_git": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3",
+          "sha256_current_git": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3",
+          "sha256_working_at_verification": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3",
+          "frozen_current_working_equal": true,
+          "lines": 206,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/kernels/cuda_backend/groupwise_fp8.cu": {
+          "sha256_frozen_git": "41964cddfd455fdc1cb9b418adcacf74416bc08f9bb64259c8d0e219ee875dd7",
+          "sha256_current_git": "41964cddfd455fdc1cb9b418adcacf74416bc08f9bb64259c8d0e219ee875dd7",
+          "sha256_working_at_verification": "41964cddfd455fdc1cb9b418adcacf74416bc08f9bb64259c8d0e219ee875dd7",
+          "frozen_current_working_equal": true,
+          "lines": 328,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/kernels/cuda_backend/kernels.cu": {
+          "sha256_frozen_git": "a5afb4e6f72a1f5cd61c02d7593156e9566f68fb9a7d9cc6bf730d797df9cfbd",
+          "sha256_current_git": "a5afb4e6f72a1f5cd61c02d7593156e9566f68fb9a7d9cc6bf730d797df9cfbd",
+          "sha256_working_at_verification": "a5afb4e6f72a1f5cd61c02d7593156e9566f68fb9a7d9cc6bf730d797df9cfbd",
+          "frozen_current_working_equal": true,
+          "lines": 2934,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/kernels/decode_attention.py": {
+          "sha256_frozen_git": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+          "sha256_current_git": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+          "sha256_working_at_verification": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
+          "frozen_current_working_equal": true,
+          "lines": 155,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "independent_canonical_closure"
+        },
+        "python/oh_my_vllm/kernels/dspark_attention.py": {
+          "sha256_frozen_git": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+          "sha256_current_git": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+          "sha256_working_at_verification": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
+          "frozen_current_working_equal": true,
+          "lines": 223,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "independent_canonical_closure"
+        },
+        "python/oh_my_vllm/kernels/elementwise.py": {
+          "sha256_frozen_git": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+          "sha256_current_git": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+          "sha256_working_at_verification": "d809bffad26e0e5820c7ba7d15bc23adc2349f75049d4350383bfe7ebaccd7be",
+          "frozen_current_working_equal": true,
+          "lines": 51,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "independent_canonical_closure"
+        },
+        "python/oh_my_vllm/kernels/fp8.py": {
+          "sha256_frozen_git": "a01b69c87e7f5f1cba47838c18a63b071fe97068fae2e4946207ccdc767979c9",
+          "sha256_current_git": "a01b69c87e7f5f1cba47838c18a63b071fe97068fae2e4946207ccdc767979c9",
+          "sha256_working_at_verification": "a01b69c87e7f5f1cba47838c18a63b071fe97068fae2e4946207ccdc767979c9",
+          "frozen_current_working_equal": true,
+          "lines": 243,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "independent_canonical_closure"
+        },
+        "python/oh_my_vllm/kernels/gdn.py": {
+          "sha256_frozen_git": "b449e439f5f524272578b05899b529de9b4eb73c7ab34fb35f9ae09b07e7af75",
+          "sha256_current_git": "b449e439f5f524272578b05899b529de9b4eb73c7ab34fb35f9ae09b07e7af75",
+          "sha256_working_at_verification": "b449e439f5f524272578b05899b529de9b4eb73c7ab34fb35f9ae09b07e7af75",
+          "frozen_current_working_equal": true,
+          "lines": 234,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "independent_canonical_closure"
+        },
+        "python/oh_my_vllm/kernels/normalization.py": {
+          "sha256_frozen_git": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+          "sha256_current_git": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+          "sha256_working_at_verification": "c2ccfca673e7f216e6356b490fbe44c27de9d509cdad247f7aa21882247936bb",
+          "frozen_current_working_equal": true,
+          "lines": 136,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "independent_canonical_closure"
+        },
+        "python/oh_my_vllm/kernels/partial_attention.py": {
+          "sha256_frozen_git": "9d74993331ee37e48931d0600204009cf926ad4582db92e8f1e2f296ad0aa92a",
+          "sha256_current_git": "9d74993331ee37e48931d0600204009cf926ad4582db92e8f1e2f296ad0aa92a",
+          "sha256_working_at_verification": "9d74993331ee37e48931d0600204009cf926ad4582db92e8f1e2f296ad0aa92a",
+          "frozen_current_working_equal": true,
+          "lines": 40,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "independent_canonical_closure"
+        },
+        "python/oh_my_vllm/models/dspark.py": {
+          "sha256_frozen_git": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+          "sha256_current_git": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+          "sha256_working_at_verification": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+          "frozen_current_working_equal": true,
+          "lines": 425,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/models/qwen.py": {
+          "sha256_frozen_git": "c5d769bd8342c5109b78d9ecfdb169f195186361cff5b7c9465d5cece776ee0d",
+          "sha256_current_git": "c5d769bd8342c5109b78d9ecfdb169f195186361cff5b7c9465d5cece776ee0d",
+          "sha256_working_at_verification": "c5d769bd8342c5109b78d9ecfdb169f195186361cff5b7c9465d5cece776ee0d",
+          "frozen_current_working_equal": true,
+          "lines": 450,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/worker/decode_graph.py": {
+          "sha256_frozen_git": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+          "sha256_current_git": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+          "sha256_working_at_verification": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+          "frozen_current_working_equal": true,
+          "lines": 345,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/worker/dspark_graph.py": {
+          "sha256_frozen_git": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+          "sha256_current_git": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+          "sha256_working_at_verification": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+          "frozen_current_working_equal": true,
+          "lines": 155,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "independent_canonical_closure"
+        },
+        "python/oh_my_vllm/worker/model_runner.py": {
+          "sha256_frozen_git": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
+          "sha256_current_git": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
+          "sha256_working_at_verification": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
+          "frozen_current_working_equal": true,
+          "lines": 880,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        },
+        "python/oh_my_vllm/worker/mtp_context_graph.py": {
+          "sha256_frozen_git": "e59aefabeaf5e44bf4b59516d8fff90532b596aa3e08bc2c29456b6b82db36bf",
+          "sha256_current_git": "e59aefabeaf5e44bf4b59516d8fff90532b596aa3e08bc2c29456b6b82db36bf",
+          "sha256_working_at_verification": "e59aefabeaf5e44bf4b59516d8fff90532b596aa3e08bc2c29456b6b82db36bf",
+          "frozen_current_working_equal": true,
+          "lines": 82,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "independent_canonical_closure"
+        },
+        "python/oh_my_vllm/worker/prefill_graph.py": {
+          "sha256_frozen_git": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
+          "sha256_current_git": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
+          "sha256_working_at_verification": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
+          "frozen_current_working_equal": true,
+          "lines": 130,
+          "origin": "original24 plus canonical wrapper/graph source closure",
+          "scope_origin": "original_Claude24"
+        }
+      },
+      "file_count": 36,
+      "all_frozen_current_working_equal": true,
+      "scope": "Original24 files plus all canonical FFI Python wrappers and seven graph-class implementation files; explicit closure, not a claim to hash the entire repository.",
+      "gpu_experiments": false,
+      "production_edits": false,
+      "original_verified_file_count": 24,
+      "supplemental_source_closure_file_count": 12
+    },
+    "validation": {
+      "schema": 3,
+      "artifact_kind": "independent_operator_audit_validation",
+      "record_timestamp_utc": "2026-10-10T04:55:14.741173Z",
+      "corrected_by": "independent reviewer (agent review_execution)",
+      "commit_frozen": "a6b9bd27df13e7f6e58c879d08b68315c5d6ad8a",
+      "commit_current": "a5cc0ef0b17c48daf2c3191145b726cb1a2d84bb",
+      "original_revision02_files": {
+        "inventory02.json": {
+          "sha256": "5492c28e7a1255fc79995c8598ab59371b75cc07460f9f44dd3b4e807fe8d662",
+          "bytes": 26795,
+          "snapshot": "<local-path>",
+          "raw_snapshot_byte_equal": true
+        },
+        "findings02.json": {
+          "sha256": "1bb2ecd22abc01c6a75886d882e1222d87ee143e31e71da2202236c5428c745b",
+          "bytes": 29384,
+          "snapshot": "<local-path>",
+          "raw_snapshot_byte_equal": true
+        },
+        "audit02.md": {
+          "sha256": "b19073817291eda66c4e98c322af72b7463d567c1b1482119448ae50ece4cf48",
+          "bytes": 13855,
+          "snapshot": "<local-path>",
+          "raw_snapshot_byte_equal": true
+        },
+        "source-identity02.json": {
+          "sha256": "21c2ec7a3b9b8774af5f525a3b37fd5ced17fdb9bbbc55f8680637584c9d67f1",
+          "bytes": 8537,
+          "snapshot": "<local-path>",
+          "raw_snapshot_byte_equal": true
+        },
+        "validation02.json": {
+          "sha256": "7d072d8cc6f2ffab805dfd38e31d16d7fc330aedb8fe19e310a5f7c7fd6344ea",
+          "bytes": 3395,
+          "snapshot": "<local-path>",
+          "raw_snapshot_byte_equal": true
+        },
+        "status02.json": {
+          "sha256": "ea3a8dccb9522cdf600d34489b2bf7577a12ec210fe71c306c7ef5268ea3694c",
+          "bytes": 1820,
+          "snapshot": "<local-path>",
+          "raw_snapshot_byte_equal": true
+        }
+      },
+      "original_validation02_limit": "Revision02 called28 entries plausible but had only26 unique native source symbols and omitted convolution_kernel; all_checks_pass was not an exact completeness proof.",
+      "original02_native_table": {
+        "row_count": 28,
+        "unique_source_symbol_count": 26,
+        "missing_actual_symbols": [
+          "convolution_kernel"
+        ],
+        "extra_actual_symbols": []
+      },
+      "checks": {
+        "main_ffi_names_exact": true,
+        "main_ffi_count25": true,
+        "all_ffi_count26": true,
+        "compute_ffi_count25": true,
+        "native_global_count27": true,
+        "native_kernel_symbols_exact": true,
+        "native_inventory_has_no_duplicate_symbols": true,
+        "generic_convolution_present": true,
+        "canonical_ffi_mapping_has_exactly25": true,
+        "all_canonical_wrapper_definitions_exist": true,
+        "ir_operations20_exact": true,
+        "all36_frozen_current_working_hashes_match": true,
+        "original24_count_correct": true,
+        "supplemental12_closure_count_correct": true,
+        "commit_ids_full40_hex": true,
+        "all6_original02_inputs_and_snapshots_unchanged": true,
+        "corrected_authorship_and_real_utc_explicit": true,
+        "all12_ids_once": true,
+        "all12_dispositions_match_independent_review": true,
+        "no_confirmed_new_production_correctness_defect": true,
+        "wide_profile_shape_and_current_source_module_bound": true,
+        "eligible_unit_warp_not_percent": true,
+        "packed18_bits10speed8fail7geometry9ops": true
+      },
+      "all_checks_passed": true,
+      "output_artifacts": {
+        "inventory03.json": {
+          "sha256": "82f8c25778e22883ac2ddad2ba8e128eac1636d74cd2334e8918ba30be644c50",
+          "bytes": 42351
+        },
+        "findings03.json": {
+          "sha256": "752ab585bb215d1521020c8e942d149b499acb6b28e2de483341ade529c248ab",
+          "bytes": 37310
+        },
+        "audit03.md": {
+          "sha256": "0401fae9fdfac02cc3ce0471cac5f06be0752fb5748457060a4cd7123d1f7ee1",
+          "bytes": 6958
+        },
+        "source-identity03.json": {
+          "sha256": "daa4437264854bcfc5df706cc3773a0e03bfe25a767e1da86c8d00ed4029d0d4",
+          "bytes": 20908
+        }
+      },
+      "original02_future_utc_errors": [
+        {
+          "file": "inventory02.json",
+          "original_literal": "2026-10-10T12:20:00Z",
+          "future_relative_to_actual_review_utc": true
+        },
+        {
+          "file": "findings02.json",
+          "original_literal": "2026-10-10T12:25:00Z",
+          "future_relative_to_actual_review_utc": true
+        },
+        {
+          "file": "source-identity02.json",
+          "original_literal": "2026-10-10T12:15:00Z",
+          "future_relative_to_actual_review_utc": true
+        },
+        {
+          "file": "validation02.json",
+          "original_literal": "2026-10-10T12:30:00Z",
+          "future_relative_to_actual_review_utc": true
+        },
+        {
+          "file": "status02.json",
+          "original_literal": "2026-10-10T12:35:00Z",
+          "future_relative_to_actual_review_utc": true
+        }
+      ],
+      "disposition_counts": {
+        "unmeasured_tuning_hypothesis": 3,
+        "false_positive": 3,
+        "experimental_not_production": 2,
+        "existing_contract": 4
+      },
+      "validation_kind": "CPU-only JSON/AST/regex/git/blob/hash inspection; no GPU/model/service/application-test execution. No new numerical/performance acceptance claim."
+    },
+    "independent_review": {
+      "schema": 1,
+      "reviewer": "agent review_execution",
+      "review_started_utc": "2026-10-10T04:45:32.021689Z",
+      "review_state": "complete",
+      "scope": "Read-only inspection of source and existing audit outputs. No GPU, services, tests, builds or production edits.",
+      "canonical_reference": "claude-owned-audit-independent-review01.json",
+      "source_identity02": {
+        "original_sha256": "21c2ec7a3b9b8774af5f525a3b37fd5ced17fdb9bbbc55f8680637584c9d67f1",
+        "reported_audit_timestamp": "2026-10-10T12:15:00Z",
+        "timestamp_valid": false,
+        "timestamp_problem": "Reported12:15Z is in the future relative to actual review UTC around04:45Z. Preserve original; correct derivative uses actual correction/verification UTC, without reconstructing original authorship time.",
+        "commit_frozen": "a6b9bd2",
+        "commit_current": "a5cc0ef0b17c48daf2c3191145b726cb1a2d84bb",
+        "checks": [
+          {
+            "path": "python/oh_my_vllm/kernels/cuda_backend/kernels.cu",
+            "reported_before": "a5afb4e6f72a1f5cd61c02d7593156e9566f68fb9a7d9cc6bf730d797df9cfbd",
+            "reported_after": "a5afb4e6f72a1f5cd61c02d7593156e9566f68fb9a7d9cc6bf730d797df9cfbd",
+            "frozen_git_sha256": "a5afb4e6f72a1f5cd61c02d7593156e9566f68fb9a7d9cc6bf730d797df9cfbd",
+            "current_git_sha256": "a5afb4e6f72a1f5cd61c02d7593156e9566f68fb9a7d9cc6bf730d797df9cfbd",
+            "working_sha256": "a5afb4e6f72a1f5cd61c02d7593156e9566f68fb9a7d9cc6bf730d797df9cfbd",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/kernels/cuda_backend/groupwise_fp8.cu",
+            "reported_before": "41964cddfd455fdc1cb9b418adcacf74416bc08f9bb64259c8d0e219ee875dd7",
+            "reported_after": "41964cddfd455fdc1cb9b418adcacf74416bc08f9bb64259c8d0e219ee875dd7",
+            "frozen_git_sha256": "41964cddfd455fdc1cb9b418adcacf74416bc08f9bb64259c8d0e219ee875dd7",
+            "current_git_sha256": "41964cddfd455fdc1cb9b418adcacf74416bc08f9bb64259c8d0e219ee875dd7",
+            "working_sha256": "41964cddfd455fdc1cb9b418adcacf74416bc08f9bb64259c8d0e219ee875dd7",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/kernels/cuda_backend/groupwise_accum.cuh",
+            "reported_before": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3",
+            "reported_after": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3",
+            "frozen_git_sha256": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3",
+            "current_git_sha256": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3",
+            "working_sha256": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/kernels/cuda_backend/__init__.py",
+            "reported_before": "0d5604eb96f763a219b6b640245dfd734f566be5ac6d5c956224e920a74f67fe",
+            "reported_after": "0d5604eb96f763a219b6b640245dfd734f566be5ac6d5c956224e920a74f67fe",
+            "frozen_git_sha256": "0d5604eb96f763a219b6b640245dfd734f566be5ac6d5c956224e920a74f67fe",
+            "current_git_sha256": "0d5604eb96f763a219b6b640245dfd734f566be5ac6d5c956224e920a74f67fe",
+            "working_sha256": "0d5604eb96f763a219b6b640245dfd734f566be5ac6d5c956224e920a74f67fe",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/kernels/cuda_backend/groupwise.py",
+            "reported_before": "e82feeb484a2c5810cfb6e0abf8a4909960022b17f6354dce226e17d0f998cca",
+            "reported_after": "e82feeb484a2c5810cfb6e0abf8a4909960022b17f6354dce226e17d0f998cca",
+            "frozen_git_sha256": "e82feeb484a2c5810cfb6e0abf8a4909960022b17f6354dce226e17d0f998cca",
+            "current_git_sha256": "e82feeb484a2c5810cfb6e0abf8a4909960022b17f6354dce226e17d0f998cca",
+            "working_sha256": "e82feeb484a2c5810cfb6e0abf8a4909960022b17f6354dce226e17d0f998cca",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/ir/core.py",
+            "reported_before": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+            "reported_after": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+            "frozen_git_sha256": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+            "current_git_sha256": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+            "working_sha256": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/ir/attention.py",
+            "reported_before": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+            "reported_after": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+            "frozen_git_sha256": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+            "current_git_sha256": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+            "working_sha256": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/ir/coverage.py",
+            "reported_before": "56256503fc5573e5bf988a0588c13e34392e7f768b5c20dbd6c6fffc5f52cc5a",
+            "reported_after": "56256503fc5573e5bf988a0588c13e34392e7f768b5c20dbd6c6fffc5f52cc5a",
+            "frozen_git_sha256": "56256503fc5573e5bf988a0588c13e34392e7f768b5c20dbd6c6fffc5f52cc5a",
+            "current_git_sha256": "56256503fc5573e5bf988a0588c13e34392e7f768b5c20dbd6c6fffc5f52cc5a",
+            "working_sha256": "56256503fc5573e5bf988a0588c13e34392e7f768b5c20dbd6c6fffc5f52cc5a",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/ir/gdn_prefill.py",
+            "reported_before": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+            "reported_after": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+            "frozen_git_sha256": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+            "current_git_sha256": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+            "working_sha256": "b4d8f981909b9f62bf6d5954e154164d7e2e38919d72ecf281c5306498a2d39d",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/ir/gdn_prepare.py",
+            "reported_before": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+            "reported_after": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+            "frozen_git_sha256": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+            "current_git_sha256": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+            "working_sha256": "23607828072c7ab64cc0a87465bbc074e6d9f989f606a479edea77ab0f867cd8",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/ir/recurrent.py",
+            "reported_before": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+            "reported_after": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+            "frozen_git_sha256": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+            "current_git_sha256": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+            "working_sha256": "7ac3b4664fbaa52abac3d3cbb2f25f7d17bf1e5e74e7e484a7195d9b887ce6c8",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/ir/state.py",
+            "reported_before": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+            "reported_after": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+            "frozen_git_sha256": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+            "current_git_sha256": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+            "working_sha256": "db66a40443c5907084f7b448d24c58854657e6780975049b115041b055136f37",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/ir/pointwise.py",
+            "reported_before": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+            "reported_after": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+            "frozen_git_sha256": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+            "current_git_sha256": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+            "working_sha256": "0bc9a8a9f1d5f87e9ff72501c50acf11fed599f5d8c3affcd6cef9d1265bb36d",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/ir/dspark.py",
+            "reported_before": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+            "reported_after": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+            "frozen_git_sha256": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+            "current_git_sha256": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+            "working_sha256": "0970aae903f71480b7eac97694ec0ef60b63fe45d1ae7f1bf72a5d150380c43e",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/ir/logits.py",
+            "reported_before": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+            "reported_after": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+            "frozen_git_sha256": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+            "current_git_sha256": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+            "working_sha256": "75a58a5b9764787de1796444659f55dca9124e77e2f3a0f0a3af6a24f9e7e38e",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/ir/normalized_linear.py",
+            "reported_before": "9a4ee73bbf7fb15c7a01c496a78f9d22683857caa779c620151b7eb7057c1f72",
+            "reported_after": "9a4ee73bbf7fb15c7a01c496a78f9d22683857caa779c620151b7eb7057c1f72",
+            "frozen_git_sha256": "9a4ee73bbf7fb15c7a01c496a78f9d22683857caa779c620151b7eb7057c1f72",
+            "current_git_sha256": "9a4ee73bbf7fb15c7a01c496a78f9d22683857caa779c620151b7eb7057c1f72",
+            "working_sha256": "9a4ee73bbf7fb15c7a01c496a78f9d22683857caa779c620151b7eb7057c1f72",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/ir/partial_attention.py",
+            "reported_before": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+            "reported_after": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+            "frozen_git_sha256": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+            "current_git_sha256": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+            "working_sha256": "a9c3e081287abc010a75d75c2da7136c40dbbb48ccf04e308ad585ddf54c144c",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/ir/execution.py",
+            "reported_before": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+            "reported_after": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+            "frozen_git_sha256": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+            "current_git_sha256": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+            "working_sha256": "ea91301b3e50743d67748d941de159b7c4adda7ba382741cbbbf124c6fe6708e",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/ir/fp8.py",
+            "reported_before": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+            "reported_after": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+            "frozen_git_sha256": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+            "current_git_sha256": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+            "working_sha256": "1022455e35ad6d74201bfe96e4be8bf3f1035d099e59904a1354c04f8c2f48a4",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/worker/decode_graph.py",
+            "reported_before": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+            "reported_after": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+            "frozen_git_sha256": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+            "current_git_sha256": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+            "working_sha256": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/worker/prefill_graph.py",
+            "reported_before": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
+            "reported_after": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
+            "frozen_git_sha256": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
+            "current_git_sha256": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
+            "working_sha256": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/worker/model_runner.py",
+            "reported_before": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
+            "reported_after": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
+            "frozen_git_sha256": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
+            "current_git_sha256": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
+            "working_sha256": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/models/qwen.py",
+            "reported_before": "c5d769bd8342c5109b78d9ecfdb169f195186361cff5b7c9465d5cece776ee0d",
+            "reported_after": "c5d769bd8342c5109b78d9ecfdb169f195186361cff5b7c9465d5cece776ee0d",
+            "frozen_git_sha256": "c5d769bd8342c5109b78d9ecfdb169f195186361cff5b7c9465d5cece776ee0d",
+            "current_git_sha256": "c5d769bd8342c5109b78d9ecfdb169f195186361cff5b7c9465d5cece776ee0d",
+            "working_sha256": "c5d769bd8342c5109b78d9ecfdb169f195186361cff5b7c9465d5cece776ee0d",
+            "passed": true
+          },
+          {
+            "path": "python/oh_my_vllm/models/dspark.py",
+            "reported_before": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+            "reported_after": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+            "frozen_git_sha256": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+            "current_git_sha256": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+            "working_sha256": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+            "passed": true
+          }
+        ],
+        "all_passed": true
+      },
+      "pending": [],
+      "conclusions": [
+        "Original24 source hashes and both full committed versions match. Corrected identity closes36 explicit source files, with12 supplemental wrapper/graph files.",
+        "Actual27 unique native globals,25 main FFI entries including one host counter,26 total owned FFI entries and25 compute entries.",
+        "Corrected03 is independent-authored; raw02 and exact pre-correction bytes are retained with hashes.",
+        "Future original UTC literals were preserved as raw provenance; all corrected records use actual independent verification/correction UTC.",
+        "Wide 35.26% and 0.65 warp profile matches current source/header/module and M624/N34816/K5120; earlier portable C10 counters are a separate valid measurement. Aggregate profile does not establish a unique root cause.",
+        "All12 dispositions reviewed: no new confirmed reachable production correctness defect; no new numerical/performance test claimed.",
+        "No production source was edited and no GPU, service or build was launched."
+      ],
+      "review_completed_utc": "2026-10-10T04:55:14.870033Z",
+      "corrected_by": "independent reviewer (agent review_execution)",
+      "commit_frozen": "a6b9bd27df13e7f6e58c879d08b68315c5d6ad8a",
+      "commit_current": "a5cc0ef0b17c48daf2c3191145b726cb1a2d84bb",
+      "original_revision02_files": {
+        "inventory02.json": {
+          "sha256": "5492c28e7a1255fc79995c8598ab59371b75cc07460f9f44dd3b4e807fe8d662",
+          "bytes": 26795,
+          "snapshot": "<local-path>",
+          "raw_snapshot_byte_equal": true
+        },
+        "findings02.json": {
+          "sha256": "1bb2ecd22abc01c6a75886d882e1222d87ee143e31e71da2202236c5428c745b",
+          "bytes": 29384,
+          "snapshot": "<local-path>",
+          "raw_snapshot_byte_equal": true
+        },
+        "audit02.md": {
+          "sha256": "b19073817291eda66c4e98c322af72b7463d567c1b1482119448ae50ece4cf48",
+          "bytes": 13855,
+          "snapshot": "<local-path>",
+          "raw_snapshot_byte_equal": true
+        },
+        "source-identity02.json": {
+          "sha256": "21c2ec7a3b9b8774af5f525a3b37fd5ced17fdb9bbbc55f8680637584c9d67f1",
+          "bytes": 8537,
+          "snapshot": "<local-path>",
+          "raw_snapshot_byte_equal": true
+        },
+        "validation02.json": {
+          "sha256": "7d072d8cc6f2ffab805dfd38e31d16d7fc330aedb8fe19e310a5f7c7fd6344ea",
+          "bytes": 3395,
+          "snapshot": "<local-path>",
+          "raw_snapshot_byte_equal": true
+        },
+        "status02.json": {
+          "sha256": "ea3a8dccb9522cdf600d34489b2bf7577a12ec210fe71c306c7ef5268ea3694c",
+          "bytes": 1820,
+          "snapshot": "<local-path>",
+          "raw_snapshot_byte_equal": true
+        }
+      },
+      "corrected_revision03_dir": "<local-path>",
+      "corrected_revision03_files": {
+        "inventory03.json": {
+          "sha256": "82f8c25778e22883ac2ddad2ba8e128eac1636d74cd2334e8918ba30be644c50",
+          "bytes": 42351
+        },
+        "findings03.json": {
+          "sha256": "752ab585bb215d1521020c8e942d149b499acb6b28e2de483341ade529c248ab",
+          "bytes": 37310
+        },
+        "audit03.md": {
+          "sha256": "0401fae9fdfac02cc3ce0471cac5f06be0752fb5748457060a4cd7123d1f7ee1",
+          "bytes": 6958
+        },
+        "source-identity03.json": {
+          "sha256": "daa4437264854bcfc5df706cc3773a0e03bfe25a767e1da86c8d00ed4029d0d4",
+          "bytes": 20908
+        },
+        "validation03.json": {
+          "sha256": "54136fb9961d59be8479371b412fd76eafadf7577c71fe08fbac2a5162a7f8f5",
+          "bytes": 5514
+        }
+      },
+      "machine_checks": {
+        "main_ffi_names_exact": true,
+        "main_ffi_count25": true,
+        "all_ffi_count26": true,
+        "compute_ffi_count25": true,
+        "native_global_count27": true,
+        "native_kernel_symbols_exact": true,
+        "native_inventory_has_no_duplicate_symbols": true,
+        "generic_convolution_present": true,
+        "canonical_ffi_mapping_has_exactly25": true,
+        "all_canonical_wrapper_definitions_exist": true,
+        "ir_operations20_exact": true,
+        "all36_frozen_current_working_hashes_match": true,
+        "original24_count_correct": true,
+        "supplemental12_closure_count_correct": true,
+        "commit_ids_full40_hex": true,
+        "all6_original02_inputs_and_snapshots_unchanged": true,
+        "corrected_authorship_and_real_utc_explicit": true,
+        "all12_ids_once": true,
+        "all12_dispositions_match_independent_review": true,
+        "no_confirmed_new_production_correctness_defect": true,
+        "wide_profile_shape_and_current_source_module_bound": true,
+        "eligible_unit_warp_not_percent": true,
+        "packed18_bits10speed8fail7geometry9ops": true
+      },
+      "machine_checks_all_pass": true,
+      "original02_future_utc_errors": [
+        {
+          "file": "inventory02.json",
+          "original_literal": "2026-10-10T12:20:00Z",
+          "future_relative_to_actual_review_utc": true
+        },
+        {
+          "file": "findings02.json",
+          "original_literal": "2026-10-10T12:25:00Z",
+          "future_relative_to_actual_review_utc": true
+        },
+        {
+          "file": "source-identity02.json",
+          "original_literal": "2026-10-10T12:15:00Z",
+          "future_relative_to_actual_review_utc": true
+        },
+        {
+          "file": "validation02.json",
+          "original_literal": "2026-10-10T12:30:00Z",
+          "future_relative_to_actual_review_utc": true
+        },
+        {
+          "file": "status02.json",
+          "original_literal": "2026-10-10T12:35:00Z",
+          "future_relative_to_actual_review_utc": true
+        }
+      ],
+      "original02_native_table": {
+        "row_count": 28,
+        "unique_source_symbol_count": 26,
+        "missing_actual_symbols": [
+          "convolution_kernel"
+        ],
+        "extra_actual_symbols": []
+      },
+      "wide_measurement_verified": {
+        "record": "milestone11-wide-observations01.json",
+        "record_sha256": "d3732369b9b6870925c658f41947124e68fc7e4f6fd41aa2b58e581128df7460",
+        "source_commit": "a6b9bd27df13e7f6e58c879d08b68315c5d6ad8a",
+        "source_status": "",
+        "case": {
+          "id": "add_norm_fp8_linear-4424919b66",
+          "configuration": {
+            "operation": "add_norm_fp8_linear",
+            "tokens": 624,
+            "width": 5120,
+            "columns": 34816
+          },
+          "workloads": [
+            "prefix-32768-1"
+          ]
+        },
+        "current_source_match": true,
+        "groupwise_sources_sha256": {
+          "python/oh_my_vllm/kernels/cuda_backend/groupwise.py": "e82feeb484a2c5810cfb6e0abf8a4909960022b17f6354dce226e17d0f998cca",
+          "python/oh_my_vllm/kernels/cuda_backend/groupwise_accum.cuh": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3",
+          "python/oh_my_vllm/kernels/cuda_backend/groupwise_fp8.cu": "41964cddfd455fdc1cb9b418adcacf74416bc08f9bb64259c8d0e219ee875dd7"
+        },
+        "loaded_gemm": {
+          "source_sha256": "41964cddfd455fdc1cb9b418adcacf74416bc08f9bb64259c8d0e219ee875dd7",
+          "headers_sha256": "9f8f986755b1af1d3a442eb905f1eb683a9be1906f7d424739a11c7f197e0e22",
+          "project_headers": {
+            "groupwise_accum.cuh": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3"
+          },
+          "build_input_sha256": "48d5d93354b4b9952702a6c0af6e4633ea0385f9a21c14beb3e263221f0bbe5f",
+          "so_sha256": "e3e475a15d2e91954cf02cf691197d0aa8e3c10e5326ef7ff7f4b83b5576a92e",
+          "module_bytes_verified": true
+        },
+        "gemm_kernel_id": "1",
+        "metrics": [
+          {
+            "ID": "1",
+            "Metric Name": "dram__bytes.sum",
+            "Metric Unit": "byte",
+            "Metric Value": "214094848"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "dram__throughput.avg.pct_of_peak_sustained_elapsed",
+            "Metric Unit": "%",
+            "Metric Value": "13.51"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum",
+            "Metric Unit": "",
+            "Metric Value": "405408"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "l1tex__m_l1tex2xbar_write_bytes_mem_global_op_tma_st.sum",
+            "Metric Unit": "byte",
+            "Metric Value": "43450368"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "l1tex__m_xbar2l1tex_read_bytes_mem_global_op_tma_ld.sum",
+            "Metric Unit": "byte",
+            "Metric Value": "1771438080"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "l1tex__t_sectors_pipe_lsu_mem_local_op_ld.sum",
+            "Metric Unit": "sector",
+            "Metric Value": "0"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "l1tex__t_sectors_pipe_lsu_mem_local_op_st.sum",
+            "Metric Unit": "sector",
+            "Metric Value": "0"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "launch__registers_per_thread",
+            "Metric Unit": "register/thread",
+            "Metric Value": "168"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "launch__shared_mem_per_block_dynamic",
+            "Metric Unit": "byte/block",
+            "Metric Value": "201216"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "launch__shared_mem_per_block_static",
+            "Metric Unit": "byte/block",
+            "Metric Value": "0"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "lts__t_bytes.sum",
+            "Metric Unit": "byte",
+            "Metric Value": "1399947328"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "lts__t_sector_hit_rate.pct",
+            "Metric Unit": "%",
+            "Metric Value": "72.70"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "lts__throughput.avg.pct_of_peak_sustained_elapsed",
+            "Metric Unit": "%",
+            "Metric Value": "41.70"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed",
+            "Metric Unit": "%",
+            "Metric Value": "51.05"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "sm__throughput.avg.pct_of_peak_sustained_elapsed",
+            "Metric Unit": "%",
+            "Metric Value": "62.91"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "sm__warps_active.avg.pct_of_peak_sustained_active",
+            "Metric Unit": "%",
+            "Metric Value": "11.83"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "smsp__inst_executed.sum",
+            "Metric Unit": "inst",
+            "Metric Value": "47113025"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "smsp__issue_active.avg.pct_of_peak_sustained_active",
+            "Metric Unit": "%",
+            "Metric Value": "46.29"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
+            "Metric Unit": "%",
+            "Metric Value": "35.26"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",
+            "Metric Unit": "%",
+            "Metric Value": "13.01"
+          },
+          {
+            "ID": "1",
+            "Metric Name": "smsp__warps_eligible.avg.per_cycle_active",
+            "Metric Unit": "warp",
+            "Metric Value": "0.65"
+          }
+        ],
+        "scope": "Existing independent one-shape normalized gate/up profile. No new GPU measurement; no unique stall-cause or framework-gain claim."
+      },
+      "finding_reviews": [
+        {
+          "id": "F01",
+          "disposition": "unmeasured_tuning_hypothesis",
+          "severity": "low",
+          "conclusion": "No production change warranted given the current consumer. If a future GDN prefill consumer gains PDL support, revisit trigger placement at that time.",
+          "evidence_scope": "Source inspection of placement/caller chain. No new latency comparison or PDL gain claimed."
+        },
+        {
+          "id": "F02",
+          "disposition": "false_positive",
+          "severity": "none",
+          "conclusion": "No change needed. Existing guard is correct and already documented by the comment 'currently uses zero workspace; future nonzero requirements fail the guard.'",
+          "evidence_scope": "Guard existence confirmed by source. Actual runtime workspace_size value not measured (expected 0 for current dispatch paths)."
+        },
+        {
+          "id": "F03",
+          "disposition": "unmeasured_tuning_hypothesis",
+          "severity": "low",
+          "conclusion": "Retain the measured stall observation. If future work targets this shape, PC/SASS attribution is needed to identify the dominant stall source before attempting stage reduction or accumulator changes. The packed FP32 candidate (F04) provides a complementary direction with existing measurements.",
+          "evidence_scope": "Current-source profile of M624/N34816/K5120 only. No all-shape or wall-time inference. The earlier portable C10 record with 33.95% and 0.56 warp is a separate valid measurement, not conflicting evidence."
+        },
+        {
+          "id": "F04",
+          "disposition": "experimental_not_production",
+          "severity": "low",
+          "conclusion": "No production adoption is established. Geometry dispatch must cover all operations sharing the same GEMM: M624/N5120/K6144 cannot be selected from gated-out alone because plain out failed. Seven common geometries cover nine consistently passing operations, not all ten individual passes. Adoption requires independent production full-operation/framework validation.",
+          "evidence_scope": "External diagnostic:18 complete-operation comparisons, all bitwise equal;10 positive paired speed gates/8 failures. Rows624/1248/2496. The7 common geometries cover9 operations because out and gated-out share each M/N/K. These medium cases do not validate two-SM or large MN dispatch."
+        },
+        {
+          "id": "F05",
+          "disposition": "experimental_not_production",
+          "severity": "low",
+          "conclusion": "Fix build04 metadata path and run the 18-shape numeric+speed suite before any production dispatch claim.",
+          "evidence_scope": "UNMEASURED entirely. Build compilation reached linking stage; metadata construction failed."
+        },
+        {
+          "id": "F06",
+          "disposition": "existing_contract",
+          "severity": "none",
+          "conclusion": "No change needed.",
+          "evidence_scope": "N/A — observability contract, not a performance measurement."
+        },
+        {
+          "id": "F07",
+          "disposition": "false_positive",
+          "severity": "none",
+          "conclusion": "No change needed.",
+          "evidence_scope": "N/A — correctness confirmed by source and test."
+        },
+        {
+          "id": "F08",
+          "disposition": "existing_contract",
+          "severity": "none",
+          "conclusion": "No change needed. Existing tests are adequate.",
+          "evidence_scope": "N/A — exception path analysis."
+        },
+        {
+          "id": "F09",
+          "disposition": "unmeasured_tuning_hypothesis",
+          "severity": "low",
+          "conclusion": "This observation is merged with F03. PC/SASS attribution is the prerequisite for any targeted intervention.",
+          "evidence_scope": "Current-source profile of M624/N34816/K5120 only. No all-shape or wall-time inference. The earlier portable C10 record with 33.95% and 0.56 warp is a separate valid measurement, not conflicting evidence."
+        },
+        {
+          "id": "F10",
+          "disposition": "existing_contract",
+          "severity": "none",
+          "conclusion": "No default-path change needed. Existing eager debug mode (OH_MY_VLLM_CUDA_DEBUG_SYNC) is the correct tool for debugging side-stream errors.",
+          "evidence_scope": "N/A — error path analysis."
+        },
+        {
+          "id": "F11",
+          "disposition": "false_positive",
+          "severity": "none",
+          "conclusion": "No change needed. If grouped or other batch sizes need double buffering, measure first — the dispatch comment at line 1949 indicates the B200 benefit applies specifically to four ungrouped queries.",
+          "evidence_scope": "N/A — correctness of dispatch confirmed. Performance of the owned decode kernel at large contexts not separately profiled."
+        },
+        {
+          "id": "F12",
+          "disposition": "existing_contract",
+          "severity": "none",
+          "conclusion": "No production change. Use dedicated large MN/formal/replay evidence for that branch; medium18 supplies no such acceptance.",
+          "evidence_scope": "Medium18 supports its own complete-operation results only. This review establishes no new large-M numerical/performance result."
+        }
+      ]
+    },
+    "original_artifacts": [
+      {
+        "name": "agents-completion01.json",
+        "bytes": 7203,
+        "sha256": "1749c60741e4c0f138b3654197593bd3c066f42f7dc45fe7674b359d0f78b426"
+      },
+      {
+        "name": "agents-corrected01.json",
+        "bytes": 7224,
+        "sha256": "e05e56c7ffbf28e8e0ac30ab2b13633ec410aed61925c26c41b6492997432b9e"
+      },
+      {
+        "name": "agents.json",
+        "bytes": 7106,
+        "sha256": "672d8f5e797fcd81087a65af4dc4b846210dd8c4163603e7e8b63237c9624e4b"
+      },
+      {
+        "name": "audit.md",
+        "bytes": 10890,
+        "sha256": "4a3d3f96c95b467aed5f36b8238448417c2ab2dc962390dd1113b4624e3577d8"
+      },
+      {
+        "name": "audit02.md",
+        "bytes": 13855,
+        "sha256": "b19073817291eda66c4e98c322af72b7463d567c1b1482119448ae50ece4cf48"
+      },
+      {
+        "name": "audit03.md",
+        "bytes": 6958,
+        "sha256": "0401fae9fdfac02cc3ce0471cac5f06be0752fb5748457060a4cd7123d1f7ee1"
+      },
+      {
+        "name": "completion-task01.txt",
+        "bytes": 1687,
+        "sha256": "e44bbe2704abe96eba9d86718ae0cc1eea99b1e8a48a558aaf1ef56bbf013a52"
+      },
+      {
+        "name": "continue01.txt",
+        "bytes": 991,
+        "sha256": "02f7443b7c3c5360ff7d7391e331498db0e894b9e6e3c08c3a2d661cbd169b6d"
+      },
+      {
+        "name": "findings.json",
+        "bytes": 25870,
+        "sha256": "a57b1aca35136c80fcf5f8e03d7df21f091b69ebef07c7a9c9bdd382cfb14b1d"
+      },
+      {
+        "name": "findings02.json",
+        "bytes": 29384,
+        "sha256": "1bb2ecd22abc01c6a75886d882e1222d87ee143e31e71da2202236c5428c745b"
+      },
+      {
+        "name": "findings03.json",
+        "bytes": 37310,
+        "sha256": "752ab585bb215d1521020c8e942d149b499acb6b28e2de483341ade529c248ab"
+      },
+      {
+        "name": "gen_corrected.py",
+        "bytes": 6327,
+        "sha256": "0535e965c3c7711b96ba2e7f26ac0a612907a55314147c4c0b29d2a3a8b450f7"
+      },
+      {
+        "name": "gen_findings02.py",
+        "bytes": 29650,
+        "sha256": "aa61248f2442e35c2535d541f8b1824a67af5b52e255e39467aec2bb83647745"
+      },
+      {
+        "name": "gen_inventory02.py",
+        "bytes": 26330,
+        "sha256": "70d0be3cc9ef5ed64996fc599c5f9c781248a041bf836d3ae579cb1bd00d6864"
+      },
+      {
+        "name": "inventory.json",
+        "bytes": 23595,
+        "sha256": "516e563352e71348129e2c666a719a8b3844e643128c8e2f592c58fe26024f43"
+      },
+      {
+        "name": "inventory02.json",
+        "bytes": 26795,
+        "sha256": "5492c28e7a1255fc79995c8598ab59371b75cc07460f9f44dd3b4e807fe8d662"
+      },
+      {
+        "name": "inventory03.json",
+        "bytes": 42351,
+        "sha256": "82f8c25778e22883ac2ddad2ba8e128eac1636d74cd2334e8918ba30be644c50"
+      },
+      {
+        "name": "launch.json",
+        "bytes": 332,
+        "sha256": "ea784d8141bd3f7fbe4450bf74ba0a5442889db724bb0400747440dc2b65d147"
+      },
+      {
+        "name": "misplaced-status01.json",
+        "bytes": 328,
+        "sha256": "9814a063c6c971fc560396ceebfd405b6b6187d6222aba2ec28f98f831a7c342"
+      },
+      {
+        "name": "revision-task01.txt",
+        "bytes": 5290,
+        "sha256": "0d5adc02eb97c25282a4190fff4fca99ec4d1093b10d4818104a177ae9825c30"
+      },
+      {
+        "name": "session-completion01.jsonl",
+        "bytes": 471088,
+        "sha256": "c97109fdac25989b96c8ca8ff469f64b60de9b7bfaecf45335b78b986e52f3c4"
+      },
+      {
+        "name": "session-completion01.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "session-continue01.jsonl",
+        "bytes": 736029,
+        "sha256": "ad8d86396aefbfc98b9a4164fe221b01bb0ec24f032976a2bda8be6bff40eb74"
+      },
+      {
+        "name": "session-continue01.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "session-revision01.jsonl",
+        "bytes": 425568,
+        "sha256": "16bb094334e732f46ff9afbcee8a1b645c855abd8a299a82eeb129e63d316683"
+      },
+      {
+        "name": "session-revision01.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "session.jsonl",
+        "bytes": 1065705,
+        "sha256": "f3328c3437f5f8d44cd0526890a9f1e82a416c2932b86888952b1c95d89f1924"
+      },
+      {
+        "name": "session.stderr",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "source-identity.json",
+        "bytes": 9078,
+        "sha256": "72bf9710889ed13eeed71a36fb1dc638e803a54c4c8061c2a86683fcfd4f30c9"
+      },
+      {
+        "name": "source-identity02.json",
+        "bytes": 8537,
+        "sha256": "21c2ec7a3b9b8774af5f525a3b37fd5ced17fdb9bbbc55f8680637584c9d67f1"
+      },
+      {
+        "name": "source-identity03.json",
+        "bytes": 20908,
+        "sha256": "daa4437264854bcfc5df706cc3773a0e03bfe25a767e1da86c8d00ed4029d0d4"
+      },
+      {
+        "name": "status.json",
+        "bytes": 876,
+        "sha256": "485f79494b6f59c53e5fcbbf9597730e136a6bd5cb56634e3f88d62e17efb530"
+      },
+      {
+        "name": "status02.json",
+        "bytes": 1820,
+        "sha256": "ea3a8dccb9522cdf600d34489b2bf7577a12ec210fe71c306c7ef5268ea3694c"
+      },
+      {
+        "name": "task.txt",
+        "bytes": 6714,
+        "sha256": "1591c59f43555c6ff63dd441f9b849c00002f0134d084feeac2dd31f6e8b82bf"
+      },
+      {
+        "name": "validation02.json",
+        "bytes": 3395,
+        "sha256": "7d072d8cc6f2ffab805dfd38e31d16d7fc330aedb8fe19e310a5f7c7fd6344ea"
+      },
+      {
+        "name": "validation03.json",
+        "bytes": 5514,
+        "sha256": "54136fb9961d59be8479371b412fd76eafadf7577c71fe08fbac2a5162a7f8f5"
+      },
+      {
+        "name": "claude-owned-audit-independent-review02.json",
+        "bytes": 31308,
+        "sha256": "ab09acf5fa344d456826dd3e8caa889e9ba7c2edf712c61daefdeb494b1326a1"
+      }
+    ],
+    "verification_limits": [
+      "Source audit does not supply new numerical or performance acceptance.",
+      "Revision 03 is independently corrected, with original Opus outputs retained byte unchanged.",
+      "Profiler counters bind the stated source, shape and replay; sampled stalls do not identify one latency cause.",
+      "External packed and cluster candidates are not selected in production.",
+      "Current-source full phase, operator, capacity and service verification is separate."
+    ],
+    "publication_normalization": {
+      "schema": 1,
+      "recorded_utc": "2026-10-10T05:04:52.457423+00:00",
+      "corrected_by": "independent reviewer (agent review_execution)",
+      "kind": "display-text normalization for the unchanged exporter",
+      "original_aggregate": {
+        "name": "milestone12-owned-cuda-audit-aggregate01.json",
+        "sha256": "cfc4cee5d0bf8b28e8906f6600bef6df6d59b9ecf43579b77948df202aa79787",
+        "bytes": 151587
+      },
+      "change_log": {
+        "name": "milestone12-owned-cuda-audit-normalization01.json",
+        "sha256": "0836d54da34699c3c2bc83bd9d4ae5f964ee0fe25e1a504927b1563121bbd0ac",
+        "bytes": 11543
+      },
+      "changed_display_strings": 14,
+      "mathematical_or_counter_descriptions": 8,
+      "reviewer_role_names": 6,
+      "preserved": "Numeric data, measurement identities, original artifact hashes, dispositions, source hashes, and verification limits are unchanged. Original aggregate and revision03 files remain byte-identical."
+    }
+  }
+}

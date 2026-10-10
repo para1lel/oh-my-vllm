@@ -28,14 +28,45 @@ The manifest also records each reference file's SHA-256.
 Keep these files and the runtime lock unchanged during unrelated work.
 A changed lock/reference must have an explicit new comparison decision.
 
-Native source is `python/oh_my_vllm/kernels/cuda_backend/kernels.cu`.
-Independent TVM FFI `build_inline` compiles it lazily. `load_module` loads the returned module.
+`python/oh_my_vllm/kernels/cuda_backend/kernels.cu` includes 10 operator headers from `operators/` for one native build.
+TVM FFI `build_inline` compiles these inputs at first use. `load_module` loads the returned module.
 The target is `sm_100a`, on the caller's current stream.
 The wrapper sets `TVM_FFI_CUDA_ARCH_LIST=10.0a`. Direct launches must set it explicitly.
 
 A sidecar binds source/configuration and module SHA for validated reuse without available nvcc.
 Finish compilation before capture and formal timing.
 TileFoundry is not a native build or service dependency.
+
+### Native module layout
+
+| Module in `operators/` | Responsibility |
+|---|---|
+| `common.cuh` | PDL, launches, error checks, storage checks, counters, reductions, and vector access. |
+| `quantization.cuh` | FP8 group quantization and SiLU multiplication. |
+| `normalization.cuh` | Target and DSpark RMS, residual RMS, and gated RMS. |
+| `attention_prepare.cuh` | Q/K preparation, RoPE, contiguous row copies, and target/draft KV writes. |
+| `gdn.cuh` | GDN gates, Q/K normalization, and recurrent state updates. |
+| `convolution.cuh` | Causal convolution and candidate state writes. |
+| `attention_math.cuh` | Softmax helpers, shared-memory addressing, and BF16 MMA helpers. |
+| `decode_attention.cuh` | Target split-KV attention and stable merge. |
+| `dspark_decode.cuh` | Draft attention over committed context and seven bidirectional block rows. |
+| `normalized_quantization.cuh` | Fused residual/gated RMS and FP8 quantization at necessary BF16 rounding points. |
+
+The single build keeps function exports and device definitions together.
+The native module binds all operator header hashes to its cache key and loaded provenance.
+The GEMM module binds `groupwise_fp8.cu` and its root template headers independently.
+The root template headers include `groupwise_accum.cuh`.
+Build and load checks reject changed source or headers.
+Formal phase and profiler checks compare loaded header identities with reviewed source.
+
+Each owned CUDA backend `.cu`, `.cuh`, and `.py` file must have at most 800 lines.
+`clang-format` 23.1.3 uses `.clang-format` and keeps the include order.
+The pre-commit hook formats native files and checks module size:
+
+```bash
+scripts/with-env.sh python scripts/format_cuda.py
+scripts/with-env.sh python scripts/format_cuda.py --check
+```
 
 ## Contracts and implementation
 

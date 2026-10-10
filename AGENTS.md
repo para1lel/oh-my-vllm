@@ -14,10 +14,11 @@ Keep all existing features and numerical tolerances.
 - Keep each active criterion in [requirements](docs/requirements.md).
 - Keep project builds, tests, and inference free of vLLM dependencies code, environments, and build caches.
 - Use CUDA for project kernels. Keep the pinned TileLang comparison.
+- Keep each owned CUDA backend code file at most 800 lines. Use the clang-format hook.
 - Keep formal operator cases, the harness, and summarized evidence in the repository.
 - Keep temporary experiments and raw profiling traces in an external directory.
 - Document future architectures, multiple GPUs, and other NVIDIA backends without untested support claims.
-- Keep DSpark weights fixed. Use current-source paired measurements for its comparison with MTP4.
+- Do not change DSpark weights.
 
 Use recent compatible stable dependencies in dependency order.
 Pin the combination with satisfactory compatibility tests.
@@ -74,6 +75,7 @@ scripts/with-env.sh python scripts/check_rust_line_width.py
 scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
+scripts/with-env.sh python scripts/format_cuda.py --check
 scripts/with-env.sh python scripts/check_docs.py
 ```
 

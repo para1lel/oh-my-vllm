@@ -71,7 +71,6 @@ Prepare 和 execute 回复回显 `rpc_id`; 丢弃迟到的已取消 prepare 回�
 | Output row | `request_id`, `token_ids`, `num_accepted_draft_tokens`, `new_draft_token_ids`; 可选 `error`, `text`, `finish_reason`, `reasoning_tokens`. |
 | `error` | `message`, 可选 `rpc_id` 和 `kind`; 区分 validation 和 internal 失败. |
 | `abort` / `shutdown` | Abort 带 `request_id`; 释放请求状态 / 停止 worker. |
-| `set_speculative_mode` / `mode_changed` | 带关联 ID 的私有比较 RPC, 仅在空闲比较 worker 中切换 MTP / DSpark. |
 
 `prefill_token_ids` 在接纳或重计算时包含完整已接受历史.
 普通解码保持增量; 草稿单独保留.
@@ -268,10 +267,7 @@ Target 分布 `p` 和 proposal 分布 `q` 都使用配置的 temperature, penalt
 Grammar simulation 先回滚, 再由已提交输出更新持久 grammar 状态.
 取消和抢占释放 target 与草稿的请求状态.
 
-私有比较 worker 在计时前加载 MTP 与 DSpark, 共享 target 及物理 target 缓存.
-仅空闲时允许 mode RPC 将活跃草稿数量在 4 和 7 之间切换.
-调度器在每次尝试之间重置前缀 metadata.
-HTTP worker 在初始化时选择一种模式, 拒绝此 RPC.
+worker 启动时选择一种模式. 在 worker 停止前保持该模式.
 参见 [ADR-009](decisions/ADR-009-dspark-optional-mode.zh.md).
 
 ## Semantic IR 与 graph
@@ -289,15 +285,13 @@ DSpark 增加 target feature, context injection, backbone, Markov step 和 greed
 单次使用的 BF16 SiLU-to-FP8 rewrite 有等价测试.
 
 普通 / MTP4 target graph 使用 32 条目. DSpark target feature graph 使用 64 条目.
-比较 worker 使用 96 条目, target family 下限为 16, target feature family 下限为 32.
-两种模式使用独立 family key 和内存 pool. Capture 保留 4 GiB 显存余量检查.
+Capture 保留 4 GiB 显存余量检查.
 
 DSpark proposal graph 使用独立的 16 条目 cache 和 pool.
 至多 32 row 的 DSpark context injection 使用独立 pool 和 32 条目 cache.
 预热和 capture 备份目标 KV slot, 在 `finally` 恢复; replay 提交当前输入.
 更大的 context injection 使用编译单元, 不进行手动 capture.
 MTP draft / proposal 的默认共享预算为 64 条目, 下限分别为 32 和 8.
-此预算同时适用于独立运行和比较 worker.
 
 长持久化 MTP context 使用独立的八条目 cache 与 pool, 保留 12 GiB capture 显存余量. 选中末行使用起点为 1 的自有 decode attention. Capture 备份将写入的 FA 槽, 在预热和捕获之后恢复. Replay 在任何复制之前验证全部 tensor 形状, 类型和 device. 只建立缓存的图可在不同位置与页地址间复用相同 query 形状. Capture 日志与 `mtp_context` 计数器标识这些活动.
 

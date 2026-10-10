@@ -5,7 +5,7 @@ Status: active. The [acceptance index](../acceptance.md) gives measured source i
 ## Context
 
 Native MTP4 supplies four draft tokens through the target model's MTP layer.
-Use the local DSpark checkpoint. Compare its throughput with native MTP4 on the same source.
+Use the local DSpark checkpoint.
 The two HTTP APIs must complete OMP tool tasks with the target checkpoint in this mode.
 All modes use the phase-latency, context, accuracy, and service gates.
 
@@ -50,23 +50,16 @@ Set the threshold to `0.0` for fixed-count proposals up to seven. Output, contex
 The setting comes from a small text/tool-history experiment with inputs different from formal inputs.
 The [handoff](../handoff.md) records its scope.
 
-Give ordinary/MTP4 target graphs, DSpark target-feature graphs, and DSpark proposal graphs different family keys and pools.
+Keep target graphs and draft proposal graphs in different memory pools.
 Compile target features, context injection, backbone, Markov step, and greedy proposal with `fullgraph=True`.
 Keep explicit provider failures and semantic mutation contracts.
 
-Use a comparison command that loads the two drafts with shared target weights and physical target caches.
-Change modes only when the comparison worker and scheduler are idle.
-Reset prefix metadata for each attempt.
-HTTP mode stays fixed for the worker lifetime.
+The worker selects one mode when it starts. It keeps that mode until it stops.
 
 ## Acceptance
 
-Use batches 1/2/4, input 32768, output 4096, the same synthetic IDs, and greedy sampling with ignored EOS.
-Each batch has three rounds with two full warmups per mode and five alternating-order measured pairs.
-Report each mode's throughput median and spread in each round.
-Record the one-sided 95% hierarchical paired-bootstrap lower bound on throughput gain.
-Report TTFT and its spread.
-These comparison statistics have no acceptance gate.
+Use the phase-latency protocol for each mode.
+Acceptance rate is total accepted drafts divided by total scheduled drafts.
 
 Keep full attempts that pass, fail, or stop before completion, with source, binary, environment, loaded checkpoint, and configuration identities.
 Record scheduled draft counts, accepted counts, compile/capture audit, capacities, and peak GPU memory.
@@ -83,13 +76,9 @@ Apply the original accuracy and three-round operator speed/confidence gates to t
 
 ## Alternatives and consequences
 
-Different comparison workers each load target weights and allocate different target caches.
-The selected comparison command shares target state and changes modes only between full attempts.
-Two draft models increase comparison-worker memory. Record that memory with each attempt.
-
 Greedy token equality alone cannot supply stochastic acceptance semantics.
 Full conditional probabilities increase proposal storage and sampling work.
 The implementation keeps this work for correct configured stochastic output.
 The performance claim must use measured acceptance results.
 
-See [requirements](../requirements.md#req-perf-003-dspark-and-native-mtp4) and [tests](../testing.md#dspark-comparison).
+See [requirements](../requirements.md) and [tests](../testing.md#framework-performance).

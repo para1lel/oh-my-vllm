@@ -5,7 +5,7 @@
 ## 背景
 
 原生 MTP4 通过 target 模型的 MTP 层提供 4 个草稿 token.
-使用本地 DSpark checkpoint, 在相同源码上比较其与原生 MTP4 的吞吐.
+使用本地 DSpark checkpoint.
 两种 HTTP API 必须在此模式完成真实 OMP 工具任务.
 所有模式使用阶段时延, 上下文, 精度和服务门槛.
 
@@ -50,23 +50,16 @@ Confidence 可缩短前缀, 默认阈值为 `0.2`.
 该设置来自文本 / 工具历史的小样本实验, 输入与正式输入不同.
 [交接](../handoff.zh.md) 记录其范围.
 
-普通 / MTP4 target graph, DSpark target feature graph 和 DSpark proposal graph 使用不同 family key 和 pool.
+target graph 与草稿 proposal graph 使用不同内存 pool.
 使用 `fullgraph=True` 编译 target feature, context injection, backbone, Markov step 和 greedy proposal.
 保持显式 provider 失败和语义 mutation 合同.
 
-私有比较命令加载两种草稿, 共享 target 权重和物理 target 缓存.
-仅比较 worker 和调度器空闲时允许切换模式.
-每次尝试重置前缀 metadata.
-HTTP 模式在 worker 生命周期内固定.
+worker 启动时选择一种模式. 在 worker 停止前保持该模式.
 
 ## 验收
 
-使用 batch1/2/4, 输入 32768, 输出 4096, 相同合成 ID, greedy sampling, 忽略 EOS.
-每个 batch 执行 3 轮, 每轮每种模式 2 次完整预热, 随后 5 个交替顺序的测量配对.
-报告每轮每种模式的吞吐中位数及波动.
-记录吞吐增益的 hierarchical paired-bootstrap 单侧 95% 置信下界.
-报告 TTFT 及其波动.
-这些统计不增加 DSpark 速度或波动门槛.
+每种模式使用阶段时延流程.
+接受率为接受草稿总数除以已调度草稿总数.
 
 保留完整成功, 失败和中断尝试, 记录源码, 二进制, 环境, 实际加载 checkpoint 和配置身份.
 记录实际已调度草稿数, 接受数, compile / capture 审计, 容量和显存峰值.
@@ -83,13 +76,9 @@ OMP 必须读取两个源码文件, 将结果回传后续模型请求, 随后生
 
 ## 替代方案与影响
 
-不同的比较 worker 各自加载 target 权重, 分配不同的 target 缓存.
-选定比较命令共享 target 状态, 只在完整尝试之间切换模式.
-两个草稿模型仍增加比较 worker 显存, 每次尝试记录该显存.
-
 仅 greedy token 相等无法提供随机采样接受语义.
 完整条件概率增加 proposal 存储和采样工作.
 实现保留这些工作, 以正确处理配置的随机输出.
 最终性能声明由实测验收确定.
 
-参见 [需求](../requirements.zh.md#req-perf-003-dspark-与原生-mtp4) 和 [测试](../testing.zh.md#dspark-比较).
+参见 [需求](../requirements.zh.md) 和 [测试](../testing.zh.md#框架性能).

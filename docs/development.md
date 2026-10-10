@@ -19,7 +19,7 @@ uv pip check --python "$OH_MY_VLLM_CONDA_PREFIX/bin/python"
 export OH_MY_VLLM_MODEL="/path/to/Qwen3.8-27B-FP8"
 ```
 
-`requirements/tools.txt` pins pytest, Ruff, pre-commit, and their constrained dependencies.
+`requirements/tools.txt` pins pytest, Ruff, pre-commit, clang-format, and their constrained dependencies.
 Regenerate it from `requirements/tools.in` with the runtime constraint after tool changes with satisfactory compatibility tests.
 
 An existing conda environment is also permitted.
@@ -104,8 +104,7 @@ DSpark proposes at most seven tokens. Native MTP4 keeps its four-token path.
 Use `0.0` for fixed-count proposals up to seven. Output, context, and grammar limits can decrease the proposal count.
 The threshold must be finite, at least zero, and less than one.
 
-HTTP mode stays fixed for the worker lifetime.
-`spec-bench` alone can change MTP/DSpark modes when idle with shared target weights and caches.
+The worker selects one mode when it starts. It keeps that mode until it stops.
 Use the [acceptance index](acceptance.md) for source identities and measured scope.
 
 ## Build and checks
@@ -118,11 +117,13 @@ scripts/with-env.sh cargo test --workspace
 scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
+scripts/with-env.sh python scripts/format_cuda.py --check
 scripts/with-env.sh python scripts/check_docs.py
 scripts/with-env.sh pre-commit run --all-files
 ```
 
 Hooks use local system tools through the same wrapper.
+The CUDA hook uses clang-format 23.1.3 and checks the 800-line module limit.
 Configure the environment before `git commit` so hooks select it correctly.
 See [contribution procedure](../CONTRIBUTING.md).
 

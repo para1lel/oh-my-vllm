@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import torch
+from oh_my_vllm.kernels import cuda_backend
 from oh_my_vllm.kernels.cuda_backend import compiled
 
 
@@ -15,6 +16,7 @@ def _probe_module():
     source = (
         root / "python/oh_my_vllm/kernels/cuda_backend/kernels.cu"
     ).read_text() + (root / "tests/fixtures/cuda_error_probe.cu").read_text()
+    digest = cuda_backend._build_input_digest(source, str(torch.__version__))
     path = build_inline(
         "oh_my_vllm_cuda_error_probe",
         cuda_sources=source,
@@ -27,7 +29,12 @@ def _probe_module():
             "diagnostic_clear_error",
         ],
         backend="cuda",
-        extra_cuda_cflags=["-O3", "--generate-code=arch=compute_100a,code=sm_100a"],
+        extra_include_paths=[str(root / "python/oh_my_vllm/kernels/cuda_backend")],
+        extra_cuda_cflags=[
+            *cuda_backend._BASE_CUDA_FLAGS,
+            cuda_backend._pdl_flag(),
+            f"-DOH_MY_VLLM_PROBE_INPUT_{digest[:20]}",
+        ],
     )
     return load_module(path)
 

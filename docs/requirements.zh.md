@@ -112,37 +112,6 @@ Prefix-hit prefill 记录第一项检查的结果, 该结果不作为失败门�
 每次尝试绑定源码, 二进制, 环境, CUDA module, 配置和 checkpoint 身份.
 正式验证使用完整原始记录, 可移植摘要不能替代原始记录.
 
-## REQ-PERF-003: DSpark 与原生 MTP4
-
-比较同一最终源码和二进制中的可选 DSpark 与原生 MTP4.
-使用 32768 个输入 token, 4096 个保留输出 token, batch 为 1, 2, 4.
-使用相同的合成 token ID, greedy sampling 和固定输出数量, 忽略 EOS.
-框架批吞吐包含注册, prefill, 调度, 传输, 采样和清理.
-
-每个 batch 的比较 worker 共享 target 权重和物理 target 缓存.
-预热前加载两种草稿模型, 每次尝试前重置前缀复用.
-每个 batch 执行 3 轮.
-每轮每种模式执行 2 次完整预热, 随后执行 5 个测量配对, 交替改变模式顺序.
-
-每个 batch 报告以下统计:
-
-- 每轮每种模式的吞吐中位数及波动.
-- 每轮 DSpark 中位数与 MTP4 的差值.
-- 吞吐增益的 hierarchical paired-bootstrap 单侧 95% 置信下界.
-
-报告 TTFT 及其波动.
-DSpark 速度, 波动及置信界限不增加验收门槛.
-保留每次失败或中断尝试及完整原始记录.
-测量期间发生编译或 graph capture 会使该次尝试失效.
-
-记录绑定实际源码文件, 二进制, Python 环境, 加载的 CUDA 模块, 运行配置及 checkpoint 字节.
-加载的 DSpark 配置和权重哈希必须与指定 checkpoint 匹配.
-记录容量, allocated / reserved 显存峰值, compile / capture 审计和实际验证 / 接受的草稿数.
-接受率的分母是已调度草稿 token, 下一步返回的 proposal 使用另一计数.
-
-源码身份及测量范围见 [验收索引](acceptance.zh.md).
-采集流程见 [测试](testing.zh.md#dspark-比较).
-
 ## REQ-CONTEXT-001: 上下文与显存
 
 支持输入与输出合计 262144 token.
@@ -208,6 +177,12 @@ Debug 日志暴露调度, 缓存, 传输和 worker 时长.
 区分主机时间与 CUDA 内核时间.
 Profiling 需显式选择.
 
+分别记录每种模式的已调度, 接受和返回草稿数.
+接受率为接受草稿总数除以已调度草稿总数.
+返回的下一步 proposal 使用不同的诊断计数.
+
+将加载的 DSpark 配置和权重哈希与指定 checkpoint 比较. 两者必须一致.
+
 ## 服务需求
 
 | ID | 合同 |
@@ -232,7 +207,6 @@ OMP 证据必须显示两次源码读取, 结果回传, 继续生成及使用读
 固定的 TileFoundry fork 用于开发.
 大幅修改 fork 前先讨论.
 临时调优放在仓库外.
-旧 Triton 后端不提供验收门槛.
 
 ## REQ-KERNEL-002: CUDA 与 PTX
 
@@ -240,6 +214,10 @@ B200 使用项目内 CUDA C++ 内核, 可包含 inline PTX.
 允许 CUTLASS.
 CUDA 为默认后端; TileLang 需显式选择, 不做静默回退.
 保留独立精度, 框架, 上下文和真实服务门槛.
+
+按功能划分自有 CUDA 后端. 每个 `.cu`, `.cuh` 和 `.py` 文件至多 800 行.
+使用固定 clang-format 23.1.3 及 pre-commit 钩子格式化, 保留 include 依赖顺序.
+全部源码和头文件进入构建, 加载及正式证据身份.
 
 在 15 个工作负载内静态推导每个实现路径的最大合法调用.
 相同配置去重.
@@ -279,8 +257,8 @@ Provider lowering 前保留语义节点.
 Activation donation 需要对指定临时值的证明; 持久缓存不能被 donation.
 Graph rewrite 需要等价测试和注明例外原因的调用点清单.
 
-验收包括全部现有精度测试, 普通 / MTP4 上下文用例, 正式算子用例和 15 个性能行.
-增加 DSpark 边界, 服务, 补充算子和配对性能用例.
+验收包括全部现有精度测试, 9 个普通 / MTP4 / DSpark 上下文用例, 正式算子用例和 15 个性能行.
+DSpark 服务及补充算子用例保持有效.
 真实模型测试必须覆盖全部 4 个编译单元, 以及 metadata 变化后的 graph replay.
 不增加编译加速百分比门槛.
 

@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from benchmarks.context_boundary import _reap_on_termination
-from benchmarks.speculative import read_service_evidence
+from benchmarks.evidence import read_service_evidence
 from scripts.acceptance_proxy import recording_proxy
 
 ROOT = Path(__file__).resolve().parents[1]

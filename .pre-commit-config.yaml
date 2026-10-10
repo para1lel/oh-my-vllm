@@ -4,6 +4,14 @@ fail_fast: false
 repos:
   - repo: local
     hooks:
+      - id: cuda-format
+        name: clang-format and CUDA module size
+        description: Format owned CUDA modules and enforce the 800-line limit.
+        entry: scripts/with-env.sh python scripts/format_cuda.py
+        language: system
+        pass_filenames: false
+        files: (^python/oh_my_vllm/kernels/cuda_backend/.*\.(cu|cuh|py)$|^\.clang-format$|^scripts/format_cuda\.py$|^\.pre-commit-config\.yaml$)
+
       - id: cargo-fmt
         name: cargo fmt
         description: Reject Rust formatting drift; run cargo fmt --all to fix it.

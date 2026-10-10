@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from benchmarks.speculative import read_service_evidence
+from benchmarks.evidence import read_service_evidence
 from scripts.serving_evidence import ServiceAttempt
 
 

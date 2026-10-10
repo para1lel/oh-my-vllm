@@ -5,7 +5,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 import torch
-from oh_my_vllm.worker.model_runner import OhMyVllmWorker, RuntimeConfig
+from oh_my_vllm.worker.model_runner import RuntimeConfig
 from oh_my_vllm.worker.sampler import RequestSampler, verify_rows
 from oh_my_vllm.worker.sampling import SamplingParams
 
@@ -73,19 +73,6 @@ def test_invalid_reachable_proposal_is_rejected(proposal):
 def test_probability_shape_mismatch_fails_before_sampling():
     with pytest.raises(ValueError, match="match the candidate"):
         sampler().draw_speculative_rows(torch.zeros(2, 2), [0], torch.zeros(2, 2))
-
-
-def test_dspark_configuration_and_idle_switch():
-    worker = OhMyVllmWorker(
-        RuntimeConfig(
-            "target", speculative_tokens=4, draft_model="draft", comparison=True
-        )
-    )
-    worker.set_speculative_mode("dspark")
-    assert worker.config.speculative_tokens == 7
-    worker.histories[1] = [42]
-    with pytest.raises(ValueError, match="idle"):
-        worker.set_speculative_mode("mtp")
 
 
 def test_dspark_missing_checkpoint_fails_before_device_initialization():

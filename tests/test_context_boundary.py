@@ -1,4 +1,4 @@
-"""REQ-CONTEXT-001: six real B200 boundary rows and fail-closed evidence checks."""
+"""REQ-CONTEXT-001: nine real B200 boundary rows and fail-closed evidence checks."""
 
 import json
 import os
@@ -303,7 +303,7 @@ def test_boundary_collector_rejects_raw_log_dir_inside_repo(monkeypatch, tmp_pat
 @pytest.mark.parametrize("mode", boundary.MODES)
 @pytest.mark.parametrize("batch_size", boundary.BATCH_SIZES)
 def test_max_context_length_262144(mode, batch_size, tmp_path):
-    """Run ordinary/MTP4 258048+4096 on the outer UUID-pinned B200."""
+    """Run ordinary/MTP4/DSpark 258048+4096 on the outer UUID-pinned B200."""
     binary_env = os.environ.get("OH_MY_VLLM_TEST_BINARY")
     assert binary_env, "run GPU boundary cases through scripts/test.sh full"
     binary = Path(binary_env)

@@ -248,7 +248,7 @@ test('complete source coverage links and highlighted full-file line anchors', as
     expect(response.ok(), record.path).toBe(true);
     expect(await response.text()).toContain('id="L' + record.line + '"');
   }
-  for (const path of ['crates/scheduler/src/lib.rs', 'python/oh_my_vllm/models/qwen.py', 'python/oh_my_vllm/kernels/cuda_backend/kernels.cu']) {
+  for (const path of ['crates/scheduler/src/lib.rs', 'python/oh_my_vllm/models/qwen.py', 'python/oh_my_vllm/kernels/cuda_backend/operators/gdn.cuh']) {
     const record = records.find((item) => item.path === path);
     await page.goto('/' + record.url);
     await expect(heading(page)).toHaveText('完整源码');
@@ -326,10 +326,6 @@ test('DSpark chapter explains causal proposals, probability verification and cur
   await expect(page.locator('article')).toContainText('bench --prompt-file');
   await expect(page.locator('article')).toContainText('--num-speculative-tokens 7');
   await expect(page.locator('.katex')).toHaveCount(8);
-  const results = page.getByRole('region', { name: 'MTP4 与 DSpark 配对测量结果' });
-  await expect(results.locator('tbody tr')).toHaveCount(6);
-  await expect(results).toContainText('90.647075%');
-  await expect(results).toContainText('56.250624%');
   await expect(page.locator('.error, .katex-error')).toHaveCount(0);
   await expect(page.locator('.source-coverage li')).not.toHaveCount(0);
   await snapshot(page, 'dspark-desktop-light');
@@ -348,9 +344,6 @@ test('DSpark chapter explains causal proposals, probability verification and cur
   await page.getByRole('button', { name: '切换到暗色模式' }).click();
   await snapshot(page, 'dspark-desktop-dark', detail);
   await page.setViewportSize({ width: 390, height: 844 });
-  await results.focus();
-  await page.keyboard.press('ArrowRight');
-  await expect.poll(() => results.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await snapshot(page, 'dspark-mobile-dark', detail);
   await page.getByRole('button', { name: '切换到亮色模式' }).click();

@@ -2,3 +2,4 @@
 pytest==9.1.1
 ruff==0.16.7
 pre-commit==4.6.2
+clang-format==23.1.3

@@ -133,7 +133,7 @@
 | `probability distribution` | 名词 | 配置采样变换及 mask 后的非负 vocabulary 概率, 总概率质量为 1. |
 | `conditional distribution` | 名词 | 给定已接受历史及此前推测草稿后, 一个位置的 vocabulary 概率. |
 | `stochastic sampling` | 名词 | 从配置的条件 vocabulary 概率中随机选择 token. |
-| `hierarchical paired-bootstrap` | 名词 | 先重采样轮次, 再在选中轮次内重采样配对样本, 估计吞吐增益的单侧置信下界. |
+| `hierarchical paired-bootstrap` | 名词 | 先重采样轮次, 再在选中轮次内重采样配对样本, 计算实测值之间差值的单侧置信界限. |
 | `probability` | 名词 | 单个 vocabulary 结果或接受事件的非负概率质量, 取值为 0 到 1. |
 | `confidence bound` | 名词 | 指定置信水平下, 从重采样测量数据计算的统计界限. |
 | `greedy sampling` | 名词 | 选择配置模型分数的最大值, 并按确定的 token ID 顺序处理相同分数. |

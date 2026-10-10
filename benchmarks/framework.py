@@ -99,7 +99,7 @@ def validate_identities(artifact):
     import re
 
     from benchmarks.common import _parse_bench_config, _parse_cuda_provenance
-    from benchmarks.speculative import loaded_draft_provenance
+    from benchmarks.evidence import loaded_draft_provenance
 
     def digest(value, length=64):
         return isinstance(value, str) and re.fullmatch(f"[0-9a-f]{{{length}}}", value)
@@ -416,8 +416,8 @@ def main():
         source_identity,
     )
     from benchmarks.context_boundary import _reap_on_termination
+    from benchmarks.evidence import checkpoint_identity, loaded_draft_provenance
     from benchmarks.measurement import audit, hardware_identity
-    from benchmarks.speculative import checkpoint_identity, loaded_draft_provenance
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(

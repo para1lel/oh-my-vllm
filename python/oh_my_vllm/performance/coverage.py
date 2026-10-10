@@ -38,7 +38,14 @@ def runtime_contract():
         if not path.is_file():
             raise ValueError(f"missing reviewed GPU provider: {name}")
         providers[name] = hashlib.sha256(path.read_bytes()).hexdigest()
-    from oh_my_vllm.kernels.cuda_backend.groupwise import _FLAGS, _headers
+    from oh_my_vllm.kernels.cuda_backend import _project_headers as operator_headers
+    from oh_my_vllm.kernels.cuda_backend.groupwise import (
+        _FLAGS,
+        _headers,
+    )
+    from oh_my_vllm.kernels.cuda_backend.groupwise import (
+        _project_headers as gemm_headers,
+    )
 
     data = distribution.locate_file("flashinfer/data")
     roots = (
@@ -55,16 +62,13 @@ def runtime_contract():
             json.dumps(_headers(data, roots), sort_keys=True).encode()
         ).hexdigest(),
         "flags": list(_FLAGS),
-        "project_headers": {
-            path.rsplit("/", 1)[-1]: digest
-            for path, digest in sources.items()
-            if path.startswith("kernels/cuda_backend/") and path.endswith(".cuh")
-        },
+        "project_headers": gemm_headers(),
     }
     return {
         "sources": sources,
         "providers": providers,
         "gemm_inputs": gemm_inputs,
+        "kernel_inputs": {"project_headers": operator_headers()},
         "versions": {
             name: importlib.metadata.version(name)
             for name in ("torch", "flashinfer-python", "triton")
@@ -295,6 +299,11 @@ def validate_inventory(trace):
         "kernels/cuda_backend/kernels.cu"
     ):
         raise ValueError("loaded CUDA source differs from reviewed source")
+    if any(
+        loaded_cuda.get(key) != value
+        for key, value in reviewed["kernel_inputs"].items()
+    ):
+        raise ValueError("loaded CUDA headers differ from reviewed source")
     if any(
         not isinstance(loaded_cuda.get(key), str)
         or len(loaded_cuda[key]) != 64

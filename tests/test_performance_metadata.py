@@ -99,6 +99,7 @@ def test_loaded_gemm_must_bind_the_reviewed_owned_accumulator_header(monkeypatch
             "kernels/cuda_backend/groupwise_fp8.cu": "b" * 64,
         },
         "gemm_inputs": {"project_headers": {"groupwise_accum.cuh": "c" * 64}},
+        "kernel_inputs": {"project_headers": {"operators/common.cuh": "7" * 64}},
     }
     monkeypatch.setattr(coverage, "validate_weights", lambda weights: None)
     monkeypatch.setattr(coverage.Path, "read_text", lambda path: json.dumps(reviewed))
@@ -108,6 +109,7 @@ def test_loaded_gemm_must_bind_the_reviewed_owned_accumulator_header(monkeypatch
             "source_sha256": "a" * 64,
             "so_sha256": "d" * 64,
             "build_input_sha256": "e" * 64,
+            "project_headers": {"operators/common.cuh": "7" * 64},
         },
         "cuda_gemm_provenance": {
             "source_sha256": "b" * 64,
@@ -125,4 +127,9 @@ def test_loaded_gemm_must_bind_the_reviewed_owned_accumulator_header(monkeypatch
         with pytest.raises(
             ValueError, match="templates or flags require semantic review"
         ):
+            coverage.validate_inventory(altered)
+    for headers in ({}, {"operators/common.cuh": "2" * 64}):
+        altered = deepcopy(trace)
+        altered["cuda_provenance"]["project_headers"] = headers
+        with pytest.raises(ValueError, match="CUDA headers differ"):
             coverage.validate_inventory(altered)

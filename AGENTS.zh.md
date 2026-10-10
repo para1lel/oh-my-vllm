@@ -14,10 +14,11 @@ Rust 负责服务, 调度和逻辑 KV 缓存; Python 负责 GPU 计算.
 - 保留 [需求](docs/requirements.zh.md) 中全部有效验收条件.
 - 项目构建, 测试和推理独立于 vLLM 代码, 环境和构建缓存.
 - 项目内核使用 CUDA; 保留冻结的 TileLang 比较实现.
+- 自有 CUDA 后端代码文件至多 800 行, 使用 clang-format 钩子.
 - 正式算子用例, 测试框架和汇总证据保留在仓库内.
 - 临时实验和原始 profiling trace 放在仓库外.
 - 未来架构, 多 GPU 和其他 NVIDIA 后端只写扩展说明, 不声称未经测试的支持.
-- 保持 DSpark 权重不变. 与 MTP4 的比较使用当前源码上的成对测量.
+- 不要修改 DSpark 权重.
 
 按依赖顺序选择近期兼容的稳定版本.
 固定经过验证的组合.
@@ -71,6 +72,7 @@ scripts/with-env.sh python scripts/check_rust_line_width.py
 scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
+scripts/with-env.sh python scripts/format_cuda.py --check
 scripts/with-env.sh python scripts/check_docs.py
 ```
 

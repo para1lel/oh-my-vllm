@@ -40,7 +40,7 @@ Make a decision about a new candidate only with a new hypothesis and full-operat
 Dynamo's 4096 limits and 256-variant warnings do not show bounded compiler memory with indefinite shape changes.
 The log/cache audit cannot exclude silent in-memory recompilation.
 
-Paired, operator, boundary, and service evidence keeps its measured source scope.
+Phase, operator, boundary, and service evidence keeps its measured source scope.
 The [acceptance index](acceptance.md) keeps source scope and all original failed records.
 The fifteen-row phase-latency collection is in progress.
 
@@ -109,3 +109,53 @@ Keep numerical tolerances and active gates unchanged.
 Do affected formal operator cases again after device implementation changes.
 Do affected framework rows again before you claim continued performance acceptance.
 Update this status and [handoff](handoff.md), with open limitations.
+
+## Owned CUDA operator audit
+
+Opus 5.5 examined owned CUDA entry points, Python wrappers, semantic operations, and production callers.
+A different agent checked and corrected the audit items against source guards, dispatch, graph restoration, and measurements.
+The [operator audit](../bench/evidence/2026-10-10-owned-cuda-audit.json) gives the full inventory, source hashes, corrections, and verification limits.
+
+This audit uses `a6b9bd2` and `a5cc0ef`, before the CUDA header split.
+Checks of the current header layout have different records.
+
+The native CUDA module has 25 FFI exports. The `groupwise_fp8` module has one other export.
+`variant_launch_count` counts host dispatches. The other 25 exports do GPU computation.
+The 27 `__global__` definitions in `operators/` do not include CUTLASS template instantiations.
+The audit counts semantic operations, FFI exports, kernel definitions, and compiled variants in different groups.
+
+| Item | Contract | More verification |
+|---|---|---|
+| FP8 GEMM workspace | The GEMM code checks the necessary workspace size before initialization and execution. | Keep the capacity guard after configuration changes. |
+| FP8 scales and accumulation | Selected projections with 624 through 2496 rows use K-major scales. Their mainloop has FP32 accumulation in K-group sequence. | Examine the tile, number of pipeline stages, and scale layout together. |
+| GDN copy and PDL | Selected views use the value copy with input strides before chunk GDN prefill. The consumer call supplies no PDL launch parameter. | Examine the two launches before a test that changes the trigger position. |
+| DSpark draft attention | All seven draft rows read the full committed context plus all seven draft KV rows. The draft block uses bidirectional attention. | Keep the reference mask and the mathematical attention scale `1/sqrt(128)`. |
+| Owned decode attention | Four ungrouped queries use two shared-memory buffers for the next tile transfer. Other selected paths use one buffer. | Compare full attention operations before a replacement. |
+| Graph and stream lifetime | The capture code restores persistent state. The caller stream records a dependency on the GDN branch in `finally`. | Keep `PY-04` until the memory-pressure test passes. |
+| Dispatch counts | The counter counts host calls, not graph replays. | Keep verification and replay counts in different groups. |
+
+The different agent checked the 12 initial audit items and found no new production defect.
+The corrected audit shows source guards, incorrect statements, external candidates, and performance changes that have no applicable measurement.
+Production selection stays the same after this audit.
+
+### Operator tuning
+
+1. Use source instruction observations for 624 through 2496 FP8 rows before pipeline stage or register tests.
+2. Measure full RMS/SiLU, quantization, scale handling, and GEMM operations for a packed FP32 candidate.
+3. Examine the GDN producer and consumer launch contracts together before a PDL integration change.
+4. Check each candidate with the source for this revision in operator, framework, capacity, and service tests before selection.
+
+The external packed candidate groups two FP32 values in `float2` for `__ffma2_rn`.
+It had equal outputs in 18 cases. Ten speed tests passed and eight failed.
+The diagnostic selection has seven GEMM shapes and nine full operations that used less time in the measurements.
+This diagnostic selection uses a GEMM shape only if all its measured output paths pass.
+These paths include output without a gate and output with a gate.
+
+The measured rows are 624, 1248, and 2496. These tests do not cover two-SM tiles or large MN scales.
+Before production selection, check these selected diagnostic results with the source for this revision.
+
+Profiler measurements identify the source, shape, kernel, and replay.
+Eligible warps have units of warps for each active scheduler cycle.
+Scoreboard samples do not give an instruction's percentage of execution time.
+Because cache can supply TMA requests, TMA traffic and HBM traffic are different measurements.
+Low occupancy, without other measurements, does not identify the latency cause or show that a different tile is faster.

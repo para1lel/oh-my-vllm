@@ -1321,8 +1321,8 @@
       "term": "hierarchical paired-bootstrap",
       "part_of_speech": "noun",
       "category": "technical",
-      "meaning": "Resampling rounds, then paired samples in each selected round, to calculate the one-sided confidence bound on throughput gain.",
-      "translation": "先重采样轮次, 再在选中轮次内重采样配对样本, 估计吞吐增益的单侧置信下界.",
+      "meaning": "Resampling rounds, then paired samples in each selected round, to calculate a one-sided confidence bound on differences between measured values.",
+      "translation": "先重采样轮次, 再在选中轮次内重采样配对样本, 计算实测值之间差值的单侧置信界限.",
       "forms": [
         "hierarchical paired-bootstrap"
       ]

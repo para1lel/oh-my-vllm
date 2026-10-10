@@ -191,7 +191,7 @@ export const sourceNotes = {
 
 Object.assign(sourceNotes, {
   runtimeConfig: {
-    title: "RuntimeConfig 的 9 个字段", intro: "这是 Python 接收的启动配置. 数量包含保留的 0 号缓存位置, 实际可写容量会少一个.",
+    title: "RuntimeConfig 的 8 个字段", intro: "这是 Python 接收的启动配置. FA 页数与 GDN 状态槽数包含保留的 0 号位置, 可写容量各少一个.",
     entries: [
       ["model", "本地模型目录.", "读取配置, safetensors, tokenizer 和对话模板."],
       ["max_model_len", "提示词加输出的 token 数上限, 默认 65536.", "校验请求与位置; 长上下文验收使用显式配置, 最高 262144."],
@@ -199,8 +199,7 @@ Object.assign(sourceNotes, {
       ["speculative_tokens", "每轮最大草稿数量, 默认 0.", "0 走普通生成, 4 启用 MTP, 7 使用独立 DSpark; 与显式模式一起校验."],
       ["mamba_blocks", "独立 GDN 状态池容量, 默认 None.", "给定数值时与 FA 分池; None 时采用 FA 逻辑容量."],
       ["speculative_mode", "none, mtp 或 dspark 模式.", "缺省保留旧的 0/4 推导, 显式 dspark 必须对应七个候选."],
-      ["draft_model", "独立 DSpark checkpoint 目录.", "DSpark 或同进程比较需要此路径, 与目标模型目录分开加载."],
-      ["comparison", "是否预加载两种 proposer.", "仅允许完成请求清理后的同进程 MTP / DSpark 比较切换."],
+      ["draft_model", "独立 DSpark checkpoint 目录.", "DSpark 模式需要此路径, 与目标模型目录分开加载."],
       ["dspark_confidence_threshold", "前缀累积接受置信度阈值, 默认 0.2.", "从首项起累计 confidence 低于阈值就停止, 可返回 0 至 7 个草稿; 0 保留全部合法候选供调试."],
     ],
   },
@@ -341,7 +340,7 @@ Object.assign(sourceNotes, {
 
 Object.assign(sourceNotes, {
   wireInit: {
-    title: "InitMsg 的 11 个字段", intro: "Rust 将启动参数编码为 init. Python 检查硬件与页大小约束, 再映射到 RuntimeConfig 并建立模型和缓存.",
+    title: "InitMsg 的 10 个字段", intro: "Rust 将启动参数编码为 init. Python 检查硬件与页大小约束, 再映射到 RuntimeConfig 并建立模型和缓存.",
     entries: [
       ["model_path", "模型本地目录.", "映射为 RuntimeConfig.model, 从中读取配置, 权重和 tokenizer."],
       ["num_gpu_blocks", "兼容配置的缓存容量单位.", "映射为同名配置, 逻辑 FA 容量取整数三分之一."],
@@ -352,7 +351,6 @@ Object.assign(sourceNotes, {
       ["num_speculative_tokens", "草稿上限.", "映射为 speculative_tokens, 0 普通生成, 4 启用 MTP, 7 启用 DSpark."],
       ["speculative_mode", "可选显式草稿模式.", "映射为同名字段, 缺省兼容旧的 0/4 选择."],
       ["draft_model_path", "独立 DSpark 本地目录.", "映射为 RuntimeConfig.draft_model, 检查配置与权重后加载."],
-      ["comparison", "同进程比较是否预加载两个 proposer.", "普通服务只加载选择的模式; 比较命令可在空闲时切换."],
       ["dspark_confidence_threshold", "前缀累积置信度阈值, 默认 0.2.", "独立自然文本 / 工具历史小样本选定; 首项未达到阈值可返回 0 草稿, 完整负载表现另行测量."],
     ],
   },

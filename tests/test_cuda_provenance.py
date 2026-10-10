@@ -6,7 +6,7 @@ import io
 import json
 import tempfile
 import unittest
-from contextlib import redirect_stderr
+from contextlib import nullcontext, redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
@@ -47,7 +47,9 @@ class ProvenanceTest(unittest.TestCase):
         self.assertTrue(manifest.is_file())
         return library, manifest
 
-    def load_offline(self, root, *, should_load, compiler_path=None):
+    def load_offline(
+        self, root, *, should_load, compiler_path=None, header_override=None
+    ):
         backend = isolated_backend()
         with (
             patch.dict("os.environ", {"TVM_FFI_CACHE_DIR": str(root)}),
@@ -58,6 +60,11 @@ class ProvenanceTest(unittest.TestCase):
                 backend,
                 "_nvcc_identity",
                 return_value=(compiler_path, "nvcc-unavailable: missing"),
+            ),
+            (
+                patch.object(backend, "_project_headers", return_value=header_override)
+                if header_override is not None
+                else nullcontext()
             ),
             redirect_stderr(io.StringIO()),
         ):
@@ -110,6 +117,14 @@ class ProvenanceTest(unittest.TestCase):
                     for flag in captured["extra_cuda_cflags"]
                 )
             )
+            self.assertTrue(
+                any(
+                    flag.startswith("-DOH_MY_VLLM_INPUT_")
+                    for flag in captured["extra_cuda_cflags"]
+                )
+            )
+            self.assertEqual(reported["project_headers"], backend._project_headers())
+            self.assertEqual(captured["extra_include_paths"], [str(BACKEND.parent)])
             marker = output.getvalue().strip().removeprefix("CUDA_BUILD_PROVENANCE ")
             self.assertEqual(json.loads(marker), reported)
 
@@ -181,6 +196,147 @@ class ProvenanceTest(unittest.TestCase):
                 self.assertNotEqual(
                     original, backend._build_input_digest("source A", "torch A")
                 )
+            with patch.object(
+                backend,
+                "_project_headers",
+                return_value={"operators/common.cuh": "0" * 64},
+            ):
+                self.assertNotEqual(
+                    original, backend._build_input_digest("source A", "torch A")
+                )
+
+    def test_header_change_during_build_rejects_loading_and_manifest(self):
+        backend = isolated_backend()
+        headers = {"operators/common.cuh": "a" * 64}
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "oh_my_vllm_cuda_fixture"
+            cache.mkdir()
+            library = cache / "loaded.so"
+            library.write_bytes(b"module built before header changed")
+
+            def build(*args, **kwargs):
+                headers["operators/common.cuh"] = "b" * 64
+                return str(library)
+
+            with (
+                patch.dict("os.environ", {"TVM_FFI_CACHE_DIR": directory}),
+                patch("torch.cuda.get_device_capability", return_value=(10, 0)),
+                patch("tvm_ffi.cpp.build_inline", side_effect=build),
+                patch("tvm_ffi.load_module") as load,
+                patch.object(
+                    backend,
+                    "_project_headers",
+                    side_effect=lambda headers=headers: dict(headers),
+                ),
+                patch.object(
+                    backend,
+                    "_nvcc_identity",
+                    return_value=(Path("/cuda/bin/nvcc"), "V12.8.1"),
+                ),
+                self.assertRaisesRegex(
+                    RuntimeError, "headers.*changed during build/load"
+                ),
+            ):
+                backend.compiled()
+            load.assert_not_called()
+            self.assertFalse((cache / "oh_my_vllm_cuda.provenance.json").exists())
+
+    def test_offline_process_rejects_changed_header_closure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.build_cached_fixture(root)
+            headers = isolated_backend()._project_headers()
+            headers[next(iter(headers))] = "0" * 64
+            _, load = self.load_offline(
+                root, should_load=False, header_override=headers
+            )
+            load.assert_not_called()
+
+    def test_source_and_header_change_at_final_compiler_query_rejects_manifest(self):
+        for changed in ("source", "header"):
+            with (
+                self.subTest(changed=changed),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                backend = isolated_backend()
+                cache = Path(directory) / "oh_my_vllm_cuda_fixture"
+                cache.mkdir()
+                library = cache / "loaded.so"
+                library.write_bytes(b"stable loaded library")
+                source = [BACKEND.with_name("kernels.cu").read_text()]
+                headers = {"operators/common.cuh": "a" * 64}
+                original_read = Path.read_text
+                queries = []
+
+                def read(
+                    path, *args, source=source, original_read=original_read, **kwargs
+                ):
+                    return (
+                        source[0]
+                        if path.name == "kernels.cu"
+                        else original_read(path, *args, **kwargs)
+                    )
+
+                def compiler(
+                    queries=queries, changed=changed, source=source, headers=headers
+                ):
+                    queries.append(True)
+                    if len(queries) == 2:
+                        if changed == "source":
+                            source[0] += "\n// changed at final query\n"
+                        else:
+                            headers["operators/common.cuh"] = "b" * 64
+                    return Path("/cuda/bin/nvcc"), "V12.8.1"
+
+                with (
+                    patch.dict("os.environ", {"TVM_FFI_CACHE_DIR": directory}),
+                    patch("torch.cuda.get_device_capability", return_value=(10, 0)),
+                    patch("tvm_ffi.cpp.build_inline", return_value=str(library)),
+                    patch("tvm_ffi.load_module", return_value=object()),
+                    patch.object(
+                        backend,
+                        "_project_headers",
+                        side_effect=lambda headers=headers: dict(headers),
+                    ),
+                    patch.object(backend, "_nvcc_identity", side_effect=compiler),
+                    patch.object(Path, "read_text", new=read),
+                    self.assertRaisesRegex(RuntimeError, "changed during build/load"),
+                ):
+                    backend.compiled()
+                self.assertFalse((cache / "oh_my_vllm_cuda.provenance.json").exists())
+
+    def test_live_load_rejects_header_change(self):
+        backend = isolated_backend()
+        headers = {"operators/common.cuh": "a" * 64}
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "oh_my_vllm_cuda_fixture"
+            cache.mkdir()
+            library = cache / "loaded.so"
+            library.write_bytes(b"stable library bytes")
+
+            def load(path):
+                headers["operators/common.cuh"] = "b" * 64
+                return object()
+
+            with (
+                patch.dict("os.environ", {"TVM_FFI_CACHE_DIR": directory}),
+                patch("torch.cuda.get_device_capability", return_value=(10, 0)),
+                patch("tvm_ffi.cpp.build_inline", return_value=str(library)),
+                patch("tvm_ffi.load_module", side_effect=load),
+                patch.object(
+                    backend,
+                    "_project_headers",
+                    side_effect=lambda headers=headers: dict(headers),
+                ),
+                patch.object(
+                    backend,
+                    "_nvcc_identity",
+                    return_value=(Path("/cuda/bin/nvcc"), "V12.8.1"),
+                ),
+                self.assertRaisesRegex(RuntimeError, "changed during build/load"),
+            ):
+                backend.compiled()
+            self.assertFalse((cache / "oh_my_vllm_cuda.provenance.json").exists())
 
     def test_cuda_target_is_fixed_even_on_multigpu_host(self):
         backend = isolated_backend()

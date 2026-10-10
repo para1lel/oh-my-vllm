@@ -43,10 +43,8 @@ pub struct WorkerConfig {
     pub num_speculative_tokens: usize,
     /// Process mode: none, mtp, or dspark. None retains the legacy token-count selection.
     pub speculative_mode: Option<String>,
-    /// Path to DSpark weights. Required for DSpark or comparison execution.
+    /// Path to DSpark weights. Required for DSpark execution.
     pub draft_model_path: Option<PathBuf>,
-    /// Keep both proposers for an idle-only benchmark switch on shared target caches.
-    pub comparison: bool,
     /// DSpark cumulative confidence cutoff. Zero selects fixed-length proposals.
     pub dspark_confidence_threshold: f64,
     /// Python executable to use.
@@ -70,7 +68,6 @@ impl Default for WorkerConfig {
             num_speculative_tokens: 0,
             speculative_mode: None,
             draft_model_path: std::env::var_os("OH_MY_VLLM_DRAFT_MODEL").map(PathBuf::from),
-            comparison: false,
             dspark_confidence_threshold: 0.2,
             python_executable: std::env::var_os("OH_MY_VLLM_WORKER_PYTHON")
                 .map(PathBuf::from)
@@ -93,7 +90,6 @@ pub struct WorkerClient {
     cancelled_prepares: BTreeSet<u64>,
     prepared_reply: Option<crate::protocol::PythonMessage>,
     serving_enabled: bool,
-    comparison: bool,
     pub logical_num_blocks: u32,
     pub mamba_blocks: u32,
     pub serving_outputs: std::collections::BTreeMap<u64, (String, Option<String>, usize)>,
@@ -151,7 +147,7 @@ impl WorkerClient {
             )
             .into());
         }
-        if (config.speculative_mode.as_deref() == Some("dspark") || config.comparison)
+        if config.speculative_mode.as_deref() == Some("dspark")
             && config
                 .draft_model_path
                 .as_ref()
@@ -223,7 +219,6 @@ impl WorkerClient {
                 .draft_model_path
                 .as_ref()
                 .map(|path| path.to_string_lossy().into_owned()),
-            comparison: config.comparison,
             dspark_confidence_threshold: config.dspark_confidence_threshold,
         });
         let mut delay_ms = 100u64;
@@ -301,7 +296,6 @@ impl WorkerClient {
             cancelled_prepares: BTreeSet::new(),
             prepared_reply: None,
             serving_enabled: false,
-            comparison: config.comparison,
             logical_num_blocks,
             mamba_blocks,
             serving_outputs: Default::default(),
@@ -346,38 +340,6 @@ impl WorkerClient {
         });
         if let Err(e) = Self::send_raw(&mut self.sock, &msg).await {
             warn!(request_id, "register send failed: {e}");
-        }
-    }
-
-    /// Select a preloaded proposer after all benchmark requests have finished.
-    pub async fn set_speculative_mode(&mut self, mode: &str) -> Result<()> {
-        if !self.comparison
-            || !matches!(mode, "mtp" | "dspark")
-            || self.serving_enabled
-            || self.pending_prepare.is_some()
-        {
-            return Err(Error::WorkerError(
-                "cannot switch a serving worker".to_owned(),
-            ));
-        }
-        self.rpc_id += 1;
-        let rpc_id = self.rpc_id;
-        Self::send_raw(
-            &mut self.sock,
-            &RustMessage::SetSpeculativeMode {
-                rpc_id,
-                mode: mode.to_owned(),
-            },
-        )
-        .await?;
-        match self.recv_for(rpc_id).await? {
-            crate::protocol::PythonMessage::ModeChanged { mode: received, .. }
-                if received == mode =>
-            {
-                Ok(())
-            }
-            crate::protocol::PythonMessage::Error(error) => Err(Error::WorkerError(error.message)),
-            other => Err(Error::UnexpectedMessageType(format!("{other:?}"))),
         }
     }
 
@@ -632,7 +594,6 @@ impl WorkerClient {
             let received = match &reply {
                 crate::protocol::PythonMessage::Prepared { rpc_id, .. } => *rpc_id,
                 crate::protocol::PythonMessage::ExecuteResult(result) => result.rpc_id,
-                crate::protocol::PythonMessage::ModeChanged { rpc_id, .. } => *rpc_id,
                 crate::protocol::PythonMessage::Error(error) => error.rpc_id,
                 other => {
                     return Err(Error::UnexpectedMessageType(format!("{other:?}")));
@@ -645,9 +606,6 @@ impl WorkerClient {
                     }
                     crate::protocol::PythonMessage::ExecuteResult(_) => {
                         self.pending_prepare.is_none_or(|(_, id)| id != expected)
-                    }
-                    crate::protocol::PythonMessage::ModeChanged { .. } => {
-                        self.comparison && !self.serving_enabled && self.pending_prepare.is_none()
                     }
                     crate::protocol::PythonMessage::Error(_) => true,
                     _ => false,
@@ -814,62 +772,6 @@ mod tests {
         let result = WorkerClient::launch(config).await;
         assert!(matches!(result, Err(Error::Io(error))
             if error.kind() == std::io::ErrorKind::InvalidInput));
-    }
-
-    #[cfg(target_os = "linux")]
-    #[tokio::test]
-    async fn comparison_mode_rpc_accepts_correlated_replies_and_keeps_guards() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let base = std::env::temp_dir().join(format!("oh-my-vllm-modes-{}", std::process::id()));
-        let script = base.with_extension("py");
-        let socket = base.with_extension("ipc");
-        std::fs::write(
-            &script,
-            concat!(
-                "#!/usr/bin/env python3\n",
-                "import sys, zmq, msgpack\n",
-                "sock = zmq.Context.instance().socket(zmq.DEALER)\n",
-                "sock.connect(sys.argv[sys.argv.index('--socket') + 1])\n",
-                "init = msgpack.unpackb(sock.recv(), raw=False)\n",
-                "sock.send(msgpack.packb(dict(type='ready', ",
-                "logical_num_blocks=42, mamba_blocks=42)))\n",
-                "while True:\n",
-                "    msg = msgpack.unpackb(sock.recv(), raw=False)\n",
-                "    if msg['type'] == 'shutdown': break\n",
-                "    assert msg['type'] == 'set_speculative_mode'\n",
-                "    sock.send(msgpack.packb(dict(type='mode_changed', ",
-                "rpc_id=msg['rpc_id'], mode=msg['mode'])))\n",
-            ),
-        )
-        .unwrap();
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
-        let config = WorkerConfig {
-            model_path: PathBuf::from("fixture-model"),
-            python_executable: script.clone(),
-            socket_path: socket.clone(),
-            comparison: true,
-            num_speculative_tokens: 4,
-            draft_model_path: Some(PathBuf::from("fixture-draft")),
-            ..WorkerConfig::default()
-        };
-        let mut client = WorkerClient::launch(config).await.unwrap();
-        for mode in ["dspark", "mtp"] {
-            client.set_speculative_mode(mode).await.unwrap();
-        }
-        assert_eq!(client.rpc_id, 2);
-        let last_rpc = client.rpc_id;
-        assert!(client.set_speculative_mode("invalid").await.is_err());
-        client.serving_enabled = true;
-        assert!(client.set_speculative_mode("dspark").await.is_err());
-        client.serving_enabled = false;
-        client.comparison = false;
-        assert!(client.set_speculative_mode("dspark").await.is_err());
-        assert_eq!(client.rpc_id, last_rpc);
-        client.shutdown().await.unwrap();
-        drop(client);
-        let _ = std::fs::remove_file(script);
-        let _ = std::fs::remove_file(socket);
     }
 
     #[tokio::test]

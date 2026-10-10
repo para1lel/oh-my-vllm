@@ -19,6 +19,8 @@ Split long JSON macros into fields and long literals with `concat!`.
 Put a `// SAFETY:` comment at each `unsafe` block.
 Use Python 3.12 or later and `ruff.toml`.
 
+Use clang-format 23.1.3 for owned CUDA modules. Keep each backend code file at most 800 lines.
+
 Add a meaningful test for new behavior.
 If a test is impractical, record the reason.
 Measure performance with the formal protocol. Identify estimates as estimates.

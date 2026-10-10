@@ -731,35 +731,6 @@ fn mtp_scheduled_gdn_slots_match_worker_candidate_slice_at_page_boundaries() {
     }
 }
 
-#[test]
-fn speculative_mode_switch_requires_idle_and_clears_prefixes() {
-    let mut scheduler = make_scheduler(64, 128);
-    assert!(!scheduler.set_speculative_tokens(6));
-    assert!(!scheduler.config.enable_mtp);
-    assert!(scheduler.add_request(make_req(1, 8, 1)));
-    assert!(!scheduler.set_speculative_tokens(7));
-    assert_eq!(scheduler.config.mtp_draft_len, 0);
-    scheduler.schedule();
-    assert!(!scheduler.set_speculative_tokens(4));
-    apply(
-        &mut scheduler,
-        WorkerOutput {
-            outputs: vec![dummy_output(1)],
-        },
-    );
-    assert!(scheduler.set_speculative_tokens(7));
-    assert!(scheduler.config.enable_mtp);
-    assert_eq!(scheduler.config.mtp_draft_len, 7);
-    assert!(scheduler.add_request(make_req(2, 8, 1)));
-    let cold = scheduler.schedule();
-    assert_eq!(cold.scheduled[0].num_computed_tokens, 0);
-    scheduler.abort(2);
-    assert!(scheduler.set_speculative_tokens(4));
-    assert_eq!(scheduler.config.mtp_draft_len, 4);
-    assert!(scheduler.set_speculative_tokens(0));
-    assert!(!scheduler.config.enable_mtp);
-}
-
 // ── abort ─────────────────────────────────────────────────────────────────────
 
 #[test]

@@ -112,7 +112,7 @@ The observability tool records 21 counters per kernel, worker identity, and load
 Representative TileFoundry shapes, profiler replays, and interleaved latency measurements have different scopes.
 [Profiling](profiling.md) gives the selected implementation and rejected candidates.
 
-## DSpark threshold and paired measurements
+## DSpark threshold selection
 
 DSpark keeps fixed weights and shares the target embedding and vocabulary head.
 Its initial cumulative confidence threshold is `0.2`. Set it to `0.0` for fixed-count diagnostics.
@@ -123,46 +123,3 @@ It has two text/tool-history requests, with input 32768 and output 512 per reque
 Each setting has two full warmups and two measured repetitions.
 Thresholds `0.0`, `0.05`, `0.1`, and `0.2` have TPS medians 177.287, 183.097, 184.198, and 184.323.
 Their acceptance rates are 28.487%, 44.957%, 53.406%, and 62.500%. These medians apply to this small collection.
-
-### Previous-source paired measurements
-
-The [paired record](../bench/evidence/2026-10-09-dspark-mtp4-paired.json) uses runtime source `e83674c` on one B200.
-It has input 32768 and output 4096 at batches 1, 2, and 4, with greedy sampling and cold prefixes.
-The modes share one process, target weights, and physical target caches.
-Each mode has two full warmups in each of three rounds.
-Each round has five pairs. The mode order changes with each pair.
-
-All three batches had the specified output counts and zero recompute preemptions.
-All 90 measured intervals had zero captures or compilations.
-
-Each table row uses fifteen measured batches for each mode.
-TPS is the median of those fifteen measurements.
-TPS includes registration, prefill, decode, transport, sampling, and cleanup. The measured time starts after model loading and warmups.
-TTFT uses the maximum request TTFT in each batch, then the median of those values.
-Acceptance divides total accepted drafts by total verified drafts.
-
-| Batch | Mode | TPS | TTFT (s) | Acceptance | Verified / step | Accepted / step |
-|---|---|---|---|---|---|---|
-| 1 | MTP4 | 319.134 | 1.631171 | 90.647075% | 3.980877 | 3.608549 |
-| 1 | DSpark | 150.959 | 1.598959 | 72.105644% | 1.313688 | 0.947243 |
-| 2 | MTP4 | 493.461 | 3.297708 | 80.736434% | 7.413793 | 5.985632 |
-| 2 | DSpark | 221.112 | 3.223185 | 63.357157% | 1.854226 | 1.174785 |
-| 4 | MTP4 | 723.972 | 6.565200 | 75.358676% | 14.667266 | 11.053058 |
-| 4 | DSpark | 355.888 | 6.428824 | 56.250624% | 3.394175 | 1.909245 |
-
-The step counts include all nonempty prefill/decode scheduling batches. The numerators include all requests in each batch.
-Service logs have per-request step counts. Keep these two count scopes different.
-Adaptive truncation changes the verified-draft denominator. The summary keeps proposed, verified, accepted, and step counts.
-
-The release binary SHA-256 is `4202db0d33251b705e1bedf65ec23bee979ec75377ee42ae7d9f30d0cc8c1072`.
-The loaded CUDA module SHA-256 is `09729aa0e90b5b95108a0f0ed66114a0371af0559a8f6152ae545311c19645d4`.
-The loaded DSpark configuration SHA-256 is `dd65fb1b01c2adea69512ff2990a79d58eb7fe2c7ea97375aa66f657a29a5bfd`.
-The loaded DSpark weights SHA-256 is `2aff025f45823b40ebe726b9dfa40302f3512bd9a11c3a7347de32a567acd9a7`.
-
-The independent review passed 368 checks on raw logs, intervals, source identity, loaded files, and completed-job cleanup.
-Its scope is the paired job. The boundary job failed after the paired job because another task used the GPU.
-The summary keeps the original parent failure and the completed paired-job success as different fields.
-The envelope's `original.sha256` identifies the export input. The `raw_artifact` fields identify the full original records.
-
-All three paired TPS confidence lower bounds are less than zero.
-This comparison has no new DSpark TPS, TTFT, spread, or confidence-bound gate.

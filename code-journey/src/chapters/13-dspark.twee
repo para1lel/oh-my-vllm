@@ -61,29 +61,26 @@
 <h2>编译和图复用怎样保持缓存顺序</h2>
 <p>worker 将 context injection, backbone, greedy 链和 Markov step 分成编译单元. DSparkGraph 的静态输入包含 anchor/MASK ID, 七行绝对位置, context 页表和已保留长度. 新图先在捕获之外完成编译与预热, replay 复制动态输入后执行同一 GPU 流程.</p>
 <p>提议图只读取 context 页, 因而捕获与预热都保持这些页的内容. context injection 在提议之前完成, 同一 CUDA stream 保证先写后读. DSpark 提议使用有界 16 项图缓存与独立 pool, 图输出在该族下一次捕获或 replay 前消费. 目标特征图, MTP 图和 DSpark 图各自管理输出生命期.</p>
-<p>目标图的缓存预算按模式分配: 普通与 MTP4 各有 32 项, DSpark 有 64 项, 同时加载两种草稿的比较 worker 有 96 项. 每项保留一组静态形状的输入, 输出与执行图. DSpark 的候选长度会随请求变化, 需要覆盖更多总行数与查询上界组合. 比较缓存将 target family 的淘汰保护下限设为 16 项, target feature family 设为 32 项. 只有已有条目数超过本族下限时, 才能从该族淘汰; 下限不会主动触发捕获, 也不会将条目补满. 其余容量按热度分配. 这些数量限制缓存增长; 空闲显存不足 4 GiB 时停止新捕获, 已驻留图继续 replay. MTP 草稿与提议共用另一组默认 64 项预算, 淘汰保护下限分别为 32 与 8; 单独运行和比较模式使用相同预算.</p>
+<p>目标图的缓存预算按模式分配: 普通与 MTP4 各有 32 项, DSpark 有 64 项. 每项保留一组静态形状的输入, 输出与执行图. DSpark 的候选长度会随请求变化, 需要覆盖更多总行数与查询上界组合. 这些数量限制缓存增长; 空闲显存不足 4 GiB 时停止新捕获, 已驻留图继续 replay. MTP 草稿与提议共用另一组默认 64 项预算, 淘汰保护下限分别为 32 与 8. 只有已有条目数超过本族下限时, 才能从该族淘汰; 下限不会主动触发捕获, 也不会将条目补满. 其余容量按热度分配.</p>
 <p>一次提交有 1 至 32 行特征时, context injection 还可以复用单独的 DSparkContextGraph. 新图先备份本次目的槽, 两轮预热后恢复, 捕获后也在 finally 恢复; 真正提交发生在随后 replay. replay 先检查全部输入的形状, 类型与设备, 再复制新的特征, 绝对位置和目的槽. 因而同一行数可以写不同请求的不同页, 捕获过程保留原缓存内容.</p>
 <<source "dsparkContextGraph" "展开 context 图的事务恢复与动态输入">>
 <p>context 图不返回活跃输出, 使用独立 pool 与最多 32 项缓存, 覆盖支持的全部行数. 提议图和 context 图各自执行 GraphCache 的显存检查, 热度准入与重捕获冷却. 超过 32 行的预填充直接调用 compiled injection 单元; 显存不足或形状尚未准入时也使用该单元, CUDA 操作与缓存写入顺序保持相同.</p>
 <p>confidence 改变各请求的实际候选数. 目标验证图把真实最大输入行数向上归入 1, 2, 5, 8 中最小的安全 bucket, 将此上界加入 key 第四项. [1,3] 与 [2,2] 总行数和请求数相同, 上界分别为 5 与 2, 因而使用不同图; [1,4] 与 [2,3] 总行数同为 5, 上界同为 5, 可以共享. starts, 页表, 位置和状态槽仍按真实请求复制, 有效查询与候选数保持本轮实际长度.</p>
 <h2>服务配置与测量怎样证明实际路线</h2>
 <p>服务选择 <<icode "--speculative-mode dspark --num-speculative-tokens 7">>, 并用 <<icode "--draft-model">> 或 OH_MY_VLLM_DRAFT_MODEL 指定本地草稿目录. <<icode "--dspark-confidence-threshold">> 配置 tau, 公共 CLI 接受有限的 [0, 1) 值, 默认 0.2, 显式设为 0 可关闭置信度截断, 保留至多七个候选. 启动消息与 RuntimeConfig 一起核对模式和数量. Chat, Responses, 流式输出, 工具与语法功能沿用既有服务路径.</p>
-<p>比较命令让 MTP 与 DSpark 共用同进程目标权重, 各持自己的草稿缓存. 整批请求结束且完成清理后, 重建 Rust 前缀管理再切换模式, 避免把未注入该草稿模型的旧 FA 命中页当成它的 context. measured 阶段的实际验证数, 接受数和模式日志证明请求走过哪条路线.</p>
+<p>worker 在初始化时选择并保持一种模式. measured 阶段的实际验证数, 接受数和模式日志证明请求走过哪条路线.</p>
 <<math "\\mathrm{TPS}=\\frac{N_{\\mathrm{kept\ output}}}{t_{\\mathrm{batch\ finish}}-t_{\\mathrm{batch\ start}}},\\quad \\mathrm{acceptance}=\\frac{N_{\\mathrm{accepted}}}{N_{\\mathrm{verified}}}">>
 <p>TPS 的分子是实际保留输出数. 接受率的分子是接受草稿数, 分母是实际送去验证的草稿数. 下一轮返回的提议数单独记录, 调度预算可能只容纳其中一部分. TPS 包含 prefill 与 decode 的完整引擎批耗时, 排除模型加载和预热. 接受率帮助解释目标轮数与草稿额外成本, 吞吐结果还需完整计时来判断.</p>
-<p>正式 DSpark 比较范围为输入 32768, 输出 4096, batch 1, 2, 4. 每个 batch 三轮, 每模式两次完整预热, 每轮五对交替顺序的正式测量. 报告每轮 TPS 中位数与相对极差, 分层配对 bootstrap 的单侧 95% 增益下界, 以及 TTFT. 当前 DSpark 比较收集实际表现, 用户暂未为它设定高于 MTP 的性能门槛. 普通解码, MTP4 和 DSpark 共十五项负载, 采用第 12 章的 prefill/decode 理论下界门槛.</p>
+<p>普通解码, MTP4, prefix-hit 和 DSpark 共十五项负载. 各阶段按第 12 章的理论下界与波动规则判定, 保留 prefix-hit prefill 的三倍倍率例外.</p>
 <h2>接受率与每步接受数怎样一起看</h2>
-<p>自适应截断会改变接受率的分母. 设本轮最多可提议七个候选, confidence 使实际提议为两个, 两个都被调度验证, 其中一个被接受, 则本轮接受率为 1 / 2 = 50%, 每步接受数为 1. MTP 若送去四个并接受三个, 接受率为 3 / 4 = 75%, 每步接受数为 3. 要估计减少了多少目标调用, 还需计算每个目标步骤平均验证及接受多少候选.</p>
+<p>自适应截断会改变接受率的分母. 设本轮最多可提议七个候选, confidence 使实际提议为两个, 两个都被调度验证, 其中一个被接受, 则本轮接受率为 1 / 2 = 50%, 每步接受数为 1. 要估计减少了多少目标调用, 还需计算每个目标步骤平均验证及接受多少候选.</p>
 <<math "\\bar n_{\\mathrm{verified}}=N_{\\mathrm{verified}}/N_{\\mathrm{steps}},\\quad \\bar n_{\\mathrm{accepted}}=N_{\\mathrm{accepted}}/N_{\\mathrm{steps}}">>
-<p>N_steps 是 Rust execute_batch 本次批执行的非空调度步骤数, 包含 prefill 与 decode; 分子汇总批内请求的候选计数. 同批请求可以共享一个步骤. 服务完成日志的 steps 按单个请求计数, 两种每步平均数须保留各自的统计范围. 跨 batch 比较时还须保留 batch_size, input_len 和 output_len. 接受率相近的两种模式, 也可能因草稿网络成本和验证行数而得到不同 TPS.</p>
-<p>下表来自运行时代码 <<icode "e83674c">> 的 formal-09 paired 子任务. 该子任务完整通过三种 batch 的比较与清理检查; 父采集随后执行边界任务时遇到其他任务的 GPU 争用而失败. 记录分别保留已完成子任务与父采集的状态.</p>
-<p>下表的 TPS 汇总每模式十五次正式测量, 取这十五个值的中位数. TTFT 先取每批内各请求的最大值, 再取十五批的中位数. 接受率及每步平均数使用全部十五批的总计数相除.</p>
-<div class="measurement-table-scroll" role="region" aria-label="MTP4 与 DSpark 配对测量结果" tabindex="0"><table class="example-table"><caption>输入 32768, 输出 4096, greedy, 每模式十五次正式测量</caption><thead><tr><th>Batch</th><th>模式</th><th>TPS</th><th>TTFT (s)</th><th>接受率</th><th>每步验证数</th><th>每步接受数</th></tr></thead><tbody><tr><td>1</td><td>MTP4</td><td>319.134</td><td>1.631171</td><td>90.647075%</td><td>3.980877</td><td>3.608549</td></tr><tr><td>1</td><td>DSpark</td><td>150.959</td><td>1.598959</td><td>72.105644%</td><td>1.313688</td><td>0.947243</td></tr><tr><td>2</td><td>MTP4</td><td>493.461</td><td>3.297708</td><td>80.736434%</td><td>7.413793</td><td>5.985632</td></tr><tr><td>2</td><td>DSpark</td><td>221.112</td><td>3.223185</td><td>63.357157%</td><td>1.854226</td><td>1.174785</td></tr><tr><td>4</td><td>MTP4</td><td>723.972</td><td>6.565200</td><td>75.358676%</td><td>14.667266</td><td>11.053058</td></tr><tr><td>4</td><td>DSpark</td><td>355.888</td><td>6.428824</td><td>56.250624%</td><td>3.394175</td><td>1.909245</td></tr></tbody></table></div>
+<p>N_steps 是 Rust execute_batch 本次批执行的非空调度步骤数, 包含 prefill 与 decode; 分子汇总批内请求的候选计数. 同批请求可以共享一个步骤. 服务完成日志的 steps 按单个请求计数, 两种每步平均数须保留各自的统计范围. 跨 batch 比较时还须保留 batch_size, input_len 和 output_len.</p>
 <p>调优 confidence 阈值时, BenchArgs 还支持 <<icode "bench --prompt-file">> 读取独立自然语料. 先用目标 tokenizer 把文本编码为 ID, 文件每行放一个请求的空格分隔 ID. 文件行数必须等于 batch_size, 每行 ID 数等于 input_len, ID 均在目标词表内. Rust 在启动 worker 前检查这些条件, 从而复用同一批执行计时与草稿计数.</p>
 <<source "benchPrompts" "展开自然语料输入的维度与词表检查">>
-<p>自然文本和工具上下文可以帮助比较不同阈值的接受长度与额外成本. 选定参数后, 再在独立正式负载上收集完整记录. spec-bench 保留既定的合成 ID, 32768 输入和 4096 输出, 调优输入与正式测量各自记录来源.</p>
+<p>自然文本和工具上下文可以帮助比较不同阈值的接受长度与额外成本. 选定参数后, 再在独立正式负载上收集完整记录. 调优输入与第 12 章的正式阶段测量各自记录来源.</p>
 <p>容量验收分别覆盖普通解码, MTP4 和 DSpark 的 batch 1, 2, 4. 每个边界请求输入 258048 个 token, 保留输出 4096 个 token, 总长度为 262144, 要求完整完成且无 OOM 或重算抢占. acceptance 文档将每组算子, 容量和服务证据绑定到对应源码与配置.</p>
-<p>同一源码版本的服务通过十二项约束生成用例, 两个 API 的生命周期测试, 实际 oh-my-pi 工具循环及长上下文前缀复用. 两个 agent 都读取源码并将工具结果送回模型, 完成后继续生成回答. 首轮 prefix batch 1 和两轮 batch 2 测量曾因 TTFT 波动超限失败, 后续完整重测通过. 正式汇总保留全部失败记录, 不删除单次样本; 服务回答的语义审查另行记录摘录范围与事实错误.</p>
+<p>既有服务记录覆盖十二项约束生成用例, 两个 API 的生命周期测试, 实际 oh-my-pi 工具循环及长上下文前缀复用. acceptance 文档说明这些记录的源码版本与范围. 两个 agent 都读取源码并将工具结果送回模型, 完成后继续生成回答. 首轮 prefix batch 1 和两轮 batch 2 测量曾因 TTFT 波动超限失败, 后续完整重测通过. 正式汇总保留全部失败记录, 不删除单次样本; 服务回答的语义审查另行记录摘录范围与事实错误.</p>
 <<coverage>>
 <<chapterChoices>>
 </article>

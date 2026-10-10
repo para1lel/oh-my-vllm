@@ -27,13 +27,44 @@ Manifest 还记录每个参考文件的 SHA-256.
 无关修改中保持这些文件和运行依赖 lock 不变.
 修改 lock / reference 需要显式的新比较决策.
 
-Native 源码为 `python/oh_my_vllm/kernels/cuda_backend/kernels.cu`.
-独立 TVM FFI 的 `build_inline` 延迟编译它; `load_module` 加载返回的模块.
+`python/oh_my_vllm/kernels/cuda_backend/kernels.cu` 包含 `operators/` 中的 10 个功能头, 统一构建 native 模块.
+TVM FFI 的 `build_inline` 在首次使用时编译这些输入; `load_module` 加载返回的模块.
 目标为 `sm_100a`, 使用调用方当前 stream.
 包装脚本设置 `TVM_FFI_CUDA_ARCH_LIST=10.0a`; 直接启动时必须显式设置.
 Sidecar 绑定源码 / 配置和精确模块 SHA, nvcc 不可用时支持验证后的复用.
 Capture 和正式计时前完成编译.
 TileFoundry 不属于 native 构建或服务依赖.
+
+### Native 模块划分
+
+| `operators/` 中的模块 | 职责 |
+|---|---|
+| `common.cuh` | PDL, 启动, 错误检查, 存储检查, 计数器, 归约和向量访问. |
+| `quantization.cuh` | FP8 分组量化和 SiLU 乘法. |
+| `normalization.cuh` | 目标模型和 DSpark 的 RMS, 残差 RMS 及 gated RMS. |
+| `attention_prepare.cuh` | Q/K 准备, RoPE, 连续行复制及目标 / 草稿 KV 写入. |
+| `gdn.cuh` | GDN gates, Q/K 归一化和递归状态更新. |
+| `convolution.cuh` | 因果卷积和候选状态写入. |
+| `attention_math.cuh` | Softmax 辅助函数, shared-memory 地址计算和 BF16 MMA 辅助函数. |
+| `decode_attention.cuh` | 目标模型的 split-KV 注意力及稳定合并. |
+| `dspark_decode.cuh` | 草稿注意力读取已提交上下文及具有双向注意力的 7 行候选块. |
+| `normalized_quantization.cuh` | 融合残差 / gated RMS 与 FP8 量化, 保留必要的 BF16 舍入点. |
+
+统一构建使导出函数与设备定义保持在同一模块中.
+Native 模块将全部功能头摘要绑定到缓存键和加载来源记录.
+GEMM 模块独立绑定 `groupwise_fp8.cu` 及根目录的模板头.
+根目录的模板头包括 `groupwise_accum.cuh`.
+构建和加载检查拒绝变化的源码或头文件.
+正式阶段和 profiler 检查将加载的头文件身份与已审查源码比较.
+
+自有 CUDA 后端的每个 `.cu`, `.cuh` 和 `.py` 文件至多 800 行.
+`clang-format` 23.1.3 使用 `.clang-format`, 保留 include 顺序.
+Pre-commit 钩子格式化 native 文件并检查模块大小:
+
+```bash
+scripts/with-env.sh python scripts/format_cuda.py
+scripts/with-env.sh python scripts/format_cuda.py --check
+```
 
 ## 合同与实现
 

@@ -13,6 +13,7 @@ scripts/with-env.sh python scripts/check_rust_line_width.py
 scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
+scripts/with-env.sh python scripts/format_cuda.py --check
 scripts/with-env.sh python scripts/check_docs.py
 scripts/test.sh cpu
 scripts/test.sh full
@@ -26,7 +27,7 @@ Full 模式在等待空闲且绑定 UUID 的 B200 前要求模型位置.
 选定 pytest 参数放在 `cpu` 或 `full` 之后.
 
 测试覆盖调度事务, 缓存所有权, 取消, RPC framing, 服务, 实际路径 FP64 参考和编译模型单元.
-GPU 覆盖包括全部 6 个最大上下文用例和 metadata 变化后的 graph replay.
+GPU 覆盖包括全部 9 个最大上下文用例和 metadata 变化后的 graph replay.
 完整模型 drift 测试在严格算子容差之外, 使用各自记录的模型级界限.
 协议回归使用 scripted worker; GPU / agentic 验收使用真实模型.
 记录 warning 和跳过测试及原因.
@@ -169,40 +170,13 @@ GPU event 区间是用于诊断的 stream 区间, 可能包含主机提交间隙
 诊断记录不提供正式验收结论.
 Profiling 与正式计时独立执行.
 
-## DSpark 比较
-
-将 `OH_MY_VLLM_DRAFT_MODEL` 设置为已校验的本地 checkpoint, 构建当前 release binary.
-完整尝试保存在仓库外, 每次使用新的输出路径:
-
-```bash
-scripts/with-gpu.sh scripts/with-env.sh python benchmarks/speculative.py --binary target/release/oh-my-vllm-zmq-worker --raw-dir "$EVIDENCE_DIR/dspark-attempts" --output "$EVIDENCE_DIR/dspark-comparison.json" --portable-output "$EVIDENCE_DIR/dspark-comparison-portable.json"
-scripts/with-env.sh python benchmarks/speculative.py --input "$EVIDENCE_DIR/dspark-comparison.json" --output "$EVIDENCE_DIR/dspark-recheck.json"
-```
-
-采集器为每个 batch 启动一个比较 worker, 共享 target 权重和物理 target 缓存.
-每种模式在预热前加载草稿模型, 每次尝试重置前缀复用.
-使用 batch1/2/4, 输入 32768, 输出 4096, 合成 ID, greedy 采样, 忽略 EOS.
-框架批吞吐包括注册, prefill, 传输和清理.
-
-每个 batch 执行 3 轮.
-每轮每种模式执行 2 次完整预热和 5 个交替顺序的测量配对.
-报告每轮每种模式的吞吐中位数及波动.
-记录 DSpark 中位数与原生 MTP4 的差值, 以及吞吐增益的 hierarchical paired-bootstrap 单侧 95% 置信下界.
-报告 TTFT 及其波动.
-该比较报告 DSpark 吞吐, 波动和置信界限.
-不增加 DSpark 吞吐或 TTFT 门槛.
-
-原始产物保留每次尝试, 日志哈希, 源码 / binary / Python 身份, package, hardware, 容量和 checkpoint 文件哈希.
-加载的草稿配置和权重哈希必须与指定 checkpoint 字节一致.
-记录包括 compile / capture 审计, GPU 显存峰值和实际验证 / 接受的草稿数.
-配对审计检查全部 42 个 phase marker 和每个测量区间.
-后续预热使用自己的 compilation / capture 区间.
-日志和最后记录的 cache mtime 展示观察到的活动, 无法排除全部静默的内存内编译.
+## DSpark 阈值与草稿统计
 
 `--dspark-confidence-threshold` 选择固定或较短 proposal, 与实际 worker 配置一同记录.
-初始设置为 `0.2`. 使用 `0.0` 保留至多 7 个固定数量 proposal. 输出, 上下文和 grammar 限制可减少 proposal 数量.
+初始设置为 `0.2`. 使用 `0.0` 保留至多 7 个固定数量 proposal.
+输出, 上下文和 grammar 限制可减少 proposal 数量.
 通过已调度 / 接受草稿数及实测性能比较各设置.
-接受率为测量配对内接受草稿总数除以已调度草稿总数.
+接受率为测量期间接受草稿总数除以已调度草稿总数.
 
 使用 `bench --prompt-file PATH` 对与正式输入不同的文本或工具历史开展实验.
 文件每行对应一个请求, token ID 以空白字符分隔.
@@ -210,11 +184,9 @@ scripts/with-env.sh python benchmarks/speculative.py --input "$EVIDENCE_DIR/dspa
 命令在加载模型或 GPU 前检查这些约束.
 实验记录保留文本来源, token 哈希, 模板和采样设置.
 
-正式比较使用的 `spec-bench` 保持固定合成输入.
-它不接受 `--prompt-file`, 阈值实验与该比较使用不同输入.
-
-实际验证草稿为已调度 candidate, 返回的下一步 proposal 使用独立诊断计数.
-Portable 输出是派生摘要, 不能替代比较所需的原始证据.
+将加载的草稿配置和权重哈希与指定 checkpoint 字节比较. 两者必须一致.
+实际验证草稿为已调度 candidate. 返回的下一步 proposal 使用不同的诊断计数.
+可移植摘要不能替代正式验证所需的原始证据.
 
 源码身份及测量范围见 [验收索引](acceptance.zh.md).
 

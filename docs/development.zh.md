@@ -19,7 +19,7 @@ uv pip check --python "$OH_MY_VLLM_CONDA_PREFIX/bin/python"
 export OH_MY_VLLM_MODEL="/path/to/Qwen3.8-27B-FP8"
 ```
 
-`requirements/tools.txt` 固定 pytest, Ruff, pre-commit 及受约束依赖.
+`requirements/tools.txt` 固定 pytest, Ruff, pre-commit, clang-format 及受约束依赖.
 验证工具修改后, 使用 runtime constraint 从 `requirements/tools.in` 重新生成.
 
 也可以使用现有 conda 环境.
@@ -101,8 +101,7 @@ DSpark 至多提出 7 个 token, 原生 MTP4 保留 4-token 路径.
 `--dspark-confidence-threshold` 设置累计前缀 confidence, 初始设置为 `0.2`.
 使用 `0.0` 保留至多 7 个固定数量 proposal. 输出, 上下文和 grammar 限制可减少 proposal 数量.
 阈值必须有限, 大于等于 0 且小于 1.
-HTTP 模式在 worker 生命周期内固定.
-只有 `spec-bench` 允许在空闲时切换 MTP / DSpark, 共享 target 权重和缓存.
+worker 启动时选择一种模式. 在 worker 停止前保持该模式.
 源码身份及测量范围见 [验收索引](acceptance.zh.md).
 
 ## 构建与检查
@@ -115,11 +114,13 @@ scripts/with-env.sh cargo test --workspace
 scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
+scripts/with-env.sh python scripts/format_cuda.py --check
 scripts/with-env.sh python scripts/check_docs.py
 scripts/with-env.sh pre-commit run --all-files
 ```
 
 钩子通过同一包装脚本使用本地系统工具.
+CUDA 钩子使用 clang-format 23.1.3, 并检查模块至多 800 行.
 `git commit` 前配置环境, 确保钩子选择正确环境.
 参见 [贡献流程](../CONTRIBUTING.zh.md).
 

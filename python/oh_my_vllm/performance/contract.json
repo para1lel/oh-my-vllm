@@ -7,7 +7,7 @@
     "worker/dspark_graph.py": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
     "worker/graph_cache.py": "1aa13b93a06c12ed30f458d253d88bf6b66d11ad4c477fcb1d937624db4d941e",
     "worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
-    "worker/model_runner.py": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
+    "worker/model_runner.py": "2ce3da939d31fb94e785c327193644f3f59783dae746912d6107ce9bb224b3cf",
     "worker/mtp.py": "3892ba9efaba0e568ce798bb19f411d6d8259fd958cd6fd29ec3ee5911888824",
     "worker/mtp_context_graph.py": "e59aefabeaf5e44bf4b59516d8fff90532b596aa3e08bc2c29456b6b82db36bf",
     "worker/prefill_graph.py": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
@@ -17,7 +17,7 @@
     "worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
     "worker/serving.py": "9c631dd4f03d1c33648afe3f56e673f48e559213dac4d22e4bc3bf7c00ac30b3",
     "worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
-    "worker/zmq_bridge.py": "ba8d80bc083559da3641a7bf0afdb8c716f524b2d97507d58966d8247d1f4139",
+    "worker/zmq_bridge.py": "4148035e28b7bb991fdb55d307773cdda3ddaae89896af8699d414c9f150a021",
     "models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
     "models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
     "models/qwen.py": "c5d769bd8342c5109b78d9ecfdb169f195186361cff5b7c9465d5cece776ee0d",
@@ -41,11 +41,21 @@
     "kernels/attention_prepare.py": "84f466cb356c3fd2406dd7c0b634a91211892a5558e98213bdeecfa7ce01e3d1",
     "kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
     "kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
-    "kernels/cuda_backend/__init__.py": "0d5604eb96f763a219b6b640245dfd734f566be5ac6d5c956224e920a74f67fe",
-    "kernels/cuda_backend/groupwise.py": "e82feeb484a2c5810cfb6e0abf8a4909960022b17f6354dce226e17d0f998cca",
-    "kernels/cuda_backend/groupwise_accum.cuh": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3",
-    "kernels/cuda_backend/groupwise_fp8.cu": "41964cddfd455fdc1cb9b418adcacf74416bc08f9bb64259c8d0e219ee875dd7",
-    "kernels/cuda_backend/kernels.cu": "a5afb4e6f72a1f5cd61c02d7593156e9566f68fb9a7d9cc6bf730d797df9cfbd",
+    "kernels/cuda_backend/__init__.py": "e84f7a9a2feee0e35e69ad4e29c56d16d6878f8a6569e4741854060a8e9e8465",
+    "kernels/cuda_backend/groupwise.py": "64833b7144a8c0274031ed76fbf962130114496d8f6618e50bd807522d91518f",
+    "kernels/cuda_backend/groupwise_accum.cuh": "72882e7b6f78e8ef01d38174e0262c99bbaea8849daf582f92545e95412c2aa3",
+    "kernels/cuda_backend/groupwise_fp8.cu": "a431652c9acbd3b4a6db8b92a21670ecc2cb2ef582e7bdb6d12a621124a860f1",
+    "kernels/cuda_backend/kernels.cu": "39fa17e2f7e51290b733accad8ce155bcac20c52819105b5a4378f02d3f3e13b",
+    "kernels/cuda_backend/operators/attention_math.cuh": "ba23fc2e4d92e1d3d21e004cf984a6141020d48fd745cc5180ffc40512827a4d",
+    "kernels/cuda_backend/operators/attention_prepare.cuh": "b4153fde26d40d10626def986cdadfb0bb4817b77f07fa7e314b813a3fcd77af",
+    "kernels/cuda_backend/operators/common.cuh": "0bbd2d3fa4daf075964225e33b5be8dd6639eb9fbd107e62937a62b4858e1bf8",
+    "kernels/cuda_backend/operators/convolution.cuh": "612a74cded75bb5551845ee156c13b9fa344201a5712b1b70cbfbaada679d8e5",
+    "kernels/cuda_backend/operators/decode_attention.cuh": "79a2dc423f648e08b699283bf39e2a750f875f94b4f7913ceabfa2c3ba1c25f4",
+    "kernels/cuda_backend/operators/dspark_decode.cuh": "0e91ec6cac705e9409d3224cf0780121c7276c8809e340c9962672c3e4e3991c",
+    "kernels/cuda_backend/operators/gdn.cuh": "98dae836372e549406de9cef69168fc858134537034933a3c44d94d4191df9f7",
+    "kernels/cuda_backend/operators/normalization.cuh": "0eb07aad2af6d01e279bcd8e9637c31575820975b451955ae96c01cecbe7bb82",
+    "kernels/cuda_backend/operators/normalized_quantization.cuh": "7dd6d5864dd471ee287183228b4fdb24f131f12c0cfd6061fc26e36e12d12913",
+    "kernels/cuda_backend/operators/quantization.cuh": "5b04db40e547c08f813fc51c86c1f9f7626cda8aa43a33cc1116ce284c5df12a",
     "kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
     "kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
     "kernels/dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3",
@@ -87,7 +97,21 @@
       "-DCUTLASS_ENABLE_GDC_FOR_SM100=1"
     ],
     "project_headers": {
-      "groupwise_accum.cuh": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3"
+      "groupwise_accum.cuh": "72882e7b6f78e8ef01d38174e0262c99bbaea8849daf582f92545e95412c2aa3"
+    }
+  },
+  "kernel_inputs": {
+    "project_headers": {
+      "operators/attention_math.cuh": "ba23fc2e4d92e1d3d21e004cf984a6141020d48fd745cc5180ffc40512827a4d",
+      "operators/attention_prepare.cuh": "b4153fde26d40d10626def986cdadfb0bb4817b77f07fa7e314b813a3fcd77af",
+      "operators/common.cuh": "0bbd2d3fa4daf075964225e33b5be8dd6639eb9fbd107e62937a62b4858e1bf8",
+      "operators/convolution.cuh": "612a74cded75bb5551845ee156c13b9fa344201a5712b1b70cbfbaada679d8e5",
+      "operators/decode_attention.cuh": "79a2dc423f648e08b699283bf39e2a750f875f94b4f7913ceabfa2c3ba1c25f4",
+      "operators/dspark_decode.cuh": "0e91ec6cac705e9409d3224cf0780121c7276c8809e340c9962672c3e4e3991c",
+      "operators/gdn.cuh": "98dae836372e549406de9cef69168fc858134537034933a3c44d94d4191df9f7",
+      "operators/normalization.cuh": "0eb07aad2af6d01e279bcd8e9637c31575820975b451955ae96c01cecbe7bb82",
+      "operators/normalized_quantization.cuh": "7dd6d5864dd471ee287183228b4fdb24f131f12c0cfd6061fc26e36e12d12913",
+      "operators/quantization.cuh": "5b04db40e547c08f813fc51c86c1f9f7626cda8aa43a33cc1116ce284c5df12a"
     }
   },
   "versions": {

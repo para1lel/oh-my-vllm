@@ -262,7 +262,7 @@ def main() -> None:
     source = source_identity(binary)
     checkpoints = None
     if "dspark" in args.modes:
-        from benchmarks.speculative import checkpoint_identity
+        from benchmarks.evidence import checkpoint_identity
 
         checkpoints = {
             "target": checkpoint_identity(args.model),
@@ -322,7 +322,7 @@ def main() -> None:
         artifact["checkpoint_end_matches_start"] = same_checkpoints
     if not same_source:
         artifact["source_end"] = source_end
-    from benchmarks.speculative import write_artifact
+    from benchmarks.evidence import write_artifact
 
     write_artifact(args.output, artifact, args.portable_output)
     if not artifact["passed"]:

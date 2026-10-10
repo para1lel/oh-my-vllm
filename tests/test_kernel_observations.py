@@ -107,6 +107,7 @@ class ObservationTest(unittest.TestCase):
                 "project_headers": {"groupwise_accum.cuh": "3" * 64},
             }
             records = {"pointwise": record, "gemm": copy.deepcopy(record)}
+            record["project_headers"] = {"operators/common.cuh": "5" * 64}
             identity = {
                 k: v
                 for k, v in records["gemm"].items()
@@ -115,11 +116,14 @@ class ObservationTest(unittest.TestCase):
             records["gemm"]["build_input_sha256"] = hashlib.sha256(
                 json.dumps(identity, sort_keys=True).encode()
             ).hexdigest()
-            inputs = {"project_headers": record["project_headers"]}
+            inputs = {"project_headers": records["gemm"]["project_headers"]}
             sources = {
                 "python/oh_my_vllm/kernels/cuda_backend/" + name: "1" * 64
                 for name in ("kernels.cu", "groupwise_fp8.cu")
             }
+            sources["python/oh_my_vllm/kernels/cuda_backend/operators/common.cuh"] = (
+                "5" * 64
+            )
             validate_profile_loads(records, "cuda", config, sources, inputs)
             validate_profile_loads({}, "tilelang", config, sources, inputs)
             validate_profile_loads(
@@ -164,6 +168,14 @@ class ObservationTest(unittest.TestCase):
             changed["gemm"]["source_sha256"] = "4" * 64
             with self.assertRaisesRegex(ValueError, "source"):
                 validate_profile_loads(changed, "cuda", config, sources, inputs)
+            for headers in (None, {}, {"operators/common.cuh": "6" * 64}):
+                changed = copy.deepcopy(records)
+                changed["pointwise"]["project_headers"] = headers
+                with (
+                    self.subTest(headers=headers),
+                    self.assertRaisesRegex(ValueError, "CUDA operator headers differ"),
+                ):
+                    validate_profile_loads(changed, "cuda", config, sources, inputs)
             library.write_bytes(b"changed after load")
             with self.assertRaisesRegex(ValueError, "library bytes changed"):
                 validate_profile_loads(records, "cuda", config, sources, inputs)

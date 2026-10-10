@@ -72,7 +72,6 @@ Prepare and execute replies echo `rpc_id`. Late cancelled prepare replies are di
 | Output row | `request_id`, `token_ids`, `num_accepted_draft_tokens`, `new_draft_token_ids`. Optional `error`, `text`, `finish_reason`, `reasoning_tokens`. |
 | `error` | `message`, optional `rpc_id` and `kind`. Distinguish validation and internal failure. |
 | `abort` / `shutdown` | `request_id` for abort. Release request state / stop the worker. |
-| `set_speculative_mode` / `mode_changed` | Correlated comparison RPC. Change MTP/DSpark mode only in an idle comparison worker. |
 
 `prefill_token_ids` contains full accepted history on admission or recompute.
 Ordinary decode stays incremental. Drafts have different storage.
@@ -282,10 +281,7 @@ Speculative state is BF16. The target and draft keep specified BF16 rounding poi
 Grammar simulation rolls back before committed output changes persistent grammar state.
 Cancellation and preemption release target and draft request state.
 
-Comparison workers load MTP and DSpark before timing, with one target and the same physical target caches.
-The idle-only mode RPC changes the active draft count between four and seven.
-The scheduler resets prefix metadata between attempts.
-HTTP workers select one mode at initialization and reject this RPC.
+The worker selects one mode when it starts. It keeps that mode until it stops.
 See [ADR-009](decisions/ADR-009-dspark-optional-mode.md).
 
 ## Semantic IR and graphs
@@ -305,8 +301,7 @@ Persistent cache writes keep ordering. Activation donation is currently absent.
 The single-use BF16 SiLU-to-FP8 rewrite has equivalence tests.
 
 Ordinary/MTP4 target graphs have 32 entries. DSpark target-feature graphs have 64 entries.
-A comparison worker has 96 entries, with family floors of 16 for target and 32 for target-feature graphs.
-The modes have different family keys and memory pools. The 4 GiB capture-headroom check stays active.
+The 4 GiB capture-headroom check stays active.
 
 DSpark proposal graphs have a different 16-entry cache and pool.
 DSpark context injection with at most 32 rows uses a different pool and a 32-entry cache.
@@ -314,7 +309,6 @@ DSpark context injection with at most 32 rows uses a different pool and a 32-ent
 Warmup and capture save destination KV slots and restore them in `finally`. Replay commits the current inputs.
 Larger context injection uses the compiled unit without manual capture.
 The default MTP draft/proposal budget is 64 entries, with floors of 32 and 8.
-This budget applies to standalone workers and comparison workers.
 
 Long persistent MTP context uses a different eight-entry cache and pool, with 12 GiB capture headroom.
 Its selected endpoints use owned decode attention with first position 1.

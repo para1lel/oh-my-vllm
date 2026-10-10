@@ -3,7 +3,7 @@
 import logging
 import math
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 import torch
 
@@ -53,7 +53,6 @@ class RuntimeConfig:
     mamba_blocks: int | None = None
     speculative_mode: str | None = None
     draft_model: str | None = None
-    comparison: bool = False
     dspark_confidence_threshold: float = 0.2
 
     def __post_init__(self) -> None:
@@ -63,10 +62,8 @@ class RuntimeConfig:
         expected = {"none": 0, "mtp": 4, "dspark": 7}[mode]
         if self.speculative_tokens != expected:
             raise ValueError("speculative token count disagrees with mode")
-        if (mode == "dspark" or self.comparison) and not self.draft_model:
+        if mode == "dspark" and not self.draft_model:
             raise ValueError("DSpark requires a draft checkpoint")
-        if self.comparison and mode == "none":
-            raise ValueError("comparison requires a speculative target configuration")
         if not math.isfinite(self.dspark_confidence_threshold) or not (
             0 <= self.dspark_confidence_threshold < 1
         ):
@@ -77,11 +74,8 @@ class RuntimeConfig:
         """Bound target graph budgets independently from physical model caches.
 
         Adaptive DSpark uses more token/query shapes than fixed-count MTP.
-        A comparison keeps both single-mode budgets, with protected family floors.
         All budgets retain the graph cache's device-memory headroom checks.
         """
-        if self.comparison:
-            return 96, {"target": 16, "target_dspark": 32}
         return (64 if self.speculative_mode == "dspark" else 32), {}
 
     def decode_graph_key(self, token_counts: list[int], extent: int) -> tuple:
@@ -136,29 +130,16 @@ class OhMyVllmWorker:
     def _proposer(self):
         return getattr(self, "dspark", None) if self._is_dspark() else self.mtp
 
-    def set_speculative_mode(self, mode: str) -> None:
-        """Switch a preloaded comparison worker only after request cleanup."""
-        if not self.config.comparison or self.histories or self.serving is not None:
-            raise ValueError("mode switch requires an idle comparison worker")
-        if mode not in ("mtp", "dspark"):
-            raise ValueError("comparison supports MTP4 and DSpark")
-        self.config = replace(
-            self.config,
-            speculative_mode=mode,
-            speculative_tokens=4 if mode == "mtp" else 7,
-        )
-        logger.info("Speculative mode selected: %s", mode)
-
     def init_device(self) -> None:
         logger.info("Independent runtime", extra={"fields": identity()})
         torch.cuda.set_device(0)
 
     @torch.inference_mode()
     def load_model(self) -> None:
-        has_dspark = self._is_dspark() or self.config.comparison
+        has_dspark = self._is_dspark()
         self.model = Qwen(
             self.config.model,
-            mtp=self.config.speculative_mode == "mtp" or self.config.comparison,
+            mtp=self.config.speculative_mode == "mtp",
             feature_layer_ids=(5, 19, 33, 47, 61) if has_dspark else (),
         )
         if os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") == "1":
@@ -242,10 +223,10 @@ class OhMyVllmWorker:
                 self.logical_num_blocks,
                 self.config.max_model_len,
             )
-            if self.config.speculative_mode == "mtp" or self.config.comparison
+            if self.config.speculative_mode == "mtp"
             else None
         )
-        if self._is_dspark() or self.config.comparison:
+        if self._is_dspark():
             from oh_my_vllm.worker.dspark import DSpark
 
             self.dspark = DSpark(

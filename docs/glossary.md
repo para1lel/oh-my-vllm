@@ -133,7 +133,7 @@ Proper product names, source identifiers, and protocol text keep their initial f
 | `probability distribution` | noun | Nonnegative vocabulary probabilities with total mass one, after configured sampling transforms and masks. |
 | `conditional distribution` | noun | Vocabulary probabilities for one position given the accepted history and previous speculative drafts. |
 | `stochastic sampling` | noun | Random token selection from configured conditional vocabulary probabilities. |
-| `hierarchical paired-bootstrap` | noun | Resampling rounds, then paired samples in each selected round, to calculate the one-sided confidence bound on throughput gain. |
+| `hierarchical paired-bootstrap` | noun | Resampling rounds, then paired samples in each selected round, to calculate a one-sided confidence bound on differences between measured values. |
 | `probability` | noun | Nonnegative numerical mass for one vocabulary outcome or acceptance event, with values from zero to one. |
 | `confidence bound` | noun | Statistical limit from resampled measurement data at a specified confidence level. |
 | `greedy sampling` | noun | Token selection by the maximum configured model score, with deterministic token-ID handling of ties. |

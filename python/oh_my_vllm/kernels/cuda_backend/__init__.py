@@ -57,6 +57,7 @@ _loaded_compiler_source: str | None = None
 _loaded_pdl: bool | None = None
 _loaded_source_sha256: str | None = None
 _loaded_build_input_sha256: str | None = None
+_loaded_project_headers: dict[str, str] | None = None
 
 
 def _pdl_flag() -> str:
@@ -105,10 +106,31 @@ def _effective_cuda_target() -> str:
     return _get_cuda_target()
 
 
-def _build_input_digest(cuda_source: str, torch_version: str) -> str:
+def _project_headers() -> dict[str, str]:
+    """Bind the native operator translation unit to its own complete header closure."""
+    directory = Path(__file__).parent
+    headers = {
+        path.relative_to(directory).as_posix(): hashlib.sha256(
+            path.read_bytes()
+        ).hexdigest()
+        for path in sorted((directory / "operators").rglob("*.cuh"))
+    }
+    if not headers:
+        raise RuntimeError("native CUDA operator headers are missing")
+    return headers
+
+
+def _build_input_digest(
+    cuda_source: str,
+    torch_version: str,
+    project_headers: dict[str, str] | None = None,
+) -> str:
     """Identify every compiler-independent input to the TVM FFI build."""
     inputs = {
         "cuda_source_sha256": hashlib.sha256(cuda_source.encode()).hexdigest(),
+        "project_headers": (
+            project_headers if project_headers is not None else _project_headers()
+        ),
         "functions": _FUNCTIONS,
         "cuda_flags": (*_BASE_CUDA_FLAGS, _pdl_flag()),
         "sm": "sm_100a",
@@ -121,6 +143,14 @@ def _build_input_digest(cuda_source: str, torch_version: str) -> str:
         "python_abi": sys.implementation.cache_tag,
     }
     return hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
+
+
+def _check_build_inputs(digest: str, torch_version: str) -> None:
+    source = Path(__file__).with_name("kernels.cu").read_text()
+    if _build_input_digest(source, torch_version) != digest:
+        raise RuntimeError(
+            "CUDA source, headers, or build inputs changed during build/load"
+        )
 
 
 def _write_manifest(
@@ -211,10 +241,12 @@ def _record_loaded(
     pdl: bool,
     cuda_source_sha256: str,
     build_input_sha256: str,
+    project_headers: dict[str, str],
 ) -> None:
     global _loaded_so_path, _loaded_so_sha256, _loaded_nvcc_path
     global _loaded_nvcc_version, _loaded_compiler_source, _loaded_pdl
     global _loaded_source_sha256, _loaded_build_input_sha256
+    global _loaded_project_headers
     _loaded_so_path = so_path
     _loaded_so_sha256 = sha
     _loaded_nvcc_path = nvcc_path
@@ -223,6 +255,7 @@ def _record_loaded(
     _loaded_pdl = pdl
     _loaded_source_sha256 = cuda_source_sha256
     _loaded_build_input_sha256 = build_input_sha256
+    _loaded_project_headers = dict(project_headers)
     print(
         "CUDA_BUILD_PROVENANCE " + json.dumps(provenance(require_loaded=True)),
         file=sys.stderr,
@@ -251,6 +284,11 @@ def provenance(*, require_loaded: bool = False, require_compiler: bool = False) 
         "pdl": _loaded_pdl,
         "source_sha256": _loaded_source_sha256,
         "build_input_sha256": _loaded_build_input_sha256,
+        "project_headers": (
+            dict(_loaded_project_headers)
+            if _loaded_project_headers is not None
+            else None
+        ),
     }
 
 
@@ -282,16 +320,20 @@ def compiled():
         )
     if torch.cuda.get_device_capability() != (10, 0):
         raise RuntimeError("the CUDA custom-kernel backend requires B200/SM100")
-    cuda_source = Path(__file__).with_name("kernels.cu").read_text()
+    source_directory = Path(__file__).parent
+    cuda_source = (source_directory / "kernels.cu").read_text()
+    project_headers = _project_headers()
     pdl_flag = _pdl_flag()
-    input_digest = _build_input_digest(cuda_source, torch.__version__)
+    input_digest = _build_input_digest(cuda_source, torch.__version__, project_headers)
     nvcc_path, nvcc_version = _nvcc_identity()
     if nvcc_path is None or nvcc_version.startswith("nvcc-unavailable:"):
         record = _cached_manifest(input_digest, nvcc_path)
+        _check_build_inputs(input_digest, torch.__version__)
         so_path = Path(record["so_path"]).resolve()
         module = load_module(so_path)
         if hashlib.sha256(so_path.read_bytes()).hexdigest() != record["so_sha256"]:
             raise RuntimeError("offline CUDA shared library changed while loading")
+        _check_build_inputs(input_digest, torch.__version__)
         _record_loaded(
             so_path,
             record["so_sha256"],
@@ -301,6 +343,7 @@ def compiled():
             pdl_flag.endswith("=1"),
             hashlib.sha256(cuda_source.encode()).hexdigest(),
             input_digest,
+            project_headers,
         )
         return module
     compiler_key = hashlib.sha256(f"{nvcc_path}\n{nvcc_version}".encode()).hexdigest()[
@@ -312,21 +355,26 @@ def compiled():
             cuda_sources=cuda_source,
             functions=list(_FUNCTIONS),
             backend="cuda",
+            extra_include_paths=[str(source_directory)],
             extra_cuda_cflags=[
                 *_BASE_CUDA_FLAGS,
                 pdl_flag,
                 f"-DOH_MY_VLLM_NVCC_ID_{compiler_key}",
+                f"-DOH_MY_VLLM_INPUT_{input_digest[:20]}",
             ],
         )
     ).resolve()
     if not _in_cuda_cache(so_path):
         raise RuntimeError("CUDA build returned a library outside the configured cache")
+    _check_build_inputs(input_digest, torch.__version__)
     before = hashlib.sha256(so_path.read_bytes()).hexdigest()
     module = load_module(so_path)
     after = hashlib.sha256(so_path.read_bytes()).hexdigest()
     if before != after:
         raise RuntimeError("CUDA shared library changed while loading")
+    _check_build_inputs(input_digest, torch.__version__)
     final_nvcc_path, final_nvcc_version = _nvcc_identity()
+    _check_build_inputs(input_digest, torch.__version__)
     final_input_digest = _build_input_digest(cuda_source, torch.__version__)
     if (final_nvcc_path, final_nvcc_version) != (
         nvcc_path,
@@ -344,6 +392,7 @@ def compiled():
         pdl_flag.endswith("=1"),
         hashlib.sha256(cuda_source.encode()).hexdigest(),
         input_digest,
+        project_headers,
     )
     return module
 

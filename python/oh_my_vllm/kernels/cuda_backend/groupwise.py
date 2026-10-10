@@ -66,10 +66,7 @@ def compiled():
     )
     source_directory = Path(__file__).parent
     source = (source_directory / "groupwise_fp8.cu").read_text()
-    project_headers = {
-        path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in sorted(source_directory.glob("*.cuh"))
-    }
+    project_headers = _project_headers()
     # All template headers participate in the build identity. A wheel version
     # alone does not identify an edited local dependency installation.
     headers = _headers(data, roots)
@@ -114,11 +111,8 @@ def compiled():
     if (
         _nvcc_identity() != (compiler, compiler_version)
         or _headers(data, roots) != headers
-        or {
-            path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in sorted(source_directory.glob("*.cuh"))
-        }
-        != project_headers
+        or _project_headers() != project_headers
+        or (source_directory / "groupwise_fp8.cu").read_text() != source
     ):
         raise RuntimeError("owned groupwise compiler or headers changed during build")
     global _PROVENANCE
@@ -131,6 +125,14 @@ def compiled():
         flush=True,
     )
     return module
+
+
+def _project_headers() -> dict[str, str]:
+    """Identify root GEMM headers independently of native operator headers."""
+    return {
+        path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(Path(__file__).parent.glob("*.cuh"))
+    }
 
 
 def provenance():

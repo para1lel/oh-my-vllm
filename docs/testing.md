@@ -13,6 +13,7 @@ scripts/with-env.sh python scripts/check_rust_line_width.py
 scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
 scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
+scripts/with-env.sh python scripts/format_cuda.py --check
 scripts/with-env.sh python scripts/check_docs.py
 scripts/test.sh cpu
 scripts/test.sh full
@@ -27,7 +28,7 @@ Pure validation tests stay active without a checkpoint.
 Selected pytest arguments follow `cpu` or `full`.
 
 Tests include scheduler transactions, cache ownership, cancellation, RPC framing, serving, inference-path FP64 references, and compiled model units.
-GPU coverage includes all six maximum-context cases and changed-metadata graph replay.
+GPU coverage includes all nine maximum-context cases and changed-metadata graph replay.
 Full-model drift tests use their documented model-level bounds in addition to strict operator-level tolerances.
 Use scripted workers for protocol regressions and the target checkpoint for GPU/agentic acceptance.
 Record warnings and skipped tests with their reasons.
@@ -174,43 +175,13 @@ Use `--diagnostic` for uncommitted-source experiments.
 Diagnostic records do not supply formal acceptance.
 Profile independently from measured acceptance.
 
-## DSpark comparison
-
-Set `OH_MY_VLLM_DRAFT_MODEL` to the validated local checkpoint and build the current release binary.
-Keep full attempts in an external directory. Use a new output path for each attempt:
-
-```bash
-scripts/with-gpu.sh scripts/with-env.sh python benchmarks/speculative.py --binary target/release/oh-my-vllm-zmq-worker --raw-dir "$EVIDENCE_DIR/dspark-attempts" --output "$EVIDENCE_DIR/dspark-comparison.json" --portable-output "$EVIDENCE_DIR/dspark-comparison-portable.json"
-scripts/with-env.sh python benchmarks/speculative.py --input "$EVIDENCE_DIR/dspark-comparison.json" --output "$EVIDENCE_DIR/dspark-recheck.json"
-```
-
-The collector starts one comparison worker per batch, with the same target weights and physical target caches.
-Each mode loads its draft model before warmup.
-Each attempt resets prefix reuse.
-Use batches 1/2/4, input 32768, output 4096, synthetic IDs, greedy sampling, and ignored EOS.
-Framework batch throughput includes registration, prefill, transport, and cleanup.
-
-Each batch has three rounds.
-Each round has two full warmups per mode and five measured pairs with alternating order.
-Record each mode's throughput median and spread in each round.
-Record the DSpark median difference from native MTP4 and the one-sided 95% hierarchical paired-bootstrap lower bound on throughput gain.
-TTFT and its spread are reported.
-
-This comparison reports DSpark throughput, spread, and confidence bounds.
-Do not add a DSpark throughput or TTFT gate for this comparison.
-
-The raw artifact keeps each attempt, log hashes, source/binary/Python identities, packages, hardware, capacities, and checkpoint file hashes.
-Compare loaded draft configuration and weight hashes with the requested checkpoint bytes. They must agree.
-
-Records include compile/capture audit, peak GPU memory, and scheduled/accepted drafts.
-The paired audit checks all forty-two phase markers and each measured interval.
-Subsequent warmups keep their own compilation/capture interval.
-Logs and the last cache mtimes show observed activity. They cannot exclude all silent in-memory compilation.
+## DSpark threshold and draft statistics
 
 `--dspark-confidence-threshold` selects fixed or shorter proposals and is recorded with the observed worker configuration.
-Its initial setting is `0.2`. Use `0.0` for fixed-count proposals up to seven. Output, context, and grammar limits can decrease the proposal count.
+Its initial setting is `0.2`. Use `0.0` for fixed-count proposals up to seven.
+Output, context, and grammar limits can decrease the proposal count.
 Compare each setting through its scheduled/accepted draft counts and measured performance.
-Acceptance rate is total accepted drafts divided by total scheduled drafts in the measured pairs.
+Acceptance rate is total accepted drafts divided by total scheduled drafts in measured work.
 
 Use `bench --prompt-file PATH` for experiments with text or tool histories different from formal inputs.
 The file has one request per line, with whitespace-separated token IDs.
@@ -218,11 +189,9 @@ Its row count must equal `--batch-size`. Each row length must equal `--input-len
 The command checks these constraints before model or GPU loading.
 Keep text sources, token hashes, templates, and sampling settings with the experiment records.
 
-`spec-bench` keeps the fixed synthetic inputs for the formal comparison.
-It does not accept `--prompt-file`. Use different inputs for threshold experiments and that comparison.
-
+Compare loaded draft configuration and weight hashes with the requested checkpoint bytes. They must agree.
 Verified drafts are scheduled candidates. Returned next-step proposals have a different diagnostic counter.
-The portable output is a derived summary. It cannot replace original evidence for comparison.
+Portable summaries cannot replace original evidence for formal verification.
 
 Use the [acceptance index](acceptance.md) for source identities and measured scope.
 
