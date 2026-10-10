@@ -368,11 +368,13 @@ def test_run_task_attaches_real_client_message_to_its_request_summary(
             _stop.set()
         return 0
 
-    def validate(events, requests, api, citation_check):
+    def validate(events, requests, api, citation_check, length_completion_check):
         assert events == [event]
-        assert requests == [request]
+        assert len(requests) == 1 and requests[0]["request"] == request["request"]
+        assert requests[0]["client_completion"]["response_id"] == CHAT_ID
         assert api == "chat"
         assert callable(citation_check)
+        assert callable(length_completion_check)
         return {"fixture": "successful anchored reads validated separately"}
 
     args = soak.build_parser().parse_args(

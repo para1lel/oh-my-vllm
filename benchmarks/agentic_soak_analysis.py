@@ -9,6 +9,7 @@ import re
 import statistics
 from pathlib import Path
 
+from benchmarks.agentic_soak_budget import validate_length_metric
 from benchmarks.agentic_soak_transport import completed_transport_close
 
 METRIC_MARKER = "SERVING_REQUEST_METRIC "
@@ -284,12 +285,14 @@ def bind_points(
                 raise ValueError(
                     "normal model request failed: transport completion differs"
                 )
+            length_completion = validate_length_metric(request, metric, task["api"])
             points.append(
                 {
                     **metric,
                     "task": task["task_id"],
                     "lane": task["lane"],
                     "post_terminal_transport_close": bool(request.get("error")),
+                    "controlled_length_completion": length_completion,
                     "elapsed_minutes": (
                         metric["processing_started_unix_s"] - measured_start
                     )

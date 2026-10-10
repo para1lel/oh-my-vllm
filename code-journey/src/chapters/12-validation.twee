@@ -65,6 +65,7 @@
 <p>测试周期性停止新请求, 排空当前请求, 检查 Rust 的活动请求, reservation 和 drain, 以及 Python 的 history, sampler 和 proposer 状态是否释放. GPU allocated 表示仍有张量 owner 的分配量, reserved 表示 PyTorch allocator 向 GPU 保留的存储, 设备占用还包括驱动和其他 GPU 库的分配, 由 total_bytes 减 free_bytes 得到. RSS 表示主机进程的驻留内存. 缓存预热可使这些值有界增长, 排空后的时间序列用于判断它们是否趋于稳定.</p>
 <p>正常负载要求无意外 OOM, worker 重启或请求失败. 过载, 取消, 慢客户端和真实 OOM 注入单独验证错误报告与恢复, 新 worker 的首次请求还要证明不会通过旧逻辑 identity 访问旧 KV 状态. 这项长时测试不设性能门槛, 日常命令默认跳过; 十五项阶段门槛继续独立验收.</p>
 <p>模型可能在工具调用已经完整返回后关闭连接. 采集器分别核对 SSE 的协议结束记录, oh-my-pi 的同一 response ID 完成消息和服务端完成 metric. 三者一致时, 结束后的连接重置作为诊断信息保留, 对应请求仍计入正常完成请求. Chat 需要有效的 finish reason 和 [DONE]; Responses 使用 response.completed, 达到输出上限时使用原因是 max_output_tokens 的 response.incomplete.</p>
+<p>最终文本达到请求的输出上限, 也可以正常结束一次模型请求. 采集器要求文本非空, 没有待处理的工具调用, 且请求预算, SDK usage, SSE usage 和服务端完成 metric 的输出数量完全一致. response ID, API 和模型身份也必须相符. 此类答案的 length 结束原因和 response.incomplete 状态保留在原始记录中, 并单独报告次数; 通用 agentic 验收仍要求自然 stop 结束.</p>
 <p>长时测试允许其他用户共享 GPU, 并记录其他进程的身份和活动时刻, 以及整块 GPU 的空闲显存. 请求和资源检查通过时继续运行. 分析设备 HBM 占用变化时, 需要结合其他进程的记录与 worker 自身的分配计数. 十五项阶段性能测试继续要求 GPU 独占.</p>
 <<coverage>>
 <<chapterChoices>>

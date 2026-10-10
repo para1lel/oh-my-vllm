@@ -291,6 +291,11 @@ Chat must have a correct finish reason and `[DONE]`.
 Responses must have `response.completed`, or `response.incomplete` with reason `max_output_tokens`.
 The client stop reason must be correct for the protocol end record.
 
+A final `length` answer must have text, no pending tool call, and matching protocol, client, and server records.
+The requested output limit and output counts in the terminal, client, and completed server record must be equal.
+Record these final answers separately. Keep `length` and `response.incomplete` fields in original evidence.
+Generic agentic acceptance must have the final stop reason `stop`.
+
 After a client disconnect with a correct finish reason, the proxy waits at most 2 seconds for the protocol end.
 Failed or cancelled tasks close their proxy connections immediately.
 

@@ -239,6 +239,10 @@ Include the two APIs, tool loops, prefix reuse, and different request lengths.
 Run cancellation, slow-client, overload, and fault tests with separate records.
 Normal requests must have no unexpected OOM, worker restart, or request failure.
 
+An answer that reaches its requested output limit must have the matching protocol end, client message, and completed server record.
+Their output counts must equal that limit. The answer must contain text without a pending tool call.
+Record these answers separately, with their original stop reason.
+
 At the specified intervals, stop new admissions and drain active work.
 Check released request state, cache limits, host RSS, and GPU allocated/reserved memory after warmup.
 Keep the complete memory time series. Investigate continued growth after cache warmup.

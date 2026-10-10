@@ -117,7 +117,12 @@ def wire_source_reads(
 
 
 def validate_agent_evidence(
-    events: list[dict], requests: list[dict], api: str, *, citation_check=None
+    events: list[dict],
+    requests: list[dict],
+    api: str,
+    *,
+    citation_check=None,
+    length_completion_check=None,
 ) -> dict:
     """Prove successful source reads and their use in the final model request."""
     required = {
@@ -178,7 +183,8 @@ def validate_agent_evidence(
         final.get("api") != expected_api
         or final.get("model") != "qwen3.8-27b-fp8"
         or not answer.strip()
-        or final.get("stopReason") != "stop"
+        or final.get("stopReason")
+        not in (("stop", "length") if length_completion_check else ("stop",))
     ):
         raise ValueError("OMP final answer is missing or uses a different API/model")
     if citation_check is None and any(name not in answer for name in required):
@@ -228,6 +234,11 @@ def validate_agent_evidence(
                 forwarded[source["path"]] = read
                 forwarded_reads.append(read)
         if set(forwarded) == set(required):
+            length_proof = None
+            if final.get("stopReason") == "length":
+                length_proof = length_completion_check(final, request)
+                if not isinstance(length_proof, dict) or not length_proof:
+                    raise ValueError("controlled length completion has no proof")
             citations = (
                 citation_check(answer, forwarded_reads) if citation_check else None
             )
@@ -235,10 +246,16 @@ def validate_agent_evidence(
                 "source_reads": forwarded,
                 "successful_source_reads": forwarded_reads,
                 "final_response_id": final["responseId"],
+                "final_stop_reason": final["stopReason"],
                 "final_answer_sha256": hashlib.sha256(answer.encode()).hexdigest(),
                 "tool_results_in_final_model_request": True,
                 "requires_semantic_answer_review": True,
                 **({"final_source_citations": citations} if citations else {}),
+                **(
+                    {"controlled_length_completion": length_proof}
+                    if length_proof
+                    else {}
+                ),
             }
     raise ValueError(
         "successful tool results were not forwarded to the final model request"

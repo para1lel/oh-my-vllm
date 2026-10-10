@@ -25,8 +25,10 @@ import threading
 import time
 import urllib.request
 from contextlib import suppress
+from functools import partial
 from pathlib import Path
 
+from benchmarks import agentic_soak_protocol as protocol
 from benchmarks.agentic_soak_analysis import (
     bind_points,
     device_used_bytes,
@@ -42,7 +44,6 @@ from benchmarks.agentic_soak_analysis import (
     source_citations,
     task_budget,
 )
-from benchmarks.agentic_soak_protocol import attach_client_completions
 from benchmarks.agentic_soak_proxy import ModelSlots, disk_proxy, load_requests
 from benchmarks.evidence import observed_configuration, runtime_source_identity
 from scripts.serving_evidence import stream_identity
@@ -220,7 +221,7 @@ def run_task(
         "--print",
         prompt,
     ]
-    code = None
+    code, requests = None, []
     try:
         with disk_proxy(
             args.base_url,
@@ -235,20 +236,23 @@ def run_task(
             (state / "models.yml").write_text(json.dumps(configuration, indent=2))
             code = run_omp(command, state, directory, stop, task_budget(args, phase))
         summary["exit_code"] = code
-        requests = load_requests(directory / "wire")
-        summary["requests"] = [
-            {key: value for key, value in record.items() if key != "request"}
-            for record in requests
-        ]
+        requests = [dict(record) for record in load_requests(directory / "wire")]
         if code:
             raise ValueError(f"normal OMP task exited {code}")
         events = [
             json.loads(line)
             for line in (directory / "events.jsonl").read_text().splitlines()
         ]
-        attach_client_completions(events, summary["requests"], api)
+        protocol.attach_client_completions(events, requests, api)
+        protocol.certify_length_completions(events, requests, api)
         summary["tool_verification"] = agentic.validate_agent_evidence(
-            events, requests, api, citation_check=source_citations
+            events,
+            requests,
+            api,
+            citation_check=source_citations,
+            length_completion_check=partial(
+                protocol.controlled_length_completion, api=api
+            ),
         )
         summary["passed"] = True
     except Exception as error:
@@ -260,6 +264,11 @@ def run_task(
             ]
         stop.set()
     finally:
+        if requests:
+            summary["requests"] = [
+                {key: value for key, value in record.items() if key != "request"}
+                for record in requests
+            ]
         summary["completed_unix_s"] = time.time()
         evidence.append("tasks.jsonl", summary)
     return summary
@@ -695,6 +704,7 @@ def run(args):
                 started_unix,
             )
         summary.update(
+            **protocol.completion_counts(normal_tasks),
             normal_completed_requests=len(points),
             completed_agent_tasks=len(normal_tasks),
             warmup_requests=len(warm_points),

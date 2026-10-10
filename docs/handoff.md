@@ -83,7 +83,7 @@ HTTP stayed alive, the stream reported failure, and one replacement worker compl
 The shared prefix was cold after recovery and hot on its next use. Final request state was empty and all owned processes exited.
 This diagnostic covers one fault stage. Complete two-mode fault, phase, and soak acceptance is pending.
 
-The current CPU suite passed 1133 tests and 99 subtests, with 448 GPU tests deselected.
+The current CPU suite passed 1289 tests and 99 subtests, with 448 GPU tests deselected.
 Rust workspace tests passed 143 cases. All pre-commit checks passed.
 
 A different agent examined protocol ends, client messages, server metrics, and the 2-second disconnect limit.
@@ -107,6 +107,15 @@ An isolated DSpark batch-four diagnostic passed six captures, twelve hits, and n
 Saved FA/GDN bytes and generated tokens agreed across executions.
 It uses the reviewed admission files over `a0109c9cdebbd142a5ae79109b54766dc3ee2464`, with the previous IR.
 This diagnostic does not supply acceptance for the complete changed inference source.
+
+The source `5a3b0b699bf0322da34b6fe12b3d9f43c395ce52` has a failed DSpark soak with a correct output-limit response.
+The earlier collector rejected its final `length` answer. Its protocol, client, and completed server output counts agree at 2048.
+The original failed records keep their status. The corrected collector checks these counts and rejects pending tool calls.
+
+The independent collector review passed 455 focused CPU tests. All pre-commit checks passed.
+
+All task-owned workers and temporary ports from that collection are closed.
+New complete phase, capacity, recovery, and two-mode soak collections are pending.
 
 ## Open work
 

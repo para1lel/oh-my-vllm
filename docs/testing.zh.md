@@ -284,6 +284,11 @@ Chat 要求正确的 finish reason 和 `[DONE]`.
 Responses 要求 `response.completed`, 或原因是 `max_output_tokens` 的 `response.incomplete`.
 客户端 stop reason 必须与协议结束记录一致.
 
+最终答案以 `length` 结束时, 必须包含文本, 没有待处理的工具调用, 且协议, 客户端和服务端记录一致.
+请求的输出上限必须等于协议结束记录, 客户端及已完成服务端记录中的输出数量.
+单独记录这些最终答案. 原始证据保留 `length` 和 `response.incomplete` 字段.
+通用 agentic 验收仍要求最终 stop reason 为 `stop`.
+
 客户端断连且已有正确的 finish reason 时, 代理最多等待 2 秒接收协议结束记录.
 失败或取消的任务立即关闭代理连接.
 
