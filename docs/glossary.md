@@ -174,6 +174,7 @@ Proper product names, source identifiers, and protocol text keep their initial f
 | `TMA multicast` | noun | Tensor Memory Accelerator transfer of one input tile to shared memory in each block of a CTA cluster. |
 | `register spill` | noun | Storage of thread-local values in local memory when register storage is not sufficient. |
 | `sector` | noun | A 32-byte memory-access unit counted by the NVIDIA profiler. |
+| `epilogue` | noun | GEMM output stage that converts accumulators and writes result storage. |
 
 ## Maintenance
 

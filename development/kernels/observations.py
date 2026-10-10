@@ -97,7 +97,116 @@ METRICS = (
     "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct",
     "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct",
     "smsp__inst_executed.sum",
+    "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed",
+    "smsp__issue_active.avg.pct_of_peak_sustained_active",
+    "smsp__warps_eligible.avg.per_cycle_active",
+    "lts__t_bytes.sum",
+    "l1tex__m_xbar2l1tex_read_bytes_mem_global_op_tma_ld.sum",
+    "l1tex__m_l1tex2xbar_write_bytes_mem_global_op_tma_st.sum",
 )
+
+
+def profile_provenance(stdout, stderr=""):
+    """Keep load identities emitted by this worker, without inferring other loads."""
+    import json
+
+    records = {}
+    for marker, key in (
+        ("CUDA_BUILD_PROVENANCE ", "pointwise"),
+        ("CUDA_GEMM_BUILD_PROVENANCE ", "gemm"),
+        ("PROFILE_WORKER_IDENTITY ", "worker"),
+    ):
+        found = [
+            json.loads(line[len(marker) :])
+            for line in (stdout + "\n" + stderr).splitlines()
+            if line.startswith(marker)
+        ]
+        if len(found) > 1 or any(not isinstance(row, dict) for row in found):
+            raise ValueError("invalid or duplicate profiler worker load identity")
+        if found:
+            records[key] = found[0]
+    return records
+
+
+def validate_profile_worker(metrics, worker, case_id, backend):
+    """Reject counters from another process, case, or selected backend."""
+    if (
+        worker.get("case") != case_id
+        or worker.get("backend") != backend
+        or type(worker.get("pid")) is not int
+        or {row["Process ID"] for row in metrics} != {str(worker["pid"])}
+    ):
+        raise ValueError("profiler metrics do not match the selected worker")
+
+
+def validate_profile_loads(records, backend, config, sources, gemm_inputs):
+    """Bind required owned providers to source, build inputs, and actual SO bytes."""
+    import hashlib
+    import json
+    import re
+
+    from development.kernels.fixtures import ENTRIES
+
+    if backend != "cuda":
+        return
+    if config["operation"] not in ENTRIES:
+        raise ValueError("unknown profiler provider requirement")
+    required = {"pointwise"}
+    if (
+        config["operation"]
+        in {
+            "fp8_linear",
+            "add_norm_fp8_linear",
+            "gated_norm_fp8_linear",
+        }
+        and config["tokens"] > 32
+    ):
+        required.add("gemm")
+    for key in required:
+        record = records.get(key)
+        if not isinstance(record, dict):
+            raise ValueError(f"missing profiler {key} load identity")
+        for field in ("source_sha256", "build_input_sha256", "so_sha256"):
+            if not isinstance(record.get(field), str) or not re.fullmatch(
+                r"[0-9a-f]{64}", record[field]
+            ):
+                raise ValueError(f"invalid profiler {key} {field}")
+        filename = "kernels.cu" if key == "pointwise" else "groupwise_fp8.cu"
+        source = "python/oh_my_vllm/kernels/cuda_backend/" + filename
+        if record["source_sha256"] != sources.get(source):
+            raise ValueError(f"profiler {key} source does not match collection")
+        if key == "gemm" and any(record.get(k) != v for k, v in gemm_inputs.items()):
+            raise ValueError("profiler GEMM templates or build inputs differ")
+        if key == "gemm":
+            identity = {
+                k: v
+                for k, v in record.items()
+                if k not in {"so_path", "so_sha256", "build_input_sha256"}
+            }
+            digest = hashlib.sha256(
+                json.dumps(identity, sort_keys=True).encode()
+            ).hexdigest()
+            if digest != record["build_input_sha256"]:
+                raise ValueError("profiler GEMM build digest does not match its inputs")
+        compiler = record.get("nvcc_path" if key == "pointwise" else "compiler")
+        version = record.get(
+            "nvcc_version" if key == "pointwise" else "compiler_version"
+        )
+        if not compiler or not version or str(version).startswith("nvcc-unavailable:"):
+            raise ValueError(f"missing profiler {key} compiler identity")
+        if key == "pointwise" and (
+            record.get("compiler_identity_source") not in {"live", "manifest"}
+            or record.get("nvcc_version") == "nvcc-changed-during-build"
+            or type(record.get("pdl")) is not bool
+        ):
+            raise ValueError("invalid profiler pointwise compiler or PDL identity")
+        if not isinstance(record.get("so_path"), str):
+            raise ValueError(f"missing profiler {key} library path")
+        if (
+            hashlib.sha256(Path(record["so_path"]).read_bytes()).hexdigest()
+            != record["so_sha256"]
+        ):
+            raise ValueError(f"profiler {key} loaded library bytes changed")
 
 
 def _profile_run(command):
@@ -134,12 +243,15 @@ def collect(case_id, ncu):
     """Collect both backends separately; profiler times never enter comparison."""
     import tempfile
 
+    from oh_my_vllm.performance.coverage import runtime_contract
+
     from benchmarks.measurement import hardware_identity
     from development.kernels.cases import cases
     from development.kernels.reference import source_hashes, verify_reference
 
     case = next(c for c in cases() if c["id"] == case_id)
     initial_sources = source_hashes()
+    gemm_inputs = runtime_contract()["gemm_inputs"]
     report = dict(
         sources_sha256=initial_sources,
         case=case,
@@ -193,7 +305,24 @@ def collect(case_id, ncu):
                         + result.stderr[-4000:]
                         + result.stdout[-4000:]
                     )
-                report["measured"][backend] = read_nsight(path, METRICS)
+                observation = read_nsight(path, METRICS)
+                observation["loaded_cuda"] = profile_provenance(
+                    result.stdout, result.stderr
+                )
+                worker = observation["loaded_cuda"].get("worker", {})
+                validate_profile_worker(
+                    observation["metrics"], worker, case_id, backend
+                )
+                validate_profile_loads(
+                    observation["loaded_cuda"],
+                    backend,
+                    case["configuration"],
+                    initial_sources,
+                    gemm_inputs,
+                )
+                observation["worker_stdout"] = result.stdout
+                observation["worker_stderr"] = result.stderr
+                report["measured"][backend] = observation
             except (OSError, ValueError, RuntimeError) as error:
                 report["measured"][backend] = dict(
                     kind="unavailable",

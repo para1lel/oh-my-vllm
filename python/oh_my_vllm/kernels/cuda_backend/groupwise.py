@@ -64,7 +64,12 @@ def compiled():
         include,
         utilities,
     )
-    source = Path(__file__).with_name("groupwise_fp8.cu").read_text()
+    source_directory = Path(__file__).parent
+    source = (source_directory / "groupwise_fp8.cu").read_text()
+    project_headers = {
+        path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(source_directory.glob("*.cuh"))
+    }
     # All template headers participate in the build identity. A wheel version
     # alone does not identify an edited local dependency installation.
     headers = _headers(data, roots)
@@ -76,6 +81,7 @@ def compiled():
         "headers_sha256": hashlib.sha256(
             json.dumps(headers, sort_keys=True).encode()
         ).hexdigest(),
+        "project_headers": project_headers,
         "compiler": str(compiler),
         "compiler_version": compiler_version,
         "torch": str(torch.__version__),
@@ -94,7 +100,7 @@ def compiled():
             cuda_sources=source,
             functions=["groupwise_fp8"],
             backend="cuda",
-            extra_include_paths=[str(root) for root in roots],
+            extra_include_paths=[str(source_directory), *(str(root) for root in roots)],
             extra_cuda_cflags=[
                 *_FLAGS,
                 f"-DOH_MY_VLLM_GEMM_INPUT_{digest[:20]}",
@@ -108,6 +114,11 @@ def compiled():
     if (
         _nvcc_identity() != (compiler, compiler_version)
         or _headers(data, roots) != headers
+        or {
+            path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(source_directory.glob("*.cuh"))
+        }
+        != project_headers
     ):
         raise RuntimeError("owned groupwise compiler or headers changed during build")
     global _PROVENANCE

@@ -2,6 +2,7 @@
 
 import json
 import operator
+from copy import deepcopy
 
 import pytest
 import torch
@@ -87,3 +88,41 @@ def test_missing_or_device_value_size_metadata_blocks_acceptance(inventory, resu
     query.meta["example_value"] = result
     execution.observe_graph("dspark", graph)
     assert not metadata_covers("dspark", "call_method:size", inventory())
+
+
+def test_loaded_gemm_must_bind_the_reviewed_owned_accumulator_header(monkeypatch):
+    from oh_my_vllm.performance import coverage
+
+    reviewed = {
+        "sources": {
+            "kernels/cuda_backend/kernels.cu": "a" * 64,
+            "kernels/cuda_backend/groupwise_fp8.cu": "b" * 64,
+        },
+        "gemm_inputs": {"project_headers": {"groupwise_accum.cuh": "c" * 64}},
+    }
+    monkeypatch.setattr(coverage, "validate_weights", lambda weights: None)
+    monkeypatch.setattr(coverage.Path, "read_text", lambda path: json.dumps(reviewed))
+    trace = {
+        "runtime_contract": reviewed,
+        "cuda_provenance": {
+            "source_sha256": "a" * 64,
+            "so_sha256": "d" * 64,
+            "build_input_sha256": "e" * 64,
+        },
+        "cuda_gemm_provenance": {
+            "source_sha256": "b" * 64,
+            "so_sha256": "f" * 64,
+            "build_input_sha256": "1" * 64,
+            "project_headers": {"groupwise_accum.cuh": "c" * 64},
+        },
+        "graph_operations": [("target", "_operator.add")],
+        "steps": [],
+    }
+    coverage.validate_inventory(trace)
+    for headers in ({}, {"groupwise_accum.cuh": "2" * 64}):
+        altered = deepcopy(trace)
+        altered["cuda_gemm_provenance"]["project_headers"] = headers
+        with pytest.raises(
+            ValueError, match="templates or flags require semantic review"
+        ):
+            coverage.validate_inventory(altered)

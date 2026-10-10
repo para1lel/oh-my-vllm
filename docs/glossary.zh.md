@@ -174,6 +174,7 @@
 | `TMA multicast` | 名词 | Tensor Memory Accelerator 将一个输入 tile 传输到 CTA cluster 中每个 block 的共享内存. |
 | `register spill` | 名词 | 寄存器存储不足时, 将线程局部值存入 local memory 的行为. |
 | `sector` | 名词 | NVIDIA profiler 统计的 32 字节访存单位. |
+| `epilogue` | 名词 | 转换累加值并写入结果存储的 GEMM 输出阶段. |
 
 ## 维护
 

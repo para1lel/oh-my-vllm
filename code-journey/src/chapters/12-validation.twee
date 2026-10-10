@@ -41,6 +41,9 @@
 <h2>算子调优怎样解释一个失败的阶段</h2>
 <p>development.kernels.observations 将 TileFoundry 的 HIR 计算量, 流量和 roofline 估计与 Nsight 硬件计数器分开记录. 大矩阵检查 Tensor Core 利用率, DRAM 流量, L2 命中率, 寄存器和共享内存占用, occupancy 与 warp stall. occupancy 表示活跃 warp 相对硬件上限的比例, stall 描述当前指令等待数据或资源的原因.</p>
 <p>例如大 GEMM 的 DRAM 使用较高, L2 命中率较低, 可以先测试 tile 遍历和 swizzle 是否减少重复读取. 寄存器溢出则提示部分临时值进入 local memory, 需要检查 tile 和流水资源. 候选实现先检查完整数值与缓存写入, 再做同条件交错计时, 最后检查完整请求和长上下文容量.</p>
+<p>采集器要求每个实际 kernel 都返回 21 类指标, 并核对值是否完整且有限. Tensor cycles 描述 Tensor Core 活跃程度, issue active 描述 warp 发出指令的活跃程度, eligible warps 描述每个周期可以发出指令的 warp 数. 同时记录 DRAM 和 L2 字节数, 以及 TMA load/store 字节数. TMA 请求可能由 L2 满足, 因而 TMA 流量与 HBM 流量分别解释.</p>
+<p>短 scoreboard 等待可能来自 shared memory 或 TMEM 数据尚未就绪; 长 scoreboard 等待常用于检查设备存储读取. 用 SourceCounters 和源码对应的指令位置继续定位, 这些采样比例表示观察到的 warp 状态, 不能直接乘以墙钟时间当作某条指令的耗时. warp-specialized kernel 的不同角色还会调整寄存器预算, launch 的寄存器数需要结合各角色的 SASS 和 local-memory 流量分析.</p>
+<p>TileFoundry 的代表形状用于检查 HIR 逻辑和中间数组, 例如观测器的门控投影 HIR 使用 2 行, 输出宽度 256. 同一报告的 Nsight 采集运行真实 624 行, 输出宽度 5120 的完整 GDN 投影链. 两者的 shape 与用途分别列出, 框架下界则使用真实调度的有效形状.</p>
 <p>317 项 CUDA 与固定 TileLang 的数值及速度门槛独立执行: 原有 230 项保持, 增加 16 项残差 RMS/FP8 gate/up 整链, 16 项门控 RMS/FP8 output 整链, 28 项其余自有 FP8 投影, 6 项完整 GDN prefill, 8 项 K/V 投影, 8 项 context 准备和 5 项 query 准备. cases.py 从生产预算, 784-token 页, 批大小和验证行数推导最大形状. 每个正式算子案例核对完整返回与修改区域, 在三轮二十对交错测量中检查速度, 保护已采用的 CUDA 实现.</p>
 <h2>怎样让下界只包含必要输出</h2>
 <p>required_outputs 从采样, 草稿输入和保留缓存反推哪些行会被使用. 所有验证行都参与目标采样, 即使候选后来被拒绝. 目标最后 FA 层的历史输出仅在 MTP 下一行或完整页边界特征需要时保留; FA 的 K/V 继续覆盖真实历史. 终止请求仅留下已经登记的完整前缀页, 未满 784 的尾部临时状态归入开销.</p>

@@ -55,6 +55,11 @@ def runtime_contract():
             json.dumps(_headers(data, roots), sort_keys=True).encode()
         ).hexdigest(),
         "flags": list(_FLAGS),
+        "project_headers": {
+            path.rsplit("/", 1)[-1]: digest
+            for path, digest in sources.items()
+            if path.startswith("kernels/cuda_backend/") and path.endswith(".cuh")
+        },
     }
     return {
         "sources": sources,

@@ -34,6 +34,11 @@ class RuntimeTests(unittest.TestCase):
                 "*) echo GPU-test-busy;;\nesac\n"
             )
             mock.chmod(0o755)
+            # The outer full suite pins a real GPU. This subprocess tests an
+            # independent mock inventory and must select from that inventory.
+            environment = dict(os.environ)
+            environment.pop("OH_MY_VLLM_GPU_UUID", None)
+            environment["PATH"] = directory + ":" + os.environ["PATH"]
             result = subprocess.run(
                 [
                     str(ROOT / "scripts/with-gpu.sh"),
@@ -41,7 +46,7 @@ class RuntimeTests(unittest.TestCase):
                     "-c",
                     'read -r input; echo "$CUDA_VISIBLE_DEVICES:$input"; exit 7',
                 ],
-                env={**os.environ, "PATH": directory + ":" + os.environ["PATH"]},
+                env=environment,
                 input="stdin-preserved\n",
                 capture_output=True,
                 text=True,

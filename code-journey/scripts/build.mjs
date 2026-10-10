@@ -63,7 +63,7 @@ const snippets = {};
 const highlighter = await createCodeHighlighter();
 for (const [key, [path, begin, end, limit = 48]] of Object.entries(specifications)) {
   const source = await readFile(resolve(repo, path), "utf8");
-  const language = path.endsWith(".rs") ? "rust" : "python";
+  const language = sourceLanguage(path);
   const excerpt = extractExcerpt(source, { begin, end, limit, language });
   const { text } = excerpt;
   const notes = sourceNotes[key];
@@ -135,7 +135,7 @@ async function buildSourceCoverage(highlighter) {
     for (const entry of await readdir(resolve(repo, directory), { recursive: true, withFileTypes: true })) {
       if (!entry.isFile()) continue;
       const path = resolve(entry.parentPath, entry.name).slice(repo.length + 1);
-      if (!/\.(rs|py|cu)$/.test(path) || /\/tests[/.]|\/tilelang_reference\//.test(path)) continue;
+      if (!/\.(rs|py|cu|cuh)$/.test(path) || /\/tests[/.]|\/tilelang_reference\//.test(path)) continue;
       if (!files.has(path)) {
         const text = await readFile(resolve(repo, path), "utf8");
         if (path.endsWith("/__init__.py") && !text.replace(/"""[\s\S]*?"""|#.*|\s/g, "")) continue;
@@ -145,11 +145,17 @@ async function buildSourceCoverage(highlighter) {
   }
   const escape = (text) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
   for (const [path, { source, name, entries }] of files) {
-    const language = path.endsWith(".rs") ? "rust" : path.endsWith(".cu") ? "cpp" : "python";
+    const language = sourceLanguage(path);
     const lines = highlighter.highlight(source, language).map((tokens, index) =>
       '<span class="source-line" id="L' + (index + 1) + '"><span class="line-number" aria-hidden="true">' + (index + 1) + '</span>' + tokens.map((token) =>
         '<span class="syntax-token" style="--syntax-light:' + token.light + ';--syntax-dark:' + token.dark + '">' + escape(token.content) + '</span>').join("") + '</span>').join("\n");
     await writeFile(resolve(directory, name), `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(path)} / 源码</title><link rel="stylesheet" href="../assets/wenkai/font.css"><link rel="stylesheet" href="../style.css"><script>try{document.documentElement.dataset.theme=localStorage.getItem('journey-theme')||'light'}catch{}</script></head><body><main id="story" class="source-viewer"><article><h1>完整源码</h1><p class="source-caption">${escape(path)} / SHA-256 ${entries[0].sha256}</p><ul class="navigation-list">${entries.map((entry) => '<li>如果想读懂此文件的调用背景, 返回 <a href="../index.html?chapter=' + entry.chapter + '">' + escape(chapters[entry.chapter].title) + '</a>. <p class="small">' + escape(entry.responsibility + '. ' + entry.decision) + '</p></li>').join("")}</ul><button class="text-button" id="source-theme" type="button">切换亮色 / 暗色</button><div class="code-block"><pre tabindex="0" aria-label="完整源码, 可横向滚动"><code class="language-${language}">${lines}</code></pre></div></article></main><script>document.getElementById('source-theme').onclick=()=>{const next=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=next;try{localStorage.setItem('journey-theme',next)}catch{}}</script></body></html>`);
   }
   return records;
+}
+
+function sourceLanguage(path) {
+  if (path.endsWith(".rs")) return "rust";
+  if (/\.(cu|cuh)$/.test(path)) return "cpp";
+  return "python";
 }

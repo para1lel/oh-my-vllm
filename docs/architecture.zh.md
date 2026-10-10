@@ -151,6 +151,18 @@ TMA multicast 将同一激活 tile 发送到两个 block.
 每个 block 计算不同的输出列. scale, 累加, 舍入, PDL 和调用者流保持原契约.
 理论计算量保持相同的有效行数和参数范围.
 
+这五种形状使用 M128/N128/K128 tile 与五级输入流水.
+自有 `PairedGroupwiseAccum` 继承固定版本 CUTLASS 主循环.
+它先发出两次独立输出 tile 的 TMEM load, 再执行一次 `tcgen05.wait::ld.sync.aligned` 等待.
+每个输出保持之前的 K 分组顺序, FP32 scale 乘法与 FP32 累加.
+最后的 TMEM 等待先于累加槽释放.
+
+它们的 epilogue 直接将累加值按 round-to-nearest-even 转为 BF16.
+之前的线性组合固定 alpha 为 1, beta 为 0.
+其他 GEMM 形状保持之前的主循环与 epilogue.
+项目 `.cuh` 摘要进入构建身份, 加载库来源记录, 已审查运行契约及算子源码清单.
+加载器在编译前后核对头文件字节.
+
 不带 scale 的普通 projection 使用 `F.linear`.
 
 这避开已观察到的 FlashInfer CUTLASS 在 17 至 32 row 的不稳定性.

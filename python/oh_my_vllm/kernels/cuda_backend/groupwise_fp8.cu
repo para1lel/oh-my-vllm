@@ -32,6 +32,7 @@
 #include <cutlass/gemm/device/gemm_universal_adapter.h>
 #include <cutlass/gemm/kernel/gemm_universal.hpp>
 #include <cutlass/util/packed_stride.hpp>
+#include "groupwise_accum.cuh"
 
 // Adapted from FlashInfer 0.6.18.post1 gemm_groupwise_sm100.cuh.
 // The project owns launch policy, initialization stream, and workspace lifetime.
@@ -45,7 +46,7 @@ using namespace cute;
 
 template <int ScaleGranularityM, int ScaleGranularityN, int ScaleGranularityK, bool ScaleMajorK,
           int MmaSM, typename DTypeIn, typename DTypeOut, int PipelineStages = 0,
-          int ClusterN = 1, int TileK = 128>
+          int ClusterN = 1, int TileK = 128, bool ConversionOnly = false>
 cudaError_t CutlassGroupwiseScaledGEMMSM100(void* float_buffer, size_t float_buffer_size_in_bytes,
                                             DTypeIn* A_ptr, DTypeIn* B_ptr, float* SFA_ptr,
                                             float* SFB_ptr, DTypeOut* D_ptr, int m, int n, int k,
@@ -95,13 +96,24 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void* float_buffer, size_t float_buf
       decltype(ScaleConfig::deduce_layoutSFA());  // Layout type for SFA matrix operand
   using LayoutSFB =
       decltype(ScaleConfig::deduce_layoutSFB());  // Layout type for SFB matrix operand
+  // The selected medium path only rounds the final FP32 accumulator to BF16.
+  // It needs no runtime alpha/beta scalars or reads of the old output.
+  using IdentityCallbacks = cutlass::epilogue::fusion::Sm90EVT<
+      cutlass::epilogue::fusion::Sm90Compute<cutlass::epilogue::thread::Identity,
+          ElementD, ElementCompute, cutlass::FloatRoundStyle::round_to_nearest>,
+      cutlass::epilogue::fusion::Sm90AccFetch>;
+  using LinearCombination = cutlass::epilogue::fusion::LinearCombination<
+      ElementD, ElementCompute, ElementC, ElementCompute>;
+  using EpilogueCallbacks = std::conditional_t<ConversionOnly,
+      IdentityCallbacks, LinearCombination>;
   using CollectiveEpilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
       cutlass::arch::Sm100, cutlass::arch::OpClassTensorOp, MmaTileShape_MNK, ClusterShape_MNK,
       cutlass::epilogue::collective::EpilogueTileAuto, ElementAccumulator, ElementCompute, ElementC,
       LayoutC, AlignmentC, ElementD, LayoutC, AlignmentD,
-      cutlass::epilogue::collective::EpilogueScheduleAuto>::CollectiveOp;
+      cutlass::epilogue::collective::EpilogueScheduleAuto,
+      EpilogueCallbacks>::CollectiveOp;
 
-  using CollectiveMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
+  using StandardMainloop = typename cutlass::gemm::collective::CollectiveBuilder<
       cutlass::arch::Sm100, cutlass::arch::OpClassTensorOp, ElementA,
       cute::tuple<LayoutA, LayoutSFA>, AlignmentA, ElementB, cute::tuple<LayoutB, LayoutSFB>,
       AlignmentB, ElementAccumulator, MmaTileShape_MNK, ClusterShape_MNK,
@@ -110,6 +122,8 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void* float_buffer, size_t float_buf
               sizeof(typename CollectiveEpilogue::SharedStorage))>,
           cutlass::gemm::collective::StageCount<PipelineStages>>,
       cutlass::gemm::KernelScheduleSm100Blockwise>::CollectiveOp;
+  using CollectiveMainloop = std::conditional_t<ConversionOnly,
+      PairedGroupwiseAccum<StandardMainloop>, StandardMainloop>;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
       Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue,
@@ -149,9 +163,11 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void* float_buffer, size_t float_buf
                                          D_ptr,
                                          stride_C,
                                      }};
-  auto& fusion_args = arguments.epilogue.thread;
-  fusion_args.alpha = 1.0f;
-  fusion_args.beta = 0.0f;
+  if constexpr (!ConversionOnly) {
+    auto& fusion_args = arguments.epilogue.thread;
+    fusion_args.alpha = 1.0f;
+    fusion_args.beta = 0.0f;
+  }
 
   // The wide gate/up projection otherwise sweeps activation rows for each
   // output tile. Shape-selected swizzles keep nearby tiles in the same L2
@@ -240,11 +256,12 @@ void groupwise_fp8(TensorView a, TensorView weight, TensorView scale_a,
   }
   TVM_FFI_ICHECK(scale_major_k || (mma_sm == 2 && m >= 32144 && n == 34816 && k == 5120))
       << "MN scales require the full two-SM gate/up shape";
-  auto run = [&](auto sm, auto stages, auto major_k, auto cluster_n, auto tile_k) {
+  auto run = [&](auto sm, auto stages, auto major_k, auto cluster_n, auto tile_k,
+                 auto conversion_only) {
     return oh_my_vllm::gemm::CutlassGroupwiseScaledGEMMSM100<
         1, 128, 128, decltype(major_k)::value, decltype(sm)::value, cutlass::float_e4m3_t,
         cutlass::bfloat16_t, decltype(stages)::value, decltype(cluster_n)::value,
-        decltype(tile_k)::value>(
+        decltype(tile_k)::value, decltype(conversion_only)::value>(
         workspace.data_ptr(), workspace.size(0),
         static_cast<cutlass::float_e4m3_t*>(a.data_ptr()),
         static_cast<cutlass::float_e4m3_t*>(weight.data_ptr()),
@@ -280,27 +297,27 @@ void groupwise_fp8(TensorView a, TensorView weight, TensorView scale_a,
   auto status = mma_sm == 1
                     ? (medium_projection
                          ? run(std::integral_constant<int, 1>{},
-                               std::integral_constant<int, 0>{}, std::true_type{},
+                               std::integral_constant<int, 5>{}, std::true_type{},
                                std::integral_constant<int, 2>{},
-                               std::integral_constant<int, 128>{})
+                               std::integral_constant<int, 128>{}, std::true_type{})
                          : run(std::integral_constant<int, 1>{},
                                std::integral_constant<int, 0>{}, std::true_type{},
                                std::integral_constant<int, 1>{},
-                               std::integral_constant<int, 128>{}))
+                               std::integral_constant<int, 128>{}, std::false_type{}))
                 : m >= 32144 && n == 34816 && k == 5120
                     ? (scale_major_k
                          ? run(std::integral_constant<int, 2>{},
                                std::integral_constant<int, 5>{}, std::true_type{},
                                std::integral_constant<int, 1>{},
-                               std::integral_constant<int, 128>{})
+                               std::integral_constant<int, 128>{}, std::false_type{})
                          : run(std::integral_constant<int, 2>{},
                                std::integral_constant<int, 3>{}, std::false_type{},
                                std::integral_constant<int, 1>{},
-                               std::integral_constant<int, 256>{}))
+                               std::integral_constant<int, 256>{}, std::false_type{}))
                     : run(std::integral_constant<int, 2>{},
                           std::integral_constant<int, 0>{}, std::true_type{},
                           std::integral_constant<int, 1>{},
-                          std::integral_constant<int, 128>{});
+                          std::integral_constant<int, 128>{}, std::false_type{});
   TVM_FFI_ICHECK(status == cudaSuccess) << cudaGetErrorString(status);
   if (debug) {
     auto result = cudaStreamSynchronize(stream);

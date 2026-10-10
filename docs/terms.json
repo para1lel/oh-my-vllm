@@ -1758,6 +1758,17 @@
         "sector",
         "sectors"
       ]
+    },
+    {
+      "term": "epilogue",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "GEMM output stage that converts accumulators and writes result storage.",
+      "translation": "转换累加值并写入结果存储的 GEMM 输出阶段.",
+      "forms": [
+        "epilogue",
+        "epilogues"
+      ]
     }
   ]
 }

@@ -46,6 +46,11 @@
 <p>前缀命中 32144 token 后, 32768 token 的输入还剩 624 行要计算. batch 2 和 4 分别合并为 1248 和 2496 行. 在这些尺寸上, GEMM 沿输出列切成许多 tile, 相邻列 tile 会读取相同的激活块. CTA 是 cooperative thread array, 即一个协作执行的 CUDA thread block; CTA cluster 将几个 block 放在同一协作范围内, 由 TMA (Tensor Memory Accelerator) 将同一输入 tile multicast 到各 block 的共享内存.</p>
 <p>这里 one-SM 指每个 tile 的 Tensor Core 计算使用一个 SM (Streaming Multiprocessor, GPU 的计算单元). 当前 one-SM 路径在 624 到 2496 行采用沿 N 维含两个 block 的 cluster. 一个 block 计算一组输出列, 另一个计算相邻列, 二者复用激活传输. 适用的 N/K 组合为 34816/5120, 16384/5120, 14336/5120, 5120/17408 和 5120/6144, 分别覆盖 gate/up, GDN QKVZ, FA QKV, MLP down 和 GDN output 投影. N 是输出宽度, K 是输入宽度. 行数范围和投影形状共同决定路由, 大 prefill 的 two-SM 配置继续按自己的测量选择.</p>
 <p>cluster 改变输入传输与 block 协作, 仍使用相同的 K-major scale, FP32 累加与 BF16 输出. 三十五项完整操作比较计入 RMS 或 SiLU, 量化, 分配与 GEMM, 检查输出逐位相同, 并覆盖 2047 到 2048 行的 swizzle 边界. 第 12 章所述的 Nsight 指标用于核对资源变化, 独立成对计时用于选择配置; 理论下界仍按相同有效行与参数读取计算.</p>
+<h2>如何减少累加结果的等待与输出转换</h2>
+<p>这五种中等行数投影使用 M128, N128, K128 的 one-SM tile 和五级输入流水. M128 表示一个 tile 覆盖 128 个输入行, N128 覆盖 128 个输出列, K128 表示每轮乘法覆盖 128 个输入列. 一个 K 分组的 FP8 乘法得到 FP32 部分和, 再乘以该组激活与权重的 FP32 scale, 累加到输出的 FP32 总和.</p>
+<p>SM100 把 Tensor Core 的部分和保存在 TMEM (tensor memory, 张量专用存储) 中. 自有 PairedGroupwiseAccum 从固定版本 CUTLASS 主循环继承输入搬运和矩阵乘法, 只修改部分和的读取: 先发出两个独立输出 tile 的 TMEM load, 再执行一次 tcgen05.wait::ld.sync.aligned 等待两次读取完成. 每个 tile 的部分和随后按原顺序缩放和累加, 两个输出之间没有数学依赖.</p>
+<p>这里 tTR_FullAcc 保存输出的 FP32 总和, tTR_PartAcc 和 tTR_PartAccNext 保存两个输出 tile 当前 K 分组的部分和. scale_a 与 scale_b 分别来自激活和权重, 两者相乘得到该分组的缩放系数. 累加仍按 K 分组从前到后执行, 最后的等待完成后才释放流水槽, 防止 Tensor Core 提前覆盖正在读取的数据.</p>
+<p>epilogue 是矩阵乘法最后写出结果的阶段. 通用输出路径计算 alpha 乘以累加值再加 beta 乘以旧输出, 此处 alpha 固定为 1, beta 固定为 0. 这五种投影直接把累加值按 round-to-nearest-even 转为 BF16, 即取最近值, 等距时取最低位为偶数的值. BF16 输出类型和舍入保持相同. 图重放测试改变输入, 权重和 scale, 在侧流与 PDL 开关下逐位比较结果, 并检查输出边界和输入存储.</p>
 <h2>自有 CUDA 算子如何实现这些契约</h2>
 <p>kernels.backend 在进程级选择默认 CUDA 后端. cuda_backend.factory_for 为量化, SiLU, gates, RMS, 残差 RMS, RoPE, RMS/RoPE, append, 注意力准备, 卷积, Q/K 归一化, GDN 递归和 decode partial/merge 建立入口. 所有调用使用调用者当前 CUDA 流, 保持与 PyTorch 操作的顺序.</p>
 <p>kernels.cu 用 warp (32 个线程的执行组) 做求和或最大值归约, 用向量读写减少访存指令. RMS 与量化每组计算归约和 scale; packed 投影视图按真实 token stride 取值; Q/K 准备链合并归一化, RoPE 和缓存写入; 卷积读取最近三项并保存候选; GDN 按头更新矩阵, 将所需位置写入 pool.</p>
@@ -56,6 +61,7 @@
 <p>GDN prefill 的 V 是 packed 投影中的非连续视图. 自有 CUDA 按每行真实 stride 读取, 每个 lane 复制八个 BF16 的原始位, 减少通用逐元素复制的访存指令. 256 线程配置由完整复制链计时与 DRAM 指标选择. FP32 递归 batch 2 采用每线程八行和一个 warp, batch 4 采用两行和四个 warp, 改变资源分配并保留原计算与舍入顺序.</p>
 <p>大 QKV/Z 与 down 投影在 M 至少为 32144, 形状分别为 N=16384, K=5120 和 N=5120, K=17408 时, 分别使用 swizzle 16 和 8. 大 gate/up 在 M 至少为 32144, N=34816, K=5120 时使用 swizzle 16, 其余宽投影保持 swizzle 8. 按实际尺寸选择减少了其他 shape 的回退风险, 正式用例继续覆盖完整生产形状.</p>
 <p>compiled 以 CUDA 源码, torch 版本和编译器身份生成缓存摘要, 通过 TVM FFI 构建并加载共享库. FFI 是跨语言函数接口, 这里把 Python 调用接到 CUDA 主机入口. 加载前后核对库文件摘要, provenance 记录实际源码, NVCC 路径版本与加载文件.</p>
+<p>FP8 构建还记录项目内 .cuh 头文件的 SHA-256, 其中包括 PairedGroupwiseAccum. 构建前后核对头文件内容, 正式运行核对实际加载库记录的摘要与已审查的源码契约. 因而只修改头文件也会生成新的构建身份, 测量结果可以对应到实际执行的累加实现.</p>
 <p>显式选择 tilelang 时使用冻结比较实现, 覆盖 FP8 量化, attention append/decode, 卷积, 逐元素与归一化, GDN 归一化/递归等同一算子契约. 这些参考模块用于已有比较证据; 默认推理使用 CUDA. 项目调用的 FlashInfer, CuTe 与 TVM FFI 按独立库接口使用, 不引入 vLLM 执行依赖.</p>
 <p>编译, 图捕获与具体 kernel 分派都留下可检查记录. 运行身份与正式算子用例因此能回答这一轮究竟执行了哪份实现, 下一章把这些信息组织成验收流程.</p>
 <<coverage>>

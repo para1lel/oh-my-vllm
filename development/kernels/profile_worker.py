@@ -1,6 +1,7 @@
 """One complete formal operation inside a profiler-only NVTX range."""
 
 import argparse
+import json
 import os
 
 
@@ -29,6 +30,11 @@ def main():
         output = function()
         torch.cuda.synchronize()
     del output
+    print(
+        "PROFILE_WORKER_IDENTITY "
+        + json.dumps({"pid": os.getpid(), "case": args.case, "backend": args.backend}),
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

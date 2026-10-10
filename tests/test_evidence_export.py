@@ -58,6 +58,22 @@ def test_formal_comparison_explicitly_rejects_derived_evidence():
         assess(summary)
 
 
+def test_source_floor_division_and_documentation_comments_survive_path_redaction():
+    original = {
+        "anchor": "self.logical_num_blocks = config.num_gpu_blocks // 3",
+        "comment": "/// Keep the accepted token IDs.\n// Keep state.",
+        "model": str(Path("/") / "data0" / "shared" / "model"),
+        "network_path": "//example-host/model",
+        "url": "https://example.com/source",
+    }
+    summary = export.derive(json.dumps(original).encode(), "original.json")["data"]
+    assert summary["anchor"] == original["anchor"]
+    assert summary["comment"] == original["comment"]
+    assert summary["url"] == original["url"]
+    assert summary["model"] == "<local-path>"
+    assert summary["network_path"] == "<local-path>"
+
+
 def test_redaction_collisions_fail_instead_of_losing_values():
     name = "/tmp/kernel.so"
     alias = "<local-path>#" + hashlib.sha256(name.encode()).hexdigest()[:12]

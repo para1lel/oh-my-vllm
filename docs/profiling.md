@@ -56,7 +56,7 @@ Aligned views take no clone path.
 The report separates HIR estimates from Nsight counters and resources.
 It verifies immutable reference identity and requested counter completeness.
 NVTX ranges do not include warmup/JIT.
-Raw profiler CSV stays in external storage.
+Parsed counter rows stay in the external report. Temporary CSV files are removed after parsing.
 
 Cancellation stops the owned profiler process group.
 Use [kernel development](kernels.md#analysis-and-profiling) for the command and limitations.
@@ -348,3 +348,63 @@ Multi-step tests include new and continued prefill with ordinary decode and four
 Reachable checkpoints and final tails keep progress.
 Configured token budgets less than one block also keep progress.
 The production token budget stays 32768 and block size stays 784.
+
+## TMEM and output-stage tuning
+
+Use observed kernel counters to distinguish tensor work, scale access, accumulator waits, and output conversion.
+The observability command requests 21 metrics per launch.
+It includes Tensor activity, issue activity, eligible warps, DRAM/L2 bytes, TMA transfers, resources, local-memory sectors, and stalls.
+It keeps worker output and load identities from stdout and stderr.
+Each counter launch must match the recorded worker process, case, and backend.
+
+The necessary CUDA modules must match source, templates, project headers, build inputs, and loaded library bytes.
+Only the three FP8 projection operations at more than 32 rows must load the owned GEMM module.
+
+TMA bytes specify transfers through the TMA path. L2 can supply those transfers.
+They do not equal compulsory HBM traffic.
+
+SourceCounters show sampled warp states at source instructions. Their proportions do not measure instruction wall-time fractions.
+Warp-specialized kernels can change register budgets by role. Examine SASS and local-memory traffic with launch resource counts.
+
+A source-C9 prefix graph contained 1196 kernels, with 252 FP8 projection launches.
+Their elapsed-time sum was about 19.470 ms. Attention's sum was about 5.767 ms.
+These sums identify work for tuning. Overlapping branches prevent their direct use as a critical path.
+
+SourceCounters showed about 87% of reported excessive regular-load sectors at four activation-scale load instructions.
+That fraction excludes TMA traffic. It cannot show the fraction of HBM bandwidth used by scales.
+
+The current five projections at 624 through 2496 rows use an owned accumulator derived from the pinned CUTLASS mainloop.
+Two independent output tiles issue TMEM loads before one load wait.
+Each output keeps ascending K-group order, FP32 scale multiplication, and FP32 accumulation.
+The final wait is before accumulator-slot release.
+
+The epilogue directly rounds FP32 values to BF16, with the same round-to-nearest-even result.
+
+External candidate diagnostics kept full outputs bitwise equal.
+The production path passed 26 boundary, replay, changed-weight, PDL, stream, and storage checks.
+All 18 affected full-operation cases passed against pinned TileLang, with three rounds and twenty pairs per round.
+
+Each graph has 100 full operations. The smallest time-saved confidence lower bound was about 6.486 microseconds.
+These dirty-source filtered records have diagnostic scope.
+The [accumulator diagnosis](../bench/evidence/2026-10-10-fp8-accumulator-observations.json) keeps selected cases, original hashes, counters, and review scope.
+
+The native gated projection observation uses 624 rows, output width 5120, and input width 6144.
+Its representative HIR uses two rows and output width 256. Keep these shapes and purposes different.
+The full native chain includes gated normalization, FP8 quantization, allocation, and GEMM.
+The profiler has three TileLang launches and two CUDA launches, with all 21 counters per launch.
+Profiler timing does not supply the interleaved speed verdict.
+
+A vector activation-scale prefetch kept outputs equal but increased full-operation latency. Dispatch excludes it.
+An output-tile change failed numerical checks. Static scheduling and different input layouts also did not decrease full-operation time.
+Their compile failures, timeouts, and source-stability failures stay in external records.
+The unstable external accumulator-equivalence attempt supplies no performance conclusion.
+
+Four TMEM loads before one wait and MN scales for the two operands kept outputs bitwise equal.
+Each candidate increased time in all 18 full-operation cases against the current production path.
+Dispatch keeps two loads per wait and K-major scales for these shapes.
+N64 compilation failed because the checkpoint scale granularity is 128 output columns.
+
+The last production short-output diagnosis used input 32768, prefix 32144, and output 16.
+With two warmups and five measurements, prefill medians were about 0.037355 and 0.063120 seconds at batches 1 and 2.
+Their required-work bounds were about 0.010057 and 0.020114 seconds.
+More tuning is necessary. Formal phase workloads keep 4096 outputs.

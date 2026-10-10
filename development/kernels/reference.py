@@ -58,6 +58,7 @@ def source_hashes(root=ROOT):
     paths = [
         *root.glob("python/oh_my_vllm/kernels/**/*.py"),
         *root.glob("python/oh_my_vllm/kernels/**/*.cu"),
+        *root.glob("python/oh_my_vllm/kernels/**/*.cuh"),
         root / "python/oh_my_vllm/models/qwen.py",
         root / "python/oh_my_vllm/models/dspark.py",
         *root.glob("python/oh_my_vllm/ir/**/*.py"),

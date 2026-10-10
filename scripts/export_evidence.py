@@ -44,7 +44,7 @@ OMIT = {
     "last_lines",
     "base_url",
 }
-ABSOLUTE_PATH = re.compile(r"(?<![A-Za-z0-9:/])/(?:[^\s,;\"'<>|)\]}]+)")
+ABSOLUTE_PATH = re.compile(r"(?<![A-Za-z0-9:/])/(?!/+(?:\s|$))(?:[^\s,;\"'<>|)\]}]+)")
 GPU_UUID = re.compile(r"GPU-[0-9a-f]{4,}(?:-[0-9a-f]+)*(?:\.{3}|…)?", re.I)
 IP = re.compile(
     r"(?<![\d.])(?:10|192\.168|172\.(?:1[6-9]|2\d|3[01]))"

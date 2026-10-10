@@ -53,7 +53,7 @@ Warning 在次数 1, 2, 4, 8 和后续 2 的幂时报告复制字节.
 报告区分 HIR 估算, Nsight counter 和 resource.
 校验冻结参考身份及所需 counter 完整性.
 Warmup/JIT 保留在 NVTX range 外.
-原始 profiler CSV 放在 Git 外.
+解析后的计数器行保存在外部报告. 临时 CSV 文件在解析后删除.
 取消时停止所属 profiler 进程组.
 命令和限制见 [内核开发](kernels.zh.md#分析与-profiling).
 
@@ -309,3 +309,61 @@ N256, 不同 two-SM tile, K-split 归约和串行或并行 KV 分割也增加耗
 可到达的 checkpoint 和最后尾部保持推进.
 配置 token 预算不足一页时也保持推进.
 生产 token 预算仍为 32768, 页大小仍为 784.
+
+## TMEM 与输出阶段调优
+
+使用实际 kernel 计数器区分 Tensor 工作, scale 访问, 累加值等待及输出转换.
+观测命令为每次 launch 请求 21 类指标.
+包括 Tensor 活跃程度, 指令发出活跃程度, eligible warp, DRAM/L2 字节数, TMA 传输, 资源, local-memory sector 和停顿.
+它保留 stdout 和 stderr 中的 worker 输出及加载身份.
+每次计数器 launch 必须匹配记录的 worker 进程, 用例和后端.
+
+必需 CUDA 模块必须匹配源码, 模板, 项目头文件, 构建输入及加载库的字节.
+只有行数超过 32 的三类 FP8 投影操作要求加载自有 GEMM 模块.
+
+TMA 字节数描述 TMA 路径的传输. L2 可以提供这些传输.
+它们不等于必需 HBM 流量.
+
+SourceCounters 定位采样得到的 warp 状态, 比例不能表示指令的墙钟耗时占比.
+warp-specialized kernel 可以按角色改变寄存器预算. 结合 SASS, local-memory 流量及 launch 资源计数分析.
+
+源码 C9 的前缀图包含 1196 个 kernel, 其中 252 次 FP8 投影启动.
+投影耗时之和约为 19.470 ms. Attention 耗时之和约为 5.767 ms.
+这些和用于定位调优工作. 分支重叠使它们不能直接用作关键路径.
+
+SourceCounters 将报告的过量普通读取 sector 中约 87% 定位到四条激活 scale load 指令.
+这一占比不包含 TMA 流量, 不能据此确定 scale 使用的 HBM 带宽占比.
+
+当前 624 至 2496 行的五种投影使用从固定 CUTLASS 主循环派生的自有累加器.
+两个独立输出 tile 先发出 TMEM load, 再执行一次读取等待.
+每个输出保持 K 分组递增顺序, FP32 scale 乘法及 FP32 累加.
+最后的等待先于累加槽释放.
+epilogue 直接将 FP32 值舍入为 BF16, round-to-nearest-even 结果相同.
+
+外部候选诊断保持完整输出逐位相同.
+生产路径通过 26 项边界, 重放, 变化权重, PDL, stream 和存储检查.
+18 项受影响的完整算子全部通过与固定 TileLang 的检查, 每项三轮, 每轮二十对.
+每个图包含 100 次完整操作. 最小节省时间置信下界约为 6.486 microseconds.
+这些未提交源码的筛选记录用于诊断.
+[累加器诊断](../bench/evidence/2026-10-10-fp8-accumulator-observations.json) 保留所选用例, 原始摘要, 计数器及审查范围.
+
+原生门控投影观察使用 624 行, 输出宽度 5120, 输入宽度 6144.
+代表 HIR 使用两行和输出宽度 256. 两种形状与用途分别注明.
+完整原生链包含门控归一化, FP8 量化, 分配及 GEMM.
+profiler 中有三次 TileLang launch 和两次 CUDA launch, 每次都有完整 21 类计数器.
+profiler 计时不提供交错测量的速度结论.
+
+向量化激活 scale prefetch 保持输出相同, 但增加了完整操作时延, 不进入分派.
+一个输出 tile 修改未通过数值检查. 静态调度和其他输入布局也未改善完整操作.
+编译失败, 超时及源码稳定性失败保留在外部记录中.
+不稳定的外部累加器等价尝试不能提供性能结论.
+
+一次等待前发出四次 TMEM load 和两个操作数都使用 MN scale 的候选均保持输出逐位相同.
+每个候选的 18 项完整操作相对当前生产路径均更慢.
+这些形状继续使用每次等待前两次读取及 K-major scale.
+N64 编译失败, 因为 checkpoint 的 scale 粒度为 128 个输出列.
+
+最近的生产短输出诊断使用输入 32768, 前缀 32144, 输出 16.
+两次预热和五次测量后, batch 1 和 2 的 prefill 中位数约为 0.037355 和 0.063120 秒.
+必需工作下界约为 0.010057 和 0.020114 秒.
+仍需进一步调优. 正式阶段负载保持输出 4096.

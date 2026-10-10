@@ -1,28 +1,26 @@
 {
-  "gemm_inputs": {
-    "flags": [
-      "-O3",
-      "-DNDEBUG",
-      "-use_fast_math",
-      "--expt-relaxed-constexpr",
-      "-static-global-template-stub=false",
-      "--generate-code=arch=compute_100a,code=sm_100a",
-      "-DCUTLASS_ENABLE_GDC_FOR_SM100=1"
-    ],
-    "headers_sha256": "9f8f986755b1af1d3a442eb905f1eb683a9be1906f7d424739a11c7f197e0e22"
-  },
-  "providers": {
-    "flashinfer/decode.py": "d82d107a644596a9349780b839b34e690c50169ea4cea3d0ee02b78e9dc88c1a",
-    "flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py": "faaf28508f419a255cc030678ef86e73f47153631cc9403176d058b6a0bd715b",
-    "flashinfer/gdn_kernels/blackwell/gdn_prefill.py": "dba25861bb34245a344fc4d4fb443419ecf3f425feb9053823bcd7d7165efe01",
-    "flashinfer/gdn_kernels/delta_rule_dsl/varlen_helper.py": "c9cda29f3e9d0105d91326c4c670feace92f988ed9fde61dcea3035fd6e704ab",
-    "flashinfer/gdn_prefill.py": "e4475a2edc830b97d6bc27f13980e2f5951d7d97eb13547f539acf94e2a2132d",
-    "flashinfer/gemm/gemm_base.py": "de6b7ec299f45801e15e5b9ec7341c417c4d9df8d4a5b4650d701694c483ab8e",
-    "flashinfer/jit/attention/modules.py": "23a8fb1fa8f45db3b527645d15a65c874dba6d3bc7d7df6599d9d7c3a6ddea30",
-    "flashinfer/jit/gemm/core.py": "c118b52da882ecf8b54e850290612b1c6e5593bd0d4a99806f5dc5fb3b9e48f1",
-    "flashinfer/prefill.py": "2ad12a8387b3f6bff192e5945769b68d90cfcab00b9eb2a8a524af8dd71a29de"
-  },
   "sources": {
+    "worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
+    "worker/batch_plan.py": "38fdc0b7661e7a10716642d34ecd3f134f8dda297f67d604139ba23bf063e9a3",
+    "worker/decode_graph.py": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
+    "worker/dspark.py": "454c967c062ec842c53736f6115ec54b9aea0f39959c996fcd6c25c26637f6de",
+    "worker/dspark_graph.py": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
+    "worker/graph_cache.py": "1aa13b93a06c12ed30f458d253d88bf6b66d11ad4c477fcb1d937624db4d941e",
+    "worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
+    "worker/model_runner.py": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
+    "worker/mtp.py": "3892ba9efaba0e568ce798bb19f411d6d8259fd958cd6fd29ec3ee5911888824",
+    "worker/mtp_context_graph.py": "e59aefabeaf5e44bf4b59516d8fff90532b596aa3e08bc2c29456b6b82db36bf",
+    "worker/prefill_graph.py": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
+    "worker/protocol.py": "a3a74a605a84da886893f46524ee6de55979161d4f4632fabcd2ad50fa10d65e",
+    "worker/runtime.py": "ebad0c00284f2d74349de9d410773c7e09b8371205f65e0c716c57875046e294",
+    "worker/sampler.py": "0d1f14464dbd57284b5de997317c29c242a94c56c2d620bfb38a0301f9fb465b",
+    "worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
+    "worker/serving.py": "9c631dd4f03d1c33648afe3f56e673f48e559213dac4d22e4bc3bf7c00ac30b3",
+    "worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
+    "worker/zmq_bridge.py": "ba8d80bc083559da3641a7bf0afdb8c716f524b2d97507d58966d8247d1f4139",
+    "models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
+    "models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
+    "models/qwen.py": "c5d769bd8342c5109b78d9ecfdb169f195186361cff5b7c9465d5cece776ee0d",
     "ir/__init__.py": "e0b7f00f7c99e40733556cd2ad646c2627f176baf0affedd0d5bcb1906305f4d",
     "ir/attention.py": "88aeee43dbe0acbe2480e5c787c6d5858159f67c5b1e5f7aedef419ce4e4dc83",
     "ir/core.py": "c689812b0f02514bbdce8c24ae3abc7dab81f45fa82557d863d2eb15905fd599",
@@ -44,8 +42,9 @@
     "kernels/backend.py": "2bbb5840d4e10f890149393a8050e62a1e152d30e5b9559bddede67f5ac54205",
     "kernels/convolution.py": "6697c1112690cc1d19b063394904a70ec2144c4f9223a4b3baf1ca3767fe0a60",
     "kernels/cuda_backend/__init__.py": "0d5604eb96f763a219b6b640245dfd734f566be5ac6d5c956224e920a74f67fe",
-    "kernels/cuda_backend/groupwise.py": "aacfabfe02aa45bd4bd6b8658a61763da20ad38b0ded57ac4a1ac89a0fb4806f",
-    "kernels/cuda_backend/groupwise_fp8.cu": "8d6eb849f96c59d2e0c91e1cb3e703fa2b60b9cf663db2f4eacbd1f2ab3413ec",
+    "kernels/cuda_backend/groupwise.py": "e82feeb484a2c5810cfb6e0abf8a4909960022b17f6354dce226e17d0f998cca",
+    "kernels/cuda_backend/groupwise_accum.cuh": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3",
+    "kernels/cuda_backend/groupwise_fp8.cu": "41964cddfd455fdc1cb9b418adcacf74416bc08f9bb64259c8d0e219ee875dd7",
     "kernels/cuda_backend/kernels.cu": "a5afb4e6f72a1f5cd61c02d7593156e9566f68fb9a7d9cc6bf730d797df9cfbd",
     "kernels/decode_attention.py": "13164c65eb814a35445e986b31aed1940a76a949c159c67ec2abe9105012c9ea",
     "kernels/dspark_attention.py": "dd584664b2ea42799ae22093bf65a6cc7544fe7d3df88231c527acc11056aee4",
@@ -63,32 +62,37 @@
     "kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
     "kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
     "kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
-    "kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
-    "models/__init__.py": "d5dbec801ed992014dcd97adc80453dd38ab1f03403ed4538b425105f5d815ae",
-    "models/dspark.py": "6de60d9e9ce4aa372bdb24204be4349c192b7714fc7250d31e26b3dd95f59aca",
-    "models/qwen.py": "c5d769bd8342c5109b78d9ecfdb169f195186361cff5b7c9465d5cece776ee0d",
-    "worker/__init__.py": "d0fe00958a7bca9bdd359c163d524520ba7c40223a3cf910e9d6aa485b154d34",
-    "worker/batch_plan.py": "38fdc0b7661e7a10716642d34ecd3f134f8dda297f67d604139ba23bf063e9a3",
-    "worker/decode_graph.py": "ff6d8c259dafb31986d1caccf01122bb8c69542e149350592f3cbddab0f987dd",
-    "worker/dspark.py": "454c967c062ec842c53736f6115ec54b9aea0f39959c996fcd6c25c26637f6de",
-    "worker/dspark_graph.py": "5c85a758c78b4556c5619cacec22f4ba5ea629a02949184ac06446e7a47f2397",
-    "worker/graph_cache.py": "1aa13b93a06c12ed30f458d253d88bf6b66d11ad4c477fcb1d937624db4d941e",
-    "worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
-    "worker/model_runner.py": "3ed85d55dd2f694c76d50736b9a8d512bf87b71e75fc00ac0d4531bf12948fde",
-    "worker/mtp.py": "3892ba9efaba0e568ce798bb19f411d6d8259fd958cd6fd29ec3ee5911888824",
-    "worker/mtp_context_graph.py": "e59aefabeaf5e44bf4b59516d8fff90532b596aa3e08bc2c29456b6b82db36bf",
-    "worker/prefill_graph.py": "c0f60feec35049e7c03a5472f02a656cacc3e80789f14cc717d7be9f0cbb7a4a",
-    "worker/protocol.py": "a3a74a605a84da886893f46524ee6de55979161d4f4632fabcd2ad50fa10d65e",
-    "worker/runtime.py": "ebad0c00284f2d74349de9d410773c7e09b8371205f65e0c716c57875046e294",
-    "worker/sampler.py": "0d1f14464dbd57284b5de997317c29c242a94c56c2d620bfb38a0301f9fb465b",
-    "worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
-    "worker/serving.py": "9c631dd4f03d1c33648afe3f56e673f48e559213dac4d22e4bc3bf7c00ac30b3",
-    "worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
-    "worker/zmq_bridge.py": "ba8d80bc083559da3641a7bf0afdb8c716f524b2d97507d58966d8247d1f4139"
+    "kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
+  },
+  "providers": {
+    "flashinfer/gemm/gemm_base.py": "de6b7ec299f45801e15e5b9ec7341c417c4d9df8d4a5b4650d701694c483ab8e",
+    "flashinfer/prefill.py": "2ad12a8387b3f6bff192e5945769b68d90cfcab00b9eb2a8a524af8dd71a29de",
+    "flashinfer/decode.py": "d82d107a644596a9349780b839b34e690c50169ea4cea3d0ee02b78e9dc88c1a",
+    "flashinfer/jit/attention/modules.py": "23a8fb1fa8f45db3b527645d15a65c874dba6d3bc7d7df6599d9d7c3a6ddea30",
+    "flashinfer/jit/gemm/core.py": "c118b52da882ecf8b54e850290612b1c6e5593bd0d4a99806f5dc5fb3b9e48f1",
+    "flashinfer/gdn_kernels/blackwell/gdn_prefill.py": "dba25861bb34245a344fc4d4fb443419ecf3f425feb9053823bcd7d7165efe01",
+    "flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py": "faaf28508f419a255cc030678ef86e73f47153631cc9403176d058b6a0bd715b",
+    "flashinfer/gdn_prefill.py": "e4475a2edc830b97d6bc27f13980e2f5951d7d97eb13547f539acf94e2a2132d",
+    "flashinfer/gdn_kernels/delta_rule_dsl/varlen_helper.py": "c9cda29f3e9d0105d91326c4c670feace92f988ed9fde61dcea3035fd6e704ab"
+  },
+  "gemm_inputs": {
+    "headers_sha256": "9f8f986755b1af1d3a442eb905f1eb683a9be1906f7d424739a11c7f197e0e22",
+    "flags": [
+      "-O3",
+      "-DNDEBUG",
+      "-use_fast_math",
+      "--expt-relaxed-constexpr",
+      "-static-global-template-stub=false",
+      "--generate-code=arch=compute_100a,code=sm_100a",
+      "-DCUTLASS_ENABLE_GDC_FOR_SM100=1"
+    ],
+    "project_headers": {
+      "groupwise_accum.cuh": "06fed83da62fe36c1ed581d4d6f7da892cf0cb544a142971ffae00cbd22eebd3"
+    }
   },
   "versions": {
-    "flashinfer-python": "0.6.18.post1",
     "torch": "2.14.0",
+    "flashinfer-python": "0.6.18.post1",
     "triton": "3.8.0"
   }
 }

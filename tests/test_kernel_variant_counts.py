@@ -122,5 +122,6 @@ def test_cuda_variant_counters_track_fast_and_generic_launches():
     assert_variant("convolution", before, "generic")
     assert not result.count_nonzero().item()
 
-    with pytest.raises(Exception, match="unknown CUDA variant operation"):
-        compiled().variant_launch_count(7, True)
+    for invalid in (-1, len(variant_launch_counts())):
+        with pytest.raises(Exception, match="unknown CUDA variant operation"):
+            compiled().variant_launch_count(invalid, True)

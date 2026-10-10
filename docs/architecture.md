@@ -156,6 +156,18 @@ TMA multicast sends the same activation tile to the two blocks.
 Each block computes different output columns. Scales, accumulation, rounding, PDL, and the caller stream keep their previous contracts.
 Theoretical work keeps the same logical rows and parameter ranges.
 
+These five shapes use M128/N128/K128 tiles and five input pipeline stages.
+The owned `PairedGroupwiseAccum` inherits the pinned CUTLASS mainloop.
+It issues two independent output-tile TMEM loads before one `tcgen05.wait::ld.sync.aligned` wait.
+Each output keeps its previous K-group order, FP32 scale multiplication, and FP32 accumulation.
+The final TMEM wait is before accumulator-slot release.
+
+Their epilogue directly converts the accumulator to BF16 with round-to-nearest-even.
+The previous linear combination has fixed alpha 1 and beta 0.
+Other GEMM shapes keep their previous mainloop and epilogue.
+Project `.cuh` hashes enter the build identity, loaded-library provenance, reviewed runtime contract, and operator source inventory.
+The loader verifies header bytes before and after compilation.
+
 Ordinary projections without scales use `F.linear`.
 
 
