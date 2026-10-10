@@ -117,6 +117,16 @@ def sample(now=100.0):
                 "module_capacity": 4,
                 "compiled_graph_counts": {"unit": 2},
                 "unit_capacity": 4,
+                **{
+                    f"{name}_{suffix}": value
+                    for name in ("fx_source", "fake_tensor", "fx_profiler")
+                    for suffix, value in (
+                        ("entries", 2),
+                        ("capacity", 4),
+                        ("bytes", 2048),
+                        ("byte_capacity", 4096),
+                    )
+                },
             },
             "gpu": {
                 "allocated_bytes": 10_000_000,
@@ -194,6 +204,32 @@ def test_metric_log_duplicate_and_truncation_fail(tmp_path):
         read_metrics(path)
     with pytest.raises(ValueError, match="truncated"):
         read_metrics(path, path.stat().st_size + 1)
+
+
+@pytest.mark.parametrize("name", ["fx_source", "fake_tensor", "fx_profiler"])
+@pytest.mark.parametrize(
+    "suffix,cap", [("entries", "capacity"), ("bytes", "byte_capacity")]
+)
+@pytest.mark.parametrize(
+    "mutation",
+    ["missing", "over_capacity", "negative", "boolean", "fraction", "zero_budget"],
+)
+def test_compiler_metadata_requires_complete_and_bounded_evidence(
+    name, suffix, cap, mutation
+):
+    healthy = sample()
+    compiled = healthy["worker"]["compile"]
+    key, cap_key = f"{name}_{suffix}", f"{name}_{cap}"
+    if mutation == "missing":
+        del compiled[key]
+    elif mutation == "over_capacity":
+        compiled[key] = compiled[cap_key] + 1
+    elif mutation == "zero_budget":
+        compiled[cap_key] = 0
+    else:
+        compiled[key] = {"negative": -1, "boolean": True, "fraction": 1.5}[mutation]
+    checks = {check["name"]: check for check in resource_checks(healthy)}
+    assert not checks[f"compile_{name}_{suffix}"]["passed"]
 
 
 def test_all_caps_and_idle_resources_checked():

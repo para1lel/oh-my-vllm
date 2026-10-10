@@ -1,6 +1,7 @@
 export const specifications = {
   cachePublish: ["crates/kv-cache/src/group.rs", "    pub fn commit_cache(", "    /// Free blocks the group", 24],
   compilerBudget: ["python/oh_my_vllm/ir/cache.py", "    def before_call(", "    def compiled(", 38],
+  compilerMetadataGC: ["python/oh_my_vllm/ir/cache.py", "    def after_call(", "    @staticmethod\n    def _release_modules(", 28],
   admissionLease: ["crates/zmq-worker/src/serving/resources.rs", "    pub fn admit(", "    pub fn snapshot(", 26],
   selectedAttention: ["python/oh_my_vllm/models/qwen.py", "    def forward_selected(", "    def __call__(", 55],
   normalizedLinear: ["python/oh_my_vllm/ir/normalized_linear.py", "def add_norm_fp8_linear(", "\n\ndef _gated_fake("],

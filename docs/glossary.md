@@ -182,6 +182,7 @@ Proper product names, source identifiers, and protocol text keep their initial f
 | `worker epoch` | noun | Identity of one worker generation that completed loading, used to reject admissions for an old worker. |
 | `compiler variant` | noun | Program compiled for one code identity and input metadata, with conditions for its reuse. |
 | `encoded state reservation` | noun | Byte capacity kept for conservative encoded input, history, and output estimates. JSON, object, and allocator overhead is additional. |
+| `reference cycle` | noun | Python object references that return to their first object and can keep unused objects in memory. |
 
 ## Maintenance
 

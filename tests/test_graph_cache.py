@@ -29,7 +29,7 @@ def test_memory_pressure_releases_last_pool_owner_before_recapture():
         free_bytes=lambda: free[0],
         synchronize=lambda: events.append("drain"),
         release_family=lambda family: events.append(f"release {family}"),
-        release_memory=lambda: free.__setitem__(0, 10),
+        release_memory=lambda: free.__setitem__(0, 10) if not cache.graphs else None,
     )
     owner = cache.get_or_create("target", (1,), Owner)
     reference = weakref.ref(owner)
@@ -42,6 +42,77 @@ def test_memory_pressure_releases_last_pool_owner_before_recapture():
     assert cache.snapshot()["target_pressure_eviction"] == 1
     recreated = cache.get_or_create("target", (1,), Owner)
     assert recreated is not None
+
+
+def test_reclaim_unused_allocator_blocks_preserves_resident_pool_and_outputs():
+    events = []
+    free = [10]
+    cache = GraphCache(
+        min_capture_free_bytes=8,
+        free_bytes=lambda: free[0],
+        synchronize=lambda: events.append("drain"),
+        release_memory=lambda: (events.append("reclaim"), free.__setitem__(0, 10)),
+        release_family=lambda family: events.append(f"release {family}"),
+    )
+    owner = cache.get_or_create("prefill_dspark", (1,), object)
+    free[0] = 1
+    assert cache.should_use("prefill_dspark", (2,))
+    assert cache.get_or_create("prefill_dspark", (1,), object) is owner
+    assert events == ["drain", "reclaim"]
+    assert cache.snapshot()["prefill_dspark_pressure_eviction"] == 0
+    assert cache.snapshot()["allocator_reclaimed_bytes"] == 9
+
+
+def test_resident_replay_does_not_trim_on_low_capture_headroom():
+    free = [10]
+    sync, reclaim, release = Mock(), Mock(), Mock()
+    cache = GraphCache(
+        min_capture_free_bytes=8,
+        free_bytes=lambda: free[0],
+        synchronize=sync,
+        release_memory=reclaim,
+        release_family=release,
+    )
+    owner = cache.get_or_create("prefill_dspark", (1,), object)
+    free[0] = 0
+    assert cache.should_use("prefill_dspark", (1,))
+    assert cache.get_or_create("prefill_dspark", (1,), object) is owner
+    sync.assert_not_called()
+    reclaim.assert_not_called()
+    release.assert_not_called()
+
+
+def test_per_capture_headroom_preserves_other_family_default_guard():
+    free = [12]
+    cache = GraphCache(min_capture_free_bytes=32, free_bytes=lambda: free[0])
+    assert cache.should_use("prefill_dspark", (1,), headroom_bytes=8)
+    owner = cache.get_or_create("prefill_dspark", (1,), object, headroom_bytes=8)
+    assert owner is not None
+    assert not cache.should_use("target", (2,))
+    assert cache.min_capture_free_bytes == 32
+    free[0] = 0
+    assert cache.should_use("prefill_dspark", (1,), headroom_bytes=8)
+    assert (
+        cache.get_or_create("prefill_dspark", (1,), object, headroom_bytes=8) is owner
+    )
+
+
+def test_per_capture_headroom_rechecks_a_late_drop_without_publishing():
+    free = [12]
+    cache = GraphCache(min_capture_free_bytes=32, free_bytes=lambda: free[0])
+    assert cache.should_use("prefill_dspark", (1,), headroom_bytes=8)
+    free[0] = 7
+    create = Mock()
+    assert cache.get_or_create("prefill_dspark", (1,), create, headroom_bytes=8) is None
+    create.assert_not_called()
+    assert cache.snapshot()["resident"] == 0
+
+
+@pytest.mark.parametrize("invalid", [-1, float("nan"), True, "8"])
+def test_per_capture_headroom_rejects_invalid_values(invalid):
+    cache = GraphCache()
+    with pytest.raises(ValueError, match="invalid capture headroom"):
+        cache.should_use("target", (1,), headroom_bytes=invalid)
 
 
 def test_clear_drains_before_destroying_graph_owners():

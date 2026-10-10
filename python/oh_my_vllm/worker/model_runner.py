@@ -72,6 +72,15 @@ class RuntimeConfig:
         """
         return (64 if self.speculative_mode == "dspark" else 32), {}
 
+    def target_graph_cooldown(self) -> int:
+        """Keep resident DSpark graphs while repeated shape churn cools down.
+
+        A recent recapture starts the same bounded decision interval used by
+        MTP's draft family. Existing shapes still replay; other shapes use the
+        compiled target path until the interval ends.
+        """
+        return 32768 if self.speculative_mode == "dspark" else 0
+
     def decode_graph_key(self, token_counts: list[int], extent: int) -> tuple:
         """Include the per-request query bound in the captured attention shape.
 
@@ -191,6 +200,7 @@ class OhMyVllmWorker:
         self.graph_cache = GraphCache(
             capacity=capacity,
             family_floors=floors,
+            churn_cooldown_decisions=self.config.target_graph_cooldown(),
             free_bytes=lambda: torch.cuda.mem_get_info()[0],
             reserved_bytes=lambda: torch.cuda.memory_reserved(),
             release_memory=torch.cuda.empty_cache,
@@ -544,6 +554,7 @@ class OhMyVllmWorker:
             and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1"
             and (self.attention.native or self.attention.ragged)
         ):
+            from oh_my_vllm.worker.prefill_budget import prefill_capture_headroom
             from oh_my_vllm.worker.prefill_graph import PrefillGraph
 
             prefill_key = (
@@ -553,13 +564,20 @@ class OhMyVllmWorker:
                 tuple(selected) if batch.output_indices is not None else None,
             )
             prefill_family = "prefill_dspark" if self._is_dspark() else "prefill"
-            if self.prefill_graph_cache.should_use(prefill_family, prefill_key):
+            headroom = prefill_capture_headroom(
+                self.model, self.caches, token_tensor, batch, writes
+            )
+            if self.prefill_graph_cache.should_use(
+                prefill_family, prefill_key, headroom_bytes=headroom
+            ):
                 attention_plan = self.attention._ir_reference_plan
 
                 def capture_prefill():
                     logger.info(
-                        "Capture prefill graph: queries=%s contexts=%s",
+                        "Capture prefill graph: queries=%s contexts=%s "
+                        "headroom_bytes=%d",
                         *prefill_key[:2],
+                        headroom,
                     )
                     pool_name = (
                         "prefill_dspark_graph_pool"
@@ -584,7 +602,10 @@ class OhMyVllmWorker:
                         raise
 
                 graph = self.prefill_graph_cache.get_or_create(
-                    prefill_family, prefill_key, capture_prefill
+                    prefill_family,
+                    prefill_key,
+                    capture_prefill,
+                    headroom_bytes=headroom,
                 )
                 if graph is not None:
                     hidden, features = graph.replay(token_tensor, batch, attention_plan)

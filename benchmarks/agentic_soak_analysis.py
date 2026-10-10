@@ -378,6 +378,26 @@ def resource_checks(sample: dict, *, require_idle: bool = False) -> list[dict]:
             actual,
             maximum,
         )
+    for name in ("fx_source", "fake_tensor", "fx_profiler"):
+        for suffix, cap_suffix in (
+            ("entries", "capacity"),
+            ("bytes", "byte_capacity"),
+        ):
+            actual, maximum = (
+                compiled.get(name + "_" + suffix),
+                compiled.get(name + "_" + cap_suffix),
+            )
+            check(
+                "compile_" + name + "_" + suffix,
+                isinstance(actual, int)
+                and not isinstance(actual, bool)
+                and isinstance(maximum, int)
+                and not isinstance(maximum, bool)
+                and maximum > 0
+                and 0 <= actual <= maximum,
+                actual,
+                maximum,
+            )
     actual, maximum = compiled.get("code_objects"), compiled.get("code_object_capacity")
     check(
         "compile_code_objects",

@@ -10,7 +10,7 @@
 
 状态: partial/open, 严重性 P2.
 Graph family 使用有界 graph 条目缓存和共享 pool, 配合接纳, 淘汰, 空闲显存保护和 capture 恢复.
-压力驱逐可以移除某个 family 的最后一个 graph 及 pool handle. 再次捕获前先同步, 执行垃圾回收并释放 allocator 缓存.
+压力驱逐可以移除某个 family 的最后一个 graph 及 pool handle. 完成同步, 垃圾回收和 allocator 缓存释放后再次捕获.
 Resident-graph36k-to40k 转换在空闲显存少于 4 GiB 时完成.
 普通 / MTP4 同形状 262144 的多次执行也完成, 无 graph eviction 或 recapture.
 这些 probe 不覆盖跨形状 262k eviction/recapture 或全部 late-capture 显存条件.

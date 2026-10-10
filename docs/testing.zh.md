@@ -291,7 +291,7 @@ Responses 要求 `response.completed`, 或原因是 `max_output_tokens` 的 `res
 结合其他进程的记录及 worker 分配计数, 分析设备 HBM 占用变化.
 15 项阶段负载使用没有其他进程的 GPU.
 
-正常采集前先运行 2 个短预热 epoch. 预热和故意 probe 使用单独记录.
+正常采集前运行 2 个短预热 epoch. 预热和故意 probe 使用单独记录.
 预热任务上限为 900 秒. 正常任务上限为 210 秒.
 `--warmup-task-timeout` 和 `--task-timeout` 分别设置对应阶段的 OMP 任务与 proxy 传输上限.
 

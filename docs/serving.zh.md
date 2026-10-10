@@ -92,7 +92,7 @@ Responses 顶层 instruction 只适用于当前响应.
 ## Grammar 与推测 token
 
 JSON object, JSON Schema 和 strict tool grammar 在采样前生效.
-思考可先于约束答案.
+约束答案可在思考之后生成.
 一个请求不能同时使用 JSON 答案格式和启用工具.
 Strict schema 需要 closed object, 全部 property 都 required.
 不支持的 schema 明确报错.

@@ -10,7 +10,7 @@ Performance evidence applies to its measured source, as specified in [acceptance
 
 Status: partial/open, severity P2.
 Graph families use graph caches with capacity limits, shared pools, admission, eviction, free-memory guards, and capture restoration.
-Pressure eviction can remove a family's last graph and pool handle. Synchronization, garbage collection, and allocator release precede recapture.
+Pressure eviction can remove a family's last graph and pool handle. Synchronization, garbage collection, and allocator release are complete before recapture.
 
 The resident-graph 36k-to 40k transition completed with less than 4 GiB free memory.
 Same-shape 262144 ordinary/MTP4 executions also completed without graph eviction or recapture.

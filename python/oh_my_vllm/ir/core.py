@@ -485,7 +485,13 @@ def compile_forward(
 
     def invoke(*args, **kwargs):
         COMPILER_CACHE.before_call(code)
-        return compiled(*args, **kwargs)
+        # Dynamo creates FX source before entering our backend. Scope the whole
+        # invocation so those entries have the same precise project ownership.
+        try:
+            with COMPILER_CACHE.metadata.scope():
+                return compiled(*args, **kwargs)
+        finally:
+            COMPILER_CACHE.after_call()
 
     # Captured graphs retain these executable owners independently of Dynamo
     # caches. This avoids relying on CUmodule lifetime after registry eviction.

@@ -1,6 +1,6 @@
 # Current state and open work
 
-Updated: 2026-10-10.
+Updated: 2026-10-11.
 
 ## Implementation
 
@@ -27,6 +27,10 @@ Build and load checks reject changed inputs.
 Prefix cache publication follows validated state commit. Request admission and completed streams share resource leases with count and byte limits.
 The HTTP supervisor invalidates old logical KV and loads replacement workers without request replay.
 Graph pressure eviction releases unused pool owners. Compiler and diagnostic registries have fixed limits.
+
+Project-owned FX source and FakeTensor metadata have count and byte limits.
+Compiler retirement starts Python garbage collection at safe host boundaries.
+Prefill graph admission uses planned storage instead of one threshold for all routes.
 [Service contracts](serving.md) specify resource budgets, recovery limits, and request timing.
 
 [Architecture](architecture.md) defines ownership and cache contracts.
@@ -46,7 +50,7 @@ Their summary derives from complete raw logs. The larger failed collection keeps
 MTP4 and DSpark passed oh-my-pi tool loops through Chat and Responses, with normal shutdown audits.
 
 These collections use inference source `fabcede8c6e0e6e4fa2c90d5d97b1f98d9c7dfdb`.
-They precede the current serving resource changes. The new collection must verify the changed inference source.
+These results apply to the code before the current serving resource changes. The new collection must verify the changed inference source.
 [Acceptance](acceptance.md) gives original hashes, failed attempts, review scope, and limitations.
 
 The previous CPU suite passed 760 tests and 94 subtests, with 442 GPU tests deselected.
@@ -79,16 +83,36 @@ HTTP stayed alive, the stream reported failure, and one replacement worker compl
 The shared prefix was cold after recovery and hot on its next use. Final request state was empty and all owned processes exited.
 This diagnostic covers one fault stage. Complete two-mode fault, phase, and soak acceptance is pending.
 
-The current CPU suite passed 1047 tests and 99 subtests, with 445 GPU tests deselected.
+The current CPU suite passed 1133 tests and 99 subtests, with 448 GPU tests deselected.
 Rust workspace tests passed 143 cases. All pre-commit checks passed.
 
 A different agent examined protocol ends, client messages, server metrics, and the 2-second disconnect limit.
 The updated tutorial passed ten excerpt tests and nine browser tests.
-Previous soak collections keep their failure records. New formal collections are pending.
+The source `a0109c9cdebbd142a5ae79109b54766dc3ee2464` has a complete MTP4 soak with 5733 normal requests in 3670.64 seconds.
+All MTP4 availability, resource, and memory checks passed.
+
+The DSpark soak completed 964 normal requests in 3643.13 seconds without request failure, OOM, or worker restart.
+Its GPU and HTTP memory checks passed. Its worker RSS check failed with 12.32% late-period median growth.
+
+The same source passed eight allocator-OOM recovery cases, with four stages per speculative mode.
+These results apply to the code before the next compiler metadata and graph-admission corrections.
+They do not supply acceptance for those corrections.
+All task-owned GPU workers and temporary service ports from these collections are closed.
+The full original records keep failed and stopped attempts.
+
+The changed IR passed CUDA Graph replay after compiler retirement and a cold recapture.
+Two graph-memory tests passed allocator reclamation and side-stream owner release.
+
+An isolated DSpark batch-four diagnostic passed six captures, twelve hits, and no pressure evictions over three executions.
+Saved FA/GDN bytes and generated tokens agreed across executions.
+It uses the reviewed admission files over `a0109c9cdebbd142a5ae79109b54766dc3ee2464`, with the previous IR.
+This diagnostic does not supply acceptance for the complete changed inference source.
 
 ## Open work
 
 - Verify `REQ-SERVE-006`, `REQ-SERVE-007`, and `REQ-SERVE-008` with current-source resource, allocator-OOM, and long-duration service collections.
+- Verify RSS stability after the compiler metadata and graph-admission corrections.
+- Measure DSpark batch-four phase latency with steady prefill graph replay.
 - Measure each of MTP4 and DSpark for at least 3600 seconds and 500 normal requests with four oh-my-pi agents.
 - Publish each mode's request scatter plot, then measure the fifteen phase workloads again on the changed inference source.
 - Keep earlier measurements limited to their recorded source scope until the new collection passes.

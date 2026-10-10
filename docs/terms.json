@@ -1822,6 +1822,14 @@
       "meaning": "Byte capacity kept for conservative encoded input, history, and output estimates. JSON, object, and allocator overhead is additional.",
       "translation": "为编码输入, 历史和输出的保守估计保留的字节容量. JSON, object 和 allocator 额外开销另计.",
       "forms": ["encoded state reservation", "encoded state reservations"]
+    },
+    {
+      "term": "reference cycle",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Python object references that return to their first object and can keep unused objects in memory.",
+      "translation": "回到起始对象的 Python 对象引用, 可使不再使用的对象持续占用内存.",
+      "forms": ["reference cycle", "reference cycles"]
     }
   ]
 }

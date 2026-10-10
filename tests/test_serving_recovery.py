@@ -77,6 +77,16 @@ def sample():
                 "code_object_capacity": 4,
                 "compiled_graph_counts": {},
                 "unit_capacity": 4,
+                **{
+                    f"{name}_{suffix}": value
+                    for name in ("fx_source", "fake_tensor", "fx_profiler")
+                    for suffix, value in (
+                        ("entries", 0),
+                        ("capacity", 4),
+                        ("bytes", 0),
+                        ("byte_capacity", 4096),
+                    )
+                },
             },
             "gpu": {
                 "allocated_bytes": 1,

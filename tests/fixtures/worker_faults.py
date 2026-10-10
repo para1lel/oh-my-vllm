@@ -72,12 +72,12 @@ def install_fault(stage: str, kind: str, marker: str | Path) -> None:
 
         original = GraphCache.get_or_create
 
-        def get_or_create(self, family, key, create):
+        def get_or_create(self, family, key, create, **kwargs):
             def capture():
                 result = create()
                 inject()
                 return result
 
-            return original(self, family, key, capture)
+            return original(self, family, key, capture, **kwargs)
 
         GraphCache.get_or_create = get_or_create

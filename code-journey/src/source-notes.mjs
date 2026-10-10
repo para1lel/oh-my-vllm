@@ -21,6 +21,17 @@ export const sourceNotes = {
       ["is_current_stream_capturing / _reset", "当前 CUDA stream 是否正在 capture, 及淘汰指定 code 的方法.", "capture 内保留已经预热的 specialization, 清理在可重新编译的主机调用边界执行."],
     ],
   },
+  compilerMetadataGC: {
+    title: "编译调用结束后怎样释放 metadata 和引用循环", intro: "源码记录与执行代码分别管理. FX 与 FakeTensor 淘汰可重建描述, CUDA Graph 继续持有自身重放需要的可执行内容.",
+    entries: [
+      ["force", "是否执行 shutdown 清理.", "为真时清空项目 metadata 并强制完整垃圾收集; 捕获和嵌套编译期间仍等待安全边界."],
+      ["_capturing / scope_active", "当前流是否在 CUDA capture, 是否有项目编译调用尚未结束.", "任一条件成立时推迟回收, 保留当前编译和捕获正在使用的记录."],
+      ["metadata.trim", "按条目数和估算字节预算退休项目记录的方法.", "FX 源码, linecache 行副本, FakeTensor 全局 dispatch 和可选 profiler metadata 各自核对所有权; 外部记录保持原状."],
+      ["retired / _metadata_retirements", "累计 metadata 淘汰数及上次已计入的累计值.", "两者之差是本次新增退休数量, 防止重复计入同一批记录."],
+      ["pending_retirements / gc_batch", "尚未经过完整垃圾收集的退休数量及批次阈值.", "变体组, 模块和 metadata 的退休合并计数, 默认累计八次退休后收集循环引用."],
+      ["gc.collect(2) / full_gc_collections", "收集全部 Python GC generation 的调用及执行次数.", "清理普通引用计数无法释放的循环, 完成后把本批退休数归零, 次数供资源诊断检查."],
+    ],
+  },
   admissionLease: {
     title: "HTTP 输入前保留哪些准入资源", intro: "每个 Lease 的 clone 共用一次 reservation. 请求, 输出 body 和 drain 全部释放后, 才归还对应字节与数量名额.",
     entries: [

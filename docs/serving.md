@@ -94,7 +94,7 @@ Continuation does not inherit these instructions.
 ## Grammar and speculative tokens
 
 JSON object, JSON Schema, and strict tool grammars apply before sampling.
-Reasoning can precede the constrained answer.
+The constrained answer can follow reasoning.
 A request cannot combine JSON answer format with enabled tools.
 Strict schemas must have closed objects with each property required.
 Unsupported schemas fail explicitly.

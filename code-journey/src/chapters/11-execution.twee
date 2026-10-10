@@ -20,6 +20,10 @@
 <p>请求长度和并行成员变化会产生新的 specialization, 即按元数据编译的执行变体. 手动图数量有界时, 编译器仍可能保留旧变体, provider 选择记录和生成模块. CompilerCache 在主机调用边界检查预算, 按 code identity 淘汰整组变体: 单 code 达到上限时清理当前组, 总预算满时清理最近最少使用的 code. 后续需要该形状时重新 fullgraph 编译. 已捕获 CUDA Graph 继续由图对象持有自己的固定缓冲和可执行内容.</p>
 <p>provider 选择记录使用有界 LRU, rewrite 记录使用有界队列, 编译单元计数保留固定数量的标签. 这些诊断记录的上限与执行变体的上限分别检查. 编译器缓存清理遵循当前固定 PyTorch 版本的接口, 只处理项目持有的条目; 捕获内部不执行变体淘汰, 避免在 capture 中触发编译和分配.</p>
 <<source "compilerBudget" "展开编译变体数量和 capture 边界检查">>
+<p>PyTorch 还有两类全局记录需要独立限制. FX 为生成的 Python 函数保存源码, linecache 为代码检查和异常堆栈保存源码行副本; FakeTensor 为算子保存输出 shape 与 alias 等 metadata, alias 表示两个视图共享同一存储. 后者只保存可重新计算的描述, 未命中时重新执行 fake dispatch, 维持同样的输出和视图关系.</p>
+<p>项目持有的 FX 源码最多 256 项, 源码和行副本合计预算 16 MiB; FakeTensor 的全局 dispatch metadata 最多 8192 项, 字节预算 32 MiB. 可选 FX profiler metadata 单独使用 256 项和 16 MiB 上限. 编译调用登记自身新增条目, 淘汰前核对身份, 保留其他调用者的记录; ShapeEnv 内属于单次符号计算的记录保持原有生命周期. 这些字节是 metadata 存储的估算, 第 12 章还会实测完整进程 RSS.</p>
+<p>删除 registry 条目后, 生成函数仍可能通过 globals 间接引用自身, 形成引用循环. 编译器条目或变体组每累计退休八次, 下一处安全的主机调用边界执行完整 Python 垃圾收集. 嵌套编译和 CUDA capture 期间推迟这一步, shutdown 再统一清理. resident graph 继续持有重放必需的 executable owner, 测试会在生产回收之后改变输入, 验证旧图重放和冷形状重新捕获.</p>
+<<source "compilerMetadataGC" "展开 metadata 退休与完整垃圾收集的安全边界">>
 <h2>CUDA Graph 为什么需要固定地址</h2>
 <p>GPU 启动许多短 kernel 时, CPU 派发也会占时间. CUDA Graph 记录同一形状的一串启动与依赖, 后续 replay 重用它们. 图内数组地址固定, 但每次输入 ID, 位置, 页表和状态槽可以变化, 重放前用 copy_ 更新固定缓冲.</p>
 <<source "graphReplay" "展开 DecodeGraph 重放前的数据更新">>
@@ -27,8 +31,8 @@
 <p>捕获本身会运行计算, 写到 FA 和 GDN 持久缓存. 因而初始化先备份候选写区域及会覆盖的 FA 行, 预热编译单元后恢复, 再同步并捕获, 最后在 finally 再次恢复. 恢复完成后, 请求继续从原来的状态执行.</p>
 <h2>GraphCache 如何限制数量和内存</h2>
 <p>目标图默认上限 32, MTP 草稿和提议共享另一组默认上限 64. 各图族使用独立内存池, 捕获前保留 4 GiB 余量. shape 首次命中记录频率, 空间满时要求新形状反复出现且比冷条目更热, 草稿和提议的淘汰保护下限分别为 32 与 8, 只有已有条目数超过本族下限时才允许从该族淘汰.</p>
-<p>替换先成功构造新图, 再释放旧图, 捕获失败时旧条目继续保留, 错误向上报告并记录重试冷却. 频率周期衰减, 防止很久以前的热点永久占位. MTP 在短窗口反复捕获时进入共享冷却, 已有图仍可重放, 控制分组形状变化造成的捕获开销.</p>
-<p>显存不足以满足新捕获余量时, trim_for_headroom 先在同步边界释放冷图, 必要时越过图族保留下限. 图族最后一个 owner 释放后, 对应 pool handle 也要清空, 下一次捕获才能创建新的内存池. 图输出仍有使用者时继续保留其存储. 常规热点替换与内存压力回收使用不同条件, 两种事件分别计数.</p>
+<p>替换先成功构造新图, 再释放旧图, 捕获失败时旧条目继续保留, 错误向上报告并记录重试冷却. 频率周期衰减, 防止很久以前的热点永久占位. MTP 草稿图和 DSpark 目标图在短窗口反复捕获时进入各自共享的冷却, 已有图仍可重放, 其余形状继续 fullgraph 编译执行, 控制分组形状变化造成的捕获开销.</p>
+<p>显存不足以满足新捕获余量时, trim_for_headroom 先同步正在执行的 GPU 工作, 收集循环引用, 把 allocator 中未使用的 reservation 返还设备. 余量仍不足时再释放冷图, 必要时越过图族保留下限. 图族最后一个 owner 释放后, 对应 pool handle 也要清空, 下一次捕获才能创建新的内存池. 图输出仍有使用者时继续保留其存储. 常规热点替换与内存压力回收使用不同条件, 两种事件分别计数.</p>
 <p>目标图 key 有四项: 总输入行数, 请求数, context extent 和每请求 query 上限. extent 按 4096 个位置取整后受 max_model_len 限制, 决定静态页表宽度. 普通 decode 的 query 上限固定为 1, MTP 验证固定为 5. 第 13 章的 DSpark 先求本轮每请求真实最大行数, 再取覆盖它的最小 bucket: 1, 2, 5 或 8.</p>
 <<source "decodeGraphKey" "展开目标图 key 的静态形状边界">>
 <p>例如两个 DSpark 请求分别有 1 行和 3 行, 或分别有 2 行和 2 行, 总数都为 4, 请求数都为 2. 最大行数分别为 3 和 2, 安全 query 上界分别为 5 和 2, 所以第四项区分这两个图. 两个请求的行数为 [1,4] 或 [2,3] 时, 总数都为 5, 安全上界都为 5, 可以共享图.</p>
@@ -36,7 +40,9 @@
 <h2>prefill 图怎样重用形状与存储</h2>
 <p>PrefillGraph 处理 native 或 ragged attention 的固定 query/context 形状. 图内只保留 hidden 和 DSpark 所需的特征, 采样随后选择需要的行做词表投影. key 包含每请求 query 数, 每请求已有 context 长度和 prefill 请求数; token IDs, FA 页和 GDN 槽作为动态内容更新.</p>
 <p>attention.plan 会创建新 metadata 张量. replay 先核对所有新张量的形状与 dtype, 在 finally 恢复捕获时的绑定, 再把动态值复制到原存储. 规划失败后, 图仍指向原来保持存活的地址. 这个过程使物理页变化与图地址固定可以同时成立.</p>
-<p>prefill 图单独保留最多 8 个条目, 捕获前检查 32 GiB 余量. 大 ragged KV, 特征输出和用于恢复缓存的备份会在捕获期间同时存在, 因而新图需要比 decode 图更大的余量. 长图包含多流分叉和汇合, 启动包装器默认启用 graph_capture_record_stream_reuse, 让 PyTorch 根据捕获图拓扑复用已释放的临时缓冲. 显式分配器配置可覆盖默认值, 运行证据记录有效设置.</p>
+<p>prefill 图单独保留最多 8 个条目. worker/prefill_budget.py 根据计划中的行数和状态槽计算存储预算, 同一个数值用于准入和构建. 预算包括全部 FA 写入行备份, 去重后的 GDN 状态及卷积备份, metadata 副本, 预热与 capture 两阶段的临时 activation 和输出. DSpark 的五个特征 tap 与合并后的特征输出也要同时保留, 因而单独计入.</p>
+<p>短查询的 native attention 直接读分页 KV. 长查询的 ragged attention 还会复制有效 K/V, 因而加上紧凑 KV 存储并保留至少 32 GiB 余量. 两类预算都额外保留 4 GiB 的编译与碎片余量, 加上 256 MiB vendor workspace 余量. 预算是对当前模型存储需求的保守估算; OOM 后仍由 supervisor 使旧 KV 失效并恢复 worker, 第 7 章介绍这条服务路径.</p>
+<p>长图包含多流分叉和汇合, 启动包装器默认启用 graph_capture_record_stream_reuse, 让 PyTorch 根据捕获图拓扑复用已释放的临时缓冲. 显式分配器配置可覆盖默认值, 运行证据记录有效设置.</p>
 <h2>GDN 的两条准备分支怎样并行</h2>
 <p>选中输出的 prefill 图把 output_indices 纳入 key, 并持有 output_attention 的固定页表与长度存储. MTPContextGraph 用独立的 mtp_context 图族保存长草稿 context, 限制为 8 项, 保留 12 GiB 余量. 两种图在 replay 前验证所有动态张量, 防止先复制部分数据后才发现不兼容的输入.</p>
 <p>归一化输入同时进入两个独立分支. 主流执行 QKVZ 的 FP8 投影和因果卷积, 侧流执行 BA 的 BF16 投影与 delta gates. 两条分支都只依赖同一个输入, 因而可以在 GPU 上重叠. 随后的 GDN 更新要使用 Q/K/V, decay 和 beta, 所以先等待两边完成.</p>

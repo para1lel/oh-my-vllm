@@ -42,7 +42,7 @@ Native MTP also keeps target rows used by its context input and registered bound
 
 At the target's last FA layer, all required rows perform input normalization and K/V projection.
 Selected rows perform Q/gate projection, attention, output projection, MLP, and final normalization.
-DSpark feature taps precede this layer.
+DSpark collects its target features before this layer.
 A configured feature tap at layer 63 keeps the full layer output.
 
 Persistent MTP normalizes target-hidden and embedding inputs, then applies FC to each required context row.

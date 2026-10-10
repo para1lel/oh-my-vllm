@@ -215,7 +215,7 @@ Device views keep their backing storage.
 The CUDA attention preparation combines Q/K RMS, partial NeoX RoPE, V conversion, and KV writes.
 It accepts packed 14336-value projections and returns contiguous Q.
 Each 512-wide Q head keeps its gate half unchanged.
-FP64 phase calculation precedes FP32 trigonometry.
+FP64 phase calculation is complete before FP32 trigonometry.
 Negative slots skip KV writes and keep Q. Caches cannot alias inputs.
 
 Target query spans of at least 1024 gather active KV for ragged TRT-LLM attention.
@@ -342,24 +342,35 @@ An available budget lets capture start on the first miss.
 
 Counts decay each 512 observations.
 With memory pressure, the cache synchronizes and releases cold graph owners before allocation.
+It first starts garbage collection and releases unused allocator reservations. If free memory stays less than the budget, it releases cold graphs.
 Pressure eviction can pass family floors. It releases the pool handle when the last family owner leaves.
-Garbage collection releases cycles before the allocator returns free reservations.
+
+Garbage collection releases unused objects in reference cycles before the allocator returns free reservations.
 The cache skips new captures if free GPU memory still stays less than 4 GiB.
 
 The worker still uses the compiled unit.
 Capture failures back off for 64 observations.
 If MTP captures the same shape again in a 4096-cache-decision window, a shared 32768-decision capture cooldown starts.
+DSpark target graphs use the same cooldown for repeated captures of recent shapes.
 
 Resident graphs continue to replay.
 
 Pools are shared in each graph family, with different target/draft/proposal families and no overlapping replay.
-Capture restores persistent state and FA writes. Output copies precede pool reuse.
+Capture restores persistent state and FA writes. Output copies are complete before pool reuse.
 
 Target prefill has different eight-entry ordinary and DSpark families.
-These families capture fixed query/context sizes with native or ragged attention and at least 32 GiB capture headroom.
+These families capture fixed query/context sizes with native or ragged attention.
+`worker/prefill_budget.py` calculates one storage budget for admission and graph construction from the planned shape.
 KV pages, state slots, tokens, and attention metadata stay dynamic.
 Warmup and capture restore all destination FA/GDN values in `finally`.
 Replay validates all metadata replacements and restores captured bindings before copies.
+
+Native attention reads paged KV without a full-context copy.
+Its budget counts saved FA/GDN rows, cloned metadata, temporary activations, and output/features for warmup and capture.
+Ragged attention also counts compact K/V storage and keeps at least 32 GiB headroom.
+
+Each budget keeps a 4 GiB reserve for compiler storage and fragmentation, plus 256 MiB for vendor workspaces.
+These storage estimates apply to the fixed target. Allocator fragmentation or provider changes can cause OOM and activate worker recovery.
 
 FA 2 prefill uses the compiled path.
 `ir/cache.py` keeps at most 256 owned Dynamo variants, 64 variants per code, and 32 code identities.
@@ -368,11 +379,28 @@ A full per-code budget evicts that code. A full total budget evicts the least re
 Capture keeps its warmed specialization.
 
 Later host calls compile an evicted shape again with `fullgraph=True`.
-Scoped eviction keeps foreign compiler entries and the fixed-version execution contract.
+Scoped eviction keeps compiler entries from other callers and the fixed-version execution contract.
 
 The owned module registry has at most 256 entries. Each callable keeps at most 64 recent executable owners.
 Captured graph objects keep their necessary executable owners independently of compiler registry eviction.
 The variant limit thus does not count all executable owners held by resident graphs.
+
+FX stores generated Python source for code inspection and exception messages.
+FakeTensor stores output shape and alias metadata. Cache misses calculate this metadata again.
+The worker limits project-owned records in each global registry, with a separate limit for optional FX profiler metadata.
+
+| Registry | Entry limit | Metadata byte limit |
+|---|---:|---:|
+| FX source and its linecache copy | 256 | 16 MiB |
+| Global FakeTensor dispatch metadata | 8192 | 32 MiB |
+| Optional FX profiler metadata | 256 | 16 MiB |
+
+Byte counts give estimates of Python source and metadata storage. Complete process RSS has a separate measurement and acceptance check.
+Eviction removes only registered records with unchanged identity. Records from other callers keep their original owner.
+ShapeEnv-local symbolic records keep their original lifetime.
+
+The compiler starts garbage collection for all Python GC generations after it removes eight entries or specialization groups.
+Garbage collection waits until CUDA capture and nested compilation finish. Shutdown also starts garbage collection.
 
 Provider selection records have a 2048-entry LRU. Rewrite records have 256 entries, and compilation counters have at most 128 labels.
 Semantic graph inventory records are active only with the explicit trace option.

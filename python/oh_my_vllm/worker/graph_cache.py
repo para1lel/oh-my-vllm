@@ -89,23 +89,38 @@ class GraphCache:
             default=None,
         )
 
-    def trim_for_headroom(self) -> None:
+    def _headroom(self, headroom_bytes: int | None) -> int:
+        if headroom_bytes is None:
+            return self.min_capture_free_bytes
+        if type(headroom_bytes) is not int or headroom_bytes < 0:
+            raise ValueError("invalid capture headroom")
+        return headroom_bytes
+
+    def trim_for_headroom(self, *, headroom_bytes: int | None = None) -> None:
         """Release cold graphs at a synchronized boundary before allocating.
 
         Pressure may override family floors. The last owner of a family must
         release its pool handle before a later capture creates a fresh pool.
         Releasing allocator reservations does not release still-live outputs.
         """
+        required = self._headroom(headroom_bytes)
         if (
             self.release_memory is None
             or self.free_bytes is None
-            or self.free_bytes() >= self.min_capture_free_bytes
+            or self.free_bytes() >= required
         ):
             return
-        if not self.graphs:
-            return
         self.synchronize()
-        while self.graphs and self.free_bytes() < self.min_capture_free_bytes:
+        # Driver free memory excludes reusable allocator reservations. Retire
+        # unused default-pool blocks before sacrificing a live graph or its
+        # shared family pool. Synchronization also fences asynchronous replay
+        # and copies before collecting executable-owner cycles.
+        before = self.free_bytes()
+        gc.collect()
+        self.release_memory()
+        self.counters["allocator_reclaim"] += 1
+        self.counters["allocator_reclaimed_bytes"] += max(0, self.free_bytes() - before)
+        while self.graphs and self.free_bytes() < required:
             victim = min(self.graphs, key=lambda key: self.frequencies[key])
             family = victim[0]
             self.graphs.pop(victim)
@@ -119,8 +134,11 @@ class GraphCache:
             if self.release_memory is not None:
                 self.release_memory()
 
-    def should_use(self, family: str, key: tuple) -> bool:
+    def should_use(
+        self, family: str, key: tuple, *, headroom_bytes: int | None = None
+    ) -> bool:
         """Admit only sustained misses hotter than an evictable resident."""
+        required = self._headroom(headroom_bytes)
         combined = family, key
         self.clock += 1
         if self.clock % 512 == 0:
@@ -141,11 +159,8 @@ class GraphCache:
             self.counters[f"{family}_capture_failure_eager"] += 1
             return False
         self.retry_after.pop(combined, None)
-        self.trim_for_headroom()
-        if (
-            self.free_bytes is not None
-            and self.free_bytes() < self.min_capture_free_bytes
-        ):
+        self.trim_for_headroom(headroom_bytes=required)
+        if self.free_bytes is not None and self.free_bytes() < required:
             self.counters[f"{family}_headroom_eager"] += 1
             return False
         if not self.is_full():
@@ -169,19 +184,24 @@ class GraphCache:
             return False
         return True
 
-    def get_or_create(self, family: str, key: tuple, create: Callable[[], object]):
+    def get_or_create(
+        self,
+        family: str,
+        key: tuple,
+        create: Callable[[], object],
+        *,
+        headroom_bytes: int | None = None,
+    ):
         """Create a probed graph, or defer after a headroom or churn change."""
+        required = self._headroom(headroom_bytes)
         combined = family, key
         if combined in self.graphs:
             return self.graphs[combined]
         if self.clock <= self.churn_cooldown_until:
             self.counters[f"{family}_churn_eager"] += 1
             return None
-        self.trim_for_headroom()
-        if (
-            self.free_bytes is not None
-            and self.free_bytes() < self.min_capture_free_bytes
-        ):
+        self.trim_for_headroom(headroom_bytes=required)
+        if self.free_bytes is not None and self.free_bytes() < required:
             self.counters[f"{family}_headroom_eager"] += 1
             return None
         victim = None
@@ -192,12 +212,15 @@ class GraphCache:
             self.synchronize()
         if self.free_bytes is not None:
             free = self.free_bytes()
-            if free < self.min_capture_free_bytes:
+            if free < required:
                 self.counters[f"{family}_headroom_eager"] += 1
                 return None
             metric = f"{family}_min_capture_free_bytes"
             current = self.counters.get(metric)
             self.counters[metric] = free if current is None else min(current, free)
+            self.counters[f"{family}_max_capture_headroom_bytes"] = max(
+                self.counters[f"{family}_max_capture_headroom_bytes"], required
+            )
         # The old graph remains resident during capture so its pool handle
         # stays valid. If capture fails, its key, LRU order, and probation state
         # survive; the next request may retry the same capture.
@@ -260,6 +283,8 @@ class GraphCache:
             "capture_history_overflow": self.counters["capture_history_overflow"],
             "probation_eviction": self.counters["probation_eviction"],
             "retry_cooldown": len(self.retry_after),
+            "allocator_reclaim": self.counters["allocator_reclaim"],
+            "allocator_reclaimed_bytes": self.counters["allocator_reclaimed_bytes"],
             "churn_cooldown_remaining": max(0, self.churn_cooldown_until - self.clock),
             "churn_cooldown_started": self.counters["churn_cooldown_started"],
         }
@@ -288,6 +313,7 @@ class GraphCache:
                 "churn_eager",
                 "max_capture_reserved_delta",
                 "min_capture_free_bytes",
+                "max_capture_headroom_bytes",
             ):
                 result[f"{family}_{metric}"] = self.counters[f"{family}_{metric}"]
         return result

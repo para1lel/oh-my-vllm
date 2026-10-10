@@ -1,11 +1,90 @@
 """Native CUDA graph destruction, pool retirement, and recapture memory checks."""
 
 import gc
+import weakref
 from types import SimpleNamespace
 
 import pytest
 import torch
 from oh_my_vllm.worker.graph_cache import GraphCache
+
+
+@pytest.mark.gpu
+def test_allocator_reclaim_retains_shared_graph_pool_and_live_output():
+    torch.cuda.synchronize()
+    torch.cuda.empty_cache()
+    pool = [torch.cuda.graph_pool_handle()]
+
+    class Owner:
+        def __init__(self):
+            self.input = torch.ones(1 << 20, device="cuda")
+            self.graph = torch.cuda.CUDAGraph()
+            torch.cuda.synchronize()
+            with torch.cuda.graph(self.graph, pool=pool[0]):
+                self.output = self.input * 2
+
+    release = []
+    cache = GraphCache(
+        free_bytes=lambda: torch.cuda.mem_get_info()[0],
+        release_memory=torch.cuda.empty_cache,
+        release_family=lambda family: release.append(family),
+        min_capture_free_bytes=0,
+    )
+    owner = cache.get_or_create("prefill_dspark", (1,), Owner)
+    retained_pool = pool[0]
+    scratch = torch.empty(64 << 20, device="cuda", dtype=torch.uint8)
+    scratch.fill_(1)
+    torch.cuda.synchronize()
+    del scratch
+    cache.min_capture_free_bytes = torch.cuda.mem_get_info()[0] + (32 << 20)
+    assert cache.should_use("prefill_dspark", (2,))
+    assert cache.get_or_create("prefill_dspark", (1,), Owner) is owner
+    assert pool[0] == retained_pool and not release
+    assert cache.snapshot()["prefill_dspark_pressure_eviction"] == 0
+    assert cache.snapshot()["allocator_reclaimed_bytes"] >= 32 << 20
+    owner.input.fill_(3)
+    owner.graph.replay()
+    assert torch.equal(owner.output, torch.full_like(owner.output, 6))
+    cache.clear()
+    del owner, retained_pool
+    pool[0] = None
+    torch.cuda.synchronize()
+    torch.cuda.empty_cache()
+
+
+@pytest.mark.gpu
+def test_pressure_retirement_waits_for_asynchronous_replay():
+    side = torch.cuda.Stream()
+    retired = []
+    pools = [torch.cuda.graph_pool_handle()]
+
+    class Owner:
+        def __init__(self):
+            self.input = torch.ones(32, device="cuda")
+            self.graph = torch.cuda.CUDAGraph()
+            torch.cuda.synchronize()
+            with torch.cuda.graph(self.graph, pool=pools[0]):
+                self.output = self.input * 2
+
+        def __del__(self):
+            retired.append(side.query())
+
+    cache = GraphCache(
+        free_bytes=lambda: 10,
+        release_memory=torch.cuda.empty_cache,
+        release_family=lambda _family: pools.__setitem__(0, None),
+        min_capture_free_bytes=0,
+    )
+    owner = cache.get_or_create("target_dspark", (1,), Owner)
+    reference = weakref.ref(owner)
+    with torch.cuda.stream(side):
+        torch.cuda._sleep(20_000_000)
+        owner.graph.replay()
+    del owner
+    cache.min_capture_free_bytes = 11
+    cache.trim_for_headroom()
+    assert reference() is None and retired == [True]
+    assert pools[0] is None and not cache.graphs
 
 
 @pytest.mark.gpu

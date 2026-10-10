@@ -298,7 +298,7 @@ Record other GPU processes during the soak test. Continue normal collection if r
 Examine changes in device-used HBM with the other processes' records and the worker allocation counters.
 Run the 15 phase workloads on a GPU with no other processes.
 
-Two short warmup epochs precede normal collection. Warmup and intentional probes have separate records.
+Two short warmup epochs run before normal collection. Warmup and intentional probes have separate records.
 Warmup tasks have a 900-second limit. Normal tasks have a 210-second limit.
 `--warmup-task-timeout` and `--task-timeout` set the OMP task and proxy transport limits for each phase.
 

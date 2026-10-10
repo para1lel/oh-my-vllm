@@ -37,7 +37,7 @@ GPU 流量依据 tensor, 而非 checkpoint 的磁盘大小.
 
 历史行继续为后续注意力提供 K/V. 选中的行提供最终 hidden 与 logits. 选择范围保留所有验证采样行, 包括被拒绝的候选. 原生 MTP 还保留供 context 输入及已注册边界特征使用的目标行.
 
-目标最后一层 FA 对全部必需行执行输入归一化与 K/V 投影. 选中行执行 Q/gate 投影, attention, 输出投影, MLP 和最终归一化. DSpark 特征抽取位于这一层之前. 若配置第 63 层特征抽取, 则保留完整层输出.
+目标最后一层 FA 对全部必需行执行输入归一化与 K/V 投影. 选中行执行 Q/gate 投影, attention, 输出投影, MLP 和最终归一化. DSpark 在这一层之前收集目标特征. 若配置第 63 层特征抽取, 则保留完整层输出.
 
 持久化 MTP 先归一化目标 hidden 与 embedding 输入, 再对每个必需 context 行执行 FC. 每行提供 K/V, 选中末行提供草稿 hidden 输出. 后续 context 行读取目标 hidden, 因此丢弃的历史草稿 hidden 没有使用者. 临时提议行保留完整输出.
 

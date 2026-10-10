@@ -207,7 +207,7 @@ Device view 保留 backing storage.
 CUDA attention preparation 融合 Q / K RMS, partial NeoX RoPE, V 转换和 KV 写入.
 接受 packed 14336-value projection, 返回连续 Q.
 每个 512-wide Q head 的 gate 半部保持不变.
-FP64 phase 计算先于 FP32 三角函数.
+FP64 phase 计算完成后执行 FP32 三角函数.
 负 slot 跳过 KV 写入并保留 Q; cache 不能与输入 alias.
 
 Target query span 至少 1024 时, gather 活跃 KV 并使用 ragged TRT-LLM attention.
@@ -313,23 +313,34 @@ MTP draft / proposal 的默认共享预算为 64 条目, 下限分别为 32 和 
 预算未满时允许首次 miss 就 capture.
 计数每 512 次观察衰减.
 显存压力下, cache 在分配前同步并释放冷 graph owner.
+它先执行垃圾回收并释放 allocator 中未使用的 reservation. 空闲显存仍低于预算时, 才释放冷 graph.
 压力驱逐可越过 family floor. 最后一个 family owner 离开时释放 pool handle.
-Garbage collection 先释放引用循环, allocator 再返还空闲 reservation.
+
+Garbage collection 先释放循环引用中未使用的对象, allocator 再返还空闲 reservation.
 空闲 GPU 显存仍少于 4 GiB 时, cache 跳过新 capture.
 
 Worker 仍执行编译单元.
 Capture 失败后退避 64 次观察.
 同一 MTP shape 在 4096 次 cache decision 内再次 capture, 会启动共享的 32768-decision capture cooldown.
+DSpark target graph 对近期 shape 的重复捕获使用相同 cooldown.
 Resident graph 继续 replay.
 
 各 graph family 内共享 pool, target / draft / proposal family 独立, replay 不重叠.
 Capture 恢复持久状态和 FA 写入; 输出复制先于 pool 复用.
 
 Target prefill 为普通和 DSpark 模式各设独立的八条目 family.
-这些 family 捕获 query/context 大小固定的 native 或 ragged attention, 并保留至少 32 GiB capture 显存余量.
+这些 family 捕获 query/context 大小固定的 native 或 ragged attention.
+`worker/prefill_budget.py` 根据计划 shape 计算一个存储预算, 同时用于准入和图构建.
 KV page, state slot, token 和 attention metadata 保持动态.
 预热与 capture 在 `finally` 中恢复所有目标 FA/GDN 值.
 Replay 先验证全部 metadata 替换, 在复制前恢复捕获的绑定.
+
+Native attention 直接读取分页 KV, 无需复制整个 context.
+其预算计入 FA/GDN 行备份, metadata 副本, 临时 activation, 以及预热和 capture 两个阶段的输出/特征.
+Ragged attention 另计紧凑 K/V 存储, 并保留至少 32 GiB 余量.
+
+每份预算为编译器存储和碎片保留 4 GiB, 另为 vendor workspace 保留 256 MiB.
+这些存储估算适用于固定的目标模型. Allocator 碎片或 provider 变化仍可能引发 OOM, 此时进入 worker 恢复流程.
 
 FA 2 prefill 使用编译路径.
 `ir/cache.py` 限制项目 Dynamo 变体总数为 256, 单 code 变体数为 64, code identity 数为 32.
@@ -337,11 +348,28 @@ FA 2 prefill 使用编译路径.
 单 code 预算满时淘汰当前 code 的整组变体. 总预算满时淘汰最近最少使用的 code.
 Capture 保留已预热的 specialization.
 之后的主机调用需要已淘汰 shape 时, 重新使用 `fullgraph=True` 编译.
-有范围的淘汰保留外部编译条目和固定版本的执行合同.
+有范围的淘汰保留其他调用者的编译条目和固定版本的执行合同.
 
 项目模块 registry 最多 256 项. 每个 callable 保留最多 64 个最近的 executable owner.
 捕获图对象独立于编译器 registry 淘汰, 保留自身必需的 executable owner.
 因此, 变体上限不包括 resident graph 持有的全部 executable owner.
+
+FX 保存生成的 Python 源码, 用于代码检查和异常消息.
+FakeTensor 保存输出 shape 和 alias metadata. 缓存未命中时重新计算这些 metadata.
+Worker 限制每个全局 registry 中项目持有的记录, 并为可选的 FX profiler metadata 设置独立上限.
+
+| Registry | 条目上限 | Metadata 字节上限 |
+|---|---:|---:|
+| FX 源码及其 linecache 副本 | 256 | 16 MiB |
+| 全局 FakeTensor dispatch metadata | 8192 | 32 MiB |
+| 可选 FX profiler metadata | 256 | 16 MiB |
+
+字节计数估算 Python 源码和 metadata 存储. 完整进程 RSS 有独立测量与验收检查.
+淘汰只删除已登记且身份未变的记录. 其他调用者的记录仍由原 owner 管理.
+ShapeEnv 内的符号记录保持原有生命周期.
+
+编译器每累计移除八个条目或变体组, 对 Python 全部 GC generation 执行垃圾回收.
+垃圾回收等待 CUDA capture 和嵌套编译结束. Shutdown 也执行垃圾回收.
 
 Provider 选择记录使用 2048 项 LRU. Rewrite 记录最多 256 项, 编译计数最多 128 个标签.
 仅在显式 trace 选项启用时记录 semantic graph inventory.

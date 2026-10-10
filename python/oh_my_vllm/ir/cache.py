@@ -5,6 +5,7 @@ specializations at a call boundary does not destroy these graphs. A later host
 invocation compiles again rather than falling back to eager execution.
 """
 
+import gc
 import sys
 import weakref
 from collections import OrderedDict
@@ -12,6 +13,8 @@ from dataclasses import dataclass, field
 from types import CodeType
 
 import torch
+
+from .metadata_cache import CompilerMetadata
 
 
 @dataclass
@@ -22,9 +25,15 @@ class CodeState:
 
 class CompilerCache:
     def __init__(
-        self, capacity: int = 256, *, per_code: int = 64, code_capacity: int = 32
+        self,
+        capacity: int = 256,
+        *,
+        per_code: int = 64,
+        code_capacity: int = 32,
+        gc_batch: int = 8,
+        metadata: CompilerMetadata | None = None,
     ) -> None:
-        if min(capacity, per_code, code_capacity) <= 0:
+        if min(capacity, per_code, code_capacity, gc_batch) <= 0:
             raise ValueError("compiler cache budgets must be positive")
         self.capacity = capacity
         self.per_code = per_code
@@ -35,6 +44,15 @@ class CompilerCache:
         self.backends: dict[int, weakref.ReferenceType] = {}
         self.resets = 0
         self.module_evictions = 0
+        self.metadata = metadata or CompilerMetadata()
+        self.gc_batch = gc_batch
+        self.pending_retirements = 0
+        self.full_gc_collections = 0
+        self._metadata_retirements = 0
+
+    @staticmethod
+    def _capturing() -> bool:
+        return torch.cuda.is_initialized() and torch.cuda.is_current_stream_capturing()
 
     def _reset(self, ident: int) -> None:
         from torch._dynamo import convert_frame
@@ -51,6 +69,7 @@ class CompilerCache:
             for tracker in (convert_frame.input_codes, convert_frame.output_codes):
                 tracker.seen[:] = [ref for ref in tracker.seen if ref() is not None]
         self.resets += 1
+        self.pending_retirements += 1
 
     def before_call(self, code: CodeType) -> None:
         ident = id(code)
@@ -60,7 +79,7 @@ class CompilerCache:
         if saturated or total >= self.capacity:
             # A capture's second invocation must keep its warmed specialization.
             # The next host invocation performs the pending retirement instead.
-            if torch.cuda.is_initialized() and torch.cuda.is_current_stream_capturing():
+            if self._capturing():
                 return
             if saturated:
                 self._reset(ident)
@@ -70,6 +89,10 @@ class CompilerCache:
                 self._reset(next(iter(self.codes)))
         if ident not in self.codes:
             if len(self.codes) >= self.code_capacity:
+                if self._capturing():
+                    raise RuntimeError(
+                        "a new forward unit must warm before CUDA capture"
+                    )
                 self._reset(next(iter(self.codes)))
             self.codes[ident] = code, CodeState()
         self.codes.move_to_end(ident)
@@ -112,6 +135,26 @@ class CompilerCache:
         retired = [self.modules.popitem(last=False)[1] for _ in range(surplus)]
         self._release_modules(retired)
         self.module_evictions += len(retired)
+        self.pending_retirements += len(retired)
+
+    def after_call(self, *, force=False) -> None:
+        """Retire metadata and cyclic compiler owners at a safe host boundary."""
+        if self._capturing() or self.metadata.scope_active():
+            return
+        self.metadata.trim(clear=force)
+        retired = (
+            self.metadata.fx_evictions
+            + self.metadata.fake_evictions
+            + self.metadata.profiler_evictions
+        )
+        self.pending_retirements += retired - self._metadata_retirements
+        self._metadata_retirements = retired
+        if force or self.pending_retirements >= self.gc_batch:
+            # Generated functions own globals which can own the same function.
+            # Dynamo's generation-1 collection cannot retire older cycles.
+            gc.collect(2)
+            self.full_gc_collections += 1
+            self.pending_retirements = 0
 
     @staticmethod
     def _release_modules(retired) -> None:
@@ -136,6 +179,7 @@ class CompilerCache:
         from torch._inductor.codecache import PyCodeCache
 
         return {
+            **self.metadata.snapshot(),
             "code_cache_entries": sum(
                 state.variants for _, state in self.codes.values()
             ),
@@ -152,6 +196,9 @@ class CompilerCache:
             "backend_entries": len(self.backends),
             "module_evictions": self.module_evictions,
             "cache_resets": self.resets,
+            "full_gc_collections": self.full_gc_collections,
+            "gc_retirement_batch": self.gc_batch,
+            "pending_retirements": self.pending_retirements,
         }
 
     def clear(self) -> None:
@@ -163,6 +210,7 @@ class CompilerCache:
         self.modules.clear()
         for ident, reference in list(self.backends.items()):
             self._release_backend(ident, reference)
+        self.after_call(force=True)
 
 
 COMPILER_CACHE = CompilerCache()

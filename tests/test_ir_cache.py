@@ -11,6 +11,17 @@ from oh_my_vllm.ir import core
 from oh_my_vllm.ir.cache import CompilerCache
 
 
+@pytest.fixture
+def disable_automatic_gc():
+    enabled = gc.isenabled()
+    gc.disable()
+    try:
+        yield
+    finally:
+        if enabled:
+            gc.enable()
+
+
 def test_scoped_retirement_prevents_cumulative_fullgraph_failure(monkeypatch):
     cache = CompilerCache(4, per_code=2)
     monkeypatch.setattr(core, "COMPILER_CACHE", cache)
@@ -127,9 +138,9 @@ def test_real_inductor_churn_retires_owned_modules_and_keeps_fullgraph(monkeypat
 
 
 def test_long_lived_unit_bounds_executable_owners_and_preserves_capture_lease(
-    monkeypatch,
+    monkeypatch, disable_automatic_gc
 ):
-    cache = CompilerCache(4, per_code=2)
+    cache = CompilerCache(4, per_code=2, gc_batch=1)
     monkeypatch.setattr(core, "COMPILER_CACHE", cache)
     monkeypatch.setattr(torch._dynamo.config, "specialize_int", True)
     references = []
@@ -148,12 +159,12 @@ def test_long_lived_unit_bounds_executable_owners_and_preserves_capture_lease(
     for offset in range(1, 30):
         assert torch.equal(unit(torch.ones(2), offset), torch.full((2,), offset + 1.0))
         assert len(unit.execution_owners) <= cache.per_code
-        gc.collect()
-        assert sum(reference() is not None for reference in references) <= 3
+        # Production retirement collects generation-2 cycles. No test-side GC
+        # may hide a missing collection at the compiler boundary.
+        assert sum(reference() is not None for reference in references) <= 5
     assert captured_owners
     del captured_owners, unit
     cache.clear()
-    gc.collect()
     assert not any(reference() is not None for reference in references)
 
 
