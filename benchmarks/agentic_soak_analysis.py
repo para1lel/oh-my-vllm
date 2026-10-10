@@ -51,7 +51,7 @@ def task_budget(args, phase: str) -> float:
 
 
 def source_citations(answer: str, reads: list[dict]) -> list[dict]:
-    """Require read file identities; retain reported ranges as diagnostics."""
+    """Describe answer citations; actual source reads are verified upstream."""
     ranges, basenames = {}, {}
     for read in reads:
         path = read["path"]
@@ -70,41 +70,77 @@ def source_citations(answer: str, reads: list[dict]) -> list[dict]:
             r"\s*[-\u2013]\s*([1-9][0-9]*)",
             answer[match.end() :],
         )
-        references.append(
-            (
-                match["path"],
-                tuple(map(int, suffix.groups())) if suffix else None,
-            )
+        parseable = suffix is not None and all(
+            len(value) <= 20 for value in suffix.groups()
         )
+        references.append(
+            {
+                "reference": match["path"],
+                "line_range": list(map(int, suffix.groups())) if parseable else None,
+                "raw_line_range": suffix.group(0) if suffix else None,
+                "line_range_parse_status": (
+                    "parsed" if parseable else "unparseable" if suffix else "absent"
+                ),
+            }
+        )
+    unmatched = [
+        reference
+        for reference in references
+        if Path(reference["reference"]).name not in basenames
+    ]
     citations = []
     for path, actual_ranges in ranges.items():
         name = Path(path).name
-        for reference, cited_range in references:
-            qualified = reference == path
-            shortened = reference == name and len(basenames[name]) == 1
-            if qualified or shortened:
-                citations.append(
-                    {
-                        "path": path,
-                        "reference": reference,
-                        "line_range": list(cited_range) if cited_range else None,
-                        "actual_line_ranges": [
-                            list(value) if value else None
-                            for value in sorted(
-                                actual_ranges, key=lambda value: value or (0, 0)
-                            )
-                        ],
-                        "line_range_matches_read": (
-                            cited_range in actual_ranges
-                            if cited_range is not None and None not in actual_ranges
-                            else None
-                        ),
-                        "style": "full_path" if qualified else "unique_basename",
-                    }
-                )
-                break
-        else:
-            raise ValueError("answer lacks an unambiguous read citation: " + path)
+        observed = []
+        for reference in references:
+            reported = reference["reference"]
+            if Path(reported).name != name:
+                continue
+            qualified = reported == path
+            shortened = reported == name and len(basenames[name]) == 1
+            cited_range = reference["line_range"]
+            observed.append(
+                reference
+                | {
+                    "identity_matches_read": qualified or shortened,
+                    "line_range_matches_read": (
+                        tuple(cited_range) in actual_ranges
+                        if cited_range is not None and None not in actual_ranges
+                        else None
+                    ),
+                    "style": (
+                        "full_path"
+                        if qualified
+                        else "unique_basename"
+                        if shortened
+                        else "ambiguous_basename"
+                        if reported == name
+                        else "different_path"
+                    ),
+                }
+            )
+        matched = next((r for r in observed if r["identity_matches_read"]), None)
+        first = matched or (observed[0] if observed else None)
+        citations.append(
+            {
+                "path": path,
+                "actual_line_ranges": [
+                    list(value) if value else None
+                    for value in sorted(
+                        actual_ranges, key=lambda value: value or (0, 0)
+                    )
+                ],
+                "citation_present": matched is not None,
+                "references": observed,
+                "unmatched_answer_references": unmatched,
+                "reference": first["reference"] if first else None,
+                "line_range": first["line_range"] if first else None,
+                "line_range_matches_read": (
+                    first["line_range_matches_read"] if first else None
+                ),
+                "style": first["style"] if first else "missing",
+            }
+        )
     return citations
 
 
