@@ -66,6 +66,66 @@ def test_cuda_projection_and_residual_match_unfused_path(rows):
 
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
+@pytest.mark.parametrize("rows", [1, 2, 4, 6, 12, 24, 32])
+def test_small_projection_replays_changed_inputs_without_padding_or_mutation(rows):
+    from oh_my_vllm.kernels import fp8, normalization
+
+    args = inputs(rows, "cuda")
+    stream = torch.cuda.Stream()
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        fp8.add_norm_linear(*args)
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            result = fp8.add_norm_linear(*args)
+    torch.cuda.current_stream().wait_stream(stream)
+    for factor in (0.0, -2.0, 0.5):
+        args[0].fill_(factor)
+        args[1].add_(0.125)
+        args[2].mul_(0.75)
+        args[4].mul_(1.25)
+        before = [tensor.view(torch.uint8).clone() for tensor in args]
+        summed, normalized = normalization.add_rms_norm(*args[:3])
+        expected = fp8.linear(normalized, *args[3:])
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            graph.replay()
+        torch.cuda.current_stream().wait_stream(stream)
+        torch.testing.assert_close(result[0], summed, rtol=0, atol=0)
+        torch.testing.assert_close(result[1], expected, rtol=0.03, atol=0.03)
+        assert result[1].shape == (rows, args[3].shape[0])
+        assert result[1].is_contiguous()
+        for tensor, protected in zip(args, before, strict=True):
+            assert torch.equal(tensor.view(torch.uint8), protected)
+    torch.cuda.synchronize()
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
+@pytest.mark.parametrize("rows", [2, 17])
+@pytest.mark.parametrize("offset_input", [0, 1, 2])
+def test_small_projection_keeps_contiguous_storage_offset_inputs(rows, offset_input):
+    from oh_my_vllm.kernels import fp8, normalization
+
+    args = list(inputs(rows, "cuda"))
+    original = args[offset_input]
+    storage = torch.full(
+        (original.numel() + 2,), -7, dtype=original.dtype, device="cuda"
+    )
+    args[offset_input] = storage[1:-1].view(original.shape)
+    args[offset_input].copy_(original)
+    before = [tensor.view(torch.uint8).clone() for tensor in (*args, storage)]
+    summed, normalized = normalization.add_rms_norm(*args[:3])
+    expected = fp8.linear(normalized, *args[3:])
+    result = fp8.add_norm_linear(*args)
+    torch.testing.assert_close(result[0], summed, rtol=0, atol=0)
+    torch.testing.assert_close(result[1], expected, rtol=0, atol=0)
+    for tensor, protected in zip((*args, storage), before, strict=True):
+        assert torch.equal(tensor.view(torch.uint8), protected)
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
 @pytest.mark.parametrize("column", [False, True])
 def test_captured_quantization_reads_changed_inputs_and_keeps_exact_scales(column):
     from oh_my_vllm.kernels import fp8, normalization

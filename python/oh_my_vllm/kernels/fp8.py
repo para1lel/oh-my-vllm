@@ -163,18 +163,25 @@ def add_norm_linear(x, residual, gamma, weight, weight_scale):
     if x.shape[0] > 2**31 // 5120:
         raise ValueError("normalized FP8 input exceeds int32 flat offset range")
     _validate_weight(x, weight, weight_scale, 5120)
-    # At up to 32 rows, the previous CUDA chain is faster than fusion.
-    # The explicit TileLang provider also uses its original complete chain.
-    if NAME != "cuda" or x.shape[0] <= 32:
+    rows = x.shape[0]
+    small = rows <= 32
+    # Small storage-offset views keep the scalar-compatible unfused path.
+    # The explicit TileLang provider keeps its original complete chain.
+    if NAME != "cuda" or (
+        small
+        and any(
+            tensor.data_ptr() % alignment
+            for tensor, alignment in ((x, 16), (residual, 16), (gamma, 32))
+        )
+    ):
         from .normalization import add_rms_norm
 
         summed, normalized = add_rms_norm(x, residual, gamma)
         return summed, linear(normalized, weight, weight_scale)
     from .cuda_backend import compiled
 
-    rows = x.shape[0]
-    column = _large_mn_projection(rows, weight)
-    physical = (rows + 3) // 4 * 4 if column else rows
+    column = small or _large_mn_projection(rows, weight)
+    physical = (rows + 3) // 4 * 4 if column and not small else rows
     data = torch.empty((physical, 5120), device=x.device, dtype=torch.float8_e4m3fn)
     shape = (40, physical) if column else (physical, 40)
     scales = torch.empty(shape, device=x.device, dtype=torch.float32)

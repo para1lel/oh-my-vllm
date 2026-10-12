@@ -127,7 +127,9 @@ void rms_quantize(TensorView x, TensorView residual, TensorView weight, TensorVi
                 static_cast<float *>(scales.data_ptr()), column,                                   \
                 static_cast<int>(column ? scales.stride(1) : x.size(0)),                           \
                 static_cast<__nv_bfloat16 *>(summed.data_ptr()), 1e-6f)
-  if (x.size(0) >= 4096) {
+  if (x.size(0) <= 32) {
+    RMS_QUANT(640, 8, false);
+  } else if (x.size(0) >= 4096) {
     RMS_QUANT(320, 8, false);
   } else if (x.size(0) >= 2048) {
     RMS_QUANT(128, 4, true);

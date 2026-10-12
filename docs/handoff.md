@@ -147,6 +147,34 @@ The contract update passed the eight required checks.
 The full CPU suite passed `1408` tests and `119` subtests, with `455` GPU cases deselected.
 Contract and metadata checks passed `32` tests. The tutorial passed ten excerpt tests and nine browser tests.
 
+Source `2145e13` passed all six full-context ordinary/MTP4 cases and long-MTP batch `4`, with checks done independently.
+The long phase had two full warmups and five measurements, with zero preemptions and full output.
+Its prefill ratio was `2.503124` and decode ratio was `1.854889`. The spread checks passed.
+
+Its operator collection saved `176` full cases, with one small-row projection speed failure and no numerical failure.
+The failed case used two rows, width `5120`, and `34816` output columns.
+Its confidence bound was negative. The original records keep that failure.
+
+Other collections were canceled before the small-row change. Persistent sessions did not reach one hour.
+All owned GPU processes exited and temporary service endpoints closed before source changes.
+
+The small-row candidate fuses residual RMS and FP8 quantization with `640` threads and eight values per thread.
+It keeps BF16 rounding points, compact column-major activation scales, and the previous TRT-LLM GEMM provider.
+Small inputs without the necessary vector alignment keep the previous chain.
+Larger inputs keep their previous dispatch.
+
+An external comparison passed `21` full-output and timing cases across three thread/vector configurations.
+This diagnostic used a saved cache. It does not supply formal operator acceptance or identify the earlier failure cause.
+Run all applicable GPU collections again on the new committed source.
+
+The small-row candidate passed the eight required checks and pre-commit checks.
+The full CPU suite passed `1408` tests and `119` subtests, with `468` GPU cases deselected.
+Contract and metadata checks passed `32` tests.
+
+Focused GPU regressions passed `69` tests, with the previous exact checks and `13` new replay/storage-offset cases.
+Their runtime source files stayed unchanged during execution. All owned GPU processes exited.
+The tutorial passed ten excerpt tests and nine browser tests after the chapter updates.
+
 The next persistent collections keep four sessions per mode for at least `3600` active seconds each, without intermediate drain.
 Use a service reasoning budget of `8192` and direct-action audit prompts without an exact tool-count quota.
 Prompts name model delimiters without reproducing their literal spellings.

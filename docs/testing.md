@@ -87,6 +87,11 @@ Examine each written slot and unchanged protected state.
 For fused chains, include all rounding, scale, copy, and reduction behavior.
 See `tests/probe_worker.py` and the applicable kernel tests.
 
+`tests/test_ir_normalized_linear.py` checks small-row fusion at rows `1/2/4/6/12/24/32`.
+Graph replay reads changed inputs and weight scales, keeps compact output shapes, and leaves input bytes unchanged.
+Storage-offset cases check each of the three normalization inputs at rows `2/17`.
+The previous exact checks and FP8 operator tolerances stay active.
+
 ## Offline execution and numerical probes
 
 Build the release binary before these commands. Set the environment and model from [development](development.md).

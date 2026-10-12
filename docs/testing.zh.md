@@ -84,6 +84,11 @@ Recurrent state 的 NRMSE 至多 1%, 最大绝对误差至多为参考峰值 2%.
 融合链包括全部舍入, scale, copy 和 reduction 行为.
 参见 `tests/probe_worker.py` 和相关内核测试.
 
+`tests/test_ir_normalized_linear.py` 在 `1/2/4/6/12/24/32` 行检查小行数融合.
+Graph 重放读取变化后的输入和权重 scales, 保持紧凑的输出形状, 并保持输入字节不变.
+存储偏移用例在 `2/17` 行分别检查三个归一化输入.
+之前的精确检查和 FP8 算子容差继续有效.
+
 ## 离线执行与数值探针
 
 执行以下命令前构建 release binary. 按 [开发指南](development.zh.md) 设置环境和模型.

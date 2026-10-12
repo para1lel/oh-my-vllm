@@ -16,8 +16,9 @@
 <p>ServingAdapter.masks 对草稿前缀逐步试探 matcher, 得到各验证行的掩码, 然后回滚. Generation.consume 只对最终保留 ID 正式 accept, 推进匹配器. 这样, 被拒草稿不会污染之后的语法状态.</p>
 <p>工具 XML 参数路径校验能表达的 schema 范围, 把参数结构转成相应约束. 字符串内的空白属于值本身, 参数整理按结构处理空白, 保留值的内容. Rust Parser 在输出端按 schema 恢复参数类型并检查工具标签和重复参数, 连接模型约束与 API 返回结构.</p>
 <h2>Generation 保存哪些输出状态</h2>
-<p>Generation 有十个状态字段. matcher 是可选语法匹配器; max_tokens 是长度上限; stop 是停止字符串列表; eos 是模型结束 ID 集合; reasoning_end 是推理结束标记 ID; reasoning_tokens 累计推理部分数量; ids 保存本请求保留输出; decoder 是增量解码器; pending 暂存尚需判断的文字; finished 保存 None, stop 或 length 的终止原因.</p>
-<p>consume 逐个接收保留 ID, 更新语法和历史, 再处理 EOS, stop 和长度. EOS ID 可以是正式输出历史的一部分, 同时结束生成, 其标记文字不送到用户. reasoning_tokens 计算推理部分直到结束标记, 用于 usage 统计.</p>
+<p>Generation 有 11 个状态字段. matcher 是可选语法匹配器; max_tokens 是长度上限; stop 是停止字符串列表; eos 是模型结束 ID 集合; reasoning_end 是推理结束标记 ID; reasoning_tokens 累计推理部分数量; thinking_token_budget 是可选的思考内容 token 硬预算; ids 保存本请求保留输出; decoder 是增量解码器; pending 暂存尚需判断的文字; finished 保存 None, stop 或 length 的终止原因.</p>
+<p>consume 逐个接收保留 ID, 更新语法和历史, 再处理 EOS, stop 和长度. EOS ID 可以是正式输出历史的一部分, 同时结束生成, 其标记文字不送到用户. reasoning_tokens 计算推理部分直到结束标记, 并计入结束标记本身, 用于 usage 统计; 内容预算则不计这个标记. 总输出上限继续有效.</p>
+<p>到达 thinking_token_budget 后, target mask 强制推理结束标记, 然后继续正文或工具调用. mask 对草稿前缀与 bonus row 只作临时计数, Generation 仅提交最终保留的 ID. 被拒的 MTP4 或 DSpark 草稿不会消耗已提交预算.</p>
 <p>一个 token 可能只对应 UTF-8 字符的一部分. DecodeStream 保留未完整字节, 拼齐后才输出字符. stop 字符串也可能跨 token: pending 保留当前文字中可能构成 stop 前缀的尾部, 下一次继续判断, 完整 stop 及其后内容被截掉.</p>
 <p>例如 stop 为 <<icode "END">>, 本次末尾得到 <<icode "E">>, 后续还可能是 <<icode "ND">>. pending 先保留 E; 若下一次为另一字符, 已排除匹配的文字就可发送. 达到长度或正常结束时, 按结束条件排空可见内容并设置 finish_reason.</p>
 <<source "protocolResult" "展开保留 ID, 文字与结束信息的返回字段">>

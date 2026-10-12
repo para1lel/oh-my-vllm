@@ -208,10 +208,14 @@ This avoids the observed FlashInfer CUTLASS instability at 17 through 32 rows.
 Small BF16 vocabulary projections use FlashInfer CuTe-DSL GEMM.
 
 Residual/RMS and SiLU/FP8 fusions keep the existing BF16 rounding points.
-For more than 32 rows, the MLP gate/up path uses one CUDA kernel for residual RMS and activation quantization.
+The MLP gate/up path uses one CUDA kernel for residual RMS and activation quantization.
 It writes the BF16 residual sum and keeps the normalized BF16 value in registers before FP8 conversion.
 The projection keeps its previous GEMM provider and mathematical scale values.
-At most 32 rows use the previous CUDA residual RMS and quantization chain.
+
+Inputs with at most 32 rows and the necessary vector alignment use 640 threads, eight values per thread, and column-major activation scales.
+This path keeps compact row storage for the previous TRT-LLM GEMM provider.
+Small inputs without the necessary vector alignment keep the previous residual RMS and quantization chain.
+Inputs with more than 32 rows keep their previous kernel dispatch and scale layout.
 
 Scaled GDN output uses fused gated RMS and FP8 quantization before its previous GEMM.
 Each token has 48 heads of width 128. The kernel keeps the gated RMS BF16 rounding before FP8 conversion.

@@ -47,6 +47,11 @@ All other source hashes, providers, headers, compiler flags, and versions were e
 The other collections were canceled before the contract update. All owned processes exited.
 Failed and canceled records keep their status. They do not supply current-source acceptance.
 
+Source `2145e13` passed six full-context cases and long-MTP batch `4`, with full raw-record review done independently.
+Its operator collection saved `176` full cases, with one small-row projection speed failure and no numerical failure.
+Other collections were canceled before the small-row fusion change. All owned processes exited.
+Run the full GPU acceptance again on the new committed source. Earlier partial collections cannot supply that acceptance.
+
 ## Historical collection on `706f1a6`
 
 The [serving resource record](../bench/evidence/2026-10-11-serving-stability.json) uses source `706f1a6e7ce2b0188f07794cab574cbbf60f2927`.

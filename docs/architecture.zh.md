@@ -201,10 +201,14 @@ TMA multicast 将同一激活 tile 发送到两个 block.
 小批 BF16 vocabulary projection 使用 FlashInfer CuTe-DSL GEMM.
 
 Residual / RMS 和 SiLU / FP8 融合保留已有 BF16 舍入点.
-MLP gate/up 路径在超过 32 行时, 用一个 CUDA kernel 合并残差 RMS 与激活量化.
+MLP gate/up 路径用一个 CUDA kernel 合并残差 RMS 与激活量化.
 它写出 BF16 残差和, 在寄存器中保留归一化后的 BF16 值, 再转换为 FP8.
 投影保持之前的 GEMM provider 与数学上的 scale 值.
-至多 32 行使用之前的 CUDA 残差 RMS 与量化链.
+
+至多 32 行且满足必要向量对齐的输入使用 640 个线程, 每线程处理八个值, 激活 scales 为列主序.
+此路径保持紧凑的行存储, 使用之前的 TRT-LLM GEMM provider.
+未满足向量对齐条件的小行数输入保持之前的残差 RMS 与量化链.
+超过 32 行的输入保持之前的 kernel dispatch 和 scale 布局.
 
 带 scale 的 GDN 输出先融合 gated RMS 与 FP8 量化, 再使用之前的 GEMM.
 每个 token 有 48 个 head, 每个宽度为 128. Kernel 在转换为 FP8 前保留 gated RMS 的 BF16 舍入.
