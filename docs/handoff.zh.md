@@ -133,6 +133,20 @@ GPU 查询改动通过八项必需检查.
 七项所有权测试通过, 包含三项 subtest. 教程通过十项 excerpt 测试和九项浏览器测试.
 新的 GPU 验收待在已提交源码上执行.
 
+源码 `66edc40` 在普通解码和 MTP4 模式下各通过二十项 reasoning 预算案例, 原始记录分别经过独立检查.
+其长 MTP batch `4` 完成两次预热和五次测量, 随后源码 contract 检查失败.
+已审核的 `model_runner.py` 摘要仍对应 shutdown 改动前的源码.
+其余源码摘要, provider, header, compiler flag 和版本均一致.
+其他采集在 contract 更新前取消. 所有所属进程已退出.
+
+Contract 更新仅修改这一项已审核源码摘要.
+新增 CPU 测试将当前 runtime 与完整已审核 contract 核对, 不初始化 CUDA.
+该测试在摘要更新前失败. 新的已提交源码 GPU 验收待完成.
+
+Contract 更新通过八项必需检查.
+完整 CPU 套件通过 `1408` 项测试和 `119` 项 subtest, deselect `455` 项 GPU 案例.
+Contract 与 metadata 检查通过 `32` 项测试. 教程通过十项 excerpt 测试和九项浏览器测试.
+
 下一轮持久采集每种模式保留四个会话, 每条至少 `3600` 活动秒, 中途不排空.
 使用服务 reasoning 预算 `8192` 和直接行动的审计提示, 不设置精确工具调用次数配额.
 提示以名称指代模型分隔符, 不复述字面拼写.

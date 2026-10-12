@@ -39,6 +39,14 @@ A capacity attempt stopped for an external GPU process before output.
 The next capacity attempt and GPU suite were canceled before the query-scope change. All owned processes exited.
 The GPU suite passed three boundary tests, then had one failure without a saved exception report.
 
+Source `66edc40` passed twenty reasoning-budget cases each in ordinary and MTP4 modes, with raw-record checks done independently.
+Its long-MTP batch `4` completed two warmups and five measurements, then failed the source contract check.
+The reviewed `model_runner.py` hash was equal to the source hash before the shutdown change.
+All other source hashes, providers, headers, compiler flags, and versions were equal to the runtime values.
+
+The other collections were canceled before the contract update. All owned processes exited.
+Failed and canceled records keep their status. They do not supply current-source acceptance.
+
 ## Historical collection on `706f1a6`
 
 The [serving resource record](../bench/evidence/2026-10-11-serving-stability.json) uses source `706f1a6e7ce2b0188f07794cab574cbbf60f2927`.

@@ -132,6 +132,15 @@ Eager 模式关闭 capture, 让诊断复制观察真实请求.
 
 ## 验收用 release binary
 
+GPU 采集前, 在 CPU 上将当前 runtime 与已审核的语义契约核对:
+
+```bash
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_performance_metadata.py::test_current_runtime_contract_matches_semantic_review -q
+```
+
+此检查核对源码摘要, provider, header, compiler flag 和版本 pin, 不初始化 CUDA.
+仅在语义审查后修改 `performance/contract.json`. 保持源码与 provider 相等检查启用.
+
 阶段时延采集器 读取仓库 `target/release/oh-my-vllm-zmq-worker`.
 显式使用此目录, 防止其他构建位置或旧 binary 改变实测候选:
 

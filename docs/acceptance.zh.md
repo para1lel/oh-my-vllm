@@ -39,6 +39,14 @@ Shutdown 栈检查停在资源 owner 释放后的末尾 `torch.cuda.empty_cache(
 后续容量尝试与 GPU 套件在查询范围修改前取消. 所有所属进程已退出.
 GPU 套件通过三项边界测试, 随后有一项失败, 未保存异常报告.
 
+源码 `66edc40` 在普通解码和 MTP4 模式下各通过二十项 reasoning 预算案例, 原始记录分别经过独立检查.
+其长 MTP batch `4` 完成两次预热和五次测量, 随后源码 contract 检查失败.
+已审核的 `model_runner.py` 摘要仍对应 shutdown 改动前的源码.
+其余源码摘要, provider, header, compiler flag 和版本均一致.
+
+其他采集在 contract 更新前取消. 所有所属进程已退出.
+失败和取消记录保留状态. 它们不能证明当前源码通过验收.
+
 ## `706f1a6` 历史采集
 
 [服务资源记录](../bench/evidence/2026-10-11-serving-stability.json) 使用源码 `706f1a6e7ce2b0188f07794cab574cbbf60f2927`.

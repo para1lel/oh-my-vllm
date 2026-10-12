@@ -3,6 +3,7 @@
 import json
 import operator
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 import torch
@@ -10,6 +11,17 @@ from oh_my_vllm.performance import execution
 from oh_my_vllm.performance.coverage import metadata_covers
 from torch._subclasses import fake_tensor
 from torch._subclasses.fake_tensor import FakeTensorMode
+
+
+def test_current_runtime_contract_matches_semantic_review():
+    from oh_my_vllm.performance import coverage
+
+    initialized = torch.cuda.is_initialized()
+    reviewed = json.loads(
+        Path(coverage.__file__).with_name("contract.json").read_text()
+    )
+    assert coverage.runtime_contract() == reviewed
+    assert torch.cuda.is_initialized() == initialized
 
 
 @pytest.fixture

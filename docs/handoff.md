@@ -133,6 +133,20 @@ The full CPU suite passed `1407` tests and `119` subtests, with `455` GPU cases 
 Seven ownership tests passed, with three subtests. The tutorial passed ten excerpt tests and nine browser tests.
 New GPU acceptance is pending on committed source.
 
+Source `66edc40` passed twenty reasoning-budget cases each in ordinary and MTP4 modes, with raw-record checks done independently.
+Its long-MTP batch `4` completed two warmups and five measurements, then failed the source contract check.
+The reviewed `model_runner.py` hash was equal to the source hash before the shutdown change.
+All other source hashes, providers, headers, compiler flags, and versions were equal to the runtime values.
+The other collections were canceled before the contract update. All owned processes exited.
+
+The contract update changes only that reviewed source hash.
+A new CPU test checks whether the current runtime is equal to the full reviewed contract without CUDA initialization.
+The test failed before the hash update. New committed-source GPU acceptance is pending.
+
+The contract update passed the eight required checks.
+The full CPU suite passed `1408` tests and `119` subtests, with `455` GPU cases deselected.
+Contract and metadata checks passed `32` tests. The tutorial passed ten excerpt tests and nine browser tests.
+
 The next persistent collections keep four sessions per mode for at least `3600` active seconds each, without intermediate drain.
 Use a service reasoning budget of `8192` and direct-action audit prompts without an exact tool-count quota.
 Prompts name model delimiters without reproducing their literal spellings.

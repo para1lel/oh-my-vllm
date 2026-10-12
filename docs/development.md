@@ -141,6 +141,14 @@ scripts/with-env.sh pre-commit run --all-files
 
 Hooks use local system tools through the same wrapper.
 
+Before GPU acceptance, check the reviewed runtime contract without CUDA initialization:
+
+```bash
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_performance_metadata.py::test_current_runtime_contract_matches_semantic_review -q
+```
+
+The CPU suite includes this check. Complete semantic review of source or provider changes before a contract update.
+
 Use `scripts/test.sh full --evidence-dir "$EVIDENCE_DIR/python-tests"` for full pytest with saved evidence in a new external directory.
 The launcher uses two new processes for the boundary module and other tests. See [testing](testing.md#cpu-and-gpu-suites).
 

@@ -137,6 +137,14 @@ scripts/with-env.sh pre-commit run --all-files
 
 钩子通过同一包装脚本使用本地系统工具.
 
+GPU 验收前, 核对已审核的 runtime contract, 不初始化 CUDA:
+
+```bash
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_performance_metadata.py::test_current_runtime_contract_matches_semantic_review -q
+```
+
+CPU 套件包含此检查. 源码或 provider 变更后, 更新 contract 前完成语义审查.
+
 使用 `scripts/test.sh full --evidence-dir "$EVIDENCE_DIR/python-tests"` 执行完整 pytest, 将证据保存在新的外部目录.
 Launcher 用两个新进程分别执行边界模块和其余测试. 参见 [测试](testing.zh.md#cpu-与-gpu-测试套件).
 

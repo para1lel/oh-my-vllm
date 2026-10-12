@@ -135,6 +135,15 @@ Keep these probes and eager mode disabled for performance acceptance.
 
 ## Release binary for acceptance
 
+Compare the current runtime with the reviewed semantic contract on CPU before GPU collection:
+
+```bash
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_performance_metadata.py::test_current_runtime_contract_matches_semantic_review -q
+```
+
+This checks source hashes, providers, headers, compiler flags, and version pins without CUDA initialization.
+Change `performance/contract.json` only after semantic review. Keep the source and provider equality checks active.
+
 The phase-latency collector reads repository `target/release/oh-my-vllm-zmq-worker`.
 Set this directory explicitly. The harness must use the candidate binary from this build:
 
