@@ -135,7 +135,7 @@ scripts/with-gpu.sh scripts/with-env.sh python -m benchmarks.framework --mode or
 ```
 
 使用 `ordinary`, `mtp4`, `prefix` 和 `dspark` 模式, 输入 32768, batch 为 1/2/4.
-普通模式另测输入 131072, batch 相同.
+MTP4 另测输入 131072, batch 相同. `prefix` 模式使用 MTP4.
 DSpark 通过 `OH_MY_VLLM_DRAFT_MODEL` 或 `--draft-model` 指定 checkpoint.
 输出数量为 4096. 每次尝试执行两次完整预热和五次正式测量.
 前缀行必须为每个请求命中 32144 个 token.
@@ -258,73 +258,66 @@ Lifecycle stream 保留断连前已读取的 SSE frame.
 
 ## 长时 agentic 服务
 
-日常 CPU 和 GPU 命令跳过重型 soak test. 长时服务验收需显式启动.
-使用专用 MTP4 或 DSpark 服务, 新的外部结果目录及当前 release binary.
-保持源码不变. Collector 检查运行 executable, 源码哈希, worker epoch 及进程身份.
+日常命令跳过这项重型测试. 每种模式使用专用服务, 最大模型长度为 `262144`.
+使用新的外部目录. 采集全程保持源码和 release binary 不变.
+一并构建服务和 CPU 请求 normalizer:
 
 ```bash
+scripts/with-env.sh cargo build --release --bins
 scripts/with-env.sh python scripts/agentic-soak.py --mode mtp --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output-dir "$EVIDENCE_DIR/mtp-soak"
 scripts/with-env.sh python scripts/agentic-soak.py --mode dspark --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/dspark-server.log" --output-dir "$EVIDENCE_DIR/dspark-soak"
 ```
 
-各命令连接对应模式的服务. 采集结束后立即停止该服务和 worker.
-Collector 管理 4 个 OMP 客户端及临时记录代理, 不管理传入的服务.
-将 OMP 安装到 `PATH`, 或通过 `--omp` 指定.
-固定的开发工具包含 Matplotlib, 用于导出独立 SVG/PNG 图.
+设置 `OH_MY_VLLM_MODEL` 或传入 `--model`. 将 OMP 安装到 `PATH`, 或通过 `--omp` 指定.
+每个命令连接对应模式的服务. 采集结束后停止该服务和 worker.
+Collector 管理 4 个持久 OMP 进程和临时记录代理.
+每个进程在连续源码审计任务中保留 session ID 和历史.
+2 个会话使用 Chat, 2 个使用 Responses. 共享的 4-slot 上限也包含摘要请求.
 
-每种模式至少完成 500 个正常模型请求, 并至少持续 3600 秒.
-4 个真实 OMP agent 通过 Chat 和 Responses 使用 read 工具. 转发的工具结果和 response ID 必须一致.
-共享的 4-slot 上限限制并行模型调用. 负载使用可复用前缀和变化的输入长度.
+每条 lane 至少持续 `3600` 秒, 不设请求数下限.
+服务就绪后初始化客户端, 在它们发出首次请求前开始计时.
+首次编译, 图捕获和后续新形状的开销均计入测量.
+中途不排空, 不插入故障 probe. 一小时结束后完成在途工作, 再排空请求.
 
-最后答案中的文件名与行号范围作为诊断信息记录.
+任务和摘要使用 OMP `max`, 映射为服务的 `xhigh`.
+模型 context window 为 `262144`, 任务输出上限为 `32768`, 包含 reasoning token.
+本地 `qwen3` tokenizer 元数据与 provider usage 让 OMP 了解会话大小.
+启用 soft 自动压缩, threshold 为 `196608`, reserve 为 `65536`, 保留最近 `20000` 个 token.
+OMP 自行选择压缩时机, 包括工具循环中途. 控制器不发送手动 compact 命令.
+服务检查完整模板输入与请求输出之和是否在总容量内.
+CPU guard 重复生产 normalization 与模板路径, 提供独立容量证据.
+将其计数与 SSE usage, SDK 输入加缓存用量, 以及 journal 的 provider-input snapshot 核对.
 
-协议结束记录, 已完成的客户端消息和已完成的服务端 metric 必须使用相同的 response ID.
-这 3 项检查通过时, 协议结束后的 `ConnectionResetError` 或 `BrokenPipeError` 作为诊断信息保留.
-Chat 要求正确的 finish reason 和 `[DONE]`.
-Responses 要求 `response.completed`, 或原因是 `max_output_tokens` 的 `response.incomplete`.
-客户端 stop reason 必须与协议结束记录一致.
+OMP 的 settled `contextUsage` 使用 provider-input 锚点加上之后的本地变化.
+压缩判定还考虑生成输出和已保存历史的估算.
+两种记录均保留. 界面百分比不能代表完整的压缩判定.
+每次观察到压缩时, 检查会话身份延续, 摘要可用, 以及之后成功的模型工作.
+一小时内不强制发生自然压缩. 未覆盖时明确报告.
+参见固定版本的 [OMP 压缩流程](https://github.com/can1357/oh-my-pi/blob/v18.4.3/docs/compaction.md).
 
-最终答案以 `length` 结束时, 必须包含文本, 没有待处理的工具调用, 且协议, 客户端和服务端记录一致.
-请求的输出上限必须等于协议结束记录, 客户端及已完成服务端记录中的输出数量.
-单独记录这些最终答案. 原始证据保留 `length` 和 `response.incomplete` 字段.
-通用 agentic 验收仍要求最终 stop reason 为 `stop`.
+4 条 lane 分别审计调度/KV, HTTP/生命周期, GPU/缓存, 测试/文档.
+它们读取有界源码区间, 搜索实际符号, 在外部 workspace 中保存进度笔记.
+逐个已完成的审计工作项核对源码读取及转发的工具结果. 保留增量会话 journal 和完整 RPC/wire 记录.
 
-客户端断连且已有正确的 finish reason 时, 代理最多等待 2 秒接收协议结束记录.
-失败或取消的任务立即关闭代理连接.
+逐个模型请求核对已完成的服务 metric, SSE 结束记录及 SDK usage.
+仅在同 ID 的协议, SDK 和服务完成证明齐全时, 将结束后的 `ConnectionResetError` 或 `BrokenPipeError` 保留为诊断信息.
+SDK 与 SSE stop reason 必须相符. `length` 结束的输出数必须等于请求预算.
+并行摘要请求必须唯一匹配 usage 和生命周期. 证据有歧义时验证失败.
 
-记录 soak test 期间的其他 GPU 进程. 请求和资源检查通过时继续正常采集.
-结合其他进程的记录及 worker 分配计数, 分析设备 HBM 占用变化.
-15 项阶段负载使用没有其他进程的 GPU.
+采集期间检查资源的数量和字节上限. 最后排空后检查 Rust/Python 请求状态为空.
+各逻辑池此时有 `blocks - 1` 个空闲块, 包含可驱逐复用的缓存块.
+Block `0` 保持分配. HTTP 和 worker 必须保持原有进程出生身份.
+结合主机 RSS, GPU allocated / reserved 内存, 图/编译缓存占用, 活动请求和输入长度分析.
+变化的会话大小可能改变有界缓存. 独立审查需解释增长并确认内存稳定性.
+Collector 将 `operational_passed` 和 `awaiting_resource_review` 与正式验收区分记录.
 
-正常采集前运行 2 个短预热 epoch. 预热和故意 probe 使用单独记录.
-预热任务上限为 900 秒. 正常任务上限为 210 秒.
-`--warmup-task-timeout` 和 `--task-timeout` 分别设置对应阶段的 OMP 任务与 proxy 传输上限.
+记录其他 GPU 进程和设备 HBM 占用. 请求和资源检查通过时, 轻度争用可继续.
+15 项阶段负载仍要求 GPU 独占.
+全部完成的任务和实际摘要请求按用途绘图, 不添加 Chat/Responses 颜色图例.
+横轴为框架开始处理的时刻, 纵轴为输出 token 数除以处理墙钟时间.
+输出数包含 reasoning token. 排队时间, 取消和失败分别报告.
+不设性能门槛. `--diagnostic` 允许缩短的 smoke test, 不能提供正式验收.
 
-预热时间不计入正常采集要求的 3600 秒.
-其 deadline 为 `30 + 3 * drain_timeout + 2 * (warmup_epoch_seconds + warmup_task_timeout)` 秒.
-保留实际预热时间和完整失败记录.
-
-每个正常 epoch 默认准入任务 300 秒, 随后排空活动请求.
-取消和慢客户端 probe 使用单独记录. 正常请求不得发生意外失败, OOM 或 worker 重启.
-周期性资源 snapshot 的数量和字节上限必须有效. 排空后 Rust/Python 请求状态必须为空.
-Collector 单调时长及服务正常请求的时间跨度均须满足时长要求.
-
-排空后, 每个逻辑池必须有 `blocks - 1` 个空闲块. 缓存块可继续留在前缀索引中, 供驱逐时复用.
-Block 0 是 null block, 始终保持分配.
-
-正常采集的后半段至少保留 6 个 idle snapshot.
-缓存预热后, 比较该后半段起始和结束窗口的中位数.
-GPU allocated / reserved 或设备占用增长超过 64 MiB 与 5% 中较大者时需调查.
-主机 RSS 增长超过 128 MiB 与 5% 中较大者时需调查.
-保留完整时间序列, drift 和 trend 估计. 内存审计失败时先调查, 再重新完整采集.
-
-设备 HBM 占用使用 worker 设备 snapshot 中的 `total_bytes - free_bytes`.
-它包含 Torch allocated / reserved 计数之外的设备存储. Collector 单独保存活跃及排空状态的内存曲线, 与请求 TPS 分开.
-
-全部正常完成模型请求绘入图中, 横轴使用框架开始准备请求的时刻.
-纵轴使用输出 token 数除以开始处理至生成完成的墙钟时间.
-排队时间, 取消请求和失败分别报告. Soak 不设性能门槛.
-缩短的 smoke test 使用 `--diagnostic`. 诊断记录不能通过正式 soak 验收.
 
 ## 真实 OOM 下的 worker 恢复
 

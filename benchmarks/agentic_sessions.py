@@ -1,0 +1,415 @@
+"""Four persistent OMP RPC clients and a source-audit follow-up curriculum."""
+
+from __future__ import annotations
+
+import gzip
+import hashlib
+import json
+import os
+import shutil
+import signal
+import subprocess
+import threading
+import time
+from pathlib import Path
+
+from benchmarks.agentic_context import isolated_environment, session_configuration
+
+ROOT = Path(__file__).resolve().parents[1]
+EVENTS = [
+    "agent_start",
+    "agent_end",
+    "turn_start",
+    "turn_end",
+    "message_end",
+    "tool_execution_start",
+    "tool_execution_end",
+    "auto_compaction_start",
+    "auto_compaction_end",
+    "auto_retry_start",
+    "auto_retry_end",
+    "session_settled",
+]
+DOMAINS = (
+    ("scheduling and logical KV ownership", ("crates/scheduler/", "crates/kv-cache/")),
+    (
+        "HTTP protocols and request lifetimes",
+        ("crates/zmq-worker/", "python/oh_my_vllm/worker/serving"),
+    ),
+    (
+        "GPU computation, graphs and compiler caches",
+        ("python/oh_my_vllm/worker/", "python/oh_my_vllm/kernels/"),
+    ),
+    ("tests, requirements and documented behavior", ("tests/", "docs/", "benchmarks/")),
+)
+
+
+def curriculum(lane: int) -> list[str]:
+    """Read real owned files in a deterministic order, without padded prompts."""
+    prefixes = DOMAINS[lane][1]
+    paths = subprocess.check_output(
+        ["git", "ls-files"], cwd=ROOT, text=True
+    ).splitlines()
+    return sorted(
+        path
+        for path in paths
+        if path.startswith(prefixes)
+        and (ROOT / path).is_file()
+        and Path(path).suffix in (".rs", ".py", ".cu", ".cuh", ".md")
+    )
+
+
+def prepare_workspace(directory: Path) -> dict:
+    """Copy audit inputs outside the repository; writes cannot change source."""
+    paths = subprocess.check_output(
+        ["git", "ls-files"], cwd=ROOT, text=True
+    ).splitlines()
+    selected = [
+        path
+        for path in paths
+        if path.startswith(("crates/", "python/", "tests/", "docs/", "benchmarks/"))
+        and (ROOT / path).is_file()
+        and Path(path).suffix in (".rs", ".py", ".cu", ".cuh", ".md", ".toml")
+    ]
+    for relative in selected:
+        target = directory / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / relative, target)
+    (directory / "notes").mkdir()
+    return {"files": selected, "source_root": str(ROOT)}
+
+
+def followup(lane: int, index: int, paths: list[str]) -> str:
+    if not paths:
+        raise ValueError("audit curriculum has no source files")
+    selected = [paths[(2 * index + offset) % len(paths)] for offset in range(2)]
+    angle = (
+        "trace ownership and successful completion",
+        "trace cancellation and failure",
+        "check resource bounds and eviction",
+        "compare code, tests and documentation",
+    )[index % 4]
+    return (
+        f"Continue your persistent audit of {DOMAINS[lane][0]}. Work item {index}. "
+        f"For this item, {angle}. Read the actual source in {' and '.join(selected)}. "
+        "Use read/grep tools and follow relevant symbols into their callers. "
+        "Read bounded ranges (at most 180 lines per read), avoid full directory dumps. "
+        "Use at most eight tool calls for this work item, including the final note. "
+        "If a path is missing, search for the symbol instead of guessing more paths. "
+        "Explain one invariant and its implementation, "
+        "then check a relevant test. "
+        "Write a brief note to notes/progress.md with checked files, evidence, "
+        "open questions and next steps. Keep earlier findings and update the note. "
+        "Support findings with source evidence. Audit inputs are copied "
+        "snapshots: write only under notes/. Keep answers concise. After context "
+        "compaction, recover the progress note and continue the same work item. "
+        "The controller will supply the next work item after this one finishes."
+    )
+
+
+class RpcClient:
+    """Correlate commands while streaming events directly to bounded disk files."""
+
+    def __init__(
+        self,
+        omp: str,
+        api: str,
+        lane: int,
+        directory: Path,
+        proxy: str,
+        stop: threading.Event,
+        timeout: float,
+    ):
+        self.directory, self.api, self.lane = directory, api, lane
+        self.stop, self.timeout = stop, timeout
+        self.condition = threading.Condition()
+        self.responses, self.results = {}, {}
+        self.sequence, self.error, self.session_id = 0, None, None
+        self.current_prompt, self.compacting = None, False
+        self.events, self.states, self.turns = [], [], []
+        self.leaf_id, self.entry_count = None, 0
+        (directory / "entries.jsonl").touch(exist_ok=False)
+        self.state = directory / "state"
+        self.state.mkdir()
+        models, settings = session_configuration(proxy, api)
+        for name, value in (("models.yml", models), ("settings.yml", settings)):
+            (self.state / name).write_text(json.dumps(value, indent=2) + "\n")
+        self.workspace = directory / "workspace"
+        self.workspace.mkdir()
+        self.workspace_manifest = prepare_workspace(self.workspace)
+        tool_guard = directory / "tool-guard.ts"
+        shutil.copyfile(ROOT / "benchmarks/agentic_tool_guard.ts", tool_guard)
+        self.workspace_manifest["tool_guard_sha256"] = hashlib.sha256(
+            tool_guard.read_bytes()
+        ).hexdigest()
+        command = [
+            omp,
+            "--cwd",
+            str(self.workspace),
+            "--mode",
+            "rpc",
+            "--thinking",
+            "max",
+            "--model",
+            f"oh-my-vllm-{api}/qwen3.8-27b-fp8",
+            "--tools",
+            "read,grep,write",
+            "--no-lsp",
+            "--no-extensions",
+            "--no-skills",
+            "--no-rules",
+            "--no-title",
+            "--extension",
+            str(tool_guard),
+            "--no-ui",
+            "--approval-mode",
+            "yolo",
+            "--session-dir",
+            str(directory / "sessions"),
+        ]
+        self.stderr = (directory / "stderr.log").open("x")
+        self.process = subprocess.Popen(
+            command,
+            cwd=self.workspace,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=self.stderr,
+            env=isolated_environment(self.state),
+            start_new_session=True,
+        )
+        try:
+            stat = Path("/proc", str(self.process.pid), "stat").read_text()
+            self.process_record = {
+                "pid": self.process.pid,
+                "pgid": self.process.pid,
+                "start_ticks": int(stat[stat.rfind(")") + 2 :].split()[19]),
+                "started_unix_s": time.time(),
+                "command": command,
+            }
+            self.reader = threading.Thread(target=self._read, daemon=True)
+            self.reader.start()
+        except BaseException:
+            if self.process.poll() is None:
+                os.killpg(self.process.pid, signal.SIGKILL)
+            self.process.wait()
+            self.process.stdin.close()
+            self.process.stdout.close()
+            self.stderr.close()
+            raise
+
+    def _read(self):
+        try:
+            with gzip.open(
+                self.directory / "rpc.jsonl.gz", "xb", compresslevel=1
+            ) as raw:
+                for line in self.process.stdout:
+                    if len(line) > 16 << 20:
+                        raise ValueError("RPC event exceeds 16 MiB bound")
+                    raw.write(line)
+                    event = json.loads(line)
+                    event["collected_unix_s"] = time.time()
+                    with self.condition:
+                        kind = event.get("type")
+                        if kind == "response":
+                            self.responses[event.get("id")] = event
+                        elif kind == "prompt_result":
+                            self.results[event.get("id")] = event
+                        else:
+                            event["prompt_id"] = self.current_prompt
+                            if len(self.events) >= 20000:
+                                raise ValueError(
+                                    "persistent evidence event limit exceeded"
+                                )
+                            if (
+                                kind == "message_end"
+                                and event.get("message", {}).get("role") == "assistant"
+                            ):
+                                message = event["message"]
+                                event["message_sha256"] = hashlib.sha256(
+                                    json.dumps(message, sort_keys=True).encode()
+                                ).hexdigest()
+                                # Raw RPC retains the full reasoning and text.
+                                # The in-memory audit needs identity and usage.
+                                event["message"] = {
+                                    key: value
+                                    for key, value in message.items()
+                                    if key != "content"
+                                }
+                            self.events.append(event)
+                            if kind == "auto_compaction_start":
+                                self.compacting = True
+                            elif kind == "auto_compaction_end":
+                                self.compacting = False
+                        self.condition.notify_all()
+                if self.process.poll() is None:
+                    self.process.wait(timeout=5)
+        except Exception as error:
+            self.error = f"{type(error).__name__}: {error}"
+        finally:
+            with self.condition:
+                self.condition.notify_all()
+
+    def context(self) -> dict:
+        with self.condition:
+            return {
+                "lane": self.lane,
+                "session_id": self.session_id,
+                "prompt_id": self.current_prompt,
+                "purpose_hint": "compaction" if self.compacting else "task",
+            }
+
+    def _send(self, kind: str, **fields) -> str:
+        self.sequence += 1
+        identity = f"lane-{self.lane}-{self.sequence}"
+        command = {"id": identity, "type": kind, **fields}
+        if kind == "prompt":
+            with self.condition:
+                self.current_prompt = identity
+        with (self.directory / "commands.jsonl").open("a") as output:
+            output.write(json.dumps(command) + "\n")
+        self.process.stdin.write((json.dumps(command) + "\n").encode())
+        self.process.stdin.flush()
+        return identity
+
+    def _wait(self, mapping: dict, identity: str, timeout: float):
+        deadline = time.monotonic() + timeout
+        with self.condition:
+            while identity not in mapping:
+                if self.stop.is_set() or self.error or self.process.poll() is not None:
+                    raise ValueError(f"persistent RPC stopped: {self.error}")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("persistent OMP command exceeded its deadline")
+                self.condition.wait(min(remaining, 0.2))
+            return mapping.pop(identity)
+
+    def command(self, kind: str, **fields) -> dict:
+        identity = self._send(kind, **fields)
+        result = self._wait(self.responses, identity, 60)
+        if result.get("success") is not True:
+            raise ValueError(f"RPC {kind} failed: {result}")
+        return result.get("data", {})
+
+    def check_state(self) -> dict:
+        state = self.command("get_state")
+        identity = state.get("sessionId")
+        if not identity or (self.session_id and identity != self.session_id):
+            raise ValueError("persistent session identity changed")
+        if (
+            state.get("thinkingLevel") != "max"
+            or state.get("autoCompactionEnabled") is not True
+        ):
+            raise ValueError("persistent thinking or compaction configuration differs")
+        if state.get("model", {}).get("contextWindow") != 262144:
+            raise ValueError("persistent model context window differs")
+        if state.get("model", {}).get("tokenizer") != "qwen3":
+            raise ValueError("persistent model tokenizer differs")
+        self.session_id = identity
+        self.states.append({"collected_unix_s": time.time(), **state})
+        return state
+
+    def initialize(self):
+        self.command("set_event_filter", events=EVENTS)
+        self.command("set_auto_retry", enabled=False)
+        self.check_state()
+        available = self.command("get_available_models")["models"]
+        if any(
+            model.get("provider") != f"oh-my-vllm-{self.api}" for model in available
+        ):
+            raise ValueError("persistent client has nonlocal fallback models")
+
+    def prompt(self, message: str, index: int):
+        started = time.monotonic()
+        started_unix = time.time()
+        identity = self._send("prompt", message=message)
+        self.current_prompt = identity
+        accepted = self._wait(self.responses, identity, 60)
+        if accepted.get("success") is not True:
+            raise ValueError(f"persistent prompt rejected: {accepted}")
+        result = self._wait(self.results, identity, self.timeout)
+        if (
+            result.get("status") != "completed"
+            or result.get("agentInvoked") is not True
+        ):
+            raise ValueError(f"persistent prompt failed: {result}")
+        while not self.check_state().get("isSettled"):
+            if time.monotonic() - started >= self.timeout:
+                raise TimeoutError("persistent post-prompt work did not settle")
+            self.stop.wait(0.1)
+        self.turns.append(
+            {
+                "prompt_id": identity,
+                "index": index,
+                "result": result,
+                "started_unix_s": started_unix,
+                "completed_unix_s": time.time(),
+                "elapsed_s": time.monotonic() - started,
+                "completed_monotonic_s": time.monotonic(),
+            }
+        )
+        self.checkpoint_entries()
+        self.persist()
+
+    def checkpoint_entries(self):
+        fields = {"since": self.leaf_id} if self.leaf_id else {}
+        result = self.command("get_entries", **fields)
+        with (self.directory / "entries.jsonl").open("a") as output:
+            for entry in result.get("entries", []):
+                output.write(json.dumps(entry) + "\n")
+                self.entry_count += 1
+        self.leaf_id = result.get("leafId", self.leaf_id)
+
+    def persist(self):
+        with self.condition:
+            for name, value in (
+                ("events", self.events),
+                ("states", self.states),
+                ("turns", self.turns),
+            ):
+                (self.directory / f"{name}.json").write_text(
+                    json.dumps(value, indent=2) + "\n"
+                )
+
+    def collect(self):
+        self.check_state()
+        self.checkpoint_entries()
+        self.persist()
+        return {
+            "lane": self.lane,
+            "api": self.api,
+            "session_id": self.session_id,
+            "turns": len(self.turns),
+            "process": self.process_record,
+            "entries_file": "entries.jsonl",
+            "entry_count": self.entry_count,
+            "leaf_id": self.leaf_id,
+            "workspace": self.workspace_manifest,
+        }
+
+    def close(self):
+        self.persist()
+        if self.process.poll() is None:
+            with self.condition:
+                with (self.directory / "commands.jsonl").open("a") as output:
+                    output.write(json.dumps({"type": "shutdown_stdin_eof"}) + "\n")
+                self.process.stdin.close()
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(self.process.pid, signal.SIGTERM)
+                try:
+                    self.process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    os.killpg(self.process.pid, signal.SIGKILL)
+                    self.process.wait()
+        self.reader.join(timeout=10)
+        self.process.stdout.close()
+        self.stderr.close()
+        self.process_record.update(
+            returncode=self.process.returncode, stopped_unix_s=time.time(), reaped=True
+        )
+        (self.directory / "process.json").write_text(
+            json.dumps(self.process_record) + "\n"
+        )
+        if self.reader.is_alive():
+            raise ValueError("persistent RPC reader did not exit")

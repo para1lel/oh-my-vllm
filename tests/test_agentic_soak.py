@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from benchmarks.agentic_soak import Evidence, build_parser, run, run_omp, task_prompt
+from benchmarks.agentic_soak import build_parser, run
 from benchmarks.agentic_soak_analysis import (
     bind_points,
     device_used_bytes,
@@ -19,9 +19,9 @@ from benchmarks.agentic_soak_analysis import (
     read_metrics,
     request_metric,
     resource_checks,
-    task_budget,
 )
 from benchmarks.agentic_soak_proxy import ModelSlots, disk_proxy, load_requests
+from benchmarks.agentic_soak_support import Evidence, run_omp
 
 
 def metric(rid=7, *, status="completed", api="chat", tokens=20):
@@ -410,16 +410,6 @@ def test_raw_evidence_append_and_atomic_summary(tmp_path):
     assert not (tmp_path / "summary.json.tmp").exists()
 
 
-def test_task_context_lengths_vary_but_keep_real_tool_requirement():
-    prompts = [task_prompt(index, 0) for index in range(4)]
-    assert len({len(prompt) for prompt in prompts}) == 4
-    assert all("crates/scheduler/src/lib.rs:240-330" in prompt for prompt in prompts)
-    assert all(
-        "python/oh_my_vllm/worker/model_runner.py:85-215" in prompt
-        for prompt in prompts
-    )
-
-
 def test_real_scatter_export_preserves_all_input_points(tmp_path):
     from benchmarks.agentic_soak_analysis import plot_points
 
@@ -479,144 +469,12 @@ def test_memory_plot_labels_separate_device_and_torch_scopes(tmp_path):
     assert (tmp_path / "dspark-agentic-memory.png").stat().st_size > 1000
 
 
-@pytest.mark.parametrize("probe_failure", [False, True])
-def test_diagnostic_orchestration_excludes_warmup_and_intentional_probes(
-    tmp_path, monkeypatch, probe_failure
-):
-    import benchmarks.agentic_soak as soak
-
-    server_log = tmp_path / "server.log"
-    server_log.write_text('INFO BENCH_CONFIG speculative_mode="mtp"\n')
-    args = build_parser().parse_args(
-        [
-            "--mode",
-            "mtp",
-            "--base-url",
-            "http://127.0.0.1:1/v1",
-            "--server-log",
-            str(server_log),
-            "--output-dir",
-            str(tmp_path / "raw"),
-            "--diagnostic",
-            "--skip-plots",
-            "--duration",
-            ".08",
-            "--min-requests",
-            "4",
-            "--epoch-seconds",
-            ".04",
-            "--warmup-epoch-seconds",
-            ".001",
-            "--sample-seconds",
-            ".01",
-            "--max-runtime",
-            "10",
-        ]
-    )
-    monkeypatch.setattr(
-        soak, "runtime_source_identity", lambda _path: {"git_status": ""}
-    )
-    monkeypatch.setattr(soak, "diagnostics", lambda _url: sample(time.time()))
-    lock, counter = threading.Lock(), 0
-
-    def append_metric(record):
-        with server_log.open("a") as output:
-            output.write("INFO SERVING_REQUEST_METRIC " + json.dumps(record) + "\n")
-
-    def fake_task(_args, evidence, _slots, _stop, epoch, lane, index, phase="normal"):
-        nonlocal counter
-        started = time.time()
-        time.sleep(0.01)
-        with lock:
-            counter += 1
-            rid = counter
-            api = "chat" if lane % 2 == 0 else "responses"
-            value = metric(rid, api=api) | {
-                "received_unix_s": started,
-                "processing_started_unix_s": started,
-                "generation_completed_unix_s": time.time(),
-                "queue_seconds": 0,
-                "processing_seconds": time.time() - started,
-            }
-            append_metric(value)
-        record = task(rid, api=api) | {
-            "task_id": f"{epoch}-{lane}-{index}",
-            "lane": lane,
-            "phase": phase,
-        }
-        evidence.append("tasks.jsonl", record)
-        return record
-
-    def fake_probe(_args, evidence, api, kind, epoch):
-        nonlocal counter
-        with lock:
-            counter += 1
-            value = metric(
-                counter,
-                api=api,
-                status="failed"
-                if probe_failure
-                else ("cancelled" if kind == "cancel" else "completed"),
-            )
-            append_metric(value)
-        record = {
-            "kind": kind,
-            "api": api,
-            "request_id": counter,
-            "passed": True,
-            "epoch": epoch,
-        }
-        evidence.append("probes.jsonl", record)
-        return record
-
-    def fake_idle(_args, evidence, _stop, _after, phase="normal"):
-        row = sample(time.time()) | {"phase": phase}
-        evidence.append("idle.jsonl", row)
-        return row
-
-    monkeypatch.setattr(soak, "run_task", fake_task)
-    monkeypatch.setattr(soak, "lifecycle_probe", fake_probe)
-    monkeypatch.setattr(soak, "wait_idle", fake_idle)
-    result = run(args)
-    if probe_failure:
-        assert "unexpected server status failed" in result["error"]
-        tasks = [
-            json.loads(line)
-            for line in (tmp_path / "raw/tasks.jsonl").read_text().splitlines()
-        ]
-        points = bind_points(
-            read_metrics(server_log), [t for t in tasks if t["phase"] == "normal"], 0
-        )
-        actual_span = max(p["generation_completed_unix_s"] for p in points) - min(
-            p["processing_started_unix_s"] for p in points
-        )
-        assert result["measured_duration_s"] == actual_span
-        assert result["collector_elapsed_s"] >= actual_span
-        assert not result["passed"]
-        return
-    assert "error" not in result
-    assert result["passed"] is False
-    assert result["diagnostic"] is True
-    assert result["measured_duration_s"] >= 0.08
-    assert result["warmup_requests"] == 8
-    assert result["intentional_probes"] >= 4
-    assert sum(result["api_counts"].values()) == result["normal_completed_requests"]
-    points = json.loads((tmp_path / "raw/points.json").read_text())["points"]
-    assert len(points) == result["normal_completed_requests"]
-    tasks = [
-        json.loads(line)
-        for line in (tmp_path / "raw/tasks.jsonl").read_text().splitlines()
-    ]
-    normal_task_ids = {task["task_id"] for task in tasks if task["phase"] == "normal"}
-    assert all(point["task"] in normal_task_ids for point in points)
-
-
 def test_idle_check_waits_for_zero_state_and_a_fresh_worker_snapshot(
     tmp_path, monkeypatch
 ):
     from types import SimpleNamespace
 
-    import benchmarks.agentic_soak as soak
+    import benchmarks.agentic_soak_support as soak
 
     snapshots = [sample(99.0), sample(100.0), sample(101.0)]
     snapshots[0]["sampled_unix_s"] = 200.0
@@ -640,7 +498,7 @@ def test_idle_check_waits_for_zero_state_and_a_fresh_worker_snapshot(
 def test_probe_failures_remain_in_raw_evidence(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    import benchmarks.agentic_soak as soak
+    import benchmarks.agentic_soak_support as soak
 
     def broken(*_args, **_kwargs):
         raise ConnectionError("test service unavailable")
@@ -778,33 +636,3 @@ def test_proxy_close_wakes_upstream_header_and_body_reads(tmp_path, headers_sent
         server.shutdown()
         server.server_close()
         thread.join()
-
-
-def test_positive_utc_clock_step_cannot_shorten_formal_duration():
-    from benchmarks.agentic_soak_analysis import normal_run_complete
-
-    assert not normal_run_complete(7200, 30, 1000, 3600, 500)
-    assert not normal_run_complete(3600, 3599.999, 500, 3600, 500)
-    assert not normal_run_complete(3599.999, 3600, 500, 3600, 500)
-    assert not normal_run_complete(3600, 3600, 499, 3600, 500)
-    assert normal_run_complete(3600, 3600, 500, 3600, 500)
-
-
-def test_one_hour_and_500_requests_are_defaults_without_changing_store_capacity():
-    args = build_parser().parse_args(
-        [
-            "--mode",
-            "mtp",
-            "--base-url",
-            "unused",
-            "--server-log",
-            "unused",
-            "--output-dir",
-            "unused",
-        ]
-    )
-    assert args.duration == 3600
-    assert args.min_requests == 500
-    assert args.agents == 4
-    assert task_budget(args, "warmup") == 900
-    assert task_budget(args, "normal") == 210

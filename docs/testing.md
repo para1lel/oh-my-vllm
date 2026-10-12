@@ -138,7 +138,7 @@ scripts/with-gpu.sh scripts/with-env.sh python -m benchmarks.framework --mode or
 ```
 
 Use modes `ordinary`, `mtp4`, `prefix`, and `dspark` with input 32768 and batches 1/2/4.
-Use ordinary input 131072 with the same batches.
+Use MTP4 input 131072 with the same batches. Mode `prefix` uses MTP4.
 Set `OH_MY_VLLM_DRAFT_MODEL` or `--draft-model` for DSpark.
 Output count is 4096. Each attempt has two full warmups and five measured repetitions.
 
@@ -265,74 +265,75 @@ Lifecycle streams keep the consumed SSE frames before disconnect.
 
 ## Long-duration agentic service
 
-Daily CPU and GPU commands skip the heavy soak test. Start it explicitly for long-duration service acceptance.
-Use one dedicated MTP4 or DSpark service, a new external result directory, and the current release binary.
-Keep source unchanged. The collector checks the running executable, source hashes, worker epoch, and process identities.
+Daily commands skip this heavy test. Run each mode against a dedicated service with maximum model length `262144`.
+Use a new external directory. Keep the source and release binary unchanged throughout collection.
+Build the service and CPU request normalizer together:
 
 ```bash
+scripts/with-env.sh cargo build --release --bins
 scripts/with-env.sh python scripts/agentic-soak.py --mode mtp --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output-dir "$EVIDENCE_DIR/mtp-soak"
 scripts/with-env.sh python scripts/agentic-soak.py --mode dspark --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/dspark-server.log" --output-dir "$EVIDENCE_DIR/dspark-soak"
 ```
 
-Run each command against its matching service. Stop that service and worker immediately after collection.
-The collector owns its four OMP clients and temporary recording proxies. It does not own the supplied service.
-Install OMP on `PATH` or supply `--omp`.
-The pinned development tools include Matplotlib for standalone SVG/PNG plots.
+Set `OH_MY_VLLM_MODEL` or supply `--model`. Install OMP on `PATH` or supply `--omp`.
+Use the matching service for each command. Stop that service and worker after collection.
+The collector owns four persistent OMP processes and temporary recording proxies.
 
-Each mode must complete at least 500 normal model requests and run for at least 3600 seconds.
-The four OMP agents use read tools through Chat and Responses. Their forwarded tool results and response IDs must agree.
-A shared four-slot limit controls concurrent model calls. The workload uses reusable prefixes and different input lengths.
+Each process keeps its session ID and history through successive source-audit tasks.
+Two sessions use Chat and two use Responses. A shared four-slot limit also includes summary calls.
 
-File names and line ranges in the last answer are diagnostic records.
+Each lane must continue for at least `3600` seconds. There is no request-count minimum.
+Initialize the clients after service readiness, then start the clock before their first requests.
+First compilation, graph capture, and later new-shape costs enter the measurements.
 
-Protocol end records, completed client messages, and completed server metrics must have the same response ID.
-Keep `ConnectionResetError` or `BrokenPipeError` after the protocol end as diagnostic records only when these 3 checks pass.
-Chat must have a correct finish reason and `[DONE]`.
-Responses must have `response.completed`, or `response.incomplete` with reason `max_output_tokens`.
-The client stop reason must be correct for the protocol end record.
+Do not insert intermediate drains or fault probes. After the hour, complete active work and drain requests.
 
-A final `length` answer must have text, no pending tool call, and matching protocol, client, and server records.
-The requested output limit and output counts in the terminal, client, and completed server record must be equal.
-Record these final answers separately. Keep `length` and `response.incomplete` fields in original evidence.
-Generic agentic acceptance must have the final stop reason `stop`.
+Use OMP `max` for tasks and summaries, mapped to service `xhigh`.
+The model context window is `262144` and its task output limit is `32768`, with reasoning tokens.
+Use the local `qwen3` tokenizer metadata and provider usage to keep OMP aware of the conversation size.
 
-After a client disconnect with a correct finish reason, the proxy waits at most 2 seconds for the protocol end.
-Failed or cancelled tasks close their proxy connections immediately.
+Enable soft automatic compaction with threshold `196608`, reserve `65536`, and recent history `20000` tokens.
+OMP selects compaction times, with during tool loops. The controller sends no manual compact command.
+The service checks full templated input plus requested output against its total capacity.
 
-Record other GPU processes during the soak test. Continue normal collection if request and resource checks pass.
-Examine changes in device-used HBM with the other processes' records and the worker allocation counters.
-Run the 15 phase workloads on a GPU with no other processes.
+The CPU guard repeats the production normalization and template path for independent capacity evidence.
+Verify its count against SSE usage, SDK input plus cache usage, and the journal's provider-input snapshot.
 
-Two short warmup epochs run before normal collection. Warmup and intentional probes have separate records.
-Warmup tasks have a 900-second limit. Normal tasks have a 210-second limit.
-`--warmup-task-timeout` and `--task-timeout` set the OMP task and proxy transport limits for each phase.
+OMP's settled `contextUsage` uses a provider-input anchor plus later local changes.
+Its compaction decision also considers generated output and the stored-history estimate.
+Keep the two records. Do not interpret the displayed percentage as the complete compaction decision.
 
-Warmup time does not count toward the 3600-second normal collection.
-Its deadline is `30 + 3 * drain_timeout + 2 * (warmup_epoch_seconds + warmup_task_timeout)` seconds.
-Keep its elapsed time and complete failure records.
+Check the same session identity, usable summary, and successful model work after each observed compaction.
+Natural compaction is not required during the hour. Report absent coverage explicitly.
+See the pinned [OMP compaction procedure](https://github.com/can1357/oh-my-pi/blob/v18.4.3/docs/compaction.md).
 
-Each normal epoch admits tasks for 300 seconds by default, then drains active requests.
-Cancellation and slow-client probes have separate records. Normal requests must have no unexpected failures, OOM, or worker restart.
-Periodic resource snapshots must have valid counts and byte limits. Drained Rust/Python request state must be empty.
-The collector's monotonic duration and the normal server request span must each meet the duration requirement.
+The four lanes audit scheduling/KV, HTTP/lifetimes, GPU/caches, and tests/documents.
+They read bounded source ranges, search measured symbols, and keep progress notes in their external workspace.
+Verify source reads and forwarded tool results in each completed audit work item. Keep incremental session journals and complete RPC/wire records.
 
-After drain, each logical pool must have `blocks - 1` free blocks. Cached blocks can stay in the prefix index for eviction.
-Block 0 is the null block and stays allocated.
+Verify completed server metrics, SSE terminals, and SDK usage for each model call.
+Keep post-terminal `ConnectionResetError` or `BrokenPipeError` as diagnostics only with same-ID protocol, SDK, and server completion.
+Check that SDK and SSE stop reasons agree. A `length` completion must match its requested output budget.
 
-Keep at least six idle snapshots in the last half of normal collection.
-Compare the first and last median windows in that half after cache warmup.
-Investigate GPU allocated/reserved or device-used growth more than the larger of 64 MiB or 5%.
-Investigate host RSS growth more than the larger of 128 MiB or 5%.
-Keep the complete time series, drift, and trend estimates. Investigate a failed memory audit before a new complete collection.
+Parallel summary calls must have a unique usage and lifecycle match. Ambiguous evidence fails verification.
 
-Device-used HBM is `total_bytes - free_bytes` from the worker's device snapshot.
-It includes device storage that Torch's allocated/reserved counters do not count.
-The collector saves active and drained memory curves independently of request TPS.
+Check resource count and byte limits throughout collection. Check empty Rust/Python request state after the final drain.
+Each logical pool then has `blocks - 1` free blocks, with cached blocks available for eviction.
+Block `0` stays allocated. Keep the original HTTP and worker process birth identities.
 
-Plot all normally completed model requests, with framework preparation start time on the horizontal axis.
-Use output tokens divided by processing-start-to-generation-completion wall time on the vertical axis.
-Report queue time, cancelled requests, and failures separately. The soak has no performance gate.
-Use `--diagnostic` for a shorter smoke test. Diagnostic records cannot pass formal soak acceptance.
+Examine host RSS, GPU allocated/reserved memory, graph/compiler occupancy, active requests, and input lengths together.
+Changing conversation sizes can change bounded caches. Independent review must examine the causes of growth and accept memory stability.
+The collector records `operational_passed` and `awaiting_resource_review` separately from formal acceptance.
+
+Record other GPU processes and device-used HBM. Light contention can continue if request and resource checks pass.
+The fifteen phase workloads still must use an exclusive GPU.
+Plot all completed task and measured summary calls by purpose. Do not add Chat/Responses color legends.
+
+Use framework processing start on the horizontal axis and output tokens divided by processing wall time on the vertical axis.
+Reasoning tokens enter the output count. Report queue time, cancellations, and failures separately.
+There is no performance gate. `--diagnostic` permits a shorter smoke test, which cannot supply formal acceptance.
+
+
 
 ## Worker recovery with allocator OOM
 

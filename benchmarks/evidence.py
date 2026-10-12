@@ -107,7 +107,7 @@ def runtime_source_identity(binary: Path) -> dict:
         path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
         for directory in ("crates", "python", "benchmarks", "scripts")
         for path in sorted((root / directory).rglob("*"))
-        if path.is_file() and path.suffix in (".rs", ".py", ".sh", ".cu", ".cuh")
+        if path.is_file() and path.suffix in (".rs", ".py", ".sh", ".cu", ".cuh", ".ts")
     }
     return result
 

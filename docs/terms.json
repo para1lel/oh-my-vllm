@@ -1835,9 +1835,42 @@
       "term": "normal request",
       "part_of_speech": "noun",
       "category": "technical",
-      "meaning": "Model request assigned to the measured soak workload, excluding warmup and intentional probes.",
-      "translation": "分配给持续测试测量负载的模型请求, 不包含预热和有意安排的探测.",
+      "meaning": "Task or compaction model request in the measured soak workload, separate from intentional probes.",
+      "translation": "持续测试测量负载中的任务或压缩模型请求, 与有意安排的探测分开.",
       "forms": ["normal request", "normal requests"]
+    },
+    {
+      "term": "persistent session",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "One client process and conversation history with the same session identity through tasks and compaction.",
+      "translation": "在任务和压缩期间保持同一会话身份的客户端进程及会话历史.",
+      "forms": [
+        "persistent session",
+        "persistent sessions"
+      ]
+    },
+    {
+      "term": "compaction",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Replacement of part of a conversation history with a summary in the same session.",
+      "translation": "在同一会话中用摘要替换部分历史.",
+      "forms": [
+        "compaction",
+        "compactions"
+      ]
+    },
+    {
+      "term": "context snapshot",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "Provider input count and context metadata saved with a completed assistant message.",
+      "translation": "随已完成 assistant 消息保存的 provider 输入计数和上下文 metadata.",
+      "forms": [
+        "context snapshot",
+        "context snapshots"
+      ]
     }
   ]
 }

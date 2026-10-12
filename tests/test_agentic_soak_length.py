@@ -8,7 +8,6 @@ from functools import partial
 import pytest
 from test_speculative_service_evidence import agent_evidence
 
-from benchmarks.agentic_soak import agentic
 from benchmarks.agentic_soak_protocol import (
     StreamCompletion,
     attach_client_completions,
@@ -16,6 +15,7 @@ from benchmarks.agentic_soak_protocol import (
     completion_counts,
     controlled_length_completion,
 )
+from benchmarks.agentic_soak_support import agentic
 
 
 def evidence(api, prefix=None):

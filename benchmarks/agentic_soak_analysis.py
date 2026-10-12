@@ -638,8 +638,14 @@ def plot_points(points: list[dict], mode: str, directory: Path):
         raise ValueError("cannot plot a soak without completed normal requests")
     with plt.rc_context({"font.size": 10, "svg.fonttype": "none"}):
         figure, axes = plt.subplots(figsize=(10, 4.2), layout="constrained")
-        for api, color in (("chat", "#21845c"), ("responses", "#4667ac")):
-            selected = [point for point in points if point["api"] == api]
+        for purpose, color in (("task", "#21845c"), ("compaction", "#4667ac")):
+            selected = [
+                point
+                for point in points
+                if (point.get("purpose", "task") == "task") == (purpose == "task")
+            ]
+            if not selected:
+                continue
             axes.scatter(
                 [p["elapsed_minutes"] for p in selected],
                 [p["output_tps"] for p in selected],
@@ -647,7 +653,7 @@ def plot_points(points: list[dict], mode: str, directory: Path):
                 alpha=0.55,
                 linewidths=0,
                 color=color,
-                label=api.title(),
+                label="Task" if purpose == "task" else "Compaction",
             )
         axes.set(
             xlabel="Request processing start (minutes since measured start)",
@@ -658,7 +664,8 @@ def plot_points(points: list[dict], mode: str, directory: Path):
         axes.spines[["top", "right"]].set_visible(False)
         axes.grid(axis="y", alpha=0.2)
         axes.set_axisbelow(True)
-        axes.legend(frameon=False)
+        if any(point.get("purpose", "task") != "task" for point in points):
+            axes.legend(frameon=False)
         for suffix in ("svg", "png"):
             figure.savefig(
                 directory / f"{mode}-agentic-soak.{suffix}",

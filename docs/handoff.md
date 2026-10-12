@@ -1,6 +1,6 @@
 # Current state and open work
 
-Updated: 2026-10-11.
+Updated: 2026-10-12.
 
 ## Implementation
 
@@ -34,41 +34,17 @@ DSpark graph recapture uses a cooldown for repeated shape changes.
 
 ## Verification
 
-The phase, capacity, overload, recovery, and long-duration collections use source `706f1a6e7ce2b0188f07794cab574cbbf60f2927`.
-The final publication also corrects Markdown image checks.
-It keeps the measured inference code, release binary, and selected CUDA configurations.
-[Acceptance](acceptance.md) gives original hashes, source scope, failed attempts, and independent reviews.
+The persistent-session collector keeps four OMP processes and histories, maximum effort, and runtime context usage.
+It keeps incremental journals and checks provider-input anchors against service counts.
+Formal acceptance also must have independent resource review.
 
-All fifteen phase workloads passed with two full warmups and five measurements per workload.
-A different review process calculated the full prefill and decode models again for all 75 measured schedules.
-The [README table](../README.md#measured-performance) gives latency, lower-bound ratios, decode TPS, and theoretical percentages.
-Prefix-hit prefill records its ratio. Its spread check and decode gates passed.
+Rust tests, formatting, line width, Clippy, and CUDA formatting checks passed.
+The CPU suite passed 1307 tests and 99 subtests, with 448 GPU cases deselected.
+Additional context and compaction evidence regressions passed.
 
-All six ordinary/MTP4 capacity cases produced full output at total length 262144, without OOM or recompute preemption.
-DSpark keeps phase, numerical, operator-speed, and service checks.
-
-MTP4 completed 5135 normal requests in 3675.338 seconds.
-DSpark completed 3104 normal requests in 3665.792 seconds.
-Each collection used four oh-my-pi agents and completed the resource and late-period memory checks.
-The README has separate plots. The heavy test has no performance gate and daily commands skip it.
-
-Two overload cases and eight allocator-OOM recovery cases passed.
-The fault stages cover accepted-state commit, graph capture, sampling, and proposal generation in each speculative mode.
-HTTP stayed alive. Replacement workers completed Chat and Responses with cold then reused prefixes.
-The independent reviews checked empty request state, resource release, raw hashes, and owned process exit.
-
-The full 317-case CUDA/TileLang collection uses source `fabcede8c6e0e6e4fa2c90d5d97b1f98d9c7dfdb`.
-Owned operator implementations and operator case, timing, and comparison files are unchanged from that collection.
-The ownership utility and IR have subsequent changes. Their source scope is separate.
-The current-source GPU checks cover compiler retirement, graph replay, allocator reclamation, and side-stream owner release.
-
-The CPU suite at the measured source passed 1293 tests and 99 subtests, with 448 GPU tests deselected.
-The final document checker passed 14 regressions.
-Rust workspace tests passed 143 cases. The required pre-commit checks passed.
-The tutorial passed ten excerpt tests and nine browser tests.
-
-All task-owned GPU workers and temporary service listeners are closed.
-Original failed or cancelled attempts keep their status. One-hour observations apply to the measured workload and shapes.
+The new one-hour MTP4 and DSpark collections and revised fifteen phase workloads are pending.
+Short diagnostics and cancelled attempts keep their original status in external evidence.
+[Acceptance](acceptance.md) identifies previous measurement scope. Those results do not certify the revised workload.
 
 ## Open work
 

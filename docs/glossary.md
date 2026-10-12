@@ -183,7 +183,10 @@ Proper product names, source identifiers, and protocol text keep their initial f
 | `compiler variant` | noun | Program compiled for one code identity and input metadata, with conditions for its reuse. |
 | `encoded state reservation` | noun | Byte capacity kept for conservative encoded input, history, and output estimates. JSON, object, and allocator overhead is additional. |
 | `reference cycle` | noun | Python object references that return to their first object and can keep unused objects in memory. |
-| `normal request` | noun | Model request assigned to the measured soak workload, excluding warmup and intentional probes. |
+| `normal request` | noun | Task or compaction model request in the measured soak workload, separate from intentional probes. |
+| `persistent session` | noun | One client process and conversation history with the same session identity through tasks and compaction. |
+| `compaction` | noun | Replacement of part of a conversation history with a summary in the same session. |
+| `context snapshot` | noun | Provider input count and context metadata saved with a completed assistant message. |
 
 ## Maintenance
 

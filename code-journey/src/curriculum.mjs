@@ -17,13 +17,15 @@ export const chapters = {
 // Each record is checked against the current source, then shown in its chapter.
 // Layout: chapter, file, source anchor, responsibility, implementation and decision.
 export const coverage = [
+  ["Validation", "crates/zmq-worker/src/bin/normalize-request.rs", "fn main(", "独立容量核对的生产请求转换", "复用 HTTP 请求 normalization, 逐行转换 Chat 与 Responses 输入, 交给 CPU tokenizer 核对完整模板预算. 验证工具不启动 GPU, 也不决定 OMP 的压缩时机."],
   ["Sampling", "crates/zmq-worker/src/serving/resources.rs", "pub struct Budget", "Budget / Lease: 准入, 字节预算与输出寿命", "读取 body 与复制历史前保留容量, queue 与 live 名额分别保护等待和处理中的请求. Lease 共享 owner 直到 HTTP body 与 drain 释放, 绝对 deadline 包括排队."],
   ["Protocol", "python/oh_my_vllm/worker/errors.py", "def transactional_step(", "transactional_step: 失效 GPU 事务的错误边界", "区分 OOM, device 与 internal 故障, 未完成 execute 标为不可继续使用. Bridge 发送错误后退出, Rust supervisor 以新 worker 和空逻辑缓存恢复."],
   ["Compilation", "python/oh_my_vllm/ir/cache.py", "class CompilerCache", "CompilerCache: 项目编译变体和模块的有界寿命", "按 code identity 限制 specialization 数量, 只清理项目持有的编译记录. 主机调用边界按 code 淘汰整组变体: 单 code 饱和时清当前组, 总预算满时选最近最少使用的 code. Capture 内保留已预热变体, 已捕获图继续由其 owner 管理."],
   ["Compilation", "python/oh_my_vllm/ir/metadata_cache.py", "class CompilerMetadata", "CompilerMetadata: FX 源码与 FakeTensor 描述的所有权", "编译调用按线程上下文登记项目记录, 限制条目数和估算字节. 删除前核对源码及 linecache 副本的实际身份, 保留外部调用者的记录. FakeTensor miss 重新计算 shape 与 alias metadata, 捕获图保持自己的可执行 owner."],
   ["Compilation", "python/oh_my_vllm/worker/prefill_budget.py", "def prefill_capture_headroom(", "prefill_capture_headroom: 捕获前的存储预算", "根据真实行数和状态写槽计入缓存备份, metadata, 两阶段临时缓冲和输出. Native 路径直接读分页 KV, ragged 路径另计紧凑 K/V 并保留至少 32 GiB. 同一预算用于准入和构建, 捕获失败继续使用既定 worker 恢复流程."],
-  ["Validation", "benchmarks/agentic_soak.py", "def run_task(", "四个真实 OMP agent 的长时采集", "四条 agent lane 交替使用 Chat / Responses, read 结果进入后续模型请求. 正常持续时长和请求数量同时满足要求, 周期排空资源, 取消和慢读取另存记录."],
-  ["Validation", "benchmarks/agentic_soak_analysis.py", "def bind_points(", "请求图表和资源稳定性的证据核对", "用 response ID 关联服务开始准备时刻, 生成完成耗时与输出数量. 保留全部正常点, 检查资源上限和排空后的内存增长, 原始记录独立于可移植摘要."],
+  ["Validation", "benchmarks/agentic_sessions.py", "class RpcClient", "固定 OMP 会话与连续历史", "四个 RPC 进程保留 session ID, 连续追问和压缩沿用历史. 每个 settled turn 增量保存 journal, 检查模型窗口与最高 effort."],
+  ["Validation", "benchmarks/agentic_context.py", "def session_configuration(", "OMP 自动压缩与运行时上下文", "显式配置 qwen3 tokenizer, 262144 窗口和 max effort. OMP 根据 provider usage 自动压缩, 独立 token 检查只验证容量."],
+  ["Validation", "benchmarks/agentic_session_evidence.py", "def audit_session(", "会话, 工具与上下文证据", "关联真实 response ID, SDK usage, SSE 和服务 metric. 检查 journal 输入锚点, 自然压缩摘要和成功延续, 保留未覆盖范围."],
   ["Validation", "benchmarks/agentic_soak_proxy.py", "class ModelSlots", "记录代理与四并发模型请求上限", "磁盘保存转发请求和 SSE response identity, 四个共享 slot 限制真正的模型调用并发, 代理和 agent 子进程在结束时释放."],
   ["Model", "python/oh_my_vllm/kernels/partial_attention.py", "def prepare_context(", "全部 context 与选中 query 的 CUDA 准备", "context 只归一化四个 K 头, 应用 FP64 相位的 RoPE 并写入全部 K/V; query 为选中行准备 24 个 Q 头. 两者保留完整准备链的 BF16 舍入, 使用调用者 CUDA 流与 PDL."],
   ["Compilation", "python/oh_my_vllm/ir/partial_attention.py", "def prepare_context(", "选中输出的语义契约", "context 声明修改缓存, query 返回 BF16 Q. fake 实现检查形状和位置整数类型, native 数学参考与 CUDA provider 对应同一 checkpoint 区间."],

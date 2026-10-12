@@ -5,7 +5,7 @@
 <p>正确性从请求入口一直检查到完成. Rust 测试核对输入整理, 调度预算, FA/GDN 分配, 前缀命中, 在途进度和返回数量. Python planner 核对确认历史与 GPU 地址, sampler 检查候选接受, 概率筛选, 语法状态和停止条件. GPU 测试比较完整输出与被修改的缓存区域, 包括 packed stride, 候选回滚和长位置 RoPE.</p>
 <p>Semantic IR 为每个操作提供数学参考, 输出元数据和修改声明. ir.coverage 检查模型调用点是否经过登记的语义入口. 本教程另外把每个项目自有核心文件连接到讲解章节; 两种检查分别保证执行契约与阅读覆盖.</p>
 <h2>十五项性能负载与六项容量负载</h2>
-<p>性能验收有五组输入, 每组 batch 为 1, 2, 4, 共十五项: 普通解码 32768, MTP4 32768, 前缀命中 32768, 普通解码 131072, DSpark 32768. 每个请求保留 4096 个输出 token. 输入采用固定合成 token IDs, 贪心采样并忽略 EOS. 前缀组逐请求检查命中 32144 个 token, 其余组检查冷缓存.</p>
+<p>性能验收有五组输入, 每组 batch 为 1, 2, 4, 共十五项: 普通解码 32768, MTP4 32768, MTP4 前缀命中 32768, MTP4 131072, DSpark 32768. 每个请求保留 4096 个输出 token. 输入采用固定合成 token IDs, 贪心采样并忽略 EOS. 前缀组逐请求检查命中 32144 个 token, 其余组检查冷缓存.</p>
 <p>容量验收覆盖普通解码和 MTP4, 各自 batch 1, 2, 4. 每个请求输入 258048 个 token, 输出 4096 个 token, 总长度为 262144. 六项都要完整完成, 无 OOM 和重算抢占. OOM 表示 GPU 内存不足; 重算抢占表示缓存被释放后再次计算旧历史. 检查同时保留 784-token 页, 16 层 FA 和 48 层 GDN align 状态规则.</p>
 <h2>逐请求划分 prefill 与 decode</h2>
 <p>一个 batch 中, 请求可能分批进入 GPU. Rust 为每个请求记录提交, 首个保留 token 和最后一个保留 token 的时刻, 同时记录首末输出对应的调度 step. prefill 从提交到首 token, decode 从首 token 到末 token. 每次重复分别取 batch 内最慢的 prefill 与最慢的 decode.</p>
@@ -58,18 +58,21 @@
 <p>framework 收集器核对提交过且保持不变的源码, Rust 二进制的构建输入摘要, checkpoint 内容, 硬件身份和实际 FA/GDN 容量. runtime_contract 绑定语义路径, 外部 provider 和 CUTLASS/CCCL 模板; 实际加载库的摘要与编译参数必须匹配. 未识别的 GPU 操作会阻止正式验收.</p>
 <p>measurement.audit 检查 measured 起点后的编译和图捕获日志, 并检查缓存文件变化. 原始记录与 profiling 保存在本地或外部目录, 仓库保存可移植的测量摘要和原始 SHA. 每个结论标明源码, 配置, 负载和检查范围.</p>
 <p>完整服务检查还覆盖 Chat, Responses, streaming, tools, thinking, 约束生成和取消, 包括 DSpark serving oh-my-pi agents. 性能测试, 容量测试与真实服务分别检查不同边界. 运行结束后释放该次启动的 worker 和临时服务端口.</p>
-<h2>四个真实 agent 怎样验证长期稳定服务</h2>
-<p>agentic-soak 为 MTP4 和 DSpark 分别运行至少一小时, 每种模式完成至少 500 个正常模型请求. 四个并行 oh-my-pi agent 使用真实 read 工具, 把读取结果传回 Chat 或 Responses 的下一轮输入. 记录代理核对工具调用, 转发内容和 response ID, 服务日志提供框架真正开始准备请求的时刻及生成完成时间.</p>
+<h2>四个固定会话怎样验证长期稳定服务</h2>
+<p>MTP4 和 DSpark 分别测试. 每种模式保留四个 oh-my-pi 进程, 两个使用 Chat, 两个使用 Responses, 至少持续一小时. 每个进程的 session ID 和历史连续, 控制器在一次审计完成后发送下一项任务. 四个会话分别检查调度与 KV, 服务协议与生命周期, GPU 计算与缓存, 测试与文档, 使用真实读取和搜索工具, 将笔记写在外部测试目录.</p>
+<p>服务就绪并完成客户端初始化后开始计时. 首次请求的编译和 CUDA Graph 捕获计入测试, 不提前运行短会话预热. 不设请求数下限, 报告实际请求和任务数量. 所有模型调用共享四个并发 slot, 包括自动压缩所需的摘要请求. 任务和摘要均使用 OMP 的 max effort, 映射为服务的 xhigh.</p>
+<h3>OMP 怎样知道会话占用了多少 context</h3>
+<p>客户端模型配置使用 qwen3 tokenizer 和 262144 context window, 输出上限为 32768, 包括 reasoning token. 服务返回完整模板输入的 usage, 其中缓存命中 token 仍属于输入. OMP 将这份输入用量保存在 assistant journal 的 contextSnapshot.promptTokens 中, 作为会话统计的锚点. 控制器不发送手动 compact 命令.</p>
+<p>OMP 的 contextUsage 在输入锚点上计入后续本地变化. 它的自动压缩判定还考虑本次生成输出和保存的历史估算, 因而界面百分比与压缩判定采用不同口径. 本测试将 threshold 设为 196608, reserve 设为 65536, 保留最近 20000 个 token. OMP 可以在工具循环中自动压缩, 继续沿用同一个 session ID. 独立 CPU 计数重复服务的 normalization 与模板路径, 用于核对输入和输出容量, 不选择压缩时机.</p>
+<p>采集器核对服务 SSE, SDK 输入与缓存用量, 以及 journal 的输入锚点. 每次实际压缩还要有可用摘要和压缩后成功的模型请求, 才能报告延续已覆盖. 一小时内自然压缩没有发生时, 如实标明覆盖情况.</p>
 <<math "R_i=\\frac{N_{i,\\mathrm{output}}}{t_{i,\\mathrm{complete}}-t_{i,\\mathrm{prepare}}}">>
-<p><<imath "i">> 表示一条正常完成的模型请求, <<imath "N_{i,\\mathrm{output}}">> 为保留输出 token 数, <<imath "t_{i,\\mathrm{prepare}}">> 为开始准备的时刻, <<imath "t_{i,\\mathrm{complete}}">> 为生成完成的时刻. README 每种模式放一张散点图, 横坐标使用 <<imath "t_{i,\\mathrm{prepare}}">>, 纵坐标使用 <<imath "R_i">>. 持续时长用服务单调时钟测量, 横轴时刻用 UTC 记录. 请求进入准入队列到开始准备的等待时间另报, 网络排空不计入生成时间, 取消和失败使用单独记录.</p>
-<p>测试周期性停止新请求, 排空当前请求, 检查 Rust 的活动请求, reservation 和 drain, 以及 Python 的 history, sampler 和 proposer 状态是否释放. GPU allocated 表示仍有张量 owner 的分配量, reserved 表示 PyTorch allocator 向 GPU 保留的存储, 设备占用还包括驱动和其他 GPU 库的分配, 由 total_bytes 减 free_bytes 得到. RSS 表示主机进程的驻留内存. 缓存预热可使这些值有界增长, 排空后的时间序列用于判断它们是否趋于稳定.</p>
-<p>正常负载要求无意外 OOM, worker 重启或请求失败. 过载, 取消, 慢客户端和真实 OOM 注入单独验证错误报告与恢复, 新 worker 的首次请求还要证明不会通过旧逻辑 identity 访问旧 KV 状态. 这项长时测试不设性能门槛, 日常命令默认跳过; 十五项阶段门槛继续独立验收.</p>
-<p>模型可能在工具调用已经完整返回后关闭连接. 采集器分别核对 SSE 的协议结束记录, oh-my-pi 的同一 response ID 完成消息和服务端完成 metric. 三者一致时, 结束后的连接重置作为诊断信息保留, 对应请求仍计入正常完成请求. Chat 需要有效的 finish reason 和 [DONE]; Responses 使用 response.completed, 达到输出上限时使用原因是 max_output_tokens 的 response.incomplete.</p>
-<p>最终文本达到请求的输出上限, 也可以正常结束一次模型请求. 采集器要求文本非空, 没有待处理的工具调用, 且请求预算, SDK usage, SSE usage 和服务端完成 metric 的输出数量完全一致. response ID, API 和模型身份也必须相符. 此类答案的 length 结束原因和 response.incomplete 状态保留在原始记录中, 并单独报告次数; 通用 agentic 验收仍要求自然 stop 结束.</p>
-<p>长时测试允许其他用户共享 GPU, 并记录其他进程的身份和活动时刻, 以及整块 GPU 的空闲显存. 请求和资源检查通过时继续运行. 分析设备 HBM 占用变化时, 需要结合其他进程的记录与 worker 自身的分配计数. 十五项阶段性能测试继续要求 GPU 独占.</p>
+<p>每个点对应一次正常完成的任务或压缩模型请求. 横轴为框架开始准备请求的时刻, 纵轴为输出 token 数除以开始处理到生成完成的墙钟时间. Reasoning token 计入输出, 排队时间单独报告. 图片按请求用途标记, 不添加 Chat / Responses 颜色图例.</p>
+<p>一小时内连续推进任务, 中途不排空. 周期性检查请求, KV, 图, 编译和 HTTP 缓存的数量与字节上限, 结束后完成在途工作并排空. GPU allocated 表示仍有张量 owner 的分配量, reserved 表示 allocator 保留的存储, 设备 HBM 占用包含驱动和其他库. RSS 表示主机驻留内存. 独立审查结合上下文长度, 活动请求和缓存占用解释内存曲线, 再确认资源稳定性.</p>
+<p>正常负载要求无意外 OOM, worker 重启或请求失败. 取消, 慢客户端, 过载和真实 OOM 测试分别保留证据. 轻度其他用户 GPU 争用允许继续, 十五项阶段性能测试仍要求独占. 这项重型长时测试不设性能门槛, 日常命令默认跳过.</p>
+<p>请求完成证明分别来自 SSE 结束记录, 同 ID 的 SDK 消息和服务完成 metric. SDK 与 SSE stop reason 必须相符. 有完整结束证明的连接重置保留为诊断信息. 并行摘要根据输入, 缓存, 输出 usage 和生命周期唯一关联, 有歧义时验证失败.</p>
 
 <h2>怎样查阅当前源码的验收结果</h2>
-<p>README 的阶段表按十五项负载列出 prefill 时延与下界倍率, decode 吞吐与理论吞吐百分比. 每种草稿模式另有一张四并行 agent 的一小时请求散点图, 展示正常请求的处理起点与生成吞吐. 预热和有意安排的探测分别保存; 这项重型测试由显式命令启动, 日常测试默认跳过.</p>
+<p>README 的阶段表按十五项负载列出 prefill 时延与下界倍率, decode 吞吐与理论吞吐百分比. 每种草稿模式另有一张四并行 agent 的一小时请求散点图, 展示正常请求的处理起点与生成吞吐. 任务和自然压缩分别标明用途; 这项重型测试由显式命令启动, 日常测试默认跳过.</p>
 <p>docs/acceptance.md 将表格和图片连接到可移植证据. 证据保存实测源码, 二进制摘要, 完整原始记录的 SHA, 内存检查与独立审查结果. 更新文档后仍保留实测源码身份, 通过对照实际推理文件确认此次发布延续同一运行实现. 一小时结果覆盖实际运行的输入形状; 最大 context 附近跨形状图重捕获和更长期的形状变化继续由专门实验检查.</p>
 <<coverage>>
 <<chapterChoices>>

@@ -183,7 +183,10 @@
 | `compiler variant` | 名词 | 针对某个 code identity 和输入 metadata 编译的程序, 带有复用条件. |
 | `encoded state reservation` | 名词 | 为编码输入, 历史和输出的保守估计保留的字节容量. JSON, object 和 allocator 额外开销另计. |
 | `reference cycle` | 名词 | 回到起始对象的 Python 对象引用, 可使不再使用的对象持续占用内存. |
-| `normal request` | 名词 | 分配给持续测试测量负载的模型请求, 不包含预热和有意安排的探测. |
+| `normal request` | 名词 | 持续测试测量负载中的任务或压缩模型请求, 与有意安排的探测分开. |
+| `persistent session` | 名词 | 在任务和压缩期间保持同一会话身份的客户端进程及会话历史. |
+| `compaction` | 名词 | 在同一会话中用摘要替换部分历史. |
+| `context snapshot` | 名词 | 随已完成 assistant 消息保存的 provider 输入计数和上下文 metadata. |
 
 ## 维护
 

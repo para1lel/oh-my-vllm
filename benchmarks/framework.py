@@ -11,7 +11,7 @@ WORKLOADS = tuple(
         ("ordinary", 32768),
         ("mtp4", 32768),
         ("prefix", 32768),
-        ("ordinary", 131072),
+        ("mtp4", 131072),
         ("dspark", 32768),
     )
     for batch in (1, 2, 4)
@@ -32,7 +32,7 @@ def phase_times(run, workload):
         "output_len": workload["output_len"],
         "speculative_mode": {
             "ordinary": "none",
-            "prefix": "none",
+            "prefix": "mtp",
             "mtp4": "mtp",
             "dspark": "dspark",
         }[workload["mode"]],
@@ -259,7 +259,7 @@ def validate_identities(artifact):
         "block_size": 784,
         "max_model_len": 262144,
         "max_num_batched_tokens": 32768,
-        "num_speculative_tokens": {"ordinary": 0, "prefix": 0, "mtp4": 4, "dspark": 7}[
+        "num_speculative_tokens": {"ordinary": 0, "prefix": 4, "mtp4": 4, "dspark": 7}[
             artifact["workload"]["mode"]
         ],
     }
@@ -492,7 +492,7 @@ def main():
                 "--max-model-len",
                 "262144",
             ]
-            if args.mode == "mtp4":
+            if args.mode in ("mtp4", "prefix"):
                 command.extend(["--num-speculative-tokens", "4"])
             elif args.mode == "dspark":
                 command.extend(

@@ -13,6 +13,10 @@ def test_fifteen_fixed_workloads_keep_synthetic_lengths_and_prefix_scope():
     assert {w["output_len"] for w in WORKLOADS} == {4096}
     assert {w["batch_size"] for w in WORKLOADS} == {1, 2, 4}
     assert [w["input_len"] for w in WORKLOADS if w["mode"] == "dspark"] == [32768] * 3
+    assert [w["input_len"] for w in WORKLOADS if w["mode"] == "ordinary"] == [32768] * 3
+    assert [w["input_len"] for w in WORKLOADS if w["mode"] == "mtp4"] == [32768] * 3 + [
+        131072
+    ] * 3
 
 
 def run():

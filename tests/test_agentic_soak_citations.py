@@ -3,8 +3,8 @@
 import pytest
 from test_speculative_service_evidence import agent_evidence
 
-from benchmarks.agentic_soak import agentic
 from benchmarks.agentic_soak_analysis import source_citations
+from benchmarks.agentic_soak_support import agentic
 
 
 def reads():

@@ -151,6 +151,9 @@ def disk_proxy(
     *,
     request_timeout: float = 180,
     normal_completion=None,
+    preflight=None,
+    request_context=None,
+    cancel_preflight=None,
 ):
     """Close every owned socket and join handlers before final evidence is read."""
     upstream = urllib.parse.urlsplit(upstream_url)
@@ -230,10 +233,13 @@ def disk_proxy(
                 if len(data) != size:
                     raise ValueError("client request body was truncated")
                 body_path.write_bytes(data)
-                if data:
-                    json.loads(data)
+                body = json.loads(data) if data else {}
                 if self.path not in ("/v1/chat/completions", "/v1/responses"):
                     raise ValueError("soak proxy accepts only model-generation routes")
+                if request_context is not None:
+                    record.update(request_context())
+                if preflight is not None:
+                    record["context_proof"] = preflight(body, self.path)
                 request = urllib.request.Request(
                     upstream_url.rstrip("/") + self.path.removeprefix("/v1"),
                     data=data if data else None,
@@ -319,6 +325,10 @@ def disk_proxy(
     thread.start()
     try:
         yield f"http://127.0.0.1:{server.server_port}/v1", records
+    except BaseException:
+        if cancel_preflight is not None:
+            cancel_preflight()
+        raise
     finally:
         try:
             if normal_completion is not None and normal_completion():
@@ -342,13 +352,13 @@ def disk_proxy(
                 raise RuntimeError("evidence proxy listener did not stop")
 
 
-def load_requests(directory: Path) -> list[dict]:
+def load_requests(directory: Path, *, maximum: int = 32) -> list[dict]:
     """Read a finished task's evidence after every handler has joined."""
     records = [
         json.loads(line) for line in (directory / "http.jsonl").read_text().splitlines()
     ]
-    if len(records) > 32:
-        raise ValueError("one OMP task exceeded the bounded 32-call evidence window")
+    if len(records) > maximum:
+        raise ValueError("OMP requests exceeded the bounded evidence window")
     for record in records:
         body = directory / record["request_file"]
         record["request"] = json.loads(body.read_text())

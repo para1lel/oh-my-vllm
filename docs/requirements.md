@@ -40,8 +40,9 @@ The phase-latency and operator gates stay active.
 
 | Mode | Input tokens | Output tokens | Batch sizes |
 |---|---:|---:|---|
-| ordinary, MTP4, prefix-hit, DSpark | 32768 | 4096 | 1, 2, 4 |
-| ordinary | 131072 | 4096 | 1, 2, 4 |
+| ordinary, MTP4, DSpark | 32768 | 4096 | 1, 2, 4 |
+| MTP4 prefix-hit | 32768 | 4096 | 1, 2, 4 |
+| MTP4 | 131072 | 4096 | 1, 2, 4 |
 
 These combinations make fifteen rows.
 Use synthetic token IDs, greedy sampling, and fixed output counts with ignored EOS.
@@ -232,32 +233,41 @@ Run tests for OOM, partial state changes, shared prefixes, and successful servic
 
 ## REQ-SERVE-008: Long-duration agentic service
 
-Run a soak test for MTP4 and DSpark independently.
-Each mode must run for at least one hour and complete at least 500 normal model requests.
-Use four parallel oh-my-pi agents and at most four concurrent model requests.
-Include the two APIs, tool loops, prefix reuse, and different request lengths.
-Run cancellation, slow-client, overload, and fault tests with separate records.
+Run MTP4 and DSpark independently. Each mode uses four fixed oh-my-pi sessions for at least one hour.
+Keep each process, session ID, and conversation history through follow-up tasks and automatic compaction.
+Use two Chat sessions and two Responses sessions. Limit concurrent model calls to four, with compaction calls.
+
+Report measured request counts. No minimum request count applies.
+
+Start the clock after service readiness and client initialization. Include first-request compilation and graph capture.
+Use maximum reasoning effort for tasks and compaction. OMP `max` maps to service `xhigh`.
+Supply `262144` as the model context window. Include reasoning tokens in the output budget.
+
+OMP uses runtime provider usage and its conversation estimate to decide automatic compaction.
+Independent token checks verify the input and output capacity. They do not select compaction times.
+Report natural compaction coverage and successful continuation in the same session.
+
+Each session audits a different source area with source tools. Send follow-up tasks in the same history.
+Keep notes in an external directory. Continue tasks throughout the hour, then finish active work and drain requests.
+Check resource limits throughout collection and released request state after the final drain.
+
+Keep full host RSS and GPU allocated/reserved memory curves. Examine growth against context length, active requests, and cache occupancy.
+Independent memory review must accept these observations before publication as a passed soak test.
 Normal requests must have no unexpected OOM, worker restart, or request failure.
 
-An answer that reaches its requested output limit must have the matching protocol end, client message, and completed server record.
-Their output counts must equal that limit. The answer must contain text without a pending tool call.
-Record these answers separately, with their original stop reason.
+Run cancellation, slow-client, overload, and fault tests separately.
 
-At the specified intervals, stop new admissions and drain active work.
-Check released request state, cache limits, host RSS, and GPU allocated/reserved memory after warmup.
-Keep the complete memory time series. Investigate continued growth after cache warmup.
-Use a separate fault test to verify worker recovery and invalidation of old logical KV identities.
+Record other GPU processes. Continue collection if request and resource checks pass.
+Phase latency tests must use a GPU with no other processes.
 
-Record other GPU processes during the soak test. Continue normal collection if request and resource checks pass.
-Run phase latency tests on a GPU with no other processes.
+Publish one README scatter plot per mode. Include task requests and measured compaction requests, with their purpose identified.
+The horizontal axis is framework processing start, when request preparation starts.
+The vertical axis is output tokens divided by processing-start-to-generation-completion wall time.
 
-Publish one scatter plot per mode in the README. Use one point per normally completed model request.
-The horizontal axis is the framework processing start time, when request preparation starts.
-The vertical axis is output tokens divided by wall time from processing start to generation completion.
-Report queue time, cancelled requests, and failed requests separately.
+Include reasoning tokens. Report queue time, cancelled requests, and failed requests separately.
+Do not use API color legends. This test has no performance gate. Daily test commands skip it.
+Measure affected phase workloads again after inference-path changes.
 
-This test has no performance gate. Skip this heavy test by default in daily test commands.
-Measure affected phase workloads again with `REQ-PERF-001` after inference-path changes.
 
 ## REQ-KERNEL-001: Pinned TileLang comparison
 
