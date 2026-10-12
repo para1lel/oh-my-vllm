@@ -60,6 +60,11 @@ DSpark proposal probabilities can differ from the constrained target distributio
 
 All Python module paths are relative to `python/oh_my_vllm/`.
 
+The pinned FlashInfer cubin package supplies its versioned binary kernels and headers.
+By default, FlashInfer checks package versions and artifact hashes. Worker identity records the selected directory and check options.
+The reviewed runtime contract binds the loader sources and package versions.
+Project kernels, model compilation, and graph capture keep their separate caches and first-use paths.
+
 ## Transport contract
 
 Rust binds `ipc://<socket_path>`. The single Python worker connects.

@@ -55,6 +55,7 @@ def collector_environment(omp: str) -> dict:
                 "tilelang",
                 "apache-tvm-ffi",
                 "flashinfer-python",
+                "flashinfer-cubin",
                 "pyzmq",
                 "msgpack",
                 "matplotlib",

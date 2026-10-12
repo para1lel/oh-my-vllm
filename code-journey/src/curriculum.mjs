@@ -49,7 +49,7 @@ export const coverage = [
   ["Ownership", "crates/zmq-worker/src/main.rs", "async fn run()", "run / execute_batch: CLI 的 Serve 与 Bench 路线", "配置 worker, 初始化 Rust 缓存与调度器, 分派 HTTP 或批量基准入口. Bench 使用同一调度和模型执行链, 通过合成 ID 构造负载."],
   ["Ownership", "crates/zmq-worker/src/lib.rs", "pub use", "crate 导出边界", "导出 WorkerClient 和配置, 把命令入口与通信实现分开, 供 serving 与 benchmark 共用."],
   ["Ownership", "python/oh_my_vllm/worker/model_runner.py", "class OhMyVllmWorker", "OhMyVllmWorker: 初始化, 执行与清理", "init_device / load_model / initialize_cache 建立单卡运行时; execute_model 检查计划, 组合输入, 调用 forward, 采样并提交; shutdown 释放图和模型引用."],
-  ["Ownership", "python/oh_my_vllm/worker/runtime.py", "def identity(", "identity / verify_loaded_modules: 运行身份", "记录解释器, 软件版本和内核构建来源, 检查 Python 路径与已加载模块/动态库. 独立运行约束在启动与退出时都留下可核对的证据."],
+  ["Ownership", "python/oh_my_vllm/worker/runtime.py", "def identity(", "identity / verify_loaded_modules: 运行身份", "记录解释器, 软件版本和内核构建来源. FlashInfer 使用匹配的 cubin 包, 身份记录其目录与校验开关; 项目编译缓存仍按运行隔离. 启动与退出时检查 Python 路径和已加载模块/动态库."],
   ["Ownership", "python/oh_my_vllm/worker/logging_utils.py", "def configure_logging(", "configure_logging: 关联日志", "统一日志格式并关联运行编号, 使 Rust 派发, Python 执行和请求完成的记录可以对应."],
   ["Requests", "crates/scheduler/src/request.rs", "pub struct Request", "Request: 已确认历史与生命周期", "保存提示词长度, 历史, 在途进度, 输出上限和草稿; append_token / set_drafts 分开维护已确认与候选数据."],
   ["Requests", "crates/scheduler/src/lib.rs", "    pub fn schedule(", "Scheduler: 接纳, 排队, 验证与提交", "schedule 先推进运行请求再接纳等待请求; pause / resume 处理背压; validate_output 在 update 修改历史之前检查结果契约, abort 清理请求和缓存."],

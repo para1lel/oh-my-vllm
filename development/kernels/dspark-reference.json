@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "frozen_reference_manifest_sha256": "545c3d6f70ab290c4411b17513505fb3eb76014d6e3bd839081714668a7d49c9",
+  "frozen_reference_manifest_sha256": "1adaa993c6ac851c1699ec1b05e33bd0120acac8fb6a4eb2c392b1210ccb5365",
   "files": {
     "dspark_tilelang_reference.py": "df5f73c3d90f7f25cb1befe45a674e8088d6cb1c71d7476859a0a0a2e3ee9ac3"
   },

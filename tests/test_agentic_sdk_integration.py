@@ -10,6 +10,7 @@ import shutil
 import socket
 import subprocess
 import threading
+from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
@@ -39,6 +40,8 @@ def test_pinned_omp_observer_preserves_requests_and_real_automatic_compaction(
     assert version.returncode == 0 and "18.4.3" in version.stdout
     slot = tmp_path / "client"
     records = []
+    record_lock = threading.Lock()
+    first_parallel = threading.Event()
     prefix = "\n".join(
         f"{i:05d}: {hashlib.sha256(str(i).encode()).hexdigest()} "
         f"states source invariant {i * i}."
@@ -51,8 +54,24 @@ def test_pinned_omp_observer_preserves_requests_and_real_automatic_compaction(
 
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-            records.append({"path": self.path, "request": body})
-            n = len(records)
+            with record_lock:
+                parallel = completed_history and 2 <= len(records) < 4
+            if parallel:
+                # The two real compaction calls run in Promise.all. Exercise
+                # opposite admission orders with the deterministic fake API.
+                prefix_call = (
+                    "MUST summarize prefix for retained suffix:" in json.dumps(body)
+                )
+                if prefix_call != enabled:
+                    assert first_parallel.wait(timeout=10)
+            with record_lock:
+                records.append({"path": self.path, "request": body})
+                n = len(records)
+                (slot / "request-bodies.json").write_text(
+                    json.dumps(records, indent=2) + "\n"
+                )
+                if completed_history and n == 3:
+                    first_parallel.set()
             ident = f"resp_fixture_{n}"
             text = (
                 prefix
@@ -199,6 +218,7 @@ def test_pinned_omp_observer_preserves_requests_and_real_automatic_compaction(
                 + "\n"
             )
             records.clear()
+            first_parallel = threading.Event()
             monkeypatch.setattr(
                 SdkTrace,
                 "environment",
@@ -264,7 +284,18 @@ def test_pinned_omp_observer_preserves_requests_and_real_automatic_compaction(
             shutil.move(slot, tmp_path / ("on" if enabled else "off"))
         # The workspace, fixed session, source and fake response IDs are equal.
         # Compare the complete JSON bodies, including xhigh and native budgets.
-        assert requests[0] == requests[1]
+        if completed_history:
+            assert len(requests[0]) == len(requests[1]) == 6
+            assert requests[0][:2] == requests[1][:2]
+            assert requests[0][4:] == requests[1][4:]
+            assert requests[0][2] != requests[1][2]
+            assert Counter(
+                json.dumps(record, sort_keys=True) for record in requests[0][2:4]
+            ) == Counter(
+                json.dumps(record, sort_keys=True) for record in requests[1][2:4]
+            )
+        else:
+            assert requests[0] == requests[1]
         for record in requests[1]:
             body = record["request"]
             assert "thinking_token_budget" not in body

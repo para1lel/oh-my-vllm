@@ -59,6 +59,11 @@ DSpark 提议概率可以与受约束的 target 分布不同. 它的拒绝修正
 
 全部 Python 模块路径相对于 `python/oh_my_vllm/`.
 
+固定版本的 FlashInfer cubin 包提供其带版本的二进制内核和 header.
+默认情况下, FlashInfer 检查包版本和产物哈希. Worker 身份记录所选目录和检查选项.
+经审核的运行时契约绑定 loader 源码和包版本.
+项目内核, 模型编译和图捕获保留各自缓存及首次使用路径.
+
 ## 传输合同
 
 Rust 绑定 `ipc://<socket_path>`; 唯一 Python worker 连接它.

@@ -25,6 +25,21 @@ Full 模式在等待空闲且绑定 UUID 的 B200 前要求模型位置.
 模型未配置时, CPU tokenizer / HTTP 集成测试明确跳过.
 纯校验测试无需 checkpoint, 仍然执行.
 
+FlashInfer 产物测试使用固定版本 cubin 包, 不初始化 CUDA.
+它们在禁止下载时加载经过校验的 B200 manifest, header 和一个二进制内核.
+它们还拒绝字节不符的产物和包版本不匹配.
+
+```bash
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_flashinfer_artifacts.py -q
+```
+
+这些 CPU 检查不能证明模型耗时或冷启动验收通过.
+GPU 验收保留全新项目缓存. 不安装预热的项目或 FlashInfer JIT cache.
+
+CPU SDK fixture 保留完整请求体及每个请求体的副本数量.
+存在已完成历史时, 两个自动摘要请求可以具有不同的先后顺序.
+其他请求须保持相同顺序. CPU fixture 分别测试这两种顺序.
+
 Scripted HTTP fixture 的服务首次就绪 timeout 为 `30` 秒.
 这段等待包含 Python import 和 ZMQ 连接. 请求, 恢复与关闭断言保留原有 deadline.
 

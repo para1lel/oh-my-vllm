@@ -7,6 +7,8 @@
     "worker/dspark_graph.py": "32f2e6d111882708146c04f38b94ecaa04364281014a77102e5a51a93ce45995",
     "worker/errors.py": "40d6f08b40e1d7565d0ef348a40e14f7d7c3be6f5c5d3fc0b4a2a95f011763b9",
     "worker/graph_cache.py": "e211d0fc5d5f658e7bc46088d35976b19413f96bfe388083f243e3b01d6c996f",
+    "worker/graph_capture.py": "bd668d8167b18bdae13a93a2742327f645ac0bd9eb180b77bc6439be64b6fdcd",
+    "worker/host_allocator.py": "f6b9d8fbfe04f303616a5a936fc5acf91dd2301e8e8356d9e670454505ff9438",
     "worker/logging_utils.py": "0a50824e64b1abf6c2e118c6620804367a44e6373cb0b9f63352129bcb4d0f78",
     "worker/model_runner.py": "d9407081d72c9abea2835e9d767ff7a17a03773f72f133761f5c161c63f09c67",
     "worker/mtp.py": "63f3a043cfc4d4b649c6a9da007822d99218e5a0a69403b7af6f7a6e04d0172a",
@@ -14,7 +16,7 @@
     "worker/prefill_budget.py": "04a69ca951114d8b89cc75e983f7a268661c80424f93d48f1ef7e9247073b654",
     "worker/prefill_graph.py": "cdb3209007da4bcb5842f0e9d880edf48bf7e31bdb23dd12fa1577a4db51a485",
     "worker/protocol.py": "a3a74a605a84da886893f46524ee6de55979161d4f4632fabcd2ad50fa10d65e",
-    "worker/runtime.py": "399fc28a0a9038582fb1d35425b4f498d32504be4cfe28fd2c2620cb1c8944a1",
+    "worker/runtime.py": "0b5a1075e91b4857f2f520c11fb631094f14f521fc6f85b8327794ffc5682d0e",
     "worker/sampler.py": "39eb42e532f94cd05308471effccccb12fe085461f3c9aa795e4a33ce63de141",
     "worker/sampling.py": "37ebc7412961b355542733868ca999556b0f22aaa6a555cbe1e1ce8ca8d3ed6c",
     "worker/serving.py": "57afa41284171728bf8b888d5ae8c08cd63c674dd8e6dc543a2b8a8ebdbac51b",
@@ -76,9 +78,7 @@
     "kernels/tilelang_reference/elementwise.py": "c15b43794af544d851e7b260b8fa2356a7905c9ea2856bb7072f10c30fd37f7b",
     "kernels/tilelang_reference/fp8.py": "9097a36234ff6c59a0f7958f4fbb69d0b8d9115e4fe102a3c9875a7dddaeb810",
     "kernels/tilelang_reference/gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
-    "kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab",
-    "worker/graph_capture.py": "bd668d8167b18bdae13a93a2742327f645ac0bd9eb180b77bc6439be64b6fdcd",
-    "worker/host_allocator.py": "f6b9d8fbfe04f303616a5a936fc5acf91dd2301e8e8356d9e670454505ff9438"
+    "kernels/tilelang_reference/normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
   },
   "providers": {
     "flashinfer/gemm/gemm_base.py": "de6b7ec299f45801e15e5b9ec7341c417c4d9df8d4a5b4650d701694c483ab8e",
@@ -86,10 +86,15 @@
     "flashinfer/decode.py": "d82d107a644596a9349780b839b34e690c50169ea4cea3d0ee02b78e9dc88c1a",
     "flashinfer/jit/attention/modules.py": "23a8fb1fa8f45db3b527645d15a65c874dba6d3bc7d7df6599d9d7c3a6ddea30",
     "flashinfer/jit/gemm/core.py": "c118b52da882ecf8b54e850290612b1c6e5593bd0d4a99806f5dc5fb3b9e48f1",
+    "flashinfer/jit/env.py": "c3955fd0b83154356942840c1217e7c64a3602766feddbd701f814bae25ff47e",
+    "flashinfer/jit/cubin_loader.py": "4635b9a83658c0bdff3f1b94bce4b0d84ba4e2e20ed01ee5c0e05d56a1c15b5d",
+    "flashinfer/artifacts.py": "dc6fc83987f36fc731ea734eddb465eb9d52f89b14fd07fd785c31083c7eef98",
     "flashinfer/gdn_kernels/blackwell/gdn_prefill.py": "dba25861bb34245a344fc4d4fb443419ecf3f425feb9053823bcd7d7165efe01",
     "flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py": "faaf28508f419a255cc030678ef86e73f47153631cc9403176d058b6a0bd715b",
     "flashinfer/gdn_prefill.py": "e4475a2edc830b97d6bc27f13980e2f5951d7d97eb13547f539acf94e2a2132d",
-    "flashinfer/gdn_kernels/delta_rule_dsl/varlen_helper.py": "c9cda29f3e9d0105d91326c4c670feace92f988ed9fde61dcea3035fd6e704ab"
+    "flashinfer/gdn_kernels/delta_rule_dsl/varlen_helper.py": "c9cda29f3e9d0105d91326c4c670feace92f988ed9fde61dcea3035fd6e704ab",
+    "flashinfer_cubin/__init__.py": "4083819667661c56fa05bd7839da5f61d35587e0bb52fdcd52533eec4a434652",
+    "flashinfer_cubin/_build_meta.py": "4e45d7611455d87f07ef1a0edd4e1dba6dca0de36377b50d3e8291d400f07d5a"
   },
   "gemm_inputs": {
     "headers_sha256": "9f8f986755b1af1d3a442eb905f1eb683a9be1906f7d424739a11c7f197e0e22",
@@ -123,6 +128,7 @@
   "versions": {
     "torch": "2.14.0",
     "flashinfer-python": "0.6.18.post1",
+    "flashinfer-cubin": "0.6.18.post1",
     "triton": "3.8.0"
   }
 }

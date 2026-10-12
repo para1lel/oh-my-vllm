@@ -25,6 +25,21 @@ Full mode must use a model location before selection of an idle UUID-pinned B200
 CPU tokenizer/HTTP integrations skip explicitly when the model is unset.
 Pure validation tests stay active without a checkpoint.
 
+The FlashInfer artifact tests use the pinned cubin package without CUDA initialization.
+They load checked B200 manifests, headers, and a binary kernel with downloads disabled.
+They also reject incorrect artifact bytes and package version mismatches.
+
+```bash
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_flashinfer_artifacts.py -q
+```
+
+These CPU checks do not prove model timing or cold-start acceptance.
+Keep fresh project caches for GPU acceptance. Do not install a prewarmed project or FlashInfer JIT cache.
+
+The CPU SDK fixture keeps full request bodies and the number of copies of each body.
+With completed history, two automatic summary requests can have different sequences.
+Other requests must keep the same sequence. The CPU fixture tests each sequence.
+
 Scripted HTTP fixtures have a `30`-second timeout for initial service readiness.
 This wait includes Python imports and the ZMQ connection. Request, recovery, and shutdown assertions keep their existing deadlines.
 

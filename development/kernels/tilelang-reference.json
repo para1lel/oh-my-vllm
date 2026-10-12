@@ -11,6 +11,6 @@
     "gdn.py": "ed157de6b1768356306ecaf0131ffa2a639e0ae12a3a4dadeaf4cfec2d185ca8",
     "normalization.py": "42cae2b9937b2f78c1bc442e6ed9aed0585bda096b54392c658a413c70dcf1ab"
   },
-  "runtime_requirements_sha256": "5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a",
+  "runtime_requirements_sha256": "575d155adcd68f0f4d6fbd5f7268c31a085e26ab315b41a9bb5e2d2868c32cab",
   "tilefoundry_commit": "6b1b1493efcb55f3f2f327b5cc90a01181adf690"
 }

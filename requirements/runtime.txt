@@ -16,6 +16,7 @@ cuda-tile==1.6.0
 cuda-toolkit==13.0.3.0
 einops==0.8.2
 filelock==3.32.6
+flashinfer-cubin @ https://github.com/flashinfer-ai/flashinfer/releases/download/v0.6.18.post1/flashinfer_cubin-0.6.18.post1-py3-none-any.whl#sha256=bbacb5b8bbf429e43bf2740bb45551d981f41d0462842e36ee6fb3e3452763ab
 flashinfer-python==0.6.18.post1
 fsspec==2026.9.0
 h11==0.16.0

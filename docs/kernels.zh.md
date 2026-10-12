@@ -20,12 +20,17 @@ Python 启动前设置 `OH_MY_VLLM_KERNEL_BACKEND=tilelang` 选择比较后端.
 |---|---|
 | 已验收参考记录 | `02bf35f98ceb6b40a2a813aa3e0cccbfa9067600` |
 | 内核实现 | `da75c02bd9e01556436877acba3243636dec80d6` |
-| 运行依赖 lock SHA-256 | `5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a` |
+| 运行依赖 lock SHA-256 | `575d155adcd68f0f4d6fbd5f7268c31a085e26ab315b41a9bb5e2d2868c32cab` |
 | TileFoundry fork | `6b1b1493efcb55f3f2f327b5cc90a01181adf690` |
 
 Manifest 还记录每个参考文件的 SHA-256.
 无关修改中保持这些文件和运行依赖 lock 不变.
 修改 lock / reference 需要显式的新比较决策.
+
+[产物决策](decisions/ADR-012-reasoning-token-budget.zh.md#omp-适配与限制) 在比较环境中添加相同版本的 FlashInfer cubin 包.
+两个 manifest 绑定新运行依赖 lock 及关联 manifest 哈希.
+全部参考内核哈希, TileFoundry commit, 原始 case ID 及数值容差保持不变.
+新的 GPU 验收须使用此环境.
 
 `python/oh_my_vllm/kernels/cuda_backend/kernels.cu` 包含 `operators/` 中的 10 个功能头, 统一构建 native 模块.
 TVM FFI 的 `build_inline` 在首次使用时编译这些输入; `load_module` 加载返回的模块.

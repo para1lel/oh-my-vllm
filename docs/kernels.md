@@ -21,12 +21,17 @@ Do not tune the reference.
 |---|---|
 | Accepted reference record | `02bf35f98ceb6b40a2a813aa3e0cccbfa9067600` |
 | Kernel implementation | `da75c02bd9e01556436877acba3243636dec80d6` |
-| Runtime lock SHA-256 | `5f02f2051db2ba92fcdc1864283d4101eba331ed9c9677f3dac627f04c37e15a` |
+| Runtime lock SHA-256 | `575d155adcd68f0f4d6fbd5f7268c31a085e26ab315b41a9bb5e2d2868c32cab` |
 | TileFoundry fork | `6b1b1493efcb55f3f2f327b5cc90a01181adf690` |
 
 The manifest also records each reference file's SHA-256.
 Keep these files and the runtime lock unchanged during unrelated work.
 A changed lock/reference must have an explicit new comparison decision.
+
+The [artifact decision](decisions/ADR-012-reasoning-token-budget.md#omp-integration-and-limits) adds the FlashInfer cubin package with the same version to the comparison environment.
+The two manifests bind the new runtime lock and its linked manifest hash.
+All reference kernel hashes, TileFoundry commits, original case IDs, and numerical tolerances stay unchanged.
+New GPU acceptance must use this environment.
 
 `python/oh_my_vllm/kernels/cuda_backend/kernels.cu` includes 10 operator headers from `operators/` for one native build.
 TVM FFI `build_inline` compiles these inputs at first use. `load_module` loads the returned module.

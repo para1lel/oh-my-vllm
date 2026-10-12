@@ -34,6 +34,12 @@ The combination with satisfactory compatibility tests includes Torch 2.14.0, Tra
 The recorded build used CUDA 13.1 tools and Torch CUDA 13.0 runtime libraries.
 These versions show the tested combination. Use the lockfile for the full closure.
 
+The runtime also pins `flashinfer-cubin` to the same `0.6.18.post1` release as `flashinfer-python`.
+The direct dependency URL keeps the official wheel SHA-256 from the [FlashInfer wheel index](https://flashinfer.ai/whl/flashinfer-cubin/).
+The package supplies versioned binary kernels and headers before model execution.
+It does not supply project inference graphs or project build caches.
+New GPU acceptance must check this dependency combination.
+
 ## Configuration selection
 
 `scripts/with-env.sh` selects the environment in this order:
@@ -76,7 +82,13 @@ Supply `WorkerConfig.model_path` explicitly for direct Rust library calls.
 
 The default cache suffix is `oh-my-vllm/tilelang-ffi012` for compatibility with the library combination with satisfactory compatibility tests.
 Different subdirectories hold FlashInfer, third-party Triton, TileLang, and native CUDA artifacts.
-First use can compile kernels or download versioned FlashInfer GEMM cubins.
+
+FlashInfer selects the installed cubin package with the same version before its workspace cache.
+An explicit `FLASHINFER_CUBIN_DIR` takes precedence. By default, FlashInfer checks each requested artifact's SHA-256 before use.
+
+Missing or incorrect artifacts can cause a download. `FLASHINFER_NO_DOWNLOAD=1` rejects that download instead.
+First use still compiles project kernels and model units and captures CUDA Graphs.
+The [FlashInfer installation guide](https://docs.flashinfer.ai/installation.html) gives package installation commands.
 Runtime identity records library versions and rejects accidental vLLM imports or mapped libraries.
 Do not use accuracy probes or eager overrides during performance acceptance.
 

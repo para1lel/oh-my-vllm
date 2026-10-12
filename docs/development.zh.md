@@ -34,6 +34,12 @@ vLLM 及其缓存与项目运行时隔离.
 记录中的构建使用 CUDA 13.1 工具和 Torch CUDA 13.0 运行库.
 这些版本描述已测试组合; 完整依赖以 lockfile 为准.
 
+运行依赖还将 `flashinfer-cubin` 固定到与 `flashinfer-python` 相同的 `0.6.18.post1` 发布版本.
+直接依赖 URL 保留 [FlashInfer wheel 索引](https://flashinfer.ai/whl/flashinfer-cubin/) 中的官方 wheel SHA-256.
+该包在模型执行前提供带版本的二进制内核和 header.
+它不提供项目推理图或项目构建缓存.
+新的 GPU 验收需检查此依赖组合.
+
 ## 配置选择
 
 `scripts/with-env.sh` 按以下顺序选择环境:
@@ -75,7 +81,13 @@ vLLM 及其缓存与项目运行时隔离.
 
 默认缓存后缀为 `oh-my-vllm/tilelang-ffi012`, 与已验证库组合兼容.
 子目录隔离 FlashInfer, 第三方 Triton, TileLang 和 native CUDA 产物.
-首次使用可能编译内核或下载带版本的 FlashInfer GEMM cubin.
+
+FlashInfer 优先选择已安装的相同版本 cubin 包, 然后才选择 workspace cache.
+显式 `FLASHINFER_CUBIN_DIR` 优先. 默认情况下, FlashInfer 使用每个请求产物前检查其 SHA-256.
+
+缺失或校验不符的产物可能触发下载. `FLASHINFER_NO_DOWNLOAD=1` 则拒绝该下载.
+首次使用仍编译项目内核和模型单元, 并捕获 CUDA Graph.
+[FlashInfer 安装指南](https://docs.flashinfer.ai/installation.html) 提供该包的安装命令.
 运行时身份记录库版本, 拒绝意外 vLLM 导入或映射库.
 性能验收期间不启用精度 probe 或 eager override.
 

@@ -29,12 +29,21 @@ def runtime_contract():
         "flashinfer/decode.py",
         "flashinfer/jit/attention/modules.py",
         "flashinfer/jit/gemm/core.py",
+        "flashinfer/jit/env.py",
+        "flashinfer/jit/cubin_loader.py",
+        "flashinfer/artifacts.py",
         "flashinfer/gdn_kernels/blackwell/gdn_prefill.py",
         "flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py",
         "flashinfer/gdn_prefill.py",
         "flashinfer/gdn_kernels/delta_rule_dsl/varlen_helper.py",
     ):
         path = distribution.locate_file(name)
+        if not path.is_file():
+            raise ValueError(f"missing reviewed GPU provider: {name}")
+        providers[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    cubin_distribution = importlib.metadata.distribution("flashinfer-cubin")
+    for name in ("flashinfer_cubin/__init__.py", "flashinfer_cubin/_build_meta.py"):
+        path = cubin_distribution.locate_file(name)
         if not path.is_file():
             raise ValueError(f"missing reviewed GPU provider: {name}")
         providers[name] = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -71,7 +80,7 @@ def runtime_contract():
         "kernel_inputs": {"project_headers": operator_headers()},
         "versions": {
             name: importlib.metadata.version(name)
-            for name in ("torch", "flashinfer-python", "triton")
+            for name in ("torch", "flashinfer-python", "flashinfer-cubin", "triton")
         },
     }
 

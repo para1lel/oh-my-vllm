@@ -235,6 +235,34 @@ The tutorial passed ten source-display tests and nine browser tests.
 
 New committed-source GPU acceptance and independent resource review are necessary.
 
+## Packaged FlashInfer artifacts
+
+Source `9d9d105` passed ordinary batch `1` phase checks. Its other GPU collections stopped before full acceptance.
+The DSpark Responses request stopped at the installed client's `300000`-millisecond progress timeout.
+Service keepalive comments did not reset that timer. Original logs show cold compilation and artifact downloads during the wait.
+All active and queued jobs, owned GPU processes, and temporary model-service endpoints stopped before the dependency change.
+
+The runtime now pins `flashinfer-cubin` to the same `0.6.18.post1` version as `flashinfer-python`.
+The dependency URL keeps the official wheel SHA-256.
+Independent review checked the full wheel and seven completed artifacts from the failed DSpark download.
+One additional header had no completed old download for comparison.
+
+Worker identity records the selected artifact directory and check options.
+The reviewed contract adds five provider source hashes and the package version.
+Its other providers, versions, compiler flags, and header inputs stay equal to the previous values.
+
+Four offline CPU artifact tests passed without CUDA initialization. The dependency check passed for `126` packages.
+
+The two comparison manifests now bind the added dependency. Reference kernels, case IDs, and numerical tolerances stay unchanged.
+The CPU SDK fixture keeps full request bodies for the two concurrent automatic summary calls.
+
+The final CPU suite passed `1470` tests and `119` subtests, with `469` GPU tests not selected.
+Rust passed `152` tests. The eight required checks passed.
+The tutorial passed ten source-display tests and nine browser tests.
+
+New committed-source GPU acceptance and independent resource review are pending.
+Cold-start verification must keep the original client timeout and fresh project caches.
+
 ## Open work
 
 - Extend `PY-04` to cross-shape graph eviction and recapture near the maximum supported context.

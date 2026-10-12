@@ -8,6 +8,7 @@ Originals supply formal verification. Portable summaries give results for readin
 ## Current collection
 
 New acceptance will check SDK evidence collection and optional host allocator diagnostics.
+It must also check the cubin package with the same version as FlashInfer, with fresh project caches and original client timeouts.
 The current candidate has 517 operator cases, with 317 unchanged configurations and 200 new static workload cases.
 
 The [SDK collector CPU record](../bench/evidence/2026-10-13-native-sdk-collector.json) gives fixture checks and original result hashes.

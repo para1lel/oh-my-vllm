@@ -8,6 +8,7 @@
 ## 当前采集
 
 新的验收将检查 SDK 证据采集和可选的主机 allocator diagnostics.
+它还须检查与 FlashInfer 版本相同的 cubin 包, 保留全新项目缓存及原客户端超时.
 当前候选版本有 517 项算子案例, 保留 317 项配置, 新增 200 项静态负载案例.
 
 [SDK collector CPU 记录](../bench/evidence/2026-10-13-native-sdk-collector.json) 提供 fixture 检查及原始结果哈希.

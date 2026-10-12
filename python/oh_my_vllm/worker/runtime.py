@@ -18,6 +18,8 @@ def identity() -> dict:
     forbidden = [path for path in sys.path if path and "vllm" in Path(path).parts]
     if forbidden:
         raise RuntimeError(f"legacy source/environment on Python path: {forbidden}")
+    from flashinfer.jit import env as flashinfer_env
+
     from oh_my_vllm.ir.execution import execution_policy
 
     identity: dict = {
@@ -32,6 +34,7 @@ def identity() -> dict:
                 "tilelang",
                 "apache-tvm-ffi",
                 "flashinfer-python",
+                "flashinfer-cubin",
                 "transformers",
                 "tokenizers",
                 "safetensors",
@@ -41,6 +44,14 @@ def identity() -> dict:
             )
         },
         "flashinfer_workspace": os.environ.get("FLASHINFER_WORKSPACE_BASE"),
+        "flashinfer_cubin_dir": str(flashinfer_env.FLASHINFER_CUBIN_DIR),
+        "flashinfer_no_download": bool(os.environ.get("FLASHINFER_NO_DOWNLOAD")),
+        "flashinfer_checksum_disabled": bool(
+            os.environ.get("FLASHINFER_CUBIN_CHECKSUM_DISABLED")
+        ),
+        "flashinfer_version_check_disabled": bool(
+            os.environ.get("FLASHINFER_DISABLE_VERSION_CHECK")
+        ),
         "triton_cache": os.environ.get("TRITON_CACHE_DIR"),
         "tilelang_cache": os.environ.get("TILELANG_CACHE_DIR"),
         "native_cuda_cache": os.environ.get("TVM_FFI_CACHE_DIR"),
