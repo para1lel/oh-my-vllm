@@ -63,6 +63,9 @@ pub struct ServeArgs {
     pub response_max_bytes: usize,
     #[arg(long, default_value_t = 600)]
     pub request_timeout_seconds: u64,
+    /// Deadline for one GPU step, including first-use compilation and graph capture.
+    #[arg(long, default_value_t = 120, value_parser = clap::value_parser!(u64).range(1..))]
+    pub worker_step_timeout_seconds: u64,
     #[arg(long, default_value_t = 35)]
     pub shutdown_grace_seconds: u64,
     /// Conservative host state reserved across input, output, and stream drain.
@@ -524,6 +527,7 @@ pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) 
             && args.response_max_bytes > 0
             && args.response_ttl_seconds > 0
             && args.request_timeout_seconds > 0
+            && args.worker_step_timeout_seconds > 0
             && args.shutdown_grace_seconds > 0,
         "serving limits must be positive"
     );
@@ -555,6 +559,7 @@ pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) 
             "response_max_bytes": args.response_max_bytes,
             "response_capacity": args.response_capacity,
             "request_timeout_seconds": args.request_timeout_seconds,
+            "worker_step_timeout_seconds": args.worker_step_timeout_seconds,
             "worker_restart_attempts": args.worker_restart_attempts,
             "diagnostics_interval_seconds": args.diagnostics_interval_seconds,
         },
@@ -588,6 +593,7 @@ pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) 
             health,
             diagnostics_interval: Duration::from_secs(args.diagnostics_interval_seconds),
             restart_attempts: args.worker_restart_attempts,
+            step_timeout: Duration::from_secs(args.worker_step_timeout_seconds),
         },
         shutdown_rx,
     ));
@@ -907,6 +913,7 @@ struct EngineContext {
     health: Arc<Mutex<Value>>,
     diagnostics_interval: Duration,
     restart_attempts: usize,
+    step_timeout: Duration,
 }
 
 async fn engine(
@@ -1038,13 +1045,14 @@ async fn engine(
 async fn execute(
     client: &mut WorkerClient,
     batch: &oh_my_vllm_scheduler::SchedulerOutput,
+    step_timeout: Duration,
 ) -> Result<oh_my_vllm_scheduler::WorkerOutput> {
     if batch.scheduled.len() > 1 {
         let request_ids: Vec<_> = batch.scheduled.iter().map(|r| r.request_id).collect();
         debug!(?request_ids, "scheduled mixed batch");
     }
     let output = tokio::time::timeout(
-        Duration::from_secs(120),
+        step_timeout,
         client.execute_one_step(
             &batch.scheduled,
             &batch.finished_request_ids,
@@ -1052,7 +1060,8 @@ async fn execute(
             batch.num_batched_tokens,
         ),
     )
-    .await??;
+    .await
+    .with_context(|| format!("worker step exceeded {} seconds", step_timeout.as_secs()))??;
     if !batch.finished_request_ids.is_empty() {
         debug!(request_ids = ?batch.finished_request_ids, "worker requests released");
     }
@@ -1076,7 +1085,7 @@ async fn run_engine(
         let was_idle = active.is_empty();
         if was_idle {
             // Finish native cleanup before going idle, including cancelled admissions.
-            execute(client, &scheduler.schedule()).await?;
+            execute(client, &scheduler.schedule(), context.step_timeout).await?;
         }
         update_resource_counts(
             health,
@@ -1180,7 +1189,7 @@ async fn run_engine(
             tokio::time::sleep(Duration::from_millis(10)).await;
             continue;
         }
-        let worker = execute(client, &batch).await?;
+        let worker = execute(client, &batch, context.step_timeout).await?;
         for scheduled in &batch.scheduled {
             let id = scheduled.request_id;
             if let Some(error) = client.serving_errors.remove(&id) {
@@ -1348,6 +1357,29 @@ fn update_resource_counts(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn step_deadline_is_positive_and_configurable() {
+        #[derive(clap::Parser)]
+        struct Options {
+            #[command(flatten)]
+            serving: ServeArgs,
+        }
+        use clap::Parser;
+        assert_eq!(
+            Options::parse_from(["serve"])
+                .serving
+                .worker_step_timeout_seconds,
+            120
+        );
+        assert_eq!(
+            Options::parse_from(["serve", "--worker-step-timeout-seconds", "600"])
+                .serving
+                .worker_step_timeout_seconds,
+            600,
+        );
+        assert!(Options::try_parse_from(["serve", "--worker-step-timeout-seconds", "0",]).is_err());
+    }
 
     #[tokio::test]
     async fn stalled_stream_preserves_more_than_256_events_and_recovers_in_order() {

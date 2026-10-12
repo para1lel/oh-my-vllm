@@ -147,6 +147,7 @@ def main():
                     ),
                     "hold": "hold-active" in text,
                     "slow_execute": "slow-execute" in text,
+                    "first_step_delay": 1.25 if "step-deadline" in text else 0,
                     "flood": "flood-active" in text,
                     "slow_stream": "slow-stream" in text,
                     "stream_step": 0,
@@ -231,6 +232,9 @@ def main():
                     set(scheduled["mamba_block_table"]) - {0},
                 )
                 state = requests[rid]
+                if state["first_step_delay"]:
+                    time.sleep(state["first_step_delay"])
+                    state["first_step_delay"] = 0
                 plan = None
                 if state["mtp_slot_plan"]:
                     plan = plan_request(

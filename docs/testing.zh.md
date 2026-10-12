@@ -277,6 +277,10 @@ Collector 管理 4 个持久 OMP 进程和临时记录代理.
 每条 lane 至少持续 `3600` 秒, 不设请求数下限.
 服务就绪后初始化客户端, 在它们发出首次请求前开始计时.
 首次编译, 图捕获和后续新形状的开销均计入测量.
+
+此采集器对应的服务使用 `--worker-step-timeout-seconds 600` 和 `--request-timeout-seconds 1800`.
+从 diagnostics 记录这些上限. 这些期限允许冷编译完成, 不另行预热.
+
 中途不排空, 不插入故障 probe. 一小时结束后完成在途工作, 再排空请求.
 
 任务和摘要使用 OMP `max`, 映射为服务的 `xhigh`.
@@ -310,6 +314,11 @@ Block `0` 保持分配. HTTP 和 worker 必须保持原有进程出生身份.
 结合主机 RSS, GPU allocated / reserved 内存, 图/编译缓存占用, 活动请求和输入长度分析.
 变化的会话大小可能改变有界缓存. 独立审查需解释增长并确认内存稳定性.
 Collector 将 `operational_passed` 和 `awaiting_resource_review` 与正式验收区分记录.
+
+GPU 进程查询前保留失败 worker 的 diagnostics.
+GPU 查询失败时, 保留错误与重新读取的 worker 状态.
+正常负载期间的 epoch 变化或 worker 重启均判为失败.
+最终检查和证据哈希计算前必须结束资源采样. 收尾时到达的采样失败也必须使采集失败.
 
 记录其他 GPU 进程和设备 HBM 占用. 请求和资源检查通过时, 轻度争用可继续.
 15 项阶段负载仍要求 GPU 独占.

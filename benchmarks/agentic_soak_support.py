@@ -176,6 +176,64 @@ def gpu_processes(worker_pid: int) -> dict:
     }
 
 
+def resource_sample(base_url: str, epoch: int, evidence: Evidence) -> dict:
+    """Save failed worker observations before a GPU inventory can obscure them."""
+
+    def observe():
+        return {
+            **diagnostics(base_url),
+            "collected_unix_s": time.time(),
+            "collected_monotonic_s": time.monotonic(),
+            "phase": "normal",
+            "observation": "active",
+        }
+
+    def failures(sample):
+        checks = resource_checks(sample)
+        failed = [check["name"] for check in checks if not check["passed"]]
+        if sample.get("epoch") != epoch:
+            failed.append(f"worker epoch {sample.get('epoch')} differs from {epoch}")
+        return failed
+
+    sample = observe()
+    failed = failures(sample)
+    if failed:
+        sample["sampling_error"] = failed
+        evidence.append("memory.jsonl", sample)
+        raise ValueError(f"worker or resource checks failed: {failed}")
+    try:
+        sample["gpu_processes"] = gpu_processes(sample["worker_pid"])
+    except Exception as error:
+        sample["sampling_error"] = f"GPU process inventory: {error}"
+        evidence.append("memory.jsonl", sample)
+        # Recovery can start after the first HTTP snapshot and before NVML.
+        try:
+            fresh = observe()
+        except Exception as recheck_error:
+            evidence.append(
+                "memory.jsonl",
+                {
+                    "phase": "normal",
+                    "observation": "gpu_inventory_failure_recheck",
+                    "collected_unix_s": time.time(),
+                    "sampling_error": str(recheck_error),
+                },
+            )
+            raise ValueError(
+                f"GPU process inventory failed: {error}; "
+                f"worker recheck failed: {recheck_error}"
+            ) from error
+        fresh["observation"] = "gpu_inventory_failure_recheck"
+        fresh["sampling_error"] = failures(fresh)
+        evidence.append("memory.jsonl", fresh)
+        raise ValueError(
+            f"GPU process inventory failed: {error}; worker recheck: "
+            f"status={fresh.get('status')}, epoch={fresh.get('epoch')}, "
+            f"restarts={fresh.get('restarts')}, failures={fresh['sampling_error']}"
+        ) from error
+    return sample
+
+
 def wait_idle(
     args, evidence: Evidence, stop: threading.Event, after: float, phase: str = "normal"
 ) -> dict:

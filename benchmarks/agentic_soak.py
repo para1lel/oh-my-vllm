@@ -20,15 +20,13 @@ from benchmarks.agentic_soak_analysis import (
     plot_memory,
     plot_points,
     read_metrics,
-    resource_checks,
 )
 from benchmarks.agentic_soak_proxy import ModelSlots, disk_proxy
 from benchmarks.agentic_soak_support import (
     Evidence,
     collector_environment,
-    diagnostics,
-    gpu_processes,
     read_jsonl,
+    resource_sample,
     wait_idle,
 )
 from benchmarks.evidence import observed_configuration, runtime_source_identity
@@ -139,20 +137,7 @@ def run(args):
     def sample_memory():
         while not sampler_stop.is_set():
             try:
-                sample = diagnostics(args.base_url)
-                sample.update(
-                    collected_unix_s=time.time(),
-                    collected_monotonic_s=time.monotonic(),
-                    phase="normal",
-                    observation="active",
-                    gpu_processes=gpu_processes(sample["worker_pid"]),
-                )
-                if sample.get("epoch") != initial_epoch or not all(
-                    check["passed"] for check in resource_checks(sample)
-                ):
-                    raise ValueError(
-                        "worker identity, restart or resource bound failed"
-                    )
+                sample = resource_sample(args.base_url, initial_epoch, evidence)
                 with lock:
                     sample["agents"] = [client.context() for client in clients.values()]
                 evidence.append("memory.jsonl", sample)
@@ -256,14 +241,16 @@ def run(args):
         sampler.start()
         with concurrent.futures.ThreadPoolExecutor(4) as pool:
             list(pool.map(lane_run, range(4)))
-        if errors:
-            raise ValueError("; ".join(errors))
         if any(
             session["active_seconds"] < args.duration for session in sessions.values()
         ):
             raise ValueError("a persistent lane ended before the required hour")
         sampler_stop.set()
-        sampler.join(timeout=20)
+        # Finish the HTTP/NVML observation before checking its errors.
+        # The sampler must also stop writing evidence before final hashes.
+        sampler.join()
+        if errors:
+            raise ValueError("; ".join(errors))
         final_idle = wait_idle(args, evidence, stop, time.time(), phase="post_run")
         for name, original in summary["owned_service_processes"].items():
             pid = final_idle[name]
@@ -328,7 +315,7 @@ def run(args):
         stop.set()
         sampler_stop.set()
         if sampler and sampler.ident:
-            sampler.join(timeout=20)
+            sampler.join()
         if guard:
             guard.close()
         for sig, handler in old_handlers.items():

@@ -23,6 +23,9 @@ Admission leases have count and byte limits for queued requests, prepared reques
 The HTTP supervisor invalidates old logical KV and loads replacement workers after failure.
 Affected requests stop and report an error. Recovery keeps HTTP alive.
 
+The worker step deadline has a positive configurable value, with a default of 120 seconds.
+It includes first-use compilation and graph capture.
+
 Compiler metadata has count and byte limits. Graph caches have count limits for resident entries and check capture headroom.
 Compiler retirement starts garbage collection at safe host boundaries and keeps owners needed for resident graph replay.
 Prefill admission accounts for planned storage. Graph pressure eviction releases unused pool owners.
@@ -37,12 +40,18 @@ DSpark graph recapture uses a cooldown for repeated shape changes.
 The persistent-session collector keeps four OMP processes and histories, maximum effort, and runtime context usage.
 It keeps incremental journals and checks provider-input anchors against service counts.
 Formal acceptance also must have independent resource review.
+The sampler keeps failed worker observations before GPU process lookup.
+The collector stops the sampler before final checks and evidence hashes.
 
 Rust tests, formatting, line width, Clippy, and CUDA formatting checks passed.
-The CPU suite passed 1307 tests and 99 subtests, with 448 GPU cases deselected.
+The CPU suite passed 1314 tests and 101 subtests, with 448 GPU cases deselected.
 Additional context and compaction evidence regressions passed.
 
 The new one-hour MTP4 and DSpark collections and revised fifteen phase workloads are pending.
+Previous cold-start collections failed the worker step deadline. Their original records keep their failure status.
+The collector uses a 600-second step deadline and an 1800-second request deadline without separate warmup.
+
+Nine phase rows passed their gates on the previous measured source. Six rows are pending.
 Short diagnostics and cancelled attempts keep their original status in external evidence.
 [Acceptance](acceptance.md) identifies previous measurement scope. Those results do not certify the revised workload.
 

@@ -1183,6 +1183,92 @@ class HttpTests(unittest.TestCase):
                         os.killpg(process.pid, signal.SIGKILL)
                         process.wait()
 
+    def test_worker_step_deadline_controls_delayed_rpc_and_recovery(self):
+        for seconds in (1, 2):
+            with (
+                self.subTest(seconds=seconds),
+                self.resource_server(
+                    f"step-timeout-{seconds}",
+                    "--worker-step-timeout-seconds",
+                    str(seconds),
+                    "--request-timeout-seconds",
+                    "10",
+                ) as (port, log),
+            ):
+                address = f"http://127.0.0.1:{port}"
+                deadline = time.monotonic() + 10
+                while time.monotonic() < deadline:
+                    with urllib.request.urlopen(
+                        address + "/diagnostics", timeout=2
+                    ) as reply:
+                        before = json.load(reply)
+                    if (
+                        before["status"] == "running"
+                        and before["worker"]
+                        and before["worker_pid"]
+                    ):
+                        break
+                    time.sleep(0.05)
+                self.assertTrue(before["worker"])
+                self.assertIsInstance(before["worker_pid"], int)
+                request = urllib.request.Request(
+                    address + "/v1/responses",
+                    data=json.dumps(
+                        self.base(
+                            True,
+                            input="step-deadline",
+                            max_output_tokens=16,
+                            reasoning={"effort": "off"},
+                        )
+                    ).encode(),
+                    headers={"Content-Type": "application/json"},
+                )
+                if seconds == 2:
+                    with urllib.request.urlopen(request, timeout=5) as reply:
+                        self.assertEqual(json.load(reply)["status"], "completed")
+                else:
+                    with self.assertRaises(urllib.error.HTTPError) as failure:
+                        urllib.request.urlopen(request, timeout=5)
+                    self.assertEqual(failure.exception.code, 500)
+                    self.assertIn("worker step exceeded 1 seconds", log.read_text())
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    with urllib.request.urlopen(
+                        address + "/diagnostics", timeout=2
+                    ) as reply:
+                        sample = json.load(reply)
+                    if (
+                        sample["status"] == "running"
+                        and sample["restarts"] == int(seconds == 1)
+                        and sample["epoch"] == before["epoch"] + int(seconds == 1)
+                        and sample["worker"]
+                        and (sample["worker_pid"] != before["worker_pid"])
+                        == (seconds == 1)
+                    ):
+                        break
+                    time.sleep(0.05)
+                self.assertEqual(sample["status"], "running")
+                self.assertEqual(sample["restarts"], int(seconds == 1))
+                self.assertEqual(sample["server_pid"], before["server_pid"])
+                self.assertEqual(sample["epoch"], before["epoch"] + int(seconds == 1))
+                self.assertEqual(
+                    sample["worker_pid"] != before["worker_pid"],
+                    seconds == 1,
+                )
+                self.assertEqual(
+                    sample["limits"]["worker_step_timeout_seconds"], seconds
+                )
+                if seconds == 1:
+                    retry = urllib.request.Request(
+                        address + "/v1/responses",
+                        data=json.dumps(
+                            self.base(True, reasoning={"effort": "off"})
+                        ).encode(),
+                        headers={"Content-Type": "application/json"},
+                    )
+                    with urllib.request.urlopen(retry, timeout=5) as reply:
+                        self.assertEqual(json.load(reply)["status"], "completed")
+
     def test_host_reservation_precedes_body_read_and_recovers_after_disconnect(self):
         with self.resource_server(
             "body-budget", "--request-state-max-bytes", str(8 << 20)

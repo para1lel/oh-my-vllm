@@ -286,6 +286,9 @@ Each lane must continue for at least `3600` seconds. There is no request-count m
 Initialize the clients after service readiness, then start the clock before their first requests.
 First compilation, graph capture, and later new-shape costs enter the measurements.
 
+For this collector, start the service with `--worker-step-timeout-seconds 600` and `--request-timeout-seconds 1800`.
+Record these limits from diagnostics. They let cold compilation complete without separate warmup.
+
 Do not insert intermediate drains or fault probes. After the hour, complete active work and drain requests.
 
 Use OMP `max` for tasks and summaries, mapped to service `xhigh`.
@@ -324,6 +327,11 @@ Block `0` stays allocated. Keep the original HTTP and worker process birth ident
 Examine host RSS, GPU allocated/reserved memory, graph/compiler occupancy, active requests, and input lengths together.
 Changing conversation sizes can change bounded caches. Independent review must examine the causes of growth and accept memory stability.
 The collector records `operational_passed` and `awaiting_resource_review` separately from formal acceptance.
+
+Keep failed worker diagnostics before GPU process lookup.
+If GPU lookup fails, keep its error and a new worker observation.
+A changed worker epoch or restart fails the normal workload.
+Finish resource sampling before final checks and evidence hashes. A late sampling failure must fail the collection.
 
 Record other GPU processes and device-used HBM. Light contention can continue if request and resource checks pass.
 The fifteen phase workloads still must use an exclusive GPU.

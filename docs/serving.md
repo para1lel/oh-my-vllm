@@ -175,7 +175,8 @@ JSON tree storage, allocator overhead, and Python objects use additional memory.
 | Pending stream queue | 1024 events or 8 MiB serialized bytes |
 | Backpressure grace | 30 seconds |
 | Request timeout | 600 seconds |
-| Prepare/step RPC deadline | 120 seconds |
+| Prepare RPC deadline | 120 seconds |
+| Worker step deadline | 120 seconds |
 | Shared shutdown grace | 35 seconds |
 | Worker replacement attempts | 5 |
 | Worker memory snapshot interval | 30 seconds |
@@ -189,6 +190,11 @@ Disconnect marks cancellation immediately. The next engine check applies it.
 The absolute request deadline starts before body reading. It includes queue wait, preparation, and generation.
 Expired queued requests cannot start preparation.
 Overload returns 503. A request that exceeds the logical KV capacity returns 413.
+
+Set `--worker-step-timeout-seconds` for the maximum wait for one GPU step.
+The positive value includes first-use compilation and graph capture.
+A step timeout fails active requests and starts worker recovery.
+Keep this deadline finite. Request and shutdown deadlines stay separate.
 
 Deadline checks occur between operations. RPCs or blocked sends can make cancellation occur later.
 Background CPU preparation itself does not block this check.

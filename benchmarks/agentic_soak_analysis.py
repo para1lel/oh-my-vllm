@@ -35,7 +35,7 @@ def finite_number(value, name: str, *, minimum=0.0) -> float:
 
 def device_used_bytes(sample: dict) -> int:
     """Include driver/vendor HBM outside Torch; exclusivity is a separate check."""
-    gpu = sample.get("worker", {}).get("gpu", {})
+    gpu = (sample.get("worker") or {}).get("gpu", {})
     total, free = (gpu.get(name) for name in ("total_bytes", "free_bytes"))
     if (
         not all(
@@ -345,7 +345,7 @@ def resource_checks(sample: dict, *, require_idle: bool = False) -> list[dict]:
         actual,
         maximum,
     )
-    worker = sample.get("worker", {})
+    worker = sample.get("worker") or {}
     check("worker_snapshot_present", bool(worker))
     check("graph_counters_present", bool(worker.get("graphs")))
     for name, graph in worker.get("graphs", {}).items():

@@ -167,7 +167,8 @@ JSON 树存储, allocator 开销及 Python 对象另外使用内存. RSS 与此�
 | 待发送 stream 队列 | 1024 event 或 8 MiB 序列化字节 |
 | 背压 grace | 30 秒 |
 | 请求 timeout | 600 秒 |
-| Prepare/step RPC deadline | 120 秒 |
+| Prepare RPC deadline | 120 秒 |
+| Worker step deadline | 120 秒 |
 | 共享 shutdown grace | 35 秒 |
 | Worker 替换尝试 | 5 |
 | Worker 内存 snapshot 间隔 | 30 秒 |
@@ -180,6 +181,11 @@ Pending 队列为空且 channel 至少有 128 个空 slot 后恢复生成.
 请求绝对 deadline 从读取 body 前开始, 包含排队, 准备和生成.
 已过期的排队请求不能开始准备.
 过载返回 503. 超出逻辑 KV 容量的请求返回 413.
+
+用 `--worker-step-timeout-seconds` 设置单个 GPU step 的最长等待时间.
+该值必须为正数, 包括首次编译和图捕获.
+Step 超时会让活跃请求失败, 并启动 worker 恢复.
+保持有限期限. 请求和 shutdown 期限分别生效.
 
 Deadline 检查在操作之间发生; RPC 或阻塞 send 可能延迟取消.
 后台 CPU preparation 本身不阻塞该检查.
