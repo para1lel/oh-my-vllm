@@ -26,6 +26,11 @@ Checkpoint 位置通过 `OH_MY_VLLM_MODEL` 或 `--model` 设置.
 ## REQ-EXEC-001: GPU 执行
 
 模型计算使用 CUDA Graph, 多个 CUDA stream 和 Programmatic Dependent Launch (PDL).
+
+图执行必须启用 native caching allocator, 且不能显式设置 `max_split_size_mb`.
+启动时拒绝不支持的实际设置, 不改写原值. 显式 eager 诊断仍可使用.
+被捕获的 cuBLAS 工作区保留在所属图的 pool 中, 工作区预算不改.
+
 通过语义操作和 tensor / state 读写定义图依赖.
 独立分支可以并行执行.
 PDL consumer 必须先等待, 再读取 producer 输出.

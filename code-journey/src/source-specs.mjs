@@ -15,6 +15,7 @@ export const specifications = {
   dsparkStop: ["python/oh_my_vllm/worker/dspark.py", "    def _sample(", null, 42],
   dsparkContextGraph: ["python/oh_my_vllm/worker/dspark_graph.py", "class DSparkContextGraph:", "\n\nclass DSparkGraph:", 105],
   decodeGraphKey: ["python/oh_my_vllm/worker/model_runner.py", "    def decode_graph_key(", "\n\nclass OhMyVllmWorker:", 24],
+  graphCapture: ["python/oh_my_vllm/worker/graph_capture.py", "def capture_graph(", null, 32],
   benchPrompts: ["crates/zmq-worker/src/main.rs", "    fn prompts(&self,", "\n}\n\n// The controller", 65],
   request: ["crates/scheduler/src/request.rs", "pub struct Request {", "\nimpl Request {"],
   tokenHistory: ["crates/scheduler/src/request.rs", "    pub token_ids: Vec<u32>,", "    /// Unverified MTP draft tokens appended"],

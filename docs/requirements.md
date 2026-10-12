@@ -26,6 +26,11 @@ Set the checkpoint location through `OH_MY_VLLM_MODEL` or `--model`.
 ## REQ-EXEC-001: GPU execution
 
 Use CUDA Graph, multiple CUDA streams, and Programmatic Dependent Launch (PDL) for model computation.
+
+Graph execution must use an enabled native caching allocator without explicit `max_split_size_mb`.
+Reject unsupported effective settings at startup without changing them. Explicit eager diagnostics stay available.
+Keep captured cuBLAS workspaces in their owning graph pools without changing workspace budgets.
+
 Use semantic operations and tensor/state access to define graph dependencies.
 Independent branches can run in parallel.
 PDL consumers must wait before they read producer output.

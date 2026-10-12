@@ -81,6 +81,12 @@ vLLM 及其缓存与项目运行时隔离.
 此选项依据 graph 依赖, 在多 stream 捕获期间复用存储.
 显式设置优先, 包括空值.
 选择后包装脚本移除旧别名. Trace 身份记录 allocator backend.
+
+启用图的 worker 要求启用 native caching allocator 且不能显式设置 `max_split_size_mb`.
+启动时拒绝其他配置, 不改写原值.
+需要使用这些配置进行显式诊断时, 设置 `OH_MY_VLLM_ENFORCE_EAGER=1`.
+捕获边界保留 cuBLAS 工作区预算. 参见 [ADR-013](decisions/ADR-013-cuda-graph-workspace-ownership.zh.md).
+
 在 worker 初始化前设置 stream 与 PDL 选项. 正式采集必须启用两项选项.
 
 ## 草稿模式选择

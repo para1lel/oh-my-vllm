@@ -7,6 +7,7 @@ import torch
 from oh_my_vllm.ir import compile_forward
 from oh_my_vllm.kernels.attention import PagedAttention
 from oh_my_vllm.models.qwen import Batch
+from oh_my_vllm.worker.graph_capture import capture_graph
 
 
 class PrefillGraph:
@@ -71,7 +72,7 @@ class PrefillGraph:
             unit()
             restore()
             torch.cuda.synchronize()
-            with torch.cuda.graph(self.graph, pool=pool):
+            with capture_graph(self.graph, pool=pool):
                 self.hidden, self.features = unit()
             self.execution_owners = tuple(unit.execution_owners)
         finally:

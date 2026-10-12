@@ -7,6 +7,7 @@ import torch
 from oh_my_vllm.ir import compile_forward
 from oh_my_vllm.kernels.decode_attention import decode
 from oh_my_vllm.models.qwen import AttentionBatch, Batch, Qwen
+from oh_my_vllm.worker.graph_capture import capture_graph
 
 
 class DecodeAttention:
@@ -203,7 +204,7 @@ class DecodeGraph:
             unit()
             restore()
             torch.cuda.synchronize()
-            with torch.cuda.graph(self.graph, pool=pool):
+            with capture_graph(self.graph, pool=pool):
                 self.hidden, self.logits, self.features = unit()
             self.execution_owners = tuple(getattr(unit, "execution_owners", ()))
         finally:
@@ -260,7 +261,7 @@ class DraftGraph:
             unit()
             cache[pages, :, offsets] = saved
             torch.cuda.synchronize()
-            with torch.cuda.graph(self.graph, pool=pool):
+            with capture_graph(self.graph, pool=pool):
                 self.hidden = unit()
             self.execution_owners = tuple(getattr(unit, "execution_owners", ()))
         finally:
@@ -334,7 +335,7 @@ class ProposalGraph:
             unit()
             cache[pages, :, offsets] = saved
             torch.cuda.synchronize()
-            with torch.cuda.graph(self.graph, pool=pool):
+            with capture_graph(self.graph, pool=pool):
                 self.tokens = unit()
             self.execution_owners = tuple(getattr(unit, "execution_owners", ()))
         finally:

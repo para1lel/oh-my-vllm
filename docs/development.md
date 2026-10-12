@@ -83,6 +83,12 @@ This option uses graph dependencies to reuse storage during capture with multipl
 Explicit settings, with an empty value, take precedence.
 The wrapper removes the legacy alias after selection. Trace identity records the allocator backend.
 
+Graph-enabled workers must use an enabled native caching allocator without an explicit `max_split_size_mb`.
+Startup rejects other configurations without changing them.
+Use `OH_MY_VLLM_ENFORCE_EAGER=1` for explicit diagnostics with those configurations.
+The capture boundary keeps the cuBLAS workspace budgets. See [ADR-013](decisions/ADR-013-cuda-graph-workspace-ownership.md).
+
+
 Set stream and PDL options before worker initialization. Formal collection must have the two options enabled.
 
 ## Draft mode selection

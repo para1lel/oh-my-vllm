@@ -20,6 +20,7 @@ from oh_my_vllm.worker.errors import (
     transactional_step,
 )
 from oh_my_vllm.worker.graph_cache import GraphCache
+from oh_my_vllm.worker.graph_capture import validate_graph_allocator
 from oh_my_vllm.worker.protocol import RequestOutput, SchedulerOutput, WorkerOutput
 from oh_my_vllm.worker.runtime import identity, verify_loaded_modules
 from oh_my_vllm.worker.sampler import RequestSampler, greedy_rows, verify_rows
@@ -135,6 +136,8 @@ class OhMyVllmWorker:
         return getattr(self, "dspark", None) if self._is_dspark() else self.mtp
 
     def init_device(self) -> None:
+        if os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1":
+            validate_graph_allocator()
         logger.info("Independent runtime", extra={"fields": identity()})
         torch.cuda.set_device(0)
 

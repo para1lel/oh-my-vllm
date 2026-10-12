@@ -363,6 +363,13 @@ DSpark target graphs use the same cooldown for repeated captures of recent shape
 Resident graphs continue to replay.
 
 Pools are shared in each graph family, with different target/draft/proposal families and no overlapping replay.
+
+All seven capture sites use `worker/graph_capture.py`.
+It synchronizes and clears cached cuBLAS workspaces before capture so each workspace belongs to its graph pool.
+Workspace budgets and numerical tolerances stay unchanged.
+Startup must use an enabled native caching allocator without `max_split_size_mb`, except in explicit eager mode.
+[ADR-013](decisions/ADR-013-cuda-graph-workspace-ownership.md) gives the lifetime contract and verification limits.
+
 Capture restores persistent state and FA writes. Output copies are complete before pool reuse.
 
 Target prefill has different eight-entry ordinary and DSpark families.

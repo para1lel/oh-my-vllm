@@ -5,6 +5,7 @@ import logging
 import torch
 
 from oh_my_vllm.worker.batch_plan import BLOCK
+from oh_my_vllm.worker.graph_capture import capture_graph
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ class DSparkContextGraph:
                 (len(features),),
                 len(features),
             )
-            with torch.cuda.graph(self.graph, pool=pool):
+            with capture_graph(self.graph, pool=pool):
                 self.outputs = unit(*inputs)
             self.execution_owners = tuple(getattr(unit, "execution_owners", ()))
         finally:
@@ -135,7 +136,7 @@ class DSparkGraph:
             key,
             tokens.numel(),
         )
-        with torch.cuda.graph(self.graph, pool=pool):
+        with capture_graph(self.graph, pool=pool):
             self.outputs = unit(*inputs)
         self.execution_owners = tuple(getattr(unit, "execution_owners", ()))
 

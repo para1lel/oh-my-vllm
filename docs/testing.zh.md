@@ -28,6 +28,11 @@ Full 模式在等待空闲且绑定 UUID 的 B200 前要求模型位置.
 
 测试覆盖调度事务, 缓存所有权, 取消, RPC framing, 服务, 实际路径 FP64 参考和编译模型单元.
 GPU 覆盖包括全部 6 个最大上下文用例和 metadata 变化后的 graph replay.
+
+`tests/test_graph_capture.py` 在 CPU 上检查实际 allocator 设置与工作区生命周期屏障.
+`tests/test_dspark_context_graph_gpu.py` 包含生产使用的 29-by-25600 BF16 上下文投影.
+它在捕获 stream 的 pool 外预热, 重置无关 GEMM 图, 施加 allocator 压力, 并重放变化后的输入.
+它用 `atol=0.03`, `rtol=0.03` 检查全部五层 cache 输出, 精确检查未修改行的 canary, 并验证工作区预算未变.
 完整模型 drift 测试在严格算子容差之外, 使用各自记录的模型级界限.
 协议回归使用 scripted worker; GPU / agentic 验收使用真实模型.
 记录 warning 和跳过测试及原因.

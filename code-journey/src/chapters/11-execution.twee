@@ -28,6 +28,11 @@
 <p>GPU 启动许多短 kernel 时, CPU 派发也会占时间. CUDA Graph 记录同一形状的一串启动与依赖, 后续 replay 重用它们. 图内数组地址固定, 但每次输入 ID, 位置, 页表和状态槽可以变化, 重放前用 copy_ 更新固定缓冲.</p>
 <<source "graphReplay" "展开 DecodeGraph 重放前的数据更新">>
 <p>DecodeGraph 处理目标计算, DraftGraph 处理单个 MTP 层, ProposalGraph 处理连续草稿提议. DecodeAttention 在图内准备动态长度和分组查询元数据, starts 也按本轮内容复制, 让一个图能服务不同请求.</p>
+<h3>cuBLAS 工作区怎样与图一起存活</h3>
+<p>cuBLAS 在矩阵乘法中使用临时工作区. 固定版本的 PyTorch 按 handle 和 stream 缓存这个地址, 捕获的图会记录该地址. 如果预热在捕获外分配工作区, 后续另一个图的 reset 可能清掉缓存 owner, allocator 再回收存储, 原图重放就可能发生非法内存访问.</p>
+<p>七个 worker 捕获入口统一使用 capture_graph. 它先等待已有 GPU 工作完成, 清除缓存的 cuBLAS 工作区 owner, 再开始捕获. 第一个被捕获的 GEMM 因而在对应图的私有 pool 中分配工作区. 同一 family 串行执行并及时消费输出, 驻留图保留其 pool. 工作区大小, 权重和数值容差保持不变.</p>
+<<source "graphCapture" "展开捕获前的工作区生命周期屏障">>
+<p>这个所有权契约使用启用的 native caching allocator, 不支持显式 max_split_size_mb 或 cudaMallocAsync. Worker 在加载模型前检查实际配置, 不改写用户设置. 显式 eager 诊断仍可使用其他 allocator. 短回归测试检查无关图重置并释放后的重放和五层 KV 写入, 完整模型与一小时会话另行验收.</p>
 <p>捕获本身会运行计算, 写到 FA 和 GDN 持久缓存. 因而初始化先备份候选写区域及会覆盖的 FA 行, 预热编译单元后恢复, 再同步并捕获, 最后在 finally 再次恢复. 恢复完成后, 请求继续从原来的状态执行.</p>
 <h2>GraphCache 如何限制数量和内存</h2>
 <p>目标图默认上限 32, MTP 草稿和提议共享另一组默认上限 64. 各图族使用独立内存池, 捕获前保留 4 GiB 余量. shape 首次命中记录频率, 空间满时要求新形状反复出现且比冷条目更热, 草稿和提议的淘汰保护下限分别为 32 与 8, 只有已有条目数超过本族下限时才允许从该族淘汰.</p>

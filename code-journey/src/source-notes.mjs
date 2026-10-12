@@ -488,6 +488,16 @@ Object.assign(sourceNotes, {
       ["sum(token_counts) / len(token_counts)", "总 token 行数和请求数.", "控制输入与输出张量形状, 和 extent, bound 一起组成四项 key."],
     ],
   },
+  graphCapture: {
+    title: "捕获图使用的 cuBLAS 工作区由谁持有", intro: "同步后清除旧工作区缓存, 让捕获内的首次分配属于图的私有 pool.",
+    entries: [
+      ["graph / pool", "本次捕获的 CUDA Graph 与可选 family 共享 pool.", "驻留图保留私有 pool, 同 family 的输出必须在下一次捕获或重放前消费."],
+      ["validate_graph_allocator", "检查实际 allocator backend, caching 开关和配置.", "拒绝不能保证私有 pool 存活的配置, 不改写用户原值."],
+      ["torch.cuda.synchronize", "等待当前设备已有工作完成.", "释放缓存 owner 前, 防止旧 GEMM 仍在使用其工作区."],
+      ["_cuda_clearCublasWorkspaces", "清除 PyTorch 缓存的 cuBLAS 工作区 owner.", "下一个捕获内 GEMM 在图的 pool 中分配新工作区, 预算未改."],
+      ["torch.cuda.graph / yield", "实际捕获范围与调用者的计算单元.", "所有七个入口共用这个边界, 捕获错误按原路径向上传播."],
+    ],
+  },
   benchPrompts: {
     title: "BenchArgs 的合成与自然语料入口", intro: "启动 GPU worker 前解析与校验全部请求 ID, 自然语料可用于独立参数调优.",
     entries: [

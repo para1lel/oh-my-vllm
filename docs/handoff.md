@@ -36,6 +36,12 @@ Compiler retirement starts garbage collection at safe host boundaries and keeps 
 Prefill admission accounts for planned storage. Graph pressure eviction releases unused pool owners.
 DSpark graph recapture uses a cooldown for repeated shape changes.
 
+All seven capture sites synchronize and clear cached cuBLAS workspaces before capture.
+This puts new workspaces in their owning graph pools and keeps workspace budgets and numerical tolerances.
+Graph-enabled startup must use an enabled native caching allocator without `max_split_size_mb`.
+Unsupported explicit configurations are rejected without rewriting them. Explicit eager mode stays available.
+[ADR-013](decisions/ADR-013-cuda-graph-workspace-ownership.md) records the lifetime fix and its scope.
+
 [Architecture](architecture.md) specifies ownership and cache contracts.
 [Service contracts](serving.md) specify budgets, worker recovery, and request timing.
 [Development](development.md) gives portable environment selection. Keep host configuration in ignored `LOCAL.md`.
@@ -49,12 +55,24 @@ The sampler keeps failed worker observations before GPU process lookup.
 The collector stops the sampler before final checks and evidence hashes.
 
 Rust tests, formatting, line width, Clippy, and CUDA formatting checks passed.
-The CPU suite passed 1372 tests and 116 subtests, with 448 GPU cases deselected.
-Additional context and compaction evidence regressions passed.
+The CPU suite passed 1389 tests and 116 subtests, with 449 GPU cases deselected.
+The workspace regression passed sixteen GPU tests, with one intentional allocator-OOM test deselected.
+The production capture boundary passed forty-two checkpoint context cases and 210 layer comparisons, with maximum absolute error zero.
+
+The reasoning-budget GPU suite passed sixty cases on source `ee05583` before the workspace fix.
+It covered ordinary, MTP4, DSpark, the two APIs, streams, JSON, tools, stochastic sampling, and service defaults.
+DSpark used confidence threshold zero for those cases. This result does not supply phase or persistent-session acceptance.
 
 The new one-hour MTP4 and DSpark collections and revised fifteen phase workloads are pending.
-The last MTP4 attempt failed on repeated answer text. The last DSpark attempt failed after an unexplained worker exit.
-Their original failed records stay unchanged. The worker now reports its exit status before process-group cleanup.
+The next DSpark collection failed with CUDA illegal memory access. The concurrent MTP4 and phase attempts were cancelled.
+
+A synchronized diagnostic found the failure in a resident 29-row context graph.
+A same-stream workspace lifetime reproducer failed after unrelated graph reset.
+The private-pool fix passed forty-two checkpoint context cases, with 210 layer comparisons and maximum absolute error zero.
+That diagnostic used synthetic target features and did not exercise the full target, scheduling, or HTTP workload.
+
+All collectors and their owned GPU processes exited. Original failed and cancelled records stay unchanged.
+Test the budget suite, fifteen phases, and two persistent-session collections again on the fixed committed source.
 
 The user requested a stop before the budget change. The active phase attempt was cancelled and its owned processes exited.
 

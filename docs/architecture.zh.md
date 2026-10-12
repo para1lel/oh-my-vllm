@@ -332,6 +332,13 @@ DSpark target graph 对近期 shape 的重复捕获使用相同 cooldown.
 Resident graph 继续 replay.
 
 各 graph family 内共享 pool, target / draft / proposal family 独立, replay 不重叠.
+
+全部七个捕获入口使用 `worker/graph_capture.py`.
+它在捕获前同步并清除缓存的 cuBLAS 工作区, 使各工作区属于对应图的 pool.
+工作区预算和数值容差保持不变.
+除显式 eager 模式外, 启动要求启用 native caching allocator 且不能设置 `max_split_size_mb`.
+[ADR-013](decisions/ADR-013-cuda-graph-workspace-ownership.zh.md) 说明生命周期契约和验证限制.
+
 Capture 恢复持久状态和 FA 写入; 输出复制先于 pool 复用.
 
 Target prefill 为普通和 DSpark 模式各设独立的八条目 family.

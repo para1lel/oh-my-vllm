@@ -17,6 +17,7 @@ export const chapters = {
 // Each record is checked against the current source, then shown in its chapter.
 // Layout: chapter, file, source anchor, responsibility, implementation and decision.
 export const coverage = [
+  ["Compilation", "python/oh_my_vllm/worker/graph_capture.py", "def capture_graph(", "capture_graph: 图与 cuBLAS 工作区的共同寿命", "全部七个捕获入口先同步并清除缓存 owner, 使新工作区在所属图 pool 内分配. 启动与捕获边界检查实际 allocator, 保留工作区预算, 现有权重与数值容差."],
   ["Validation", "crates/zmq-worker/src/bin/normalize-request.rs", "fn main(", "独立容量核对的生产请求转换", "复用 HTTP 请求 normalization, 逐行转换 Chat 与 Responses 输入, 交给 CPU tokenizer 核对完整模板预算. 验证工具不启动 GPU, 也不决定 OMP 的压缩时机."],
   ["Sampling", "crates/zmq-worker/src/serving/resources.rs", "pub struct Budget", "Budget / Lease: 准入, 字节预算与输出寿命", "读取 body 与复制历史前保留容量, queue 与 live 名额分别保护等待和处理中的请求. Lease 共享 owner 直到 HTTP body 与 drain 释放, 绝对 deadline 包括排队."],
   ["Protocol", "python/oh_my_vllm/worker/errors.py", "def transactional_step(", "transactional_step: 失效 GPU 事务的错误边界", "区分 OOM, device 与 internal 故障, 未完成 execute 标为不可继续使用. Bridge 发送错误后退出, Rust supervisor 以新 worker 和空逻辑缓存恢复."],

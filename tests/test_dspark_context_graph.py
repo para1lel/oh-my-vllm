@@ -142,7 +142,9 @@ def _cpu_capture(unit, caches, features, positions, slots):
         patch("torch.cuda.Stream", return_value=stream),
         patch("torch.cuda.current_stream", return_value=stream),
         patch("torch.cuda.stream", return_value=nullcontext()),
-        patch("torch.cuda.graph", return_value=nullcontext()),
+        patch(
+            "oh_my_vllm.worker.dspark_graph.capture_graph", return_value=nullcontext()
+        ),
         patch("torch.cuda.synchronize"),
     ):
         return DSparkContextGraph(unit, caches, features, positions, slots)
@@ -203,7 +205,9 @@ def test_proposal_capture_logs_actual_graph_family_key_and_rows(caplog):
         patch("torch.cuda.Stream", return_value=stream),
         patch("torch.cuda.current_stream", return_value=stream),
         patch("torch.cuda.stream", return_value=nullcontext()),
-        patch("torch.cuda.graph", return_value=nullcontext()),
+        patch(
+            "oh_my_vllm.worker.dspark_graph.capture_graph", return_value=nullcontext()
+        ),
         patch("torch.cuda.synchronize"),
     ):
         graph = DSparkGraph(

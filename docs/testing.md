@@ -29,6 +29,13 @@ Selected pytest arguments follow `cpu` or `full`.
 
 Tests include scheduler transactions, cache ownership, cancellation, RPC framing, serving, inference-path FP64 references, and compiled model units.
 GPU coverage includes all six maximum-context cases and changed-metadata graph replay.
+
+`tests/test_graph_capture.py` checks effective allocator settings and workspace lifetime fences on CPU.
+`tests/test_dspark_context_graph_gpu.py` includes the production 29-by-25600 BF16 context projection.
+Its warmup uses the capture stream before pool capture.
+It resets unrelated GEMM graphs, applies allocator pressure, and replays changed inputs.
+It checks all five cache outputs at `atol=0.03`, `rtol=0.03`, exact untouched-row canaries, and unchanged workspace budgets.
+
 Full-model drift tests use their documented model-level bounds in addition to strict operator-level tolerances.
 Use scripted workers for protocol regressions and the target checkpoint for GPU/agentic acceptance.
 Record warnings and skipped tests with their reasons.
