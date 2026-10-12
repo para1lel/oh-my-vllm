@@ -391,12 +391,45 @@ Check that SDK and SSE stop reasons agree. A `length` completion must match its 
 
 Parallel summary calls must have a unique usage and lifecycle match. Ambiguous evidence fails verification.
 
+OMP `18.4.3` does not put internal summary usage in its session journal.
+The collector uses one owned loopback OTLP endpoint per client for original SDK result traces.
+It keeps provider dispatch, model APIs, request bodies, and automatic compaction unchanged.
+Native traces supply response IDs, conversation IDs, token usage, finish reasons, and summary purposes.
+
+The API binding comes from hashed isolated configuration and recorded runtime model state. Native traces do not supply that field.
+
+Each wire request must match a unique SDK result trace. Missing, changed, or ambiguous records fail verification.
+After active work, the collector waits for completed SDK exports before RPC shutdown and then closes the trace listener.
+Original protobuf records have size limits and hashes. Collector errors and closure records enter offline verification.
+
+An exporter can send the same batch again. The collector keeps these original records.
+Two SDK completions with the same response ID fail verification.
+Only `message_end` supplies an RPC SDK completion. A normal `turn_end` can include the same message.
+
+Run the CPU instrumentation checks with the pinned OMP executable available:
+
+```bash
+scripts/with-env.sh python -m pytest tests/test_agentic_sdk_trace.py tests/test_agentic_sdk_integration.py tests/test_host_allocator.py
+```
+
+The integration fixture supplies API responses from fixed test data. It checks full request JSON equality and all three automatic-compaction purposes.
+It does not test target inference or tokenizer counts from the target model.
+
 Check resource count and byte limits throughout collection. Check empty Rust/Python request state after the final drain.
 Each logical pool then has `blocks - 1` free blocks, with cached blocks available for eviction.
 Block `0` stays allocated. Keep the original HTTP and worker process birth identities.
 
 Examine host RSS, GPU allocated/reserved memory, graph/compiler occupancy, active requests, and input lengths together.
 Changing conversation sizes can change bounded caches. Independent review must examine the causes of growth and accept memory stability.
+
+Set `OH_MY_VLLM_HOST_ALLOCATOR_DIAGNOSTICS=1` for optional glibc allocator fields at existing diagnostic intervals.
+Each record includes the `available` value and call time. Available measurements include glibc version and raw `mallinfo2` fields.
+The call uses allocator locks and examines free storage. Its cost can vary with allocator state.
+
+`uordblks + hblkhd` gives values for storage in use or kept by the allocator. `fordblks` gives its free storage.
+Thread caches, direct mappings, and other allocators limit these measurements. They do not count all objects in use or replace RSS.
+The option does not change allocator settings or start extra resource release. Unsupported hosts report that measurements are not available.
+
 The collector records `operational_passed` and `awaiting_resource_review` separately from formal acceptance.
 
 Keep failed worker diagnostics before GPU process lookup.

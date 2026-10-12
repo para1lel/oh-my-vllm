@@ -377,11 +377,44 @@ OMP 的 settled `contextUsage` 使用 provider-input 锚点加上之后的本地
 SDK 与 SSE stop reason 必须相符. `length` 结束的输出数必须等于请求预算.
 并行摘要请求必须唯一匹配 usage 和生命周期. 证据有歧义时验证失败.
 
+OMP `18.4.3` 不将内部摘要 usage 写入会话 journal.
+Collector 为每个客户端建立一个自有 loopback OTLP endpoint, 采集原始 SDK 结果 trace.
+它保持 provider dispatch, 模型 API, 请求正文和自动压缩不变.
+原生 trace 提供响应 ID, 会话 ID, token usage, finish reason 和摘要用途.
+
+API 绑定来自带哈希的隔离配置及已记录的运行时模型状态. 原生 trace 不提供该字段.
+
+每个 wire 请求必须唯一匹配一个 SDK 结果 trace. 记录缺失, 改变或有歧义时验证失败.
+活动工作结束后, collector 等待已完成 SDK 导出, 再关闭 RPC 和 trace listener.
+原始 protobuf 记录设有大小上限并保存哈希. 离线验证检查 collector 错误及关闭记录.
+
+Exporter 可再次发送同一批次. Collector 保留这些原始记录.
+具有相同 response ID 的两个 SDK 完成记录使验证失败.
+只有 `message_end` 提供 RPC SDK 完成记录. 正常 `turn_end` 可以携带同一消息.
+
+安装固定版本 OMP executable 后, 执行 CPU 采集检查:
+
+```bash
+scripts/with-env.sh python -m pytest tests/test_agentic_sdk_trace.py tests/test_agentic_sdk_integration.py tests/test_host_allocator.py
+```
+
+集成 fixture 提供来自固定测试数据的 API 响应. 它检查完整请求 JSON 相等及全部三种自动压缩用途.
+它不测试目标模型推理或目标模型的 tokenizer 计数.
+
 采集期间检查资源的数量和字节上限. 最后排空后检查 Rust/Python 请求状态为空.
 各逻辑池此时有 `blocks - 1` 个空闲块, 包含可驱逐复用的缓存块.
 Block `0` 保持分配. HTTP 和 worker 必须保持原有进程出生身份.
 结合主机 RSS, GPU allocated / reserved 内存, 图/编译缓存占用, 活动请求和输入长度分析.
 变化的会话大小可能改变有界缓存. 独立审查需解释增长并确认内存稳定性.
+
+设置 `OH_MY_VLLM_HOST_ALLOCATOR_DIAGNOSTICS=1`, 在现有诊断间隔采集可选 glibc allocator 字段.
+每条记录包含 `available` 值和调用耗时. 可用测量包含 glibc 版本和原始 `mallinfo2` 字段.
+该调用使用 allocator 锁, 并检查空闲存储. 开销可能随 allocator 状态改变.
+
+`uordblks + hblkhd` 表示 allocator 已用或保留的存储. `fordblks` 表示该 allocator 中的空闲存储.
+线程缓存, 直接映射和其他 allocator 限制测量范围. 这些值不统计全部活跃对象, 也不替代 RSS.
+该开关不改变 allocator 设置, 不启动额外资源释放. 不支持的主机明确报告测量不可用.
+
 Collector 将 `operational_passed` 和 `awaiting_resource_review` 与正式验收区分记录.
 
 GPU 进程查询前保留失败 worker 的 diagnostics.

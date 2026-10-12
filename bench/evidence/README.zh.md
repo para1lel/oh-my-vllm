@@ -19,6 +19,9 @@
 [README](../../README.zh.md#性能实测) 给出阶段表格和独立的 MTP4 / DSpark 请求图.
 每项结果保留其实测源码和完整原始 SHA.
 
+[原生 SDK collector 记录](2026-10-13-native-sdk-collector.json) 提供 CPU fixture 检查及原始结果哈希.
+这些检查不提供模型验收.
+
 ## 导出
 
 ```bash

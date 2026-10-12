@@ -7,8 +7,11 @@
 
 ## 当前采集
 
-长 prefill 预算分配处于验收阶段.
+新的验收将检查 SDK 证据采集和可选的主机 allocator diagnostics.
 当前候选版本有 517 项算子案例, 保留 317 项配置, 新增 200 项静态负载案例.
+
+[SDK collector CPU 记录](../bench/evidence/2026-10-13-native-sdk-collector.json) 提供 fixture 检查及原始结果哈希.
+这些检查不提供模型验收.
 新的十五行阶段, 六项容量案例, reasoning 预算套件和两组持久会话采集待完成.
 此前源码结果不能证明当前源码通过验收.
 
@@ -63,6 +66,18 @@ Fixture 修改保留原断言, 并增加在该 segment 中保留活跃 tensor �
 
 MTP 持久采集未满一小时便触发 OMP 重复输出检查失败. 其重试及其他活跃采集在 fixture 修改前取消.
 所有所属 GPU 进程已退出, 临时服务端点已关闭. 新提交源码上的 GPU 验收待完成.
+
+## `f019075` 的部分采集
+
+独立审核接受六十项 reasoning 预算案例, 六项完整 context 案例, 十一行阶段和全部 `469` 项 GPU 测试.
+剩余阶段行和完整 `517` 项算子矩阵未完成.
+一轮算子尝试保存 `42` 行, 其中一行置信下界为负. 其他尝试分别在 `158` 行和 `16` 行后停止.
+这些记录不提供完整算子验收.
+
+两组持久采集均未使全部四条活动 lane 完成一小时.
+MTP collector 缺少六个自然压缩调用的独立 SDK usage.
+DSpark collector 将正常 `turn_end` 误算为另一个 SDK 完成记录. 主机内存稳定性尚无已接受的审核结果.
+修改 collector 和 diagnostics 前, 全部自有 collector, GPU 进程和临时模型服务 endpoint 均已停止.
 
 ## `706f1a6` 历史采集
 

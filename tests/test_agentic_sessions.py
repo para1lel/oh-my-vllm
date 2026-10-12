@@ -125,7 +125,9 @@ for line in sys.stdin:
  if kind=='get_state':
   data={'sessionId':'session-2' if CHANGE and turn>1 else 'session-1',
         'thinkingLevel':'max','autoCompactionEnabled':True,'isSettled':True,
-        'model':{'contextWindow':262144,'tokenizer':'qwen3'}}
+        'model':{'contextWindow':262144,'tokenizer':'qwen3',
+                 'api':'openai-completions','provider':'oh-my-vllm-chat',
+                 'id':'qwen3.8-27b-fp8'}}
  print(json.dumps({'type':'response','id':identity,'success':True,'data':data}),flush=True)
  if kind=='prompt':
   turn+=1

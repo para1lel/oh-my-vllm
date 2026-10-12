@@ -204,6 +204,37 @@ Typed inventory 仅在 receiver 为 Tensor 且结果为整数时, 将 Tensor `nu
 旧 prefix 失败记录没有此类型证据, 仍被拒绝.
 [验收](acceptance.zh.md) 标明此前测量范围. 此前结果不能证明调整后的负载已通过.
 
+## SDK 证据与主机观测
+
+源码 `f019075` 通过六十项预算案例, 六项完整 context 案例, 十一行阶段和全部 `469` 项 GPU 测试, 均经过独立审核.
+它没有完成十五行阶段或完整 `517` 项算子矩阵.
+一轮算子尝试保存 `42` 行, 其中一行置信下界为负. 原始失败和取消记录保留状态.
+
+两组持久采集均未使全部四条活动 lane 完成一小时.
+六个自然触发的 MTP 压缩调用有 SSE 和服务记录, 但没有独立 SDK usage 记录.
+DSpark collector 还将正常 `turn_end` 误算为另一个 SDK 完成记录.
+独立审核未接受两种模式的主机内存稳定性.
+修改前, 全部自有 collector, GPU 进程和临时模型服务 endpoint 均已停止.
+
+Collector 现在为每个固定客户端建立一个自有 loopback endpoint, 接收原生 OMP SDK trace.
+它检查带哈希的原始导出, 完整 wire 覆盖, 配置中的 API 绑定及正常 collector 关闭.
+只有 `message_end` 计入 RPC 完成记录. 对于正常 HTTP stream, 具有相同 response ID 的两个 SDK 完成记录也使验证失败.
+
+四个固定版本 OMP CPU 集成案例通过, 覆盖两种 API 及全部三种自动压缩用途.
+原生 SDK 遥测关闭和启用时, 完整请求 JSON 保持相等.
+这些 fixture 不提供目标推理或一小时验收.
+
+可选 glibc allocator 观测将字段值和调用耗时与 RSS 分开记录.
+该开关保持现有诊断间隔, 不改变 allocator 选项, 不启动额外资源释放.
+CPU 测试已通过, 包含使用已安装 C header 核对结构大小及字段偏移.
+
+Rust `152` 项测试通过. CPU 套件通过 `1466` 项测试及 `119` 项子测试.
+CPU 模式不选择 `469` 项 GPU 测试.
+八项必需检查, 依赖检查及 release 构建通过.
+教程通过十项源码展示测试及九项浏览器测试.
+
+需在新的已提交源码上执行 GPU 验收和独立资源审核.
+
 ## 后续工作
 
 - 扩展 `PY-04`, 在接近最大支持 context 时验证跨 shape 图驱逐与重捕获.

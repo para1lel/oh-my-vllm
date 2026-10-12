@@ -21,6 +21,7 @@ export OH_MY_VLLM_MODEL="/path/to/Qwen3.8-27B-FP8"
 
 `requirements/tools.txt` pins pytest, Ruff, pre-commit, clang-format, Matplotlib, and their constrained dependencies.
 Matplotlib exports the agentic soak scatter plots as standalone SVG and PNG files.
+`opentelemetry-proto` decodes original OMP SDK trace exports for persistent-session evidence.
 Regenerate it from `requirements/tools.in` with the runtime constraint after tool changes with satisfactory compatibility tests.
 
 An existing conda environment is also permitted.
@@ -67,6 +68,7 @@ Supply `WorkerConfig.model_path` explicitly for direct Rust library calls.
 | `OH_MY_VLLM_ENFORCE_EAGER` | Explicit diagnostic mode when set to `1`. |
 | `OH_MY_VLLM_MULTI_STREAM` | GDN branch streams. Default `1`. Diagnostic `0` disables them. |
 | `OH_MY_VLLM_CUDA_PDL` | Owned CUDA programmatic launch. Default `1`. Diagnostic `0` disables it. |
+| `OH_MY_VLLM_HOST_ALLOCATOR_DIAGNOSTICS` | Optional glibc `mallinfo2` measurements in worker diagnostics. Set `1` to enable. |
 | `OH_MY_VLLM_GPU_UUID` | Optional idle B200 selection for `scripts/with-gpu.sh`. |
 | `PYTORCH_ALLOC_CONF` | Explicit allocator options. This name takes precedence over the legacy name. |
 | `PYTORCH_CUDA_ALLOC_CONF` | Legacy allocator options when the new name is unset. |

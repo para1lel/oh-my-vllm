@@ -17,6 +17,8 @@ export const chapters = {
 // Each record is checked against the current source, then shown in its chapter.
 // Layout: chapter, file, source anchor, responsibility, implementation and decision.
 export const coverage = [
+  ["Validation", "python/oh_my_vllm/worker/host_allocator.py", "def host_allocator_snapshot(", "glibc allocator: 主机存储的可选诊断", "现有诊断边界按开关读取 mallinfo2, 保存原始字段, glibc 版本和调用耗时. allocator 已用或保留存储与进程 RSS 分开, 不统计全部活跃对象, 不改变分配选项或主动释放资源."],
+  ["Validation", "benchmarks/agentic_sdk_trace.py", "class SdkTrace", "原生 OMP SDK usage 与导出边界", "每个固定客户端使用一个自有 loopback endpoint, 保存带哈希的原始 protobuf. 每次调用唯一关联 SDK response ID, SSE 与服务 metric, API 绑定来自配置和运行时状态. 重复导出保留原始记录, 真正重复的 SDK 完成记录使验证失败."],
   ["Compilation", "python/oh_my_vllm/worker/graph_capture.py", "def capture_graph(", "capture_graph: 图与 cuBLAS 工作区的共同寿命", "全部七个捕获入口先同步并清除缓存 owner, 使新工作区在所属图 pool 内分配. 启动与捕获边界检查实际 allocator, 保留工作区预算, 现有权重与数值容差."],
   ["Validation", "crates/zmq-worker/src/bin/normalize-request.rs", "fn main(", "独立容量核对的生产请求转换", "复用 HTTP 请求 normalization, 逐行转换 Chat 与 Responses 输入, 交给 CPU tokenizer 核对完整模板预算. 验证工具不启动 GPU, 也不决定 OMP 的压缩时机."],
   ["Sampling", "crates/zmq-worker/src/serving/resources.rs", "pub struct Budget", "Budget / Lease: 准入, 字节预算与输出寿命", "读取 body 与复制历史前保留容量, queue 与 live 名额分别保护等待和处理中的请求. Lease 共享 owner 直到 HTTP body 与 drain 释放, 绝对 deadline 包括排队."],

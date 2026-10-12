@@ -6,11 +6,12 @@ import hashlib
 import json
 import math
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
 
 from benchmarks.agentic_context import CONTEXT_WINDOW
+from benchmarks.agentic_sdk_trace import read_sdk_spans
 from benchmarks.agentic_soak_analysis import request_metric
 from benchmarks.agentic_soak_transport import completed_transport_close
 
@@ -28,6 +29,31 @@ def entry_time(entry: dict) -> float:
     return datetime.fromisoformat(entry["timestamp"].replace("Z", "+00:00")).timestamp()
 
 
+def sdk_completion_events(events: list[dict], identity: str) -> list[dict]:
+    """A turn-end event can repeat a message without another SDK completion."""
+    return [
+        event
+        for event in events
+        if event.get("type") == "message_end"
+        and event.get("message", {}).get("role") == "assistant"
+        and event["message"].get("responseId") == identity
+    ]
+
+
+def rpc_completions(events: list[dict]) -> dict:
+    """Reject repeated SDK completions for healthy and disconnected streams."""
+    messages = {}
+    for event in events:
+        message = event.get("message", {})
+        if event.get("type") != "message_end" or message.get("role") != "assistant":
+            continue
+        identity = message.get("responseId")
+        if not identity or identity in messages:
+            raise ValueError("missing or duplicate RPC SDK completion identity")
+        messages[identity] = message
+    return messages
+
+
 def match_summary(
     entries: list[dict], record: dict, proof: dict, output: int, api: str
 ):
@@ -38,7 +64,9 @@ def match_summary(
     candidates = [
         entry
         for entry in entries
-        if entry.get("api") == api
+        if (entry.get("api") or entry.get("api_binding")) == api
+        and entry.get("responseId", record["response_ids"][0])
+        == record["response_ids"][0]
         and entry.get("provider") == record["expected_provider"]
         and entry.get("model") == "qwen3.8-27b-fp8"
         and entry.get("stopReason") == reason
@@ -54,6 +82,126 @@ def match_summary(
     result = candidates[0]
     entries.remove(result)
     return result
+
+
+def trace_messages(directory: Path, session: dict) -> list[dict]:
+    """Keep native SDK result fields distinct from the configured API binding."""
+    binding = session["sdk_trace"]
+    expected_api = (
+        "openai-completions" if session["api"] == "chat" else "openai-responses"
+    )
+    if (
+        binding["directory"] != "sdk-trace"
+        or binding["source"] != "omp_sdk_otlp"
+        or binding["api_binding_source"] != "isolated_provider_configuration"
+        or binding["api_binding"] != expected_api
+    ):
+        raise ValueError("SDK trace configuration binding differs")
+    if set(binding["configuration_sha256"]) != {"models.yml", "settings.yml"}:
+        raise ValueError("SDK provider configuration identities are incomplete")
+    for name, digest in binding["configuration_sha256"].items():
+        if (
+            name not in ("models.yml", "settings.yml")
+            or hashlib.sha256((directory / "state" / name).read_bytes()).hexdigest()
+            != digest
+        ):
+            raise ValueError("SDK provider configuration hash differs")
+    models = json.loads((directory / "state/models.yml").read_text())
+    provider = models["providers"][f"oh-my-vllm-{session['api']}"]
+    if provider["api"] != expected_api:
+        raise ValueError("SDK provider API binding differs")
+    states = json.loads((directory / "states.json").read_text())
+    if not states or any(
+        state["sessionId"] != session["session_id"]
+        or state["model"].get("api") != expected_api
+        or state["model"].get("provider") != f"oh-my-vllm-{session['api']}"
+        or state["model"].get("id") != "qwen3.8-27b-fp8"
+        for state in states
+    ):
+        raise ValueError("SDK runtime API binding differs")
+    messages, identities = [], set()
+    for span in read_sdk_spans(directory / "sdk-trace"):
+        values = span["attributes"]
+        purpose = values.get("omp.gen_ai.oneshot.kind", "task")
+        counts = [
+            values.get(key, 0)
+            for key in (
+                "gen_ai.usage.cache_read.input_tokens",
+                "gen_ai.usage.cache_creation.input_tokens",
+                "gen_ai.usage.reasoning.output_tokens",
+            )
+        ]
+        budget = values.get("gen_ai.request.max_tokens")
+        identity = values.get("gen_ai.response.id")
+        input_tokens = values.get("gen_ai.usage.input_tokens")
+        output_tokens = values.get("gen_ai.usage.output_tokens")
+        reason = values.get("gen_ai.response.finish_reasons")
+        if (
+            span["scope"] != "@oh-my-pi/pi-agent-core"
+            or span["status_code"] not in (0, 1)
+            or not identity
+            or identity in identities
+            or values.get("gen_ai.conversation.id") != session["session_id"]
+            or values.get("gen_ai.provider.name") != f"oh-my-vllm-{session['api']}"
+            or values.get("gen_ai.response.model") != "qwen3.8-27b-fp8"
+            or type(input_tokens) is not int
+            or input_tokens < 0
+            or type(output_tokens) is not int
+            or output_tokens < 0
+            or reason not in (["stop"], ["tool_calls"], ["length"])
+            or values.get("gen_ai.request.model") != "qwen3.8-27b-fp8"
+            or values.get("omp.gen_ai.request.reasoning.effort") != "max"
+            or purpose
+            not in (
+                "task",
+                "compaction_summary",
+                "compaction_short_summary",
+                "compaction_turn_prefix",
+            )
+            or any(type(value) is not int or value < 0 for value in counts)
+            or sum(counts[:2]) > input_tokens
+            or counts[2] > output_tokens
+            or type(values.get("omp.gen_ai.usage.total_tokens")) is not int
+            or values["omp.gen_ai.usage.total_tokens"] != input_tokens + output_tokens
+            or (
+                budget is not None
+                and (type(budget) is not int or not 0 < budget <= 32768)
+            )
+            or (purpose != "task" and budget is None)
+            or not re.fullmatch(r"[0-9a-f]{32}", span["trace_id"])
+            or int(span["trace_id"], 16) == 0
+            or not re.fullmatch(r"[0-9a-f]{16}", span["span_id"])
+            or int(span["span_id"], 16) == 0
+            or not math.isfinite(span["started_unix_s"])
+            or not math.isfinite(span["completed_unix_s"])
+            or not 0 < span["started_unix_s"] <= span["completed_unix_s"]
+        ):
+            raise ValueError("SDK result trace is incomplete or inconsistent")
+        identities.add(identity)
+        messages.append(
+            {
+                "source": span["source"],
+                "id": span["span_id"],
+                "responseId": identity,
+                "session_id": session["session_id"],
+                "timestamp": datetime.fromtimestamp(
+                    span["completed_unix_s"], tz=UTC
+                ).isoformat(),
+                "purpose": purpose,
+                "provider": values["gen_ai.provider.name"],
+                "model": values["gen_ai.response.model"],
+                "api_binding": expected_api,
+                "api_binding_source": binding["api_binding_source"],
+                "stopReason": {
+                    "stop": "stop",
+                    "tool_calls": "toolUse",
+                    "length": "length",
+                }[reason[0]],
+                "usage": {"input": input_tokens, "output": output_tokens},
+                "sdk_trace": span,
+            }
+        )
+    return messages
 
 
 def tool_output(value) -> str:
@@ -240,14 +388,11 @@ def audit_session(
                             if key != "content"
                         },
                     }
-    messages = {
-        event["message"]["responseId"]: event["message"]
-        for event in events
-        if event.get("type") == "message_end"
-        and event.get("message", {}).get("role") == "assistant"
-        and event["message"].get("responseId")
-    }
+    messages = rpc_completions(events)
     extra_usage = [entry for entry in entries if entry["type"] == "model_usage"]
+    traced = trace_messages(directory, session)
+    traces = {item["responseId"]: item for item in traced}
+    extra_usage.extend(item for item in traced if item["purpose"] != "task")
     points = []
     successful_tools = {
         event["toolCallId"]: event
@@ -298,6 +443,21 @@ def audit_session(
                 raise ValueError(
                     "CPU token count differs from independent serving usage"
                 )
+            trace = traces.get(identity)
+            if (
+                trace is None
+                or trace["usage"] != usage
+                or trace["sdk_trace"]["started_unix_s"]
+                > record["upstream_started_unix_s"] + 1
+                or trace["sdk_trace"]["completed_unix_s"]
+                < record["upstream_started_unix_s"] - 1
+                or (
+                    "gen_ai.request.max_tokens" in trace["sdk_trace"]["attributes"]
+                    and trace["sdk_trace"]["attributes"]["gen_ai.request.max_tokens"]
+                    != proof["output_budget"]
+                )
+            ):
+                raise ValueError("wire request lacks matching genuine SDK result trace")
             message = messages.get(identity)
             purpose = "task"
             expected_api = (
@@ -318,7 +478,7 @@ def audit_session(
                 )
                 purpose = message["purpose"]
             if (
-                message.get("api") != expected_api
+                (message.get("api") or message.get("api_binding")) != expected_api
                 or message.get("provider") != f"oh-my-vllm-{session['api']}"
                 or message.get("model") != "qwen3.8-27b-fp8"
                 or message.get("errorMessage")
@@ -328,6 +488,10 @@ def audit_session(
                 )
             if message.get("stopReason") not in ("stop", "toolUse", "length"):
                 raise ValueError("SDK completion has an unsuccessful stop reason")
+            if message["stopReason"] != trace["stopReason"] or (purpose == "task") != (
+                trace["purpose"] == "task"
+            ):
+                raise ValueError("SDK result trace differs from the RPC completion")
             if message["stopReason"] != {
                 "stop": "stop",
                 "tool_calls": "toolUse",
@@ -335,14 +499,10 @@ def audit_session(
             }.get(terminal["finish_reason"]):
                 raise ValueError("SDK and SSE stop reasons differ")
             if record.get("error"):
-                same_id_events = [
-                    event
-                    for event in events
-                    if event.get("message", {}).get("responseId") == identity
-                ]
+                same_id_events = sdk_completion_events(events, identity)
                 record["client_completion"] = {
                     "response_id": identity,
-                    "api": message["api"],
+                    "api": message.get("api") or message["api_binding"],
                     "model": message["model"],
                     "stop_reason": message["stopReason"],
                     "message_count": len(same_id_events),
@@ -351,6 +511,20 @@ def audit_session(
                     else None,
                     "successful": not message.get("errorMessage"),
                 }
+                if purpose != "task":
+                    record["client_completion"].pop("api")
+                    record["client_completion"].pop("message_count")
+                    record["client_completion"].pop("message_sha256")
+                    record["client_completion"].update(
+                        source="omp_sdk_otlp",
+                        api_binding=trace["api_binding"],
+                        api_binding_source=trace["api_binding_source"],
+                        span_count=1,
+                        span_id=trace["sdk_trace"]["span_id"],
+                        trace_id=trace["sdk_trace"]["trace_id"],
+                        export_file=trace["sdk_trace"]["export_file"],
+                        export_sha256=trace["sdk_trace"]["export_sha256"],
+                    )
                 if not completed_transport_close(record, identity, session["api"]):
                     raise ValueError(
                         "persistent transport lacks independent completion"
@@ -413,7 +587,7 @@ def audit_session(
                     / metric["processing_seconds"],
                 }
             )
-    if extra_usage or set(messages) - normal_ids:
+    if extra_usage or set(messages) - normal_ids or set(traces) != normal_ids:
         raise ValueError("SDK requests and wire requests do not have complete coverage")
     reads = set(read_starts) & set(successful_tools) & forwarded
     if (

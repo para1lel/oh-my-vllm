@@ -438,6 +438,13 @@ Garbage collection waits until CUDA capture and nested compilation finish. Shutd
 Provider selection records have a 2048-entry LRU. Rewrite records have 256 entries, and compilation counters have at most 128 labels.
 Semantic graph inventory records are active only with the explicit trace option.
 
+Worker diagnostics record full process RSS and optional glibc allocator values in different fields.
+`OH_MY_VLLM_HOST_ALLOCATOR_DIAGNOSTICS=1` enables `mallinfo2` at the existing diagnostic boundary.
+Each record includes the `available` value and call time. Available measurements include allocator version and raw fields.
+These measurements do not supply a count of all objects in use.
+
+The call uses allocator locks. The option does not change allocator settings or start extra resource release.
+
 Shutdown releases graph pools, executable owners, bound model callables, request state, and owned compiler roots.
 The bridge then closes its socket and exits the worker process.
 Process exit releases cached CUDA allocator storage. Shutdown does not call a final `torch.cuda.empty_cache()`.

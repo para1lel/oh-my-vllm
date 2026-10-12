@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 from benchmarks.agentic_context import isolated_environment, session_configuration
+from benchmarks.agentic_sdk_trace import SdkTrace
 
 ROOT = Path(__file__).resolve().parents[1]
 EVENTS = [
@@ -134,8 +135,13 @@ class RpcClient:
         self.state = directory / "state"
         self.state.mkdir()
         models, settings = session_configuration(proxy, api)
+        settings["telemetry"] = {"otlpExportEnabled": True}
         for name, value in (("models.yml", models), ("settings.yml", settings)):
             (self.state / name).write_text(json.dumps(value, indent=2) + "\n")
+        self.configuration_hashes = {
+            name: hashlib.sha256((self.state / name).read_bytes()).hexdigest()
+            for name in ("models.yml", "settings.yml")
+        }
         self.workspace = directory / "workspace"
         self.workspace.mkdir()
         self.workspace_manifest = prepare_workspace(self.workspace)
@@ -170,15 +176,21 @@ class RpcClient:
             str(directory / "sessions"),
         ]
         self.stderr = (directory / "stderr.log").open("x")
-        self.process = subprocess.Popen(
-            command,
-            cwd=self.workspace,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=self.stderr,
-            env=isolated_environment(self.state),
-            start_new_session=True,
-        )
+        self.sdk_trace = SdkTrace(directory / "sdk-trace")
+        try:
+            self.process = subprocess.Popen(
+                command,
+                cwd=self.workspace,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=self.stderr,
+                env=isolated_environment(self.state) | self.sdk_trace.environment(),
+                start_new_session=True,
+            )
+        except BaseException:
+            self.sdk_trace.close()
+            self.stderr.close()
+            raise
         try:
             stat = Path("/proc", str(self.process.pid), "stat").read_text()
             self.process_record = {
@@ -197,6 +209,7 @@ class RpcClient:
             self.process.stdin.close()
             self.process.stdout.close()
             self.stderr.close()
+            self.sdk_trace.close()
             raise
 
     def _read(self):
@@ -277,6 +290,10 @@ class RpcClient:
         deadline = time.monotonic() + timeout
         with self.condition:
             while identity not in mapping:
+                if self.sdk_trace.error:
+                    raise ValueError(
+                        f"persistent SDK trace failed: {self.sdk_trace.error}"
+                    )
                 if self.stop.is_set() or self.error or self.process.poll() is not None:
                     raise ValueError(f"persistent RPC stopped: {self.error}")
                 remaining = deadline - time.monotonic()
@@ -306,6 +323,16 @@ class RpcClient:
             raise ValueError("persistent model context window differs")
         if state.get("model", {}).get("tokenizer") != "qwen3":
             raise ValueError("persistent model tokenizer differs")
+        model = state["model"]
+        expected_api = (
+            "openai-completions" if self.api == "chat" else "openai-responses"
+        )
+        if (
+            model.get("api") != expected_api
+            or model.get("provider") != f"oh-my-vllm-{self.api}"
+            or model.get("id") != "qwen3.8-27b-fp8"
+        ):
+            raise ValueError("persistent runtime provider/API differs")
         self.session_id = identity
         self.states.append({"collected_unix_s": time.time(), **state})
         return state
@@ -376,6 +403,15 @@ class RpcClient:
         self.check_state()
         self.checkpoint_entries()
         self.persist()
+        self.sdk_trace.wait_for(
+            {
+                event["message"]["responseId"]
+                for event in self.events
+                if event.get("type") == "message_end"
+                and event.get("message", {}).get("role") == "assistant"
+                and event["message"].get("responseId")
+            }
+        )
         return {
             "lane": self.lane,
             "api": self.api,
@@ -386,6 +422,16 @@ class RpcClient:
             "entry_count": self.entry_count,
             "leaf_id": self.leaf_id,
             "workspace": self.workspace_manifest,
+            "sdk_trace": {
+                "directory": "sdk-trace",
+                "source": "omp_sdk_otlp",
+                "api_binding": "openai-completions"
+                if self.api == "chat"
+                else "openai-responses",
+                "api_binding_source": "isolated_provider_configuration",
+                "configuration_sha256": self.configuration_hashes,
+                "environment": self.sdk_trace.environment(),
+            },
         }
 
     def close(self):
@@ -413,5 +459,6 @@ class RpcClient:
         (self.directory / "process.json").write_text(
             json.dumps(self.process_record) + "\n"
         )
+        self.sdk_trace.close()
         if self.reader.is_alive():
             raise ValueError("persistent RPC reader did not exit")

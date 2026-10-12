@@ -7,8 +7,11 @@ Originals supply formal verification. Portable summaries give results for readin
 
 ## Current collection
 
-Long-prefill budget division is in acceptance.
+New acceptance will check SDK evidence collection and optional host allocator diagnostics.
 The current candidate has 517 operator cases, with 317 unchanged configurations and 200 new static workload cases.
+
+The [SDK collector CPU record](../bench/evidence/2026-10-13-native-sdk-collector.json) gives fixture checks and original result hashes.
+These checks do not supply model acceptance.
 The new fifteen phase rows, six capacity cases, reasoning-budget suite, and two persistent-session collections are pending.
 Previous source results cannot supply current-source acceptance.
 
@@ -63,6 +66,18 @@ The fixture change keeps the original assertions and adds a case with a live ten
 
 MTP persistent collection failed OMP's repeated-output check before one hour. Its retry and other active collections were canceled before the fixture change.
 All owned GPU processes exited and temporary service endpoints closed. New committed-source GPU acceptance is pending.
+
+## Partial collection on `f019075`
+
+Independent review accepted sixty reasoning-budget cases, six full-context cases, eleven phase rows, and all `469` GPU tests.
+The other phase rows and full `517`-case operator matrix did not finish.
+One operator attempt saved `42` rows with one negative confidence bound. Other attempts stopped with `158` and `16` rows.
+These records do not supply full operator acceptance.
+
+Neither persistent collection completed all four active lanes for one hour.
+The MTP collector lacked independent SDK usage for six natural compaction calls.
+The DSpark collector counted a normal `turn_end` as another SDK completion. Host memory stability has no accepted result.
+All owned collectors, GPU processes, and temporary model-service endpoints stopped before collector and diagnostic changes.
 
 ## Historical collection on `706f1a6`
 

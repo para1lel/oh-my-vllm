@@ -3,6 +3,37 @@
 import re
 
 
+def sdk_completion_valid(client: dict, sdk_api: str) -> bool:
+    """RPC messages and native SDK spans have separate recorded origins."""
+    if client.get("source") == "omp_sdk_otlp":
+        count = client.get("span_count")
+        return (
+            client.get("api_binding") == sdk_api
+            and client.get("api_binding_source") == "isolated_provider_configuration"
+            and "api" not in client
+            and type(count) is int
+            and count == 1
+            and isinstance(client.get("export_sha256"), str)
+            and re.fullmatch(r"[0-9a-f]{64}", client["export_sha256"]) is not None
+            and isinstance(client.get("export_file"), str)
+            and re.fullmatch(r"[0-9]{4}\.pb", client["export_file"]) is not None
+            and isinstance(client.get("trace_id"), str)
+            and re.fullmatch(r"[0-9a-f]{32}", client["trace_id"]) is not None
+            and isinstance(client.get("span_id"), str)
+            and re.fullmatch(r"[0-9a-f]{16}", client["span_id"]) is not None
+        )
+    count = client.get("message_count")
+    digest = client.get("message_sha256")
+    return (
+        client.get("source") in (None, "omp_rpc_message_end")
+        and client.get("api") == sdk_api
+        and type(count) is int
+        and count == 1
+        and isinstance(digest, str)
+        and re.fullmatch(r"[0-9a-f]{64}", digest) is not None
+    )
+
+
 def completed_transport_close(request: dict, response_id: str, api: str) -> bool:
     """Require protocol and SDK completion alongside the caller's server check."""
     if not isinstance(api, str):
@@ -40,8 +71,6 @@ def completed_transport_close(request: dict, response_id: str, api: str) -> bool
             terminal == "responses_completed" and reason in {"stop", "tool_calls"}
         ) or (terminal == "responses_incomplete" and reason == "length")
     offset, size = protocol.get("raw_terminal_offset"), request.get("response_bytes")
-    message_count = client.get("message_count")
-    message_hash = client.get("message_sha256")
     return (
         valid_terminal
         and protocol.get("success") is True
@@ -56,12 +85,7 @@ def completed_transport_close(request: dict, response_id: str, api: str) -> bool
         and 0 < offset <= size
         and client.get("successful") is True
         and client.get("response_id") == response_id
-        and client.get("api") == sdk_api
+        and sdk_completion_valid(client, sdk_api)
         and client.get("model") == "qwen3.8-27b-fp8"
         and client.get("stop_reason") == stop_reason
-        and isinstance(message_count, int)
-        and not isinstance(message_count, bool)
-        and message_count == 1
-        and isinstance(message_hash, str)
-        and re.fullmatch(r"[0-9a-f]{64}", message_hash) is not None
     )

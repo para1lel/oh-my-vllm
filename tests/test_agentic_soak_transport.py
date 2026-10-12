@@ -7,6 +7,7 @@ import pytest
 from test_agentic_soak import metric, task
 
 from benchmarks.agentic_soak_analysis import bind_points
+from benchmarks.agentic_soak_transport import completed_transport_close
 
 
 def evidence(api="chat", reason="tool_calls"):
@@ -77,6 +78,54 @@ def evidence(api="chat", reason="tool_calls"):
             "response_bytes": request["response_bytes"],
         }
     return model, agent, request
+
+
+@pytest.mark.parametrize("api", ["chat", "responses"])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        None,
+        "duplicate",
+        "bool_count",
+        "raw_api",
+        "wrong_origin",
+        "wrong_binding",
+        "missing_hash",
+    ],
+)
+def test_native_summary_completion_keeps_its_span_origin_and_duplicate_rejection(
+    api, mutation
+):
+    _, _, request = evidence(api)
+    client = request["client_completion"]
+    sdk_api = client.pop("api")
+    digest = client.pop("message_sha256")
+    client.pop("message_count")
+    client.update(
+        source="omp_sdk_otlp",
+        api_binding=sdk_api,
+        api_binding_source="isolated_provider_configuration",
+        span_count=1,
+        span_id="1" * 16,
+        trace_id="2" * 32,
+        export_file="0000.pb",
+        export_sha256=digest,
+    )
+    if mutation == "duplicate":
+        client["span_count"] = 2
+    elif mutation == "bool_count":
+        client["span_count"] = True
+    elif mutation == "raw_api":
+        client["api"] = sdk_api
+    elif mutation == "wrong_origin":
+        client["source"] = "wire_sse"
+    elif mutation == "wrong_binding":
+        client["api_binding"] = "different"
+    elif mutation == "missing_hash":
+        client.pop("export_sha256")
+    assert completed_transport_close(request, client["response_id"], api) is (
+        mutation is None
+    )
 
 
 @pytest.mark.parametrize("api", ["chat", "responses"])

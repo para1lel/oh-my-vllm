@@ -74,7 +74,12 @@
 <p>每个点对应一次正常完成的任务或压缩模型请求. 横轴为框架开始准备请求的时刻, 纵轴为输出 token 数除以开始处理到生成完成的墙钟时间. Reasoning token 计入输出, 排队时间单独报告. 图片按请求用途标记, 不添加 Chat / Responses 颜色图例.</p>
 <p>一小时内连续推进任务, 中途不排空. 周期性检查请求, KV, 图, 编译和 HTTP 缓存的数量与字节上限, 结束后完成在途工作并排空. GPU allocated 表示仍有张量 owner 的分配量, reserved 表示 allocator 保留的存储, 设备 HBM 占用包含驱动和其他库. RSS 表示主机驻留内存. 独立审查结合上下文长度, 活动请求和缓存占用解释内存曲线, 再确认资源稳定性.</p>
 <p>正常负载要求无意外 OOM, worker 重启或请求失败. 取消, 慢客户端, 过载和真实 OOM 测试分别保留证据. 轻度其他用户 GPU 争用允许继续, 十五项阶段性能测试仍要求独占. 这项重型长时测试不设性能门槛, 日常命令默认跳过.</p>
-<p>请求完成证明分别来自 SSE 结束记录, 同 ID 的 SDK 消息和服务完成 metric. SDK 与 SSE stop reason 必须相符. 有完整结束证明的连接重置保留为诊断信息. 并行摘要根据输入, 缓存, 输出 usage 和生命周期唯一关联, 有歧义时验证失败.</p>
+<p>请求完成证明分别来自 SSE 结束记录, 同 ID 的原生 SDK 结果 trace 和服务完成 metric. 每个固定客户端有一个自有 loopback OTLP endpoint, 接收 OMP SDK 导出的原始 protobuf, 包括自动压缩的三种摘要用途. 采集器保存文件哈希并检查完整请求覆盖. 原生 trace 的 input_tokens 已包含缓存 token, cache_read 和 cache_creation 不再加一次. RPC / journal 的 input 与 cacheRead / cacheWrite 按其 SDK 字段合同合计. SDK trace 不提供 API 字段; Chat / Responses 绑定来自带哈希的独立配置和真实运行时模型状态.</p>
+<p>SDK 与 SSE 的 usage 和 stop reason 必须相符. RPC 只有 message_end 计为一次 SDK 完成, 正常 turn_end 可以携带同一消息. Exporter 再次发送相同批次时保留原始导出; 同一 response ID 的两个独立 SDK 完成记录使验证失败. 有完整结束证明的连接重置保留为诊断信息. 摘要的输入, 缓存, 输出 usage 和生命周期也须唯一对应, 有歧义时验证失败.</p>
+<h3>RSS 增长时, allocator 字段能说明什么</h3>
+<p><<icode "OH_MY_VLLM_HOST_ALLOCATOR_DIAGNOSTICS=1">> 在现有诊断间隔启用 glibc mallinfo2, 默认关闭. available 表示当前主机是否支持, scope 固定为 glibc_malloc_only, elapsed_seconds 保存调用耗时. 支持时还记录 libc_version, fields 及 used_or_retained_bytes; 不支持时只给出 reason, 不把缺失测量写成零.</p>
+<p>fields 保存 C 结构中的十个原始 size_t 字段. arena 是 malloc arena 的总存储字节, 不含 hblkhd 单独计数的直接 mmap 分配. ordblks 是常规空闲块及顶部 chunk 数量, fastbin 另计. smblks 和 fsmblks 分别记录 fastbin 空闲块数量与字节. hblks 和 hblkhd 分别记录 allocator 的 mmap 块数量与字节. uordblks 是已用存储, fordblks 是空闲存储, keepcost 给出 main arena 顶部可释放空间的信息. usmblks 保留原始历史字段值, 当前 glibc 不使用该字段.</p>
+<p>used_or_retained_bytes 等于 uordblks + hblkhd, 不等于全部活跃对象或完整 RSS. 线程缓存, 不经过 glibc malloc 的直接映射和其他 allocator 限制它的范围. 调用使用 allocator 锁并检查空闲存储, 开销随状态变化. 诊断不改变 allocator 选项, 不启动额外资源释放. 独立审查需结合上下文, 活动请求和缓存状态解释曲线, 这些字段本身不证明内存稳定.</p>
 
 <h2>怎样查阅当前源码的验收结果</h2>
 <p>README 的阶段表按十五项负载列出 prefill 时延与下界倍率, decode 吞吐与理论吞吐百分比. 每种草稿模式另有一张四并行 agent 的一小时请求散点图, 展示正常请求的处理起点与生成吞吐. 任务和自然压缩分别标明用途; 这项重型测试由显式命令启动, 日常测试默认跳过.</p>

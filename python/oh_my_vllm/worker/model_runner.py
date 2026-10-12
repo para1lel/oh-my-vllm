@@ -885,6 +885,11 @@ class OhMyVllmWorker:
         free, total = torch.cuda.mem_get_info()
         with open("/proc/self/statm", encoding="ascii") as status:
             rss = int(status.read().split()[1]) * os.sysconf("SC_PAGE_SIZE")
+        cpu = {"rss_bytes": rss}
+        if os.environ.get("OH_MY_VLLM_HOST_ALLOCATOR_DIAGNOSTICS") == "1":
+            from oh_my_vllm.worker.host_allocator import host_allocator_snapshot
+
+            cpu["host_allocator"] = host_allocator_snapshot()
         return {
             "requests": requests,
             "graphs": {name: cache.snapshot() for name, cache in graph_caches.items()},
@@ -897,7 +902,7 @@ class OhMyVllmWorker:
                 "free_bytes": free,
                 "total_bytes": total,
             },
-            "cpu": {"rss_bytes": rss},
+            "cpu": cpu,
         }
 
     def _release_resources(self) -> None:

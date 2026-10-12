@@ -406,6 +406,13 @@ ShapeEnv 内的符号记录保持原有生命周期.
 Provider 选择记录使用 2048 项 LRU. Rewrite 记录最多 256 项, 编译计数最多 128 个标签.
 仅在显式 trace 选项启用时记录 semantic graph inventory.
 
+Worker diagnostics 将完整进程 RSS 与可选的 glibc allocator 字段分开记录.
+`OH_MY_VLLM_HOST_ALLOCATOR_DIAGNOSTICS=1` 在现有诊断边界启用 `mallinfo2`.
+每条记录包含 `available` 值和调用耗时. 可用测量包含 allocator 版本和原始字段.
+这些测量不提供全部活跃对象的计数.
+
+调用使用 allocator 锁. 该开关不改变 allocator 设置, 不启动额外资源释放.
+
 Shutdown 释放 graph pool, executable owner, 绑定模型 callable, 请求状态及项目编译器根引用.
 随后 bridge 关闭 socket, 退出 worker 进程.
 进程退出释放 CUDA allocator 的缓存存储. Shutdown 不在末尾调用 `torch.cuda.empty_cache()`.

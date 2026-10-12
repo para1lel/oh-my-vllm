@@ -58,6 +58,8 @@ def collector_environment(omp: str) -> dict:
                 "pyzmq",
                 "msgpack",
                 "matplotlib",
+                "opentelemetry-proto",
+                "protobuf",
             )
         },
     }

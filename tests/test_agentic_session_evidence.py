@@ -9,11 +9,43 @@ from benchmarks.agentic_session_evidence import (
     audit_context_usage,
     compaction_continuations,
     match_summary,
+    rpc_completions,
+    sdk_completion_events,
     tool_output,
 )
+from benchmarks.agentic_soak_transport import completed_transport_close
 
 TIMESTAMP = "2026-10-12T00:00:01Z"
 TIME = datetime.fromisoformat(TIMESTAMP.replace("Z", "+00:00")).timestamp()
+
+
+@pytest.mark.parametrize("api", ["chat", "responses"])
+@pytest.mark.parametrize("duplicate", [False, True])
+def test_turn_end_repeat_does_not_replace_or_duplicate_sdk_completion(api, duplicate):
+    from test_agentic_soak_transport import evidence
+
+    _, _, request = evidence(api)
+    identity = request["client_completion"]["response_id"]
+    message = {"role": "assistant", "responseId": identity}
+    completion = {
+        "type": "message_end",
+        "message": message,
+        "message_sha256": request["client_completion"]["message_sha256"],
+    }
+    # OMP emits the same assistant message in its normal turn_end event.
+    events = [completion, {"type": "turn_end", "message": message, "toolResults": []}]
+    if duplicate:
+        events.append(copy.deepcopy(completion))
+        with pytest.raises(ValueError, match="duplicate RPC"):
+            rpc_completions(events)
+    else:
+        assert rpc_completions(events) == {identity: message}
+    matched = sdk_completion_events(events, identity)
+    request["client_completion"].update(
+        message_count=len(matched), message_sha256=matched[0]["message_sha256"]
+    )
+    assert completed_transport_close(request, identity, api) is not duplicate
+    assert not sdk_completion_events(events[1:2], identity)
 
 
 def anchor(tokens=100, epoch=0, timestamp=TIMESTAMP):
@@ -109,6 +141,7 @@ def summary(tokens, identity):
 
 def record():
     return {
+        "response_ids": ["response-1"],
         "protocol_completion": {"finish_reason": "stop"},
         "expected_provider": "oh-my-vllm-chat",
         "upstream_started_unix_s": TIME - 1,

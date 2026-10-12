@@ -204,6 +204,37 @@ Typed inventory identifies Tensor `numel` as host metadata only with a Tensor re
 The old prefix failure has no such type evidence and stays rejected.
 [Acceptance](acceptance.md) identifies previous measurement scope. Previous results do not certify the revised workload.
 
+## SDK evidence and host diagnostics
+
+Source `f019075` passed sixty budget cases, six full-context cases, eleven phase rows, and all `469` GPU tests, with independent review.
+It did not complete the fifteen phase rows or the full `517`-case operator matrix.
+An operator attempt saved `42` rows, with one negative confidence bound. Original failed and canceled records keep their status.
+
+Neither persistent collection completed all four active lanes for one hour.
+Six natural MTP compaction calls had SSE and service records but no independent SDK usage record.
+The DSpark collector also counted a normal `turn_end` as another SDK completion.
+Independent review did not accept host memory stability in either mode.
+All owned collectors, GPU processes, and temporary model-service endpoints stopped before changes.
+
+The collector now receives native OMP SDK traces through one owned loopback endpoint per fixed client.
+It checks hashed original exports, full wire coverage, configuration API bindings, and normal collector closure.
+Only `message_end` counts as an RPC completion. Two SDK completions with the same response ID fail verification for healthy HTTP streams.
+
+Four pinned OMP CPU integration cases passed across the two APIs and all three automatic-compaction purposes.
+Full request JSON stayed equal with native SDK telemetry disabled and enabled.
+These fixtures do not supply target-inference or hour-long acceptance.
+
+Optional glibc allocator measurements record field values and call time in different fields from RSS.
+The option keeps existing diagnostic intervals and does not change allocator options or start extra resource release.
+Its CPU tests passed, with the structure size and field offsets checked against the installed C header.
+
+Rust passed `152` tests. The CPU suite passed `1466` tests and `119` subtests.
+CPU mode did not select `469` GPU tests.
+The eight required checks, dependency check, and release build passed.
+The tutorial passed ten source-display tests and nine browser tests.
+
+New committed-source GPU acceptance and independent resource review are necessary.
+
 ## Open work
 
 - Extend `PY-04` to cross-shape graph eviction and recapture near the maximum supported context.

@@ -19,6 +19,9 @@ It also gives two one-hour agentic collections and eight allocator-OOM recovery 
 The [README](../../README.md#measured-performance) gives the phase table and separate MTP4/DSpark request plots.
 Each result keeps its measured source and full original hash.
 
+The [native SDK collector record](2026-10-13-native-sdk-collector.json) gives CPU fixture checks and original result hashes.
+These checks do not supply model acceptance.
+
 ## Export
 
 ```bash
