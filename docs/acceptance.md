@@ -32,6 +32,13 @@ Shutdown stack inspections stopped at the final `torch.cuda.empty_cache()` call 
 A diagnostic without that call completed ordinary batch `1` at input `258048` plus output `4096`, with the original shutdown deadline.
 It used a saved cache and permitted external GPU work. It does not supply formal capacity or performance acceptance.
 
+Source `3cb4cbc` phase and operator attempts stopped after a GPU query timeout, without full acceptance.
+Two saved operator cases passed arithmetic checks done independently. They do not supply the `517`-case matrix.
+
+A capacity attempt stopped for an external GPU process before output.
+The next capacity attempt and GPU suite were canceled before the query-scope change. All owned processes exited.
+The GPU suite passed three boundary tests, then had one failure without a saved exception report.
+
 ## Historical collection on `706f1a6`
 
 The [serving resource record](../bench/evidence/2026-10-11-serving-stability.json) uses source `706f1a6e7ce2b0188f07794cab574cbbf60f2927`.

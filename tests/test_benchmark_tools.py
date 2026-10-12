@@ -54,10 +54,20 @@ class BenchmarkTests(unittest.TestCase):
             try:
                 child = int(process.stdout.readline())
                 self.assertNotEqual(os.getpgid(child), process.pid)
+
+                def selected_snapshot(command, *, text, timeout):
+                    # A different device can be unresponsive without sharing this GPU.
+                    if (
+                        "-i" not in command
+                        or command[command.index("-i") + 1] != "GPU-own"
+                    ):
+                        raise subprocess.TimeoutExpired(command, timeout)
+                    return f"GPU-own, {child}\n"
+
                 with patch.object(
                     compare.subprocess,
                     "check_output",
-                    return_value=f"GPU-own, {child}\nGPU-other, 12\n",
+                    side_effect=selected_snapshot,
                 ):
                     compare.assert_gpu_exclusive(
                         "GPU-own", process.pid, ownership=ownership
@@ -68,6 +78,27 @@ class BenchmarkTests(unittest.TestCase):
                 ownership.close()
                 process.stdout.close()
             self.assertFalse(Path(f"/proc/{child}").exists())
+
+    def test_gpu_query_failures_do_not_accept_exclusive_execution(self):
+        ownership = compare.ProcessOwnership(os.getpid())
+        errors = (
+            subprocess.TimeoutExpired("nvidia-smi", 10),
+            subprocess.CalledProcessError(1, "nvidia-smi"),
+            FileNotFoundError("nvidia-smi"),
+        )
+        try:
+            for error in errors:
+                with (
+                    self.subTest(error=type(error).__name__),
+                    patch.object(compare.subprocess, "check_output", side_effect=error),
+                    self.assertRaises(type(error)) as raised,
+                ):
+                    compare.assert_gpu_exclusive(
+                        "GPU-own", os.getpid(), ownership=ownership
+                    )
+                self.assertIs(raised.exception, error)
+        finally:
+            ownership.close()
 
     def test_same_uid_and_group_does_not_prove_ownership(self):
         foreign = subprocess.Popen([sys.executable, "-c", "import time;time.sleep(60)"])

@@ -119,6 +119,20 @@ The shutdown and test-process changes passed the eight required checks and pre-c
 The full CPU suite passed `1406` tests and `116` subtests, with `455` GPU cases deselected.
 Collection and lifecycle checks passed `23` tests. The tutorial passed ten excerpt tests and nine browser tests.
 
+The `3cb4cbc` phase and operator attempts stopped after a GPU query timeout, without full acceptance.
+Two saved operator cases passed arithmetic checks done independently. The first capacity attempt stopped for an external GPU process.
+The next capacity attempt and GPU suite were canceled before the query-scope change. All owned processes exited.
+The GPU suite passed three boundary tests, then had one failure without a saved exception report.
+
+The ownership query now uses only the selected GPU UUID. Its timeout stays `10` seconds.
+Query failures still stop the collection. Process acceptance still checks exact ancestry and birth identity.
+Diagnostic queries did not identify the cause of the earlier timeouts.
+
+The GPU query change passed the eight required checks.
+The full CPU suite passed `1407` tests and `119` subtests, with `455` GPU cases deselected.
+Seven ownership tests passed, with three subtests. The tutorial passed ten excerpt tests and nine browser tests.
+New GPU acceptance is pending on committed source.
+
 The next persistent collections keep four sessions per mode for at least `3600` active seconds each, without intermediate drain.
 Use a service reasoning budget of `8192` and direct-action audit prompts without an exact tool-count quota.
 Prompts name model delimiters without reproducing their literal spellings.

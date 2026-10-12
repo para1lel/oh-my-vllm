@@ -49,6 +49,11 @@ Removal of the final `torch.cuda.empty_cache()` call uses these behavior checks,
 Tests include scheduler transactions, cache ownership, cancellation, RPC framing, serving, inference-path FP64 references, and compiled model units.
 GPU coverage includes all six maximum-context cases and changed-metadata graph replay.
 
+The benchmark ownership check queries only the selected GPU UUID through `nvidia-smi -i`.
+Its query timeout stays `10` seconds. Query failures stop the collection.
+Process acceptance still checks exact owned ancestry and birth identity.
+CPU regressions check selected-device isolation, foreign processes, birth reuse, and query failures.
+
 `tests/test_graph_capture.py` checks effective allocator settings and workspace lifetime fences on CPU.
 `tests/test_dspark_context_graph_gpu.py` includes the production 29-by-25600 BF16 context projection.
 Its warmup uses the capture stream before pool capture.

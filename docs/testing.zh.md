@@ -49,6 +49,11 @@ Partition plugin 保留所选 node ID 及其重复次数. 空分组不会掩盖�
 测试覆盖调度事务, 缓存所有权, 取消, RPC framing, 服务, 实际路径 FP64 参考和编译模型单元.
 GPU 覆盖包括全部 6 个最大上下文用例和 metadata 变化后的 graph replay.
 
+基准所有权检查通过 `nvidia-smi -i` 仅查询选定的 GPU UUID.
+查询 timeout 保持 `10` 秒. 查询失败会停止采集.
+进程接受条件仍要求精确的所属祖先关系和出生身份.
+CPU 回归检查选定设备隔离, 外部进程, 出生身份复用和查询失败.
+
 `tests/test_graph_capture.py` 在 CPU 上检查实际 allocator 设置与工作区生命周期屏障.
 `tests/test_dspark_context_graph_gpu.py` 包含生产使用的 29-by-25600 BF16 上下文投影.
 它在捕获 stream 的 pool 外预热, 重置无关 GEMM 图, 施加 allocator 压力, 并重放变化后的输入.

@@ -344,6 +344,8 @@ def assert_gpu_exclusive(gpu, process_group, *, ownership=None):
         snapshot = subprocess.check_output(
             [
                 "nvidia-smi",
+                "-i",
+                gpu,
                 "--query-compute-apps=gpu_uuid,pid",
                 "--format=csv,noheader",
             ],
