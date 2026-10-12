@@ -36,6 +36,7 @@ function monitor(page) {
 }
 
 test('Twine prerequisite routes retain interest and complete all thirteen chapters', async ({ page }) => {
+  test.setTimeout(90000);
   const errors = monitor(page);
   await page.goto('/');
   await expect(page).toHaveTitle('oh-my-vllm 代码之旅');
@@ -196,7 +197,7 @@ test('every chapter, displayed field and formula works at mobile document sizes'
     await expect(page.locator('.syntax-guide')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), id).toBeLessThanOrEqual(390);
     if (id === 'Requests') {
-      await expect(page.getByRole('table', { name: 'Request 的 9 个字段', exact: true }).locator('tbody tr')).toHaveCount(9);
+      await expect(page.getByRole('table', { name: 'Request 的 10 个字段', exact: true }).locator('tbody tr')).toHaveCount(10);
       await snapshot(page, 'twelve-chapters-fields-mobile', page.locator('.field-guide').first());
     }
     if (id === 'Model') await snapshot(page, 'twelve-chapters-model-mobile');

@@ -7,6 +7,24 @@
 
 ## 当前采集
 
+长 prefill 预算分配处于验收阶段.
+当前候选版本有 517 项算子案例, 保留 317 项配置, 新增 200 项静态负载案例.
+新的十五行阶段, 六项容量案例, reasoning 预算套件和两组持久会话采集待完成.
+此前源码结果不能证明当前源码通过验收.
+
+源码 `22dd754` 通过六十项预算案例和六项无预热的普通解码 / MTP4 完整 context 案例, 均经过原始记录独立审查.
+它完成十三行阶段: 十二行通过, 长 MTP batch `4` 未通过保持不变的 decode 倍率上限.
+失败中位数为 `39.9496` 秒, 下界为 `12.2634` 秒, 倍率为 `3.2576`.
+
+其 prefill 与离散度门槛通过. 两行普通解码阶段未完成.
+持久会话尝试失败或在一小时前取消, 不能提供验收结论.
+
+Scheduler 修改前, 全部自有采集器与 GPU 进程已退出.
+原始失败, 取消和部分记录保留状态与源码身份.
+[交接](handoff.zh.md) 给出当前验证与下一轮采集配置.
+
+## `706f1a6` 历史采集
+
 [服务资源记录](../bench/evidence/2026-10-11-serving-stability.json) 使用源码 `706f1a6e7ce2b0188f07794cab574cbbf60f2927`.
 release 二进制 SHA-256 为 `ceb58b4e6b248fc657b567fe82a9e2211d88d565a73cceaceffc7a1b944fd890`.
 记录保存原始 SHA, 测量值, 失败尝试和独立审查.
@@ -34,8 +52,10 @@ Decode TPS 每个请求计入 4095 token, 因为首 token 归入 prefill.
 
 完整 317 项 CUDA/TileLang 测试使用源码 `fabcede8c6e0e6e4fa2c90d5d97b1f98d9c7dfdb`.
 全部数值和速度检查通过. 矩阵保留原有 230 项及参考版本.
-自有算子实现及算子案例, 计时和比较文件自该次测量后保持不变.
-源码不变的证明覆盖 `python/oh_my_vllm/kernels/`, `development/kernels/` 和 `benchmarks/kernels.py`.
+在 `706f1a6` 发布时, 自有算子实现及算子案例, 计时和比较文件与该次测量一致.
+该源码不变证明覆盖 `python/oh_my_vllm/kernels/`, `development/kernels/` 和 `benchmarks/kernels.py`.
+
+新的长 prefill 案例选择有后续变更, 不能将历史完整 harness 证明延伸到这些改动.
 所有权工具和 IR 有后续改动. 旧算子结果保留原始源码范围.
 [算子记录](../bench/evidence/2026-10-10-current-source-acceptance.json) 保存该次源码, 原始 SHA 和独立审查.
 

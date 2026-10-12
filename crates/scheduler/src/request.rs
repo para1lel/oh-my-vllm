@@ -36,6 +36,9 @@ pub struct Request {
     pub draft_token_ids: Vec<u32>,
     /// Tokens whose KV is resident on the GPU entering the current step.
     pub num_computed_tokens: usize,
+    /// Prefix position reused when the current prefill or recompute began.
+    /// Keep the original missing span while subsequent chunks make progress.
+    pub prefill_start: usize,
     /// Tokens sent to the GPU in the most recent step that have not yet
     /// been committed (relevant for Mamba align-mode deferral).
     pub num_in_flight_tokens: usize,
@@ -61,6 +64,7 @@ impl Request {
             token_ids: prompt_token_ids,
             draft_token_ids: Vec::new(),
             num_computed_tokens: 0,
+            prefill_start: 0,
             num_in_flight_tokens: 0,
             max_tokens,
             block_hashes,

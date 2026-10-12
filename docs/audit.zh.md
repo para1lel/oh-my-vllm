@@ -46,7 +46,7 @@ Provider selection, rewrite record 和 compile counter label 也有固定上限.
 自有 FX source 和 FakeTensor metadata 同时受数量与字节上限约束.
 Compiler retirement 在安全主机边界启动垃圾回收.
 
-当前 MTP4 和 DSpark 采集使用四个 agent, 通过一小时资源和内存检查.
+源码 `706f1a6` 使用四个 agent, 通过 MTP4 和 DSpark 一小时资源和内存检查.
 结果覆盖观测到的输入 shape. 无限变化的 shape 仍需进一步测量.
 见 [验收](acceptance.zh.md) 和 [持续测试](testing.zh.md#长时-agentic-服务).
 
@@ -60,12 +60,14 @@ Prefix block 只有在校验后的 worker 输出提交其状态后才进入查�
 Worker 失败后使对应逻辑 KV 失效, 并在 HTTP 保持可用的情况下重建 worker.
 受影响的 stream 停止并报告失败. 进程出生记录保护清理过程, 避免 PID 复用导致误杀.
 Allocator-OOM 采集器检查故障阶段, 缓存失效, 恢复后的成功服务与进程清理.
-当前源码通过十五项阶段负载, 两项一小时 agentic 采集和八项 allocator-OOM 恢复阶段.
+源码 `706f1a6` 通过十五项阶段负载, 两项一小时 agentic 采集和八项 allocator-OOM 恢复阶段.
 [验收索引](acceptance.zh.md) 给出源码身份, 原始 SHA, 审查和限制.
 
 阶段时延, 算子, 边界和服务证据保留各自的实测源码范围.
 [验收索引](acceptance.zh.md)保留源码范围及全部原始失败记录.
-15 个阶段时延负载通过. 源码身份和审查范围见验收索引.
+历史十五行阶段时延采集在 `706f1a6` 上通过.
+新的长 prefill 调度与持久会话负载处于验收阶段.
+源码和审查范围见验收索引.
 
 ## 已关闭问题索引
 

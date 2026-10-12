@@ -102,6 +102,21 @@ This applies only when the available budget cannot reach the next checkpoint or 
 Decode-only steps, speculative verification, reachable checkpoints, and final tails keep forward progress.
 Configured token budgets less than one block also keep progress.
 
+The scheduler reserves active decode inputs before any continued prefill uses the token budget.
+Two or more eligible long requests divide the available prefill budget in aligned chunks.
+The initial missing span must be more than the configured step budget.
+`Request.prefill_start` records its reused prefix at admission and resets after preemption.
+This classification stays effective until the current prefill finishes, with its last chunks.
+
+Each quota is a multiple of 784. Each participant must have room for at least one block.
+Paused requests and requests with no available sequence slot do not enter the count.
+The prefix estimate is read-only. Admission calculates the hit again before allocation.
+
+Short prompts use the ordinary budget path.
+Cached prompts also use it when their initial missing span is at most the configured step budget.
+FIFO admission, tail preemption, and first-token publication keep their contracts.
+[ADR-014](decisions/ADR-014-long-prefill-budget-sharing.md) records the decision and verification limits.
+
 The scheduler rejects requests that cannot fit their required logical capacity.
 
 Allocation first removes obsolete aligned state and counts required capacity with read-only pool access.

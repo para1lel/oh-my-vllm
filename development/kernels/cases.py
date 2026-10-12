@@ -20,7 +20,7 @@ PREFILL = {
 }
 
 
-def cases():
+def original_cases():
     merged = {}
 
     def add(workload, operation, **configuration):
@@ -198,6 +198,25 @@ def cases():
                             max_tokens=262144,
                             first=0,
                         )
+    return list(merged.values())
+
+
+def cases():
+    """Keep every original case and add maxima for all fifteen active workloads."""
+    from .long_prefill_cases import long_prefill_cases
+
+    original = original_cases()
+    merged = {row["id"]: row for row in original}
+    for row in long_prefill_cases(original):
+        if row["id"] not in merged:
+            merged[row["id"]] = row
+        else:
+            previous = merged[row["id"]]
+            if previous["configuration"] != row["configuration"]:
+                raise ValueError("supplemental case ID collision")
+            for workload in row["workloads"]:
+                if workload not in previous["workloads"]:
+                    previous["workloads"].append(workload)
     return list(merged.values())
 
 

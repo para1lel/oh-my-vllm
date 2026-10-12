@@ -121,6 +121,66 @@ impl Scheduler {
         })
     }
 
+    fn decode_tokens(request: &Request) -> usize {
+        let end = request
+            .prompt_len
+            .max(request.token_ids.len().saturating_sub(1));
+        if request.num_computed_tokens < end {
+            0
+        } else {
+            request
+                .num_tokens_with_spec()
+                .saturating_sub(request.num_computed_tokens)
+        }
+    }
+
+    fn long_prefill(&self, request: &Request, start: usize) -> bool {
+        let end = request
+            .prompt_len
+            .max(request.token_ids.len().saturating_sub(1));
+        start < end
+            && end.saturating_sub(request.prefill_start) > self.config.max_num_batched_tokens
+    }
+
+    /// Share long prefill work without changing admission or preemption order.
+    /// Prefix lookups here are read-only; admission looks up and touches again.
+    fn long_prefill_quota(&self) -> Option<usize> {
+        let mut count = 0;
+        let mut decode = 0_usize;
+        for request in &self.running {
+            if self.paused.contains(&request.id) {
+                continue;
+            }
+            if self.long_prefill(request, request.num_computed_tokens) {
+                count += 1;
+            } else {
+                decode = decode.saturating_add(Self::decode_tokens(request));
+            }
+        }
+        let slots = self.config.max_num_seqs.saturating_sub(self.running.len());
+        for request in self
+            .waiting
+            .iter()
+            .filter(|r| !self.paused.contains(&r.id))
+            .take(slots)
+        {
+            let end = request
+                .prompt_len
+                .max(request.token_ids.len().saturating_sub(1));
+            if end <= self.config.max_num_batched_tokens {
+                continue;
+            }
+            let (_, _, hit) = self.kv.get_computed_blocks(request);
+            count += usize::from(end.saturating_sub(hit) > self.config.max_num_batched_tokens);
+        }
+        let budget = self.config.max_num_batched_tokens.saturating_sub(decode);
+        let block = self.kv.block_size();
+        if count < 2 || budget / block < count {
+            return None;
+        }
+        Some(budget / count / block * block)
+    }
+
     /// Defer a rounded one-token prefill after a block-sized prefill chunk.
     ///
     /// A later step can reach the next aligned checkpoint without adding a
@@ -240,6 +300,7 @@ impl Scheduler {
     fn preempt_request(&mut self, mut req: Request, output: &mut SchedulerOutput) {
         self.kv.free(req.id);
         req.num_computed_tokens = 0;
+        req.prefill_start = 0;
         req.num_in_flight_tokens = 0;
         req.draft_token_ids.clear();
         req.status = RequestStatus::Preempted;
@@ -265,6 +326,13 @@ impl Scheduler {
         };
         let mut token_budget = self.config.max_num_batched_tokens;
         let mut has_prefill_chunk = false;
+        let long_quota = self.long_prefill_quota();
+        let mut pending_decode = self
+            .running
+            .iter()
+            .filter(|request| !self.paused.contains(&request.id))
+            .map(Self::decode_tokens)
+            .fold(0_usize, usize::saturating_add);
 
         // ── phase 1: running requests (decode / continued prefill) ────────────
         //
@@ -277,17 +345,28 @@ impl Scheduler {
                 continue;
             }
             let tokens_needed = req.num_tokens_with_spec() - req.num_computed_tokens;
-            let to_schedule = self.aligned_prefill(
-                &req,
-                req.num_computed_tokens,
-                tokens_needed.min(token_budget),
-            );
+            let decode = Self::decode_tokens(&req);
+            pending_decode = pending_decode.saturating_sub(decode);
+            // Short and continued prefills cannot spend later decode budgets.
+            // Queue order still controls admission and preemption priority.
+            let available = if decode == 0 {
+                token_budget.saturating_sub(pending_decode)
+            } else {
+                token_budget
+            };
+            let limit = if self.long_prefill(&req, req.num_computed_tokens) {
+                available.min(long_quota.unwrap_or(available))
+            } else {
+                available
+            };
+            let to_schedule =
+                self.aligned_prefill(&req, req.num_computed_tokens, tokens_needed.min(limit));
             if to_schedule == 0
                 || self.defer_aligned_prefill(
                     &req,
                     req.num_computed_tokens,
                     to_schedule,
-                    token_budget,
+                    limit,
                     has_prefill_chunk,
                 )
             {
@@ -313,6 +392,9 @@ impl Scheduler {
                 let Some(victim) = self.running.pop_back() else {
                     break None;
                 };
+                if !self.paused.contains(&victim.id) {
+                    pending_decode = pending_decode.saturating_sub(Self::decode_tokens(&victim));
+                }
                 self.preempt_request(victim, &mut output);
             };
 
@@ -370,15 +452,15 @@ impl Scheduler {
 
             let total_tokens = req.num_tokens_with_spec();
             let remaining = total_tokens - hit_len;
-            let to_schedule = self.aligned_prefill(&req, hit_len, remaining.min(token_budget));
+            req.prefill_start = hit_len;
+            let limit = if self.long_prefill(&req, hit_len) {
+                token_budget.min(long_quota.unwrap_or(token_budget))
+            } else {
+                token_budget
+            };
+            let to_schedule = self.aligned_prefill(&req, hit_len, remaining.min(limit));
             if to_schedule == 0
-                || self.defer_aligned_prefill(
-                    &req,
-                    hit_len,
-                    to_schedule,
-                    token_budget,
-                    has_prefill_chunk,
-                )
+                || self.defer_aligned_prefill(&req, hit_len, to_schedule, limit, has_prefill_chunk)
             {
                 self.waiting.push_front(req);
                 break;

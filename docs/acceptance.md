@@ -7,6 +7,24 @@ Originals supply formal verification. Portable summaries give results for readin
 
 ## Current collection
 
+Long-prefill budget division is in acceptance.
+The current candidate has 517 operator cases, with 317 unchanged configurations and 200 new static workload cases.
+The new fifteen phase rows, six capacity cases, reasoning-budget suite, and two persistent-session collections are pending.
+Previous source results cannot supply current-source acceptance.
+
+Source `22dd754` passed sixty budget cases and six full-context ordinary/MTP4 cases without warmup, with independent raw-record review.
+It completed thirteen phase rows: twelve passed and long-MTP batch `4` failed the unchanged decode ratio limit.
+The failed median was `39.9496` seconds, with lower bound `12.2634` seconds and ratio `3.2576`.
+
+Its prefill and spread gates passed. Two ordinary phase rows did not complete.
+The persistent-session attempts failed or were canceled before one hour. They supply no acceptance.
+
+All owned collectors and GPU processes exited before the scheduler change.
+Original failed, canceled, and partial records keep their status and source identities.
+The [handoff](handoff.md) gives current verification and the next collection configuration.
+
+## Historical collection on `706f1a6`
+
 The [serving resource record](../bench/evidence/2026-10-11-serving-stability.json) uses source `706f1a6e7ce2b0188f07794cab574cbbf60f2927`.
 The release binary SHA-256 is `ceb58b4e6b248fc657b567fe82a9e2211d88d565a73cceaceffc7a1b944fd890`.
 The record keeps original hashes, measurements, failed attempts, and independent reviews.
@@ -34,8 +52,10 @@ Decode TPS counts 4095 tokens per request because the first token belongs to pre
 
 The full 317-case CUDA/TileLang collection uses source `fabcede8c6e0e6e4fa2c90d5d97b1f98d9c7dfdb`.
 All numerical and speed checks passed. The matrix keeps the original 230 cases and reference pins.
-Owned operator implementations and operator case, timing, and comparison files are unchanged from that collection.
-The unchanged source proof covers `python/oh_my_vllm/kernels/`, `development/kernels/`, and `benchmarks/kernels.py`.
+At the `706f1a6` publication, owned operator implementations and operator case, timing, and comparison files matched that collection.
+That unchanged source proof covers `python/oh_my_vllm/kernels/`, `development/kernels/`, and `benchmarks/kernels.py`.
+
+The new long-prefill case selection has subsequent changes. Do not extend the historical full-harness proof to those changes.
 
 The ownership utility and IR have subsequent changes. The old operator result keeps its original source scope.
 The [operator record](../bench/evidence/2026-10-10-current-source-acceptance.json) keeps its source, original hashes, and independent review.
@@ -137,9 +157,9 @@ Phase GPU ownership checks occur once per second and after exit. Interference fu
 The long-duration supervisor records other GPU processes and permits light foreign use.
 All owned GPU workers and temporary service listeners exited after collection.
 
-## Failed and cancelled collections
+## Failed and canceled collections
 
-Original failed or cancelled collections keep their original status and hashes in the current resource record.
+Original failed or canceled collections keep their original status and hashes in the current resource record.
 Their samples do not enter accepted phase rows or normal request plots.
 
 One MTP4 attempt stopped because its captured agent task lacked the two required source reads.

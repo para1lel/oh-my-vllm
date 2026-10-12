@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from development.kernels.cases import cases
+from development.kernels.cases import cases, original_cases
 
 
 def test_all_existing_230_case_ids_are_kept():
@@ -15,7 +15,7 @@ def test_all_existing_230_case_ids_are_kept():
         / "bench/evidence/2026-10-09-dspark-operators.json"
     )
     previous = json.loads(path.read_text())["data"]["rows"]
-    ids = {case["id"] for case in cases()}
+    ids = {case["id"] for case in original_cases()}
     assert len(previous) == 230
     assert {case["id"] for case in previous} <= ids
 
@@ -36,13 +36,13 @@ def test_owned_fp8_matrix_covers_all_distinct_projection_chains():
     expected.add((32143, 2048, 5120, False))
     observed = {
         (config["tokens"], config["columns"], config["width"], config["silu"])
-        for case in cases()
+        for case in original_cases()
         if (config := case["configuration"])["operation"] == "fp8_linear"
     }
     assert observed == expected
     fused = [
         case["configuration"]
-        for case in cases()
+        for case in original_cases()
         if case["configuration"]["operation"] == "add_norm_fp8_linear"
     ]
     assert len(fused) == 16
@@ -52,7 +52,7 @@ def test_owned_fp8_matrix_covers_all_distinct_projection_chains():
 def test_full_gdn_prefill_covers_only_prefill_rows():
     configurations = {
         tuple(case["configuration"]["counts"])
-        for case in cases()
+        for case in original_cases()
         if case["configuration"]["operation"] == "gdn_prefill"
     }
     assert configurations == {
@@ -63,7 +63,7 @@ def test_full_gdn_prefill_covers_only_prefill_rows():
         (144, 32144),
         (624, 32144),
     }
-    assert len(cases()) == 317
+    assert len(original_cases()) == 317
 
 
 def test_gated_projection_covers_all_model_rows_and_keeps_previous_case_count():
@@ -87,22 +87,22 @@ def test_gated_projection_covers_all_model_rows_and_keeps_previous_case_count():
     }
     observed = {
         case["configuration"]["tokens"]
-        for case in cases()
+        for case in original_cases()
         if case["configuration"]["operation"] == "gated_norm_fp8_linear"
     }
     assert observed == expected
-    assert len(cases()) - len(observed) == 301
+    assert len(original_cases()) - len(observed) == 301
 
 
 def test_partial_preparation_includes_cold_mtp_and_live_verification_maxima():
     context = {
         case["configuration"]["tokens"]
-        for case in cases()
+        for case in original_cases()
         if case["configuration"]["operation"] == "prepare_context"
     }
     query = {
         case["configuration"]["tokens"]
-        for case in cases()
+        for case in original_cases()
         if case["configuration"]["operation"] == "prepare_query"
     }
     assert context == {624, 1248, 2496, 32143, 32144, 32288, 32290, 32768}

@@ -24,6 +24,10 @@ CPU 模式选择 `not gpu`, GPU visibility 为空.
 Full 模式在等待空闲且绑定 UUID 的 B200 前要求模型位置.
 模型未配置时, CPU tokenizer / HTTP 集成测试明确跳过.
 纯校验测试无需 checkpoint, 仍然执行.
+
+Scripted HTTP fixture 的服务首次就绪 timeout 为 `30` 秒.
+这段等待包含 Python import 和 ZMQ 连接. 请求, 恢复与关闭断言保留原有 deadline.
+
 选定 pytest 参数放在 `cpu` 或 `full` 之后.
 
 测试覆盖调度事务, 缓存所有权, 取消, RPC framing, 服务, 实际路径 FP64 参考和编译模型单元.
@@ -130,8 +134,12 @@ scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda pytho
 
 使用 `--operations NAME` 选择算子族.
 为每个所选用例 ID 给出 `--case-id ID`.
-少于 317 个用例 ID 的选择报告 `coverage.complete=false`, 并保持完整的逐用例协议.
-矩阵验收前, 全部 317 个用例 ID 必须通过.
+少于 517 个用例 ID 的选择报告 `coverage.complete=false`, 并保持完整的逐用例协议.
+矩阵验收前, 全部 517 个用例 ID 必须通过.
+
+原有 317 项保留配置和对比版本.
+补充矩阵从 `development/kernels/long_prefill_cases.py` 和 `development/kernels/short_prefill_cases.py` 增加 200 项.
+部分采集必须保留其源码范围, 不能单独证明完整矩阵通过.
 
 计时前校验完整输出和实际写入缓存.
 每个用例需要 3 轮, 每轮 20 个交错配对, CUDA 每轮中位数更快.

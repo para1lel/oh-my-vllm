@@ -47,7 +47,7 @@ The regression tests check eviction and graph replay after eviction.
 Owned FX source and FakeTensor metadata have count and byte limits.
 Compiler retirement starts garbage collection at safe host boundaries.
 
-The current MTP4 and DSpark collections passed one-hour resource and memory checks with four agents.
+Source `706f1a6` passed one-hour MTP4 and DSpark resource and memory checks with four agents.
 The results cover the observed input shapes. Measure indefinite shape changes in further collections.
 See [acceptance](acceptance.md) and [long-duration testing](testing.md#long-duration-agentic-service).
 
@@ -61,12 +61,14 @@ Their byte accounting excludes JSON allocator overhead. RSS has a separate memor
 Worker failure invalidates its logical KV and reconstructs the worker while HTTP stays available.
 Affected streams stop and report failure. Process birth records protect cleanup from PID reuse.
 The allocator-OOM collector checks failure stages, cache invalidation, successful service after recovery, and process cleanup.
-The current source passed fifteen phase rows, two one-hour agentic collections, and eight allocator-OOM recovery stages.
+Source `706f1a6` passed fifteen phase rows, two one-hour agentic collections, and eight allocator-OOM recovery stages.
 The [acceptance index](acceptance.md) gives their source identities, original hashes, reviews, and limits.
 
 Phase, operator, boundary, and service evidence keeps its measured source scope.
 The [acceptance index](acceptance.md) keeps source scope and all original failed records.
-The fifteen-row phase-latency collection passed. See the acceptance index for its source and review scope.
+The historical fifteen-row phase-latency collection passed on `706f1a6`.
+New long-prefill scheduling and persistent-session workloads are in acceptance.
+See the acceptance index for source and review scope.
 
 ## Closed finding index
 

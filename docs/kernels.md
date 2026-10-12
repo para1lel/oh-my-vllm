@@ -117,10 +117,39 @@ This finite test does not include all pairs or prove identical intermediate quot
 
 ## Formal cases and timing
 
-`development/kernels/cases.py` statically derives and deduplicates each path's maximum legal invocation in the twelve workloads.
+`development/kernels/cases.py` keeps all 317 historical configurations and workload labels in `original_cases()`.
+The supplemental modules derive static maxima for the fifteen active workloads.
+The full matrix has 517 cases, with unchanged original configurations and comparison pins.
+
 FA fixtures exclude null page 0.
 Full operations include snapshots, copies, and split merges.
 `development/kernels/semantics.py` gives logical behavior. `twins.py` binds the pinned full operations.
+
+The 200 new cases cover divided prefill budgets, shifted initial MTP context, and long MTP attention metadata paths.
+B2/B4 prefill has 31360 rows, with sequence counts `15680/15680` or `7840/7840/7840/7840`.
+Context without prefix reuse has 31358 or 31356 rows. Its full chain keeps normalization, quantization, KV projection, and cache preparation.
+
+The last aligned B1 chunk has 2352 rows. Target tails have `144` rows per request.
+MTP context restores one checkpoint hidden row per request, so its tails have `145` rows per request.
+The cases keep different normalization, Q/K, convolution, GEMM, and quantization paths for these shapes.
+Three-row verification near the output limit also has separate warp-path cases.
+
+After full acceptance at a page boundary, MTP context restores one hidden row.
+The next step can have six context rows per request. Quantization cases keep `6/12/24` rows for batches `1/2/4`.
+Attention and MLP still select one endpoint per request. These cases do not add six-query attention.
+
+The twelve short/prefix workloads keep FIFO mixed-step maxima, with prefill and active decode in the same invocation.
+GDN prefill does not include decode rows. Convolution includes them.
+MTP context restores checkpoint hidden rows. Prefix context has `625` rows per request.
+The DSpark hidden RMS cases also cover the path with less than `4096` rows.
+
+Proposal attention reaches length 135166. Catch-up can include the last sampled anchor at length 135168.
+Selected prefill endpoints reach length 131073. Their graph extent is 135168.
+Target attention uses FlashInfer and has a separate maximum length of 135167.
+
+The new cases keep metadata types and the B4 single-row dual-buffer path.
+MTP `fc` uses BF16. Do not classify it as an owned FP8 projection.
+Each new case uses the unchanged numerical tolerances and full timing gates.
 
 DSpark adds static supplemental shapes for target verification and draft operators.
 The original case IDs and eight pinned TileLang files stay unchanged.

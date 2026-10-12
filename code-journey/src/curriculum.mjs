@@ -52,6 +52,7 @@ export const coverage = [
   ["Requests", "crates/scheduler/src/request.rs", "pub struct Request", "Request: 已确认历史与生命周期", "保存提示词长度, 历史, 在途进度, 输出上限和草稿; append_token / set_drafts 分开维护已确认与候选数据."],
   ["Requests", "crates/scheduler/src/lib.rs", "    pub fn schedule(", "Scheduler: 接纳, 排队, 验证与提交", "schedule 先推进运行请求再接纳等待请求; pause / resume 处理背压; validate_output 在 update 修改历史之前检查结果契约, abort 清理请求和缓存."],
   ["Requests", "crates/scheduler/src/output.rs", "pub struct ScheduledRequest", "ScheduledRequest / SchedulerOutput / WorkerOutput", "长期请求状态, 单轮输入片段和返回结果分别建模, 让在途输入数量与输出数量有明确归属."],
+  ["Budget", "crates/scheduler/src/lib.rs", "    fn long_prefill_quota(", "long_prefill_quota: 长请求分摊预算", "排除暂停请求, 按可用请求槽检查真实前缀缺失, 预留 decode 输入, 再把额度向下对齐到 784. 原始缺失区间的分类持续到 prefill 完成, FIFO 和抢占顺序不变."],
   ["Budget", "crates/scheduler/src/lib.rs", "    fn aligned_prefill(", "aligned_prefill: 按预算和页边界选片段", "未完成的长 prefill 按页调整终点, 同时在最后完整页与尾段之间切开. 正输入量的返回值至少为 1, 让小预算也能前进."],
   ["Cache", "crates/kv-cache/src/group.rs", "pub struct GroupManager", "GroupManager: 分组块表与需求计算", "FullAttention 保存按位置增长的页, Mamba align 保存恢复点与候选槽. get_num_blocks_to_allocate 计算缺口, allocate_new_blocks 建表, remove_skipped_blocks 回收以后不再读取的旧状态."],
   ["Cache", "crates/kv-cache/src/coordinator.rs", "pub struct HybridCoordinator", "HybridCoordinator: 两类缓存共同分配", "统一 FA/GDN 命中长度, 先检查需求与水位, 再引用命中块并分配新块. --mamba-blocks 可提供独立 GDN 容量; 省略时共享池."],

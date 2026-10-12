@@ -71,15 +71,16 @@ export const sourceNotes = {
     entries: [["token_ids", "按顺序保存的 token ID 列表, 类型是 Vec<u32>.", "模型读取这些 ID. 生成被确认后, 新 ID 加到列表末尾, 供后续计算使用."]],
   },
   computedCounters: {
-    title: "两个计算进度字段",
+    title: "计算进度与本次 prefill 起点",
     intro: "缓存保存模型已经算出的中间结果, 供下一轮复用. 注释中的 KV 是 key/value, 即模型用来读取历史的两组数值. GDN 将历史信息逐步汇入一个状态, 源码沿用 Mamba 名称. 本项目将历史按每块 784 个 token 管理, align-mode 表示在选定块边界保存可恢复的 GDN 状态. 计数表示这两类缓存共同可用的进度.",
     entries: [
       ["num_computed_tokens", "已提交且缓存可用的 token 数, 也是下一轮输入的起点.", "已提交 2 个 token 时, 下一轮从历史下标 2 开始. worker 的结果确认后才推进这个计数."],
+      ["prefill_start", "本次 prefill 或重算开始时复用的前缀位置.", "命中 32144 个 token 时为 32144. 后续分块保留此值, 用于区分原本需要长计算的请求与只剩短尾的缓存命中."],
       ["num_in_flight_tokens", "本轮已经派发, 尚未提交的输入 token 数.", "派发 1 个输入时为 1. Rust 检查返回结果后, 将它计入已提交进度并清零此字段."],
     ],
   },
   request: {
-    title: "Request 的 9 个字段",
+    title: "Request 的 10 个字段",
     intro: "Request 是 Rust 为一条请求保存的状态记录. RequestId 标识请求, BlockHash 保存前缀摘要. 块是固定长度的历史片段, 本项目每块 784 个 token; 前缀摘要用于查找这些片段的缓存. MTP (Multi-Token Prediction) 先提出多个候选 token, 再由目标模型验证; 尚待验证的候选叫作草稿.",
     entries: [
       ["id", "这条请求的唯一编号, 类型是 RequestId.", "把调度计划, 缓存分配, worker 返回结果和取消操作对应到同一条请求."],
@@ -87,10 +88,21 @@ export const sourceNotes = {
       ["token_ids", "完整的已确认历史: 提示词加上已确认的输出 ID.", "用于选择本轮输入和保存生成结果. 示例 [17, 92, 6] 加入输出 42 后成为 [17, 92, 6, 42]."],
       ["draft_token_ids", "MTP 提出的待验证 token ID 列表.", "调度时将草稿计入输入预算. worker 返回后清空旧草稿, 再安装下一轮草稿. 普通生成时为空."],
       ["num_computed_tokens", "已经提交, 且模型缓存可用的历史前缀长度.", "决定下一轮从哪个位置开始计算. 新请求通常为 0, 命中可复用前缀时可从命中位置开始."],
+      ["prefill_start", "本次 prefill 开始时的复用位置, 不随分块进度增加.", "用于判断原始未命中区间是否超过一轮预算. 抢占后清零, 重新准入时按新前缀命中重新设置."],
       ["num_in_flight_tokens", "最近一轮已发给 worker, 尚未提交的输入数量.", "校验返回结果并计算本轮结束位置. 派发后增加, 确认后清零, 防止把在途计算提前当成可用缓存."],
       ["max_tokens", "允许生成的输出 token 数上限.", "限制输出历史的增长并判断请求何时完成. 提示词长度另计; 提示词 3 个, 上限 4 个时, 历史最多包含 7 个 token."],
       ["block_hashes", "完整缓存块的链式摘要列表, 类型是 Vec<BlockHash>.", "摘要同时包含当前块与之前的前缀信息, 用于查找相同开头的已缓存页. 已确认输出填满新块时继续延长这条链."],
       ["status", "调度状态, 类型是 RequestStatus.", "Waiting 表示等待分配; Running 表示持有缓存并可执行; Preempted 表示缓存被回收后重新等待. 完成的请求会从队列移除."],
+    ],
+  },
+  longQuota: {
+    title: "长 prefill 的共享额度",
+    intro: "返回 Option<usize>. 至少两条可推进的长请求, 且每条都能获得一页时, 返回本轮每条长请求的输入上限. 其它情形返回 None, 沿用常规预算.",
+    entries: [
+      ["count / slots", "可参与的长 prefill 数, 以及还能准入的请求槽数.", "排除暂停请求, 按 FIFO 检查可准入请求. 前缀查询只读, 真正准入时重新查询并保护缓存."],
+      ["decode / budget", "活动 decode 所需输入总数, 以及为 prefill 留下的额度.", "先为已有 decode 保留输入, 再分配 prefill. 短尾也不能消费排在后面的 decode 额度."],
+      ["block / quota", "784-token 页大小, 以及按页向下对齐的每请求额度.", "四条冷长请求在 32768 预算下各得到 7840, 共 31360. 分块持续到实际 prefill 完成."],
+      ["prefill_start / hit", "已运行请求最初复用的位置, 以及待准入请求当前可复用的位置.", "长度判断基于最初未命中区间, 避免剩余区间变短时突然恢复串行计算."],
     ],
   },
   queues: {
@@ -100,6 +112,7 @@ export const sourceNotes = {
       ["self.config", "调度器保存的配置.", "提供每轮 token 上限与同时运行的请求数量上限."],
       ["max_num_batched_tokens", "每轮所有请求的输入 token 总数上限.", "实验配置为 32768. 它限制一轮的计算量, 不限制整条请求的总长度."],
       ["token_budget", "这一轮还可派发的输入数量.", "从配置上限开始, 每派发一个片段就扣除片段长度."],
+      ["long_quota / pending_decode", "长 prefill 共享额度与尚待安排的 decode 额度.", "共享额度只限制原始未命中区间超过一轮预算的长请求; 任何 prefill 都不能花掉队列后方 decode 的预留."],
       ["has_prefill_chunk", "本轮已成功分配至少一页 prefill 片段的标记.", "只有实际分配后才设为 true. decode 或草稿验证输入不会设置该标记, 只有这类输入的轮次让小片段继续推进."],
     ],
   },

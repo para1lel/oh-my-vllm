@@ -112,10 +112,39 @@ B200 production 回归覆盖 65280 个 finite BF16 encoding, 32640 个 finite ma
 
 ## 正式用例与计时
 
-`development/kernels/cases.py` 在 12 个工作负载内静态推导并去重每个路径的最大合法调用.
+`development/kernels/cases.py` 在 `original_cases()` 中保留全部 317 项历史配置与负载标签.
+补充模块推导十五项活动负载的静态最大值.
+完整矩阵有 517 项, 原有配置和对比版本保持不变.
+
 FA fixture 排除 null page0.
 完整操作包括 snapshot, copy 和 split merge.
 `development/kernels/semantics.py` 描述逻辑行为; `twins.py` 绑定冻结的完整操作.
+
+新增 200 项覆盖 prefill 预算分配, 首轮移位 MTP context 和长 MTP attention 元数据路径.
+B2/B4 prefill 有 31360 行, sequence 数量为 `15680/15680` 或 `7840/7840/7840/7840`.
+不复用前缀的 context 有 31358 或 31356 行. 完整链保留 normalization, quantization, KV projection 和 cache preparation.
+
+B1 最后一个对齐 chunk 有 2352 行. Target 尾段每条请求有 `144` 行.
+MTP context 每条请求恢复一行 checkpoint hidden, 因而其尾段每条有 `145` 行.
+用例保留这些形状不同的 normalization, Q/K, convolution, GEMM 和 quantization 路径.
+输出上限附近的三行 verification 也有独立 warp-path 用例.
+
+在页边界完整接受后, MTP context 恢复一行 hidden.
+下一轮每条请求可以有六行 context. 量化案例保留 batch `1/2/4` 下的 `6/12/24` 行.
+Attention 和 MLP 仍为每条请求选择一个 endpoint. 这些案例不增加六行 query attention.
+
+十二项短输入 / prefix 负载保留 FIFO 混合 step 最大值, 一次调用包含 prefill 与活动 decode.
+GDN prefill 排除 decode 行. Convolution 包含这些行.
+MTP context 恢复 checkpoint hidden 行. Prefix context 每条请求有 `625` 行.
+DSpark hidden RMS 案例也覆盖少于 `4096` 行的路径.
+
+Proposal attention 的长度达到 135166. Catch-up 可以包含最终 sampled anchor, 长度达到 135168.
+选定 prefill endpoint 的长度达到 131073. 其图 extent 为 135168.
+Target attention 使用 FlashInfer, 最大长度另为 135167.
+
+新增案例保留元数据类型和 B4 单行 dual-buffer 路径.
+MTP `fc` 使用 BF16, 不能归入自有 FP8 projection.
+每项新增案例沿用原有数值容差和完整计时门槛.
 
 DSpark 为 target verification 和草稿算子增加静态补充 shape.
 原用例 ID 和 8 个冻结 TileLang 文件保持不变.

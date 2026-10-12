@@ -52,6 +52,251 @@ fn apply(scheduler: &mut Scheduler, output: WorkerOutput) -> WorkerOutput {
     scheduler.update(output).expect("test output must be valid")
 }
 
+fn production_long_scheduler(max_seqs: usize) -> Scheduler {
+    Scheduler::new(
+        SchedulerConfig {
+            max_num_batched_tokens: 32768,
+            max_num_seqs: max_seqs,
+            enable_mtp: false,
+            mtp_draft_len: 0,
+        },
+        HybridCoordinator::new(1400, 784, true, 0).with_mamba_capacity(128),
+    )
+}
+
+fn unique_long_request(id: u64) -> Request {
+    let mut request = make_req(id, 131072, 1);
+    for token in &mut request.token_ids {
+        *token += id as u32 * 1000;
+    }
+    request
+}
+
+#[test]
+fn four_long_prefills_keep_aligned_progress_through_the_final_tail() {
+    let mut scheduler = production_long_scheduler(4);
+    for id in 1..=4 {
+        assert!(scheduler.add_request(unique_long_request(id)));
+    }
+    let mut completed = false;
+    for _ in 0..24 {
+        let step = scheduler.schedule();
+        assert_eq!(step.scheduled.len(), 4);
+        assert!(step.num_batched_tokens <= 32768);
+        assert!(step.preempted_request_ids.is_empty());
+        assert_eq!(scheduler.num_running(), 4);
+        assert_eq!(scheduler.num_waiting(), 0);
+        let first = &step.scheduled[0];
+        let end = first.num_computed_tokens + first.token_ids.len();
+        assert!(end <= 131072);
+        for (index, request) in step.scheduled.iter().enumerate() {
+            assert_eq!(request.request_id, index as u64 + 1);
+            assert_eq!(request.num_computed_tokens, first.num_computed_tokens);
+            assert_eq!(request.token_ids.len(), first.token_ids.len());
+        }
+        if end < 131072 {
+            assert!(end.is_multiple_of(784));
+        }
+        apply(
+            &mut scheduler,
+            WorkerOutput {
+                outputs: step
+                    .scheduled
+                    .iter()
+                    .map(|request| RequestOutput {
+                        request_id: request.request_id,
+                        token_ids: if end == 131072 {
+                            vec![42]
+                        } else {
+                            Vec::new()
+                        },
+                        num_accepted_draft_tokens: 0,
+                        new_draft_token_ids: Vec::new(),
+                    })
+                    .collect(),
+            },
+        );
+        if end == 131072 {
+            completed = true;
+            break;
+        }
+    }
+    assert!(
+        completed,
+        "all four prompts must finish without serial final chunks"
+    );
+    assert_eq!(scheduler.num_running(), 0);
+}
+
+#[test]
+fn long_prefill_sharing_reserves_decode_before_new_admission() {
+    let mut scheduler = production_long_scheduler(4);
+    assert!(scheduler.add_request(make_req(1, 784, 8)));
+    assert!(scheduler.add_request(unique_long_request(2)));
+    assert!(scheduler.add_request(unique_long_request(3)));
+    let first = scheduler.schedule();
+    assert_eq!(first.scheduled.len(), 3);
+    apply(
+        &mut scheduler,
+        WorkerOutput {
+            outputs: first
+                .scheduled
+                .iter()
+                .map(|row| RequestOutput {
+                    request_id: row.request_id,
+                    token_ids: if row.request_id == 1 {
+                        vec![42]
+                    } else {
+                        Vec::new()
+                    },
+                    num_accepted_draft_tokens: 0,
+                    new_draft_token_ids: Vec::new(),
+                })
+                .collect(),
+        },
+    );
+    let next = scheduler.schedule();
+    assert_eq!(next.scheduled.len(), 3);
+    assert_eq!(next.scheduled[0].request_id, 1);
+    assert_eq!(next.scheduled[0].token_ids.len(), 1);
+    assert!(next.num_batched_tokens <= 32768);
+    assert!(
+        next.scheduled[1..]
+            .iter()
+            .all(|row| row.token_ids.len() >= 784)
+    );
+}
+
+#[test]
+fn long_prefill_quota_excludes_paused_and_unavailable_sequence_slots() {
+    let mut scheduler = production_long_scheduler(1);
+    for id in 1..=4 {
+        assert!(scheduler.add_request(unique_long_request(id)));
+    }
+    assert_eq!(scheduler.long_prefill_quota(), None);
+    scheduler.config.max_num_seqs = 4;
+    scheduler.pause(1);
+    scheduler.pause(2);
+    scheduler.pause(3);
+    assert_eq!(scheduler.long_prefill_quota(), None);
+    scheduler.resume(3);
+    assert_eq!(scheduler.long_prefill_quota(), Some(15680));
+    let step = scheduler.schedule();
+    assert_eq!(
+        step.scheduled
+            .iter()
+            .map(|row| row.request_id)
+            .collect::<Vec<_>>(),
+        vec![3, 4]
+    );
+    assert_eq!(
+        scheduler
+            .waiting
+            .iter()
+            .map(|request| request.id)
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+}
+
+#[test]
+fn near_complete_cached_long_prompt_does_not_limit_cold_prefill() {
+    let mut scheduler = production_long_scheduler(4);
+    assert!(scheduler.add_request(unique_long_request(1)));
+    while scheduler.num_waiting() + scheduler.num_running() > 0 {
+        let step = scheduler.schedule();
+        let row = &step.scheduled[0];
+        let complete = row.num_computed_tokens + row.token_ids.len() == 131072;
+        apply(
+            &mut scheduler,
+            WorkerOutput {
+                outputs: vec![RequestOutput {
+                    request_id: 1,
+                    token_ids: if complete {
+                        vec![42]
+                    } else {
+                        Vec::new()
+                    },
+                    num_accepted_draft_tokens: 0,
+                    new_draft_token_ids: Vec::new(),
+                }],
+            },
+        );
+    }
+    let mut cached = unique_long_request(1);
+    cached.id = 2;
+    assert!(scheduler.add_request(cached));
+    assert!(scheduler.add_request(unique_long_request(3)));
+    assert_eq!(scheduler.long_prefill_quota(), None);
+    let step = scheduler.schedule();
+    assert_eq!(step.scheduled.len(), 2);
+    assert_eq!(step.scheduled[0].num_computed_tokens, 130928);
+    assert_eq!(scheduler.running[0].prefill_start, 130928);
+    assert_eq!(step.scheduled[1].token_ids.len(), 32144);
+}
+
+#[test]
+fn short_prefill_tails_cannot_take_a_later_active_decode_budget() {
+    let mut scheduler = production_long_scheduler(6);
+    let requests = [
+        unique_long_request(1),
+        unique_long_request(2),
+        make_req(3, 1408, 1),
+        make_req(4, 1408, 1),
+        make_req(5, 944, 1),
+        make_req(6, 784, 8),
+    ];
+    // Establish a valid completed first page for every request. The decode
+    // follows three shorter unfinished prompts in the admission queue.
+    scheduler.kv.new_step_starts();
+    for request in requests {
+        assert!(scheduler.add_request(request));
+        let mut request = scheduler.waiting.pop_front().unwrap();
+        assert!(
+            scheduler
+                .kv
+                .allocate_slots(&request, (Vec::new(), Vec::new()), 0, 784, 0, true)
+                .is_some()
+        );
+        request.status = crate::RequestStatus::Running;
+        request.num_in_flight_tokens = 784;
+        scheduler.running.push_back(request);
+    }
+    apply(
+        &mut scheduler,
+        WorkerOutput {
+            outputs: (1..=6)
+                .map(|id| RequestOutput {
+                    request_id: id,
+                    token_ids: if id == 6 {
+                        vec![42]
+                    } else {
+                        Vec::new()
+                    },
+                    num_accepted_draft_tokens: 0,
+                    new_draft_token_ids: Vec::new(),
+                })
+                .collect(),
+        },
+    );
+    let step = scheduler.schedule();
+    assert!(step.num_batched_tokens <= 32768);
+    let decode = step
+        .scheduled
+        .iter()
+        .find(|row| row.request_id == 6)
+        .unwrap();
+    assert_eq!(decode.token_ids.len(), 1);
+    assert_eq!(
+        step.scheduled
+            .iter()
+            .map(|row| row.request_id)
+            .collect::<Vec<_>>(),
+        vec![1, 2, 3, 4, 6]
+    );
+    assert!(step.preempted_request_ids.is_empty());
+}
+
 // ── cold prefill ──────────────────────────────────────────────────────────────
 
 #[test]

@@ -25,6 +25,9 @@ Full mode must use a model location before selection of an idle UUID-pinned B200
 CPU tokenizer/HTTP integrations skip explicitly when the model is unset.
 Pure validation tests stay active without a checkpoint.
 
+Scripted HTTP fixtures have a `30`-second timeout for initial service readiness.
+This wait includes Python imports and the ZMQ connection. Request, recovery, and shutdown assertions keep their existing deadlines.
+
 Selected pytest arguments follow `cpu` or `full`.
 
 Tests include scheduler transactions, cache ownership, cancellation, RPC framing, serving, inference-path FP64 references, and compiled model units.
@@ -134,8 +137,12 @@ The harness uses static cases from `development/kernels/cases.py`.
 
 Use `--operations NAME` to select an operation family.
 Give `--case-id ID` for each selected case ID.
-A selection with less than 317 case IDs reports `coverage.complete=false` and keeps the full per-case protocol.
-All 317 case IDs must pass before matrix acceptance.
+A selection with less than 517 case IDs reports `coverage.complete=false` and keeps the full per-case protocol.
+All 517 case IDs must pass before matrix acceptance.
+
+The original 317 cases keep their configurations and comparison pins.
+The supplements add 200 cases from `development/kernels/long_prefill_cases.py` and `development/kernels/short_prefill_cases.py`.
+Partial collections must keep their source scope and cannot supply full-matrix acceptance alone.
 
 It verifies full output and written caches before timing.
 Each case must have three rounds of twenty interleaved pairs and faster CUDA medians in all rounds.

@@ -22,6 +22,8 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
+# Fixture imports include Torch and XGrammar before the ZMQ peer connects.
+FIXTURE_START_TIMEOUT = 30
 
 
 def open_pidfd(pid):
@@ -114,7 +116,7 @@ class HttpTests(unittest.TestCase):
             stderr=cls.log,
             start_new_session=True,
         )
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + FIXTURE_START_TIMEOUT
         while time.monotonic() < deadline:
             if cls.process.poll() is not None:
                 cls.log.seek(0)
@@ -237,7 +239,7 @@ class HttpTests(unittest.TestCase):
                 )
                 worker_pidfd = None
                 try:
-                    deadline = time.monotonic() + 15
+                    deadline = time.monotonic() + FIXTURE_START_TIMEOUT
                     while time.monotonic() < deadline:
                         if process.poll() is not None:
                             self.fail((directory / "server.log").read_text())
@@ -587,7 +589,7 @@ class HttpTests(unittest.TestCase):
                         start_new_session=True,
                     )
                     try:
-                        deadline = time.monotonic() + 30
+                        deadline = time.monotonic() + FIXTURE_START_TIMEOUT
                         while time.monotonic() < deadline:
                             try:
                                 with urllib.request.urlopen(
@@ -720,7 +722,7 @@ class HttpTests(unittest.TestCase):
                 start_new_session=True,
             )
             try:
-                deadline = time.monotonic() + 15
+                deadline = time.monotonic() + FIXTURE_START_TIMEOUT
                 while time.monotonic() < deadline:
                     if process.poll() is not None:
                         self.fail(log_path.read_text())
@@ -790,7 +792,7 @@ class HttpTests(unittest.TestCase):
                 start_new_session=True,
             )
             try:
-                deadline = time.monotonic() + 15
+                deadline = time.monotonic() + FIXTURE_START_TIMEOUT
                 while time.monotonic() < deadline:
                     if process.poll() is not None:
                         self.fail(log_path.read_text())
@@ -857,7 +859,7 @@ class HttpTests(unittest.TestCase):
                 start_new_session=True,
             )
             try:
-                deadline = time.monotonic() + 15
+                deadline = time.monotonic() + FIXTURE_START_TIMEOUT
                 while time.monotonic() < deadline:
                     if process.poll() is not None:
                         self.fail(log_path.read_text())
@@ -938,7 +940,7 @@ class HttpTests(unittest.TestCase):
             connection = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
             try:
                 address = f"http://127.0.0.1:{port}/v1"
-                deadline = time.monotonic() + 15
+                deadline = time.monotonic() + FIXTURE_START_TIMEOUT
                 while time.monotonic() < deadline:
                     if process.poll() is not None:
                         self.fail(log_path.read_text())
@@ -1161,7 +1163,7 @@ class HttpTests(unittest.TestCase):
                 start_new_session=True,
             )
             try:
-                deadline = time.monotonic() + 20
+                deadline = time.monotonic() + FIXTURE_START_TIMEOUT
                 while time.monotonic() < deadline:
                     if process.poll() is not None:
                         self.fail(log_path.read_text())
@@ -1778,7 +1780,7 @@ class HttpTests(unittest.TestCase):
                 start_new_session=True,
             )
             try:
-                deadline = time.monotonic() + 15
+                deadline = time.monotonic() + FIXTURE_START_TIMEOUT
                 while time.monotonic() < deadline:
                     if process.poll() is not None:
                         self.fail(log_path.read_text())
