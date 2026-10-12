@@ -78,6 +78,23 @@ Chat 使用 `reasoning_effort`; Responses 使用 `reasoning.effort`.
 未知 effort 报错.
 这些 prompt 控制不指定固定 token 预算或单调的质量 / 延迟关系.
 
+两种 API 都接受顶层 `thinking_token_budget`.
+非负整数限制生成的思考内容 token 数. `-1` 表示不单独限制.
+请求省略此字段时, 服务选项 `--thinking-token-budget` 提供默认值.
+它默认为 `-1`, 与 vLLM 默认行为相同.
+请求值优先. Effort 不选择数值预算.
+达到预算后, target mask 只允许 `</think>`, 然后继续生成答案或工具调用.
+启用思考时, 零预算立即强制生成此标记. Off 不产生思考块.
+
+结束标记占一个输出 token. 原有 reasoning usage 包含此 token, 因此可能为 `budget + 1`.
+总输出与上下文限制继续生效. 它们可能在结束标记或答案之前停止生成.
+该预算不限制答案 token, 也不检测正文重复.
+Responses 输出与服务诊断记录有效预算.
+
+当前安装的 OMP OpenAI adapter 省略此字段. 用服务选项统一覆盖两种 API, 包括自动压缩.
+不能从 OMP `max` 或服务 `xhigh` 推导出数值预算.
+[思考预算决策](decisions/ADR-012-reasoning-token-budget.zh.md) 给出来源比较和推测解码契约.
+
 Chat 将 `reasoning_content` 与文本和工具参数分开.
 Responses 的 readable reasoning event / item 来自模型自身输出.
 不另外生成摘要.

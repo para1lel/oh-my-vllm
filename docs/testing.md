@@ -33,6 +33,18 @@ Full-model drift tests use their documented model-level bounds in addition to st
 Use scripted workers for protocol regressions and the target checkpoint for GPU/agentic acceptance.
 Record warnings and skipped tests with their reasons.
 
+## Reasoning budget acceptance
+
+Build the release binary and start each service with `serve --thinking-token-budget 32`.
+Use modes `none`, `mtp`, and `dspark`, with an idle UUID-pinned B200 and the corresponding startup mode.
+The script checks zero, small, default, unlimited, and off budgets through the two APIs.
+It checks streams, JSON, strict tools, total length, effective request metrics, and unchanged source identities.
+Stop the owned service and worker after each run. Keep original request and response records.
+
+```bash
+scripts/with-env.sh python scripts/thinking-budget-acceptance.py --mode mtp --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output "$EVIDENCE_DIR/thinking-budget.json"
+```
+
 ## Accuracy
 
 Use independent references with CPU FP64 computation on rounded inference inputs.
@@ -292,6 +304,10 @@ Record these limits from diagnostics. They let cold compilation complete without
 Do not insert intermediate drains or fault probes. After the hour, complete active work and drain requests.
 
 Use OMP `max` for tasks and summaries, mapped to service `xhigh`.
+Use `serve --thinking-token-budget 8192` for this workload and record the effective value from diagnostics and request metrics.
+This value is a test configuration, not a quality or latency recommendation.
+OMP omits the field in the two OpenAI APIs. The service default also applies to its summary requests.
+
 The model context window is `262144` and its task output limit is `32768`, with reasoning tokens.
 Use the local `qwen3` tokenizer metadata and provider usage to keep OMP aware of the conversation size.
 

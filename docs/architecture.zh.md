@@ -22,6 +22,12 @@ Finished-only execution 会刷新待处理的 Python 清理, 包括没有剩余�
 HTTP supervisor 保留 listener, 清空逻辑缓存, 重建 worker 后重新准入.
 Rust 子进程管理和 Linux parent-death signal 防止遗留 Python worker.
 
+Rust 从请求的显式字段或服务默认值选择思考预算.
+Python 在 `Generation` 中保存已提交的思考 token 计数.
+Target mask 为每个草稿前缀和 bonus row 使用独立的预览计数.
+只有保留的 token 改变已提交计数. Mask 预览不改变历史或 KV 状态.
+DSpark 提议概率可以与受约束的 target 分布不同. 它的拒绝修正仍使用受约束的 target.
+
 ## Rust 模块
 
 | 模块 | 职责 |

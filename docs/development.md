@@ -108,6 +108,16 @@ The threshold must be finite, at least zero, and less than one.
 The worker selects one mode when it starts. It keeps that mode until it stops.
 Use the [acceptance index](acceptance.md) for source identities and measured scope.
 
+## Reasoning budget selection
+
+The two HTTP APIs accept `thinking_token_budget`. An explicit request value takes precedence over the service default.
+Set `serve --thinking-token-budget N` for clients that omit this field. This includes OMP and its automatic compaction requests.
+Use `-1` for no separate limit. This is the default.
+
+A nonnegative value limits generated reasoning content tokens. The closing marker uses one additional output token.
+Keep the total output limit effective. Effort settings do not change the numeric budget.
+See [service contracts](serving.md#thinking-and-replay) for examples and limits.
+
 ## Build and checks
 
 ```bash

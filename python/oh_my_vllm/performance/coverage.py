@@ -156,10 +156,15 @@ def metadata_covers(unit, target, descriptions):
     for row in rows:
         if row.get("receiver_tensor") is not True:
             return False
-        if target == "call_method:size":
-            if row.get("category") != "shape_query" or row.get("result_kind") not in (
-                "dimension",
-                "shape",
+        if target in ("call_method:size", "call_method:numel"):
+            kinds = (
+                ("dimension", "shape")
+                if target == "call_method:size"
+                else ("dimension",)
+            )
+            if (
+                row.get("category") != "shape_query"
+                or row.get("result_kind") not in kinds
             ):
                 return False
             continue
@@ -338,6 +343,7 @@ def validate_inventory(trace):
             "_operator.floordiv",
             "_operator.mod",
             "call_method:size",
+            "call_method:numel",
         ) and metadata_covers(unit, target, trace.get("graph_metadata", [])):
             continue
         if (

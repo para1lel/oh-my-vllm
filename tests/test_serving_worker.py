@@ -267,6 +267,69 @@ class ServingTests(unittest.TestCase):
         self.assertGreater(generation.reasoning_tokens, 0)
         self.assertLess(generation.reasoning_tokens, len(ids))
 
+    def test_budget_closes_reasoning_before_json_or_tool_grammar(self):
+        for tools in (False, True):
+            with self.subTest(tools=tools):
+                options = {"effort": "xhigh", "thinking_token_budget": 0}
+                if tools:
+                    options.update(
+                        format={"type": "text"},
+                        tools=[
+                            {
+                                "type": "function",
+                                "function": {
+                                    "name": "read",
+                                    "parameters": {
+                                        "type": "object",
+                                        "properties": {"path": {"type": "string"}},
+                                        "required": ["path"],
+                                        "additionalProperties": False,
+                                    },
+                                },
+                            }
+                        ],
+                        tool_choice="required",
+                    )
+                    answer = (
+                        "\n\n<tool_call>\n<function=read>\n"
+                        "<parameter=path>README.md</parameter>\n"
+                        "</function>\n</tool_call>"
+                    )
+                else:
+                    answer = '\n\n{"n":123}'
+                self.prepare(**options)
+                generation = self.adapter.generations[1]
+                end = generation.reasoning_end
+                before = self.adapter.masks({1: []}).grammar_bitmask.copy()
+                self.assertEqual(sum(int(word).bit_count() for word in before[0]), 1)
+                drafts = self.adapter.tokenizer.encode(
+                    f"</think>{answer}", add_special_tokens=False
+                )
+                self.adapter.masks({1: drafts})
+                self.assertTrue(
+                    (before == self.adapter.masks({1: []}).grammar_bitmask).all()
+                )
+                kept, text = generation.consume(
+                    [*drafts, 248046], self.adapter.tokenizer
+                )
+                self.assertEqual(kept, [*drafts, 248046])
+                self.assertEqual(kept[0], end)
+                self.assertEqual(text, f"</think>{answer}")
+                self.assertEqual(generation.reasoning_tokens, 1)
+                self.assertEqual(generation.finished, "stop")
+
+    def test_budget_validation_and_unlimited_or_off_paths(self):
+        for budget in (-2, 1_048_577, True, 1.5, "1024"):
+            with self.subTest(budget=budget), self.assertRaises(RequestValidationError):
+                self.prepare(effort="xhigh", thinking_token_budget=budget)
+        for budget in (-1, None):
+            self.prepare(
+                effort="xhigh", format={"type": "text"}, thinking_token_budget=budget
+            )
+            self.assertIsNone(self.adapter.masks({1: [123] * 7}))
+        self.prepare(effort="off", format={"type": "text"}, thinking_token_budget=0)
+        self.assertIsNone(self.adapter.masks({1: []}))
+
     def test_required_tools_and_parallel_limit(self):
         tools = [
             {

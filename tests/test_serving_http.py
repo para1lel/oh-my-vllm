@@ -18,6 +18,7 @@ import urllib.error
 import urllib.request
 from contextlib import contextmanager, suppress
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
@@ -1182,6 +1183,47 @@ class HttpTests(unittest.TestCase):
                     except subprocess.TimeoutExpired:
                         os.killpg(process.pid, signal.SIGKILL)
                         process.wait()
+
+    def test_server_thinking_budget_covers_omitted_sdk_fields_and_overrides(self):
+        capture = self.directory / "thinking-budgets.jsonl"
+        with (
+            patch.dict(os.environ, {"OH_MY_VLLM_FIXTURE_CAPTURE": str(capture)}),
+            self.resource_server(
+                "thinking-budget", "--thinking-token-budget", "64"
+            ) as (port, _),
+        ):
+            address = f"http://127.0.0.1:{port}"
+            with urllib.request.urlopen(
+                address + "/diagnostics", timeout=10
+            ) as response:
+                self.assertEqual(
+                    json.load(response)["limits"]["thinking_token_budget"], 64
+                )
+            for responses in (False, True):
+                for budget in (None, -1, 0, 8):
+                    with self.subTest(responses=responses, budget=budget):
+                        body = self.base(responses)
+                        body.update(
+                            {"reasoning": {"effort": "off"}}
+                            if responses
+                            else {"reasoning_effort": "off"}
+                        )
+                        if budget is not None:
+                            body["thinking_token_budget"] = budget
+                        endpoint = "/responses" if responses else "/chat/completions"
+                        request = urllib.request.Request(
+                            address + "/v1" + endpoint,
+                            json.dumps(body).encode(),
+                            {"Content-Type": "application/json"},
+                        )
+                        with urllib.request.urlopen(request, timeout=20) as response:
+                            result = json.load(response)
+                        expected = 64 if budget is None else budget
+                        normalized = json.loads(capture.read_text().splitlines()[-1])
+                        self.assertEqual(normalized["thinking_token_budget"], expected)
+                        self.assertEqual(normalized["effort"], "off")
+                        if responses:
+                            self.assertEqual(result["thinking_token_budget"], expected)
 
     def test_worker_step_deadline_controls_delayed_rpc_and_recovery(self):
         for seconds in (1, 2):

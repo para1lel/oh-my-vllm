@@ -1,5 +1,6 @@
 """Runtime identity and checks against accidental legacy dependencies."""
 
+import hashlib
 import importlib.metadata
 import importlib.util
 import os
@@ -47,6 +48,16 @@ def identity() -> dict:
         "vllm_importable": False,
         "execution_policy": asdict(execution_policy()),
         "allocator_config": os.environ.get("PYTORCH_ALLOC_CONF"),
+        "sources_sha256": {
+            str(path.relative_to(Path(__file__).resolve().parents[1])): hashlib.sha256(
+                path.read_bytes()
+            ).hexdigest()
+            for directory in ("worker", "models", "ir", "kernels")
+            for path in sorted(
+                (Path(__file__).resolve().parents[1] / directory).rglob("*")
+            )
+            if path.is_file() and path.suffix in (".py", ".cu", ".cpp", ".cuh", ".h")
+        },
     }
     if NAME == "cuda":
         from oh_my_vllm.kernels.cuda_backend import provenance

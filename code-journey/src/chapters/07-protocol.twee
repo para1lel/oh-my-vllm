@@ -26,6 +26,10 @@
 <<source "workerResult" "展开 Rust worker 返回记录" false>>
 <<source "protocolResult" "展开 Python 返回记录的 8 个字段">>
 <p>结果始终按 request_id 匹配, prefill 优先的批重排不会改变归属. 请求级 error 使对应请求结束; CUDA 故障或协议整体失配则结束 worker / 引擎执行, 避免继续使用不可靠状态.</p>
+<h2>思考预算怎样保留回答空间</h2>
+<p>effort 控制模板提示, 不等于 token 硬上限. Chat 与 Responses 都支持顶层 <<icode "thinking_token_budget">>; <<icode "--thinking-token-budget">> 为省略此字段的客户端提供服务默认值. 默认 -1 不单独限制, 与 vLLM 的默认行为相同. 当前 OMP 的两种 OpenAI 请求都省略此字段, 因此服务默认值统一覆盖任务和自动压缩请求, 同时保留 max 到 xhigh 的映射.</p>
+<p>非负预算允许指定数量的思考内容 token. 到达边界后, Python 的 target mask 只允许生成 <<icode "</think>">>, 再恢复答案或工具约束. Generation 只按已保留 token 提交计数; mask 对每个草稿前缀和 bonus row 使用临时计数, 避免拒绝的 MTP4 或 DSpark token 消耗预算. DSpark 提议可以使用不同分布, target 的受约束分布仍决定接受与拒绝修正.</p>
+<p>结束标记额外占一个输出 token, 原有 reasoning usage 包含它. 因此 usage 最多可为预算加 1. 总输出和 262144 上下文限制始终优先, 可能在正文之前耗尽. 零预算强制立即结束已启用的思考, 不替代 off. 思考上限不检测正文重复, 也不保证答案质量.</p>
 <h2>CPU 输入准备怎样与 GPU 计算交错</h2>
 <p>模板处理, tokenizer 与语法编译主要在 CPU 运行. Python _PrepareExecutor 使用一个准备线程, 同时最多一个运行任务与一个排队任务. 主线程仍负责 ZMQ 消息与 GPU 执行, 因而新请求的准备可以与当前 execute 交错.</p>
 <p>准备线程产生不可变输入, 主线程收到完成通知后才安装 histories, sampler 和 Generation. 在 Rust 等待 execute_result 时, prepared 可能先到; WorkerClient 暂存这类回复, 保留它们的 rpc_id, 等引擎处理准备接纳. 有界排队和回复缓冲限制积压.</p>

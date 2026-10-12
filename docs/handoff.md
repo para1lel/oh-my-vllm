@@ -23,6 +23,11 @@ Admission leases have count and byte limits for queued requests, prepared reques
 The HTTP supervisor invalidates old logical KV and loads replacement workers after failure.
 Affected requests stop and report an error. Recovery keeps HTTP alive.
 
+The service and requests have a numeric `thinking_token_budget`, with default `-1` for no separate limit.
+Target masks force `</think>` after the content budget, then generation continues. Effort and total limits stay effective.
+The service default covers OMP's Chat, Responses, and automatic compaction requests, which omit the field.
+[ADR-012](decisions/ADR-012-reasoning-token-budget.md) records the engine comparison and speculative contract.
+
 The worker step deadline has a positive configurable value, with a default of 120 seconds.
 It includes first-use compilation and graph capture.
 
@@ -44,14 +49,25 @@ The sampler keeps failed worker observations before GPU process lookup.
 The collector stops the sampler before final checks and evidence hashes.
 
 Rust tests, formatting, line width, Clippy, and CUDA formatting checks passed.
-The CPU suite passed 1314 tests and 101 subtests, with 448 GPU cases deselected.
+The CPU suite passed 1372 tests and 116 subtests, with 448 GPU cases deselected.
 Additional context and compaction evidence regressions passed.
 
 The new one-hour MTP4 and DSpark collections and revised fifteen phase workloads are pending.
+The last MTP4 attempt failed on repeated answer text. The last DSpark attempt failed after an unexplained worker exit.
+Their original failed records stay unchanged. The worker now reports its exit status before process-group cleanup.
+
+The user requested a stop before the budget change. The active phase attempt was cancelled and its owned processes exited.
+
+The next collections use committed source, a service budget of `8192`, and direct-action audit prompts without an exact tool-count quota.
+
 Previous cold-start collections failed the worker step deadline. Their original records keep their failure status.
 The collector uses a 600-second step deadline and an 1800-second request deadline without separate warmup.
 
-Nine phase rows passed their gates on the previous measured source. Six rows are pending.
+Twelve phase rows passed their gates on previous measured sources. They keep their original source and binary identities.
+They do not supply acceptance for the reasoning-budget change. Test the fifteen workloads again on the updated source.
+Typed inventory now identifies Tensor `numel` as host metadata only with a Tensor receiver and an integer result.
+The old prefix failure has no such type evidence and stays rejected.
+
 Short diagnostics and cancelled attempts keep their original status in external evidence.
 [Acceptance](acceptance.md) identifies previous measurement scope. Those results do not certify the revised workload.
 

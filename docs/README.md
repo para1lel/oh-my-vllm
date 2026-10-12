@@ -33,6 +33,7 @@ Start with [requirements](requirements.md), [architecture](architecture.md), and
 | [ADR-008](decisions/ADR-008-semantic-ir.md) | Active: semantic operations and compiled GPU units. |
 | [ADR-009](decisions/ADR-009-dspark-optional-mode.md) | Active: optional DSpark mode and acceptance with source identities. |
 | [ADR-010](decisions/ADR-010-phase-latency-and-execution.md) | Active: theoretical phase bounds and GPU execution contracts. |
+| [ADR-012](decisions/ADR-012-reasoning-token-budget.md) | Active: target reasoning budgets and OMP service defaults. |
 | [ADR-011](decisions/ADR-011-bounded-serving-and-worker-recovery.md) | Active: resource limits, committed prefixes, and worker recovery. |
 
 Architecture includes the former design document.

@@ -267,6 +267,7 @@ class Generation:
     eos: set[int]
     reasoning_end: int | None = None
     reasoning_tokens: int = 0
+    thinking_token_budget: int | None = None
     ids: list[int] = field(default_factory=list)
     decoder: DecodeStream = field(default_factory=DecodeStream)
     pending: str = ""
@@ -277,6 +278,13 @@ class Generation:
         for token in tokens:
             if self.finished:
                 break
+            if (
+                self.reasoning_end is not None
+                and self.thinking_token_budget is not None
+                and self.reasoning_tokens >= self.thinking_token_budget
+                and token != self.reasoning_end
+            ):
+                raise RuntimeError("sample exceeded the thinking token budget")
             if self.matcher is not None and not self.matcher.accept_token(token):
                 raise RuntimeError("sample violated the grammar mask")
             accepted.append(token)
@@ -411,6 +419,14 @@ class ServingAdapter:
         )
         ids = self.tokenizer.encode(prompt, add_special_tokens=False)
         max_tokens = request["max_tokens"]
+        budget = request.get("thinking_token_budget")
+        if budget is not None and (
+            type(budget) is not int or not -1 <= budget <= 1_048_576
+        ):
+            raise RequestValidationError(
+                "thinking_token_budget must be -1 or an integer in [0,1048576]"
+            )
+        budget = None if budget in (None, -1) else budget
         if not ids or len(ids) + max_tokens > self.max_model_len:
             raise RequestValidationError(
                 "prompt plus output budget exceeds context limit"
@@ -429,7 +445,19 @@ class ServingAdapter:
             request.get("stop", []),
             self.eos,
             self.tokenizer.convert_tokens_to_ids("</think>") if thinking else None,
+            thinking_token_budget=budget,
         )
+        if thinking and budget is not None:
+            end = generation.reasoning_end
+            if (
+                type(end) is not int
+                or not 0 <= end < self.vocab_size
+                or self.tokenizer.encode("</think>", add_special_tokens=False) != [end]
+                or end in self.eos
+            ):
+                raise RequestValidationError(
+                    "thinking budget requires a distinct single-token </think>"
+                )
         return ids, params, generation
 
     def prepare(self, request_id: int, request: dict):
@@ -441,7 +469,13 @@ class ServingAdapter:
         ids = [
             rid
             for rid in drafts_by_request
-            if rid in self.generations and self.generations[rid].matcher is not None
+            if rid in self.generations
+            and (
+                self.generations[rid].matcher is not None
+                or self._budget_reached_in_rows(
+                    self.generations[rid], len(drafts_by_request[rid])
+                )
+            )
         ]
         if not ids:
             return None
@@ -451,24 +485,61 @@ class ServingAdapter:
         mask = self._mask[:rows]
         row = 0
         for rid in ids:
-            matcher = self.generations[rid].matcher
+            generation = self.generations[rid]
+            matcher = generation.matcher
+            reasoning_end = generation.reasoning_end
+            reasoning_tokens = generation.reasoning_tokens
             advanced = 0
             valid = True
             # Masks follow each speculative prefix. An invalid draft is rejected at
             # its first bad position; subsequent rows cannot affect accepted output.
             try:
                 for token in [*drafts_by_request[rid], None]:
-                    valid = valid and not matcher.is_terminated()
-                    if valid:
+                    valid = valid and (matcher is None or not matcher.is_terminated())
+                    if valid and matcher is not None:
                         matcher.fill_next_token_bitmask(mask, row)
                     else:
                         # Rows after EOS cannot contribute: consume stops at EOS.
                         mask[row].fill_(-1)
+                    forced = (
+                        reasoning_end
+                        if valid
+                        and reasoning_end is not None
+                        and generation.thinking_token_budget is not None
+                        and reasoning_tokens >= generation.thinking_token_budget
+                        else None
+                    )
+                    if forced is not None:
+                        word, bit = divmod(forced, 32)
+                        if not (int(mask[row, word]) >> bit) & 1:
+                            raise RuntimeError(
+                                "grammar disallows the reasoning end token"
+                            )
+                        mask[row].fill_(0)
+                        value = 1 << bit
+                        mask[row, word] = value if bit < 31 else value - (1 << 32)
                     row += 1
                     if token is not None and valid:
-                        valid = matcher.accept_token(token)
-                        advanced += int(valid)
+                        valid = forced is None or token == forced
+                        if valid and matcher is not None:
+                            valid = matcher.accept_token(token)
+                            advanced += int(valid)
+                        if valid and reasoning_end is not None:
+                            if token == reasoning_end or token in generation.eos:
+                                reasoning_end = None
+                            else:
+                                reasoning_tokens += 1
             finally:
                 if advanced:
                     matcher.rollback(advanced)
         return GrammarOutput([str(rid) for rid in ids], mask.numpy())
+
+    @staticmethod
+    def _budget_reached_in_rows(generation: Generation, drafts: int) -> bool:
+        # Keep the existing unmasked fast path until a verification or bonus row
+        # can reach the boundary. Preview state never changes committed history.
+        return (
+            generation.reasoning_end is not None
+            and generation.thinking_token_budget is not None
+            and generation.reasoning_tokens + drafts >= generation.thinking_token_budget
+        )

@@ -80,6 +80,24 @@ Native off/low/medium/xhigh control the template. High aliases xhigh and none al
 Unknown efforts fail.
 These prompt controls do not specify fixed token budgets or monotonic quality/latency.
 
+The two APIs accept top-level `thinking_token_budget`.
+Use a nonnegative integer to limit generated reasoning content tokens. Use `-1` for no separate limit.
+The service option `--thinking-token-budget` supplies the default when a request omits this field.
+Its default is `-1`, as in vLLM's default behavior.
+
+A request value takes precedence. Effort does not select the numeric budget.
+After the budget, the target mask lets the sampler select only `</think>`, then answer or tool generation continues.
+A zero budget forces this marker immediately when thinking is enabled. Off does not produce a reasoning block.
+
+The closing marker uses one output token. Existing reasoning usage includes this token, so it can be `budget + 1`.
+The total output and context limits stay effective. They can stop generation before the closing marker or answer.
+The budget does not limit answer tokens or detect repeated answer text.
+Responses output and service diagnostics report the effective budget.
+
+OMP's installed OpenAI adapters omit this field. Use the service option for the two APIs and automatic compaction.
+Do not infer a numeric budget from OMP `max` or service `xhigh`.
+[Reasoning budget decision](decisions/ADR-012-reasoning-token-budget.md) gives the source comparisons and speculative contract.
+
 Chat separates `reasoning_content` from text and tool arguments.
 Responses supplies readable reasoning events/items from the model's emitted reasoning.
 It does not generate another summary.

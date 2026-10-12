@@ -321,7 +321,12 @@ class RequestSampler:
         selected[:-1] = torch.where(accepted, candidate, selected[:-1])
         valid_p = torch.isfinite(target).all(-1) & (target.sum(-1) > 0)
         valid = valid_p.clone()
-        valid[:-1] &= valid_q & (accepted | (mass[:, 0] > 0))
+        # For a singleton target, rejection must return its sole token. A
+        # float32 q can round q(end) to 1 while retaining tiny mass elsewhere,
+        # making p-q round to zero even for a reachable rejected draft.
+        # The existing target fallback is exact in this deterministic case.
+        singleton = (target[:-1] > 0).sum(-1) == 1
+        valid[:-1] &= valid_q & (accepted | (mass[:, 0] > 0) | singleton)
         return torch.stack((selected, valid.to(torch.int64)), -1)
 
     def _resize_counts(self, width: int) -> None:

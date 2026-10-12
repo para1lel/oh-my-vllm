@@ -151,7 +151,16 @@ impl ManagedChild {
                 {
                     return Err(std::io::Error::last_os_error());
                 }
-                Ok(info.si_pid() != 0)
+                let exited = info.si_pid() != 0;
+                if exited {
+                    warn!(
+                        worker_pid = self.child().id(),
+                        wait_code = info.si_code,
+                        wait_status = info.si_status(),
+                        "worker exit observed before process-group cleanup"
+                    );
+                }
+                Ok(exited)
             }
         }
         #[cfg(not(target_os = "linux"))]

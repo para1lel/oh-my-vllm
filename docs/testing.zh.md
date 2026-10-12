@@ -32,6 +32,18 @@ GPU 覆盖包括全部 6 个最大上下文用例和 metadata 变化后的 graph
 协议回归使用 scripted worker; GPU / agentic 验收使用真实模型.
 记录 warning 和跳过测试及原因.
 
+## 思考预算验收
+
+构建 release binary, 用 `serve --thinking-token-budget 32` 启动各模式服务.
+使用 `none`, `mtp` 和 `dspark`, 选择空闲且锁定 UUID 的 B200, 并指定对应启动模式.
+脚本通过两种 API 检查零, 小值, 默认, 不限与关闭思考预算.
+它检查 stream, JSON, strict tool, 总长度, 有效请求 metric 与源码身份不变.
+每次运行后停止所属 service 和 worker. 保留原始请求与响应记录.
+
+```bash
+scripts/with-env.sh python scripts/thinking-budget-acceptance.py --mode mtp --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output "$EVIDENCE_DIR/thinking-budget.json"
+```
+
 ## 精度
 
 用独立计算的 FP64 参考比较实际舍入输入.
@@ -284,6 +296,9 @@ Collector 管理 4 个持久 OMP 进程和临时记录代理.
 中途不排空, 不插入故障 probe. 一小时结束后完成在途工作, 再排空请求.
 
 任务和摘要使用 OMP `max`, 映射为服务的 `xhigh`.
+此工作负载使用 `serve --thinking-token-budget 8192`, 从 diagnostics 和请求 metric 记录有效值.
+此值是测试配置, 不是质量或延迟建议.
+OMP 在两种 OpenAI API 中省略此字段. 服务默认值也适用于它的摘要请求.
 模型 context window 为 `262144`, 任务输出上限为 `32768`, 包含 reasoning token.
 本地 `qwen3` tokenizer 元数据与 provider usage 让 OMP 了解会话大小.
 启用 soft 自动压缩, threshold 为 `196608`, reserve 为 `65536`, 保留最近 `20000` 个 token.

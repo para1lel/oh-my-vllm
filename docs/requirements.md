@@ -197,6 +197,7 @@ Compare loaded DSpark configuration and weight hashes with the requested checkpo
 |---|---|
 | REQ-SERVE-001 | Supply text Chat Completions and Responses, streams, tools, history, usage, model discovery, retrieval, and deletion. |
 | REQ-SERVE-002 | Supply off/low/medium/high/xhigh thinking. Default medium, high maps to xhigh, none maps to off. |
+| REQ-SERVE-007 | Apply explicit reasoning token budgets before target sampling in ordinary, MTP4, and DSpark modes. Keep effort separate from numeric and total limits. |
 | REQ-SERVE-003 | Complete oh-my-pi tasks through each API with MTP4 and DSpark. Read files without error and use their returned results in subsequent model input. |
 | REQ-SERVE-004 | Apply JSON/Schema/strict-tool masks before sampling, with each mode's drafts and bonus tokens. Reject unsupported schemas. |
 | REQ-SERVE-005 | Examine queue time, preparation, TTFT, output rate, cache behavior, and draft counters without an extra HTTP throughput gate. |

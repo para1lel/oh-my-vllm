@@ -33,6 +33,7 @@
 | [ADR-008](decisions/ADR-008-semantic-ir.zh.md) | 有效: 语义算子和编译 GPU 单元. |
 | [ADR-009](decisions/ADR-009-dspark-optional-mode.zh.md) | 有效: 可选 DSpark 模式和绑定源码的独立验收. |
 | [ADR-010](decisions/ADR-010-phase-latency-and-execution.zh.md) | 有效: 理论阶段下界和 GPU 执行合同. |
+| [ADR-012](decisions/ADR-012-reasoning-token-budget.zh.md) | 有效: target 思考预算与 OMP 服务默认值. |
 | [ADR-011](decisions/ADR-011-bounded-serving-and-worker-recovery.zh.md) | 有效: 资源上限, 已提交前缀及 worker 恢复. |
 
 架构包含原设计文档.

@@ -22,6 +22,13 @@ Request-local failures stop their request. Worker/device failures stop affected 
 The HTTP supervisor keeps its listener, clears logical caches, and reconstructs the worker before new admission.
 The Rust child owner and Linux parent-death signal prevent abandoned Python workers.
 
+Rust selects the request reasoning budget from its explicit field or the service default.
+Python keeps the committed reasoning token count in `Generation`.
+Target masks use a separate preview count for each draft prefix and bonus row.
+Only kept tokens change the committed count. Mask preview does not change history or KV state.
+
+DSpark proposal probabilities can differ from the constrained target distribution. Its rejection correction still uses the constrained target.
+
 ## Rust modules
 
 | Module | Responsibility |

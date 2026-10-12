@@ -61,6 +61,7 @@ pub fn normalize(
         "safety_identifier",
         "chat_template_kwargs",
         "enable_thinking",
+        "thinking_token_budget",
     ];
     for key in object.keys() {
         ensure!(allowed.contains(&key.as_str()), "unsupported field: {key}");
@@ -406,6 +407,19 @@ pub fn normalize(
         max_tokens > 0 && max_tokens <= 1_048_576,
         "invalid output limit"
     );
+    let thinking_budget = match body.get("thinking_token_budget") {
+        None => Value::Null,
+        Some(value) => {
+            let budget = value
+                .as_i64()
+                .ok_or_else(|| anyhow::anyhow!("thinking_token_budget must be an integer"))?;
+            ensure!(
+                (-1..=1_048_576).contains(&budget),
+                "thinking_token_budget must be -1 or in [0,1048576]"
+            );
+            json!(budget)
+        }
+    };
     let mut sampling = json!({});
     for key in [
         "temperature",
@@ -487,6 +501,7 @@ pub fn normalize(
         "preserve_thinking": template.get("preserve_thinking").cloned().unwrap_or(json!(true)),
         "format": format,
         "max_tokens": max_tokens,
+        "thinking_token_budget": thinking_budget,
         "sampling": sampling,
         "stop": stop,
     });
@@ -596,6 +611,44 @@ fn append_input(messages: &mut Vec<Value>, item: &Value) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn thinking_budgets_are_explicit_and_independent_of_effort() {
+        for responses in [false, true] {
+            let mut body = if responses {
+                json!({"model": "m", "input": "hello", "reasoning": {"effort": "xhigh"}})
+            } else {
+                json!({"model": "m", "messages": [{"role": "user", "content": "hello"}],
+                    "reasoning_effort": "xhigh"})
+            };
+            assert!(
+                normalize(body.clone(), responses, "m", None)
+                    .unwrap()
+                    .normalized["thinking_token_budget"]
+                    .is_null()
+            );
+            for budget in [-1, 0, 1, 8192, 1_048_576] {
+                body["thinking_token_budget"] = json!(budget);
+                let request = normalize(body.clone(), responses, "m", None).unwrap();
+                assert_eq!(request.normalized["thinking_token_budget"], budget);
+                assert_eq!(request.normalized["effort"], "xhigh");
+                assert_eq!(request.normalized["max_tokens"], 8192);
+            }
+            for invalid in [
+                json!(-2),
+                json!(1_048_577),
+                json!(1.5),
+                json!(true),
+                json!("1024"),
+                Value::Null,
+                json!({}),
+                json!(1u64 << 63),
+            ] {
+                body["thinking_token_budget"] = invalid;
+                assert!(normalize(body.clone(), responses, "m", None).is_err());
+            }
+        }
+    }
+
     #[test]
     fn replay_tool_association_and_mapping() {
         let r = normalize(

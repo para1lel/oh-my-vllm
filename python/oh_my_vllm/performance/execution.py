@@ -74,7 +74,7 @@ def _metadata_description(unit, node, target):
         "node": node.name,
         "receiver_tensor": isinstance(receiver, torch.Tensor),
     }
-    if target == "call_method:size":
+    if target in ("call_method:size", "call_method:numel"):
         description.update(category="shape_query", result_kind=_shape_result(result))
         return description
     description.update(
@@ -117,7 +117,12 @@ def observe_graph(unit, graph):
         else:
             continue
         _GRAPH_OPERATIONS.add((unit, target))
-        if target in ("_operator.floordiv", "_operator.mod", "call_method:size"):
+        if target in (
+            "_operator.floordiv",
+            "_operator.mod",
+            "call_method:size",
+            "call_method:numel",
+        ):
             _GRAPH_METADATA.add(
                 json.dumps(_metadata_description(unit, node, target), sort_keys=True)
             )

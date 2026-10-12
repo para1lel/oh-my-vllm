@@ -190,6 +190,7 @@ Profiling 需显式选择.
 |---|---|
 | REQ-SERVE-001 | 提供文本 Chat Completions 和 Responses, 流式响应, 工具, 历史, usage, 模型发现, 查询和删除. |
 | REQ-SERVE-002 | 提供 off/low/medium/high/xhigh 思考; 默认 medium, high 映射为 xhigh, none 映射为 off. |
+| REQ-SERVE-007 | 在普通, MTP4 和 DSpark 模式的 target 采样前应用显式思考 token 预算. Effort 与数值预算和总量限制保持独立. |
 | REQ-SERVE-003 | MTP4 和 DSpark 分别通过两种 API 完成真实 oh-my-pi 任务, 实际读文件并将结果传入后续模型输入. |
 | REQ-SERVE-004 | 采样前施加 JSON / Schema / strict-tool mask, 包括每种模式的草稿和 bonus token; 拒绝不支持的 schema. |
 | REQ-SERVE-005 | 检查排队, 准备, TTFT, 输出速率, 缓存和草稿计数, 不增加 HTTP 吞吐门槛. |

@@ -89,20 +89,22 @@ def followup(lane: int, index: int, paths: list[str]) -> str:
         "check resource bounds and eviction",
         "compare code, tests and documentation",
     )[index % 4]
+    note = f"notes/item-{index:05d}.md"
     return (
         f"Continue your persistent audit of {DOMAINS[lane][0]}. Work item {index}. "
-        f"For this item, {angle}. Read the actual source in {' and '.join(selected)}. "
-        "Use read/grep tools and follow relevant symbols into their callers. "
-        "Read bounded ranges (at most 180 lines per read), avoid full directory dumps. "
-        "Use at most eight tool calls for this work item, including the final note. "
-        "If a path is missing, search for the symbol instead of guessing more paths. "
-        "Explain one invariant and its implementation, "
-        "then check a relevant test. "
-        "Write a brief note to notes/progress.md with checked files, evidence, "
-        "open questions and next steps. Keep earlier findings and update the note. "
-        "Support findings with source evidence. Audit inputs are copied "
-        "snapshots: write only under notes/. Keep answers concise. After context "
-        "compaction, recover the progress note and continue the same work item. "
+        f"For this item, {angle}. Inspect {' and '.join(selected)} "
+        "with read/grep tools. Read at most 180 lines per call. "
+        "Follow a relevant caller or test when needed to establish one invariant. "
+        "Take the next necessary tool action directly. "
+        "Once the evidence is sufficient, record one checked invariant and a "
+        f"relevant test, with file and line citations, in {note}. "
+        "Keep earlier item notes unchanged. Update notes/progress.md with a brief "
+        "index of item notes, the current item, open questions and next steps; "
+        "link earlier notes instead of copying their findings into each update. "
+        "Audit inputs are copied snapshots: write only under notes/. "
+        "Give a concise final answer after saving the note. "
+        "After automatic context compaction, read notes/progress.md and the "
+        "current item note, then continue this same work item. "
         "The controller will supply the next work item after this one finishes."
     )
 

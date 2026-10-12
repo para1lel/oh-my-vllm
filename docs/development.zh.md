@@ -105,6 +105,15 @@ DSpark 至多提出 7 个 token, 原生 MTP4 保留 4-token 路径.
 worker 启动时选择一种模式. 在 worker 停止前保持该模式.
 源码身份及测量范围见 [验收索引](acceptance.zh.md).
 
+## 思考预算选择
+
+两种 HTTP API 都接受 `thinking_token_budget`. 请求的显式值优先于服务默认值.
+为省略此字段的客户端设置 `serve --thinking-token-budget N`, 包括 OMP 及其自动压缩请求.
+`-1` 表示不单独限制, 也是默认值.
+非负值限制生成的思考内容 token 数. 结束标记额外占一个输出 token.
+总输出限制继续生效. Effort 设置不改变数值预算.
+示例和限制见[服务契约](serving.zh.md#思考与重放).
+
 ## 构建与检查
 
 ```bash

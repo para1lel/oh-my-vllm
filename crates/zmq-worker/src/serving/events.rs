@@ -494,6 +494,7 @@ impl Output {
             "service_tier": "default",
             "user": self.request.original["user"],
             "max_output_tokens": self.request.normalized["max_tokens"],
+            "thinking_token_budget": self.request.normalized["thinking_token_budget"],
         })
     }
     pub fn error_event(&mut self, message: &str) -> Value {
