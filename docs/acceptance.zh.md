@@ -23,6 +23,15 @@ Scheduler 修改前, 全部自有采集器与 GPU 进程已退出.
 原始失败, 取消和部分记录保留状态与源码身份.
 [交接](handoff.zh.md) 给出当前验证与下一轮采集配置.
 
+`4100d1a` 的新阶段与算子尝试因外部 GPU 进程而停止, 没有完整结果行.
+其容量尝试完成了普通 batch `1` 的输出, 随后 worker shutdown 失败.
+其 GPU 套件在 GPU 查询 timeout 后停止. 六项边界测试失败, 未保存 pytest 异常报告.
+所有所属进程已退出. 这些尝试不提供正式验收.
+
+Shutdown 栈检查停在资源 owner 释放后的末尾 `torch.cuda.empty_cache()` 调用.
+省略该调用的诊断完成了普通 batch `1`, 输入 `258048` 加输出 `4096`, 保留原有 shutdown deadline.
+它使用保存的 cache, 允许外部 GPU 工作. 它不提供正式容量或性能验收.
+
 ## `706f1a6` 历史采集
 
 [服务资源记录](../bench/evidence/2026-10-11-serving-stability.json) 使用源码 `706f1a6e7ce2b0188f07794cab574cbbf60f2927`.

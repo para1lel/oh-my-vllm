@@ -7,6 +7,7 @@
 <h2>十五项性能负载与六项容量负载</h2>
 <p>性能验收有五组输入, 每组 batch 为 1, 2, 4, 共十五项: 普通解码 32768, MTP4 32768, MTP4 前缀命中 32768, MTP4 131072, DSpark 32768. 每个请求保留 4096 个输出 token. 输入采用固定合成 token IDs, 贪心采样并忽略 EOS. 前缀组逐请求检查命中 32144 个 token, 其余组检查冷缓存.</p>
 <p>容量验收覆盖普通解码和 MTP4, 各自 batch 1, 2, 4. 每个请求输入 258048 个 token, 输出 4096 个 token, 总长度为 262144. 六项都要完整完成, 无 OOM 和重算抢占. OOM 表示 GPU 内存不足; 重算抢占表示缓存被释放后再次计算旧历史. 检查同时保留 784-token 页, 16 层 FA 和 48 层 GDN align 状态规则.</p>
+<p>完整 pytest 入口先在独立进程运行这六项, 再用另一个进程执行其余测试, 防止此前测试留下的 CUDA context 被内层独占检查识别为外部占用. 分组保留原始所选 node ID 及重复次数, 不降低独占要求. 已启动进程的日志和进程出生记录留在外部证据目录; pytest 写入时也保留 JUnit 结果. 中断或尚未启动的分组不能视为完整证据.</p>
 <h2>逐请求划分 prefill 与 decode</h2>
 <p>一个 batch 中, 请求可能分批进入 GPU. Rust 为每个请求记录提交, 首个保留 token 和最后一个保留 token 的时刻, 同时记录首末输出对应的调度 step. prefill 从提交到首 token, decode 从首 token 到末 token. 每次重复分别取 batch 内最慢的 prefill 与最慢的 decode.</p>
 <<math "P_i=t_{i,\\mathrm{first}}-t_{i,\\mathrm{submit}},\\quad D_i=t_{i,\\mathrm{last}}-t_{i,\\mathrm{first}},\\quad P=\\max_i P_i,\\quad D=\\max_i D_i">>

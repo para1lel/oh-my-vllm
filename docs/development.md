@@ -140,6 +140,10 @@ scripts/with-env.sh pre-commit run --all-files
 ```
 
 Hooks use local system tools through the same wrapper.
+
+Use `scripts/test.sh full --evidence-dir "$EVIDENCE_DIR/python-tests"` for full pytest with saved evidence in a new external directory.
+The launcher uses two new processes for the boundary module and other tests. See [testing](testing.md#cpu-and-gpu-suites).
+
 The CUDA hook uses clang-format 23.1.3 and checks the 800-line module limit.
 Configure the environment before `git commit` so hooks select it correctly.
 See [contribution procedure](../CONTRIBUTING.md).

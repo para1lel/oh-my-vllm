@@ -29,6 +29,22 @@ Scripted HTTP fixture 的服务首次就绪 timeout 为 `30` 秒.
 这段等待包含 Python import 和 ZMQ 连接. 请求, 恢复与关闭断言保留原有 deadline.
 
 选定 pytest 参数放在 `cpu` 或 `full` 之后.
+Full 模式使用两个新的 pytest 进程, 先执行 context-boundary 模块.
+边界收集器的 GPU 所有权检查执行时, 没有此前测试的 CUDA context.
+Partition plugin 保留所选 node ID 及其重复次数. 空分组不会掩盖失败.
+
+各进程先使用原始收集范围和 pytest filter, 再按路径分组.
+这样 `--ignore` 和 `--ignore-glob` 对边界模块继续生效.
+
+使用 `full --evidence-dir "$EVIDENCE_DIR/python-tests"` 指定新的外部证据目录.
+未指定时, launcher 打印新的临时目录, 退出后保留文件.
+每个已启动的 pytest 进程保留日志和进程出生记录. Pytest 写入 JUnit 结果时保留文件.
+缺少分组报告不能视为完整测试证据.
+`tests/test_python_test_partition.py` 将真实收集结果与原始 pytest node multiset 比较, 不执行 GPU 计算.
+
+已有 worker lifecycle 测试在 CPU 上检查模型, callable 和 graph-pool 引用释放.
+六项真实模型边界用例检查进程在未改变的 worker shutdown deadline 前正常退出.
+移除末尾 `torch.cuda.empty_cache()` 调用使用这些行为检查, 不增加重复源码语句的测试.
 
 测试覆盖调度事务, 缓存所有权, 取消, RPC framing, 服务, 实际路径 FP64 参考和编译模型单元.
 GPU 覆盖包括全部 6 个最大上下文用例和 metadata 变化后的 graph replay.

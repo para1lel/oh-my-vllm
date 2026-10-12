@@ -1,6 +1,6 @@
 # Current state and open work
 
-Updated: 2026-10-12.
+Updated: 2026-10-13.
 
 ## Implementation
 
@@ -35,6 +35,9 @@ Compiler metadata has count and byte limits. Graph caches have count limits for 
 Compiler retirement starts garbage collection at safe host boundaries and keeps owners needed for resident graph replay.
 Prefill admission accounts for planned storage. Graph pressure eviction releases unused pool owners.
 DSpark graph recapture uses a cooldown for repeated shape changes.
+
+Shutdown releases resource owners, then the bridge exits the process without a final allocator flush.
+Normal graph-pressure eviction keeps its allocator cleanup. The Rust shutdown deadline stays `30` seconds.
 
 All seven capture sites synchronize and clear cached cuBLAS workspaces before capture.
 This puts new workspaces in their owning graph pools and keeps workspace budgets and numerical tolerances.
@@ -97,6 +100,24 @@ The repeated full CPU suite passed `1398` tests and `116` subtests, with `455` G
 
 The full operator matrix has `517` cases. New operator, phase, capacity, budget, and persistent-session GPU acceptance is pending.
 Repeat the applicable checks on committed source before publication.
+
+Fresh phase and operator attempts on `4100d1a` stopped for external GPU processes before complete rows.
+The capacity attempt produced full ordinary batch `1` output, without OOM or preemption, then failed worker shutdown.
+The GPU suite stopped after a GPU lookup timeout. Six boundary tests failed without saved pytest exception reports.
+These attempts do not supply formal acceptance. All owned processes exited.
+
+A small independent check showed that the inner GPU check rejects an earlier CUDA context in its parent pytest process.
+The full test launcher now runs the boundary module and the other tests in two new processes.
+Independent CPU collection checks kept the original node multiset, explicit selectors, duplicate counts, empty groups, and failure evidence.
+
+Shutdown stack inspections stopped at `torch.cuda.empty_cache()` after resource-owner release.
+A diagnostic that skipped only that final call completed ordinary batch `1` at input `258048` plus output `4096`.
+It kept the `30`-second shutdown deadline and left no owned process alive.
+The diagnostic used a saved cache and permitted external GPU work. It does not supply formal capacity or performance acceptance.
+
+The shutdown and test-process changes passed the eight required checks and pre-commit checks.
+The full CPU suite passed `1406` tests and `116` subtests, with `455` GPU cases deselected.
+Collection and lifecycle checks passed `23` tests. The tutorial passed ten excerpt tests and nine browser tests.
 
 The next persistent collections keep four sessions per mode for at least `3600` active seconds each, without intermediate drain.
 Use a service reasoning budget of `8192` and direct-action audit prompts without an exact tool-count quota.

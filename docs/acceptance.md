@@ -23,6 +23,15 @@ All owned collectors and GPU processes exited before the scheduler change.
 Original failed, canceled, and partial records keep their status and source identities.
 The [handoff](handoff.md) gives current verification and the next collection configuration.
 
+The new phase and operator attempts on `4100d1a` stopped for external GPU processes, without complete rows.
+Its capacity attempt completed ordinary batch `1` output, then failed worker shutdown.
+Its GPU suite stopped after a GPU lookup timeout. Six boundary tests failed without saved pytest exception reports.
+All owned processes exited. These attempts do not supply formal acceptance.
+
+Shutdown stack inspections stopped at the final `torch.cuda.empty_cache()` call after resource-owner release.
+A diagnostic without that call completed ordinary batch `1` at input `258048` plus output `4096`, with the original shutdown deadline.
+It used a saved cache and permitted external GPU work. It does not supply formal capacity or performance acceptance.
+
 ## Historical collection on `706f1a6`
 
 The [serving resource record](../bench/evidence/2026-10-11-serving-stability.json) uses source `706f1a6e7ce2b0188f07794cab574cbbf60f2927`.

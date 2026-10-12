@@ -29,6 +29,22 @@ Scripted HTTP fixtures have a `30`-second timeout for initial service readiness.
 This wait includes Python imports and the ZMQ connection. Request, recovery, and shutdown assertions keep their existing deadlines.
 
 Selected pytest arguments follow `cpu` or `full`.
+Full mode uses two new pytest processes, with the context-boundary module first.
+The boundary collector's GPU ownership check runs without CUDA contexts from earlier tests.
+The partition plugin keeps selected node IDs and their duplicate counts. Empty groups do not hide failures.
+
+Each process uses the original collection scope and pytest filters before path partition.
+This keeps `--ignore` and `--ignore-glob` effective for the boundary module.
+
+Use `full --evidence-dir "$EVIDENCE_DIR/python-tests"` for a new external evidence directory.
+Without this option, the launcher prints a new temporary directory and keeps its files after exit.
+Each started pytest process has a log and process birth records. Keep JUnit results when pytest writes them.
+Do not treat missing group reports as completed test evidence.
+`tests/test_python_test_partition.py` compares collection results with the original pytest node multiset without GPU execution.
+
+The existing worker lifecycle test checks model, callable, and graph-pool reference release on CPU.
+The six target-model boundary rows check normal process exit before the unchanged worker shutdown deadline.
+Removal of the final `torch.cuda.empty_cache()` call uses these behavior checks, without a test that repeats the source statement.
 
 Tests include scheduler transactions, cache ownership, cancellation, RPC framing, serving, inference-path FP64 references, and compiled model units.
 GPU coverage includes all six maximum-context cases and changed-metadata graph replay.

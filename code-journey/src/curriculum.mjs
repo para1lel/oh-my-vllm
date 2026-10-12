@@ -126,4 +126,6 @@ export const coverage = [
   ["Compilation", "python/oh_my_vllm/kernels/cuda_backend/groupwise_accum.cuh", "struct PairedGroupwiseAccum", "分块 FP8 累加中的 TMEM 读取与同步", "继承固定 CUTLASS 主循环, 将两个独立输出 tile 的 TMEM load 放在同一次等待之前. 保留每个输出的 K 分组顺序, FP32 scale 乘法和累加, 最终 BF16 舍入. 项目头文件摘要进入构建, 加载记录和正式源码检查."],
   ["Validation", "benchmarks/measurement.py", "def audit(", "运行身份与测量阶段审计", "记录硬件和缓存身份, 查找 measured 阶段的编译/捕获日志, 审计编译缓存的文件变化, 核实预热完成后的稳定执行."],
   ["Validation", "development/kernels/cases.py", "def cases(", "算子最大形状用例", "静态推导生产路径边界, 将 shape 与布局纳入正式算子验收, 与冻结 TileLang 比较; 微调脚本和原始 profiling 留在仓库外."],
+  ["Validation", "scripts/run_python_tests.py", "def run(", "独立进程运行容量与其余测试", "容量模块先运行, 其余测试使用新的 pytest 进程, 通过共享所有权检查和进程出生记录确认退出. 每组原始证据保留在外部目录."],
+  ["Validation", "development/pytest_partition.py", "def pytest_collection_modifyitems(", "保留原始选择与重复次数的测试分组", "按源码路径分组, 避免显式 node ID 越过分组而重复执行. 回归比较真实收集的 node multiset, 独占检查与测试断言保持不变."],
 ];

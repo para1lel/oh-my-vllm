@@ -20,4 +20,4 @@ if [[ "$mode" == cpu ]]; then
         PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest tests -q -m 'not gpu' "$@"
 fi
 exec scripts/with-gpu.sh scripts/with-env.sh env \
-    PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 MAX_JOBS=8 python -m pytest tests -q "$@"
+    PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 MAX_JOBS=8 python scripts/run_python_tests.py "$@"

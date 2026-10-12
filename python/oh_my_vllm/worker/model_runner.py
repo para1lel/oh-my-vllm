@@ -980,4 +980,5 @@ class OhMyVllmWorker:
         verify_loaded_modules()
         logger.info("Independent runtime module/library audit passed")
         self._release_resources()
-        torch.cuda.empty_cache()
+        # The bridge exits after shutdown. Process exit releases allocator storage
+        # without a second device-wide allocator flush on this terminal path.

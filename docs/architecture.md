@@ -435,6 +435,9 @@ Provider selection records have a 2048-entry LRU. Rewrite records have 256 entri
 Semantic graph inventory records are active only with the explicit trace option.
 
 Shutdown releases graph pools, executable owners, bound model callables, request state, and owned compiler roots.
+The bridge then closes its socket and exits the worker process.
+Process exit releases cached CUDA allocator storage. Shutdown does not call a final `torch.cuda.empty_cache()`.
+Normal graph-pressure eviction keeps its allocator cleanup.
 See [service limits](serving.md#storage-and-resource-limits) and [ADR-011](decisions/ADR-011-bounded-serving-and-worker-recovery.md).
 
 ## CUDA streams and PDL

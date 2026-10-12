@@ -136,6 +136,10 @@ scripts/with-env.sh pre-commit run --all-files
 ```
 
 钩子通过同一包装脚本使用本地系统工具.
+
+使用 `scripts/test.sh full --evidence-dir "$EVIDENCE_DIR/python-tests"` 执行完整 pytest, 将证据保存在新的外部目录.
+Launcher 用两个新进程分别执行边界模块和其余测试. 参见 [测试](testing.zh.md#cpu-与-gpu-测试套件).
+
 CUDA 钩子使用 clang-format 23.1.3, 并检查模块至多 800 行.
 `git commit` 前配置环境, 确保钩子选择正确环境.
 参见 [贡献流程](../CONTRIBUTING.zh.md).

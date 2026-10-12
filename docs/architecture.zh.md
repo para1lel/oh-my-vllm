@@ -403,6 +403,9 @@ Provider 选择记录使用 2048 项 LRU. Rewrite 记录最多 256 项, 编译�
 仅在显式 trace 选项启用时记录 semantic graph inventory.
 
 Shutdown 释放 graph pool, executable owner, 绑定模型 callable, 请求状态及项目编译器根引用.
+随后 bridge 关闭 socket, 退出 worker 进程.
+进程退出释放 CUDA allocator 的缓存存储. Shutdown 不在末尾调用 `torch.cuda.empty_cache()`.
+正常图压力淘汰保留 allocator 清理.
 参见 [服务上限](serving.zh.md#存储与资源限制) 和 [ADR-011](decisions/ADR-011-bounded-serving-and-worker-recovery.zh.md).
 
 ## CUDA stream 与 PDL

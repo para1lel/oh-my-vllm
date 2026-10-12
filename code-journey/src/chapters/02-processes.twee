@@ -25,6 +25,7 @@
 <h2>启动和退出怎样留下可核对的记录</h2>
 <p><<icode "logging_utils">> 把日志写成 JSON (按字段名组织的文本记录), 包含 UTC (协调世界时) 时间, 日志级别, run_id, pid, component 和 message, 并合并操作自带的 fields. run_id 关联同一次运行, pid 标识进程. 耗时使用只向前推进的单调时钟, 避免系统时间调整影响计时.</p>
 <p>Rust 持有 Python 子进程句柄, shutdown 正常结束 worker; 异常退出则由句柄清理子进程. Python 也监测父进程存活. 单卡模型和缓存属于这一个 worker, 任务结束后释放图, 张量与服务资源.</p>
+<p>shutdown 先同步 CUDA, 审计运行模块, 释放模型 callable, 图池和请求引用. bridge 随后关闭 socket 并退出进程, CUDA allocator 的缓存存储随进程退出释放. 这里不再追加 empty_cache; 正常运行中的图压力淘汰仍保留自己的 allocator 清理.</p>
 <<coverage>>
 <<chapterChoices>>
 </article>
