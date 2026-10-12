@@ -177,9 +177,28 @@ The tutorial passed ten excerpt tests and nine browser tests after the chapter u
 
 The next persistent collections keep four sessions per mode for at least `3600` active seconds each, without intermediate drain.
 Use a service reasoning budget of `8192` and direct-action audit prompts without an exact tool-count quota.
-Prompts name model delimiters without reproducing their literal spellings.
+Prompts tell agents to give file and line references without a copy of source text.
 The collector turn deadline is `7200` seconds. Worker step and service request deadlines stay `600` and `1800` seconds.
 First-use compilation and capture stay inside the workload, without separate warmup.
+
+Source `d7f0b5f` passed sixty reasoning-budget cases, six full-context cases, and long-MTP batch `4`, with independent raw-record review.
+The long phase had prefill ratio `2.494071` and decode ratio `1.829035`. Its spread checks passed.
+Its operator collection saved `313` complete rows before cancellation. These rows do not supply the full `517`-case matrix.
+
+Its full GPU suite passed `211` tests, failed one allocator-release test, and did not run `256` tests.
+A separate diagnostic passed the original five graph-memory tests.
+Another diagnostic failed the same assertion with a live tensor in a default-pool segment with allocated and free storage.
+It does not prove the cause of the original suite failure.
+
+The allocator test now uses a temporary allocation more than `total_size - allocated_size` for each existing default-pool segment.
+Its original graph, output, pool, and release assertions stay unchanged. A new GPU case checks a segment with allocated and free storage.
+
+MTP persistent collection failed OMP's repeated-output check before one hour. Its retry and the other active collections were canceled before this test change.
+All owned GPU processes exited and temporary service endpoints closed. New committed-source GPU acceptance is pending.
+
+The allocator test change passed the eight required checks and pre-commit checks.
+The full CPU suite passed `1408` tests and `119` subtests, with `469` GPU cases deselected.
+Six focused graph-memory GPU tests passed. The tutorial passed ten excerpt tests and nine browser tests.
 
 Typed inventory identifies Tensor `numel` as host metadata only with a Tensor receiver and an integer result.
 The old prefix failure has no such type evidence and stays rejected.

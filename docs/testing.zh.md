@@ -55,6 +55,12 @@ GPU 覆盖包括全部 6 个最大上下文用例和 metadata 变化后的 graph
 CPU 回归检查选定设备隔离, 外部进程, 出生身份复用和查询失败.
 
 `tests/test_graph_capture.py` 在 CPU 上检查实际 allocator 设置与工作区生命周期屏障.
+`tests/test_graph_memory.py` 检查活跃共享图及输出保留时的 allocator 释放.
+临时分配大于现有各个 default-pool segment 的 `total_size - allocated_size`.
+Allocator 能释放新 segment 的全部存储, 同时保留其他 segment 中的活跃 tensor.
+新增用例在同一个 default-pool segment 中保留活跃 tensor 和至少 `128` MiB 空闲存储.
+Owner, pool, 零驱逐, `32` MiB 释放和精确重放检查继续有效.
+
 `tests/test_dspark_context_graph_gpu.py` 包含生产使用的 29-by-25600 BF16 上下文投影.
 它在捕获 stream 的 pool 外预热, 重置无关 GEMM 图, 施加 allocator 压力, 并重放变化后的输入.
 它用 `atol=0.03`, `rtol=0.03` 检查全部五层 cache 输出, 精确检查未修改行的 canary, 并验证工作区预算未变.

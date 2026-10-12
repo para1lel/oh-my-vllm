@@ -55,6 +55,12 @@ Process acceptance still checks exact owned ancestry and birth identity.
 CPU regressions check selected-device isolation, foreign processes, birth reuse, and query failures.
 
 `tests/test_graph_capture.py` checks effective allocator settings and workspace lifetime fences on CPU.
+`tests/test_graph_memory.py` checks allocator release with live shared graphs and outputs.
+Its temporary allocation is more than `total_size - allocated_size` for each existing default-pool segment.
+The allocator can release all storage in the new segment while other segments keep live tensors.
+A new case keeps a live tensor and at least `128` MiB of free storage in the same default-pool segment.
+The owner, pool, zero-eviction, `32` MiB release, and exact replay checks stay active.
+
 `tests/test_dspark_context_graph_gpu.py` includes the production 29-by-25600 BF16 context projection.
 Its warmup uses the capture stream before pool capture.
 It resets unrelated GEMM graphs, applies allocator pressure, and replays changed inputs.

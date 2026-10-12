@@ -52,6 +52,18 @@ Its operator collection saved `176` full cases, with one small-row projection sp
 Other collections were canceled before the small-row fusion change. All owned processes exited.
 Run the full GPU acceptance again on the new committed source. Earlier partial collections cannot supply that acceptance.
 
+Source `d7f0b5f` passed sixty reasoning-budget cases, six full-context cases, and long-MTP batch `4`, with independent raw-record review.
+Its operator collector saved `313` complete rows before cancellation. They do not supply the full `517`-case matrix.
+Its full GPU suite passed `211` tests, failed one allocator-release test, and did not run `256` tests.
+
+The five graph-memory tests passed in a separate diagnostic.
+A diagnostic with allocated and free storage in a default-pool segment failed the same assertion.
+It does not prove the original failure's cause.
+The fixture change keeps the original assertions and adds a case with a live tensor in that segment.
+
+MTP persistent collection failed OMP's repeated-output check before one hour. Its retry and other active collections were canceled before the fixture change.
+All owned GPU processes exited and temporary service endpoints closed. New committed-source GPU acceptance is pending.
+
 ## Historical collection on `706f1a6`
 
 The [serving resource record](../bench/evidence/2026-10-11-serving-stability.json) uses source `706f1a6e7ce2b0188f07794cab574cbbf60f2927`.

@@ -9,6 +9,17 @@ import torch
 from oh_my_vllm.worker.graph_cache import GraphCache
 
 
+def _default_segment_unused_capacity():
+    return max(
+        (
+            segment["total_size"] - segment["allocated_size"]
+            for segment in torch.cuda.memory_snapshot()
+            if segment["segment_pool_id"] == (0, 0)
+        ),
+        default=0,
+    )
+
+
 @pytest.mark.gpu
 def test_allocator_reclaim_retains_shared_graph_pool_and_live_output():
     torch.cuda.synchronize()
@@ -32,7 +43,12 @@ def test_allocator_reclaim_retains_shared_graph_pool_and_live_output():
     )
     owner = cache.get_or_create("prefill_dspark", (1,), Owner)
     retained_pool = pool[0]
-    scratch = torch.empty(64 << 20, device="cuda", dtype=torch.uint8)
+    torch.cuda.synchronize()
+    # An inactive block can share a segment with a live tensor from an earlier
+    # test. Request more than the unused capacity of every default-pool segment
+    # so scratch receives a new segment that empty_cache can release in full.
+    default_unused = _default_segment_unused_capacity()
+    scratch = torch.empty(default_unused + (64 << 20), device="cuda", dtype=torch.uint8)
     scratch.fill_(1)
     torch.cuda.synchronize()
     del scratch
@@ -50,6 +66,37 @@ def test_allocator_reclaim_retains_shared_graph_pool_and_live_output():
     pool[0] = None
     torch.cuda.synchronize()
     torch.cuda.empty_cache()
+
+
+@pytest.mark.gpu
+def test_allocator_reclaim_retains_graph_with_fragmented_default_pool():
+    torch.cuda.synchronize()
+    torch.cuda.empty_cache()
+    default_unused = _default_segment_unused_capacity()
+    slab = torch.empty(default_unused + (256 << 20), device="cuda", dtype=torch.uint8)
+    slab.fill_(1)
+    torch.cuda.synchronize()
+    del slab
+    live = torch.full(
+        (default_unused + (128 << 20),), 3, device="cuda", dtype=torch.uint8
+    )
+    try:
+        segment = next(
+            segment
+            for segment in torch.cuda.memory_snapshot()
+            if segment["address"]
+            <= live.data_ptr()
+            < segment["address"] + segment["total_size"]
+        )
+        assert segment["segment_pool_id"] == (0, 0)
+        assert segment["total_size"] - segment["allocated_size"] >= 128 << 20
+        test_allocator_reclaim_retains_shared_graph_pool_and_live_output()
+        assert torch.equal(live, torch.full_like(live, 3))
+    finally:
+        del live
+        gc.collect()
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
 
 
 @pytest.mark.gpu
