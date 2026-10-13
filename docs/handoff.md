@@ -70,6 +70,15 @@ The two-times gate is not met. These diagnostic results are not formal acceptanc
 The final-source matrix and framework phases must be recollected after further tuning.
 External CUDA candidates are not production changes or acceptance evidence.
 
+Source `af749d3` passed 490 GPU cases and failed 20 cases in the complete non-boundary selection.
+The failures identified permanent stream-slot limits and incorrect Q/K timing-reference selection.
+The repair enforces zero native scheduler workspace and uses one persistent device sentinel.
+Q/K timing uses repository CUDA, while numerical observation uses independent Torch and rejects timing-baseline selection.
+
+All 49 affected GPU checks and 56 selected CPU checks passed after repair.
+Independent review found no blocker. Required hooks passed.
+The complete GPU selection must run again on the final source.
+
 Summaries with obsolete comparison provenance were removed from the working tree. Git history keeps their original results.
 See the [acceptance index](acceptance.md) for current collection scope.
 

@@ -1,4 +1,4 @@
-"""Owned SM100 CUTLASS launch and bounded per-stream scheduler workspaces."""
+"""Owned SM100 CUTLASS launch with zero scheduler workspace."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import torch
 
 from oh_my_vllm.ir.execution import execution_policy
 
-_WORKSPACES: dict[tuple[int, int], torch.Tensor] = {}
+_WORKSPACES: dict[int, torch.Tensor] = {}
 _PROVENANCE = None
 _FLAGS = (
     "-O3",
@@ -151,21 +151,10 @@ def provenance():
 
 
 def _workspace(device: torch.device) -> torch.Tensor:
-    """Persistent scratch is private to the stream that writes it.
-
-    A worker uses its origin, graph-capture, and branch streams. Four slots
-    bound scratch memory to 64 bytes per device and reject unbounded stream churn.
-    CUDA Graph objects keep the addresses alive through this worker-lifetime map.
-    """
-    stream = torch.cuda.current_stream(device)
-    key = (device.index, stream.cuda_stream)
-    if key not in _WORKSPACES:
-        if sum(index == device.index for index, _ in _WORKSPACES) >= 4:
-            raise RuntimeError("owned FP8 workspace stream limit exceeded")
-        # The pinned CLC/epilogue requires zero scratch. Keep an aligned pointer
-        # and let the C++ size guard reject a future nonzero requirement.
-        _WORKSPACES[key] = torch.empty(16, device=device, dtype=torch.uint8)
-    return _WORKSPACES[key]
+    """Keep one device sentinel; the native zero-size guard forbids writes."""
+    if device.index not in _WORKSPACES:
+        _WORKSPACES[device.index] = torch.empty(16, device=device, dtype=torch.uint8)
+    return _WORKSPACES[device.index]
 
 
 def gemm(a, weight, scale_a, scale_weight, *, mma_sm=1, scale_major_k=True):

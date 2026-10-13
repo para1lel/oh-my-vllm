@@ -49,6 +49,11 @@ CONFIGURATIONS = {
 }
 
 
+def test_numerical_observation_rejects_a_timing_baseline_before_cuda():
+    with pytest.raises(ValueError, match="numerical observation"):
+        fixtures.fixture({"operation": "qk", "tokens": 2}, observe=True, timing=True)
+
+
 @pytest.mark.parametrize("operation", sorted(CONFIGURATIONS))
 def test_every_formal_fixture_builds_complete_operation_callables(
     operation, monkeypatch

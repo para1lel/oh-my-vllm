@@ -50,6 +50,8 @@ def fixture(
     DSpark append timing can share a cache because immutable K/V and slots
     repeat the same writes. Numerical verification keeps independent caches.
     """
+    if observe and timing:
+        raise ValueError("numerical observation cannot select a timing baseline")
     if shared_append_destination and (
         observe or config["operation"] != "dspark_append"
     ):
@@ -61,7 +63,7 @@ def fixture(
     generator = torch.Generator(device="cuda").manual_seed(seed)
     operation = config["operation"]
     module, entry = ENTRIES[operation]
-    if timing:
+    if timing or qk_inputs:
         from .cuda_baseline import operator
 
         reference = operator(module, entry)

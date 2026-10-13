@@ -182,6 +182,8 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void *float_buffer, size_t float_buf
   Gemm gemm;
 
   size_t workspace_size = Gemm::get_workspace_size(arguments);
+  TVM_FFI_ICHECK(workspace_size == 0)
+      << "owned groupwise FP8 requires zero scheduler workspace: " << workspace_size;
   TVM_FFI_ICHECK(float_buffer_size_in_bytes >= workspace_size)
       << "groupwise FP8 workspace is too small: " << workspace_size;
   void *workspace_ptr = float_buffer;
@@ -190,8 +192,8 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void *float_buffer, size_t float_buf
         << "groupwise FP8 CUTLASS error: " << cutlassGetStatusString(status);
   };
   check(gemm.can_implement(arguments));
-  // Keep any initialization on the caller stream. This pinned CLC scheduler
-  // currently uses zero workspace; future nonzero requirements fail the guard.
+  // Initialization stays on the caller stream. The zero-size guard makes the
+  // device-lifetime sentinel safe to share across streams and captured graphs.
   check(gemm.initialize(arguments, workspace_ptr, stream));
   check(gemm.run(stream, nullptr, pdl));
   return cudaSuccess;
