@@ -35,16 +35,21 @@ Oneoff 客户端生成必需的 settings overlay, 并在 handler 停机完成前
 487 个 GPU 测试全部通过, 无跳过. 60 个思考预算案例全部通过.
 
 两种草稿模式和 API 的约束, lifecycle 和长 context 检查通过.
-Oneoff OMP 客户端因缺失 settings overlay 在模型执行前停止. 原始失败记录保留.
+旧 Oneoff OMP 客户端因缺失 settings overlay 在模型执行前停止. 原始失败记录保留.
+源码 `179a56f` 通过 Chat 和 Responses 的 4 项 oneoff 框架检查, 共 31 个真实模型请求.
+3 项 native 负载审计通过. DSpark Responses 负载审计失败并保留记录.
 
 517 个算子案例全部通过数值检查. 速度检查通过 514 个, 失败 3 个.
 另一张 B200 的全新 cache 测量复现了这 3 个速度失败.
 因此完整算子矩阵尚未通过验收.
 遵守用户要求, 保持计算不变. 不降低固定 TileLang 性能门槛.
 
-上一轮 CPU 采集通过 1536 个测试和 156 个子测试, 487 个 GPU 案例被 deselect.
-对应的 8 项必检和教程检查通过. 教程有 10 个 Node 测试和 9 个浏览器测试.
-新的 collector 和 overlay 修复需要在已提交源码上完成适用 CPU 检查.
+源码 `179a56f` 在 724.00 秒内通过 1565 个 CPU 测试和 156 个子测试, 487 个 GPU 案例被 deselect.
+源码哈希保持不变. 8 项必检全部通过.
+教程通过 10 个 Node 测试, 9 个浏览器测试, 以及 Rust 调度测试, 格式检查和 lint 检查.
+
+8 个所选 allocator-OOM 阶段通过: `ae070e4` 上的 6 个, 以及 `179a56f` 上缺失的 2 个 `after_commit` 阶段.
+这些记录跨两个提交. 新 collector 因未选择全部 4 个阶段而保留失败状态.
 
 ## 框架一小时证据
 
@@ -63,18 +68,15 @@ Worker snapshot 最大滞后分别为 136.230 和 138.827 秒. 采样资源上�
 原始 journal/SDK 审计失败单独保留. MTP 有 6 个服务端完成请求缺少同 ID 原生结束消息.
 客户端 stream stall 和 incomplete-read 原因仍不确定. 结果不声称每个请求都成功.
 
-## 剩余工作
+## 已知限制
 
-完成剩余 phase, budget 和服务记录的独立审查.
-运行新 collector 的 CPU 检查和完整 CPU 套件, 随后完成必检及教程构建.
-使用放宽后的公共 worker step deadline, 为 MTP4 和 DSpark 执行此前未实际触发的 `after_commit` allocator-OOM 阶段.
-其余 6 个 allocator-OOM 阶段已在 `ae070e4` 通过.
+3 个小 normalization shape 未通过不变的算子速度门槛. 用户同意交付且暂不优化这些案例.
+见[审计](audit.zh.md). 不降低固定 TileLang 门槛, 也不宣称完整算子矩阵通过.
+更完整的内存归因和自然压缩覆盖仍是单独的限制. 模型任务进展属于负载观察.
 
-Overlay 修复后通过两种 API 运行 oneoff OMP 兼容性检查.
-
-3 个小 normalization shape 未通过不变的算子速度门槛. 见[审计](audit.zh.md).
-模型任务进展属于负载观察. 更完整的内存归因和自然压缩覆盖仍是单独的限制.
-按[验收](acceptance.zh.md) 查看源码范围明确的证据. 逐日修复经过保留在 Git 历史.
+适用的修复及交付检查已在此记录范围内完成.
+[验收索引](acceptance.zh.md) 和[可移植记录](../bench/evidence/README.zh.md) 提供源码身份, 测量及验证限制.
+逐日修复经过保留在 Git 历史. 用户未要求 push 或 pull request.
 
 ## 教程预览
 

@@ -35,16 +35,21 @@ Six maximum-context ordinary/MTP4 cases passed at batches 1, 2, and 4 without OO
 All 487 GPU tests passed without skips. All 60 reasoning-budget cases passed.
 
 Constraints, lifecycle, and long-context checks passed for the two speculative modes and APIs.
-The oneoff OMP client stopped before model execution because its settings overlay was missing. Its original failures stay recorded.
+The old oneoff OMP client stopped before model execution because its settings overlay was missing. Its original failures stay recorded.
+Source `179a56f` passed four oneoff framework checks through Chat and Responses, with 31 model requests.
+Three native workload audits passed. The DSpark Responses workload audit failed and stays recorded.
 
 All 517 operator cases passed numerical checks. Speed checks passed 514 cases and failed three cases.
 A second B200 measurement with a new project cache reproduced all three speed failures.
 The full operator matrix therefore does not pass acceptance.
 Keep computation unchanged as the user instructed. Do not lower the pinned TileLang performance gate.
 
-The previous CPU collection passed 1536 tests and 156 subtests, with 487 GPU cases deselected.
-Its eight required checks and tutorial checks passed. The tutorial had ten Node tests and nine browser tests.
-Complete the applicable CPU checks on committed source for the new collector and overlay fixes.
+Source `179a56f` passed 1565 CPU tests and 156 subtests, with 487 GPU cases deselected, in 724.00 seconds.
+Source hashes stayed the same. All eight required checks passed.
+The tutorial passed ten Node tests, nine browser tests, and its Rust scheduler test, format check, and lint check.
+
+Eight selected allocator-OOM stages passed: six on `ae070e4`, plus the two missing `after_commit` stages on `179a56f`.
+These records span two commits. The new collectors keep their failed status because they did not select all four stages.
 
 ## Framework-hour evidence
 
@@ -63,18 +68,15 @@ These results do not prove a memory plateau, full allocation attribution, each i
 Original journal/SDK audit failures stay separate. MTP has six server-completed requests without the same-ID native ending message.
 Client stream-stall and incomplete-read causes stay unknown. The results do not claim that each request succeeded.
 
-## Open work
+## Known limits
 
-Finish independent review of the other phase, budget, and service records.
-Run the new collector CPU checks and full CPU suite, then finish the required checks and tutorial build.
-Run the previously unexercised `after_commit` allocator-OOM stage for MTP4 and DSpark with the wider public worker-step deadline.
-The other six allocator-OOM stages already passed on `ae070e4`.
+Three small normalization shapes fail the unchanged operator speed gate. The user gave approval for delivery without optimization of these cases.
+See [audit](audit.md). Do not lower the pinned TileLang gate or claim that the full operator matrix passes.
+Further memory attribution and natural-compaction coverage stay separate limits. Model-task progress stays a workload observation.
 
-Run the oneoff OMP compatibility checks through the two APIs after the overlay fix.
-
-Three small normalization shapes fail the unchanged operator speed gate. See [audit](audit.md).
-Model-task progress stays a workload observation. Further memory attribution and natural-compaction coverage stay separate limits.
-Use [acceptance](acceptance.md) for source-scoped evidence. Daily repair narratives stay in Git history.
+All applicable repair and delivery checks are completed for this recorded scope.
+The [acceptance index](acceptance.md) and [portable records](../bench/evidence/README.md) give source identities, measurements, and verification limits.
+Daily repair narratives stay in Git history. No push or pull request was requested.
 
 ## Tutorial preview
 

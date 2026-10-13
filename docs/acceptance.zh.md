@@ -23,11 +23,11 @@ OMP goal 状态, 任务进展, 工具错误和最终答案属于负载观察.
 | 服务协议 | MTP4 和 DSpark 通过两种 API 的约束, lifecycle 和长 context 检查 |
 | 算子 | 数值通过 517 个, 速度通过 514 个, 失败 3 个 |
 | 框架一小时 | MTP4 和 DSpark 各通过独立审查的 3600 秒窗口 |
-| Allocator 恢复 | 6 个阶段通过, 2 个首个 cold 阶段在旧 worker step deadline 停止, 尚未触发注入 |
-| Oneoff OMP | 原始尝试因缺失 settings overlay, 在模型请求前失败 |
+| Allocator 恢复 | 8 个所选阶段通过: `ae070e4` 上的 6 个及 `179a56f` 上的 2 个 `after_commit` 阶段 |
+| Oneoff OMP | `179a56f` 上的 4 项框架检查通过, 共 31 个模型请求 |
 
 另一张 B200 的全新 cache 测量复现了 3 个算子速度失败.
-用户暂缓优化. 完整算子矩阵尚未通过验收.
+用户同意交付且暂不优化这些案例. 完整算子矩阵尚未通过验收.
 见[审计](audit.zh.md#krn-07-小-normalization-shape).
 
 MTP 有 412 个请求, 407 个服务端完成和 5 个已匹配终止, 包括最后停止尾部.
@@ -42,7 +42,18 @@ Worker snapshot 相对采集时刻最多滞后 136.230 和 138.827 秒.
 
 后续修改调整超时策略与 collector 证据范围, 不改变 GPU 计算或约束解码.
 用户免除了仅针对超时参数的额外测试.
-新的 CPU 检查, 缺失恢复阶段和修复后的 oneoff 兼容性检查正在最终验证.
+
+源码 `179a56f` 通过 1565 个 CPU 测试和 156 个子测试, 487 个 GPU 案例被 deselect. 采集期间源码保持不变.
+8 项必检通过. 教程有 10 个 Node 测试, 9 个浏览器测试, 以及通过的 Rust 调度测试.
+[当前记录](../bench/evidence/2026-10-13-current-source-acceptance.json) 保留原始哈希及复查范围.
+[框架一小时记录](../bench/evidence/2026-10-13-framework-hour.json) 保留两个窗口, 资源限制和原始失败.
+
+8 个恢复阶段的通过记录跨两个源码提交. 原始恢复 collector 保留失败状态及退出码 1. 旧 collector 的首个 cold 阶段失败.
+新 collector 只选择 `after_commit`. 因此完整 4 阶段覆盖门槛仍为 false.
+
+4 项 oneoff 框架检查通过. 3 项 native 负载审计通过. DSpark Responses 负载审计失败并保留记录.
+Native 任务答案不决定框架验收.
+
 [交接](handoff.zh.md) 给出结果与限制. 历史测量只适用于记录的源码.
 
 ## `f019075` 的部分采集
@@ -78,7 +89,7 @@ Prefix-hit 行复用 32144 token. 其他行使用冷前缀.
 它核对源码身份, 加载模块, 输出, trace 运算, 统计和自有 worker 退出.
 两个阶段模型均包含全部必需操作.
 
-[README 表格](../README.zh.md#性能实测) 给出 prefill 秒数, 下界倍率, decode TPS 和理论百分比.
+[历史记录](../bench/evidence/2026-10-11-serving-stability.json) 给出 prefill 秒数, 下界倍率, decode TPS 和理论百分比.
 Prefix-hit prefill 记录倍率. 其波动与 decode 门槛通过.
 Decode TPS 每个请求计入 4095 token, 因为首 token 归入 prefill.
 

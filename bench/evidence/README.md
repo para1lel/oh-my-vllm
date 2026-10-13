@@ -14,7 +14,7 @@ They keep experiment names, original hashes, selected measurements, and verifica
 They have `formal_acceptance=false`.
 The [owned-kernel and liveness summary](2026-10-10-owned-tuning-liveness.json) uses this format.
 
-The [current serving resource record](2026-10-11-serving-stability.json) gives fifteen phase rows and six capacity cases.
+The [historical serving resource record](2026-10-11-serving-stability.json) gives fifteen phase rows and six capacity cases.
 It also gives two one-hour agentic collections and eight allocator-OOM recovery stages.
 The [README](../../README.md#measured-performance) gives the phase table and separate MTP4/DSpark request plots.
 Each result keeps its measured source and full original hash.
@@ -24,6 +24,14 @@ These checks do not supply model acceptance.
 
 The [constrained-decoding investigation](2026-10-13-constrained-decoding-investigation.json) keeps recorded loop symptoms and selected conditional target probabilities.
 It also records two constructed protocol defects. It does not show original sampled paths or formal acceptance.
+
+The [current acceptance record](2026-10-13-current-source-acceptance.json) gives the source-scoped GPU, CPU, recovery, and service results.
+The [framework-hour record](2026-10-13-framework-hour.json) gives two independently reviewed 3600-second windows on source `ae070e4`.
+It keeps the original native audit failures and the framework-only acceptance scope.
+The request and memory plots include those windows and their stop tails. Resource samples do not prove a memory plateau or full allocation attribution.
+
+The operator matrix has 517 numerical passes and three speed failures.
+The user gave approval for delivery without optimization of these cases.
 
 ## Export
 

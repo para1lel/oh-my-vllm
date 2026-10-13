@@ -23,11 +23,11 @@ Formal GPU collections on clean `ae070e4` that stayed the same used new project 
 | Service protocols | Constraints, lifecycle, and long context passed in MTP4 and DSpark with the two APIs |
 | Operators | 517 numerical passes, 514 speed passes, three speed failures |
 | Framework hour | MTP4 and DSpark each passed the independently reviewed 3600-second window |
-| Allocator recovery | Six stages passed, two first cold stages stopped before injection at the old worker-step deadline |
-| Oneoff OMP | Original attempts failed before model requests because the settings overlay was missing |
+| Allocator recovery | Eight selected stages passed: six on `ae070e4`, two `after_commit` stages on `179a56f` |
+| Oneoff OMP | Four framework checks passed on `179a56f`, with 31 model requests |
 
 A second B200 measurement with a new project cache reproduced the three operator speed failures.
-The user deferred optimization. The full operator matrix does not pass acceptance.
+The user gave approval for delivery without optimization of these cases. The full operator matrix does not pass acceptance.
 See [audit](audit.md#krn-07-small-normalization-shapes).
 
 MTP had 412 requests, 407 server completions, and five matched terminations, with the final stop tail.
@@ -37,12 +37,23 @@ All eight agent sandboxes, generated files, copied tools, caches, and owned imag
 
 Worker RSS increased during the hour. MTP grew from 1.136 to 6.822 GiB. DSpark grew from 1.280 to 8.519 GiB.
 Worker snapshots lagged collection by up to 136.230 and 138.827 seconds.
-Resource checks do not prove a memory plateau, full allocation attribution, or stability beyond the measured hour.
+Resource checks do not prove a memory plateau, full allocation attribution, or stable operation beyond the measured hour.
 Natural compaction coverage and original journal/SDK errors are separate workload observations.
 
 The subsequent changes adjust timeout policy and collector evidence scope without changes to GPU computation or constrained decoding.
 The user waived more tests for timeout parameters alone.
-New CPU checks, missing recovery stages, and corrected oneoff compatibility checks are in final verification.
+
+Source `179a56f` passed 1565 CPU tests and 156 subtests, with 487 GPU cases deselected. The source stayed the same during collection.
+The eight required checks passed. The tutorial has ten Node tests, nine browser tests, and a passed Rust scheduler test.
+The [current record](../bench/evidence/2026-10-13-current-source-acceptance.json) keeps original hashes and review scope.
+The [framework-hour record](../bench/evidence/2026-10-13-framework-hour.json) keeps the two windows, resource limits, and original failures.
+
+The eight recovery-stage passes span two source commits. The original recovery collectors keep their failed status and exit code 1. The older collectors failed their first cold stage.
+The new collectors selected only `after_commit`. The gate for all four stages therefore stays false.
+
+Four oneoff framework checks passed. Three native workload audits passed. The DSpark Responses workload audit failed and stays recorded.
+Native task answers do not control framework acceptance.
+
 The [handoff](handoff.md) gives results and limits. Earlier measurements stay scoped to their recorded source.
 
 ## Partial collection on `f019075`
@@ -78,7 +89,7 @@ The independent review calculated the full prefill and decode models again for a
 It checked source identities, loaded modules, output, trace arithmetic, statistics, and owned worker exit.
 The two phase models include all required operations.
 
-The [README table](../README.md#measured-performance) gives prefill seconds, lower-bound ratios, decode TPS, and theoretical percentages.
+The [historical record](../bench/evidence/2026-10-11-serving-stability.json) gives prefill seconds, lower-bound ratios, decode TPS, and theoretical percentages.
 Prefix-hit prefill records its ratio. Its spread and decode gates passed.
 Decode TPS counts 4095 tokens per request because the first token belongs to prefill.
 
