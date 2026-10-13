@@ -73,7 +73,9 @@ def inputs(tokens, strided=False):
     return q, k, v, g, beta
 
 
-@pytest.mark.parametrize("tokens", [1, 7, 129, 624, 1023, 1024, 2048, 4096])
+@pytest.mark.parametrize(
+    "tokens", [1, 7, 129, 144, 288, 320, 321, 624, 1023, 1024, 2048, 4096]
+)
 @pytest.mark.parametrize("strided", [False, True])
 def test_prefill_qk_normalization_fp64(tokens, strided):
     q, k, *_ = inputs(tokens, strided)
@@ -90,7 +92,7 @@ def test_prefill_qk_normalization_fp64(tokens, strided):
         assert torch.signbit(actual[-1, -1]).all()
 
 
-@pytest.mark.parametrize("tokens", [1, 624])
+@pytest.mark.parametrize("tokens", [1, 144, 288, 320, 321, 624])
 def test_packed_qk_preserves_fp32_first_square_edge_values(tokens):
     """Keep FP32 underflow/overflow, nonfinite values, and signed-zero output."""
     packed = torch.ones(tokens, 10240, device="cuda", dtype=torch.bfloat16)
@@ -128,6 +130,40 @@ def test_packed_qk_preserves_fp32_first_square_edge_values(tokens):
         torch.testing.assert_close(actual, expected, atol=0, rtol=0.004, equal_nan=True)
         zeros = expected.eq(0)
         assert torch.equal(torch.signbit(actual[zeros]), torch.signbit(source[zeros]))
+
+
+@pytest.mark.parametrize("tokens", [144, 288, 320, 321])
+def test_packed_qk_graph_replays_changed_inputs_across_short_dispatch(tokens):
+    q, k, *_ = inputs(tokens, strided=True)
+    stream = torch.cuda.Stream()
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        gdn.normalize_qk(q, k)
+    torch.cuda.current_stream().wait_stream(stream)
+    graph = torch.cuda.CUDAGraph()
+    try:
+        with torch.cuda.graph(graph, stream=stream):
+            outputs = gdn.normalize_qk(q, k)
+        for scale in (1.0, 1e-5):
+            q.normal_().mul_(scale)
+            k.normal_().mul_(scale)
+            q[-1, -1] = -0.0
+            original = q.clone(), k.clone()
+            graph.replay()
+            torch.cuda.synchronize()
+            for actual, source, before in zip(outputs, (q, k), original, strict=True):
+                assert torch.equal(source, before)
+                rounded = source.cpu().double()
+                expected = rounded * torch.rsqrt(
+                    rounded.square().sum(-1, keepdim=True) + 1e-6
+                )
+                torch.testing.assert_close(
+                    actual.cpu().double(), expected, atol=0.002, rtol=0.004
+                )
+            assert torch.signbit(outputs[0][-1, -1]).all()
+    finally:
+        torch.cuda.synchronize()
+        graph.reset()
 
 
 def test_native_prefix_attention_fp64_and_mixed_lengths():

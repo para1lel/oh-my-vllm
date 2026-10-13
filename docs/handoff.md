@@ -263,6 +263,44 @@ The tutorial passed ten source-display tests and nine browser tests.
 New committed-source GPU acceptance and independent resource review are pending.
 Cold-start verification must keep the original client timeout and fresh project caches.
 
+## Short Q/K and executable diagnostics
+
+Source `4804ec6` passed all `469` GPU tests, sixty budget cases, and six full-context cases, with independent review.
+Its phase collections did not complete all fifteen rows.
+The operator collection saved `354` complete rows. All numerical checks passed, but the `144`-token Q/K speed comparison failed.
+Neither persistent collection completed one hour. Independent review did not accept host memory stability.
+
+RSS continued to increase after several cache counts reached their limits.
+All owned collections and waiters stopped. Independent review checked process births, GPU release, and temporary endpoints before source changes.
+
+The Q/K candidate uses four values per lane through `320` tokens. Larger inputs keep their eight-value paths.
+The packed-layout guards, FP32 squares, epsilon, BF16 rounding, PDL, and numerical tolerances stay effective.
+An external comparison supports the short path at sampled lengths through `320` tokens.
+
+One later focused production matrix still failed the `576`-token comparison. That failed record stays unchanged.
+Further verification is necessary before full acceptance.
+
+The next focused production comparison passed all twelve Q/K cases and `48` GPU numerical, graph replay, and output-pool tests.
+Independent review checked the exact bootstrap results, source and native-library identities, and process release.
+This focused result does not supply the full `517`-case matrix or unified acceptance.
+
+Three completed MTP audit items had grep output. Each work item had no source read.
+The unchanged source-read gate rejects these items.
+The next task prompt tells the agent to read source again before completion. Earlier records keep their original results.
+
+Optional executable diagnostics use weak references to report owner tuple lengths, shared objects, generation identities, and other live compiled executables.
+Weak reference callbacks, unsupported objects, and observation overflow have different fields. Diagnostics do not add strong executable owners.
+Shallow byte counts exclude contained objects and native storage. They do not identify the cause of the earlier RSS increase.
+Complete new committed-source acceptance and independent resource review before publication.
+
+The revised CPU suite passed `1477` tests and `119` subtests. CPU mode did not select `485` GPU tests.
+The ten warnings were dependency deprecation warnings.
+Rust passed `152` tests. The eight required checks, release build, and dependency check passed.
+The tutorial passed ten source-display tests and nine browser tests.
+
+The reviewed runtime contract changes only the Q/K source and header, two diagnostic source files, and one new diagnostic module.
+Its providers, versions, GEMM headers, and compiler flags stay equal to the previous contract.
+
 ## Open work
 
 - Extend `PY-04` to cross-shape graph eviction and recapture near the maximum supported context.

@@ -187,6 +187,7 @@ Proper product names, source identifiers, and protocol text keep their initial f
 | `persistent session` | noun | One client process and conversation history with the same session identity through tasks and compaction. |
 | `compaction` | noun | Replacement of part of a conversation history with a summary in the same session. |
 | `context snapshot` | noun | Provider input count and context metadata saved with a completed assistant message. |
+| `weak reference` | noun | A Python object reference that does not keep its object in memory. |
 
 ## Maintenance
 

@@ -391,6 +391,14 @@ Capture 保留已预热的 specialization.
 捕获图对象独立于编译器 registry 淘汰, 保留自身必需的 executable owner.
 因此, 变体上限不包括 resident graph 持有的全部 executable owner.
 
+`OH_MY_VLLM_EXECUTABLE_DIAGNOSTICS=1` 在现有 worker 诊断边界启用包含 generation 身份与 owner 计数的弱引用记录.
+记录上限为 `8192` 项. 溢出或对象不支持弱引用时, 测量覆盖范围不完整.
+诊断区分图 owner tuple, 持久 callable owner deque, 二者共享对象, 以及其他存活 compiled executable.
+等待中的弱引用回调与存活记录使用不同计数.
+
+浅层对象和 closure 容器尺寸不包括其内容, native 存储和 allocator 保留内存.
+这些计数不能证明进程内存稳定. 诊断不改变 capture, executable 所有权或资源释放.
+
 FX 保存生成的 Python 源码, 用于代码检查和异常消息.
 FakeTensor 保存输出 shape 和 alias metadata. 缓存未命中时重新计算这些 metadata.
 Worker 限制每个全局 registry 中项目持有的记录, 并为可选的 FX profiler metadata 设置独立上限.

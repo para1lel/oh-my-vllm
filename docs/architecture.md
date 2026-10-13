@@ -423,6 +423,14 @@ The owned module registry has at most 256 entries. Each callable keeps at most 6
 Captured graph objects keep their necessary executable owners independently of compiler registry eviction.
 The variant limit thus does not count all executable owners held by resident graphs.
 
+`OH_MY_VLLM_EXECUTABLE_DIAGNOSTICS=1` enables weak reference records with generation identities and owner counts at the existing worker diagnostic boundary.
+The records have an `8192`-entry limit. Overflow and objects without weak reference support make measurement coverage incomplete.
+Diagnostics separate graph owner tuples, persistent callable owner deques, their shared objects, and other live compiled executables.
+Pending weak reference callbacks have a different count from live records.
+
+Shallow object and closure container sizes exclude their contents, native storage, and allocator retention.
+These counts do not prove process memory stability. Diagnostics do not change capture, executable ownership, or resource release.
+
 FX stores generated Python source for code inspection and exception messages.
 FakeTensor stores output shape and alias metadata. Cache misses calculate this metadata again.
 The worker limits project-owned records in each global registry, with a separate limit for optional FX profiler metadata.

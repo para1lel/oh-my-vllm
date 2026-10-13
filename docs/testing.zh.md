@@ -36,6 +36,19 @@ scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_flashi
 这些 CPU 检查不能证明模型耗时或冷启动验收通过.
 GPU 验收保留全新项目缓存. 不安装预热的项目或 FlashInfer JIT cache.
 
+CPU executable 诊断测试检查 executable 生命周期, owner 交集, 等待中的回调, 以及明确的不完整覆盖范围.
+测试保留诊断快照, 不保留 executable 的强引用.
+
+```bash
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_executable_diagnostics.py tests/test_worker_lifecycle.py -q
+```
+
+Q/K GPU 测试在短输入 dispatch 边界检查 FP64 输出, FP32 边界值, 以及输入改变后的图重放.
+保留原数值容差和固定版本的 TileLang 对比.
+
+每个持续审计任务必须重新成功读取源码.
+Grep 输出和之前的历史记录不能满足原有的逐任务源码读取检查.
+
 CPU SDK fixture 保留完整请求体及每个请求体的副本数量.
 存在已完成历史时, 两个自动摘要请求可以具有不同的先后顺序.
 其他请求须保持相同顺序. CPU fixture 分别测试这两种顺序.

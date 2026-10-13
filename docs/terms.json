@@ -1871,6 +1871,14 @@
         "context snapshot",
         "context snapshots"
       ]
+    },
+    {
+      "term": "weak reference",
+      "part_of_speech": "noun",
+      "category": "technical",
+      "meaning": "A Python object reference that does not keep its object in memory.",
+      "translation": "不使其目标对象继续驻留内存的 Python 对象引用.",
+      "forms": ["weak reference", "weak references"]
     }
   ]
 }

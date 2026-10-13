@@ -83,7 +83,7 @@ scripts/with-env.sh python scripts/format_cuda.py --check
 | SiLU/multiply | Fast exponential and paired BF16 multiplication keep the two BF16 rounding points. |
 | RMS | Dense width 5120 uses aligned register-resident specializations and epsilon `1e-6`. |
 | Gated RMS | 48 heads, width 128, stable sigmoid, FP32 gating without an extra BF16 rounding point. |
-| Q/K | Packed sixteen-head rows, token stride 10240, aligned eight-element loads. |
+| Q/K | Packed sixteen-head rows, token stride 10240. Inputs through `320` tokens use four-element loads. Larger inputs use eight-element loads. |
 | Convolution | 10240 channels, token stride 16384, guarded weight alignment, and source-state snapshots. |
 | GDN | Guarded vector state updates, FP32 arithmetic, BF16 MTP or FP32 ordinary storage. |
 | Attention preparation | Q/K RMS/RoPE, V conversion, and KV writes with FP64 phase reduction. |

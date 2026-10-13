@@ -75,6 +75,7 @@ Supply `WorkerConfig.model_path` explicitly for direct Rust library calls.
 | `OH_MY_VLLM_MULTI_STREAM` | GDN branch streams. Default `1`. Diagnostic `0` disables them. |
 | `OH_MY_VLLM_CUDA_PDL` | Owned CUDA programmatic launch. Default `1`. Diagnostic `0` disables it. |
 | `OH_MY_VLLM_HOST_ALLOCATOR_DIAGNOSTICS` | Optional glibc `mallinfo2` measurements in worker diagnostics. Set `1` to enable. |
+| `OH_MY_VLLM_EXECUTABLE_DIAGNOSTICS` | Optional compiled executable measurements through weak references at the existing worker diagnostic boundary. Set `1` to enable. |
 | `OH_MY_VLLM_GPU_UUID` | Optional idle B200 selection for `scripts/with-gpu.sh`. |
 | `PYTORCH_ALLOC_CONF` | Explicit allocator options. This name takes precedence over the legacy name. |
 | `PYTORCH_CUDA_ALLOC_CONF` | Legacy allocator options when the new name is unset. |

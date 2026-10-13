@@ -53,22 +53,26 @@ __device__ float half_warp_sum(float value) {
   return value;
 }
 
-template <int Threads, bool Joint>
+template <int Threads, bool Joint, int Vector = 8>
 __global__ void __launch_bounds__(Threads, 1)
     model_qk_kernel(const __nv_bfloat16 *__restrict__ q, const __nv_bfloat16 *__restrict__ k,
                     __nv_bfloat16 *__restrict__ oq, __nv_bfloat16 *__restrict__ ok) {
   pdl_dependency_wait();
   pdl_launch_next();
   static_assert(Threads == 128 || Threads == 256);
+  static_assert(Vector == 8 || (Vector == 4 && Threads == 128 && Joint));
+  constexpr int lanes = 128 / Vector, per_token = 2048 / Vector;
   // Fixed16-head rows fill every CTA, so no partial-head mask is needed.
 
-  int64_t input_offset = (int64_t(blockIdx.x) * (Threads) / 256) * 10240 +
-                         ((int64_t(blockIdx.x) * (Threads)) % 256) * 8 + int64_t(threadIdx.x) * 8;
-  auto a = *reinterpret_cast<const AlignedVector<__nv_bfloat16, 8> *>(q + input_offset);
-  auto b = *reinterpret_cast<const AlignedVector<__nv_bfloat16, 8> *>(k + input_offset);
-  float2 av[4], bv[4], as = make_float2(0, 0), bs = make_float2(0, 0);
+  int64_t logical = int64_t(blockIdx.x) * Threads + threadIdx.x;
+  int64_t input_offset = (int64_t(blockIdx.x) * Threads / per_token) * 10240 +
+                         ((int64_t(blockIdx.x) * Threads) % per_token) * Vector +
+                         int64_t(threadIdx.x) * Vector;
+  auto a = *reinterpret_cast<const AlignedVector<__nv_bfloat16, Vector> *>(q + input_offset);
+  auto b = *reinterpret_cast<const AlignedVector<__nv_bfloat16, Vector> *>(k + input_offset);
+  float2 av[Vector / 2], bv[Vector / 2], as = make_float2(0, 0), bs = make_float2(0, 0);
 #pragma unroll
-  for (int j = 0; j < 4; ++j) {
+  for (int j = 0; j < Vector / 2; ++j) {
     av[j] = __bfloat1622float2(reinterpret_cast<__nv_bfloat162 *>(a.value)[j]);
     bv[j] = __bfloat1622float2(reinterpret_cast<__nv_bfloat162 *>(b.value)[j]);
     auto aq = __fmul2_rn(av[j], av[j]);
@@ -86,25 +90,23 @@ __global__ void __launch_bounds__(Threads, 1)
   float2 sums = make_float2(as.x + as.y, bs.x + bs.y);
   if constexpr (Joint) {
 #pragma unroll
-    for (int i = 8; i; i >>= 1)
-      sums = __fadd2_rn(sums, make_float2(__shfl_xor_sync(0xffffffff, sums.x, i, 16),
-                                          __shfl_xor_sync(0xffffffff, sums.y, i, 16)));
+    for (int i = lanes / 2; i; i >>= 1)
+      sums = __fadd2_rn(sums, make_float2(__shfl_xor_sync(0xffffffff, sums.x, i, lanes),
+                                          __shfl_xor_sync(0xffffffff, sums.y, i, lanes)));
   } else {
     sums.x = half_warp_sum(sums.x);
     sums.y = half_warp_sum(sums.y);
   }
   float ai = rsqrtf(sums.x + 1e-6f), bi = rsqrtf(sums.y + 1e-6f);
 #pragma unroll
-  for (int j = 0; j < 4; ++j) {
+  for (int j = 0; j < Vector / 2; ++j) {
     reinterpret_cast<__nv_bfloat162 *>(a.value)[j] =
         __float22bfloat162_rn(__fmul2_rn(av[j], make_float2(ai, ai)));
     reinterpret_cast<__nv_bfloat162 *>(b.value)[j] =
         __float22bfloat162_rn(__fmul2_rn(bv[j], make_float2(bi, bi)));
   }
-  *reinterpret_cast<AlignedVector<__nv_bfloat16, 8> *>(oq + int64_t(blockIdx.x) * Threads * 8 +
-                                                       threadIdx.x * 8) = a;
-  *reinterpret_cast<AlignedVector<__nv_bfloat16, 8> *>(ok + int64_t(blockIdx.x) * Threads * 8 +
-                                                       threadIdx.x * 8) = b;
+  *reinterpret_cast<AlignedVector<__nv_bfloat16, Vector> *>(oq + logical * Vector) = a;
+  *reinterpret_cast<AlignedVector<__nv_bfloat16, Vector> *>(ok + logical * Vector) = b;
 }
 __global__ void qk_kernel(const __nv_bfloat16 *__restrict__ q, const __nv_bfloat16 *__restrict__ k,
                           __nv_bfloat16 *__restrict__ oq, __nv_bfloat16 *__restrict__ ok, int rows,
@@ -135,18 +137,21 @@ void normalize_qk(TensorView q, TensorView k, TensorView oq, TensorView ok) {
                 reinterpret_cast<uintptr_t>(k.data_ptr()) % 16 == 0;
   auto stream = stream_for(q, "normalize_qk");
   if (packed) {
-#define MODEL_QK(T, J)                                                                             \
-  launch_kernel(model_qk_kernel<T, J>, q.size(0) * (256 / T), T, 0, stream,                        \
+#define MODEL_QK(T, J, V)                                                                          \
+  launch_kernel(model_qk_kernel<T, J, V>, q.size(0) * (2048 / V / T), T, 0, stream,                \
                 static_cast<const __nv_bfloat16 *>(q.data_ptr()),                                  \
                 static_cast<const __nv_bfloat16 *>(k.data_ptr()),                                  \
                 static_cast<__nv_bfloat16 *>(oq.data_ptr()),                                       \
                 static_cast<__nv_bfloat16 *>(ok.data_ptr()))
-    if (q.size(0) < 1024) {
-      MODEL_QK(128, true);
+    if (q.size(0) <= 320) {
+      // Four values per lane reduce short-row work before the warp reduction.
+      MODEL_QK(128, true, 4);
+    } else if (q.size(0) < 1024) {
+      MODEL_QK(128, true, 8);
     } else if (q.size(0) < 4096) {
-      MODEL_QK(256, false);
+      MODEL_QK(256, false, 8);
     } else {
-      MODEL_QK(256, true);
+      MODEL_QK(256, true, 8);
     }
 #undef MODEL_QK
     finish_cuda_launch(stream, "normalize_qk");

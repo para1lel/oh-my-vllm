@@ -81,7 +81,7 @@ scripts/with-env.sh python scripts/format_cuda.py --check
 | SiLU/multiply | Fast exponential 和 paired BF16 multiplication 保留两个 BF16 舍入点. |
 | RMS | Dense width5120 使用对齐, 寄存器内 specialization, epsilon `1e-6`. |
 | Gated RMS | 48 head, width128, stable sigmoid, FP32 gating, 无额外 BF16 舍入点. |
-| Q/K | Packed 16-head row, token stride10240, 对齐 eight-element load. |
+| Q/K | Packed 16-head row, token stride 10240. 不超过 `320` tokens 的输入使用 four-element load. 更大输入使用 eight-element load. |
 | Convolution | 10240 channel, token stride16384, weight alignment 保护和 source-state snapshot. |
 | GDN | 受保护的 vector state update, FP32 arithmetic, BF16 MTP 或 FP32 ordinary storage. |
 | Attention preparation | Q/K RMS/RoPE, V conversion 和 KV write, 使用 FP64 phase reduction. |

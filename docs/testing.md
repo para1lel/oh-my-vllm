@@ -36,6 +36,19 @@ scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_flashi
 These CPU checks do not prove model timing or cold-start acceptance.
 Keep fresh project caches for GPU acceptance. Do not install a prewarmed project or FlashInfer JIT cache.
 
+CPU executable diagnostics tests check executable lifetime, owner intersections, pending callbacks, and explicit incomplete coverage.
+They keep diagnostic snapshots without a strong executable reference.
+
+```bash
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_executable_diagnostics.py tests/test_worker_lifecycle.py -q
+```
+
+Q/K GPU tests include FP64 output, FP32 edge values, and changed-input graph replay at the short dispatch boundary.
+Keep their original numerical tolerances and the frozen TileLang comparison.
+
+Each persistent audit task must have a new successful source read.
+Grep output and earlier history do not satisfy the existing per-item source-read gate.
+
 The CPU SDK fixture keeps full request bodies and the number of copies of each body.
 With completed history, two automatic summary requests can have different sequences.
 Other requests must keep the same sequence. The CPU fixture tests each sequence.

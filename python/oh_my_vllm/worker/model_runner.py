@@ -886,6 +886,38 @@ class OhMyVllmWorker:
         with open("/proc/self/statm", encoding="ascii") as status:
             rss = int(status.read().split()[1]) * os.sysconf("SC_PAGE_SIZE")
         cpu = {"rss_bytes": rss}
+        from oh_my_vllm.ir.executable_diagnostics import (
+            EXECUTABLE_DIAGNOSTICS,
+        )
+        from oh_my_vllm.ir.executable_diagnostics import (
+            enabled as executable_diagnostics_enabled,
+        )
+
+        if executable_diagnostics_enabled():
+            families = {}
+            for name, cache in graph_caches.items():
+                for (family, _), graph in cache.graphs.items():
+                    families.setdefault(f"{name}.{family}", []).append(graph)
+            units = {
+                name: getattr(self, name, None)
+                for name in ("forward_unit", "logits_unit", "feature_unit")
+            }
+            for name, attributes in (
+                ("mtp", ("draft_unit", "context_unit", "logits_unit")),
+                (
+                    "dspark",
+                    ("inject_unit", "backbone_unit", "greedy_unit", "step_unit"),
+                ),
+            ):
+                proposer = getattr(self, name, None)
+                if proposer is not None:
+                    units.update(
+                        (f"{name}.{attribute}", getattr(proposer, attribute, None))
+                        for attribute in attributes
+                    )
+            cpu["compiled_executables"] = EXECUTABLE_DIAGNOSTICS.snapshot(
+                families, units
+            )
         if os.environ.get("OH_MY_VLLM_HOST_ALLOCATOR_DIAGNOSTICS") == "1":
             from oh_my_vllm.worker.host_allocator import host_allocator_snapshot
 

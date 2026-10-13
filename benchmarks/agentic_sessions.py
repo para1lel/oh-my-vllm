@@ -94,7 +94,8 @@ def followup(lane: int, index: int, paths: list[str]) -> str:
     return (
         f"Continue your persistent audit of {DOMAINS[lane][0]}. Work item {index}. "
         f"For this item, {angle}. Inspect {' and '.join(selected)} "
-        "with read/grep tools. Read at most 180 lines per call. "
+        "with read/grep tools. Make a fresh successful read call on one selected "
+        "source file in this work item. Read at most 180 lines per call. "
         "Follow a relevant caller or test when needed to establish one invariant. "
         "Take the next necessary tool action directly. "
         "Once the evidence is sufficient, record one checked invariant and a "

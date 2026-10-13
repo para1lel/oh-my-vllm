@@ -187,6 +187,7 @@
 | `persistent session` | 名词 | 在任务和压缩期间保持同一会话身份的客户端进程及会话历史. |
 | `compaction` | 名词 | 在同一会话中用摘要替换部分历史. |
 | `context snapshot` | 名词 | 随已完成 assistant 消息保存的 provider 输入计数和上下文 metadata. |
+| `weak reference` | 名词 | 不使其目标对象继续驻留内存的 Python 对象引用. |
 
 ## 维护
 

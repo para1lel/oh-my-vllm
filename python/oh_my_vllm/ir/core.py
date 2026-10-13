@@ -458,6 +458,9 @@ def compile_forward(
     if code is None:
         raise TypeError("forward units must expose a Python code object")
     owners = deque(maxlen=COMPILER_CACHE.per_code)
+    from .executable_diagnostics import EXECUTABLE_DIAGNOSTICS, enabled
+
+    observe_executables = enabled()
 
     def lower(graph_module: torch.fx.GraphModule, inputs: Sequence[Any]):
         from torch._inductor.codecache import PyCodeCache
@@ -466,6 +469,8 @@ def compile_forward(
         module_start = len(PyCodeCache.modules)
         compiled = lower_to_inductor(graph_module, inputs, unit=label)
         owners.append(compiled)
+        if observe_executables:
+            EXECUTABLE_DIAGNOSTICS.register(compiled, label)
         COMPILER_CACHE.compiled(code, module_start)
         if label not in _COMPILED_GRAPHS and len(_COMPILED_GRAPHS) >= _UNIT_CAPACITY:
             _COMPILED_GRAPHS.pop(next(iter(_COMPILED_GRAPHS)))

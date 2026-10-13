@@ -169,7 +169,15 @@ def test_shutdown_releases_bound_methods_graph_pools_and_model():
     )
 
 
-def test_resource_snapshot_has_bounded_counts_and_separate_allocator_metrics():
+@pytest.mark.parametrize("observe", [False, True])
+def test_resource_snapshot_has_bounded_counts_and_separate_allocator_metrics(
+    monkeypatch, observe
+):
+    from oh_my_vllm.ir import executable_diagnostics
+
+    monkeypatch.setenv("OH_MY_VLLM_EXECUTABLE_DIAGNOSTICS", "1" if observe else "0")
+    diagnostics = executable_diagnostics.ExecutableDiagnostics()
+    monkeypatch.setattr(executable_diagnostics, "EXECUTABLE_DIAGNOSTICS", diagnostics)
     worker = OhMyVllmWorker.__new__(OhMyVllmWorker)
     worker.histories = {1: [7]}
     worker.samplers = {1: object()}
@@ -180,6 +188,15 @@ def test_resource_snapshot_has_bounded_counts_and_separate_allocator_metrics():
     worker.prefill_graph_cache = GraphCache(synchronize=Mock())
     worker.mtp = None
     worker.dspark = None
+
+    def compiled():
+        return None
+
+    diagnostics.register(compiled, "target")
+    worker.forward_unit = SimpleNamespace(execution_owners=(compiled,))
+    worker.graph_cache.graphs["target", (1,)] = SimpleNamespace(
+        execution_owners=(compiled,)
+    )
     with (
         patch.object(torch.cuda, "synchronize") as synchronize,
         patch.object(torch.cuda, "mem_get_info", return_value=(100, 200)),
@@ -196,3 +213,12 @@ def test_resource_snapshot_has_bounded_counts_and_separate_allocator_metrics():
     assert stats["gpu"]["allocated_bytes"] == 11
     assert stats["gpu"]["reserved_bytes"] == 22
     assert stats["cpu"]["rss_bytes"] > 0
+    if observe:
+        owners = stats["cpu"]["compiled_executables"]
+        assert owners["graph_persistent_overlap"] == 1
+        assert owners["weak_live_not_enumerated"] == 0
+        assert owners["graph_families"]["target.target"]["owner_tuple_lengths"] == {
+            1: 1
+        }
+    else:
+        assert "compiled_executables" not in stats["cpu"]
