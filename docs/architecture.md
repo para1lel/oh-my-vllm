@@ -27,7 +27,16 @@ Python keeps the committed reasoning token count in `Generation`.
 Target masks use a separate preview count for each draft prefix and bonus row.
 Only kept tokens change the committed count. Mask preview does not change history or KV state.
 
+Each thinking request uses one validated closing token ID in its grammar and committed count.
+The reasoning shell also applies to plain text. Plain answers keep their original whitespace and literal markup.
+Enabled tool constraints start at the opener that Rust recognizes.
+[ADR-016](decisions/ADR-016-canonical-serving-control-tokens.md) records protocol boundaries and the separate repetition investigation.
+
 DSpark proposal probabilities can differ from the constrained target distribution. Its rejection correction still uses the constrained target.
+
+The shared sampler applies `repetition_guard` after grammar masks and before top-k/top-p.
+It uses bounded generated-token history and each speculative prefix.
+[Service contracts](serving.md#sampling-tools-and-stopping) specify its thresholds, grammar fallback, explicit disable option, and limits.
 
 ## Rust modules
 
@@ -43,7 +52,7 @@ DSpark proposal probabilities can differ from the constrained target distributio
 `serving/sampling.rs` owns shared service sampling defaults and the validation used by requests and CLI overrides.
 Each HTTP API and draft mode uses this layer before Python request preparation.
 Explicit request values take precedence over service defaults. Python adds checkpoint defaults for fields without explicit values.
-Production and test HTTP services use the same default presence penalty `1.5`.
+Production and test HTTP services use the same default presence penalty `0.5`.
 [ADR-015](decisions/ADR-015-shared-serving-sampling-defaults.md) records the selected parameters and verification limits.
 
 ## Python modules

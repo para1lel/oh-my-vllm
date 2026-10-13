@@ -33,7 +33,7 @@ Proper product names, source identifiers, and protocol text keep their initial f
 | `logits` | noun | Model scores for the output vocabulary before sampling. |
 | `sampling` | noun | Selection of a token from model scores and configured constraints. |
 | `sample` | verb | Select a token according to the configured distribution. |
-| `grammar` | noun | Token-level constraints for JSON answers or function arguments. |
+| `grammar` | noun | Token-level constraints for reasoning control, JSON answers, or function arguments. |
 | `mask` | noun | Allowed-token information used before sampling. |
 | `tensor` | noun | A typed multidimensional array with device and layout metadata. |
 | `dtype` | noun | Tensor element representation, such as BF16 or FP32. |

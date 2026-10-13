@@ -37,6 +37,8 @@ Start with [requirements](requirements.md), [architecture](architecture.md), and
 | [ADR-012](decisions/ADR-012-reasoning-token-budget.md) | Active: target reasoning budgets and OMP service defaults. |
 | [ADR-013](decisions/ADR-013-cuda-graph-workspace-ownership.md) | Implementation in acceptance: cuBLAS workspace ownership. |
 | [ADR-014](decisions/ADR-014-long-prefill-budget-sharing.md) | Implementation in acceptance: long prefill budget division. |
+| [ADR-015](decisions/ADR-015-shared-serving-sampling-defaults.md) | Implementation in acceptance: shared production and test sampling defaults. |
+| [ADR-016](decisions/ADR-016-canonical-serving-control-tokens.md) | Implementation in acceptance: canonical reasoning and tool control boundaries. |
 
 Architecture includes the former design document.
 Current work includes the former plan.

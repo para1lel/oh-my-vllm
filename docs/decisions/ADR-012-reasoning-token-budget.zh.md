@@ -24,7 +24,7 @@ Off 不产生思考块. 启用思考时, 零预算强制生成结束 token.
 Python 根据已提交计数, 为每个 target verification row 及其前置草稿前缀预览预算.
 Rollback 后, mask 预览不改变计数, 历史, grammar 状态或 KV 状态.
 只有保留的输出 token 改变已提交计数.
-到达边界前, 普通文本保留无 mask 的采样路径.
+到达边界前, 思考输出也使用 [ADR-016](ADR-016-canonical-serving-control-tokens.zh.md) 中统一控制 token 的 grammar.
 到达边界时, greedy 和随机 target 采样均使用 mask, 包括 bonus row.
 
 DSpark 提议可以使用不同分布. Target verification 使用受约束的分布.

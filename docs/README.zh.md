@@ -37,6 +37,8 @@
 | [ADR-012](decisions/ADR-012-reasoning-token-budget.zh.md) | 有效: target 思考预算与 OMP 服务默认值. |
 | [ADR-013](decisions/ADR-013-cuda-graph-workspace-ownership.zh.md) | 实现进入验收: cuBLAS workspace 所有权. |
 | [ADR-014](decisions/ADR-014-long-prefill-budget-sharing.zh.md) | 实现进入验收: 长 prefill 预算分配. |
+| [ADR-015](decisions/ADR-015-shared-serving-sampling-defaults.zh.md) | 实现进入验收: 生产和测试的公共采样默认值. |
+| [ADR-016](decisions/ADR-016-canonical-serving-control-tokens.zh.md) | 实现进入验收: 统一思考和工具控制边界. |
 
 架构包含原设计文档.
 当前工作包含原计划.

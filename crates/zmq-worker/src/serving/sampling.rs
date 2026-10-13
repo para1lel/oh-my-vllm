@@ -2,7 +2,7 @@
 use anyhow::{Result, ensure};
 use serde_json::{Value, json};
 
-const KEYS: [&str; 7] = [
+const KEYS: [&str; 8] = [
     "temperature",
     "top_p",
     "top_k",
@@ -10,16 +10,21 @@ const KEYS: [&str; 7] = [
     "frequency_penalty",
     "presence_penalty",
     "repetition_penalty",
+    "repetition_guard",
 ];
 
 // Shared by every HTTP API and speculative mode, including test services.
-const DEFAULT_PRESENCE_PENALTY: f64 = 1.5;
+const DEFAULT_PRESENCE_PENALTY: f64 = 0.5;
 
 pub fn extract(body: &Value) -> Result<Value> {
     let mut sampling = json!({});
     for key in KEYS {
         if let Some(value) = body.get(key).filter(|v| !v.is_null()) {
-            ensure!(value.is_number(), "{key} must be numeric");
+            if key == "repetition_guard" {
+                ensure!(value.is_boolean(), "repetition_guard must be a boolean");
+            } else {
+                ensure!(value.is_number(), "{key} must be numeric");
+            }
             sampling[key] = value.clone();
         }
     }
@@ -86,7 +91,10 @@ pub fn parse_overrides(text: &str) -> std::result::Result<Value, String> {
 
 pub fn service_defaults(overrides: &Value) -> Result<Value> {
     let validated = validate_overrides(overrides)?;
-    let mut defaults = json!({"presence_penalty": DEFAULT_PRESENCE_PENALTY});
+    let mut defaults = json!({
+        "presence_penalty": DEFAULT_PRESENCE_PENALTY,
+        "repetition_guard": true,
+    });
     defaults
         .as_object_mut()
         .unwrap()
@@ -157,15 +165,31 @@ mod tests {
     fn shared_defaults_survive_unrelated_server_overrides_and_accept_explicit_zero() {
         assert_eq!(
             service_defaults(&json!({})).unwrap(),
-            json!({"presence_penalty": 1.5})
+            json!({"presence_penalty": 0.5, "repetition_guard": true})
         );
         assert_eq!(
             service_defaults(&json!({"top_p": 0.8})).unwrap(),
-            json!({"presence_penalty": 1.5, "top_p": 0.8})
+            json!({"presence_penalty": 0.5, "top_p": 0.8, "repetition_guard": true})
         );
         assert_eq!(
             service_defaults(&json!({"presence_penalty": 0})).unwrap(),
-            json!({"presence_penalty": 0})
+            json!({"presence_penalty": 0, "repetition_guard": true})
         );
+    }
+
+    #[test]
+    fn repetition_guard_validates_boolean_and_preserves_request_precedence() {
+        for invalid in [json!(0), json!(1), json!("true"), json!([])] {
+            assert!(extract(&json!({"repetition_guard": invalid})).is_err());
+            assert!(validate_overrides(&json!({"repetition_guard": invalid})).is_err());
+        }
+        assert!(validate_overrides(&json!({"repetition_guard": null})).is_err());
+        let defaults = service_defaults(&json!({"repetition_guard": false})).unwrap();
+        assert_eq!(defaults["repetition_guard"], false);
+        for (request, expected) in [(json!(null), false), (json!(true), true)] {
+            let mut sampling = extract(&json!({"repetition_guard": request})).unwrap();
+            apply_defaults(&mut sampling, &defaults);
+            assert_eq!(sampling["repetition_guard"], expected);
+        }
     }
 }

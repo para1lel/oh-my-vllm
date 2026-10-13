@@ -280,7 +280,10 @@ class OhMyVllmWorker:
         if not prompt_token_ids or any(not 0 <= t < 248320 for t in prompt_token_ids):
             raise ValueError("invalid prompt tokens")
         params = sampling_params or SamplingParams(
-            self.config.max_model_len, temperature=0, ignore_eos=True
+            self.config.max_model_len,
+            temperature=0,
+            ignore_eos=True,
+            repetition_guard=False,
         )
         sampler = RequestSampler(params, prompt_token_ids, "cuda", vocab_size=248320)
         self.histories[request_id] = list(prompt_token_ids)

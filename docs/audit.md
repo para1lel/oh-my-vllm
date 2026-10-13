@@ -6,6 +6,23 @@ The closed-finding index keeps useful contracts and fix identities.
 Daily remediation narratives stay in Git history.
 Performance evidence applies to its measured source, as specified in [acceptance](acceptance.md).
 
+## Serving control tokens and repetition
+
+These findings are additional to the original source audit.
+`SRV-11` and `SRV-12` have protocol changes in verification, with severity P1.
+`SRV-11` concerns grammar/parser string closure without the token ID that ends Python reasoning accounting.
+`SRV-12` concerns malformed tool openers that bypass the previous grammar trigger and its schema or function policy.
+Failing CPU regressions preceded the fixes.
+[ADR-016](decisions/ADR-016-canonical-serving-control-tokens.md) specifies their contracts and feature preservation.
+
+`SRV-13` stays open, with severity P1. Recorded persistent MTP4 requests repeated ordinary text and failed client progress.
+Their pseudo-tags are legal text, not repeated reasoning transitions.
+Conditional target measurements support a closing delimiter in quoted text as a possible cause of repeated output.
+They do not reproduce the original sampled path.
+
+The [investigation summary](../bench/evidence/2026-10-13-constrained-decoding-investigation.json) records source identities, original hashes, measurements, and limits.
+The protocol fixes do not close this finding or prove long-duration agent acceptance.
+
 ## PY-04: Graph memory and shape changes
 
 Status: partial/open, severity P2.

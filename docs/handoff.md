@@ -392,7 +392,7 @@ The active collections were canceled before parameter edits. All eight collectio
 Task-owned GPU processes exited while source hashes stayed equal. Failed and canceled records stay unchanged.
 The partial collections do not supply full matrix, one-hour, or independent memory acceptance.
 
-The shared presence penalty default is now `1.5` for all production and test HTTP services.
+Source `9a2cd64` used the shared presence penalty default `1.5` for all production and test HTTP services.
 Checkpoint temperature `1`, top_p `.95`, top_k `20`, repetition penalty `1`, frequency penalty `0`, and reasoning budget `-1` stay effective.
 Explicit service and request overrides keep their precedence.
 The new value is a candidate in Qwen's stated adjustment range.
@@ -403,12 +403,76 @@ The full CPU suite passed `1486` tests and `132` subtests, with `485` GPU tests 
 Source and test file hashes stayed equal during execution.
 New committed-source GPU acceptance and independent resource review are open.
 
+## Constrained-decoding investigation
+
+The user requested a shared presence penalty of `0.5` and investigation before further decoder changes.
+All seven active acceptance roots on `9a2cd64` were canceled and reaped before the first source edit.
+Independent review checked `6292` owned process births, nine IPC paths, and eighteen service ports after desktop tool exits.
+Partial operator, phase, capacity, GPU-test, and persistent-session records stay canceled and cannot supply complete acceptance.
+
+The conditional GPU diagnostic used unchanged decoder source, with only the uncommitted default restoration and related documentation changes.
+It completed normally and released all `345` recorded owned process births and its selected GPU.
+Source, helper, and checkpoint hashes stayed equal during execution.
+This was an investigation, not a service or formal acceptance run.
+
+The two original failures changed from reasoning to ordinary text while the model discussed a closing delimiter.
+The repeated `</thinking>` and `<next_thinking>` strings are ordinary text.
+The first failure had fewer total generated tokens than its reasoning budget. The second had no separate reasoning limit.
+The numeric budget did not force these recorded transitions.
+
+The diagnostic checked `21` reconstructed output prefixes with BF16 and FP32 GDN states, for `42` sites.
+Independent CPU review reconstructed `128` distributions from `84` original logits and mask artifacts.
+The maximum probability reconstruction difference was `8.7798e-8`.
+This check concerns saved diagnostic probabilities, not model numerical tolerance.
+
+The measurements support a closing delimiter in quoted text as a possible cause of repeated output.
+Original sampled IDs, logits, and random state are unavailable.
+They do not prove a unique cause or replay the original MTP execution.
+[The portable summary](../bench/evidence/2026-10-13-constrained-decoding-investigation.json) gives original identities, selected measurements, and limits.
+
+The implementation sets the shared presence penalty back to `0.5` and fixes two independently reproduced protocol failures.
+Each thinking request validates and uses one closing token ID for grammar and accounting.
+Tool constraints start at the opener recognized by Rust.
+Plain body markup, whitespace forms, disabled tools, explicit non-strict arguments, stop strings, and total length keep their contracts.
+
+The first corrected tokenizer/grammar collection passed `19` tests and `40` subtests.
+Independent candidate checks found an unnecessary plain separator restriction. The implementation removed it and added preservation regressions.
+
+One subsequent selected-test command used an absent test path and collected no tests. Its failed record stays unchanged.
+New complete CPU, GPU, tutorial, and independent resource checks stay open on the final implementation.
+The two protocol fixes do not show that ordinary-text loops are resolved or that one-hour acceptance passed.
+
+## Generated-token cycle guard verification
+
+All service modes use the shared `repetition_guard` default `true` and presence penalty `0.5`.
+The guard detects generated-token cycles repeated without interruption, with fixed limits without specific text markers.
+It applies each speculative prefix and keeps required grammar continuations.
+Explicit `false` allows intentional repeated output. Offline Run/Bench keep their explicit greedy configuration.
+See [service sampling](serving.md) for the limits and precedence.
+
+The complete CPU suite passed `1510` tests and `156` subtests, with `487` GPU tests not selected.
+Source and test hashes stayed equal during execution.
+Final import spacing and test-name changes passed the focused guard tests again.
+The eight required checks, dependency compatibility check, and tutorial trace checks passed.
+
+The tutorial passed ten source-display tests and nine browser tests, with desktop and mobile screenshot review.
+Browser plugin was not available. The tests used the repository's Playwright workflow.
+
+The first CPU attempt failed the old source contract and the slow-client pause assertion.
+The reviewed contract now includes the sampler changes and cycle detector.
+The HTTP fixture sets its receive buffer before connection and sends enough data to exceed TCP buffering.
+The pause, resume, and concurrent-request checks stay effective. The repeated complete suite passed.
+
+New committed-source GPU, phase, operator, capacity, service, and persistent-session acceptance is open.
+Independent resource review is necessary. Keep `SRV-13` open until the new original records support closure.
+
 ## Open work
 
 - Extend `PY-04` to cross-shape graph eviction and recapture near the maximum supported context.
 - Measure `PY-06` host overlap before a change to dependent host waits.
 - Examine compiler storage with indefinitely changing shapes, using its fixed capacity contracts.
 - Keep the heavy soak test explicit and do affected phase workloads again after runtime changes.
+- Keep `SRV-13` open until original token traces and new persistent-session results show the repetition behavior.
 - Complete user review of the tutorial.
 
 ## Tutorial preview

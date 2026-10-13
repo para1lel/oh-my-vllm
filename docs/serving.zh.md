@@ -56,7 +56,7 @@ API 子集遵循 [Chat Completions](https://developers.openai.com/api/reference/
 采样支持 temperature, top_p, top_k, seed, 以及 frequency/presence/repetition penalty.
 Checkpoint 默认 temperature `1`, top_p `.95`, top_k `20`.
 
-公共 HTTP 服务默认增加 presence_penalty `1.5`. Frequency penalty 保持 `0`, repetition penalty 保持 `1`.
+公共 HTTP 服务默认增加 presence_penalty `0.5`. Frequency penalty 保持 `0`, repetition penalty 保持 `1`.
 普通, MTP4, DSpark 和测试服务使用相同的默认值.
 独立思考预算默认仍为 `-1`.
 用 `serve --override-generation-config` 和 JSON object 修改支持的采样默认值.
@@ -70,7 +70,21 @@ Python 为省略的字段补充 checkpoint 默认值.
 
 [采样决策](decisions/ADR-015-shared-serving-sampling-defaults.zh.md) 记录模型指导, 选定值和验证限制.
 
-离线 Run/Bench 使用 greedy sampling, 固定输出长度并忽略 EOS.
+公共 `repetition_guard` 默认值为 `true`. 请求和服务覆盖值接受布尔值.
+显式 `false` 允许有意重复输出. 请求中的 null 值使用服务默认值.
+
+保护只检查已生成 token, 包含各行草稿前缀, 窗口最多 `768` token.
+它检测周期长度为 `1` 到 `256` token 的连续循环, 要求至少重复 `3` 次, 且覆盖 `64` 个重复 token.
+在 grammar mask 之后, top-k/top-p 之前, 它将继续这些循环的所有下一 token 分数设为负无穷.
+若没有剩余有限候选, 则保留原有掩码后分数. 因此, grammar 必需的续接仍可用.
+它不检查提示词中的重复, 草稿检查也不改变已提交历史.
+
+普通, MTP4 和 DSpark 的 target 分布使用相同规则. DSpark 提议概率在接受修正前包含此规则.
+
+保护不能保证任务完成, 也不能阻止这些限制之外的循环.
+启用时也会影响有意重复的文本. 保持客户端的进展和重复检查有效.
+
+离线 Run/Bench 显式禁用保护, 使用 greedy sampling, 固定输出长度并忽略 EOS.
 
 Tool choice 支持 auto, none, required 和指定函数.
 未设置 `parallel_tool_calls=false` 时允许多个调用.
@@ -132,13 +146,25 @@ Strict schema 需要 closed object, 全部 property 都 required.
 不支持未知 string format, 或 pattern / format 与 length bound 的组合.
 
 XGrammar 提供 Qwen XML tool grammar 和 JSON answer grammar.
+
+每个思考请求使用经过验证的单个结束 token ID, 包括纯文本和无限思考预算.
+拼出相同结束字符串的普通 ID 不能结束思考.
+在该 token 前屏蔽 EOS. 显式文本 stop 和总长度仍可提前结束请求.
+纯文本正文在思考结束后保留原有空白形式和标签字面量.
+
+启用工具时, 约束与 Rust parser 一样从 `<tool_call>` 开始.
+生成调用的后续部分必须满足函数选择, 并行调用和 schema 约束.
+显式 `strict=false` 关闭工具参数的 schema 约束. XML 解析仍生效.
+[控制 token 决策](decisions/ADR-016-canonical-serving-control-tokens.zh.md) 给出合同和重复问题的限制.
+
 每个 MTP 或 DSpark draft 和 bonus position 使用其 speculative prefix 对应的 mask.
 模拟 grammar 推进后回滚; 只有保留输出推进持久状态.
 被 mask 的草稿在第一个无效位置失败.
 CPU 测试覆盖回滚, 拒绝和 reasoning-end 跨界.
 真实 MTP4 证据覆盖两个 API, off/medium, JSON object, JSON Schema 和 strict tool.
 
-DSpark proposal 在选择 candidate 前使用相同 mask.
+DSpark proposal 在选择 candidate 前应用 grammar mask. Target 还应用数值思考预算.
+
 随机输出的接受规则使用完整条件 target / proposal 概率, 应用配置的采样参数.
 Candidate 接受概率为 `min(1,p(x)/q(x))`, 拒绝时使用归一化的 `max(p-q,0)`, bonus 使用 target 分布 `p`.
 Greedy 输出使用 target argmax 验证.
@@ -164,7 +190,13 @@ JSON answer schema 不受 XML 专属限制.
 保留引号, 空格, 额外换行和 function/tool-close literal.
 Enum / const string 恢复精确 schema value, 包括其自身换行.
 Parser 只在参数值外识别结束 tag.
-普通文本或 JSON 答案中的 literal tool tag 保持为文本.
+
+禁用工具时, 普通文本或 JSON 答案中的 literal tool tag 保持为文本.
+启用工具时, 起始标记专用于调用. 字符串参数仍可包含标记字面量.
+
+Grammar mask 约束结构. 正文重复和任务失败仍可能发生.
+`</thinking>` 和 `<next_thinking>` 是普通文本, 并非思考分隔符.
+持久会话验收保留客户端原有的重复检测和进展超时.
 
 ## 存储与资源限制
 

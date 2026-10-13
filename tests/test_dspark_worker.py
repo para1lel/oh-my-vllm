@@ -260,6 +260,37 @@ def test_stochastic_q_matches_sampling_filters_history_and_markov_chain():
         worker.draft_probabilities(1, drafts)
 
 
+@pytest.mark.parametrize("guard", [False, True])
+def test_proposal_q_applies_cycle_guard_before_recording_each_prefix(guard):
+    worker, _ = make_worker()
+    params = SamplingParams(
+        max_tokens=128, temperature=0.7, seed=9, repetition_guard=guard
+    )
+    sampler = RequestSampler(params, [0], "cpu", vocab_size=11)
+    sampler.commit([0, 1] * 32)
+    history = list(sampler.generated)
+    rng = sampler.generator.get_state().clone()
+    drafts = proposal(worker, count=1, history=[0, 1], samplers={1: sampler})[1]
+    assert len(drafts) == 7
+    q = worker.draft_probabilities(1, drafts)
+    previous = 1
+    for position, token in enumerate(drafts):
+        scores = torch.linspace(-1, 1, 11)
+        scores[(previous + 1) % 11] += 3
+        if guard and position == 0:
+            # The next 0 would extend 32 copies of [0, 1]. Any other ID breaks
+            # that suffix, so none of the remaining seven-step prefixes cycle.
+            scores[0] = -torch.inf
+            assert token != 0
+        torch.testing.assert_close(
+            q[position], (scores / params.temperature).softmax(0)
+        )
+        previous = token
+    assert (q[0, 0] == 0).item() == guard
+    assert sampler.generated == history
+    assert torch.equal(sampler.generator.get_state(), rng)
+
+
 class Matcher:
     def __init__(self):
         self.accepted = []

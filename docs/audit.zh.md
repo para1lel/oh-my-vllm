@@ -6,6 +6,23 @@
 逐日整改经过保留在 Git 历史.
 性能证据只适用于实测源码, 见 [验收](acceptance.zh.md).
 
+## 服务控制 token 与重复
+
+这些发现不属于原始源码审计的条目.
+`SRV-11` 和 `SRV-12` 的协议修改处于验证阶段, 严重性为 P1.
+`SRV-11` 涉及 grammar/parser 按字符串结束思考, 却没有产生结束 Python 思考计数的 token ID.
+`SRV-12` 涉及错误工具起始格式绕过原 grammar trigger 及其 schema 或函数策略.
+修复前已复现失败的 CPU 回归.
+[ADR-016](decisions/ADR-016-canonical-serving-control-tokens.zh.md) 规定合同及功能保留范围.
+
+`SRV-13` 仍未关闭, 严重性为 P1. 已记录的持久 MTP4 请求重复正文, 未能满足客户端进展要求.
+其中的伪标签是合法文本, 并非重复的思考通道切换.
+Target 条件概率测量支持将引用文本中的结束分隔符视为重复输出的可能原因.
+它们没有复现原始采样路径.
+
+[调查摘要](../bench/evidence/2026-10-13-constrained-decoding-investigation.json) 记录源码身份, 原始哈希, 测量和限制.
+协议修复不能关闭该条目, 也不能证明长程 Agent 验收.
+
 ## PY-04: Graph 显存与 shape 变化
 
 状态: partial/open, 严重性 P2.

@@ -207,9 +207,14 @@ Compare loaded DSpark configuration and weight hashes with the requested checkpo
 | REQ-SERVE-004 | Apply JSON/Schema/strict-tool masks before sampling, with each mode's drafts and bonus tokens. Reject unsupported schemas. |
 | REQ-SERVE-005 | Examine queue time, preparation, TTFT, output rate, cache behavior, and draft counters without an extra HTTP throughput gate. |
 | REQ-SERVE-008 | Use shared production and test service sampling defaults across ordinary, MTP4, DSpark, the two APIs, and automatic compaction. Explicit values take precedence. |
+| REQ-SERVE-009 | Apply a bounded generated-token cycle guard in all service modes. Keep grammar continuations, speculative prefix correctness, and explicit disable available. |
 
 [Service contracts](serving.md) define supported parameters, XML restrictions, storage limits, and errors.
 Scripted workers alone cannot show target-model acceptance.
+
+Thinking grammar and budget accounting must use the same closing token identity.
+Enabled tool constraints must start at the opener recognized by the output parser.
+
 For each draft mode, run tests for the two APIs, constraints, cancellation, mixed batches, and long-context prefix reuse.
 OMP evidence must show two source reads, forwarded results, continued generation, and an answer that uses those results.
 Compare response IDs with server logs for the active mode and scheduled drafts.

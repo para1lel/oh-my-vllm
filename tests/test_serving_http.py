@@ -981,8 +981,11 @@ class HttpTests(unittest.TestCase):
                 else:
                     self.fail("slow-stream fixture did not start")
 
-                connection.connect()
+                # Fix the receive buffer before the TCP window is negotiated.
+                connection.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                connection.sock.settimeout(connection.timeout)
                 connection.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 65536)
+                connection.sock.connect(("127.0.0.1", port))
                 payload = self.base(
                     stream=True,
                     store=False,
@@ -1292,7 +1295,12 @@ class HttpTests(unittest.TestCase):
                 Path(os.environ["OH_MY_VLLM_MODEL"]) / "generation_config.json"
             ).read_text()
         )
-        defaults = {"presence_penalty": 0.5, "repetition_penalty": 1.1, "seed": 7}
+        defaults = {
+            "presence_penalty": 0.5,
+            "repetition_penalty": 1.1,
+            "seed": 7,
+            "repetition_guard": False,
+        }
         with (
             patch.dict(os.environ, {"OH_MY_VLLM_FIXTURE_SAMPLING": str(capture)}),
             self.resource_server(
@@ -1310,6 +1318,7 @@ class HttpTests(unittest.TestCase):
                 for override in (None, 0.0, 1.0):
                     with self.subTest(responses=responses, override=override):
                         body = self.base(responses, presence_penalty=override)
+                        body["repetition_guard"] = None if override is None else True
                         if override is not None:
                             body.update(repetition_penalty=1.0, seed=9)
                         body.update(
@@ -1335,6 +1344,9 @@ class HttpTests(unittest.TestCase):
                             1.1 if override is None else 1.0,
                         )
                         self.assertEqual(actual["seed"], 7 if override is None else 9)
+                        self.assertEqual(
+                            actual["repetition_guard"], override is not None
+                        )
                         for key in ("temperature", "top_p", "top_k"):
                             self.assertEqual(actual[key], model_defaults[key])
             metrics = [
@@ -1358,7 +1370,7 @@ class HttpTests(unittest.TestCase):
             with urllib.request.urlopen(address + "/diagnostics", timeout=10) as reply:
                 self.assertEqual(
                     json.load(reply)["limits"]["override_generation_config"],
-                    {"presence_penalty": 1.5},
+                    {"presence_penalty": 0.5, "repetition_guard": True},
                 )
             for responses in (False, True):
                 body = self.base(responses)
@@ -1371,8 +1383,9 @@ class HttpTests(unittest.TestCase):
                 with urllib.request.urlopen(request, timeout=20) as reply:
                     self.assertEqual(reply.status, 200)
                 actual = json.loads(capture.read_text().splitlines()[-1])
-                self.assertEqual(actual["presence_penalty"], 1.5)
+                self.assertEqual(actual["presence_penalty"], 0.5)
                 self.assertEqual(actual["repetition_penalty"], 1.0)
+                self.assertIs(actual["repetition_guard"], True)
 
     def test_worker_step_deadline_controls_delayed_rpc_and_recovery(self):
         for seconds in (1, 2):

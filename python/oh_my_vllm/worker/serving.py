@@ -17,6 +17,8 @@ from xgrammar.structural_tag import (
     SequenceFormat,
     StructuralTag,
     TagFormat,
+    TokenFormat,
+    TriggeredTagsFormat,
 )
 
 from oh_my_vllm.worker.sampling import GrammarOutput, SamplingParams
@@ -369,33 +371,61 @@ class ServingAdapter:
             )
             validate_xml_parameters(function["parameters"])
             function["parameters"].setdefault("additionalProperties", False)
-        grammar = None
+        reasoning_end = (
+            self.tokenizer.convert_tokens_to_ids("</think>") if thinking else None
+        )
+        if thinking and (
+            type(reasoning_end) is not int
+            or not 0 <= reasoning_end < self.vocab_size
+            or self.tokenizer.encode("</think>", add_special_tokens=False)
+            != [reasoning_end]
+            or reasoning_end in self.eos
+        ):
+            raise RequestValidationError(
+                "thinking requires a distinct single-token </think>"
+            )
+        constrained = fmt["type"] != "text" or bool(tools and choice != "none")
         if fmt["type"] != "text":
             schema = fmt.get("schema", {"type": "object"})
             validate_schema(schema, strict=fmt.get("strict", False))
             suffix = JSONSchemaFormat(json_schema=schema)
-            if thinking:
-                suffix = SequenceFormat(
-                    elements=[
-                        TagFormat(begin="", content=AnyTextFormat(), end="</think>"),
-                        ConstStringFormat(value="\n\n"),
-                        suffix,
-                    ]
-                )
-            grammar = self.compiler.compile_structural_tag(StructuralTag(format=suffix))
-        elif tools:
+        elif tools and choice != "none":
             tag = xgr.get_model_structural_tag(
                 "qwen_3_5",
                 tools=tools,
                 tool_choice=choice,
-                reasoning=thinking,
+                reasoning=False,
+                parallel_tool_calls=request.get("parallel_tool_calls", True),
             )
-            suffix = tag.format.elements[-1] if thinking else tag.format
-            if not request.get("parallel_tool_calls", True) and hasattr(
-                suffix, "stop_after_first"
-            ):
-                suffix.stop_after_first = True
-            grammar = self.compiler.compile_structural_tag(tag)
+            suffix = tag.format
+            if isinstance(suffix, TriggeredTagsFormat):
+                # Rust recognizes the opener immediately. A longer trigger lets
+                # malformed calls bypass schema and function-choice constraints.
+                suffix.triggers = ["<tool_call>"]
+        else:
+            # Disabled tools and plain answers retain literal protocol markup.
+            suffix = AnyTextFormat()
+        if thinking:
+            # Generation counts IDs, while Rust routes decoded strings. Require
+            # one token identity so a base-token spelling cannot close only the
+            # grammar/parser and leave the numeric budget in reasoning state.
+            reasoning = TagFormat(
+                begin="",
+                content=AnyTextFormat(excludes=["<think>", "</think>"]),
+                end=TokenFormat(token=reasoning_end),
+            )
+            suffix = SequenceFormat(
+                elements=[
+                    reasoning,
+                    *([ConstStringFormat(value="\n\n")] if constrained else []),
+                    suffix,
+                ]
+            )
+        grammar = (
+            self.compiler.compile_structural_tag(StructuralTag(format=suffix))
+            if thinking or constrained
+            else None
+        )
         # Template accepts dict arguments, while the API transmits JSON strings.
         messages = request["messages"]
         for message in messages:
@@ -444,20 +474,9 @@ class ServingAdapter:
             max_tokens,
             request.get("stop", []),
             self.eos,
-            self.tokenizer.convert_tokens_to_ids("</think>") if thinking else None,
+            reasoning_end,
             thinking_token_budget=budget,
         )
-        if thinking and budget is not None:
-            end = generation.reasoning_end
-            if (
-                type(end) is not int
-                or not 0 <= end < self.vocab_size
-                or self.tokenizer.encode("</think>", add_special_tokens=False) != [end]
-                or end in self.eos
-            ):
-                raise RequestValidationError(
-                    "thinking budget requires a distinct single-token </think>"
-                )
         return ids, params, generation
 
     def prepare(self, request_id: int, request: dict):

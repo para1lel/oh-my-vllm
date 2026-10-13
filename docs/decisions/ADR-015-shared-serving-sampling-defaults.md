@@ -33,7 +33,7 @@ Original failed and canceled records keep their source and status.
 
 ## Decision
 
-Use one shared presence penalty default of `1.5` for ordinary, MTP4, DSpark, and test HTTP services.
+Use one shared presence penalty default of `0.5` for ordinary, MTP4, DSpark, and test HTTP services.
 Keep checkpoint temperature `1`, top_p `.95`, and top_k `20`, with repetition penalty `1` and frequency penalty `0`.
 Keep the separate reasoning budget default `-1`. Reasoning effort, total output limits, and context limits keep their existing contracts.
 
@@ -55,12 +55,18 @@ Service diagnostics report merged service defaults. Request metrics report servi
 These metric fields exclude checkpoint values added by Python.
 The CPU fixture separately records Python sampling parameters after checkpoint merge.
 
+Use the shared `repetition_guard=true` default for generated-token cycles. Permit explicit boolean overrides.
+The [service contract](../serving.md#sampling-tools-and-stopping) defines the bounded rule and grammar fallback.
+The rule applies before top-k/top-p in target distributions and DSpark proposal distributions.
+Offline fixed-length greedy workloads explicitly disable it.
+It changes repeated output, with intentional repetitions, and does not guarantee task completion.
+
 ## Official guidance and limits
 
 The [vLLM engine arguments](https://docs.vllm.ai/en/stable/configuration/engine_args/#override-generation-config) specify service overrides merged with model generation configuration.
 The [Qwen model card](https://huggingface.co/Qwen/Qwen3.8-27B#best-practices) gives the thinking defaults and an optional presence penalty range from `0` through `2`.
 Qwen states that more penalty can decrease quality and cause language mixing.
-The selected `1.5` is a project configuration in that range. It is not Qwen's fixed recommended default.
+The selected `0.5` is a project configuration in that range. It is not Qwen's fixed recommended default.
 
 It changes stochastic generation probabilities. New inference and persistent-session acceptance are necessary.
 

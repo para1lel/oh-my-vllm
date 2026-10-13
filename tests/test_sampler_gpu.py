@@ -10,8 +10,22 @@ from oh_my_vllm.worker.sampler import RequestSampler, probabilities, verify_rows
 from oh_my_vllm.worker.sampling import SamplingParams
 
 from tests.test_independent_sampler import check_seeded_drafts_mask_partial_commit
+from tests.test_repetition_guard import (
+    check_cycle_guard_distributions,
+    check_cycle_guard_speculative_prefixes,
+)
 
 pytestmark = pytest.mark.gpu
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_cycle_guard_distributions_on_gpu():
+    check_cycle_guard_distributions("cuda")
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+def test_cycle_guard_mtp_and_dspark_target_prefixes_on_gpu():
+    check_cycle_guard_speculative_prefixes("cuda")
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")

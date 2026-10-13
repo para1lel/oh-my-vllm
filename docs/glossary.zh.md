@@ -33,7 +33,7 @@
 | `logits` | 名词 | 采样前模型对输出 vocabulary 的分数. |
 | `sampling` | 名词 | 按模型分数和配置约束选择 token. |
 | `sample` | 动词 | 按配置的分布选择 token. |
-| `grammar` | 名词 | JSON 答案或函数参数的 token 级约束. |
+| `grammar` | 名词 | 思考控制, JSON 答案或函数参数的 token 级约束. |
 | `mask` | 名词 | 采样前使用的允许 token 信息. |
 | `tensor` | 名词 | 具有 device 和 layout metadata 的类型化多维数组. |
 | `dtype` | 名词 | Tensor 元素表示, 例如 BF16 或 FP32. |

@@ -26,7 +26,16 @@ Rust 从请求的显式字段或服务默认值选择思考预算.
 Python 在 `Generation` 中保存已提交的思考 token 计数.
 Target mask 为每个草稿前缀和 bonus row 使用独立的预览计数.
 只有保留的 token 改变已提交计数. Mask 预览不改变历史或 KV 状态.
+
+每个思考请求的 grammar 和已提交计数使用同一个经过验证的结束 token ID.
+纯文本也使用思考外层结构. 纯文本正文保留原有空白形式和标签字面量.
+启用工具时, 约束从 Rust 识别的起始标记开始.
+[ADR-016](decisions/ADR-016-canonical-serving-control-tokens.zh.md) 记录协议边界及独立的重复调查.
 DSpark 提议概率可以与受约束的 target 分布不同. 它的拒绝修正仍使用受约束的 target.
+
+公共 sampler 在 grammar mask 之后, top-k/top-p 之前应用 `repetition_guard`.
+它使用有界的生成 token 历史和各行草稿前缀.
+[服务契约](serving.zh.md#采样-工具与停止) 规定阈值, grammar 回退, 显式关闭选项和限制.
 
 ## Rust 模块
 
@@ -42,7 +51,7 @@ DSpark 提议概率可以与受约束的 target 分布不同. 它的拒绝修正
 `serving/sampling.rs` 负责公共服务采样默认值, 以及请求与 CLI 覆盖配置共用的校验.
 各 HTTP API 和草稿模式在 Python 请求准备前使用此层.
 请求显式值优先于服务默认值. Python 为省略的字段补充 checkpoint 默认值.
-生产和测试 HTTP 服务统一使用默认 presence penalty `1.5`.
+生产和测试 HTTP 服务统一使用默认 presence penalty `0.5`.
 [ADR-015](decisions/ADR-015-shared-serving-sampling-defaults.zh.md) 记录选定参数和验证限制.
 
 ## Python 模块

@@ -109,9 +109,22 @@ Owner, pool, 零驱逐, `32` MiB 释放和精确重放检查继续有效.
 
 ## 公共服务采样验收
 
+重复保护测试用独立定义比较有界循环检测, 并检查各草稿前缀的分布.
+CPU 用例覆盖多个重叠循环, grammar 必需续接, 提示词隔离, 显式关闭和无效 logits.
+GPU 用例检查筛选顺序, grammar 必需续接和各草稿前缀的分布.
+HTTP 回归检查公共默认值, null 值和显式布尔值在 Rust, msgpack 和 Python 之间的传递.
+
+Tokenizer 回归检查规范思考结束, 工具起始标记约束, schema, 函数选择, 并行调用和推测回滚.
+它们保留标签字面量, 纯文本空白, 禁用工具, 显式非 strict 参数, stop 字符串和总长度.
+这些 CPU 用例不能证明模型重复已解决, 也不能证明长程 Agent 验收通过.
+
+```bash
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_serving_worker.py tests/test_thinking_budget.py -q
+```
+
 测试 HTTP 服务使用生产默认值.
 两种 API 和各草稿模式共用校验和优先顺序.
-默认 presence penalty 为 `1.5`. 独立思考预算默认值为 `-1`.
+默认 presence penalty 为 `0.5`. 独立思考预算默认值为 `-1`.
 
 持续验收必须使用这些默认值. 从原始 diagnostics 和 metric 记录服务默认值及添加服务默认值后的请求采样字段.
 最大 effort 和输出 / 上下文限制仍为显式工作负载设置.

@@ -111,9 +111,22 @@ Record warnings and skipped tests with their reasons.
 
 ## Shared service sampling acceptance
 
+Repetition tests compare bounded cycle detection with an independent definition and check speculative prefix distributions.
+CPU cases cover joint cycles, forced grammar continuations, prompt isolation, explicit disable, and invalid logits.
+GPU cases check filtering order, forced grammar continuations, and speculative prefix distributions.
+HTTP regressions check shared defaults, null values, and explicit booleans through Rust, msgpack, and Python.
+
+Tokenizer regressions check canonical reasoning closure, tool opener constraints, schemas, function choice, parallel calls, and speculative rollback.
+They keep literal markup, plain whitespace, disabled tools, explicit non-strict arguments, stop strings, and total length.
+These CPU cases do not prove that model repetition is resolved or that long-duration agent acceptance passed.
+
+```bash
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_serving_worker.py tests/test_thinking_budget.py -q
+```
+
 Test HTTP services use production defaults.
 The two APIs and each draft mode use the same validation and precedence.
-The default presence penalty is `1.5`. The separate reasoning budget default is `-1`.
+The default presence penalty is `0.5`. The separate reasoning budget default is `-1`.
 
 Persistent acceptance must use these defaults. Record service defaults and request sampling fields after service defaults are added from the original diagnostics and metrics.
 Maximum effort and output/context limits stay explicit workload settings.

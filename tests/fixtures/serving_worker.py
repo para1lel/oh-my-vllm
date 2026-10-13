@@ -332,7 +332,9 @@ def main():
                             output.write("step\n")
                 if state["slow_stream"]:
                     state["stream_step"] += 1
-                    text = f"{state['stream_step']:06d}|" + "x" * 8185
+                    # Exceed TCP buffering plus the 256-event application channel
+                    # before all 750 steps complete on the integration-test host.
+                    text = f"{state['stream_step']:06d}|" + "x" * (32768 - 7)
                 outputs.append(
                     {
                         "request_id": rid,

@@ -46,8 +46,8 @@
 <<source "dsparkStop" "展开逐步随机提议与置信度停止">>
 <p>默认 0.2 来自独立自然文本与工具历史的小样本参数比较, 适用范围由该调优记录说明. 完整负载表现仍由正式测量给出. 阈值 0 关闭置信度截断, 保留至多七个候选, 供调试与对照使用. 实际候选数还受 grammar 终止, 剩余输出预算和目标上下文位置限制; 接近上限时, 同一七行 block 只返回验证范围内的合法候选.</p>
 <h2>greedy 与随机 q 怎样分别验证</h2>
-<p>本轮全部提议请求的温度都为 0, 且都无惩罚或 grammar 时, greedy 路径在设备上逐步取最大分数 ID, 计算七个 confidence, 一次读回 token, score 和有效标志. 目标 greedy 输出与候选连续匹配时接受, 第一个不匹配位置保留目标 ID. 这条路径保存候选 ID, 按需使用随机路径才保留完整词表 q.</p>
-<p>随机模式用用户的 temperature, top_k, top_p, 重复/频次/存在惩罚与当前语法掩码构造真实 q. 第 k 行的历史包含已经提交的 anchor 和前 k - 1 个候选. 提议使用独立 RNG stream, 目标 sampler 的 RNG 与持久 generated 在提议过程中保持原进度.</p>
+<p>本轮全部提议请求的温度都为 0, 且都无惩罚或 grammar, 并关闭 repetition_guard 时, greedy 路径在设备上逐步取最大分数 ID, 计算七个 confidence, 一次读回 token, score 和有效标志. 目标 greedy 输出与候选连续匹配时接受, 第一个不匹配位置保留目标 ID. 这条路径保存候选 ID, 按需使用随机路径才保留完整词表 q.</p>
+<p>随机模式用用户的 temperature, top_k, top_p, 重复/频次/存在惩罚, 循环保护与当前语法掩码构造真实 q. 第 k 行的历史包含已经提交的 anchor 和前 k - 1 个候选. 提议使用独立 RNG stream, 目标 sampler 的 RNG 与持久 generated 在提议过程中保持原进度.</p>
 <<source "dsparkProposal" "展开候选记录及设备概率字段">>
 <p>draft_probabilities 检查下一轮实际验证候选等于原始提议的前缀, 返回对应的 device tensor 切片. Python 内部直接传给 verifier, ZMQ 消息只携带 ID 与实际结果. 如果调度预算只容纳前三个候选, 使用原来前三行 q 就能验证这段前缀.</p>
 <<math "\\alpha_k=\\min(1,p_k(x_k)/q_k(x_k)),\\quad r_k(v)=\\frac{\\max(p_k(v)-q_k(v),0)}{\\sum_u\\max(p_k(u)-q_k(u),0)}">>

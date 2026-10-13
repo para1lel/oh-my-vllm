@@ -56,7 +56,7 @@ The API subset follows [Chat Completions](https://developers.openai.com/api/refe
 Sampling supplies temperature, top_p, top_k, seed, and frequency/presence/repetition penalties.
 Checkpoint defaults are temperature `1`, top_p `.95`, and top_k `20`.
 
-The shared HTTP service default adds presence_penalty `1.5`. Frequency penalty stays `0`, and repetition penalty stays `1`.
+The shared HTTP service default adds presence_penalty `0.5`. Frequency penalty stays `0`, and repetition penalty stays `1`.
 Ordinary, MTP4, DSpark, and test services use the same defaults.
 The separate reasoning budget stays `-1` by default.
 Use `serve --override-generation-config` with a JSON object to change supported sampling defaults.
@@ -70,7 +70,21 @@ Python adds checkpoint defaults for fields without explicit values.
 
 The [sampling decision](decisions/ADR-015-shared-serving-sampling-defaults.md) records the model guidance, selected value, and verification limits.
 
-Offline Run/Bench use greedy sampling, fixed output length, and ignore EOS.
+The shared `repetition_guard` default is `true`. Requests and service overrides accept a boolean.
+An explicit `false` allows intentional repeated output. A request's null value uses the service default.
+
+The guard examines only generated tokens, with each speculative prefix, in a window of at most `768` tokens.
+It detects cycles repeated without interruption of `1` through `256` tokens, with at least `3` repetitions and `64` repeated tokens.
+After grammar masks and before top-k/top-p, it sets scores to negative infinity for all next tokens that continue these cycles.
+If no finite alternative is available, it keeps the original masked scores. Required grammar continuations thus stay available.
+It does not check prompt repetition or change committed history during speculative checks.
+
+Ordinary, MTP4, and DSpark target distributions use the same rule. DSpark proposal probabilities include the rule before acceptance correction.
+
+The guard cannot guarantee task completion or prevent cycles beyond these limits.
+It also affects intentional repeated text when enabled. Keep client progress and repetition checks effective.
+
+Offline Run/Bench explicitly disable the guard and use greedy sampling, fixed output length, and ignored EOS.
 
 Tool choice can be auto, none, required, or a named function.
 Multiple calls are permitted unless `parallel_tool_calls=false`.
@@ -136,6 +150,17 @@ The supported keyword inventory is in `python/oh_my_vllm/worker/serving.py`.
 Unknown string formats and pattern/format combined with length bounds are unsupported.
 
 XGrammar supplies Qwen XML tool grammars and JSON answer grammars.
+
+Each thinking request uses its validated single closing token ID, with plain text and unlimited reasoning.
+Ordinary IDs that spell the closing string cannot end reasoning.
+EOS is masked until that token. Explicit text stops and total length can still finish earlier.
+Plain answers keep their whitespace and literal markup after reasoning ends.
+
+Enabled tool constraints start at `<tool_call>`, as in the Rust parser.
+The generated call content must satisfy its function-choice, parallel-call, and schema constraints.
+Explicit `strict=false` disables tool argument schema constraints. XML parsing still applies.
+[The control-token decision](decisions/ADR-016-canonical-serving-control-tokens.md) gives the contract and repetition limitations.
+
 Each MTP or DSpark draft and bonus position uses its speculative-prefix mask.
 Simulated grammar advancement rolls back. Kept output alone advances persistent state.
 A draft that the mask rejects fails at its first invalid position.
@@ -143,7 +168,8 @@ A draft that the mask rejects fails at its first invalid position.
 CPU tests include rollback, rejection, and reasoning-end crossings.
 Target-model MTP4 evidence includes the two APIs, off/medium, JSON object, JSON Schema, and strict tools.
 
-DSpark proposals use the same masks before candidate selection.
+DSpark proposals apply grammar masks before candidate selection. The target also applies the numeric reasoning budget.
+
 For stochastic output, acceptance uses full conditional target/proposal probabilities with the configured sampling parameters.
 Candidate acceptance is `min(1,p(x)/q(x))`. Rejection uses normalized `max(p-q,0)`, and the bonus uses target distribution `p`.
 Verification uses target tokens with maximum scores for greedy sampling.
@@ -171,7 +197,13 @@ Unconstrained strings remove one leading/trailing newline from template markup.
 Quotes, spaces, extra newlines, and function/tool-close literals stay.
 Enum/const strings restore the same schema value, with its newlines.
 Parsers recognize closing tags only when they are not in parameter values.
-Literal tool tags in ordinary text or JSON answers stay text.
+
+With tools disabled, literal tool tags in ordinary text or JSON answers stay text.
+Enabled tools reserve their opener for calls. String arguments can still contain literal markup.
+
+Grammar masks constrain structure. Repeated ordinary text and failed tasks can still occur.
+`</thinking>` and `<next_thinking>` are ordinary text, not reasoning delimiters.
+Keep the client's original repetition detector and progress timeout in persistent acceptance.
 
 ## Storage and resource limits
 

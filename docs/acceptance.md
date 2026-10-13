@@ -16,6 +16,10 @@ These checks do not supply model acceptance.
 The new fifteen phase rows, six capacity cases, reasoning-budget suite, and two persistent-session collections are pending.
 Previous source results cannot supply current-source acceptance.
 
+The [constrained-decoding investigation](../bench/evidence/2026-10-13-constrained-decoding-investigation.json) records ordinary-text loops and selected target conditional probabilities.
+It does not replay original sampled IDs or supply formal model acceptance.
+New collections must check canonical reasoning closure, tool openers, and the repetition guard with shared presence penalty `0.5`.
+
 Source `22dd754` passed sixty budget cases and six full-context ordinary/MTP4 cases without warmup, with independent raw-record review.
 It completed thirteen phase rows: twelve passed and long-MTP batch `4` failed the unchanged decode ratio limit.
 The failed median was `39.9496` seconds, with lower bound `12.2634` seconds and ratio `3.2576`.

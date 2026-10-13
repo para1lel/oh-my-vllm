@@ -344,7 +344,7 @@ Object.assign(sourceNotes, {
     ],
   },
   samplingParams: {
-    title: "SamplingParams 的 9 个字段", intro: "每条请求保留自己的参数和随机生成器. max_tokens 限制长度, 其余参数控制分数筛选或终止行为.",
+    title: "SamplingParams 的 10 个字段", intro: "每条请求保留自己的参数和随机生成器. max_tokens 限制长度, 其余参数控制分数筛选或终止行为.",
     entries: [
       ["max_tokens", "输出 token 上限, 正整数.", "达到数量就结束, 与提示词长度分别计算."],
       ["temperature", "采样温度, 默认 1.", "分数除以温度后做 softmax; 0 走贪心, 极小正值归零."],
@@ -355,6 +355,7 @@ Object.assign(sourceNotes, {
       ["frequency_penalty", "按已生成出现次数调整分数, 默认 0.", "出现 c 次的 ID 减去 c 乘此参数."],
       ["presence_penalty", "按是否已经生成调整分数, 默认 0.", "已经出现的 ID 减去此参数一次."],
       ["repetition_penalty", "提示词及已生成历史的重复惩罚, 默认 1.", "正分数除以它, 负分数乘以它; 草稿验证逐行加入候选前缀."],
+      ["repetition_guard", "连续 token 循环保护, 默认 True.", "在最近 768 个生成 token 中检测周期 1 到 256, 至少重复 3 次且覆盖 64 个 token; 无其他有限候选时保留原分布. 显式 False 可关闭."],
     ],
   },
   verifyRows: {

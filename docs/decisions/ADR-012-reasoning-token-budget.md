@@ -26,7 +26,7 @@ This contract is specific to the tested Qwen tokenizer with a distinct, single-t
 Python previews the committed count for each target verification row, with its preceding draft prefix.
 Mask preview does not change the count, history, grammar state, or KV state after rollback.
 Only kept output tokens change the committed count.
-Before the boundary, plain text keeps its unmasked sampling path.
+Before the boundary, thinking output also uses the canonical control-token grammar in [ADR-016](ADR-016-canonical-serving-control-tokens.md).
 At the boundary, greedy and stochastic target sampling use the mask, with bonus rows.
 
 DSpark proposals can use a different distribution. Its target verification uses the constrained distribution.

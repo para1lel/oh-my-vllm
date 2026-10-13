@@ -46,4 +46,6 @@ def test_batched_greedy_matches_request_sampling(device):
     ],
 )
 def test_non_plain_sampling_excluded(params):
-    assert not RequestSampler(SamplingParams(10, **params), [], "cpu").plain_greedy
+    assert not RequestSampler(
+        SamplingParams(10, repetition_guard=False, **params), [], "cpu"
+    ).plain_greedy

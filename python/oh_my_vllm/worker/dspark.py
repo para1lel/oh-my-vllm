@@ -448,7 +448,7 @@ class DSpark:
         params = (
             sampler.params
             if sampler is not None
-            else SamplingParams(max_tokens=7, temperature=0)
+            else SamplingParams(max_tokens=7, temperature=0, repetition_guard=False)
         )
         try:
             for position in range(limit):
@@ -474,8 +474,9 @@ class DSpark:
                 if sampler is not None and sampler.plain_greedy and mask is None:
                     token, valid = greedy_rows(logits)[0]
                 else:
-                    prompt = [] if sampler is None else sampler.prompt
-                    generated = [] if sampler is None else sampler.generated
+                    prompt, generated = (
+                        ((), ()) if sampler is None else sampler.sampling_history()
+                    )
                     distribution = probabilities(
                         logits, params, prompt, [*generated, *candidates], bitmask=mask
                     )

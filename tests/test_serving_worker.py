@@ -326,9 +326,189 @@ class ServingTests(unittest.TestCase):
             self.prepare(
                 effort="xhigh", format={"type": "text"}, thinking_token_budget=budget
             )
-            self.assertIsNone(self.adapter.masks({1: [123] * 7}))
+            self.assertIsNotNone(self.adapter.masks({1: [123] * 7}))
         self.prepare(effort="off", format={"type": "text"}, thinking_token_budget=0)
         self.assertIsNone(self.adapter.masks({1: []}))
+
+    @staticmethod
+    def tool_definitions():
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "strict": True,
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"n": {"type": "integer", "minimum": 1}},
+                        "required": ["n"],
+                        "additionalProperties": False,
+                    },
+                },
+            }
+            for name in ("read", "write")
+        ]
+
+    def mask_allows(self, token):
+        mask = self.adapter.masks({1: []}).grammar_bitmask[0]
+        return bool((int(mask[token // 32]) >> (token % 32)) & 1)
+
+    def test_reasoning_end_has_one_token_identity_in_every_format(self):
+        for fmt in ("text", "json", "tools"):
+            for budget in (-1, 4):
+                with self.subTest(fmt=fmt, budget=budget):
+                    options = {"effort": "xhigh", "thinking_token_budget": budget}
+                    if fmt != "json":
+                        options["format"] = {"type": "text"}
+                    if fmt == "tools":
+                        options["tools"] = self.tool_definitions()
+                    self.prepare(**options)
+                    generation = self.adapter.generations[1]
+                    # Ordinary base IDs spell the same bytes as the dedicated ID.
+                    self.assertEqual(
+                        self.adapter.tokenizer.decode([510, 26003, 29]), "</think>"
+                    )
+                    generation.consume([510, 26003], self.adapter.tokenizer)
+                    self.assertFalse(self.mask_allows(29))
+                    self.assertTrue(self.mask_allows(248069))
+                    before = self.adapter.masks({1: []}).grammar_bitmask.copy()
+                    self.adapter.masks({1: [29, 123]})
+                    self.assertTrue(
+                        (before == self.adapter.masks({1: []}).grammar_bitmask).all()
+                    )
+                    generation.consume([248069], self.adapter.tokenizer)
+                    self.assertIsNone(generation.reasoning_end)
+                    self.assertEqual(generation.reasoning_tokens, 3)
+
+    def test_tool_opener_cannot_bypass_required_schema_or_policy(self):
+        named = {"type": "function", "function": {"name": "read"}}
+        malformed = [
+            "<tool_call>garbage",
+            "<tool_call><function=read></function></tool_call>",
+            "<tool_call>\n<function=read>\n</function>\n</tool_call>",
+            (
+                "<tool_call>\n<function=read>\n<parameter=n>0</parameter>\n"
+                "</function>\n</tool_call>"
+            ),
+        ]
+        for choice in ("auto", "required", named):
+            for text in malformed:
+                with self.subTest(choice=choice, text=text):
+                    self.prepare(
+                        format={"type": "text"},
+                        tools=self.tool_definitions(),
+                        tool_choice=choice,
+                    )
+                    matcher = self.adapter.generations[1].matcher
+                    self.assertFalse(matcher.accept_string(text))
+
+    def test_named_and_parallel_policy_apply_at_the_first_opener(self):
+        def call(name, gap="\n"):
+            return (
+                f"<tool_call>{gap}<function={name}>\n<parameter=n>1</parameter>\n"
+                "</function>\n</tool_call>"
+            )
+
+        self.prepare(
+            format={"type": "text"},
+            tools=self.tool_definitions(),
+            tool_choice={"type": "function", "function": {"name": "read"}},
+        )
+        self.assertFalse(
+            self.adapter.generations[1].matcher.accept_string(call("write", ""))
+        )
+        for parallel in (False, True):
+            with self.subTest(parallel=parallel):
+                self.prepare(
+                    format={"type": "text"},
+                    tools=self.tool_definitions(),
+                    parallel_tool_calls=parallel,
+                )
+                matcher = self.adapter.generations[1].matcher
+                self.assertTrue(matcher.accept_string(call("read")))
+                self.assertEqual(matcher.accept_string("\n" + call("write")), parallel)
+
+    def test_plain_reasoning_requires_close_before_eos_and_preserves_body_literals(
+        self,
+    ):
+        literal = "</think> <think> </thinking> <next_thinking> <tool_call>"
+        for effort in ("off", "xhigh"):
+            for disabled_tools in (False, True):
+                with self.subTest(effort=effort, disabled_tools=disabled_tools):
+                    self.prepare(
+                        format={"type": "text"},
+                        effort=effort,
+                        tools=self.tool_definitions() if disabled_tools else [],
+                        tool_choice="none",
+                    )
+                    generation = self.adapter.generations[1]
+                    if effort != "off":
+                        self.assertFalse(self.mask_allows(248046))
+                        generation.consume(
+                            self.adapter.tokenizer.encode(
+                                "</think>\n\n", add_special_tokens=False
+                            ),
+                            self.adapter.tokenizer,
+                        )
+                    ids = self.adapter.tokenizer.encode(
+                        literal, add_special_tokens=False
+                    )
+                    _, text = generation.consume([*ids, 248046], self.adapter.tokenizer)
+                    self.assertEqual(text, literal)
+                    self.assertEqual(generation.finished, "stop")
+
+    def test_unlimited_reasoning_validates_canonical_end_before_publication(self):
+        self.adapter.generations.pop(1, None)
+        with (
+            patch.object(
+                self.adapter.tokenizer, "convert_tokens_to_ids", return_value=0
+            ),
+            self.assertRaisesRegex(RequestValidationError, "single-token </think>"),
+        ):
+            self.prepare(effort="xhigh", format={"type": "text"})
+        self.assertNotIn(1, self.adapter.generations)
+
+    def test_plain_reasoning_preserves_direct_body_stop_and_total_length(self):
+        self.prepare(effort="xhigh", format={"type": "text"})
+        generation = self.adapter.generations[1]
+        ids = self.adapter.tokenizer.encode("</think>answer", add_special_tokens=False)
+        _, text = generation.consume([*ids, 248046], self.adapter.tokenizer)
+        self.assertEqual(text, "</think>answer")
+        self.assertEqual(generation.finished, "stop")
+        self.prepare(effort="xhigh", format={"type": "text"}, stop=["STOP"])
+        generation = self.adapter.generations[1]
+        ids = self.adapter.tokenizer.encode("checking STOP", add_special_tokens=False)
+        _, text = generation.consume(ids, self.adapter.tokenizer)
+        self.assertEqual(text, "checking ")
+        self.assertEqual(generation.finished, "stop")
+        self.assertIsNotNone(generation.reasoning_end)
+        self.prepare(effort="xhigh", format={"type": "text"}, max_tokens=1)
+        generation = self.adapter.generations[1]
+        generation.consume([123], self.adapter.tokenizer)
+        self.assertEqual(generation.finished, "length")
+
+    def test_answer_strings_and_explicit_nonstrict_tools_keep_their_contracts(self):
+        schema = {
+            "type": "object",
+            "properties": {"s": {"type": "string"}},
+            "required": ["s"],
+            "additionalProperties": False,
+        }
+        self.prepare(effort="xhigh", format={"type": "json_schema", "schema": schema})
+        generation = self.adapter.generations[1]
+        text = '</think>\n\n{"s":"</think> <think> <tool_call> </thinking>"}'
+        ids = self.adapter.tokenizer.encode(text, add_special_tokens=False)
+        _, actual = generation.consume([*ids, 248046], self.adapter.tokenizer)
+        self.assertEqual(actual, text)
+        tools = self.tool_definitions()
+        tools[0]["function"]["strict"] = False
+        self.prepare(format={"type": "text"}, tools=tools)
+        # Explicit strict=false does not apply the numeric minimum to arguments.
+        call = (
+            "<tool_call>\n<function=read>\n<parameter=n>0</parameter>\n"
+            "</function>\n</tool_call>"
+        )
+        self.assertTrue(self.adapter.generations[1].matcher.accept_string(call))
 
     def test_required_tools_and_parallel_limit(self):
         tools = [

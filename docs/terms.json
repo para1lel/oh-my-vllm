@@ -262,8 +262,8 @@
       "term": "grammar",
       "part_of_speech": "noun",
       "category": "technical",
-      "meaning": "Token-level constraints for JSON answers or function arguments.",
-      "translation": "JSON 答案或函数参数的 token 级约束.",
+      "meaning": "Token-level constraints for reasoning control, JSON answers, or function arguments.",
+      "translation": "思考控制, JSON 答案或函数参数的 token 级约束.",
       "forms": [
         "grammar"
       ]

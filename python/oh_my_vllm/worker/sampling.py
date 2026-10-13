@@ -17,8 +17,11 @@ class SamplingParams:
     frequency_penalty: float = 0.0
     presence_penalty: float = 0.0
     repetition_penalty: float = 1.0
+    repetition_guard: bool = True
 
     def __post_init__(self):
+        if type(self.repetition_guard) is not bool:
+            raise ValueError("repetition_guard must be a boolean")
         if type(self.max_tokens) is not int or self.max_tokens <= 0:
             raise ValueError("max_tokens must be a positive integer")
         if not math.isfinite(self.temperature) or self.temperature < 0:

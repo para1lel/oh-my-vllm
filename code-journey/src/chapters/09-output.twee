@@ -3,18 +3,24 @@
 <<chapterHeader>>
 <h2>词表分数怎样变成输出 ID</h2>
 <p>logits 是模型给每个词表 ID 的分数. 普通最终片段需要一行分数, MTP 验证最多需要五行. RequestSampler 按请求保留已生成历史与随机生成器, 结合 SamplingParams 和可选语法掩码生成概率, 再选出 ID.</p>
-<<source "samplingParams" "展开 SamplingParams 的 9 个字段">>
-<p>HTTP 采样配置按三层合并: 请求显式值优先于服务默认值, 服务值优先于 checkpoint 默认值. 普通, MTP4, DSpark 和测试服务共用 presence_penalty 1.5; checkpoint 的 temperature 1, top_p 0.95, top_k 20 继续有效. --override-generation-config 可以修改支持的服务字段. 请求中省略或 null 使用默认值, 显式 presence_penalty 0 关闭默认惩罚.</p>
+<<source "samplingParams" "展开 SamplingParams 的 10 个字段">>
+<p>HTTP 采样配置按三层合并: 请求显式值优先于服务默认值, 服务值优先于 checkpoint 默认值. 普通, MTP4, DSpark 和测试服务共用 presence_penalty 0.5; checkpoint 的 temperature 1, top_p 0.95, top_k 20 继续有效. --override-generation-config 可以修改支持的服务字段. 请求中省略或 null 使用默认值, 显式 presence_penalty 0 关闭默认惩罚.</p>
 <p>temperature 为 0 时选择最高分, 称为 greedy (贪心). 大于 0 时先按温度缩放分数, 再经 softmax 归一化. 极小正温度归零, 避免数值溢出. 随机采样使用请求自己的种子和 generator, 当前调用用指数随机量与概率构造竞赛, 选出最大的一项.</p>
 <<math "p_i=\\frac{e^{z_i/T}}{\\sum_j e^{z_j/T}},\\quad y=\\mathop{\\mathrm{argmax}}_i(p_i/E_i),\\quad E_i\\sim\\operatorname{Exp}(1)">>
 <p>z 是调整和筛选后的分数, T 是正温度, p 是概率, E 是各 ID 独立的指数随机量, y 是选中 ID. T 为 0 使用贪心分支. 实现检查真正使用的行至少存在一个有效有限候选, 无效分布会使对应请求结束.</p>
 <h2>惩罚与 top-k / top-p 的顺序</h2>
 <p>repetition_penalty 看提示词和已生成历史, 对出现过的 ID 按分数正负分别除或乘惩罚系数. frequency_penalty 按已生成出现次数减分, presence_penalty 对已生成出现过的 ID 减分一次. 草稿验证逐行把候选前缀加入临时计数, 每一行对应自己看到的历史.</p>
 <p>语法掩码将不允许的 ID 分数设为负无穷. 随后 top-k 取第 k 高分作为阈值, 并列分数都会保留, 所以候选可超过 k 个. top-p 按概率稳定排序, 保留直到累计概率跨过阈值的那一项, 最高项始终保留.</p>
-<p>小 top-k 情况可以只在候选集合里做排序; 阈值并列需要回到完整稳定排序, 保持筛选语义. 无惩罚贪心路径直接选最大 ID 和有效标志, 将多行结果一次传回 CPU, 减少词表分布传输. 第 10 章会用这些行解释 MTP 接受规则.</p>
+<p>小 top-k 情况可以只在候选集合里做排序; 阈值并列需要回到完整稳定排序, 保持筛选语义. 关闭循环保护的无惩罚贪心路径按最高分选出 ID 和有效标志, 将多行结果一次传回 CPU, 减少词表分布传输. 第 10 章会用这些行解释 MTP 接受规则.</p>
+<h2>连续 token 循环怎样打断</h2>
+<p>repetition_guard 默认开启, 服务覆盖值和请求显式值均可用布尔 false 关闭. 检测只读取最近 768 个已生成 token, 加上当前验证行之前的草稿前缀. 周期长度为 1 到 256, 至少连续重复 3 次且覆盖 64 个 token 时, 将所有符合条件的下一续接 ID 联合屏蔽.</p>
+<p>这一步在语法掩码之后, top-k / top-p 之前执行. 若屏蔽后没有其他有限候选, 保留原分布, 让 grammar 必需的重复结构仍可生成. 普通, MTP4 和 DSpark 共用该规则; DSpark 的提议概率也包含保护, 验证仍按实际 p/q 修正. 试探草稿不修改正式历史.</p>
+<p>保护不检查提示词中的重复, 不依赖特定标签文字, 也不保证消除所有循环或完成任务. 需要有意重复输出时可以显式关闭. 离线固定长度的 greedy 基准显式关闭保护; 客户端的重复检测与进展超时继续有效.</p>
 <h2>语法约束怎样保证输出能继续匹配</h2>
 <p>JSON schema 描述允许的字段, 类型与结构. 工具调用同样有参数 schema. 输入准备检查这些结构和引用, 构造匹配器; GrammarOutput 用位掩码表示此刻每个词表 ID 是否允许. 每个整数打包 32 个 ID 的允许位, GPU 按位取得候选许可.</p>
 <p>ServingAdapter.masks 对草稿前缀逐步试探 matcher, 得到各验证行的掩码, 然后回滚. Generation.consume 只对最终保留 ID 正式 accept, 推进匹配器. 这样, 被拒草稿不会污染之后的语法状态.</p>
+<p>每个思考请求都用同一个经过验证的结束 ID 连接 grammar 和预算计数. 专用的 <<icode "</think>">> token 能结束思考, 普通 ID 拼成的同形字符串不能只让解析器先切换. 工具约束从 <<icode "<tool_call>">> 就开始, 避免错误的后续格式绕过参数 schema 或指定函数.</p>
+<p>语法只约束结构. <<icode "</thinking>">> 和 <<icode "<next_thinking>">> 是普通文字, 仍可合法生成或出现在代码示例中. 它们重复出现不等于再次进入真正的思考状态; presence_penalty 也不保证消除循环. 纯文本正文保留标签字面量和原有空白形式, 关闭思考且禁用工具时仍用无掩码路径.</p>
 <p>工具 XML 参数路径校验能表达的 schema 范围, 把参数结构转成相应约束. 字符串内的空白属于值本身, 参数整理按结构处理空白, 保留值的内容. Rust Parser 在输出端按 schema 恢复参数类型并检查工具标签和重复参数, 连接模型约束与 API 返回结构.</p>
 <h2>Generation 保存哪些输出状态</h2>
 <p>Generation 有 11 个状态字段. matcher 是可选语法匹配器; max_tokens 是长度上限; stop 是停止字符串列表; eos 是模型结束 ID 集合; reasoning_end 是推理结束标记 ID; reasoning_tokens 累计推理部分数量; thinking_token_budget 是可选的思考内容 token 硬预算; ids 保存本请求保留输出; decoder 是增量解码器; pending 暂存尚需判断的文字; finished 保存 None, stop 或 length 的终止原因.</p>

@@ -33,7 +33,7 @@ Reasoning 通道没有该周期.
 
 ## 决策
 
-普通, MTP4, DSpark 和测试 HTTP 服务统一使用 presence penalty 默认值 `1.5`.
+普通, MTP4, DSpark 和测试 HTTP 服务统一使用 presence penalty 默认值 `0.5`.
 保持 checkpoint 的 temperature `1`, top_p `.95` 和 top_k `20`, repetition penalty 为 `1`, frequency penalty 为 `0`.
 独立思考预算默认保持 `-1`. Reasoning effort, 总输出限制和上下文限制保留原有契约.
 
@@ -55,12 +55,18 @@ OMP Chat, Responses 和自动压缩在省略采样字段时使用这些值.
 这些 metric 字段不含 Python 补充的 checkpoint 值.
 CPU fixture 单独记录 checkpoint 合并后实际 Python 采样参数.
 
+对生成 token 循环使用公共默认值 `repetition_guard=true`. 允许显式布尔覆盖值.
+[服务契约](../serving.zh.md#采样-工具与停止) 定义有界规则和 grammar 回退.
+该规则在 target 分布与 DSpark 提议分布的 top-k/top-p 之前应用.
+离线固定长度 greedy 工作负载显式禁用它.
+它改变重复输出, 包括有意重复, 且不保证任务完成.
+
 ## 官方指导与限制
 
 [vLLM 引擎参数](https://docs.vllm.ai/en/stable/configuration/engine_args/#override-generation-config) 说明服务覆盖值与模型 generation configuration 的合并方式.
 [Qwen 模型卡](https://huggingface.co/Qwen/Qwen3.8-27B#best-practices) 给出思考默认值, 并允许 presence penalty 在 `0` 到 `2` 之间调整.
 Qwen 指出更高惩罚可能降低质量并导致语言混杂.
-选定的 `1.5` 是该范围内的项目配置. 它不是 Qwen 固定推荐的默认值.
+选定的 `0.5` 是该范围内的项目配置. 它不是 Qwen 固定推荐的默认值.
 
 它改变随机生成概率. 需要新的推理和持续会话验收.
 

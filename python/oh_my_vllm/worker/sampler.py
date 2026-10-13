@@ -11,6 +11,7 @@ from collections.abc import Sequence
 import numpy as np
 import torch
 
+from oh_my_vllm.worker.repetition import HISTORY_WINDOW, cycle_continuations
 from oh_my_vllm.worker.sampling import SamplingParams
 
 
@@ -83,6 +84,23 @@ def probabilities(
         ids = torch.arange(vocab, device=scores.device)
         allowed = ((mask[:, ids // 32] >> (ids % 32)) & 1).bool()
         scores.masked_fill_(~allowed, -torch.inf)
+    if params.repetition_guard:
+        tail = list(generated[-HISTORY_WINDOW:])
+        for row in range(scores.shape[0]):
+            blocked = sorted(cycle_continuations(tail))
+            if blocked:
+                current = scores[row]
+                original = current[blocked].clone()
+                finite = torch.isfinite(original)
+                # Do not hide NaN/+inf failures, or remove a grammar's only
+                # legal continuation. Apply the union jointly before top-k/p.
+                current[blocked] = torch.where(finite, -torch.inf, original)
+                has_alternative = torch.isfinite(current).any()
+                current[blocked] = torch.where(
+                    has_alternative & finite, -torch.inf, original
+                )
+            if row < len(drafts):
+                tail.append(drafts[row])
     if params.temperature == 0:
         # Invalid rows after a rejected draft are permitted, but cannot be consumed.
         valid = torch.isfinite(scores).any(-1, keepdim=True) & ~(
@@ -204,6 +222,7 @@ class RequestSampler:
             and p.repetition_penalty == 1
             and p.frequency_penalty == 0
             and p.presence_penalty == 0
+            and not p.repetition_guard
         )
 
     def sample(
@@ -213,6 +232,15 @@ class RequestSampler:
         bitmask: np.ndarray | torch.Tensor | None = None,
     ) -> list[int]:
         return verify_rows(self.draw_rows(logits, drafts, bitmask).tolist(), drafts)
+
+    def sampling_history(self) -> tuple[Sequence[int], Sequence[int]]:
+        """Retain full penalty history, but bound a guard-only preview's work."""
+        if self._history_counts is not None:
+            return self.prompt, self.generated
+        generated = (
+            self.generated[-HISTORY_WINDOW:] if self.params.repetition_guard else ()
+        )
+        return (), generated
 
     def draw_rows(
         self,
@@ -228,11 +256,12 @@ class RequestSampler:
         )
         if needs_history:
             self._resize_counts(logits.shape[-1])
+        prompt, generated = self.sampling_history()
         probs = probabilities(
             logits,
             self.params,
-            self.prompt if needs_history else (),
-            self.generated if needs_history else (),
+            prompt,
+            generated,
             drafts,
             bitmask,
             history_counts=self._history_counts,
@@ -287,11 +316,12 @@ class RequestSampler:
         )
         if needs_history:
             self._resize_counts(logits.shape[-1])
+        prompt, generated = self.sampling_history()
         target = probabilities(
             logits,
             self.params,
-            self.prompt if needs_history else (),
-            self.generated if needs_history else (),
+            prompt,
+            generated,
             drafts,
             bitmask,
             history_counts=self._history_counts,

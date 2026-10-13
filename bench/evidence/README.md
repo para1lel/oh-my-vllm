@@ -22,6 +22,9 @@ Each result keeps its measured source and full original hash.
 The [native SDK collector record](2026-10-13-native-sdk-collector.json) gives CPU fixture checks and original result hashes.
 These checks do not supply model acceptance.
 
+The [constrained-decoding investigation](2026-10-13-constrained-decoding-investigation.json) keeps recorded loop symptoms and selected conditional target probabilities.
+It also records two constructed protocol defects. It does not show original sampled paths or formal acceptance.
+
 ## Export
 
 ```bash

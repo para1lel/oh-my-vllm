@@ -45,6 +45,7 @@ pub fn normalize(
         "frequency_penalty",
         "presence_penalty",
         "repetition_penalty",
+        "repetition_guard",
         "stop",
         "store",
         "previous_response_id",

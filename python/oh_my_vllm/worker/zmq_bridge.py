@@ -79,7 +79,7 @@ def _register_request(worker, message):
     if limit is not None and (type(limit) is not int or limit <= 0):
         raise ValueError("max_tokens must be a positive integer")
     params = (
-        SamplingParams(limit, temperature=0, ignore_eos=True)
+        SamplingParams(limit, temperature=0, ignore_eos=True, repetition_guard=False)
         if limit is not None
         else None
     )

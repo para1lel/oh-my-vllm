@@ -22,6 +22,9 @@
 [原生 SDK collector 记录](2026-10-13-native-sdk-collector.json) 提供 CPU fixture 检查及原始结果哈希.
 这些检查不提供模型验收.
 
+[约束解码调查](2026-10-13-constrained-decoding-investigation.json) 保留已记录的循环症状及选定的 target 条件概率.
+它也记录两项构造出的协议缺陷. 它不能确定原始采样路径, 也不提供正式验收.
+
 ## 导出
 
 ```bash
