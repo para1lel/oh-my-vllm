@@ -65,6 +65,35 @@ class PromptValidationTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("prompt token is outside", result.stderr)
 
+    def test_sampling_override_rejects_invalid_config_before_worker_launch(self):
+        for config in (
+            "[]",
+            '{"presence_penalty":3}',
+            '{"presence_penalty":null}',
+            '{"top_k":2.5}',
+            '{"temperature":true}',
+            '{"min_p":0}',
+            '{"max_tokens":100}',
+        ):
+            with self.subTest(config=config):
+                result = subprocess.run(
+                    [
+                        str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                        "--model",
+                        "/nonexistent-checkpoint",
+                        "serve",
+                        "--override-generation-config",
+                        config,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("invalid value", result.stderr)
+                self.assertNotIn("launch worker", result.stderr)
+
 
 class HttpTests(unittest.TestCase):
     @classmethod
@@ -1255,6 +1284,95 @@ class HttpTests(unittest.TestCase):
                         self.assertEqual(normalized["effort"], "off")
                         if responses:
                             self.assertEqual(result["thinking_token_budget"], expected)
+
+    def test_service_sampling_defaults_reach_both_api_samplers(self):
+        capture = self.directory / "effective-sampling.jsonl"
+        model_defaults = json.loads(
+            (
+                Path(os.environ["OH_MY_VLLM_MODEL"]) / "generation_config.json"
+            ).read_text()
+        )
+        defaults = {"presence_penalty": 0.5, "repetition_penalty": 1.1, "seed": 7}
+        with (
+            patch.dict(os.environ, {"OH_MY_VLLM_FIXTURE_SAMPLING": str(capture)}),
+            self.resource_server(
+                "sampling-defaults",
+                "--override-generation-config",
+                json.dumps(defaults),
+            ) as (port, log),
+        ):
+            address = f"http://127.0.0.1:{port}"
+            with urllib.request.urlopen(address + "/diagnostics", timeout=10) as reply:
+                self.assertEqual(
+                    json.load(reply)["limits"]["override_generation_config"], defaults
+                )
+            for responses in (False, True):
+                for override in (None, 0.0, 1.0):
+                    with self.subTest(responses=responses, override=override):
+                        body = self.base(responses, presence_penalty=override)
+                        if override is not None:
+                            body.update(repetition_penalty=1.0, seed=9)
+                        body.update(
+                            {"reasoning": {"effort": "off"}}
+                            if responses
+                            else {"reasoning_effort": "off"}
+                        )
+                        endpoint = "/responses" if responses else "/chat/completions"
+                        request = urllib.request.Request(
+                            address + "/v1" + endpoint,
+                            json.dumps(body).encode(),
+                            {"Content-Type": "application/json"},
+                        )
+                        with urllib.request.urlopen(request, timeout=20) as reply:
+                            self.assertEqual(reply.status, 200)
+                        actual = json.loads(capture.read_text().splitlines()[-1])
+                        self.assertEqual(
+                            actual["presence_penalty"],
+                            0.5 if override is None else override,
+                        )
+                        self.assertEqual(
+                            actual["repetition_penalty"],
+                            1.1 if override is None else 1.0,
+                        )
+                        self.assertEqual(actual["seed"], 7 if override is None else 9)
+                        for key in ("temperature", "top_p", "top_k"):
+                            self.assertEqual(actual[key], model_defaults[key])
+            metrics = [
+                json.loads(line.split("SERVING_REQUEST_METRIC ", 1)[1])
+                for line in log.read_text().splitlines()
+                if "SERVING_REQUEST_METRIC " in line
+            ]
+            self.assertEqual(len(metrics), 6)
+            self.assertEqual(
+                [row["sampling"]["presence_penalty"] for row in metrics],
+                [0.5, 0.0, 1.0] * 2,
+            )
+
+    def test_production_sampling_default_is_shared_by_test_services(self):
+        capture = self.directory / "production-sampling.jsonl"
+        with (
+            patch.dict(os.environ, {"OH_MY_VLLM_FIXTURE_SAMPLING": str(capture)}),
+            self.resource_server("production-sampling") as (port, _),
+        ):
+            address = f"http://127.0.0.1:{port}"
+            with urllib.request.urlopen(address + "/diagnostics", timeout=10) as reply:
+                self.assertEqual(
+                    json.load(reply)["limits"]["override_generation_config"],
+                    {"presence_penalty": 0.5},
+                )
+            for responses in (False, True):
+                body = self.base(responses)
+                endpoint = "/responses" if responses else "/chat/completions"
+                request = urllib.request.Request(
+                    address + "/v1" + endpoint,
+                    json.dumps(body).encode(),
+                    {"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(request, timeout=20) as reply:
+                    self.assertEqual(reply.status, 200)
+                actual = json.loads(capture.read_text().splitlines()[-1])
+                self.assertEqual(actual["presence_penalty"], 0.5)
+                self.assertEqual(actual["repetition_penalty"], 1.0)
 
     def test_worker_step_deadline_controls_delayed_rpc_and_recovery(self):
         for seconds in (1, 2):

@@ -107,6 +107,21 @@ Owner, pool, 零驱逐, `32` MiB 释放和精确重放检查继续有效.
 协议回归使用 scripted worker; GPU / agentic 验收使用真实模型.
 记录 warning 和跳过测试及原因.
 
+## 公共服务采样验收
+
+测试 HTTP 服务使用生产默认值.
+两种 API 和各草稿模式共用校验和优先顺序.
+默认 presence penalty 为 `0.5`. 独立思考预算默认值为 `-1`.
+
+持续验收必须使用这些默认值. 从原始 diagnostics 和 metric 记录服务默认值及添加服务默认值后的请求采样字段.
+最大 effort 和输出 / 上下文限制仍为显式工作负载设置.
+
+离线阶段 / 算子测量和预算边界测试保留各自规定的显式参数.
+
+`tests/test_serving_http.py` 检查真实 Rust HTTP, ZMQ, Python sampler 和 checkpoint 合并, 不执行 GPU 推理.
+它检查显式零, null 省略, 服务修改和 worker 启动前的拒绝.
+Rust 测试为 CLI 与请求字段共用同一校验函数.
+
 ## 思考预算验收
 
 构建 release binary, 用 `serve --thinking-token-budget 32` 启动各模式服务.
@@ -389,9 +404,9 @@ Collector 管理 4 个持久 OMP 进程和临时记录代理.
 中途不排空, 不插入故障 probe. 一小时结束后完成在途工作, 再排空请求.
 
 任务和摘要使用 OMP `max`, 映射为服务的 `xhigh`.
-此工作负载使用 `serve --thinking-token-budget 8192`, 从 diagnostics 和请求 metric 记录有效值.
-此值是测试配置, 不是质量或延迟建议.
-OMP 在两种 OpenAI API 中省略此字段. 服务默认值也适用于它的摘要请求.
+此工作负载使用生产采样和思考预算默认值, 不另设启动覆盖值.
+从 diagnostics 记录有效服务值, 从请求 metric 记录添加服务默认值后的采样字段.
+OMP 在两种 OpenAI API 中省略这些字段. 服务默认值也应用于其摘要请求.
 模型 context window 为 `262144`, 任务输出上限为 `32768`, 包含 reasoning token.
 本地 `qwen3` tokenizer 元数据与 provider usage 让 OMP 了解会话大小.
 启用 soft 自动压缩, threshold 为 `196608`, reserve 为 `65536`, 保留最近 `20000` 个 token.

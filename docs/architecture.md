@@ -40,6 +40,12 @@ DSpark proposal probabilities can differ from the constrained target distributio
 | `crates/zmq-worker/src/main.rs` | CLI, offline driver, benchmark timing, and runtime configuration. |
 | `crates/zmq-worker/src/serving/` | Axum HTTP, typed events, tool parsing, response storage, and online admission. |
 
+`serving/sampling.rs` owns shared service sampling defaults and the validation used by requests and CLI overrides.
+Each HTTP API and draft mode uses this layer before Python request preparation.
+Explicit request values take precedence over service defaults. Python adds checkpoint defaults for fields without explicit values.
+Production and test HTTP services use the same default presence penalty `0.5`.
+[ADR-015](decisions/ADR-015-shared-serving-sampling-defaults.md) records the selected parameters and verification limits.
+
 ## Python modules
 
 | Module | Responsibility |

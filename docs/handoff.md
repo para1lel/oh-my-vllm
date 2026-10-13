@@ -175,8 +175,8 @@ Focused GPU regressions passed `69` tests, with the previous exact checks and `1
 Their runtime source files stayed unchanged during execution. All owned GPU processes exited.
 The tutorial passed ten excerpt tests and nine browser tests after the chapter updates.
 
-The next persistent collections keep four sessions per mode for at least `3600` active seconds each, without intermediate drain.
-Use a service reasoning budget of `8192` and direct-action audit prompts without an exact tool-count quota.
+The previous persistent workload required four sessions per mode, with at least `3600` active seconds each and no intermediate drain.
+It used a service reasoning budget of `8192` and direct-action audit prompts without an exact tool-count quota.
 Prompts tell agents to give file and line references without a copy of source text.
 The collector turn deadline is `7200` seconds. Worker step and service request deadlines stay `600` and `1800` seconds.
 First-use compilation and capture stay inside the workload, without separate warmup.
@@ -332,6 +332,49 @@ Independent review checked the original results, equal source hashes before and 
 Rust passed `152` tests. The eight required checks and all-files hooks passed.
 The tutorial passed ten source-display tests and nine browser tests.
 New committed-source GPU acceptance and independent continuous memory review are open.
+
+## Shared service sampling
+
+Source `249bbb0` passed all `485` GPU tests, six full-context cases, and the ordinary and MTP4 phase rows at batches `1/2/4`.
+Independent review checked original results, source identities, and owned process exit.
+Its long-MTP batch `4` completed normally. Independent phase-model review for that row is still open.
+The operator collection saved `361` of `517` rows before cancellation. These partial rows do not supply full acceptance.
+
+Its MTP persistent test failed after `2379.1744` seconds with repeated ordinary text.
+The reasoning channel had no repeated cycle. The SDK label did not identify the output channel.
+The request used checkpoint temperature `1`, top_p `.95`, and top_k `20`, with presence penalty `0` and repetition penalty `1`.
+
+The server recorded `5035` generated tokens on cancellation, before the explicit service reasoning budget `8192` and total context limit.
+Original failed records keep their status and usage limitations.
+
+The DSpark persistent test and other unfinished collections were canceled before sampling changes.
+All eleven collection roots were reaped. Task-owned GPU processes exited before the first source edit.
+The source stayed equal during cancellation. Original failed and canceled records stay unchanged.
+Neither persistent test supplies one-hour or independent memory acceptance.
+
+The service uses one shared presence penalty default `0.5` for production and test HTTP services in each draft mode.
+Checkpoint temperature, top_p, top_k, total limits, and the separate reasoning budget default `-1` keep their previous values.
+Use `--override-generation-config` for validated service changes. Explicit request values take precedence, with `0` to disable the presence penalty.
+
+Diagnostics show service defaults. Request metrics show service and explicit request sampling fields, before Python checkpoint merge.
+[ADR-015](decisions/ADR-015-shared-serving-sampling-defaults.md) records official guidance and the configuration limits.
+The selected penalty is in Qwen's adjustment range, but new stochastic and persistent-session acceptance are necessary.
+
+New persistent tests must use production sampling and reasoning-budget defaults, without different startup overrides.
+Budget boundary tests and offline greedy measurements keep their specified explicit parameters.
+The new integration regression failed before implementation, then passed.
+Three Rust sampling tests and three HTTP/ZMQ/Python tests passed, with `13` subtests.
+
+The first all-target Rust checks failed because the standalone normalizer had no reference to the new sampling module.
+The CPU collection stopped before that module reference changed. The original failed and canceled records stay unchanged.
+
+After the fix, Rust passed `158` tests. The eight required checks, release build, and all-files hooks passed.
+
+The full CPU suite passed `1486` tests and `132` subtests, with `485` GPU tests not selected and ten dependency warnings.
+Source and test file hashes stayed equal during execution.
+The tutorial passed ten source-display tests and nine browser tests after the final request-null wording clarification.
+
+New committed-source GPU acceptance and independent resource review are open.
 
 ## Open work
 

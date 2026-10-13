@@ -9,6 +9,10 @@ use serde_json::{Value, json};
 #[path = "../serving/request.rs"]
 mod request;
 
+#[allow(dead_code)]
+#[path = "../serving/sampling.rs"]
+mod sampling;
+
 fn main() -> anyhow::Result<()> {
     let mut output = io::stdout().lock();
     for line in io::stdin().lock().lines() {

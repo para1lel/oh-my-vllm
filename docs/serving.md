@@ -55,6 +55,21 @@ The API subset follows [Chat Completions](https://developers.openai.com/api/refe
 
 Sampling supplies temperature, top_p, top_k, seed, and frequency/presence/repetition penalties.
 Checkpoint defaults are temperature `1`, top_p `.95`, and top_k `20`.
+
+The shared HTTP service default adds presence_penalty `0.5`. Frequency penalty stays `0`, and repetition penalty stays `1`.
+Ordinary, MTP4, DSpark, and test services use the same defaults.
+The separate reasoning budget stays `-1` by default.
+Use `serve --override-generation-config` with a JSON object to change supported sampling defaults.
+Explicit request values take precedence over service values, which take precedence over checkpoint values.
+
+Only the supported sampling keys are permitted. Invalid CLI values fail before model loading.
+A request's null sampling field uses the default. An explicit `0` disables the default presence penalty.
+
+Diagnostics report service defaults. Request metrics report the merged service and explicit request sampling fields.
+Python adds checkpoint defaults for fields without explicit values.
+
+The [sampling decision](decisions/ADR-015-shared-serving-sampling-defaults.md) records the model guidance, selected value, and verification limits.
+
 Offline Run/Bench use greedy sampling, fixed output length, and ignore EOS.
 
 Tool choice can be auto, none, required, or a named function.

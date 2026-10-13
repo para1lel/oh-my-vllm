@@ -206,6 +206,7 @@ Compare loaded DSpark configuration and weight hashes with the requested checkpo
 | REQ-SERVE-003 | Complete oh-my-pi tasks through each API with MTP4 and DSpark. Read files without error and use their returned results in subsequent model input. |
 | REQ-SERVE-004 | Apply JSON/Schema/strict-tool masks before sampling, with each mode's drafts and bonus tokens. Reject unsupported schemas. |
 | REQ-SERVE-005 | Examine queue time, preparation, TTFT, output rate, cache behavior, and draft counters without an extra HTTP throughput gate. |
+| REQ-SERVE-008 | Use shared production and test service sampling defaults across ordinary, MTP4, DSpark, the two APIs, and automatic compaction. Explicit values take precedence. |
 
 [Service contracts](serving.md) define supported parameters, XML restrictions, storage limits, and errors.
 Scripted workers alone cannot show target-model acceptance.

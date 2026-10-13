@@ -109,6 +109,21 @@ Full-model drift tests use their documented model-level bounds in addition to st
 Use scripted workers for protocol regressions and the target checkpoint for GPU/agentic acceptance.
 Record warnings and skipped tests with their reasons.
 
+## Shared service sampling acceptance
+
+Test HTTP services use production defaults.
+The two APIs and each draft mode use the same validation and precedence.
+The default presence penalty is `0.5`. The separate reasoning budget default is `-1`.
+
+Persistent acceptance must use these defaults. Record service defaults and request sampling fields after service defaults are added from the original diagnostics and metrics.
+Maximum effort and output/context limits stay explicit workload settings.
+
+Offline phase/operator measurements and budget boundary tests keep their specified explicit parameters.
+
+`tests/test_serving_http.py` checks Rust HTTP, ZMQ, Python sampler, and checkpoint merge without GPU inference.
+It checks explicit zero, null omission, service changes, and rejection before worker launch.
+Rust tests use the same validation function for CLI and request fields.
+
 ## Reasoning budget acceptance
 
 Build the release binary and start each service with `serve --thinking-token-budget 32`.
@@ -398,9 +413,9 @@ Record these limits from diagnostics. They let cold compilation complete without
 Do not insert intermediate drains or fault probes. After the hour, complete active work and drain requests.
 
 Use OMP `max` for tasks and summaries, mapped to service `xhigh`.
-Use `serve --thinking-token-budget 8192` for this workload and record the effective value from diagnostics and request metrics.
-This value is a test configuration, not a quality or latency recommendation.
-OMP omits the field in the two OpenAI APIs. The service default also applies to its summary requests.
+Use production sampling and reasoning-budget defaults for this workload, without different startup overrides.
+Record effective service values from diagnostics and sampling fields after service defaults are added from request metrics.
+OMP does not supply these fields in the two OpenAI APIs. Service defaults also apply to its summary requests.
 
 The model context window is `262144` and its task output limit is `32768`, with reasoning tokens.
 Use the local `qwen3` tokenizer metadata and provider usage to keep OMP aware of the conversation size.

@@ -39,6 +39,12 @@ DSpark 提议概率可以与受约束的 target 分布不同. 它的拒绝修正
 | `crates/zmq-worker/src/main.rs` | CLI, 离线驱动, 基准计时和运行配置. |
 | `crates/zmq-worker/src/serving/` | Axum HTTP, 类型化事件, 工具解析, 响应存储和在线接纳. |
 
+`serving/sampling.rs` 负责公共服务采样默认值, 以及请求与 CLI 覆盖配置共用的校验.
+各 HTTP API 和草稿模式在 Python 请求准备前使用此层.
+请求显式值优先于服务默认值. Python 为省略的字段补充 checkpoint 默认值.
+生产和测试 HTTP 服务统一使用默认 presence penalty `0.5`.
+[ADR-015](decisions/ADR-015-shared-serving-sampling-defaults.zh.md) 记录选定参数和验证限制.
+
 ## Python 模块
 
 | 模块 | 职责 |

@@ -3,6 +3,7 @@ mod events;
 mod parser;
 mod request;
 mod resources;
+mod sampling;
 
 use crate::{client::WorkerClient, error::Error as WorkerError};
 use anyhow::{Context, Result};
@@ -70,6 +71,9 @@ pub struct ServeArgs {
     #[arg(long, default_value_t = -1, allow_hyphen_values = true,
         value_parser = clap::value_parser!(i64).range(-1..=1_048_576))]
     pub thinking_token_budget: i64,
+    /// Sampling defaults for omitted request fields, above checkpoint defaults.
+    #[arg(long, default_value = "{}", value_parser = sampling::parse_overrides)]
+    pub override_generation_config: Value,
     #[arg(long, default_value_t = 35)]
     pub shutdown_grace_seconds: u64,
     /// Conservative host state reserved across input, output, and stream drain.
@@ -146,6 +150,7 @@ struct App {
     store: Arc<Mutex<Store>>,
     model: String,
     thinking_token_budget: i64,
+    sampling_defaults: Value,
     budget: Budget,
     health: Arc<Mutex<Value>>,
     request_timeout: Duration,
@@ -419,6 +424,7 @@ async fn generate(
     if request.normalized["thinking_token_budget"].is_null() {
         request.normalized["thinking_token_budget"] = json!(app.thinking_token_budget);
     }
+    sampling::apply_defaults(&mut request.normalized["sampling"], &app.sampling_defaults);
     let streaming = request.stream;
     let request_bytes = serialized_bytes(&request.original)
         .unwrap_or(usize::MAX)
@@ -530,6 +536,7 @@ async fn delete(State(app): State<App>, Path(id): Path<String>) -> Response {
 }
 
 pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) -> Result<()> {
+    let sampling_defaults = sampling::service_defaults(&args.override_generation_config)?;
     anyhow::ensure!(
         args.response_capacity > 0
             && args.response_max_bytes > 0
@@ -569,6 +576,7 @@ pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) 
             "request_timeout_seconds": args.request_timeout_seconds,
             "worker_step_timeout_seconds": args.worker_step_timeout_seconds,
             "thinking_token_budget": args.thinking_token_budget,
+            "override_generation_config": sampling_defaults,
             "worker_restart_attempts": args.worker_restart_attempts,
             "diagnostics_interval_seconds": args.diagnostics_interval_seconds,
         },
@@ -578,6 +586,7 @@ pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) 
         store: store.clone(),
         model: args.served_model_name.clone(),
         thinking_token_budget: args.thinking_token_budget,
+        sampling_defaults,
         budget: budget.clone(),
         health: health.clone(),
         request_timeout: Duration::from_secs(args.request_timeout_seconds),
@@ -909,6 +918,7 @@ impl Active {
                 "processing_started_unix_s": self.processing_started_unix_s,
                 "generation_completed_unix_s": unix_seconds(),
                 "thinking_token_budget": self.output.request.normalized["thinking_token_budget"],
+                "sampling": self.output.request.normalized["sampling"],
                 "output_tokens": self.output.output_tokens,
                 "prefix_hit_tokens": self.output.cached_tokens,
                 "queue_seconds": self.processing_started.duration_since(self.started).as_secs_f64(),

@@ -199,6 +199,7 @@ Profiling 需显式选择.
 | REQ-SERVE-003 | MTP4 和 DSpark 分别通过两种 API 完成真实 oh-my-pi 任务, 实际读文件并将结果传入后续模型输入. |
 | REQ-SERVE-004 | 采样前施加 JSON / Schema / strict-tool mask, 包括每种模式的草稿和 bonus token; 拒绝不支持的 schema. |
 | REQ-SERVE-005 | 检查排队, 准备, TTFT, 输出速率, 缓存和草稿计数, 不增加 HTTP 吞吐门槛. |
+| REQ-SERVE-008 | 生产和测试服务在普通, MTP4, DSpark, 两种 API 及自动压缩中使用公共采样默认值. 显式值优先. |
 
 [服务合同](serving.zh.md) 定义支持的参数, XML 限制, 存储限制和错误.
 单独使用 scripted worker 不能证明真实模型验收.

@@ -55,6 +55,21 @@ API 子集遵循 [Chat Completions](https://developers.openai.com/api/reference/
 
 采样支持 temperature, top_p, top_k, seed, 以及 frequency/presence/repetition penalty.
 Checkpoint 默认 temperature `1`, top_p `.95`, top_k `20`.
+
+公共 HTTP 服务默认增加 presence_penalty `0.5`. Frequency penalty 保持 `0`, repetition penalty 保持 `1`.
+普通, MTP4, DSpark 和测试服务使用相同的默认值.
+独立思考预算默认仍为 `-1`.
+用 `serve --override-generation-config` 和 JSON object 修改支持的采样默认值.
+请求显式值优先于服务值, 服务值优先于 checkpoint 值.
+
+仅允许支持的采样键. 无效 CLI 值会在模型加载前失败.
+请求中为 null 的采样字段使用默认值. 显式 `0` 关闭默认 presence penalty.
+
+Diagnostics 报告服务默认值. 请求 metric 报告合并后的服务和请求显式采样字段.
+Python 为省略的字段补充 checkpoint 默认值.
+
+[采样决策](decisions/ADR-015-shared-serving-sampling-defaults.zh.md) 记录模型指导, 选定值和验证限制.
+
 离线 Run/Bench 使用 greedy sampling, 固定输出长度并忽略 EOS.
 
 Tool choice 支持 auto, none, required 和指定函数.

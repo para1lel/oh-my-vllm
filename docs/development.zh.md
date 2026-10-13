@@ -135,6 +135,21 @@ worker 启动时选择一种模式. 在 worker 停止前保持该模式.
 总输出限制继续生效. Effort 设置不改变数值预算.
 示例和限制见[服务契约](serving.zh.md#思考与重放).
 
+## 公共服务采样默认值
+
+生产和测试 HTTP 服务在普通, MTP4 和 DSpark 模式中使用相同的采样默认值.
+默认 presence penalty 为 `0.5`, checkpoint temperature 为 `1`, top_p 为 `.95`, top_k 为 `20`.
+独立思考预算默认是 `-1`. 显式请求或服务选项可以修改这些值.
+用包含支持的采样键的 JSON object 修改服务配置:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/sampling-serve.ipc serve --override-generation-config '{"presence_penalty":0}'
+```
+
+此示例显式关闭 presence penalty. 其他默认值继续生效.
+两种 API 和 OMP 自动压缩在请求省略这些字段时使用相同的服务默认值.
+优先顺序和 diagnostics 见[服务契约](serving.zh.md#采样-工具与停止).
+
 ## 构建与检查
 
 ```bash

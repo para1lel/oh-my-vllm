@@ -139,6 +139,21 @@ A nonnegative value limits generated reasoning content tokens. The closing marke
 Keep the total output limit effective. Effort settings do not change the numeric budget.
 See [service contracts](serving.md#thinking-and-replay) for examples and limits.
 
+## Shared service sampling defaults
+
+Production and test HTTP services use the same sampling defaults in ordinary, MTP4, and DSpark modes.
+The default presence penalty is `0.5`, with checkpoint temperature `1`, top_p `.95`, and top_k `20`.
+The default separate reasoning budget is `-1`. Explicit requests or service options can change these values.
+Use a JSON object with supported sampling keys for service changes:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/sampling-serve.ipc serve --override-generation-config '{"presence_penalty":0}'
+```
+
+This example explicitly disables the presence penalty. Other defaults stay effective.
+The two APIs and OMP automatic compaction use the same service defaults when their requests do not supply these fields.
+See [service contracts](serving.md#sampling-tools-and-stopping) for precedence and diagnostics.
+
 ## Build and checks
 
 ```bash

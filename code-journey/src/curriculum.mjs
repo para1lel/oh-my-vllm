@@ -82,6 +82,7 @@ export const coverage = [
   ["Sampling", "python/oh_my_vllm/worker/sampler.py", "def probabilities(", "probabilities / greedy_rows / verify_rows / RequestSampler", "根据已确认历史调整分数, 应用逐行语法位掩码, 再筛选和采样. 惩罚计数与随机生成器按请求保留; 无惩罚贪心路径只回传选中 ID 和有效标志."],
   ["Sampling", "python/oh_my_vllm/worker/serving.py", "class Generation", "Generation.consume / ServingAdapter.masks", "只提交停止条件之前保留的 ID, DecodeStream 保留跨 token 的 UTF-8 片段, 暂存可能属于 stop 前缀的字符. 草稿语法先试探再回滚, 正式提交时再推进 matcher."],
   ["Sampling", "crates/zmq-worker/src/serving/mod.rs", "async fn run_engine(", "HTTP handlers / run_engine / StreamBuffer / Store", "准备接纳与 execute 交错, 背压暂停调度但保留缓存, 断连和超时取消请求. 流式缓冲有界; 结束后限时排空, Responses 存储限制数量与体积."],
+  ["Sampling", "crates/zmq-worker/src/serving/sampling.rs", "pub fn service_defaults(", "service_defaults / extract / apply_defaults", "各服务模式共用生产和测试默认采样配置. 服务覆盖值先经请求同一套数值校验, 请求显式值优先于服务值, 最后由 Python 补充 checkpoint 默认值; 显式零与省略字段的含义不同."],
   ["Sampling", "crates/zmq-worker/src/serving/parser.rs", "pub struct Parser", "Parser.feed / feed_length / ToolProgress", "增量识别推理, 正文和工具调用, 保留不完整标记直到下一片段. 按 schema 恢复类型, 检查标签和重复参数, 长度截断时丢弃未闭合工具调用."],
   ["Sampling", "crates/zmq-worker/src/serving/events.rs", "pub struct Output", "Output.start / delta / finish / history", "把解析后的增量翻译为 Chat 或 Responses 事件, 统计输入/缓存/输出/推理用量, 组装完成响应并保存可重放历史."],
   ["Speculation", "python/oh_my_vllm/worker/mtp.py", "class MTP", "MTP.propose / validate_state / forget / _run", "MTP 行 p 使用目标 hidden[p-1] 与 token[p]. 缓存边界隐藏特征, 验证后选已接受状态; 四草稿一路在图中产生, 接近分配边界时逐步缩短提议."],

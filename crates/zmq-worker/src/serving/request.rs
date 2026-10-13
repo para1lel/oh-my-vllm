@@ -420,57 +420,7 @@ pub fn normalize(
             json!(budget)
         }
     };
-    let mut sampling = json!({});
-    for key in [
-        "temperature",
-        "top_p",
-        "top_k",
-        "seed",
-        "frequency_penalty",
-        "presence_penalty",
-        "repetition_penalty",
-    ] {
-        if let Some(value) = body.get(key).filter(|v| !v.is_null()) {
-            ensure!(value.is_number(), "{key} must be numeric");
-            sampling[key] = value.clone();
-        }
-    }
-    if let Some(value) = sampling["temperature"].as_f64() {
-        ensure!(value >= 0.0, "temperature must be nonnegative");
-    }
-    if let Some(value) = sampling["top_p"].as_f64() {
-        ensure!(value > 0.0 && value <= 1.0, "top_p must be in (0,1]");
-    }
-    if !sampling["top_k"].is_null() {
-        ensure!(
-            sampling["top_k"].as_i64().is_some_and(|value| value >= -1),
-            "top_k must be an integer >= -1"
-        );
-    }
-    if !sampling["seed"].is_null() {
-        ensure!(
-            sampling["seed"].as_i64().is_some(),
-            "seed must be an integer"
-        );
-    }
-    for key in ["frequency_penalty", "presence_penalty"] {
-        if let Some(value) = sampling[key].as_f64() {
-            ensure!((-2.0..=2.0).contains(&value), "{key} must be in [-2,2]");
-        }
-    }
-    // A temperature in (0, 1e-5) causes NaN in softmax; treat it as greedy.
-    if sampling["temperature"]
-        .as_f64()
-        .is_some_and(|t| t > 0.0 && t < 1e-5)
-    {
-        sampling["temperature"] = json!(0.0);
-    }
-    if let Some(penalty) = sampling["repetition_penalty"].as_f64() {
-        ensure!(
-            (1e-5..=1e5).contains(&penalty),
-            "repetition_penalty must be in [1e-5,1e5]"
-        );
-    }
+    let sampling = super::sampling::extract(&body)?;
     let stop = match body.get("stop") {
         None | Some(Value::Null) => vec![],
         Some(Value::String(s)) => vec![s.clone()],

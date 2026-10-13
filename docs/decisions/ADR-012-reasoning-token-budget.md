@@ -69,4 +69,5 @@ Keep those failures and test the affected workloads again after changes.
 CPU cases check zero, disabled and unlimited reasoning, total length, typed validation, and mixed requests.
 They check draft prefixes, rollback, bonus rows, grammar transitions, and DSpark rejection with different proposal probabilities.
 Target-model checks must cover ordinary, MTP4, DSpark, the two APIs, streams, JSON, tools, and the service default.
-The one-hour persistent-session workload must keep maximum effort and record its explicit service budget.
+The one-hour persistent-session workload must keep maximum effort and record the shared production service budget.
+Use production defaults unless a test explicitly examines a different budget.

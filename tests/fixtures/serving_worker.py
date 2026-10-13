@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import time
+from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -103,7 +104,10 @@ def main():
                     raise RequestValidationError("fixture invalid request")
                 if "prepare-internal" in content:
                     raise RuntimeError("fixture tokenizer failure")
-                prompt, _ = adapter.prepare(rid, request)
+                prompt, params = adapter.prepare(rid, request)
+                if path := os.environ.get("OH_MY_VLLM_FIXTURE_SAMPLING"):
+                    with Path(path).open("a") as output:
+                        output.write(json.dumps(asdict(params)) + "\n")
                 history = request["messages"]
                 tool_results = any(item["role"] == "tool" for item in history)
                 text = history[-1].get("content") or ""
