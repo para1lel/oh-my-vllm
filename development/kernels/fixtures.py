@@ -7,6 +7,7 @@ import torch
 from development.kernels.timing import reference_operator
 
 ENTRIES = {
+    "attention_gate": ("elementwise", "attention_gate"),
     "prepare_attention": ("attention_prepare", "prepare_attention"),
     "prepare_context": ("partial_attention", "prepare_context"),
     "prepare_query": ("partial_attention", "prepare_query"),
@@ -86,7 +87,11 @@ def fixture(
     def metadata(values, dtype=torch.int64):
         return torch.tensor(values, device="cuda", dtype=dtype)
 
-    if operation == "dspark_rms_norm":
+    if operation == "attention_gate":
+        packed = random(n, config["packed_width"])
+        gate = packed[:, :12288].view(n, 24, 512)[..., 256:]
+        args = (random(n, 24, 256), gate)
+    elif operation == "dspark_rms_norm":
         args = (random(n, 5120), random(5120))
     elif operation == "dspark_norm_rope":
         # The supplied frequency vector matches the production YaRN blend.

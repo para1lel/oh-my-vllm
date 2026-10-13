@@ -5,6 +5,13 @@ import torch
 from .backend import kernel
 
 _silu_mul = kernel("elementwise", "_silu_mul")
+_attention_gate = kernel("elementwise", "_attention_gate")
+
+
+def attention_gate(input: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+    output = torch.empty(input.shape, device=input.device, dtype=input.dtype)
+    _attention_gate()(input, gate, output)
+    return output
 
 
 def silu_mul(packed: torch.Tensor) -> torch.Tensor:

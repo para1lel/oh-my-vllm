@@ -3,6 +3,7 @@
 #include "operators/quantization.cuh"
 #include "operators/normalization.cuh"
 #include "operators/attention_prepare.cuh"
+#include "operators/attention_gate.cuh"
 #include "operators/gdn.cuh"
 #include "operators/convolution.cuh"
 #include "operators/attention_math.cuh"

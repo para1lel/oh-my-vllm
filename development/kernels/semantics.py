@@ -23,6 +23,14 @@ ATTENTION_SCALE = 256**-0.5
 )
 class Operators:
     @func
+    def attention_gate(
+        input: Tensor[(2, 24, 256), DType.bf16],
+        gate: Tensor[(2, 24, 256), DType.bf16],
+    ):
+        factor = tf.cast(tf.sigmoid(tf.cast(gate, "f32")), "bf16")
+        return tf.cast(tf.cast(input, "f32") * tf.cast(factor, "f32"), "bf16")
+
+    @func
     def silu(x: Tensor[(2, 512), DType.bf16]):
         gate = tf.cast(x[:, :256], "f32")
         activated = tf.cast(tf.silu(gate), "bf16")

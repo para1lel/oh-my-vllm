@@ -18,7 +18,27 @@ def test_all_317_original_cases_are_unchanged_and_preserved():
         row = observed[previous["id"]]
         assert row["configuration"] == previous["configuration"]
         assert set(previous["workloads"]) <= set(row["workloads"])
-    assert len(observed) == 517
+    assert len(observed) == 539
+
+
+def test_attention_gate_covers_full_and_selected_legal_maxima():
+    rows = [
+        row for row in cases() if row["configuration"]["operation"] == "attention_gate"
+    ]
+    configurations = {tuple(sorted(row["configuration"].items())) for row in rows}
+    assert len(rows) == len(configurations) == 22
+    assert {
+        (row["configuration"]["tokens"], row["configuration"]["packed_width"])
+        for row in rows
+    } >= {
+        (32768, 14336),
+        (32290, 14336),
+        (32, 14336),
+        (25, 12288),
+    }
+    assert {workload for row in rows for workload in row["workloads"]} == {
+        workload for row in cases() for workload in row["workloads"]
+    }
 
 
 def test_multiple_prefill_maxima_cover_the_new_projection_and_state_paths():

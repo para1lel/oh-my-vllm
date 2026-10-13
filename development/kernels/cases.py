@@ -203,6 +203,7 @@ def original_cases():
 
 def cases():
     """Keep every original case and add maxima for all fifteen active workloads."""
+    from .attention_gate_cases import attention_gate_cases
     from .long_prefill_cases import long_prefill_cases
 
     original = original_cases()
@@ -217,7 +218,8 @@ def cases():
             for workload in row["workloads"]:
                 if workload not in previous["workloads"]:
                     previous["workloads"].append(workload)
-    return list(merged.values())
+    matrix = list(merged.values())
+    return matrix + attention_gate_cases(matrix)
 
 
 # The quantized checkpoint's MLP uses fused SiLU quantization, and Q/K use

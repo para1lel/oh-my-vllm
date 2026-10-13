@@ -54,6 +54,7 @@ def runtime_contract():
 
 
 IR_OPERATIONS = {
+    "attention_gate",
     "add_norm_fp8_linear",
     "gated_norm_fp8_linear",
     "add_rms_norm",

@@ -22,6 +22,10 @@ class Site:
 
 
 SITES = (
+    Site("models/qwen.py", "Layer.full_attention", "attention_gate", "attention_gate"),
+    Site(
+        "models/qwen.py", "Layer.forward_selected", "attention_gate", "attention_gate"
+    ),
     Site("models/qwen.py", "Linear.__call__", "fp8.linear", "fp8_linear"),
     Site("models/qwen.py", "Linear.silu", "fp8.linear", "fp8_linear"),
     Site("models/qwen.py", "Linear.silu", "silu_mul", "silu_mul"),

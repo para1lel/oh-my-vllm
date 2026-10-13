@@ -5,6 +5,7 @@ import torch
 # Match the existing independent operator tests. State copies have exact BF16
 # values; GDN recurrent state retains the model-path BF16/FP32 tolerance.
 _TOLERANCES = {
+    "attention_gate": (0, 0),
     "gates": (2e-6, 2e-6),
     "qk": (0.002, 0.004),
     "quant": (0, 0),

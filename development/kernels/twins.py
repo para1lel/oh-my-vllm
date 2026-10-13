@@ -54,6 +54,10 @@ def _prefill_delta(q, k, v, g, beta, state):
 @runtime_module(Operators)
 class CUDA:
     @runtime_func
+    def attention_gate(self, input, gate):
+        return elementwise.attention_gate(input, gate)
+
+    @runtime_func
     def silu(self, x):
         return elementwise.silu_mul(x)
 

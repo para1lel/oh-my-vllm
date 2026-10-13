@@ -15,6 +15,7 @@ import torch.nn.functional as F
 from safetensors import safe_open
 
 from oh_my_vllm.ir import fp8
+from oh_my_vllm.ir.attention_gate import attention_gate
 from oh_my_vllm.ir.gdn_prefill import gdn_prefill
 from oh_my_vllm.ir.gdn_prepare import gdn_prepare
 from oh_my_vllm.ir.logits import logits_gemm
@@ -187,7 +188,7 @@ class Layer:
             packed, self.q_norm, self.k_norm, batch.positions, cache, batch.fa_slots
         )
         out = batch.attention(q, cache)
-        return self.out((out * gate.sigmoid()).flatten(1))
+        return self.out(attention_gate(out, gate).flatten(1))
 
     def delta_attention(
         self, x: torch.Tensor, batch: Batch, cache: tuple[torch.Tensor, torch.Tensor]
@@ -281,7 +282,7 @@ class Layer:
         q = prepare_query(packed, self.q_norm, batch.positions.index_select(0, indices))
         gate = packed.reshape(-1, 24, 512)[..., 256:]
         attended = output_attention(q, cache)
-        result = self.out((attended * gate.sigmoid()).flatten(1))
+        result = self.out(attention_gate(attended, gate).flatten(1))
         return self.mlp_residual(result, residual)
 
     def __call__(

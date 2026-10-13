@@ -94,6 +94,22 @@ All 517 operator cases passed the dirty-source diagnostic matrix, with complete 
 It is not formal acceptance. Current-source complete GPU, capacity, phase, and one-hour acceptance is pending.
 Model probes are diagnostic and do not meet the two-times latency gate.
 
+Committed source `51dea95` passed the formal 517-case operator matrix with complete coverage and no interference.
+Its complete non-boundary GPU selection passed 586 cases and failed one MTP changed-metadata greedy-equivalence check.
+The failing record is kept. It is not complete GPU acceptance.
+
+The repair keeps the attention sigmoid's BF16 rounding before its BF16 product.
+See [attention gate](../python/oh_my_vllm/ir/attention_gate.py).
+The unchanged full-model compile test and gate precision/replay checks passed all five cases.
+The independent native gate matched Torch for all BF16 gate bit patterns.
+
+Selected CPU checks passed 23 cases and two subtests. Formal-case and coverage checks passed 16 cases.
+Independent review corrected a host launch-grid overflow and found no further source blocker.
+
+The formal harness adds 22 full and selected gate shapes without removing any of the previous 517 case IDs.
+Their numerical gate is exact. Current-source formal matrix and full GPU acceptance are pending.
+The theoretical equations are unchanged. Framework phase, capacity, and one-hour acceptance are pending.
+
 Summaries with obsolete comparison provenance were removed from the working tree. Git history keeps their original results.
 See the [acceptance index](acceptance.md) for current collection scope.
 

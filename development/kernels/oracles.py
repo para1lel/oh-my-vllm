@@ -147,6 +147,7 @@ def quantize(x, *, column_major=False, silu_gate=False):
 
 def operator(module, name):
     from oh_my_vllm.ir import (
+        attention_gate,
         dspark,
         fp8,
         normalized_linear,
@@ -157,6 +158,7 @@ def operator(module, name):
     )
 
     direct = {
+        ("elementwise", "attention_gate"): attention_gate._native,
         ("attention", "append"): append,
         ("attention_prepare", "prepare_attention"): state._native_prepare,
         ("partial_attention", "prepare_context"): partial_attention._native_context,

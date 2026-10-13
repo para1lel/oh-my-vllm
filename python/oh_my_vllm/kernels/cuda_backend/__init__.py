@@ -17,6 +17,7 @@ _FUNCTIONS = (
     "rms_quantize",
     "gated_quantize",
     "silu_mul",
+    "attention_gate",
     "gates",
     "rms",
     "add_rms",
@@ -474,6 +475,8 @@ def factory_for(module, name):
         return lambda: compiled().gates
     if (module, name) == ("elementwise", "_silu_mul"):
         return lambda: compiled().silu_mul
+    if (module, name) == ("elementwise", "_attention_gate"):
+        return lambda: compiled().attention_gate
     if (module, name) != ("fp8", "_quantize"):
         return missing
 
