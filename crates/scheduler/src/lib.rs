@@ -81,6 +81,7 @@ impl Scheduler {
     pub fn cache_resource_counts(&self) -> (usize, usize, usize, usize, usize, usize) {
         self.kv.resource_counts()
     }
+
     pub fn reset_prefix_cache(&mut self) -> bool {
         self.running.is_empty() && self.waiting.is_empty() && self.kv.reset_prefix_cache()
     }

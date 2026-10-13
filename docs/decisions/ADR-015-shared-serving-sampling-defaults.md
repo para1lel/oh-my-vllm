@@ -56,7 +56,7 @@ These metric fields exclude checkpoint values added by Python.
 The CPU fixture separately records Python sampling parameters after checkpoint merge.
 
 Use the shared `repetition_guard=true` default for generated-token cycles. Permit explicit boolean overrides.
-The [service contract](../serving.md#sampling-tools-and-stopping) defines the bounded rule and grammar fallback.
+The [service contract](../serving/api.md#sampling-tools-and-stopping) defines the bounded rule and grammar fallback.
 The rule applies before top-k/top-p in target distributions and DSpark proposal distributions.
 Offline fixed-length greedy workloads explicitly disable it.
 It changes repeated output, with intentional repetitions, and does not guarantee task completion.

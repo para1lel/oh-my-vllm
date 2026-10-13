@@ -5,6 +5,25 @@ Use its writing rules and approved dictionary meanings, parts of speech, and for
 Use the [project glossary](glossary.md) for necessary technical nouns and verbs.
 The standard permits technical terms. This glossary does not authorize general-purpose synonyms.
 
+## Disclosure and source links
+
+Keep each owned English document at most 2000 English words. Apply the same limit to optional `LOCAL.md`.
+Count headings, prose, tables, link labels, and inline identifiers. Exclude fenced code, link destinations, and source metadata.
+
+Split topics into linked pages. Root guides give direction. Directory guides give local contracts.
+
+Keep background, equations, invariants, and decision reasons. Link implementation details to source files.
+Do not copy signatures, dispatch thresholds, or control flow into prose.
+
+File links check file existence. Implementation links use unique source text and generated line numbers:
+
+```markdown
+[Graph capture](../python/oh_my_vllm/worker/graph_capture.py#L1) <!-- source: def capture_graph( -->
+```
+
+The documentation hook updates that line number. Missing or ambiguous text fails the check.
+Keep the same anchor in the Chinese companion. Generated glossary pages come from `docs/terms.json`.
+
 ## English procedure
 
 Use approved words in their approved meaning and part of speech.

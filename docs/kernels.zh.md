@@ -1,258 +1,55 @@
 # 内核开发
 
-CUDA 是 B200 上项目内核的默认后端.
-冻结 TileLang 后端作为显式比较对象.
-第三方库内部可以使用 Triton.
-实测源码身份见 [验收](acceptance.zh.md), 剩余限制见 [审计](audit.zh.md).
+使用 [算子契约](requirements/kernels.zh.md), [harness 指令](../development/kernels/AGENTS.zh.md) 和 [性能协议](requirements/performance.zh.md).
+当前 provider 迁移状态见 [交接](handoff.zh.md). 不把旧测量当作新验收.
 
-## 后端与来源
+## 实现来源
 
-Python 启动前设置 `OH_MY_VLLM_KERNEL_BACKEND=tilelang` 选择比较后端.
-无效后端或缺失 CUDA 实现会报错.
-不自动回退到 TileLang.
-公共 Python wrapper 保留校验和 factory binding.
-冻结实现保留在 `python/oh_my_vllm/kernels/tilelang_reference/`.
-不调优参考实现.
+[CUDA backend](../python/oh_my_vllm/kernels/cuda_backend/) 负责设备代码和原生绑定.
+[Semantic IR](../python/oh_my_vllm/ir/) 负责算子契约, reference, mutation schema 和 provider 选择.
+[目标模型](../python/oh_my_vllm/models/qwen.py) 提供调用位置的上下文.
 
-`development/kernels/tilelang-reference.json` 绑定以下身份:
+调度, 布局 guard, launch 参数和特化阈值放在这些源码中.
+Torch 不提供的算子使用仓库 CUDA. 允许原生 CUDA 库.
+Python 绑定是进入自有 kernel 的桥接, 不是外部算子 provider.
 
-| 身份 | 值 |
-|---|---|
-| 已验收参考记录 | `02bf35f98ceb6b40a2a813aa3e0cccbfa9067600` |
-| 内核实现 | `da75c02bd9e01556436877acba3243636dec80d6` |
-| 运行依赖 lock SHA-256 | `575d155adcd68f0f4d6fbd5f7268c31a085e26ab315b41a9bb5e2d2868c32cab` |
-| TileFoundry fork | `6b1b1493efcb55f3f2f327b5cc90a01181adf690` |
-
-Manifest 还记录每个参考文件的 SHA-256.
-无关修改中保持这些文件和运行依赖 lock 不变.
-修改 lock / reference 需要显式的新比较决策.
-
-[产物决策](decisions/ADR-012-reasoning-token-budget.zh.md#omp-适配与限制) 在比较环境中添加相同版本的 FlashInfer cubin 包.
-两个 manifest 绑定新运行依赖 lock 及关联 manifest 哈希.
-全部参考内核哈希, TileFoundry commit, 原始 case ID 及数值容差保持不变.
-新的 GPU 验收须使用此环境.
-
-`python/oh_my_vllm/kernels/cuda_backend/kernels.cu` 包含 `operators/` 中的 10 个功能头, 统一构建 native 模块.
-TVM FFI 的 `build_inline` 在首次使用时编译这些输入; `load_module` 加载返回的模块.
-目标为 `sm_100a`, 使用调用方当前 stream.
-包装脚本设置 `TVM_FFI_CUDA_ARCH_LIST=10.0a`; 直接启动时必须显式设置.
-Sidecar 绑定源码 / 配置和精确模块 SHA, nvcc 不可用时支持验证后的复用.
-Capture 和正式计时前完成编译.
-TileFoundry 不属于 native 构建或服务依赖.
-
-### Native 模块划分
-
-| `operators/` 中的模块 | 职责 |
-|---|---|
-| `common.cuh` | PDL, 启动, 错误检查, 存储检查, 计数器, 归约和向量访问. |
-| `quantization.cuh` | FP8 分组量化和 SiLU 乘法. |
-| `normalization.cuh` | 目标模型和 DSpark 的 RMS, 残差 RMS 及 gated RMS. |
-| `attention_prepare.cuh` | Q/K 准备, RoPE, 连续行复制及目标 / 草稿 KV 写入. |
-| `gdn.cuh` | GDN gates, Q/K 归一化和递归状态更新. |
-| `convolution.cuh` | 因果卷积和候选状态写入. |
-| `attention_math.cuh` | Softmax 辅助函数, shared-memory 地址计算和 BF16 MMA 辅助函数. |
-| `decode_attention.cuh` | 目标模型的 split-KV 注意力及稳定合并. |
-| `dspark_decode.cuh` | 草稿注意力读取已提交上下文及具有双向注意力的 7 行候选块. |
-| `normalized_quantization.cuh` | 融合残差 / gated RMS 与 FP8 量化, 保留必要的 BF16 舍入点. |
-
-统一构建使导出函数与设备定义保持在同一模块中.
-Native 模块将全部功能头摘要绑定到缓存键和加载来源记录.
-GEMM 模块独立绑定 `groupwise_fp8.cu` 及根目录的模板头.
-根目录的模板头包括 `groupwise_accum.cuh`.
-构建和加载检查拒绝变化的源码或头文件.
-正式阶段和 profiler 检查将加载的头文件身份与已审查源码比较.
-
-自有 CUDA 后端的每个 `.cu`, `.cuh` 和 `.py` 文件至多 800 行.
-`clang-format` 23.1.3 使用 `.clang-format`, 保留 include 顺序.
-Pre-commit 钩子格式化 native 文件并检查模块大小:
+每个 backend 的 `.cu`, `.cuh`, `.py` 文件最多 800 行.
+使用固定的 clang-format 和定义空行 hook. 必要的数值与寿命说明保持简短.
 
 ```bash
 scripts/with-env.sh python scripts/format_cuda.py
 scripts/with-env.sh python scripts/format_cuda.py --check
+scripts/with-env.sh python scripts/check_definition_spacing.py
 ```
 
-## 合同与实现
+## 数值与状态契约
 
-| 算子 | 当前特性 |
-|---|---|
-| FP8 | Four-element vector, warp REDUX, 精确 scale division 和 packed store. |
-| BF16 finite FP8 scale reciprocal | `rcp.approx`, 一次 residual correction 和两次 `__fmaf_rn`. |
-| 其他 FP8 reciprocal | Nonfinite maxima, FP16 和 FP32 使用精确 `__fdiv_rn`. |
-| SiLU/multiply | Fast exponential 和 paired BF16 multiplication 保留两个 BF16 舍入点. |
-| RMS | Dense width5120 使用对齐, 寄存器内 specialization, epsilon `1e-6`. |
-| Gated RMS | 48 head, width128, stable sigmoid, FP32 gating, 无额外 BF16 舍入点. |
-| Q/K | Packed 16-head row, token stride 10240. 不超过 `320` tokens 的输入使用 four-element load. 更大输入使用 eight-element load. |
-| Convolution | 10240 channel, token stride16384, weight alignment 保护和 source-state snapshot. |
-| GDN | 受保护的 vector state update, FP32 arithmetic, BF16 MTP 或 FP32 ordinary storage. |
-| Attention preparation | Q/K RMS/RoPE, V conversion 和 KV write, 使用 FP64 phase reduction. |
-| Decode attention | BF16 `mma.sync`/`ldmatrix`, FP32 accumulation, sector swizzling, split-KV 和独立 merge. |
+每个算子有输入/输出 shape, dtype, stride, 对齐和 mutation 契约.
+使用独立 Torch reference, 遵守规定精度与舍入边界.
+更高精度不能替代规定的 FP32 除法或可观察的 BF16 cast.
+除返回值比较外, 保留已写状态 witness 和未修改存储检查.
 
-其他支持的 layout 使用 generic CUDA 路径.
-Fast-path guard 包括 alignment, stride, shape 和 disjoint-storage 检查.
-所需 snapshot 完成后, state update 可以合法覆盖自身 source.
-直接 recurrence FFI 要求连续 `int32`/`int64` index tensor, 单调 starts, 合法 reads, 以及合法 writes 或 `-1`.
-不在每次 launch 将 GPU index 内容复制回主机.
-Batch plan 按报告容量校验逻辑 slot.
+融合必须保持数学语义, 已接受状态边界和数值容差.
+缓存和状态存储不能作为临时 donation 目标.
+在 graph replay 中检查变化的输入和 metadata. launch 前拒绝不支持布局或无效绑定.
 
-区分 fresh-output non-aliasing 与 in-place state/cache 合同.
-无效 wrapper 输入在 wrapper 或 C++ 边界拒绝.
-负 attention slot 跳过 KV write, 保留 Q.
-原生 MTP4 verification 最多 5 个 query, DSpark verification 最多 8 个.
-Production wrapper 通过复制对齐未对齐 KV view, 并报告该成本.
-Clone counter 和故障归因见 [profiling](profiling.zh.md).
+## 正式案例
 
-Reduction order 可随 row 数量和 alignment 变化.
-应用 FP64-reference 容差; RMS bitwise batch invariance 不属于合同.
-Gated-RMS sweep 覆盖 input1, weight0.25 时所有 finite BF16 gate.
-没有穷尽全部 input/weight pair.
+从全部十五个框架工作负载推导每条实现路径的最大合法调用.
+路径不同时区分阶段. 相同配置去重.
+不单独最大化不能同时出现的维度.
+正式案例, 独立 reference, harness 和证据摘要放在仓库中.
 
-Finite BF16 maxima 的精确 scale 位于 `[2.232142829e-13,7.565917940e35]`.
-Reciprocal 近似范围为 `[1.321716729e-36,4.480000066e12]`.
-Scale 和 reciprocal 保持 FP32 normal value.
-[PTX reciprocal 规则](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#floating-point-instructions-rcp) 指定近似指令误差界限.
-B200 production 回归覆盖 65280 个 finite BF16 encoding, 32640 个 finite maxima, 有符号 midpoint 派生样本和 nonfinite fallback.
-还覆盖 maximum448 时 126 个正 / 负 FP8 midpoint.
-这些测试的最终 FP8 字节和 scale 与 CPU RN 参考一致.
-此有限测试不穷尽全部 pair, 也不证明中间 quotient 相同.
+算子计时用于诊断瓶颈和比较 candidate. 完整框架提供最终性能门槛.
+比较完整算子, 包含必需复制, reduction 和转换.
+使用交错 candidate/baseline 测量. profiling 与验收计时分开.
+保留原始失败尝试和不可用计数器的状态.
 
-## 正式用例与计时
+## 工具与构建身份
 
-`development/kernels/cases.py` 在 `original_cases()` 中保留全部 317 项历史配置与负载标签.
-补充模块推导十五项活动负载的静态最大值.
-完整矩阵有 517 项, 原有配置和对比版本保持不变.
+TileFoundry 是开发工具. 更新不得悄悄改变生产构建依赖.
+原生头文件单独固定, 将其来源身份与编译器选项, 已加载模块哈希一起记录.
+计时前完成编译和 graph capture.
+临时调优和原始 trace 放在外部存储. 每次运行后停止自有 GPU 进程.
 
-FA fixture 排除 null page0.
-完整操作包括 snapshot, copy 和 split merge.
-`development/kernels/semantics.py` 描述逻辑行为; `twins.py` 绑定冻结的完整操作.
-
-新增 200 项覆盖 prefill 预算分配, 首轮移位 MTP context 和长 MTP attention 元数据路径.
-B2/B4 prefill 有 31360 行, sequence 数量为 `15680/15680` 或 `7840/7840/7840/7840`.
-不复用前缀的 context 有 31358 或 31356 行. 完整链保留 normalization, quantization, KV projection 和 cache preparation.
-
-B1 最后一个对齐 chunk 有 2352 行. Target 尾段每条请求有 `144` 行.
-MTP context 每条请求恢复一行 checkpoint hidden, 因而其尾段每条有 `145` 行.
-用例保留这些形状不同的 normalization, Q/K, convolution, GEMM 和 quantization 路径.
-输出上限附近的三行 verification 也有独立 warp-path 用例.
-
-在页边界完整接受后, MTP context 恢复一行 hidden.
-下一轮每条请求可以有六行 context. 量化案例保留 batch `1/2/4` 下的 `6/12/24` 行.
-Attention 和 MLP 仍为每条请求选择一个 endpoint. 这些案例不增加六行 query attention.
-
-十二项短输入 / prefix 负载保留 FIFO 混合 step 最大值, 一次调用包含 prefill 与活动 decode.
-GDN prefill 排除 decode 行. Convolution 包含这些行.
-MTP context 恢复 checkpoint hidden 行. Prefix context 每条请求有 `625` 行.
-DSpark hidden RMS 案例也覆盖少于 `4096` 行的路径.
-
-Proposal attention 的长度达到 135166. Catch-up 可以包含最终 sampled anchor, 长度达到 135168.
-选定 prefill endpoint 的长度达到 131073. 其图 extent 为 135168.
-Target attention 使用 FlashInfer, 最大长度另为 135167.
-
-新增案例保留元数据类型和 B4 单行 dual-buffer 路径.
-MTP `fc` 使用 BF16, 不能归入自有 FP8 projection.
-每项新增案例沿用原有数值容差和完整计时门槛.
-
-DSpark 为 target verification 和草稿算子增加静态补充 shape.
-原用例 ID 和 8 个冻结 TileLang 文件保持不变.
-`development/kernels/dspark-reference.json` 绑定补充参考及其原始 manifest 哈希.
-`dspark_tilelang_reference.py` 提供不同的 DSpark 性能比较对象.
-独立 FP64 PyTorch 参考提供数值比较.
-新用例包括 BF16 hidden RMS 舍入, head-128 YaRN Q / K preparation, context append 和 7-row 草稿 attention.
-DSpark hidden RMS 使用 vector load 和成对 BF16 乘法.
-每次 normalization 和 multiplication 保留规定的 BF16 舍入.
-Q / K preparation 在 register 中保留 rotary 的两个半部, 每对 sine / cosine 只计算一次.
-小规模调用每个 head 使用 64 个线程, 大规模调用每个 head 使用一个 warp.
-
-Context append 对地址对齐且 storage 互不重叠的 tensor 使用 128-bit load / store.
-容量检查选择 32-bit 或 64-bit 地址除法.
-Kernel 在除法前检查 slot 范围.
-Kernel 在计算缓存地址前读取源数据.
-其他 layout 使用 CUDA `append` 操作.
-
-相同 K / V 和 slot 的重复 context append 写入相同字节.
-计时阶段的两个操作使用相同目标缓存, 消除缓存地址差异.
-数值校验在计时前使用独立缓存, 最初 147 项用例保留其数值 fixture 契约.
-
-每个新用例沿用完整输出, cache write, 3 轮, 20 个配对和置信下界门槛.
-源码身份及测量范围见 [验收索引](acceptance.zh.md).
-
-```bash
-scripts/with-env.sh python benchmarks/kernels.py --list
-scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda python benchmarks/kernels.py --output "$EVIDENCE_DIR/operators.json"
-```
-
-Graph 内部的 external CUDA Event 包围全部 100 次完整操作.
-计时区间排除 graph replay 前后的主机提交停顿.
-采集器等待 graph 结束 event 后才读取耗时.
-
-无状态 Q/K 计时先做独立数值校验, 再使用共享 graph pool 和 capture stream.
-两个完整函数保留各自的两次输出分配. 串行 replay 之间不使用输出值.
-采集器检查当前输出与上一次调用输出存储的 alias.
-它检查全部 100 次调用的对应输出地址一致, 输出与输入存储范围不重叠.
-
-计时结束后还检查全部输入存储字节. Graph 和 stream 保留到最终同步完成.
-
-DSpark append 以外的可变用例沿用不同目标 pool.
-
-使用仓库外可写的 `EVIDENCE_DIR`.
-`--operations` 选择诊断子集; 不完整覆盖或 dirty source 不能通过完整矩阵.
-GPU 干扰和源码变化使采集失效.
-采集器记录源码, 模块, hardware, 完整输出校验, 全部样本和单独标识的估算.
-
-计时前在现有容差下比较完整返回值和实际写入缓存.
-包括 FP8 scale stride 和逐 slot recurrent 界限.
-恢复 mutable state, 预热两条路径.
-每个用例需要 3 轮, 每轮 20 个交错配对, CUDA 每轮中位数更快.
-平均节省时间的单侧 95% hierarchical-bootstrap 下界必须为正.
-不设最低百分比增益, 不新增相对 TileLang 的框架比率.
-
-以下用例的正式输出门槛要求 1 次 fast, 0 次 generic host dispatch:
-
-| 算子 | Fast-path 输入 |
-|---|---|
-| `norm` | Dense nongated5120 row, 对齐 input/weight. |
-| `add_norm` | Dense5120 row, 对齐 input/residual/weight. |
-| `gated_norm` | 48 个 head, 每行宽度 128, 使用 gated RMS. |
-| `qk` | 打包的 16-head 行, token stride 为 10240, Q/K 对齐. |
-| `recurrent` | 16 个 Q head, 48 个 V head, Q/K/state 对齐, state pool 不重叠. |
-| `convolution` | 10240 个 channel, token stride 为 16384, weight 对齐, state pool 不重叠. |
-
-`variant_launch_counts()` 测量 host dispatch, 不统计 graph replay.
-`append` 不属于正式矩阵, 有独立 fast/generic GPU 测试.
-其 fast path 要求 width 可被 8 整除, K/V/cache 对齐.
-
-## 分析与 profiling
-
-按 [开发指南](development.zh.md) 安装固定 TileFoundry 工具.
-Fork 支持 HIR sin/cos evaluation, printing 和 cost classification, 不生成 device code.
-使用兼容的 released TileLang 和 OR-Tools 版本; 不维护这些库的本地 fork.
-Editable TileFoundry 源码必须持续可用.
-
-```bash
-scripts/with-env.sh tilefoundry analyze development/kernels/semantics.py:Operators.silu "$EVIDENCE_DIR/silu-analysis.txt" --compute-cost --memory --roofline
-scripts/with-gpu.sh scripts/with-env.sh python -m development.kernels.observations --case attention-c426ebd5d5 --output "$EVIDENCE_DIR/observations.json"
-```
-
-HIR arithmetic, memory 和 roofline 输出是估算.
-分析 topology 不等于实际 device placement.
-Observation 工具通过 Nsight Compute 分别 profile 完整后端操作.
-Warmup 和 JIT 位于 NVTX range 外.
-缺失或非有限 requested counter 会使 observation 失败.
-所需 counter 包括 local-memory 读取和写入的 sector 数, 用于识别寄存器 spill 流量.
-报告分别标识估算, counter, resource 和源码身份.
-不提供验收计时样本.
-
-固定 HIR 无 FP64 dtype.
-其 FP32 RoPE phase 不能证明最大上下文精度.
-应使用独立 FP64 和模型测试.
-原始 profiler CSV 和临时调优放在 Git 外.
-
-## 修改流程
-
-1. 阅读 wrapper, 合同, 测试和相关审计项.
-2. 保留支持的 shape, stride, dtype, alias rule, state output 和舍入边界.
-3. 用分析选择假设, 再使用合法 metadata 测量完整操作.
-4. Production dispatch 保持确定; 不做运行时 autotuning 搜索.
-5. 完成受影响的正确性和正式算子用例.
-6. 声称性能验收仍成立前, 完成受影响框架工作负载.
-7. 提交带原始哈希的可移植证据; 临时记录放在仓库外.
-8. 完成独立审查, 停止所属 GPU 程序.
+主机/设备归因见 [profiling](profiling.zh.md), 采集见 [测试命令](testing/performance.zh.md).

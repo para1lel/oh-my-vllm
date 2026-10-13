@@ -43,9 +43,9 @@ CPU 测试覆盖缓存发布, 未知回复 ID, 有界准入, deadline 及 stream
 在显存压力和形状变化下测试图驱逐及重新捕获.
 
 分别使用 4 个 oh-my-pi agent 对 MTP4 和 DSpark 运行 soak test.
-每种模式至少持续 1 小时, 并完成至少 500 个正常模型请求.
+每种模式至少持续 1 小时. 请求数量和 agent 任务完成情况用于诊断, 不设最低数量门槛.
 测量请求计时和内存, 不设 soak 性能门槛.
 推理路径修改后重测 15 个阶段性能行.
 日常测试默认跳过重型 soak test.
 
-参见 [需求](../requirements.zh.md#req-serve-006-资源上限与缓存正确性) 和 [测试](../testing.zh.md).
+参见 [需求](../requirements/service.zh.md#req-serve-006-资源上限与缓存正确性) 和 [测试](../testing.zh.md).

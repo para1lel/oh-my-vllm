@@ -109,6 +109,7 @@ struct ManagedChild {
     child: Option<Child>,
     group_killed: bool,
 }
+
 static PENDING_REAPS: AtomicUsize = AtomicUsize::new(0);
 
 impl ManagedChild {

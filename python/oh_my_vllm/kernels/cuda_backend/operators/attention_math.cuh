@@ -22,6 +22,7 @@ __device__ __forceinline__ float softmax_exp2(float value) {
 __device__ __forceinline__ int shared_index(int row, int col, int stride = 256) {
   return row * stride + (col ^ ((row & 7) * 8));
 }
+
 __device__ __forceinline__ void load_a(unsigned (&a)[4], const __nv_bfloat16 *data, int inner,
                                        int lane, int stride = 256) {
   unsigned address =
@@ -30,6 +31,7 @@ __device__ __forceinline__ void load_a(unsigned (&a)[4], const __nv_bfloat16 *da
                : "=r"(a[0]), "=r"(a[1]), "=r"(a[2]), "=r"(a[3])
                : "r"(address));
 }
+
 __device__ __forceinline__ void load_k(unsigned (&b)[2], const __nv_bfloat16 *data, int inner,
                                        int warp, int lane, int stride = 256) {
   unsigned address = __cvta_generic_to_shared(
@@ -38,6 +40,7 @@ __device__ __forceinline__ void load_k(unsigned (&b)[2], const __nv_bfloat16 *da
                : "=r"(b[0]), "=r"(b[1])
                : "r"(address));
 }
+
 __device__ __forceinline__ void load_v(unsigned (&b)[2], const __nv_bfloat16 *data, int inner,
                                        int col, int lane, int stride = 256) {
   unsigned address = __cvta_generic_to_shared(data + shared_index(inner + lane % 16, col, stride));
@@ -45,6 +48,7 @@ __device__ __forceinline__ void load_v(unsigned (&b)[2], const __nv_bfloat16 *da
                : "=r"(b[0]), "=r"(b[1])
                : "r"(address));
 }
+
 __device__ __forceinline__ void mma_bf16(float (&c)[4], unsigned a0, unsigned a1, unsigned a2,
                                          unsigned a3, unsigned b0, unsigned b1) {
   asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 "

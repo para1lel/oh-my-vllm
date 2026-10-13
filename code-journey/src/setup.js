@@ -2,10 +2,12 @@
 Config.history.maxStates = 100;
 Config.passages.nobr = true;
 Config.passages.transitionOut = 0;
+
 Config.saves.isAllowed = () => false;
 
 setup.lessons = {};
 const storageKey = "oh-my-vllm-journey-v2";
+
 setup.load = function () {
   setup.lessons = setup.journeyData.chapters;
   session.delete("state");
@@ -19,7 +21,9 @@ setup.load = function () {
     saved = { ...old, read: [], visited: oldList.map((id) => mapped[id]).filter(Boolean),
       last: mapped[old?.last] || "Start", goal: mapped[old?.goal] || "Basics" };
   }
+
   const valid = (list) => Array.isArray(list) ? [...new Set(list.filter((name) => Object.hasOwn(setup.lessons, name)))] : [];
+
   const v = State.variables;
   v.read = valid(saved.read); v.visited = valid(saved.visited);
   setup.readMemory = v.read.slice(); setup.visitedMemory = v.visited.slice();
@@ -36,6 +40,7 @@ setup.load = function () {
     Config.passages.start = setup.nextMissing(saved.last);
   } else Config.passages.start = "Start";
 };
+
 setup.save = function () {
   const v = State.variables;
   try {
@@ -46,17 +51,20 @@ setup.save = function () {
     }));
   } catch {}
 };
+
 setup.nextMissing = function (target) {
   for (const required of setup.lessons[target].needs) {
     if (!State.variables.read.includes(required)) return setup.nextMissing(required);
   }
   return target;
 };
+
 setup.complete = function () {
   const current = State.passage;
   if (setup.lessons[current] && !State.variables.read.includes(current)) State.variables.read.push(current);
   setup.readMemory = [...new Set([...setup.readMemory, ...State.variables.read])];
 };
+
 setup.navigate = function (target, interest, markComplete = false) {
   if (markComplete) setup.complete();
   if (interest) {
@@ -66,6 +74,7 @@ setup.navigate = function (target, interest, markComplete = false) {
   setup.save();
   Engine.play(setup.lessons[target] ? setup.nextMissing(target) : target);
 };
+
 Macro.add("route", {
   handler() {
     const [text, target, interest, markComplete = false] = this.args;
@@ -89,12 +98,14 @@ Macro.add("icode", {
     this.output.appendChild(code);
   },
 });
+
 setup.conditionLink = function (list, condition, target, label, interest, markComplete = false) {
   const item = document.createElement("li");
   item.append(document.createTextNode(condition + " "));
   new Wikifier(item, '<<route ' + JSON.stringify(label || setup.lessons[target]?.title || target) + ' ' + JSON.stringify(target) + ' ' + JSON.stringify(interest || null) + ' ' + JSON.stringify(markComplete) + '>>');
   item.append(document.createTextNode(".")); list.appendChild(item);
 };
+
 Macro.add("chapterHeader", { handler() {
   const chapter = setup.lessons[State.passage];
   const title = document.createElement("h1"); title.textContent = "第 " + chapter.number + " 章. " + chapter.title;
@@ -143,6 +154,7 @@ Macro.add("coverage", { handler() {
   }
   section.append(heading, intro, list); this.output.appendChild(section);
 } });
+
 setup.copyCode = async function (text) {
   if (navigator.clipboard?.writeText) {
     try { await navigator.clipboard.writeText(text); return; } catch {}
@@ -168,6 +180,7 @@ setup.copyCode = async function (text) {
   }
   if (!copied) throw new Error("Clipboard copy failed");
 };
+
 setup.codeBlock = function (source, preview = false) {
   const block = document.createElement("div");
   block.className = "code-block" + (preview ? " excerpt-preview" : "");
@@ -186,6 +199,7 @@ setup.codeBlock = function (source, preview = false) {
   status.className = "sr-only";
   status.setAttribute("role", "status");
   let reset;
+
   copy.onclick = async () => {
     clearTimeout(reset);
     try {
@@ -198,6 +212,7 @@ setup.codeBlock = function (source, preview = false) {
     }
     reset = setTimeout(() => { copy.textContent = "复制代码"; status.textContent = ""; }, 1800);
   };
+
   toolbar.append(label, copy, status);
   const pre = document.createElement("pre");
   pre.tabIndex = 0;
@@ -234,6 +249,7 @@ setup.codeBlock = function (source, preview = false) {
   block.append(toolbar, pre);
   return block;
 };
+
 setup.sourceGuide = function (key) {
   const notes = setup.journeyData.sourceNotes[key];
   const section = document.createElement("section");
@@ -269,6 +285,7 @@ setup.sourceGuide = function (key) {
   section.appendChild(table);
   return section;
 };
+
 Macro.add("explain", {
   handler() {
     const key = this.args[0];
@@ -359,6 +376,7 @@ setup.renderExperiment = function (container) {
   button.textContent = completed ? "已得到首 token" : "执行下一步";
   setup.save();
 };
+
 $(document).on(":passagestart", () => {
   // History restores variables before rendering; merge progress before macros run.
   State.variables.read = [...new Set([...setup.readMemory, ...State.variables.read])];
@@ -374,11 +392,15 @@ $(document).on(":passageend", (event) => {
   }
   setup.readMemory = v.read.slice();
   setup.visitedMemory = v.visited.slice();
+
   document.getElementById("journey-home").onclick = (event) => { event.preventDefault(); Engine.play("Start"); };
+
   document.getElementById("journey-map").onclick = (event) => { event.preventDefault(); Engine.play("Map"); };
+
   const theme = document.getElementById("theme-toggle");
   theme.textContent = document.documentElement.dataset.theme === "dark" ? "亮色" : "暗色";
   theme.setAttribute("aria-label", document.documentElement.dataset.theme === "dark" ? "切换到亮色模式" : "切换到暗色模式");
+
   theme.onclick = () => {
     const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
@@ -386,7 +408,9 @@ $(document).on(":passageend", (event) => {
     theme.textContent = next === "dark" ? "亮色" : "暗色";
     theme.setAttribute("aria-label", next === "dark" ? "切换到亮色模式" : "切换到暗色模式");
   };
+
   document.getElementById("read-count").textContent = "已读 " + v.read.length + " / " + Object.keys(setup.lessons).length + " 章";
+
   document.getElementById("restart").onclick = () => {
     v.read = []; v.visited = []; setup.readMemory = []; setup.visitedMemory = []; v.goal = "Basics"; v.interest = "basics";
     v.expLength = 32768; v.expIndex = -1; v.lastLesson = "Start";
@@ -396,18 +420,22 @@ $(document).on(":passageend", (event) => {
     setup.load();
     Engine.play("Start");
   };
+
   const back = document.getElementById("journey-back");
   if (back) {
     back.disabled = State.length <= 1;
     back.closest("li").hidden = State.length <= 1;
+
     back.onclick = () => Engine.backward();
   }
   const container = event.content.querySelector("[data-experiment]");
   if (container) {
     setup.renderExperiment(container);
+
     container.querySelector("[data-action='step']").onclick = () => {
       v.expIndex++; setup.renderExperiment(container);
     };
+
     container.querySelector("[data-action='reset']").onclick = () => {
       v.expIndex = -1; setup.renderExperiment(container);
     };

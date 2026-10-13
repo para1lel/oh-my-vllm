@@ -5,11 +5,12 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "serve": "node scripts/serve.mjs",
-    "test": "node --test tests/excerpt.test.mjs && playwright test"
+    "test": "node --test tests/*.test.mjs && playwright test"
   },
   "devDependencies": {
     "@fontsource/lxgw-wenkai": "5.3.0",
     "@playwright/test": "1.63.0",
+    "acorn": "8.19.0",
     "katex": "0.19.0",
     "shiki": "4.5.0"
   }

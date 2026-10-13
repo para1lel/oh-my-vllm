@@ -188,6 +188,7 @@ __global__ void rms_kernel(const __nv_bfloat16 *__restrict__ x, const float *__r
     out[static_cast<int64_t>(row) * width + i] = __float2bfloat16_rn(v);
   }
 }
+
 void rms(TensorView x, TensorView weight, TensorView gate, TensorView out, double epsilon,
          bool gated) {
   int h = x.size(1), d = x.size(2), rows = x.size(0) * h;
@@ -243,6 +244,7 @@ void rms(TensorView x, TensorView weight, TensorView gate, TensorView out, doubl
   finish_cuda_launch(stream, gated ? "gated_norm" : "norm");
   record_variant(gated ? kGatedNorm : kNorm, false);
 }
+
 void add_rms(TensorView x, TensorView residual, TensorView weight, TensorView summed,
              TensorView out) {
   int d = x.size(1), rows = x.size(0);

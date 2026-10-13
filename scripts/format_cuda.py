@@ -17,6 +17,8 @@ def oversized_files(directory: Path) -> list[tuple[Path, int]]:
         (path, lines)
         for path in sorted(directory.rglob("*"))
         if path.is_file()
+        and not path.is_symlink()
+        and path.resolve().is_relative_to(directory.resolve())
         and path.suffix in {".cu", ".cuh", ".py"}
         and (lines := len(path.read_text().splitlines())) > MAX_LINES
     ]
@@ -26,8 +28,21 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="reject formatting drift")
     options = parser.parse_args()
+    names = subprocess.check_output(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        cwd=ROOT,
+    )
     files = sorted(
-        path for path in BACKEND.rglob("*") if path.suffix in {".cu", ".cuh"}
+        {
+            ROOT / name.decode()
+            for name in names.split(b"\0")
+            if name
+            and not name.startswith(b"3rdparty/")
+            and Path(name.decode()).suffix in {".cu", ".cuh", ".cpp", ".hpp", ".h"}
+            and (ROOT / name.decode()).is_file()
+            and not (ROOT / name.decode()).is_symlink()
+            and (ROOT / name.decode()).resolve().is_relative_to(ROOT)
+        }
     )
     flags = ["--dry-run", "--Werror"] if options.check else ["-i"]
     result = subprocess.run(

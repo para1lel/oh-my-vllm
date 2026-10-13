@@ -1,266 +1,55 @@
 # Kernel development
 
-CUDA is the default owned backend on B200.
-The pinned TileLang backend is an explicit comparison.
-Third-party libraries can use Triton internally.
-See [acceptance](acceptance.md) for measured source identity and [audit](audit.md) for open limits.
+Use the [operator contracts](requirements/kernels.md), [harness instructions](../development/kernels/AGENTS.md), and [performance protocol](requirements/performance.md).
+The current provider migration is in the [handoff](handoff.md). Do not treat old measurements as new acceptance.
 
-## Backend and provenance
+## Implementation sources
 
-Set `OH_MY_VLLM_KERNEL_BACKEND=tilelang` before Python starts to select the comparison.
-An invalid backend or missing CUDA implementation raises an error.
-There is no automatic TileLang fallback.
-Public Python wrappers keep validation and factory bindings.
-Pinned bodies stay in `python/oh_my_vllm/kernels/tilelang_reference/`.
+[CUDA backend](../python/oh_my_vllm/kernels/cuda_backend/) owns device code and native bindings.
+[Semantic IR](../python/oh_my_vllm/ir/) owns operation contracts, references, mutation schemas, and provider selection.
+[Target model](../python/oh_my_vllm/models/qwen.py) supplies call-site context.
 
-Do not tune the reference.
+Schedules, layout guards, launch parameters, and specialization thresholds belong in those sources.
+Use repository CUDA for operations that Torch does not supply. Native CUDA libraries are permitted.
+Python bindings are transport into owned kernels, not external operator providers.
 
-`development/kernels/tilelang-reference.json` binds these identities:
-
-| Identity | Value |
-|---|---|
-| Accepted reference record | `02bf35f98ceb6b40a2a813aa3e0cccbfa9067600` |
-| Kernel implementation | `da75c02bd9e01556436877acba3243636dec80d6` |
-| Runtime lock SHA-256 | `575d155adcd68f0f4d6fbd5f7268c31a085e26ab315b41a9bb5e2d2868c32cab` |
-| TileFoundry fork | `6b1b1493efcb55f3f2f327b5cc90a01181adf690` |
-
-The manifest also records each reference file's SHA-256.
-Keep these files and the runtime lock unchanged during unrelated work.
-A changed lock/reference must have an explicit new comparison decision.
-
-The [artifact decision](decisions/ADR-012-reasoning-token-budget.md#omp-integration-and-limits) adds the FlashInfer cubin package with the same version to the comparison environment.
-The two manifests bind the new runtime lock and its linked manifest hash.
-All reference kernel hashes, TileFoundry commits, original case IDs, and numerical tolerances stay unchanged.
-New GPU acceptance must use this environment.
-
-`python/oh_my_vllm/kernels/cuda_backend/kernels.cu` includes 10 operator headers from `operators/` for one native build.
-TVM FFI `build_inline` compiles these inputs at first use. `load_module` loads the returned module.
-The target is `sm_100a`, on the caller's current stream.
-The wrapper sets `TVM_FFI_CUDA_ARCH_LIST=10.0a`. Direct launches must set it explicitly.
-
-A sidecar binds source/configuration and module SHA for validated reuse without available nvcc.
-Finish compilation before capture and formal timing.
-TileFoundry is not a native build or service dependency.
-
-### Native module layout
-
-| Module in `operators/` | Responsibility |
-|---|---|
-| `common.cuh` | PDL, launches, error checks, storage checks, counters, reductions, and vector access. |
-| `quantization.cuh` | FP8 group quantization and SiLU multiplication. |
-| `normalization.cuh` | Target and DSpark RMS, residual RMS, and gated RMS. |
-| `attention_prepare.cuh` | Q/K preparation, RoPE, contiguous row copies, and target/draft KV writes. |
-| `gdn.cuh` | GDN gates, Q/K normalization, and recurrent state updates. |
-| `convolution.cuh` | Causal convolution and candidate state writes. |
-| `attention_math.cuh` | Softmax helpers, shared-memory addressing, and BF16 MMA helpers. |
-| `decode_attention.cuh` | Target split-KV attention and stable merge. |
-| `dspark_decode.cuh` | Draft attention over committed context and seven bidirectional block rows. |
-| `normalized_quantization.cuh` | Fused residual/gated RMS and FP8 quantization at necessary BF16 rounding points. |
-
-The single build keeps function exports and device definitions together.
-The native module binds all operator header hashes to its cache key and loaded provenance.
-The GEMM module binds `groupwise_fp8.cu` and its root template headers independently.
-The root template headers include `groupwise_accum.cuh`.
-Build and load checks reject changed source or headers.
-Formal phase and profiler checks compare loaded header identities with reviewed source.
-
-Each owned CUDA backend `.cu`, `.cuh`, and `.py` file must have at most 800 lines.
-`clang-format` 23.1.3 uses `.clang-format` and keeps the include order.
-The pre-commit hook formats native files and checks module size:
+Keep each backend `.cu`, `.cuh`, and `.py` file at most 800 lines.
+Use pinned clang-format and the definition-spacing hook. Keep necessary numerical and lifetime explanations concise.
 
 ```bash
 scripts/with-env.sh python scripts/format_cuda.py
 scripts/with-env.sh python scripts/format_cuda.py --check
+scripts/with-env.sh python scripts/check_definition_spacing.py
 ```
 
-## Contracts and implementation
+## Numerical and state contracts
 
-| Operation | Current properties |
-|---|---|
-| FP8 | Four-element vectors, warp REDUX, exact scale division, and packed stores. |
-| BF16 finite FP8 scale reciprocal | `rcp.approx` with one residual correction and two `__fmaf_rn` operations. |
-| Other FP8 reciprocals | Nonfinite maxima, FP16, and FP32 use exact division through `__fdiv_rn`. |
-| SiLU/multiply | Fast exponential and paired BF16 multiplication keep the two BF16 rounding points. |
-| RMS | Dense width 5120 uses aligned register-resident specializations and epsilon `1e-6`. |
-| Gated RMS | 48 heads, width 128, stable sigmoid, FP32 gating without an extra BF16 rounding point. |
-| Q/K | Packed sixteen-head rows, token stride 10240. Inputs through `320` tokens use four-element loads. Larger inputs use eight-element loads. |
-| Convolution | 10240 channels, token stride 16384, guarded weight alignment, and source-state snapshots. |
-| GDN | Guarded vector state updates, FP32 arithmetic, BF16 MTP or FP32 ordinary storage. |
-| Attention preparation | Q/K RMS/RoPE, V conversion, and KV writes with FP64 phase reduction. |
-| Decode attention | BF16 `mma.sync`/`ldmatrix`, FP32 accumulation, sector swizzling, split-KV, and a different merge operation. |
+Each operation has input/output shape, dtype, stride, alignment, and mutation contracts.
+Use an independent Torch reference with the specified precision and rounding boundaries.
+Higher precision does not replace prescribed FP32 division or observable BF16 casts.
+Keep written-state witnesses and untouched storage checks, with returned-output comparisons.
 
-Generic CUDA paths handle other supported layouts.
-Fast-path guards include alignment, strides, shape, and disjoint-storage checks.
-State updates can validly overwrite their own source after required snapshots.
-Direct recurrence FFI must use contiguous `int32`/`int64` index tensors, monotone starts, valid reads, and valid writes or `-1`.
-GPU index contents are not copied to the host on each launch.
+Fusion must keep mathematical semantics, accepted-state boundaries, and numerical tolerances.
+Cache and state storage cannot become temporary donation targets.
+Check changed inputs and metadata during graph replay. Reject unsupported layouts or invalid bindings before launch.
 
-The batch plan validates logical slots against reported capacities.
+## Formal cases
 
-Use different contracts for fresh-output non-aliasing and in-place state/cache operations.
-Reject invalid wrapper inputs at the wrapper or C++ boundary.
-Negative attention slots skip KV writes and keep Q.
-Native MTP4 verification has at most five queries. DSpark verification has at most eight.
-The production wrapper aligns misaligned KV views by copying and reports that cost.
+Derive the largest legal invocation of each implementation path from all fifteen framework workloads.
+Keep phases distinct when their paths differ. Deduplicate identical configurations.
+Do not independently maximize dimensions that cannot occur together.
+Keep formal cases, independent references, the harness, and summarized evidence in the repository.
 
-See [profiling](profiling.md) for clone counters and fault attribution.
+Operator timing diagnoses bottlenecks and compares candidates. The full framework supplies the final performance gate.
+Compare complete operations, with required copies, reductions, and conversion.
+Use interleaved candidate/baseline measurements. Profile separately from acceptance timing.
+Keep original failed attempts and unavailable counters visible.
 
-Reduction order can vary with row count and alignment.
-FP64-reference tolerances apply. Bitwise RMS batch invariance is not a contract.
-The gated-RMS sweep included each finite BF16 gate at input 1 and weight 0.25.
-This test does not include all input/weight pairs.
+## Tool and build identity
 
-For finite BF16 maxima, exact scale division gives a result in `[2.232142829e-13,7.565917940e35]`.
-The reciprocal's approximate range is `[1.321716729e-36,4.480000066e12]`.
-Scale and reciprocal stay FP32 normal values.
-[PTX reciprocal rules](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#floating-point-instructions-rcp) specify the approximate instruction's error bound.
-The B200 production regression includes 65280 finite BF16 encodings, 32640 finite maxima, signed midpoint-derived samples, and nonfinite fallback.
+TileFoundry is a development tool. Its updates must not silently change production build dependencies.
+Pin native headers independently and record their source identities with compiler options and loaded module hashes.
+Finish compilation and graph capture before timing.
+Keep temporary tuning and raw traces in external storage. Stop owned GPU processes after each run.
 
-It also includes 126 positive/negative FP8 midpoints at maximum 448.
-Final FP8 bytes and scales match the CPU RN reference for those tests.
-This finite test does not include all pairs or prove identical intermediate quotients.
-
-## Formal cases and timing
-
-`development/kernels/cases.py` keeps all 317 historical configurations and workload labels in `original_cases()`.
-The supplemental modules derive static maxima for the fifteen active workloads.
-The full matrix has 517 cases, with unchanged original configurations and comparison pins.
-
-FA fixtures exclude null page 0.
-Full operations include snapshots, copies, and split merges.
-`development/kernels/semantics.py` gives logical behavior. `twins.py` binds the pinned full operations.
-
-The 200 new cases cover divided prefill budgets, shifted initial MTP context, and long MTP attention metadata paths.
-B2/B4 prefill has 31360 rows, with sequence counts `15680/15680` or `7840/7840/7840/7840`.
-Context without prefix reuse has 31358 or 31356 rows. Its full chain keeps normalization, quantization, KV projection, and cache preparation.
-
-The last aligned B1 chunk has 2352 rows. Target tails have `144` rows per request.
-MTP context restores one checkpoint hidden row per request, so its tails have `145` rows per request.
-The cases keep different normalization, Q/K, convolution, GEMM, and quantization paths for these shapes.
-Three-row verification near the output limit also has separate warp-path cases.
-
-After full acceptance at a page boundary, MTP context restores one hidden row.
-The next step can have six context rows per request. Quantization cases keep `6/12/24` rows for batches `1/2/4`.
-Attention and MLP still select one endpoint per request. These cases do not add six-query attention.
-
-The twelve short/prefix workloads keep FIFO mixed-step maxima, with prefill and active decode in the same invocation.
-GDN prefill does not include decode rows. Convolution includes them.
-MTP context restores checkpoint hidden rows. Prefix context has `625` rows per request.
-The DSpark hidden RMS cases also cover the path with less than `4096` rows.
-
-Proposal attention reaches length 135166. Catch-up can include the last sampled anchor at length 135168.
-Selected prefill endpoints reach length 131073. Their graph extent is 135168.
-Target attention uses FlashInfer and has a separate maximum length of 135167.
-
-The new cases keep metadata types and the B4 single-row dual-buffer path.
-MTP `fc` uses BF16. Do not classify it as an owned FP8 projection.
-Each new case uses the unchanged numerical tolerances and full timing gates.
-
-DSpark adds static supplemental shapes for target verification and draft operators.
-The original case IDs and eight pinned TileLang files stay unchanged.
-`development/kernels/dspark-reference.json` binds the supplemental reference and its original manifest hash.
-`dspark_tilelang_reference.py` supplies a different DSpark performance comparison.
-Independent references from FP64 PyTorch supply the numerical comparison.
-The new cases include BF16 hidden RMS rounding, head-128 YaRN Q/K preparation, context append, and seven-row draft attention.
-
-DSpark hidden RMS uses vector loads and packed BF16 multiplication.
-Each normalization and multiplication keeps its specified BF16 rounding.
-Q/K preparation keeps the two rotary halves in registers and calculates each sine/cosine pair one time.
-Small invocations use 64 threads for each head. Large invocations use one warp for each head.
-
-Context append uses 128-bit loads/stores for aligned tensors with disjoint storage.
-A capacity check selects 32-bit or 64-bit address division.
-The kernel checks the slot range before division.
-The kernel reads source data before it calculates the cache address.
-Other layouts use the CUDA `append` operation.
-
-Context append with the same K/V and slots writes the same bytes each time.
-For timing, the two operations use the same destination cache to remove cache-address differences.
-Numerical verification uses different caches before timing. The initial 147 cases keep their numerical fixture contract.
-
-Each new case has the same full-output, cache-write, three-round, twenty-pair, and confidence-bound gates.
-Use the [acceptance index](acceptance.md) for source identities and measured scope.
-
-```bash
-scripts/with-env.sh python benchmarks/kernels.py --list
-scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda python benchmarks/kernels.py --output "$EVIDENCE_DIR/operators.json"
-```
-
-The collector records external CUDA Events before and after all 100 full operations in each graph.
-The interval does not include host submission gaps before or after graph replay.
-The collector waits for the graph's end event before it reads elapsed time.
-
-Stateless Q/K timing uses one shared graph pool and capture stream after independent numerical verification.
-Each whole function keeps its two output allocations. Do not use the output values between serial replays.
-The collector checks for aliases with the previous call's output storage.
-It checks matching output addresses for all 100 calls and disjoint output/input storage.
-
-It also checks all input-storage bytes after timing. Keep the graphs and stream until final synchronization.
-
-Mutable cases other than DSpark append keep different destination pools.
-
-Use an external writable `EVIDENCE_DIR`.
-`--operations` selects diagnostic subsets. Partial coverage or dirty source cannot pass the full matrix.
-GPU contention and source changes invalidate collection.
-The collector records source, module, hardware, full output verification, all samples, and independently labeled estimates.
-
-Before timing, compare full returns and written inference caches at existing tolerances.
-Include FP8 scale strides and recurrent per-slot bounds.
-Restore mutable state and do warmup on the two paths.
-Each case must have three rounds of twenty interleaved pairs and faster CUDA medians in each round.
-The one-sided 95% hierarchical-bootstrap lower bound on mean time saved must be positive.
-
-There is no minimum percentage gain or new TileLang-relative framework ratio.
-
-The formal output gate must use one fast and zero generic host dispatches for these cases:
-
-| Operation | Fast-path input |
-|---|---|
-| `norm` | Dense nongated 5120 rows, aligned input/weight. |
-| `add_norm` | Dense 5120 rows, aligned input/residual/weight. |
-| `gated_norm` | Gated 48-head,128-wide rows. |
-| `qk` | Packed 16-head rows,10240 token stride, aligned Q/K. |
-| `recurrent` | 16 Q heads,48 V heads, aligned Q/K/state, disjoint state pool. |
-| `convolution` | 10240 channels,16384 token stride, aligned weight, disjoint state pool. |
-
-`variant_launch_counts()` measures host dispatch, not graph replay.
-`append` is not in the formal matrix and has a focused fast/generic GPU test.
-Its fast path must use width divisible by eight and aligned K/V/cache.
-
-## Analysis and profiling
-
-Install the pinned TileFoundry tools as specified in [development](development.md).
-Its fork supplies HIR sin/cos evaluation, printing, and cost classification. It does not generate device code.
-Use compatible released TileLang and OR-Tools versions. Do not maintain local forks of these libraries.
-The editable TileFoundry source must stay available.
-
-```bash
-scripts/with-env.sh tilefoundry analyze development/kernels/semantics.py:Operators.silu "$EVIDENCE_DIR/silu-analysis.txt" --compute-cost --memory --roofline
-scripts/with-gpu.sh scripts/with-env.sh python -m development.kernels.observations --case attention-c426ebd5d5 --output "$EVIDENCE_DIR/observations.json"
-```
-
-HIR arithmetic, memory, and roofline outputs are estimates.
-The analysis topology is not the device placement.
-The observation tool profiles full backend operations independently with Nsight Compute.
-The NVTX range does not include warmup or JIT.
-Missing or nonfinite requested counters fail the observation run.
-The requested counters include local-memory read and write sectors to identify register-spill traffic.
-
-The report labels estimates, counters, resources, and source identity independently.
-It supplies no acceptance timing samples.
-
-The pinned HIR has no FP64 dtype.
-Its FP32 RoPE phase cannot show maximum-context accuracy.
-Use independent references with FP64 computation and model tests instead.
-Keep raw profiler CSV and temporary tuning in external storage.
-
-## Change procedure
-
-1. Read wrappers, contracts, tests, and the relevant audit entries.
-2. Keep supported shapes, strides, dtypes, alias rules, state outputs, and rounding boundaries.
-3. Use analysis to select hypotheses, then measure full operations with valid metadata.
-4. Keep production dispatch deterministic. Do not start a runtime autotuning search.
-5. Complete affected correctness and formal operator cases.
-6. Complete affected framework rows before you claim continued performance acceptance.
-7. Commit portable evidence with raw hashes. Keep temporary records in an external directory.
-8. Complete a review by another agent and stop owned GPU programs.
+Read [profiling](profiling.md) for host/device attribution and [test commands](testing/performance.md) for collection.

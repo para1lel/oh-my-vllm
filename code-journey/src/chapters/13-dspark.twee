@@ -71,7 +71,7 @@
 <p>worker 在初始化时选择并保持一种模式. measured 阶段的实际验证数, 接受数和模式日志证明请求走过哪条路线.</p>
 <<math "\\mathrm{TPS}=\\frac{N_{\\mathrm{kept\ output}}}{t_{\\mathrm{batch\ finish}}-t_{\\mathrm{batch\ start}}},\\quad \\mathrm{acceptance}=\\frac{N_{\\mathrm{accepted}}}{N_{\\mathrm{verified}}}">>
 <p>TPS 的分子是实际保留输出数. 接受率的分子是接受草稿数, 分母是实际送去验证的草稿数. 下一轮返回的提议数单独记录, 调度预算可能只容纳其中一部分. TPS 包含 prefill 与 decode 的完整引擎批耗时, 排除模型加载和预热. 接受率帮助解释目标轮数与草稿额外成本, 吞吐结果还需完整计时来判断.</p>
-<p>普通解码, MTP4, prefix-hit 和 DSpark 共十五项负载. 各阶段按第 12 章的理论下界与波动规则判定, 保留 prefix-hit prefill 的三倍倍率例外.</p>
+<p>普通解码, MTP4, prefix-hit 和 DSpark 共十五项负载. 各阶段按第 12 章的理论下界与波动规则判定, 保留 prefix-hit prefill 的两倍倍率例外.</p>
 <h2>接受率与每步接受数怎样一起看</h2>
 <p>自适应截断会改变接受率的分母. 设本轮最多可提议七个候选, confidence 使实际提议为两个, 两个都被调度验证, 其中一个被接受, 则本轮接受率为 1 / 2 = 50%, 每步接受数为 1. 要估计减少了多少目标调用, 还需计算每个目标步骤平均验证及接受多少候选.</p>
 <<math "\\bar n_{\\mathrm{verified}}=N_{\\mathrm{verified}}/N_{\\mathrm{steps}},\\quad \\bar n_{\\mathrm{accepted}}=N_{\\mathrm{accepted}}/N_{\\mathrm{steps}}">>

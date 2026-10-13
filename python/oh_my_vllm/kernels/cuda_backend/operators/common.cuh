@@ -64,10 +64,13 @@ enum VariantOperation {
   kGatedNormFp8Linear,
   kVariantCount
 };
+
 std::atomic<int64_t> variant_launches[kVariantCount][2]{};
+
 void record_variant(int operation, bool fast) {
   variant_launches[operation][fast].fetch_add(1, std::memory_order_relaxed);
 }
+
 int64_t variant_launch_count(int64_t operation, bool fast) {
   TVM_FFI_ICHECK(operation >= 0 && operation < kVariantCount) << "unknown CUDA variant operation";
   return variant_launches[operation][fast].load(std::memory_order_relaxed);
@@ -80,6 +83,7 @@ bool cuda_debug_sync_enabled() {
   }();
   return enabled;
 }
+
 void begin_cuda_launch(cudaStream_t stream, const char *operation) {
   if (!cuda_debug_sync_enabled())
     return;
@@ -98,6 +102,7 @@ void begin_cuda_launch(cudaStream_t stream, const char *operation) {
   TVM_FFI_ICHECK(status == cudaSuccess)
       << operation << " prior CUDA work failed before launch: " << cudaGetErrorString(status);
 }
+
 void finish_cuda_launch(cudaStream_t stream, const char *operation) {
   cudaError_t status = cudaPeekAtLastError();
   if (cuda_debug_sync_enabled()) {
@@ -112,6 +117,7 @@ void finish_cuda_launch(cudaStream_t stream, const char *operation) {
         << operation << " CUDA launch or prior asynchronous error: " << cudaGetErrorString(status);
   }
 }
+
 cudaStream_t stream_for(TensorView x, const char *operation) {
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
   begin_cuda_launch(stream, operation);
@@ -122,16 +128,19 @@ bool has_dtype(TensorView tensor, int code, int bits) {
   auto dtype = tensor.dtype();
   return dtype.code == code && dtype.bits == bits && dtype.lanes == 1;
 }
+
 bool same_cuda_device(TensorView tensor, TensorView source) {
   auto device = tensor.device();
   auto expected = source.device();
   return device.device_type == kDLCUDA && expected.device_type == kDLCUDA &&
          device.device_id == expected.device_id;
 }
+
 bool is_index_dtype(TensorView tensor) {
   auto dtype = tensor.dtype();
   return dtype.code == kDLInt && (dtype.bits == 32 || dtype.bits == 64) && dtype.lanes == 1;
 }
+
 bool fits_int32_flat_offsets(TensorView tensor, bool kernel_width) {
   if (tensor.ndim() != 2)
     return false;
@@ -145,6 +154,7 @@ bool fits_int32_flat_offsets(TensorView tensor, bool kernel_width) {
 template <typename Input> struct alignas(sizeof(Input) * 4) Four {
   Input values[4];
 };
+
 template <typename Input, bool Aligned> __device__ Four<Input> load_four(const Input *x) {
   if constexpr (Aligned)
     return *reinterpret_cast<const Four<Input> *>(x);
@@ -154,23 +164,28 @@ template <typename Input, bool Aligned> __device__ Four<Input> load_four(const I
     values.values[j] = x[j];
   return values;
 }
+
 __device__ float warp_sum(float value) {
 #pragma unroll
   for (int offset = 16; offset; offset >>= 1)
     value += __shfl_down_sync(0xffffffff, value, offset);
   return __shfl_sync(0xffffffff, value, 0);
 }
+
 __device__ int64_t index_at(const void *data, bool wide, int index) {
   return wide ? static_cast<const int64_t *>(data)[index]
               : static_cast<const int32_t *>(data)[index];
 }
+
 template <typename T, int Vector> struct alignas(sizeof(T) * Vector) AlignedVector {
   T value[Vector];
 };
+
 template <typename T, int Vector>
 __device__ AlignedVector<T, Vector> load_aligned_vector(const T *p) {
   return *reinterpret_cast<const AlignedVector<T, Vector> *>(p);
 }
+
 template <int Vector, bool Streaming>
 __device__ void store_rms_vector(__nv_bfloat16 *destination,
                                  AlignedVector<__nv_bfloat16, Vector> value) {
@@ -196,6 +211,7 @@ bool aligned(TensorView tensor, uintptr_t bytes) {
 struct Strides {
   int64_t token, head, dim;
 };
+
 // Validated callers use positive dense/row-strided views. Conservative byte
 // spans include padding so a fast restricted path never assumes false independence.
 uint64_t tensor_span_bytes(TensorView tensor) {
@@ -208,6 +224,7 @@ uint64_t tensor_span_bytes(TensorView tensor) {
   }
   return elements * (tensor.dtype().bits / 8);
 }
+
 bool disjoint_storage(TensorView output, TensorView input) {
   auto first = reinterpret_cast<uintptr_t>(output.data_ptr());
   auto second = reinterpret_cast<uintptr_t>(input.data_ptr());

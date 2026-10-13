@@ -34,7 +34,9 @@ function completeMetadata(text, language) {
 // Stop between complete attachments; blank paragraphs inside them stay intact.
 function declarationStart(lines, index, language) {
   const indent = lines[index].match(/^[\t ]*/)[0];
+
   const aligned = (line) => line.startsWith(indent) && !/^[\t ]/.test(line.slice(indent.length));
+
   while (index > 0) {
     const previous = lines[index - 1];
     const text = previous.trim();
@@ -68,6 +70,9 @@ function declarationStart(lines, index, language) {
 export function extractExcerpt(source, { begin, end, limit = 48, language }) {
   const offset = source.indexOf(begin);
   if (offset < 0) throw new Error("Missing source anchor: " + begin);
+  if (source.indexOf(begin, offset + begin.length) >= 0) {
+    throw new Error("Ambiguous source anchor: " + begin);
+  }
   const stop = end ? source.indexOf(end, offset + begin.length) : source.length;
   if (stop < 0) throw new Error("Missing end anchor: " + end);
   const lines = source.split("\n");

@@ -175,6 +175,7 @@ impl Drop for Drain {
 /// Measure serialized data without allocating a second serialized payload.
 pub fn serialized_bytes<T: serde::Serialize>(value: &T) -> Result<usize> {
     struct Counter(usize);
+
     impl Write for Counter {
         fn write(&mut self, input: &[u8]) -> io::Result<usize> {
             self.0 = self
@@ -183,10 +184,12 @@ pub fn serialized_bytes<T: serde::Serialize>(value: &T) -> Result<usize> {
                 .ok_or_else(|| io::Error::other("serialized request size overflow"))?;
             Ok(input.len())
         }
+
         fn flush(&mut self) -> io::Result<()> {
             Ok(())
         }
     }
+
     let mut counter = Counter(0);
     serde_json::to_writer(&mut counter, value)?;
     Ok(counter.0)

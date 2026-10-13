@@ -42,6 +42,7 @@ model_convolution_kernel(const __nv_bfloat16 *__restrict__ x,
     out[static_cast<int64_t>(token) * c + channel] = __float2bfloat16_rn(activated);
   }
 }
+
 // Four adjacent channels share token metadata and aligned activation loads.
 // Keep the scalar tap order, activation formula, and snapshot writes.
 template <int Rows>
@@ -100,6 +101,7 @@ __global__ void vector_model_convolution_kernel(
         result;
   }
 }
+
 template <int Rows>
 __global__ void convolution_kernel(const __nv_bfloat16 *x, const __nv_bfloat16 *weight,
                                    __nv_bfloat16 *pool, const void *ids, const void *starts,
@@ -136,6 +138,7 @@ __global__ void convolution_kernel(const __nv_bfloat16 *x, const __nv_bfloat16 *
         __float2bfloat16_rn(total / (1.f + expf(-total)));
   }
 }
+
 void convolution(TensorView x, TensorView weight, TensorView pool, TensorView ids,
                  TensorView starts, TensorView sources, TensorView writes, TensorView out) {
   int n = x.size(0), c = x.size(1);

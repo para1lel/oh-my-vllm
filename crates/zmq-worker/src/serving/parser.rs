@@ -494,6 +494,7 @@ fn restore_string(value: &str, schema: &Value, root: &Value) -> Result<String> {
     );
     Ok(matches.pop().unwrap())
 }
+
 fn resolve_schema<'a>(schema: &'a Value, root: &'a Value, depth: usize) -> Result<&'a Value> {
     ensure!(depth < 32, "recursive tool parameter type");
     if let Some(reference) = schema["$ref"].as_str() {
@@ -509,6 +510,7 @@ fn resolve_schema<'a>(schema: &'a Value, root: &'a Value, depth: usize) -> Resul
     }
     Ok(schema)
 }
+
 fn string_schema(schema: &Value, root: &Value, depth: usize) -> Result<bool> {
     ensure!(depth < 32, "recursive tool parameter type");
     let schema = resolve_schema(schema, root, depth)?;
@@ -538,6 +540,7 @@ fn safe_prefix(text: &str, marker: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn fragmented_reasoning_and_typed_tool() {
         let mut parser = Parser::new(
@@ -587,6 +590,7 @@ mod tests {
             })
         );
     }
+
     #[test]
     fn literals_are_not_tool_calls_without_tools() {
         let mut parser = Parser::new(false, vec![]);
@@ -594,6 +598,7 @@ mod tests {
         let events = parser.feed(raw, true).unwrap();
         assert!(matches!(&events[0], Delta::Text(text) if text == raw));
     }
+
     #[test]
     fn tool_strings_preserve_quotes_newlines_and_close_tag_literals() {
         let mut parser = Parser::new(
@@ -625,6 +630,7 @@ mod tests {
             "\n\"hello\" </function> </tool_call>\n"
         );
     }
+
     #[test]
     fn incomplete_tool_is_an_error() {
         let mut parser = Parser::new(

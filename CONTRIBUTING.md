@@ -8,7 +8,7 @@ Push or open a pull request only after explicit user instruction.
 ## Implementation
 
 Keep Rust service, scheduler, and logical cache ownership.
-Keep GPU computation in Python and third-party libraries.
+Keep GPU computation in Python with Torch and repository CUDA.
 Keep the block size, numerical tolerances, API features, and active acceptance criteria.
 Select stable compatible dependencies and pin the combination with satisfactory compatibility tests.
 Install Python dependencies with `uv`. Do not use `pip` directly.

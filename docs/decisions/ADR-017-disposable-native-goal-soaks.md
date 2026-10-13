@@ -42,4 +42,4 @@ At the deadline, pause continuation and send native RPC `abort` before the final
 CPU fixtures check native continuation, early goal completion, the two APIs, automatic compaction, isolation, and cleanup failures.
 They supply fixed model responses. They do not prove target inference or one-hour service stability.
 Formal MTP4 and DSpark tests must have complete original records and independent resource review.
-See [testing](../testing.md#long-duration-agentic-service) for commands and evidence rules.
+See [testing](../testing/soak.md#long-duration-agentic-service) for commands and evidence rules.

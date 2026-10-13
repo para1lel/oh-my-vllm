@@ -79,7 +79,7 @@ Compiler retirement 在安全主机边界启动垃圾回收.
 
 源码 `706f1a6` 使用四个 agent, 通过 MTP4 和 DSpark 一小时资源和内存检查.
 结果覆盖观测到的输入 shape. 无限变化的 shape 仍需进一步测量.
-见 [验收](acceptance.zh.md) 和 [持续测试](testing.zh.md#长时-agentic-服务).
+见 [验收](acceptance.zh.md) 和 [持续测试](testing/soak.zh.md#长时-agentic-服务).
 
 ## 服务资源修正
 

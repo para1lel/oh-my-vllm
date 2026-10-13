@@ -1,6 +1,6 @@
 # 阶段时延的理论分析
 
-[性能要求](requirements.zh.md#req-perf-001-阶段时延) 使用每次测量中各请求的计算工作.
+[性能要求](requirements/performance.zh.md#req-perf-001-阶段时延) 使用每次测量中各请求的计算工作.
 模型读取语义执行记录. CUDA Event 时长仅用于诊断.
 
 ## 请求边界

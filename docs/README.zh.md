@@ -10,7 +10,7 @@
 | [开发](development.zh.md) | 环境, 配置, 依赖和构建. |
 | [测试](testing.zh.md) | CPU/GPU 检查及正式验收流程. |
 | [服务](serving.zh.md) | HTTP 子集, mask, 思考, 状态和限制. |
-| [内核](kernels.zh.md) | CUDA, 冻结 TileLang, 正式用例和开发工具. |
+| [内核](kernels.zh.md) | CUDA, 独立参考, 正式用例和开发工具. |
 | [Profiling](profiling.zh.md) | 诊断, counter, 来源和计时限制. |
 | [验收](acceptance.zh.md) | 实测源码和证据范围的统一索引. |
 | [审计](audit.zh.md) | 剩余问题和简短已关闭修复索引. |
@@ -44,6 +44,6 @@
 
 架构包含原设计文档.
 当前工作包含原计划.
-内核开发合并原 CUDA 和 TileLang 指南.
+内核开发连接原生实现和独立契约.
 审计保留剩余问题和有用修复身份; 详细任务历史保留在 Git 中.
 主机专属维护记录放在被忽略的 `LOCAL.md`.

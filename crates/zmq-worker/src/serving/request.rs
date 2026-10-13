@@ -562,6 +562,7 @@ fn append_input(messages: &mut Vec<Value>, item: &Value) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn thinking_budgets_are_explicit_and_independent_of_effort() {
         for responses in [false, true] {

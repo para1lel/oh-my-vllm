@@ -7,12 +7,48 @@ from pathlib import Path
 
 import pytest
 
+from scripts.documentation_contracts import english_word_count, update_source_links
+
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
     "docs_check", ROOT / "scripts/check_docs.py"
 )
 docs = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(docs)
+
+
+def test_document_limit_counts_visible_words_and_protects_code_and_destinations():
+    text = (
+        "# Title\n\n" + "word " * 1997 + "`cache_block`\n\n"
+        "[Guide](https://example.test/a-long-address)\n\n"
+        "~~~python\n" + "code " * 500 + "\n~~~\n"
+    )
+    assert english_word_count(text) == 2001
+    assert english_word_count(text.replace("word ", "", 1)) == 2000
+
+
+def test_source_links_detect_ambiguity_stale_lines_and_invalid_ranges(tmp_path):
+    source = tmp_path / "worker.py"
+    source.write_text("import torch\n\ndef execute_model():\n    pass\n")
+    document = tmp_path / "README.md"
+    text = "[Execute](worker.py#L1) <!-- source: def execute_model( -->\n"
+    assert any("stale" in issue for issue in docs.link_issues(document, text, tmp_path))
+    updated = update_source_links(document, text, tmp_path)
+    assert "worker.py#L3" in updated
+    assert docs.link_issues(document, updated, tmp_path) == []
+    source.write_text(source.read_text() + "\ndef execute_model():\n    pass\n")
+    assert any(
+        "found 2" in issue for issue in docs.link_issues(document, updated, tmp_path)
+    )
+    assert update_source_links(document, updated, tmp_path) == updated
+    assert docs.link_issues(document, "[Bad](worker.py#L2-L100)", tmp_path)
+    assert docs.link_issues(document, "[Bad](worker.py#L4-L2)", tmp_path)
+    assert docs.link_issues(document, "[File](worker.py)", tmp_path) == []
+    assert any(
+        "unique anchor" in issue
+        for issue in docs.link_issues(document, "[Line](worker.py#L1)", tmp_path)
+    )
+    assert docs.link_issues(document, "```md\n" + text + "```\n", tmp_path) == []
 
 
 def test_translation_checks_commands_identifiers_values_and_structure():
@@ -34,6 +70,61 @@ def test_translation_checks_commands_identifiers_values_and_structure():
             expected in issue
             for issue in docs.pairing_issues(english, chinese.replace(before, after))
         )
+
+
+def test_angle_and_reference_links_check_targets_and_update_source_lines(tmp_path):
+    source = tmp_path / "source file.py"
+    source.write_text("\ndef execute():\n    pass\n")
+    document = tmp_path / "README.md"
+    text = (
+        "[Execute][worker]\n\n"
+        "[worker]: <source file.py#L1> <!-- source: def execute( -->\n"
+    )
+    updated = update_source_links(document, text, tmp_path)
+    assert "<source file.py#L2>" in updated
+    assert docs.link_issues(document, updated, tmp_path) == []
+    assert docs.link_issues(document, "[Missing](<missing source.py>)", tmp_path)
+    assert docs.link_issues(document, "[Missing][undefined]", tmp_path)
+    assert docs.link_issues(document, "[Missing][x]\n\n[x]: missing.py", tmp_path)
+
+
+def test_owned_document_enumeration_does_not_follow_external_symlinks(tmp_path):
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(["git", "init", "-q", str(repository)], check=True)
+    target = tmp_path / "external.md"
+    original = "[Missing](outside.py#L1) <!-- source: def execute( -->\n"
+    target.write_text(original)
+    (repository / "linked.md").symlink_to(target)
+    assert docs.owned_files(repository) == []
+    assert target.read_text() == original
+
+
+def test_reference_before_inline_updates_keep_offsets_when_line_width_changes(tmp_path):
+    (tmp_path / "worker.py").write_text("\n" * 30 + "def execute():\n    pass\n")
+    document = tmp_path / "README.md"
+    text = (
+        "[worker]: worker.py#L1 <!-- source: def execute( -->\n\n"
+        "[Inline](worker.py#L1) <!-- source: def execute( -->\n"
+    )
+    expected = text.replace("worker.py#L1", "worker.py#L31")
+    assert update_source_links(document, text, tmp_path) == expected
+    assert docs.link_issues(document, expected, tmp_path) == []
+
+
+def test_commonmark_links_use_visible_labels_and_protect_inline_examples(tmp_path):
+    document = tmp_path / "README.md"
+    for text in (
+        "[Source](missing.py (Source title))",
+        r"[Source\] label](missing.py)",
+    ):
+        assert docs.link_issues(document, text, tmp_path)
+    assert docs.link_issues(document, "`[Source][undefined]`", tmp_path) == []
+    assert (
+        english_word_count("[One][hidden-long-label]\n\n[hidden-long-label]: file.py")
+        == 1
+    )
+    assert english_word_count("[One](file.py)") == 1
 
 
 def test_sentence_limits_include_parenthetical_internal_sentences():
@@ -157,6 +248,12 @@ def test_repository_check_requires_pairs_ignored_storage_and_consistent_glossary
         "# 术语\n\n| `token` | 名词 | 一个词表 ID. |\n"
     )
     assert docs.check(tmp_path)[0] == []
+    (tmp_path / "README.md").write_text("# Model\n\n" + "word.\n\n" * 2000)
+    assert any("2000" in issue for issue in docs.check(tmp_path)[0])
+    (tmp_path / "README.md").write_text("# Model\n\nThe model works.\n")
+    (tmp_path / "LOCAL.md").write_text("# Local\n\n" + "word.\n\n" * 2000)
+    assert any("LOCAL.md: 2001" in issue for issue in docs.check(tmp_path)[0])
+    (tmp_path / "LOCAL.md").unlink()
     (tmp_path / "README.zh.md").unlink()
     assert any("missing translation" in issue for issue in docs.check(tmp_path)[0])
     (directory / "glossary.zh.md").write_text(

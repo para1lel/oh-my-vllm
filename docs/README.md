@@ -10,7 +10,7 @@ Start with [requirements](requirements.md), [architecture](architecture.md), and
 | [Development](development.md) | Environment, configuration, dependencies, and build. |
 | [Tests](testing.md) | CPU/GPU checks and formal acceptance procedures. |
 | [Service](serving.md) | HTTP subset, masks, thinking, state, and limits. |
-| [Kernels](kernels.md) | CUDA, pinned TileLang, formal cases, and development tools. |
+| [Kernels](kernels.md) | CUDA, independent references, formal cases, and development tools. |
 | [Profiling](profiling.md) | Diagnostics, counters, provenance, and timing limits. |
 | [Acceptance](acceptance.md) | Sole index of measured source and evidence scope. |
 | [Audit](audit.md) | Open findings and compact closed-fix index. |
@@ -44,7 +44,7 @@ Start with [requirements](requirements.md), [architecture](architecture.md), and
 
 Architecture includes the former design document.
 Current work includes the former plan.
-Kernel development combines the former CUDA and TileLang guides.
+Kernel development links native implementation and independent contracts.
 The audit keeps open problems and useful fix identities. Detailed task history stays in Git.
 
 Keep host-specific maintenance in ignored `LOCAL.md`.

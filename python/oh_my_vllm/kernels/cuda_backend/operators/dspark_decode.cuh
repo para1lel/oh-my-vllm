@@ -278,6 +278,7 @@ void dspark_attention_partial(TensorView query, TensorView cache, TensorView tab
                 tables.size(1), cache.size(0), lse.size(2));
   finish_cuda_launch(stream, "dspark_attention_partial");
 }
+
 template <int Splits>
 __global__ void dspark_attention_merge_kernel(const float *__restrict__ partial,
                                               const float *__restrict__ lse,

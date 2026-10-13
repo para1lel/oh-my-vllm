@@ -104,23 +104,29 @@ impl CacheRequest for Request {
     fn request_id(&self) -> RequestId {
         self.id
     }
+
     /// Canonical token count (prompt + accepted output, no drafts).
     /// Used by `cache_blocks` to exclude unverified tokens from the prefix cache.
     fn num_tokens(&self) -> usize {
         self.token_ids.len()
     }
+
     fn num_prompt_tokens(&self) -> usize {
         self.prompt_len
     }
+
     fn num_computed_tokens(&self) -> usize {
         self.num_computed_tokens
     }
+
     fn num_in_flight_tokens(&self) -> usize {
         self.num_in_flight_tokens
     }
+
     fn block_hashes(&self) -> &[BlockHash] {
         &self.block_hashes
     }
+
     fn is_waiting_or_preempted(&self) -> bool {
         matches!(
             self.status,

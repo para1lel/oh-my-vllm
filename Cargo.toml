@@ -3,6 +3,7 @@ members = [
     "crates/kv-cache",
     "crates/scheduler",
     "crates/zmq-worker",
+    "development/style-check",
 ]
 resolver = "3"
 

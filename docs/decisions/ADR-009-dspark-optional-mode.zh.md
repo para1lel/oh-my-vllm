@@ -6,7 +6,7 @@
 
 原生 MTP4 通过 target 模型的 MTP 层提供 4 个草稿 token.
 使用本地 DSpark checkpoint.
-两种 HTTP API 必须在此模式完成真实 OMP 工具任务.
+两种 HTTP API 必须在此模式接受 OMP 请求并返回有效模型响应.
 所有模式使用阶段时延, 精度和服务门槛.
 上下文容量门槛覆盖普通解码和 MTP4.
 
@@ -48,8 +48,7 @@ Target 和 proposal 分布均应用用户采样参数及 grammar mask.
 Confidence 可缩短前缀, 默认阈值为 `0.2`.
 首项 confidence 乘积低于阈值时返回 0 个 candidate, 该步由目标执行单 token 解码.
 设置为 `0.0` 保留至多 7 个固定数量 proposal. 输出, 上下文和 grammar 限制可减少 proposal 数量.
-该设置来自文本 / 工具历史的小样本实验, 输入与正式输入不同.
-[交接](../handoff.zh.md) 记录其范围.
+该默认值是配置选择, 不代表一般最优值. 实际效率由当前源码测量决定.
 
 target graph 与草稿 proposal graph 使用不同内存 pool.
 使用 `fullgraph=True` 编译 target feature, context injection, backbone, Markov step 和 greedy proposal.
@@ -68,8 +67,8 @@ worker 启动时选择一种模式. 在 worker 停止前保持该模式.
 可移植摘要继续作为派生证据.
 
 检查 DSpark 两种 API 的约束, 混合 batch, 取消和长上下文前缀复用.
-OMP 必须读取两个源码文件, 将结果回传后续模型请求, 随后生成最终答案.
-通过 response ID 匹配实际模式的服务日志, 单独检查答案语义.
+检查工具调用及返回结果进入后续模型请求.
+通过 response ID 匹配实际模式的服务日志. 任务进展和最终答案用于诊断, 不决定框架验收.
 
 原 TileLang 文件, manifest 哈希和用例 ID 保持不变.
 新增独立补充参考及静态推导的 DSpark 算子用例.
@@ -82,4 +81,4 @@ OMP 必须读取两个源码文件, 将结果回传后续模型请求, 随后生
 实现保留这些工作, 以正确处理配置的随机输出.
 最终性能声明由实测验收确定.
 
-参见 [需求](../requirements.zh.md) 和 [测试](../testing.zh.md#框架性能).
+参见 [需求](../requirements.zh.md) 和 [测试](../testing/performance.zh.md#框架性能).

@@ -26,5 +26,5 @@
 新架构和 GPU 后端在声明支持前需要具体合同和测试.
 多 GPU 需要 rank-local state 和 collective, Rust 保持调度所有权.
 DSpark 实现必须具备独立 draft state, target hidden feature 和可变 verification/commit/rollback.
-其 5 层 BF16 设计, feature index 和 block 区别见 [架构](../architecture.zh.md#扩展边界).
+其 5 层 BF16 设计, feature index 和 block 区别见 [架构](../architecture/speculation.zh.md#dspark).
 本轮不添加空接口或多节点支持.

@@ -31,8 +31,10 @@
 
 #pragma once
 #include <cute/tensor.hpp>
+
 namespace oh_my_vllm::gemm {
 using namespace cute;
+
 // Adapted from the pinned CUTLASS blockwise accumulator transform.
 // Only the selected medium projection uses this owned transform. Each output
 // retains its K-group order; independent N tiles share one TMEM load wait.
@@ -47,6 +49,7 @@ template <class Base> struct PairedGroupwiseAccum : Base {
   using MainloopSFPipelineState = typename Base::MainloopSFPipelineState;
   static constexpr int ScaleGranularityK = Base::ScaleGranularityK;
   static constexpr int ScaleKsPerTile = Base::ScaleKsPerTile;
+
   /// Transform
   template <class AccumTransformParams, class TmemStorage, class CtaTileCoord, class CopyOpT2R,
             class EpilogueTile>

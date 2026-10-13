@@ -14,8 +14,19 @@ import unicodedata
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from scripts.documentation_contracts import (
+    MAX_ENGLISH_WORDS,
+    document_links,
+    english_word_count,
+    fenced_code_ranges,
+    mask_fenced_code,
+    reference_link_issues,
+    rendered_link_destinations,
+    source_link_issues,
+    update_source_links,
+)
+
 ROOT = Path(__file__).resolve().parents[1]
-FENCE = re.compile(r"^```[^\n]*\n[\s\S]*?^```\s*$", re.M)
 INLINE = re.compile(r"`([^`\n]+)`")
 LINK = re.compile(r"!?\[([^\]]+)\]\(([^\s)]+)\)")
 SENTENCE = re.compile(r"(?<=[.!?])(?:\s+|$)")
@@ -48,12 +59,15 @@ def owned_files(root):
             if name
             and not name.startswith(b"3rdparty/")
             and (root / name.decode()).is_file()
+            and not (root / name.decode()).is_symlink()
+            and (root / name.decode()).resolve().is_relative_to(root.resolve())
         }
     )
 
 
 def prose(text, keep_quotes=False):
-    text = FENCE.sub("", text)
+    text = mask_fenced_code(text)
+    text = re.sub(r"<!--[\s\S]*?-->", "", text)
     text = LINK.sub(lambda m: m[1], text)
     text = INLINE.sub(" QUOTED ", text)
     text = re.sub(r"https?://\S+", " QUOTED ", text)
@@ -80,7 +94,7 @@ def sentences(text):
 
 def markdown_issues(text, chinese=False):
     errors = []
-    if len(re.findall(r"^```", text, re.M)) % 2:
+    if any(not closed for _, _, closed in fenced_code_ranges(text)):
         errors.append("unclosed fenced code block")
     clean = prose(text, keep_quotes=chinese)
     if chinese:
@@ -158,10 +172,16 @@ def markdown_issues(text, chinese=False):
 
 def pairing_issues(english, chinese):
     errors = []
-    if FENCE.findall(english) != FENCE.findall(chinese):
+    if re.findall(r"<!-- source: ([^\n]+?) -->", english) != re.findall(
+        r"<!-- source: ([^\n]+?) -->", chinese
+    ):
+        errors.append("translation changes source anchors")
+    if [english[start:end] for start, end, _ in fenced_code_ranges(english)] != [
+        chinese[start:end] for start, end, _ in fenced_code_ranges(chinese)
+    ]:
         errors.append("translation changes fenced code/commands")
-    a = collections.Counter(INLINE.findall(FENCE.sub("", english)))
-    b = collections.Counter(INLINE.findall(FENCE.sub("", chinese)))
+    a = collections.Counter(INLINE.findall(mask_fenced_code(english)))
+    b = collections.Counter(INLINE.findall(mask_fenced_code(chinese)))
     if a != b:
         errors.append(
             f"translation changes inline identifiers: missing={dict(a - b)}, "
@@ -183,7 +203,7 @@ def pairing_issues(english, chinese):
 def anchors(text):
     result = set()
     counts = collections.Counter()
-    for match in re.finditer(r"^#+ (.+)$", FENCE.sub("", text), re.M):
+    for match in re.finditer(r"^#+ (.+)$", mask_fenced_code(text), re.M):
         title = re.sub(r"[`*_]", "", match[1]).lower()
         slug = "".join(
             c for c in title if c in " -_" or unicodedata.category(c)[0] in "LN"
@@ -194,12 +214,17 @@ def anchors(text):
 
 
 def link_issues(path, text, root):
-    errors = []
-    for _, destination in LINK.findall(FENCE.sub("", text)):
+    errors = source_link_issues(path, text, root) + reference_link_issues(text)
+    destinations = rendered_link_destinations(text)
+    destinations.update(link.destination for link in document_links(text))
+    for destination in sorted(destinations):
         parsed = urlsplit(destination)
         if parsed.scheme or parsed.netloc:
             continue
         target = (path.parent / unquote(parsed.path)).resolve() if parsed.path else path
+        if not target.is_relative_to(root.resolve()):
+            errors.append(f"local link leaves repository: {destination}")
+            continue
         if not target.exists():
             errors.append(f"missing local link: {destination}")
         elif (
@@ -208,8 +233,6 @@ def link_issues(path, text, root):
             and unquote(parsed.fragment) not in anchors(target.read_text())
         ):
             errors.append(f"missing Markdown anchor: {destination}")
-        if not target.is_relative_to(root.resolve()):
-            errors.append(f"local link leaves repository: {destination}")
     return errors
 
 
@@ -261,7 +284,14 @@ def glossary_issues(root):
         ):
             errors.append(f"invalid registered glossary form: {key}")
         for language in ("glossary.md", "glossary.zh.md"):
-            text = (root / "docs" / language).read_text()
+            suffix = ".zh.md" if language.endswith(".zh.md") else ".md"
+            paths = [root / "docs" / language]
+            paths.extend(
+                path
+                for path in sorted((root / "docs/glossary").glob("*.md"))
+                if path.name.endswith(".zh.md") == suffix.startswith(".zh")
+            )
+            text = "\n".join(path.read_text() for path in paths if path.is_file())
             meaning = (
                 entry["translation"]
                 if language.endswith(".zh.md")
@@ -290,6 +320,11 @@ def check(root):
         if path.suffix != ".md":
             continue
         chinese = path.name.endswith(".zh.md")
+        words = english_word_count(text)
+        if not chinese and words > MAX_ENGLISH_WORDS:
+            issues.append(
+                f"{relative}: {words} English words exceeds {MAX_ENGLISH_WORDS}"
+            )
         issues.extend(
             f"{relative}: {error}" for error in markdown_issues(text, chinese)
         )
@@ -307,6 +342,12 @@ def check(root):
                 for error in pairing_issues(text, counterpart.read_text())
             )
     issues.extend(f"docs/terms.json: {error}" for error in glossary_issues(root))
+    local = root / "LOCAL.md"
+    if (
+        local.is_file()
+        and (words := english_word_count(local.read_text())) > MAX_ENGLISH_WORDS
+    ):
+        issues.append(f"LOCAL.md: {words} English words exceeds {MAX_ENGLISH_WORDS}")
     for ignored in ("LOCAL.md", ".local/evidence/example.json"):
         result = subprocess.run(
             ["git", "check-ignore", "-q", ignored], cwd=root, check=False
@@ -319,7 +360,16 @@ def check(root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
+    parser.add_argument("--fix-source-links", action="store_true")
     args = parser.parse_args()
+    if args.fix_source_links:
+        for relative in owned_files(args.root):
+            path = args.root / relative
+            if path.suffix == ".md":
+                text = path.read_text()
+                updated = update_source_links(path, text, args.root)
+                if updated != text:
+                    path.write_text(updated)
     issues, count = check(args.root.resolve())
     if issues:
         print("\n".join(issues))

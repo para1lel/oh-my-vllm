@@ -80,7 +80,7 @@ Compiler retirement starts garbage collection at safe host boundaries.
 
 Source `706f1a6` passed one-hour MTP4 and DSpark resource and memory checks with four agents.
 The results cover the observed input shapes. Measure indefinite shape changes in further collections.
-See [acceptance](acceptance.md) and [long-duration testing](testing.md#long-duration-agentic-service).
+See [acceptance](acceptance.md) and [long-duration testing](testing/soak.md#long-duration-agentic-service).
 
 ## Serving resource corrections
 

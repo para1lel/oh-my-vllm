@@ -23,4 +23,4 @@ Do not connect another worker to the same endpoint.
 Use owned-process cleanup for stale IPC files.
 Remove a stale path only after you make sure that no live owner uses it.
 
-Current framing and asynchronous prepare/execute handling are in the [architecture](../architecture.md#transport-contract).
+Current framing and asynchronous prepare/execute handling are in the [architecture](../architecture/runtime.md#transport-contract).

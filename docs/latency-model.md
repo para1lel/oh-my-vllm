@@ -1,6 +1,6 @@
 # Theoretical phase latency
 
-The [performance requirements](requirements.md#req-perf-001-phase-latency) use the work of each measured request.
+The [performance requirements](requirements/performance.md#req-perf-001-phase-latency) use the work of each measured request.
 The model reads semantic execution records. CUDA Event durations supply diagnostic data only.
 
 ## Request boundaries

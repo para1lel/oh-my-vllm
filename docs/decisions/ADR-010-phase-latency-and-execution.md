@@ -6,10 +6,10 @@ Date: 2026-10-09. Status: implementation in acceptance.
 
 Use per-request framework wall time for prefill and decode.
 Use two full warmups and five measured repetitions for each of fifteen fixed workloads.
-Except for prefix-hit prefill, each phase must have median wall time at most three times its median theoretical lower bound.
+Except for prefix-hit prefill, each phase must have median wall time at most two times its median theoretical lower bound.
 Its spread, `(max-min)/median`, must be at most 10%.
 
-Record the prefix-hit prefill latency ratio without a three-times gate.
+Record the prefix-hit prefill latency ratio without a two-times gate.
 This short cached phase keeps the 10% spread check. Prefix-hit decode keeps the two gates.
 Use [requirements](../requirements.md) for the fixed shapes and capacity tests.
 

@@ -16,7 +16,7 @@ The [owned-kernel and liveness summary](2026-10-10-owned-tuning-liveness.json) u
 
 The [historical serving resource record](2026-10-11-serving-stability.json) gives fifteen phase rows and six capacity cases.
 It also gives two one-hour agentic collections and eight allocator-OOM recovery stages.
-The [README](../../README.md#measured-performance) gives the phase table and separate MTP4/DSpark request plots.
+The [acceptance index](../../docs/acceptance.md) records current scope and pending collection.
 Each result keeps its measured source and full original hash.
 
 The [native SDK collector record](2026-10-13-native-sdk-collector.json) gives CPU fixture checks and original result hashes.
@@ -42,4 +42,4 @@ scripts/with-env.sh python scripts/export_evidence.py --input "$EVIDENCE_DIR/ori
 The exporter keeps its input unchanged and rejects identical input/output locations.
 Examine the summary for host data before you put it in tracked evidence.
 Formal verification uses full original records.
-Performance uses the [phase-latency protocol](../../docs/testing.md#framework-performance).
+Performance uses the [phase-latency protocol](../../docs/testing/performance.md#framework-performance).

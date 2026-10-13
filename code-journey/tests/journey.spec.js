@@ -3,8 +3,11 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 
 const evidence = process.env.JOURNEY_QA_DIR || '/tmp/oh-my-vllm-journey-qa';
+
 const route = (page, name) => page.getByRole('link', { name, exact: true });
+
 const heading = (page) => page.getByRole('heading', { level: 1 });
+
 async function snapshot(page, name, region) {
   await mkdir(evidence, { recursive: true });
   await page.evaluate(async () => {
@@ -18,6 +21,7 @@ async function snapshot(page, name, region) {
     await page.screenshot({ path: evidence + '/' + name + '.png', animations: 'disabled' });
   }
 }
+
 async function openChapter(page, target) {
   await page.goto('/');
   await page.locator('#journey-map').click();
@@ -28,6 +32,7 @@ async function openChapter(page, target) {
   }
   return chapters;
 }
+
 function monitor(page) {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -80,7 +85,9 @@ test('Twine prerequisite routes retain interest and complete all thirteen chapte
 test('actual scheduler boundary traces, refresh and theme persistence', async ({ page }) => {
   const errors = monitor(page);
   await openChapter(page, 'Budget');
+
   const value = (key) => page.locator('[data-value="' + key + '"]');
+
   await expect(value('computed')).toHaveText('0');
   await page.getByRole('button', { name: '执行下一步', exact: true }).click();
   await expect(value('computed')).toHaveText('32144');
@@ -132,7 +139,10 @@ test('normalized source display, dual-theme contrast and both clipboard paths', 
   await block.getByRole('button', { name: '复制 Rust 代码' }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(data.snippets.aligned.text);
   await page.evaluate(() => {
-    const clipboard = navigator.clipboard; window.readClipboard = () => clipboard.readText();
+    const clipboard = navigator.clipboard;
+
+window.readClipboard = () => clipboard.readText();
+
     Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
   });
   await block.getByRole('button', { name: '复制 Rust 代码' }).click();
@@ -145,6 +155,7 @@ test('normalized source display, dual-theme contrast and both clipboard paths', 
       const luminance = (color) => color.match(/\d+/g).slice(0, 3).map(Number).map((x) => x / 255)
         .map((x) => x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4)
         .reduce((sum, x, i) => sum + x * [.2126, .7152, .0722][i], 0);
+
       return [...block.querySelectorAll('.syntax-token, .code-language, .code-copy, .line-number')].filter((t) => t.textContent.trim()).map((t) => {
         const bg = luminance(getComputedStyle(t.closest('.code-toolbar') || block).backgroundColor);
         const fg = luminance(getComputedStyle(t).color); return (Math.max(bg, fg) + .05) / (Math.min(bg, fg) + .05);

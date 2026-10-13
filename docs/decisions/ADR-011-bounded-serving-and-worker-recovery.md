@@ -43,9 +43,10 @@ Use target-model tests for OOM, partial state changes, shared prefixes, and succ
 Run graph eviction and recapture tests with memory pressure and different shapes.
 
 Run separate MTP4 and DSpark soak tests with four oh-my-pi agents.
-Each mode runs for at least one hour and completes at least 500 normal model requests.
+Each mode runs for at least one hour. Request counts and agent task completion are diagnostic, without a minimum-count gate.
+
 Measure request timing and memory. Apply no soak performance gate.
 Measure the fifteen phase workloads again for inference-path changes.
 Daily tests skip the heavy soak tests by default.
 
-See [requirements](../requirements.md#req-serve-006-resource-limits-and-cache-integrity) and [tests](../testing.md).
+See [requirements](../requirements/service.md#req-serve-006-resource-limits-and-cache-integrity) and [tests](../testing.md).

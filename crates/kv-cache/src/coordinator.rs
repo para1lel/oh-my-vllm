@@ -85,6 +85,7 @@ impl HybridCoordinator {
             mamba.num_cached_entries(),
         )
     }
+
     /// Create a coordinator for a pool of `num_blocks` blocks.
     ///
     /// `block_size` must be the same for both groups (Qwen3.8: 784).

@@ -42,10 +42,18 @@ kiwisolver==1.5.1
     # via
     #   -c requirements/tools.txt
     #   matplotlib
+markdown-it-py==4.2.0
+    # via
+    #   -c requirements/runtime.txt
+    #   -r requirements/tools.in
 matplotlib==3.11.2
     # via
     #   -c requirements/tools.txt
     #   -r requirements/tools.in
+mdurl==0.1.2
+    # via
+    #   -c requirements/runtime.txt
+    #   markdown-it-py
 nodeenv==1.11.0
     # via
     #   -c requirements/tools.txt
@@ -57,7 +65,9 @@ numpy==2.5.3
     #   contourpy
     #   matplotlib
 opentelemetry-proto==1.45.1
-    # via -r requirements/tools.in
+    # via
+    #   -c requirements/tools.txt
+    #   -r requirements/tools.in
 packaging==26.3
     # via
     #   -c requirements/runtime.txt
@@ -84,6 +94,7 @@ pre-commit==4.6.2
 protobuf==6.33.6
     # via
     #   -c requirements/runtime.txt
+    #   -c requirements/tools.txt
     #   opentelemetry-proto
 pygments==2.21.0
     # via

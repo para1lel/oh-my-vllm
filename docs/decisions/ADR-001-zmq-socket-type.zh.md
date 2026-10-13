@@ -22,4 +22,4 @@ DEALER 本身不限制为单个 peer.
 不将另一个 worker 连接到相同 endpoint.
 用所属进程清理流程处理遗留 IPC 文件.
 只有确认没有活跃 owner 使用后才删除遗留路径.
-当前 framing 和异步 prepare/execute 处理见 [架构](../architecture.zh.md#传输合同).
+当前 framing 和异步 prepare/execute 处理见 [架构](../architecture/runtime.zh.md#传输合同).

@@ -58,21 +58,27 @@ impl CacheRequest for Req {
     fn request_id(&self) -> RequestId {
         self.id
     }
+
     fn num_tokens(&self) -> usize {
         self.num_tokens
     }
+
     fn num_prompt_tokens(&self) -> usize {
         self.num_prompt_tokens
     }
+
     fn num_computed_tokens(&self) -> usize {
         self.num_computed_tokens
     }
+
     fn num_in_flight_tokens(&self) -> usize {
         self.num_in_flight_tokens
     }
+
     fn block_hashes(&self) -> &[BlockHash] {
         &self.block_hashes
     }
+
     fn is_waiting_or_preempted(&self) -> bool {
         self.waiting
     }

@@ -16,7 +16,7 @@
 
 [历史服务资源记录](2026-10-11-serving-stability.json) 给出十五项阶段负载和六项容量案例.
 它还给出两项一小时 agentic 采集和八项 allocator-OOM 恢复阶段.
-[README](../../README.zh.md#性能实测) 给出阶段表格和独立的 MTP4 / DSpark 请求图.
+[验收索引](../../docs/acceptance.zh.md)记录当前范围和后续采集状态.
 每项结果保留其实测源码和完整原始 SHA.
 
 [原生 SDK collector 记录](2026-10-13-native-sdk-collector.json) 提供 CPU fixture 检查及原始结果哈希.
@@ -42,4 +42,4 @@ scripts/with-env.sh python scripts/export_evidence.py --input "$EVIDENCE_DIR/ori
 导出器保持输入不变, 拒绝相同的输入 / 输出位置.
 放入跟踪证据前, 检查摘要中的主机信息.
 正式验证使用完整原始记录.
-性能采用 [阶段时延协议](../../docs/testing.zh.md#框架性能).
+性能采用 [阶段时延协议](../../docs/testing/performance.zh.md#框架性能).

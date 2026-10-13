@@ -79,7 +79,7 @@ def phase_verdict(wall, lower, *, mode="ordinary", phase="prefill"):
     bound = statistics.median(lower)
     spread = (max(wall) - min(wall)) / median
     latency_gate = not (mode == "prefix" and phase == "prefill")
-    latency_passed = median <= 3 * bound
+    latency_passed = median <= 2 * bound
     spread_passed = spread <= 0.10
     return {
         "wall_median_s": median,

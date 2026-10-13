@@ -21,4 +21,4 @@ Rust 只回滚已调度且被拒绝的草稿.
 保持 block784 和实际路径 FP64 参考容差.
 测试覆盖 target verification state, GQA/GDN, 分块边界, 前缀复用和连贯文本.
 完整模型 token identity 不作为门槛.
-参见 [精度需求](../requirements.zh.md#req-acc-001-数值精度) 和 [验收](../acceptance.zh.md).
+参见 [精度需求](../requirements/core.zh.md#req-acc-001-数值精度) 和 [验收](../acceptance.zh.md).

@@ -121,6 +121,9 @@ async function buildSourceCoverage(highlighter) {
     const source = await readFile(resolve(repo, path), "utf8");
     const offset = source.indexOf(anchor);
     if (offset < 0) throw new Error("Missing coverage anchor: " + path + " / " + anchor);
+    if (source.indexOf(anchor, offset + anchor.length) >= 0) {
+      throw new Error("Ambiguous coverage anchor: " + path + " / " + anchor);
+    }
     const line = source.slice(0, offset).split("\n").length;
     const name = path.replaceAll("/", "__") + ".html";
     const sha256 = createHash("sha256").update(source).digest("hex");
@@ -143,7 +146,9 @@ async function buildSourceCoverage(highlighter) {
       }
     }
   }
+
   const escape = (text) => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
+
   for (const [path, { source, name, entries }] of files) {
     const language = sourceLanguage(path);
     const lines = highlighter.highlight(source, language).map((tokens, index) =>

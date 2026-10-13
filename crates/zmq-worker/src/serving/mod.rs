@@ -91,6 +91,7 @@ pub fn now() -> u64 {
         .unwrap_or_default()
         .as_secs()
 }
+
 static IDS: AtomicU64 = AtomicU64::new(1);
 
 struct Stored {
@@ -99,6 +100,7 @@ struct Stored {
     saved: Instant,
     bytes: usize,
 }
+
 struct Store {
     entries: BTreeMap<String, Stored>,
     ttl: Duration,
@@ -106,12 +108,14 @@ struct Store {
     max_bytes: usize,
     bytes: usize,
 }
+
 impl Store {
     fn prune(&mut self) {
         self.entries
             .retain(|_, value| value.saved.elapsed() < self.ttl);
         self.bytes = self.entries.values().map(|s| s.bytes).sum();
     }
+
     fn insert(&mut self, id: String, response: Value, history: Vec<Value>) -> bool {
         self.prune();
         let bytes =
@@ -155,6 +159,7 @@ struct App {
     health: Arc<Mutex<Value>>,
     request_timeout: Duration,
 }
+
 struct Submission {
     request: Request,
     enqueued: Instant,
@@ -163,6 +168,7 @@ struct Submission {
     ready: oneshot::Sender<std::result::Result<(), (StatusCode, String)>>,
     lease: Lease,
 }
+
 struct Active {
     output: Output,
     parser: Parser,
@@ -355,6 +361,7 @@ async fn diagnostics(State(app): State<App>) -> Json<Value> {
     snapshot["cpu"] = json!({"rss_bytes": resources::rss_bytes()});
     Json(snapshot)
 }
+
 async fn chat(
     State(app): State<App>,
     Extension(lease): Extension<Lease>,
@@ -362,6 +369,7 @@ async fn chat(
 ) -> Response {
     generate(app, lease, body, false).await
 }
+
 async fn responses(
     State(app): State<App>,
     Extension(lease): Extension<Lease>,
@@ -369,6 +377,7 @@ async fn responses(
 ) -> Response {
     generate(app, lease, body, true).await
 }
+
 async fn generate(
     app: App,
     lease: Lease,
@@ -485,6 +494,7 @@ async fn generate(
         .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
         .into_response()
 }
+
 async fn models(State(app): State<App>) -> Json<Value> {
     Json(json!({
         "object": "list",
@@ -498,6 +508,7 @@ async fn models(State(app): State<App>) -> Json<Value> {
         ],
     }))
 }
+
 async fn retrieve(
     State(app): State<App>,
     Extension(lease): Extension<Lease>,
@@ -518,6 +529,7 @@ async fn retrieve(
         None => error(StatusCode::NOT_FOUND, "response not found or expired"),
     }
 }
+
 async fn delete(State(app): State<App>, Path(id): Path<String>) -> Response {
     let mut store = app.store.lock().unwrap();
     store.prune();
@@ -1388,6 +1400,7 @@ mod tests {
             #[command(flatten)]
             serving: ServeArgs,
         }
+
         use clap::Parser;
         assert_eq!(
             Options::parse_from(["serve"])

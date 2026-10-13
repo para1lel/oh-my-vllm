@@ -63,10 +63,10 @@ def test_mixed_phases_use_own_last_minus_own_first_and_exclude_cleanup():
 
 
 def test_ratio_of_medians_is_distinct_from_median_of_ratios():
-    verdict = phase_verdict([2.9, 2.95, 3, 3.05, 3.1], [1, 100, 1, 100, 1])
-    assert verdict["latency_ratio"] == 3
+    verdict = phase_verdict([1.92, 1.96, 2, 2.04, 2.08], [1, 100, 1, 100, 1])
+    assert verdict["latency_ratio"] == 2
     assert verdict["passed"]
-    assert not phase_verdict([3.01] * 5, [1] * 5)["passed"]
+    assert not phase_verdict([2.01] * 5, [1] * 5)["passed"]
 
 
 def test_wall_spread_is_a_phase_gate_with_exact_boundary():

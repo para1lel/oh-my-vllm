@@ -50,7 +50,7 @@ New GPU acceptance must check this dependency combination.
 4. Repository `.venv`.
 
 A missing selected environment is an error.
-The wrapper prepends its `bin` to `PATH` and repository `python` to `PYTHONPATH`.
+The wrapper prepends its `bin` to `PATH` and repository `python` plus the root directory to `PYTHONPATH`.
 The wrapper sets `UV_PYTHON` to its selected Python. An explicit uv `--python` option takes precedence.
 
 Without an explicit value, `CARGO_TARGET_DIR` uses repository `target`.
@@ -138,7 +138,7 @@ Use `-1` for no separate limit. This is the default.
 
 A nonnegative value limits generated reasoning content tokens. The closing marker uses one additional output token.
 Keep the total output limit effective. Effort settings do not change the numeric budget.
-See [service contracts](serving.md#thinking-and-replay) for examples and limits.
+See [service contracts](serving/api.md#thinking-and-replay) for examples and limits.
 
 ## Shared service sampling defaults
 
@@ -153,12 +153,18 @@ scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --s
 
 This example explicitly disables the presence penalty. Other defaults stay effective.
 The two APIs and OMP automatic compaction use the same service defaults when their requests do not supply these fields.
-See [service contracts](serving.md#sampling-tools-and-stopping) for precedence and diagnostics.
+See [service contracts](serving/api.md#sampling-tools-and-stopping) for precedence and diagnostics.
 
 The shared `repetition_guard` default is `true`. Use a boolean service override or request value to disable it.
-See [service contracts](serving.md#sampling-tools-and-stopping) for the bounded cycle rule and intentional repeated output.
+See [service contracts](serving/api.md#sampling-tools-and-stopping) for the bounded cycle rule and intentional repeated output.
 
 ## Build and checks
+
+Documentation and source formatting checks use the tutorial JavaScript parser. Use Node 24 LTS or a newer compatible stable release. Install its local Node dependencies first:
+
+```bash
+npm ci --prefix code-journey
+```
 
 ```bash
 scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
@@ -170,6 +176,8 @@ scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
 scripts/with-env.sh python scripts/format_cuda.py --check
 scripts/with-env.sh python scripts/check_docs.py
+scripts/with-env.sh python scripts/build_glossary.py --check
+scripts/with-env.sh python scripts/check_definition_spacing.py
 scripts/with-env.sh pre-commit run --all-files
 ```
 
@@ -184,7 +192,7 @@ scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_perfor
 The CPU suite includes this check. Complete semantic review of source or provider changes before a contract update.
 
 Use `scripts/test.sh full --evidence-dir "$EVIDENCE_DIR/python-tests"` for full pytest with saved evidence in a new external directory.
-The launcher uses two new processes for the boundary module and other tests. See [testing](testing.md#cpu-and-gpu-suites).
+The launcher uses two new processes for the boundary module and other tests. See [testing](testing/suites.md#cpu-and-gpu-suites).
 
 The CUDA hook uses clang-format 23.1.3 and checks the 800-line module limit.
 Configure the environment before `git commit` so hooks select it correctly.

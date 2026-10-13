@@ -37,12 +37,14 @@ impl Output {
             cached_tokens: 0,
         }
     }
+
     fn event(&mut self, kind: &str, mut body: Value) -> Value {
         body["type"] = json!(kind);
         body["sequence_number"] = json!(self.sequence);
         self.sequence += 1;
         body
     }
+
     fn chat_chunk(&self, delta: Value, finish: Value) -> Value {
         json!({
             "id": self.id,
@@ -58,6 +60,7 @@ impl Output {
             ],
         })
     }
+
     pub fn start(&mut self) -> Vec<Value> {
         if !self.request.responses {
             return vec![self.chat_chunk(
@@ -84,6 +87,7 @@ impl Output {
             ),
         ]
     }
+
     pub fn delta(&mut self, delta: Delta) -> Vec<Value> {
         let mut events = Vec::new();
         if !self.request.responses {
@@ -283,6 +287,7 @@ impl Output {
         }
         events
     }
+
     pub fn finish(&mut self, reason: &str) -> (Value, Vec<Value>) {
         if !self.request.responses {
             let finish = if reason == "length" {
@@ -419,6 +424,7 @@ impl Output {
         ));
         (response, events)
     }
+
     fn usage(&self) -> Value {
         if self.request.responses {
             json!({
@@ -446,6 +452,7 @@ impl Output {
             })
         }
     }
+
     fn response(&self, status: &str, reason: Option<&str>) -> Value {
         json!({
             "id": self.id,
@@ -497,6 +504,7 @@ impl Output {
             "thinking_token_budget": self.request.normalized["thinking_token_budget"],
         })
     }
+
     pub fn error_event(&mut self, message: &str) -> Value {
         if self.request.responses {
             self.event(
@@ -517,6 +525,7 @@ impl Output {
             })
         }
     }
+
     pub fn history(&self) -> Vec<Value> {
         let mut history = self.request.normalized["messages"]
             .as_array()
@@ -547,6 +556,7 @@ impl Output {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn stored_history_drops_only_top_level_instructions() {
         let request = super::super::request::normalize(

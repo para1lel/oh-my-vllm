@@ -18,6 +18,7 @@ __global__ void gates_kernel(const __nv_bfloat16 *__restrict__ ba, const float *
   float e = __expf(-fabsf(b));
   beta[i] = __fdividef(b >= 0.f ? 1.f : e, 1.f + e);
 }
+
 void gates(TensorView ba, TensorView log, TensorView bias, TensorView decay, TensorView beta) {
   TVM_FFI_ICHECK(same_cuda_device(ba, ba) && same_cuda_device(log, ba) &&
                  same_cuda_device(bias, ba) && same_cuda_device(decay, ba) &&
@@ -108,6 +109,7 @@ __global__ void __launch_bounds__(Threads, 1)
   *reinterpret_cast<AlignedVector<__nv_bfloat16, Vector> *>(oq + logical * Vector) = a;
   *reinterpret_cast<AlignedVector<__nv_bfloat16, Vector> *>(ok + logical * Vector) = b;
 }
+
 __global__ void qk_kernel(const __nv_bfloat16 *__restrict__ q, const __nv_bfloat16 *__restrict__ k,
                           __nv_bfloat16 *__restrict__ oq, __nv_bfloat16 *__restrict__ ok, int rows,
                           int heads, int64_t qs, int64_t ks) {
@@ -131,6 +133,7 @@ __global__ void qk_kernel(const __nv_bfloat16 *__restrict__ q, const __nv_bfloat
     ok[static_cast<int64_t>(row) * 128 + lane + j * 32] = __float2bfloat16_rn(kv[j] * ki);
   }
 }
+
 void normalize_qk(TensorView q, TensorView k, TensorView oq, TensorView ok) {
   bool packed = q.size(1) == 16 && q.stride(0) == 10240 && k.stride(0) == 10240 &&
                 reinterpret_cast<uintptr_t>(q.data_ptr()) % 16 == 0 &&
@@ -166,6 +169,7 @@ void normalize_qk(TensorView q, TensorView k, TensorView oq, TensorView ok) {
   finish_cuda_launch(stream, "normalize_qk");
   record_variant(kQk, false);
 }
+
 template <typename State, int Rows, int Warps>
 __global__ void
 recurrent_vector_kernel(const __nv_bfloat16 *__restrict__ q, const __nv_bfloat16 *__restrict__ k,
@@ -252,6 +256,7 @@ recurrent_vector_kernel(const __nv_bfloat16 *__restrict__ q, const __nv_bfloat16
     }
   }
 }
+
 template <typename State>
 __global__ void recurrent_kernel(const __nv_bfloat16 *q, const __nv_bfloat16 *k,
                                  const __nv_bfloat16 *v, const float *decay, const float *beta,
@@ -316,6 +321,7 @@ __global__ void recurrent_kernel(const __nv_bfloat16 *q, const __nv_bfloat16 *k,
     }
   }
 }
+
 void recurrent(TensorView q, TensorView k, TensorView v, TensorView decay, TensorView beta,
                TensorView pool, TensorView starts, TensorView reads, TensorView writes,
                TensorView out) {

@@ -56,7 +56,7 @@ OMP Chat, Responses 和自动压缩在省略采样字段时使用这些值.
 CPU fixture 单独记录 checkpoint 合并后实际 Python 采样参数.
 
 对生成 token 循环使用公共默认值 `repetition_guard=true`. 允许显式布尔覆盖值.
-[服务契约](../serving.zh.md#采样-工具与停止) 定义有界规则和 grammar 回退.
+[服务契约](../serving/api.zh.md#采样-工具与停止) 定义有界规则和 grammar 回退.
 该规则在 target 分布与 DSpark 提议分布的 top-k/top-p 之前应用.
 离线固定长度 greedy 工作负载显式禁用它.
 它改变重复输出, 包括有意重复, 且不保证任务完成.

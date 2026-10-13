@@ -7,6 +7,7 @@ __device__ float phase(int64_t position, int channel, int rotary, double theta) 
   constexpr double tau = 6.283185307179586476925286766559;
   return static_cast<float>(a - nearbyint(a / tau) * tau);
 }
+
 // Fixed model frequencies, computed in FP64 as exp(-log(1e7) * channel /32).
 // Global read-only storage avoids divergent constant-memory serialization.
 __device__ const double rotary_frequency[32] = {
@@ -74,6 +75,7 @@ prepare_attention_kernel(const __nv_bfloat16 *packed, const float *qw, const flo
       out[((int64_t)token * 24 + head) * 256 + lane + j * 32] = __float2bfloat16_rn(values[j]);
   }
 }
+
 void prepare_attention(TensorView p, TensorView qw, TensorView kw, TensorView pos, TensorView cache,
                        TensorView slots, TensorView out) {
   auto stream = stream_for(p, "prepare_attention");
@@ -86,6 +88,7 @@ void prepare_attention(TensorView p, TensorView qw, TensorView kw, TensorView po
 }
 
 bool disjoint_storage(TensorView output, TensorView input);
+
 void check_partial_prepare(TensorView p, TensorView weight, TensorView pos, int width) {
   TVM_FFI_ICHECK(same_cuda_device(p, p) && same_cuda_device(weight, p) &&
                  same_cuda_device(pos, p) && has_dtype(p, kDLBfloat, 16) &&
@@ -98,6 +101,7 @@ void check_partial_prepare(TensorView p, TensorView weight, TensorView pos, int 
                  pos.stride(0) == 1)
       << "partial attention preparation requires contiguous model shapes";
 }
+
 void prepare_context(TensorView p, TensorView kw, TensorView pos, TensorView cache,
                      TensorView slots) {
   check_partial_prepare(p, kw, pos, 2048);
@@ -174,6 +178,7 @@ __global__ void rms_rope_kernel(const __nv_bfloat16 *__restrict__ x,
   for (int j = 0; j < 8; ++j)
     out[static_cast<int64_t>(row) * 256 + lane + j * 32] = __float2bfloat16_rn(values[j]);
 }
+
 void rms_rope(TensorView x, TensorView weight, TensorView positions, TensorView out) {
   int rows = x.size(0) * x.size(1);
   auto stream = stream_for(x, "rms_rope");
@@ -184,6 +189,7 @@ void rms_rope(TensorView x, TensorView weight, TensorView positions, TensorView 
                 Strides{x.stride(0), x.stride(1), x.stride(2)}, positions.dtype().bits == 64);
   finish_cuda_launch(stream, "rms_rope");
 }
+
 __global__ void rope_kernel(const __nv_bfloat16 *__restrict__ x, const void *__restrict__ positions,
                             __nv_bfloat16 *__restrict__ out, int n, int h, int d, int rotary,
                             double theta, bool wide) {
@@ -202,6 +208,7 @@ __global__ void rope_kernel(const __nv_bfloat16 *__restrict__ x, const void *__r
   }
   out[i] = __float2bfloat16_rn(v);
 }
+
 void rope(TensorView x, TensorView positions, TensorView out, int64_t rotary, double theta) {
   int n = x.size(0), h = x.size(1), d = x.size(2);
   auto stream = stream_for(x, "rope");
@@ -274,6 +281,7 @@ __global__ void append_kernel(const __nv_bfloat16 *k, const __nv_bfloat16 *v, __
     }
   }
 }
+
 void append(TensorView k, TensorView v, TensorView cache, TensorView slots) {
   int width = k.size(1) * k.size(2);
   bool vector = width % 8 == 0 && reinterpret_cast<uintptr_t>(k.data_ptr()) % 16 == 0 &&

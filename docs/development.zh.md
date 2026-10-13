@@ -50,7 +50,7 @@ vLLM 及其缓存与项目运行时隔离.
 4. 仓库 `.venv`.
 
 选定环境不存在时即报错.
-包装脚本将其 `bin` 加在 `PATH` 前, 将仓库 `python` 加在 `PYTHONPATH` 前.
+包装脚本将其 `bin` 加在 `PATH` 前, 将仓库 `python` 和根目录加在 `PYTHONPATH` 前.
 包装脚本将 `UV_PYTHON` 设为所选 Python. uv 的显式 `--python` 选项优先.
 
 `CARGO_TARGET_DIR` 默认为仓库 `target`.
@@ -134,7 +134,7 @@ worker 启动时选择一种模式. 在 worker 停止前保持该模式.
 `-1` 表示不单独限制, 也是默认值.
 非负值限制生成的思考内容 token 数. 结束标记额外占一个输出 token.
 总输出限制继续生效. Effort 设置不改变数值预算.
-示例和限制见[服务契约](serving.zh.md#思考与重放).
+示例和限制见[服务契约](serving/api.zh.md#思考与重放).
 
 ## 公共服务采样默认值
 
@@ -149,12 +149,18 @@ scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --s
 
 此示例显式关闭 presence penalty. 其他默认值继续生效.
 两种 API 和 OMP 自动压缩在请求省略这些字段时使用相同的服务默认值.
-优先顺序和 diagnostics 见[服务契约](serving.zh.md#采样-工具与停止).
+优先顺序和 diagnostics 见[服务契约](serving/api.zh.md#采样-工具与停止).
 
 公共 `repetition_guard` 默认值为 `true`. 用布尔服务覆盖值或请求值可关闭它.
-有界循环规则和有意重复输出见[服务契约](serving.zh.md#采样-工具与停止).
+有界循环规则和有意重复输出见[服务契约](serving/api.zh.md#采样-工具与停止).
 
 ## 构建与检查
+
+文档与源码格式检查使用 tutorial 的 JavaScript parser. 使用 Node 24 LTS 或更新的兼容稳定版本. 先安装本地 Node 依赖:
+
+```bash
+npm ci --prefix code-journey
+```
 
 ```bash
 scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
@@ -166,6 +172,8 @@ scripts/with-env.sh ruff format python/
 scripts/with-env.sh ruff check python/
 scripts/with-env.sh python scripts/format_cuda.py --check
 scripts/with-env.sh python scripts/check_docs.py
+scripts/with-env.sh python scripts/build_glossary.py --check
+scripts/with-env.sh python scripts/check_definition_spacing.py
 scripts/with-env.sh pre-commit run --all-files
 ```
 
@@ -180,7 +188,7 @@ scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_perfor
 CPU 套件包含此检查. 源码或 provider 变更后, 更新 contract 前完成语义审查.
 
 使用 `scripts/test.sh full --evidence-dir "$EVIDENCE_DIR/python-tests"` 执行完整 pytest, 将证据保存在新的外部目录.
-Launcher 用两个新进程分别执行边界模块和其余测试. 参见 [测试](testing.zh.md#cpu-与-gpu-测试套件).
+Launcher 用两个新进程分别执行边界模块和其余测试. 参见 [测试](testing/suites.zh.md#cpu-与-gpu-测试套件).
 
 CUDA 钩子使用 clang-format 23.1.3, 并检查模块至多 800 行.
 `git commit` 前配置环境, 确保钩子选择正确环境.

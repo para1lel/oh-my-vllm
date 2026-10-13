@@ -152,6 +152,7 @@ void dispatch(TensorView x, TensorView out, TensorView scales, bool column, bool
     launch_quantize<Input, 0, Aligned>(x, out, scales, column, silu, stream);
   }
 }
+
 template <typename Input>
 void dispatch_alignment(TensorView x, TensorView out, TensorView scales, bool column, bool silu,
                         cudaStream_t stream) {
@@ -162,6 +163,7 @@ void dispatch_alignment(TensorView x, TensorView out, TensorView scales, bool co
   else
     dispatch<Input, false>(x, out, scales, column, silu, stream);
 }
+
 void quantize(TensorView x, TensorView out, TensorView scales, bool column, bool silu) {
   TVM_FFI_ICHECK(same_cuda_device(x, x) && same_cuda_device(out, x) && same_cuda_device(scales, x))
       << "CUDA quantize tensors must share one CUDA device";
@@ -194,6 +196,7 @@ void quantize(TensorView x, TensorView out, TensorView scales, bool column, bool
     dispatch_alignment<float>(x, out, scales, column, silu, stream);
   finish_cuda_launch(stream, "quantize");
 }
+
 __global__ void silu_kernel(const __nv_bfloat16 *__restrict__ x, __nv_bfloat16 *__restrict__ out,
                             int rows, int width) {
   pdl_dependency_wait();
@@ -206,6 +209,7 @@ __global__ void silu_kernel(const __nv_bfloat16 *__restrict__ x, __nv_bfloat16 *
   float a = __bfloat162float(__float2bfloat16_rn(g / (1.f + __expf(-g))));
   out[i] = __float2bfloat16_rn(a * __bfloat162float(x[offset + width]));
 }
+
 void silu_mul(TensorView x, TensorView out) {
   TVM_FFI_ICHECK(same_cuda_device(x, x) && same_cuda_device(out, x))
       << "CUDA SiLU tensors must share one CUDA device";

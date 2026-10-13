@@ -28,5 +28,5 @@ Review each milestone and measure affected hot paths.
 New architectures and GPU backends must have concrete contracts and tests before support claims.
 Multiple GPUs must have rank-local state and collectives while Rust keeps scheduling ownership.
 A DSpark implementation must have its own draft state, target hidden features, and variable verification/commit/rollback.
-Its five-layer BF16 design, feature indices, and block distinctions are in [architecture](../architecture.md#extension-boundaries).
+Its five-layer BF16 design, feature indices, and block distinctions are in [architecture](../architecture/speculation.md#dspark).
 Do not add empty interfaces or multi-node support for this task.

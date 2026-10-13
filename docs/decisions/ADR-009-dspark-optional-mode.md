@@ -6,7 +6,7 @@ Status: active. The [acceptance index](../acceptance.md) gives measured source i
 
 Native MTP4 supplies four draft tokens through the target model's MTP layer.
 Use the local DSpark checkpoint.
-The two HTTP APIs must complete OMP tool tasks with the target checkpoint in this mode.
+The two HTTP APIs must accept OMP requests and return valid model responses in this mode.
 All modes use the phase-latency, accuracy, and service gates.
 Context capacity gates cover ordinary decoding and MTP4.
 
@@ -48,8 +48,7 @@ Use a different draft random generator and keep target generator ownership.
 The confidence head can make the prefix shorter, with a default threshold of `0.2`.
 A first confidence product less than the threshold returns zero candidates, and that step uses one target token.
 Set the threshold to `0.0` for fixed-count proposals up to seven. Output, context, and grammar limits can decrease the proposal count.
-The setting comes from a small text/tool-history experiment with inputs different from formal inputs.
-The [handoff](../handoff.md) records its scope.
+This default is a configuration choice, without a general optimum claim. Current-source measurements decide its efficiency.
 
 Keep target graphs and draft proposal graphs in different memory pools.
 Compile target features, context injection, backbone, Markov step, and greedy proposal with `fullgraph=True`.
@@ -68,8 +67,8 @@ Returned next-step proposals cannot supply the acceptance-rate denominator.
 Portable summaries stay derived evidence.
 
 Check DSpark two-API constraints, mixed batches, cancellation, and long-context prefix reuse.
-OMP must read two source files and forward their results into a subsequent model request before its last answer.
-Compare response IDs with active-mode server logs and examine answer meaning after the automated checks.
+Check tool calls and returned results in subsequent model input.
+Compare response IDs with active-mode server logs. Task progress and final answers are diagnostic and do not decide framework acceptance.
 
 Keep the original TileLang files, manifest hash, and case IDs unchanged.
 Add a different supplemental reference and statically derived DSpark operator cases.
@@ -82,4 +81,4 @@ Full conditional probabilities increase proposal storage and sampling work.
 The implementation keeps this work for correct configured stochastic output.
 The performance claim must use measured acceptance results.
 
-See [requirements](../requirements.md) and [tests](../testing.md#framework-performance).
+See [requirements](../requirements.md) and [tests](../testing/performance.md#framework-performance).

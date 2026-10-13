@@ -248,6 +248,7 @@ attention_partial_kernel(const __nv_bfloat16 *__restrict__ query,
     }
   }
 }
+
 template <bool ModelShape, bool Grouped, typename Position, int Buffers>
 void configure_attention_shared_memory(int shared_bytes) {
   // ModelShape, Grouped and Buffers determine this kernel's shared footprint.
@@ -259,6 +260,7 @@ void configure_attention_shared_memory(int shared_bytes) {
                        cudaFuncAttributeMaxDynamicSharedMemorySize, shared_bytes) == cudaSuccess);
   });
 }
+
 template <typename Position>
 void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorView lengths,
                       TensorView starts, TensorView partial, TensorView lse, int64_t first,
@@ -304,6 +306,7 @@ void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorV
   }
 #undef ATTENTION
 }
+
 void attention_partial(TensorView q, TensorView cache, TensorView tables, TensorView lengths,
                        TensorView starts, TensorView partial, TensorView lse, int64_t first,
                        bool grouped, bool position64, int64_t max_query_len) {
@@ -317,6 +320,7 @@ void attention_partial(TensorView q, TensorView cache, TensorView tables, Tensor
                               max_query_len, stream);
   finish_cuda_launch(stream, "attention_partial");
 }
+
 template <int Splits>
 __global__ void attention_merge_kernel(const float *__restrict__ partial,
                                        const float *__restrict__ lse,

@@ -15,7 +15,7 @@ export PATH="$ENV_PREFIX/bin:$PATH"
 # uv otherwise prefers an inherited active environment over PATH.
 export UV_PYTHON="$ENV_PREFIX/bin/python"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$REPO_ROOT/target}"
-export PYTHONPATH="$REPO_ROOT/python${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$REPO_ROOT/python:$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export OH_MY_VLLM_WORKER_PYTHON="${OH_MY_VLLM_WORKER_PYTHON:-$ENV_PREFIX/bin/python}"
 # Keep independently built kernels separate from other frameworks' artifacts.
 RUNTIME_CACHE="${OH_MY_VLLM_RUNTIME_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/oh-my-vllm/tilelang-ffi012}"

@@ -29,6 +29,7 @@ export async function createCodeHighlighter() {
         darkStyle: variants.dark.fontStyle,
       })));
     },
+
     dispose() { highlighter.dispose(); },
   };
 }

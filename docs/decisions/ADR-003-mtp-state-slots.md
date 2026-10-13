@@ -21,4 +21,4 @@ Precision is part of the measured configuration, not a general MTP accuracy clai
 Keep block 784 and the inference-path FP64 reference tolerances.
 Tests include target verification states, GQA/GDN, chunk boundaries, prefix reuse, and coherent text.
 Full-model token identity is not a gate.
-See [accuracy requirements](../requirements.md#req-acc-001-numerical-accuracy) and [acceptance](../acceptance.md).
+See [accuracy requirements](../requirements/core.md#req-acc-001-numerical-accuracy) and [acceptance](../acceptance.md).
