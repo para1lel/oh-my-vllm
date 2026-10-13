@@ -18,9 +18,22 @@ Presence penalty 为 `0`, repetition penalty 为 `1`.
 在生成切换到普通文本前, 之前的 grep 结果包含思考结束标记.
 输入可能有影响. 这一观察不能确定重复输出的原因.
 
+源码 `98a6eb1` 使用公共 presence penalty `0.5` 和生产思考预算 `-1`.
+其 MTP4 持续测试在 `1276.9908` 秒后失败.
+OMP 在普通文本中检测到连续四次重复的 `257` 字符周期.
+Reasoning 通道没有该周期.
+
+输入与预留输出为 `92124 + 32768` 个 token. 服务在取消时记录 `1725` 个生成 token.
+失败的 stream 没有终止事件或最终 SDK usage.
+
+循环标记和重复文本由模型生成. 实际请求文本不含这些字面标记.
+该重复的原因仍未知.
+下一次参数修改前, 全部八项采集根进程均已回收.
+原始失败和取消记录保留各自源码与状态.
+
 ## 决策
 
-普通, MTP4, DSpark 和测试 HTTP 服务统一使用 presence penalty 默认值 `0.5`.
+普通, MTP4, DSpark 和测试 HTTP 服务统一使用 presence penalty 默认值 `1.5`.
 保持 checkpoint 的 temperature `1`, top_p `.95` 和 top_k `20`, repetition penalty 为 `1`, frequency penalty 为 `0`.
 独立思考预算默认保持 `-1`. Reasoning effort, 总输出限制和上下文限制保留原有契约.
 
@@ -47,7 +60,7 @@ CPU fixture 单独记录 checkpoint 合并后实际 Python 采样参数.
 [vLLM 引擎参数](https://docs.vllm.ai/en/stable/configuration/engine_args/#override-generation-config) 说明服务覆盖值与模型 generation configuration 的合并方式.
 [Qwen 模型卡](https://huggingface.co/Qwen/Qwen3.8-27B#best-practices) 给出思考默认值, 并允许 presence penalty 在 `0` 到 `2` 之间调整.
 Qwen 指出更高惩罚可能降低质量并导致语言混杂.
-选定的 `0.5` 是该范围内的项目配置. 它不是 Qwen 固定推荐的默认值.
+选定的 `1.5` 是该范围内的项目配置. 它不是 Qwen 固定推荐的默认值.
 
 它改变随机生成概率. 需要新的推理和持续会话验收.
 

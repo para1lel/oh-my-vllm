@@ -113,7 +113,7 @@ Record warnings and skipped tests with their reasons.
 
 Test HTTP services use production defaults.
 The two APIs and each draft mode use the same validation and precedence.
-The default presence penalty is `0.5`. The separate reasoning budget default is `-1`.
+The default presence penalty is `1.5`. The separate reasoning budget default is `-1`.
 
 Persistent acceptance must use these defaults. Record service defaults and request sampling fields after service defaults are added from the original diagnostics and metrics.
 Maximum effort and output/context limits stay explicit workload settings.

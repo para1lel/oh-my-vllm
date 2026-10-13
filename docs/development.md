@@ -142,7 +142,7 @@ See [service contracts](serving.md#thinking-and-replay) for examples and limits.
 ## Shared service sampling defaults
 
 Production and test HTTP services use the same sampling defaults in ordinary, MTP4, and DSpark modes.
-The default presence penalty is `0.5`, with checkpoint temperature `1`, top_p `.95`, and top_k `20`.
+The default presence penalty is `1.5`, with checkpoint temperature `1`, top_p `.95`, and top_k `20`.
 The default separate reasoning budget is `-1`. Explicit requests or service options can change these values.
 Use a JSON object with supported sampling keys for service changes:
 

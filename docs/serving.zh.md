@@ -56,7 +56,7 @@ API 子集遵循 [Chat Completions](https://developers.openai.com/api/reference/
 采样支持 temperature, top_p, top_k, seed, 以及 frequency/presence/repetition penalty.
 Checkpoint 默认 temperature `1`, top_p `.95`, top_k `20`.
 
-公共 HTTP 服务默认增加 presence_penalty `0.5`. Frequency penalty 保持 `0`, repetition penalty 保持 `1`.
+公共 HTTP 服务默认增加 presence_penalty `1.5`. Frequency penalty 保持 `0`, repetition penalty 保持 `1`.
 普通, MTP4, DSpark 和测试服务使用相同的默认值.
 独立思考预算默认仍为 `-1`.
 用 `serve --override-generation-config` 和 JSON object 修改支持的采样默认值.

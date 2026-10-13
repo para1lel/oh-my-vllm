@@ -138,7 +138,7 @@ worker 启动时选择一种模式. 在 worker 停止前保持该模式.
 ## 公共服务采样默认值
 
 生产和测试 HTTP 服务在普通, MTP4 和 DSpark 模式中使用相同的采样默认值.
-默认 presence penalty 为 `0.5`, checkpoint temperature 为 `1`, top_p 为 `.95`, top_k 为 `20`.
+默认 presence penalty 为 `1.5`, checkpoint temperature 为 `1`, top_p 为 `.95`, top_k 为 `20`.
 独立思考预算默认是 `-1`. 显式请求或服务选项可以修改这些值.
 用包含支持的采样键的 JSON object 修改服务配置:
 

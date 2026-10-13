@@ -4,7 +4,7 @@
 <h2>词表分数怎样变成输出 ID</h2>
 <p>logits 是模型给每个词表 ID 的分数. 普通最终片段需要一行分数, MTP 验证最多需要五行. RequestSampler 按请求保留已生成历史与随机生成器, 结合 SamplingParams 和可选语法掩码生成概率, 再选出 ID.</p>
 <<source "samplingParams" "展开 SamplingParams 的 9 个字段">>
-<p>HTTP 采样配置按三层合并: 请求显式值优先于服务默认值, 服务值优先于 checkpoint 默认值. 普通, MTP4, DSpark 和测试服务共用 presence_penalty 0.5; checkpoint 的 temperature 1, top_p 0.95, top_k 20 继续有效. --override-generation-config 可以修改支持的服务字段. 请求中省略或 null 使用默认值, 显式 presence_penalty 0 关闭默认惩罚.</p>
+<p>HTTP 采样配置按三层合并: 请求显式值优先于服务默认值, 服务值优先于 checkpoint 默认值. 普通, MTP4, DSpark 和测试服务共用 presence_penalty 1.5; checkpoint 的 temperature 1, top_p 0.95, top_k 20 继续有效. --override-generation-config 可以修改支持的服务字段. 请求中省略或 null 使用默认值, 显式 presence_penalty 0 关闭默认惩罚.</p>
 <p>temperature 为 0 时选择最高分, 称为 greedy (贪心). 大于 0 时先按温度缩放分数, 再经 softmax 归一化. 极小正温度归零, 避免数值溢出. 随机采样使用请求自己的种子和 generator, 当前调用用指数随机量与概率构造竞赛, 选出最大的一项.</p>
 <<math "p_i=\\frac{e^{z_i/T}}{\\sum_j e^{z_j/T}},\\quad y=\\mathop{\\mathrm{argmax}}_i(p_i/E_i),\\quad E_i\\sim\\operatorname{Exp}(1)">>
 <p>z 是调整和筛选后的分数, T 是正温度, p 是概率, E 是各 ID 独立的指数随机量, y 是选中 ID. T 为 0 使用贪心分支. 实现检查真正使用的行至少存在一个有效有限候选, 无效分布会使对应请求结束.</p>

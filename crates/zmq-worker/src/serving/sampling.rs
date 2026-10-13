@@ -13,7 +13,7 @@ const KEYS: [&str; 7] = [
 ];
 
 // Shared by every HTTP API and speculative mode, including test services.
-const DEFAULT_PRESENCE_PENALTY: f64 = 0.5;
+const DEFAULT_PRESENCE_PENALTY: f64 = 1.5;
 
 pub fn extract(body: &Value) -> Result<Value> {
     let mut sampling = json!({});
@@ -157,11 +157,11 @@ mod tests {
     fn shared_defaults_survive_unrelated_server_overrides_and_accept_explicit_zero() {
         assert_eq!(
             service_defaults(&json!({})).unwrap(),
-            json!({"presence_penalty": 0.5})
+            json!({"presence_penalty": 1.5})
         );
         assert_eq!(
             service_defaults(&json!({"top_p": 0.8})).unwrap(),
-            json!({"presence_penalty": 0.5, "top_p": 0.8})
+            json!({"presence_penalty": 1.5, "top_p": 0.8})
         );
         assert_eq!(
             service_defaults(&json!({"presence_penalty": 0})).unwrap(),

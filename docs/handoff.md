@@ -352,7 +352,7 @@ All eleven collection roots were reaped. Task-owned GPU processes exited before 
 The source stayed equal during cancellation. Original failed and canceled records stay unchanged.
 Neither persistent test supplies one-hour or independent memory acceptance.
 
-The service uses one shared presence penalty default `0.5` for production and test HTTP services in each draft mode.
+Source `98a6eb1` used a shared presence penalty default `0.5` for production and test HTTP services in each draft mode.
 Checkpoint temperature, top_p, top_k, total limits, and the separate reasoning budget default `-1` keep their previous values.
 Use `--override-generation-config` for validated service changes. Explicit request values take precedence, with `0` to disable the presence penalty.
 
@@ -374,6 +374,33 @@ The full CPU suite passed `1486` tests and `132` subtests, with `485` GPU tests 
 Source and test file hashes stayed equal during execution.
 The tutorial passed ten source-display tests and nine browser tests after the final request-null wording clarification.
 
+New committed-source GPU acceptance and independent resource review are open.
+
+## Shared presence penalty adjustment
+
+The fresh collection on `98a6eb1` used production defaults, with reasoning budget `-1` and presence penalty `0.5`.
+Its MTP4 persistent test failed after `1276.9908` seconds with four consecutive copies of a `257`-character cycle in ordinary text.
+The reasoning channel did not contain that cycle. SDK error labels do not identify the output channel.
+The recorded request text did not contain the generated loop markers. The cause is not known.
+
+The failed request used `92124` input tokens and `32768` reserved output tokens, below `262144`.
+The server recorded `1725` generated tokens on cancellation. The stream had no terminal event or final SDK usage.
+The SDK error usage values were zero. These values are not measured final token counts.
+
+Ordinary batch `1` and MTP4 batch `1` passed independent phase-model review on this source.
+The active collections were canceled before parameter edits. All eight collection roots were reaped.
+Task-owned GPU processes exited while source hashes stayed equal. Failed and canceled records stay unchanged.
+The partial collections do not supply full matrix, one-hour, or independent memory acceptance.
+
+The shared presence penalty default is now `1.5` for all production and test HTTP services.
+Checkpoint temperature `1`, top_p `.95`, top_k `20`, repetition penalty `1`, frequency penalty `0`, and reasoning budget `-1` stay effective.
+Explicit service and request overrides keep their precedence.
+The new value is a candidate in Qwen's stated adjustment range.
+
+The eight required checks and release build passed.
+The tutorial passed ten source tests and nine browser tests.
+The full CPU suite passed `1486` tests and `132` subtests, with `485` GPU tests not selected and ten dependency warnings.
+Source and test file hashes stayed equal during execution.
 New committed-source GPU acceptance and independent resource review are open.
 
 ## Open work

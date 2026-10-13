@@ -1358,7 +1358,7 @@ class HttpTests(unittest.TestCase):
             with urllib.request.urlopen(address + "/diagnostics", timeout=10) as reply:
                 self.assertEqual(
                     json.load(reply)["limits"]["override_generation_config"],
-                    {"presence_penalty": 0.5},
+                    {"presence_penalty": 1.5},
                 )
             for responses in (False, True):
                 body = self.base(responses)
@@ -1371,7 +1371,7 @@ class HttpTests(unittest.TestCase):
                 with urllib.request.urlopen(request, timeout=20) as reply:
                     self.assertEqual(reply.status, 200)
                 actual = json.loads(capture.read_text().splitlines()[-1])
-                self.assertEqual(actual["presence_penalty"], 0.5)
+                self.assertEqual(actual["presence_penalty"], 1.5)
                 self.assertEqual(actual["repetition_penalty"], 1.0)
 
     def test_worker_step_deadline_controls_delayed_rpc_and_recovery(self):
