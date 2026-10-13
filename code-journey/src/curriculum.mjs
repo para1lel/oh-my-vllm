@@ -17,6 +17,7 @@ export const chapters = {
 // Each record is checked against the current source, then shown in its chapter.
 // Layout: chapter, file, source anchor, responsibility, implementation and decision.
 export const coverage = [
+  ["Sampling", "python/oh_my_vllm/worker/tool_descriptions.py", "def decoding_tools(", "工具描述保留与请求适配", "模型提示保留原始工具参数和注解, 请求准备只向现有 XML decoder 传递支持的 schema 副本. maxLength 等描述由模型遵守, 违反时 OMP 校验并把错误反馈给模型; 显式 strict=true 保持原来的严格检查, 推理与 matcher 实现不变."],
   ["Validation", "python/oh_my_vllm/worker/host_allocator.py", "def host_allocator_snapshot(", "glibc allocator: 主机存储的可选诊断", "现有诊断边界按开关读取 mallinfo2, 保存原始字段, glibc 版本和调用耗时. allocator 已用或保留存储与进程 RSS 分开, 不统计全部活跃对象, 不改变分配选项或主动释放资源."],
   ["Validation", "benchmarks/agentic_sdk_trace.py", "class SdkTrace", "原生 OMP SDK usage 与导出边界", "每个固定客户端使用一个自有 loopback endpoint, 保存带哈希的原始 protobuf. 每次调用唯一关联 SDK response ID, SSE 与服务 metric, API 绑定来自配置和运行时状态. 重复导出保留原始记录, 真正重复的 SDK 完成记录使验证失败."],
   ["Compilation", "python/oh_my_vllm/worker/graph_capture.py", "def capture_graph(", "capture_graph: 图与 cuBLAS 工作区的共同寿命", "全部七个捕获入口先同步并清除缓存 owner, 使新工作区在所属图 pool 内分配. 启动与捕获边界检查实际 allocator, 保留工作区预算, 现有权重与数值容差."],

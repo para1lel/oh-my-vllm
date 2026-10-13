@@ -22,6 +22,7 @@ from xgrammar.structural_tag import (
 )
 
 from oh_my_vllm.worker.sampling import GrammarOutput, SamplingParams
+from oh_my_vllm.worker.tool_descriptions import decoding_tools
 
 # Deliberately bounded subset: unknown keywords must never silently weaken strictness.
 _SCHEMA_KEYS = {
@@ -357,9 +358,10 @@ class ServingAdapter:
         """Build immutable request inputs without publishing a live generation."""
         thinking = request["effort"] != "off"
         tools = request.get("tools", [])
+        grammar_tools = decoding_tools(tools)
         choice = request.get("tool_choice", "auto" if tools else "none")
         fmt = request.get("format", {"type": "text"})
-        for tool in tools:
+        for tool in grammar_tools:
             function = tool["function"]
             function.setdefault(
                 "parameters",
@@ -392,7 +394,7 @@ class ServingAdapter:
         elif tools and choice != "none":
             tag = xgr.get_model_structural_tag(
                 "qwen_3_5",
-                tools=tools,
+                tools=grammar_tools,
                 tool_choice=choice,
                 reasoning=False,
                 parallel_tool_calls=request.get("parallel_tool_calls", True),

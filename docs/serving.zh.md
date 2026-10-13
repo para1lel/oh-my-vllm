@@ -141,9 +141,18 @@ JSON object, JSON Schema 和 strict tool grammar 在采样前生效.
 约束答案可在思考之后生成.
 一个请求不能同时使用 JSON 答案格式和启用工具.
 Strict schema 需要 closed object, 全部 property 都 required.
-不支持的 schema 明确报错.
-支持的 keyword 清单位于 `python/oh_my_vllm/worker/serving.py`.
-不支持未知 string format, 或 pattern / format 与 length bound 的组合.
+不支持的 strict schema 明确报错.
+JSON 答案及显式 strict 工具支持的 keyword 清单位于 `python/oh_my_vllm/worker/serving.py`.
+这些 schema 不支持未知 string format, 或 pattern/format 与 length limit 的组合.
+
+未显式设置 `strict=true` 时, 工具描述可以包含额外 schema keyword.
+模型 prompt 保留完整原始描述和参数.
+请求准备为现有 XML decoder 生成独立副本.
+String 长度, pattern, format, default, examples 及其他省略 keyword 仍是模型应遵守的说明.
+OMP 用原始工具定义校验生成参数, 并向模型返回失败信息.
+已知 XML 类型, 必需字段, function choice 和并行调用规则保持现有行为.
+
+[ADR-018](decisions/ADR-018-client-owned-tool-descriptions.zh.md) 说明请求准备策略.
 
 XGrammar 提供 Qwen XML tool grammar 和 JSON answer grammar.
 
@@ -179,7 +188,8 @@ Property 类型需已知且无歧义.
 允许 property 局部 `$ref` 和无歧义 `anyOf`.
 XML 中 string / nonstring 混合 union 有歧义, 会被拒绝.
 
-XML string 不支持 pattern, length 或 format 约束.
+显式 strict XML string 不支持 pattern, length 或 format 约束.
+其他工具描述可以包含这些 keyword, 由客户端校验.
 String enum / const 不能包含参数结束 delimiter.
 候选值不能只在外围空格, 换行或 tab 上不同.
 Parser 从唯一 schema value 恢复 padding.

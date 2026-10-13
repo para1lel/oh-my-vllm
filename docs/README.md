@@ -39,6 +39,8 @@ Start with [requirements](requirements.md), [architecture](architecture.md), and
 | [ADR-014](decisions/ADR-014-long-prefill-budget-sharing.md) | Implementation in acceptance: long prefill budget division. |
 | [ADR-015](decisions/ADR-015-shared-serving-sampling-defaults.md) | Implementation in acceptance: shared production and test sampling defaults. |
 | [ADR-016](decisions/ADR-016-canonical-serving-control-tokens.md) | Implementation in acceptance: canonical reasoning and tool control boundaries. |
+| [ADR-017](decisions/ADR-017-disposable-native-goal-soaks.md) | Implementation in acceptance: native goals in disposable sandboxes. |
+| [ADR-018](decisions/ADR-018-client-owned-tool-descriptions.md) | Implementation in acceptance: original tool descriptions and client argument checks. |
 
 Architecture includes the former design document.
 Current work includes the former plan.

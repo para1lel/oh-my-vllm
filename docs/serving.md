@@ -144,10 +144,19 @@ JSON object, JSON Schema, and strict tool grammars apply before sampling.
 The constrained answer can follow reasoning.
 A request cannot combine JSON answer format with enabled tools.
 Strict schemas must have closed objects with each property required.
-Unsupported schemas fail explicitly.
+Unsupported strict schemas fail explicitly.
 
-The supported keyword inventory is in `python/oh_my_vllm/worker/serving.py`.
-Unknown string formats and pattern/format combined with length bounds are unsupported.
+The supported keyword inventory for JSON answers and explicit strict tools is in `python/oh_my_vllm/worker/serving.py`.
+These schemas cannot use unknown string formats or combine pattern/format with length limits.
+
+Without explicit `strict=true`, tool descriptions can contain additional schema keywords.
+The model prompt keeps the full original description and parameters.
+Request preparation makes a separate copy for the existing XML decoder.
+String length, pattern, format, defaults, examples, and other omitted keywords stay as instructions for the model.
+OMP validates generated arguments against its original tool definition and returns failures to the model.
+Known XML types, required fields, function choice, and parallel-call rules keep their existing behavior.
+
+[ADR-018](decisions/ADR-018-client-owned-tool-descriptions.md) gives the request preparation policy.
 
 XGrammar supplies Qwen XML tool grammars and JSON answer grammars.
 
@@ -185,7 +194,8 @@ Local property `$ref` and unambiguous `anyOf` are permitted.
 
 Mixed string/nonstring unions are ambiguous in XML and fail.
 
-XML strings cannot use pattern, length, or format constraints.
+Explicit strict XML strings cannot use pattern, length, or format constraints.
+Other tool descriptions can include these keywords for client validation.
 String enum/const cannot contain the parameter closing delimiter.
 Candidates cannot differ only in surrounding spaces, newlines, or tabs.
 The parser restores padding from the unique schema value.

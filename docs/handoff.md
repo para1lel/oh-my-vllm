@@ -489,6 +489,29 @@ An independent review passed `16` focused cleanup and goal cases. All eight requ
 These fixed-response fixtures do not prove target inference or one-hour stability.
 New GPU, service, and independent resource verification is pending on committed source.
 
+## Client-owned tool description verification
+
+Request preparation keeps original tool schemas in model prompts and supplies a separate supported schema copy to the existing XML decoder.
+OMP checks descriptive string limits and returns argument errors to the model.
+Explicit strict requests keep their existing rejection rules. GPU computation, sampling, speculative masks, and matcher implementations keep their existing code.
+[ADR-018](decisions/ADR-018-client-owned-tool-descriptions.md) records the boundary.
+
+Focused worker checks passed `23` tests and `40` subtests.
+Sandboxed OMP executable fixtures passed `5` tests through the two APIs, with its original Bash `maxLength=48` description.
+OMP rejected a `49`-character name, sent the error in subsequent model input, and executed the next valid synchronous command.
+The fixtures used production CPU request preparation but fixed API responses. They do not prove target inference or one-hour stability.
+
+Previous GPU attempts stopped after foreign GPU use or rejection of the original Bash description before model execution.
+Their original failure and cancellation records stay unchanged. Owned GPU workers, containers, images, and sandbox files were released.
+The first full CPU collection passed `1536` tests and `156` subtests, with `487` GPU tests not selected.
+A hook changed test import formatting during execution. A new full collection must show unchanged source.
+
+The new full collection passed `1536` tests and `156` subtests, with `487` GPU tests not selected and unchanged source.
+
+All eight required checks and hooks passed after the formatting change.
+The tutorial passed `10` source-display tests and `9` browser tests.
+Independent source, STE, and translation reviews passed. New GPU, service, and independent resource checks are pending on committed source.
+
 ## Open work
 
 - Extend `PY-04` to cross-shape graph eviction and recapture near the maximum supported context.

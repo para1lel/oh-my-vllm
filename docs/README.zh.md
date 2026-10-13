@@ -39,6 +39,8 @@
 | [ADR-014](decisions/ADR-014-long-prefill-budget-sharing.zh.md) | 实现进入验收: 长 prefill 预算分配. |
 | [ADR-015](decisions/ADR-015-shared-serving-sampling-defaults.zh.md) | 实现进入验收: 生产和测试的公共采样默认值. |
 | [ADR-016](decisions/ADR-016-canonical-serving-control-tokens.zh.md) | 实现进入验收: 统一思考和工具控制边界. |
+| [ADR-017](decisions/ADR-017-disposable-native-goal-soaks.zh.md) | 实现进入验收: 可删除沙箱中的原生 goal. |
+| [ADR-018](decisions/ADR-018-client-owned-tool-descriptions.zh.md) | 实现进入验收: 原始工具描述和客户端参数检查. |
 
 架构包含原设计文档.
 当前工作包含原计划.

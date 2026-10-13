@@ -135,6 +135,22 @@ scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_servin
 它检查显式零, null 省略, 服务修改和 worker 启动前的拒绝.
 Rust 测试为 CLI 与请求字段共用同一校验函数.
 
+## 原生工具描述兼容性
+
+通过两种 API 使用固定版本 OMP 的原始 Bash 工具定义.
+其 `name` 参数具有 `maxLength=48`. 模型 prompt 保留该描述.
+请求适配器必须接受该描述, 不添加 string 长度 mask.
+OMP 必须拒绝生成的 `49` 字符 name, 在后续模型输入返回该错误, 并完成下一条合法命令.
+显式 `strict=true` 必须保留不支持 schema 的拒绝行为.
+
+CPU fixture 使用确定性 API 响应和真实 sandbox OMP 进程.
+它不能证明目标模型输出或一小时稳定性.
+`OH_MY_VLLM_MODEL` 和 release normalizer 可用时, 它还使用生产 CPU preflight.
+
+```bash
+scripts/with-env.sh python -m pytest tests/test_serving_worker.py tests/test_agentic_goal_integration.py -q
+```
+
 ## 思考预算验收
 
 构建 release binary, 用 `serve --thinking-token-budget 32` 启动各模式服务.

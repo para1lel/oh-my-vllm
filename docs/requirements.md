@@ -215,6 +215,10 @@ Scripted workers alone cannot show target-model acceptance.
 Thinking grammar and budget accounting must use the same closing token identity.
 Enabled tool constraints must start at the opener recognized by the output parser.
 
+Keep original tool descriptions and parameter schemas in the model prompt.
+For tools without explicit `strict=true`, accept descriptive keywords through a separate copy of the supported XML schema.
+OMP checks descriptive argument limits and returns errors to the model. Keep explicit strict schemas and inference computation unchanged.
+
 For each draft mode, run tests for the two APIs, constraints, cancellation, mixed batches, and long-context prefix reuse.
 OMP evidence must show two source reads, forwarded results, continued generation, and an answer that uses those results.
 Compare response IDs with server logs for the active mode and scheduled drafts.

@@ -510,6 +510,77 @@ class ServingTests(unittest.TestCase):
         )
         self.assertTrue(self.adapter.generations[1].matcher.accept_string(call))
 
+    def test_native_tool_descriptions_remain_in_prompt_without_length_masks(self):
+        parameters = {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 48,
+                    "pattern": "^[a-z]+$",
+                    "format": "client-defined-name",
+                    "default": "example",
+                    "examples": ["example"],
+                }
+            },
+            "required": ["name"],
+            "additionalProperties": False,
+        }
+        tools = [
+            {
+                "type": "function",
+                "function": {"name": "bash", "parameters": parameters},
+            }
+        ]
+        original = copy.deepcopy(tools)
+        request = {
+            "messages": [{"role": "user", "content": "Use the bash tool."}],
+            "effort": "off",
+            "max_tokens": 128,
+            "format": {"type": "text"},
+            "tools": tools,
+        }
+        ids, _, generation = self.adapter.prepare_inputs(request)
+        self.assertEqual(request["tools"], original)
+        self.adapter.generations[1] = generation
+        prompt = self.adapter.tokenizer.decode(ids)
+        self.assertIn('"maxLength": 48', prompt)
+        self.assertIn('"format": "client-defined-name"', prompt)
+        self.assertIn('"examples": ["example"]', prompt)
+        call = (
+            "<tool_call>\n<function=bash>\n<parameter=name>"
+            + "X" * 49
+            + "</parameter>\n</function>\n</tool_call>"
+        )
+        generation = self.adapter.generations[1]
+        self.assertTrue(generation.matcher.accept_string(call))
+        # The normal mask/consume path also leaves owner constraints to OMP.
+        self.prepare(format={"type": "text"}, tools=tools)
+        generation = self.adapter.generations[1]
+        ids = self.adapter.tokenizer.encode(call, add_special_tokens=False)
+        for token in ids:
+            self.assertTrue(self.mask_allows(token))
+            generation.consume([token], self.adapter.tokenizer)
+
+    def test_explicit_strict_tool_keeps_unsupported_schema_rejection(self):
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "bash",
+                    "strict": True,
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"name": {"type": "string", "maxLength": 48}},
+                        "required": ["name"],
+                        "additionalProperties": False,
+                    },
+                },
+            }
+        ]
+        with self.assertRaises(RequestValidationError):
+            self.prepare(format={"type": "text"}, tools=tools)
+
     def test_required_tools_and_parallel_limit(self):
         tools = [
             {

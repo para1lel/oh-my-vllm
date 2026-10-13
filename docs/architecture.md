@@ -38,6 +38,11 @@ The shared sampler applies `repetition_guard` after grammar masks and before top
 It uses bounded generated-token history and each speculative prefix.
 [Service contracts](serving.md#sampling-tools-and-stopping) specify its thresholds, grammar fallback, explicit disable option, and limits.
 
+The model prompt keeps full tool descriptions.
+For tools without explicit `strict=true`, request preparation supplies a separate schema copy to the existing XML decoder.
+The tool owner validates descriptive constraints and returns argument errors to the model.
+Explicit strict schemas keep their existing validation. GPU computation, sampling, and matcher implementations stay unchanged.
+
 ## Rust modules
 
 | Module | Responsibility |
@@ -65,7 +70,7 @@ Production and test HTTP services use the same default presence penalty `0.5`.
 | `worker/mtp.py` | Proposals, verification, accepted-state retention, and checkpoint writes. |
 | `worker/dspark.py`, `worker/dspark_graph.py` | DSpark context, conditional proposals, confidence limits, and different proposal graphs. |
 | `worker/decode_graph.py`, `graph_cache.py` | Persistent inputs, transactional capture, graph entry limits, and replay. |
-| `worker/serving.py`, `sampling.py`, `sampler.py` | Tokenization, XGrammar, sampling, detokenization, and output accounting. |
+| `worker/serving.py`, `tool_descriptions.py`, `sampling.py`, `sampler.py` | Tokenization, XGrammar, sampling, detokenization, and output accounting. |
 | `models/qwen.py` | Checkpoint loading, 64-layer target, MTP layer, FP8/ordinary projections, and forward units. |
 | `models/dspark.py` | Local BF16 draft checkpoint, five GQA layers, target-feature projection, and Markov/confidence heads. |
 | `ir/` | Semantic operations, references, mutation schemas, provider selection, lowering, and coverage. |

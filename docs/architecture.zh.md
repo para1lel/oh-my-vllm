@@ -37,6 +37,11 @@ DSpark 提议概率可以与受约束的 target 分布不同. 它的拒绝修正
 它使用有界的生成 token 历史和各行草稿前缀.
 [服务契约](serving.zh.md#采样-工具与停止) 规定阈值, grammar 回退, 显式关闭选项和限制.
 
+工具描述完整保留在模型 prompt 中.
+工具未显式设置 `strict=true` 时, 请求准备向现有 XML decoder 提供独立 schema 副本.
+工具所有者校验描述约束, 并将参数错误返回模型.
+显式 strict schema 保持现有校验. GPU 计算, sampling 及 matcher 实现不变.
+
 ## Rust 模块
 
 | 模块 | 职责 |
@@ -64,7 +69,7 @@ DSpark 提议概率可以与受约束的 target 分布不同. 它的拒绝修正
 | `worker/mtp.py` | Proposal, 验证, 已接受状态保留和 checkpoint 写入. |
 | `worker/dspark.py`, `worker/dspark_graph.py` | DSpark context, 条件 proposal, confidence 限制和独立 proposal graph. |
 | `worker/decode_graph.py`, `graph_cache.py` | 持久输入, 事务式 capture, 有界 graph 条目和 replay. |
-| `worker/serving.py`, `sampling.py`, `sampler.py` | Tokenization, XGrammar, 采样, detokenization 和输出计数. |
+| `worker/serving.py`, `tool_descriptions.py`, `sampling.py`, `sampler.py` | Tokenization, XGrammar, 采样, detokenization 和输出计数. |
 | `models/qwen.py` | Checkpoint 加载, 64 层 target, MTP 层, FP8 / 普通 projection 和 forward 单元. |
 | `models/dspark.py` | 本地 BF16 草稿 checkpoint, 5 层 GQA, target feature projection 及 Markov / confidence head. |
 | `ir/` | 语义算子, 参考, mutation schema, provider 选择, lowering 和覆盖. |

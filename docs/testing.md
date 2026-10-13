@@ -137,6 +137,22 @@ Offline phase/operator measurements and budget boundary tests keep their specifi
 It checks explicit zero, null omission, service changes, and rejection before worker launch.
 Rust tests use the same validation function for CLI and request fields.
 
+## Native tool description compatibility
+
+Use the original pinned OMP Bash tool definition through the two APIs.
+Its `name` parameter has `maxLength=48`. Keep this description in the model prompt.
+The request adapter must accept the description without adding a string-length mask.
+OMP must reject a generated name with `49` characters, return that error in subsequent model input, and complete the next valid command.
+Explicit `strict=true` must keep unsupported-schema rejection.
+
+The CPU fixture uses deterministic API responses and a sandboxed OMP executable process.
+It does not prove target-model output or one-hour stability.
+With `OH_MY_VLLM_MODEL` and the release normalizer available, it also uses the production CPU preflight.
+
+```bash
+scripts/with-env.sh python -m pytest tests/test_serving_worker.py tests/test_agentic_goal_integration.py -q
+```
+
 ## Reasoning budget acceptance
 
 Build the release binary and start each service with `serve --thinking-token-budget 32`.
