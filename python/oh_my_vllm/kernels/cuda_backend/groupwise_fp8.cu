@@ -46,7 +46,7 @@ using namespace cute;
 
 template <int ScaleGranularityM, int ScaleGranularityN, int ScaleGranularityK, bool ScaleMajorK,
           int MmaSM, typename DTypeIn, typename DTypeOut, int PipelineStages = 0, int ClusterN = 1,
-          int TileK = 128, bool ConversionOnly = false>
+          int TileK = 128, bool ConversionOnly = false, int TileM = 128>
 cudaError_t CutlassGroupwiseScaledGEMMSM100(void *float_buffer, size_t float_buffer_size_in_bytes,
                                             DTypeIn *A_ptr, DTypeIn *B_ptr, float *SFA_ptr,
                                             float *SFB_ptr, DTypeOut *D_ptr, int m, int n, int k,
@@ -79,7 +79,7 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void *float_buffer, size_t float_buf
   using ElementAccumulator = float; // Element Accumulator will also be our scale factor type
   using ElementCompute = float;
 
-  using MmaTileShape_MNK = Shape<cute::Int<MmaSM * 128>, _128, cute::Int<TileK>>;
+  using MmaTileShape_MNK = Shape<cute::Int<MmaSM * TileM>, _128, cute::Int<TileK>>;
   using ClusterShape_MNK = Shape<cute::Int<MmaSM>, cute::Int<ClusterN>, _1>;
 
   // NOTE(Zihao):: UMMA::Major::MN, UMMA::Major::MN is the fastest configuration.
@@ -249,12 +249,12 @@ void groupwise_fp8(TensorView a, TensorView weight, TensorView scale_a, TensorVi
   }
   TVM_FFI_ICHECK(scale_major_k || (mma_sm == 2 && m >= 32144 && n == 34816 && k == 5120))
       << "MN scales require the full two-SM gate/up shape";
-  auto run = [&](auto sm, auto stages, auto major_k, auto cluster_n, auto tile_k,
+  auto run = [&](auto tile_m, auto sm, auto stages, auto major_k, auto cluster_n, auto tile_k,
                  auto conversion_only) {
     return oh_my_vllm::gemm::CutlassGroupwiseScaledGEMMSM100<
         1, 128, 128, decltype(major_k)::value, decltype(sm)::value, cutlass::float_e4m3_t,
         cutlass::bfloat16_t, decltype(stages)::value, decltype(cluster_n)::value,
-        decltype(tile_k)::value, decltype(conversion_only)::value>(
+        decltype(tile_k)::value, decltype(conversion_only)::value, decltype(tile_m)::value>(
         workspace.data_ptr(), workspace.size(0), static_cast<cutlass::float_e4m3_t *>(a.data_ptr()),
         static_cast<cutlass::float_e4m3_t *>(weight.data_ptr()),
         static_cast<float *>(scale_a.data_ptr()), static_cast<float *>(scale_weight.data_ptr()),
@@ -286,23 +286,33 @@ void groupwise_fp8(TensorView a, TensorView weight, TensorView scale_a, TensorVi
                                  ((k == 5120 && (n == 34816 || n == 16384 || n == 14336)) ||
                                   (n == 5120 && (k == 17408 || k == 6144)));
   auto status =
-      mma_sm == 1 ? (medium_projection
-                         ? run(std::integral_constant<int, 1>{}, std::integral_constant<int, 5>{},
-                               std::true_type{}, std::integral_constant<int, 2>{},
-                               std::integral_constant<int, 128>{}, std::true_type{})
-                         : run(std::integral_constant<int, 1>{}, std::integral_constant<int, 0>{},
-                               std::true_type{}, std::integral_constant<int, 1>{},
-                               std::integral_constant<int, 128>{}, std::false_type{}))
+      mma_sm == 1 && m <= 64
+          ? run(std::integral_constant<int, 64>{}, std::integral_constant<int, 1>{},
+                std::integral_constant<int, 0>{}, std::true_type{},
+                std::integral_constant<int, 1>{}, std::integral_constant<int, 128>{},
+                std::false_type{})
+      : mma_sm == 1 ? (medium_projection
+                           ? run(std::integral_constant<int, 128>{},
+                                 std::integral_constant<int, 1>{}, std::integral_constant<int, 5>{},
+                                 std::true_type{}, std::integral_constant<int, 2>{},
+                                 std::integral_constant<int, 128>{}, std::true_type{})
+                           : run(std::integral_constant<int, 128>{},
+                                 std::integral_constant<int, 1>{}, std::integral_constant<int, 0>{},
+                                 std::true_type{}, std::integral_constant<int, 1>{},
+                                 std::integral_constant<int, 128>{}, std::false_type{}))
       : m >= 32144 && n == 34816 && k == 5120
-          ? (scale_major_k ? run(std::integral_constant<int, 2>{}, std::integral_constant<int, 5>{},
+          ? (scale_major_k ? run(std::integral_constant<int, 128>{},
+                                 std::integral_constant<int, 2>{}, std::integral_constant<int, 5>{},
                                  std::true_type{}, std::integral_constant<int, 1>{},
                                  std::integral_constant<int, 128>{}, std::false_type{})
-                           : run(std::integral_constant<int, 2>{}, std::integral_constant<int, 3>{},
+                           : run(std::integral_constant<int, 128>{},
+                                 std::integral_constant<int, 2>{}, std::integral_constant<int, 3>{},
                                  std::false_type{}, std::integral_constant<int, 1>{},
                                  std::integral_constant<int, 256>{}, std::false_type{}))
-          : run(std::integral_constant<int, 2>{}, std::integral_constant<int, 0>{},
-                std::true_type{}, std::integral_constant<int, 1>{},
-                std::integral_constant<int, 128>{}, std::false_type{});
+          : run(std::integral_constant<int, 128>{}, std::integral_constant<int, 2>{},
+                std::integral_constant<int, 0>{}, std::true_type{},
+                std::integral_constant<int, 1>{}, std::integral_constant<int, 128>{},
+                std::false_type{});
   TVM_FFI_ICHECK(status == cudaSuccess) << cudaGetErrorString(status);
   if (debug) {
     auto result = cudaStreamSynchronize(stream);

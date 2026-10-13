@@ -113,11 +113,17 @@ def _project_quantized(data, scale, weight, weight_scale, *, logical_rows=None):
             scale_major_k=not mn,
         )
         return output[:rows] if mn else output
+    from .cuda_backend import compiled
     from .cuda_backend.groupwise import gemm
 
-    padded = max(128, (rows + 127) // 128 * 128)
-    padded_data = torch.nn.functional.pad(data, (0, 0, 0, padded - data.shape[0]))
-    padded_scale = torch.nn.functional.pad(scale, (0, 0, 0, padded - scale.shape[0]))
+    padded = 64
+    padded_data = torch.empty(
+        (padded, data.shape[1]), device=data.device, dtype=data.dtype
+    )
+    padded_scale = torch.empty(
+        (padded, scale.shape[1]), device=scale.device, dtype=scale.dtype
+    )
+    compiled().pad_quantized(data, scale, padded_data, padded_scale)
     return gemm(padded_data, weight, padded_scale, weight_scale)[:rows]
 
 

@@ -62,12 +62,46 @@ def test_changed_inputs_and_ragged_offsets_replay_independent_reference():
         verify("gdn_prefill", lambda expected=expected: expected, lambda: actual)
 
 
-def test_chunk_scratch_capacity_alias_and_output_canaries():
+@pytest.mark.parametrize("unaligned", [False, True])
+def test_chunk_scratch_capacity_alias_and_output_canaries(unaligned):
     q, k, v, decay, beta, state, offsets = inputs(129)
+    expected = reference(q, k, v, decay, beta, state, offsets)
     q, k = normalize_qk(q, k)
+    source_storages = []
+    if unaligned:
+        strided = []
+        for tensor in (q, k, v):
+            token_width = tensor.shape[1] * tensor.shape[2]
+            storage = torch.full(
+                (tensor.shape[0] * (token_width + 1) + 1,),
+                29,
+                device="cuda",
+                dtype=tensor.dtype,
+            )
+            view = storage.as_strided(
+                tensor.shape, (token_width + 1, tensor.shape[2], 1), storage_offset=1
+            )
+            view.copy_(tensor)
+            source_storages.append((storage, storage.clone()))
+            strided.append(view)
+        q, k, v = strided
     chunks = 5
     coefficients = torch.empty(chunks, 48, 64, 64, device="cuda", dtype=torch.bfloat16)
     cumulative = torch.empty(chunks, 48, 64, device="cuda")
+    transformed_keys = torch.empty(
+        chunks, 48, 64, 128, device="cuda", dtype=torch.bfloat16
+    )
+    transformed_values = torch.empty(chunks, 48, 64, 128, device="cuda")
+    query_key_scores = torch.empty(
+        chunks, 48, 64, 64, device="cuda", dtype=torch.bfloat16
+    )
+    carried_keys = torch.empty_like(transformed_keys)
+    intermediates = (
+        transformed_keys,
+        transformed_values,
+        query_key_scores,
+        carried_keys,
+    )
     storage = torch.full((131, 48, 128), 19, device="cuda", dtype=torch.bfloat16)
     final_storage = torch.full(
         (5, 48, 128, 128), 23, device="cuda", dtype=torch.float32
@@ -79,17 +113,65 @@ def test_chunk_scratch_capacity_alias_and_output_canaries():
             k, decay, beta, offsets, coefficients[:2], cumulative[:2]
         )
     module.gdn_chunk_prepare(k, decay, beta, offsets, coefficients, cumulative)
+    module.gdn_chunk_project(q, k, v, offsets, coefficients, cumulative, *intermediates)
     with pytest.raises(Exception, match="Check failed"):
-        module.gdn_chunk_scan(
-            q, k, v, state, offsets, coefficients[:2], cumulative[:2], output, final
+        module.gdn_chunk_project(
+            q,
+            k,
+            v,
+            offsets,
+            coefficients,
+            cumulative,
+            transformed_keys[:2],
+            transformed_values,
+            query_key_scores,
+            carried_keys,
+        )
+    with pytest.raises(Exception, match="Check failed"):
+        module.gdn_chunk_project(
+            q,
+            k,
+            v,
+            offsets,
+            coefficients,
+            cumulative,
+            transformed_keys,
+            transformed_values,
+            query_key_scores,
+            transformed_keys,
         )
     with pytest.raises(Exception, match="Check failed"):
         module.gdn_chunk_scan(
-            q, k, v, state, offsets, coefficients, cumulative, output, state
+            q,
+            k,
+            v,
+            state,
+            offsets,
+            coefficients[:2],
+            cumulative[:2],
+            *intermediates,
+            output,
+            final,
+        )
+    with pytest.raises(Exception, match="Check failed"):
+        module.gdn_chunk_scan(
+            q,
+            k,
+            v,
+            state,
+            offsets,
+            coefficients,
+            cumulative,
+            *intermediates,
+            output,
+            state,
         )
     module.gdn_chunk_scan(
-        q, k, v, state, offsets, coefficients, cumulative, output, final
+        q, k, v, state, offsets, coefficients, cumulative, *intermediates, output, final
     )
+    verify("gdn_prefill", lambda: expected, lambda: (output, final))
+    for source_storage, initial in source_storages:
+        torch.testing.assert_close(source_storage, initial, rtol=0, atol=0)
     torch.testing.assert_close(
         storage[[0, -1]], torch.full_like(storage[[0, -1]], 19), rtol=0, atol=0
     )

@@ -13,6 +13,7 @@ from pathlib import Path
 _FUNCTIONS = (
     "variant_launch_count",
     "quantize",
+    "pad_quantized",
     "rms_quantize",
     "gated_quantize",
     "silu_mul",
@@ -29,6 +30,7 @@ _FUNCTIONS = (
     "recurrent",
     "gdn_prefill",
     "gdn_chunk_prepare",
+    "gdn_chunk_project",
     "gdn_chunk_scan",
     "append",
     "convolution",

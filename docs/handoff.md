@@ -42,8 +42,8 @@ Selected native GPU checks passed 76 cases for attention, GDN state/replay/inval
 A checkpoint-loaded ordinary smoke run completed and released its worker.
 All 22 TileFoundry analyses and one CUDA twin CLI check passed after the upstream rebase.
 
-The complete 517-case matrix, full GPU suite, framework phases, six capacity boundaries, and two one-hour runs are pending for milestone four.
-GDN chunk tuning improved selected timings, but the full framework performance gate is unverified.
+The full GPU suite, framework phases, six capacity boundaries, and two one-hour runs are pending for milestone four.
+Operator results below apply only to their recorded source. The final-source matrix is pending.
 No new-source full GPU acceptance is claimed. Historical repair results belong to source `b98a83a` and earlier recorded commits.
 
 Milestone four's diagnostic checkpoint adds default-off small Torch profiler windows and dark cache-hit request plots.
@@ -53,10 +53,21 @@ The profiler GPU test and a checkpoint-loaded small benchmark passed. The trace 
 Required Rust/style/document checks and tutorial checks passed before the checkpoint.
 Independent review checked profiler cleanup, default-off semantics, and paired document scope.
 
-All 517 operator cases passed in an uncommitted-source diagnostic run after correcting independent FP8 reference division and scale strides.
-Formal operator evidence must be recollected from the committed source.
+Committed source `a17b031` passed the complete CPU suite: 1587 cases and 153 subtests.
+Its formal 517-case operator matrix passed with complete coverage and no interference.
+
+The next CUDA checkpoint improves GDN chunk execution and small FP8 projections while retaining independent numerical and state contracts.
+Selected integrated GPU checks passed 29 cases. Added tail-tile and unaligned-storage checks passed seven cases.
+A canary variable in a test masked the output storage before correction. All seven affected checks passed afterward.
+
+Independent review found no correctness blocker and approved refreshing source identities without changing the lower-bound model.
+
+The tuned-source diagnostic matrix passed all 517 operator cases with complete coverage and no interference.
 A framework diagnostic completed two warmups and five measurements with no OOM or preemption.
-Its runtime contract was stale, so analysis rejected it. Its timings show that further tuning must precede the two-times gate.
+
+Steady prefill was about 1.57 seconds and decode about 42 seconds for one ordinary 32768-input/4096-output request.
+The two-times gate is not met. These diagnostic results are not formal acceptance.
+The final-source matrix and framework phases must be recollected after further tuning.
 External CUDA candidates are not production changes or acceptance evidence.
 
 Summaries with obsolete comparison provenance were removed from the working tree. Git history keeps their original results.

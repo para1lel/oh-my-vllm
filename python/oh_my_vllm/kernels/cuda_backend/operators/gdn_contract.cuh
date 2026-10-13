@@ -37,3 +37,22 @@ void validate_gdn_scratch(TensorView coefficients, TensorView cumulative, Tensor
                  cumulative.stride(2) == 1 && cumulative.stride(1) == 64 &&
                  cumulative.stride(0) == heads * 64 && disjoint_storage(coefficients, cumulative));
 }
+
+void validate_gdn_chunk_tensor(TensorView tensor, TensorView device, int64_t chunks, int64_t heads,
+                               int columns, int code, int bits) {
+  TVM_FFI_ICHECK(same_cuda_device(tensor, device) && tensor.ndim() == 4 &&
+                 tensor.size(0) == chunks && tensor.size(1) == heads && tensor.size(2) == 64 &&
+                 tensor.size(3) == columns && has_dtype(tensor, code, bits) &&
+                 tensor.stride(3) == 1 && tensor.stride(2) == columns &&
+                 tensor.stride(1) == 64 * columns && tensor.stride(0) == heads * 64 * columns &&
+                 aligned(tensor, 16));
+}
+
+void validate_gdn_intermediates(TensorView transformed_keys, TensorView transformed_values,
+                                TensorView query_key_scores, TensorView carried_keys,
+                                TensorView device, int64_t chunks, int64_t heads) {
+  validate_gdn_chunk_tensor(transformed_keys, device, chunks, heads, 128, kDLBfloat, 16);
+  validate_gdn_chunk_tensor(transformed_values, device, chunks, heads, 128, kDLFloat, 32);
+  validate_gdn_chunk_tensor(query_key_scores, device, chunks, heads, 64, kDLBfloat, 16);
+  validate_gdn_chunk_tensor(carried_keys, device, chunks, heads, 128, kDLBfloat, 16);
+}

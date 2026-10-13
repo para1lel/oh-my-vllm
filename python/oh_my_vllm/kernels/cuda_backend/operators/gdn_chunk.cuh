@@ -4,13 +4,44 @@
 #include <mma.h>
 
 namespace gdn_chunk {
+__device__ void copy16(void *destination, const void *source, bool valid = true) {
+  uint32_t dst = __cvta_generic_to_shared(destination);
+  int bytes = valid ? 16 : 0;
+  asm volatile("cp.async.ca.shared.global [%0], [%1], 16, %2;" ::"r"(dst), "l"(source), "r"(bytes));
+}
+
+__device__ void copy_bf16_8(__nv_bfloat16 *destination, const __nv_bfloat16 *source,
+                            bool valid = true) {
+  if ((reinterpret_cast<uintptr_t>(source) & 15) == 0)
+    copy16(destination, source, valid);
+  else {
+#pragma unroll
+    for (int i = 0; i < 8; ++i)
+      destination[i] = valid ? source[i] : __float2bfloat16(0);
+  }
+}
+
+__device__ AlignedVector<__nv_bfloat16, 8> load_bf16_8(const __nv_bfloat16 *source) {
+  if ((reinterpret_cast<uintptr_t>(source) & 15) == 0)
+    return load_aligned_vector<__nv_bfloat16, 8>(source);
+  AlignedVector<__nv_bfloat16, 8> result;
+#pragma unroll
+  for (int i = 0; i < 8; ++i)
+    result.value[i] = source[i];
+  return result;
+}
+
+__device__ void wait_copies() {
+  asm volatile("cp.async.commit_group; cp.async.wait_group 0;" ::: "memory");
+  __syncthreads();
+}
 
 constexpr int chunk_size = 64;
 constexpr int value_tile = 16;
 constexpr int key_pitch = 136;
 constexpr int value_pitch = 24;
 constexpr int transform_pitch = 72;
-constexpr int scan_shared_bytes = 108032;
+constexpr int scan_shared_bytes = 49152;
 
 __device__ int chunk_prefix(const void *starts, bool wide, int sequence) {
   int prefix = 0;
@@ -79,26 +110,32 @@ __global__ void prepare_kernel(const __nv_bfloat16 *__restrict__ keys,
   const int query_head = head / (value_heads / query_heads);
   extern __shared__ __align__(32) unsigned char storage[];
   auto key = reinterpret_cast<__nv_bfloat16 *>(storage);
-  auto lower = reinterpret_cast<float *>(storage + 16384);
-  auto inverse = reinterpret_cast<float *>(storage + 32768);
-  auto log_decay = reinterpret_cast<float *>(storage + 49152);
-  auto update = reinterpret_cast<float *>(storage + 49408);
-  for (int i = threadIdx.x; i < 64 * 128; i += blockDim.x) {
-    int row = i / 128, column = i % 128;
-    key[i] = row < count ? keys[(first + row) * key_stride + query_head * 128 + column]
-                         : __float2bfloat16(0.0f);
+  auto lower = reinterpret_cast<float *>(storage + 17408);
+  auto inverse = reinterpret_cast<float *>(storage + 33792);
+  auto log_decay = reinterpret_cast<float *>(storage + 50176);
+  auto update = reinterpret_cast<float *>(storage + 50432);
+  for (int i = threadIdx.x; i < 64 * 16; i += blockDim.x) {
+    int row = i / 16, key_column = i % 16 * 8;
+    copy_bf16_8(key + row * 136 + key_column,
+                keys + (first + min(row, count - 1)) * key_stride + query_head * 128 + key_column,
+                row < count);
   }
+  if (threadIdx.x < 64) {
+    int row = threadIdx.x;
+    log_decay[row] = row < count ? decay[(first + row) * value_heads + head] : 0;
+    update[row] = row < count ? beta[(first + row) * value_heads + head] : 0;
+  }
+  wait_copies();
   if (threadIdx.x == 0) {
     float total = 0;
     for (int row = 0; row < 64; ++row) {
       if (row < count)
-        total += decay[(first + row) * value_heads + head];
+        total += log_decay[row];
       log_decay[row] = total;
-      update[row] = row < count ? beta[(first + row) * value_heads + head] : 0.0f;
     }
   }
   __syncthreads();
-  multiply<64, 64, 128, false, true>(key, 128, key, 128, lower, 64);
+  multiply<64, 64, 128, false, true>(key, 136, key, 136, lower, 64);
   for (int i = threadIdx.x; i < 64 * 64; i += blockDim.x) {
     int row = i / 64, column = i % 64;
     lower[i] =
@@ -124,15 +161,123 @@ __global__ void prepare_kernel(const __nv_bfloat16 *__restrict__ keys,
     cumulative_decay[base + threadIdx.x] = log_decay[threadIdx.x];
 }
 
-__global__ void scan_kernel(const __nv_bfloat16 *__restrict__ queries,
-                            const __nv_bfloat16 *__restrict__ keys,
-                            const __nv_bfloat16 *__restrict__ values,
-                            const float *__restrict__ initial, const void *__restrict__ starts,
-                            bool wide, int query_heads, int value_heads, int sequences,
-                            int64_t tokens, int64_t qs, int64_t ks, int64_t vs,
-                            const __nv_bfloat16 *__restrict__ coefficients,
-                            const float *__restrict__ cumulative_decay,
-                            __nv_bfloat16 *__restrict__ output, float *__restrict__ final) {
+__global__ void project_kernel(const __nv_bfloat16 *queries, const __nv_bfloat16 *keys,
+                               const __nv_bfloat16 *values, const void *starts, bool wide,
+                               int sequences, int hk, int hv, int64_t qs, int64_t ks, int64_t vs,
+                               const __nv_bfloat16 *coeff, const float *decay,
+                               __nv_bfloat16 *transformed_keys, float *transformed_values,
+                               __nv_bfloat16 *query_key_scores, __nv_bfloat16 *carried_keys,
+                               int64_t tokens) {
+  pdl_dependency_wait();
+  pdl_launch_next();
+  if (!valid_gdn_offsets(starts, wide, sequences, tokens)) {
+    asm volatile("trap;");
+    return;
+  }
+  int chunk = blockIdx.x, head = blockIdx.y, sequence = 0, prefix = 0;
+  for (; sequence < sequences; ++sequence) {
+    int chunks =
+        (index_at(starts, wide, sequence + 1) - index_at(starts, wide, sequence) + 63) / 64;
+    if (chunk < prefix + chunks)
+      break;
+    prefix += chunks;
+  }
+  if (sequence == sequences)
+    return;
+  int64_t first = index_at(starts, wide, sequence) + (chunk - prefix) * 64;
+  int count = min(int64_t(64), index_at(starts, wide, sequence + 1) - first), qh = head / (hv / hk);
+  int64_t base = (int64_t(chunk) * hv + head) * 64;
+  extern __shared__ __align__(32) unsigned char memory[];
+  auto a = reinterpret_cast<__nv_bfloat16 *>(memory);
+  auto b = reinterpret_cast<__nv_bfloat16 *>(memory + 17408);
+  auto transform = reinterpret_cast<__nv_bfloat16 *>(memory + 34816);
+  auto temporary = reinterpret_cast<float *>(memory + 44032);
+  auto logs = reinterpret_cast<float *>(memory + 78848);
+  if (threadIdx.x < 64)
+    logs[threadIdx.x] = decay[base + threadIdx.x];
+  for (int i = threadIdx.x; i < 64 * 8; i += blockDim.x) {
+    int row = i / 8, col = i % 8 * 8;
+    copy16(transform + row * 72 + col, coeff + base * 64 + row * 64 + col);
+  }
+  wait_copies();
+  for (int i = threadIdx.x; i < 64 * 16; i += blockDim.x) {
+    int row = i / 16, col = i % 16 * 8;
+    auto ka = load_bf16_8(keys + (first + min(row, count - 1)) * ks + qh * 128 + col);
+    auto vb = load_bf16_8(values + (first + min(row, count - 1)) * vs + head * 128 + col);
+    float factor = expf(logs[row]);
+#pragma unroll
+    for (int j = 0; j < 8; ++j) {
+      ka.value[j] = row < count ? __float2bfloat16_rn(__bfloat162float(ka.value[j]) * factor)
+                                : __float2bfloat16(0);
+      vb.value[j] = row < count ? vb.value[j] : __float2bfloat16(0);
+    }
+    *reinterpret_cast<AlignedVector<__nv_bfloat16, 8> *>(a + row * 136 + col) = ka;
+    *reinterpret_cast<AlignedVector<__nv_bfloat16, 8> *>(b + row * 136 + col) = vb;
+  }
+  __syncthreads();
+  multiply<64, 128, 64>(transform, 72, a, 136, temporary, 136);
+  for (int i = threadIdx.x; i < 64 * 16; i += blockDim.x) {
+    int row = i / 16, col = i % 16 * 8;
+    auto result = load_aligned_vector<float, 8>(temporary + row * 136 + col);
+    AlignedVector<__nv_bfloat16, 8> packed;
+#pragma unroll
+    for (int j = 0; j < 8; ++j)
+      packed.value[j] = __float2bfloat16_rn(-result.value[j]);
+    *reinterpret_cast<AlignedVector<__nv_bfloat16, 8> *>(transformed_keys + (base + row) * 128 +
+                                                         col) = packed;
+  }
+  __syncthreads();
+  multiply<64, 128, 64>(transform, 72, b, 136, temporary, 136);
+  for (int i = threadIdx.x; i < 64 * 32; i += blockDim.x) {
+    int row = i / 32, col = i % 32 * 4;
+    *reinterpret_cast<float4 *>(transformed_values + (base + row) * 128 + col) =
+        *reinterpret_cast<float4 *>(temporary + row * 136 + col);
+  }
+  for (int i = threadIdx.x; i < 64 * 16; i += blockDim.x) {
+    int row = i / 16, col = i % 16 * 8;
+    copy_bf16_8(a + row * 136 + col, queries + (first + min(row, count - 1)) * qs + qh * 128 + col,
+                row < count);
+    copy_bf16_8(b + row * 136 + col, keys + (first + min(row, count - 1)) * ks + qh * 128 + col,
+                row < count);
+  }
+  wait_copies();
+  multiply<64, 64, 128, false, true>(a, 136, b, 136, temporary, 72);
+  for (int i = threadIdx.x; i < 64 * 16; i += blockDim.x) {
+    int row = i / 16, col = i % 16 * 4;
+    auto result = load_four<float, true>(temporary + row * 72 + col);
+    Four<__nv_bfloat16> packed;
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+      float score = row < count && col + j <= row
+                        ? result.values[j] * expf(logs[row] - logs[col + j]) * 0.08838834764831844f
+                        : 0;
+      packed.values[j] = __float2bfloat16_rn(score);
+    }
+    *reinterpret_cast<Four<__nv_bfloat16> *>(query_key_scores + (base + row) * 64 + col) = packed;
+  }
+  for (int i = threadIdx.x; i < 64 * 16; i += blockDim.x) {
+    int row = i / 16, col = i % 16 * 8;
+    auto result = load_bf16_8(keys + (first + min(row, count - 1)) * ks + qh * 128 + col);
+    float factor = expf(logs[count - 1] - logs[row]);
+#pragma unroll
+    for (int j = 0; j < 8; ++j)
+      result.value[j] =
+          __float2bfloat16_rn((row < count ? __bfloat162float(result.value[j]) : 0) * factor);
+    *reinterpret_cast<AlignedVector<__nv_bfloat16, 8> *>(carried_keys + (base + row) * 128 + col) =
+        result;
+  }
+}
+
+__global__ void
+scan_kernel(const __nv_bfloat16 *__restrict__ queries, const __nv_bfloat16 *__restrict__ keys,
+            const __nv_bfloat16 *__restrict__ values, const float *__restrict__ initial,
+            const void *__restrict__ starts, bool wide, int query_heads, int value_heads,
+            int sequences, int64_t tokens, int64_t qs, int64_t ks, int64_t vs,
+            const __nv_bfloat16 *__restrict__ coefficients,
+            const float *__restrict__ cumulative_decay, const __nv_bfloat16 *transformed_keys,
+            const float *transformed_values, const __nv_bfloat16 *query_key_scores,
+            const __nv_bfloat16 *carried_keys, __nv_bfloat16 *__restrict__ output,
+            float *__restrict__ final) {
   pdl_dependency_wait();
   pdl_launch_next();
   if (!valid_gdn_offsets(starts, wide, sequences, tokens)) {
@@ -151,13 +296,11 @@ __global__ void scan_kernel(const __nv_bfloat16 *__restrict__ queries,
   auto state_bf16 = reinterpret_cast<__nv_bfloat16 *>(storage + 8704);
   auto a = reinterpret_cast<__nv_bfloat16 *>(storage + 13056);
   auto b = reinterpret_cast<__nv_bfloat16 *>(storage + 30464);
-  auto transform = reinterpret_cast<__nv_bfloat16 *>(storage + 47872);
-  auto score = reinterpret_cast<float *>(storage + 47872);
-  auto temporary = reinterpret_cast<float *>(storage + 66304);
-  auto delta = reinterpret_cast<float *>(storage + 101120);
-  auto log_decay = reinterpret_cast<float *>(storage + 107264);
-  auto decayed_rows = reinterpret_cast<float *>(storage + 107520);
-  auto final_rows = reinterpret_cast<float *>(storage + 107776);
+  auto temporary = reinterpret_cast<float *>(storage + 33536);
+  auto delta = reinterpret_cast<float *>(storage + 42240);
+  auto log_decay = reinterpret_cast<float *>(storage + 48384);
+  auto decayed_rows = reinterpret_cast<float *>(storage + 48640);
+  auto final_rows = reinterpret_cast<float *>(storage + 48896);
   for (int i = threadIdx.x; i < value_tile * 128; i += blockDim.x) {
     int shared_index = i / 128 * key_pitch + i % 128;
     state[shared_index] = initial[state_base + i];
@@ -174,70 +317,51 @@ __global__ void scan_kernel(const __nv_bfloat16 *__restrict__ queries,
       final_rows[threadIdx.x] =
           expf(cumulative_decay[base + count - 1] - cumulative_decay[base + threadIdx.x]);
     }
-    for (int i = threadIdx.x; i < 64 * 64; i += blockDim.x)
-      transform[i / 64 * transform_pitch + i % 64] = coefficients[base * 64 + i];
-    __syncthreads();
-    for (int i = threadIdx.x; i < 64 * 128; i += blockDim.x) {
-      int row = i / 128, column = i % 128, offset = row * key_pitch + column;
-      float key = row < count
-                      ? __bfloat162float(keys[(position + row) * ks + query_head * 128 + column])
-                      : 0.0f;
-      a[offset] = __float2bfloat16_rn(key * decayed_rows[row]);
-      b[offset] = row < count && column < value_tile
-                      ? values[(position + row) * vs + head * 128 + value_offset + column]
-                      : __float2bfloat16(0.0f);
+    for (int i = threadIdx.x; i < 64 * 16; i += blockDim.x) {
+      int row = i / 16, key = i % 16 * 8;
+      copy16(a + row * key_pitch + key, transformed_keys + (base + row) * 128 + key);
     }
-    __syncthreads();
-    multiply<64, 128, 64>(transform, transform_pitch, a, key_pitch, temporary, key_pitch);
-    for (int i = threadIdx.x; i < 64 * 128; i += blockDim.x) {
-      int offset = i / 128 * key_pitch + i % 128;
-      a[offset] = __float2bfloat16_rn(-temporary[offset]);
+    for (int i = threadIdx.x; i < 64 * (value_tile / 4); i += blockDim.x) {
+      int row = i / (value_tile / 4), value = i % (value_tile / 4) * 4;
+      copy16(delta + row * value_pitch + value,
+             transformed_values + (base + row) * 128 + value_offset + value);
     }
-    __syncthreads();
-    multiply<64, value_tile, 64>(transform, transform_pitch, b, key_pitch, delta, value_pitch);
+    wait_copies();
     multiply<64, value_tile, 128, false, true>(a, key_pitch, state_bf16, key_pitch, delta,
                                                value_pitch, true);
-    for (int i = threadIdx.x; i < 64 * 128; i += blockDim.x) {
-      int row = i / 128, column = i % 128, offset = row * key_pitch + column;
-      a[offset] = row < count ? queries[(position + row) * qs + query_head * 128 + column]
-                              : __float2bfloat16(0.0f);
-      b[offset] = row < count ? keys[(position + row) * ks + query_head * 128 + column]
-                              : __float2bfloat16(0.0f);
+    for (int i = threadIdx.x; i < 64 * 16; i += blockDim.x) {
+      int row = i / 16, key = i % 16 * 8;
+      copy_bf16_8(a + row * key_pitch + key,
+                  queries + (position + min(row, count - 1)) * qs + query_head * 128 + key,
+                  row < count);
     }
-    __syncthreads();
+    wait_copies();
     multiply<64, value_tile, 128, false, true>(a, key_pitch, state_bf16, key_pitch, temporary,
                                                value_pitch);
     for (int i = threadIdx.x; i < 64 * value_tile; i += blockDim.x)
       temporary[i / value_tile * value_pitch + i % value_tile] *=
           decayed_rows[i / value_tile] * 0.08838834764831844f;
-    multiply<64, 64, 128, false, true>(a, key_pitch, b, key_pitch, score, transform_pitch);
-    for (int i = threadIdx.x; i < 64 * 64; i += blockDim.x) {
-      int row = i / 64, column = i % 64;
-      float attention = row < count && column <= row
-                            ? score[row * transform_pitch + column] *
-                                  expf(log_decay[row] - log_decay[column]) * 0.08838834764831844f
-                            : 0.0f;
-      a[row * transform_pitch + column] = __float2bfloat16_rn(attention);
+    for (int i = threadIdx.x; i < 64 * 8; i += blockDim.x) {
+      int row = i / 8, column = i % 8 * 8;
+      copy16(a + row * transform_pitch + column, query_key_scores + (base + row) * 64 + column);
     }
+    wait_copies();
     for (int i = threadIdx.x; i < 64 * value_tile; i += blockDim.x)
-      b[i / value_tile * key_pitch + i % value_tile] =
+      b[i / value_tile * value_pitch + i % value_tile] =
           __float2bfloat16_rn(delta[i / value_tile * value_pitch + i % value_tile]);
     __syncthreads();
-    multiply<64, value_tile, 64>(a, transform_pitch, b, key_pitch, temporary, value_pitch, true);
+    multiply<64, value_tile, 64>(a, transform_pitch, b, value_pitch, temporary, value_pitch, true);
     for (int i = threadIdx.x; i < count * value_tile; i += blockDim.x) {
       int row = i / value_tile, column = i % value_tile;
       output[((position + row) * value_heads + head) * 128 + value_offset + column] =
           __float2bfloat16_rn(temporary[row * value_pitch + column]);
     }
-    for (int i = threadIdx.x; i < 64 * 128; i += blockDim.x) {
-      int row = i / 128, column = i % 128;
-      float key = row < count
-                      ? __bfloat162float(keys[(position + row) * ks + query_head * 128 + column])
-                      : 0.0f;
-      a[row * key_pitch + column] = __float2bfloat16_rn(key * final_rows[row]);
+    for (int i = threadIdx.x; i < 64 * 16; i += blockDim.x) {
+      int row = i / 16, key = i % 16 * 8;
+      copy16(a + row * key_pitch + key, carried_keys + (base + row) * 128 + key);
     }
-    __syncthreads();
-    multiply<value_tile, 128, 64, true, false>(b, key_pitch, a, key_pitch, temporary, key_pitch);
+    wait_copies();
+    multiply<value_tile, 128, 64, true, false>(b, value_pitch, a, key_pitch, temporary, key_pitch);
     const float carry = decayed_rows[count - 1];
     for (int i = threadIdx.x; i < value_tile * 128; i += blockDim.x) {
       int offset = i / 128 * key_pitch + i % 128;
@@ -271,9 +395,9 @@ void gdn_chunk_prepare(TensorView keys, TensorView decay, TensorView beta, Tenso
       TVM_FFI_ICHECK(disjoint_storage(destination, source));
   TVM_FFI_ICHECK(cudaFuncSetAttribute(gdn_chunk::prepare_kernel,
                                       cudaFuncAttributeMaxDynamicSharedMemorySize,
-                                      49664) == cudaSuccess);
+                                      50688) == cudaSuccess);
   auto stream = stream_for(keys, "gdn_chunk_prepare");
-  launch_kernel(gdn_chunk::prepare_kernel, dim3(coefficients.size(0), decay.size(1)), 256, 49664,
+  launch_kernel(gdn_chunk::prepare_kernel, dim3(coefficients.size(0), decay.size(1)), 128, 50688,
                 stream, static_cast<const __nv_bfloat16 *>(keys.data_ptr()),
                 static_cast<const float *>(decay.data_ptr()),
                 static_cast<const float *>(beta.data_ptr()), starts.data_ptr(),
@@ -284,7 +408,9 @@ void gdn_chunk_prepare(TensorView keys, TensorView decay, TensorView beta, Tenso
 }
 
 void gdn_chunk_scan(TensorView q, TensorView k, TensorView v, TensorView initial, TensorView starts,
-                    TensorView coefficients, TensorView cumulative_decay, TensorView output,
+                    TensorView coefficients, TensorView cumulative_decay,
+                    TensorView transformed_keys, TensorView transformed_values,
+                    TensorView query_key_scores, TensorView carried_keys, TensorView output,
                     TensorView final) {
   TVM_FFI_ICHECK(q.ndim() == 3 && q.size(0) > 0 && q.size(0) <= INT32_MAX && q.size(1) > 0 &&
                  v.ndim() == 3 && v.size(1) > 0 && v.size(1) <= 65535 &&
@@ -299,8 +425,11 @@ void gdn_chunk_scan(TensorView q, TensorView k, TensorView v, TensorView initial
   validate_gdn_states(final, q, starts.size(0) - 1, v.size(1));
   const int64_t chunks = (q.size(0) + 63) / 64 + starts.size(0) - 2;
   validate_gdn_scratch(coefficients, cumulative_decay, q, chunks, v.size(1));
+  validate_gdn_intermediates(transformed_keys, transformed_values, query_key_scores, carried_keys,
+                             q, chunks, v.size(1));
   for (auto destination : {output, final})
-    for (auto source : {q, k, v, initial, starts, coefficients, cumulative_decay})
+    for (auto source : {q, k, v, initial, starts, coefficients, cumulative_decay, transformed_keys,
+                        transformed_values, query_key_scores, carried_keys})
       TVM_FFI_ICHECK(disjoint_storage(destination, source));
   TVM_FFI_ICHECK(disjoint_storage(output, final));
   TVM_FFI_ICHECK(cudaFuncSetAttribute(gdn_chunk::scan_kernel,
@@ -316,6 +445,52 @@ void gdn_chunk_scan(TensorView q, TensorView k, TensorView v, TensorView initial
       q.size(1), v.size(1), starts.size(0) - 1, q.size(0), q.stride(0), k.stride(0), v.stride(0),
       static_cast<const __nv_bfloat16 *>(coefficients.data_ptr()),
       static_cast<const float *>(cumulative_decay.data_ptr()),
+      static_cast<const __nv_bfloat16 *>(transformed_keys.data_ptr()),
+      static_cast<const float *>(transformed_values.data_ptr()),
+      static_cast<const __nv_bfloat16 *>(query_key_scores.data_ptr()),
+      static_cast<const __nv_bfloat16 *>(carried_keys.data_ptr()),
       static_cast<__nv_bfloat16 *>(output.data_ptr()), static_cast<float *>(final.data_ptr()));
   finish_cuda_launch(stream, "gdn_chunk_scan");
+}
+
+void gdn_chunk_project(TensorView q, TensorView k, TensorView v, TensorView starts,
+                       TensorView coefficients, TensorView cumulative_decay,
+                       TensorView transformed_keys, TensorView transformed_values,
+                       TensorView query_key_scores, TensorView carried_keys) {
+  TVM_FFI_ICHECK(q.ndim() == 3 && q.size(0) > 0 && q.size(0) <= INT32_MAX && q.size(1) > 0 &&
+                 v.ndim() == 3 && v.size(1) > 0 && v.size(1) <= 65535 &&
+                 v.size(1) % q.size(1) == 0);
+  validate_gdn_rows(q, q, q.size(0), q.size(1));
+  validate_gdn_rows(k, q, q.size(0), q.size(1));
+  validate_gdn_rows(v, q, q.size(0), v.size(1));
+  validate_gdn_starts(starts, q);
+  const int64_t chunks = (q.size(0) + 63) / 64 + starts.size(0) - 2;
+  validate_gdn_scratch(coefficients, cumulative_decay, q, chunks, v.size(1));
+  validate_gdn_intermediates(transformed_keys, transformed_values, query_key_scores, carried_keys,
+                             q, chunks, v.size(1));
+  const std::array<TensorView, 4> destinations = {transformed_keys, transformed_values,
+                                                  query_key_scores, carried_keys};
+  for (size_t i = 0; i < destinations.size(); ++i) {
+    for (auto source : {q, k, v, starts, coefficients, cumulative_decay})
+      TVM_FFI_ICHECK(disjoint_storage(destinations[i], source));
+    for (size_t j = 0; j < i; ++j)
+      TVM_FFI_ICHECK(disjoint_storage(destinations[i], destinations[j]));
+  }
+  TVM_FFI_ICHECK(cudaFuncSetAttribute(gdn_chunk::project_kernel,
+                                      cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                      79104) == cudaSuccess);
+  auto stream = stream_for(q, "gdn_chunk_project");
+  launch_kernel(gdn_chunk::project_kernel, dim3(chunks, v.size(1)), 256, 79104, stream,
+                static_cast<const __nv_bfloat16 *>(q.data_ptr()),
+                static_cast<const __nv_bfloat16 *>(k.data_ptr()),
+                static_cast<const __nv_bfloat16 *>(v.data_ptr()), starts.data_ptr(),
+                starts.dtype().bits == 64, starts.size(0) - 1, q.size(1), v.size(1), q.stride(0),
+                k.stride(0), v.stride(0),
+                static_cast<const __nv_bfloat16 *>(coefficients.data_ptr()),
+                static_cast<const float *>(cumulative_decay.data_ptr()),
+                static_cast<__nv_bfloat16 *>(transformed_keys.data_ptr()),
+                static_cast<float *>(transformed_values.data_ptr()),
+                static_cast<__nv_bfloat16 *>(query_key_scores.data_ptr()),
+                static_cast<__nv_bfloat16 *>(carried_keys.data_ptr()), q.size(0));
+  finish_cuda_launch(stream, "gdn_chunk_project");
 }

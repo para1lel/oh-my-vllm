@@ -197,6 +197,54 @@ void quantize(TensorView x, TensorView out, TensorView scales, bool column, bool
   finish_cuda_launch(stream, "quantize");
 }
 
+__global__ void pad_quantized_kernel(const uint4 *__restrict__ data,
+                                     const float *__restrict__ scales,
+                                     uint4 *__restrict__ padded_data,
+                                     float *__restrict__ padded_scales, int rows, int width,
+                                     int padded_rows) {
+  pdl_dependency_wait();
+  pdl_launch_next();
+  const int index = blockIdx.x * blockDim.x + threadIdx.x;
+  const int vectors = padded_rows * (width / 16);
+  if (index < vectors) {
+    padded_data[index] = index < rows * (width / 16) ? data[index] : make_uint4(0, 0, 0, 0);
+  } else {
+    const int scale_index = index - vectors;
+    if (scale_index < padded_rows * (width / 128))
+      padded_scales[scale_index] = scale_index < rows * (width / 128) ? scales[scale_index] : 0;
+  }
+}
+
+void pad_quantized(TensorView data, TensorView scales, TensorView output,
+                   TensorView output_scales) {
+  TVM_FFI_ICHECK(data.ndim() == 2 && scales.ndim() == 2 && output.ndim() == 2 &&
+                 output_scales.ndim() == 2 && data.size(0) > 0 && data.size(0) <= 32 &&
+                 data.size(1) > 0 && data.size(1) % 128 == 0 && output.size(0) == 64 &&
+                 output.size(1) == data.size(1) && scales.size(0) == data.size(0) &&
+                 scales.size(1) == data.size(1) / 128 && output_scales.size(0) == 64 &&
+                 output_scales.size(1) == scales.size(1))
+      << "FP8 padding requires compact input rows and a 64-row destination";
+  for (auto tensor : {data, scales, output, output_scales}) {
+    TVM_FFI_ICHECK(same_cuda_device(tensor, data) && tensor.stride(1) == 1 &&
+                   tensor.stride(0) == tensor.size(1) && aligned(tensor, 16) &&
+                   fits_int32_flat_offsets(tensor, true));
+  }
+  TVM_FFI_ICHECK(has_dtype(data, kDLFloat8_e4m3fn, 8) && has_dtype(output, kDLFloat8_e4m3fn, 8) &&
+                 has_dtype(scales, kDLFloat, 32) && has_dtype(output_scales, kDLFloat, 32) &&
+                 disjoint_storage(output, output_scales));
+  for (auto destination : {output, output_scales})
+    for (auto source : {data, scales})
+      TVM_FFI_ICHECK(disjoint_storage(destination, source));
+  auto stream = stream_for(data, "pad_quantized");
+  const int items = output.size(0) * (data.size(1) / 16 + data.size(1) / 128);
+  launch_kernel(
+      pad_quantized_kernel, (items + 255) / 256, 256, 0, stream,
+      static_cast<const uint4 *>(data.data_ptr()), static_cast<const float *>(scales.data_ptr()),
+      static_cast<uint4 *>(output.data_ptr()), static_cast<float *>(output_scales.data_ptr()),
+      data.size(0), data.size(1), output.size(0));
+  finish_cuda_launch(stream, "pad_quantized");
+}
+
 __global__ void silu_kernel(const __nv_bfloat16 *__restrict__ x, __nv_bfloat16 *__restrict__ out,
                             int rows, int width) {
   pdl_dependency_wait();
