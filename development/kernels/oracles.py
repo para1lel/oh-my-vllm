@@ -118,6 +118,33 @@ def dspark_norm_rope(x, weight, positions, inv_freq, attention_factor, eps=1e-6)
     )
 
 
+def quantize(x, *, column_major=False, silu_gate=False):
+    if silu_gate:
+        gate, up = x.chunk(2, dim=-1)
+        x = torch.nn.functional.silu(gate.float()).to(x.dtype) * up
+    values = x.cpu().float().reshape(x.shape[0], -1, 128)
+    magnitudes = torch.nan_to_num(
+        values.abs(), nan=0, posinf=float("inf"), neginf=float("inf")
+    )
+    scale = magnitudes.amax(-1).clamp_min(1e-10) / 448
+    # CPU IEEE division keeps the existing exact FP8 contract. CUDA Torch
+    # tensor division uses an approximate reciprocal at some rounding ties.
+    divided = values / scale[..., None]
+    encoded = torch.fmin(
+        torch.full_like(divided, 448),
+        torch.fmax(torch.full_like(divided, -448), divided),
+    )
+    encoded = encoded.reshape(x.shape).to(torch.float8_e4m3fn).to(x.device)
+    scale = scale.to(x.device)
+    if column_major:
+        column_scale = torch.empty(
+            (scale.shape[1], scale.shape[0]), dtype=scale.dtype, device=x.device
+        ).T
+        column_scale.copy_(scale)
+        scale = column_scale
+    return encoded, scale
+
+
 def operator(module, name):
     from oh_my_vllm.ir import (
         dspark,
@@ -153,9 +180,7 @@ def operator(module, name):
     if (module, name) == ("normalization", "rms_norm"):
         return lambda x, w, *, gate=None: pointwise._native_rms_norm(x, w, 1e-6, gate)
     if (module, name) == ("fp8", "quantize"):
-        return lambda x, *, column_major=False, silu_gate=False: fp8._native_quantize(
-            x, column_major, silu_gate
-        )
+        return quantize
     if (module, name) == ("fp8", "linear"):
         return lambda x, w, s, *, silu_gate=False: fp8._native_linear(
             x, w, s, silu_gate

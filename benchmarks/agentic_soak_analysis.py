@@ -627,16 +627,45 @@ def file_identity(path: Path) -> dict:
     }
 
 
+def cache_hit_fraction(point: dict) -> float:
+    tokens, hits = point.get("input_tokens"), point.get("prefix_hit_tokens")
+    if (
+        type(tokens) is not int
+        or tokens <= 0
+        or type(hits) is not int
+        or not 0 <= hits <= tokens
+    ):
+        raise ValueError(
+            "scatter cache fraction needs valid measured input/cache counts"
+        )
+    return hits / tokens
+
+
 def plot_points(points: list[dict], mode: str, directory: Path):
     """Export independent scatter figures; never substitute synthetic points."""
     import matplotlib
 
     matplotlib.use("Agg")
+    from matplotlib import colors, ticker
     from matplotlib import pyplot as plt
 
-    with plt.rc_context({"font.size": 10, "svg.fonttype": "none"}):
+    fractions = [cache_hit_fraction(point) for point in points]
+    theme = {
+        "font.size": 10,
+        "svg.fonttype": "none",
+        "figure.facecolor": "#0d1117",
+        "axes.facecolor": "#0d1117",
+        "axes.edgecolor": "#566174",
+        "axes.labelcolor": "#dce4ef",
+        "text.color": "#dce4ef",
+        "xtick.color": "#aab8cb",
+        "ytick.color": "#aab8cb",
+        "grid.color": "#566174",
+    }
+    with plt.rc_context(theme):
         figure, axes = plt.subplots(figsize=(10, 4.2), layout="constrained")
-        for purpose, color in (("task", "#21845c"), ("compaction", "#4667ac")):
+        normalization = colors.Normalize(vmin=0, vmax=1)
+        for purpose, marker in (("task", "o"), ("compaction", "D")):
             selected = [
                 point
                 for point in points
@@ -647,10 +676,13 @@ def plot_points(points: list[dict], mode: str, directory: Path):
             axes.scatter(
                 [p["elapsed_minutes"] for p in selected],
                 [p["output_tps"] for p in selected],
-                s=8,
-                alpha=0.55,
+                s=15,
+                alpha=0.85,
                 linewidths=0,
-                color=color,
+                c=[cache_hit_fraction(point) for point in selected],
+                cmap="viridis",
+                norm=normalization,
+                marker=marker,
                 label="Task" if purpose == "task" else "Compaction",
             )
         axes.set(
@@ -671,6 +703,14 @@ def plot_points(points: list[dict], mode: str, directory: Path):
         axes.spines[["top", "right"]].set_visible(False)
         axes.grid(axis="y", alpha=0.2)
         axes.set_axisbelow(True)
+        if fractions:
+            scale = plt.cm.ScalarMappable(norm=normalization, cmap="viridis")
+            figure.colorbar(
+                scale,
+                ax=axes,
+                label="Prefix cache hit fraction",
+                format=ticker.PercentFormatter(1),
+            )
         if any(point.get("purpose", "task") != "task" for point in points):
             axes.legend(frameon=False)
         for suffix in ("svg", "png"):

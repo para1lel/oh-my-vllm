@@ -6,7 +6,7 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import msgpack
 import torch
@@ -243,6 +243,27 @@ class BridgeAbortTest(unittest.TestCase):
         self.assertEqual(self.recv()["type"], "execute_result")
         self.assertNotIn(7, self.worker.histories)
         self.assertNotIn(7, self.worker.serving.generations)
+
+    def test_abort_preserves_active_profiler_and_releases_request(self):
+        self.prepare(11, 7)
+        self.assertEqual(self.recv()["type"], "prepared")
+        profiler = Mock()
+        self.worker.torch_profiler = profiler
+        self.send({"type": "abort", "request_id": 7})
+        self.send({"type": "stats", "rpc_id": 12})
+        self.assertEqual(self.recv()["stats"]["requests"]["histories"], 0)
+        self.assertNotIn(7, self.worker.serving.generations)
+        profiler.close.assert_not_called()
+
+    def test_shutdown_releases_worker_when_profiler_export_fails(self):
+        profiler = Mock()
+        profiler.close.side_effect = OSError("trace export failed")
+        self.worker.torch_profiler = profiler
+        self.send({"type": "shutdown"})
+        self.thread.join(1)
+        self.assertFalse(self.thread.is_alive())
+        self.assertEqual(self.worker.shutdown_calls, 1)
+        self.assertEqual(profiler.close.call_args_list[0].args, ())
 
     def test_duplicate_prepare_preserves_live_request(self):
         self.prepare(11, 7)

@@ -37,6 +37,15 @@ pub struct InitMsg {
     pub draft_model_path: Option<String>,
     /// Minimum cumulative prefix confidence; zero retains the full legal draft.
     pub dspark_confidence_threshold: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub torch_profile: Option<BenchmarkProfile>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BenchmarkProfile {
+    pub path: String,
+    pub skip_steps: usize,
+    pub steps: usize,
 }
 
 #[derive(Debug, Serialize)]

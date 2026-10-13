@@ -140,6 +140,9 @@ Record other GPU processes and device-used HBM. Light contention can continue if
 The fifteen phase workloads still must use an exclusive GPU.
 Plot all completed task and measured summary calls by purpose. Do not add Chat/Responses color legends.
 
+Use a dark background and a fixed 0–1 gradient for `prefix_hit_tokens/input_tokens`.
+Distinguish task and compaction calls only with different markers.
+
 Use framework processing start on the horizontal axis and output tokens divided by processing wall time on the vertical axis.
 Reasoning tokens enter the output count. Report queue time, cancellations, and failures separately.
 There is no performance gate. `--diagnostic` permits a shorter smoke test, which cannot supply formal acceptance.

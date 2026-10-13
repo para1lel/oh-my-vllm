@@ -110,7 +110,8 @@
     "worker/target_execution.py": "3907df28dde447f8c26d6409562d4defba1bd4a3d42e89ff45a6438b92bccaa3",
     "worker/tensors.py": "dfef59447ffb85fb1b4d801edc21a31e2c3e051b42f3f875b1868f43ac0629cb",
     "worker/tool_descriptions.py": "37388ded6973cbddf79a93d4fa054725f7a9ac0c392d6c27d1690df9d94f5b53",
-    "worker/zmq_bridge.py": "2ad2d3f851cf7ea65ec9fdc7abcc901263668ac13a32d7ac2808cece10351f42"
+    "worker/torch_profile.py": "9a61fef65d30bc62528638cc47388890c2d4cf55fd686f314e6e015127a352e3",
+    "worker/zmq_bridge.py": "9ab9d15aa942c498f82b23bd6c482d4a7d97caa41a8546bea9d83ce9d2697191"
   },
   "versions": {
     "apache-tvm-ffi": "0.1.12",

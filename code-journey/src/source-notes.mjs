@@ -392,13 +392,13 @@ Object.assign(sourceNotes, {
       ["median / bound / spread", "墙钟中位数, 下界中位数, 墙钟相对极差.", "倍率使用两个中位数的比值, spread 等于极差除以墙钟中位数."],
       ["wall_median_s / lower_bound_median_s", "两组值各自的中位秒数.", "保留原始量, 使倍率和门槛可以重新核算."],
       ["latency_ratio / wall_spread", "实际与理论中位数的比值和波动比例.", "每个阶段都保留这两项数值."],
-      ["latency_gate / latency_passed / spread_passed / passed", "倍率是否作为门槛, 倍率检查结果, 波动检查结果与阶段结果.", "有效倍率门槛最高为 3, 波动最高为 10%. Prefix-hit prefill 只按波动判定, decode 保持两项检查."],
+      ["latency_gate / latency_passed / spread_passed / passed", "倍率是否作为门槛, 倍率检查结果, 波动检查结果与阶段结果.", "有效倍率门槛最高为 2, 波动最高为 10%. Prefix-hit prefill 只按波动判定, decode 保持两项检查."],
     ],
   },});
 
 Object.assign(sourceNotes, {
   wireInit: {
-    title: "InitMsg 的 10 个字段", intro: "Rust 将启动参数编码为 init. Python 检查硬件与页大小约束, 再映射到 RuntimeConfig 并建立模型和缓存.",
+    title: "InitMsg 的 11 个字段", intro: "Rust 将启动参数编码为 init. Python 检查硬件与页大小约束, 再映射到 RuntimeConfig 并建立模型和缓存.",
     entries: [
       ["model_path", "模型本地目录.", "映射为 RuntimeConfig.model, 从中读取配置, 权重和 tokenizer."],
       ["num_gpu_blocks", "兼容配置的缓存容量单位.", "映射为同名配置, 逻辑 FA 容量取整数三分之一."],
@@ -410,6 +410,7 @@ Object.assign(sourceNotes, {
       ["speculative_mode", "可选显式草稿模式.", "映射为同名字段, 缺省兼容旧的 0/4 选择."],
       ["draft_model_path", "独立 DSpark 本地目录.", "映射为 RuntimeConfig.draft_model, 检查配置与权重后加载."],
       ["dspark_confidence_threshold", "前缀累积置信度阈值, 默认 0.2.", "独立自然文本 / 工具历史小样本选定; 首项未达到阈值可返回 0 草稿, 完整负载表现另行测量."],
+      ["torch_profile", "显式 benchmark 诊断的外部 trace 路径与窗口.", "默认省略; 非空 worker step 计入窗口并包含 warmup, CUDA kernel 时序与正式时延验收分开采集."],
     ],
   },
   wireRegister: {

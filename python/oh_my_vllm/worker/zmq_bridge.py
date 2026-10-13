@@ -69,6 +69,7 @@ from oh_my_vllm.worker.model_runner import OhMyVllmWorker, RuntimeConfig
 from oh_my_vllm.worker.protocol import ScheduledRequest, SchedulerOutput, WorkerOutput
 from oh_my_vllm.worker.sampling import SamplingParams
 from oh_my_vllm.worker.serving import RequestValidationError
+from oh_my_vllm.worker.torch_profile import BenchmarkProfiler
 
 logger = logging.getLogger("oh_my_vllm.worker.zmq_bridge")
 
@@ -413,7 +414,14 @@ def serve(socket_addr: str) -> None:
                     if trace is not None:
                         trace.begin(msg["step_id"], worker.config.speculative_mode)
                     try:
-                        worker_out = worker.execute_model(sched_out)
+                        profiler = getattr(worker, "torch_profiler", None)
+                        if profiler is None:
+                            worker_out = worker.execute_model(sched_out)
+                        else:
+                            with profiler.step(
+                                msg["step_id"], sched_out.num_batched_tokens
+                            ):
+                                worker_out = worker.execute_model(sched_out)
                     finally:
                         if trace is not None:
                             trace.end()
@@ -473,6 +481,11 @@ def serve(socket_addr: str) -> None:
                     preparer.close()
                     preparer = None
                 if worker is not None:
+                    if getattr(worker, "torch_profiler", None) is not None:
+                        try:
+                            worker.torch_profiler.close()
+                        except Exception:
+                            logger.exception("benchmark profiler export failed")
                     if getattr(worker, "semantic_trace", None) is not None:
                         worker.semantic_trace.save()
                     worker.shutdown()
@@ -484,6 +497,9 @@ def serve(socket_addr: str) -> None:
     finally:
         if preparer is not None:
             preparer.close()
+        if worker is not None and getattr(worker, "torch_profiler", None) is not None:
+            with suppress(Exception):
+                worker.torch_profiler.close(incomplete=True)
         if worker is not None and getattr(worker, "semantic_trace", None) is not None:
             # Host metadata survives controlled failures without querying a
             # device that may already have reported a CUDA fault.
@@ -498,6 +514,9 @@ def _handle_init(msg: dict) -> OhMyVllmWorker:
         raise ValueError("Target model requires block_size=784")
     if msg.get("tensor_parallel_size", 1) != 1:
         raise ValueError("Only single-device inference is implemented")
+    profiler = (
+        BenchmarkProfiler(msg["torch_profile"]) if msg.get("torch_profile") else None
+    )
     worker = OhMyVllmWorker(
         RuntimeConfig(
             model=msg["model_path"],
@@ -514,6 +533,7 @@ def _handle_init(msg: dict) -> OhMyVllmWorker:
     worker.load_model()
     worker.initialize_cache()
     worker.semantic_trace = ExecutionTrace(worker)
+    worker.torch_profiler = profiler
     return worker
 
 

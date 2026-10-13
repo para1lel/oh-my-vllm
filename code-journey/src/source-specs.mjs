@@ -44,7 +44,7 @@ export const specifications = {
   graphReplay: ["python/oh_my_vllm/worker/decode_graph.py", "    def replay(\n", "\n\nclass DraftGraph"],
   irDispatch: ["python/oh_my_vllm/ir/core.py", "    def __call__(self, *args:", "\n\ndef operations("],
   measurement: ["benchmarks/framework.py", "def phase_verdict(", "\n\ndef validate_identities("],
-  wireInit: ["crates/zmq-worker/src/protocol.rs", "pub struct InitMsg {", "\n#[derive(Debug, Serialize)]\npub struct RegisterMsg"],
+  wireInit: ["crates/zmq-worker/src/protocol.rs", "pub struct InitMsg {", "\n#[derive(Debug, Clone, Serialize)]\npub struct BenchmarkProfile"],
   wireRegister: ["crates/zmq-worker/src/protocol.rs", "pub struct RegisterMsg {", "\n#[derive(Debug, Serialize)]\npub struct ExecuteMsg"],
   wireExecute: ["crates/zmq-worker/src/protocol.rs", "pub struct ExecuteMsg {", "\n#[derive(Debug, Serialize)]\npub struct ScheduledRequestMsg"],
 };

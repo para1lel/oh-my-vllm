@@ -113,3 +113,22 @@ def test_native_collection_rejects_template_or_build_input_drift(changed):
     loaded[changed] = [] if changed == "flags" else "changed"
     with pytest.raises(RuntimeError, match="native GEMM inputs differ"):
         validate_native_inputs(loaded, expected)
+
+
+@pytest.mark.parametrize("rows", [1, 2])
+@pytest.mark.parametrize("column", [False, True])
+def test_quantization_oracle_keeps_exact_codes_and_single_row_scale_layout(
+    rows, column
+):
+    import torch
+
+    from development.kernels.oracles import quantize
+
+    x = torch.zeros(rows, 256, dtype=torch.bfloat16)
+    x[:, 0] = 448
+    x[:, 1] = 1
+    encoded, scale = quantize(x, column_major=column)
+    assert encoded.float()[:, 0].tolist() == [448] * rows
+    assert encoded.float()[:, 1].tolist() == [1] * rows
+    assert scale.stride() == ((1, rows) if column else (2, 1))
+    assert scale[:, 0].tolist() == [1] * rows

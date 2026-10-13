@@ -127,6 +127,9 @@ GPU 查询失败时, 保留错误与重新读取的 worker 状态.
 记录其他 GPU 进程和设备 HBM 占用. 请求和资源检查通过时, 轻度争用可继续.
 15 项阶段负载仍要求 GPU 独占.
 全部完成的任务和实际摘要请求按用途绘图, 不添加 Chat/Responses 颜色图例.
+
+使用暗色背景, 以固定 0–1 渐变表示 `prefix_hit_tokens/input_tokens`.
+任务与 compaction 请求仅通过不同 marker 区分.
 横轴为框架开始处理的时刻, 纵轴为输出 token 数除以处理墙钟时间.
 输出数包含 reasoning token. 排队时间, 取消和失败分别报告.
 不设性能门槛. `--diagnostic` 允许缩短的 smoke test, 不能提供正式验收.

@@ -384,7 +384,10 @@ def test_real_scatter_export_preserves_all_input_points(tmp_path):
     from benchmarks.agentic_soak_analysis import plot_points
 
     points = bind_points(
-        [metric(7), metric(8, api="responses")],
+        [
+            metric(7) | {"input_tokens": 100, "prefix_hit_tokens": 0},
+            metric(8, api="responses") | {"input_tokens": 100, "prefix_hit_tokens": 75},
+        ],
         [task(7), task(8, api="responses")],
         100.0,
     )
@@ -392,6 +395,8 @@ def test_real_scatter_export_preserves_all_input_points(tmp_path):
     svg = (tmp_path / "mtp-agentic-soak.svg").read_text()
     assert "2 completed requests" in svg
     assert "processing start" in svg
+    assert "Prefix cache hit fraction" in svg
+    assert "#0d1117" in svg
     assert (tmp_path / "mtp-agentic-soak.png").stat().st_size > 1000
 
 

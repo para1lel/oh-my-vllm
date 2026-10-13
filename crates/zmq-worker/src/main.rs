@@ -86,9 +86,38 @@ struct BenchArgs {
     /// Admit one request every N steps to exercise continuous batching.
     #[arg(long, default_value_t = 0)]
     arrival_interval: usize,
+    #[arg(long)]
+    torch_profile: Option<PathBuf>,
+    #[arg(long, default_value_t = 8, requires = "torch_profile")]
+    torch_profile_skip_steps: usize,
+    #[arg(long, default_value_t = 2, requires = "torch_profile")]
+    torch_profile_steps: usize,
 }
 
 impl BenchArgs {
+    fn profile_configuration(
+        &self,
+    ) -> Result<Option<oh_my_vllm_zmq_worker::protocol::BenchmarkProfile>> {
+        let Some(path) = &self.torch_profile else {
+            return Ok(None);
+        };
+        ensure!(
+            (1..=4).contains(&self.batch_size)
+                && self.input_len.saturating_add(self.output_len) <= 4096
+                && self.batch_size.saturating_mul(self.input_len) <= 4096,
+            "torch profiling is limited to small benchmarks (batch <= 4, context <= 4096)"
+        );
+        ensure!(
+            (1..=8).contains(&self.torch_profile_steps) && self.torch_profile_skip_steps <= 10000,
+            "torch profiling needs 1..8 active steps and at most 10000 skipped steps"
+        );
+        Ok(Some(oh_my_vllm_zmq_worker::protocol::BenchmarkProfile {
+            path: path.to_string_lossy().into_owned(),
+            skip_steps: self.torch_profile_skip_steps,
+            steps: self.torch_profile_steps,
+        }))
+    }
+
     fn prompts(&self, max_model_len: usize) -> Result<Vec<Vec<u32>>> {
         ensure!(
             (1..=32).contains(&self.batch_size)
@@ -221,6 +250,11 @@ async fn run() -> Result<()> {
     } else {
         None
     };
+    let torch_profile = if let Cmd::Bench(args) = &cli.cmd {
+        args.profile_configuration()?
+    } else {
+        None
+    };
     let mut client = WorkerClient::launch(WorkerConfig {
         model_path: cli.model,
         socket_path: cli.socket,
@@ -233,6 +267,7 @@ async fn run() -> Result<()> {
         speculative_mode: Some(mode.clone()),
         draft_model_path: cli.draft_model,
         dspark_confidence_threshold: cli.dspark_confidence_threshold,
+        torch_profile,
         ..WorkerConfig::default()
     })
     .await
@@ -602,7 +637,39 @@ mod benchmark_input_tests {
             prompt_file: None,
             prefix_hit: false,
             arrival_interval: 0,
+            torch_profile: None,
+            torch_profile_skip_steps: 8,
+            torch_profile_steps: 2,
         }
+    }
+
+    #[test]
+    fn profiler_bounds_limit_the_whole_batch_and_window() {
+        let mut args = args();
+        assert!(args.profile_configuration().unwrap().is_none());
+        args.torch_profile = Some("/tmp/timeline.json".into());
+        args.batch_size = 4;
+        args.input_len = 1024;
+        args.output_len = 16;
+        assert!(args.profile_configuration().unwrap().is_some());
+        args.input_len = 2048;
+        assert!(args.profile_configuration().is_err());
+        args.input_len = 1024;
+        args.output_len = 4096;
+        assert!(args.profile_configuration().is_err());
+        args.output_len = 16;
+        args.batch_size = 5;
+        assert!(args.profile_configuration().is_err());
+        args.batch_size = 4;
+        for steps in [0, 9] {
+            args.torch_profile_steps = steps;
+            assert!(args.profile_configuration().is_err());
+        }
+        args.torch_profile_steps = 8;
+        args.torch_profile_skip_steps = 10000;
+        assert!(args.profile_configuration().unwrap().is_some());
+        args.torch_profile_skip_steps = 10001;
+        assert!(args.profile_configuration().is_err());
     }
 
     #[test]

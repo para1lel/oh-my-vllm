@@ -10,6 +10,24 @@
 使用 CUDA Events 或 profiler trace 归因 GPU 时间. 主机 enqueue 时间不等于 GPU 执行时间.
 并发 kernel 的耗时不能相加作为 wall latency. 记录 stream, 重叠和依赖.
 
+## 小窗口 Torch profiler
+
+Benchmark profiler 默认关闭. 只在小规模诊断中使用:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --max-model-len 8192 --num-gpu-blocks 64 bench --input-len 128 --output-len 16 --warmup 1 --repetitions 1 --torch-profile "$EVIDENCE_DIR/timeline.json"
+```
+
+使用新的外部 trace 路径. 可选 `--torch-profile-skip-steps` 与 `--torch-profile-steps` 设置采集窗口.
+窗口按整个运行中的非空 worker step 计数, 包含 warmup, 而不是按 benchmark 重复次数计数.
+CLI 限制实际请求长度和 batch size, 而非模型容量. Worker 检查总 query token 数并限制 active step.
+
+[Profiler](../python/oh_my_vllm/worker/torch_profile.py#L41) <!-- source: class BenchmarkProfiler: -->
+导出 Chrome trace, 并记录每个 CUDA kernel 的起点, 时长, device, stream 及可取得的 operator 关联.
+这些是设备时序区间. Graph replay 可以只有 kernel 名字, 没有单独的 CPU operator 身份.
+Profiler 不把 CPU enqueue 时长计入 GPU runtime.
+采集与正式时延测量及其他 CUPTI subscriber 分开. 参见 [Torch profiler API](https://docs.pytorch.org/docs/2.14/profiler.html).
+
 ## 稳定测量
 
 测量重复中不包含编译, graph capture 或 cache 淘汰.

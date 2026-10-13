@@ -62,6 +62,7 @@ export const coverage = [
   ["Ownership", "python/oh_my_vllm/worker/model_runner.py", "class OhMyVllmWorker", "OhMyVllmWorker: 初始化, 执行与清理", "init_device / load_model / initialize_cache 建立单卡运行时; execute_model 检查计划, 组合输入, 调用 forward, 采样并提交; shutdown 释放图和模型引用."],
   ["Ownership", "python/oh_my_vllm/worker/runtime.py", "def identity(", "identity / verify_loaded_modules: 运行身份", "记录解释器, 软件版本和内核构建来源. 原生内核身份绑定仓库源码, 固定头文件, 编译器与实际动态库; 项目编译缓存仍按运行隔离. 启动与退出时检查 Python 路径和已加载模块/动态库."],
   ["Ownership", "python/oh_my_vllm/worker/logging_utils.py", "def configure_logging(", "configure_logging: 关联日志", "统一日志格式并关联运行编号, 使 Rust 派发, Python 执行和请求完成的记录可以对应."],
+  ["Validation", "python/oh_my_vllm/worker/torch_profile.py", "class BenchmarkProfiler:", "BenchmarkProfiler: 小窗口设备时序诊断", "仅 benchmark 可显式开启, 按非空 worker step 选择有界窗口, 包含 warmup. 导出 CUDA kernel 的真实起点和时长, 保留 stream 与可取得的 operator 关联; 退出时释放 profiler, 导出失败也继续清理 worker. 正式时延测量保持关闭."],
   ["Requests", "crates/scheduler/src/request.rs", "pub struct Request", "Request: 已确认历史与生命周期", "保存提示词长度, 历史, 在途进度, 输出上限和草稿; append_token / set_drafts 分开维护已确认与候选数据."],
   ["Requests", "crates/scheduler/src/lib.rs", "    pub fn schedule(", "Scheduler: 接纳, 排队, 验证与提交", "schedule 先推进运行请求再接纳等待请求; pause / resume 处理背压; validate_output 在 update 修改历史之前检查结果契约, abort 清理请求和缓存."],
   ["Requests", "crates/scheduler/src/output.rs", "pub struct ScheduledRequest", "ScheduledRequest / SchedulerOutput / WorkerOutput", "长期请求状态, 单轮输入片段和返回结果分别建模, 让在途输入数量与输出数量有明确归属."],

@@ -46,6 +46,19 @@ Upstream rebase 后全部 22 个 TileFoundry analysis 及一个实际 CUDA twin 
 GDN chunk 调优改善了选定形状时延, 但完整框架性能门槛尚未验证.
 未声明新源码完整 GPU 通过验收. 历史修复结果属于源码 `b98a83a` 及此前记录的提交.
 
+第四阶段的诊断 checkpoint 添加默认关闭的小窗口 Torch profiler 和暗色 cache 命中率请求图.
+选定 CPU 检查通过 117 个案例和 11 个 subtest. Rust benchmark 边界检查全部三个案例通过.
+Profiler GPU 测试及加载 checkpoint 的小 benchmark 通过. Trace 记录两个 step 和 3930 个 CUDA kernel.
+
+Checkpoint 前通过必需的 Rust, 样式, 文档和教程检查.
+独立复核确认 profiler 清理, 默认关闭语义和双语文档范围.
+
+修正独立 FP8 参考的除法和 scale stride 后, 未提交源码的诊断运行通过全部 517 个算子案例.
+正式算子证据必须从已提交源码重新采集.
+一次框架诊断完成两次预热和五次测量, 没有 OOM 或抢占.
+其 runtime contract 过期, 因此分析拒绝该记录. 时延也表明两倍目标仍需调优.
+外部 CUDA 候选不属于生产变更或验收证据.
+
 带过时比较来源的摘要已从工作树删除; Git 历史保留其原始结果.
 当前采集范围见[验收索引](acceptance.zh.md).
 

@@ -52,6 +52,7 @@ pub struct WorkerConfig {
     pub python_executable: PathBuf,
     /// Timeout waiting for the worker to become ready after launch.
     pub init_timeout: Duration,
+    pub torch_profile: Option<crate::protocol::BenchmarkProfile>,
 }
 
 impl Default for WorkerConfig {
@@ -74,6 +75,7 @@ impl Default for WorkerConfig {
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("python3")),
             init_timeout: Duration::from_secs(300),
+            torch_profile: None,
         }
     }
 }
@@ -344,6 +346,7 @@ impl WorkerClient {
                 .as_ref()
                 .map(|path| path.to_string_lossy().into_owned()),
             dspark_confidence_threshold: config.dspark_confidence_threshold,
+            torch_profile: config.torch_profile.clone(),
         });
         let mut delay_ms = 100u64;
         let deadline = std::time::Instant::now() + config.init_timeout;

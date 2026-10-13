@@ -46,6 +46,19 @@ The complete 517-case matrix, full GPU suite, framework phases, six capacity bou
 GDN chunk tuning improved selected timings, but the full framework performance gate is unverified.
 No new-source full GPU acceptance is claimed. Historical repair results belong to source `b98a83a` and earlier recorded commits.
 
+Milestone four's diagnostic checkpoint adds default-off small Torch profiler windows and dark cache-hit request plots.
+Selected CPU checks passed 117 cases and 11 subtests. Rust benchmark boundary checks passed all three cases.
+The profiler GPU test and a checkpoint-loaded small benchmark passed. The trace recorded two steps and 3930 CUDA kernels.
+
+Required Rust/style/document checks and tutorial checks passed before the checkpoint.
+Independent review checked profiler cleanup, default-off semantics, and paired document scope.
+
+All 517 operator cases passed in an uncommitted-source diagnostic run after correcting independent FP8 reference division and scale strides.
+Formal operator evidence must be recollected from the committed source.
+A framework diagnostic completed two warmups and five measurements with no OOM or preemption.
+Its runtime contract was stale, so analysis rejected it. Its timings show that further tuning must precede the two-times gate.
+External CUDA candidates are not production changes or acceptance evidence.
+
 Summaries with obsolete comparison provenance were removed from the working tree. Git history keeps their original results.
 See the [acceptance index](acceptance.md) for current collection scope.
 
