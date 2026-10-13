@@ -30,7 +30,7 @@ export const specifications = {
   workerResult: ["crates/scheduler/src/output.rs", "pub struct WorkerOutput", null],
   validate: ["crates/scheduler/src/lib.rs", "            let final_chunk", "            let computed_after"],
   commit: ["crates/scheduler/src/lib.rs", "            req.num_computed_tokens =\n", "            let full_blocks"],
-  worker: ["python/oh_my_vllm/worker/model_runner.py", "    def execute_model(", "        plans = []"],
+  worker: ["python/oh_my_vllm/worker/model_runner.py", "    def _plan_scheduled_requests(", "        plans = []"],
   plan: ["python/oh_my_vllm/worker/batch_plan.py", "def plan_request(", null, 24],
   runtimeConfig: ["python/oh_my_vllm/worker/model_runner.py", "class RuntimeConfig:", "\n\nclass OhMyVllmWorker"],
   batchFields: ["python/oh_my_vllm/models/qwen.py", "class AttentionBatch:", "    def delta("],

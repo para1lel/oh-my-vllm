@@ -182,7 +182,7 @@ scripts/with-env.sh pre-commit run --all-files
 GPU 验收前, 核对已审核的 runtime contract, 不初始化 CUDA:
 
 ```bash
-scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_performance_metadata.py::test_current_runtime_contract_matches_semantic_review -q
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/tooling/test_performance_metadata.py::test_current_runtime_contract_matches_semantic_review -q
 ```
 
 CPU 套件包含此检查. 源码或 provider 变更后, 更新 contract 前完成语义审查.

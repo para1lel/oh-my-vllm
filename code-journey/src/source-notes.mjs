@@ -193,8 +193,8 @@ export const sourceNotes = {
     ],
   },
   worker: {
-    title: "execute_model 入口中的消息字段与状态",
-    intro: "execute_model 使用 torch.inference_mode 关闭梯度记录, 减少推理中的自动求导开销. 入口先处理清理通知, 再核对输入数量. SchedulerOutput 是调度消息; WorkerOutput 是返回消息. MTP 控制器保存草稿相关状态.",
+    title: "请求规划入口中的消息字段与状态",
+    intro: "_plan_scheduled_requests 先处理清理通知, 再核对输入数量与缓存地址. SchedulerOutput 是调度消息, 函数返回已验证计划和请求注册错误. execute_model 在 inference_mode 与事务保护中调用它, 随后执行目标计算和状态提交.",
     entries: [
       ["scheduled / scheduled.scheduled", "函数接收的一轮消息, 以及其中本轮执行的请求列表.", "消息对象与内部列表名称相近. 内部列表的每项是 ScheduledRequest."],
       ["finished_request_ids / rid", "需要清理的请求编号列表, 以及循环当前处理的编号.", "unregister_request(rid) 删除 worker 保存的历史, 采样器和状态记录."],

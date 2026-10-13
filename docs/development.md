@@ -186,7 +186,7 @@ Hooks use local system tools through the same wrapper.
 Before GPU acceptance, check the reviewed runtime contract without CUDA initialization:
 
 ```bash
-scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_performance_metadata.py::test_current_runtime_contract_matches_semantic_review -q
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/tooling/test_performance_metadata.py::test_current_runtime_contract_matches_semantic_review -q
 ```
 
 The CPU suite includes this check. Complete semantic review of source or provider changes before a contract update.

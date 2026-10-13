@@ -182,6 +182,7 @@ def check_coverage(package_root: Path, registered: set[str]) -> None:
         "models/qwen.py",
         "models/dspark.py",
         "worker/model_runner.py",
+        "worker/target_execution.py",
         "worker/mtp.py",
         "worker/decode_graph.py",
         "worker/dspark.py",

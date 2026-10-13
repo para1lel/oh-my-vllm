@@ -10,9 +10,14 @@ import torch
 
 from oh_my_vllm.ir import compile_forward
 from oh_my_vllm.kernels.attention import PagedAttention
-from oh_my_vllm.models.qwen import Batch, Qwen
+from oh_my_vllm.models.qwen import Qwen
 from oh_my_vllm.performance.execution import certify_feedback, record, tracing
-from oh_my_vllm.worker.batch_plan import BLOCK, plan_request, validate_batch
+from oh_my_vllm.worker.batch_plan import (
+    BLOCK,
+    PlannedRequest,
+    plan_request,
+    validate_batch,
+)
 from oh_my_vllm.worker.errors import (
     WorkerUnavailable,
     failure_kind,
@@ -26,10 +31,9 @@ from oh_my_vllm.worker.runtime import identity, verify_loaded_modules
 from oh_my_vllm.worker.sampler import RequestSampler, greedy_rows, verify_rows
 from oh_my_vllm.worker.sampling import SamplingParams
 from oh_my_vllm.worker.serving import ServingAdapter
+from oh_my_vllm.worker.target_execution import run_target
 from oh_my_vllm.worker.tensors import (
-    device_page_tables,
     device_tensor,
-    device_vectors,
 )
 
 logger = logging.getLogger(__name__)
@@ -319,64 +323,9 @@ class OhMyVllmWorker:
     @transactional_step
     @torch.inference_mode()
     def execute_model(self, scheduled: SchedulerOutput) -> WorkerOutput:
-        for rid in scheduled.finished_request_ids:
-            self.unregister_request(rid)
-        for rid in scheduled.preempted_request_ids:
-            if self.mtp is not None:
-                self.mtp.forget(rid)
-            if getattr(self, "dspark", None) is not None:
-                self.dspark.forget(rid)
-            self.sources.pop(rid, None)
-            self.computed.pop(rid, None)
-        if scheduled.num_batched_tokens != sum(
-            len(r.token_ids) for r in scheduled.scheduled
-        ):
-            raise ValueError("Rust token budget disagrees with scheduled input")
-        plans = []
-        registration_errors = []
-        for request in scheduled.scheduled:
-            rid = request.request_id
-            if rid not in self.histories:
-                if self.serving is None:
-                    raise ValueError(f"request {rid} has no registered prompt")
-                registration_errors.append(
-                    RequestOutput(rid, [], error="request registration failed")
-                )
-                continue
-            if (
-                rid in self.computed
-                and self.computed[rid] != request.num_computed_tokens
-            ):
-                raise ValueError(
-                    "Rust computed position disagrees with committed state"
-                )
-            if (
-                request.num_computed_tokens + len(request.token_ids)
-                > self.config.max_model_len
-            ):
-                raise ValueError("scheduled input exceeds the model context")
-            if any(
-                p <= 0 or p >= self.logical_num_blocks for p in request.fa_block_table
-            ):
-                raise ValueError("FA table exceeds page capacity")
-            if any(p < 0 or p >= self.mamba_blocks for p in request.mamba_block_table):
-                raise ValueError("Mamba table exceeds state capacity")
-            if rid in self.sources and not 0 <= self.sources[rid] < self.mamba_blocks:
-                raise ValueError("recurrent source exceeds state capacity")
-            plans.append(
-                plan_request(
-                    request,
-                    self.histories[rid],
-                    self.sources.get(rid),
-                    self.logical_num_blocks,
-                    self.mamba_blocks,
-                    self.config.speculative_tokens,
-                )
-            )
+        plans, registration_errors = self._plan_scheduled_requests(scheduled)
         if not plans:
             return WorkerOutput(registration_errors)
-        validate_batch(plans)
-        plans.sort(key=lambda p: not p.prefill)
         if tracing():
             record(
                 "target",
@@ -404,231 +353,9 @@ class OhMyVllmWorker:
                 if self.config.speculative_tokens
                 else "torch.float32",
             )
-        ids, positions, sequence_ids, writes, slots, pages = [], [], [], [], [], []
-        starts, page_starts, last_lengths = [0], [0], []
-        for sequence, plan in enumerate(plans):
-            req = plan.request
-            count = len(req.token_ids)
-            end = req.num_computed_tokens + count
-            ids.extend(req.token_ids)
-            positions.extend(range(req.num_computed_tokens, end))
-            sequence_ids.extend([sequence] * count)
-            writes.extend(plan.writes)
-            slots.extend(
-                req.fa_block_table[p // BLOCK] * BLOCK + p % BLOCK
-                for p in range(req.num_computed_tokens, end)
-            )
-            starts.append(len(ids))
-            pages.extend(req.fa_block_table[: (end + BLOCK - 1) // BLOCK])
-            page_starts.append(len(pages))
-            last_lengths.append((end - 1) % BLOCK + 1)
-        cpu_starts = torch.tensor(starts, dtype=torch.int32)
-        extent = min(
-            self.config.max_model_len, ((max(positions) + 4096) // 4096) * 4096
-        )
-        decode_only = not any(p.prefill for p in plans)
-        key = (
-            self.config.decode_graph_key([len(p.writes) for p in plans], extent)
-            if decode_only
-            else ()
-        )
-        family = "target_dspark" if self._is_dspark() else "target"
-        use_graph = (
-            decode_only
-            and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1"
-            and self.graph_cache.should_use(family, key)
-        )
-        if not use_graph:
-            self.attention.plan(
-                cpu_starts,
-                torch.tensor(page_starts, dtype=torch.int32),
-                torch.tensor(pages, dtype=torch.int32),
-                torch.tensor(last_lengths, dtype=torch.int32),
-                24,
-                4,
-                256,
-            )
-        metadata = device_vectors(
-            [
-                positions,
-                starts,
-                sequence_ids,
-                [p.source for p in plans],
-                writes,
-                [p.writes[-1] for p in plans],
-                slots,
-                ids,
-            ]
-        )
-        batch = Batch(
-            positions=metadata[0],
-            # FlashInfer prefill consumes int32 offsets; convert once per batch.
-            starts=metadata[1].to(torch.int32),
-            sequence_ids=metadata[2],
-            state_reads=metadata[3],
-            state_writes=metadata[4],
-            final_state_writes=metadata[5],
-            fa_slots=metadata[6],
-            attention=self.attention,
-            prefill_sequences=sum(p.prefill for p in plans),
-            prefill_tokens=sum(len(p.writes) for p in plans if p.prefill),
-        )
-        token_tensor = metadata[7]
-        selected = [
-            starts[i] + row for i, p in enumerate(plans) for row in p.sample_indices
-        ]
-        if (
-            not decode_only
-            and len(selected) < len(ids)
-            and (self._proposer() is None or self._is_dspark())
-        ):
-            # MTP consumes historical target hidden rows; ordinary and DSpark
-            # consume only logits here. DSpark feature taps precede layer 63.
-            batch.output_indices = device_tensor(selected, dtype=torch.int64)
-            if selected:
-                from oh_my_vllm.worker.decode_graph import DecodeAttention
-
-                selected_tables = device_page_tables(
-                    [p.request.fa_block_table for p in plans],
-                    (extent + BLOCK - 1) // BLOCK,
-                    counts=[len(p.sample_indices) for p in plans],
-                )
-                lengths = device_tensor(
-                    [positions[row] + 1 for row in selected], dtype=torch.int32
-                )
-                batch.output_attention = DecodeAttention(
-                    selected_tables, lengths, extent
-                )
-        hidden = None
-        graph_logits = None
-        features = None
-        if use_graph:
-            from oh_my_vllm.worker.decode_graph import DecodeGraph
-
-            width = (extent + BLOCK - 1) // BLOCK
-            tables = device_page_tables(
-                [p.request.fa_block_table for p in plans],
-                width,
-                counts=[len(p.writes) for p in plans],
-                dtype=torch.int32,
-                device="cuda",
-            )
-
-            def capture():
-                pool_name = "dspark_graph_pool" if self._is_dspark() else "graph_pool"
-                if getattr(self, pool_name) is None:
-                    setattr(self, pool_name, torch.cuda.graph_pool_handle())
-                logger.info(
-                    "Capture target graph: tokens=%d requests=%d "
-                    "extent=%d max_query_len=%d",
-                    *key,
-                )
-                try:
-                    return DecodeGraph(
-                        self.model,
-                        self.caches,
-                        token_tensor,
-                        batch,
-                        tables,
-                        extent,
-                        pool=getattr(self, pool_name),
-                        compile_model=os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1",
-                        max_query_len=key[-1],
-                        capture_features=self._is_dspark(),
-                    )
-                except Exception:
-                    if not self.graph_cache.has_family(family):
-                        setattr(self, pool_name, None)
-                    raise
-
-            graph = self.graph_cache.get_or_create(family, key, capture)
-            if graph is None:
-                self.attention.plan(
-                    cpu_starts,
-                    torch.tensor(page_starts, dtype=torch.int32),
-                    torch.tensor(pages, dtype=torch.int32),
-                    torch.tensor(last_lengths, dtype=torch.int32),
-                    24,
-                    4,
-                    256,
-                )
-            else:
-                hidden, graph_logits = graph.replay(token_tensor, batch, tables)
-                features = graph.features if self._is_dspark() else None
-        if (
-            not decode_only
-            and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1"
-            and (self.attention.native or self.attention.ragged)
-        ):
-            from oh_my_vllm.worker.prefill_budget import prefill_capture_headroom
-            from oh_my_vllm.worker.prefill_graph import PrefillGraph
-
-            prefill_key = (
-                tuple(len(p.writes) for p in plans),
-                tuple(p.request.num_computed_tokens for p in plans),
-                batch.prefill_sequences,
-                tuple(selected) if batch.output_indices is not None else None,
-            )
-            prefill_family = "prefill_dspark" if self._is_dspark() else "prefill"
-            headroom = prefill_capture_headroom(
-                self.model, self.caches, token_tensor, batch, writes
-            )
-            if self.prefill_graph_cache.should_use(
-                prefill_family, prefill_key, headroom_bytes=headroom
-            ):
-                attention_plan = self.attention._ir_reference_plan
-
-                def capture_prefill():
-                    logger.info(
-                        "Capture prefill graph: queries=%s contexts=%s "
-                        "headroom_bytes=%d",
-                        *prefill_key[:2],
-                        headroom,
-                    )
-                    pool_name = (
-                        "prefill_dspark_graph_pool"
-                        if self._is_dspark()
-                        else "prefill_graph_pool"
-                    )
-                    if getattr(self, pool_name) is None:
-                        setattr(self, pool_name, torch.cuda.graph_pool_handle())
-                    try:
-                        return PrefillGraph(
-                            self.model,
-                            self.caches,
-                            token_tensor,
-                            batch,
-                            attention_plan,
-                            pool=getattr(self, pool_name),
-                            capture_features=self._is_dspark(),
-                        )
-                    except Exception:
-                        if not self.prefill_graph_cache.has_family(prefill_family):
-                            setattr(self, pool_name, None)
-                        raise
-
-                graph = self.prefill_graph_cache.get_or_create(
-                    prefill_family,
-                    prefill_key,
-                    capture_prefill,
-                    headroom_bytes=headroom,
-                )
-                if graph is not None:
-                    hidden, features = graph.replay(token_tensor, batch, attention_plan)
-        if hidden is None:
-            if self._is_dspark():
-                hidden, features = self.feature_unit(token_tensor, batch, self.caches)
-            else:
-                hidden = self.forward_unit(token_tensor, batch, self.caches)
-        logits = None
-        if selected:
-            if graph_logits is None:
-                logits = self.logits_unit(hidden[selected])
-            elif selected == list(range(len(ids))):
-                logits = graph_logits
-            else:
-                logits = graph_logits[selected]
-        # The grammar adapter only needs these two protocol-independent mappings.
+        target = run_target(self, plans)
+        hidden, features, logits = target.hidden, target.features, target.logits
+        starts = target.request_starts
         masks, mask_errors = self._build_masks(plans)
         greedy = None
         if (
@@ -699,6 +426,68 @@ class OhMyVllmWorker:
             for output in successful_outputs:
                 output.new_draft_token_ids = drafts[output.request_id]
         return WorkerOutput(registration_errors + results)
+
+    def _plan_scheduled_requests(
+        self, scheduled: SchedulerOutput
+    ) -> tuple[list[PlannedRequest], list[RequestOutput]]:
+        for rid in scheduled.finished_request_ids:
+            self.unregister_request(rid)
+        for rid in scheduled.preempted_request_ids:
+            if self.mtp is not None:
+                self.mtp.forget(rid)
+            if getattr(self, "dspark", None) is not None:
+                self.dspark.forget(rid)
+            self.sources.pop(rid, None)
+            self.computed.pop(rid, None)
+        if scheduled.num_batched_tokens != sum(
+            len(r.token_ids) for r in scheduled.scheduled
+        ):
+            raise ValueError("Rust token budget disagrees with scheduled input")
+        plans = []
+        registration_errors = []
+        for request in scheduled.scheduled:
+            rid = request.request_id
+            if rid not in self.histories:
+                if self.serving is None:
+                    raise ValueError(f"request {rid} has no registered prompt")
+                registration_errors.append(
+                    RequestOutput(rid, [], error="request registration failed")
+                )
+                continue
+            if (
+                rid in self.computed
+                and self.computed[rid] != request.num_computed_tokens
+            ):
+                raise ValueError(
+                    "Rust computed position disagrees with committed state"
+                )
+            if (
+                request.num_computed_tokens + len(request.token_ids)
+                > self.config.max_model_len
+            ):
+                raise ValueError("scheduled input exceeds the model context")
+            if any(
+                p <= 0 or p >= self.logical_num_blocks for p in request.fa_block_table
+            ):
+                raise ValueError("FA table exceeds page capacity")
+            if any(p < 0 or p >= self.mamba_blocks for p in request.mamba_block_table):
+                raise ValueError("Mamba table exceeds state capacity")
+            if rid in self.sources and not 0 <= self.sources[rid] < self.mamba_blocks:
+                raise ValueError("recurrent source exceeds state capacity")
+            plans.append(
+                plan_request(
+                    request,
+                    self.histories[rid],
+                    self.sources.get(rid),
+                    self.logical_num_blocks,
+                    self.mamba_blocks,
+                    self.config.speculative_tokens,
+                )
+            )
+        if plans:
+            validate_batch(plans)
+            plans.sort(key=lambda p: not p.prefill)
+        return plans, registration_errors
 
     def _build_masks(self, plans):
         """Generate grammar rows per request so one invalid grammar is isolated."""

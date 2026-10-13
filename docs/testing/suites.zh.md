@@ -1,5 +1,17 @@
 # CPU 与 GPU 测试套件
 
+## 测试分层
+
+- [unit](../../tests/unit/): 关键所有权, 提交/回滚, cache 和故障不变量.
+- [numerical](../../tests/numerical/): 独立数学参考, 舍入, schema 和 GPU 状态 witness.
+- [integration](../../tests/integration/): 真实进程, HTTP/ZMQ 和 OMP 协议边界.
+- [tooling](../../tests/tooling/): 开发检查, 采集器, 静态案例和证据验证.
+- [acceptance](../../tests/acceptance/): 真实模型容量和编译单元验收.
+- [support](../../tests/support/): 共享构造器和 reference, 无测试模块导入.
+
+目录表示职责. `gpu`, `isolated_gpu` 和 `omp` marker 表示执行条件. 未注册 marker 即报错.
+单元测试保留关键不变量. 常规行为由集成测试覆盖, 不再重复.
+
 ## CPU 与 GPU 测试套件
 
 ```bash
@@ -26,7 +38,7 @@ FlashInfer 产物测试使用固定版本 cubin 包, 不初始化 CUDA.
 它们还拒绝字节不符的产物和包版本不匹配.
 
 ```bash
-scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_flashinfer_artifacts.py -q
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/tooling/test_flashinfer_artifacts.py -q
 ```
 
 这些 CPU 检查不能证明模型耗时或冷启动验收通过.
@@ -38,8 +50,8 @@ HTTP 回归让非空 owner 测量经过 Python msgpack, Rust decoder 和 HTTP di
 测试检查 tuple 长度 `0/1/2`, owner 交集和零 worker 重启.
 
 ```bash
-scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_executable_diagnostics.py tests/test_worker_lifecycle.py -q
-scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_serving_http.py::HttpTests::test_executable_diagnostics_cross_msgpack_rust_and_http_boundaries -q
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/unit/test_executable_diagnostics.py tests/integration/test_worker_lifecycle.py -q
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/integration/test_serving_http.py::HttpTests::test_executable_diagnostics_cross_msgpack_rust_and_http_boundaries -q
 ```
 
 Q/K GPU 测试在短输入 dispatch 边界检查 FP64 输出, FP32 边界值, 以及输入改变后的图重放.
@@ -56,18 +68,18 @@ Scripted HTTP fixture 的服务首次就绪 timeout 为 `30` 秒.
 这段等待包含 Python import 和 ZMQ 连接. 请求, 恢复与关闭断言保留原有 deadline.
 
 选定 pytest 参数放在 `cpu` 或 `full` 之后.
-Full 模式使用两个新的 pytest 进程, 先执行 context-boundary 模块.
+Full 模式使用两个新的 pytest 进程, 先执行标为 `isolated_gpu` 的 6 个边界 GPU 用例.
 边界收集器的 GPU 所有权检查执行时, 没有此前测试的 CUDA context.
 Partition plugin 保留所选 node ID 及其重复次数. 空分组不会掩盖失败.
 
-各进程先使用原始收集范围和 pytest filter, 再按路径分组.
+各进程先使用原始收集范围和 pytest filter, 再按 `isolated_gpu` 分组.
 这样 `--ignore` 和 `--ignore-glob` 对边界模块继续生效.
 
 使用 `full --evidence-dir "$EVIDENCE_DIR/python-tests"` 指定新的外部证据目录.
 未指定时, launcher 打印新的临时目录, 退出后保留文件.
 每个已启动的 pytest 进程保留日志和进程出生记录. Pytest 写入 JUnit 结果时保留文件.
 缺少分组报告不能视为完整测试证据.
-`tests/test_python_test_partition.py` 将真实收集结果与原始 pytest node multiset 比较, 不执行 GPU 计算.
+`tests/tooling/test_python_test_partition.py` 用小型 fixture 项目验证 selector, filter 和重复 node 的等价收集, 不执行 GPU 计算.
 
 已有 worker lifecycle 测试在 CPU 上检查模型, callable 和 graph-pool 引用释放.
 六项真实模型边界用例检查进程在未改变的 worker shutdown deadline 前正常退出.
@@ -89,14 +101,14 @@ CPU 回归检查选定设备隔离, 外部进程, 出生身份复用和查询失
 其他 `pidfd_open` 错误保留原处理.
 CPU 测试检查真实子进程退出, PID 复用及这些失败条件.
 
-`tests/test_graph_capture.py` 在 CPU 上检查实际 allocator 设置与工作区生命周期屏障.
-`tests/test_graph_memory.py` 检查活跃共享图及输出保留时的 allocator 释放.
+`tests/unit/test_graph_capture.py` 在 CPU 上检查实际 allocator 设置与工作区生命周期屏障.
+`tests/unit/test_graph_memory.py` 检查活跃共享图及输出保留时的 allocator 释放.
 临时分配大于现有各个 default-pool segment 的 `total_size - allocated_size`.
 Allocator 能释放新 segment 的全部存储, 同时保留其他 segment 中的活跃 tensor.
 新增用例在同一个 default-pool segment 中保留活跃 tensor 和至少 `128` MiB 空闲存储.
 Owner, pool, 零驱逐, `32` MiB 释放和精确重放检查继续有效.
 
-`tests/test_dspark_context_graph_gpu.py` 包含生产使用的 29-by-25600 BF16 上下文投影.
+`tests/numerical/test_dspark_context_graph_gpu.py` 包含生产使用的 29-by-25600 BF16 上下文投影.
 它在捕获 stream 的 pool 外预热, 重置无关 GEMM 图, 施加 allocator 压力, 并重放变化后的输入.
 它用 `atol=0.03`, `rtol=0.03` 检查全部五层 cache 输出, 精确检查未修改行的 canary, 并验证工作区预算未变.
 完整模型 drift 测试在严格算子容差之外, 使用各自记录的模型级界限.

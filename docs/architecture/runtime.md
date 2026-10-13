@@ -7,7 +7,7 @@ Each stage has one owner. GPU work must not publish an unvalidated prefix.
 Cancellation takes effect at completed operation boundaries. Worker failure invalidates its state before replacement.
 
 Read [service admission](../../crates/zmq-worker/src/serving/), [request preparation](../../python/oh_my_vllm/worker/serving.py),
-[worker execution](../../python/oh_my_vllm/worker/model_runner.py), and [scheduler commit](../../crates/scheduler/src/lib.rs).
+[worker execution](../../python/oh_my_vllm/worker/model_runner.py), [target execution](../../python/oh_my_vllm/worker/target_execution.py), and [scheduler commit](../../crates/scheduler/src/lib.rs).
 [Service contracts](../serving.md) define observable API behavior.
 
 ## Rust modules

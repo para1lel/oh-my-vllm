@@ -5,7 +5,7 @@
 Compare the current runtime with the reviewed semantic contract on CPU before GPU collection:
 
 ```bash
-scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_performance_metadata.py::test_current_runtime_contract_matches_semantic_review -q
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/tooling/test_performance_metadata.py::test_current_runtime_contract_matches_semantic_review -q
 ```
 
 This checks source hashes, providers, headers, compiler flags, and version pins without CUDA initialization.

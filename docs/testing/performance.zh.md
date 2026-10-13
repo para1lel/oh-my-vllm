@@ -5,7 +5,7 @@
 GPU 采集前, 在 CPU 上将当前 runtime 与已审核的语义契约核对:
 
 ```bash
-scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_performance_metadata.py::test_current_runtime_contract_matches_semantic_review -q
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/tooling/test_performance_metadata.py::test_current_runtime_contract_matches_semantic_review -q
 ```
 
 此检查核对源码摘要, provider, header, compiler flag 和版本 pin, 不初始化 CUDA.

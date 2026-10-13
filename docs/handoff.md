@@ -1,6 +1,6 @@
 # Current state and open work
 
-Updated: 2026-10-13. Refactor work is active. Final delivery is pending.
+Updated: 2026-10-14. Refactor work is active. Final delivery is pending.
 
 ## Accepted scope
 
@@ -15,7 +15,7 @@ Keep the theoretical model, two warmups, five repetitions, and 10% spread gates.
 ## Milestones
 
 1. Document hierarchy, source anchors, word limits, and definition spacing: complete and independently reviewed.
-2. Cohesive code modules and critical test layers: pending.
+2. Cohesive code modules and critical test layers: complete and independently reviewed.
 3. Native CUDA provider migration, independent references, TileFoundry rebase, and harness adaptation: pending.
 4. Profiler, request plots, performance tuning, and complete acceptance: pending.
 
@@ -27,7 +27,13 @@ Do not push or open pull requests.
 Milestone one passed required Rust/style/document checks, 55 selected Python tests, 14 Node tests, and 9 browser tests.
 The tutorial build passed. Independent review findings were corrected.
 
-GPU acceptance and the full Python suite follow the later source freeze. They did not run for this milestone.
+Milestone two passed required Rust/style/document checks, 14 Node tests, and 9 browser tests.
+The full CPU run passed 1572 cases and 156 subtests. One stale environment-path assertion failed.
+After correction, all seven environment tests passed. No other CPU failure occurred.
+
+GPU selection kept all 487 nodes, with six isolated boundary cases. This was collection validation, not GPU execution.
+
+GPU acceptance follows the native CUDA migration and source freeze. It did not run for these milestones.
 No new-source GPU acceptance is claimed. Historical repair results belong to source `b98a83a` and earlier recorded commits.
 
 Current summaries with obsolete comparison provenance will leave the working tree. Git history keeps their original results.

@@ -7,7 +7,7 @@
 取消在已完成算子的边界生效; worker 失败时先使其状态失效, 然后替换.
 
 读取[服务准入](../../crates/zmq-worker/src/serving/), [请求准备](../../python/oh_my_vllm/worker/serving.py),
-[worker 执行](../../python/oh_my_vllm/worker/model_runner.py)和[调度器提交](../../crates/scheduler/src/lib.rs).
+[worker 执行](../../python/oh_my_vllm/worker/model_runner.py), [目标执行](../../python/oh_my_vllm/worker/target_execution.py)和[调度器提交](../../crates/scheduler/src/lib.rs).
 [服务契约](../serving.zh.md)定义可观察的 API 行为.
 
 ## Rust 模块

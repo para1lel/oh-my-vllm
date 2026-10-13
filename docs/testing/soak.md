@@ -107,7 +107,7 @@ Only `message_end` supplies an RPC SDK completion. A normal `turn_end` can inclu
 Run the CPU instrumentation checks with the pinned OMP executable available:
 
 ```bash
-scripts/with-env.sh python -m pytest tests/test_agentic_sdk_trace.py tests/test_agentic_sdk_integration.py tests/test_agentic_goal_integration.py tests/test_agentic_goals.py tests/test_host_allocator.py
+scripts/with-env.sh python -m pytest tests/tooling/test_agentic_sdk_trace.py tests/integration/test_agentic_sdk_integration.py tests/integration/test_agentic_goal_integration.py tests/tooling/test_agentic_goals.py tests/unit/test_host_allocator.py
 ```
 
 The integration fixture supplies API responses from fixed test data. It checks full request JSON equality and all three automatic-compaction purposes.

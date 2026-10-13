@@ -12,7 +12,7 @@ They keep literal markup, plain whitespace, disabled tools, explicit non-strict 
 These CPU cases do not prove that model repetition is resolved or that long-duration agent acceptance passed.
 
 ```bash
-scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_serving_worker.py tests/test_thinking_budget.py -q
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/integration/test_serving_worker.py tests/unit/test_thinking_budget.py -q
 ```
 
 Test HTTP services use production defaults.
@@ -24,7 +24,7 @@ Maximum effort and output/context limits stay explicit workload settings.
 
 Offline phase/operator measurements and budget boundary tests keep their specified explicit parameters.
 
-`tests/test_serving_http.py` checks Rust HTTP, ZMQ, Python sampler, and checkpoint merge without GPU inference.
+`tests/integration/test_serving_http.py` checks Rust HTTP, ZMQ, Python sampler, and checkpoint merge without GPU inference.
 It checks explicit zero, null omission, service changes, and rejection before worker launch.
 Rust tests use the same validation function for CLI and request fields.
 
@@ -41,7 +41,7 @@ It does not prove target-model output or one-hour stability.
 With `OH_MY_VLLM_MODEL` and the release normalizer available, it also uses the production CPU preflight.
 
 ```bash
-scripts/with-env.sh python -m pytest tests/test_serving_worker.py tests/test_agentic_goal_integration.py -q
+scripts/with-env.sh python -m pytest tests/integration/test_serving_worker.py tests/integration/test_agentic_goal_integration.py -q
 ```
 
 ## Reasoning budget acceptance
@@ -67,7 +67,7 @@ Examine each written slot and unchanged protected state.
 For fused chains, include all rounding, scale, copy, and reduction behavior.
 See `tests/probe_worker.py` and the applicable kernel tests.
 
-`tests/test_ir_normalized_linear.py` checks small-row fusion at rows `1/2/4/6/12/24/32`.
+`tests/numerical/test_ir_normalized_linear.py` checks small-row fusion at rows `1/2/4/6/12/24/32`.
 Graph replay reads changed inputs and weight scales, keeps compact output shapes, and leaves input bytes unchanged.
 Storage-offset cases check each of the three normalization inputs at rows `2/17`.
 The previous exact checks and FP8 operator tolerances stay active.

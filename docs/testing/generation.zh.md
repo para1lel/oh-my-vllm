@@ -12,7 +12,7 @@ Tokenizer 回归检查规范思考结束, 工具起始标记约束, schema, 函�
 这些 CPU 用例不能证明模型重复已解决, 也不能证明长程 Agent 验收通过.
 
 ```bash
-scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_serving_worker.py tests/test_thinking_budget.py -q
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/integration/test_serving_worker.py tests/unit/test_thinking_budget.py -q
 ```
 
 测试 HTTP 服务使用生产默认值.
@@ -24,7 +24,7 @@ scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_servin
 
 离线阶段 / 算子测量和预算边界测试保留各自规定的显式参数.
 
-`tests/test_serving_http.py` 检查真实 Rust HTTP, ZMQ, Python sampler 和 checkpoint 合并, 不执行 GPU 推理.
+`tests/integration/test_serving_http.py` 检查真实 Rust HTTP, ZMQ, Python sampler 和 checkpoint 合并, 不执行 GPU 推理.
 它检查显式零, null 省略, 服务修改和 worker 启动前的拒绝.
 Rust 测试为 CLI 与请求字段共用同一校验函数.
 
@@ -41,7 +41,7 @@ CPU fixture 使用确定性 API 响应和真实 sandbox OMP 进程.
 `OH_MY_VLLM_MODEL` 和 release normalizer 可用时, 它还使用生产 CPU preflight.
 
 ```bash
-scripts/with-env.sh python -m pytest tests/test_serving_worker.py tests/test_agentic_goal_integration.py -q
+scripts/with-env.sh python -m pytest tests/integration/test_serving_worker.py tests/integration/test_agentic_goal_integration.py -q
 ```
 
 ## 思考预算验收
@@ -66,7 +66,7 @@ Recurrent state 的 NRMSE 至多 1%, 最大绝对误差至多为参考峰值 2%.
 融合链包括全部舍入, scale, copy 和 reduction 行为.
 参见 `tests/probe_worker.py` 和相关内核测试.
 
-`tests/test_ir_normalized_linear.py` 在 `1/2/4/6/12/24/32` 行检查小行数融合.
+`tests/numerical/test_ir_normalized_linear.py` 在 `1/2/4/6/12/24/32` 行检查小行数融合.
 Graph 重放读取变化后的输入和权重 scales, 保持紧凑的输出形状, 并保持输入字节不变.
 存储偏移用例在 `2/17` 行分别检查三个归一化输入.
 之前的精确检查和 FP8 算子容差继续有效.

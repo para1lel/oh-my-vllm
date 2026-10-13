@@ -13,7 +13,7 @@ from benchmarks.common import run_engine  # noqa: E402
 from benchmarks.context_boundary import _reap_on_termination  # noqa: E402
 
 
-def commands(pytest_args, evidence):
+def commands(pytest_args, evidence, *, test_root="tests"):
     return [
         (
             name,
@@ -21,7 +21,7 @@ def commands(pytest_args, evidence):
                 sys.executable,
                 "-m",
                 "pytest",
-                "tests",
+                test_root,
                 "-q",
                 *pytest_args,
                 "-p",

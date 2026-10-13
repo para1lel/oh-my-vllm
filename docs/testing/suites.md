@@ -1,5 +1,17 @@
 # CPU and GPU suites
 
+## Test layers
+
+- [unit](../../tests/unit/): critical ownership, commit/rollback, cache, and fault invariants.
+- [numerical](../../tests/numerical/): independent mathematics, rounding, schemas, and GPU state witnesses.
+- [integration](../../tests/integration/): process, HTTP/ZMQ, and OMP protocol boundaries.
+- [tooling](../../tests/tooling/): development checks, collectors, static cases, and evidence validation.
+- [acceptance](../../tests/acceptance/): target-model capacity and compiled-unit acceptance.
+- [support](../../tests/support/): shared builders and references without test-module imports.
+
+Directories identify responsibility. The `gpu`, `isolated_gpu`, and `omp` markers identify execution conditions. Unknown markers fail collection.
+Unit tests keep critical invariants. Integration covers ordinary behavior without repeated unit assertions.
+
 ## CPU and GPU suites
 
 ```bash
@@ -26,7 +38,7 @@ They load checked B200 manifests, headers, and a binary kernel with downloads di
 They also reject incorrect artifact bytes and package version mismatches.
 
 ```bash
-scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_flashinfer_artifacts.py -q
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/tooling/test_flashinfer_artifacts.py -q
 ```
 
 These CPU checks do not prove model timing or cold-start acceptance.
@@ -38,8 +50,8 @@ The HTTP regression sends nonempty owner measurements through Python msgpack, th
 It checks tuple lengths `0/1/2`, owner intersections, and zero worker restarts.
 
 ```bash
-scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_executable_diagnostics.py tests/test_worker_lifecycle.py -q
-scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_serving_http.py::HttpTests::test_executable_diagnostics_cross_msgpack_rust_and_http_boundaries -q
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/unit/test_executable_diagnostics.py tests/integration/test_worker_lifecycle.py -q
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/integration/test_serving_http.py::HttpTests::test_executable_diagnostics_cross_msgpack_rust_and_http_boundaries -q
 ```
 
 Q/K GPU tests include FP64 output, FP32 edge values, and changed-input graph replay at the short dispatch boundary.
@@ -56,18 +68,18 @@ Scripted HTTP fixtures have a `30`-second timeout for initial service readiness.
 This wait includes Python imports and the ZMQ connection. Request, recovery, and shutdown assertions keep their existing deadlines.
 
 Selected pytest arguments follow `cpu` or `full`.
-Full mode uses two new pytest processes, with the context-boundary module first.
+Full mode uses two new pytest processes, with the six `isolated_gpu` boundary cases first.
 The boundary collector's GPU ownership check runs without CUDA contexts from earlier tests.
 The partition plugin keeps selected node IDs and their duplicate counts. Empty groups do not hide failures.
 
-Each process uses the original collection scope and pytest filters before path partition.
+Each process uses the original collection scope and pytest filters before `isolated_gpu` partition.
 This keeps `--ignore` and `--ignore-glob` effective for the boundary module.
 
 Use `full --evidence-dir "$EVIDENCE_DIR/python-tests"` for a new external evidence directory.
 Without this option, the launcher prints a new temporary directory and keeps its files after exit.
 Each started pytest process has a log and process birth records. Keep JUnit results when pytest writes them.
 Do not treat missing group reports as completed test evidence.
-`tests/test_python_test_partition.py` compares collection results with the original pytest node multiset without GPU execution.
+`tests/tooling/test_python_test_partition.py` checks selector, filter, and duplicate-node equivalence on a small fixture project without GPU execution.
 
 The existing worker lifecycle test checks model, callable, and graph-pool reference release on CPU.
 The six target-model boundary rows check normal process exit before the unchanged worker shutdown deadline.
@@ -89,14 +101,14 @@ The observer does not register a missing or changed birth. The same birth still 
 Other `pidfd_open` errors keep their previous handling.
 CPU tests check child exit, PID reuse, and these failure conditions.
 
-`tests/test_graph_capture.py` checks effective allocator settings and workspace lifetime fences on CPU.
-`tests/test_graph_memory.py` checks allocator release with live shared graphs and outputs.
+`tests/unit/test_graph_capture.py` checks effective allocator settings and workspace lifetime fences on CPU.
+`tests/unit/test_graph_memory.py` checks allocator release with live shared graphs and outputs.
 Its temporary allocation is more than `total_size - allocated_size` for each existing default-pool segment.
 The allocator can release all storage in the new segment while other segments keep live tensors.
 A new case keeps a live tensor and at least `128` MiB of free storage in the same default-pool segment.
 The owner, pool, zero-eviction, `32` MiB release, and exact replay checks stay active.
 
-`tests/test_dspark_context_graph_gpu.py` includes the production 29-by-25600 BF16 context projection.
+`tests/numerical/test_dspark_context_graph_gpu.py` includes the production 29-by-25600 BF16 context projection.
 Its warmup uses the capture stream before pool capture.
 It resets unrelated GEMM graphs, applies allocator pressure, and replays changed inputs.
 It checks all five cache outputs at `atol=0.03`, `rtol=0.03`, exact untouched-row canaries, and unchanged workspace budgets.

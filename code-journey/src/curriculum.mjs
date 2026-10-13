@@ -53,6 +53,7 @@ export const coverage = [
   ["Basics", "python/oh_my_vllm/worker/serving.py", "    def prepare_inputs(", "ServingAdapter.prepare_inputs: 模板, 分词与输入预算", "按模型本地模板组织角色和工具记录, 检查提示词加输出预算, 返回 ID, SamplingParams 和 Generation. 准备阶段构造数据, 桥接主线程再安装活跃状态."],
   ["Ownership", "crates/zmq-worker/src/main.rs", "async fn run()", "run / execute_batch: CLI 的 Serve 与 Bench 路线", "配置 worker, 初始化 Rust 缓存与调度器, 分派 HTTP 或批量基准入口. Bench 使用同一调度和模型执行链, 通过合成 ID 构造负载."],
   ["Ownership", "crates/zmq-worker/src/lib.rs", "pub use client::WorkerClient;", "crate 导出边界", "导出 WorkerClient 和配置, 把命令入口与通信实现分开, 供 serving 与 benchmark 共用."],
+  ["Ownership", "python/oh_my_vllm/worker/target_execution.py", "def run_target(", "Target execution: 输入, 图与输出", "接收已验证计划, 组织设备 metadata, 选择目标 graph 或编译单元, 返回 hidden, DSpark feature 和采样 logits. 状态提交由 worker 单独负责."],
   ["Ownership", "python/oh_my_vllm/worker/model_runner.py", "class OhMyVllmWorker", "OhMyVllmWorker: 初始化, 执行与清理", "init_device / load_model / initialize_cache 建立单卡运行时; execute_model 检查计划, 组合输入, 调用 forward, 采样并提交; shutdown 释放图和模型引用."],
   ["Ownership", "python/oh_my_vllm/worker/runtime.py", "def identity(", "identity / verify_loaded_modules: 运行身份", "记录解释器, 软件版本和内核构建来源. FlashInfer 使用匹配的 cubin 包, 身份记录其目录与校验开关; 项目编译缓存仍按运行隔离. 启动与退出时检查 Python 路径和已加载模块/动态库."],
   ["Ownership", "python/oh_my_vllm/worker/logging_utils.py", "def configure_logging(", "configure_logging: 关联日志", "统一日志格式并关联运行编号, 使 Rust 派发, Python 执行和请求完成的记录可以对应."],
@@ -137,5 +138,5 @@ export const coverage = [
   ["Validation", "benchmarks/measurement.py", "def audit(", "运行身份与测量阶段审计", "记录硬件和缓存身份, 查找 measured 阶段的编译/捕获日志, 审计编译缓存的文件变化, 核实预热完成后的稳定执行."],
   ["Validation", "development/kernels/cases.py", "def cases(", "算子最大形状用例", "静态推导生产路径边界, 将 shape 与布局纳入正式算子验收, 与冻结 TileLang 比较; 微调脚本和原始 profiling 留在仓库外."],
   ["Validation", "scripts/run_python_tests.py", "def run(", "独立进程运行容量与其余测试", "容量模块先运行, 其余测试使用新的 pytest 进程, 通过共享所有权检查和进程出生记录确认退出. 每组原始证据保留在外部目录."],
-  ["Validation", "development/pytest_partition.py", "def pytest_collection_modifyitems(", "保留原始选择与重复次数的测试分组", "按源码路径分组, 避免显式 node ID 越过分组而重复执行. 回归比较真实收集的 node multiset, 独占检查与测试断言保持不变."],
+  ["Validation", "development/pytest_partition.py", "def pytest_collection_modifyitems(", "保留原始选择与重复次数的测试分组", "按 isolated_gpu 执行条件分组, 避免显式 node ID 越过分组而重复执行. 小型 fixture 项目检查 selector, marker 和重复 node; 真实仓库另做一次 collection parity. 六个边界 GPU 用例在首个全新进程运行."],
 ];

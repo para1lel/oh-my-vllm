@@ -96,7 +96,7 @@ Exporter 可再次发送同一批次. Collector 保留这些原始记录.
 安装固定版本 OMP executable 后, 执行 CPU 采集检查:
 
 ```bash
-scripts/with-env.sh python -m pytest tests/test_agentic_sdk_trace.py tests/test_agentic_sdk_integration.py tests/test_agentic_goal_integration.py tests/test_agentic_goals.py tests/test_host_allocator.py
+scripts/with-env.sh python -m pytest tests/tooling/test_agentic_sdk_trace.py tests/integration/test_agentic_sdk_integration.py tests/integration/test_agentic_goal_integration.py tests/tooling/test_agentic_goals.py tests/unit/test_host_allocator.py
 ```
 
 集成 fixture 提供来自固定测试数据的 API 响应. 它检查完整请求 JSON 相等及全部三种自动压缩用途.
