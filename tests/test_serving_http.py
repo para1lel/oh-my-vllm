@@ -1186,6 +1186,35 @@ class HttpTests(unittest.TestCase):
                         os.killpg(process.pid, signal.SIGKILL)
                         process.wait()
 
+    def test_executable_diagnostics_cross_msgpack_rust_and_http_boundaries(self):
+        with (
+            patch.dict(os.environ, {"OH_MY_VLLM_EXECUTABLE_DIAGNOSTICS": "1"}),
+            self.resource_server("executable-diagnostics") as (port, log),
+        ):
+            address = f"http://127.0.0.1:{port}"
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                with urllib.request.urlopen(
+                    address + "/diagnostics", timeout=2
+                ) as reply:
+                    snapshot = json.load(reply)
+                if snapshot["worker"] is not None:
+                    break
+                time.sleep(0.05)
+            self.assertIsNotNone(snapshot["worker"], log.read_text())
+            self.assertEqual(snapshot["restarts"], 0)
+            owners = snapshot["worker"]["cpu"]["compiled_executables"]
+            self.assertEqual(
+                owners["graph_families"]["target"]["owner_tuple_lengths"],
+                {"0": 1, "1": 1, "2": 1},
+            )
+            self.assertEqual(owners["graph_owner_union"], 2)
+            self.assertEqual(owners["persistent_owner_union"], 1)
+            self.assertEqual(owners["graph_persistent_overlap"], 1)
+            self.assertEqual(owners["weak_live_unique"], 2)
+            self.assertTrue(owners["weak_coverage_complete"])
+            self.assertNotIn("msgpack decode error", log.read_text())
+
     def test_server_thinking_budget_covers_omitted_sdk_fields_and_overrides(self):
         capture = self.directory / "thinking-budgets.jsonl"
         with (

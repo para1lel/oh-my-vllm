@@ -1,5 +1,6 @@
 """Failed and interrupted measurements retain their child output on disk."""
 
+import errno
 import importlib.util
 import json
 import os
@@ -18,6 +19,102 @@ spec.loader.exec_module(process_module)
 
 
 class BenchmarkProcessTest(unittest.TestCase):
+    def test_pidfd_einval_after_child_reap_does_not_publish_ownership(self):
+        ownership = process_module.ProcessOwnership(os.getpid())
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        try:
+
+            def reap_before_open(pid):
+                self.assertEqual(pid, child.pid)
+                child.terminate()
+                child.wait(timeout=5)
+                raise OSError(errno.EINVAL, "pidfd_open failed")
+
+            with patch.object(
+                process_module, "_open_pidfd", side_effect=reap_before_open
+            ):
+                self.assertIsNone(ownership._bind(child.pid, parent=ownership.root))
+            self.assertNotIn(
+                child.pid, {row["pid"] for row in ownership.records.values()}
+            )
+        finally:
+            if child.poll() is None:
+                child.terminate()
+            child.wait(timeout=5)
+            ownership.close()
+
+    def test_pidfd_einval_for_existing_birth_still_fails(self):
+        ownership = process_module.ProcessOwnership(os.getpid())
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        try:
+            with (
+                patch.object(
+                    process_module,
+                    "_open_pidfd",
+                    side_effect=OSError(errno.EINVAL, "pidfd_open failed"),
+                ),
+                self.assertRaises(OSError) as failure,
+            ):
+                ownership._bind(child.pid, parent=ownership.root)
+            self.assertEqual(failure.exception.errno, errno.EINVAL)
+            self.assertIsNone(child.poll())
+            self.assertNotIn(
+                child.pid, {row["pid"] for row in ownership.records.values()}
+            )
+            self.assertIn(str(child.pid), " ".join(failure.exception.__notes__))
+        finally:
+            child.terminate()
+            child.wait(timeout=5)
+            ownership.close()
+
+    def test_pidfd_einval_with_reused_pid_does_not_bind_new_birth(self):
+        ownership = process_module.ProcessOwnership(os.getpid())
+        old = dict(ownership.root, pid=99999999, start_ticks=1)
+        reused = dict(old, start_ticks=2)
+        try:
+            with (
+                patch.object(
+                    process_module, "_process_record", side_effect=[old, reused]
+                ),
+                patch.object(
+                    process_module,
+                    "_open_pidfd",
+                    side_effect=OSError(errno.EINVAL, "pidfd_open failed"),
+                ),
+            ):
+                self.assertIsNone(ownership._bind(old["pid"], parent=ownership.root))
+            self.assertEqual(len(ownership.records), 1)
+            self.assertEqual(len(ownership.pidfds), 1)
+        finally:
+            ownership.close()
+
+    def test_other_pidfd_errors_remain_fatal_after_child_reap(self):
+        ownership = process_module.ProcessOwnership(os.getpid())
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        try:
+
+            def reap_before_open(pid):
+                child.terminate()
+                child.wait(timeout=5)
+                raise OSError(errno.EMFILE, "pidfd_open failed")
+
+            with (
+                patch.object(
+                    process_module, "_open_pidfd", side_effect=reap_before_open
+                ),
+                self.assertRaises(OSError) as failure,
+            ):
+                ownership._bind(child.pid, parent=ownership.root)
+            self.assertEqual(failure.exception.errno, errno.EMFILE)
+            self.assertNotIn(
+                child.pid, {row["pid"] for row in ownership.records.values()}
+            )
+        finally:
+            if child.poll() is None:
+                child.terminate()
+            child.wait(timeout=5)
+            ownership.close()
+
     def assert_audit_released(self, log, expected):
         audit = json.loads(Path(str(log) + ".processes.json").read_text())
         self.assertEqual(audit["live"], [])

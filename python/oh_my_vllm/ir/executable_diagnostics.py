@@ -144,7 +144,9 @@ class ExecutableDiagnostics:
             "graph_families": {
                 name: {
                     "graphs": sum(lengths.values()),
-                    "owner_tuple_lengths": dict(lengths),
+                    "owner_tuple_lengths": {
+                        str(length): count for length, count in lengths.items()
+                    },
                     "owner_union": len(identities),
                 }
                 for name, (lengths, identities) in families.items()

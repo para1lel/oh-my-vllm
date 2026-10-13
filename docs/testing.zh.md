@@ -38,9 +38,12 @@ GPU 验收保留全新项目缓存. 不安装预热的项目或 FlashInfer JIT c
 
 CPU executable 诊断测试检查 executable 生命周期, owner 交集, 等待中的回调, 以及明确的不完整覆盖范围.
 测试保留诊断快照, 不保留 executable 的强引用.
+HTTP 回归让非空 owner 测量经过 Python msgpack, Rust decoder 和 HTTP diagnostics.
+测试检查 tuple 长度 `0/1/2`, owner 交集和零 worker 重启.
 
 ```bash
 scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_executable_diagnostics.py tests/test_worker_lifecycle.py -q
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_serving_http.py::HttpTests::test_executable_diagnostics_cross_msgpack_rust_and_http_boundaries -q
 ```
 
 Q/K GPU 测试在短输入 dispatch 边界检查 FP64 输出, FP32 边界值, 以及输入改变后的图重放.
@@ -81,6 +84,14 @@ GPU 覆盖包括全部 6 个最大上下文用例和 metadata 变化后的 graph
 查询 timeout 保持 `10` 秒. 查询失败会停止采集.
 进程接受条件仍要求精确的所属祖先关系和出生身份.
 CPU 回归检查选定设备隔离, 外部进程, 出生身份复用和查询失败.
+
+进程在内核 PID lookup 后, pidfd binding 前被回收时, Linux 可能返回 `EINVAL`.
+[Linux 6.8 实现](https://github.com/torvalds/linux/blob/v6.8/kernel/fork.c#L2178) 在 lookup 后检查 thread-group leader.
+
+采集在这个错误后重新检查进程出生身份.
+观测器不登记已消失或变化的身份. 相同身份仍导致失败.
+其他 `pidfd_open` 错误保留原处理.
+CPU 测试检查真实子进程退出, PID 复用及这些失败条件.
 
 `tests/test_graph_capture.py` 在 CPU 上检查实际 allocator 设置与工作区生命周期屏障.
 `tests/test_graph_memory.py` 检查活跃共享图及输出保留时的 allocator 释放.

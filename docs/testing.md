@@ -38,9 +38,12 @@ Keep fresh project caches for GPU acceptance. Do not install a prewarmed project
 
 CPU executable diagnostics tests check executable lifetime, owner intersections, pending callbacks, and explicit incomplete coverage.
 They keep diagnostic snapshots without a strong executable reference.
+The HTTP regression sends nonempty owner measurements through Python msgpack, the Rust decoder, and HTTP diagnostics.
+It checks tuple lengths `0/1/2`, owner intersections, and zero worker restarts.
 
 ```bash
 scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_executable_diagnostics.py tests/test_worker_lifecycle.py -q
+scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_serving_http.py::HttpTests::test_executable_diagnostics_cross_msgpack_rust_and_http_boundaries -q
 ```
 
 Q/K GPU tests include FP64 output, FP32 edge values, and changed-input graph replay at the short dispatch boundary.
@@ -81,6 +84,14 @@ The benchmark ownership check queries only the selected GPU UUID through `nvidia
 Its query timeout stays `10` seconds. Query failures stop the collection.
 Process acceptance still checks exact owned ancestry and birth identity.
 CPU regressions check selected-device isolation, foreign processes, birth reuse, and query failures.
+
+Linux can return `EINVAL` when a process is reaped after kernel PID lookup and before pidfd binding.
+The [Linux 6.8 implementation](https://github.com/torvalds/linux/blob/v6.8/kernel/fork.c#L2178) checks for a thread-group leader after lookup.
+
+Collection checks the process birth again after this error.
+The observer does not register a missing or changed birth. The same birth still causes failure.
+Other `pidfd_open` errors keep their previous handling.
+CPU tests check child exit, PID reuse, and these failure conditions.
 
 `tests/test_graph_capture.py` checks effective allocator settings and workspace lifetime fences on CPU.
 `tests/test_graph_memory.py` checks allocator release with live shared graphs and outputs.

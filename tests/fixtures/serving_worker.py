@@ -6,9 +6,11 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import msgpack
 import zmq
+from oh_my_vllm.ir.executable_diagnostics import ExecutableDiagnostics, enabled
 from oh_my_vllm.worker.batch_plan import plan_request
 from oh_my_vllm.worker.protocol import ScheduledRequest
 from oh_my_vllm.worker.serving import RequestValidationError, ServingAdapter
@@ -24,6 +26,20 @@ def main():
     block_owners = {}
     adapter = None
     delayed_replies = []
+    executable_diagnostics = None
+    if enabled():
+        executable_diagnostics = ExecutableDiagnostics()
+        first, second = lambda: None, lambda: None
+        executable_diagnostics.register(first, "first")
+        executable_diagnostics.register(second, "second")
+        graph_owners = {
+            "target": [
+                SimpleNamespace(execution_owners=()),
+                SimpleNamespace(execution_owners=(first,)),
+                SimpleNamespace(execution_owners=(first, second)),
+            ]
+        }
+        persistent_owners = {"backbone": SimpleNamespace(execution_owners=(first,))}
 
     def publish_blocks():
         if not (path := os.environ.get("OH_MY_VLLM_FIXTURE_BLOCKS")):
@@ -368,6 +384,12 @@ def main():
                     "gpu": {"allocated_bytes": 0, "reserved_bytes": 0},
                 },
             }
+            if executable_diagnostics is not None:
+                reply["stats"]["cpu"] = {
+                    "compiled_executables": executable_diagnostics.snapshot(
+                        graph_owners, persistent_owners
+                    )
+                }
         elif kind == "shutdown":
             publish_blocks()
             if path := os.environ.get("OH_MY_VLLM_FIXTURE_SHUTDOWN"):

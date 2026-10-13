@@ -6,6 +6,7 @@ import threading
 import weakref
 from types import SimpleNamespace
 
+import msgpack
 from oh_my_vllm.ir.executable_diagnostics import ExecutableDiagnostics, enabled
 
 
@@ -52,7 +53,10 @@ def test_actual_tuple_lengths_deduplication_and_persistent_overlap():
     assert snapshot["persistent_owner_union"] == 1
     assert snapshot["graph_persistent_overlap"] == 1
     assert snapshot["weak_live_not_enumerated"] == 1
-    assert snapshot["graph_families"]["dspark"]["owner_tuple_lengths"] == {2: 1, 1: 1}
+    assert snapshot["graph_families"]["dspark"]["owner_tuple_lengths"] == {
+        "2": 1,
+        "1": 1,
+    }
     assert snapshot["persistent_units"]["backbone"]["owner_deque_length"] == 1
     rows = {row["registrations"][0]["unit"]: row for row in snapshot["owners"]}
     assert rows["shared"]["graph_families"] == ["dspark"]
@@ -60,6 +64,31 @@ def test_actual_tuple_lengths_deduplication_and_persistent_overlap():
     assert rows["other"]["graph_families"] == []
     assert snapshot["measurement_seconds"] >= 0
     assert snapshot["byte_scope"] == "shallow owner and closure container only"
+
+
+def test_diagnostic_snapshot_has_msgpack_string_map_keys():
+    diagnostics = ExecutableDiagnostics()
+    executable = owner()
+    diagnostics.register(executable, "target")
+    snapshot = diagnostics.snapshot(
+        {
+            "target": [
+                SimpleNamespace(execution_owners=()),
+                SimpleNamespace(execution_owners=(executable,)),
+                SimpleNamespace(execution_owners=(executable, executable)),
+            ]
+        },
+        {"forward": SimpleNamespace(execution_owners=(executable,))},
+    )
+    frame = {"type": "stats_result", "rpc_id": 1, "stats": snapshot}
+    wire = msgpack.packb(frame, use_bin_type=True)
+    decoded = msgpack.unpackb(wire, raw=False, strict_map_key=True)
+    assert decoded == frame
+    assert decoded["stats"]["graph_families"]["target"]["owner_tuple_lengths"] == {
+        "0": 1,
+        "1": 1,
+        "2": 1,
+    }
 
 
 def test_generations_and_missing_weak_coverage_stay_explicit():

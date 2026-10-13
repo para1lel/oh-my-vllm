@@ -218,7 +218,7 @@ def test_resource_snapshot_has_bounded_counts_and_separate_allocator_metrics(
         assert owners["graph_persistent_overlap"] == 1
         assert owners["weak_live_not_enumerated"] == 0
         assert owners["graph_families"]["target.target"]["owner_tuple_lengths"] == {
-            1: 1
+            "1": 1
         }
     else:
         assert "compiled_executables" not in stats["cpu"]

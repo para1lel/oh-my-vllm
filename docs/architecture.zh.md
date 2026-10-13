@@ -395,6 +395,7 @@ Capture 保留已预热的 specialization.
 记录上限为 `8192` 项. 溢出或对象不支持弱引用时, 测量覆盖范围不完整.
 诊断区分图 owner tuple, 持久 callable owner deque, 二者共享对象, 以及其他存活 compiled executable.
 等待中的弱引用回调与存活记录使用不同计数.
+Owner tuple 长度在 msgpack 诊断结果中使用字符串 map key.
 
 浅层对象和 closure 容器尺寸不包括其内容, native 存储和 allocator 保留内存.
 这些计数不能证明进程内存稳定. 诊断不改变 capture, executable 所有权或资源释放.

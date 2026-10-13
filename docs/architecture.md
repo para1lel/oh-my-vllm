@@ -427,6 +427,7 @@ The variant limit thus does not count all executable owners held by resident gra
 The records have an `8192`-entry limit. Overflow and objects without weak reference support make measurement coverage incomplete.
 Diagnostics separate graph owner tuples, persistent callable owner deques, their shared objects, and other live compiled executables.
 Pending weak reference callbacks have a different count from live records.
+Owner tuple lengths use string map keys in the msgpack diagnostic result.
 
 Shallow object and closure container sizes exclude their contents, native storage, and allocator retention.
 These counts do not prove process memory stability. Diagnostics do not change capture, executable ownership, or resource release.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -123,6 +124,16 @@ class ProcessOwnership:
             fd = self.pidfds[key] if existing else _open_pidfd(pid)
         except ProcessLookupError:
             return None
+        except OSError as error:
+            if error.errno != errno.EINVAL:
+                raise
+            # Linux can return EINVAL if the group leader is reaped after lookup.
+            # Skip only a birth that is now absent; a live unbound task still fails.
+            again = _process_record(pid)
+            if again is None or self.key(again) != key:
+                return None
+            error.add_note(f"pidfd_open identity: before={record}, after={again}")
+            raise
         published = existing
         try:
             again = _process_record(pid)

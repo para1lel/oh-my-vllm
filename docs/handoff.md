@@ -301,6 +301,38 @@ The tutorial passed ten source-display tests and nine browser tests.
 The reviewed runtime contract changes only the Q/K source and header, two diagnostic source files, and one new diagnostic module.
 Its providers, versions, GEMM headers, and compiler flags stay equal to the previous contract.
 
+Source `c4b45f5` passed post-commit CPU preflight with `69` tests and `3` subtests.
+Its next unified collection stopped before full acceptance.
+The two persistent-session tests failed Rust msgpack decoding after the first nonempty owner histogram used integer keys.
+The ordinary phase stopped when process ownership observation reported `pidfd_open` error `EINVAL`.
+Its record did not identify the affected PID, so the exact cause is unknown.
+
+All seven collection roots exited before changes. Independent checks found each of the `3611` recorded owned process births missing.
+Temporary ports and IPC paths closed, and GPU process queries were empty.
+Original failed and canceled records keep their source and status.
+
+Owner histogram keys now use strings for the Rust JSON-value contract.
+The HTTP/ZMQ regression failed before the fix, then passed with the other seven executable diagnostics tests.
+The runtime contract changes only this reviewed diagnostic source hash.
+
+The process observer checks the original birth again after `EINVAL`.
+It does not register a missing or changed birth. The same birth still causes failure.
+Other `pidfd_open` errors keep their previous handling.
+This check does not prove the cause of the earlier failure.
+New committed-source GPU acceptance and independent continuous memory review are open.
+
+The first revised full CPU suite passed `1482` tests and `119` subtests, with one failed lifecycle assertion.
+That assertion expected an integer owner histogram key. It now expects the protocol's string key.
+The failed record stays unchanged.
+
+The next full CPU suite passed `1483` tests and `119` subtests, with `485` GPU tests not selected.
+The ten warnings were dependency deprecation warnings.
+Independent review checked the original results, equal source hashes before and after testing, and process release.
+
+Rust passed `152` tests. The eight required checks and all-files hooks passed.
+The tutorial passed ten source-display tests and nine browser tests.
+New committed-source GPU acceptance and independent continuous memory review are open.
+
 ## Open work
 
 - Extend `PY-04` to cross-shape graph eviction and recapture near the maximum supported context.
