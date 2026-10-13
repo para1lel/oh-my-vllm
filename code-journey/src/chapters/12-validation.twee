@@ -64,7 +64,8 @@
 <p>measurement.audit 检查 measured 起点后的编译和图捕获日志, 并检查缓存文件变化. 原始记录与 profiling 保存在本地或外部目录, 仓库保存可移植的测量摘要和原始 SHA. 每个结论标明源码, 配置, 负载和检查范围.</p>
 <p>完整服务检查还覆盖 Chat, Responses, streaming, tools, thinking, 约束生成和取消, 包括 DSpark serving oh-my-pi agents. 性能测试, 容量测试与真实服务分别检查不同边界. 运行结束后释放该次启动的 worker 和临时服务端口.</p>
 <h2>四个固定会话怎样验证长期稳定服务</h2>
-<p>MTP4 和 DSpark 分别测试. 每种模式保留四个 oh-my-pi 进程, 两个使用 Chat, 两个使用 Responses, 至少持续一小时. 每个进程的 session ID 和历史连续, 控制器在一次审计完成后发送下一项任务. 四个会话分别检查调度与 KV, 服务协议与生命周期, GPU 计算与缓存, 测试与文档, 使用真实读取和搜索工具, 将笔记写在外部测试目录.</p>
+<p>MTP4 和 DSpark 分别测试. 每种模式保留四个 oh-my-pi 进程, 两个使用 Chat, 两个使用 Responses, 至少持续一小时. 每个会话在新建的空目录中实现数据库, 包含 SQL, transaction, index, 崩溃恢复, 独立测试与实测 benchmark. OMP 18.10.3 使用原生 goal 自动续行; 当前 goal 提前完成, 暂停或停止续行时, 控制器记录原因, 提交预先准备的下一项, 沿用同一进程, session ID, 历史和项目.</p>
+<p>每个验收 Agent 位于独立 rootless Docker sandbox. 容器只挂载对应的新建目录, 不挂载推理项目或 Docker socket, 不访问 GPU 设备. 正常结束, 失败和取消均删除容器, 修改文件, 安装工具, 缓存及自有镜像. 外部证据目录保留原始日志, 哈希, 摘要及资源图. 一小时结束时停止续行, 完成在途尾部并单独报告其耗时; 数据库尚未完成的功能和失败测试如实记录.</p>
 <p>服务就绪并完成客户端初始化后开始计时. 首次请求的编译和 CUDA Graph 捕获计入测试, 不提前运行短会话预热. 不设请求数下限, 报告实际请求和任务数量. 所有模型调用共享四个并发 slot, 包括自动压缩所需的摘要请求. 任务和摘要均使用 OMP 的 max effort, 映射为服务的 xhigh.</p>
 <h3>OMP 怎样知道会话占用了多少 context</h3>
 <p>客户端模型配置使用 qwen3 tokenizer 和 262144 context window, 输出上限为 32768, 包括 reasoning token. 服务返回完整模板输入的 usage, 其中缓存命中 token 仍属于输入. OMP 将这份输入用量保存在 assistant journal 的 contextSnapshot.promptTokens 中, 作为会话统计的锚点. 控制器不发送手动 compact 命令.</p>

@@ -488,3 +488,11 @@ Rust 记录请求提交, 首 token 和末 token 的时刻及其对应 step.
 DSpark 运行时支持仅覆盖已校验的本地 checkpoint 架构.
 不同草稿 checkpoint 需要新增加载, 语义, 数值和验收测试.
 源码身份及测量范围见 [验收索引](acceptance.zh.md).
+
+## Agentic 测试所有权
+
+推理服务和 GPU worker 与 agent sandbox 分开.
+主机 collector 管理记录代理, SDK trace endpoint, context 检查和资源测量.
+各 sandbox 管理新建 CPU 项目, OMP 状态, 工具和临时文件.
+Collector 在完成, 失败或取消后释放这些 owner, 并在独立证据目录中保留日志.
+[ADR-017](decisions/ADR-017-disposable-native-goal-soaks.zh.md) 定义原生 goal 和清理流程.

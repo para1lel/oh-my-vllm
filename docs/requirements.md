@@ -259,8 +259,15 @@ OMP uses runtime provider usage and its conversation estimate to decide automati
 Independent token checks verify the input and output capacity. They do not select compaction times.
 Report natural compaction coverage and successful continuation in the same session.
 
-Each session audits a different source area with source tools. Send follow-up tasks in the same history.
-Keep notes in an external directory. Continue tasks throughout the hour, then finish active work and drain requests.
+Each session starts a new database project in a separate sandbox, without a copy of inference source.
+Use OMP native goals and automatic continuation. Keep a prepared sequence of implementation, fault, concurrency, and differential-test goals.
+Submit the next goal after completion, pause, or stopped continuation. These changes do not fail acceptance.
+
+Keep the same process, session ID, history, and workspace throughout the hour.
+Then stop continuation, complete active work, and drain requests.
+
+Delete sandbox containers, modified files, installed tools, and caches after completion, failure, or cancellation.
+Keep original test logs and source hashes in a separate evidence directory.
 Check resource limits throughout collection and released request state after the final drain.
 
 Keep full host RSS and GPU allocated/reserved memory curves. Examine growth against context length, active requests, and cache occupancy.

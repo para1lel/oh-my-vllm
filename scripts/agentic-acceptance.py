@@ -40,7 +40,7 @@ TASK = (
 )
 
 
-def source_read_path(argument: str) -> dict:
+def source_read_path(argument: str, root: Path = ROOT) -> dict:
     """Separate OMP's positive line-range suffix from a repository filename."""
     if not isinstance(argument, str):
         raise ValueError("source read path must be a string")
@@ -54,11 +54,11 @@ def source_read_path(argument: str) -> dict:
     end = int(match["end"]) if match["end"] else start
     if start is not None and end < start:
         raise ValueError("source read line range is reversed")
-    resolved = (ROOT / match["path"]).resolve()
-    if not resolved.is_relative_to(ROOT):
+    resolved = (root / match["path"]).resolve()
+    if not resolved.is_relative_to(root):
         raise ValueError("source read is outside the repository")
     return {
-        "path": resolved.relative_to(ROOT).as_posix(),
+        "path": resolved.relative_to(root).as_posix(),
         "original_path": argument,
         "line_range": [start, end] if start is not None else None,
     }
@@ -123,6 +123,7 @@ def validate_agent_evidence(
     *,
     citation_check=None,
     length_completion_check=None,
+    workspace: Path = ROOT,
 ) -> dict:
     """Prove successful source reads and their use in the final model request."""
     required = {
@@ -141,7 +142,7 @@ def validate_agent_evidence(
             if not path:
                 continue
             try:
-                source = source_read_path(path)
+                source = source_read_path(path, workspace)
             except ValueError:
                 continue
             text = "\n".join(
@@ -262,13 +263,13 @@ def validate_agent_evidence(
     )
 
 
-def run_client(command, state: Path, output, errors, timeout=660):
+def run_client(command, state: Path, output, errors, timeout=660, *, sandbox=None):
     process = None
     with _reap_on_termination() as cancelled:
         try:
             process = subprocess.Popen(
                 command,
-                cwd=ROOT,
+                cwd=sandbox.root / "workspace" if sandbox else ROOT,
                 env=os.environ | {"PI_CODING_AGENT_DIR": str(state)},
                 stdout=output,
                 stderr=errors,
@@ -283,13 +284,17 @@ def run_client(command, state: Path, output, errors, timeout=660):
             return process.returncode
         finally:
             if process is not None:
-                with suppress(ProcessLookupError):
-                    os.killpg(process.pid, signal.SIGTERM)
-                with suppress(subprocess.TimeoutExpired):
-                    process.wait(timeout=5)
-                with suppress(ProcessLookupError):
-                    os.killpg(process.pid, signal.SIGKILL)
+                if process.poll() is None:
+                    with suppress(ProcessLookupError):
+                        os.killpg(process.pid, signal.SIGTERM)
+                    with suppress(subprocess.TimeoutExpired):
+                        process.wait(timeout=5)
+                    if process.poll() is None:
+                        with suppress(ProcessLookupError):
+                            os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
+            if sandbox:
+                sandbox.close()
 
 
 def configuration(base_url):
@@ -348,6 +353,9 @@ def main():
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--omp", default="omp")
     parser.add_argument(
+        "--sandbox-host", default=os.environ.get("OH_MY_VLLM_SANDBOX_HOST")
+    )
+    parser.add_argument(
         "--thinking",
         default="medium",
         choices=["off", "minimal", "low", "medium", "high", "xhigh", "max"],
@@ -374,55 +382,98 @@ def main():
     if args.configure_only:
         print(state)
         return
-    command = [
-        args.omp,
-        "--cwd",
-        str(ROOT),
-        "--model",
-        f"oh-my-vllm-{args.api}/qwen3.8-27b-fp8",
-        "--thinking",
-        args.thinking,
-        "--tools",
-        "read,grep,glob",
-        "--no-lsp",
-        "--no-extensions",
-        "--no-skills",
-        "--no-rules",
-        "--no-title",
-        "--no-session",
-        "--mode",
-        "json",
-        "--max-time",
-        "10m",
-        "--print",
-        TASK,
-    ]
-    started = time.monotonic()
-    log_offset = args.server_log.stat().st_size if args.server_log else None
-    log_identity = (
-        (args.server_log.stat().st_dev, args.server_log.stat().st_ino)
-        if args.server_log
-        else None
-    )
-    with recording_proxy(args.base_url) as (proxy_url, requests):
-        (state / "models.yml").write_text(
-            json.dumps(configuration(proxy_url), indent=2)
+    from benchmarks.agentic_sandbox import AgentSandbox, SandboxImage, host_endpoint
+    from benchmarks.agentic_sessions import prepare_workspace
+
+    image, sandbox, workspace = None, None, None
+    requests, command, collection_errors = [], [], []
+    exit_code, started, log_offset, log_identity = 1, time.monotonic(), None, None
+
+    def cancel(signum, frame):
+        raise InterruptedError("agentic acceptance cancelled")
+
+    old_handlers = {
+        sig: signal.signal(sig, cancel) for sig in (signal.SIGTERM, signal.SIGINT)
+    }
+    try:
+        image = SandboxImage(args.omp, directory / "sandbox-runtime", args.sandbox_host)
+        sandbox = AgentSandbox(image, directory)
+        workspace = sandbox.root / "workspace"
+        prepare_workspace(workspace)
+        import shutil
+
+        shutil.copyfile(ROOT / "README.md", workspace / "README.md")
+        command = [
+            args.omp,
+            "--cwd",
+            str(workspace),
+            "--model",
+            f"oh-my-vllm-{args.api}/qwen3.8-27b-fp8",
+            "--thinking",
+            args.thinking,
+            "--tools",
+            "read,grep,glob",
+            "--no-lsp",
+            "--no-extensions",
+            "--no-skills",
+            "--no-rules",
+            "--no-title",
+            "--no-session",
+            "--mode",
+            "json",
+            "--max-time",
+            "10m",
+            "--print",
+            TASK,
+        ]
+        started = time.monotonic()
+        log_offset = args.server_log.stat().st_size if args.server_log else None
+        log_identity = (
+            (args.server_log.stat().st_dev, args.server_log.stat().st_ino)
+            if args.server_log
+            else None
         )
-        with (
-            (directory / f"{args.api}.jsonl").open("w") as output,
-            (directory / f"{args.api}.stderr").open("w") as errors,
-        ):
-            try:
-                exit_code = run_client(command, state, output, errors)
-            except InterruptedError:
-                exit_code = 124
-    (directory / f"{args.api}-http.json").write_text(
-        json.dumps(requests, indent=2) + "\n"
-    )
+        with recording_proxy(args.base_url) as (proxy_url, requests):
+            models = json.dumps(
+                configuration(host_endpoint(proxy_url, image.gateway)), indent=2
+            )
+            (state / "models.yml").write_text(models)
+            (sandbox.root / "state/models.yml").write_text(models)
+            with (
+                (directory / f"{args.api}.jsonl").open("w") as output,
+                (directory / f"{args.api}.stderr").open("w") as errors,
+            ):
+                try:
+                    exit_code = run_client(
+                        sandbox.command(command, {}),
+                        state,
+                        output,
+                        errors,
+                        sandbox=sandbox,
+                    )
+                except InterruptedError:
+                    exit_code = 124
+    except Exception as error:
+        collection_errors.append(f"{type(error).__name__}: {error}")
+    finally:
+        for owner in (sandbox, image):
+            if owner:
+                try:
+                    owner.close()
+                except Exception as error:
+                    collection_errors.append(
+                        f"cleanup: {type(error).__name__}: {error}"
+                    )
+        for sig, handler in old_handlers.items():
+            signal.signal(sig, handler)
+        (directory / f"{args.api}-http.json").write_text(
+            json.dumps(requests, indent=2) + "\n"
+        )
     summary = {
         "api": args.api,
         "command": command,
         "exit_code": exit_code,
+        "collection_errors": collection_errors,
         "elapsed_s": time.monotonic() - started,
         "task": TASK,
         "speculative_mode": args.speculative_mode,
@@ -434,6 +485,8 @@ def main():
         ),
     }
     try:
+        if collection_errors:
+            raise ValueError("; ".join(collection_errors))
         if exit_code:
             raise ValueError(f"OMP exited with status {exit_code}")
         events = [
@@ -441,7 +494,7 @@ def main():
             for line in (directory / f"{args.api}.jsonl").read_text().splitlines()
         ]
         summary["client_verification"] = validate_agent_evidence(
-            events, requests, args.api
+            events, requests, args.api, workspace=workspace
         )
         if args.server_log:
             if log_identity != (

@@ -49,7 +49,7 @@ scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_servin
 Q/K GPU tests include FP64 output, FP32 edge values, and changed-input graph replay at the short dispatch boundary.
 Keep their original numerical tolerances and the frozen TileLang comparison.
 
-Each persistent audit task must have a new successful source read.
+Each diagnostic source-audit task must have a new successful source read.
 Grep output and earlier history do not satisfy the existing per-item source-read gate.
 
 The CPU SDK fixture keeps full request bodies and the number of copies of each body.
@@ -411,9 +411,18 @@ scripts/with-env.sh python scripts/agentic-soak.py --mode dspark --base-url "$SE
 
 Set `OH_MY_VLLM_MODEL` or supply `--model`. Install OMP on `PATH` or supply `--omp`.
 Use the matching service for each command. Stop that service and worker after collection.
-The collector owns four persistent OMP processes and temporary recording proxies.
 
-Each process keeps its session ID and history through successive source-audit tasks.
+Use the pinned OMP `18.10.3` executable and Docker with its `rootless` mode enabled.
+The collector builds a temporary image with OMP, Python, Bash, and certificates.
+Set `--sandbox-host` or `OH_MY_VLLM_SANDBOX_HOST` to the container gateway for host loopback access.
+
+Keep host-specific selection in ignored `LOCAL.md`.
+The collector owns four sandbox containers, persistent OMP processes, and temporary recording proxies.
+
+Only each agent's new external directory enters its container. Inference source and the Docker socket do not enter it.
+The containers have separate PID namespaces and no GPU devices.
+
+Each process keeps its session ID and history through successive native goals.
 Two sessions use Chat and two use Responses. A shared four-slot limit also includes summary calls.
 
 Each lane must continue for at least `3600` seconds. There is no request-count minimum.
@@ -446,11 +455,26 @@ Keep the two records. Do not interpret the displayed percentage as the complete 
 
 Check the same session identity, usable summary, and successful model work after each observed compaction.
 Natural compaction is not required during the hour. Report absent coverage explicitly.
-See the pinned [OMP compaction procedure](https://github.com/can1357/oh-my-pi/blob/v18.4.3/docs/compaction.md).
+See the pinned [OMP compaction procedure](https://github.com/can1357/oh-my-pi/blob/v18.10.3/docs/compaction.md).
 
-The four lanes audit scheduling/KV, HTTP/lifetimes, GPU/caches, and tests/documents.
-They read bounded source ranges, search measured symbols, and keep progress notes in their external workspace.
-Verify source reads and forwarded tool results in each completed audit work item. Keep incremental session journals and complete RPC/wire records.
+Each lane builds an embedded database from an empty workspace with Python standard-library tools.
+The task includes SQL, transactions, indexes, durable storage, crash recovery, independent tests, and measured benchmarks.
+The controller uses native RPC `goal create`, with automatic continuation enabled for `rpc`.
+No token budget applies. Goal completion, pause, or stopped continuation selects the next prepared goal.
+Follow-up goals examine faults, concurrency, SQL results, storage changes, performance, and open requirements.
+
+The same process, session ID, history, and workspace continue. Goal changes keep their original reasons and timestamps.
+A goal command ID supplies host correlation. It does not represent a native `prompt_result`.
+
+Verify forwarded task or generated-source reads across the session. An early goal exit can have no reads.
+Keep incremental journals, native session and raw tool-output logs, and complete RPC/wire records.
+
+After the hour, pause continuation and complete its active work. Report the tail separately from the collection window.
+Hash generated source before and after independent sandbox test commands. Record failures without claiming a complete database.
+
+Then remove owned containers, modified files, installed tools, caches, and the temporary image.
+Keep original logs, hash manifests, summaries, and resource figures in a separate evidence directory. Failure and cancellation use the same cleanup.
+The optional `--workload audit --diagnostic` path keeps the older source-audit fixture. It cannot supply formal acceptance.
 
 Verify completed server metrics, SSE terminals, and SDK usage for each model call.
 Keep post-terminal `ConnectionResetError` or `BrokenPipeError` as diagnostics only with same-ID protocol, SDK, and server completion.
@@ -458,7 +482,7 @@ Check that SDK and SSE stop reasons agree. A `length` completion must match its 
 
 Parallel summary calls must have a unique usage and lifecycle match. Ambiguous evidence fails verification.
 
-OMP `18.4.3` does not put internal summary usage in its session journal.
+OMP `18.10.3` does not put internal summary usage in its session journal.
 The collector uses one owned loopback OTLP endpoint per client for original SDK result traces.
 It keeps provider dispatch, model APIs, request bodies, and automatic compaction unchanged.
 Native traces supply response IDs, conversation IDs, token usage, finish reasons, and summary purposes.
@@ -476,7 +500,7 @@ Only `message_end` supplies an RPC SDK completion. A normal `turn_end` can inclu
 Run the CPU instrumentation checks with the pinned OMP executable available:
 
 ```bash
-scripts/with-env.sh python -m pytest tests/test_agentic_sdk_trace.py tests/test_agentic_sdk_integration.py tests/test_host_allocator.py
+scripts/with-env.sh python -m pytest tests/test_agentic_sdk_trace.py tests/test_agentic_sdk_integration.py tests/test_agentic_goal_integration.py tests/test_agentic_goals.py tests/test_host_allocator.py
 ```
 
 The integration fixture supplies API responses from fixed test data. It checks full request JSON equality and all three automatic-compaction purposes.

@@ -30,6 +30,7 @@ from benchmarks.agentic_soak_support import (
     wait_idle,
 )
 from benchmarks.evidence import observed_configuration, runtime_source_identity
+from benchmarks.serving_identity import server_identity
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -50,6 +51,12 @@ def build_parser():
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--omp", default="omp")
+    parser.add_argument("--workload", choices=("goal", "audit"), default="goal")
+    parser.add_argument(
+        "--sandbox-host",
+        default=os.environ.get("OH_MY_VLLM_SANDBOX_HOST"),
+        help="rootless Docker gateway to host loopback collectors",
+    )
     parser.add_argument("--duration", type=float, default=3600)
     parser.add_argument("--agents", type=int, choices=(4,), default=4)
     parser.add_argument("--turn-timeout", type=float, default=1800)
@@ -68,6 +75,8 @@ def run(args):
         raise ValueError("raw soak evidence must be outside the source repository")
     if not args.diagnostic and (args.duration < 3600 or args.skip_plots):
         raise ValueError("formal soak requires >=3600 seconds and real scatter figures")
+    if not args.diagnostic and args.workload != "goal":
+        raise ValueError("formal soak requires the native goal workload")
     if any(
         not math.isfinite(value) or value <= 0
         for value in (
@@ -123,6 +132,8 @@ def run(args):
             "intermediate_drains": False,
             "performance_gate": None,
             "compaction_coverage_required": False,
+            "workload": args.workload,
+            "goal_continuation": "native_rpc" if args.workload == "goal" else None,
         },
     }
     evidence.write("summary.json", summary)
@@ -130,7 +141,7 @@ def run(args):
     lock = threading.Lock()
     barrier = threading.Barrier(4)
     clock = {}
-    guard, sampler = None, None
+    guard, sampler, sandbox_image = None, None, None
     initial_epoch = None
     normal_ended = None
 
@@ -165,7 +176,15 @@ def run(args):
                 cancel_preflight=guard.close,
             ) as (proxy, _records):
                 client = RpcClient(
-                    args.omp, api, lane, lane_directory, proxy, stop, args.turn_timeout
+                    args.omp,
+                    api,
+                    lane,
+                    lane_directory,
+                    proxy,
+                    stop,
+                    args.turn_timeout,
+                    goal_mode=args.workload == "goal",
+                    sandbox_image=sandbox_image,
                 )
                 client.initialize()
                 with lock:
@@ -175,9 +194,18 @@ def run(args):
                     if not clock:
                         clock.update(monotonic=time.monotonic(), unix=time.time())
                         evidence.append("clock.jsonl", clock)
-                paths, index = curriculum(lane), 0
-                while not stop.is_set() and (
-                    index == 0 or time.monotonic() - clock["monotonic"] < args.duration
+                if args.workload == "goal":
+                    from benchmarks.agentic_goals import run_goal
+
+                    goal_collection = run_goal(client, clock, args.duration)
+                paths, index = (curriculum(lane) if args.workload == "audit" else []), 0
+                while (
+                    args.workload == "audit"
+                    and not stop.is_set()
+                    and (
+                        index == 0
+                        or time.monotonic() - clock["monotonic"] < args.duration
+                    )
                 ):
                     client.prompt(followup(lane, index, paths), index)
                     evidence.append(
@@ -204,7 +232,47 @@ def run(args):
                 if stop.is_set():
                     raise ValueError("persistent soak stopped before normal completion")
                 active_ended = client.turns[-1]["completed_monotonic_s"]
+                if args.workload == "goal":
+                    active_ended = goal_collection["collection_deadline_monotonic_s"]
                 collected = client.collect()
+                if args.workload == "goal":
+                    collected["goal_collection"] = goal_collection
+                    from benchmarks.agentic_goals import artifacts
+
+                    before_artifacts = artifacts(client.workspace)
+                    if (
+                        before_artifacts["files_sha256"].get("TASK.md")
+                        != collected["workspace"]["specification_sha256"]
+                    ):
+                        raise ValueError("native goal task specification changed")
+                    checks = [
+                        client.sandbox.execute(
+                            [
+                                "python",
+                                "-m",
+                                "unittest",
+                                "discover",
+                                "-s",
+                                "tests",
+                                "-q",
+                            ]
+                        ),
+                        client.sandbox.execute(
+                            ["python", "-m", "compileall", "-q", "goaldb", "tests"]
+                        ),
+                    ]
+                    evidence.write(
+                        f"lane-{lane}/artifact-checks.json", {"checks": checks}
+                    )
+                    collected["goal_artifacts"] = artifacts(client.workspace)
+                    collected["goal_artifacts"]["before_checks"] = before_artifacts
+                    collected["goal_artifacts"]["independent_checks"] = [
+                        {"command": check["command"], "returncode": check["returncode"]}
+                        for check in checks
+                    ]
+                    evidence.write(
+                        f"lane-{lane}/artifacts.json", collected["goal_artifacts"]
+                    )
                 collected["active_seconds"] = active_ended - clock["monotonic"]
                 with lock:
                     sessions[lane] = collected
@@ -217,12 +285,28 @@ def run(args):
                 guard.close()
         finally:
             if client:
-                client.close()
+                try:
+                    client.close()
+                except Exception as error:
+                    errors.append(f"lane {lane} cleanup: {error}")
+                    stop.set()
 
     try:
         baseline = wait_idle(args, evidence, stop, time.time(), phase="baseline")
         initial_epoch = baseline["epoch"]
         summary["initial_diagnostics"] = baseline
+        summary["live_source_identity"] = server_identity(
+            baseline, startup.decode(), source
+        )
+        configuration = baseline.get("limits", {})
+        defaults = configuration.get("override_generation_config", {})
+        if not args.diagnostic and (
+            defaults.get("presence_penalty") != 0.5
+            or defaults.get("repetition_guard") is not True
+            or configuration.get("thinking_token_budget") != -1
+            or float(observed.get("dspark_confidence_threshold", -1)) != 0.2
+        ):
+            raise ValueError("goal service does not use production sampling defaults")
         summary["owned_service_processes"] = {}
         for name in ("server_pid", "worker_pid"):
             pid = baseline[name]
@@ -237,6 +321,12 @@ def run(args):
             }
         guard = ContextGuard(args.model, args.normalizer, directory)
         summary["context_guard"] = guard.identity
+        if args.workload == "goal":
+            from benchmarks.agentic_sandbox import SandboxImage
+
+            sandbox_image = SandboxImage(
+                args.omp, directory / "sandbox-runtime", args.sandbox_host, stop=stop
+            )
         sampler = threading.Thread(target=sample_memory, daemon=True)
         sampler.start()
         with concurrent.futures.ThreadPoolExecutor(4) as pool:
@@ -259,6 +349,11 @@ def run(args):
             if pid != original["pid"] or ticks != original["start_ticks"]:
                 raise ValueError("service process identity changed during the soak")
         summary["final_diagnostics"] = final_idle
+        if (
+            server_identity(final_idle, startup.decode(), source)
+            != summary["live_source_identity"]
+        ):
+            raise ValueError("live service source identity changed during the soak")
         metrics = read_metrics(args.server_log, offset)
         by_response = {metric["response_id"]: metric for metric in metrics}
         points, audits = [], []
@@ -316,8 +411,15 @@ def run(args):
         sampler_stop.set()
         if sampler and sampler.ident:
             sampler.join()
-        if guard:
-            guard.close()
+        for owner in (guard, sandbox_image):
+            if owner:
+                try:
+                    owner.close()
+                except Exception as error:
+                    errors.append(f"collector cleanup: {error}")
+                    summary.update(
+                        operational_passed=False, status="cleanup_failed", errors=errors
+                    )
         for sig, handler in old_handlers.items():
             signal.signal(sig, handler)
         if (

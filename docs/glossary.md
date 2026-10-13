@@ -188,6 +188,8 @@ Proper product names, source identifiers, and protocol text keep their initial f
 | `compaction` | noun | Replacement of part of a conversation history with a summary in the same session. |
 | `context snapshot` | noun | Provider input count and context metadata saved with a completed assistant message. |
 | `weak reference` | noun | A Python object reference that does not keep its object in memory. |
+| `sandbox` | noun | A disposable agent container with separate process and filesystem namespaces. |
+| `native goal` | noun | An OMP objective with stored state and automatic continuation in one session. |
 
 ## Maintenance
 

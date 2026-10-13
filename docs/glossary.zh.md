@@ -188,6 +188,8 @@
 | `compaction` | 名词 | 在同一会话中用摘要替换部分历史. |
 | `context snapshot` | 名词 | 随已完成 assistant 消息保存的 provider 输入计数和上下文 metadata. |
 | `weak reference` | 名词 | 不使其目标对象继续驻留内存的 Python 对象引用. |
+| `sandbox` | 名词 | 具有独立进程和文件系统 namespace 的可删除 agent 容器. |
+| `native goal` | 名词 | 在同一会话中保存状态并自动续行的 OMP 目标. |
 
 ## 维护
 

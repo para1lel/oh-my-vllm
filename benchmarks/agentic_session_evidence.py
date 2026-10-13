@@ -301,6 +301,8 @@ def work_item_reads(
     forwarded: set,
     turns: list[dict],
     workspace: Path,
+    *,
+    goal_mode: bool = False,
 ) -> list[dict]:
     """Each completed audit item must read immutable source, not only notes."""
     verified = []
@@ -324,9 +326,10 @@ def work_item_reads(
                 "tests",
                 "docs",
                 "benchmarks",
+                *(("TASK.md", "goaldb") if goal_mode else ()),
             ):
                 calls.append(identity)
-        if not calls:
+        if not calls and not goal_mode:
             raise ValueError("completed audit work item lacks forwarded source reads")
         verified.append(
             {"prompt_id": turn["prompt_id"], "forwarded_source_reads": len(calls)}
@@ -363,6 +366,16 @@ def audit_session(
     events = json.loads((directory / "events.json").read_text())
     states = json.loads((directory / "states.json").read_text())
     turns = json.loads((directory / "turns.json").read_text())
+    if session.get("goal_id"):
+        expected = {turn["prompt_id"]: turn["goal_id"] for turn in turns}
+        for event in events:
+            goal = event.get("goal")
+            if (
+                event.get("type") == "goal_updated"
+                and goal
+                and goal.get("id") != expected.get(event.get("prompt_id"))
+            ):
+                raise ValueError("native goal event has an uncommanded identity")
     entries, anchors = [], {}
     with (directory / session["entries_file"]).open() as journal:
         for line in journal:
@@ -599,8 +612,15 @@ def audit_session(
             "persistent session lacks actual forwarded reads or continuous identity"
         )
     work_reads = work_item_reads(
-        read_starts, successful_tools, forwarded, turns, directory / "workspace"
+        read_starts,
+        successful_tools,
+        forwarded,
+        turns,
+        Path(session.get("workspace_path", directory / "workspace")),
+        goal_mode=session.get("workspace", {}).get("kind") == "native_goal_database",
     )
+    if not any(item["forwarded_source_reads"] for item in work_reads):
+        raise ValueError("persistent workload has no forwarded task or source read")
     compactions = [entry for entry in entries if entry["type"] == "compaction"]
     if any(not entry.get("summary", "").strip() for entry in compactions):
         raise ValueError("compaction has no usable history summary")
@@ -629,6 +649,9 @@ def audit_session(
         "compaction_continuation_covered": bool(continuations)
         and all(item["continued"] for item in continuations),
         "process": session["process"],
+        "goal_artifacts": session.get("goal_artifacts"),
+        "goal_collection": session.get("goal_collection"),
+        "goals": turns if session.get("goal_id") else None,
         "active_seconds": session["active_seconds"],
         "context_usage": context_usage,
         "entries_sha256": hashlib.sha256(

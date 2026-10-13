@@ -53,7 +53,7 @@ def test_sampler_exits_before_acceptance_and_raw_hashing(
             super().join(timeout)
 
     class Client:
-        def __init__(self, omp, api, lane, directory, proxy, stop, timeout):
+        def __init__(self, omp, api, lane, directory, proxy, stop, timeout, **kwargs):
             self.lane = lane
             self.api = api
             self.turns = []
@@ -144,6 +144,7 @@ def test_sampler_exits_before_acceptance_and_raw_hashing(
             "max_model_len": 262144,
         },
         "collector_environment": lambda omp: {},
+        "server_identity": lambda *args: {},
         "read_metrics": lambda *args: metrics,
         "audit_session": audit,
     }.items():
@@ -166,6 +167,7 @@ def test_sampler_exits_before_acceptance_and_raw_hashing(
         mode="mtp",
         omp="stub",
         base_url="stub",
+        workload="audit",
     )
     result = soak.run(args)
     assert sampler_exited.is_set()

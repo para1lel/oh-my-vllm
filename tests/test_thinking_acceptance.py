@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from benchmarks import serving_identity
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 spec = importlib.util.spec_from_file_location(
@@ -153,7 +155,9 @@ def test_acceptance_binds_live_binary_and_worker_startup(monkeypatch, mismatch):
         return original_read(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "read_text", read)
-    monkeypatch.setattr(module, "runtime_contract", lambda: {"sources": sources})
+    monkeypatch.setattr(
+        serving_identity, "runtime_contract", lambda: {"sources": sources}
+    )
     if mismatch:
         with pytest.raises(ValueError):
             module.server_identity(diagnostics, log, source)

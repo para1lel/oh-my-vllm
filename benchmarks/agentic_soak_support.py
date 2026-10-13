@@ -148,9 +148,23 @@ def diagnostics(base_url: str) -> dict:
 
 def gpu_processes(worker_pid: int) -> dict:
     """Keep foreign GPU use as evidence without stopping or rejecting its owner."""
+    before = _process_record(worker_pid)
+    if not before:
+        raise ValueError("serving worker disappeared before GPU lookup")
+    environment = Path("/proc", str(worker_pid), "environ").read_bytes().split(b"\0")
+    devices = [
+        value.split(b"=", 1)[1].decode()
+        for value in environment
+        if value.startswith(b"CUDA_VISIBLE_DEVICES=")
+    ]
+    if len(devices) != 1 or not devices[0].startswith("GPU-") or "," in devices[0]:
+        raise ValueError("serving worker has no single pinned GPU UUID")
+    pinned = devices[0]
     output = subprocess.check_output(
         [
             "nvidia-smi",
+            "-i",
+            pinned,
             "--query-compute-apps=gpu_uuid,pid,used_memory",
             "--format=csv,noheader,nounits",
         ],
@@ -169,13 +183,15 @@ def gpu_processes(worker_pid: int) -> dict:
                 "process": _process_record(pid),
             }
         )
+    after = _process_record(worker_pid)
+    if not after or before["start_ticks"] != after["start_ticks"]:
+        raise ValueError("serving worker identity changed during GPU lookup")
     selected = {row["gpu_uuid"] for row in rows if row["pid"] == worker_pid}
-    if len(selected) != 1:
+    if selected != {pinned} or any(row["gpu_uuid"] != pinned for row in rows):
         raise ValueError("serving worker has missing or ambiguous GPU identity")
-    uuid = selected.pop()
     return {
-        "gpu_uuid": uuid,
-        "processes": [row for row in rows if row["gpu_uuid"] == uuid],
+        "gpu_uuid": pinned,
+        "processes": rows,
     }
 
 

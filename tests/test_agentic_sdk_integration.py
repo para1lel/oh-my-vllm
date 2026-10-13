@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 import pytest
 
 from benchmarks.agentic_context import isolated_environment
+from benchmarks.agentic_goals import OMP_VERSION
 from benchmarks.agentic_sdk_trace import SdkTrace, read_sdk_spans
 from benchmarks.agentic_session_evidence import trace_messages
 from benchmarks.agentic_sessions import RpcClient
@@ -25,11 +26,11 @@ from benchmarks.agentic_sessions import RpcClient
 @pytest.mark.parametrize("api", ["chat", "responses"])
 @pytest.mark.parametrize("completed_history", [False, True])
 def test_pinned_omp_observer_preserves_requests_and_real_automatic_compaction(
-    tmp_path, monkeypatch, api, completed_history
+    tmp_path, monkeypatch, api, completed_history, agentic_sandbox_image
 ):
     omp = shutil.which("omp")
     if omp is None:
-        pytest.skip("Pinned OMP 18.4.3 executable is not installed")
+        pytest.skip(f"Pinned OMP {OMP_VERSION} executable is not installed")
     version = subprocess.run(
         [omp, "--version"],
         capture_output=True,
@@ -37,7 +38,7 @@ def test_pinned_omp_observer_preserves_requests_and_real_automatic_compaction(
         timeout=10,
         env=isolated_environment(tmp_path / "version-state"),
     )
-    assert version.returncode == 0 and "18.4.3" in version.stdout
+    assert version.returncode == 0 and OMP_VERSION in version.stdout
     slot = tmp_path / "client"
     records = []
     record_lock = threading.Lock()
@@ -196,8 +197,10 @@ def test_pinned_omp_observer_preserves_requests_and_real_automatic_compaction(
     original_environment = SdkTrace.environment
 
     def popen(command, **kwargs):
-        if command[0] == omp:
-            command = [*command, "--session", str(slot / "fixed-session.jsonl")]
+        if command[0] == "docker" and "/usr/local/bin/omp" in command:
+            session = slot / "sandbox/sessions/fixed-session.jsonl"
+            shutil.copyfile(slot / "fixed-session.jsonl", session)
+            command = [*command, "--session", str(session)]
         return original_popen(command, **kwargs)
 
     monkeypatch.setattr(subprocess, "Popen", popen)
@@ -232,6 +235,7 @@ def test_pinned_omp_observer_preserves_requests_and_real_automatic_compaction(
                 f"http://127.0.0.1:{server.server_port}/v1",
                 threading.Event(),
                 120,
+                sandbox_image=agentic_sandbox_image,
             )
             try:
                 client.initialize()

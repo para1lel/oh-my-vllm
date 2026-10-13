@@ -123,8 +123,55 @@ class RpcClient:
         proxy: str,
         stop: threading.Event,
         timeout: float,
+        *,
+        goal_mode: bool = False,
+        sandbox_image=None,
+    ):
+        self.sandbox = None
+        try:
+            self._initialize(
+                omp,
+                api,
+                lane,
+                directory,
+                proxy,
+                stop,
+                timeout,
+                goal_mode=goal_mode,
+                sandbox_image=sandbox_image,
+            )
+        except BaseException:
+            if self.sandbox:
+                self.sandbox.close()
+            if hasattr(self, "sdk_trace"):
+                self.sdk_trace.close()
+            if hasattr(self, "stderr"):
+                self.stderr.close()
+            raise
+
+    def _initialize(
+        self,
+        omp,
+        api,
+        lane,
+        directory,
+        proxy,
+        stop,
+        timeout,
+        *,
+        goal_mode=False,
+        sandbox_image=None,
     ):
         self.directory, self.api, self.lane = directory, api, lane
+        self.goal_mode, self.goal_id = goal_mode, None
+        self.sandbox = None
+        if goal_mode or sandbox_image is not None:
+            if sandbox_image is None:
+                raise ValueError("native goal clients require an actual sandbox image")
+            from benchmarks.agentic_sandbox import AgentSandbox, host_endpoint
+
+            self.sandbox = AgentSandbox(sandbox_image, directory)
+            proxy = host_endpoint(proxy, sandbox_image.gateway)
         self.stop, self.timeout = stop, timeout
         self.condition = threading.Condition()
         self.responses, self.results = {}, {}
@@ -137,17 +184,33 @@ class RpcClient:
         self.state.mkdir()
         models, settings = session_configuration(proxy, api)
         settings["telemetry"] = {"otlpExportEnabled": True}
+        if goal_mode:
+            settings["goal"] = {"enabled": True, "continuationModes": ["rpc"]}
         for name, value in (("models.yml", models), ("settings.yml", settings)):
             (self.state / name).write_text(json.dumps(value, indent=2) + "\n")
         self.configuration_hashes = {
             name: hashlib.sha256((self.state / name).read_bytes()).hexdigest()
             for name in ("models.yml", "settings.yml")
         }
-        self.workspace = directory / "workspace"
-        self.workspace.mkdir()
-        self.workspace_manifest = prepare_workspace(self.workspace)
+        self.workspace = (
+            self.sandbox.root / "workspace" if self.sandbox else directory / "workspace"
+        )
+        if not self.sandbox:
+            self.workspace.mkdir()
+        if goal_mode:
+            from benchmarks.agentic_goals import prepare_workspace as prepare_goal
+
+            self.workspace_manifest = prepare_goal(self.workspace, lane)
+        else:
+            self.workspace_manifest = prepare_workspace(self.workspace)
         tool_guard = directory / "tool-guard.ts"
-        shutil.copyfile(ROOT / "benchmarks/agentic_tool_guard.ts", tool_guard)
+        guard = "agentic_goal_tool_guard.ts" if goal_mode else "agentic_tool_guard.ts"
+        shutil.copyfile(ROOT / "benchmarks" / guard, tool_guard)
+        if self.sandbox:
+            for name in ("models.yml", "settings.yml"):
+                shutil.copyfile(self.state / name, self.sandbox.root / "state" / name)
+            shutil.copyfile(tool_guard, self.sandbox.root / "tool-guard.ts")
+            tool_guard = self.sandbox.root / "tool-guard.ts"
         self.workspace_manifest["tool_guard_sha256"] = hashlib.sha256(
             tool_guard.read_bytes()
         ).hexdigest()
@@ -162,7 +225,7 @@ class RpcClient:
             "--model",
             f"oh-my-vllm-{api}/qwen3.8-27b-fp8",
             "--tools",
-            "read,grep,write",
+            "read,grep,write,edit,bash" if goal_mode else "read,grep,write",
             "--no-lsp",
             "--no-extensions",
             "--no-skills",
@@ -174,23 +237,33 @@ class RpcClient:
             "--approval-mode",
             "yolo",
             "--session-dir",
-            str(directory / "sessions"),
+            str((self.sandbox.root if self.sandbox else directory) / "sessions"),
         ]
         self.stderr = (directory / "stderr.log").open("x")
         self.sdk_trace = SdkTrace(directory / "sdk-trace")
         try:
+            environment = (
+                isolated_environment(self.state) | self.sdk_trace.environment()
+            )
+            if self.sandbox:
+                command = self.sandbox.command(command, self.sdk_trace.environment())
+                # Docker must use the same host daemon selection as inspect/build.
+                # Only explicitly selected --env values enter the guest.
+                environment = os.environ.copy()
             self.process = subprocess.Popen(
                 command,
                 cwd=self.workspace,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=self.stderr,
-                env=isolated_environment(self.state) | self.sdk_trace.environment(),
+                env=environment,
                 start_new_session=True,
             )
         except BaseException:
             self.sdk_trace.close()
             self.stderr.close()
+            if self.sandbox:
+                self.sandbox.close()
             raise
         try:
             stat = Path("/proc", str(self.process.pid), "stat").read_text()
@@ -211,6 +284,8 @@ class RpcClient:
             self.process.stdout.close()
             self.stderr.close()
             self.sdk_trace.close()
+            if self.sandbox:
+                self.sandbox.close()
             raise
 
     def _read(self):
@@ -224,6 +299,7 @@ class RpcClient:
                     raw.write(line)
                     event = json.loads(line)
                     event["collected_unix_s"] = time.time()
+                    event["collected_monotonic_s"] = time.monotonic()
                     with self.condition:
                         kind = event.get("type")
                         if kind == "response":
@@ -278,7 +354,7 @@ class RpcClient:
         self.sequence += 1
         identity = f"lane-{self.lane}-{self.sequence}"
         command = {"id": identity, "type": kind, **fields}
-        if kind == "prompt":
+        if kind == "prompt" or (kind == "goal" and fields.get("op") == "create"):
             with self.condition:
                 self.current_prompt = identity
         with (self.directory / "commands.jsonl").open("a") as output:
@@ -339,9 +415,14 @@ class RpcClient:
         return state
 
     def initialize(self):
-        self.command("set_event_filter", events=EVENTS)
+        self.command(
+            "set_event_filter",
+            events=EVENTS + (["goal_updated"] if self.goal_mode else []),
+        )
         self.command("set_auto_retry", enabled=False)
         self.check_state()
+        if self.sandbox:
+            self.sandbox.inspect()
         available = self.command("get_available_models")["models"]
         if any(
             model.get("provider") != f"oh-my-vllm-{self.api}" for model in available
@@ -423,6 +504,8 @@ class RpcClient:
             "entry_count": self.entry_count,
             "leaf_id": self.leaf_id,
             "workspace": self.workspace_manifest,
+            "workspace_path": str(self.workspace),
+            "goal_id": self.goal_id,
             "sdk_trace": {
                 "directory": "sdk-trace",
                 "source": "omp_sdk_otlp",
@@ -436,30 +519,44 @@ class RpcClient:
         }
 
     def close(self):
-        self.persist()
+        failures = []
+
+        def attempt(action):
+            try:
+                action()
+            except Exception as error:
+                failures.append(f"{type(error).__name__}: {error}")
+
+        attempt(self.persist)
         if self.process.poll() is None:
-            with self.condition:
-                with (self.directory / "commands.jsonl").open("a") as output:
-                    output.write(json.dumps({"type": "shutdown_stdin_eof"}) + "\n")
-                self.process.stdin.close()
+            attempt(self.process.stdin.close)
             try:
                 self.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                os.killpg(self.process.pid, signal.SIGTERM)
-                try:
-                    self.process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    os.killpg(self.process.pid, signal.SIGKILL)
-                    self.process.wait()
-        self.reader.join(timeout=10)
-        self.process.stdout.close()
-        self.stderr.close()
+                if self.sandbox:
+                    attempt(self.sandbox.stop)
+                if self.process.poll() is None:
+                    attempt(lambda: os.killpg(self.process.pid, signal.SIGTERM))
+                    try:
+                        self.process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        attempt(lambda: os.killpg(self.process.pid, signal.SIGKILL))
+                        self.process.wait()
+        attempt(lambda: self.reader.join(timeout=10))
+        attempt(self.process.stdout.close)
+        attempt(self.stderr.close)
         self.process_record.update(
             returncode=self.process.returncode, stopped_unix_s=time.time(), reaped=True
         )
-        (self.directory / "process.json").write_text(
-            json.dumps(self.process_record) + "\n"
+        attempt(
+            lambda: (self.directory / "process.json").write_text(
+                json.dumps(self.process_record) + "\n"
+            )
         )
-        self.sdk_trace.close()
+        attempt(self.sdk_trace.close)
+        if self.sandbox:
+            attempt(self.sandbox.close)
         if self.reader.is_alive():
-            raise ValueError("persistent RPC reader did not exit")
+            failures.append("persistent RPC reader did not exit")
+        if failures:
+            raise ValueError("persistent cleanup failed: " + "; ".join(failures))

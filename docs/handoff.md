@@ -466,6 +466,29 @@ The pause, resume, and concurrent-request checks stay effective. The repeated co
 New committed-source GPU, phase, operator, capacity, service, and persistent-session acceptance is open.
 Independent resource review is necessary. Keep `SRV-13` open until the new original records support closure.
 
+## Native-goal sandbox verification
+
+The long-duration workload now starts four new database projects in rootless Docker sandboxes.
+OMP `18.10.3` supplies native RPC goals and automatic continuation. Prepared follow-up goals keep the same process and history.
+Early completion, pause, or stopped continuation selects the next goal instead of failing the hour.
+The final paused tail has separate timing. Incomplete database products and test failures stay explicit.
+
+The host controls goal creation and starts continuation again. Each recorded goal identity must match its host command.
+Sandbox containers have separate PID namespaces and no GPU, inference-project, or Docker-socket access.
+Cleanup removes modified files, installed tools, caches, containers, and owned images after completion, failure, or cancellation.
+Original RPC, wire, SDK, native-session, and tool-output logs stay in a separate evidence directory.
+[ADR-017](decisions/ADR-017-disposable-native-goal-soaks.md) records ownership and evidence scope.
+
+The OMP executable compatibility collection passed `34` CPU cases, with the two APIs, native goals, blocked todos, automatic compaction, and cleanup failures.
+A later virtual-clock collection passed `11` goal cases, with paused tails across the collection deadline.
+SIGTERM fixtures passed during executable copying and a slow build. They kept failure evidence, deleted copied tools, and released the builder process.
+
+The final complete CPU collection passed `1534` tests and `156` subtests with unchanged source.
+An independent review passed `16` focused cleanup and goal cases. All eight required checks passed.
+
+These fixed-response fixtures do not prove target inference or one-hour stability.
+New GPU, service, and independent resource verification is pending on committed source.
+
 ## Open work
 
 - Extend `PY-04` to cross-shape graph eviction and recapture near the maximum supported context.

@@ -520,3 +520,11 @@ Current interfaces make no such support claim.
 DSpark runtime support applies to the validated local checkpoint architecture.
 Different draft checkpoints must have new loading, semantic, numerical, and acceptance tests.
 Use the [acceptance index](acceptance.md) for source identities and measured scope.
+
+## Agentic test ownership
+
+The inference service and GPU worker are separate from the agent sandboxes.
+The host collector owns recording proxies, SDK trace endpoints, context checks, and resource measurements.
+Each sandbox owns a new CPU project, OMP state, tools, and temporary files.
+The collector removes these owners after completion, failure, or cancellation, and keeps logs in a separate evidence directory.
+[ADR-017](decisions/ADR-017-disposable-native-goal-soaks.md) specifies native goals and cleanup.

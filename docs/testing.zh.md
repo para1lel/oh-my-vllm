@@ -49,7 +49,7 @@ scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_servin
 Q/K GPU 测试在短输入 dispatch 边界检查 FP64 输出, FP32 边界值, 以及输入改变后的图重放.
 保留原数值容差和固定版本的 TileLang 对比.
 
-每个持续审计任务必须重新成功读取源码.
+每个诊断性源码审计任务必须重新成功读取源码.
 Grep 输出和之前的历史记录不能满足原有的逐任务源码读取检查.
 
 CPU SDK fixture 保留完整请求体及每个请求体的副本数量.
@@ -403,8 +403,15 @@ scripts/with-env.sh python scripts/agentic-soak.py --mode dspark --base-url "$SE
 
 设置 `OH_MY_VLLM_MODEL` 或传入 `--model`. 将 OMP 安装到 `PATH`, 或通过 `--omp` 指定.
 每个命令连接对应模式的服务. 采集结束后停止该服务和 worker.
-Collector 管理 4 个持久 OMP 进程和临时记录代理.
-每个进程在连续源码审计任务中保留 session ID 和历史.
+使用固定的 OMP `18.10.3` executable, 并启用 Docker 的 `rootless` 模式.
+Collector 构建包含 OMP, Python, Bash 和证书的临时镜像.
+将 `--sandbox-host` 或 `OH_MY_VLLM_SANDBOX_HOST` 设为访问主机 loopback 的容器网关.
+主机特定选择保存在忽略的 `LOCAL.md`.
+Collector 管理 4 个 sandbox 容器, 持久 OMP 进程和临时记录代理.
+每个容器只挂载对应 agent 的新建外部目录. 不挂载推理源码和 Docker socket.
+容器具有独立 PID namespace, 不访问 GPU 设备.
+
+每个进程在连续原生 goal 中保留 session ID 和历史.
 2 个会话使用 Chat, 2 个使用 Responses. 共享的 4-slot 上限也包含摘要请求.
 
 每条 lane 至少持续 `3600` 秒, 不设请求数下限.
@@ -433,18 +440,30 @@ OMP 的 settled `contextUsage` 使用 provider-input 锚点加上之后的本地
 两种记录均保留. 界面百分比不能代表完整的压缩判定.
 每次观察到压缩时, 检查会话身份延续, 摘要可用, 以及之后成功的模型工作.
 一小时内不强制发生自然压缩. 未覆盖时明确报告.
-参见固定版本的 [OMP 压缩流程](https://github.com/can1357/oh-my-pi/blob/v18.4.3/docs/compaction.md).
+参见固定版本的 [OMP 压缩流程](https://github.com/can1357/oh-my-pi/blob/v18.10.3/docs/compaction.md).
 
-4 条 lane 分别审计调度/KV, HTTP/生命周期, GPU/缓存, 测试/文档.
-它们读取有界源码区间, 搜索实际符号, 在外部 workspace 中保存进度笔记.
-逐个已完成的审计工作项核对源码读取及转发的工具结果. 保留增量会话 journal 和完整 RPC/wire 记录.
+每条 lane 在空 workspace 中使用 Python 标准库工具实现嵌入式数据库.
+任务包含 SQL, transaction, index, 持久存储, 崩溃恢复, 独立测试与实测 benchmark.
+控制器使用原生 RPC `goal create`, 为 `rpc` 启用自动续行.
+不设 token budget. Goal 完成, 暂停或停止续行后选择预先准备的下一项.
+后续 goal 检查故障, 并发, SQL 结果, 存储变更, 性能及剩余要求.
+同一进程, session ID, 历史和工作目录继续使用. Goal 转换保留原始原因与时间戳.
+Goal 命令 ID 只用于主机侧关联, 不代表原生 `prompt_result`.
+在整个会话中验证任务或生成源码的读取结果已转发. 提前结束的 goal 可以没有读取.
+保留增量 journal, 原生会话及完整工具输出日志, 以及完整 RPC/wire 记录.
+
+一小时后暂停续行, 完成在途尾部工作. 尾部耗时与采集窗口分开报告.
+独立 sandbox 测试命令运行前后均对生成源码计算哈希. 记录失败, 不宣称数据库已完成.
+随后删除自有容器, 修改文件, 安装工具, 缓存及临时镜像.
+在 sandbox 外部的独立证据目录保留原始日志, 哈希 manifest, 摘要和资源图. 失败和取消使用同样的清理流程.
+可选 `--workload audit --diagnostic` 路径保留旧源码审计 fixture, 不能提供正式验收.
 
 逐个模型请求核对已完成的服务 metric, SSE 结束记录及 SDK usage.
 仅在同 ID 的协议, SDK 和服务完成证明齐全时, 将结束后的 `ConnectionResetError` 或 `BrokenPipeError` 保留为诊断信息.
 SDK 与 SSE stop reason 必须相符. `length` 结束的输出数必须等于请求预算.
 并行摘要请求必须唯一匹配 usage 和生命周期. 证据有歧义时验证失败.
 
-OMP `18.4.3` 不将内部摘要 usage 写入会话 journal.
+OMP `18.10.3` 不将内部摘要 usage 写入会话 journal.
 Collector 为每个客户端建立一个自有 loopback OTLP endpoint, 采集原始 SDK 结果 trace.
 它保持 provider dispatch, 模型 API, 请求正文和自动压缩不变.
 原生 trace 提供响应 ID, 会话 ID, token usage, finish reason 和摘要用途.
@@ -462,7 +481,7 @@ Exporter 可再次发送同一批次. Collector 保留这些原始记录.
 安装固定版本 OMP executable 后, 执行 CPU 采集检查:
 
 ```bash
-scripts/with-env.sh python -m pytest tests/test_agentic_sdk_trace.py tests/test_agentic_sdk_integration.py tests/test_host_allocator.py
+scripts/with-env.sh python -m pytest tests/test_agentic_sdk_trace.py tests/test_agentic_sdk_integration.py tests/test_agentic_goal_integration.py tests/test_agentic_goals.py tests/test_host_allocator.py
 ```
 
 集成 fixture 提供来自固定测试数据的 API 响应. 它检查完整请求 JSON 相等及全部三种自动压缩用途.

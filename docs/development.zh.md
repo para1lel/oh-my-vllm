@@ -76,6 +76,7 @@ vLLM 及其缓存与项目运行时隔离.
 | `OH_MY_VLLM_HOST_ALLOCATOR_DIAGNOSTICS` | Worker diagnostics 中可选的 glibc `mallinfo2` 观测. 设置 `1` 启用. |
 | `OH_MY_VLLM_EXECUTABLE_DIAGNOSTICS` | 在现有 worker 诊断边界通过弱引用进行可选的 compiled executable 观测. 设置 `1` 启用. |
 | `OH_MY_VLLM_GPU_UUID` | 可选的空闲 B200 选择, 供 `scripts/with-gpu.sh` 使用. |
+| `OH_MY_VLLM_SANDBOX_HOST` | Agent collector 访问主机 loopback endpoint 的 Rootless Docker 网关. Sandbox 兼容性测试需要此变量. |
 | `PYTORCH_ALLOC_CONF` | 显式 allocator 选项; 此名称优先于旧名称. |
 | `PYTORCH_CUDA_ALLOC_CONF` | 新名称未设置时使用的旧 allocator 选项. |
 | `OMP_NUM_THREADS` | 主机线程数量; 默认 `1`. |
