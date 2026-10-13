@@ -62,10 +62,10 @@ pub struct ServeArgs {
     pub response_capacity: usize,
     #[arg(long, default_value_t = 268435456)]
     pub response_max_bytes: usize,
-    #[arg(long, default_value_t = 600)]
+    #[arg(long, default_value_t = 3600)]
     pub request_timeout_seconds: u64,
     /// Deadline for one GPU step, including first-use compilation and graph capture.
-    #[arg(long, default_value_t = 120, value_parser = clap::value_parser!(u64).range(1..))]
+    #[arg(long, default_value_t = 600, value_parser = clap::value_parser!(u64).range(1..))]
     pub worker_step_timeout_seconds: u64,
     /// Default reasoning content budget. -1 keeps only the total output limit.
     #[arg(long, default_value_t = -1, allow_hyphen_values = true,
@@ -1393,7 +1393,7 @@ mod tests {
             Options::parse_from(["serve"])
                 .serving
                 .worker_step_timeout_seconds,
-            120
+            600
         );
         assert_eq!(
             Options::parse_from(["serve", "--worker-step-timeout-seconds", "600"])

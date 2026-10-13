@@ -23,6 +23,20 @@ Target 条件概率测量支持将引用文本中的结束分隔符视为重复�
 [调查摘要](../bench/evidence/2026-10-13-constrained-decoding-investigation.json) 记录源码身份, 原始哈希, 测量和限制.
 协议修复不能关闭该条目, 也不能证明长程 Agent 验收.
 
+
+用户取消了任务进展验收. `SRV-13` 作为模型质量观察保留, 不属于框架一小时门槛.
+当前框架一小时结果不声称全部模型请求或 Agent 任务成功完成.
+
+## KRN-07: 小 normalization shape
+
+状态: open, 严重性 P2. 用户为交付暂缓优化.
+完整 517 案例矩阵在 `ae070e4` 上全部通过数值检查, 速度通过 514 个, 失败 3 个.
+失败案例为 `add_norm-6becd76d98`, `dspark_rms_norm-c227a5ffdd` 和 `dspark_rms_norm-906d7e4f4c`.
+对应行数为 576, 624, 632, width 均为 5120.
+
+另一张 B200 的全新 cache 测量使用完整成对轮次协议, 复现了每项失败.
+保持 CUDA 计算及固定 TileLang 门槛不变. 完整算子矩阵尚未通过验收.
+
 ## PY-04: Graph 显存与 shape 变化
 
 状态: partial/open, 严重性 P2.

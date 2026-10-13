@@ -203,7 +203,7 @@ Compare loaded DSpark configuration and weight hashes with the requested checkpo
 | REQ-SERVE-001 | Supply text Chat Completions and Responses, streams, tools, history, usage, model discovery, retrieval, and deletion. |
 | REQ-SERVE-002 | Supply off/low/medium/high/xhigh thinking. Default medium, high maps to xhigh, none maps to off. |
 | REQ-SERVE-007 | Apply explicit reasoning token budgets before target sampling in ordinary, MTP4, and DSpark modes. Keep effort separate from numeric and total limits. |
-| REQ-SERVE-003 | Complete oh-my-pi tasks through each API with MTP4 and DSpark. Read files without error and use their returned results in subsequent model input. |
+| REQ-SERVE-003 | Use oh-my-pi through each API with MTP4 and DSpark. Verify model requests, responses, and returned tool results in subsequent input. |
 | REQ-SERVE-004 | Apply JSON/Schema/strict-tool masks before sampling, with each mode's drafts and bonus tokens. Reject unsupported schemas. |
 | REQ-SERVE-005 | Examine queue time, preparation, TTFT, output rate, cache behavior, and draft counters without an extra HTTP throughput gate. |
 | REQ-SERVE-008 | Use shared production and test service sampling defaults across ordinary, MTP4, DSpark, the two APIs, and automatic compaction. Explicit values take precedence. |
@@ -220,7 +220,8 @@ For tools without explicit `strict=true`, accept descriptive keywords through a 
 OMP checks descriptive argument limits and returns errors to the model. Keep explicit strict schemas and inference computation unchanged.
 
 For each draft mode, run tests for the two APIs, constraints, cancellation, mixed batches, and long-context prefix reuse.
-OMP evidence must show two source reads, forwarded results, continued generation, and an answer that uses those results.
+OMP evidence keeps model requests, responses, tool calls, returned results, and subsequent requests.
+Task progress, tool errors, goal status, and final answers are workload observations. They do not decide framework acceptance.
 Compare response IDs with server logs for the active mode and scheduled drafts.
 
 ## REQ-SERVE-006: Resource limits and cache integrity
@@ -249,7 +250,8 @@ Run tests for OOM, partial state changes, shared prefixes, and successful servic
 
 ## REQ-SERVE-008: Long-duration agentic service
 
-Run MTP4 and DSpark independently. Each mode uses four fixed oh-my-pi sessions for at least one hour.
+Run MTP4 and DSpark independently for at least one hour each. Four fixed oh-my-pi sessions supply each mode's request workload.
+The hour verifies inference service availability, serving contracts, resource limits, and cleanup.
 Keep each process, session ID, and conversation history through follow-up tasks and automatic compaction.
 Use two Chat sessions and two Responses sessions. Limit concurrent model calls to four, with compaction calls.
 
@@ -261,14 +263,15 @@ Supply `262144` as the model context window. Include reasoning tokens in the out
 
 OMP uses runtime provider usage and its conversation estimate to decide automatic compaction.
 Independent token checks verify the input and output capacity. They do not select compaction times.
-Report natural compaction coverage and successful continuation in the same session.
+Report natural compaction coverage and subsequent requests in the same session. Summary content and task results are workload observations.
 
 Each session starts a new database project in a separate sandbox, without a copy of inference source.
 Use OMP native goals and automatic continuation. Keep a prepared sequence of implementation, fault, concurrency, and differential-test goals.
 Submit the next goal after completion, pause, or stopped continuation. These changes do not fail acceptance.
 
 Keep the same process, session ID, history, and workspace throughout the hour.
-Then stop continuation, complete active work, and drain requests.
+Then pause continuation, abort active agent work through native RPC, and drain model requests.
+Record the stop action and report the tail separately.
 
 Delete sandbox containers, modified files, installed tools, and caches after completion, failure, or cancellation.
 Keep original test logs and source hashes in a separate evidence directory.
@@ -276,7 +279,8 @@ Check resource limits throughout collection and released request state after the
 
 Keep full host RSS and GPU allocated/reserved memory curves. Examine growth against context length, active requests, and cache occupancy.
 Independent memory review must accept these observations before publication as a passed soak test.
-Normal requests must have no unexpected OOM, worker restart, or request failure.
+The framework must have no unexpected OOM, worker restart, or failed model execution.
+Report client cancellations and configured request deadlines separately. They do not imply successful request completion.
 
 Run cancellation, slow-client, overload, and fault tests separately.
 

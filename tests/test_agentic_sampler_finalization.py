@@ -113,7 +113,11 @@ def test_sampler_exits_before_acceptance_and_raw_hashing(
 
     def audit(directory, session, *args):
         assert sampler_exited.wait(2)
-        return [metrics[session["lane"]]], {}
+        metric = metrics[session["lane"]]
+        return [metric], {
+            "response_ids": [metric["response_id"]],
+            "cancelled_requests": 0,
+        }
 
     metrics = [
         {
@@ -122,6 +126,7 @@ def test_sampler_exits_before_acceptance_and_raw_hashing(
             "output_budget": 20,
             "processing_started_unix_s": time.time(),
             "purpose": "task",
+            "epoch": 0,
         }
         for lane in range(4)
     ]
@@ -147,6 +152,7 @@ def test_sampler_exits_before_acceptance_and_raw_hashing(
         "server_identity": lambda *args: {},
         "read_metrics": lambda *args: metrics,
         "audit_session": audit,
+        "audit_framework_session": audit,
     }.items():
         monkeypatch.setattr(soak, name, value)
     server_log = tmp_path / "server.log"

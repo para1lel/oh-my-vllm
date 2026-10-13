@@ -34,7 +34,7 @@ scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/test_flashi
 ```
 
 These CPU checks do not prove model timing or cold-start acceptance.
-Keep fresh project caches for GPU acceptance. Do not install a prewarmed project or FlashInfer JIT cache.
+Keep new project caches for GPU acceptance. Do not install a prewarmed project or FlashInfer JIT cache.
 
 CPU executable diagnostics tests check executable lifetime, owner intersections, pending callbacks, and explicit incomplete coverage.
 They keep diagnostic snapshots without a strong executable reference.
@@ -383,8 +383,8 @@ Examine positive MTP proposals and accepted drafts in the server log.
 Stop the service and its worker immediately after these tests.
 
 The long-context gate checks strict JSON content, input more than 131072, prefix reuse after the first request, and positive MTP proposals per request.
-Complete OMP tasks with the target checkpoint through each API as specified in [service contracts](serving.md#verification).
-The tools must read files, and the model must receive their results.
+Use OMP with the target checkpoint through each API as specified in [service contracts](serving.md#verification).
+Check original model streams, usage, and server metrics independently of task results.
 Script success alone is insufficient.
 
 Do the service gates again with a different DSpark worker:
@@ -400,11 +400,10 @@ The constraint and long-context scripts test the two APIs.
 Each completed response ID must agree with the active mode and scheduled/accepted counts in the server log.
 
 The OMP script forwards client HTTP through a temporary recording proxy without body changes.
-It keeps client JSONL, forwarded requests, response IDs, and tool-result hashes.
+It keeps client JSONL, forwarded requests, original SSE bytes, response IDs, and tool-result hashes.
 
-The two source reads must complete without error. Their results must enter a subsequent model request before its last answer.
-The last answer must cite the source files and use their results.
-Examine answer meaning after the automated checks.
+Keep the original source-read and answer checks as a separate workload audit.
+Task errors and incomplete answers do not decide framework acceptance. Zero model requests cannot pass.
 Stop the DSpark service and its worker after these tests.
 
 Service scripts reserve each output file or directory before requests. An existing result path fails.
@@ -412,6 +411,12 @@ They keep `passed=false` until the applicable contracts pass.
 Each received HTTP response is saved before content or log checks.
 Failures keep received responses and an explicit error record.
 Lifecycle streams keep the consumed SSE frames before disconnect.
+
+Native first-event and idle deadlines are 900 seconds. The collector turn deadline is 7200 seconds.
+Oneoff clients use a 30-minute task limit and a 1860-second host limit. Their proxy read deadline is 900 seconds.
+
+The recovery request and stage deadlines are 900 and 3600 seconds.
+The user waived more tests for timeout parameters alone. Use meaningful regression checks for collector behavior changes.
 
 ## Long-duration agentic service
 
@@ -441,14 +446,15 @@ The containers have separate PID namespaces and no GPU devices.
 Each process keeps its session ID and history through successive native goals.
 Two sessions use Chat and two use Responses. A shared four-slot limit also includes summary calls.
 
-Each lane must continue for at least `3600` seconds. There is no request-count minimum.
+Each inference mode must run for at least `3600` seconds with four persistent request workloads. There is no request-count minimum.
 Initialize the clients after service readiness, then start the clock before their first requests.
 First compilation, graph capture, and later new-shape costs enter the measurements.
 
-For this collector, start the service with `--worker-step-timeout-seconds 600` and `--request-timeout-seconds 1800`.
+For this collector, start the service with `--worker-step-timeout-seconds 600` and `--request-timeout-seconds 3600`.
 Record these limits from diagnostics. They let cold compilation complete without separate warmup.
 
-Do not insert intermediate drains or fault probes. After the hour, complete active work and drain requests.
+Do not insert intermediate drains or fault probes. After the hour, pause continuation and send native RPC `abort`.
+Drain model requests and record the stop action.
 
 Use OMP `max` for tasks and summaries, mapped to service `xhigh`.
 Use production sampling and reasoning-budget defaults for this workload, without different startup overrides.
@@ -463,17 +469,17 @@ OMP selects compaction times, with during tool loops. The controller sends no ma
 The service checks full templated input plus requested output against its total capacity.
 
 The CPU guard repeats the production normalization and template path for independent capacity evidence.
-Verify its count against SSE usage, SDK input plus cache usage, and the journal's provider-input snapshot.
+Verify its count against SSE usage. Record SDK and journal comparisons in the separate workload audit.
 
 OMP's settled `contextUsage` uses a provider-input anchor plus later local changes.
 Its compaction decision also considers generated output and the stored-history estimate.
 Keep the two records. Do not interpret the displayed percentage as the complete compaction decision.
 
-Check the same session identity, usable summary, and successful model work after each observed compaction.
+Check the same session identity and report subsequent requests after each observed compaction. Summary content is a workload observation.
 Natural compaction is not required during the hour. Report absent coverage explicitly.
 See the pinned [OMP compaction procedure](https://github.com/can1357/oh-my-pi/blob/v18.10.3/docs/compaction.md).
 
-Each lane builds an embedded database from an empty workspace with Python standard-library tools.
+Each lane receives an embedded database task in an empty workspace with Python standard-library tools.
 The task includes SQL, transactions, indexes, durable storage, crash recovery, independent tests, and measured benchmarks.
 The controller uses native RPC `goal create`, with automatic continuation enabled for `rpc`.
 No token budget applies. Goal completion, pause, or stopped continuation selects the next prepared goal.
@@ -482,17 +488,20 @@ Follow-up goals examine faults, concurrency, SQL results, storage changes, perfo
 The same process, session ID, history, and workspace continue. Goal changes keep their original reasons and timestamps.
 A goal command ID supplies host correlation. It does not represent a native `prompt_result`.
 
-Verify forwarded task or generated-source reads across the session. An early goal exit can have no reads.
+Record source reads, tool errors, task progress, and goal changes as workload observations. They do not decide framework acceptance.
 Keep incremental journals, native session and raw tool-output logs, and complete RPC/wire records.
 
-After the hour, pause continuation and complete its active work. Report the tail separately from the collection window.
-Hash generated source before and after independent sandbox test commands. Record failures without claiming a complete database.
+After the hour, pause continuation and abort active agent work. Report the tail separately from the collection window.
+Hash generated source before and after independent sandbox test commands. Record failures without claiming that the database task is completed.
 
 Then remove owned containers, modified files, installed tools, caches, and the temporary image.
 Keep original logs, hash manifests, summaries, and resource figures in a separate evidence directory. Failure and cancellation use the same cleanup.
 The optional `--workload audit --diagnostic` path keeps the older source-audit fixture. It cannot supply formal acceptance.
 
-Verify completed server metrics, SSE terminals, and SDK usage for each model call.
+Verify original request coverage, completed SSE terminals, usage, and server metrics independently of native task outcomes.
+Report cancelled requests with their original protocol and transport observations. Do not infer their cause from a shared error message.
+
+The following SDK and journal checks supply separate native workload diagnostics. Their result does not decide framework acceptance.
 Keep post-terminal `ConnectionResetError` or `BrokenPipeError` as diagnostics only with same-ID protocol, SDK, and server completion.
 Check that SDK and SSE stop reasons agree. A `length` completion must match its requested output budget.
 
@@ -527,7 +536,8 @@ Each logical pool then has `blocks - 1` free blocks, with cached blocks availabl
 Block `0` stays allocated. Keep the original HTTP and worker process birth identities.
 
 Examine host RSS, GPU allocated/reserved memory, graph/compiler occupancy, active requests, and input lengths together.
-Changing conversation sizes can change bounded caches. Independent review must examine the causes of growth and accept memory stability.
+Changing conversation sizes can change bounded caches. Independent review must examine growth, resource limits, and cleanup.
+Sampled limits do not prove a memory plateau, full allocation attribution, or stability beyond the measured hour.
 
 Set `OH_MY_VLLM_HOST_ALLOCATOR_DIAGNOSTICS=1` for optional glibc allocator fields at existing diagnostic intervals.
 Each record includes the `available` value and call time. Available measurements include glibc version and raw `mallinfo2` fields.

@@ -33,6 +33,10 @@ Remove agent containers, modified files, installed tools, caches, and the owned 
 Failure and cancellation use the same cleanup. Keep original logs and hash manifests in a separate evidence directory.
 Never prune foreign Docker resources.
 
+The hour checks inference service stability. Goal status, task progress, database tests, tool errors, and final answers are workload observations.
+They do not decide framework acceptance. Check original model requests, resource limits, and owned sandbox cleanup independently.
+At the deadline, pause continuation and send native RPC `abort` before the final model-request drain.
+
 ## Verification scope
 
 CPU fixtures check native continuation, early goal completion, the two APIs, automatic compaction, isolation, and cleanup failures.

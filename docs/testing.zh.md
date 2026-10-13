@@ -376,8 +376,8 @@ Lifecycle 工具必须在所提供日志中找到混合请求共享 batch, 以�
 这些测试完成后立即停止服务及其 worker.
 
 长上下文门槛检查 strict JSON 内容, 输入超过 131072, 首次请求之后的前缀复用和逐请求正 MTP proposal.
-按 [服务合同](serving.zh.md#验证) 分别完成两种 API 的真实 OMP 任务.
-要求实际读文件和工具结果, 不只看脚本成功.
+按 [服务合同](serving.zh.md#验证) 分别通过两种 API 使用 OMP 和目标 checkpoint.
+独立于任务结果检查原始模型 stream, usage 和服务 metric.
 
 使用不同的 DSpark worker 再次执行服务门槛:
 
@@ -392,11 +392,10 @@ Lifecycle 检查分别使用 `--api chat` 和 `--api responses`.
 每个完成 response ID 都必须与服务日志中的活跃模式和实际验证 / 接受计数匹配.
 
 OMP 脚本通过临时记录代理转发真实客户端 HTTP, 请求 body 保持不变.
-保留客户端 JSONL, 转发请求, response ID 和工具结果哈希.
+保留客户端 JSONL, 转发请求, 原始 SSE 字节, response ID 和工具结果哈希.
 
-两次源码读取必须无错误地完成, 结果在最后一条答案前进入后续模型请求.
-最后一条答案必须引用源码文件并使用读取结果.
-自动检查之外单独复核答案语义.
+保留原有源码读取和答案检查, 作为单独的负载审计.
+任务错误和未完成答案不决定框架验收. 没有模型请求时不能通过.
 这些测试完成后停止 DSpark 服务及其 worker.
 
 服务脚本在请求前独占输出文件或目录, 已存在的结果路径会报错.
@@ -404,6 +403,12 @@ OMP 脚本通过临时记录代理转发真实客户端 HTTP, 请求 body 保持
 每个已接收 HTTP 响应在内容或日志检查前保存.
 失败时保留已收响应及明确错误记录.
 Lifecycle stream 保留断连前已读取的 SSE frame.
+
+原生 first-event 和 idle deadline 均为 900 秒. Collector turn deadline 为 7200 秒.
+Oneoff 客户端任务时限为 30 分钟, 主机时限为 1860 秒. 代理读取 deadline 为 900 秒.
+
+Recovery 请求和阶段 deadline 分别为 900 和 3600 秒.
+用户免除了仅针对超时参数的额外测试. Collector 行为变化仍需有意义的回归检查.
 
 ## 长时 agentic 服务
 
@@ -430,14 +435,15 @@ Collector 管理 4 个 sandbox 容器, 持久 OMP 进程和临时记录代理.
 每个进程在连续原生 goal 中保留 session ID 和历史.
 2 个会话使用 Chat, 2 个使用 Responses. 共享的 4-slot 上限也包含摘要请求.
 
-每条 lane 至少持续 `3600` 秒, 不设请求数下限.
+每种推理模式必须在 4 个持久请求负载下运行至少 `3600` 秒. 不设请求数下限.
 服务就绪后初始化客户端, 在它们发出首次请求前开始计时.
 首次编译, 图捕获和后续新形状的开销均计入测量.
 
-此采集器对应的服务使用 `--worker-step-timeout-seconds 600` 和 `--request-timeout-seconds 1800`.
+此采集器对应的服务使用 `--worker-step-timeout-seconds 600` 和 `--request-timeout-seconds 3600`.
 从 diagnostics 记录这些上限. 这些期限允许冷编译完成, 不另行预热.
 
-中途不排空, 不插入故障 probe. 一小时结束后完成在途工作, 再排空请求.
+中途不排空, 不插入故障 probe. 一小时结束后暂停续行, 并发送原生 RPC `abort`.
+排空模型请求, 记录停止动作.
 
 任务和摘要使用 OMP `max`, 映射为服务的 `xhigh`.
 此工作负载使用生产采样和思考预算默认值, 不另设启动覆盖值.
@@ -449,32 +455,35 @@ OMP 在两种 OpenAI API 中省略这些字段. 服务默认值也应用于其�
 OMP 自行选择压缩时机, 包括工具循环中途. 控制器不发送手动 compact 命令.
 服务检查完整模板输入与请求输出之和是否在总容量内.
 CPU guard 重复生产 normalization 与模板路径, 提供独立容量证据.
-将其计数与 SSE usage, SDK 输入加缓存用量, 以及 journal 的 provider-input snapshot 核对.
+将其计数与 SSE usage 核对. SDK 和 journal 比较结果记入单独的负载审计.
 
 OMP 的 settled `contextUsage` 使用 provider-input 锚点加上之后的本地变化.
 压缩判定还考虑生成输出和已保存历史的估算.
 两种记录均保留. 界面百分比不能代表完整的压缩判定.
-每次观察到压缩时, 检查会话身份延续, 摘要可用, 以及之后成功的模型工作.
+每次观察到压缩时, 检查会话身份延续并报告后续请求. 摘要内容属于负载观察.
 一小时内不强制发生自然压缩. 未覆盖时明确报告.
 参见固定版本的 [OMP 压缩流程](https://github.com/can1357/oh-my-pi/blob/v18.10.3/docs/compaction.md).
 
-每条 lane 在空 workspace 中使用 Python 标准库工具实现嵌入式数据库.
+每条 lane 在空 workspace 中获得嵌入式数据库任务, 使用 Python 标准库工具.
 任务包含 SQL, transaction, index, 持久存储, 崩溃恢复, 独立测试与实测 benchmark.
 控制器使用原生 RPC `goal create`, 为 `rpc` 启用自动续行.
 不设 token budget. Goal 完成, 暂停或停止续行后选择预先准备的下一项.
 后续 goal 检查故障, 并发, SQL 结果, 存储变更, 性能及剩余要求.
 同一进程, session ID, 历史和工作目录继续使用. Goal 转换保留原始原因与时间戳.
 Goal 命令 ID 只用于主机侧关联, 不代表原生 `prompt_result`.
-在整个会话中验证任务或生成源码的读取结果已转发. 提前结束的 goal 可以没有读取.
+将源码读取, 工具错误, 任务进展和 goal 转换记录为负载观察, 不用于决定框架验收.
 保留增量 journal, 原生会话及完整工具输出日志, 以及完整 RPC/wire 记录.
 
-一小时后暂停续行, 完成在途尾部工作. 尾部耗时与采集窗口分开报告.
+一小时后暂停续行, 并 abort 在途 Agent 工作. 尾部耗时与采集窗口分开报告.
 独立 sandbox 测试命令运行前后均对生成源码计算哈希. 记录失败, 不宣称数据库已完成.
 随后删除自有容器, 修改文件, 安装工具, 缓存及临时镜像.
 在 sandbox 外部的独立证据目录保留原始日志, 哈希 manifest, 摘要和资源图. 失败和取消使用同样的清理流程.
 可选 `--workload audit --diagnostic` 路径保留旧源码审计 fixture, 不能提供正式验收.
 
-逐个模型请求核对已完成的服务 metric, SSE 结束记录及 SDK usage.
+独立于原生任务结果核对原始请求覆盖, 已完成 SSE 结束记录, usage 和服务 metric.
+取消请求保留原始协议及传输观察. 不根据共用错误消息推断取消原因.
+
+下列 SDK 与 journal 检查提供单独的原生负载诊断, 其结果不决定框架验收.
 仅在同 ID 的协议, SDK 和服务完成证明齐全时, 将结束后的 `ConnectionResetError` 或 `BrokenPipeError` 保留为诊断信息.
 SDK 与 SSE stop reason 必须相符. `length` 结束的输出数必须等于请求预算.
 并行摘要请求必须唯一匹配 usage 和生命周期. 证据有歧义时验证失败.
@@ -507,7 +516,8 @@ scripts/with-env.sh python -m pytest tests/test_agentic_sdk_trace.py tests/test_
 各逻辑池此时有 `blocks - 1` 个空闲块, 包含可驱逐复用的缓存块.
 Block `0` 保持分配. HTTP 和 worker 必须保持原有进程出生身份.
 结合主机 RSS, GPU allocated / reserved 内存, 图/编译缓存占用, 活动请求和输入长度分析.
-变化的会话大小可能改变有界缓存. 独立审查需解释增长并确认内存稳定性.
+会话大小变化可以影响有界缓存. 独立审查必须检查增长, 资源上限和清理.
+采样上限不能证明内存平台, 完整分配归因或测量一小时之外的稳定性.
 
 设置 `OH_MY_VLLM_HOST_ALLOCATOR_DIAGNOSTICS=1`, 在现有诊断间隔采集可选 glibc allocator 字段.
 每条记录包含 `available` 值和调用耗时. 可用测量包含 glibc 版本和原始 `mallinfo2` 字段.

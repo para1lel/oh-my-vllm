@@ -7,70 +7,43 @@ Originals supply formal verification. Portable summaries give results for readin
 
 ## Current collection
 
-New acceptance will check SDK evidence collection and optional host allocator diagnostics.
-It must also check the cubin package with the same version as FlashInfer, with fresh project caches and original client timeouts.
-The current candidate has 517 operator cases, with 317 unchanged configurations and 200 new static workload cases.
+Acceptance checks the inference framework and its active numerical, performance, context, and serving contracts.
+OMP goal status, task progress, tool errors, and final answers are workload observations.
+The hour checks continuous framework availability, sampled resource limits, and owned sandbox cleanup.
+Original client and collector failures keep their recorded status.
 
-The [SDK collector CPU record](../bench/evidence/2026-10-13-native-sdk-collector.json) gives fixture checks and original result hashes.
-These checks do not supply model acceptance.
-The new fifteen phase rows, six capacity cases, reasoning-budget suite, and two persistent-session collections are pending.
-Previous source results cannot supply current-source acceptance.
+Formal GPU collections on clean `ae070e4` that stayed the same used new project caches and pinned dependencies.
 
-The [constrained-decoding investigation](../bench/evidence/2026-10-13-constrained-decoding-investigation.json) records ordinary-text loops and selected target conditional probabilities.
-It does not replay original sampled IDs or supply formal model acceptance.
-New collections must check canonical reasoning closure, tool openers, and the repetition guard with shared presence penalty `0.5`.
+| Check | Measured result |
+|---|---|
+| GPU suite | 487 passed, no skips |
+| Phase latency | Fifteen rows passed, two warmups and five measurements per row |
+| Maximum context | Six ordinary/MTP4 cases passed at batches 1, 2, and 4 |
+| Reasoning budget | Sixty cases passed |
+| Service protocols | Constraints, lifecycle, and long context passed in MTP4 and DSpark with the two APIs |
+| Operators | 517 numerical passes, 514 speed passes, three speed failures |
+| Framework hour | MTP4 and DSpark each passed the independently reviewed 3600-second window |
+| Allocator recovery | Six stages passed, two first cold stages stopped before injection at the old worker-step deadline |
+| Oneoff OMP | Original attempts failed before model requests because the settings overlay was missing |
 
-Source `22dd754` passed sixty budget cases and six full-context ordinary/MTP4 cases without warmup, with independent raw-record review.
-It completed thirteen phase rows: twelve passed and long-MTP batch `4` failed the unchanged decode ratio limit.
-The failed median was `39.9496` seconds, with lower bound `12.2634` seconds and ratio `3.2576`.
+A second B200 measurement with a new project cache reproduced the three operator speed failures.
+The user deferred optimization. The full operator matrix does not pass acceptance.
+See [audit](audit.md#krn-07-small-normalization-shapes).
 
-Its prefill and spread gates passed. Two ordinary phase rows did not complete.
-The persistent-session attempts failed or were canceled before one hour. They supply no acceptance.
+MTP had 412 requests, 407 server completions, and five matched terminations, with the final stop tail.
+DSpark had 87 requests, 79 server completions, and eight matched terminations, with the final stop tail.
+The two windows had fixed source, process birth identities, and epoch, without unexpected OOM or worker restart.
+All eight agent sandboxes, generated files, copied tools, caches, and owned images were removed.
 
-All owned collectors and GPU processes exited before the scheduler change.
-Original failed, canceled, and partial records keep their status and source identities.
-The [handoff](handoff.md) gives current verification and the next collection configuration.
+Worker RSS increased during the hour. MTP grew from 1.136 to 6.822 GiB. DSpark grew from 1.280 to 8.519 GiB.
+Worker snapshots lagged collection by up to 136.230 and 138.827 seconds.
+Resource checks do not prove a memory plateau, full allocation attribution, or stability beyond the measured hour.
+Natural compaction coverage and original journal/SDK errors are separate workload observations.
 
-The new phase and operator attempts on `4100d1a` stopped for external GPU processes, without complete rows.
-Its capacity attempt completed ordinary batch `1` output, then failed worker shutdown.
-Its GPU suite stopped after a GPU lookup timeout. Six boundary tests failed without saved pytest exception reports.
-All owned processes exited. These attempts do not supply formal acceptance.
-
-Shutdown stack inspections stopped at the final `torch.cuda.empty_cache()` call after resource-owner release.
-A diagnostic without that call completed ordinary batch `1` at input `258048` plus output `4096`, with the original shutdown deadline.
-It used a saved cache and permitted external GPU work. It does not supply formal capacity or performance acceptance.
-
-Source `3cb4cbc` phase and operator attempts stopped after a GPU query timeout, without full acceptance.
-Two saved operator cases passed arithmetic checks done independently. They do not supply the `517`-case matrix.
-
-A capacity attempt stopped for an external GPU process before output.
-The next capacity attempt and GPU suite were canceled before the query-scope change. All owned processes exited.
-The GPU suite passed three boundary tests, then had one failure without a saved exception report.
-
-Source `66edc40` passed twenty reasoning-budget cases each in ordinary and MTP4 modes, with raw-record checks done independently.
-Its long-MTP batch `4` completed two warmups and five measurements, then failed the source contract check.
-The reviewed `model_runner.py` hash was equal to the source hash before the shutdown change.
-All other source hashes, providers, headers, compiler flags, and versions were equal to the runtime values.
-
-The other collections were canceled before the contract update. All owned processes exited.
-Failed and canceled records keep their status. They do not supply current-source acceptance.
-
-Source `2145e13` passed six full-context cases and long-MTP batch `4`, with full raw-record review done independently.
-Its operator collection saved `176` full cases, with one small-row projection speed failure and no numerical failure.
-Other collections were canceled before the small-row fusion change. All owned processes exited.
-Run the full GPU acceptance again on the new committed source. Earlier partial collections cannot supply that acceptance.
-
-Source `d7f0b5f` passed sixty reasoning-budget cases, six full-context cases, and long-MTP batch `4`, with independent raw-record review.
-Its operator collector saved `313` complete rows before cancellation. They do not supply the full `517`-case matrix.
-Its full GPU suite passed `211` tests, failed one allocator-release test, and did not run `256` tests.
-
-The five graph-memory tests passed in a separate diagnostic.
-A diagnostic with allocated and free storage in a default-pool segment failed the same assertion.
-It does not prove the original failure's cause.
-The fixture change keeps the original assertions and adds a case with a live tensor in that segment.
-
-MTP persistent collection failed OMP's repeated-output check before one hour. Its retry and other active collections were canceled before the fixture change.
-All owned GPU processes exited and temporary service endpoints closed. New committed-source GPU acceptance is pending.
+The subsequent changes adjust timeout policy and collector evidence scope without changes to GPU computation or constrained decoding.
+The user waived more tests for timeout parameters alone.
+New CPU checks, missing recovery stages, and corrected oneoff compatibility checks are in final verification.
+The [handoff](handoff.md) gives results and limits. Earlier measurements stay scoped to their recorded source.
 
 ## Partial collection on `f019075`
 

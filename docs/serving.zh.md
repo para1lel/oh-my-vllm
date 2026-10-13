@@ -240,9 +240,9 @@ JSON 树存储, allocator 开销及 Python 对象另外使用内存. RSS 与此�
 | Stream channel | 256 event |
 | 待发送 stream 队列 | 1024 event 或 8 MiB 序列化字节 |
 | 背压 grace | 30 秒 |
-| 请求 timeout | 600 秒 |
+| 请求 timeout | 3600 秒 |
 | Prepare RPC deadline | 120 秒 |
-| Worker step deadline | 120 秒 |
+| Worker step deadline | 600 秒 |
 | 共享 shutdown grace | 35 秒 |
 | Worker 替换尝试 | 5 |
 | Worker 内存 snapshot 间隔 | 30 秒 |
@@ -295,14 +295,12 @@ Worker 报告各请求状态映射, graph cache, 编译 cache, 主机 RSS 及 GP
 ## 验证
 
 使用 `scripts/serving-acceptance.py`, `scripts/serving-lifecycle.py` 和 `scripts/agentic-acceptance.py`.
-每种草稿模式分别通过 `--api chat` 和 `--api responses`, 使用 target checkpoint 完成真实 OMP 任务.
+每种草稿模式分别通过 `--api chat` 和 `--api responses`, 使用 target checkpoint 和 OMP.
 使用 `--omp` 或 `PATH` 上的可执行程序.
-客户端 JSONL 必须记录 `read` 成功读取 `crates/scheduler/src/lib.rs` 和 `python/oh_my_vllm/worker/model_runner.py`.
-仅列出目录不能满足条件.
-工具结果必须回传模型.
-记录代理保留包含每个源码读取结果的实际转发模型请求.
-客户端最后一条答案的 response ID 必须与记录的 HTTP 响应和实际模式服务日志匹配.
-答案必须使用结果并引用文件.
+客户端 JSONL 和转发 HTTP 记录保留原始工具调用, 结果, 错误及后续请求.
+记录代理保存原始 SSE 字节, 响应哈希, ID 及转发模型请求.
+将 SSE 完成与 usage 同实际模式的服务 metric 核对.
+源码读取结果和最终答案属于负载观察. 脚本单独报告原有任务审计结果.
 代理任务期间保持仓库不变.
 
 检查实际排队 / 准备时间, TTFT, 速率, 步数, 前缀复用和 verified / accepted draft.

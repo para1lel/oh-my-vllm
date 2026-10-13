@@ -212,7 +212,12 @@ def session_configuration(base_url: str, api: str) -> tuple[dict, dict]:
         },
         "memory": {"backend": "off"},
         "autolearn": {"enabled": False},
-        "providers": {"openaiWebsockets": "off", "openaiLiveSteering": False},
+        "providers": {
+            "openaiWebsockets": "off",
+            "openaiLiveSteering": False,
+            "streamFirstEventTimeoutSeconds": 900,
+            "streamIdleTimeoutSeconds": 900,
+        },
         "retry": {"enabled": False},
         "enabledModels": [f"{name}/{model['id']}"],
     }

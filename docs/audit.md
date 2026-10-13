@@ -23,6 +23,20 @@ They do not reproduce the original sampled path.
 The [investigation summary](../bench/evidence/2026-10-13-constrained-decoding-investigation.json) records source identities, original hashes, measurements, and limits.
 The protocol fixes do not close this finding or prove long-duration agent acceptance.
 
+
+The user removed task-progress acceptance. Keep `SRV-13` as an observation about model output. It does not decide the framework-hour result.
+The current framework-hour result does not claim successful completion of all model requests or agent tasks.
+
+## KRN-07: Small normalization shapes
+
+Status: open, severity P2. The user deferred optimization for delivery.
+The full 517-case matrix passed all numerical checks, with 514 speed passes and three speed failures on `ae070e4`.
+The failed cases are `add_norm-6becd76d98`, `dspark_rms_norm-c227a5ffdd`, and `dspark_rms_norm-906d7e4f4c`.
+They use 576, 624, and 632 rows with width 5120.
+
+A second B200 measurement with a new project cache reproduced each failure with the full paired-round protocol.
+Keep the CUDA computation and pinned TileLang gate unchanged. The full operator matrix does not pass acceptance.
+
 ## PY-04: Graph memory and shape changes
 
 Status: partial/open, severity P2.

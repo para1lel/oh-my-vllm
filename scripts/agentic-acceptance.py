@@ -263,7 +263,7 @@ def validate_agent_evidence(
     )
 
 
-def run_client(command, state: Path, output, errors, timeout=660, *, sandbox=None):
+def run_client(command, state: Path, output, errors, timeout=1860, *, sandbox=None):
     process = None
     with _reap_on_termination() as cancelled:
         try:
@@ -379,9 +379,34 @@ def main():
     (state / "models.yml").write_text(
         json.dumps(configuration(args.base_url), indent=2)
     )
+    settings = {
+        "providers": {
+            "streamFirstEventTimeoutSeconds": 900,
+            "streamIdleTimeoutSeconds": 900,
+        }
+    }
+    (state / "settings.yml").write_text(json.dumps(settings, indent=2) + "\n")
     if args.configure_only:
         print(state)
         return
+
+    cancelled = [False]
+
+    def cancel(signum, frame):
+        cancelled[0] = True
+        raise InterruptedError("agentic acceptance cancelled")
+
+    old_handlers = {
+        sig: signal.signal(sig, cancel) for sig in (signal.SIGTERM, signal.SIGINT)
+    }
+    try:
+        collect_oneoff(args, directory, state, settings, cancelled)
+    finally:
+        for sig, handler in old_handlers.items():
+            signal.signal(sig, handler)
+
+
+def collect_oneoff(args, directory, state, settings, cancelled):
     from benchmarks.agentic_sandbox import AgentSandbox, SandboxImage, host_endpoint
     from benchmarks.agentic_sessions import prepare_workspace
 
@@ -389,12 +414,6 @@ def main():
     requests, command, collection_errors = [], [], []
     exit_code, started, log_offset, log_identity = 1, time.monotonic(), None, None
 
-    def cancel(signum, frame):
-        raise InterruptedError("agentic acceptance cancelled")
-
-    old_handlers = {
-        sig: signal.signal(sig, cancel) for sig in (signal.SIGTERM, signal.SIGINT)
-    }
     try:
         image = SandboxImage(args.omp, directory / "sandbox-runtime", args.sandbox_host)
         sandbox = AgentSandbox(image, directory)
@@ -422,7 +441,7 @@ def main():
             "--mode",
             "json",
             "--max-time",
-            "10m",
+            "30m",
             "--print",
             TASK,
         ]
@@ -433,12 +452,18 @@ def main():
             if args.server_log
             else None
         )
-        with recording_proxy(args.base_url) as (proxy_url, requests):
+        with recording_proxy(args.base_url, raw_directory=directory / "wire") as (
+            proxy_url,
+            requests,
+        ):
             models = json.dumps(
                 configuration(host_endpoint(proxy_url, image.gateway)), indent=2
             )
             (state / "models.yml").write_text(models)
             (sandbox.root / "state/models.yml").write_text(models)
+            (sandbox.root / "state/settings.yml").write_text(
+                json.dumps(settings, indent=2) + "\n"
+            )
             with (
                 (directory / f"{args.api}.jsonl").open("w") as output,
                 (directory / f"{args.api}.stderr").open("w") as errors,
@@ -453,6 +478,7 @@ def main():
                     )
                 except InterruptedError:
                     exit_code = 124
+                    collection_errors.append("collector cancelled by signal")
     except Exception as error:
         collection_errors.append(f"{type(error).__name__}: {error}")
     finally:
@@ -464,11 +490,14 @@ def main():
                     collection_errors.append(
                         f"cleanup: {type(error).__name__}: {error}"
                     )
-        for sig, handler in old_handlers.items():
-            signal.signal(sig, handler)
-        (directory / f"{args.api}-http.json").write_text(
-            json.dumps(requests, indent=2) + "\n"
-        )
+        try:
+            (directory / f"{args.api}-http.json").write_text(
+                json.dumps(requests, indent=2) + "\n"
+            )
+        except Exception as error:
+            collection_errors.append(
+                f"HTTP evidence write: {type(error).__name__}: {error}"
+            )
     summary = {
         "api": args.api,
         "command": command,
@@ -480,42 +509,67 @@ def main():
         "passed": False,
         "requires_review": (
             "Verify real tool execution, tool-result follow-up requests, "
-            "the final answer claims and model execution evidence; "
+            "raw SSE, usage, and model execution evidence; "
             "exit zero alone is not acceptance."
         ),
     }
     try:
         if collection_errors:
             raise ValueError("; ".join(collection_errors))
-        if exit_code:
-            raise ValueError(f"OMP exited with status {exit_code}")
-        events = [
-            json.loads(line)
-            for line in (directory / f"{args.api}.jsonl").read_text().splitlines()
-        ]
-        summary["client_verification"] = validate_agent_evidence(
-            events, requests, args.api, workspace=workspace
-        )
+        try:
+            events = [
+                json.loads(line)
+                for line in (directory / f"{args.api}.jsonl").read_text().splitlines()
+            ]
+            summary["workload_audit"] = {
+                "passed": exit_code == 0,
+                "exit_code": exit_code,
+                "audit": validate_agent_evidence(
+                    events, requests, args.api, workspace=workspace
+                ),
+            }
+        except Exception as error:
+            summary["workload_audit"] = {
+                "passed": False,
+                "exit_code": exit_code,
+                "error": str(error),
+            }
+        if not requests:
+            raise ValueError("OMP sent no model requests")
         if args.server_log:
             if log_identity != (
                 args.server_log.stat().st_dev,
                 args.server_log.stat().st_ino,
             ):
                 raise ValueError("server log changed identity during OMP acceptance")
-            ids = {
-                int(rid.rsplit("_", 1)[1])
-                for request in requests
-                for rid in request.get("response_ids", [])
+            from benchmarks.agentic_framework_evidence import audit_oneoff_requests
+            from benchmarks.agentic_soak_analysis import read_metrics
+
+            summary["framework_verification"] = audit_oneoff_requests(
+                requests,
+                args.api,
+                read_metrics(args.server_log, log_offset),
+                directory / "wire",
+            )
+            completed = {
+                metric["request_id"]
+                for metric in read_metrics(args.server_log, log_offset)
+                if metric["status"] == "completed"
             }
             summary["server_verification"] = read_service_evidence(
-                args.server_log, log_offset, args.speculative_mode, request_ids=ids
+                args.server_log,
+                log_offset,
+                args.speculative_mode,
+                request_ids=completed,
             )
+        if cancelled[0]:
+            raise InterruptedError("collector cancelled by signal")
         summary["passed"] = bool(args.server_log)
-    except ValueError as error:
-        summary["error"] = str(error)
+    except Exception as error:
+        summary["error"] = f"{type(error).__name__}: {error}"
     (directory / f"{args.api}-run.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary))
-    raise SystemExit(exit_code or (1 if "error" in summary else 0))
+    raise SystemExit(0 if summary["passed"] else 1)
 
 
 if __name__ == "__main__":

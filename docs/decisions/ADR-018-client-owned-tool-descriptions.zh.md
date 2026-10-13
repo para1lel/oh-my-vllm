@@ -18,7 +18,8 @@ OMP `18.10.3` 的 Bash 工具在可选 `name` 参数上具有 `maxLength=48`.
 副本保留现有支持的 XML 类型, property, required 字段, 引用, 有限候选以及 numeric/array 约束.
 String 长度, pattern, format, default, examples 及其他省略 keyword 保留在原始描述中.
 
-模型必须遵守这些说明. OMP 校验返回参数, 并在后续模型输入中提供错误信息.
+原始 schema 向模型提供说明. OMP 校验返回参数, 并将错误加入后续模型输入.
+客户端对描述性关键词的检查不决定框架验收.
 
 对独立副本使用现有 validator 和 XGrammar compiler.
 不修改 GPU 计算, sampling, speculative mask 或 matcher 实现.
@@ -38,4 +39,4 @@ OMP 可执行程序 fixture 必须依据原始 `48` 字符限制拒绝 `49` 字�
 它必须转发该错误, 并通过每种 API 执行下一条合法命令.
 
 确定性 fixture 响应不能证明目标模型推理或一小时稳定性.
-提交源码后重测正式服务和长程门槛.
+验收使用注明源码范围的正式服务与长时证据.

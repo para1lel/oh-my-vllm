@@ -296,7 +296,7 @@ class SdkTrace:
                     raise ValueError("OMP did not export all completed SDK results")
                 self.condition.wait(min(remaining, 0.1))
 
-    def close(self):
+    def close(self, *, strict=True):
         if not self.closed:
             self.closed = True
             self.server.shutdown()
@@ -317,5 +317,5 @@ class SdkTrace:
                 )
                 + "\n"
             )
-        if self.error:
+        if strict and self.error:
             raise ValueError(self.error)

@@ -362,8 +362,8 @@ def test_rpc_cleanup_releases_real_sandbox_after_evidence_failure(
     else:
         original_close = client.sdk_trace.close
 
-        def fail():
-            original_close()
+        def fail(**kwargs):
+            original_close(**kwargs)
             raise OSError("injected SDK failure")
 
         monkeypatch.setattr(client.sdk_trace, "close", fail)

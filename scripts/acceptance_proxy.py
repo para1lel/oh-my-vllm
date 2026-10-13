@@ -1,12 +1,15 @@
 """Record actual OMP HTTP payloads while forwarding to the real model service."""
 
 import hashlib
+import http.client
 import json
+import socket
 import threading
 import urllib.error
 import urllib.request
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 
 def response_ids(body: bytes) -> list[str]:
@@ -32,16 +35,50 @@ def response_ids(body: bytes) -> list[str]:
 
 
 @contextmanager
-def recording_proxy(upstream_url: str):
+def recording_proxy(upstream_url: str, *, raw_directory: Path | None = None):
     """Own a loopback listener and retain complete upstream request evidence.
 
     HTTP/1.0 closes each downstream stream after its body. The upstream SSE
     content is forwarded without reconstruction, tool edits, or extra requests.
     """
-    records, active = [], []
+    if raw_directory is not None:
+        raw_directory.mkdir(parents=True, exist_ok=False)
+    records, sockets = [], set()
     lock = threading.Lock()
+    stop = threading.Event()
+
+    class Connection(http.client.HTTPConnection):
+        def connect(self):
+            if stop.is_set():
+                raise InterruptedError("proxy closed before upstream connection")
+            self.sock = socket.socket(
+                socket.AF_INET6 if ":" in self.host else socket.AF_INET,
+                socket.SOCK_STREAM,
+            )
+            self.sock.settimeout(self.timeout)
+            with lock:
+                sockets.add(self.sock)
+                if stop.is_set():
+                    self.sock.close()
+                    raise InterruptedError("proxy closed during upstream connection")
+            self.sock.connect((self.host, self.port))
+
+    class TrackingHandler(urllib.request.HTTPHandler):
+        def http_open(self, request):
+            return self.do_open(Connection, request)
+
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), TrackingHandler()
+    )
 
     class Handler(BaseHTTPRequestHandler):
+        def setup(self):
+            with lock:
+                sockets.add(self.request)
+                if stop.is_set():
+                    self.request.close()
+            super().setup()
+
         def log_message(self, format, *args):
             pass
 
@@ -51,6 +88,7 @@ def recording_proxy(upstream_url: str):
             if data:
                 record["request"] = json.loads(data)
             with lock:
+                index = len(records)
                 records.append(record)
             suffix = self.path.removeprefix("/v1")
             request = urllib.request.Request(
@@ -66,12 +104,10 @@ def recording_proxy(upstream_url: str):
             body = bytearray()
             try:
                 try:
-                    response = urllib.request.urlopen(request, timeout=120)
+                    response = opener.open(request, timeout=900)
                 except urllib.error.HTTPError as error:
                     response = error
                 with response:
-                    with lock:
-                        active.append(response)
                     record["response_status"] = response.status
                     self.send_response(response.status)
                     for key, value in response.headers.items():
@@ -93,25 +129,31 @@ def recording_proxy(upstream_url: str):
             finally:
                 record["response_sha256"] = hashlib.sha256(body).hexdigest()
                 record["response_ids"] = response_ids(body)
-                with lock:
-                    if "response" in locals() and response in active:
-                        active.remove(response)
+                if raw_directory is not None:
+                    filename = f"{index:04d}-response.bin"
+                    (raw_directory / filename).write_bytes(body)
+                    record["response_file"] = filename
 
         do_GET = forward
         do_POST = forward
         do_DELETE = forward
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    server.daemon_threads = True
+    server.daemon_threads = False
+    server.block_on_close = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
         yield f"http://127.0.0.1:{server.server_port}/v1", records
     finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=5)
+        stop.set()
         with lock:
-            responses = active.copy()
-        for response in responses:
-            response.close()
+            owned_sockets = list(sockets)
+        for connection in owned_sockets:
+            with suppress(OSError):
+                connection.shutdown(socket.SHUT_RDWR)
+        server.shutdown()
+        server.server_close()  # Joins handlers after their owned sockets wake.
+        thread.join(timeout=5)
+        if thread.is_alive():
+            raise RuntimeError("recording proxy listener did not stop")

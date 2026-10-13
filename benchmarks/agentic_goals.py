@@ -190,8 +190,9 @@ def run_goal(client, clock: dict, duration: float):
                 next_checkpoint = now + 30
             client.stop.wait(min(1, max(0, deadline - now)))
         active_ended = time.monotonic()
-        # Stop continuation, retain the natural tail, and preserve native status.
+        # Stop continuation and cancel active work only after the collection deadline.
         paused = client.command("goal", op="pause")
+        aborted = client.command("abort") if reason == "collection_deadline" else None
         state = settle(client)
         completed = time.monotonic()
         client.turns.append(
@@ -204,6 +205,7 @@ def run_goal(client, clock: dict, duration: float):
                 "objective_sha256": hashlib.sha256(text.encode()).hexdigest(),
                 "transition_reason": reason,
                 "goal_pause": paused,
+                "collection_abort": aborted,
                 "goal_final": state.get("goal"),
                 "started_unix_s": started_unix,
                 "active_ended_monotonic_s": active_ended,
@@ -250,3 +252,27 @@ def artifacts(directory: Path) -> dict:
         "products_present": products,
         "missing_products": [name for name, present in products.items() if not present],
     }
+
+
+def observe_artifacts(client) -> dict:
+    """Record task files/tests without making their outcome a framework gate."""
+    errors, checks = [], []
+    before = {}
+    try:
+        before = artifacts(client.workspace)
+    except Exception as error:
+        errors.append(f"artifact hashes before checks: {type(error).__name__}: {error}")
+    for command in (
+        ["python", "-m", "unittest", "discover", "-s", "tests", "-q"],
+        ["python", "-m", "compileall", "-q", "goaldb", "tests"],
+    ):
+        try:
+            checks.append(client.sandbox.execute(command))
+        except Exception as error:
+            checks.append({"command": command, "returncode": None, "error": str(error)})
+    after = {}
+    try:
+        after = artifacts(client.workspace)
+    except Exception as error:
+        errors.append(f"artifact hashes after checks: {type(error).__name__}: {error}")
+    return dict(after, before_checks=before, independent_checks=checks, errors=errors)

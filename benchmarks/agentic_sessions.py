@@ -367,10 +367,6 @@ class RpcClient:
         deadline = time.monotonic() + timeout
         with self.condition:
             while identity not in mapping:
-                if self.sdk_trace.error:
-                    raise ValueError(
-                        f"persistent SDK trace failed: {self.sdk_trace.error}"
-                    )
                 if self.stop.is_set() or self.error or self.process.poll() is not None:
                     raise ValueError(f"persistent RPC stopped: {self.error}")
                 remaining = deadline - time.monotonic()
@@ -485,15 +481,19 @@ class RpcClient:
         self.check_state()
         self.checkpoint_entries()
         self.persist()
-        self.sdk_trace.wait_for(
-            {
-                event["message"]["responseId"]
-                for event in self.events
-                if event.get("type") == "message_end"
-                and event.get("message", {}).get("role") == "assistant"
-                and event["message"].get("responseId")
-            }
-        )
+        trace_capture_error = None
+        try:
+            self.sdk_trace.wait_for(
+                {
+                    event["message"]["responseId"]
+                    for event in self.events
+                    if event.get("type") == "message_end"
+                    and event.get("message", {}).get("role") == "assistant"
+                    and event["message"].get("responseId")
+                }
+            )
+        except Exception as error:
+            trace_capture_error = f"{type(error).__name__}: {error}"
         return {
             "lane": self.lane,
             "api": self.api,
@@ -509,6 +509,7 @@ class RpcClient:
             "sdk_trace": {
                 "directory": "sdk-trace",
                 "source": "omp_sdk_otlp",
+                "capture_error": trace_capture_error,
                 "api_binding": "openai-completions"
                 if self.api == "chat"
                 else "openai-responses",
@@ -553,7 +554,7 @@ class RpcClient:
                 json.dumps(self.process_record) + "\n"
             )
         )
-        attempt(self.sdk_trace.close)
+        attempt(lambda: self.sdk_trace.close(strict=False))
         if self.sandbox:
             attempt(self.sandbox.close)
         if self.reader.is_alive():

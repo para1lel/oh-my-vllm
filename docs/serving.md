@@ -249,9 +249,9 @@ JSON tree storage, allocator overhead, and Python objects use additional memory.
 | Stream channel | 256 events |
 | Pending stream queue | 1024 events or 8 MiB serialized bytes |
 | Backpressure grace | 30 seconds |
-| Request timeout | 600 seconds |
+| Request timeout | 3600 seconds |
 | Prepare RPC deadline | 120 seconds |
-| Worker step deadline | 120 seconds |
+| Worker step deadline | 600 seconds |
 | Shared shutdown grace | 35 seconds |
 | Worker replacement attempts | 5 |
 | Worker memory snapshot interval | 30 seconds |
@@ -306,16 +306,13 @@ Processing starts before Python preparation and ends when generation completes. 
 ## Verification
 
 Use `scripts/serving-acceptance.py`, `scripts/serving-lifecycle.py`, and `scripts/agentic-acceptance.py`.
-Complete OMP tasks through `--api chat` and `--api responses` with the target checkpoint in each draft mode.
+Use OMP through `--api chat` and `--api responses` with the target checkpoint in each draft mode.
 Use `--omp` or the executable on `PATH`.
-The client JSONL must show successful `read` calls for `crates/scheduler/src/lib.rs` and `python/oh_my_vllm/worker/model_runner.py`.
-Directory listings alone are insufficient.
-The model must receive the tool results.
+Keep original tool calls, results, errors, and subsequent requests in client JSONL and forwarded HTTP records.
 
-The recording proxy keeps the forwarded model request that contains each source-read result.
-Client response IDs for the last answer must agree with the recorded HTTP responses and active-mode server logs.
-
-The answer must use those results and refer to the files.
+The recording proxy saves original SSE bytes, response hashes, IDs, and forwarded model requests.
+Check SSE completion and usage against server metrics for the active mode.
+Source-read outcomes and final answers are workload observations. The script reports its original task audit separately.
 Keep the repository unchanged during the agent task.
 
 Examine measured queue/preparation time, TTFT, rate, steps, prefix reuse, and verified/accepted drafts.

@@ -662,9 +662,9 @@ def parse_args(argv=None):
     parser.add_argument("--stages", nargs="+", choices=STAGES, default=list(STAGES))
     parser.add_argument("--startup-timeout", type=float, default=600)
     parser.add_argument("--recovery-timeout", type=float, default=600)
-    parser.add_argument("--request-timeout", type=float, default=180)
+    parser.add_argument("--request-timeout", type=float, default=900)
     parser.add_argument("--drain-timeout", type=float, default=90)
-    parser.add_argument("--stage-timeout", type=float, default=1800)
+    parser.add_argument("--stage-timeout", type=float, default=3600)
     parser.add_argument("--diagnostic", action="store_true")
     args = parser.parse_args(argv)
     if args.model is None or (args.mode == "dspark" and args.draft_model is None):

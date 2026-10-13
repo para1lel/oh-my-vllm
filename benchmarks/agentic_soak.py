@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from benchmarks.agentic_context import ContextGuard
+from benchmarks.agentic_framework_evidence import audit_framework_session
 from benchmarks.agentic_session_evidence import audit_session
 from benchmarks.agentic_sessions import RpcClient, curriculum, followup
 from benchmarks.agentic_soak_analysis import (
@@ -59,7 +60,7 @@ def build_parser():
     )
     parser.add_argument("--duration", type=float, default=3600)
     parser.add_argument("--agents", type=int, choices=(4,), default=4)
-    parser.add_argument("--turn-timeout", type=float, default=1800)
+    parser.add_argument("--turn-timeout", type=float, default=7200)
     parser.add_argument("--drain-timeout", type=float, default=180)
     parser.add_argument("--sample-seconds", type=float, default=30)
     parser.add_argument(
@@ -112,7 +113,8 @@ def run(args):
         for sig in (signal.SIGINT, signal.SIGTERM)
     }
     summary = {
-        "schema": 2,
+        "schema": 3,
+        "acceptance_scope": "inference framework continuity and serving contracts",
         "kind": "persistent_agentic_soak",
         "mode": args.mode,
         "passed": False,
@@ -237,43 +239,20 @@ def run(args):
                 collected = client.collect()
                 if args.workload == "goal":
                     collected["goal_collection"] = goal_collection
-                    from benchmarks.agentic_goals import artifacts
+                    from benchmarks.agentic_goals import observe_artifacts
 
-                    before_artifacts = artifacts(client.workspace)
-                    if (
-                        before_artifacts["files_sha256"].get("TASK.md")
-                        != collected["workspace"]["specification_sha256"]
-                    ):
-                        raise ValueError("native goal task specification changed")
-                    checks = [
-                        client.sandbox.execute(
-                            [
-                                "python",
-                                "-m",
-                                "unittest",
-                                "discover",
-                                "-s",
-                                "tests",
-                                "-q",
-                            ]
-                        ),
-                        client.sandbox.execute(
-                            ["python", "-m", "compileall", "-q", "goaldb", "tests"]
-                        ),
-                    ]
-                    evidence.write(
-                        f"lane-{lane}/artifact-checks.json", {"checks": checks}
+                    collected["goal_artifacts"] = observe_artifacts(client)
+                    collected["goal_specification_unchanged"] = (
+                        collected["goal_artifacts"]["before_checks"]
+                        .get("files_sha256", {})
+                        .get("TASK.md")
+                        == collected["workspace"]["specification_sha256"]
                     )
-                    collected["goal_artifacts"] = artifacts(client.workspace)
-                    collected["goal_artifacts"]["before_checks"] = before_artifacts
-                    collected["goal_artifacts"]["independent_checks"] = [
-                        {"command": check["command"], "returncode": check["returncode"]}
-                        for check in checks
-                    ]
                     evidence.write(
                         f"lane-{lane}/artifacts.json", collected["goal_artifacts"]
                     )
                 collected["active_seconds"] = active_ended - clock["monotonic"]
+                evidence.write(f"lane-{lane}/session.json", collected)
                 with lock:
                     sessions[lane] = collected
                     normal_ended = max(normal_ended or active_ended, active_ended)
@@ -356,14 +335,34 @@ def run(args):
             raise ValueError("live service source identity changed during the soak")
         metrics = read_metrics(args.server_log, offset)
         by_response = {metric["response_id"]: metric for metric in metrics}
-        points, audits = [], []
+        if any(metric["epoch"] != initial_epoch for metric in metrics):
+            raise ValueError("request worker epoch changed during collection")
+        points, audits, workload_audits = [], [], []
         for lane in range(4):
-            selected, audit = audit_session(
-                directory / f"lane-{lane}", sessions[lane], by_response, clock["unix"]
+            lane_directory = directory / f"lane-{lane}"
+            selected, audit = audit_framework_session(
+                lane_directory, sessions[lane], by_response, clock["unix"]
             )
             points.extend(selected)
             audits.append(audit)
-        if {point["response_id"] for point in points} != set(by_response):
+            try:
+                _, workload = audit_session(
+                    lane_directory, sessions[lane], by_response, clock["unix"]
+                )
+                workload_audits.append(
+                    {"lane": lane, "passed": True, "audit": workload}
+                )
+            except Exception as error:
+                workload_audits.append(
+                    {
+                        "lane": lane,
+                        "passed": False,
+                        "error": f"{type(error).__name__}: {error}",
+                    }
+                )
+        if {rid for audit in audits for rid in audit["response_ids"]} != set(
+            by_response
+        ):
             raise ValueError("service and collector model request coverage differs")
         points.sort(key=lambda point: point["processing_started_unix_s"])
         for point in points:
@@ -387,10 +386,16 @@ def run(args):
             collector_elapsed_s=normal_ended - clock["monotonic"],
             completed_normal_requests=len(points),
             sessions=audits,
+            workload_audits=workload_audits,
+            cancellations=sum(audit["cancelled_requests"] for audit in audits),
+            all_request_success_claim=False,
             observed_model_concurrency=slots.peak,
-            maximum_input_tokens=max(point["input_tokens"] for point in points),
+            maximum_input_tokens=max(
+                (point["input_tokens"] for point in points), default=None
+            ),
             maximum_total_budget=max(
-                point["input_tokens"] + point["output_budget"] for point in points
+                (point["input_tokens"] + point["output_budget"] for point in points),
+                default=None,
             ),
             compaction_requests=sum(point["purpose"] != "task" for point in points),
             memory_audit={

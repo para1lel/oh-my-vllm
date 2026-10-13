@@ -634,8 +634,6 @@ def plot_points(points: list[dict], mode: str, directory: Path):
     matplotlib.use("Agg")
     from matplotlib import pyplot as plt
 
-    if not points:
-        raise ValueError("cannot plot a soak without completed normal requests")
     with plt.rc_context({"font.size": 10, "svg.fonttype": "none"}):
         figure, axes = plt.subplots(figsize=(10, 4.2), layout="constrained")
         for purpose, color in (("task", "#21845c"), ("compaction", "#4667ac")):
@@ -661,6 +659,15 @@ def plot_points(points: list[dict], mode: str, directory: Path):
             title=f"{'MTP4' if mode == 'mtp' else 'DSpark'} agentic serving: "
             f"{len(points)} completed requests",
         )
+        if not points:
+            axes.text(
+                0.5,
+                0.5,
+                "No completed requests; see cancellation/resource evidence",
+                transform=axes.transAxes,
+                ha="center",
+                va="center",
+            )
         axes.spines[["top", "right"]].set_visible(False)
         axes.grid(axis="y", alpha=0.2)
         axes.set_axisbelow(True)

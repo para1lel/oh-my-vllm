@@ -18,7 +18,8 @@ For a tool without explicit `strict=true`, make a separate schema copy for reque
 The copy keeps the existing supported XML types, properties, required fields, references, finite choices, and numeric/array constraints.
 String length, pattern, format, defaults, examples, and other omitted keywords stay in the original description.
 
-The model must obey those instructions. OMP validates the returned arguments and supplies any error in subsequent model input.
+The original schema supplies model instructions. OMP validates returned arguments and supplies errors in subsequent model input.
+Client checks on descriptive keywords do not decide framework acceptance.
 
 Use the existing validator and XGrammar compiler on the separate copy.
 Do not change GPU computation, sampling, speculative masks, or matcher implementations.
@@ -38,4 +39,4 @@ The OMP executable fixture must reject a `49`-character Bash name against its or
 It must forward the error and execute the next valid command through each API.
 
 Deterministic fixture responses do not prove target inference or one-hour stability.
-Do the formal service and long-duration gates again on committed source.
+Use source-scoped formal service and long-duration evidence for acceptance.

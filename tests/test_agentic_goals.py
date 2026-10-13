@@ -33,6 +33,7 @@ def test_early_goal_stop_submits_next_goal_in_the_same_client(
 
         def __init__(self):
             self.responses, self.turns, self.created, self.commands = {}, [], [], []
+            self.all_commands = []
             self.tail_deadline = 0
 
         def _send(self, kind, **fields):
@@ -50,11 +51,12 @@ def test_early_goal_stop_submits_next_goal_in_the_same_client(
             return mapping.pop(identity)
 
         def command(self, kind, **fields):
+            self.all_commands.append((kind, fields))
             if kind == "goal":
                 self.commands.append(fields["op"])
                 if fields["op"] == "pause":
                     self.tail_deadline = now[0] + tail
-            return {}
+            return {"kind": kind}
 
         def check_state(self):
             status = terminal if len(self.created) == 1 else "active"
@@ -86,6 +88,10 @@ def test_early_goal_stop_submits_next_goal_in_the_same_client(
     assert client.created[0]["objective"] != client.created[1]["objective"]
     assert [turn["goal_id"] for turn in client.turns] == ["goal-1", "goal-2"]
     assert client.commands == ["pause", "drop", "pause"]
+    assert sum(kind == "abort" for kind, _ in client.all_commands) == 1
+    assert client.all_commands[-2:] == [("goal", {"op": "pause"}), ("abort", {})]
+    assert client.turns[0]["collection_abort"] is None
+    assert client.turns[-1]["collection_abort"] == {"kind": "abort"}
     assert client.turns[-1]["active_ended_monotonic_s"] >= 106.0
     assert client.turns[0]["transition_reason"] != "collection_deadline"
     assert all("result" not in turn for turn in client.turns)
@@ -120,3 +126,17 @@ def test_incomplete_goal_products_are_recorded_without_ending_service_acceptance
     assert result["task_complete"] is False
     assert result["missing_products"] == ["implementation", "tests", "progress_notes"]
     assert "TASK.md" in result["files_sha256"]
+
+
+def test_generated_task_test_timeout_stays_a_workload_observation(tmp_path):
+    goals.prepare_workspace(tmp_path, 0)
+
+    def execute(command):
+        raise TimeoutError("generated tests did not finish")
+
+    observed = goals.observe_artifacts(
+        SimpleNamespace(workspace=tmp_path, sandbox=SimpleNamespace(execute=execute))
+    )
+    assert observed["task_complete"] is False
+    assert len(observed["independent_checks"]) == 2
+    assert all(check["returncode"] is None for check in observed["independent_checks"])
