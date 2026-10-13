@@ -79,6 +79,21 @@ All 49 affected GPU checks and 56 selected CPU checks passed after repair.
 Independent review found no blocker. Required hooks passed.
 The complete GPU selection must run again on the final source.
 
+The repeated non-boundary GPU selection on `10d45c9` passed all 510 cases.
+An earlier attempt stopped after detecting a foreign GPU process. Its records are separate.
+
+The next checkpoint corrects GDN state tolerance failures on correlated keys and improves small FP8 projections.
+See [GDN](../python/oh_my_vllm/kernels/gdn.py) and [native GEMM](../python/oh_my_vllm/kernels/cuda_backend/groupwise.py).
+Independent review checked storage, replay, source identity, and unchanged theoretical rules.
+
+GDN GPU checks passed 72 cases. A corrected deterministic graph routing check passed its separate repeat.
+Split-K checks passed 26 GPU cases. Seven selected precision and replay cases passed Compute Sanitizer with zero errors.
+The complete CPU suite passed 1589 cases and 153 subtests. Required hooks passed.
+
+All 517 operator cases passed the dirty-source diagnostic matrix, with complete coverage and no detected interference.
+It is not formal acceptance. Current-source complete GPU, capacity, phase, and one-hour acceptance is pending.
+Model probes are diagnostic and do not meet the two-times latency gate.
+
 Summaries with obsolete comparison provenance were removed from the working tree. Git history keeps their original results.
 See the [acceptance index](acceptance.md) for current collection scope.
 

@@ -10,6 +10,9 @@ from contextlib import nullcontext, redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+import torch
+
 BACKEND = (
     Path(__file__).resolve().parents[2]
     / "python/oh_my_vllm/kernels/cuda_backend/__init__.py"
@@ -22,6 +25,41 @@ def isolated_backend():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_gemm_rejects_shared_cuda_header_change_during_build(tmp_path, monkeypatch):
+    from oh_my_vllm.kernels import cuda_backend
+    from oh_my_vllm.kernels.cuda_backend import groupwise
+
+    operators = tmp_path / "operators"
+    operators.mkdir()
+    common = operators / "common.cuh"
+    common.write_text("original shared CUDA contracts")
+    (tmp_path / "groupwise_accum.cuh").write_text("accumulator")
+    (tmp_path / "groupwise_splitk.cuh").write_text('#include "operators/common.cuh"')
+    (tmp_path / "groupwise_fp8.cu").write_text("candidate source")
+    library = tmp_path / "candidate.so"
+    library.write_bytes(b"candidate binary")
+    monkeypatch.setattr(groupwise, "__file__", str(tmp_path / "groupwise.py"))
+    monkeypatch.setattr(groupwise, "_dependency_roots", lambda: (tmp_path, (tmp_path,)))
+    monkeypatch.setattr(groupwise, "_headers", lambda *_: {"native": "unchanged"})
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda: (10, 0))
+    monkeypatch.setattr(
+        cuda_backend, "_nvcc_identity", lambda: (tmp_path / "nvcc", "compiler")
+    )
+    monkeypatch.setattr(cuda_backend, "_effective_cuda_target", lambda: "sm_100a")
+    monkeypatch.delenv("OH_MY_VLLM_CUDA_DEBUG_SYNC", raising=False)
+
+    def build(*args, **kwargs):
+        common.write_text("changed shared CUDA contracts")
+        return str(library)
+
+    with (
+        patch("tvm_ffi.cpp.build_inline", side_effect=build),
+        patch("tvm_ffi.load_module", return_value=object()),
+        pytest.raises(RuntimeError, match="compiler or headers changed during build"),
+    ):
+        groupwise.compiled.__wrapped__()
 
 
 class ProvenanceTest(unittest.TestCase):

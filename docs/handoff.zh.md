@@ -79,6 +79,21 @@ Q/K 计时使用仓库 CUDA, 数值观察使用独立 Torch, 并拒绝选择计�
 独立复核没有发现阻断. 必需 hooks 通过.
 必须在最终源码上重新运行完整 GPU 分组.
 
+在 `10d45c9` 上重复运行的非边界 GPU 分组全部 510 个案例通过.
+此前一次运行在检测到其他用户的 GPU 进程后停止. 该次记录单独保留.
+
+下一个 checkpoint 修复相关 key 下 GDN 状态超出容差的问题, 并改善小形状 FP8 投影.
+参见 [GDN](../python/oh_my_vllm/kernels/gdn.py) 和[原生 GEMM](../python/oh_my_vllm/kernels/cuda_backend/groupwise.py).
+独立复核检查了存储, replay, 源码身份以及保持不变的理论规则.
+
+GDN GPU 检查通过 72 个案例. 修正后的确定性 graph 选路检查单独重复运行并通过.
+Split-K 检查通过 26 个 GPU 案例. 七个选定精度与 replay 案例通过 Compute Sanitizer, 错误数为零.
+完整 CPU 测试通过 1589 个案例和 153 个 subtest. 必需 hooks 通过.
+
+未提交源码的诊断矩阵全部 517 个算子案例通过, 覆盖完整且没有检测到干扰.
+该记录不属于正式验收. 当前源码的完整 GPU, 容量, 阶段以及一小时验收仍待完成.
+模型探测仍属于诊断, 没有达到两倍延迟门槛.
+
 带过时比较来源的摘要已从工作树删除; Git 历史保留其原始结果.
 当前采集范围见[验收索引](acceptance.zh.md).
 

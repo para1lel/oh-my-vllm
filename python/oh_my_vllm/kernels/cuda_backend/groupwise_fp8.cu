@@ -46,7 +46,7 @@ using namespace cute;
 
 template <int ScaleGranularityM, int ScaleGranularityN, int ScaleGranularityK, bool ScaleMajorK,
           int MmaSM, typename DTypeIn, typename DTypeOut, int PipelineStages = 0, int ClusterN = 1,
-          int TileK = 128, bool ConversionOnly = false, int TileM = 128>
+          int TileK = 128, bool ConversionOnly = false, int TileM = 128, int SplitK = 1>
 cudaError_t CutlassGroupwiseScaledGEMMSM100(void *float_buffer, size_t float_buffer_size_in_bytes,
                                             DTypeIn *A_ptr, DTypeIn *B_ptr, float *SFA_ptr,
                                             float *SFB_ptr, DTypeOut *D_ptr, int m, int n, int k,
@@ -134,13 +134,21 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void *float_buffer, size_t float_buf
   using StrideC = typename Gemm::GemmKernel::StrideC;
   using StrideD = typename Gemm::GemmKernel::StrideD;
 
-  auto stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(m, k, l));
-  auto stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(n, k, l));
+  auto stride_A = cutlass::make_cute_packed_stride(StrideA{}, cute::make_shape(m, k * SplitK, l));
+  auto stride_B = cutlass::make_cute_packed_stride(StrideB{}, cute::make_shape(n, k * SplitK, l));
   auto stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(m, n, l));
   auto stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(m, n, l));
 
-  auto layout_SFA = ScaleConfig::tile_atom_to_shape_SFA(make_shape(m, n, k, l));
-  auto layout_SFB = ScaleConfig::tile_atom_to_shape_SFB(make_shape(m, n, k, l));
+  auto layout_SFA = ScaleConfig::tile_atom_to_shape_SFA(make_shape(m, n, k * SplitK, l));
+  auto layout_SFB = ScaleConfig::tile_atom_to_shape_SFB(make_shape(m, n, k * SplitK, l));
+
+  if constexpr (SplitK > 1) {
+    static_assert(ScaleMajorK);
+    cute::get<2>(stride_A) = k;
+    cute::get<2>(stride_B) = k;
+    cute::get<2>(layout_SFA.stride()) = k / 128;
+    cute::get<2>(layout_SFB.stride()) = k / 128;
+  }
 
   typename Gemm::Arguments arguments{cutlass::gemm::GemmUniversalMode::kGemm,
                                      {m, n, k, l},
@@ -322,4 +330,6 @@ void groupwise_fp8(TensorView a, TensorView weight, TensorView scale_a, TensorVi
         << "groupwise FP8 execution error: " << cudaGetErrorString(result);
   }
 }
+
+#include "groupwise_splitk.cuh"
 #endif

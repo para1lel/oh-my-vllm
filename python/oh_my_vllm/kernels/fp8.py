@@ -90,6 +90,10 @@ def _project_quantized(data, scale, weight, weight_scale, *, logical_rows=None):
     """Project validated row-major FP8 data without a second quantization."""
     rows = data.shape[0] if logical_rows is None else logical_rows
     small = rows <= 32
+    if small and weight.shape[0] == 5120 and weight.shape[1] in (17408, 6144):
+        from .cuda_backend.groupwise import gemm_splitk
+
+        return gemm_splitk(data[:rows], weight, scale[:rows], weight_scale)
     if not small:
         from .cuda_backend.groupwise import gemm
 

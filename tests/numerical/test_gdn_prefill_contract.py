@@ -1,5 +1,6 @@
 """Independent state, storage, and replay contracts for native GDN prefill."""
 
+import math
 import subprocess
 import sys
 
@@ -62,6 +63,138 @@ def test_changed_inputs_and_ragged_offsets_replay_independent_reference():
         verify("gdn_prefill", lambda expected=expected: expected, lambda: actual)
 
 
+@pytest.mark.parametrize("length", [129, 257])
+def test_near_collinear_keys_and_unit_beta_preserve_chunk_state(length):
+    args = inputs(length)
+    keys = torch.randn(1, 16, 128, device="cuda", dtype=torch.bfloat16)
+    args[1].copy_(keys + torch.randn_like(args[1]) * 0.001)
+    args[3].fill_(-0.000001)
+    args[4].fill_(0.999)
+    expected = reference(*args)
+    actual = prefill(*args)
+    verify("gdn_prefill", lambda expected=expected: expected, lambda: actual)
+
+
+@pytest.mark.parametrize("beta", [0.0, 0.1, 0.5, 0.999])
+@pytest.mark.parametrize("keys", ["constant", "alternating", "near_collinear"])
+def test_structured_keys_and_mixed_chunks_replay_state_contract(beta, keys):
+    args = inputs(257, torch.int64)
+    base = torch.randn(1, 16, 128, device="cuda", dtype=torch.bfloat16)
+    args[1][64:192].copy_(base)
+    if keys == "alternating":
+        args[1][65:192:2].neg_()
+    elif keys == "near_collinear":
+        args[1][64:192].add_(torch.randn_like(args[1][64:192]) * 0.01)
+    args[3].zero_()
+    args[4].fill_(beta)
+    for _ in range(2):
+        prefill(*args)
+    graph = torch.cuda.CUDAGraph()
+    torch.cuda.synchronize()
+    with torch.cuda.graph(graph):
+        actual = prefill(*args)
+    for multiplier in (0.75, 1.25):
+        args[0].mul_(multiplier)
+        args[2].mul_(multiplier)
+        args[3].sub_(0.01)
+        args[4].mul_(0.95)
+        expected = reference(*args)
+        graph.replay()
+        verify("gdn_prefill", lambda expected=expected: expected, lambda: actual)
+    del graph
+    torch.cuda.synchronize()
+
+
+@pytest.mark.parametrize(
+    "correlation", [0.12, 0.13, 0.29, 0.31, 0.44, 0.46, 0.6, 0.8, 0.84, 0.86]
+)
+@pytest.mark.parametrize("beta", [0.5, 0.95, 0.999])
+def test_correlation_route_boundary_preserves_independent_state(correlation, beta):
+    args = inputs(257)
+    args[1].zero_()
+    args[1][:, :, 0].fill_(math.sqrt(correlation))
+    indices = (torch.arange(257, device="cuda") % 64 + 1).view(-1, 1, 1)
+    args[1].scatter_(2, indices.expand(-1, 16, 1), math.sqrt(1 - correlation))
+    args[3].fill_(-0.001)
+    args[4].fill_(beta)
+    expected = reference(*args)
+    actual = prefill(*args)
+    verify("gdn_prefill", lambda expected=expected: expected, lambda: actual)
+    _, normalized = normalize_qk(args[0], args[1])
+    coefficients = torch.empty(7, 48, 64, 64, device="cuda", dtype=torch.bfloat16)
+    cumulative = torch.empty(7, 48, 64, device="cuda")
+    conditioning = torch.empty(7, 48, device="cuda", dtype=torch.int32)
+    compiled().gdn_chunk_prepare(
+        normalized, args[3], args[4], args[6], coefficients, cumulative, conditioning
+    )
+    gram = normalized[:64, 0].float() @ normalized[:64, 0].float().T
+    gram.diagonal().zero_()
+    expected_route = int(
+        gram.abs().max().item() > 0.3 or gram.square().sum(-1).max().item() > 1
+    )
+    assert torch.all(conditioning[:4] == expected_route).item()
+
+
+def test_changed_keys_replay_normal_constant_precise_normal_chunks():
+    args = inputs(257)
+    orthogonal_keys = torch.zeros_like(args[1])
+    indices = (torch.arange(257, device="cuda") % 64).view(-1, 1, 1)
+    orthogonal_keys.scatter_(2, indices.expand(-1, 16, 1), 1)
+    base = torch.randn(1, 16, 128, device="cuda", dtype=torch.bfloat16)
+    coefficients = torch.empty(7, 48, 64, 64, device="cuda", dtype=torch.bfloat16)
+    cumulative = torch.empty(7, 48, 64, device="cuda")
+    conditioning = torch.empty(7, 48, device="cuda", dtype=torch.int32)
+    graph = torch.cuda.CUDAGraph()
+    for _ in range(2):
+        prefill(*args)
+    torch.cuda.synchronize()
+    with torch.cuda.graph(graph):
+        actual = prefill(*args)
+    for mode in ("normal", "constant", "precise", "normal"):
+        if mode == "normal":
+            args[1].copy_(orthogonal_keys)
+        else:
+            args[1].copy_(base)
+            if mode == "precise":
+                args[1][1::2].neg_()
+        args[0].mul_(0.9)
+        args[2].mul_(0.75)
+        args[3].mul_(0.8)
+        args[4].mul_(0.8)
+        args[5].add_(0.01)
+        _, normalized = normalize_qk(args[0], args[1])
+        compiled().gdn_chunk_prepare(
+            normalized,
+            args[3],
+            args[4],
+            args[6],
+            coefficients,
+            cumulative,
+            conditioning,
+        )
+        assert torch.all(
+            conditioning[:4] == {"normal": 0, "constant": 2, "precise": 1}[mode]
+        ).item()
+        expected = reference(*args)
+        graph.replay()
+        verify("gdn_prefill", lambda expected=expected: expected, lambda: actual)
+
+
+@pytest.mark.parametrize("state_scale", [1, 100, 1000])
+@pytest.mark.parametrize("zero_values", [False, True])
+def test_constant_keys_preserve_large_initial_state_and_zero_values(
+    state_scale, zero_values
+):
+    args = inputs(257)
+    args[1].copy_(args[1][:1].clone())
+    args[5].mul_(state_scale / 0.01)
+    if zero_values:
+        args[2].zero_()
+    expected = reference(*args)
+    actual = prefill(*args)
+    verify("gdn_prefill", lambda expected=expected: expected, lambda: actual)
+
+
 @pytest.mark.parametrize("unaligned", [False, True])
 def test_chunk_scratch_capacity_alias_and_output_canaries(unaligned):
     q, k, v, decay, beta, state, offsets = inputs(129)
@@ -88,6 +221,10 @@ def test_chunk_scratch_capacity_alias_and_output_canaries(unaligned):
     chunks = 5
     coefficients = torch.empty(chunks, 48, 64, 64, device="cuda", dtype=torch.bfloat16)
     cumulative = torch.empty(chunks, 48, 64, device="cuda")
+    conditioning_storage = torch.full(
+        (chunks + 2, 48), 29, device="cuda", dtype=torch.int32
+    )
+    conditioning = conditioning_storage[1:-1]
     transformed_keys = torch.empty(
         chunks, 48, 64, 128, device="cuda", dtype=torch.bfloat16
     )
@@ -110,10 +247,28 @@ def test_chunk_scratch_capacity_alias_and_output_canaries(unaligned):
     module = compiled()
     with pytest.raises(Exception, match="Check failed"):
         module.gdn_chunk_prepare(
-            k, decay, beta, offsets, coefficients[:2], cumulative[:2]
+            k, decay, beta, offsets, coefficients[:2], cumulative[:2], conditioning[:2]
         )
-    module.gdn_chunk_prepare(k, decay, beta, offsets, coefficients, cumulative)
-    module.gdn_chunk_project(q, k, v, offsets, coefficients, cumulative, *intermediates)
+    with pytest.raises(Exception, match="Check failed"):
+        module.gdn_chunk_prepare(
+            k, decay, beta, offsets, coefficients, cumulative, conditioning[:-1]
+        )
+    with pytest.raises(Exception, match="Check failed"):
+        module.gdn_chunk_prepare(
+            k,
+            decay,
+            beta,
+            offsets,
+            coefficients,
+            cumulative,
+            cumulative.view(torch.int32).flatten()[: chunks * 48].view(chunks, 48),
+        )
+    module.gdn_chunk_prepare(
+        k, decay, beta, offsets, coefficients, cumulative, conditioning
+    )
+    module.gdn_chunk_project(
+        q, k, v, offsets, coefficients, cumulative, *intermediates, conditioning
+    )
     with pytest.raises(Exception, match="Check failed"):
         module.gdn_chunk_project(
             q,
@@ -126,6 +281,7 @@ def test_chunk_scratch_capacity_alias_and_output_canaries(unaligned):
             transformed_values,
             query_key_scores,
             carried_keys,
+            conditioning,
         )
     with pytest.raises(Exception, match="Check failed"):
         module.gdn_chunk_project(
@@ -139,6 +295,7 @@ def test_chunk_scratch_capacity_alias_and_output_canaries(unaligned):
             transformed_values,
             query_key_scores,
             transformed_keys,
+            conditioning,
         )
     with pytest.raises(Exception, match="Check failed"):
         module.gdn_chunk_scan(
@@ -152,6 +309,9 @@ def test_chunk_scratch_capacity_alias_and_output_canaries(unaligned):
             *intermediates,
             output,
             final,
+            conditioning,
+            decay,
+            beta,
         )
     with pytest.raises(Exception, match="Check failed"):
         module.gdn_chunk_scan(
@@ -165,11 +325,32 @@ def test_chunk_scratch_capacity_alias_and_output_canaries(unaligned):
             *intermediates,
             output,
             state,
+            conditioning,
+            decay,
+            beta,
         )
     module.gdn_chunk_scan(
-        q, k, v, state, offsets, coefficients, cumulative, *intermediates, output, final
+        q,
+        k,
+        v,
+        state,
+        offsets,
+        coefficients,
+        cumulative,
+        *intermediates,
+        output,
+        final,
+        conditioning,
+        decay,
+        beta,
     )
     verify("gdn_prefill", lambda: expected, lambda: (output, final))
+    torch.testing.assert_close(
+        conditioning_storage[[0, -1]],
+        torch.full_like(conditioning_storage[[0, -1]], 29),
+        rtol=0,
+        atol=0,
+    )
     for source_storage, initial in source_storages:
         torch.testing.assert_close(source_storage, initial, rtol=0, atol=0)
     torch.testing.assert_close(

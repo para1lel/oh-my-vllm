@@ -81,12 +81,49 @@ __device__ void multiply(const __nv_bfloat16 *a, int leading_a, const __nv_bfloa
   __syncthreads();
 }
 
+__device__ void invert_unit_triangular(const float *lower, float *inverse, float *product) {
+  if (threadIdx.x < 64) {
+    const int column = threadIdx.x, limit = (column / 8 + 1) * 8;
+    for (int row = column + 1; row < limit; ++row) {
+      float value = -lower[row * 64 + column];
+      for (int inner = column + 1; inner < row; ++inner)
+        value -= lower[row * 64 + inner] * inverse[inner * 64 + column];
+      inverse[row * 64 + column] = value;
+    }
+  }
+  __syncthreads();
+  // Cross blocks use -C^-1 B A^-1 in FP32 before the coefficient's BF16 boundary.
+  for (int width = 16; width <= 64; width *= 2) {
+    const int half = width / 2, blocks = 64 / width, total = blocks * half * half;
+    for (int index = threadIdx.x; index < total; index += blockDim.x) {
+      const int block = index / (half * half);
+      const int row = block * width + half + index / half % half;
+      const int column = block * width + index % half;
+      float result = 0;
+      for (int inner = block * width + half; inner <= row; ++inner)
+        result += inverse[row * 64 + inner] * lower[inner * 64 + column];
+      product[row * 64 + column] = result;
+    }
+    __syncthreads();
+    for (int index = threadIdx.x; index < total; index += blockDim.x) {
+      const int block = index / (half * half);
+      const int row = block * width + half + index / half % half;
+      const int column = block * width + index % half;
+      float result = 0;
+      for (int inner = column; inner < block * width + half; ++inner)
+        result -= product[row * 64 + inner] * inverse[inner * 64 + column];
+      inverse[row * 64 + column] = result;
+    }
+    __syncthreads();
+  }
+}
+
 __global__ void prepare_kernel(const __nv_bfloat16 *__restrict__ keys,
                                const float *__restrict__ decay, const float *__restrict__ beta,
                                const void *__restrict__ starts, bool wide, int sequences,
                                int query_heads, int value_heads, int64_t tokens, int64_t key_stride,
                                __nv_bfloat16 *__restrict__ coefficients,
-                               float *__restrict__ cumulative_decay) {
+                               float *__restrict__ cumulative_decay, int32_t *conditioning) {
   pdl_dependency_wait();
   pdl_launch_next();
   if (!valid_gdn_offsets(starts, wide, sequences, tokens)) {
@@ -135,30 +172,54 @@ __global__ void prepare_kernel(const __nv_bfloat16 *__restrict__ keys,
     }
   }
   __syncthreads();
+  bool different_key = false;
+  for (int i = threadIdx.x; i < count * 128; i += blockDim.x)
+    different_key |= __bfloat16_as_ushort(key[i / 128 * key_pitch + i % 128]) !=
+                     __bfloat16_as_ushort(key[i % 128]);
+  const bool constant_key = __syncthreads_or(different_key) == 0;
+  float squared_norm = 0;
+#pragma unroll
+  for (int i = 0; i < 4; ++i) {
+    float value = __bfloat162float(key[threadIdx.x % 32 + i * 32]);
+    squared_norm += value * value;
+  }
+  squared_norm = warp_sum(squared_norm);
+  const int64_t base = (int64_t(chunk) * value_heads + head) * 64;
+  if (constant_key && squared_norm >= 0.5f) {
+    if (threadIdx.x == 0)
+      conditioning[int64_t(chunk) * value_heads + head] = 2;
+    if (threadIdx.x < 64)
+      cumulative_decay[base + threadIdx.x] = log_decay[threadIdx.x];
+    return;
+  }
   multiply<64, 64, 128, false, true>(key, 136, key, 136, lower, 64);
+  bool needs_precise_recurrence = false;
+  for (int row = threadIdx.x / 32; row < count; row += blockDim.x / 32) {
+    float row_squared_norm = 0;
+    for (int column = threadIdx.x % 32; column < count; column += 32) {
+      const float correlation = column == row ? 0 : lower[row * 64 + column];
+      row_squared_norm += correlation * correlation;
+      needs_precise_recurrence |= fabsf(correlation) > 0.3f;
+    }
+    needs_precise_recurrence |= warp_sum(row_squared_norm) > 1.0f;
+  }
+  const int precise_recurrence = __syncthreads_or(needs_precise_recurrence);
+  if (threadIdx.x == 0)
+    conditioning[int64_t(chunk) * value_heads + head] = precise_recurrence;
+  if (threadIdx.x < 64)
+    cumulative_decay[base + threadIdx.x] = log_decay[threadIdx.x];
+  if (precise_recurrence)
+    return;
   for (int i = threadIdx.x; i < 64 * 64; i += blockDim.x) {
-    int row = i / 64, column = i % 64;
+    const int row = i / 64, column = i % 64;
     lower[i] =
         row > column ? lower[i] * update[row] * expf(log_decay[row] - log_decay[column]) : 0.0f;
     inverse[i] = row == column ? 1.0f : 0.0f;
   }
   __syncthreads();
-  // Solve the unit triangular system in FP32 before its BF16 tensor-core boundary.
-  for (int row = 1; row < 64; ++row) {
-    if (threadIdx.x < row) {
-      int column = threadIdx.x;
-      float value = -lower[row * 64 + column];
-      for (int inner = column + 1; inner < row; ++inner)
-        value -= lower[row * 64 + inner] * inverse[inner * 64 + column];
-      inverse[row * 64 + column] = value;
-    }
-    __syncthreads();
-  }
-  const int64_t base = (int64_t(chunk) * value_heads + head) * 64;
+  invert_unit_triangular(lower, inverse, reinterpret_cast<float *>(key));
   for (int i = threadIdx.x; i < 64 * 64; i += blockDim.x)
     coefficients[base * 64 + i] = __float2bfloat16_rn(inverse[i] * update[i % 64]);
-  if (threadIdx.x < 64)
-    cumulative_decay[base + threadIdx.x] = log_decay[threadIdx.x];
 }
 
 __global__ void project_kernel(const __nv_bfloat16 *queries, const __nv_bfloat16 *keys,
@@ -167,7 +228,7 @@ __global__ void project_kernel(const __nv_bfloat16 *queries, const __nv_bfloat16
                                const __nv_bfloat16 *coeff, const float *decay,
                                __nv_bfloat16 *transformed_keys, float *transformed_values,
                                __nv_bfloat16 *query_key_scores, __nv_bfloat16 *carried_keys,
-                               int64_t tokens) {
+                               int64_t tokens, const int32_t *conditioning) {
   pdl_dependency_wait();
   pdl_launch_next();
   if (!valid_gdn_offsets(starts, wide, sequences, tokens)) {
@@ -183,6 +244,8 @@ __global__ void project_kernel(const __nv_bfloat16 *queries, const __nv_bfloat16
     prefix += chunks;
   }
   if (sequence == sequences)
+    return;
+  if (conditioning[int64_t(chunk) * hv + head])
     return;
   int64_t first = index_at(starts, wide, sequence) + (chunk - prefix) * 64;
   int count = min(int64_t(64), index_at(starts, wide, sequence + 1) - first), qh = head / (hv / hk);
@@ -268,6 +331,11 @@ __global__ void project_kernel(const __nv_bfloat16 *queries, const __nv_bfloat16
   }
 }
 
+} // namespace gdn_chunk
+
+#include "gdn_precision.cuh"
+
+namespace gdn_chunk {
 __global__ void
 scan_kernel(const __nv_bfloat16 *__restrict__ queries, const __nv_bfloat16 *__restrict__ keys,
             const __nv_bfloat16 *__restrict__ values, const float *__restrict__ initial,
@@ -277,7 +345,8 @@ scan_kernel(const __nv_bfloat16 *__restrict__ queries, const __nv_bfloat16 *__re
             const float *__restrict__ cumulative_decay, const __nv_bfloat16 *transformed_keys,
             const float *transformed_values, const __nv_bfloat16 *query_key_scores,
             const __nv_bfloat16 *carried_keys, __nv_bfloat16 *__restrict__ output,
-            float *__restrict__ final) {
+            float *__restrict__ final, const int32_t *conditioning, const float *decay,
+            const float *beta) {
   pdl_dependency_wait();
   pdl_launch_next();
   if (!valid_gdn_offsets(starts, wide, sequences, tokens)) {
@@ -311,6 +380,19 @@ scan_kernel(const __nv_bfloat16 *__restrict__ queries, const __nv_bfloat16 *__re
     const int count = min(int64_t(64), end - position);
     const int chunk = prefix + (position - first) / 64;
     const int64_t base = (int64_t(chunk) * value_heads + head) * 64;
+    if (conditioning[int64_t(chunk) * value_heads + head] == 2) {
+      scan_constant_key_chunk(queries, keys, values, decay, beta, cumulative_decay + base, position,
+                              count, query_heads, value_heads, head, value_offset, qs, ks, vs,
+                              state, state_bf16, a, b, temporary, delta, log_decay, decayed_rows,
+                              final_rows, output);
+      continue;
+    }
+    if (conditioning[int64_t(chunk) * value_heads + head]) {
+      scan_precise_chunk(queries, keys, values, decay, beta, position, count, query_heads,
+                         value_heads, head, value_offset, qs, ks, vs, state, state_bf16, storage,
+                         output);
+      continue;
+    }
     if (threadIdx.x < 64) {
       log_decay[threadIdx.x] = cumulative_decay[base + threadIdx.x];
       decayed_rows[threadIdx.x] = expf(cumulative_decay[base + threadIdx.x]);
@@ -377,7 +459,8 @@ scan_kernel(const __nv_bfloat16 *__restrict__ queries, const __nv_bfloat16 *__re
 } // namespace gdn_chunk
 
 void gdn_chunk_prepare(TensorView keys, TensorView decay, TensorView beta, TensorView starts,
-                       TensorView coefficients, TensorView cumulative_decay) {
+                       TensorView coefficients, TensorView cumulative_decay,
+                       TensorView conditioning) {
   TVM_FFI_ICHECK(keys.ndim() == 3 && keys.size(0) > 0 && keys.size(0) <= INT32_MAX &&
                  keys.size(1) > 0 && decay.ndim() == 2 && decay.size(1) > 0 &&
                  decay.size(1) <= 65535 && decay.size(1) % keys.size(1) == 0);
@@ -390,20 +473,27 @@ void gdn_chunk_prepare(TensorView keys, TensorView decay, TensorView beta, Tenso
                    gate.stride(0) == decay.size(1));
   const int64_t chunks = (keys.size(0) + 63) / 64 + starts.size(0) - 2;
   validate_gdn_scratch(coefficients, cumulative_decay, keys, chunks, decay.size(1));
-  for (auto destination : {coefficients, cumulative_decay})
+  TVM_FFI_ICHECK(conditioning.ndim() == 2 && conditioning.size(0) == chunks &&
+                 conditioning.size(1) == decay.size(1) && has_dtype(conditioning, kDLInt, 32) &&
+                 same_cuda_device(conditioning, keys) && aligned(conditioning, 4) &&
+                 conditioning.stride(0) == decay.size(1) && conditioning.stride(1) == 1);
+  for (auto source : {coefficients, cumulative_decay})
+    TVM_FFI_ICHECK(disjoint_storage(conditioning, source));
+  for (auto destination : {coefficients, cumulative_decay, conditioning})
     for (auto source : {keys, decay, beta, starts})
       TVM_FFI_ICHECK(disjoint_storage(destination, source));
   TVM_FFI_ICHECK(cudaFuncSetAttribute(gdn_chunk::prepare_kernel,
                                       cudaFuncAttributeMaxDynamicSharedMemorySize,
                                       50688) == cudaSuccess);
   auto stream = stream_for(keys, "gdn_chunk_prepare");
-  launch_kernel(gdn_chunk::prepare_kernel, dim3(coefficients.size(0), decay.size(1)), 128, 50688,
+  launch_kernel(gdn_chunk::prepare_kernel, dim3(coefficients.size(0), decay.size(1)), 256, 50688,
                 stream, static_cast<const __nv_bfloat16 *>(keys.data_ptr()),
                 static_cast<const float *>(decay.data_ptr()),
                 static_cast<const float *>(beta.data_ptr()), starts.data_ptr(),
                 starts.dtype().bits == 64, starts.size(0) - 1, keys.size(1), decay.size(1),
                 keys.size(0), keys.stride(0), static_cast<__nv_bfloat16 *>(coefficients.data_ptr()),
-                static_cast<float *>(cumulative_decay.data_ptr()));
+                static_cast<float *>(cumulative_decay.data_ptr()),
+                static_cast<int32_t *>(conditioning.data_ptr()));
   finish_cuda_launch(stream, "gdn_chunk_prepare");
 }
 
@@ -411,7 +501,7 @@ void gdn_chunk_scan(TensorView q, TensorView k, TensorView v, TensorView initial
                     TensorView coefficients, TensorView cumulative_decay,
                     TensorView transformed_keys, TensorView transformed_values,
                     TensorView query_key_scores, TensorView carried_keys, TensorView output,
-                    TensorView final) {
+                    TensorView final, TensorView conditioning, TensorView decay, TensorView beta) {
   TVM_FFI_ICHECK(q.ndim() == 3 && q.size(0) > 0 && q.size(0) <= INT32_MAX && q.size(1) > 0 &&
                  v.ndim() == 3 && v.size(1) > 0 && v.size(1) <= 65535 &&
                  v.size(1) % q.size(1) == 0);
@@ -427,9 +517,18 @@ void gdn_chunk_scan(TensorView q, TensorView k, TensorView v, TensorView initial
   validate_gdn_scratch(coefficients, cumulative_decay, q, chunks, v.size(1));
   validate_gdn_intermediates(transformed_keys, transformed_values, query_key_scores, carried_keys,
                              q, chunks, v.size(1));
+  TVM_FFI_ICHECK(conditioning.ndim() == 2 && conditioning.size(0) == chunks &&
+                 conditioning.size(1) == v.size(1) && has_dtype(conditioning, kDLInt, 32) &&
+                 same_cuda_device(conditioning, q) && aligned(conditioning, 4) &&
+                 conditioning.stride(0) == v.size(1) && conditioning.stride(1) == 1);
+  for (auto gate : {decay, beta})
+    TVM_FFI_ICHECK(same_cuda_device(gate, q) && gate.ndim() == 2 && gate.size(0) == q.size(0) &&
+                   gate.size(1) == v.size(1) && has_dtype(gate, kDLFloat, 32) && aligned(gate, 4) &&
+                   gate.stride(0) == v.size(1) && gate.stride(1) == 1);
   for (auto destination : {output, final})
-    for (auto source : {q, k, v, initial, starts, coefficients, cumulative_decay, transformed_keys,
-                        transformed_values, query_key_scores, carried_keys})
+    for (auto source :
+         {q, k, v, initial, starts, coefficients, cumulative_decay, transformed_keys,
+          transformed_values, query_key_scores, carried_keys, conditioning, decay, beta})
       TVM_FFI_ICHECK(disjoint_storage(destination, source));
   TVM_FFI_ICHECK(disjoint_storage(output, final));
   TVM_FFI_ICHECK(cudaFuncSetAttribute(gdn_chunk::scan_kernel,
@@ -437,7 +536,7 @@ void gdn_chunk_scan(TensorView q, TensorView k, TensorView v, TensorView initial
                                       gdn_chunk::scan_shared_bytes) == cudaSuccess);
   auto stream = stream_for(q, "gdn_chunk_scan");
   launch_kernel(
-      gdn_chunk::scan_kernel, dim3(starts.size(0) - 1, v.size(1), 128 / gdn_chunk::value_tile), 128,
+      gdn_chunk::scan_kernel, dim3(starts.size(0) - 1, v.size(1), 128 / gdn_chunk::value_tile), 256,
       gdn_chunk::scan_shared_bytes, stream, static_cast<const __nv_bfloat16 *>(q.data_ptr()),
       static_cast<const __nv_bfloat16 *>(k.data_ptr()),
       static_cast<const __nv_bfloat16 *>(v.data_ptr()),
@@ -449,14 +548,17 @@ void gdn_chunk_scan(TensorView q, TensorView k, TensorView v, TensorView initial
       static_cast<const float *>(transformed_values.data_ptr()),
       static_cast<const __nv_bfloat16 *>(query_key_scores.data_ptr()),
       static_cast<const __nv_bfloat16 *>(carried_keys.data_ptr()),
-      static_cast<__nv_bfloat16 *>(output.data_ptr()), static_cast<float *>(final.data_ptr()));
+      static_cast<__nv_bfloat16 *>(output.data_ptr()), static_cast<float *>(final.data_ptr()),
+      static_cast<const int32_t *>(conditioning.data_ptr()),
+      static_cast<const float *>(decay.data_ptr()), static_cast<const float *>(beta.data_ptr()));
   finish_cuda_launch(stream, "gdn_chunk_scan");
 }
 
 void gdn_chunk_project(TensorView q, TensorView k, TensorView v, TensorView starts,
                        TensorView coefficients, TensorView cumulative_decay,
                        TensorView transformed_keys, TensorView transformed_values,
-                       TensorView query_key_scores, TensorView carried_keys) {
+                       TensorView query_key_scores, TensorView carried_keys,
+                       TensorView conditioning) {
   TVM_FFI_ICHECK(q.ndim() == 3 && q.size(0) > 0 && q.size(0) <= INT32_MAX && q.size(1) > 0 &&
                  v.ndim() == 3 && v.size(1) > 0 && v.size(1) <= 65535 &&
                  v.size(1) % q.size(1) == 0);
@@ -468,10 +570,14 @@ void gdn_chunk_project(TensorView q, TensorView k, TensorView v, TensorView star
   validate_gdn_scratch(coefficients, cumulative_decay, q, chunks, v.size(1));
   validate_gdn_intermediates(transformed_keys, transformed_values, query_key_scores, carried_keys,
                              q, chunks, v.size(1));
+  TVM_FFI_ICHECK(conditioning.ndim() == 2 && conditioning.size(0) == chunks &&
+                 conditioning.size(1) == v.size(1) && has_dtype(conditioning, kDLInt, 32) &&
+                 same_cuda_device(conditioning, q) && aligned(conditioning, 4) &&
+                 conditioning.stride(0) == v.size(1) && conditioning.stride(1) == 1);
   const std::array<TensorView, 4> destinations = {transformed_keys, transformed_values,
                                                   query_key_scores, carried_keys};
   for (size_t i = 0; i < destinations.size(); ++i) {
-    for (auto source : {q, k, v, starts, coefficients, cumulative_decay})
+    for (auto source : {q, k, v, starts, coefficients, cumulative_decay, conditioning})
       TVM_FFI_ICHECK(disjoint_storage(destinations[i], source));
     for (size_t j = 0; j < i; ++j)
       TVM_FFI_ICHECK(disjoint_storage(destinations[i], destinations[j]));
@@ -491,6 +597,7 @@ void gdn_chunk_project(TensorView q, TensorView k, TensorView v, TensorView star
                 static_cast<__nv_bfloat16 *>(transformed_keys.data_ptr()),
                 static_cast<float *>(transformed_values.data_ptr()),
                 static_cast<__nv_bfloat16 *>(query_key_scores.data_ptr()),
-                static_cast<__nv_bfloat16 *>(carried_keys.data_ptr()), q.size(0));
+                static_cast<__nv_bfloat16 *>(carried_keys.data_ptr()), q.size(0),
+                static_cast<const int32_t *>(conditioning.data_ptr()));
   finish_cuda_launch(stream, "gdn_chunk_project");
 }

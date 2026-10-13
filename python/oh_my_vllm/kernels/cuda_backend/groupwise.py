@@ -95,7 +95,7 @@ def compiled():
         "torch": str(torch.__version__),
         "tvm_ffi": importlib.metadata.version("apache-tvm-ffi"),
         "flags": _FLAGS,
-        "functions": ["groupwise_fp8"],
+        "functions": ["groupwise_fp8", "groupwise_fp8_splitk"],
         "backend": "cuda",
         "tvm_cuda_target": _effective_cuda_target(),
         "cxx": os.environ.get("CXX", "c++"),
@@ -106,7 +106,7 @@ def compiled():
         build_inline(
             "oh_my_vllm_groupwise_fp8",
             cuda_sources=source,
-            functions=["groupwise_fp8"],
+            functions=["groupwise_fp8", "groupwise_fp8_splitk"],
             backend="cuda",
             extra_include_paths=[str(source_directory), *(str(root) for root in roots)],
             extra_cuda_cflags=[
@@ -139,10 +139,12 @@ def compiled():
 
 
 def _project_headers() -> dict[str, str]:
-    """Identify root GEMM headers independently of native operator headers."""
+    """Identify owned GEMM headers and their shared CUDA contracts."""
+    root = Path(__file__).parent
+    paths = [*root.glob("*.cuh"), root / "operators/common.cuh"]
     return {
-        path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in sorted(Path(__file__).parent.glob("*.cuh"))
+        path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(paths)
     }
 
 
@@ -174,5 +176,29 @@ def gemm(a, weight, scale_a, scale_weight, *, mma_sm=1, scale_major_k=True):
         mma_sm,
         execution_policy().pdl,
         scale_major_k,
+    )
+    return output
+
+
+def gemm_splitk(a, weight, scale_a, scale_weight):
+    """Merge FP32 K segments before the projection's single BF16 boundary."""
+    rows, width = a.shape
+    splits = 8 if width == 17408 and rows <= 8 else 2
+    with torch.cuda.device(a.device):
+        module = compiled()
+    output = torch.empty((rows, weight.shape[0]), device=a.device, dtype=torch.bfloat16)
+    partials = torch.empty(
+        (splits, rows, weight.shape[0]), device=a.device, dtype=torch.float32
+    )
+    module.groupwise_fp8_splitk(
+        a,
+        weight,
+        scale_a,
+        scale_weight,
+        partials,
+        output,
+        _workspace(a.device),
+        splits,
+        execution_policy().pdl,
     )
     return output

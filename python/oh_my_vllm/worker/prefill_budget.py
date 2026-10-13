@@ -68,7 +68,9 @@ def prefill_capture_headroom(model, caches, tokens, batch, write_slots) -> int:
     sequences = batch.state_reads.numel()
     state_scratch = sequences * 48 * 128 * 128 * (4 + 4 + 4)
     chunks = (rows + 63) // 64 + sequences - 1
-    chunk_scratch = chunks * 48 * 64 * (64 * 2 + 4 + (128 + 64 + 128) * 2 + 128 * 4)
+    chunk_scratch = (
+        chunks * 48 * (64 * (64 * 2 + 4 + (128 + 64 + 128) * 2 + 128 * 4) + 4)
+    )
     # All five individual feature taps coexist with their concatenated output.
     feature_bytes = rows * 5120 * 2 * len(model.feature_layer_ids)
     outputs = rows * 5120 * 2 + 2 * feature_bytes

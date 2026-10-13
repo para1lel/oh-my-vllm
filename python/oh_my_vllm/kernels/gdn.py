@@ -217,6 +217,9 @@ def prefill(
         cumulative_decay = torch.empty(
             (chunks, v.shape[1], 64), device=q.device, dtype=torch.float32
         )
+        conditioning = torch.empty(
+            (chunks, v.shape[1]), device=q.device, dtype=torch.int32
+        )
         chunk_shape = (chunks, v.shape[1], 64)
         transformed_keys = torch.empty(
             (*chunk_shape, 128), device=q.device, dtype=torch.bfloat16
@@ -229,7 +232,7 @@ def prefill(
         )
         carried_keys = torch.empty_like(transformed_keys)
         module.gdn_chunk_prepare(
-            k, log_decay, beta, starts, coefficients, cumulative_decay
+            k, log_decay, beta, starts, coefficients, cumulative_decay, conditioning
         )
         module.gdn_chunk_project(
             q,
@@ -242,6 +245,7 @@ def prefill(
             transformed_values,
             query_key_scores,
             carried_keys,
+            conditioning,
         )
         module.gdn_chunk_scan(
             q,
@@ -257,5 +261,8 @@ def prefill(
             carried_keys,
             output,
             final,
+            conditioning,
+            log_decay,
+            beta,
         )
     return output, final
