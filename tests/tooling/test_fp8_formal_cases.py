@@ -12,12 +12,12 @@ from development.kernels.cases import cases, original_cases
 def test_all_existing_230_case_ids_are_kept():
     path = (
         Path(__file__).resolve().parents[2]
-        / "bench/evidence/2026-10-09-dspark-operators.json"
+        / "development/kernels/original-case-ids.json"
     )
-    previous = json.loads(path.read_text())["data"]["rows"]
+    previous = json.loads(path.read_text())["with_dspark"]
     ids = {case["id"] for case in original_cases()}
     assert len(previous) == 230
-    assert {case["id"] for case in previous} <= ids
+    assert set(previous) <= ids
 
 
 def test_owned_fp8_matrix_covers_all_distinct_projection_chains():

@@ -77,7 +77,7 @@ def prefill_capture_headroom(model, caches, tokens, batch, write_slots) -> int:
         + 2 * (layer_scratch + state_scratch + outputs)
         + (256 << 20)
     )
-    if batch.attention.ragged:
+    if getattr(batch.attention, "key_slots", None) is not None:
         # Compact BF16 K and V [context_tokens,4,256], in both allocators.
         required += 2 * 2 * batch.attention.key_slots.numel() * 4 * 256 * 2
         required = max(32 << 30, required)

@@ -26,29 +26,25 @@ Set `EVIDENCE_DIR` to a writable external directory for full raw records and log
 
 ```bash
 scripts/with-env.sh python benchmarks/kernels.py --list
-scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda python benchmarks/kernels.py --output "$EVIDENCE_DIR/operators.json"
+scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda python benchmarks/kernels.py --numerical-only --output "$EVIDENCE_DIR/operators.json"
 ```
 
-Set `EVIDENCE_DIR` to a writable evidence directory in an external directory.
-The harness uses static cases from `development/kernels/cases.py`.
+Use a new external output path. [Static cases](../../development/kernels/cases.py) define the matrix.
+All 517 cases must pass independent numerical, rounding, mutation, and state contracts.
+The original 317 case IDs stay. The supplements add 200 legal production cases.
 
-Use `--operations NAME` to select an operation family.
-Give `--case-id ID` for each selected case ID.
-A selection with less than 517 case IDs reports `coverage.complete=false` and keeps the full per-case protocol.
-All 517 case IDs must pass before matrix acceptance.
+Partial selection reports `coverage.complete=false` and cannot prove full-matrix acceptance alone.
+Use `--operations NAME` or repeated `--case-id ID` for diagnosis.
 
-The original 317 cases keep their configurations and comparison pins.
-The supplements add 200 cases from `development/kernels/long_prefill_cases.py` and `development/kernels/short_prefill_cases.py`.
-Partial collections must keep their source scope and cannot supply full-matrix acceptance alone.
+Omit `--numerical-only` for paired tuning measurements after numerical verification.
+Each case then has three rounds of twenty interleaved pairs, with one hundred graph repetitions per sample.
+The hierarchical-bootstrap one-sided 95% bound gives time saved against the repository CUDA baseline.
+Operator timing is diagnostic. Complete framework phase latency supplies the performance gate.
 
-It verifies full output and written caches before timing.
-Each case must have three rounds of twenty interleaved pairs and faster CUDA medians in all rounds.
-The hierarchical-bootstrap one-sided 95% bound on time saved must be positive.
-
-Each timing sample uses one hundred graph repetitions.
 Restore persistent state between cases and rounds.
 Normalization, Q/K, recurrent, and convolution verification must have one fast and zero generic host dispatches.
-Do not substitute graph replay counts for host dispatch counts.
+Graph replay counts cannot replace host dispatch counts.
+The complete GPU matrix validates numerical-only collection. Separate selected timings validate candidate comparisons.
 Use [kernel development](../kernels.md) for provenance and profiling separation.
 
 ## Framework performance

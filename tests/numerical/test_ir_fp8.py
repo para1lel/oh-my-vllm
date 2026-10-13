@@ -41,7 +41,7 @@ def test_fp8_reference_keeps_nonfinite_cuda_semantics():
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
 @pytest.mark.parametrize("silu_gate", [False, True])
-def test_fp8_linear_compiled_matches_existing_flashinfer_path(silu_gate):
+def test_fp8_linear_compiled_matches_existing_cuda_path(silu_gate):
     from oh_my_vllm.kernels import fp8 as old_fp8
 
     width = 5120

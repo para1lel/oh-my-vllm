@@ -62,7 +62,7 @@ export const sourceNotes = {
       ["gamma", "5120 个 FP32 RMS 乘数.", "逐列调节归一化值; 加载时已包含 norm 权重的 offset."],
       ["weight", "FP8 [输出列数, 5120] 投影权重.", "MLP 的 gate/up 合并为 34816 列."],
       ["scale", "FP32 [输出列数/128, 40] 权重缩放系数.", "每项对应权重的 128x128 块, 与激活的每行 128 元素 scale 一起用于 GEMM."],
-      ["_OP", "add_norm_fp8_linear 的语义操作对象.", "选择 native 数学参考或当前 CUDA / TileLang provider, 返回残差和与 BF16 投影."],
+      ["_OP", "add_norm_fp8_linear 的语义操作对象.", "选择 native 数学参考或自有 CUDA provider, 返回残差和与 BF16 投影."],
     ],
   },
   tokenHistory: {
@@ -306,7 +306,7 @@ Object.assign(sourceNotes, {
       ["residual", "延迟相加的残差分支, 初始为 None.", "forward_residual 同时返回新分支与累积残差, 以融合加法和归一化."],
       ["layer / cache / self.layers", "当前层, 该层缓存, 64 层列表.", "一一对应执行 FA 或 GDN 计算."],
       ["self.embedding / self.norm / self.head", "词嵌入矩阵, 最后 RMS 权重, 词表投影矩阵.", "embedding 查输入; norm 整理幅度; head 产生 248320 个词表分数."],
-      ["hidden.shape[0] / logits_gemm / F.linear", "输入行数, 小行数投影核, 通用矩阵投影.", "最多 32 行用 CuTe-DSL, 更多行走 F.linear 后转 FP32."],
+      ["hidden.shape[0] / logits_gemm / F.linear", "输入行数与标准 Torch 矩阵投影.", "统一使用 Torch F.linear 得到 BF16 投影结果后转换为 FP32."],
       ["index / batch.output_indices / self._selected_final", "当前层号, 所需输出行和最后层的选中计算入口.", "第 63 层可保留全部 K/V 并只产生需要的最终特征. 返回数组仍按原输入行寻址, 采样器只读取选中行."],
     ],
   },

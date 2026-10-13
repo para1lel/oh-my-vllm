@@ -1,12 +1,11 @@
-"""Thin TileFoundry adapters calling the frozen TileLang comparison.
+"""TileFoundry runtime adapters for repository CUDA operations.
 
 Logical state is made explicit for HIR comparison. Cache/graph safety and the
 full shape/dtype matrix remain covered by the existing project tests.
 """
 
 import torch
-from oh_my_vllm.kernels import dspark_tilelang_reference as dspark
-from oh_my_vllm.kernels.tilelang_reference import (
+from oh_my_vllm.kernels import (
     attention,
     convolution,
     decode_attention,
@@ -15,6 +14,7 @@ from oh_my_vllm.kernels.tilelang_reference import (
     gdn,
     normalization,
 )
+from oh_my_vllm.kernels import dspark_attention as dspark
 from tilefoundry.runtime import runtime_func, runtime_module
 
 from development.kernels.semantics import Operators
@@ -52,7 +52,7 @@ def _prefill_delta(q, k, v, g, beta, state):
 
 
 @runtime_module(Operators)
-class TileLang:
+class CUDA:
     @runtime_func
     def silu(self, x):
         return elementwise.silu_mul(x)
@@ -132,7 +132,7 @@ class TileLang:
 
     @runtime_func
     def prepare_attention(self, packed, qw, kw, positions, old_k, old_v):
-        from oh_my_vllm.kernels.attention_prepare import tilelang_prepare
+        from oh_my_vllm.kernels.attention_prepare import prepare_attention
 
         cache = torch.zeros(
             (2, 2, 784, 4, 256), device=packed.device, dtype=packed.dtype
@@ -140,7 +140,7 @@ class TileLang:
         prior = torch.arange(783, device=packed.device, dtype=torch.int64)
         slots = torch.tensor([783, 784], device=packed.device, dtype=torch.int64)
         attention.append(cache, old_k, old_v, prior)
-        q = tilelang_prepare(packed, qw, kw, positions, cache, slots)
+        q = prepare_attention(packed, qw, kw, positions, cache, slots)
         logical = torch.arange(785, device=packed.device)
         return (
             q,
@@ -150,7 +150,7 @@ class TileLang:
 
     @runtime_func
     def prepare_context(self, packed, kw, positions, old_k, old_v):
-        from oh_my_vllm.kernels.partial_attention import tilelang_context
+        from oh_my_vllm.kernels.partial_attention import prepare_context
 
         cache = torch.zeros(
             (2, 2, 784, 4, 256), device=packed.device, dtype=packed.dtype
@@ -158,7 +158,7 @@ class TileLang:
         prior = torch.arange(783, device=packed.device, dtype=torch.int64)
         slots = torch.tensor([783, 784], device=packed.device, dtype=torch.int64)
         attention.append(cache, old_k, old_v, prior)
-        tilelang_context(packed, kw, positions, cache, slots)
+        prepare_context(packed, kw, positions, cache, slots)
         logical = torch.arange(785, device=packed.device)
         return cache[logical // 784, 0, logical % 784], cache[
             logical // 784, 1, logical % 784
@@ -166,9 +166,9 @@ class TileLang:
 
     @runtime_func
     def prepare_query(self, packed, qw, positions):
-        from oh_my_vllm.kernels.partial_attention import tilelang_query
+        from oh_my_vllm.kernels.partial_attention import prepare_query
 
-        return tilelang_query(packed, qw, positions)
+        return prepare_query(packed, qw, positions)
 
     @runtime_func
     def quant(self, x):

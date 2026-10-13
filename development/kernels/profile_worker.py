@@ -8,9 +8,9 @@ import os
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--case", required=True)
-    parser.add_argument("--backend", required=True, choices=("cuda", "tilelang"))
+    parser.add_argument("--backend", required=True, choices=("cuda", "cuda-baseline"))
     args = parser.parse_args()
-    os.environ["OH_MY_VLLM_KERNEL_BACKEND"] = args.backend
+    os.environ["OH_MY_VLLM_KERNEL_BACKEND"] = "cuda"
 
     import torch
 
@@ -21,7 +21,7 @@ def main():
     verify_reference()
     case = next(c for c in cases() if c["id"] == args.case)
     torch.manual_seed(784)
-    reference, candidate = fixture(case["configuration"])
+    reference, candidate = fixture(case["configuration"], timing=True)
     function = candidate if args.backend == "cuda" else reference
     for _ in range(10):
         output = function()

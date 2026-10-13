@@ -1,4 +1,4 @@
-"""Formal static-shape CUDA versus frozen TileLang performance collection."""
+"""Independent numerical acceptance and paired repository CUDA tuning diagnostics."""
 
 import argparse
 import json
@@ -16,7 +16,12 @@ from measurement import hardware_identity  # noqa: E402
 
 from development.kernels.cases import UNUSED, cases  # noqa: E402
 from development.kernels.comparison import compare  # noqa: E402
-from development.kernels.reference import source_hashes, verify_reference  # noqa: E402
+from development.kernels.reference import (  # noqa: E402
+    native_inputs,
+    source_hashes,
+    validate_native_inputs,
+    verify_reference,
+)
 from development.kernels.variant import (  # noqa: E402
     REQUIRED_FAST,
     verify_fast_dispatch,
@@ -31,6 +36,11 @@ def main():
     parser.add_argument("--operations", nargs="+")
     parser.add_argument("--case-id", action="append", default=[])
     parser.add_argument("--list", action="store_true")
+    parser.add_argument(
+        "--numerical-only",
+        action="store_true",
+        help="verify the complete numerical/state matrix without paired tuning timings",
+    )
     args = parser.parse_args()
     matrix = cases()
     unknown = set(args.case_id) - {case["id"] for case in matrix}
@@ -68,6 +78,7 @@ def main():
     reference_manifest = verify_reference()
     hardware = hardware_identity()
     initial_sources = sources()
+    initial_native_inputs = native_inputs()
     failures = []
     stop = threading.Event()
 
@@ -91,9 +102,18 @@ def main():
         ).strip(),
         source_status=status,
         sources_sha256=initial_sources,
+        native_gemm_inputs=initial_native_inputs,
         hardware=hardware,
         reference=reference_manifest,
+        measurement_scope="numerical"
+        if args.numerical_only
+        else "numerical_and_paired",
         protocol=(
+            "Complete independent numerical, rounding, mutation and "
+            "per-sequence state verification; no timing samples."
+        )
+        if args.numerical_only
+        else (
             "Complete static maximum-shape operations; three independent warm rounds, "
             "twenty alternating-order pairs/round,100 graph repetitions/sample. "
             "External timing events inside each graph exclude host submission gaps. "
@@ -102,7 +122,7 @@ def main():
             "verification. Stateless Q/K timing uses matching output-address sequences "
             "in one graph pool after independent verification; whole functions keep "
             "their output allocations. Other mutable destinations remain isolated. "
-            "Before timing, compare both backends' "
+            "Before timing, compare independent mathematics and repository CUDA "
             "returns and written cache/state slots at existing tolerances."
         ),
         coverage=dict(
@@ -136,44 +156,58 @@ def main():
                 if variant_before is not None
                 else None
             )
-            if operation == "dspark_append":
-                # The full append is idempotent with immutable K/V. Identical
-                # destinations remove allocator-address bandwidth bias. The
-                # numerical gate above still compares independent caches.
-                del reference, candidate, witnesses
-                reference, candidate = fixture(
-                    case["configuration"], shared_append_destination=True
-                )
-                witnesses = ()
             pool_audit = None
-            if operation == "qk":
-                # Independent output verification above precedes shared-pool
-                # timing. Each whole operation allocates its original outputs.
-                del reference, candidate, witnesses
-                reference, candidate, timing_inputs = fixture(
-                    case["configuration"], qk_inputs=True
-                )
-                witnesses = ()
-                pool_audit = {}
-                raw = measure(
-                    reference, candidate, qk_inputs=timing_inputs, audit=pool_audit
-                )
-                del timing_inputs
-            else:
-                raw = measure(reference, candidate)
+            raw = None
+            if not args.numerical_only:
+                if operation == "dspark_append":
+                    # The full append is idempotent with immutable K/V. Identical
+                    # destinations remove allocator-address bandwidth bias. The
+                    # numerical gate above still compares independent caches.
+                    del reference, candidate, witnesses
+                    reference, candidate = fixture(
+                        case["configuration"],
+                        shared_append_destination=True,
+                        timing=True,
+                    )
+                    witnesses = ()
+                    raw = measure(reference, candidate)
+                elif operation == "qk":
+                    # Independent output verification above precedes shared-pool
+                    # timing. Each whole operation allocates its original outputs.
+                    del reference, candidate, witnesses
+                    reference, candidate, timing_inputs = fixture(
+                        case["configuration"], qk_inputs=True, timing=True
+                    )
+                    witnesses = ()
+                    pool_audit = {}
+                    raw = measure(
+                        reference, candidate, qk_inputs=timing_inputs, audit=pool_audit
+                    )
+                    del timing_inputs
+                else:
+                    del reference, candidate, witnesses
+                    reference, candidate = fixture(case["configuration"], timing=True)
+                    witnesses = ()
+                    raw = measure(reference, candidate)
             report["cuda_build_provenance"] = provenance(
                 require_loaded=True, require_compiler=True
             )
             report["cuda_gemm_build_provenance"] = gemm_provenance()
             if (
-                operation in ("fp8_linear", "add_norm_fp8_linear")
-                and case["configuration"]["tokens"] > 32
+                operation
+                in ("fp8_linear", "add_norm_fp8_linear", "gated_norm_fp8_linear")
                 and report["cuda_gemm_build_provenance"] is None
             ):
                 raise RuntimeError(
                     "owned FP8 measurement lacks its loaded CUDA module identity"
                 )
-            decision = compare(raw)
+            if report["cuda_gemm_build_provenance"] is not None:
+                validate_native_inputs(
+                    report["cuda_gemm_build_provenance"], initial_native_inputs
+                )
+            if native_inputs() != initial_native_inputs:
+                raise RuntimeError("native headers changed during collection")
+            decision = None if args.numerical_only else compare(raw)
             if failures or sources() != initial_sources:
                 raise RuntimeError(
                     failures[0] if failures else "source changed during measurement"
@@ -182,7 +216,9 @@ def main():
                 dict(
                     **case,
                     output_verification=output_verification,
-                    timing_destination=(
+                    timing_destination=None
+                    if args.numerical_only
+                    else (
                         "shared_append_cache"
                         if operation == "dspark_append"
                         else "shared_qk_output_pool"
@@ -197,8 +233,12 @@ def main():
             )
             print(
                 case["id"],
-                "PASS" if decision["passed"] else "FAIL",
-                decision["paired_mean_gain_ms"],
+                "NUMERICAL_PASS"
+                if decision is None
+                else "FASTER"
+                if decision["passed"]
+                else "DIAGNOSTIC",
+                None if decision is None else decision["paired_mean_gain_ms"],
                 flush=True,
             )
             del reference, candidate, witnesses
@@ -220,10 +260,10 @@ def main():
                 operation, operation
             )
             report["estimates"][operation] = analyze(symbol)
-        if sources() != initial_sources:
+        if sources() != initial_sources or native_inputs() != initial_native_inputs:
             raise RuntimeError("source changed during analysis")
         report["selected_passed"] = all(
-            r["comparison"]["passed"] for r in report["rows"]
+            r["output_verification"]["passed"] for r in report["rows"]
         )
         report["passed"] = (
             not report["diagnostic"]
@@ -238,7 +278,7 @@ def main():
         thread.join()
         report["interference"] = failures
         save()
-    if not all(r["comparison"]["passed"] for r in report["rows"]):
+    if not all(r["output_verification"]["passed"] for r in report["rows"]):
         raise SystemExit(1)
 
 

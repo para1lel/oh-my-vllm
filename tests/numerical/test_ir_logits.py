@@ -1,4 +1,4 @@
-"""The small-batch vocabulary projection keeps its FlashInfer path in IR."""
+"""The small-batch vocabulary projection keeps its Torch path in IR."""
 
 import pytest
 import torch
@@ -22,12 +22,10 @@ def test_logits_native_semantics_and_fake_contract():
 
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
-def test_logits_flashinfer_compiles_and_matches_existing_path():
-    from flashinfer.gemm import mm_bf16
-
+def test_logits_compiles_and_matches_torch():
     hidden = torch.randn(2, 5120, device="cuda", dtype=torch.bfloat16)
     head = torch.randn(256, 5120, device="cuda", dtype=torch.bfloat16)
-    expected = mm_bf16(hidden, head.T, backend="cute-dsl").float()
+    expected = F.linear(hidden, head).float()
     eager = logits_gemm(hidden, head)
     compiled = compile_forward(logits_gemm)(hidden, head)
     torch.testing.assert_close(eager, expected, rtol=0, atol=0)

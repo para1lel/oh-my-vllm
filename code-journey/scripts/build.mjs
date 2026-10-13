@@ -132,13 +132,12 @@ async function buildSourceCoverage(highlighter) {
     if (!files.has(path)) files.set(path, { source, name, entries: [] });
     files.get(path).entries.push(record);
   }
-  // Include every substantive first-party runtime file. Frozen comparison
-  // providers and test modules are deliberately outside the default call chain.
+  // Every substantive runtime file has a chapter entry.
   for (const directory of ["crates", "python/oh_my_vllm"]) {
     for (const entry of await readdir(resolve(repo, directory), { recursive: true, withFileTypes: true })) {
       if (!entry.isFile()) continue;
       const path = resolve(entry.parentPath, entry.name).slice(repo.length + 1);
-      if (!/\.(rs|py|cu|cuh)$/.test(path) || /\/tests[/.]|\/tilelang_reference\//.test(path)) continue;
+      if (!/\.(rs|py|cu|cuh)$/.test(path) || /\/tests[/.]/.test(path)) continue;
       if (!files.has(path)) {
         const text = await readFile(resolve(repo, path), "utf8");
         if (path.endsWith("/__init__.py") && !text.replace(/"""[\s\S]*?"""|#.*|\s/g, "")) continue;

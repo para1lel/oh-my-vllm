@@ -4,7 +4,7 @@
 
 ## 决策
 
-以 `torch.library` 算子作为项目 CUDA 和关键 FlashInfer 算子的语义节点.
+以 `torch.library` 算子作为仓库 CUDA 和 Torch 操作的语义节点.
 每个节点具有 executable reference, fake shape/dtype 合同, mutation schema 和有序 provider.
 Provider 从静态 phase, shape, dtype, layout 和 device metadata 选择, 不读取 tensor value.
 选择时冻结 registry configuration.

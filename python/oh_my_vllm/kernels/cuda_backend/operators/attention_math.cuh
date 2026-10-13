@@ -10,7 +10,7 @@ __device__ float warp_max(float value) {
 }
 
 // Softmax uses the same hardware base-two exponential family as the frozen
-// TileLang path. Keep approximation local: RoPE and FP8 retain their math rules.
+// Keep approximation local: RoPE and FP8 retain their math rules.
 __device__ __forceinline__ float softmax_exp2(float value) {
   float result;
   asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(result) : "f"(value));

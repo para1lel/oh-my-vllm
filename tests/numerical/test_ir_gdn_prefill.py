@@ -1,4 +1,4 @@
-"""FlashInfer GDN prefill is an opaque, schema-checked IR node."""
+"""CUDA GDN prefill is an opaque, schema-checked IR node."""
 
 import pytest
 import torch
@@ -29,7 +29,7 @@ def test_native_gdn_prefill_reference_and_schema():
 
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
-def test_compiled_gdn_prefill_matches_existing_flashinfer_path():
+def test_compiled_gdn_prefill_matches_existing_cuda_path():
     from oh_my_vllm.kernels.gdn import prefill as old_prefill
 
     q = torch.randn(7, 16, 128, device="cuda", dtype=torch.bfloat16)

@@ -147,20 +147,16 @@ def validate_profile_loads(records, backend, config, sources, gemm_inputs):
 
     from development.kernels.fixtures import ENTRIES
 
-    if backend != "cuda":
-        return
+    if backend not in ("cuda", "cuda-baseline"):
+        raise ValueError("unknown profiler CUDA provider")
     if config["operation"] not in ENTRIES:
         raise ValueError("unknown profiler provider requirement")
     required = {"pointwise"}
-    if (
-        config["operation"]
-        in {
-            "fp8_linear",
-            "add_norm_fp8_linear",
-            "gated_norm_fp8_linear",
-        }
-        and config["tokens"] > 32
-    ):
+    if config["operation"] in {
+        "fp8_linear",
+        "add_norm_fp8_linear",
+        "gated_norm_fp8_linear",
+    }:
         required.add("gemm")
     for key in required:
         record = records.get(key)
@@ -284,7 +280,7 @@ def collect(case_id, ncu):
         limitation="Profiler replay only; not timing or performance acceptance",
     )
     with tempfile.TemporaryDirectory(prefix="oh-my-vllm-ncu-") as directory:
-        for backend in ("tilelang", "cuda"):
+        for backend in ("cuda-baseline", "cuda"):
             path = Path(directory) / f"{backend}.csv"
             command = [
                 str(ncu),

@@ -201,8 +201,7 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void *float_buffer, size_t float_buf
 } // namespace oh_my_vllm
 
 // The owned route supports the checkpoint's regular BF16-output FP8 matrices.
-// Small M stays on the independently validated TRT path until its replacement
-// has numerical and performance evidence.
+// Public FP8 projections pad small matrices before this native tile entry.
 void groupwise_fp8(TensorView a, TensorView weight, TensorView scale_a, TensorView scale_weight,
                    TensorView output, TensorView workspace, int64_t mma_sm, bool pdl,
                    bool scale_major_k) {

@@ -33,16 +33,7 @@ Full mode must use a model location before selection of an idle UUID-pinned B200
 CPU tokenizer/HTTP integrations skip explicitly when the model is unset.
 Pure validation tests stay active without a checkpoint.
 
-The FlashInfer artifact tests use the pinned cubin package without CUDA initialization.
-They load checked B200 manifests, headers, and a binary kernel with downloads disabled.
-They also reject incorrect artifact bytes and package version mismatches.
-
-```bash
-scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/tooling/test_flashinfer_artifacts.py -q
-```
-
-These CPU checks do not prove model timing or cold-start acceptance.
-Keep new project caches for GPU acceptance. Do not install a prewarmed project or FlashInfer JIT cache.
+Keep new project caches for GPU acceptance. Do not install a prewarmed project JIT cache.
 
 CPU executable diagnostics tests check executable lifetime, owner intersections, pending callbacks, and explicit incomplete coverage.
 They keep diagnostic snapshots without a strong executable reference.
@@ -55,7 +46,7 @@ scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/integration
 ```
 
 Q/K GPU tests include FP64 output, FP32 edge values, and changed-input graph replay at the short dispatch boundary.
-Keep their original numerical tolerances and the frozen TileLang comparison.
+Keep their original numerical tolerances and independent references.
 
 Each diagnostic source-audit task must have a new successful source read.
 Grep output and earlier history do not satisfy the existing per-item source-read gate.

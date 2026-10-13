@@ -45,8 +45,8 @@
 <p>采集器要求每个实际 kernel 都返回 21 类指标, 并核对值是否完整且有限. Tensor cycles 描述 Tensor Core 活跃程度, issue active 描述 warp 发出指令的活跃程度, eligible warps 描述每个周期可以发出指令的 warp 数. 同时记录 DRAM 和 L2 字节数, 以及 TMA load/store 字节数. TMA 请求可能由 L2 满足, 因而 TMA 流量与 HBM 流量分别解释.</p>
 <p>短 scoreboard 等待可能来自 shared memory 或 TMEM 数据尚未就绪; 长 scoreboard 等待常用于检查设备存储读取. 用 SourceCounters 和源码对应的指令位置继续定位, 这些采样比例表示观察到的 warp 状态, 不能直接乘以墙钟时间当作某条指令的耗时. warp-specialized kernel 的不同角色还会调整寄存器预算, launch 的寄存器数需要结合各角色的 SASS 和 local-memory 流量分析.</p>
 <p>TileFoundry 的代表形状用于检查 HIR 逻辑和中间数组, 例如观测器的门控投影 HIR 使用 2 行, 输出宽度 256. 同一报告的 Nsight 采集运行真实 624 行, 输出宽度 5120 的完整 GDN 投影链. 两者的 shape 与用途分别列出, 框架下界则使用真实调度的有效形状.</p>
-<p>317 项 CUDA 与固定 TileLang 的数值及速度门槛独立执行: 原有 230 项保持, 增加 16 项残差 RMS/FP8 gate/up 整链, 16 项门控 RMS/FP8 output 整链, 28 项其余自有 FP8 投影, 6 项完整 GDN prefill, 8 项 K/V 投影, 8 项 context 准备和 5 项 query 准备. cases.py 从生产预算, 784-token 页, 批大小和验证行数推导最大形状. 每个正式算子案例核对完整返回与修改区域, 在三轮二十对交错测量中检查速度, 保护已采用的 CUDA 实现.</p>
-<p>长 prefill 共享预算后, 矩阵保留这 317 项, 再增加 200 项, 共 517 项. B2/B4 每轮总计 31360 行, 首轮移位 context 为 31358/31356 行. 长 MTP proposal 最大长度是 135166, catch-up 包含最终 sampled anchor 时为 135168; prefill endpoint 为 131073, 图 extent 为 135168. 新案例覆盖不同元数据类型和 B4 单行双 buffer 路径, 沿用原数值容差与速度门槛, 当前尚待统一 GPU 验收. Target attention 走 FlashInfer, 最大长度为 135167; MTP fc 是 BF16, 不计入自有 FP8 案例.</p>
+<p>317 项原始案例保留独立数值契约: 原有 230 项保持, 增加 16 项残差 RMS/FP8 gate/up 整链, 16 项门控 RMS/FP8 output 整链, 28 项其余自有 FP8 投影, 6 项完整 GDN prefill, 8 项 K/V 投影, 8 项 context 准备和 5 项 query 准备. cases.py 从生产预算, 784-token 页, 批大小和验证行数推导最大形状. 每个正式算子案例核对完整返回与修改区域, 在三轮二十对交错测量中诊断候选和仓库 CUDA 基线的差异, 最终以框架两倍门槛验收.</p>
+<p>长 prefill 共享预算后, 矩阵保留这 317 项, 再增加 200 项, 共 517 项. B2/B4 每轮总计 31360 行, 首轮移位 context 为 31358/31356 行. 长 MTP proposal 最大长度是 135166, catch-up 包含最终 sampled anchor 时为 135168; prefill endpoint 为 131073, 图 extent 为 135168. 新案例覆盖不同元数据类型和 B4 单行双 buffer 路径, 沿用原数值容差和状态契约, 当前尚待统一 GPU 验收. Target attention 使用自有 CUDA 或 Torch 标准 attention, 最大长度为 135167; MTP fc 是 BF16, 不计入自有 FP8 案例.</p>
 <p>最后的形状也会改变实现路径. B1 最后一个完整页片段有 2352 行; 最终 target 尾段每条 144 行, MTP context 则补回 checkpoint 的一行 hidden, 每条为 145 行. 案例同时保留这些 shape 下不同的 normalization, Q/K, convolution, GEMM 和 quantization 路径, 以及接近输出上限时三行 verification 的 warp 分支. 大形状通过不能代替这些分支的验证.</p>
 <p>补充范围还包括十二项短输入与 prefix 负载的混合 step: target 的 prefill 尾段和 decode 一起进入卷积与投影, GDN prefill 则只处理 prefill 行. MTP 会恢复边界 hidden, prefix context 每条共有 625 行. DSpark hidden RMS 保留少于 4096 行的路径. 这些静态最大值来自同一次合法调度, 不把不同请求或轮次的最大维度任意拼接.</p>
 <p>完整接受的 MTP step 恰好在页边界结束时, 下一轮会恢复一行 hidden, 加上五行目标输入, 每条请求最多有六行 context. 量化案例因此还覆盖 batch 1, 2, 4 下的 6, 12, 24 行. Attention 和 MLP 每条请求只选择一个 endpoint, 这不会产生六行 query attention.</p>
@@ -60,7 +60,7 @@
 <p>大型 gate/up 的 K tile 从 128 改为 256, 每次覆盖两个原有 scale 分组, 配合三级流水. 32144 行的独立 profile 中, local 读取由 39207168 降到 1096704 个 sector, 写入由 4983712 降到 14208. 两次 GEMM 都使用 168 个寄存器, 占用率约为 11.72%. shared-memory 动态用量从 160256 增至 185344 字节. 这些观测帮助解释指令和 spill 的变化.</p>
 <p>计时覆盖残差 RMS, FP8 量化, scale 打包, 尾行补齐和 GEMM. 三轮每轮二十对, 每个计时图内执行一百次操作. 32144 与 32290 行的完整输出逐位相同, 平均节省约 0.487 与 0.487 ms. Nsight 运行独立于这组计时. 理论下界按相同的有效行, scale 分组和参数范围计算.</p>
 <h2>证据怎样绑定源码与运行环境</h2>
-<p>framework 收集器核对提交过且保持不变的源码, Rust 二进制的构建输入摘要, checkpoint 内容, 硬件身份和实际 FA/GDN 容量. runtime_contract 绑定语义路径, 外部 provider 和 CUTLASS/CCCL 模板; 实际加载库的摘要与编译参数必须匹配. 未识别的 GPU 操作会阻止正式验收.</p>
+<p>framework 收集器核对提交过且保持不变的源码, Rust 二进制的构建输入摘要, checkpoint 内容, 硬件身份和实际 FA/GDN 容量. runtime_contract 绑定语义路径与原生 CUTLASS/CCCL 模板; 实际加载库的摘要与编译参数必须匹配. 未识别的 GPU 操作会阻止正式验收.</p>
 <p>measurement.audit 检查 measured 起点后的编译和图捕获日志, 并检查缓存文件变化. 原始记录与 profiling 保存在本地或外部目录, 仓库保存可移植的测量摘要和原始 SHA. 每个结论标明源码, 配置, 负载和检查范围.</p>
 <p>完整服务检查还覆盖 Chat, Responses, streaming, tools, thinking, 约束生成和取消, 包括 DSpark serving oh-my-pi agents. 性能测试, 容量测试与真实服务分别检查不同边界. 运行结束后释放该次启动的 worker 和临时服务端口.</p>
 <h2>四个固定会话怎样验证长期稳定服务</h2>

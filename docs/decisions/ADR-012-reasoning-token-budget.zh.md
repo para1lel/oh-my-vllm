@@ -41,7 +41,7 @@ DSpark 提议可以使用不同分布. Target verification 使用受约束的分
 
 ## OMP 适配与限制
 
-当前安装的 OMP 为 `v18.4.3`.
+原始观测使用的 OMP 为 `v18.4.3`.
 已观察到的 Chat 与 Responses 请求省略 `thinking_token_budget`, 同时保留原有 `max` effort 到 `xhigh` 的映射.
 CPU 请求测试显示, model `compat.extraBody` 会为 Chat 添加此字段, 但 Responses 省略它.
 用服务默认值统一覆盖两种 API 与自动压缩, 无需分别修改客户端.
@@ -51,13 +51,8 @@ CPU 请求测试显示, model `compat.extraBody` 会为 Chat 添加此字段, �
 SSE 注释和 `response.in_progress` 不重置此计时器.
 Reasoning 预算不能减少编译或下载时间.
 
-Cubin 包与 FlashInfer 的版本相同. 它在请求前安装带版本的产物.
-默认情况下, FlashInfer 使用每个产物前进行校验.
-冷启动验证仍使用原客户端及其超时.
-
-比较环境将此包加入运行依赖 lock.
-冻结 TileLang manifest 绑定该 lock. DSpark manifest 绑定新的 TileLang manifest 哈希.
-参考内核哈希, case ID, 数值容差及 TileFoundry commit 保持不变.
+测量前编译仓库内核. 冷启动验证使用原客户端及其超时.
+每次采集保留原生源码, 头文件, 编译器, 用例和数值身份.
 
 此预算不检测思考结束后的重复, 不能保证答案质量或消除 worker 故障.
 保留这些失败, 修改后重新测试受影响工作负载.

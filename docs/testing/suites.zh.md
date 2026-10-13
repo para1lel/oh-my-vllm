@@ -33,16 +33,7 @@ Full 模式在等待空闲且绑定 UUID 的 B200 前要求模型位置.
 模型未配置时, CPU tokenizer / HTTP 集成测试明确跳过.
 纯校验测试无需 checkpoint, 仍然执行.
 
-FlashInfer 产物测试使用固定版本 cubin 包, 不初始化 CUDA.
-它们在禁止下载时加载经过校验的 B200 manifest, header 和一个二进制内核.
-它们还拒绝字节不符的产物和包版本不匹配.
-
-```bash
-scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/tooling/test_flashinfer_artifacts.py -q
-```
-
-这些 CPU 检查不能证明模型耗时或冷启动验收通过.
-GPU 验收保留全新项目缓存. 不安装预热的项目或 FlashInfer JIT cache.
+GPU 验收保留全新项目缓存. 不安装预热的项目 JIT cache.
 
 CPU executable 诊断测试检查 executable 生命周期, owner 交集, 等待中的回调, 以及明确的不完整覆盖范围.
 测试保留诊断快照, 不保留 executable 的强引用.
@@ -55,7 +46,7 @@ scripts/with-env.sh env CUDA_VISIBLE_DEVICES= python -m pytest tests/integration
 ```
 
 Q/K GPU 测试在短输入 dispatch 边界检查 FP64 输出, FP32 边界值, 以及输入改变后的图重放.
-保留原数值容差和固定版本的 TileLang 对比.
+保留原数值容差与独立参考.
 
 每个诊断性源码审计任务必须重新成功读取源码.
 Grep 输出和之前的历史记录不能满足原有的逐任务源码读取检查.

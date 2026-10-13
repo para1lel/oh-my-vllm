@@ -16,7 +16,6 @@ class DecodeAttention:
         tables: torch.Tensor,
         lengths: torch.Tensor,
         extent: int,
-        workspace=None,
         max_query_len: int = 5,
     ):
         from oh_my_vllm.ir.attention import register_plan
@@ -27,52 +26,18 @@ class DecodeAttention:
         self.max_query_len = max_query_len
         self.first = 0
         self.starts = None
-        self.workspace = workspace
-        self.native_metadata = None
         self._ir_handle = register_plan(self)
 
-    def prepare(self) -> None:
-        """Translate logical 784-token pages once per target model execution."""
-        if self.first:
-            return
-        if self.workspace is None:
-            self.workspace = torch.empty(
-                128 << 20, device=self.tables.device, dtype=torch.uint8
-            )
-        if self.starts is None:
-            tables, lengths = self.tables, self.lengths
-            starts = torch.arange(
-                len(lengths) + 1, device=lengths.device, dtype=torch.int32
-            )
-        else:
-            tables = self.tables.index_select(0, self.starts[:-1])
-            lengths = self.lengths.index_select(0, self.starts[1:] - 1)
-            starts = self.starts.to(torch.int32)
-        offsets = torch.arange(49, device=tables.device, dtype=torch.int32)
-        subpages = (tables[:, :, None] * 98 + offsets).flatten(1).to(torch.int32)
-        self.native_metadata = subpages, lengths.to(torch.int32), starts
-
     def __call__(self, query: torch.Tensor, cache: torch.Tensor) -> torch.Tensor:
-        from oh_my_vllm.ir.attention import (
-            TARGET_NATIVE_DECODE,
-            TARGET_OWNED_DECODE,
-            planned_attention,
-        )
+        from oh_my_vllm.ir.attention import TARGET_OWNED_DECODE, planned_attention
 
-        route = (
-            TARGET_NATIVE_DECODE
-            if self.first == 0 and self.native_metadata is not None
-            else TARGET_OWNED_DECODE
-        )
-        native = self.native_metadata if route == TARGET_NATIVE_DECODE else (None,) * 3
         return planned_attention(
             query,
             cache,
             self._ir_handle,
-            route,
+            TARGET_OWNED_DECODE,
             self.tables,
             self.lengths,
-            *native,
         )
 
     def _run(
@@ -81,33 +46,9 @@ class DecodeAttention:
         cache: torch.Tensor,
         tables: torch.Tensor | None = None,
         lengths: torch.Tensor | None = None,
-        native_tables: torch.Tensor | None = None,
-        native_lengths: torch.Tensor | None = None,
-        native_starts: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if tables is None or lengths is None:
             raise ValueError("target decode needs explicit tables and lengths")
-        if self.first == 0 and native_tables is not None:
-            from flashinfer.decode import trtllm_batch_decode_with_kv_cache
-
-            tables, lengths, starts = native_tables, native_lengths, native_starts
-            # Every logical page stores 49 K subpages followed by 49 V subpages.
-            # Offset views share the same indices; holes are never addressed.
-            blocks = cache.view(-1, 16, *cache.shape[-2:])
-            return trtllm_batch_decode_with_kv_cache(
-                query,
-                (blocks[:-49], blocks[49:]),
-                self.workspace,
-                tables,
-                lengths,
-                self.extent,
-                bmm1_scale=query.shape[-1] ** -0.5,
-                kv_layout="NHD",
-                backend="trtllm-gen",
-                q_len_per_req=None,
-                max_q_len=self.max_query_len if self.starts is not None else 1,
-                cum_seq_lens_q=starts,
-            )
         return decode(
             query,
             cache,
@@ -150,13 +91,8 @@ class DecodeGraph:
             tables.clone(),
             batch.positions.clone() + 1,
             extent,
-            workspace=getattr(batch.attention, "workspace", None),
             max_query_len=max_query_len,
         )
-        if self.attention.workspace is None:
-            self.attention.workspace = torch.empty(
-                128 << 20, device=tables.device, dtype=torch.uint8
-            )
         self.batch = Batch(
             **{
                 f.name: value.clone() if isinstance(value, torch.Tensor) else value
@@ -188,7 +124,6 @@ class DecodeGraph:
                     cache[fa_pages, :, fa_offsets] = backup
 
         def run() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
-            self.attention.prepare()
             if capture_features:
                 hidden, features = model.forward_features(
                     self.tokens, self.batch, caches

@@ -27,7 +27,6 @@ def replay_stream():
 def test_cluster_boundaries_replay_changed_data_and_scales(
     rows, pdl, replay_stream, monkeypatch
 ):
-    from flashinfer.gemm import gemm_fp8_nt_groupwise
     from oh_my_vllm.kernels.cuda_backend import groupwise
 
     monkeypatch.setattr(groupwise, "execution_policy", lambda: SimpleNamespace(pdl=pdl))
@@ -64,17 +63,7 @@ def test_cluster_boundaries_replay_changed_data_and_scales(
         data_before = data.view(torch.uint8).clone()
         activation_scale_before = scale_a.clone()
         scale_before = scale_weight.clone()
-        # This library route has its own unmodified one-CTA CUTLASS launcher.
-        expected = gemm_fp8_nt_groupwise(
-            data,
-            weight,
-            scale_a,
-            scale_weight,
-            scale_major_mode="K",
-            mma_sm=1,
-            out_dtype=torch.bfloat16,
-            backend="cutlass",
-        )
+        expected = groupwise.gemm(data, weight, scale_a, scale_weight, mma_sm=1)
         replay_stream.wait_stream(torch.cuda.current_stream())
         with torch.cuda.stream(replay_stream):
             graph.replay()
@@ -96,7 +85,6 @@ def test_cluster_boundaries_replay_changed_data_and_scales(
 def test_identity_epilogue_replay_preserves_inputs_and_output_guards(
     columns, inner, pdl, replay_stream
 ):
-    from flashinfer.gemm import gemm_fp8_nt_groupwise
     from oh_my_vllm.kernels.cuda_backend import groupwise
 
     rows = 624
@@ -156,16 +144,7 @@ def test_identity_epilogue_replay_preserves_inputs_and_output_guards(
             tensor.view(torch.uint8).clone()
             for tensor in (data, weight, scale_a, scale_weight)
         ]
-        expected = gemm_fp8_nt_groupwise(
-            data,
-            weight,
-            scale_a,
-            scale_weight,
-            scale_major_mode="K",
-            mma_sm=1,
-            out_dtype=torch.bfloat16,
-            backend="cutlass",
-        )
+        expected = groupwise.gemm(data, weight, scale_a, scale_weight, mma_sm=1)
         # The conversion callback must ignore old D, even when it contains NaN.
         result.fill_(float("nan"))
         replay_stream.wait_stream(torch.cuda.current_stream())

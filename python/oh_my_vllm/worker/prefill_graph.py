@@ -13,8 +13,8 @@ from oh_my_vllm.worker.graph_capture import capture_graph
 class PrefillGraph:
     """Capture a fixed query/context shape while keeping page addresses dynamic.
 
-    This family captures the ragged or native prefill attention path. Short FA2
-    plans retain their existing path. Independent graphs share scratch only when
+    This family captures prefill attention with compact valid KV rows.
+    Independent graphs share scratch only when
     their complete fork/join executions occur sequentially on the origin stream.
     """
 
@@ -25,8 +25,6 @@ class PrefillGraph:
         self.tokens = tokens.clone()
         self.attention = PagedAttention(workspace=batch.attention.workspace)
         self.attention.plan(*plan, 24, 4, 256)
-        if not (self.attention.native or self.attention.ragged):
-            raise ValueError("prefill graph requires native or ragged attention")
         self.batch = Batch(
             **{
                 f.name: value.clone() if isinstance(value, torch.Tensor) else value

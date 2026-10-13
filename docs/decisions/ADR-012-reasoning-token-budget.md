@@ -43,7 +43,7 @@ We used these sources to specify the contract. Project code and dependencies do 
 
 ## OMP integration and limits
 
-The installed OMP is `v18.4.3`.
+The original observation used OMP `v18.4.3`.
 Observed Chat and Responses requests omit `thinking_token_budget`, with their existing `max` effort mapping to `xhigh`.
 A CPU request test shows that model `compat.extraBody` adds the field for Chat but omits it for Responses.
 Use the service default to cover the two APIs and automatic compaction without different client patches.
@@ -53,13 +53,8 @@ The installed Responses adapter stops after `300000` milliseconds without an acc
 SSE comments and `response.in_progress` do not reset this timer.
 A reasoning budget cannot decrease compilation or download time.
 
-The cubin package has the same version as FlashInfer. It installs versioned artifacts before requests.
-By default, FlashInfer checks each artifact before use.
-Cold-start verification still uses the original client and its timeout.
-
-The comparison environment adds this package to the runtime lock.
-The frozen TileLang manifest binds that lock. The DSpark manifest binds the new TileLang manifest hash.
-Reference kernel hashes, case IDs, numerical tolerances, and TileFoundry commits stay unchanged.
+Compile repository kernels before measurement. Cold-start verification uses the original client and its timeout.
+Keep native source, header, compiler, case, and numerical identities in each collection.
 
 The budget does not detect repetition after reasoning ends. It cannot guarantee answer quality or eliminate worker failures.
 Keep those failures and test the affected workloads again after changes.

@@ -2,26 +2,6 @@
 
 import torch
 
-from .backend import NAME
-
-
-def tilelang_prepare(packed, q_weight, k_weight, positions, cache, slots):
-    """The original complete chain, explicitly bound to immutable kernels.
-
-    Preserve contiguous() rather than forcing a copy: single-token V can already
-    be contiguous. This is also the formal frozen-chain comparison.
-    """
-    from .tilelang_reference.attention import append
-    from .tilelang_reference.normalization import rms_rotary
-
-    qg, k, v = packed.split([12288, 1024, 1024], -1)
-    q = qg.reshape(-1, 24, 512)[..., :256]
-    q = rms_rotary(q, q_weight, positions)
-    k = rms_rotary(k.reshape(-1, 4, 256), k_weight, positions)
-    v = v.reshape(-1, 4, 256).contiguous()
-    append(cache, k, v, slots)
-    return q
-
 
 def prepare_attention(packed, q_weight, k_weight, positions, cache, slots):
     """Return normalized/rotated Q and write normalized K plus unchanged V.
@@ -59,12 +39,6 @@ def prepare_attention(packed, q_weight, k_weight, positions, cache, slots):
         for t in (packed, q_weight, k_weight, positions, slots)
     ):
         raise ValueError("attention cache must not overlap projection or metadata")
-    if NAME == "tilelang":
-        torch._assert_async(
-            torch.all((slots < 0) | (slots < len(cache) * 784)),
-            "FA slot exceeds cache capacity",
-        )
-        return tilelang_prepare(*tensors)
     from .cuda_backend import compiled
 
     out = torch.empty((len(packed), 24, 256), device=packed.device, dtype=packed.dtype)

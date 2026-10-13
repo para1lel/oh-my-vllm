@@ -27,13 +27,35 @@ _FLAGS = (
 )
 
 
+def _dependency_roots():
+    from . import _nvcc_identity
+
+    compiler, _ = _nvcc_identity()
+    if compiler is None:
+        raise RuntimeError("native GEMM headers require a CUDA toolkit")
+    data = Path(__file__).resolve().parents[4] / "3rdparty/cutlass"
+    roots = (
+        compiler.parent.parent / "include/cccl",
+        data / "include",
+        data / "tools/util/include",
+    )
+    if any(not root.is_dir() for root in roots):
+        raise RuntimeError("native CUTLASS or CUDA CCCL headers are missing")
+    return data, roots
+
+
 def _headers(data, roots):
-    return {
-        str(path.relative_to(data)): hashlib.sha256(path.read_bytes()).hexdigest()
-        for root in roots
-        for path in sorted(root.rglob("*"))
-        if path.is_file()
-    }
+    headers = {}
+    for root in roots:
+        prefix = (
+            root.relative_to(data).as_posix() if root.is_relative_to(data) else "cccl"
+        )
+        for path in sorted(root.rglob("*")):
+            if path.is_file():
+                headers[f"{prefix}/{path.relative_to(root)}"] = hashlib.sha256(
+                    path.read_bytes()
+                ).hexdigest()
+    return headers
 
 
 @cache
@@ -52,18 +74,7 @@ def compiled():
 
     if torch.cuda.get_device_capability() != (10, 0):
         raise RuntimeError("owned groupwise FP8 GEMM requires SM100")
-    data = importlib.metadata.distribution("flashinfer-python").locate_file(
-        "flashinfer/data"
-    )
-    include = data / "cutlass/include"
-    utilities = data / "cutlass/tools/util/include"
-    roots = (
-        data / "cccl/cub",
-        data / "cccl/libcudacxx/include",
-        data / "cccl/thrust",
-        include,
-        utilities,
-    )
+    data, roots = _dependency_roots()
     source_directory = Path(__file__).parent
     source = (source_directory / "groupwise_fp8.cu").read_text()
     project_headers = _project_headers()

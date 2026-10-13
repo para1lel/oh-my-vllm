@@ -9,3 +9,7 @@
 #include "operators/decode_attention.cuh"
 #include "operators/dspark_decode.cuh"
 #include "operators/normalized_quantization.cuh"
+
+#include "operators/gdn_prefill.cuh"
+
+#include "operators/gdn_chunk.cuh"

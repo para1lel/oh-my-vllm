@@ -1,12 +1,11 @@
-"""FlashInfer BF16 vocabulary GEMM with an FP32 semantic result."""
+"""Torch BF16 vocabulary GEMM with an FP32 semantic result."""
 
 from __future__ import annotations
 
 import torch
 import torch.nn.functional as F
 
-from .core import Operation, TensorSpec
-from .execution import execution_policy
+from .core import Operation
 
 
 def _fake_logits(hidden: torch.Tensor, head: torch.Tensor) -> torch.Tensor:
@@ -33,34 +32,8 @@ def _native_logits(hidden: torch.Tensor, head: torch.Tensor) -> torch.Tensor:
 _native_logits.register_fake(_fake_logits)
 
 
-@torch.library.custom_op("oh_my_vllm_flashinfer::logits_gemm", mutates_args=())
-def _flashinfer_logits(hidden: torch.Tensor, head: torch.Tensor) -> torch.Tensor:
-    from flashinfer.gemm import mm_bf16
-
-    return mm_bf16(
-        hidden, head.T, backend="cute-dsl", pdl=execution_policy().pdl
-    ).float()
-
-
-_flashinfer_logits.register_fake(_fake_logits)
-
-
 _LOGITS = Operation(
-    "logits_gemm",
-    _ir_logits,
-    _native_logits,
-    default_priority=("flashinfer",),
-)
-_LOGITS.register_impl(
-    "flashinfer",
-    _flashinfer_logits,
-    supports=lambda hidden, head: (
-        isinstance(hidden, TensorSpec)
-        and isinstance(head, TensorSpec)
-        and hidden.device.type == "cuda"
-        and head.device == hidden.device
-        and hidden.shape[0] <= 32
-    ),
+    "logits_gemm", _ir_logits, _native_logits, default_priority=("native",)
 )
 
 

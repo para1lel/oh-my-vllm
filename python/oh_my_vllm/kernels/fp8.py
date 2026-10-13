@@ -1,8 +1,8 @@
-"""Block-scaled FP8 projections with owned CUDA and FlashInfer providers."""
+"""Block-scaled FP8 projections with repository CUDA and native CUTLASS."""
 
 import torch
 
-from .backend import NAME, kernel
+from .backend import kernel
 
 _quantize = kernel("fp8", "_quantize")
 
@@ -41,13 +41,7 @@ def quantize(
     scales = torch.empty(shape, dtype=torch.float32, device=x.device)
     if column_major:
         scales = scales.T
-    if NAME == "cuda":
-        _quantize(column_major, silu_gate)(x, data, scales)
-    else:
-        tile = 16 if rows >= 128 and (silu_gate or not column_major) else 1
-        _quantize(
-            width, str(x.dtype).removeprefix("torch."), column_major, silu_gate, tile
-        )(x, data, scales)
+    _quantize(column_major, silu_gate)(x, data, scales)
     return data, scales
 
 
@@ -63,8 +57,7 @@ def linear(
         raise ValueError("FP8 inputs, weights and scales must be matrices")
     input_width = x.shape[1] // 2 if silu_gate else x.shape[1]
     _validate_weight(x, weight, weight_scale, input_width)
-    # Small TRT-LLM GEMM uses column-major activation scales.
-    column = x.shape[0] <= 32 or _large_mn_projection(x.shape[0], weight)
+    column = _large_mn_projection(x.shape[0], weight)
     data, scale = quantize(x, column_major=column, silu_gate=silu_gate)
     return _project_quantized(data, scale, weight, weight_scale)
 
@@ -90,19 +83,14 @@ def _validate_weight(x, weight, weight_scale, input_width):
 
 def _large_mn_projection(rows, weight):
     """Select the measured full gate/up shape, with four-row scale alignment."""
-    return NAME == "cuda" and rows >= 32144 and weight.shape == (34816, 5120)
+    return rows >= 32144 and weight.shape == (34816, 5120)
 
 
 def _project_quantized(data, scale, weight, weight_scale, *, logical_rows=None):
     """Project validated row-major FP8 data without a second quantization."""
-    from flashinfer.gemm import gemm_fp8_nt_groupwise
-
-    # TRT-LLM's independent FlashInfer backend is faster for decode and avoids
-    # CUTLASS SM100's nondeterministic 17..32-row low-latency path. Its activation
-    # scales are column-major; checkpoint weight scales remain row-major.
     rows = data.shape[0] if logical_rows is None else logical_rows
     small = rows <= 32
-    if NAME == "cuda" and not small:
+    if not small:
         from .cuda_backend.groupwise import gemm
 
         mn = _large_mn_projection(rows, weight)
@@ -125,16 +113,12 @@ def _project_quantized(data, scale, weight, weight_scale, *, logical_rows=None):
             scale_major_k=not mn,
         )
         return output[:rows] if mn else output
-    return gemm_fp8_nt_groupwise(
-        data,
-        weight,
-        scale,
-        weight_scale,
-        scale_major_mode="K",
-        mma_sm=2 if data.shape[0] >= 256 and weight.shape[0] >= 32768 else 1,
-        out_dtype=torch.bfloat16,
-        backend="trtllm" if small else "cutlass",
-    )
+    from .cuda_backend.groupwise import gemm
+
+    padded = max(128, (rows + 127) // 128 * 128)
+    padded_data = torch.nn.functional.pad(data, (0, 0, 0, padded - data.shape[0]))
+    padded_scale = torch.nn.functional.pad(scale, (0, 0, 0, padded - scale.shape[0]))
+    return gemm(padded_data, weight, padded_scale, weight_scale)[:rows]
 
 
 def add_norm_linear(x, residual, gamma, weight, weight_scale):
@@ -166,13 +150,9 @@ def add_norm_linear(x, residual, gamma, weight, weight_scale):
     rows = x.shape[0]
     small = rows <= 32
     # Small storage-offset views keep the scalar-compatible unfused path.
-    # The explicit TileLang provider keeps its original complete chain.
-    if NAME != "cuda" or (
-        small
-        and any(
-            tensor.data_ptr() % alignment
-            for tensor, alignment in ((x, 16), (residual, 16), (gamma, 32))
-        )
+    if small and any(
+        tensor.data_ptr() % alignment
+        for tensor, alignment in ((x, 16), (residual, 16), (gamma, 32))
     ):
         from .normalization import add_rms_norm
 
@@ -180,7 +160,7 @@ def add_norm_linear(x, residual, gamma, weight, weight_scale):
         return summed, linear(normalized, weight, weight_scale)
     from .cuda_backend import compiled
 
-    column = small or _large_mn_projection(rows, weight)
+    column = _large_mn_projection(rows, weight)
     physical = (rows + 3) // 4 * 4 if column and not small else rows
     data = torch.empty((physical, 5120), device=x.device, dtype=torch.float8_e4m3fn)
     shape = (40, physical) if column else (physical, 40)
@@ -231,15 +211,10 @@ def gated_norm_linear(x, gamma, gate, weight, weight_scale):
     if x.shape[0] > 2**31 // 6144:
         raise ValueError("gated FP8 input exceeds int32 flat offset range")
     _validate_weight(x, weight, weight_scale, 6144)
-    if NAME != "cuda":
-        from .normalization import rms_norm
-
-        normalized = rms_norm(x, gamma, gate=gate)
-        return linear(normalized.flatten(1), weight, weight_scale)
     from .cuda_backend import compiled
 
     rows = x.shape[0]
-    column = rows <= 32
+    column = False
     data = torch.empty((rows, 6144), device=x.device, dtype=torch.float8_e4m3fn)
     scales = torch.empty(
         (48, rows) if column else (rows, 48), device=x.device, dtype=torch.float32

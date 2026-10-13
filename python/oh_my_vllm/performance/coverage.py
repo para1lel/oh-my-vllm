@@ -21,49 +21,17 @@ def runtime_contract():
                 sources[str(path.relative_to(root))] = hashlib.sha256(
                     path.read_bytes()
                 ).hexdigest()
-    providers = {}
-    distribution = importlib.metadata.distribution("flashinfer-python")
-    for name in (
-        "flashinfer/gemm/gemm_base.py",
-        "flashinfer/prefill.py",
-        "flashinfer/decode.py",
-        "flashinfer/jit/attention/modules.py",
-        "flashinfer/jit/gemm/core.py",
-        "flashinfer/jit/env.py",
-        "flashinfer/jit/cubin_loader.py",
-        "flashinfer/artifacts.py",
-        "flashinfer/gdn_kernels/blackwell/gdn_prefill.py",
-        "flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py",
-        "flashinfer/gdn_prefill.py",
-        "flashinfer/gdn_kernels/delta_rule_dsl/varlen_helper.py",
-    ):
-        path = distribution.locate_file(name)
-        if not path.is_file():
-            raise ValueError(f"missing reviewed GPU provider: {name}")
-        providers[name] = hashlib.sha256(path.read_bytes()).hexdigest()
-    cubin_distribution = importlib.metadata.distribution("flashinfer-cubin")
-    for name in ("flashinfer_cubin/__init__.py", "flashinfer_cubin/_build_meta.py"):
-        path = cubin_distribution.locate_file(name)
-        if not path.is_file():
-            raise ValueError(f"missing reviewed GPU provider: {name}")
-        providers[name] = hashlib.sha256(path.read_bytes()).hexdigest()
     from oh_my_vllm.kernels.cuda_backend import _project_headers as operator_headers
     from oh_my_vllm.kernels.cuda_backend.groupwise import (
         _FLAGS,
+        _dependency_roots,
         _headers,
     )
     from oh_my_vllm.kernels.cuda_backend.groupwise import (
         _project_headers as gemm_headers,
     )
 
-    data = distribution.locate_file("flashinfer/data")
-    roots = (
-        data / "cccl/cub",
-        data / "cccl/libcudacxx/include",
-        data / "cccl/thrust",
-        data / "cutlass/include",
-        data / "cutlass/tools/util/include",
-    )
+    data, roots = _dependency_roots()
     import json
 
     gemm_inputs = {
@@ -75,12 +43,12 @@ def runtime_contract():
     }
     return {
         "sources": sources,
-        "providers": providers,
+        "providers": {},
         "gemm_inputs": gemm_inputs,
         "kernel_inputs": {"project_headers": operator_headers()},
         "versions": {
             name: importlib.metadata.version(name)
-            for name in ("torch", "flashinfer-python", "flashinfer-cubin", "triton")
+            for name in ("torch", "apache-tvm-ffi", "triton")
         },
     }
 

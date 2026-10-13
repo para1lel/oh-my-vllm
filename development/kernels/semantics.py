@@ -15,7 +15,7 @@ Q_SCALE = 128**-0.5
 ATTENTION_SCALE = 256**-0.5
 
 
-# A single logical analysis unit, not the TileLang kernel's actual CTA placement.
+# A single logical analysis unit, not the CUDA kernel's actual CTA placement.
 @module(
     entry="silu",
     target=CudaTarget("nvidia.b200_sxm"),

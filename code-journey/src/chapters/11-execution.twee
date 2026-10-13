@@ -2,14 +2,14 @@
 <article>
 <<chapterHeader>>
 <h2>为什么在模型与具体 kernel 之间加入语义层</h2>
-<p>kernel 是一次 GPU 算子执行的程序. 同一数学操作可能有不同实现, 例如短序列递归 CUDA 与长 prefill FlashInfer. Semantic IR (语义中间表示) 为操作定义统一数学契约, 输入布局, 输出形状和修改区域, 模型通过这些入口调用具体实现.</p>
+<p>kernel 是一次 GPU 算子执行的程序. 同一数学操作可能有不同实现, 例如短序列递归 CUDA 与长 prefill chunk CUDA. Semantic IR (语义中间表示) 为操作定义统一数学契约, 输入布局, 输出形状和修改区域, 模型通过这些入口调用具体实现.</p>
 <p>Operation 注册语义 op 与各 provider (实现提供者). TensorSpec 描述形状, stride, dtype 和设备; stride 是沿一个数组维度移动一格所跨的存储元素数, 因而视图可以非连续. fake 实现描述输出元数据, 编译捕获时无需真实执行 GPU 计算.</p>
 <p>Qwen 和内核入口导入 ir.fp8, pointwise, recurrent, state, attention, gdn_prefill 与 logits 时完成注册. ir.__init__ 导出编译和选择公共接口, core 管理注册表. eager 调用按静态元数据直接选择, 编译调用先留下语义节点.</p>
 <<source "irDispatch" "展开语义操作的 eager 与编译分派">>
 <h2>各语义模块具体负责什么</h2>
 <p>fp8 定义激活量化和 FP8 投影, 包括带 SiLU 门的版本. pointwise 定义 SiLU 乘法, GDN gates, RMS 和残差归一化. recurrent 定义卷积及 GDN 更新, 将持久 pool 标成会修改的参数. state 定义完整 Q/K 归一化, RoPE 和 KV 写入链.</p>
-<p>normalized_linear 将残差 RMS 和 FP8 投影连接为一个语义操作. 超过 32 行的 CUDA provider 先融合加法, RMS 与量化, 删除归一化数组的设备存储写入和再次读取. 它保留原链的 BF16 舍入与 GEMM 路由, 使算子融合与第 8 章的数学定义一致. 至多 32 行按实测选择原 CUDA 两步链, 同一语义操作保持相同的输入与返回契约.</p>
-<p>同一 normalized_linear 模块还提供 gated_norm_fp8_linear, 将 GDN 的带 SiLU 门的逐头 RMS 与 FP8 output 投影连接起来. 第 8 章说明其五个输入. CUDA provider 保留门控结果的 BF16 舍入并直接量化, 写出投影所需的 scale, 删除中间 BF16 数组. TileLang 对照由固定 RMS 与 FP8 投影组合, 原参考文件保持相同摘要.</p>
+<p>normalized_linear 将残差 RMS 和 FP8 投影连接为一个语义操作. 超过 32 行的 CUDA provider 先融合加法, RMS 与量化, 删除归一化数组的设备存储写入和再次读取. 它保留原链的 BF16 舍入与 GEMM 路由, 使算子融合与第 8 章的数学定义一致. 满足对齐的小行数同样执行融合量化, 未对齐视图保留两步链, 同一语义操作保持相同的输入与返回契约.</p>
+<p>同一 normalized_linear 模块还提供 gated_norm_fp8_linear, 将 GDN 的带 SiLU 门的逐头 RMS 与 FP8 output 投影连接起来. 第 8 章说明其五个输入. CUDA provider 保留门控结果的 BF16 舍入并直接量化, 写出投影所需的 scale, 删除中间 BF16 数组. 独立 Torch 参考保留这些可观察舍入边界.</p>
 <p>attention 用 CPU 计划句柄表示 wrapper 与固定路由, 动态表和长度仍作为显式张量输入. gdn_prefill 返回长序列输出与最终状态, 再按有序 index_copy_ 写回持久池. logits 定义小行数词表矩阵投影. 参考实现提供数学对照, 生产 provider 有显式优先级与支持条件.</p>
 <p>优先级在第一次选择后冻结, 选择只依据元数据和声明路由. 编译器为实际读取的静态条件建立 guard (适用条件检查), 动态页表内容不决定 provider. 不支持的配置或缺少实现会报错, 保持实际执行路线可核对.</p>
 <h2>fullgraph 编译怎样完成 lowering</h2>
@@ -46,7 +46,7 @@
 <p>PrefillGraph 处理 native 或 ragged attention 的固定 query/context 形状. 图内只保留 hidden 和 DSpark 所需的特征, 采样随后选择需要的行做词表投影. key 包含每请求 query 数, 每请求已有 context 长度和 prefill 请求数; token IDs, FA 页和 GDN 槽作为动态内容更新.</p>
 <p>attention.plan 会创建新 metadata 张量. replay 先核对所有新张量的形状与 dtype, 在 finally 恢复捕获时的绑定, 再把动态值复制到原存储. 规划失败后, 图仍指向原来保持存活的地址. 这个过程使物理页变化与图地址固定可以同时成立.</p>
 <p>prefill 图单独保留最多 8 个条目. worker/prefill_budget.py 根据计划中的行数和状态槽计算存储预算, 同一个数值用于准入和构建. 预算包括全部 FA 写入行备份, 去重后的 GDN 状态及卷积备份, metadata 副本, 预热与 capture 两阶段的临时 activation 和输出. DSpark 的五个特征 tap 与合并后的特征输出也要同时保留, 因而单独计入.</p>
-<p>短查询的 native attention 直接读分页 KV. 长查询的 ragged attention 还会复制有效 K/V, 因而加上紧凑 KV 存储并保留至少 32 GiB 余量. 两类预算都额外保留 4 GiB 的编译与碎片余量, 加上 256 MiB vendor workspace 余量. 预算是对当前模型存储需求的保守估算; OOM 后仍由 supervisor 使旧 KV 失效并恢复 worker, 第 7 章介绍这条服务路径.</p>
+<p>当前 prefill attention 收集有效 K/V, 因而预算包含紧凑 KV 存储并保留至少 32 GiB 余量. 还额外保留 4 GiB 的编译与碎片余量, 加上 256 MiB vendor workspace 余量. 预算是对当前模型存储需求的保守估算; OOM 后仍由 supervisor 使旧 KV 失效并恢复 worker, 第 7 章介绍这条服务路径.</p>
 <p>长图包含多流分叉和汇合, 启动包装器默认启用 graph_capture_record_stream_reuse, 让 PyTorch 根据捕获图拓扑复用已释放的临时缓冲. 显式分配器配置可覆盖默认值, 运行证据记录有效设置.</p>
 <h2>GDN 的两条准备分支怎样并行</h2>
 <p>选中输出的 prefill 图把 output_indices 纳入 key, 并持有 output_attention 的固定页表与长度存储. MTPContextGraph 用独立的 mtp_context 图族保存长草稿 context, 限制为 8 项, 保留 12 GiB 余量. 两种图在 replay 前验证所有动态张量, 防止先复制部分数据后才发现不兼容的输入.</p>
@@ -55,7 +55,7 @@
 <h2>PDL 怎样提前启动依赖消费者</h2>
 <p>PDL 是 Programmatic Dependent Launch. 普通依赖启动通常等待生产者整个 kernel 结束, PDL 允许生产者发出 grid dependency 信号后提前调度消费者. 消费者在读取依赖数据之前调用 cudaGridDependencySynchronize, 保证数据已经发布. 提前获得执行机会可以覆盖启动或独立准备成本, 实际重叠程度由 GPU 资源决定.</p>
 <p>自有 CUDA 入口使用 cudaLaunchKernelEx, 显式指定 programmatic stream serialization 属性. 当前点算子在读取输入之前等待依赖, 随后允许下个 kernel 提前调度. CUDA Graph 捕获保留这些启动属性与依赖. OH_MY_VLLM_CUDA_PDL=0 提供关闭 PDL 的独立进程对照.</p>
-<p>大型 FP8 GEMM 使用项目维护的 SM100 CUTLASS CUDA 入口. 它保持原有 FP8 数据, 128 维 scale 分块, FP32 累加与 BF16 输出, 同时显式控制初始化 stream 和 PDL. 小行数继续采用已验证的 TRT 路径, 词表 CuTe-DSL GEMM 也传递 PDL 设置.</p>
+<p>大型 FP8 GEMM 使用项目维护的 SM100 CUTLASS CUDA 入口. 它保持原有 FP8 数据, 128 维 scale 分块, FP32 累加与 BF16 输出, 同时显式控制初始化 stream 和 PDL. 小行数补齐后执行同一原生投影, 词表使用 Torch 标准 F.linear.</p>
 <p>宽 gate/up 投影从 M=2048 起使用八 tile swizzle; 当 M 至少 32144, N=34816, K=5120 时, two-SM 路径在列主序 scale 下使用 swizzle 16, K=256 的 tile 与三级流水. K tile 的宽度表示一次 tile 计算覆盖的输入列数; scale 分组仍为 128, 一个 256 元素的 tile 覆盖两个分组. K-major 布局参考保持 K=128 与五级流水. 流水级数表示用于重叠输入传输与计算的 shared-memory buffer 层数. swizzle 改变相邻 tile 的遍历布局, 让它们更容易复用 L2 内的数据, 矩阵运算与舍入保持一致. 第 12 章说明如何用缓存命中, HBM 流量和同条件计时选择这类参数, 再核对完整模型效果.</p>
 <p>该大型 gate/up 路径还使用列主序 scale, 让相邻行的缩放值在存储中连续, 减少 scale 的传输开销. 公开权重和 scale 保持 checkpoint 布局; 每次调用将 43520 字节的权重 scale 重新打包, 图重放也能读到 scale 的修改. 激活 scale 的行跨度需要四行对齐, 因而物理行容量向上取整到四的倍数. 融合 RMS 量化直接写入这块存储, 每次清零至多三行尾部, GEMM 返回后裁剪到实际行数. 这些补齐与打包只算实现开销, 理论下界仍按实际有效行计算.</p>
 <h2>中等行数投影怎样复用同一激活 tile</h2>
@@ -69,16 +69,16 @@
 <p>epilogue 是矩阵乘法最后写出结果的阶段. 通用输出路径计算 alpha 乘以累加值再加 beta 乘以旧输出, 此处 alpha 固定为 1, beta 固定为 0. 这五种投影直接把累加值按 round-to-nearest-even 转为 BF16, 即取最近值, 等距时取最低位为偶数的值. BF16 输出类型和舍入保持相同. 图重放测试改变输入, 权重和 scale, 在侧流与 PDL 开关下逐位比较结果, 并检查输出边界和输入存储.</p>
 <h2>自有 CUDA 算子如何实现这些契约</h2>
 <p>kernels.backend 在进程级选择默认 CUDA 后端. cuda_backend.factory_for 为量化, SiLU, gates, RMS, 残差 RMS, RoPE, RMS/RoPE, append, 注意力准备, 卷积, Q/K 归一化, GDN 递归和 decode partial/merge 建立入口. 所有调用使用调用者当前 CUDA 流, 保持与 PyTorch 操作的顺序.</p>
-<p>kernels.cu 是统一构建入口, 按依赖顺序包含 operators/ 中的十个功能头. common.cuh 提供 PDL, 启动检查, 向量读写与共享存储检查; 各模块按量化, 归一化, 注意力准备, GDN, 卷积和解码注意力划分. warp 是 32 个线程的执行组, 用于求和或最大值归约, 向量读写用于减少访存指令. RMS 与量化每组计算归约和 scale; packed 投影视图按真实 token stride 取值; Q/K 准备链合并归一化, RoPE 和缓存写入; 卷积读取最近三项并保存候选; GDN 按头更新矩阵, 将所需位置写入 pool.</p>
+<p>kernels.cu 是统一构建入口, 按依赖顺序包含 operators/ 中的功能头. common.cuh 提供 PDL, 启动检查, 向量读写与共享存储检查; 各模块按量化, 归一化, 注意力准备, GDN, 卷积和解码注意力划分. warp 是 32 个线程的执行组, 用于求和或最大值归约, 向量读写用于减少访存指令. RMS 与量化每组计算归约和 scale; packed 投影视图按真实 token stride 取值; Q/K 准备链合并归一化, RoPE 和缓存写入; 卷积读取最近三项并保存候选; GDN 按头更新矩阵, 将所需位置写入 pool.</p>
 <p>decode attention 将很长 KV 切成多个 split. 每个 split 返回局部归一化输出和以 2 为底的 log-sum-exp, 再稳定合并. 令局部输出为 o, 归一化对数为 l, 合并前减去最大 l 避免指数溢出.</p>
 <<math "m=\\max_s l_s,\\quad w_s=2^{l_s-m},\\quad o=\\frac{\\sum_s w_s o_s}{\\sum_s w_s}">>
 <p>s 是分片下标, l_s 是该分片概率归一化量的 log2, CUDA 实现以 exp2 计算权重. 对没有有效位置的分片处理负无穷, 所有权重为零时输出零. 主机入口按布局, 位置整数类型和分片数量分派模板, 检查设备与形状, 并保留实际变体计数和复制统计.</p>
-<h2>构建来源和冻结比较路径怎样记录</h2>
+<h2>构建来源和独立数学参考怎样记录</h2>
 <p>GDN prefill 的 V 是 packed 投影中的非连续视图. 自有 CUDA 按每行真实 stride 读取, 每个 lane 复制八个 BF16 的原始位, 减少通用逐元素复制的访存指令. 256 线程配置由完整复制链计时与 DRAM 指标选择. FP32 递归 batch 2 采用每线程八行和一个 warp, batch 4 采用两行和四个 warp, 改变资源分配并保留原计算与舍入顺序.</p>
 <p>大 QKV/Z 与 down 投影在 M 至少为 32144, 形状分别为 N=16384, K=5120 和 N=5120, K=17408 时, 分别使用 swizzle 16 和 8. 大 gate/up 在 M 至少为 32144, N=34816, K=5120 时使用 swizzle 16, 其余宽投影保持 swizzle 8. 按实际尺寸选择减少了其他 shape 的回退风险, 正式用例继续覆盖完整生产形状.</p>
 <p>compiled 以 CUDA 入口, 全部 operators/ 功能头, torch 版本和编译器身份生成缓存摘要, 通过 TVM FFI 构建并加载共享库. FFI 是跨语言函数接口, 这里把 Python 调用接到 CUDA 主机入口. 构建和加载前后核对源码, 头文件与库文件摘要, provenance 记录实际源码, NVCC 路径版本与加载文件. 修改任一功能头会改变缓存摘要, 避免复用此前编译的实现.</p>
 <p>FP8 构建还记录项目内 .cuh 头文件的 SHA-256, 其中包括 PairedGroupwiseAccum. 构建前后核对头文件内容, 正式运行核对实际加载库记录的摘要与已审查的源码契约. 因而只修改头文件也会生成新的构建身份, 测量结果可以对应到实际执行的累加实现.</p>
-<p>显式选择 tilelang 时使用冻结比较实现, 覆盖 FP8 量化, attention append/decode, 卷积, 逐元素与归一化, GDN 归一化/递归等同一算子契约. 这些参考模块用于已有比较证据; 默认推理使用 CUDA. 项目调用的 FlashInfer, CuTe 与 TVM FFI 按独立库接口使用, 不引入 vLLM 执行依赖.</p>
+<p>项目只使用自有 CUDA provider 与 Torch 标准操作. 原生 CUTLASS 与 CUDA toolkit 的 CCCL 头文件独立固定版本, TVM FFI 只负责加载仓库内核. 独立 Torch 参考验证数学, 精度, 返回值和状态修改; 成对 CUDA 基线测量用于选择候选, 完整框架的阶段延迟决定性能验收.</p>
 <p>编译, 图捕获与具体 kernel 分派都留下可检查记录. 运行身份与正式算子用例因此能回答这一轮究竟执行了哪份实现, 下一章把这些信息组织成验收流程.</p>
 <<coverage>>
 <<chapterChoices>>

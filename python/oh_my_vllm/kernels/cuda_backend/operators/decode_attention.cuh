@@ -6,16 +6,26 @@
 // scores/probabilities and online-softmax statistics cross warp boundaries.
 template <int BK, typename Position>
 __device__ __forceinline__ void stage_kv(const __nv_bfloat16 *cache, const void *tables, int start,
-                                         int table_width, Position base, Position last, int hk,
-                                         int kh, bool tw, __nv_bfloat16 *k, __nv_bfloat16 *v) {
+                                         int table_width, int64_t cache_pages, Position base,
+                                         Position last, int hk, int kh, bool tw, __nv_bfloat16 *k,
+                                         __nv_bfloat16 *v) {
   // A BK-wide tile can touch at most two 784-token pages. Each thread loads
   // those table entries once per tile, rather than once per K/V chunk.
   Position first_page = min(base, last - 1) / 784;
   Position final_page = min(base + BK - 1, last - 1) / 784;
+  if (first_page < 0 || final_page >= table_width) {
+    asm volatile("trap;");
+    return;
+  }
   int64_t table_row = static_cast<int64_t>(start) * table_width;
   int64_t first_block = index_at(tables, tw, table_row + first_page);
   int64_t final_block =
       first_page == final_page ? first_block : index_at(tables, tw, table_row + final_page);
+  if (first_block < 0 || first_block >= cache_pages || final_block < 0 ||
+      final_block >= cache_pages) {
+    asm volatile("trap;");
+    return;
+  }
 #pragma unroll
   for (int i = threadIdx.x; i < BK * 32; i += 128) {
     Position pos = base + i / 32;
@@ -28,20 +38,19 @@ __device__ __forceinline__ void stage_kv(const __nv_bfloat16 *cache, const void 
                  "l"(cache + offset), "r"(bytes)
                  : "memory");
     asm volatile("cp.async.cg.shared.global.L2::128B [%0], [%1], 16, %2;" ::"r"(vd),
-                 "l"(cache + offset + 784 * hk * 256), "r"(bytes)
+                 "l"(cache + offset + int64_t(784) * hk * 256), "r"(bytes)
                  : "memory");
   }
   asm volatile("cp.async.commit_group;" ::: "memory");
 }
 
 template <bool ModelShape, bool Grouped, typename Position, int Buffers>
-__global__ void
-attention_partial_kernel(const __nv_bfloat16 *__restrict__ query,
-                         const __nv_bfloat16 *__restrict__ cache, const void *__restrict__ tables,
-                         const void *__restrict__ lengths, const void *__restrict__ starts,
-                         float *__restrict__ partial, float *__restrict__ lse, int runtime_h,
-                         int runtime_hk, int table_width, int splits, int first, bool tw, bool lw,
-                         bool sw, int query_tiles, int max_query_len) {
+__global__ void attention_partial_kernel(
+    const __nv_bfloat16 *__restrict__ query, const __nv_bfloat16 *__restrict__ cache,
+    const void *__restrict__ tables, const void *__restrict__ lengths,
+    const void *__restrict__ starts, float *__restrict__ partial, float *__restrict__ lse,
+    int runtime_h, int runtime_hk, int table_width, int splits, int first, bool tw, bool lw,
+    bool sw, int query_tiles, int max_query_len, int query_rows, int64_t cache_pages) {
   pdl_dependency_wait();
   pdl_launch_next();
   constexpr int BQ = Grouped ? 32 : 16, BK = Grouped ? 64 : 32;
@@ -58,13 +67,23 @@ attention_partial_kernel(const __nv_bfloat16 *__restrict__ query,
   const int fr = lane / 4, fc = (lane % 4) * 2;
   const int seq = blockIdx.x / query_tiles, qbase = (blockIdx.x % query_tiles) * BQ;
   const int kh = blockIdx.y, split = blockIdx.z, ratio = h / hk;
-  const int start = Grouped ? index_at(starts, sw, seq) : seq;
-  const int end = Grouped ? index_at(starts, sw, seq + 1) : seq + 1;
+  const int64_t start64 = Grouped ? index_at(starts, sw, seq) : seq;
+  const int64_t end64 = Grouped ? index_at(starts, sw, seq + 1) : seq + 1;
   if constexpr (Grouped) {
-    if (end <= start || end - start > max_query_len)
+    const int sequences = gridDim.x / query_tiles;
+    if (start64 < 0 || end64 > query_rows || end64 <= start64 || end64 - start64 > max_query_len ||
+        index_at(starts, sw, 0) != 0 || index_at(starts, sw, sequences) != query_rows) {
       asm volatile("trap;");
+      return;
+    }
   }
-  const Position last = index_at(lengths, lw, end - 1);
+  const int start = start64, end = end64;
+  const int64_t last64 = index_at(lengths, lw, end - 1);
+  if (last64 < first || last64 > int64_t(table_width) * 784) {
+    asm volatile("trap;");
+    return;
+  }
+  const Position last = last64;
   const Position chunk = ((max(last - first, Position(0)) + splits * BK - 1) / (splits * BK)) * BK;
   const Position begin = first + split * chunk;
   float acc[AccTiles][4] = {}, denominator[RowGroups] = {}, maximum[RowGroups];
@@ -91,8 +110,8 @@ attention_partial_kernel(const __nv_bfloat16 *__restrict__ query,
   __syncthreads();
   const Position limit = min(begin + chunk, last);
   if (begin < limit)
-    stage_kv<BK>(cache, tables, start, table_width, begin, last, hk, kh, tw, key_buffers,
-                 value_buffers);
+    stage_kv<BK>(cache, tables, start, table_width, cache_pages, begin, last, hk, kh, tw,
+                 key_buffers, value_buffers);
   int step = 0;
   for (Position base = begin; base < limit; base += BK, ++step) {
     auto *k = key_buffers + (step % Buffers) * BK * 256;
@@ -101,7 +120,7 @@ attention_partial_kernel(const __nv_bfloat16 *__restrict__ query,
     __syncthreads();
     if constexpr (Buffers == 2) {
       if (base + BK < limit)
-        stage_kv<BK>(cache, tables, start, table_width, base + BK, last, hk, kh, tw,
+        stage_kv<BK>(cache, tables, start, table_width, cache_pages, base + BK, last, hk, kh, tw,
                      key_buffers + ((step + 1) % Buffers) * BK * 256,
                      value_buffers + ((step + 1) % Buffers) * BK * 256);
     }
@@ -214,8 +233,8 @@ attention_partial_kernel(const __nv_bfloat16 *__restrict__ query,
     __syncthreads();
     if constexpr (Buffers == 1) {
       if (base + BK < limit)
-        stage_kv<BK>(cache, tables, start, table_width, base + BK, last, hk, kh, tw, key_buffers,
-                     value_buffers);
+        stage_kv<BK>(cache, tables, start, table_width, cache_pages, base + BK, last, hk, kh, tw,
+                     key_buffers, value_buffers);
     }
   }
 #pragma unroll
@@ -273,7 +292,9 @@ void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorV
   int shared_bytes =
       (bq * 256 + 2 * ((!grouped && q.size(0) == 4) ? 2 : 1) * bk * 256 + bq * 64) * 2 +
       (8 * bq) * 4;
-  dim3 grid((grouped ? starts.size(0) - 1 : q.size(0)) * tiles, hk, splits);
+  const int64_t sequences = grouped ? starts.size(0) - 1 : q.size(0);
+  TVM_FFI_ICHECK(sequences <= INT32_MAX / tiles);
+  dim3 grid(sequences * tiles, hk, splits);
 #define ATTENTION(M, G, B)                                                                         \
   configure_attention_shared_memory<M, G, Position, B>(shared_bytes);                              \
   launch_kernel(attention_partial_kernel<M, G, Position, B>, grid, 128, shared_bytes, stream,      \
@@ -282,7 +303,7 @@ void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorV
                 lengths.data_ptr(), starts.data_ptr(), static_cast<float *>(partial.data_ptr()),   \
                 static_cast<float *>(lse.data_ptr()), h, hk, tables.size(1), splits, first,        \
                 tables.dtype().bits == 64, lengths.dtype().bits == 64, starts.dtype().bits == 64,  \
-                tiles, max_query_len)
+                tiles, max_query_len, q.size(0), cache.size(0))
   if (h == 24 && hk == 4) {
     if (grouped) {
       ATTENTION(true, true, 1);
@@ -310,6 +331,41 @@ void launch_attention(TensorView q, TensorView cache, TensorView tables, TensorV
 void attention_partial(TensorView q, TensorView cache, TensorView tables, TensorView lengths,
                        TensorView starts, TensorView partial, TensorView lse, int64_t first,
                        bool grouped, bool position64, int64_t max_query_len) {
+  TVM_FFI_ICHECK(q.ndim() == 3 && q.size(0) > 0 && q.size(0) <= INT32_MAX && q.size(1) > 0 &&
+                 q.size(1) <= 65535 && q.size(2) == 256 && has_dtype(q, kDLBfloat, 16) &&
+                 q.stride(2) == 1 && q.stride(1) == 256 && q.stride(0) == q.size(1) * 256);
+  TVM_FFI_ICHECK(
+      cache.ndim() == 5 && cache.size(0) > 0 && cache.size(1) == 2 && cache.size(2) == 784 &&
+      cache.size(3) > 0 && cache.size(4) == 256 && q.size(1) % cache.size(3) == 0 &&
+      q.size(1) / cache.size(3) <= 16 && has_dtype(cache, kDLBfloat, 16) && cache.stride(4) == 1 &&
+      cache.stride(3) == 256 && cache.stride(2) == cache.size(3) * 256 &&
+      cache.stride(1) == 784 * cache.size(3) * 256 && cache.stride(0) == 2 * cache.stride(1) &&
+      reinterpret_cast<uintptr_t>(cache.data_ptr()) % 16 == 0);
+  TVM_FFI_ICHECK(tables.ndim() == 2 && tables.size(0) == q.size(0) && tables.size(1) > 0 &&
+                 tables.size(1) <= INT32_MAX && is_index_dtype(tables) && tables.stride(1) == 1 &&
+                 tables.stride(0) == tables.size(1));
+  TVM_FFI_ICHECK(lengths.ndim() == 1 && lengths.size(0) == q.size(0) && is_index_dtype(lengths) &&
+                 lengths.stride(0) == 1);
+  TVM_FFI_ICHECK(starts.ndim() == 1 && starts.size(0) > 0 && starts.size(0) <= INT32_MAX &&
+                 is_index_dtype(starts) && starts.stride(0) == 1 &&
+                 (!grouped || starts.size(0) >= 2));
+  TVM_FFI_ICHECK(first == 0 || first == 1);
+  TVM_FFI_ICHECK(position64 || tables.size(1) <= INT32_MAX / 784);
+  TVM_FFI_ICHECK(lse.ndim() == 3 && lse.size(0) == q.size(0) && lse.size(1) == q.size(1) &&
+                 (lse.size(2) == 16 || lse.size(2) == 64 || lse.size(2) == 128) &&
+                 has_dtype(lse, kDLFloat, 32) && lse.stride(2) == 1 &&
+                 lse.stride(1) == lse.size(2) && lse.stride(0) == q.size(1) * lse.size(2));
+  TVM_FFI_ICHECK(
+      partial.ndim() == 4 && partial.size(0) == q.size(0) && partial.size(1) == q.size(1) &&
+      partial.size(2) == lse.size(2) && partial.size(3) == 256 &&
+      has_dtype(partial, kDLFloat, 32) && partial.stride(3) == 1 && partial.stride(2) == 256 &&
+      partial.stride(1) == lse.size(2) * 256 && partial.stride(0) == q.size(1) * partial.stride(1));
+  for (auto tensor : {cache, tables, lengths, starts, partial, lse})
+    TVM_FFI_ICHECK(same_cuda_device(tensor, q));
+  for (auto destination : {partial, lse})
+    for (auto source : {q, cache, tables, lengths, starts})
+      TVM_FFI_ICHECK(disjoint_storage(destination, source));
+  TVM_FFI_ICHECK(disjoint_storage(partial, lse));
   TVM_FFI_ICHECK(max_query_len >= 1 && max_query_len <= 8);
   auto stream = stream_for(q, "attention_partial");
   if (position64)
@@ -358,6 +414,23 @@ __global__ void attention_merge_kernel(const float *__restrict__ partial,
 }
 
 void attention_merge(TensorView partial, TensorView lse, TensorView out) {
+  TVM_FFI_ICHECK(out.ndim() == 3 && out.size(0) > 0 && out.size(1) > 0 && out.size(2) == 256 &&
+                 out.size(0) <= INT32_MAX / out.size(1) && has_dtype(out, kDLBfloat, 16) &&
+                 out.stride(2) == 1 && out.stride(1) == 256 && out.stride(0) == out.size(1) * 256 &&
+                 reinterpret_cast<uintptr_t>(out.data_ptr()) % 4 == 0);
+  TVM_FFI_ICHECK(lse.ndim() == 3 && lse.size(0) == out.size(0) && lse.size(1) == out.size(1) &&
+                 (lse.size(2) == 16 || lse.size(2) == 64 || lse.size(2) == 128) &&
+                 has_dtype(lse, kDLFloat, 32) && lse.stride(2) == 1 &&
+                 lse.stride(1) == lse.size(2) && lse.stride(0) == out.size(1) * lse.size(2));
+  TVM_FFI_ICHECK(partial.ndim() == 4 && partial.size(0) == out.size(0) &&
+                 partial.size(1) == out.size(1) && partial.size(2) == lse.size(2) &&
+                 partial.size(3) == 256 && has_dtype(partial, kDLFloat, 32) &&
+                 partial.stride(3) == 1 && partial.stride(2) == 256 &&
+                 partial.stride(1) == lse.size(2) * 256 &&
+                 partial.stride(0) == out.size(1) * partial.stride(1) &&
+                 reinterpret_cast<uintptr_t>(partial.data_ptr()) % 8 == 0);
+  TVM_FFI_ICHECK(same_cuda_device(lse, out) && same_cuda_device(partial, out) &&
+                 disjoint_storage(out, lse) && disjoint_storage(out, partial));
   auto stream = stream_for(out, "attention_merge");
 #define MERGE(S)                                                                                   \
   launch_kernel(attention_merge_kernel<S>, lse.size(0) * lse.size(1), 128, 0, stream,              \

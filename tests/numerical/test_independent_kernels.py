@@ -6,7 +6,6 @@ inputs passed to the GPU, matching actual-path probe tolerances.
 
 import math
 from itertools import pairwise
-from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -181,7 +180,6 @@ def test_native_prefix_attention_fp64_and_mixed_lengths():
         4,
         256,
     )
-    assert plan.native
     query = torch.randn(129, 24, 256, device="cuda", dtype=torch.bfloat16)
     out = plan(query, cache)
     for rows, pages, length in [
@@ -201,9 +199,8 @@ def test_native_prefix_attention_fp64_and_mixed_lengths():
 
 
 @pytest.mark.parametrize("length", [4097, 4237, 4703])
-def test_flashinfer_native_prefill_ignores_workspace_and_stale_subpage_bytes(length):
-    """Test poisoned scratch and the final partial subpage in TRT-LLM context."""
-    from flashinfer.prefill import trtllm_batch_context_with_kv_cache
+def test_owned_prefill_ignores_workspace_and_stale_subpage_bytes(length):
+    """Test poisoned scratch and the final partial subpage in Torch causal attention."""
     from oh_my_vllm.kernels.attention import PagedAttention
 
     generator = torch.Generator(device="cpu").manual_seed(length)
@@ -227,33 +224,27 @@ def test_flashinfer_native_prefill_ignores_workspace_and_stale_subpage_bytes(len
 
     query = torch.ones(128, 24, 256, device="cuda", dtype=torch.bfloat16)
     outputs = []
-    with patch(
-        "flashinfer.prefill.trtllm_batch_context_with_kv_cache",
-        wraps=trtllm_batch_context_with_kv_cache,
-    ) as backend:
-        for cache, workspace_value in (
-            (caches[0], 0),
-            (caches[0], 0xA5),
-            (caches[1], 0),
-            (caches[1], 0xA5),
-        ):
-            plan = PagedAttention()
-            plan.plan(
-                torch.tensor([0, 128], dtype=torch.int32),
-                torch.tensor([0, pages], dtype=torch.int32),
-                torch.tensor(mapping, dtype=torch.int32),
-                torch.tensor([length - (pages - 1) * 784], dtype=torch.int32),
-                24,
-                4,
-                256,
-            )
-            assert plan.native and not plan.ragged
-            plan.workspace.fill_(workspace_value)
-            first = plan(query, cache).detach().clone()
-            repeated = plan(query, cache).detach().clone()
-            torch.testing.assert_close(repeated, first, atol=0, rtol=0)
-            outputs.append(first)
-        assert backend.call_count == 8
+    for cache, workspace_value in (
+        (caches[0], 0),
+        (caches[0], 0xA5),
+        (caches[1], 0),
+        (caches[1], 0xA5),
+    ):
+        plan = PagedAttention()
+        plan.plan(
+            torch.tensor([0, 128], dtype=torch.int32),
+            torch.tensor([0, pages], dtype=torch.int32),
+            torch.tensor(mapping, dtype=torch.int32),
+            torch.tensor([length - (pages - 1) * 784], dtype=torch.int32),
+            24,
+            4,
+            256,
+        )
+        plan.workspace.fill_(workspace_value)
+        first = plan(query, cache).detach().clone()
+        repeated = plan(query, cache).detach().clone()
+        torch.testing.assert_close(repeated, first, atol=0, rtol=0)
+        outputs.append(first)
     for output in outputs:
         assert torch.isfinite(output).all()
         torch.testing.assert_close(output, outputs[0], atol=0, rtol=0)

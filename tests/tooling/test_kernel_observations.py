@@ -75,7 +75,7 @@ class ObservationTest(unittest.TestCase):
             {**worker, "pid": 785},
             {**worker, "pid": True},
             {**worker, "case": "another"},
-            {**worker, "backend": "tilelang"},
+            {**worker, "backend": "unsupported"},
         ):
             with self.subTest(worker=changed), self.assertRaises(ValueError):
                 validate_profile_worker(metrics, changed, "gated", "cuda")
@@ -125,9 +125,10 @@ class ObservationTest(unittest.TestCase):
                 "5" * 64
             )
             validate_profile_loads(records, "cuda", config, sources, inputs)
-            validate_profile_loads({}, "tilelang", config, sources, inputs)
+            with self.assertRaisesRegex(ValueError, "unknown profiler"):
+                validate_profile_loads({}, "unsupported", config, sources, inputs)
             validate_profile_loads(
-                {"pointwise": record}, "cuda", {**config, "tokens": 8}, sources, inputs
+                records, "cuda", {**config, "tokens": 8}, sources, inputs
             )
             for operation in (
                 "recurrent",

@@ -16,7 +16,7 @@ Keep the theoretical model, two warmups, five repetitions, and 10% spread gates.
 
 1. Document hierarchy, source anchors, word limits, and definition spacing: complete and independently reviewed.
 2. Cohesive code modules and critical test layers: complete and independently reviewed.
-3. Native CUDA provider migration, independent references, TileFoundry rebase, and harness adaptation: pending.
+3. Native CUDA provider migration, independent references, TileFoundry rebase, and harness adaptation: complete and independently reviewed.
 4. Profiler, request plots, performance tuning, and complete acceptance: pending.
 
 Obtain independent review before each milestone commit. Commit on `main` and continue until all work passes.
@@ -33,10 +33,20 @@ After correction, all seven environment tests passed. No other CPU failure occur
 
 GPU selection kept all 487 nodes, with six isolated boundary cases. This was collection validation, not GPU execution.
 
-GPU acceptance follows the native CUDA migration and source freeze. It did not run for these milestones.
-No new-source GPU acceptance is claimed. Historical repair results belong to source `b98a83a` and earlier recorded commits.
+Milestone three passed required Rust/style/document checks, 14 Node tests, and 9 browser tests.
+Its broad CPU collection passed 1073 cases and 56 subtests. One obsolete evidence-path assertion failed.
+All nine affected formal-case tests passed after replacement with unchanged case IDs.
+The final harness checks passed 47 cases and 31 subtests. Runtime-contract checks passed all 32 cases.
 
-Current summaries with obsolete comparison provenance will leave the working tree. Git history keeps their original results.
+Selected native GPU checks passed 76 cases for attention, GDN state/replay/invalid offsets, FP8, logits, and TileFoundry twins.
+A checkpoint-loaded ordinary smoke run completed and released its worker.
+All 22 TileFoundry analyses and one CUDA twin CLI check passed after the upstream rebase.
+
+The complete 517-case matrix, full GPU suite, framework phases, six capacity boundaries, and two one-hour runs are pending for milestone four.
+GDN chunk tuning improved selected timings, but the full framework performance gate is unverified.
+No new-source full GPU acceptance is claimed. Historical repair results belong to source `b98a83a` and earlier recorded commits.
+
+Summaries with obsolete comparison provenance were removed from the working tree. Git history keeps their original results.
 See the [acceptance index](acceptance.md) for current collection scope.
 
 ## Active exception and cleanup

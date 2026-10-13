@@ -3,7 +3,6 @@
 import os
 import subprocess
 import sys
-from unittest.mock import patch
 
 import oh_my_vllm.kernels.decode_attention as decode_attention
 import pytest
@@ -20,7 +19,7 @@ pytestmark = [
 
 
 @pytest.mark.parametrize("entry", ["append", "prepare_attention"])
-@pytest.mark.parametrize("backend", ["cuda", "tilelang"])
+@pytest.mark.parametrize("backend", ["cuda"])
 def test_out_of_range_fa_write_slot_raises(entry, backend):
     environment = os.environ | {"OH_MY_VLLM_KERNEL_BACKEND": backend}
     process = subprocess.run(
@@ -47,7 +46,7 @@ def test_attention_merge_all_empty_splits_writes_zero():
     torch.testing.assert_close(out[0, 1:], torch.zeros_like(out[0, 1:]))
 
 
-@pytest.mark.parametrize("backend", ["cuda", "tilelang"])
+@pytest.mark.parametrize("backend", ["cuda"])
 def test_grouped_decode_rejects_group_size_above_5(backend):
     environment = os.environ | {"OH_MY_VLLM_KERNEL_BACKEND": backend}
     process = subprocess.run(
@@ -107,9 +106,8 @@ def inputs():
 
 
 @pytest.mark.parametrize("length", [1, 15, 16, 17, 783, 784, 785, 4095, 4096])
-def test_flashinfer_native_decode_ignores_workspace_and_stale_subpage_bytes(length):
-    """Test first-use workspace and unwritten KV tails on TRT-LLM decode."""
-    from flashinfer.decode import trtllm_batch_decode_with_kv_cache
+def test_owned_decode_ignores_unwritten_cache_tails(length):
+    """Unwritten KV tails must not affect first-use or repeated decode."""
 
     generator = torch.Generator(device="cpu").manual_seed(1000 + length)
     query = torch.ones(1, 24, 256, device="cuda", dtype=torch.bfloat16)
@@ -130,28 +128,17 @@ def test_flashinfer_native_decode_ignores_workspace_and_stale_subpage_bytes(leng
             cache[physical, 0, : end - start] = keys[start:end].cuda()
             cache[physical, 1, : end - start] = values[start:end].cuda()
         caches.append(cache)
-    tables = torch.tensor([mapping], device="cuda", dtype=torch.int32)
+    tables = torch.tensor(
+        [mapping + [0] * (6 - len(mapping))], device="cuda", dtype=torch.int32
+    )
     lengths = torch.tensor([length], device="cuda", dtype=torch.int32)
     outputs = []
-    with patch(
-        "flashinfer.decode.trtllm_batch_decode_with_kv_cache",
-        wraps=trtllm_batch_decode_with_kv_cache,
-    ) as backend:
-        for cache, workspace_value in (
-            (caches[0], 0),
-            (caches[0], 0xA5),
-            (caches[1], 0),
-            (caches[1], 0xA5),
-        ):
-            attention = DecodeAttention(tables, lengths, extent=max(4096, length))
-            attention.prepare()
-            assert attention.native_metadata is not None
-            attention.workspace.fill_(workspace_value)
-            first = attention(query, cache).detach().clone()
-            repeated = attention(query, cache).detach().clone()
-            torch.testing.assert_close(repeated, first, atol=0, rtol=0)
-            outputs.append(first)
-        assert backend.call_count == 8
+    for cache in caches:
+        attention = DecodeAttention(tables, lengths, extent=max(4096, length))
+        first = attention(query, cache).detach().clone()
+        repeated = attention(query, cache).detach().clone()
+        torch.testing.assert_close(repeated, first, atol=0, rtol=0)
+        outputs.append(first)
     for output in outputs[1:]:
         torch.testing.assert_close(output, outputs[0], atol=0, rtol=0)
     torch.testing.assert_close(
@@ -165,11 +152,8 @@ def test_flashinfer_native_decode_ignores_workspace_and_stale_subpage_bytes(leng
 @pytest.mark.parametrize(
     "batch,group,length", [(4, 1, 32769), (1, 5, 785), (1, 1, 131073)]
 )
-def test_flashinfer_native_decode_first_use_poison_at_production_shapes(
-    batch, group, length
-):
+def test_owned_decode_first_use_poison_at_production_shapes(batch, group, length):
     """Test poisoned scratch/tails in batched, grouped and long decode."""
-    from flashinfer.decode import trtllm_batch_decode_with_kv_cache
 
     pages = (length + 783) // 784
     cache_shape = (1 + batch * pages, 2, 784, 4, 256)
@@ -178,7 +162,12 @@ def test_flashinfer_native_decode_first_use_poison_at_production_shapes(
     for row in range(batch):
         mapping = list(range(1 + row * pages, 1 + (row + 1) * pages))[::-1]
         tables.extend([mapping] * group)
-    compact = torch.tensor(tables, device="cuda", dtype=torch.int32)
+    width = (max(4096, length) + 783) // 784
+    compact = torch.tensor(
+        [row + [0] * (width - len(row)) for row in tables],
+        device="cuda",
+        dtype=torch.int32,
+    )
     lengths = torch.tensor(
         [
             position
@@ -202,26 +191,13 @@ def test_flashinfer_native_decode_first_use_poison_at_production_shapes(
         else None
     )
     outputs = []
-    with patch(
-        "flashinfer.decode.trtllm_batch_decode_with_kv_cache",
-        wraps=trtllm_batch_decode_with_kv_cache,
-    ) as backend:
-        for cache, workspace_value in (
-            (caches[0], 0),
-            (caches[0], 0xA5),
-            (caches[1], 0),
-            (caches[1], 0xA5),
-        ):
-            attention = DecodeAttention(compact, lengths, extent=max(4096, length))
-            attention.starts = starts
-            attention.prepare()
-            assert attention.native_metadata is not None
-            attention.workspace.fill_(workspace_value)
-            first = attention(query, cache).detach().clone()
-            repeated = attention(query, cache).detach().clone()
-            torch.testing.assert_close(repeated, first, atol=0, rtol=0)
-            outputs.append(first)
-        assert backend.call_count == 8
+    for cache in caches:
+        attention = DecodeAttention(compact, lengths, extent=max(4096, length))
+        attention.starts = starts
+        first = attention(query, cache).detach().clone()
+        repeated = attention(query, cache).detach().clone()
+        torch.testing.assert_close(repeated, first, atol=0, rtol=0)
+        outputs.append(first)
     for output in outputs:
         assert torch.isfinite(output).all()
         torch.testing.assert_close(output, outputs[0], atol=0, rtol=0)
@@ -265,7 +241,7 @@ def test_graph_replay_reads_updated_lengths_and_tables():
 
 
 @pytest.mark.parametrize("compiled", [False, True])
-def test_native_query_bucket_replay_changes_request_boundaries(compiled):
+def test_owned_query_bucket_replay_changes_request_boundaries(compiled):
     """One bound-five graph serves [1,4] and [2,3] with dynamic causality."""
     from oh_my_vllm.ir import compile_forward
 
@@ -280,15 +256,10 @@ def test_native_query_bucket_replay_changes_request_boundaries(compiled):
     tables = torch.tensor([[1, 2]] + [[3, 4]] * 4, device="cuda", dtype=torch.int32)
     lengths = torch.tensor([21, 782, 783, 784, 785], device="cuda", dtype=torch.int32)
     starts = torch.tensor([0, 1, 5], device="cuda", dtype=torch.int32)
-    # Production allocates scratch before compiling the opaque attention plan.
-    workspace = torch.empty(128 << 20, device="cuda", dtype=torch.uint8)
-    attention = DecodeAttention(
-        tables, lengths, 1568, workspace=workspace, max_query_len=5
-    )
+    attention = DecodeAttention(tables, lengths, 1568, max_query_len=5)
     attention.starts = starts
 
     def run():
-        attention.prepare()
         return attention(query, cache)
 
     unit = compile_forward(run, unit="query_bucket_replay") if compiled else run
@@ -397,7 +368,6 @@ def test_grouped_verification_preserves_ragged_causality(first, native):
 
     def run():
         if native:
-            attention.prepare()
             return attention(query, cache)
         return decode(
             query, cache, tables, lengths, first=first, max_tokens=1568, starts=starts
@@ -472,7 +442,6 @@ def test_cache_addresses_beyond_signed_int32(grouped, native):
     if native:
         attention = DecodeAttention(tables, lengths, 784)
         attention.starts = starts
-        attention.prepare()
         actual = attention(query, cache)
     else:
         actual = decode(query, cache, tables, lengths, max_tokens=784, starts=starts)
@@ -527,3 +496,21 @@ def test_unaligned_cache_clone_warning_and_count_accumulate(caplog, monkeypatch)
         )
         assert decode_attention.unaligned_cache_clone_count() == expected_count
         assert caplog.text.count("unaligned FA cache clone") == warnings
+
+
+@pytest.mark.parametrize("bad_offsets", ["negative", "terminal", "origin"])
+def test_grouped_offsets_reject_out_of_bounds_rows(bad_offsets):
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tests.gpu_slot_guard_case",
+            "grouped_offsets",
+            bad_offsets,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

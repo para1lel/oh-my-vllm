@@ -4,54 +4,9 @@ import torch
 
 
 def reference_operator(module, name):
-    """Bind the whole frozen operation, including Python-side copies/allocations."""
-    from importlib import import_module
+    from .oracles import operator
 
-    if (module, name) == ("fp8", "gated_norm_linear"):
-        normalization = reference_operator("normalization", "rms_norm")
-        projection = reference_operator("fp8", "linear")
-
-        def frozen_gated_chain(x, gamma, gate, weight, scale):
-            normalized = normalization(x, gamma, gate=gate)
-            return projection(normalized.flatten(1), weight, scale)
-
-        return frozen_gated_chain
-    if (module, name) == ("fp8", "add_norm_linear"):
-        # Compose original frozen kernels. The reference files and pin stay equal.
-        normalization = reference_operator("normalization", "add_rms_norm")
-        projection = reference_operator("fp8", "linear")
-
-        def frozen_chain(x, residual, gamma, weight, scale):
-            summed, normalized = normalization(x, residual, gamma)
-            return summed, projection(normalized, weight, scale)
-
-        return frozen_chain
-    if module == "dspark_attention":
-        path = "oh_my_vllm.kernels.dspark_tilelang_reference"
-        function = getattr(import_module(path), name)
-        if function.__module__ != path:
-            raise ValueError("comparison must bind the supplemental operation directly")
-        return function
-    if (module, name) == ("attention_prepare", "prepare_attention"):
-        # The production pre-fusion chain, composed only of immutable kernels.
-        # Its V.contiguous() is a no-op when the original view is contiguous.
-        from oh_my_vllm.kernels.attention_prepare import tilelang_prepare
-
-        return tilelang_prepare
-    if module == "partial_attention":
-        from oh_my_vllm.kernels.partial_attention import (
-            tilelang_context,
-            tilelang_query,
-        )
-
-        return {"prepare_context": tilelang_context, "prepare_query": tilelang_query}[
-            name
-        ]
-    path = f"oh_my_vllm.kernels.tilelang_reference.{module}"
-    function = getattr(import_module(path), name)
-    if function.__module__ != path:
-        raise ValueError("comparison must bind the frozen operation directly")
-    return function
+    return operator(module, name)
 
 
 def measure(

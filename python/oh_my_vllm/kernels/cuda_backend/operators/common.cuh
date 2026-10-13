@@ -172,7 +172,7 @@ __device__ float warp_sum(float value) {
   return __shfl_sync(0xffffffff, value, 0);
 }
 
-__device__ int64_t index_at(const void *data, bool wide, int index) {
+__device__ int64_t index_at(const void *data, bool wide, int64_t index) {
   return wide ? static_cast<const int64_t *>(data)[index]
               : static_cast<const int32_t *>(data)[index];
 }

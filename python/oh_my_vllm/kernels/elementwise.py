@@ -2,7 +2,7 @@
 
 import torch
 
-from .backend import NAME, kernel
+from .backend import kernel
 
 _silu_mul = kernel("elementwise", "_silu_mul")
 
@@ -21,11 +21,7 @@ def silu_mul(packed: torch.Tensor) -> torch.Tensor:
             f"tensor size {rows} * {packed.shape[1]} exceeds int32 flat offset range"
         )
     out = torch.empty((rows, width), dtype=packed.dtype, device=packed.device)
-    if NAME == "cuda":
-        _silu_mul()(packed, out)
-    else:
-        block = 1024 if rows >= 128 else 256
-        _silu_mul(width, block)(packed, out)
+    _silu_mul()(packed, out)
     return out
 
 

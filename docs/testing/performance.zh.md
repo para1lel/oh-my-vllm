@@ -26,29 +26,26 @@ scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
 
 ```bash
 scripts/with-env.sh python benchmarks/kernels.py --list
-scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda python benchmarks/kernels.py --output "$EVIDENCE_DIR/operators.json"
+scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda python benchmarks/kernels.py --numerical-only --output "$EVIDENCE_DIR/operators.json"
 ```
 
-将 `EVIDENCE_DIR` 设置为仓库外的可写证据目录.
-测试框架使用 `development/kernels/cases.py` 中的静态用例.
+使用新的外部输出路径. [静态用例](../../development/kernels/cases.py) 定义矩阵.
+全部 517 项须通过独立数值, 舍入, 修改与状态契约.
+原有 317 个用例 ID 保留. 补充范围增加 200 个合法生产案例.
 
-使用 `--operations NAME` 选择算子族.
-为每个所选用例 ID 给出 `--case-id ID`.
-少于 517 个用例 ID 的选择报告 `coverage.complete=false`, 并保持完整的逐用例协议.
-矩阵验收前, 全部 517 个用例 ID 必须通过.
+部分选择报告 `coverage.complete=false`, 不能单独证明完整矩阵通过.
+诊断可使用 `--operations NAME` 或重复的 `--case-id ID`.
 
-原有 317 项保留配置和对比版本.
-补充矩阵从 `development/kernels/long_prefill_cases.py` 和 `development/kernels/short_prefill_cases.py` 增加 200 项.
-部分采集必须保留其源码范围, 不能单独证明完整矩阵通过.
+省略 `--numerical-only`, 即在数值验证后执行成对调优测量.
+每项包含三轮二十对交错测量, 每个 sample 使用一百次图重放.
+分层 bootstrap 的单侧 95% 下界描述相对仓库 CUDA 基线的节省耗时.
+算子计时用于诊断. 性能门槛由完整框架的阶段延迟决定.
 
-计时前校验完整输出和实际写入缓存.
-每个用例需要 3 轮, 每轮 20 个交错配对, CUDA 每轮中位数更快.
-节省时间的 hierarchical-bootstrap 单侧 95% 下界必须为正.
-每个计时样本使用 100 次 graph repetition.
-用例和轮次之间恢复持久状态.
-Normalization, Q / K, recurrent 和 convolution 校验要求 1 次 fast, 0 次 generic host dispatch.
-不以 graph replay 次数代替 host dispatch 次数.
-来源记录和 profiling 分离见 [内核开发](../kernels.zh.md).
+用例与轮次之间恢复持久状态.
+Normalization, Q/K, recurrent 和 convolution 验证须有一次 fast host dispatch, 零次 generic dispatch.
+Graph replay 计数不能替代 host dispatch 计数.
+完整 GPU 矩阵验证仅数值采集. 独立的选定计时验证候选比较.
+来源记录与 profiling 分离见[内核开发](../kernels.zh.md).
 
 ## 框架性能
 

@@ -6,7 +6,7 @@ import statistics
 
 
 def compare(rounds, *, bootstrap_samples=10000):
-    """Each round contains alternating-order (TileLang, CUDA) latency pairs.
+    """Each round contains alternating-order (baseline, candidate) latency pairs.
 
     Bootstrap round means hierarchically, retaining between-round variation.
     The one-sided 95% lower bound must be positive; no minimum gain is imposed.
@@ -27,7 +27,9 @@ def compare(rounds, *, bootstrap_samples=10000):
         old, new = zip(*pairs, strict=True)
         differences.append([a - b for a, b in pairs])
         round_results.append(
-            dict(tilelang_ms=statistics.median(old), cuda_ms=statistics.median(new))
+            dict(
+                baseline_ms=statistics.median(old), candidate_ms=statistics.median(new)
+            )
         )
     rng = random.Random(784)
     estimates = []
@@ -45,5 +47,5 @@ def compare(rounds, *, bootstrap_samples=10000):
         gain_lower_95_ms=lower,
         method="hierarchical paired bootstrap, one-sided95%, seed784",
         passed=lower > 0
-        and all(r["cuda_ms"] < r["tilelang_ms"] for r in round_results),
+        and all(r["candidate_ms"] < r["baseline_ms"] for r in round_results),
     )

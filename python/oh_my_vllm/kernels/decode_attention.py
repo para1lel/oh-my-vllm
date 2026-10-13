@@ -10,7 +10,7 @@ import threading
 
 import torch
 
-from .backend import NAME, kernel
+from .backend import kernel
 
 _partials = kernel("decode_attention", "_partials")
 
@@ -79,18 +79,6 @@ def decode(
     # The group size is encoded by starts, not by the Q/KV head ratio.
     # CUDA checks dynamic group extents in the partial kernel. Rust/MTP planning
     # provides the configured bound during normal execution.
-    if NAME == "tilelang" and starts is not None:
-        groups = starts[1:] - starts[:-1]
-        torch._assert_async(
-            torch.all((groups >= 1) & (groups <= max_query_len)),
-            "grouped decode exceeds its configured query bound",
-        )
-        if max_query_len > 5:
-            # Preserve the immutable TileLang body. Its grouped tile covers five
-            # target rows; independent rows compute the same causal attention.
-            starts = None
-    # Both backends issue16-byte KV copies. Preserve support for contiguous
-    # views that start at an unaligned BF16 storage offset.
     if cache.data_ptr() % 16:
         cache = cache.clone()
         global _unaligned_cache_clone_count
@@ -103,10 +91,6 @@ def decode(
                 count,
                 cache.numel() * cache.element_size(),
             )
-    # The frozen TileLang code vector-loads Q. Contiguous BF16 storage-offset
-    # views need an aligned copy; native CUDA handles their scalar load directly.
-    if NAME == "tilelang" and query.data_ptr() % 16:
-        query = query.clone()
     # Keep the reduction traffic bounded for small batches; both kernels are
     # included when selecting split counts, not just the partial attention.
     splits = 64
@@ -122,34 +106,10 @@ def decode(
     out = torch.empty_like(query)
     offsets = starts if starts is not None else lengths
     position_dtype = "int32" if max_tokens <= 2**31 - splits * block else "int64"
-    if NAME == "cuda":
-        partials = _partials(
-            splits, first, starts is not None, position_dtype, max_query_len
-        )
-        merge = _merge()
-    else:
-        types = tuple(
-            str(t.dtype).removeprefix("torch.") for t in (tables, lengths, offsets)
-        )
-        query_tile = (
-            max(16, 1 << (5 * (heads // kv_heads) - 1).bit_length())
-            if starts is not None
-            else 16
-        )
-        partials = _partials(
-            heads,
-            kv_heads,
-            len(cache),
-            tables.shape[1],
-            splits,
-            first,
-            block,
-            query_tile,
-            starts is not None,
-            types,
-            position_dtype,
-        )
-        merge = _merge(heads, splits)
+    partials = _partials(
+        splits, first, starts is not None, position_dtype, max_query_len
+    )
+    merge = _merge()
     partials(query, cache, tables, lengths, offsets, partial, lse)
     merge(partial, lse, out)
     return out

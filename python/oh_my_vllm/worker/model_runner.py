@@ -90,7 +90,7 @@ class RuntimeConfig:
         """Include the per-request query bound in the captured attention shape.
 
         DSpark confidence stopping changes each request's verification length.
-        Equal total rows can still require different FlashInfer query bounds.
+        Equal total rows can still require different Torch/CUDA query bounds.
         Target GQA has six query heads per KV head. Bounds 1/2/5/8 keep groups
         within the native 8/16/32/64-row tiles and limit captured shape variety.
         Ordinary and MTP keep their existing fixed bounds.

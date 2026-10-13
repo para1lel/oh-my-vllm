@@ -34,7 +34,13 @@ ENTRIES = {
 
 
 def fixture(
-    config, *, seed=784, observe=False, shared_append_destination=False, qk_inputs=False
+    config,
+    *,
+    seed=784,
+    observe=False,
+    shared_append_destination=False,
+    qk_inputs=False,
+    timing=False,
 ):
     """Share immutable inputs; allocate isolated mutable destination pools.
 
@@ -55,7 +61,12 @@ def fixture(
     generator = torch.Generator(device="cuda").manual_seed(seed)
     operation = config["operation"]
     module, entry = ENTRIES[operation]
-    reference = reference_operator(module, entry)
+    if timing:
+        from .cuda_baseline import operator
+
+        reference = operator(module, entry)
+    else:
+        reference = reference_operator(module, entry)
     candidate = getattr(importlib.import_module(f"oh_my_vllm.kernels.{module}"), entry)
     n = config.get("tokens", 0)
     kwargs = {}
@@ -358,8 +369,6 @@ def fixture(
             else None,
         )
         if queries > 5:
-            # The frozen grouped tile covers five target queries. Its original
-            # independent-row path computes all eight without changing source.
             reference_kwargs = kwargs | {"starts": None}
             candidate_kwargs = kwargs | {"max_query_len": 8}
             return package(

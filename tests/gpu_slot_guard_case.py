@@ -10,7 +10,34 @@ def main() -> None:
     cache = torch.zeros(2, 2, 784, 4, 256, device="cuda", dtype=torch.bfloat16)
     slots = torch.tensor([len(cache) * 784], device="cuda", dtype=torch.int64)
     try:
-        if entry == "grouped_decode":
+        if entry == "gdn_prefill":
+            from oh_my_vllm.kernels.gdn import prefill
+
+            length, invalid = int(sys.argv[2]), sys.argv[3]
+            offsets = {
+                "origin": [1, 1, length],
+                "terminal": [0, 0, length + 1],
+                "decreasing": [0, length, 0, length],
+            }[invalid]
+            q = torch.zeros(length, 1, 128, device="cuda", dtype=torch.bfloat16)
+            gate = torch.zeros(length, 1, device="cuda")
+            state = torch.zeros(len(offsets) - 1, 1, 128, 128, device="cuda")
+            starts = torch.tensor(offsets, device="cuda", dtype=torch.int32)
+            prefill(q, q, q, gate, gate, state, starts)
+        elif entry == "grouped_offsets":
+            from oh_my_vllm.kernels.decode_attention import decode
+
+            offsets = {
+                "negative": [-1, 1],
+                "terminal": [0, 2],
+                "origin": [1, 1],
+            }[sys.argv[2]]
+            query = torch.zeros(1, 24, 256, device="cuda", dtype=torch.bfloat16)
+            tables = torch.zeros(1, 1, device="cuda", dtype=torch.int32)
+            lengths = torch.ones(1, device="cuda", dtype=torch.int32)
+            starts = torch.tensor(offsets, device="cuda", dtype=torch.int64)
+            decode(query, cache, tables, lengths, max_tokens=784, starts=starts)
+        elif entry == "grouped_decode":
             from oh_my_vllm.kernels.decode_attention import decode
 
             query = torch.zeros(6, 24, 256, device="cuda", dtype=torch.bfloat16)

@@ -58,7 +58,7 @@ def test_constructor_restores_fa_and_recurrent_state_after_failure(
 
     module = importlib.import_module("oh_my_vllm.worker.prefill_graph")
     attention = SimpleNamespace(workspace=None)
-    fake_attention = SimpleNamespace(native=True, ragged=False, plan=Mock())
+    fake_attention = SimpleNamespace(plan=Mock())
     monkeypatch.setattr(module, "PagedAttention", lambda **kw: fake_attention)
     monkeypatch.setattr(module, "compile_forward", lambda fn, **kw: fn)
     monkeypatch.setattr(torch.cuda, "CUDAGraph", Mock)

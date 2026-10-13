@@ -4,7 +4,7 @@ Date: 2026-09-29. Status: accepted for the measured workset at `619c9d9`.
 
 ## Decision
 
-Use `torch.library` operations as semantic nodes for owned CUDA and key FlashInfer operations.
+Use `torch.library` operations as semantic nodes for repository CUDA and Torch operations.
 Give each node an executable reference, fake shape/dtype contract, mutation schema, and ordered providers.
 Select providers from static phase, shape, dtype, layout, and device metadata, never tensor values.
 Keep registry configuration unchanged after selection.

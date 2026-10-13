@@ -1,4 +1,4 @@
-"""DSpark semantic nodes with explicit CUDA or supplemental TileLang providers."""
+"""DSpark semantic nodes with explicit CUDA or repository CUDA providers."""
 
 from __future__ import annotations
 
@@ -137,10 +137,6 @@ _native_dspark_rms_norm.register_fake(_fake_rms)
 def _kernel_dspark_rms_norm(
     x: torch.Tensor, weight: torch.Tensor, eps: float
 ) -> torch.Tensor:
-    if NAME == "tilelang":
-        from oh_my_vllm.kernels.dspark_tilelang_reference import rms_norm
-
-        return rms_norm(x, weight, eps)
     from oh_my_vllm.kernels.dspark_attention import _rms_cuda
 
     return _rms_cuda(x, weight, eps)
@@ -202,10 +198,6 @@ def _kernel_dspark_norm_rope(
     attention_factor: float,
     eps: float,
 ) -> torch.Tensor:
-    if NAME == "tilelang":
-        from oh_my_vllm.kernels.dspark_tilelang_reference import normalize_rope
-
-        return normalize_rope(x, weight, positions, inv_freq, attention_factor, eps)
     from oh_my_vllm.kernels.dspark_attention import _normalize_rope_cuda
 
     return _normalize_rope_cuda(x, weight, positions, inv_freq, attention_factor, eps)
@@ -257,10 +249,6 @@ _native_dspark_append.register_fake(_fake_append)
 def _kernel_dspark_append(
     cache: torch.Tensor, key: torch.Tensor, value: torch.Tensor, slots: torch.Tensor
 ) -> None:
-    if NAME == "tilelang":
-        from oh_my_vllm.kernels.dspark_tilelang_reference import append
-
-        return append(cache, key, value, slots)
     from oh_my_vllm.kernels.dspark_attention import _append_cuda
 
     return _append_cuda(cache, key, value, slots)
@@ -323,10 +311,6 @@ def _kernel_dspark_attention(
     block_key: torch.Tensor,
     block_value: torch.Tensor,
 ) -> torch.Tensor:
-    if NAME == "tilelang":
-        from oh_my_vllm.kernels.dspark_tilelang_reference import attention
-
-        return attention(query, cache, tables, context_lengths, block_key, block_value)
     from oh_my_vllm.kernels.dspark_attention import _attention_cuda
 
     return _attention_cuda(

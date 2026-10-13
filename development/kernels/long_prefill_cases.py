@@ -148,7 +148,7 @@ def long_prefill_cases(original):
             add(workload, config)
 
         # These are owned first=1 MTP paths. Target first=0 attention uses its
-        # independently checked FlashInfer route and has final length 135167.
+        # independently checked Torch/CUDA route and has final length 135167.
         # Proposal: generated <=4091, anchor+three forwarded draft rows.
         # Catch-up: the final accepted anchor can reach length 135168.
         for active in (batch, 3) if batch == 4 else (batch,):

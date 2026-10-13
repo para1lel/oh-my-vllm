@@ -82,7 +82,7 @@ def run_target(worker: OhMyVllmWorker, plans: list[PlannedRequest]) -> TargetOut
     )
     batch = Batch(
         positions=metadata[0],
-        # FlashInfer prefill consumes int32 offsets; convert once per batch.
+        # Torch/CUDA prefill consumes int32 offsets; convert once per batch.
         starts=metadata[1].to(torch.int32),
         sequence_ids=metadata[2],
         state_reads=metadata[3],
@@ -173,11 +173,7 @@ def run_target(worker: OhMyVllmWorker, plans: list[PlannedRequest]) -> TargetOut
         else:
             hidden, graph_logits = graph.replay(token_tensor, batch, tables)
             features = graph.features if worker._is_dspark() else None
-    if (
-        not decode_only
-        and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1"
-        and (worker.attention.native or worker.attention.ragged)
-    ):
+    if not decode_only and os.environ.get("OH_MY_VLLM_ENFORCE_EAGER") != "1":
         from oh_my_vllm.worker.prefill_budget import prefill_capture_headroom
         from oh_my_vllm.worker.prefill_graph import PrefillGraph
 

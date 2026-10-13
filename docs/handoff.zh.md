@@ -16,7 +16,7 @@
 
 1. 文档层次, 源码锚点, 单词限制和定义空行: 已完成并独立审查.
 2. 职责集中的代码模块和关键测试分层: 已完成并独立审查.
-3. 原生 CUDA provider 迁移, 独立 reference, TileFoundry rebase 和 harness 适配: 待完成.
+3. 原生 CUDA provider 迁移, 独立 reference, TileFoundry rebase 和 harness 适配: 已完成并独立审查.
 4. Profiler, 请求图, 性能调优和完整验收: 待完成.
 
 每个里程碑 commit 前获得独立 review. 在 `main` 提交, 持续推进到全部工作通过.
@@ -33,10 +33,20 @@
 
 GPU 分组保留全部 487 个节点, 其中 6 个边界案例隔离运行. 这是收集验证, 并非 GPU 执行.
 
-GPU 验收将在原生 CUDA 迁移及源码稳定后执行. 这两个阶段未运行 GPU 验收.
-未声明新源码 GPU 通过验收. 历史修复结果属于源码 `b98a83a` 及此前记录的提交.
+第三阶段通过必需 Rust/style/doc 检查, 14 个 Node 测试和 9 个浏览器测试.
+广泛 CPU 收集通过 1073 个案例及 56 个 subtest; 一个过时证据路径断言失败.
+替换为保留的案例 ID 后, 全部 9 个相关 formal-case 测试通过.
+最终 harness 检查通过 47 个案例及 31 个 subtest, runtime-contract 检查全部 32 个案例通过.
 
-带过时比较来源的当前摘要将从工作树删除; Git 历史保留其原始结果.
+选定原生 GPU 检查通过 76 个案例, 包括 attention, GDN 状态/replay/非法 offsets, FP8, logits 和 TileFoundry twins.
+真实模型 ordinary 冒烟推理完成并释放 worker.
+Upstream rebase 后全部 22 个 TileFoundry analysis 及一个实际 CUDA twin CLI 检查通过.
+
+完整 517 个算子案例, 全部 GPU 测试, 框架阶段, 六个容量边界及两次一小时运行留到第四阶段.
+GDN chunk 调优改善了选定形状时延, 但完整框架性能门槛尚未验证.
+未声明新源码完整 GPU 通过验收. 历史修复结果属于源码 `b98a83a` 及此前记录的提交.
+
+带过时比较来源的摘要已从工作树删除; Git 历史保留其原始结果.
 当前采集范围见[验收索引](acceptance.zh.md).
 
 ## 持续服务例外与清理

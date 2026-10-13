@@ -1,4 +1,4 @@
-"""Block FP8 quantization and fused FlashInfer GEMM semantic operators."""
+"""Block FP8 quantization and fused Torch/CUDA GEMM semantic operators."""
 
 from __future__ import annotations
 

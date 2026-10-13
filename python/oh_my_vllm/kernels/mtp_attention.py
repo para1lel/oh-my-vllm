@@ -10,15 +10,10 @@ from oh_my_vllm.worker.tensors import device_page_tables
 
 class MTPAttention:
     def __init__(self, max_tokens: int) -> None:
-        from flashinfer import BatchPrefillWithRaggedKVCacheWrapper
-
         from oh_my_vllm.ir.attention import register_plan
 
         self.max_tokens = max_tokens
-        self.workspace = torch.empty(128 << 20, device="cuda", dtype=torch.uint8)
-        self.wrapper = BatchPrefillWithRaggedKVCacheWrapper(
-            self.workspace, "NHD", backend="fa2"
-        )
+        self.workspace = torch.empty(0, device="cuda", dtype=torch.uint8)
         self._ir_handle = register_plan(self)
 
     def plan(
@@ -57,26 +52,8 @@ class MTPAttention:
                 slots.extend(table[p // 784] * 784 + p % 784 for p in range(1, end))
                 offsets.append(len(slots))
             self.slots = torch.tensor(slots, device="cuda")
-            self.native = max(counts) >= 128
-            if self.native:
-                self.query_starts = torch.tensor(
-                    starts, dtype=torch.int32, device="cuda"
-                )
-                self.kv_starts = torch.tensor(offsets, dtype=torch.int32, device="cuda")
-                self.lengths = self.kv_starts[1:] - self.kv_starts[:-1]
-                self.max_query = max(counts)
-                self.max_kv = max(ends) - 1
-                return
-            self.wrapper.plan(
-                torch.tensor(starts, dtype=torch.int32),
-                torch.tensor(offsets, dtype=torch.int32),
-                24,
-                4,
-                256,
-                causal=True,
-                q_data_type=torch.bfloat16,
-                kv_data_type=torch.bfloat16,
-            )
+            self.query_offsets = starts
+            self.kv_offsets = offsets
 
     def __call__(self, query: torch.Tensor, cache: torch.Tensor) -> torch.Tensor:
         from oh_my_vllm.ir.attention import (
@@ -96,9 +73,6 @@ class MTPAttention:
         cache: torch.Tensor,
         tables: torch.Tensor | None = None,
         lengths: torch.Tensor | None = None,
-        native_tables: torch.Tensor | None = None,
-        native_lengths: torch.Tensor | None = None,
-        native_starts: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if self.decode_mode:
             if tables is None or lengths is None:
@@ -113,28 +87,6 @@ class MTPAttention:
             )
         pages, offsets = self.slots // 784, self.slots % 784
         k, v = cache[pages, 0, offsets], cache[pages, 1, offsets]
-        if self.native:
-            from flashinfer.prefill import trtllm_ragged_attention_deepseek
+        from .ragged_attention import causal_attention
 
-            return trtllm_ragged_attention_deepseek(
-                query,
-                k,
-                v,
-                self.workspace,
-                seq_lens=self.lengths,
-                max_q_len=self.max_query,
-                max_kv_len=self.max_kv,
-                bmm1_scale=256**-0.5,
-                bmm2_scale=1.0,
-                o_sf_scale=1.0,
-                batch_size=len(self.lengths),
-                window_left=-1,
-                cum_seq_lens_q=self.query_starts,
-                cum_seq_lens_kv=self.kv_starts,
-                enable_pdl=False,
-                is_causal=True,
-                return_lse=False,
-                skip_all_rows_active_check=True,
-                use_fp16_softmax=False,
-            )
-        return self.wrapper.run(query, k, v)
+        return causal_attention(query, k, v, self.query_offsets, self.kv_offsets)

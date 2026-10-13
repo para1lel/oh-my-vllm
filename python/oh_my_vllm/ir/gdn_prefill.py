@@ -1,4 +1,4 @@
-"""FlashInfer GDN prefill as a semantic op with a PyTorch recurrence reference."""
+"""CUDA GDN prefill as a semantic op with a PyTorch recurrence reference."""
 
 from __future__ import annotations
 
@@ -88,8 +88,8 @@ def _native_prefill(
 _native_prefill.register_fake(_fake_prefill)
 
 
-@torch.library.custom_op("oh_my_vllm_flashinfer::gdn_prefill", mutates_args=())
-def _flashinfer_prefill(
+@torch.library.custom_op("oh_my_vllm_kernel::gdn_prefill", mutates_args=())
+def _cuda_prefill(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
@@ -101,18 +101,18 @@ def _flashinfer_prefill(
     return gdn.prefill(q, k, v, log_decay, beta, initial_state, starts)
 
 
-_flashinfer_prefill.register_fake(_fake_prefill)
+_cuda_prefill.register_fake(_fake_prefill)
 
 
 _PREFILL = Operation(
     "gdn_prefill",
     _ir_prefill,
     _native_prefill,
-    default_priority=("flashinfer",),
+    default_priority=("cuda",),
 )
 _PREFILL.register_impl(
-    "flashinfer",
-    _flashinfer_prefill,
+    "cuda",
+    _cuda_prefill,
     supports=lambda q, k, v, decay, beta, initial, starts: all(
         isinstance(spec, TensorSpec) and spec.device.type == "cuda"
         for spec in (q, k, v, decay, beta, initial, starts)

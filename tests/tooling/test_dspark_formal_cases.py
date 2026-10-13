@@ -5,14 +5,15 @@ import json
 from pathlib import Path
 
 from development.kernels.cases import cases
-from development.kernels.reference import source_hashes, verify_reference
+from development.kernels.reference import source_hashes
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_original_147_cases_survive_in_extended_matrix():
-    manifest = verify_reference()["dspark_supplemental"]
-    ids = manifest["preserved_original_case_ids"]
+    ids = json.loads((ROOT / "development/kernels/original-case-ids.json").read_text())[
+        "baseline"
+    ]
     assert len(ids) == 147
     assert hashlib.sha256(
         json.dumps(ids, separators=(",", ":")).encode()
@@ -59,6 +60,6 @@ def test_formal_provenance_includes_new_semantics_and_pin():
         "python/oh_my_vllm/ir/core.py",
         "python/oh_my_vllm/ir/dspark.py",
         "python/oh_my_vllm/models/dspark.py",
-        "python/oh_my_vllm/kernels/dspark_tilelang_reference.py",
-        "development/kernels/dspark-reference.json",
+        "python/oh_my_vllm/kernels/dspark_attention.py",
+        "development/kernels/oracles.py",
     } <= hashes.keys()

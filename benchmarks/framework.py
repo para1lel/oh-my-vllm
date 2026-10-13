@@ -539,9 +539,7 @@ def main():
         artifact["measurement_audit"] = audit(
             log,
             [
-                os.environ.get("FLASHINFER_WORKSPACE_BASE"),
                 os.environ.get("TRITON_CACHE_DIR"),
-                os.environ.get("TILELANG_CACHE_DIR"),
                 os.environ.get("TVM_FFI_CACHE_DIR"),
             ],
         )

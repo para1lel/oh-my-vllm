@@ -1,7 +1,7 @@
-"""Auditable production call sites for owned and FlashInfer model operators.
+"""Auditable production call sites for repository model operators.
 
 The manifest covers the model's computation entry points. Kernel wrappers and
-FlashInfer calls inside an implementation are deliberately below the IR boundary.
+CUDA and Torch calls inside an implementation stay below the IR boundary.
 Ordinary PyTorch operations, host planning, and sampling are outside its scope.
 """
 
@@ -134,11 +134,6 @@ DIRECT_IMPORT_EXCEPTIONS = {
         "oh_my_vllm.kernels.decode_attention",
         "decode",
     ): "owned attention provider body",
-    (
-        "worker/decode_graph.py",
-        "flashinfer.decode",
-        "trtllm_batch_decode_with_kv_cache",
-    ): "FlashInfer attention provider body",
 }
 
 
@@ -195,7 +190,7 @@ def check_coverage(package_root: Path, registered: set[str]) -> None:
         module = ast.parse((package_root / file).read_text())
         for node in ast.walk(module):
             if isinstance(node, ast.ImportFrom) and node.module is not None:
-                if node.module.startswith(("oh_my_vllm.kernels", "flashinfer")):
+                if node.module.startswith("oh_my_vllm.kernels"):
                     for name in node.names:
                         key = (file, node.module, name.name)
                         if key not in DIRECT_IMPORT_EXCEPTIONS:
@@ -205,7 +200,7 @@ def check_coverage(package_root: Path, registered: set[str]) -> None:
                         used_exceptions.add(key)
             elif isinstance(node, ast.Import):
                 for name in node.names:
-                    if name.name.startswith(("oh_my_vllm.kernels", "flashinfer")):
+                    if name.name.startswith("oh_my_vllm.kernels"):
                         raise AssertionError(
                             f"unlisted direct backend import: {(file, name.name)}"
                         )

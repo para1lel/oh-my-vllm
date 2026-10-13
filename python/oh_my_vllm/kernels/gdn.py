@@ -148,26 +148,9 @@ def recurrent(
     ):
         raise ValueError("GDN tensors must be contiguous on the same CUDA device")
     output = torch.empty(v.shape, device=v.device, dtype=v.dtype)
-    if NAME == "cuda":
-        _recurrent()(
-            q, k, v, log_decay, beta, pool, starts, read_slots, write_slots, output
-        )
-    else:
-        tile = 32 if read_slots.numel() >= 4 else 16
-        types = tuple(
-            str(t.dtype).removeprefix("torch.")
-            for t in (starts, read_slots, write_slots)
-        )
-        _recurrent(
-            len(read_slots),
-            len(pool),
-            q.shape[1],
-            v.shape[1],
-            tile,
-            (q.stride(0), k.stride(0), v.stride(0)),
-            str(pool.dtype).removeprefix("torch."),
-            types,
-        )(q, k, v, log_decay, beta, pool, starts, read_slots, write_slots, output)
+    _recurrent()(
+        q, k, v, log_decay, beta, pool, starts, read_slots, write_slots, output
+    )
     return output
 
 
@@ -180,8 +163,7 @@ def prefill(
     initial_state: torch.Tensor,
     starts: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Independent FlashInfer prefill; gates use log-decay at our boundary."""
-    from flashinfer.gdn_prefill import chunk_gated_delta_rule
+    """BF16 normalized inputs with independent FP32 recurrent state outputs."""
 
     if q.ndim != 3 or q.shape != k.shape or q.shape[-1] != 128:
         raise ValueError("GDN prefill requires matching [tokens,heads,128] q/k")
@@ -217,18 +199,36 @@ def prefill(
         if tensor.device != q.device:
             raise ValueError("GDN tensors must share one CUDA device")
 
-    # FlashInfer 0.6.18 exposes use_qk_l2norm_in_kernel but its prefill body
-    # does not implement it. Normalize explicitly, including the model epsilon.
+    from .cuda_backend import compiled
+
     q, k = normalize_qk(q, k)
-    # FlashInfer uses multiplicative decay rather than log-decay.
-    return chunk_gated_delta_rule(
-        q=q.contiguous(),
-        k=k.contiguous(),
-        v=_contiguous_values(v),
-        g=log_decay.float().exp().contiguous(),
-        beta=beta.float().contiguous(),
-        initial_state=initial_state,
-        output_final_state=True,
-        cu_seqlens=starts,
-        use_qk_l2norm_in_kernel=False,
-    )
+    output = torch.empty(v.shape, device=v.device, dtype=v.dtype)
+    final = torch.empty_like(initial_state)
+    module = compiled()
+    if q.shape[0] < 128:
+        module.gdn_prefill(
+            q, k, v, log_decay, beta, initial_state, starts, output, final
+        )
+    else:
+        chunks = (q.shape[0] + 63) // 64 + starts.numel() - 2
+        coefficients = torch.empty(
+            (chunks, v.shape[1], 64, 64), device=q.device, dtype=torch.bfloat16
+        )
+        cumulative_decay = torch.empty(
+            (chunks, v.shape[1], 64), device=q.device, dtype=torch.float32
+        )
+        module.gdn_chunk_prepare(
+            k, log_decay, beta, starts, coefficients, cumulative_decay
+        )
+        module.gdn_chunk_scan(
+            q,
+            k,
+            v,
+            initial_state,
+            starts,
+            coefficients,
+            cumulative_decay,
+            output,
+            final,
+        )
+    return output, final

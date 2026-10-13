@@ -70,9 +70,9 @@ Check DSpark two-API constraints, mixed batches, cancellation, and long-context 
 Check tool calls and returned results in subsequent model input.
 Compare response IDs with active-mode server logs. Task progress and final answers are diagnostic and do not decide framework acceptance.
 
-Keep the original TileLang files, manifest hash, and case IDs unchanged.
+Keep the original case IDs, independent numerical contracts, and state witnesses.
 Add a different supplemental reference and statically derived DSpark operator cases.
-Apply the original accuracy and three-round operator speed/confidence gates to these cases.
+Apply the original accuracy contracts and three-round timing diagnostics to these cases.
 
 ## Alternatives and consequences
 

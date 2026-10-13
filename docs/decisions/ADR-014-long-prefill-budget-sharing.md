@@ -6,7 +6,7 @@ Date: 2026-10-12. Status: implementation in acceptance.
 
 Source `22dd754` failed MTP4 input `131072`, output `4096`, batch `4` decode latency.
 Its median wall time was `39.9496` seconds, with a lower bound of `12.2634` seconds.
-The ratio was `3.2576`, more than the unchanged limit of `3`.
+The ratio was `3.2576`, more than the earlier limit of `3`.
 The prefill ratio and the two spread checks passed.
 
 The first request started decode about `19.7` seconds before the last request.
@@ -45,13 +45,13 @@ CPU tests check sustained four-request progress, `784` boundaries, prompt tails,
 A regression places short prefill tails before an active decode in the running queue.
 Each prefill must respect that decode's reserved input budget.
 
-Keep all original `317` operator cases and the pinned TileLang comparison.
+Keep all original `317` operator cases and their independent numerical contracts.
 Add statically derived long-MTP and multiple-prefill cases for new legal shapes and implementation paths.
-Use the same full-output, state, three-round, twenty-pair, and confidence-bound gates.
+Keep full-output and state contracts. Use three-round, twenty-pair confidence estimates for timing diagnosis.
 
 Test all fifteen phase workloads, six full-context cases, reasoning budgets, and the two persistent OMP modes again.
 New ragged shapes, graph capture storage, numerical results, and resource growth must have new evidence.
 Previous source results keep their original identities and limitations.
-The numerical tolerances, DSpark weights, theoretical formulas, and acceptance limits stay unchanged.
+The numerical tolerances, DSpark weights, and theoretical formulas stay unchanged. Framework latency uses the current 2-times gate.
 
 [Architecture](../architecture.md) specifies allocation. [Requirements](../requirements.md) keep the active gates.

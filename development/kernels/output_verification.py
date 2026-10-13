@@ -1,4 +1,4 @@
-"""Correctness gate for whole-operation CUDA versus frozen TileLang fixtures."""
+"""Correctness gate for whole-operation CUDA versus independent Torch fixtures."""
 
 import torch
 
