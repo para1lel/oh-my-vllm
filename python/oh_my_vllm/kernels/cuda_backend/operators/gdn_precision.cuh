@@ -192,4 +192,95 @@ __device__ void scan_precise_chunk(const __nv_bfloat16 *queries, const __nv_bflo
   __syncthreads();
 }
 
+// Precision-only persistent chunk. The per-token arithmetic and every BF16
+// rounding boundary are identical to scan_precise_chunk; only the state
+// location changes. The caller keeps the FP32 state live in registers across
+// the whole chunk loop of one (sequence, head) and only selects this path when
+// every chunk of that sequence/head has conditioning == 1, so the shared
+// state<->register roundtrip and the (precision-dead) BF16 state mirror write
+// are removed. The mixed-route loop in scan_kernel is unchanged.
+__device__ __forceinline__ void
+scan_precision_persistent_chunk(const __nv_bfloat16 *queries, const __nv_bfloat16 *keys,
+                                const __nv_bfloat16 *values, const float *decay, const float *beta,
+                                int64_t position, int count, int hk, int hv, int head,
+                                int value_offset, int64_t qs, int64_t ks, int64_t vs,
+                                unsigned char *storage, float2 *state, __nv_bfloat16 *output) {
+  constexpr int lanes = precise_subgroup_lanes, columns = 128 / lanes;
+  const int lane = threadIdx.x % lanes,
+            first_value = threadIdx.x / lanes * precise_values_per_group;
+  const int query_head = head / (hv / hk);
+  auto shared_queries = reinterpret_cast<__nv_bfloat16 *>(storage + 26112);
+  auto shared_keys = reinterpret_cast<__nv_bfloat16 *>(storage + 42496);
+  auto shared_values = reinterpret_cast<__nv_bfloat16 *>(storage + 58880);
+  auto multipliers = reinterpret_cast<float *>(storage + 62976);
+  auto updates = reinterpret_cast<float *>(storage + 63232);
+  for (int i = threadIdx.x; i < 64 * 16; i += blockDim.x) {
+    const int row = i / 16, column = i % 16 * 8;
+    copy_bf16_8(shared_queries + row * 128 + column,
+                queries + (position + min(row, count - 1)) * qs + query_head * 128 + column,
+                row < count);
+    copy_bf16_8(shared_keys + row * 128 + column,
+                keys + (position + min(row, count - 1)) * ks + query_head * 128 + column,
+                row < count);
+  }
+  for (int i = threadIdx.x; i < 64 * (value_tile / 8); i += blockDim.x) {
+    const int row = i / (value_tile / 8), column = i % (value_tile / 8) * 8;
+    copy_bf16_8(shared_values + row * value_tile + column,
+                values + (position + min(row, count - 1)) * vs + head * 128 + value_offset + column,
+                row < count);
+  }
+  if (threadIdx.x < count) {
+    multipliers[threadIdx.x] = expf(decay[(position + threadIdx.x) * hv + head]);
+    updates[threadIdx.x] = beta[(position + threadIdx.x) * hv + head];
+  }
+  wait_copies();
+  for (int row_index = 0; row_index < count; ++row_index) {
+    float query[columns], key[columns];
+#pragma unroll
+    for (int column = 0; column < columns; ++column) {
+      query[column] = __bfloat162float(shared_queries[row_index * 128 + lane + column * lanes]) *
+                      0.08838834764831844f;
+      key[column] = __bfloat162float(shared_keys[row_index * 128 + lane + column * lanes]);
+    }
+    const float multiplier = multipliers[row_index], update = updates[row_index];
+    float2 recalled = make_float2(0, 0);
+#pragma unroll
+    for (int column = 0; column < columns; ++column) {
+      state[column] = __fmul2_rn(state[column], make_float2(multiplier, multiplier));
+      recalled = __ffma2_rn(state[column], make_float2(key[column], key[column]), recalled);
+    }
+#pragma unroll
+    for (int offset = lanes / 2; offset; offset >>= 1)
+      recalled =
+          __fadd2_rn(recalled, make_float2(__shfl_xor_sync(0xffffffff, recalled.x, offset, lanes),
+                                           __shfl_xor_sync(0xffffffff, recalled.y, offset, lanes)));
+    float2 value = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162 *>(
+        shared_values + row_index * value_tile + first_value));
+    float2 delta = __fmul2_rn(__fadd2_rn(value, make_float2(-recalled.x, -recalled.y)),
+                              make_float2(update, update));
+    float2 result = make_float2(0, 0);
+#pragma unroll
+    for (int column = 0; column < columns; ++column) {
+      state[column] = __ffma2_rn(delta, make_float2(key[column], key[column]), state[column]);
+      result = __ffma2_rn(state[column], make_float2(query[column], query[column]), result);
+    }
+#pragma unroll
+    for (int offset = lanes / 2; offset; offset >>= 1)
+      result =
+          __fadd2_rn(result, make_float2(__shfl_xor_sync(0xffffffff, result.x, offset, lanes),
+                                         __shfl_xor_sync(0xffffffff, result.y, offset, lanes)));
+    if (lane == 0) {
+      auto destination =
+          output + ((position + row_index) * hv + head) * 128 + value_offset + first_value;
+      if ((reinterpret_cast<uintptr_t>(destination) & 3) == 0)
+        *reinterpret_cast<__nv_bfloat162 *>(destination) = __float22bfloat162_rn(result);
+      else {
+        destination[0] = __float2bfloat16_rn(result.x);
+        destination[1] = __float2bfloat16_rn(result.y);
+      }
+    }
+  }
+  __syncthreads();
+}
+
 } // namespace gdn_chunk

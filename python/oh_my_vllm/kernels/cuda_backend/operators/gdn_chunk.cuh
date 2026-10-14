@@ -94,7 +94,8 @@ __device__ void invert_unit_triangular(const float *lower, float *inverse, float
     }
   }
   __syncthreads();
-  // Cross blocks use -C^-1 B A^-1 in FP32 before the coefficient's BF16 boundary.
+  // Cross blocks use -C^-1 B A^-1 in FP32 before the coefficient's BF16
+  // boundary.
   for (int width = 16; width <= 64; width *= 2) {
     const int half = width / 2, blocks = 64 / width, total = blocks * half * half;
     for (int index = threadIdx.x; index < total; index += blockDim.x) {
@@ -372,6 +373,39 @@ scan_kernel(const __nv_bfloat16 *__restrict__ queries, const __nv_bfloat16 *__re
   auto log_decay = reinterpret_cast<float *>(storage + 76288);
   auto decayed_rows = reinterpret_cast<float *>(storage + 76544);
   auto final_rows = reinterpret_cast<float *>(storage + 76800);
+  // Precision-only fast path: selected only when every chunk of this
+  // (sequence, head) is the precise route (conditioning == 1). Otherwise the
+  // unchanged mixed-route loop below runs. The selection is device-side and
+  // uses no host readback.
+  const int sequence_chunks = int((end - first + 63) / 64);
+  bool every_chunk_precise = true;
+  for (int c = threadIdx.x; c < sequence_chunks; c += blockDim.x)
+    every_chunk_precise &= (conditioning[int64_t(prefix + c) * value_heads + head] == 1);
+  every_chunk_precise = __syncthreads_and(every_chunk_precise);
+  if (every_chunk_precise) {
+    constexpr int lanes = precise_subgroup_lanes, columns = 128 / lanes;
+    const int lane = threadIdx.x % lanes,
+              first_value = threadIdx.x / lanes * precise_values_per_group;
+    float2 persistent_state[columns];
+#pragma unroll
+    for (int column = 0; column < columns; ++column)
+      persistent_state[column] =
+          make_float2(initial[state_base + first_value * 128 + lane + column * lanes],
+                      initial[state_base + (first_value + 1) * 128 + lane + column * lanes]);
+    for (int64_t position = first; position < end; position += 64) {
+      const int count = min(int64_t(64), end - position);
+      scan_precision_persistent_chunk(queries, keys, values, decay, beta, position, count,
+                                      query_heads, value_heads, head, value_offset, qs, ks, vs,
+                                      storage, persistent_state, output);
+    }
+#pragma unroll
+    for (int column = 0; column < columns; ++column) {
+      final[state_base + first_value * 128 + lane + column * lanes] = persistent_state[column].x;
+      final[state_base + (first_value + 1) * 128 + lane + column * lanes] =
+          persistent_state[column].y;
+    }
+    return;
+  }
   for (int i = threadIdx.x; i < value_tile * 128; i += blockDim.x) {
     int shared_index = i / 128 * key_pitch + i % 128;
     state[shared_index] = initial[state_base + i];

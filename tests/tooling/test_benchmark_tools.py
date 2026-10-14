@@ -27,7 +27,10 @@ class BenchmarkTests(unittest.TestCase):
                 "'import time; time.sleep(60)']); "
                 "Path(sys.argv[1]).write_text(str(p.pid)); time.sleep(60)"
             )
-            with self.assertRaises(subprocess.TimeoutExpired):
+            with (
+                patch.dict(os.environ, {"CUDA_VISIBLE_DEVICES": ""}),
+                self.assertRaises(subprocess.TimeoutExpired),
+            ):
                 compare.run_engine(
                     [sys.executable, "-c", code, str(pid_file)], timeout=1
                 )

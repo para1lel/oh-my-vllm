@@ -1,6 +1,6 @@
 # Current state and open work
 
-Updated: 2026-10-14. Refactor work is active. Final delivery is pending.
+Updated: 2026-10-15. Refactor work is active. Final delivery is pending.
 
 ## Accepted scope
 
@@ -19,35 +19,25 @@ Keep the theoretical model, two warmups, five repetitions, and 10% spread gates.
 3. Native CUDA provider migration, independent references, TileFoundry rebase, and harness adaptation: complete and independently reviewed.
 4. Profiler, request plots, performance tuning, and complete acceptance: pending.
 
-Obtain independent review before each milestone commit. Codex commits on `main` and pushes reviewed milestones after checks pass.
-OMP develops assigned GitHub Issues in a separate checkout and submits pull requests from its own branches.
-Rebase each pull request onto current `main`, repeat applicable checks, then squash into one single-parent commit.
-Update `main` only by fast-forward. Continue until all work passes.
+Apply [contribution](../CONTRIBUTING.md) and [collaboration](collaboration.md): independent review, checks, prompt publication, assigned OMP branches, rebase, repeat checks, squash, and fast-forward.
+Codex uses `main`. OMP uses a separate checkout. Continue until all work passes.
 
 The user authorized publication of the TileFoundry fork update.
 Its `main` follows upstream `e9820eb`. Its `oh-my-vllm-integration` branch matches the pinned `5b9a310` compatibility source.
 
 ## Previous source verification
 
-Source `3324a7f` keeps the [attention sigmoid's](../python/oh_my_vllm/ir/attention_gate.py) BF16 rounding before its BF16 product.
-The unchanged full-model MTP compile check and all-BF16-bit-pattern Torch comparison pass.
+Source `3324a7f` keeps attention sigmoid BF16 rounding before the BF16 product.
+Full-model MTP compile passes. The gate matches Torch for all BF16 bit patterns.
+Its formal 539-case matrix adds 22 gate cases to the previous 517 IDs. Non-boundary GPU passes 589 cases.
+Six ordinary/MTP4 capacity cases finish 258048 input and 4096 output tokens at batches 1/2/4, without OOM or recompute preemption.
 
-The formal operator matrix passes all 539 cases with complete coverage and no interference.
-It adds 22 gate cases to the unchanged previous 517 case IDs.
-The complete non-boundary GPU suite passes 589 cases.
-Six ordinary/MTP4 capacity cases at batches 1, 2, and 4 finish 258048 input and 4096 output tokens per request with zero OOM and recompute preemption.
+MTP and DSpark each pass six service clients and four-stage allocator OOM recovery, with worker replacement, cache reuse, and final release.
+Independent review covers original requests, source identities, and cleanup.
+CPU passes 1592/153. Its predecessor passes 1568/153 but fails 23 missing attention-gate fixtures. Keep original failures.
+Rust/style/document checks passed before that commit.
 
-MTP and DSpark each pass six service clients: constraints, Chat/Responses lifecycle, long context, and Chat/Responses agentic interaction.
-Each mode passes allocator OOM recovery at four stages, with worker replacement, cache reuse, and final release.
-These collections have independent reviews of original requests, source identities, and cleanup records.
-
-The CPU repeat passes 1592 cases and 153 subtests.
-Its predecessor passes 1568 and 153 but fails 23 fixtures with missing attention-gate configuration.
-The repair changes fixture configuration. Keep the original failed record.
-
-Required Rust/style/document checks passed before `3324a7f`.
-The current tutorial repeat passes 14 Node tests and 9 browser tests. Its build passes after source coverage updates.
-The default-off bounded Torch profiler and dark cache-hit request plots have selected CPU/GPU verification.
+Tutorial passes 14 Node and 9 browser tests plus its build. Bounded profiling and dark cache-hit plots have selected CPU/GPU checks.
 
 ## Selected subgroup scan checkpoint
 
@@ -69,26 +59,17 @@ The source-bound checkpoint summary is in the [acceptance index](acceptance.md).
 
 ## Narrow FP8 checkpoint
 
-The [native narrow projection](kernels/narrow-fp8.md) keeps FP32 block scales and the BF16 output boundary.
-Independent source review approves the orientation change and the source/header identity refresh.
-Twelve shapes have three rounds of twenty interleaved pairs. GPU projection latency decreases by 13.4%–18.4%, with positive confidence lower bounds.
+[Native narrow projection](kernels/narrow-fp8.md) keeps FP32 scales and BF16 output. Review approves its orientation and source/header identities.
+Twelve shapes with three rounds of twenty pairs reduce GPU latency 13.4%-18.4%, with positive confidence bounds.
+CPU passes 1592/153. Non-boundary GPU passes 621, with 28 new replay/fault cases and unchanged full-model checks.
+Two memchecks and all 539 operator diagnostic cases pass without interference.
 
-The full CPU repeat passes 1592 cases and 153 subtests. The full non-boundary GPU repeat passes 621 cases.
-The GPU suite contains 28 new critical replay/fault cases and the unchanged full-model compiled-unit checks.
-Two selected replay cases pass Compute Sanitizer with zero errors.
-All 539 operator diagnostic cases pass, with full coverage and no interference.
+The first CPU source-contract failure stays available. Corrected identities pass selected checks and the full repeat.
+Ordinary 32768/4096 batch-one diagnostics use two warmups and five measurements: prefill 1.971 seconds, ratio 4.461. Decode 34.116 seconds, ratio 2.203.
 
-The first CPU attempt fails one stale source-contract check. Its original record stays available.
-The reviewed identity refresh passes the selected checks and full repeat.
-
-The ordinary 32768-input/4096-output batch-one diagnostic collects two warmups and five measurements.
-Prefill is 1.971 seconds with ratio 4.461. Decode is 34.116 seconds with ratio 2.203.
-The spread checks pass. The two latency checks fail. This is uncommitted-source evidence, not formal acceptance.
-
-Capacity, service, one-hour, and the full framework matrix await final-source verification.
-
-Further [precision-path lessons](kernels/precision-lessons.md) reject finite history, fixed direct FP32 prefixes, and slow native FP64 panels.
-The CPU rounding counterexample rejects an ideal-arithmetic-only residual guard. No GDN candidate from these experiments is selected.
+Spreads pass. Latency gates fail. This dirty-source evidence is not formal acceptance.
+Capacity, service, one-hour, and the complete framework matrix await final-source verification.
+[Precision lessons](kernels/precision-lessons.md) reject finite history, fixed FP32 prefixes, and slow native FP64 panels.
 
 ## Service process ownership checkpoint
 
@@ -154,9 +135,8 @@ Independent review approves the dispatcher. Its 35 targeted CPU cases pass.
 They cover launch-record failure, cleanup errors, an older checkout, early leader exit, and peak boundaries.
 These checks do not verify GPU inference, performance, or a one-hour collection.
 
-OMP must correct Issue 4 independent review findings.
-Open findings: native edit guard, partial startup, cleanup, socket retention, and complete transport evidence.
-Verify corrections and isolation end to end before integration.
+OMP is correcting the fourth Issue 4 review: abort timing, optional cancellation evidence, clock correlation, and completed checks.
+Startup, cleanup, sockets, attempt counts, and asymmetric hops pass selected reviews. Final-source two-API fixtures and canonical CPU evidence are pending.
 
 HTTP fixtures use the selected test binary from separate Cargo output directories.
 Its selected repeat passes 38 tests and 46 subtests, with 31 recorded launches.
@@ -166,6 +146,23 @@ Final-source acceptance is pending.
 The tool lock now supplies Ninja for fresh native CUDA builds.
 A new external candidate build records its compiler, complete project header closure, and module hashes.
 Compilation and module loading do not prove memory safety, numerical acceptance, or performance.
+
+## Persistent precision state checkpoint
+
+The [persistent precision path](kernels/persistent-state.md) keeps FP32 state across all-precision chunks with the same eight-lane arithmetic.
+Mixed routes, BF16 boundaries, and numerical/state tolerances stay equal. Independent review approves four source/header identity updates.
+Twelve memchecks, 105 selected GPU tests, and all 539 operator diagnostic cases pass without interference.
+Main passes five fresh memchecks and 588 numerical tests with six subtests.
+
+Six context cases pass. The full non-boundary set passes 2307 cases but fails one CPU timeout fixture.
+The GPU-visible fixture fix passes seven tests and three subtests. The complete non-boundary repeat passes 2308/153. Original failures stay available.
+
+Same-GPU framework collections use the same checkpoint bytes and release binary, with two warmups and five measurements each.
+Separate caches pass steady-state audit. Prefill decreases 1.959 to 1.899 seconds, or 3.06%.
+Decode medians are 33.970 and 33.947 seconds. Ratios 4.300/2.192 fail the latency gate. Spread checks pass.
+
+The sixteen-lane regression and first shared-cache audit failures stay available.
+Final-source numerical, fifteen-row performance, service, and one-hour acceptance are pending.
 
 ## One-hour evidence
 
