@@ -14,14 +14,17 @@ import pytest
 from benchmarks import agentic_soak as soak
 
 
-@pytest.mark.parametrize("sampler_error", [True, False])
+@pytest.mark.parametrize(
+    "sampler_error,external_cancel", [(True, False), (False, False), (False, True)]
+)
 def test_sampler_exits_before_acceptance_and_raw_hashing(
-    monkeypatch, tmp_path, sampler_error
+    monkeypatch, tmp_path, sampler_error, external_cancel
 ):
     release_sample = threading.Event()
     sample_entered = threading.Event()
     sampler_exited = threading.Event()
     sampler_stop_holder = {}
+    cancelled = threading.Event()
     original_thread = threading.Thread
 
     class ControlledThread(original_thread):
@@ -61,6 +64,8 @@ def test_sampler_exits_before_acceptance_and_raw_hashing(
 
         def initialize(self):
             assert sample_entered.wait(2)
+            if external_cancel:
+                cancelled.set()
 
         def context(self):
             return {"lane": self.lane}
@@ -175,7 +180,7 @@ def test_sampler_exits_before_acceptance_and_raw_hashing(
         base_url="stub",
         workload="audit",
     )
-    result = soak.run(args)
+    result = soak.run(args, cancelled=cancelled) if external_cancel else soak.run(args)
     assert sampler_exited.is_set()
     memory = directory / "memory.jsonl"
     assert memory.exists()
@@ -183,7 +188,17 @@ def test_sampler_exits_before_acceptance_and_raw_hashing(
         row["sha256"] for row in result["raw_files"] if row["path"] == "memory.jsonl"
     )
     assert recorded_hash == hashlib.sha256(memory.read_bytes()).hexdigest()
-    if sampler_error:
+    if external_cancel:
+        assert cancelled.is_set()
+        assert not result.get("operational_passed"), result
+        assert any(
+            "stopped before normal completion" in error for error in result["errors"]
+        )
+        assert all(
+            "stopped before normal completion" in error or "BrokenBarrierError" in error
+            for error in result["errors"]
+        )
+    elif sampler_error:
         assert not result.get("operational_passed"), result
         assert "resource sampler: late sampler failure" in result["error"]
         assert result["errors"] == ["resource sampler: late sampler failure"]

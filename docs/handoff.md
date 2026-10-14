@@ -92,6 +92,27 @@ Capacity, service, one-hour, and the full framework matrix await final-source ve
 Further [precision-path lessons](kernels/precision-lessons.md) reject finite history, fixed direct FP32 prefixes, and slow native FP64 panels.
 The CPU rounding counterexample rejects an ideal-arithmetic-only residual guard. No GDN candidate from these experiments is selected.
 
+## Service process ownership checkpoint
+
+The [dedicated supervisor](testing/process-ownership.md) gives the engine tree an isolated process scope.
+The collector's other subprocess roots do not enter that scope.
+Selected CPU tests cover lost session leaders, root binding failure, partial control input, external cancellation, and cleanup error records.
+
+The full CPU repeat passes 1604 cases and 153 subtests. Rust, style, and document checks pass.
+The previous full repeat fails eight fixture collections after pytest reads an unrelated temporary-directory symlink.
+The fixtures now keep each comparison collection in its own configuration scope. The original failed record stays available.
+
+Independent review found a test assertion that rejected a valid barrier cancellation.
+The assertion is corrected. The original failed record stays available.
+
+Five external driver CPU cases pass: normal completion, engine exit, collector failure, supervisor loss, and an invalid collector result.
+These checks verify process ownership and keep original errors. They do not verify inference or a one-hour collection.
+Deadline-tail evidence and final-source one-hour acceptance are pending.
+
+A later external CUDA candidate failed with an illegal memory access. It was rejected and did not enter production.
+The [safety guide](kernels/cuda-safety.md) records the reviewed local scale-copy defect and verification limits.
+Keep that failed candidate off all devices until a new reviewed implementation meets the candidate procedure.
+
 ## One-hour evidence
 
 MTP4 and DSpark each collect four persistent OMP goal sessions for one hour in new disposable sandbox workspaces.

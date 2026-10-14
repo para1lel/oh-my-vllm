@@ -14,6 +14,7 @@ scripts/with-env.sh python scripts/agentic-soak.py --mode dspark --base-url "$SE
 
 Set `OH_MY_VLLM_MODEL` or supply `--model`. Install OMP on `PATH` or supply `--omp`.
 Use the matching service for each command. Stop that service and worker after collection.
+Use [dedicated process ownership](process-ownership.md) for an isolated service process scope.
 
 Use the pinned OMP `18.10.3` executable and Docker with its `rootless` mode enabled.
 The collector builds a temporary image with OMP, Python, Bash, and certificates.

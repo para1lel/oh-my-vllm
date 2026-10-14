@@ -58,7 +58,12 @@ def collect(command, directory):
 def test_isolated_collection_preserves_selected_nodes_and_multiplicity(
     arguments, collection_project, tmp_path
 ):
-    common = ["--rootdir=" + str(collection_project), "-c", str(ROOT / "pytest.ini")]
+    common = [
+        "--rootdir=" + str(collection_project),
+        "--confcutdir=" + str(collection_project),
+        "-c",
+        str(ROOT / "pytest.ini"),
+    ]
     original = collect(
         [sys.executable, "-m", "pytest", "tests", "-q", *common, *arguments],
         collection_project,

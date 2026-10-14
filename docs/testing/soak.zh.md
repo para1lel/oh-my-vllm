@@ -14,6 +14,7 @@ scripts/with-env.sh python scripts/agentic-soak.py --mode dspark --base-url "$SE
 
 设置 `OH_MY_VLLM_MODEL` 或传入 `--model`. 将 OMP 安装到 `PATH`, 或通过 `--omp` 指定.
 每个命令连接对应模式的服务. 采集结束后停止该服务和 worker.
+使用[专用进程归属](process-ownership.zh.md), 为服务提供独立的进程范围.
 使用固定的 OMP `18.10.3` executable, 并启用 Docker 的 `rootless` 模式.
 Collector 构建包含 OMP, Python, Bash 和证书的临时镜像.
 将 `--sandbox-host` 或 `OH_MY_VLLM_SANDBOX_HOST` 设为访问主机 loopback 的容器网关.

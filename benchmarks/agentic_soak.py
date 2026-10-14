@@ -70,7 +70,7 @@ def build_parser():
     return parser
 
 
-def run(args):
+def run(args, *, cancelled=None):
     directory = args.output_dir.resolve()
     if directory.is_relative_to(ROOT):
         raise ValueError("raw soak evidence must be outside the source repository")
@@ -107,7 +107,8 @@ def run(args):
         raise ValueError("service mode or maximum context differs")
     offset = args.server_log.stat().st_size
     log_identity = (args.server_log.stat().st_dev, args.server_log.stat().st_ino)
-    stop, sampler_stop, slots = threading.Event(), threading.Event(), ModelSlots()
+    stop = cancelled if cancelled is not None else threading.Event()
+    sampler_stop, slots = threading.Event(), ModelSlots()
     old_handlers = {
         sig: signal.signal(sig, lambda signum, frame: stop.set())
         for sig in (signal.SIGINT, signal.SIGTERM)
