@@ -22,7 +22,7 @@
 每个里程碑提交前取得独立审查. 在 `main` 提交, 持续推进直至全部通过.
 不得 push 或创建 pull request.
 
-## 当前源码验证
+## 前一版源码验证
 
 源码 `3324a7f` 保留 attention sigmoid 的 BF16 舍入, 再执行 BF16 乘法.
 参见 [attention gate](../python/oh_my_vllm/ir/attention_gate.py).
@@ -47,6 +47,23 @@ MTP 和 DSpark 各通过六类服务客户端: 约束, Chat/Responses 生命周�
 `3324a7f` 提交前已通过必需的 Rust/样式/文档检查.
 当前教程重跑通过 14 个 Node 测试及 9 个浏览器测试. 更新源码覆盖后, 构建通过.
 默认关闭且窗口有界的 Torch profiler 和暗色 cache 命中率请求图已通过选定 CPU/GPU 验证.
+
+## 已选 subgroup 扫描检查点
+
+已选 [精度路径](../python/oh_my_vllm/kernels/cuda_backend/operators/gdn_precision.cuh) 保持逐 token 递推, FP32 状态与 BF16 边界.
+FP32 归约顺序发生变化. 原数值与状态容差不变.
+独立审查批准源码及语义合同中的四处身份更新, 方程与下界均未改变.
+
+完整 CPU 重跑通过 1592 项和 153 个 subtest.
+选定 GPU 验证通过 99 项, 包括未修改的完整模型 MTP 编译检查.
+四项新增 [对齐与抵消案例](../tests/numerical/test_gdn_prefill_replay.py) 通过 Compute Sanitizer, 错误为零.
+完整 539 项算子数值采集通过, 没有干扰.
+未提交源码的报告属于诊断, `passed=false` 且 `selected_passed=true`.
+
+完整非边界 GPU 重跑通过 593 项.
+容量, 服务, 一小时与正式框架记录属于 `3324a7f`, 不属于本检查点.
+最终源码验收及第四里程碑待完成.
+绑定源码的检查点摘要见 [验收索引](acceptance.zh.md).
 
 ## 一小时证据
 
@@ -80,7 +97,7 @@ decode 中位数为 36.055 秒, 下界 15.484 秒, 比例 2.329.
 继续调优, 不得放宽数值, 状态, 工作负载或理论契约.
 
 选定方案后更新源码身份并执行相关检查, 完成最终源码验收, 生成真实请求图, 并在交付前取得独立审查.
-参见 [验收索引](acceptance.md) 了解采集范围.
+参见 [验收索引](acceptance.zh.md) 了解采集范围.
 过期工作树报告已移除. Git 历史保留原始结果.
 
 ## 活动例外与清理

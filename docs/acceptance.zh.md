@@ -14,6 +14,16 @@ Prefix-hit prefill 保持 ratio 例外. 全部阶段 spread 门槛仍有效.
 [交接](handoff.zh.md)记录已完成里程碑和剩余检查.
 不得依据历史测量或不完整矩阵声明最终验收.
 
+## 已选 subgroup scan 检查点
+
+[绑定源码的摘要](evidence/refactor-s8-scan/verification.json)标识已改动的 scan 和原始验证记录.
+完整 CPU 套件通过 1592 个案例和 153 个 subtest. 完整非边界 GPU 套件通过 593 个案例.
+选定 GPU 验证通过 99 个案例. 四个对齐及抵消案例通过 Compute Sanitizer, 错误为零.
+
+全部 539 个算子数值案例通过. 未提交源码的报告保持 `diagnostic=true`, `passed=false` 和 `selected_passed=true`.
+FP32 归约顺序改变. 数值容差和理论模型保持相同.
+最终源码的容量, 服务, 一小时及框架性能验证尚待完成.
+
 ## 源码 3324a7f
 
 [可移植验证摘要](evidence/refactor-3324a7f/verification.json)记录源码哈希和原始报告身份.

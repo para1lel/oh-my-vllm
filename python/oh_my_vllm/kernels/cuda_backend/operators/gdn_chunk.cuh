@@ -37,11 +37,13 @@ __device__ void wait_copies() {
 }
 
 constexpr int chunk_size = 64;
-constexpr int value_tile = 16;
+constexpr int value_tile = 32;
+constexpr int precise_subgroup_lanes = 8;
+constexpr int precise_values_per_group = 2;
 constexpr int key_pitch = 136;
-constexpr int value_pitch = 24;
+constexpr int value_pitch = 40;
 constexpr int transform_pitch = 72;
-constexpr int scan_shared_bytes = 49152;
+constexpr int scan_shared_bytes = 77056;
 
 __device__ int chunk_prefix(const void *starts, bool wide, int sequence) {
   int prefix = 0;
@@ -362,14 +364,14 @@ scan_kernel(const __nv_bfloat16 *__restrict__ queries, const __nv_bfloat16 *__re
       (int64_t(sequence) * value_heads + head) * 128 * 128 + value_offset * 128;
   extern __shared__ __align__(32) unsigned char storage[];
   auto state = reinterpret_cast<float *>(storage);
-  auto state_bf16 = reinterpret_cast<__nv_bfloat16 *>(storage + 8704);
-  auto a = reinterpret_cast<__nv_bfloat16 *>(storage + 13056);
-  auto b = reinterpret_cast<__nv_bfloat16 *>(storage + 30464);
-  auto temporary = reinterpret_cast<float *>(storage + 33536);
-  auto delta = reinterpret_cast<float *>(storage + 42240);
-  auto log_decay = reinterpret_cast<float *>(storage + 48384);
-  auto decayed_rows = reinterpret_cast<float *>(storage + 48640);
-  auto final_rows = reinterpret_cast<float *>(storage + 48896);
+  auto state_bf16 = reinterpret_cast<__nv_bfloat16 *>(storage + 17408);
+  auto a = reinterpret_cast<__nv_bfloat16 *>(storage + 26112);
+  auto b = reinterpret_cast<__nv_bfloat16 *>(storage + 43520);
+  auto temporary = reinterpret_cast<float *>(storage + 48640);
+  auto delta = reinterpret_cast<float *>(storage + 66048);
+  auto log_decay = reinterpret_cast<float *>(storage + 76288);
+  auto decayed_rows = reinterpret_cast<float *>(storage + 76544);
+  auto final_rows = reinterpret_cast<float *>(storage + 76800);
   for (int i = threadIdx.x; i < value_tile * 128; i += blockDim.x) {
     int shared_index = i / 128 * key_pitch + i % 128;
     state[shared_index] = initial[state_base + i];
@@ -536,7 +538,9 @@ void gdn_chunk_scan(TensorView q, TensorView k, TensorView v, TensorView initial
                                       gdn_chunk::scan_shared_bytes) == cudaSuccess);
   auto stream = stream_for(q, "gdn_chunk_scan");
   launch_kernel(
-      gdn_chunk::scan_kernel, dim3(starts.size(0) - 1, v.size(1), 128 / gdn_chunk::value_tile), 256,
+      gdn_chunk::scan_kernel, dim3(starts.size(0) - 1, v.size(1), 128 / gdn_chunk::value_tile),
+      gdn_chunk::value_tile / gdn_chunk::precise_values_per_group *
+          gdn_chunk::precise_subgroup_lanes,
       gdn_chunk::scan_shared_bytes, stream, static_cast<const __nv_bfloat16 *>(q.data_ptr()),
       static_cast<const __nv_bfloat16 *>(k.data_ptr()),
       static_cast<const __nv_bfloat16 *>(v.data_ptr()),

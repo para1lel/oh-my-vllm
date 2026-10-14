@@ -30,8 +30,8 @@ scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda pytho
 ```
 
 Use a new external output path. [Static cases](../../development/kernels/cases.py) define the matrix.
-All 517 cases must pass independent numerical, rounding, mutation, and state contracts.
-The original 317 case IDs stay. The supplements add 200 legal production cases.
+All 539 cases must pass independent numerical, rounding, mutation, and state contracts.
+The original 317 case IDs stay. The supplements add 200 legal production cases and 22 attention-gate cases.
 
 Partial selection reports `coverage.complete=false` and cannot prove full-matrix acceptance alone.
 Use `--operations NAME` or repeated `--case-id ID` for diagnosis.

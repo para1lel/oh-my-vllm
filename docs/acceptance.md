@@ -14,6 +14,16 @@ The final-source performance matrix and delivery checks are pending.
 The [handoff](handoff.md) records completed milestones and pending checks.
 Do not mark final acceptance from historical measurements or incomplete matrices.
 
+## Selected subgroup scan checkpoint
+
+The [source-bound summary](evidence/refactor-s8-scan/verification.json) identifies the changed scan and its original verification records.
+The complete CPU suite passes 1592 cases and 153 subtests. The complete non-boundary GPU suite passes 593 cases.
+Selected GPU verification passes 99 cases. Four alignment and cancellation cases pass Compute Sanitizer with zero errors.
+
+All 539 operator numerical cases pass. Their uncommitted-source report keeps `diagnostic=true`, `passed=false`, and `selected_passed=true`.
+The FP32 reduction order changes. Numerical tolerances and the theoretical model stay equal.
+Final-source capacity, service, one-hour, and framework performance verification are pending.
+
 ## Source 3324a7f
 
 The [portable verification summary](evidence/refactor-3324a7f/verification.json) records source hashes and original report identities.

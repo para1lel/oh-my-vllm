@@ -22,7 +22,7 @@ Keep the theoretical model, two warmups, five repetitions, and 10% spread gates.
 Obtain independent review before each milestone commit. Commit on `main` and continue until all work passes.
 Do not push or open pull requests.
 
-## Current source verification
+## Previous source verification
 
 Source `3324a7f` keeps the attention sigmoid's BF16 rounding before its BF16 product.
 See [attention gate](../python/oh_my_vllm/ir/attention_gate.py).
@@ -47,6 +47,23 @@ The original failed record is kept.
 Required Rust/style/document checks passed before `3324a7f`.
 The current tutorial repeat passes 14 Node tests and 9 browser tests. Its build passes after source coverage updates.
 The default-off bounded Torch profiler and dark cache-hit request plots have selected CPU/GPU verification.
+
+## Selected subgroup scan checkpoint
+
+The selected [precision path](../python/oh_my_vllm/kernels/cuda_backend/operators/gdn_precision.cuh) keeps the token recurrence, FP32 state, and BF16 boundaries.
+Its FP32 reduction order changes. Existing numerical and state tolerances stay equal.
+Independent review approved the source and four identity updates in the semantic contract, with no equation or lower-bound change.
+
+The complete CPU repeat passes 1592 cases and 153 subtests.
+Selected GPU verification passes 99 cases, with the unchanged complete-model MTP compile checks.
+Four added [alignment and cancellation cases](../tests/numerical/test_gdn_prefill_replay.py) pass Compute Sanitizer with zero errors.
+The complete 539-case operator numerical collection passes with no interference.
+Its uncommitted-source report is diagnostic and has `passed=false` with `selected_passed=true`.
+
+The complete non-boundary GPU repeat passes 593 cases.
+Capacity, service, one-hour, and formal framework records belong to `3324a7f`, not this checkpoint.
+Final-source acceptance and the fourth milestone are pending.
+The source-bound checkpoint summary is in the [acceptance index](acceptance.md).
 
 ## One-hour evidence
 

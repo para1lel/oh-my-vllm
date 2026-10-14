@@ -17,14 +17,14 @@ __device__ void scan_constant_key_chunk(
   }
   squared_norm = warp_sum(squared_norm);
 #pragma unroll
-  for (int row = 0; row < 2; ++row) {
+  for (int row = 0; row < 8; ++row) {
     float recalled = 0;
 #pragma unroll
     for (int column = 0; column < 4; ++column)
-      recalled += state[(warp * 2 + row) * key_pitch + lane + column * 32] * key[column];
+      recalled += state[(warp * 8 + row) * key_pitch + lane + column * 32] * key[column];
     recalled = warp_sum(recalled);
     if (lane == 0)
-      projection[warp * 2 + row] = recalled;
+      projection[warp * 8 + row] = recalled;
   }
   for (int i = threadIdx.x; i < 64 * 16; i += blockDim.x) {
     int row = i / 16, column = i % 16 * 8;
@@ -32,8 +32,8 @@ __device__ void scan_constant_key_chunk(
                 queries + (position + min(row, count - 1)) * qs + query_head * 128 + column,
                 row < count);
   }
-  for (int i = threadIdx.x; i < 64 * 2; i += blockDim.x) {
-    int row = i / 2, column = i % 2 * 8;
+  for (int i = threadIdx.x; i < 64 * (value_tile / 8); i += blockDim.x) {
+    int row = i / (value_tile / 8), column = i % (value_tile / 8) * 8;
     copy_bf16_8(b + row * value_pitch + column,
                 values + (position + min(row, count - 1)) * vs + head * 128 + value_offset + column,
                 row < count);
@@ -45,7 +45,7 @@ __device__ void scan_constant_key_chunk(
     updates[row] = beta[(position + row) * hv + head];
   }
   wait_copies();
-  for (int row = warp; row < count; row += 8) {
+  for (int row = warp; row < count; row += blockDim.x / 32) {
     float dot = 0;
 #pragma unroll
     for (int column = 0; column < 4; ++column)
@@ -100,13 +100,15 @@ __device__ void scan_precise_chunk(const __nv_bfloat16 *queries, const __nv_bflo
                                    int head, int value_offset, int64_t qs, int64_t ks, int64_t vs,
                                    float *shared_state, __nv_bfloat16 *rounded_state,
                                    unsigned char *storage, __nv_bfloat16 *output) {
-  const int lane = threadIdx.x % 32, first_value = threadIdx.x / 32 * 2;
+  constexpr int lanes = precise_subgroup_lanes, columns = 128 / lanes;
+  const int lane = threadIdx.x % lanes,
+            first_value = threadIdx.x / lanes * precise_values_per_group;
   const int query_head = head / (hv / hk);
-  auto shared_queries = reinterpret_cast<__nv_bfloat16 *>(storage + 13056);
-  auto shared_keys = reinterpret_cast<__nv_bfloat16 *>(storage + 29440);
-  auto shared_values = reinterpret_cast<__nv_bfloat16 *>(storage + 45824);
-  auto multipliers = reinterpret_cast<float *>(storage + 47872);
-  auto updates = reinterpret_cast<float *>(storage + 48128);
+  auto shared_queries = reinterpret_cast<__nv_bfloat16 *>(storage + 26112);
+  auto shared_keys = reinterpret_cast<__nv_bfloat16 *>(storage + 42496);
+  auto shared_values = reinterpret_cast<__nv_bfloat16 *>(storage + 58880);
+  auto multipliers = reinterpret_cast<float *>(storage + 62976);
+  auto updates = reinterpret_cast<float *>(storage + 63232);
   for (int i = threadIdx.x; i < 64 * 16; i += blockDim.x) {
     const int row = i / 16, column = i % 16 * 8;
     copy_bf16_8(shared_queries + row * 128 + column,
@@ -116,8 +118,8 @@ __device__ void scan_precise_chunk(const __nv_bfloat16 *queries, const __nv_bflo
                 keys + (position + min(row, count - 1)) * ks + query_head * 128 + column,
                 row < count);
   }
-  for (int i = threadIdx.x; i < 64 * 2; i += blockDim.x) {
-    const int row = i / 2, column = i % 2 * 8;
+  for (int i = threadIdx.x; i < 64 * (value_tile / 8); i += blockDim.x) {
+    const int row = i / (value_tile / 8), column = i % (value_tile / 8) * 8;
     copy_bf16_8(shared_values + row * value_tile + column,
                 values + (position + min(row, count - 1)) * vs + head * 128 + value_offset + column,
                 row < count);
@@ -127,53 +129,66 @@ __device__ void scan_precise_chunk(const __nv_bfloat16 *queries, const __nv_bflo
     updates[threadIdx.x] = beta[(position + threadIdx.x) * hv + head];
   }
   wait_copies();
-  float state[2][4];
+  float2 state[columns];
 #pragma unroll
-  for (int row = 0; row < 2; ++row)
-#pragma unroll
-    for (int column = 0; column < 4; ++column)
-      state[row][column] = shared_state[(first_value + row) * key_pitch + lane + column * 32];
+  for (int column = 0; column < columns; ++column)
+    state[column] =
+        make_float2(shared_state[first_value * key_pitch + lane + column * lanes],
+                    shared_state[(first_value + 1) * key_pitch + lane + column * lanes]);
   for (int row_index = 0; row_index < count; ++row_index) {
-    float query[4], key[4];
+    float query[columns], key[columns];
 #pragma unroll
-    for (int column = 0; column < 4; ++column) {
-      query[column] = __bfloat162float(shared_queries[row_index * 128 + lane + column * 32]) *
+    for (int column = 0; column < columns; ++column) {
+      query[column] = __bfloat162float(shared_queries[row_index * 128 + lane + column * lanes]) *
                       0.08838834764831844f;
-      key[column] = __bfloat162float(shared_keys[row_index * 128 + lane + column * 32]);
+      key[column] = __bfloat162float(shared_keys[row_index * 128 + lane + column * lanes]);
     }
     const float multiplier = multipliers[row_index], update = updates[row_index];
+    float2 recalled = make_float2(0, 0);
 #pragma unroll
-    for (int row = 0; row < 2; ++row) {
-      float recalled = 0;
+    for (int column = 0; column < columns; ++column) {
+      state[column] = __fmul2_rn(state[column], make_float2(multiplier, multiplier));
+      recalled = __ffma2_rn(state[column], make_float2(key[column], key[column]), recalled);
+    }
 #pragma unroll
-      for (int column = 0; column < 4; ++column) {
-        state[row][column] *= multiplier;
-        recalled += state[row][column] * key[column];
+    for (int offset = lanes / 2; offset; offset >>= 1)
+      recalled =
+          __fadd2_rn(recalled, make_float2(__shfl_xor_sync(0xffffffff, recalled.x, offset, lanes),
+                                           __shfl_xor_sync(0xffffffff, recalled.y, offset, lanes)));
+    float2 value = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162 *>(
+        shared_values + row_index * value_tile + first_value));
+    float2 delta = __fmul2_rn(__fadd2_rn(value, make_float2(-recalled.x, -recalled.y)),
+                              make_float2(update, update));
+    float2 result = make_float2(0, 0);
+#pragma unroll
+    for (int column = 0; column < columns; ++column) {
+      state[column] = __ffma2_rn(delta, make_float2(key[column], key[column]), state[column]);
+      result = __ffma2_rn(state[column], make_float2(query[column], query[column]), result);
+    }
+#pragma unroll
+    for (int offset = lanes / 2; offset; offset >>= 1)
+      result =
+          __fadd2_rn(result, make_float2(__shfl_xor_sync(0xffffffff, result.x, offset, lanes),
+                                         __shfl_xor_sync(0xffffffff, result.y, offset, lanes)));
+    if (lane == 0) {
+      auto destination =
+          output + ((position + row_index) * hv + head) * 128 + value_offset + first_value;
+      if ((reinterpret_cast<uintptr_t>(destination) & 3) == 0)
+        *reinterpret_cast<__nv_bfloat162 *>(destination) = __float22bfloat162_rn(result);
+      else {
+        destination[0] = __float2bfloat16_rn(result.x);
+        destination[1] = __float2bfloat16_rn(result.y);
       }
-      recalled = warp_sum(recalled);
-      const int value = value_offset + first_value + row;
-      const float delta =
-          (__bfloat162float(shared_values[row_index * value_tile + first_value + row]) - recalled) *
-          update;
-      float result = 0;
-#pragma unroll
-      for (int column = 0; column < 4; ++column) {
-        state[row][column] += delta * key[column];
-        result += state[row][column] * query[column];
-      }
-      result = warp_sum(result);
-      if (lane == 0)
-        output[((position + row_index) * hv + head) * 128 + value] = __float2bfloat16_rn(result);
     }
   }
 #pragma unroll
-  for (int row = 0; row < 2; ++row)
-#pragma unroll
-    for (int column = 0; column < 4; ++column) {
-      const int index = (first_value + row) * key_pitch + lane + column * 32;
-      shared_state[index] = state[row][column];
-      rounded_state[index] = __float2bfloat16_rn(state[row][column]);
-    }
+  for (int column = 0; column < columns; ++column) {
+    int index = first_value * key_pitch + lane + column * lanes;
+    shared_state[index] = state[column].x;
+    shared_state[index + key_pitch] = state[column].y;
+    rounded_state[index] = __float2bfloat16_rn(state[column].x);
+    rounded_state[index + key_pitch] = __float2bfloat16_rn(state[column].y);
+  }
   __syncthreads();
 }
 

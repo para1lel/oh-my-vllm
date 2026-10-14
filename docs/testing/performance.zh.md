@@ -30,8 +30,8 @@ scripts/with-gpu.sh scripts/with-env.sh env OH_MY_VLLM_KERNEL_BACKEND=cuda pytho
 ```
 
 使用新的外部输出路径. [静态用例](../../development/kernels/cases.py) 定义矩阵.
-全部 517 项须通过独立数值, 舍入, 修改与状态契约.
-原有 317 个用例 ID 保留. 补充范围增加 200 个合法生产案例.
+全部 539 项须通过独立数值, 舍入, 修改与状态契约.
+原有 317 个用例 ID 保留. 补充范围增加 200 个合法生产案例与 22 个 attention-gate 案例.
 
 部分选择报告 `coverage.complete=false`, 不能单独证明完整矩阵通过.
 诊断可使用 `--operations NAME` 或重复的 `--case-id ID`.
