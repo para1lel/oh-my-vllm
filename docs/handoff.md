@@ -122,7 +122,7 @@ New control timestamps bind original RPC bytes, acknowledgements, the native abo
 Server-completed/client-aborted tails have a different count and do not enter scatter plots.
 Verification fails if proof is missing, changed, or does not bind one request. Historical collection results stay unchanged.
 
-The current full CPU repeat passes 1658 cases and 153 subtests.
+At the deadline checkpoint, the full CPU repeat passes 1658 cases and 153 subtests.
 Critical checks also cover subprocess RPC capture, output budgets, and more than one aborted request.
 
 The proxy records the disconnect's wall and monotonic clocks before handler cleanup.
@@ -145,6 +145,23 @@ Existing tasks can finish across a boundary. Codex handles new work during peak 
 
 DSH tuning is stopped at the user's request. Its owned sandbox resources are released.
 No candidate from that round is selected.
+
+## Collaborator dispatch checkpoint
+
+The [collaboration procedure](collaboration.md) records assigned Issue branches, independent review, rebase, and squash integration.
+Codex publishes reviewed milestones promptly. GitHub permits squash merges only.
+Host proxy and provider configuration stay in ignored `LOCAL.md` and the native credential store.
+
+The dispatcher uses the reviewed supervisor from the primary checkout when OMP works on an older branch.
+Scope and pricing checks run again after GitHub lookup. Native session records bind task continuation.
+The supervisor audits descendant release after finite tasks. Service shutdown still must use the controller's stop command.
+
+Independent review approves the dispatcher. Its 35 targeted CPU cases pass.
+They cover launch-record failure, cleanup errors, an older checkout, early leader exit, and peak boundaries.
+These checks do not verify GPU inference, performance, or a one-hour collection.
+
+OMP's first translation-workload implementation is awaiting Codex review on Issue 4.
+Verify its reported checks and isolation end to end before integration.
 
 ## One-hour evidence
 

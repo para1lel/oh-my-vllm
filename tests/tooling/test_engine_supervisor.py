@@ -16,7 +16,7 @@ from benchmarks import engine_supervisor
 
 
 @contextmanager
-def supervisor(tmp_path, engine):
+def supervisor(tmp_path, engine, *, natural_completion=False):
     log, audit = tmp_path / "engine.log", tmp_path / "processes.json"
     process = subprocess.Popen(
         [
@@ -27,6 +27,7 @@ def supervisor(tmp_path, engine):
             str(log),
             "--audit",
             str(audit),
+            *(["--natural-completion"] if natural_completion else []),
             "--",
             sys.executable,
             "-c",
@@ -104,6 +105,33 @@ def test_new_session_descendant_is_released_by_isolated_scope(tmp_path):
         assert process.wait(timeout=20) == 0
         result = released(audit, child)
     assert result["passed"] is True
+
+
+@pytest.mark.parametrize("exit_code", [0, 2])
+def test_natural_completion_releases_a_stubborn_orphan(tmp_path, exit_code):
+    engine = """import os,signal,time
+child = os.fork()
+if child == 0:
+    os.setsid()
+    signal.signal(signal.SIGTERM,signal.SIG_IGN)
+    print(os.getpid(),flush=True)
+    time.sleep(60)
+    os._exit(0)
+time.sleep(.2)
+os._exit(EXIT_CODE)
+""".replace("EXIT_CODE", str(exit_code))
+    with supervisor(tmp_path, engine, natural_completion=True) as (
+        process,
+        log,
+        audit,
+        _event,
+    ):
+        child = wait_log(log)
+        assert process.wait(timeout=20) == (0 if exit_code == 0 else 1)
+        result = released(audit, child)
+    assert result["completion_mode"] == "natural_exit"
+    assert result["engine_returncode"] == exit_code
+    assert result["passed"] is (exit_code == 0)
 
 
 def test_delayed_first_observation_owns_orphan_without_session_leader(tmp_path):

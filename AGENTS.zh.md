@@ -15,12 +15,15 @@ Torch 不提供的算子使用仓库 CUDA 实现. 允许原生 CUDA 库.
 
 ## 工作流程
 
-读取 Git 状态, 确保分支为 `main`, 然后读取[交接](docs/handoff.zh.md)和适用的目录指令.
+读取 Git 状态, 然后读取[交接](docs/handoff.zh.md)和适用的目录指令.
+Codex 使用 `main`. OMP 在独立 checkout 使用分配的 Issue 分支.
 使用满足契约的简单改动. 为关键行为添加测试, 不测试实现细节.
 每个里程碑都由独立 sub-agent review, 修正发现, 更新交接, 然后提交有意修改的路径.
 
 遵循[贡献规则](CONTRIBUTING.zh.md). 保持 hooks 启用.
-没有用户明确指令时, 不 push, 不开 pull request, 不创建分支.
+用户已授权项目 Issue, OMP 分支和 pull request, 以及经审查里程碑的发布.
+遵循[协作流程](docs/collaboration.zh.md): rebase, 重跑检查, squash, 再 fast-forward `main`.
+其他仓库及发布操作仍需用户明确指令.
 现有 TileFoundry 适配分支是已许可的例外.
 
 ## 必需检查

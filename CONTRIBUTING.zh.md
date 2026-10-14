@@ -1,9 +1,9 @@
 # 贡献流程
 
 修改前阅读 [协作规则](AGENTS.zh.md) 和 [当前工作](docs/handoff.zh.md).
-只在 `main` 上开发和提交.
+Codex 在 `main` 开发. OMP 在独立分支开发分配的 Issue, 并提交 pull request.
 保留其他任务已有的修改.
-仅在用户明确指示后推送或创建 PR.
+用户已授权本项目经审查的发布及[协作流程](docs/collaboration.zh.md).
 
 ## 实现
 

@@ -198,7 +198,7 @@ def _watch_engine(process, ownership, observations, stop):
     }
 
 
-def supervise(command, log_path, audit_path):
+def supervise(command, log_path, audit_path, *, natural_completion=False):
     supervisor = _process_record(os.getpid())
     summary = {
         "schema": 1,
@@ -207,6 +207,7 @@ def supervise(command, log_path, audit_path):
         "ownership_scope": "fresh subreaper with one spawned engine and no other roots",
         "errors": [],
         "passed": False,
+        "completion_mode": "natural_exit" if natural_completion else "controller_stop",
     }
     process, ownership = None, None
     stop = {"signal": None}
@@ -260,7 +261,9 @@ def supervise(command, log_path, audit_path):
         cleanup = summary.get("cleanup", {})
         summary["passed"] = (
             not summary["errors"]
-            and summary.get("monitor", {}).get("stop_cause") == "controller_stop"
+            and summary.get("monitor", {}).get("stop_cause")
+            == ("engine_exited" if natural_completion else "controller_stop")
+            and (not natural_completion or summary.get("engine_returncode") == 0)
             and bool(cleanup)
             and not any(
                 cleanup[name]
@@ -278,6 +281,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--audit", type=Path, required=True)
+    parser.add_argument("--natural-completion", action="store_true")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
@@ -285,7 +289,9 @@ def main():
         parser.error("an engine command is required")
     if args.audit.exists():
         parser.error("the process audit already exists")
-    result = supervise(command, args.log, args.audit)
+    result = supervise(
+        command, args.log, args.audit, natural_completion=args.natural_completion
+    )
     raise SystemExit(0 if result["passed"] else 1)
 
 

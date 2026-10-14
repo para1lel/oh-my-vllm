@@ -18,6 +18,7 @@
 TileFoundry 是固定 fork 的开发依赖. 简单不兼容可以直接修复.
 重大 fork 修改先讨论. 不开 upstream pull request.
 
-已许可的适配分支不授权主项目创建分支.
+TileFoundry 适配分支例外与已授权的 OMP Issue 分支分别适用.
+OMP 工作遵循项目[协作流程](../docs/collaboration.zh.md).
 记录测量源码, 环境, 配置, 模块和 checkpoint 身份.
 不挑选有利样本, 不通过修改理论下界隐藏开销.

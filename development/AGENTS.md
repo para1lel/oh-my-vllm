@@ -19,6 +19,7 @@ Use compatible stable dependencies in dependency order and pin the combination a
 TileFoundry is a development dependency from the pinned fork. Fix simple incompatibilities directly.
 Discuss substantial fork changes first. Do not open upstream pull requests.
 
-The permitted adaptation branch does not authorize branches in the main project.
+The TileFoundry adaptation exception is separate from the authorized OMP Issue branches.
+Use the project's [collaboration procedure](../docs/collaboration.md) for OMP work.
 Keep measurement source, environment, configuration, module, and checkpoint identities.
 Do not select favorable samples or change theoretical bounds to hide overhead.

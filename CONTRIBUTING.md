@@ -1,9 +1,9 @@
 # Contribution procedure
 
 Read [collaboration rules](AGENTS.md) and [current work](docs/handoff.md) before changes.
-Develop and commit only on `main`.
+Codex develops on `main`. OMP develops assigned Issues on separate branches and submits pull requests.
 Keep existing changes from other work.
-Push or open a pull request only after explicit user instruction.
+The user authorizes this project's reviewed publication and [collaboration procedure](docs/collaboration.md).
 
 ## Implementation
 

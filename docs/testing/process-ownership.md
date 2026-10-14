@@ -27,6 +27,10 @@ Input EOF, unexpected service exit, `SIGINT`, or `SIGTERM` causes cleanup and a 
 Partial control input cannot stop process observations or signal handling.
 The supervisor records collected observation intervals. The specified interval alone does not prove process coverage.
 
+Finite collaborator tasks use `--natural-completion` instead of a controller stop.
+Only a zero task exit with verified descendant cleanup can pass this mode.
+In the default service mode, the controller must send `stop`.
+
 Connect unexpected supervisor exit to the [collector cancellation event](../../benchmarks/agentic_soak.py#L73) <!-- source: def run(args, -->.
 Wait for collector cleanup, supervisor exit, and the controller's monitor thread exit.
 Do not close ownership handles while that thread still uses them.

@@ -15,12 +15,15 @@ Keep development tools separate from inference dependencies.
 
 ## Workflow
 
-Read Git status, make sure the branch is `main`, then read [handoff](docs/handoff.md) and applicable directory instructions.
+Read Git status, then read [handoff](docs/handoff.md) and applicable directory instructions.
+Codex uses `main`. OMP uses its assigned Issue branch in a separate checkout.
 Use the simplest change that meets the contracts. Add tests for critical behavior, not implementation details.
 After each milestone, obtain an independent sub-agent review, correct findings, update the handoff, and commit intentional paths.
 
 Follow [contribution rules](CONTRIBUTING.md). Keep hooks enabled.
-Do not push, open pull requests, or create branches without explicit user instruction.
+The user authorizes project Issues, OMP branches and pull requests, and reviewed milestone publication.
+Follow [collaboration](docs/collaboration.md): rebase, repeat checks, squash, and fast-forward `main`.
+Obtain explicit user instruction for other repositories and publication.
 The existing TileFoundry adaptation branch is the permitted exception.
 
 ## Required checks
