@@ -47,6 +47,23 @@ Graph replay 计数不能替代 host dispatch 计数.
 完整 GPU 矩阵验证仅数值采集. 独立的选定计时验证候选比较.
 来源记录与 profiling 分离见[内核开发](../kernels.zh.md).
 
+## 硬件计数器诊断
+
+使用 [profiler worker](../../development/kernels/profile_worker.py), 在预热后选择一个完整正式算子.
+以下命令已使用 Nsight Compute 2026.1.1 验证:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh ncu --target-processes all --nvtx --nvtx-include 'profile-operation/' --kernel-name 'regex:scan_kernel' --launch-count 1 --cache-control none --clock-control none --section SpeedOfLight --section Occupancy --section WarpStateStats --section MemoryWorkloadAnalysis --export "$EVIDENCE_DIR/scan" python -m development.kernels.profile_worker --case gdn_prefill-aaae0f6f08 --backend cuda
+ncu --import "$EVIDENCE_DIR/scan.ncu-rep" --page raw --csv --log-file "$EVIDENCE_DIR/scan.csv"
+```
+
+使用新的外部报告路径. 选定 kernel 只占算子的一部分.
+该命令不控制时钟和缓存状态. 重放时长只用于诊断, 不用于验收计时.
+CSV 输出包含单位行. 读取计数器值时保留该行.
+
+并发, 重放和计数器解释见 [测量指南](../profiling/measurement.zh.md).
+采集后释放自有进程. 不要并发运行另一个 CUPTI profiler.
+
 ## 框架性能
 
 构建当前 release 二进制, 为每次尝试指定新的外部输出路径.

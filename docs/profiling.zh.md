@@ -2,6 +2,7 @@
 
 通过 profiling 解释已测时延. 正式计时按 [性能契约](requirements/performance.zh.md) 关闭 profiling.
 原始 trace 放在外部存储, 绑定源码的摘要放在 [验收索引](acceptance.zh.md).
+时序关联, 重放策略, 计数器单位和已复现观测见 [测量方法](profiling/measurement.zh.md).
 
 ## 主机与设备时间
 

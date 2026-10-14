@@ -100,6 +100,14 @@ The theoretical equations are unchanged. The complete fifteen-row final-source f
 External CUDA candidates are diagnostic experiments. They are not selected production changes or acceptance evidence.
 Continue tuning without weakening numerical, state, workload, or theoretical contracts.
 
+Primary-source [algorithm research](kernels/optimization.md) and reproduced [measurement guidance](profiling/measurement.md) document the next optimization directions.
+Current scan/GEMM counters, isolated FP64 emulation, and three-layer wavefront probes have source-bound diagnostic summaries.
+Eager FP64 emulation is slower for the tested shapes. Token slicing lacks complete equivalence proof.
+Neither candidate is selected.
+
+The instrumented ordinary model recomputes route flags on 48 GDN layers for one repeated-token input.
+Of those layers, 46 use the precision route for all chunks. Other prompt distributions are unmeasured.
+
 After selection, refresh source identities and run affected checks, complete final-source acceptance, generate collected request plots, and obtain independent review before delivery.
 See the [acceptance index](acceptance.md) for collection scope.
 Obsolete working-tree reports were removed. Git history keeps their original results.

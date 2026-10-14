@@ -2,6 +2,7 @@
 
 使用 [算子契约](requirements/kernels.zh.md), [harness 指令](../development/kernels/AGENTS.zh.md) 和 [性能协议](requirements/performance.zh.md).
 当前 provider 迁移状态见 [交接](handoff.zh.md). 不把旧测量当作新验收.
+选择新的数值或调度路径前, 阅读 [算法调研和实测经验](kernels/optimization.zh.md).
 
 ## 实现来源
 

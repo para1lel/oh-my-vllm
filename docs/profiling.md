@@ -2,6 +2,7 @@
 
 Use profiling to examine measured latency. Formal timing uses [performance contracts](requirements/performance.md) with profiling disabled.
 Keep original traces in external storage and source-bound summaries in the [acceptance index](acceptance.md).
+Use the [measurement method](profiling/measurement.md) for timeline correlation, replay policy, counter units, and reproduced observations.
 
 ## Host and device time
 

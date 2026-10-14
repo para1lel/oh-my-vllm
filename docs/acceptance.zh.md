@@ -29,6 +29,13 @@ ordinary 单请求 32768 输入/4096 输出尝试完成两次预热与五次测�
 prefill 和 decode 比例为 4.436 和 2.320. 波动检查通过, 但两倍延迟检查失败.
 失败记录保持不变. 这一组案例不能构成完整十五组框架矩阵.
 
+## 优化观测
+
+[可移植诊断摘要](evidence/optimization-observations/verification.json) 绑定当前 scan/GEMM 计数器, 隔离 cuBLAS 探针和三层 wavefront 实验.
+它标识源码快照, 原始哈希, 样本, 失败尝试和验证限制.
+这些采集只用于诊断. 它们没有选出生产修改, 也不能证明正式验收通过.
+参见 [测量方法](profiling/measurement.zh.md) 和 [算法调研](kernels/optimization.zh.md).
+
 ## 源码 3324a7f
 
 [可移植验证摘要](evidence/refactor-3324a7f/verification.json)记录源码哈希和原始报告身份.

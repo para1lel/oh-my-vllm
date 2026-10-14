@@ -29,6 +29,13 @@ The ordinary 32768-input/4096-output batch-one attempt collects two warmups and 
 Prefill and decode ratios are 4.436 and 2.320. Their spread checks pass, but their two-times latency checks fail.
 The failed record stays unchanged. This one row does not complete the fifteen-row framework matrix.
 
+## Optimization observations
+
+The [portable diagnostic summary](evidence/optimization-observations/verification.json) binds current scan/GEMM counters, isolated cuBLAS probes, and a three-layer wavefront experiment.
+It identifies source snapshots, original hashes, samples, failed attempts, and verification limits.
+These collections are diagnostic. They do not select a production change or prove formal acceptance.
+See the [measurement method](profiling/measurement.md) and [algorithm research](kernels/optimization.md).
+
 ## Source 3324a7f
 
 The [portable verification summary](evidence/refactor-3324a7f/verification.json) records source hashes and original report identities.

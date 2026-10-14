@@ -47,6 +47,23 @@ Graph replay counts cannot replace host dispatch counts.
 The complete GPU matrix validates numerical-only collection. Separate selected timings validate candidate comparisons.
 Use [kernel development](../kernels.md) for provenance and profiling separation.
 
+## Hardware-counter diagnosis
+
+Use the [profiler worker](../../development/kernels/profile_worker.py) to select one complete formal operation after warmup.
+The following command was tested with Nsight Compute 2026.1.1:
+
+```bash
+scripts/with-gpu.sh scripts/with-env.sh ncu --target-processes all --nvtx --nvtx-include 'profile-operation/' --kernel-name 'regex:scan_kernel' --launch-count 1 --cache-control none --clock-control none --section SpeedOfLight --section Occupancy --section WarpStateStats --section MemoryWorkloadAnalysis --export "$EVIDENCE_DIR/scan" python -m development.kernels.profile_worker --case gdn_prefill-aaae0f6f08 --backend cuda
+ncu --import "$EVIDENCE_DIR/scan.ncu-rep" --page raw --csv --log-file "$EVIDENCE_DIR/scan.csv"
+```
+
+Use a new external report path. The selected kernel is only part of the operation.
+This command leaves clock and cache state uncontrolled. Its replay duration is diagnostic, not acceptance timing.
+CSV output includes a unit row. Keep that row when reading counter values.
+
+Use [measurement guidance](../profiling/measurement.md) for concurrency, replay, and counter interpretation.
+Release owned processes after collection. Do not run another CUPTI profiler concurrently.
+
 ## Framework performance
 
 Build the current release binary and set a new external output path for each attempt.

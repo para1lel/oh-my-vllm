@@ -2,6 +2,7 @@
 
 Use the [operator contracts](requirements/kernels.md), [harness instructions](../development/kernels/AGENTS.md), and [performance protocol](requirements/performance.md).
 The current provider migration is in the [handoff](handoff.md). Do not treat old measurements as new acceptance.
+Read [algorithm research and measured lessons](kernels/optimization.md) before selecting a new numerical or scheduling path.
 
 ## Implementation sources
 
