@@ -46,7 +46,8 @@ using namespace cute;
 
 template <int ScaleGranularityM, int ScaleGranularityN, int ScaleGranularityK, bool ScaleMajorK,
           int MmaSM, typename DTypeIn, typename DTypeOut, int PipelineStages = 0, int ClusterN = 1,
-          int TileK = 128, bool ConversionOnly = false, int TileM = 128, int SplitK = 1>
+          int TileK = 128, bool ConversionOnly = false, int TileM = 128, int SplitK = 1,
+          bool Transposed = false, int TileN = 128>
 cudaError_t CutlassGroupwiseScaledGEMMSM100(void *float_buffer, size_t float_buffer_size_in_bytes,
                                             DTypeIn *A_ptr, DTypeIn *B_ptr, float *SFA_ptr,
                                             float *SFB_ptr, DTypeOut *D_ptr, int m, int n, int k,
@@ -65,8 +66,9 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void *float_buffer, size_t float_buf
                                                    // matrix in units of elements (up to 16 bytes)
 
   // C/D matrix configuration
-  using ElementC = DTypeOut;                 // Element type for C and D matrix operands
-  using LayoutC = cutlass::layout::RowMajor; // Layout type for C and D matrix operands
+  using ElementC = DTypeOut; // Element type for C and D matrix operands
+  using LayoutC =
+      std::conditional_t<Transposed, cutlass::layout::ColumnMajor, cutlass::layout::RowMajor>;
   constexpr int AlignmentC =
       128 / cutlass::sizeof_bits<ElementC>::value; // Memory access granularity/alignment of A
                                                    // matrix in units of elements (up to 16 bytes)
@@ -79,7 +81,7 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void *float_buffer, size_t float_buf
   using ElementAccumulator = float; // Element Accumulator will also be our scale factor type
   using ElementCompute = float;
 
-  using MmaTileShape_MNK = Shape<cute::Int<MmaSM * TileM>, _128, cute::Int<TileK>>;
+  using MmaTileShape_MNK = Shape<cute::Int<MmaSM * TileM>, cute::Int<TileN>, cute::Int<TileK>>;
   using ClusterShape_MNK = Shape<cute::Int<MmaSM>, cute::Int<ClusterN>, _1>;
 
   // NOTE(Zihao):: UMMA::Major::MN, UMMA::Major::MN is the fastest configuration.
@@ -121,7 +123,8 @@ cudaError_t CutlassGroupwiseScaledGEMMSM100(void *float_buffer, size_t float_buf
                          cutlass::gemm::collective::StageCount<PipelineStages>>,
       cutlass::gemm::KernelScheduleSm100Blockwise>::CollectiveOp;
   using CollectiveMainloop =
-      std::conditional_t<ConversionOnly, PairedGroupwiseAccum<StandardMainloop>, StandardMainloop>;
+      std::conditional_t<ConversionOnly && !Transposed, PairedGroupwiseAccum<StandardMainloop>,
+                         StandardMainloop>;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
       Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue,
@@ -332,4 +335,5 @@ void groupwise_fp8(TensorView a, TensorView weight, TensorView scale_a, TensorVi
 }
 
 #include "groupwise_splitk.cuh"
+#include "groupwise_transposed.cuh"
 #endif

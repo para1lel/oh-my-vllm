@@ -39,6 +39,21 @@ prefill 和 decode 比例为 4.436 和 2.320. 波动检查通过, 但两倍延�
 后续 [仿射诊断](evidence/affine-diagnostics/verification.json) 绑定完整矩阵链路, FP32/FP64 仿真和抵消失败.
 布局候选具有诊断计时收益. 完整数值准入不可用. 没有选用这些候选.
 
+## 窄 FP8 检查点
+
+[可移植检查点摘要](evidence/narrow-fp8/verification.json) 绑定所选 CUDA 源码, 成对样本, 关键测试和失败尝试.
+十二种形状的投影采集具有正的单侧 95% 置信下界, GPU 延迟降低 13.4%–18.4%.
+CPU 重跑通过 1592 个案例和 153 个子测试. 非边界 GPU 重跑通过 621 个案例.
+539 个算子诊断案例全部通过, 覆盖完整且无干扰.
+
+普通模式 32768 输入, 4096 输出, batch 1 的诊断包含两次预热和五次测量.
+Prefill 和 decode 比值为 4.461 和 2.203. 波动通过, 但两倍延迟检查失败.
+它保持 `diagnostic=true` 和 `passed=false`. 它不能证明最终源码框架验收.
+
+[精度路径摘要](evidence/precision-lessons/verification.json) 绑定后续被拒绝的 GDN 实验和经过独立检查的 CPU 舍入反例.
+这些记录没有选用 GDN 变更, 也没有完成第四里程碑.
+范围参见 [窄投影测量](kernels/narrow-fp8.zh.md) 和 [精度经验](kernels/precision-lessons.zh.md).
+
 ## 源码 3324a7f
 
 [可移植验证摘要](evidence/refactor-3324a7f/verification.json)记录源码哈希和原始报告身份.

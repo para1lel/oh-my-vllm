@@ -48,6 +48,8 @@ Approximate exponentials or rescale elimination must have separate numerical pro
 The [diagnostic summary](../evidence/optimization-observations/verification.json) binds inputs, sources, raw hashes, samples, and limitations.
 These experiments did not select a new production implementation.
 Later [affine-scan diagnostics](affine-diagnostics.md) record matrix-layout benefits, complete emulation costs, and final-state cancellation failures.
+Further [precision experiments](precision-lessons.md) reject finite history, fixed direct FP32 prefixes, and slow native FP64 panels.
+The [narrow FP8 measurements](narrow-fp8.md) show a complete-operation benefit with unchanged block scales and output rounding.
 
 ### Native FP64 emulation
 

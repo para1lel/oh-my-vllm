@@ -39,6 +39,21 @@ See the [measurement method](profiling/measurement.md) and [algorithm research](
 Later [affine diagnostics](evidence/affine-diagnostics/verification.json) bind complete matrix chains, FP32/FP64 emulation, and cancellation failures.
 Layout candidates have diagnostic timing benefits. Complete numerical admission is not available. None is selected.
 
+## Narrow FP8 checkpoint
+
+The [portable checkpoint summary](evidence/narrow-fp8/verification.json) binds selected CUDA sources, paired samples, critical tests, and failed attempts.
+The twelve-shape projection collection has positive one-sided 95% confidence lower bounds and GPU latency reductions of 13.4%–18.4%.
+The CPU repeat passes 1592 cases and 153 subtests. The non-boundary GPU repeat passes 621 cases.
+All 539 operator diagnostic cases pass, with full coverage and no interference.
+
+The ordinary 32768-input/4096-output batch-one diagnostic has two warmups and five measurements.
+Prefill and decode ratios are 4.461 and 2.203. The spreads pass, but the two-times latency checks fail.
+It keeps `diagnostic=true` and `passed=false`. It does not prove final-source framework acceptance.
+
+The [precision-path summary](evidence/precision-lessons/verification.json) binds later rejected GDN experiments and the independently checked CPU rounding counterexample.
+These records do not select a GDN change or complete the fourth milestone.
+See [narrow projection measurements](kernels/narrow-fp8.md) and [precision lessons](kernels/precision-lessons.md) for their scope.
+
 ## Source 3324a7f
 
 The [portable verification summary](evidence/refactor-3324a7f/verification.json) records source hashes and original report identities.

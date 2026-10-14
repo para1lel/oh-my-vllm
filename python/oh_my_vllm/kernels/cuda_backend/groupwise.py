@@ -60,7 +60,7 @@ def _headers(data, roots):
 
 @cache
 def compiled():
-    """Compile only the checkpoint's two regular FP8 GEMM tactics."""
+    """Compile the checkpoint's regular, segmented, and narrow FP8 projections."""
     from tvm_ffi import load_module
     from tvm_ffi.cpp import build_inline
 
@@ -95,7 +95,11 @@ def compiled():
         "torch": str(torch.__version__),
         "tvm_ffi": importlib.metadata.version("apache-tvm-ffi"),
         "flags": _FLAGS,
-        "functions": ["groupwise_fp8", "groupwise_fp8_splitk"],
+        "functions": [
+            "groupwise_fp8",
+            "groupwise_fp8_splitk",
+            "groupwise_fp8_transposed",
+        ],
         "backend": "cuda",
         "tvm_cuda_target": _effective_cuda_target(),
         "cxx": os.environ.get("CXX", "c++"),
@@ -106,7 +110,7 @@ def compiled():
         build_inline(
             "oh_my_vllm_groupwise_fp8",
             cuda_sources=source,
-            functions=["groupwise_fp8", "groupwise_fp8_splitk"],
+            functions=identity["functions"],
             backend="cuda",
             extra_include_paths=[str(source_directory), *(str(root) for root in roots)],
             extra_cuda_cflags=[
@@ -199,6 +203,25 @@ def gemm_splitk(a, weight, scale_a, scale_weight):
         output,
         _workspace(a.device),
         splits,
+        execution_policy().pdl,
+    )
+    return output
+
+
+def gemm_transposed(a, weight, scale_a, scale_weight):
+    """Keep checkpoint scales and one BF16 boundary for narrow projections."""
+    with torch.cuda.device(a.device):
+        module = compiled()
+    output = torch.empty(
+        (a.shape[0], weight.shape[0]), device=a.device, dtype=torch.bfloat16
+    )
+    module.groupwise_fp8_transposed(
+        a,
+        weight,
+        scale_a,
+        scale_weight,
+        output,
+        _workspace(a.device),
         execution_policy().pdl,
     )
     return output

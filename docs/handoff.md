@@ -69,6 +69,29 @@ Capacity, service, and one-hour records belong to `3324a7f`, not this checkpoint
 Final-source acceptance and the fourth milestone are pending.
 The source-bound checkpoint summary is in the [acceptance index](acceptance.md).
 
+## Narrow FP8 checkpoint
+
+The [native narrow projection](kernels/narrow-fp8.md) keeps FP32 block scales and the BF16 output boundary.
+Independent source review approves the orientation change and the source/header identity refresh.
+Twelve shapes have three rounds of twenty interleaved pairs. GPU projection latency decreases by 13.4%–18.4%, with positive confidence lower bounds.
+
+The full CPU repeat passes 1592 cases and 153 subtests. The full non-boundary GPU repeat passes 621 cases.
+The GPU suite contains 28 new critical replay/fault cases and the unchanged full-model compiled-unit checks.
+Two selected replay cases pass Compute Sanitizer with zero errors.
+All 539 operator diagnostic cases pass, with full coverage and no interference.
+
+The first CPU attempt fails one stale source-contract check. Its original record stays available.
+The reviewed identity refresh passes the selected checks and full repeat.
+
+The ordinary 32768-input/4096-output batch-one diagnostic collects two warmups and five measurements.
+Prefill is 1.971 seconds with ratio 4.461. Decode is 34.116 seconds with ratio 2.203.
+The spread checks pass. The two latency checks fail. This is uncommitted-source evidence, not formal acceptance.
+
+Capacity, service, one-hour, and the full framework matrix await final-source verification.
+
+Further [precision-path lessons](kernels/precision-lessons.md) reject finite history, fixed direct FP32 prefixes, and slow native FP64 panels.
+The CPU rounding counterexample rejects an ideal-arithmetic-only residual guard. No GDN candidate from these experiments is selected.
+
 ## One-hour evidence
 
 MTP4 and DSpark each collect four persistent OMP goal sessions for one hour in new disposable sandbox workspaces.
