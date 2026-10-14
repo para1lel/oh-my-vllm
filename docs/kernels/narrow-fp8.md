@@ -80,6 +80,21 @@ The candidate is rejected. Width 17408 at rows 1/4 currently uses eight segments
 
 The [rejection summary](../evidence/rejected-schedules/verification.json) keeps original failures and source-bound diagnostic scope.
 
+## Pipeline stages
+
+An external transposed candidate changes automatic five-stage scheduling to three stages, with the same 32-column tile.
+Thirty-six fresh memchecks pass for three output widths, six row counts, and PDL on/off.
+Independent FP64 samples, complete baseline comparisons, output guards, input bytes, and changed-input caller-stream replay pass.
+After replay, all eight timing inputs are checked again.
+
+Each of eighteen shapes has three rounds of twenty pairs, with one hundred native projections per sample.
+Only width 16384 at rows 1/4 passes: mean savings are 0.102/0.075 microseconds, with one-sided 95% lower bounds 0.086/0.060.
+The other sixteen shapes are 0.24%-4.32% slower on average.
+The common three-stage selector is rejected. Check a shape-specific selector through separate review and measurement.
+
+The [native scheduling summary](../evidence/native-scheduling/verification.json) binds all shapes, original memchecks, and independent review.
+These diagnostic GPU timings exclude upstream quantization and host work. They do not supply framework acceptance.
+
 ## Lessons
 
 The ordinary 32768-input/4096-output batch-one framework diagnostic has two warmups and five measurements.

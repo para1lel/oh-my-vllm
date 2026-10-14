@@ -19,11 +19,11 @@
 3. 原生 CUDA 提供方迁移, 独立参考, TileFoundry rebase 及 harness 适配: 已完成并经独立审查.
 4. Profiler, 请求图, 性能调优及完整验收: 待完成.
 
-遵循[贡献](../CONTRIBUTING.md)和[协作](collaboration.zh.md)流程: 独立审查, 检查, 及时发布, 分配 OMP 分支, rebase, 重跑检查, squash 和 fast-forward.
+按[贡献](../CONTRIBUTING.md)和[协作](collaboration.zh.md)流程执行审查, 检查, 发布, OMP 分支, rebase, 重跑检查, squash 和 fast-forward.
 Codex 使用 `main`. OMP 使用独立 checkout. 完成全部工作.
 
-用户已授权发布 TileFoundry fork 更新.
-其 `main` 跟随 upstream `e9820eb`. `oh-my-vllm-integration` 分支与 pin 的 `5b9a310` 兼容源码一致.
+TileFoundry 发布已获授权.
+其 `main` 跟随 upstream `e9820eb`. `oh-my-vllm-integration` 匹配固定兼容源码 `5b9a310`.
 
 ## 前一版源码验证
 
@@ -37,7 +37,7 @@ MTP 和 DSpark 各通过六类服务客户端和四阶段 allocator OOM 恢复, 
 CPU 通过 1592/153; 此前运行通过 1568/153, 但 23 项 attention-gate 夹具因缺少配置失败. 保留原始失败记录.
 该提交前已通过 Rust/样式/文档检查.
 
-教程通过 14 项 Node 和 9 项浏览器测试及构建. 有界 profiling 和暗色 cache-hit 请求图通过选定 CPU/GPU 检查.
+教程构建及 14 项 Node/9 项浏览器测试通过. 有界 profiling 和暗色 cache-hit 请求图通过选定 CPU/GPU 检查.
 
 ## 已选 subgroup 扫描检查点
 
@@ -45,8 +45,8 @@ CPU 通过 1592/153; 此前运行通过 1568/153, 但 23 项 attention-gate 夹�
 FP32 归约顺序发生变化. 原数值与状态容差不变.
 独立审查批准源码及语义合同中的四处身份更新, 方程与下界均未改变.
 
-完整 CPU 重跑通过 1592 项和 153 个 subtest.
-选定 GPU 验证通过 99 项, 包括未修改的完整模型 MTP 编译检查.
+CPU 通过 1592/153.
+选定 GPU 通过 99 项, 包括未修改的完整模型 MTP 编译检查.
 四项新增 [对齐与抵消案例](../tests/numerical/test_gdn_prefill_replay.py) 通过 Compute Sanitizer, 错误为零.
 完整 539 项算子数值采集通过, 没有干扰.
 未提交源码的报告属于诊断, `passed=false` 且 `selected_passed=true`.
@@ -114,8 +114,8 @@ OMP 在 `omp/issue-4-translation-soak` 实现这项工作. Codex 负责架构, �
 官方 `deepseek/deepseek-flash` 在一个原生会话中通过两轮工具调用.
 凭据保留在用户存储中, 主机配置保留在被忽略的 `LOCAL.md`.
 
-API 不设费用上限. 新 OMP Issue 任务不得在 `Asia/Shanghai` 的官方峰时启动.
-已有任务可以跨时段完成. 峰时的新工作由 Codex 承担.
+API 不设费用上限. 新 OMP Issue 不得在官方 `Asia/Shanghai` 峰时启动.
+已有工作可以跨时段完成. 峰时的新任务由 Codex 启动处理.
 
 用户已要求停止 DSH 调优, 其拥有的 sandbox 资源已释放.
 该轮候选均未被采用.
@@ -170,6 +170,10 @@ DSpark batch 4 的 decode 降低 0.658%, 推测解码工作量不同. 延迟门�
 
 CPU 通过 1682/153. 全部十一项 hooks 通过.
 四分段诊断通过 24 项内存检查, 但十二种已测形状全部更慢.
+
+三级调度通过 36 项内存检查: 十八种形状中两种更快, 十六种更慢. 统一选择器已被排除.
+[原生调度证据](evidence/native-scheduling/verification.json)将 FP8 投影和 GDN scan 列为优先研究项.
+FP32 双通道投影和隔离注意力属于外部实验, 尚未选用.
 
 ## 一小时证据
 

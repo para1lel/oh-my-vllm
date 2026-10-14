@@ -19,11 +19,11 @@ Keep the theoretical model, two warmups, five repetitions, and 10% spread gates.
 3. Native CUDA provider migration, independent references, TileFoundry rebase, and harness adaptation: complete and independently reviewed.
 4. Profiler, request plots, performance tuning, and complete acceptance: pending.
 
-Apply [contribution](../CONTRIBUTING.md) and [collaboration](collaboration.md): independent review, checks, prompt publication, assigned OMP branches, rebase, repeat checks, squash, and fast-forward.
-Codex uses `main`. OMP uses separate checkouts. Finish all work.
+Use [contribution](../CONTRIBUTING.md) and [collaboration](collaboration.md) for review, checks, publication, OMP branches, rebase, repeated checks, squash, and fast-forward.
+Codex uses `main`. OMP uses separate checkouts. Complete all work.
 
-The user authorized publication of the TileFoundry fork update.
-Its `main` follows upstream `e9820eb`. Its `oh-my-vllm-integration` branch matches the pinned `5b9a310` compatibility source.
+TileFoundry publication is authorized.
+Its `main` follows upstream `e9820eb`. Its `oh-my-vllm-integration` matches pinned compatibility source `5b9a310`.
 
 ## Previous source verification
 
@@ -37,7 +37,7 @@ Independent review covers original requests, source identities, and cleanup.
 CPU passes 1592/153. Its predecessor passes 1568/153 but fails 23 missing attention-gate fixtures. Keep original failures.
 Rust/style/document checks passed before that commit.
 
-Tutorial passes 14 Node and 9 browser tests plus its build. Bounded profiling and dark cache-hit plots have selected CPU/GPU checks.
+Tutorial build and 14 Node/9 browser tests pass. Bounded profiling and dark cache-hit plots pass selected CPU/GPU checks.
 
 ## Selected subgroup scan checkpoint
 
@@ -45,8 +45,8 @@ The selected [precision path](../python/oh_my_vllm/kernels/cuda_backend/operator
 Its FP32 reduction order changes. Existing numerical and state tolerances stay equal.
 Independent review approved the source and four identity updates in the semantic contract, with no equation or lower-bound change.
 
-The complete CPU repeat passes 1592 cases and 153 subtests.
-Selected GPU verification passes 99 cases, with the unchanged complete-model MTP compile checks.
+CPU passes 1592/153.
+Selected GPU passes 99 cases, with unchanged complete-model MTP compile checks.
 Four added [alignment and cancellation cases](../tests/numerical/test_gdn_prefill_replay.py) pass Compute Sanitizer with zero errors.
 The complete 539-case operator numerical collection passes with no interference.
 Its uncommitted-source report is diagnostic and has `passed=false` with `selected_passed=true`.
@@ -114,8 +114,8 @@ OMP implements this work on `omp/issue-4-translation-soak`. Codex owns architect
 Official `deepseek/deepseek-flash` passes two tool-call rounds in one native session.
 Credentials stay in the user store, host configuration in ignored `LOCAL.md`.
 
-There is no API cost cap. New OMP Issue tasks cannot start during official peak pricing in `Asia/Shanghai`.
-Existing tasks can finish across a boundary. Codex handles new work during peak periods.
+API cost is uncapped. New OMP Issues cannot start during official `Asia/Shanghai` peak pricing.
+Existing work can finish across boundaries. Codex handles peak-period starts.
 
 DSH tuning is stopped at the user's request. Its owned sandbox resources are released.
 No candidate from that round is selected.
@@ -170,6 +170,10 @@ DSpark batch-four decode decreases 0.658%, with different speculative work. Late
 
 CPU passes 1682/153. All eleven hooks pass.
 Four-segment diagnostics pass 24 memchecks but slow all twelve measured shapes.
+
+Stage3 passes 36 memchecks: two of eighteen shapes improve, sixteen regress. Reject the common selector.
+[Native scheduling evidence](evidence/native-scheduling/verification.json) prioritizes FP8 projection and GDN scan.
+Packed projection and isolated attention are unselected external experiments.
 
 ## One-hour evidence
 

@@ -86,6 +86,25 @@ Checkpoint byte hashes and physical layer IDs were not collected.
 The run includes capture and observation cost. Its duration is not acceptance timing.
 Use these branch counts to prioritize precision-path research, without expanding their input scope.
 
+### Complete request timeline
+
+A separate Nsight Systems 2025.5.2 collection uses clean `6b456b8`, ordinary 32768-input/32-output batch one, one warmup, and one measurement.
+Checkpoint, source, runtime, and GPU identities match before and after collection.
+Worker logs and semantic traces bind loaded modules to source, header, build-input, and binary hashes.
+Owned processes exit naturally with complete cleanup.
+The [native scheduling summary](../evidence/native-scheduling/verification.json) binds original traces and independent interval analysis.
+
+Measured prefill executes chunks 32144/624. Its kernel spans are 1802.575/62.317 ms.
+For the large chunk, FP8 projection union/exclusive intervals are 768.704/763.868 ms. GDN scan intervals are 730.708/730.641 ms.
+
+The last 31 decode graphs span a median 7.248 ms. FP8 projection mean union/exclusive intervals are 5.171/4.110 ms.
+Attention-merge mean union is 0.650 ms, but its exclusive interval is 0.006 ms.
+Cross-category overlap is 6.085/2.859 ms in the prefill chunks and a median 2.146 ms in decode.
+
+These intervals support projection and scan research. They do not prove instruction stalls, occupancy causes, or critical-path savings.
+Categories overlap and cannot be added as wall time. Kernel spans exclude framework host gaps.
+The profiler and short output budget do not supply two-warmup/five-run performance acceptance.
+
 ## Select the change
 
 State one hypothesis and the counter or dependency that gives a reason for it.
