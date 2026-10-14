@@ -29,6 +29,8 @@ def record_transport_error(record, error):
         record.setdefault("capture_error_direction", record.get("error_direction"))
         record["transport_outcome"] = "failed"
         return
+    record.setdefault("transport_error_unix_s", time.time())
+    record.setdefault("transport_error_monotonic_s", time.monotonic())
     record["error"] = f"{type(error).__name__}: {error}"
     record["transport_error_kind"] = type(error).__name__
     record["transport_outcome"] = (
@@ -72,6 +74,8 @@ def relay_stream(response, output, write, record, api, *, set_read_timeout=None)
                 try:
                     write(chunk)
                 except (ConnectionResetError, BrokenPipeError) as error:
+                    record["transport_error_unix_s"] = time.time()
+                    record["transport_error_monotonic_s"] = time.monotonic()
                     if proof.finish_reason not in ("stop", "tool_calls", "length"):
                         raise
                     disconnect = error

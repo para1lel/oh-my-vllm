@@ -84,8 +84,7 @@ def match_summary(
     return result
 
 
-def trace_messages(directory: Path, session: dict) -> list[dict]:
-    """Keep native SDK result fields distinct from the configured API binding."""
+def sdk_api_binding(directory: Path, session: dict) -> str:
     binding = session["sdk_trace"]
     expected_api = (
         "openai-completions" if session["api"] == "chat" else "openai-responses"
@@ -119,6 +118,13 @@ def trace_messages(directory: Path, session: dict) -> list[dict]:
         for state in states
     ):
         raise ValueError("SDK runtime API binding differs")
+    return expected_api
+
+
+def trace_messages(directory: Path, session: dict) -> list[dict]:
+    """Keep native SDK result fields distinct from the configured API binding."""
+    expected_api = sdk_api_binding(directory, session)
+    binding = session["sdk_trace"]
     messages, identities = [], set()
     for span in read_sdk_spans(directory / "sdk-trace"):
         values = span["attributes"]

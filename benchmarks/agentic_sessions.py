@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 from benchmarks.agentic_context import isolated_environment, session_configuration
+from benchmarks.agentic_rpc_evidence import ControlRpcEvidence
 from benchmarks.agentic_sdk_trace import SdkTrace
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -178,6 +179,7 @@ class RpcClient:
         self.sequence, self.error, self.session_id = 0, None, None
         self.current_prompt, self.compacting = None, False
         self.events, self.states, self.turns = [], [], []
+        self.control_evidence = ControlRpcEvidence(directory)
         self.leaf_id, self.entry_count = None, 0
         (directory / "entries.jsonl").touch(exist_ok=False)
         self.state = directory / "state"
@@ -293,11 +295,14 @@ class RpcClient:
             with gzip.open(
                 self.directory / "rpc.jsonl.gz", "xb", compresslevel=1
             ) as raw:
-                for line in self.process.stdout:
+                for line_number, line in enumerate(self.process.stdout, 1):
                     if len(line) > 16 << 20:
                         raise ValueError("RPC event exceeds 16 MiB bound")
                     raw.write(line)
                     event = json.loads(line)
+                    self.control_evidence.record(
+                        "received", event, line, line_number=line_number
+                    )
                     event["collected_unix_s"] = time.time()
                     event["collected_monotonic_s"] = time.monotonic()
                     with self.condition:
@@ -354,13 +359,16 @@ class RpcClient:
         self.sequence += 1
         identity = f"lane-{self.lane}-{self.sequence}"
         command = {"id": identity, "type": kind, **fields}
+        raw = (json.dumps(command) + "\n").encode()
         if kind == "prompt" or (kind == "goal" and fields.get("op") == "create"):
             with self.condition:
                 self.current_prompt = identity
         with (self.directory / "commands.jsonl").open("a") as output:
-            output.write(json.dumps(command) + "\n")
-        self.process.stdin.write((json.dumps(command) + "\n").encode())
+            output.write(raw.decode())
+        self.control_evidence.record("dispatch_started", command, raw)
+        self.process.stdin.write(raw)
         self.process.stdin.flush()
+        self.control_evidence.record("dispatch_completed", command, raw)
         return identity
 
     def _wait(self, mapping: dict, identity: str, timeout: float):

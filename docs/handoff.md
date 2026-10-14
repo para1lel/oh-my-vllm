@@ -19,8 +19,10 @@ Keep the theoretical model, two warmups, five repetitions, and 10% spread gates.
 3. Native CUDA provider migration, independent references, TileFoundry rebase, and harness adaptation: complete and independently reviewed.
 4. Profiler, request plots, performance tuning, and complete acceptance: pending.
 
-Obtain independent review before each milestone commit. Commit on `main` and continue until all work passes.
-Do not push the main project or open pull requests.
+Obtain independent review before each milestone commit. Codex commits on `main` and pushes reviewed milestones after checks pass.
+OMP develops assigned GitHub Issues in a separate checkout and submits pull requests from its own branches.
+Rebase each pull request onto current `main`, repeat applicable checks, then squash into one single-parent commit.
+Update `main` only by fast-forward. Continue until all work passes.
 
 The user authorized publication of the TileFoundry fork update.
 Its `main` follows upstream `e9820eb`. Its `oh-my-vllm-integration` branch matches the pinned `5b9a310` compatibility source.
@@ -112,6 +114,37 @@ Deadline-tail evidence and final-source one-hour acceptance are pending.
 A later external CUDA candidate failed with an illegal memory access. It was rejected and did not enter production.
 The [safety guide](kernels/cuda-safety.md) records the reviewed local scale-copy defect and verification limits.
 Keep that failed candidate off all devices until a new reviewed implementation meets the candidate procedure.
+
+## Deadline evidence checkpoint
+
+The [deadline-tail rules](testing/deadline-tail.md) keep checks for successful SSE streams and usage unchanged.
+New control timestamps bind original RPC bytes, acknowledgements, the native aborted result, and its SDK export.
+Server-completed/client-aborted tails have a different count and do not enter scatter plots.
+Verification fails if proof is missing, changed, or does not bind one request. Historical collection results stay unchanged.
+
+The current full CPU repeat passes 1658 cases and 153 subtests.
+Critical checks also cover subprocess RPC capture, output budgets, and more than one aborted request.
+
+The proxy records the disconnect's wall and monotonic clocks before handler cleanup.
+An early disconnect, changed clock offset, or missing timestamp fails deadline attribution.
+Independent review approves these corrections. Final-source GPU and service acceptance are pending.
+Rust checks pass. Final-source one-hour verification is pending.
+
+One-hour collections must start only after all fifteen framework performance rows pass.
+The next workload translates the same full English book from Project Gutenberg in four isolated sandboxes.
+OMP must run inside each sandbox with no external network or GPU access.
+Book download is completed. Workload and local-socket transport adaptation are pending.
+
+OMP implements this work on `omp/issue-4-translation-soak`. Codex owns architecture, review, and end-to-end acceptance.
+
+The official `deepseek/deepseek-flash` collaborator passes two tool-call rounds against the official API in one native session.
+Credentials stay in the user store. Host configuration stays in ignored `LOCAL.md`.
+
+There is no API cost cap. New OMP Issue tasks cannot start during official peak pricing in `Asia/Shanghai`.
+Existing tasks can finish across a boundary. Codex handles new work during peak periods.
+
+DSH tuning is stopped at the user's request. Its owned sandbox resources are released.
+No candidate from that round is selected.
 
 ## One-hour evidence
 

@@ -19,8 +19,10 @@
 3. 原生 CUDA 提供方迁移, 独立参考, TileFoundry rebase 及 harness 适配: 已完成并经独立审查.
 4. Profiler, 请求图, 性能调优及完整验收: 待完成.
 
-每个里程碑提交前取得独立审查. 在 `main` 提交, 持续推进直至全部通过.
-不得 push 主项目或创建 pull request.
+每个里程碑提交前取得独立审查. Codex 在 `main` 提交, 检查通过后推送经审查的里程碑.
+OMP 在独立 checkout 开发分配的 GitHub Issue, 从自己的分支提交 pull request.
+每个 pull request 先 rebase 到当前 `main`, 重跑适用检查, 再 squash 为一个单父提交.
+`main` 只做 fast-forward 更新. 持续推进直至全部通过.
 
 用户已授权发布 TileFoundry fork 更新.
 其 `main` 跟随 upstream `e9820eb`. `oh-my-vllm-integration` 分支与 pin 的 `5b9a310` 兼容源码一致.
@@ -112,6 +114,37 @@ Deadline 尾部证据和最终源码的一小时验收仍待完成.
 后续外部 CUDA 候选发生非法内存访问. 该候选已被拒绝, 没有进入生产实现.
 [安全指南](kernels/cuda-safety.zh.md) 记录经审查的局部 scale 拷贝缺陷及验证限制.
 在新的经审查实现满足候选流程前, 不在任何设备运行这一失败候选.
+
+## 截止证据检查点
+
+[截止收尾规则](testing/deadline-tail.zh.md)保持成功 SSE 流和 usage 的检查不变.
+新增控制时间戳绑定原始 RPC 字节, 确认, 原生中止结果及其 SDK 导出.
+服务端完成但客户端中止的收尾请求单独计数, 不进入散点图.
+证据缺失, 改变或未绑定唯一请求时验证失败. 历史采集结果保持不变.
+
+当前完整 CPU 复测通过 1658 个案例和 153 个 subtests.
+关键检查还覆盖子进程 RPC 捕获, 输出预算和不止一个中止请求.
+
+代理在 handler 清理前记录实际断开的墙钟和单调时钟.
+提前断开, 时钟偏移改变或缺少时间戳时, 截止归因验证失败.
+独立审查批准这些修正. 最终源码的 GPU 和服务验收仍待完成.
+Rust 检查通过. 最终源码的一小时验证仍待完成.
+
+实际一小时采集只能在十五行框架性能门槛全部通过后启动.
+下一项工作负载在四个独立 sandbox 中翻译来自 Project Gutenberg 的同一本完整英文书.
+OMP 必须在各 sandbox 内运行, 不得访问外部网络或 GPU.
+书籍已下载. 工作负载和本地 socket 传输适配仍待完成.
+
+OMP 在 `omp/issue-4-translation-soak` 实现这项工作. Codex 负责架构, 审查和端到端验收.
+
+官方 `deepseek/deepseek-flash` 协作者在同一个原生会话通过两轮调用官方 API 的工具验证.
+凭据保留在用户凭据库. 主机配置保留在被忽略的 `LOCAL.md`.
+
+API 不设费用上限. 新 OMP Issue 任务不得在 `Asia/Shanghai` 的官方峰时启动.
+已有任务可以跨时段完成. 峰时的新工作由 Codex 承担.
+
+用户已要求停止 DSH 调优, 其拥有的 sandbox 资源已释放.
+该轮候选均未被采用.
 
 ## 一小时证据
 

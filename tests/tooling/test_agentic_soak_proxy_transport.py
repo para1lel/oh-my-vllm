@@ -202,6 +202,25 @@ def test_reset_before_terminal_is_always_failed(direction):
     )
 
 
+def test_disconnect_clock_precedes_handler_cleanup(monkeypatch):
+    import benchmarks.agentic_soak_proxy as proxy
+
+    clock = [100.0]
+    monkeypatch.setattr(proxy.time, "time", lambda: clock[0])
+    monkeypatch.setattr(proxy.time, "monotonic", lambda: clock[0] - 50)
+    record, output = {}, io.BytesIO()
+
+    def write(_chunk):
+        raise BrokenPipeError("client disconnected")
+
+    with pytest.raises(BrokenPipeError) as failure:
+        relay_stream(Reader([chat_event()]), output, write, record, "chat")
+    clock[0] = 200
+    record_transport_error(record, failure.value)
+    assert record["transport_error_unix_s"] == 100
+    assert record["transport_error_monotonic_s"] == 50
+
+
 def test_clean_eof_without_protocol_terminal_is_a_preserved_failure():
     _reader, _raw, record, _delivered = relay([chat_event("stop"), b""])
     assert record["transport_outcome"] == "failed"

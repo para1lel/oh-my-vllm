@@ -134,6 +134,8 @@ def audit_framework_session(
                 or proof["reasoning_effort"] != "xhigh"
             ):
                 raise ValueError("invalid actual model context/reasoning budget")
+            if metric["output_tokens"] > proof["output_budget"]:
+                raise ValueError("usage differs from actual model output budget")
             for name in ("request", "response"):
                 path = wire / record[f"{name}_file"]
                 if not path.resolve().is_relative_to(wire.resolve()):
@@ -185,6 +187,14 @@ def audit_framework_session(
             if metric["status"] == "cancelled":
                 continue
             if errors or not protocol["success"]:
+                if not errors and session.get("goal_collection"):
+                    from benchmarks.agentic_deadline_evidence import deadline_abort
+
+                    outcome["client_completion"] = "collection_deadline_aborted"
+                    outcome["deadline_abort_proof"] = deadline_abort(
+                        directory, session, record, metric, measured_start
+                    )
+                    continue
                 raise ValueError("completed request lacks successful SSE completion")
             if terminal_usage(response, session["api"]) != {
                 "input": proof["input_tokens"],
@@ -219,7 +229,13 @@ def audit_framework_session(
         "response_ids": sorted(seen),
         "outcomes": outcomes,
         "completed_requests": len(points),
-        "cancelled_requests": len(outcomes) - len(points),
+        "cancelled_requests": sum(
+            outcome["status"] == "cancelled" for outcome in outcomes
+        ),
+        "deadline_aborted_completed_requests": sum(
+            outcome.get("client_completion") == "collection_deadline_aborted"
+            for outcome in outcomes
+        ),
         "cancellation_cause": "not inferred from a shared cancel/deadline outcome",
     }
 

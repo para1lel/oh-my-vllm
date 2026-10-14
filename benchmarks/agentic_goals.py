@@ -147,6 +147,7 @@ def settle(client) -> dict:
 def run_goal(client, clock: dict, duration: float):
     """Run queued native goals in one process/history until the collection deadline."""
     deadline = clock["monotonic"] + duration
+    deadline_unix = clock.get("unix", time.time()) + duration
     index, next_checkpoint = 0, time.monotonic()
     while time.monotonic() < deadline:
         started, started_unix = time.monotonic(), time.time()
@@ -222,6 +223,7 @@ def run_goal(client, clock: dict, duration: float):
         index += 1
     return {
         "collection_deadline_monotonic_s": deadline,
+        "collection_deadline_unix_s": deadline_unix,
         "controller_ended_monotonic_s": time.monotonic(),
         "final_paused_tail_seconds": client.turns[-1]["paused_tail_seconds"],
     }

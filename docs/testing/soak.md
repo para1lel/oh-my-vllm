@@ -75,6 +75,7 @@ Record source reads, tool errors, task progress, and goal changes as workload ob
 Keep incremental journals, native session and raw tool-output logs, and complete RPC/wire records.
 
 After the hour, pause continuation and abort active agent work. Report the tail separately from the collection window.
+Use the [deadline-tail evidence rules](deadline-tail.md) for a client abort during server completion.
 Hash generated source before and after independent sandbox test commands. Record failures without claiming that the database task is completed.
 
 Then remove owned containers, modified files, installed tools, caches, and the temporary image.
