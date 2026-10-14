@@ -20,7 +20,7 @@ Keep the theoretical model, two warmups, five repetitions, and 10% spread gates.
 4. Profiler, request plots, performance tuning, and complete acceptance: pending.
 
 Apply [contribution](../CONTRIBUTING.md) and [collaboration](collaboration.md): independent review, checks, prompt publication, assigned OMP branches, rebase, repeat checks, squash, and fast-forward.
-Codex uses `main`. OMP uses a separate checkout. Continue until all work passes.
+Codex uses `main`. OMP uses separate checkouts. Finish all work.
 
 The user authorized publication of the TileFoundry fork update.
 Its `main` follows upstream `e9820eb`. Its `oh-my-vllm-integration` branch matches the pinned `5b9a310` compatibility source.
@@ -67,7 +67,7 @@ Two memchecks and all 539 operator diagnostic cases pass without interference.
 The first CPU source-contract failure stays available. Corrected identities pass selected checks and the full repeat.
 Ordinary 32768/4096 batch-one diagnostics use two warmups and five measurements: prefill 1.971 seconds, ratio 4.461. Decode 34.116 seconds, ratio 2.203.
 
-Spreads pass. Latency gates fail. This dirty-source evidence is not formal acceptance.
+Spreads pass. Latency gates fail. Dirty-source evidence is diagnostic.
 Capacity, service, one-hour, and the complete framework matrix await final-source verification.
 [Precision lessons](kernels/precision-lessons.md) reject finite history, fixed FP32 prefixes, and slow native FP64 panels.
 
@@ -132,7 +132,7 @@ The supervisor audits descendant release after finite tasks. Service shutdown st
 
 Independent review approves the dispatcher. Its 35 targeted CPU cases pass.
 They cover launch-record failure, cleanup errors, an older checkout, early leader exit, and peak boundaries.
-These checks do not verify GPU inference, performance, or a one-hour collection.
+GPU inference, performance, and one-hour acceptance are pending.
 
 OMP runtime fixes pass independent source review. Its two full-scope CPU attempts each fail one Chat clock test, with 1802 passes and 153 subtests.
 Gaps 2.327/2.342 ms exceed the unchanged 2 ms contract. Issue 19 blocks integration.
@@ -159,7 +159,7 @@ Same-GPU framework collections use the same checkpoint bytes and release binary,
 Separate caches pass steady-state audit. Prefill decreases 1.959 to 1.899 seconds, or 3.06%.
 Decode medians are 33.970 and 33.947 seconds. Ratios 4.300/2.192 fail the latency gate. Spread checks pass.
 
-The sixteen-lane regression and first shared-cache audit failures stay available.
+Four-accumulator precision passes numerical checks but slows two saved inputs. Keep rejected candidates and shared-cache failures.
 Final-source numerical, fifteen-row performance, service, and one-hour acceptance are pending.
 
 ## Split-K schedule checkpoint
@@ -167,7 +167,9 @@ Final-source numerical, fifteen-row performance, service, and one-hour acceptanc
 The [split-K schedule](kernels/narrow-fp8.md#k-segment-scheduling) changes width 17408 at eight rows from eight segments to two.
 Two memchecks, 81 GPU tests, and 539 diagnostic operator cases pass.
 DSpark batch-four decode decreases 0.658%, with different speculative work. Latency gates still fail.
+
 CPU passes 1682/153. All eleven hooks pass.
+Four-segment diagnostics pass 24 memchecks but slow all twelve measured shapes.
 
 ## One-hour evidence
 
@@ -194,7 +196,7 @@ Worker RSS increases during collection. The evidence does not prove a memory pla
 The formal ordinary 32768-input/4096-output batch-one attempt on `f05a35d` collects two warmups and five measurements without OOM or preemption.
 Median prefill is 1.960 seconds against a 0.442-second lower bound, a ratio of 4.436.
 Median decode is 35.918 seconds against a 15.484-second lower bound, a ratio of 2.320.
-The two phase spreads pass 10%. The two latency ratios fail the two-times gate.
+Spreads pass 10%. Latency ratios fail the two-times gate.
 
 The theoretical equations are unchanged. The complete fifteen-row final-source framework matrix is pending.
 External CUDA candidates are diagnostic experiments. They are not selected production changes or acceptance evidence.

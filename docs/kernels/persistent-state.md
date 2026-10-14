@@ -29,6 +29,14 @@ Contiguous snapshots do not test the original packed model strides.
 A sixteen-lane candidate improves the first input but slows the other two. It is rejected.
 Keep all its original measurements. Do not select only the improved input.
 
+A separate four-accumulator candidate changes only the precision dot-product reduction order.
+It passes twelve memchecks, 112 selected GPU tests, and all 539 operator diagnostics at unchanged tolerances.
+The paired mean gains for inputs 0/15/47 are +2.572/-363.961/-363.462 microseconds.
+Inputs 15/47 regress in all rounds. This candidate is rejected without expanded framework timing.
+
+Timing checks GPU exclusivity at entry and exit, without a continuous interference audit.
+The [rejection summary](../evidence/rejected-schedules/verification.json) binds the unchanged original records and identities.
+
 ## Critical verification
 
 Twelve external fresh-process memchecks pass with zero errors.

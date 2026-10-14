@@ -73,6 +73,13 @@ Batch one has no affected eight-row projection and is a negative control.
 The two phase latency gates fail. All spread gates pass.
 This selects a measured projection schedule and does not supply final-source framework acceptance.
 
+An external four-segment candidate passes 24 memchecks with independent output samples, guards, and changed-input replay.
+At widths 6144/17408 and rows 1/4/8/9/20/32, four segments are 2.34%-15.80% slower than two, using medians of three round medians.
+Each round has twenty pairs and one hundred complete projections per sample, with eight resident weights exceeding L2.
+The candidate is rejected. Width 17408 at rows 1/4 currently uses eight segments. This experiment does not compare that route directly.
+
+The [rejection summary](../evidence/rejected-schedules/verification.json) keeps original failures and source-bound diagnostic scope.
+
 ## Lessons
 
 The ordinary 32768-input/4096-output batch-one framework diagnostic has two warmups and five measurements.
