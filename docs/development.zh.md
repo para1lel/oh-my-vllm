@@ -17,6 +17,7 @@ uv pip install --python .venv/bin/python --no-deps -e python
 [运行时元数据](../python/pyproject.toml) 声明依赖, [运行时 lock](../requirements/runtime.txt) 固定依赖闭包.
 [工具输入](../requirements/tools.in)与[工具 lock](../requirements/tools.txt) 将维护工具分开管理.
 重新生成工具版本时使用运行时约束并执行兼容性检查.
+Ninja 用于构建新的原生 CUDA 模块. 编译时保持其可执行文件位于 `PATH`.
 
 CUDA C++ 使用固定的 [CUTLASS 源码](../3rdparty/cutlass/)以及所选 CUDA toolkit 的 CCCL 头文件.
 Python 算子库不属于运行依赖.

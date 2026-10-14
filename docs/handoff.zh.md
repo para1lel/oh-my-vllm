@@ -29,10 +29,8 @@ OMP 在独立 checkout 开发分配的 GitHub Issue, 从自己的分支提交 pu
 
 ## 前一版源码验证
 
-源码 `3324a7f` 保留 attention sigmoid 的 BF16 舍入, 再执行 BF16 乘法.
-参见 [attention gate](../python/oh_my_vllm/ir/attention_gate.py).
-这项修复使未改动的完整模型 MTP 编译检查通过.
-Gate 在所有 BF16 gate 位模式上与 Torch 一致.
+源码 `3324a7f` 保留 [attention sigmoid](../python/oh_my_vllm/ir/attention_gate.py) 的 BF16 舍入, 再执行 BF16 乘法.
+未改动的完整模型 MTP 编译检查通过, 所有 BF16 位模式的比较均与 Torch 一致.
 
 正式算子矩阵全部 539 个案例通过, 覆盖完整且无干扰.
 它在原有 517 个案例 ID 不变的基础上添加 22 个 gate 案例.
@@ -43,11 +41,9 @@ MTP 和 DSpark 各通过六类服务客户端: 约束, Chat/Responses 生命周�
 两种模式均通过四阶段真实 allocator OOM 恢复, 覆盖 worker 替换, 缓存复用和最终释放.
 这些采集已独立审查原始请求, 源码身份和清理记录.
 
-完整 CPU 重跑全部 1592 个案例和 153 个 subtest 通过.
-此前运行通过 1568 个案例和 153 个 subtest, 但 23 个 fixture 控制流案例失败.
-所有失败均指向 fixture 清单缺少 attention-gate 配置.
-修复补上该配置, 未改变生产实现.
-原始失败记录已保留.
+CPU 重跑通过 1592 个案例和 153 个 subtest.
+此前运行通过 1568 个案例和 153 个 subtest, 但 23 个夹具因缺少 attention-gate 配置而失败.
+修复仅改变夹具配置. 保留原始失败记录.
 
 `3324a7f` 提交前已通过必需的 Rust/样式/文档检查.
 当前教程重跑通过 14 个 Node 测试及 9 个浏览器测试. 更新源码覆盖后, 构建通过.
@@ -162,6 +158,10 @@ GitHub 查询后再次检查范围和定价时段. 原生会话记录绑定任�
 
 OMP 的首版翻译工作负载实现正在 Issue 4 等待 Codex 审查.
 合入前仍需端到端验证其报告的检查与隔离.
+
+工具 lock 现在提供 Ninja, 用于新的原生 CUDA 构建.
+新的外部候选构建记录编译器, 完整项目头文件闭包和模块哈希.
+编译与模块加载不证明内存安全, 数值验收或性能.
 
 ## 一小时证据
 

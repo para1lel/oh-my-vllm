@@ -29,10 +29,8 @@ Its `main` follows upstream `e9820eb`. Its `oh-my-vllm-integration` branch match
 
 ## Previous source verification
 
-Source `3324a7f` keeps the attention sigmoid's BF16 rounding before its BF16 product.
-See [attention gate](../python/oh_my_vllm/ir/attention_gate.py).
-The unchanged full-model MTP compile check passes after this correction.
-The gate matches Torch for all BF16 gate bit patterns.
+Source `3324a7f` keeps the [attention sigmoid's](../python/oh_my_vllm/ir/attention_gate.py) BF16 rounding before its BF16 product.
+The unchanged full-model MTP compile check and all-BF16-bit-pattern Torch comparison pass.
 
 The formal operator matrix passes all 539 cases with complete coverage and no interference.
 It adds 22 gate cases to the unchanged previous 517 case IDs.
@@ -43,11 +41,9 @@ MTP and DSpark each pass six service clients: constraints, Chat/Responses lifecy
 Each mode passes allocator OOM recovery at four stages, with worker replacement, cache reuse, and final release.
 These collections have independent reviews of original requests, source identities, and cleanup records.
 
-The complete CPU repeat passes all 1592 cases and 153 subtests.
-The previous run passed 1568 cases and 153 subtests but failed 23 fixture control-flow cases.
-All failures identified the missing attention-gate configuration in the fixture inventory.
-The repair adds that configuration without a production implementation change.
-The original failed record is kept.
+The CPU repeat passes 1592 cases and 153 subtests.
+Its predecessor passes 1568 and 153 but fails 23 fixtures with missing attention-gate configuration.
+The repair changes fixture configuration. Keep the original failed record.
 
 Required Rust/style/document checks passed before `3324a7f`.
 The current tutorial repeat passes 14 Node tests and 9 browser tests. Its build passes after source coverage updates.
@@ -162,6 +158,10 @@ These checks do not verify GPU inference, performance, or a one-hour collection.
 
 OMP's first translation-workload implementation is awaiting Codex review on Issue 4.
 Verify its reported checks and isolation end to end before integration.
+
+The tool lock now supplies Ninja for fresh native CUDA builds.
+A new external candidate build records its compiler, complete project header closure, and module hashes.
+Compilation and module loading do not prove memory safety, numerical acceptance, or performance.
 
 ## One-hour evidence
 

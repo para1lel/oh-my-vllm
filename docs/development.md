@@ -18,6 +18,7 @@ uv pip install --python .venv/bin/python --no-deps -e python
 [Runtime metadata](../python/pyproject.toml) declares dependencies. [Runtime lock](../requirements/runtime.txt) pins their closure.
 [Tool inputs](../requirements/tools.in) and [tool lock](../requirements/tools.txt) keep maintenance tools separate.
 Regenerate tool pins with the runtime constraint and compatibility checks.
+Ninja is a build tool for fresh native CUDA modules. Keep its executable on `PATH` for compilation.
 
 CUDA C++ uses the pinned [CUTLASS source](../3rdparty/cutlass/) and the selected CUDA toolkit's CCCL headers.
 Python operator libraries are not runtime dependencies.

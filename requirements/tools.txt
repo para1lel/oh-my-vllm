@@ -33,6 +33,8 @@ mdurl==0.1.2
     # via
     #   -c requirements/runtime.txt
     #   markdown-it-py
+ninja==1.13.0
+    # via -r requirements/tools.in
 nodeenv==1.11.0
     # via pre-commit
 numpy==2.5.3
