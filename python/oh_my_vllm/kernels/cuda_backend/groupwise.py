@@ -187,7 +187,7 @@ def gemm(a, weight, scale_a, scale_weight, *, mma_sm=1, scale_major_k=True):
 def gemm_splitk(a, weight, scale_a, scale_weight):
     """Merge FP32 K segments before the projection's single BF16 boundary."""
     rows, width = a.shape
-    splits = 8 if width == 17408 and rows <= 8 else 2
+    splits = 8 if width == 17408 and rows < 8 else 2
     with torch.cuda.device(a.device):
         module = compiled()
     output = torch.empty((rows, weight.shape[0]), device=a.device, dtype=torch.bfloat16)

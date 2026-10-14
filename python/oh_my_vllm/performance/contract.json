@@ -63,7 +63,7 @@
     "kernels/backend.py": "4d0ffc847ebc7b15f574b21eb133c1d3bb84a2a4a7b27b0b7a652531bb8c8040",
     "kernels/convolution.py": "1570df16a1321354992e9b9ba81cb46dbedc2342463c6ec42d322de6b3699bff",
     "kernels/cuda_backend/__init__.py": "d9bb0ab56cfc1498db1b8b203354263a219401b002b877cec9d631d486288691",
-    "kernels/cuda_backend/groupwise.py": "cbb95dc82a24e14a50627905caa4f54250b33027771b3444a68d77e4059a0161",
+    "kernels/cuda_backend/groupwise.py": "95d554503a87fc2c47bf18118c72f91bb7912956d2d7b59aea120618637d28e6",
     "kernels/cuda_backend/groupwise_accum.cuh": "a0e3a904af264d5d7c6bfb58a9496a2acee501f63e883860ddda7b22ac75b57d",
     "kernels/cuda_backend/groupwise_fp8.cu": "e03e94a041634deb57e888b18ed3989a07f46b03461bc92728ba985ec743c967",
     "kernels/cuda_backend/groupwise_splitk.cuh": "74f229beb8d8a82fa7894e46c55e9e82659acd693809aec5baad13f05ed160e1",

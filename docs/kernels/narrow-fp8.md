@@ -50,6 +50,29 @@ Its uncommitted-source result keeps `passed=false` and `selected_passed=true`.
 The replay tests cover narrow output shapes that the original formal matrix does not contain.
 Capacity, service, one-hour, and the fifteen-row framework matrix still await final-source verification.
 
+## K-segment scheduling
+
+The [split-K entry](../../python/oh_my_vllm/kernels/cuda_backend/groupwise.py#L187) <!-- source: def gemm_splitk( --> now uses two segments at eight rows and input width 17408.
+Rows one through seven keep eight segments. CUDA source, FP32 scales, BF16 output, and numerical tolerances stay equal.
+The [scheduling summary](../evidence/split-k/verification.json) binds the original records and source identities.
+
+For eight rows, output width 5120, and eight resident weights, two segments are faster than eight by a paired mean of 0.470 microseconds.
+The three rounds each have twenty pairs and one hundred complete projections per graph sample.
+Other measured rows reject applying eight segments to all narrow shapes.
+Two fresh policy memchecks have zero errors. Selected GPU checks pass 81 tests, and all 539 operator diagnostic cases pass without interference.
+Short pytest logs and the recorded commands do not provide independent process or binary identities for those selected tests.
+
+The same-GPU DSpark comparison uses unchanged checkpoint bytes and the same Rust binary, separate caches, two warmups, and five measurements per side.
+Source and steady-state audits pass.
+
+Batch four executes the affected eight-row target projection 783 times per baseline measurement and 799 times per candidate measurement.
+Decode medians are 39.696 and 39.435 seconds, an observed decrease of 0.658%.
+Accepted drafts and step counts differ, and the collections are sequential. The phase change cannot be assigned wholly to the selector.
+Batch one has no affected eight-row projection and is a negative control.
+
+The two phase latency gates fail. All spread gates pass.
+This selects a measured projection schedule and does not supply final-source framework acceptance.
+
 ## Lessons
 
 The ordinary 32768-input/4096-output batch-one framework diagnostic has two warmups and five measurements.

@@ -77,9 +77,8 @@ The [dedicated supervisor](testing/process-ownership.md) gives the engine tree a
 The collector's other subprocess roots do not enter that scope.
 Selected CPU tests cover lost session leaders, root binding failure, partial control input, external cancellation, and cleanup error records.
 
-The full CPU repeat passes 1604 cases and 153 subtests. Rust, style, and document checks pass.
-Its predecessor fails eight fixtures after pytest reads an unrelated temporary-directory symlink.
-Fixtures now use independent configuration scopes.
+CPU passes 1604/153 after fixture configuration isolation. Rust, style, and documents pass.
+Keep the original eight temporary-directory failures.
 
 Independent review corrects an assertion that rejects valid barrier cancellation. Keep the original failed records.
 
@@ -112,8 +111,8 @@ Book download is completed. Workload and local-socket transport adaptation are p
 
 OMP implements this work on `omp/issue-4-translation-soak`. Codex owns architecture, review, and end-to-end acceptance.
 
-The official `deepseek/deepseek-flash` collaborator passes two tool-call rounds against the official API in one native session.
-Credentials stay in the user store. Host configuration stays in ignored `LOCAL.md`.
+Official `deepseek/deepseek-flash` passes two tool-call rounds in one native session.
+Credentials stay in the user store, host configuration in ignored `LOCAL.md`.
 
 There is no API cost cap. New OMP Issue tasks cannot start during official peak pricing in `Asia/Shanghai`.
 Existing tasks can finish across a boundary. Codex handles new work during peak periods.
@@ -135,17 +134,16 @@ Independent review approves the dispatcher. Its 35 targeted CPU cases pass.
 They cover launch-record failure, cleanup errors, an older checkout, early leader exit, and peak boundaries.
 These checks do not verify GPU inference, performance, or a one-hour collection.
 
-OMP is correcting the fourth Issue 4 review: abort timing, optional cancellation evidence, clock correlation, and completed checks.
-Startup, cleanup, sockets, attempt counts, and asymmetric hops pass selected reviews. Final-source two-API fixtures and canonical CPU evidence are pending.
+OMP runtime fixes pass independent source review. Its two full-scope CPU attempts each fail one Chat clock test, with 1802 passes and 153 subtests.
+Gaps 2.327/2.342 ms exceed the unchanged 2 ms contract. Issue 19 blocks integration.
 
 HTTP fixtures use the selected test binary from separate Cargo output directories.
 Its selected repeat passes 38 tests and 46 subtests, with 31 recorded launches.
 Full CPU passes 1682 cases and 153 subtests. Keep the original eight failed checkout fixtures.
 Final-source acceptance is pending.
 
-The tool lock now supplies Ninja for fresh native CUDA builds.
-A new external candidate build records its compiler, complete project header closure, and module hashes.
-Compilation and module loading do not prove memory safety, numerical acceptance, or performance.
+The tool lock supplies Ninja. Fresh candidate builds record compiler, complete header closure, and module hashes.
+Build success does not prove memory safety, numerical acceptance, or performance.
 
 ## Persistent precision state checkpoint
 
@@ -163,6 +161,13 @@ Decode medians are 33.970 and 33.947 seconds. Ratios 4.300/2.192 fail the latenc
 
 The sixteen-lane regression and first shared-cache audit failures stay available.
 Final-source numerical, fifteen-row performance, service, and one-hour acceptance are pending.
+
+## Split-K schedule checkpoint
+
+The [split-K schedule](kernels/narrow-fp8.md#k-segment-scheduling) changes width 17408 at eight rows from eight segments to two.
+Two memchecks, 81 GPU tests, and 539 diagnostic operator cases pass.
+DSpark batch-four decode decreases 0.658%, with different speculative work. Latency gates still fail.
+CPU passes 1682/153. All eleven hooks pass.
 
 ## One-hour evidence
 
