@@ -97,15 +97,13 @@ The collector's other subprocess roots do not enter that scope.
 Selected CPU tests cover lost session leaders, root binding failure, partial control input, external cancellation, and cleanup error records.
 
 The full CPU repeat passes 1604 cases and 153 subtests. Rust, style, and document checks pass.
-The previous full repeat fails eight fixture collections after pytest reads an unrelated temporary-directory symlink.
-The fixtures now keep each comparison collection in its own configuration scope. The original failed record stays available.
+Its predecessor fails eight fixtures after pytest reads an unrelated temporary-directory symlink.
+Fixtures now use independent configuration scopes.
 
-Independent review found a test assertion that rejected a valid barrier cancellation.
-The assertion is corrected. The original failed record stays available.
+Independent review corrects an assertion that rejects valid barrier cancellation. Keep the original failed records.
 
-Five external driver CPU cases pass: normal completion, engine exit, collector failure, supervisor loss, and an invalid collector result.
-These checks verify process ownership and keep original errors. They do not verify inference or a one-hour collection.
-Deadline-tail evidence and final-source one-hour acceptance are pending.
+Five external driver CPU cases pass: normal completion, engine exit, collector failure, supervisor loss, and invalid results.
+They verify ownership and keep original errors. Inference, deadline-tail, and one-hour verification are pending.
 
 A later external CUDA candidate failed with an illegal memory access. It was rejected and did not enter production.
 The [safety guide](kernels/cuda-safety.md) records the reviewed local scale-copy defect and verification limits.
@@ -123,8 +121,8 @@ Critical checks also cover subprocess RPC capture, output budgets, and more than
 
 The proxy records the disconnect's wall and monotonic clocks before handler cleanup.
 An early disconnect, changed clock offset, or missing timestamp fails deadline attribution.
-Independent review approves these corrections. Final-source GPU and service acceptance are pending.
-Rust checks pass. Final-source one-hour verification is pending.
+Independent review approves these corrections. Rust checks pass.
+Final-source GPU, service, and one-hour acceptance are pending.
 
 One-hour collections must start only after all fifteen framework performance rows pass.
 The next workload translates the same full English book from Project Gutenberg in four isolated sandboxes.
@@ -156,8 +154,14 @@ Independent review approves the dispatcher. Its 35 targeted CPU cases pass.
 They cover launch-record failure, cleanup errors, an older checkout, early leader exit, and peak boundaries.
 These checks do not verify GPU inference, performance, or a one-hour collection.
 
-OMP's first translation-workload implementation is awaiting Codex review on Issue 4.
-Verify its reported checks and isolation end to end before integration.
+OMP must correct Issue 4 independent review findings.
+Open findings: native edit guard, partial startup, cleanup, socket retention, and complete transport evidence.
+Verify corrections and isolation end to end before integration.
+
+HTTP fixtures use the selected test binary from separate Cargo output directories.
+Its selected repeat passes 38 tests and 46 subtests, with 31 recorded launches.
+Full CPU passes 1682 cases and 153 subtests. Keep the original eight failed checkout fixtures.
+Final-source acceptance is pending.
 
 The tool lock now supplies Ninja for fresh native CUDA builds.
 A new external candidate build records its compiler, complete project header closure, and module hashes.
@@ -199,9 +203,9 @@ Current scan/GEMM counters, isolated FP64 emulation, and three-layer wavefront p
 Eager FP64 emulation is slower for the tested shapes. Token slicing lacks complete equivalence proof.
 Neither candidate is selected.
 
-Later [native affine diagnostics](kernels/affine-diagnostics.md) find complete-operation layout benefits but final-state cancellation failures.
-Three affine variants fail all eight cancellation workloads. Repository CUDA passes all eight.
-Larger finite-only FP64 emulation is also slower. Continue precision-path work without selecting these candidates.
+The [native affine diagnostics](kernels/affine-diagnostics.md) find complete-operation layout benefits.
+Three variants fail all eight final-state cancellation workloads. Repository CUDA passes all eight.
+Larger finite-only FP64 emulation is slower. No candidate is selected.
 
 The instrumented ordinary model recomputes route flags on 48 GDN layers for one repeated-token input.
 Of those layers, 46 use the precision route for all chunks. Other prompt distributions are unmeasured.

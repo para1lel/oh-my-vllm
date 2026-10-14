@@ -21,6 +21,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
+BINARY = str(
+    Path(
+        os.environ.get("OH_MY_VLLM_TEST_BINARY")
+        or ROOT / "target/debug/oh-my-vllm-zmq-worker"
+    ).resolve()
+)
 PYTHON = sys.executable
 # Fixture imports include Torch and XGrammar before the ZMQ peer connects.
 FIXTURE_START_TIMEOUT = 30
@@ -50,7 +56,7 @@ class PromptValidationTests(unittest.TestCase):
         prompt_file.write_text("248320\n")
         result = subprocess.run(
             [
-                str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                BINARY,
                 "--model",
                 "/nonexistent-checkpoint",
                 "run",
@@ -78,7 +84,7 @@ class PromptValidationTests(unittest.TestCase):
             with self.subTest(config=config):
                 result = subprocess.run(
                     [
-                        str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                        BINARY,
                         "--model",
                         "/nonexistent-checkpoint",
                         "serve",
@@ -129,7 +135,7 @@ class HttpTests(unittest.TestCase):
         cls.log = (cls.directory / "server.log").open("w+")
         cls.process = subprocess.Popen(
             [
-                str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                BINARY,
                 "--socket",
                 str(cls.directory / "worker.ipc"),
                 "--num-speculative-tokens",
@@ -254,7 +260,7 @@ class HttpTests(unittest.TestCase):
             with (directory / "server.log").open("w") as log:
                 process = subprocess.Popen(
                     [
-                        str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                        BINARY,
                         "--socket",
                         str(directory / "worker.ipc"),
                         "serve",
@@ -605,7 +611,7 @@ class HttpTests(unittest.TestCase):
                 with log_path.open("w") as log:
                     process = subprocess.Popen(
                         [
-                            str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                            BINARY,
                             "--socket",
                             str(self.directory / f"{name}.ipc"),
                             "serve",
@@ -736,7 +742,7 @@ class HttpTests(unittest.TestCase):
         with log_path.open("w") as log:
             process = subprocess.Popen(
                 [
-                    str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                    BINARY,
                     "--socket",
                     str(self.directory / "capacity-worker.ipc"),
                     "--scheduler-blocks",
@@ -808,7 +814,7 @@ class HttpTests(unittest.TestCase):
         with log_path.open("w") as log:
             process = subprocess.Popen(
                 [
-                    str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                    BINARY,
                     "--socket",
                     str(self.directory / "graceful-worker.ipc"),
                     "serve",
@@ -873,7 +879,7 @@ class HttpTests(unittest.TestCase):
         with log_path.open("w") as log:
             process = subprocess.Popen(
                 [
-                    str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                    BINARY,
                     "--socket",
                     str(self.directory / "stalled-worker.ipc"),
                     "serve",
@@ -954,7 +960,7 @@ class HttpTests(unittest.TestCase):
         with log_path.open("w") as log:
             process = subprocess.Popen(
                 [
-                    str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                    BINARY,
                     "--socket",
                     str(self.directory / "slow-stream-worker.ipc"),
                     "serve",
@@ -1179,7 +1185,7 @@ class HttpTests(unittest.TestCase):
                 environment["OH_MY_VLLM_FIXTURE_STEPS"] = str(worker_steps)
             process = subprocess.Popen(
                 [
-                    str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                    BINARY,
                     "--socket",
                     str(self.directory / (name + ".ipc")),
                     "serve",
@@ -1925,7 +1931,7 @@ class HttpTests(unittest.TestCase):
         with log_path.open("w") as log:
             process = subprocess.Popen(
                 [
-                    str(ROOT / "target/debug/oh-my-vllm-zmq-worker"),
+                    BINARY,
                     "--socket",
                     str(self.directory / "small-pool-worker.ipc"),
                     "--scheduler-blocks",

@@ -28,6 +28,8 @@ scripts/test.sh full
 ```
 
 `scripts/test.sh` 构建测试 binary, 提供 `OH_MY_VLLM_TEST_BINARY`.
+HTTP 夹具使用所选 binary. 直接执行且未设置此变量时, 使用仓库的 debug binary.
+
 CPU 模式选择 `not gpu`, GPU visibility 为空.
 Full 模式在等待空闲且绑定 UUID 的 B200 前要求模型位置.
 模型未配置时, CPU tokenizer / HTTP 集成测试明确跳过.

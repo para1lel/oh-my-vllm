@@ -28,6 +28,8 @@ scripts/test.sh full
 ```
 
 `scripts/test.sh` builds the test binary and supplies `OH_MY_VLLM_TEST_BINARY`.
+HTTP fixtures use that selected binary. Direct invocation without this variable uses the repository debug binary.
+
 CPU mode selects `not gpu` with GPU visibility empty.
 Full mode must use a model location before selection of an idle UUID-pinned B200.
 CPU tokenizer/HTTP integrations skip explicitly when the model is unset.
