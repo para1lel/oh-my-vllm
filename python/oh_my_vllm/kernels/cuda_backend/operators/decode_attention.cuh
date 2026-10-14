@@ -413,6 +413,58 @@ __global__ void attention_merge_kernel(const float *__restrict__ partial,
       total > 0.f ? accum.x / total : 0.f, total > 0.f ? accum.y / total : 0.f);
 }
 
+// Partition the 128-split numerator across eight warps and four value tiles.
+// The LSE maximum, denominator and final BF16 boundary keep the existing order;
+// the FP32 numerator uses eight shorter sums followed by a warp-ordered merge.
+__global__ void attention_merge_parallel_kernel(const float *__restrict__ partial,
+                                                const float *__restrict__ lse,
+                                                __nv_bfloat16 *__restrict__ out) {
+  pdl_dependency_wait();
+  pdl_launch_next();
+  constexpr int splits = 128;
+  const int row = blockIdx.x, tile = blockIdx.y;
+  const int tid = threadIdx.x, lane = tid & 31, warp = tid / 32;
+  __shared__ float weights[splits], scratch[8];
+  __shared__ float2 numerators[8][32];
+  const float log = tid < splits ? lse[row * splits + tid] : -INFINITY;
+  float maximum = warp_max(log);
+  if (warp < 4 && lane == 0)
+    scratch[warp] = maximum;
+  __syncthreads();
+  maximum = warp_max(lane < 4 ? scratch[lane] : -INFINITY);
+  const float safe_maximum = maximum == -INFINITY ? 0.f : maximum;
+  const float weight = tid < splits ? softmax_exp2(log - safe_maximum) : 0.f;
+  if (tid < splits)
+    weights[tid] = weight;
+  float total = warp_sum(weight);
+  if (warp < 4 && lane == 0)
+    scratch[warp + 4] = total;
+  __syncthreads();
+  total = warp_sum(lane < 4 ? scratch[lane + 4] : 0.f);
+  float2 accum = make_float2(0.f, 0.f);
+#pragma unroll
+  for (int split = warp; split < splits; split += 8) {
+    const float2 value = reinterpret_cast<const float2 *>(
+        partial)[(static_cast<int64_t>(row) * splits + split) * 128 + tile * 32 + lane];
+    const float w = weights[split];
+    accum.x += value.x * w;
+    accum.y += value.y * w;
+  }
+  numerators[warp][lane] = accum;
+  __syncthreads();
+  if (warp == 0) {
+    float2 combined = make_float2(0.f, 0.f);
+#pragma unroll
+    for (int source_warp = 0; source_warp < 8; ++source_warp) {
+      const float2 part = numerators[source_warp][lane];
+      combined.x += part.x;
+      combined.y += part.y;
+    }
+    reinterpret_cast<__nv_bfloat162 *>(out)[row * 128 + tile * 32 + lane] = __floats2bfloat162_rn(
+        total > 0.f ? combined.x / total : 0.f, total > 0.f ? combined.y / total : 0.f);
+  }
+}
+
 void attention_merge(TensorView partial, TensorView lse, TensorView out) {
   TVM_FFI_ICHECK(out.ndim() == 3 && out.size(0) > 0 && out.size(1) > 0 && out.size(2) == 256 &&
                  out.size(0) <= INT32_MAX / out.size(1) && has_dtype(out, kDLBfloat, 16) &&
@@ -443,7 +495,10 @@ void attention_merge(TensorView partial, TensorView lse, TensorView out) {
     MERGE(64);
   } else {
     TVM_FFI_ICHECK(lse.size(2) == 128);
-    MERGE(128);
+    launch_kernel(attention_merge_parallel_kernel, dim3(lse.size(0) * lse.size(1), 4), 256, 0,
+                  stream, static_cast<const float *>(partial.data_ptr()),
+                  static_cast<const float *>(lse.data_ptr()),
+                  static_cast<__nv_bfloat16 *>(out.data_ptr()));
   }
 #undef MERGE
   finish_cuda_launch(stream, "attention_merge");

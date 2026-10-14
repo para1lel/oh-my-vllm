@@ -27,35 +27,25 @@ Its `main` follows upstream `e9820eb`. Its `oh-my-vllm-integration` matches pinn
 
 ## Previous source verification
 
-Source `3324a7f` keeps attention sigmoid BF16 rounding before the BF16 product.
-Full-model MTP compile passes. The gate matches Torch for all BF16 bit patterns.
-Its formal 539-case matrix adds 22 gate cases to the previous 517 IDs. Non-boundary GPU passes 589 cases.
+Source `3324a7f` verifies attention gate rounding, full-model MTP compilation, and the formal 539-case matrix.
 Six ordinary/MTP4 capacity cases finish 258048 input and 4096 output tokens at batches 1/2/4, without OOM or recompute preemption.
+MTP and DSpark each pass six service clients and four-stage allocator recovery, with worker replacement, cache reuse, and final release.
+These records and their original failures stay source-bound in the [acceptance index](acceptance.md).
 
-MTP and DSpark each pass six service clients and four-stage allocator OOM recovery, with worker replacement, cache reuse, and final release.
-Independent review covers original requests, source identities, and cleanup.
-CPU passes 1592/153. Its predecessor passes 1568/153 but fails 23 missing attention-gate fixtures. Keep original failures.
-Rust/style/document checks passed before that commit.
+Previous CPU runs pass 1592/153 and 1568/153. The latter fails 23 missing attention-gate fixtures. Original failures stay available.
 
-Tutorial build and 14 Node/9 browser tests pass. Bounded profiling and dark cache-hit plots pass selected CPU/GPU checks.
+Tutorial build and 14 Node/9 browser tests pass.
 
 ## Selected subgroup scan checkpoint
 
-The selected [precision path](../python/oh_my_vllm/kernels/cuda_backend/operators/gdn_precision.cuh) keeps the token recurrence, FP32 state, and BF16 boundaries.
-Its FP32 reduction order changes. Existing numerical and state tolerances stay equal.
-Independent review approved the source and four identity updates in the semantic contract, with no equation or lower-bound change.
+The selected [precision path](../python/oh_my_vllm/kernels/cuda_backend/operators/gdn_precision.cuh) keeps recurrence, FP32 state, BF16 boundaries, and all tolerances with a changed FP32 reduction order.
+Independent review approves four contract identities without equation or lower-bound changes.
+CPU passes 1592/153, selected GPU 99, and non-boundary GPU 593.
+Four [alignment and cancellation cases](../tests/numerical/test_gdn_prefill_replay.py) pass memcheck.
 
-CPU passes 1592/153.
-Selected GPU passes 99 cases, with unchanged complete-model MTP compile checks.
-Four added [alignment and cancellation cases](../tests/numerical/test_gdn_prefill_replay.py) pass Compute Sanitizer with zero errors.
-The complete 539-case operator numerical collection passes with no interference.
-Its uncommitted-source report is diagnostic and has `passed=false` with `selected_passed=true`.
-
-The complete non-boundary GPU repeat passes 593 cases.
-The clean-source formal repeat at `f05a35d` passes all 539 operator numerical cases, with complete coverage and no interference.
-Capacity, service, and one-hour records belong to `3324a7f`, not this checkpoint.
-Final-source acceptance and the fourth milestone are pending.
-The source-bound checkpoint summary is in the [acceptance index](acceptance.md).
+All 539 dirty-source diagnostic cases pass with `passed=false` and `selected_passed=true`.
+Clean `f05a35d` passes all 539 formal numerical cases, with complete coverage and no interference.
+Capacity, service, and one-hour records belong to `3324a7f`. Final-source acceptance is pending.
 
 ## Narrow FP8 checkpoint
 
@@ -173,7 +163,19 @@ Four-segment diagnostics pass 24 memchecks but slow all twelve measured shapes.
 
 Stage3 passes 36 memchecks: two of eighteen shapes improve, sixteen regress. Reject the common selector.
 [Native scheduling evidence](evidence/native-scheduling/verification.json) prioritizes FP8 projection and GDN scan.
-Packed projection and isolated attention are unselected external experiments.
+Packed projection is an unselected external experiment.
+
+## Attention merge checkpoint
+
+The [128-split merge](kernels/attention-merge.md) changes FP32 sum grouping and keeps maximum, denominator, BF16 boundaries, and tolerances.
+Main passes five memchecks, 115 selected GPU tests, and 539 diagnostic numerical cases. CPU passes 1682/153 without skips.
+Complete partial-plus-merge operations improve 9.13%/7.24%/8.82% at batches 1/2/4, with positive bootstrap bounds.
+
+Production compiler flags stay equal. The failed dual-module launch and corrected experimental isolation stay available.
+Same-GPU ordinary batch-one, two-warmup/five-run diagnostics observe decode 34.079→33.770 seconds and prefill 1.897→1.902 seconds.
+Candidate latency ratios 4.305/2.181 fail. Spreads pass. These sequential sets do not prove whole-model attribution.
+
+Final-source formal numerical, fifteen-row performance, service, and book soaks are pending.
 
 ## One-hour evidence
 

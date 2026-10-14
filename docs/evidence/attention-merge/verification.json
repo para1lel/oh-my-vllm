@@ -1,0 +1,1451 @@
+{
+  "artifact_kind": "portable_attention_merge_milestone",
+  "schema_version": 1,
+  "gpu_scope": "Same B200 per comparison, with hardware identities bound by original evidence.",
+  "formal_acceptance": false,
+  "base_commit": "87ea35582ffc5caea86a409fcdbf2c4626aae3d6",
+  "source_sha256": {
+    "python/oh_my_vllm/kernels/cuda_backend/operators/decode_attention.cuh": "ec2a2544ab48c59d41c3082659330ecabbefb61c776afa1616ed3ff71f69a4fc",
+    "tests/numerical/test_attention_merge_replay.py": "c2df21a17aafe06104be9ee962f1146103421cee2e3ba6f7dd16282189aef498"
+  },
+  "contract_changes": "Exactly two attention header identities; equations, tolerances, model and latency gates equal.",
+  "main_checks": {
+    "fresh_memchecks": 5,
+    "selected_gpu": 115,
+    "full_numerical_diagnostic": 539,
+    "cpu_passed": 1682,
+    "cpu_subtests": 153,
+    "cpu_skips": 0
+  },
+  "complete_attention": {
+    "1": {
+      "batch": 1,
+      "heads": 24,
+      "context": 32768,
+      "splits": 128,
+      "kv_cache_bytes": 1078984704,
+      "resident_independent_kv_buffers": 8,
+      "comparison": {
+        "rounds": [
+          {
+            "baseline_ms": 0.03897711992263794,
+            "candidate_ms": 0.03542528033256531
+          },
+          {
+            "baseline_ms": 0.03897776007652283,
+            "candidate_ms": 0.03542160034179688
+          },
+          {
+            "baseline_ms": 0.03897776007652283,
+            "candidate_ms": 0.03541247963905335
+          }
+        ],
+        "paired_mean_gain_ms": 0.003557087699572245,
+        "gain_lower_95_ms": 0.003543535669644672,
+        "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+        "passed": true
+      }
+    },
+    "2": {
+      "batch": 2,
+      "heads": 24,
+      "context": 32768,
+      "splits": 128,
+      "kv_cache_bytes": 2157969408,
+      "resident_independent_kv_buffers": 8,
+      "comparison": {
+        "rounds": [
+          {
+            "baseline_ms": 0.06781696081161498,
+            "candidate_ms": 0.06291040182113647
+          },
+          {
+            "baseline_ms": 0.06778912067413331,
+            "candidate_ms": 0.06289391994476318
+          },
+          {
+            "baseline_ms": 0.06782016038894653,
+            "candidate_ms": 0.0629088020324707
+          }
+        ],
+        "paired_mean_gain_ms": 0.004912170728047689,
+        "gain_lower_95_ms": 0.004881717522939047,
+        "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+        "passed": true
+      }
+    },
+    "4": {
+      "batch": 4,
+      "heads": 24,
+      "context": 32768,
+      "splits": 128,
+      "kv_cache_bytes": 4315938816,
+      "resident_independent_kv_buffers": 8,
+      "comparison": {
+        "rounds": [
+          {
+            "baseline_ms": 0.12049391746520996,
+            "candidate_ms": 0.1098524808883667
+          },
+          {
+            "baseline_ms": 0.12061424255371093,
+            "candidate_ms": 0.10997087955474853
+          },
+          {
+            "baseline_ms": 0.12065855979919433,
+            "candidate_ms": 0.10994735717773438
+          }
+        ],
+        "paired_mean_gain_ms": 0.01062926975886027,
+        "gain_lower_95_ms": 0.01055173953374227,
+        "method": "hierarchical paired bootstrap, one-sided95%, seed784",
+        "passed": true
+      }
+    }
+  },
+  "framework_diagnostic": {
+    "artifact_kind": "diagnostic_attention_framework_comparison",
+    "formal_acceptance": false,
+    "diagnostic": true,
+    "analysis_sha256": {
+      "analyze_diagnostic.py": "ddae1c34bb6518d725e7ed5303b499c6e817719da6b29a2401ee3d4a31c40b8b",
+      "baseline-diagnostic-analysis.json": "6e3e185711e561700934f73869a75ac6abcfd37488b403950bced467149620eb",
+      "candidate-diagnostic-analysis.json": "70ef2e80d64af91c7e7a3e2a4cc6108d5cd5de6abef74a17563907f4c142b48e"
+    },
+    "results": {
+      "baseline": {
+        "original_sha256": "659587ad517626eadf69c3af091c494b02365e2f5d5f45c0590f8bdccfa6ff8d",
+        "times": [
+          {
+            "prefill": 1.89310496,
+            "decode": 33.937285693999996
+          },
+          {
+            "prefill": 1.896502455,
+            "decode": 34.079205395
+          },
+          {
+            "prefill": 1.898793626,
+            "decode": 34.086021949
+          },
+          {
+            "prefill": 1.8949197899999999,
+            "decode": 34.32971731
+          },
+          {
+            "prefill": 1.897935528,
+            "decode": 34.007595905
+          }
+        ],
+        "bounds": [
+          {
+            "prefill": 0.44175381006472536,
+            "prefill_model": {
+              "compute_resource_s": 0.44175381006472536,
+              "hbm_s": 0.003793777703896104,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 0.44175381006472536,
+              "lower_bound_s": 0.44175381006472536,
+              "compulsory_hbm_bytes": 29212088320,
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 40634427392.0,
+                "fp32_to_fp8": 69927464960.0,
+                "fp8_group_max_comparisons": 69927464960.0,
+                "bf16_add": 21139302400.0,
+                "bf16_multiply": 35936814080.0,
+                "fp32_to_bf16_packed_pairs": 17968407040.0,
+                "attention_max_comparisons": 193280212992.0,
+                "bf16_output_gate_product": 3019905024.0
+              }
+            },
+            "decode": 15.483942549211429,
+            "decode_model": {
+              "compute_resource_s": 0.07390502060032,
+              "hbm_s": 15.483942549211429,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 15.483942549211429,
+              "lower_bound_s": 15.483942549211429,
+              "compulsory_hbm_bytes": 119226357628928,
+              "skew_adjusted_lower_bound_s": 15.483942549211429,
+              "common_tail_model": {
+                "compute_resource_s": 0.07390502060032,
+                "hbm_s": 15.483942549211429,
+                "critical_path_s": 0.00029773345246753247,
+                "phase_start_skew_s": 0,
+                "resource_span_s": 15.483942549211429,
+                "lower_bound_s": 15.483942549211429,
+                "compulsory_hbm_bytes": 119226357628928,
+                "first_step_exclusive": 8197,
+                "selected_steps": 4095
+              },
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 3912330240.0,
+                "fp32_to_fp8": 8856207360.0,
+                "fp8_group_max_comparisons": 8856207360.0,
+                "bf16_add": 2683699200.0,
+                "bf16_multiply": 4562288640.0,
+                "fp32_to_bf16_packed_pairs": 2281144320.0,
+                "attention_max_comparisons": 54747463680.0,
+                "bf16_output_gate_product": 402554880.0
+              }
+            }
+          },
+          {
+            "prefill": 0.44175381006472536,
+            "prefill_model": {
+              "compute_resource_s": 0.44175381006472536,
+              "hbm_s": 0.003793777703896104,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 0.44175381006472536,
+              "lower_bound_s": 0.44175381006472536,
+              "compulsory_hbm_bytes": 29212088320,
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 40634427392.0,
+                "fp32_to_fp8": 69927464960.0,
+                "fp8_group_max_comparisons": 69927464960.0,
+                "bf16_add": 21139302400.0,
+                "bf16_multiply": 35936814080.0,
+                "fp32_to_bf16_packed_pairs": 17968407040.0,
+                "attention_max_comparisons": 193280212992.0,
+                "bf16_output_gate_product": 3019905024.0
+              }
+            },
+            "decode": 15.483942549211429,
+            "decode_model": {
+              "compute_resource_s": 0.07390502060032,
+              "hbm_s": 15.483942549211429,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 15.483942549211429,
+              "lower_bound_s": 15.483942549211429,
+              "compulsory_hbm_bytes": 119226357628928,
+              "skew_adjusted_lower_bound_s": 15.483942549211429,
+              "common_tail_model": {
+                "compute_resource_s": 0.07390502060032,
+                "hbm_s": 15.483942549211429,
+                "critical_path_s": 0.00029773345246753247,
+                "phase_start_skew_s": 0,
+                "resource_span_s": 15.483942549211429,
+                "lower_bound_s": 15.483942549211429,
+                "compulsory_hbm_bytes": 119226357628928,
+                "first_step_exclusive": 12295,
+                "selected_steps": 4095
+              },
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 3912330240.0,
+                "fp32_to_fp8": 8856207360.0,
+                "fp8_group_max_comparisons": 8856207360.0,
+                "bf16_add": 2683699200.0,
+                "bf16_multiply": 4562288640.0,
+                "fp32_to_bf16_packed_pairs": 2281144320.0,
+                "attention_max_comparisons": 54747463680.0,
+                "bf16_output_gate_product": 402554880.0
+              }
+            }
+          },
+          {
+            "prefill": 0.44175381006472536,
+            "prefill_model": {
+              "compute_resource_s": 0.44175381006472536,
+              "hbm_s": 0.003793777703896104,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 0.44175381006472536,
+              "lower_bound_s": 0.44175381006472536,
+              "compulsory_hbm_bytes": 29212088320,
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 40634427392.0,
+                "fp32_to_fp8": 69927464960.0,
+                "fp8_group_max_comparisons": 69927464960.0,
+                "bf16_add": 21139302400.0,
+                "bf16_multiply": 35936814080.0,
+                "fp32_to_bf16_packed_pairs": 17968407040.0,
+                "attention_max_comparisons": 193280212992.0,
+                "bf16_output_gate_product": 3019905024.0
+              }
+            },
+            "decode": 15.483942549211429,
+            "decode_model": {
+              "compute_resource_s": 0.07390502060032,
+              "hbm_s": 15.483942549211429,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 15.483942549211429,
+              "lower_bound_s": 15.483942549211429,
+              "compulsory_hbm_bytes": 119226357628928,
+              "skew_adjusted_lower_bound_s": 15.483942549211429,
+              "common_tail_model": {
+                "compute_resource_s": 0.07390502060032,
+                "hbm_s": 15.483942549211429,
+                "critical_path_s": 0.00029773345246753247,
+                "phase_start_skew_s": 0,
+                "resource_span_s": 15.483942549211429,
+                "lower_bound_s": 15.483942549211429,
+                "compulsory_hbm_bytes": 119226357628928,
+                "first_step_exclusive": 16393,
+                "selected_steps": 4095
+              },
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 3912330240.0,
+                "fp32_to_fp8": 8856207360.0,
+                "fp8_group_max_comparisons": 8856207360.0,
+                "bf16_add": 2683699200.0,
+                "bf16_multiply": 4562288640.0,
+                "fp32_to_bf16_packed_pairs": 2281144320.0,
+                "attention_max_comparisons": 54747463680.0,
+                "bf16_output_gate_product": 402554880.0
+              }
+            }
+          },
+          {
+            "prefill": 0.44175381006472536,
+            "prefill_model": {
+              "compute_resource_s": 0.44175381006472536,
+              "hbm_s": 0.003793777703896104,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 0.44175381006472536,
+              "lower_bound_s": 0.44175381006472536,
+              "compulsory_hbm_bytes": 29212088320,
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 40634427392.0,
+                "fp32_to_fp8": 69927464960.0,
+                "fp8_group_max_comparisons": 69927464960.0,
+                "bf16_add": 21139302400.0,
+                "bf16_multiply": 35936814080.0,
+                "fp32_to_bf16_packed_pairs": 17968407040.0,
+                "attention_max_comparisons": 193280212992.0,
+                "bf16_output_gate_product": 3019905024.0
+              }
+            },
+            "decode": 15.483942549211429,
+            "decode_model": {
+              "compute_resource_s": 0.07390502060032,
+              "hbm_s": 15.483942549211429,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 15.483942549211429,
+              "lower_bound_s": 15.483942549211429,
+              "compulsory_hbm_bytes": 119226357628928,
+              "skew_adjusted_lower_bound_s": 15.483942549211429,
+              "common_tail_model": {
+                "compute_resource_s": 0.07390502060032,
+                "hbm_s": 15.483942549211429,
+                "critical_path_s": 0.00029773345246753247,
+                "phase_start_skew_s": 0,
+                "resource_span_s": 15.483942549211429,
+                "lower_bound_s": 15.483942549211429,
+                "compulsory_hbm_bytes": 119226357628928,
+                "first_step_exclusive": 20491,
+                "selected_steps": 4095
+              },
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 3912330240.0,
+                "fp32_to_fp8": 8856207360.0,
+                "fp8_group_max_comparisons": 8856207360.0,
+                "bf16_add": 2683699200.0,
+                "bf16_multiply": 4562288640.0,
+                "fp32_to_bf16_packed_pairs": 2281144320.0,
+                "attention_max_comparisons": 54747463680.0,
+                "bf16_output_gate_product": 402554880.0
+              }
+            }
+          },
+          {
+            "prefill": 0.44175381006472536,
+            "prefill_model": {
+              "compute_resource_s": 0.44175381006472536,
+              "hbm_s": 0.003793777703896104,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 0.44175381006472536,
+              "lower_bound_s": 0.44175381006472536,
+              "compulsory_hbm_bytes": 29212088320,
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 40634427392.0,
+                "fp32_to_fp8": 69927464960.0,
+                "fp8_group_max_comparisons": 69927464960.0,
+                "bf16_add": 21139302400.0,
+                "bf16_multiply": 35936814080.0,
+                "fp32_to_bf16_packed_pairs": 17968407040.0,
+                "attention_max_comparisons": 193280212992.0,
+                "bf16_output_gate_product": 3019905024.0
+              }
+            },
+            "decode": 15.483942549211429,
+            "decode_model": {
+              "compute_resource_s": 0.07390502060032,
+              "hbm_s": 15.483942549211429,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 15.483942549211429,
+              "lower_bound_s": 15.483942549211429,
+              "compulsory_hbm_bytes": 119226357628928,
+              "skew_adjusted_lower_bound_s": 15.483942549211429,
+              "common_tail_model": {
+                "compute_resource_s": 0.07390502060032,
+                "hbm_s": 15.483942549211429,
+                "critical_path_s": 0.00029773345246753247,
+                "phase_start_skew_s": 0,
+                "resource_span_s": 15.483942549211429,
+                "lower_bound_s": 15.483942549211429,
+                "compulsory_hbm_bytes": 119226357628928,
+                "first_step_exclusive": 24589,
+                "selected_steps": 4095
+              },
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 3912330240.0,
+                "fp32_to_fp8": 8856207360.0,
+                "fp8_group_max_comparisons": 8856207360.0,
+                "bf16_add": 2683699200.0,
+                "bf16_multiply": 4562288640.0,
+                "fp32_to_bf16_packed_pairs": 2281144320.0,
+                "attention_max_comparisons": 54747463680.0,
+                "bf16_output_gate_product": 402554880.0
+              }
+            }
+          }
+        ],
+        "phases": {
+          "prefill": {
+            "wall_median_s": 1.896502455,
+            "lower_bound_median_s": 0.44175381006472536,
+            "latency_ratio": 4.293120764984746,
+            "wall_spread": 0.0029995563596567835,
+            "latency_gate": true,
+            "latency_passed": false,
+            "spread_passed": true,
+            "passed": false
+          },
+          "decode": {
+            "wall_median_s": 34.079205395,
+            "lower_bound_median_s": 15.483942549211429,
+            "latency_ratio": 2.2009385068879372,
+            "wall_spread": 0.01151528069541139,
+            "latency_gate": true,
+            "latency_passed": false,
+            "spread_passed": true,
+            "passed": false
+          }
+        }
+      },
+      "candidate": {
+        "original_sha256": "f088fdf5e19a40ddf5356e1b3222854528dba40b44b3bee86c2cd4c89a113836",
+        "times": [
+          {
+            "prefill": 1.892392417,
+            "decode": 33.764947358
+          },
+          {
+            "prefill": 1.901908159,
+            "decode": 33.769918882999995
+          },
+          {
+            "prefill": 1.899950256,
+            "decode": 33.767705083
+          },
+          {
+            "prefill": 1.9055960760000001,
+            "decode": 34.214139767999995
+          },
+          {
+            "prefill": 1.9017476549999999,
+            "decode": 33.894791695
+          }
+        ],
+        "bounds": [
+          {
+            "prefill": 0.44175381006472536,
+            "prefill_model": {
+              "compute_resource_s": 0.44175381006472536,
+              "hbm_s": 0.003793777703896104,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 0.44175381006472536,
+              "lower_bound_s": 0.44175381006472536,
+              "compulsory_hbm_bytes": 29212088320,
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 40634427392.0,
+                "fp32_to_fp8": 69927464960.0,
+                "fp8_group_max_comparisons": 69927464960.0,
+                "bf16_add": 21139302400.0,
+                "bf16_multiply": 35936814080.0,
+                "fp32_to_bf16_packed_pairs": 17968407040.0,
+                "attention_max_comparisons": 193280212992.0,
+                "bf16_output_gate_product": 3019905024.0
+              }
+            },
+            "decode": 15.483942549211429,
+            "decode_model": {
+              "compute_resource_s": 0.07390502060032,
+              "hbm_s": 15.483942549211429,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 15.483942549211429,
+              "lower_bound_s": 15.483942549211429,
+              "compulsory_hbm_bytes": 119226357628928,
+              "skew_adjusted_lower_bound_s": 15.483942549211429,
+              "common_tail_model": {
+                "compute_resource_s": 0.07390502060032,
+                "hbm_s": 15.483942549211429,
+                "critical_path_s": 0.00029773345246753247,
+                "phase_start_skew_s": 0,
+                "resource_span_s": 15.483942549211429,
+                "lower_bound_s": 15.483942549211429,
+                "compulsory_hbm_bytes": 119226357628928,
+                "first_step_exclusive": 8197,
+                "selected_steps": 4095
+              },
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 3912330240.0,
+                "fp32_to_fp8": 8856207360.0,
+                "fp8_group_max_comparisons": 8856207360.0,
+                "bf16_add": 2683699200.0,
+                "bf16_multiply": 4562288640.0,
+                "fp32_to_bf16_packed_pairs": 2281144320.0,
+                "attention_max_comparisons": 54747463680.0,
+                "bf16_output_gate_product": 402554880.0
+              }
+            }
+          },
+          {
+            "prefill": 0.44175381006472536,
+            "prefill_model": {
+              "compute_resource_s": 0.44175381006472536,
+              "hbm_s": 0.003793777703896104,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 0.44175381006472536,
+              "lower_bound_s": 0.44175381006472536,
+              "compulsory_hbm_bytes": 29212088320,
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 40634427392.0,
+                "fp32_to_fp8": 69927464960.0,
+                "fp8_group_max_comparisons": 69927464960.0,
+                "bf16_add": 21139302400.0,
+                "bf16_multiply": 35936814080.0,
+                "fp32_to_bf16_packed_pairs": 17968407040.0,
+                "attention_max_comparisons": 193280212992.0,
+                "bf16_output_gate_product": 3019905024.0
+              }
+            },
+            "decode": 15.483942549211429,
+            "decode_model": {
+              "compute_resource_s": 0.07390502060032,
+              "hbm_s": 15.483942549211429,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 15.483942549211429,
+              "lower_bound_s": 15.483942549211429,
+              "compulsory_hbm_bytes": 119226357628928,
+              "skew_adjusted_lower_bound_s": 15.483942549211429,
+              "common_tail_model": {
+                "compute_resource_s": 0.07390502060032,
+                "hbm_s": 15.483942549211429,
+                "critical_path_s": 0.00029773345246753247,
+                "phase_start_skew_s": 0,
+                "resource_span_s": 15.483942549211429,
+                "lower_bound_s": 15.483942549211429,
+                "compulsory_hbm_bytes": 119226357628928,
+                "first_step_exclusive": 12295,
+                "selected_steps": 4095
+              },
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 3912330240.0,
+                "fp32_to_fp8": 8856207360.0,
+                "fp8_group_max_comparisons": 8856207360.0,
+                "bf16_add": 2683699200.0,
+                "bf16_multiply": 4562288640.0,
+                "fp32_to_bf16_packed_pairs": 2281144320.0,
+                "attention_max_comparisons": 54747463680.0,
+                "bf16_output_gate_product": 402554880.0
+              }
+            }
+          },
+          {
+            "prefill": 0.44175381006472536,
+            "prefill_model": {
+              "compute_resource_s": 0.44175381006472536,
+              "hbm_s": 0.003793777703896104,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 0.44175381006472536,
+              "lower_bound_s": 0.44175381006472536,
+              "compulsory_hbm_bytes": 29212088320,
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 40634427392.0,
+                "fp32_to_fp8": 69927464960.0,
+                "fp8_group_max_comparisons": 69927464960.0,
+                "bf16_add": 21139302400.0,
+                "bf16_multiply": 35936814080.0,
+                "fp32_to_bf16_packed_pairs": 17968407040.0,
+                "attention_max_comparisons": 193280212992.0,
+                "bf16_output_gate_product": 3019905024.0
+              }
+            },
+            "decode": 15.483942549211429,
+            "decode_model": {
+              "compute_resource_s": 0.07390502060032,
+              "hbm_s": 15.483942549211429,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 15.483942549211429,
+              "lower_bound_s": 15.483942549211429,
+              "compulsory_hbm_bytes": 119226357628928,
+              "skew_adjusted_lower_bound_s": 15.483942549211429,
+              "common_tail_model": {
+                "compute_resource_s": 0.07390502060032,
+                "hbm_s": 15.483942549211429,
+                "critical_path_s": 0.00029773345246753247,
+                "phase_start_skew_s": 0,
+                "resource_span_s": 15.483942549211429,
+                "lower_bound_s": 15.483942549211429,
+                "compulsory_hbm_bytes": 119226357628928,
+                "first_step_exclusive": 16393,
+                "selected_steps": 4095
+              },
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 3912330240.0,
+                "fp32_to_fp8": 8856207360.0,
+                "fp8_group_max_comparisons": 8856207360.0,
+                "bf16_add": 2683699200.0,
+                "bf16_multiply": 4562288640.0,
+                "fp32_to_bf16_packed_pairs": 2281144320.0,
+                "attention_max_comparisons": 54747463680.0,
+                "bf16_output_gate_product": 402554880.0
+              }
+            }
+          },
+          {
+            "prefill": 0.44175381006472536,
+            "prefill_model": {
+              "compute_resource_s": 0.44175381006472536,
+              "hbm_s": 0.003793777703896104,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 0.44175381006472536,
+              "lower_bound_s": 0.44175381006472536,
+              "compulsory_hbm_bytes": 29212088320,
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 40634427392.0,
+                "fp32_to_fp8": 69927464960.0,
+                "fp8_group_max_comparisons": 69927464960.0,
+                "bf16_add": 21139302400.0,
+                "bf16_multiply": 35936814080.0,
+                "fp32_to_bf16_packed_pairs": 17968407040.0,
+                "attention_max_comparisons": 193280212992.0,
+                "bf16_output_gate_product": 3019905024.0
+              }
+            },
+            "decode": 15.483942549211429,
+            "decode_model": {
+              "compute_resource_s": 0.07390502060032,
+              "hbm_s": 15.483942549211429,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 15.483942549211429,
+              "lower_bound_s": 15.483942549211429,
+              "compulsory_hbm_bytes": 119226357628928,
+              "skew_adjusted_lower_bound_s": 15.483942549211429,
+              "common_tail_model": {
+                "compute_resource_s": 0.07390502060032,
+                "hbm_s": 15.483942549211429,
+                "critical_path_s": 0.00029773345246753247,
+                "phase_start_skew_s": 0,
+                "resource_span_s": 15.483942549211429,
+                "lower_bound_s": 15.483942549211429,
+                "compulsory_hbm_bytes": 119226357628928,
+                "first_step_exclusive": 20491,
+                "selected_steps": 4095
+              },
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 3912330240.0,
+                "fp32_to_fp8": 8856207360.0,
+                "fp8_group_max_comparisons": 8856207360.0,
+                "bf16_add": 2683699200.0,
+                "bf16_multiply": 4562288640.0,
+                "fp32_to_bf16_packed_pairs": 2281144320.0,
+                "attention_max_comparisons": 54747463680.0,
+                "bf16_output_gate_product": 402554880.0
+              }
+            }
+          },
+          {
+            "prefill": 0.44175381006472536,
+            "prefill_model": {
+              "compute_resource_s": 0.44175381006472536,
+              "hbm_s": 0.003793777703896104,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 0.44175381006472536,
+              "lower_bound_s": 0.44175381006472536,
+              "compulsory_hbm_bytes": 29212088320,
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 40634427392.0,
+                "fp32_to_fp8": 69927464960.0,
+                "fp8_group_max_comparisons": 69927464960.0,
+                "bf16_add": 21139302400.0,
+                "bf16_multiply": 35936814080.0,
+                "fp32_to_bf16_packed_pairs": 17968407040.0,
+                "attention_max_comparisons": 193280212992.0,
+                "bf16_output_gate_product": 3019905024.0
+              }
+            },
+            "decode": 15.483942549211429,
+            "decode_model": {
+              "compute_resource_s": 0.07390502060032,
+              "hbm_s": 15.483942549211429,
+              "critical_path_s": 0.00029773345246753247,
+              "phase_start_skew_s": 0.0,
+              "resource_span_s": 15.483942549211429,
+              "lower_bound_s": 15.483942549211429,
+              "compulsory_hbm_bytes": 119226357628928,
+              "skew_adjusted_lower_bound_s": 15.483942549211429,
+              "common_tail_model": {
+                "compute_resource_s": 0.07390502060032,
+                "hbm_s": 15.483942549211429,
+                "critical_path_s": 0.00029773345246753247,
+                "phase_start_skew_s": 0,
+                "resource_span_s": 15.483942549211429,
+                "lower_bound_s": 15.483942549211429,
+                "compulsory_hbm_bytes": 119226357628928,
+                "first_step_exclusive": 24589,
+                "selected_steps": 4095
+              },
+              "recognized_relaxed_operations": {
+                "fp32_to_bf16_rounding_values": 3912330240.0,
+                "fp32_to_fp8": 8856207360.0,
+                "fp8_group_max_comparisons": 8856207360.0,
+                "bf16_add": 2683699200.0,
+                "bf16_multiply": 4562288640.0,
+                "fp32_to_bf16_packed_pairs": 2281144320.0,
+                "attention_max_comparisons": 54747463680.0,
+                "bf16_output_gate_product": 402554880.0
+              }
+            }
+          }
+        ],
+        "phases": {
+          "prefill": {
+            "wall_median_s": 1.9017476549999999,
+            "lower_bound_median_s": 0.44175381006472536,
+            "latency_ratio": 4.304994346786409,
+            "wall_spread": 0.00694290799585616,
+            "latency_gate": true,
+            "latency_passed": false,
+            "spread_passed": true,
+            "passed": false
+          },
+          "decode": {
+            "wall_median_s": 33.769918882999995,
+            "lower_bound_median_s": 15.483942549211429,
+            "latency_ratio": 2.180963845330196,
+            "wall_spread": 0.013301554308030079,
+            "latency_gate": true,
+            "latency_passed": false,
+            "spread_passed": true,
+            "passed": false
+          }
+        }
+      }
+    },
+    "comparison": {
+      "prefill": {
+        "baseline_median_s": 1.896502455,
+        "candidate_median_s": 1.9017476549999999,
+        "median_change_percent": 0.2765722757790856
+      },
+      "decode": {
+        "baseline_median_s": 34.079205395,
+        "candidate_median_s": 33.769918882999995,
+        "median_change_percent": -0.9075520054390274
+      }
+    },
+    "limits": "Two separate sequential five-run sets. No complete-model causal attribution or formal acceptance."
+  },
+  "limits": [
+    "Whole operations exclude query preparation and host scheduling.",
+    "Experimental dual-library comparison adds only host -fno-gnu-unique; device functions/resources verified equal. Production flags unchanged.",
+    "Initial batch-four dual-library launch failure and analyzer checkout mismatch remain preserved.",
+    "Framework pair is one ordinary batch-one workload, separately collected five-run sets; no whole-model causal attribution.",
+    "Both candidate latency gates fail; all spread checks pass. Full15-workload27-gate and two final-source book soaks remain pending."
+  ],
+  "artifacts": {
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/1-24-0.memcheck.log": {
+      "sha256": "4553e5ef5338d38918acda4ce89b45acda375e303f6250d22fa1eebf16a35192",
+      "bytes": 685
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/1-24-0.verify.json": {
+      "sha256": "7c57f1fd96efe69c0100371ab9954781089e89d17200f191e4f42ce8d59b823a",
+      "bytes": 623
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/1-24-1.memcheck.log": {
+      "sha256": "07b5cf5aea155b2812d10800cc2c7f2c28abd7065168bf2c19b0312454506c94",
+      "bytes": 684
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/1-24-1.verify.json": {
+      "sha256": "652ae7387819ee610421f018a081bb704f0f9c58958efaff989d3da94dd6fa6f",
+      "bytes": 622
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/20-24-0.memcheck.log": {
+      "sha256": "0fdf62bd6d9c0af31bc6a784de9fd3f2f6f31ecfff3a40ab38e9b157350ad9f6",
+      "bytes": 686
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/20-24-0.verify.json": {
+      "sha256": "e2ad2eb834933e77b9cd3a9baf77c6ef163750feb853f5ba4edb433594398e14",
+      "bytes": 624
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/20-24-1.memcheck.log": {
+      "sha256": "e64e19419fdab14653fe30a8cbd64f19b1e0467e9d38d87fe1bd87b9bbaa005f",
+      "bytes": 685
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/20-24-1.verify.json": {
+      "sha256": "95b83cd236e446d9bb98db61a532d8771443c97b8f3e6029a6951720023f3095",
+      "bytes": 623
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/32-24-0.memcheck.log": {
+      "sha256": "819a770281b4ee11b3c186caa005c1eec6447c5050564246cae8f02739a164c4",
+      "bytes": 686
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/32-24-0.verify.json": {
+      "sha256": "bc6b13125818fa037ac8cf2e81bff50cf58ed17da0309adfca9c1bfe6095eaff",
+      "bytes": 624
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/32-24-1.memcheck.log": {
+      "sha256": "7ac360031c3c880154589cbbf872869147ba1e538ac3820011bb7d03c7bc82e6",
+      "bytes": 685
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/32-24-1.verify.json": {
+      "sha256": "14ababb0dc6227bef0b2ac6b5d63d3b1a840458ef194c2bfec9edf15df5d9393",
+      "bytes": 623
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/4-24-0.memcheck.log": {
+      "sha256": "6f3367083352e337bc95eb2665130abfcd29d60da2571f715ab5ce617bef6631",
+      "bytes": 685
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/4-24-0.verify.json": {
+      "sha256": "c8900bc18ce02a9246d322130c6687c656234521f56a3275d27cc7463bbe3e4a",
+      "bytes": 623
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/4-24-1.memcheck.log": {
+      "sha256": "2c5562815c0fe626e5f48aa2f46f0ef9cac1aa5147e73aa480b6719d141182bf",
+      "bytes": 684
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/4-24-1.verify.json": {
+      "sha256": "45ec2f8d5cbfe88fb16fa50cc95105bce481290364506266eacf2d9beb96cc55",
+      "bytes": 622
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/5-16-0.memcheck.log": {
+      "sha256": "b8b4230337203b2a131217ebef94d991e5cdb0f6a970a50f3a5049ba169b45c6",
+      "bytes": 685
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/5-16-0.verify.json": {
+      "sha256": "ab13d24c3da167aff91d5c9bd0f45fb8327ab65c0f210faa56fb8b8a90fe5fa0",
+      "bytes": 623
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/5-16-1.memcheck.log": {
+      "sha256": "5c52cd50ed803c518778a89c21266c51fb5b78044403c108b9d474aa7308132b",
+      "bytes": 684
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/5-16-1.verify.json": {
+      "sha256": "cd8c19d7af53bb17d0868c296676b38f0fdc95a55421c79cb63dc33148498fe7",
+      "bytes": 622
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/build-pdl0.log": {
+      "sha256": "ad7515442acb4f348e9f7d35d59c35ebb493d563c3857f48d8fc667a3f777519",
+      "bytes": 2454
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/build-pdl1.log": {
+      "sha256": "dd57cddbf9f063093be98e26993971f1899b565058e6c11e3416f5339fb5ecf0",
+      "bytes": 2452
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/build-provenance-pdl0.json": {
+      "sha256": "03e2029bea5e9057e554ab7dc282146fd083bff8fab380b50f25aa3f34774d12",
+      "bytes": 2151
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/build-provenance-pdl1.json": {
+      "sha256": "553a781ee3a1cdb488121b13a1e7cf73cc2032906ad330d1c91b5a848dd99d80",
+      "bytes": 2150
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/build_identity.py": {
+      "sha256": "e07f2cc46b3de0cb2cb2b5a435ff7d6b5b6c6fc3362d16ab6d1a28f38e5f31c8",
+      "bytes": 867
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/freeze-first.json": {
+      "sha256": "7fbe1df1ae7ea989afdc5bc0bdceaaca3279be0b671f2e240a507affdcef014d",
+      "bytes": 11174
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/freeze.json": {
+      "sha256": "e35d92634b7e92192f18cb5726c183d61c0518ed33b787c18f6e0f58ee6f9070",
+      "bytes": 11174
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/full-operators.json": {
+      "sha256": "eaf54fc3cbeb4770b71d53b8f3081a8a47bb9f809387faa3c822a727b1479d7b",
+      "bytes": 601254
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/full-operators.log": {
+      "sha256": "0c5c3441dbf81b087d1c5934803053b438a5b2548cbf477b3179e26965cea4f5",
+      "bytes": 26563
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/memcheck-controller.log": {
+      "sha256": "93d3a50c05a7af5b52a21859a7276cfca3dac679764ea2668814ae0834ed169c",
+      "bytes": 94
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/memcheck-summary.json": {
+      "sha256": "f3b585ea39e436d2d09dcd7b70935efeff4a68dd5e91403fdf92f78c466117f0",
+      "bytes": 2230
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/numerical-controller.log": {
+      "sha256": "76facb025a1745b59a5489ee4743bdbf39cebd1e6e639bdeae420ff515febc83",
+      "bytes": 511
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/numerical-owned-driver.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/numerical-owned-process-audit.json": {
+      "sha256": "4aa5e49a98fa9580cf67c874d55d0e074823a193af53299b4527d417d61cb48d",
+      "bytes": 83692
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/numerical-owned-process-audit.observations.jsonl": {
+      "sha256": "191c71189611978d1e162c98dd2238577ce5056c05bc0ce24f1bcae46b610ada",
+      "bytes": 531283
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/probe-first.py": {
+      "sha256": "92128a1ce2806436028956832d48cd0a3e91d5484f1f5f8c1a995eef74c8473a",
+      "bytes": 6662
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/probe.py": {
+      "sha256": "7a5b8ec429f33f12b7fc0efca14933e63642b1b1dd93a70125829be9c071f103",
+      "bytes": 6796
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/run_memchecks.sh": {
+      "sha256": "bd04c9b3e052e8cfb1691ddf6e5aa7a17190ea79322340545fd8bac936893df7",
+      "bytes": 561
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/run_numerical.sh": {
+      "sha256": "408fdf14db55c49fc28246ec57505546dc80d9429bbc6970daccf1c49fd881bc",
+      "bytes": 841
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/run_whole_memchecks.sh": {
+      "sha256": "3c4729af52d5ca5cc58345ee776cfb0068fdcd762a2ada0a3c6ed50d6eb7f57f",
+      "bytes": 501
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/run_whole_timing.sh": {
+      "sha256": "17248abdf75c31398143a2ed4e7be0a429cc5b9149c2463760a2f28a2f98a801",
+      "bytes": 405
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/selected-gpu.log": {
+      "sha256": "16d8dd3d52b7aeb232512edbf285c33eb5b37f972317ad8fd0ad2406c086eae7",
+      "bytes": 192
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/source-freeze-before-build.json": {
+      "sha256": "29ae7ce6fdacf2c70ee5618c23fc49bc63c6e48b1e7beb8498fb22d26d1da510",
+      "bytes": 1795
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-1-0.memcheck.log": {
+      "sha256": "84914c0430b1db6f8af139684077fb92855f05212c3b1bca0109e9d166fc8656",
+      "bytes": 761
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-1-0.verify.json": {
+      "sha256": "10b1f69bae933f0ecded7ae698b597d257b53ed02ef99a0b845122b415d7ade8",
+      "bytes": 699
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-1-1.memcheck.log": {
+      "sha256": "7aca4e88315cb4bf10a23504cc69299724b995d1c231c0640c86d20fda977f78",
+      "bytes": 760
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-1-1.verify.json": {
+      "sha256": "d849b6565594099c4f4f339cb848ea9ace02fee61e706407ce45786f82d65e2f",
+      "bytes": 698
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-2-0.memcheck.log": {
+      "sha256": "6fc357a1de051f296d9e9faf000890e9e8097347107df61a7772823957459564",
+      "bytes": 761
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-2-0.verify.json": {
+      "sha256": "9cd910046ad5fd02c58692b6ee93c6b8133c683588e1da51009ea6b5c90d2c8f",
+      "bytes": 699
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-2-1.memcheck.log": {
+      "sha256": "398429823fc32cbee1ae62ce4b22160c23a074b87351d9ee1006dad76d2414ce",
+      "bytes": 760
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-2-1.verify.json": {
+      "sha256": "48cdefaae16e2c25010b0d96b791a94983e01ed6368c33cf8537aeeff85f42ff",
+      "bytes": 698
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-4-0.memcheck.log": {
+      "sha256": "9ae5a2d2cc84efc91e1d46d0ba6944c2fe82c392b8d39c71395440952f5f045d",
+      "bytes": 5443
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-4-0.verify.json": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-freeze.json": {
+      "sha256": "de3f5c78de03b90a5463fb6a89055aa3d25080430e75df6d21c671afb96e660f",
+      "bytes": 21028
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-memcheck-controller.log": {
+      "sha256": "e3ad5bded33fe9db88bab1d2d50044a74938da8ed567bfe0f3af902d2178558b",
+      "bytes": 513
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-memchecks-owned-driver.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-memchecks-owned-process-audit.json": {
+      "sha256": "5e37ef3dece521a1f136196e8523aa05a71f399f8476ead290ac8c4698d335a7",
+      "bytes": 13633
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole-memchecks-owned-process-audit.observations.jsonl": {
+      "sha256": "a21e8aa4e93bec80e4ab198914b3034b1f8f6b333afc0fef59c3aa83b78ffe26",
+      "bytes": 58393
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole_make_freeze.py": {
+      "sha256": "0c61370c87e5779a26cfedee0dd8c673a09b3d32838a2862554f26dda090e47f",
+      "bytes": 1970
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge/whole_probe.py": {
+      "sha256": "1a6f594dab561ce164f3a9f33eb79579b3e766ea5b3209f6099d2fbd2741f314",
+      "bytes": 9558
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/baseline-build-pdl0.log": {
+      "sha256": "e5e6f94c1c25293b27fac6d58cfef206af7a3dce614425c8c4984e5630540b18",
+      "bytes": 2366
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/baseline-build-pdl1.log": {
+      "sha256": "c1e81a7ec85b7b7e0b42a02f5889c6c1d3eab085469ef500eee9e39f65f7328c",
+      "bytes": 2364
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/baseline-build-provenance-pdl0.json": {
+      "sha256": "4deaa6666804358b1e6fa9316064bf1c023ac0817f7563f2b37a8a25f3054a26",
+      "bytes": 2157
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/baseline-build-provenance-pdl1.json": {
+      "sha256": "3a7632cde6a56799c067a263d41164c97b7ee419d620b3e016b100a9b1f5d739",
+      "bytes": 2156
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/build_identity.py": {
+      "sha256": "3ac7520c9aa6d6409a84bf99c8467aff7410d248e84cb98359aebf5c32cc1f39",
+      "bytes": 1433
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/builds-controller.log": {
+      "sha256": "42896bd370f3685cb9a90e62a7f70b3eb3029348f777aee631dcd135b0e85018",
+      "bytes": 511
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/builds-owned-driver.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/builds-owned-process-audit.json": {
+      "sha256": "3f57bf8e508a0e3a44534fb4f9e828d8226981891866693e81224d245995994e",
+      "bytes": 19165
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/builds-owned-process-audit.observations.jsonl": {
+      "sha256": "9a914a32917bef35279d42fc7d4024c2f974a21a0f9f962905e26c49defdd724",
+      "bytes": 205322
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/candidate-build-pdl0.log": {
+      "sha256": "7ca6747f320233d2342ba6744c0be7d838a346435c89f46be95e3188ca808a3b",
+      "bytes": 2366
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/candidate-build-pdl1.log": {
+      "sha256": "a0de63ded24b45ca564923f904739aa46a7487702e3b959a926794fb50840b61",
+      "bytes": 2364
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/candidate-build-provenance-pdl0.json": {
+      "sha256": "dcfd4243d0a175794846e100c9f1d8e37352d90bf38dbf8ef66a45b476295877",
+      "bytes": 2157
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/candidate-build-provenance-pdl1.json": {
+      "sha256": "17e6ee6df25f4933b8c4fd3df7993fa1cc94f23a1ec0a591f1120c1dabe0a264",
+      "bytes": 2156
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/isolation-verification.json": {
+      "sha256": "14e621370aa2c62425d3c602bc270132bedd6f3316a0ff35dfd29c8fc7dd13bb",
+      "bytes": 33346
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/isolation-verification.log": {
+      "sha256": "afaa588f8728124dddb0fc1ea54f812e8d024449e56692dd61aa72da2e34e65f",
+      "bytes": 169
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/run_builds.sh": {
+      "sha256": "29b96bbcbe58d68a7cca5e2232dc6555d2da156b6aa8576e408d9cf9fefce6d8",
+      "bytes": 455
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/run_whole_memchecks.sh": {
+      "sha256": "cff0416c6e13676504c647007500ec4f7bbd25f5211291a6ed0c2b2f365f6498",
+      "bytes": 507
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/run_whole_timing.sh": {
+      "sha256": "f6f8170f03ad96f82315573c073aa79c5556ea3ec794f19c7ab26cec3e9d8f11",
+      "bytes": 411
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/source-freeze-before-build.json": {
+      "sha256": "8dd80547229feb22deddbcbf8d52a54235d57bfa1bffe31d968865dd9961a9b1",
+      "bytes": 4008
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/verify_isolation.py": {
+      "sha256": "b4c8cdeff5b11b55c0b4d77994b48f758f6faa6a7f0f4fef9ac27f02337873a4",
+      "bytes": 5475
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-1-0.memcheck.log": {
+      "sha256": "b8637323b9e98b46dc88e2dc2774611d0dae3779edebf7b0617410af130910c4",
+      "bytes": 761
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-1-0.verify.json": {
+      "sha256": "4b0fa1e37a96cc855822351bd6b7f468bf9013ef4deeb1c858fdcc1a00d42223",
+      "bytes": 699
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-1-1.memcheck.log": {
+      "sha256": "e44af2ee39b2b1c5c8a475c7cd7cf93976161798829616c6fbae038950652740",
+      "bytes": 760
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-1-1.timing.json": {
+      "sha256": "4deeefe2780377d0c6bd99b3cedde509307666b600275b705cc09e78018064d8",
+      "bytes": 5768
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-1-1.timing.log": {
+      "sha256": "1e4935733c9de73407ffbc23aa031b5ececa8e9475b1ace1a1b5ef2f76740e97",
+      "bytes": 489
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-1-1.verify.json": {
+      "sha256": "5ae92255f0491581a0a2d96ab1098853d7c8b9f36848f9d34ffa4c08e45607e8",
+      "bytes": 698
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-2-0.memcheck.log": {
+      "sha256": "ad1187841bb2304314c1598772041b345e042c92f56067647c3a6f6f1b5bf37e",
+      "bytes": 761
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-2-0.verify.json": {
+      "sha256": "77f01df7e047f3b600d28b8a2774afa3898e487b881a019b07777a9c3e7b04a7",
+      "bytes": 699
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-2-1.memcheck.log": {
+      "sha256": "dcc11ae15f1241ccd6e9d37d2f9988e38a492533bc1b822012ebd20cf3dd943c",
+      "bytes": 760
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-2-1.timing.json": {
+      "sha256": "49b5d52f98a93b5e708617283e86efc6673fe209d026ca6d05362626e410e7d7",
+      "bytes": 5723
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-2-1.timing.log": {
+      "sha256": "3e73ef7e1c8d32f91a155989326030d2db349cf8752d04375dcf743adcbffa25",
+      "bytes": 488
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-2-1.verify.json": {
+      "sha256": "7db4682db2c17ac0dbedb91a16908440562553598aa427e7b26fb61d7cfc9e2c",
+      "bytes": 698
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-4-0.memcheck.log": {
+      "sha256": "b3edca0747334203164480e3cdc43fc1ac9b8673ddd7405908af36968c6f4a4b",
+      "bytes": 761
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-4-0.verify.json": {
+      "sha256": "263fca1ac30ffd4d84aa24653d77350e7bad285e1f8460f21c9cb066b898a480",
+      "bytes": 699
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-4-1.memcheck.log": {
+      "sha256": "7bcaeffeb3049346d8a9f6e3c84cba487a60b752cc16cf9130d3bb98e146dfeb",
+      "bytes": 760
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-4-1.timing.json": {
+      "sha256": "6baa63c6bb7b4259c7679e6dff50d34d3ba5e9953143780dcba37ee6ef4e5914",
+      "bytes": 5729
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-4-1.timing.log": {
+      "sha256": "9102c1c8d3ecbdc71d331ea5eab467a5f57bcd4db062fba654092b5e2b95122e",
+      "bytes": 486
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-4-1.verify.json": {
+      "sha256": "ea341c162788bddb41097e50917f1edc1c0f02c3ad38b115632d039f22a99f67",
+      "bytes": 698
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-freeze.json": {
+      "sha256": "e3f29c563c60f2ad264ac23eb87d5c4555726ae487f56a586162b4b318b9877d",
+      "bytes": 29123
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-memcheck-controller.log": {
+      "sha256": "902ea3ed71dd26000125c8fd03a183c6386be2974b8a16e57691332dd4051114",
+      "bytes": 511
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-memcheck-summary.json": {
+      "sha256": "caf75f15df666988c8ea6cffd479aedeef4807ca1a4bb3d9a118cf1ff5a9f533",
+      "bytes": 2107
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-memchecks-owned-driver.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-memchecks-owned-process-audit.json": {
+      "sha256": "293243ce8fb934efa9a6f4c9d3da375fe1c3be9194f09ce41d6974bdecc2361b",
+      "bytes": 18828
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-memchecks-owned-process-audit.observations.jsonl": {
+      "sha256": "84b9fef83eaa7aa8a742ca5a9a3dad3bc9d5688dd60fba2208d23b01652a169d",
+      "bytes": 119478
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-timing-controller.log": {
+      "sha256": "af4710615b1c5aafe3e20c8151b3d34cc5069b4a9f52b49bf6fa1df19c2e9717",
+      "bytes": 511
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-timing-owned-driver.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-timing-owned-process-audit.json": {
+      "sha256": "6a596476648a28c92eda0e461934526ee3e94c476084a9b743b597c25b8bb10a",
+      "bytes": 4639
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole-timing-owned-process-audit.observations.jsonl": {
+      "sha256": "55bbe939093d1da61b91fd97ad698c244981ab56400b72f79ab3324438437e65",
+      "bytes": 18579
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-parallel-merge-local/whole_probe.py": {
+      "sha256": "1a6f594dab561ce164f3a9f33eb79579b3e766ea5b3209f6099d2fbd2741f314",
+      "bytes": 9558
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/1-24.memcheck.log": {
+      "sha256": "9588ece8798f56a7e523d8c6fabe8371c97e56fc713864d39b2a90527930872b",
+      "bytes": 2153
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/20-24.memcheck.log": {
+      "sha256": "fe6148a8904630ec2b38a57652a6d7e885e9be10ec81f10aec19779bd814012a",
+      "bytes": 2152
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/32-24.memcheck.log": {
+      "sha256": "c0984606821e94fac76ebfc8ed9ed076ac2d8deae4c02549f8c6320a65ae68a2",
+      "bytes": 2152
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/4-24.memcheck.log": {
+      "sha256": "7c3920f3c742f834f448437ef70c70c95d934106d2db35e8b6dbdea5a5df0e6c",
+      "bytes": 2152
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/5-16.memcheck.log": {
+      "sha256": "29116df9189ecedf96fce60a50fd9704c7f8e088cbe8f5686a41f85e3618cad0",
+      "bytes": 2152
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/cpu-contract.log": {
+      "sha256": "69ecfaf567d422eefd466e0fe6d916331525411012bbb3614286aa68e60a291c",
+      "bytes": 98
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/cpu-controller.log": {
+      "sha256": "891c08eaeff431ae2dd00333486170bfc5d30bbbec5ac5b58d70159ab09a2db3",
+      "bytes": 417
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/cpu-owned-driver.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/cpu-owned-process-audit.json": {
+      "sha256": "3b300830d524c70ecdba1f5cbca90a603ef986a1db3c2e3ee85d35d139b68bdd",
+      "bytes": 45788
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/cpu-owned-process-audit.observations.jsonl": {
+      "sha256": "d097040ab22a22a9f48af161927932bdd03af4044e2d2ad7a36e4f8a3dc52d4a",
+      "bytes": 577427
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/cpu.log": {
+      "sha256": "198481c4405649de7edde5ea0f14122e86fef8b817a96df283c409d5a69382e8",
+      "bytes": 2045
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/docs-check-2.log": {
+      "sha256": "c0ffbced67c9ccf310612b6f1949d625a5f132b5d1a57a356374f0e30b071d12",
+      "bytes": 1017
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/docs-check-3.log": {
+      "sha256": "205bfcad26732da990c1acb11b86d60a2f80db7b44e54b3bb1c86a3e489042b2",
+      "bytes": 453
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/docs-check-first.log": {
+      "sha256": "4180d787ddf064b68938a010baa7c1392c313e79c07f4d8b64d97a7c8cdcc27c",
+      "bytes": 129
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/format-check.log": {
+      "sha256": "95b9b7268a8e80ff5004443f8ff644c22ff1d41cbdb783b004b740ba64a90e9f",
+      "bytes": 57
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/full-operators.json": {
+      "sha256": "cb95147269d4bfa9d0e988c918b760637c474944d8792ec22ade2ee99b774aca",
+      "bytes": 601223
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/full-operators.log": {
+      "sha256": "4d0dcce2fcfed023055f90808d4641db442a3d6bd21062b3d96f04e848593100",
+      "bytes": 26527
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/numerical-controller.log": {
+      "sha256": "73e542390d5c619c6e947bf37d5c27232beb4f59793feb764d787490ce290244",
+      "bytes": 511
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/numerical-owned-driver.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/numerical-owned-process-audit.json": {
+      "sha256": "65d226efe02d5603180a98292bde6dd8bb2065cfa32a2d8f3adeb755d35b8969",
+      "bytes": 90428
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/numerical-owned-process-audit.observations.jsonl": {
+      "sha256": "d6c83b8aa4f4f732bfc6804fde583cdcff0631f9cadc5ef0054b94279a57c076",
+      "bytes": 521092
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/ruff-check.log": {
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "bytes": 19
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/run_cpu.sh": {
+      "sha256": "fb80620585df7e88a30699c6f15c78f9f32b90e8b907aa25c933405e1fb9364d",
+      "bytes": 263
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/run_numerical.sh": {
+      "sha256": "74b27b9d42efbcb2648050d875e2ead40cb1b13b6c21d03bd67b9b277c1e37a3",
+      "bytes": 1883
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/selected-gpu.log": {
+      "sha256": "21efb17afe1a9b0294bec1b9b32833cc9dd0febc841daaa8cff06d693b7ce058",
+      "bytes": 191
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/source-freeze.json": {
+      "sha256": "3cefe38a41e777e2484673d03b0b24493643cdd88a74071ea4902cc926cbab0c",
+      "bytes": 2852
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-main/source-link-updates.log": {
+      "sha256": "4180d787ddf064b68938a010baa7c1392c313e79c07f4d8b64d97a7c8cdcc27c",
+      "bytes": 129
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/analyze_diagnostic-first-unexecuted.py": {
+      "sha256": "1fd94aaa98d1658b88b84769da78f770c2fb89fcc5dbac001ae6f91107fedc0e",
+      "bytes": 2393
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/analyze_diagnostic.py": {
+      "sha256": "ddae1c34bb6518d725e7ed5303b499c6e817719da6b29a2401ee3d4a31c40b8b",
+      "bytes": 2215
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/baseline-analysis.log": {
+      "sha256": "8311d5ae786fa690ac0400a156b7eb60e135cc10fa294229e3f3bdbf11ce9edb",
+      "bytes": 575
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/baseline-controller.log": {
+      "sha256": "ba47c645c84dba481fa64054d749a1ace06517ca7cc312c962beb6c166d1ce6f",
+      "bytes": 511
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/baseline-diagnostic-analysis.json": {
+      "sha256": "6e3e185711e561700934f73869a75ac6abcfd37488b403950bced467149620eb",
+      "bytes": 13848
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/baseline-driver.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/baseline-owned-driver.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/baseline-owned-process-audit.json": {
+      "sha256": "46538b3d13e8cd5363c034cf1ecc73b4dfab871aabc5cb6d821aebfa0df9e9fa",
+      "bytes": 84723
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/baseline-owned-process-audit.observations.jsonl": {
+      "sha256": "b36d985816f17e03afca0770d959ebce7497d7e1372d859d7b3e09b9afb065ab",
+      "bytes": 552134
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/baseline-review.md": {
+      "sha256": "68f8dc8525ea66b602b0175d13d9526cb16b94d6f95bb947195d06b8637321ae",
+      "bytes": 2212
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/baseline-validation-first.log": {
+      "sha256": "e8bd7b3a8490ff0537b500940f7b8913db1cc356c0497345566ab8cdf84dd9e1",
+      "bytes": 351
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/candidate-analysis.log": {
+      "sha256": "093512e56796c2ce087c477022b70c65b1deceeddc6d33bd2588c86428087bcb",
+      "bytes": 586
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/candidate-controller.log": {
+      "sha256": "6f29269d3ebaffab1b59ca08e4578ec9aef289525b38a1445a6bd063a4d7813b",
+      "bytes": 511
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/candidate-diagnostic-analysis.json": {
+      "sha256": "70ef2e80d64af91c7e7a3e2a4cc6108d5cd5de6abef74a17563907f4c142b48e",
+      "bytes": 13783
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/candidate-driver.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/candidate-owned-driver.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/candidate-owned-process-audit.json": {
+      "sha256": "f13e91046e7ca5ead15ddf395c4663db8516a8152c9943d8fc3321f9e8b03142",
+      "bytes": 85416
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/candidate-owned-process-audit.observations.jsonl": {
+      "sha256": "cf23b932940524aefbe0d91a393b877b5719f59997c29f2d1177119378712291",
+      "bytes": 556414
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/diagnostic-analysis.json": {
+      "sha256": "9b8c210cdf57b3f4d3b34480c5922ef8d56dfb752c44cbc8007d7e2ddd77f85b",
+      "bytes": 27370
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/ordinary-baseline.json": {
+      "sha256": "659587ad517626eadf69c3af091c494b02365e2f5d5f45c0590f8bdccfa6ff8d",
+      "bytes": 104869643
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/ordinary-baseline.log": {
+      "sha256": "a1d8a470d3f29b97fed1d01a893376a018969733ec45fe33ff1b01ce34e3dc7b",
+      "bytes": 34043
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/ordinary-baseline.log.processes.json": {
+      "sha256": "1d68a6fbc64e7ef5854178113d54884840454f58b8772880b401677dd9f566e6",
+      "bytes": 19901
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/ordinary-baseline.trace.json": {
+      "sha256": "e6b82f9196f9fe186c18851af7c50eaac4e5492343fb2b314dbd68b985332028",
+      "bytes": 29469042
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/ordinary-candidate.json": {
+      "sha256": "f088fdf5e19a40ddf5356e1b3222854528dba40b44b3bee86c2cd4c89a113836",
+      "bytes": 104870117
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/ordinary-candidate.log": {
+      "sha256": "cde63ebd545017ba1212bf69330ee3a3823dff944bc76278d5390648f4c7bf43",
+      "bytes": 34088
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/ordinary-candidate.log.processes.json": {
+      "sha256": "5129e73b6df55730177d6b9220eebe7441af98b26c59fe33bebb386aed99afa5",
+      "bytes": 20215
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/ordinary-candidate.trace.json": {
+      "sha256": "baad809b46be2a3e61d9081b6c09f86bb9726c632e51101eae94262d2053793a",
+      "bytes": 29469078
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/paired-collection-review.md": {
+      "sha256": "21bb942457a21180c1cf92605d5f2d0fb33225bc46763a2c12a3cc3b09f198a9",
+      "bytes": 2939
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/paired-source-freeze.json": {
+      "sha256": "b487840a8b7202bf0c602f1786072383dc1efbd57032bcbefb518420affdffd0",
+      "bytes": 24140
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/release-build.log": {
+      "sha256": "64d0cbd4b7e4c6329fde55978dd3d261407b55f34c21add0feebf7e0575ee531",
+      "bytes": 62
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/run_baseline.sh": {
+      "sha256": "1ce5836964f7aca438681dd5ac67e7988232b171d64884159c40772174321c3f",
+      "bytes": 681
+    },
+    "/tmp/oh-my-vllm-collaboration-20261014/attention-framework/run_candidate.sh": {
+      "sha256": "4e1cac075199a6ac47cd6746cb9bddc2a5157c846067a52bae64fa05e90edc8e",
+      "bytes": 707
+    }
+  },
+  "summary_script_sha256": "0e60c0bce2e83a30956b4d60c3e9f5388f69e20538ed5eb308c3594c2a6161c3"
+}

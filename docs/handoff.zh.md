@@ -27,35 +27,25 @@ TileFoundry 发布已获授权.
 
 ## 前一版源码验证
 
-源码 `3324a7f` 保留 attention sigmoid 的 BF16 舍入, 再执行 BF16 乘法.
-完整模型 MTP 编译检查通过. 门控在所有 BF16 位模式下与 Torch 一致.
-其正式 539 项矩阵在原有 517 个 ID 上增加 22 项 gate 案例. 非边界 GPU 通过 589 项.
+源码 `3324a7f` 验证 attention 门控舍入, 完整模型 MTP 编译, 以及正式 539 项矩阵.
 ordinary/MTP4 的六项容量案例在 batch 1/2/4 完成 258048 输入和 4096 输出 token, 没有 OOM 或重计算抢占.
+MTP 和 DSpark 各通过六类服务客户端和四阶段 allocator 恢复, 覆盖 worker 替换, 缓存复用及最终释放.
+这些记录及原始失败仍在[验收索引](acceptance.zh.md)中绑定各自源码.
 
-MTP 和 DSpark 各通过六类服务客户端和四阶段 allocator OOM 恢复, 覆盖 worker 替换, 缓存复用和最终释放.
-独立审查覆盖原始请求, 源码身份和清理.
-CPU 通过 1592/153; 此前运行通过 1568/153, 但 23 项 attention-gate 夹具因缺少配置失败. 保留原始失败记录.
-该提交前已通过 Rust/样式/文档检查.
+此前 CPU 运行通过 1592/153 和 1568/153, 后者另有 23 项 attention-gate 夹具因缺少配置失败. 原始失败记录保留.
 
-教程构建及 14 项 Node/9 项浏览器测试通过. 有界 profiling 和暗色 cache-hit 请求图通过选定 CPU/GPU 检查.
+教程构建及 14 项 Node/9 项浏览器测试通过.
 
 ## 已选 subgroup 扫描检查点
 
-已选 [精度路径](../python/oh_my_vllm/kernels/cuda_backend/operators/gdn_precision.cuh) 保持逐 token 递推, FP32 状态与 BF16 边界.
-FP32 归约顺序发生变化. 原数值与状态容差不变.
-独立审查批准源码及语义合同中的四处身份更新, 方程与下界均未改变.
+已选[精度路径](../python/oh_my_vllm/kernels/cuda_backend/operators/gdn_precision.cuh)保持递推, FP32 状态, BF16 边界与全部容差, 但 FP32 归约顺序变化.
+独立审查批准四处契约身份更新, 方程与下界不变.
+CPU 通过 1592/153, 选定 GPU 通过 99 项, 非边界 GPU 通过 593 项.
+四项[对齐与抵消案例](../tests/numerical/test_gdn_prefill_replay.py)通过内存检查.
 
-CPU 通过 1592/153.
-选定 GPU 通过 99 项, 包括未修改的完整模型 MTP 编译检查.
-四项新增 [对齐与抵消案例](../tests/numerical/test_gdn_prefill_replay.py) 通过 Compute Sanitizer, 错误为零.
-完整 539 项算子数值采集通过, 没有干扰.
-未提交源码的报告属于诊断, `passed=false` 且 `selected_passed=true`.
-
-完整非边界 GPU 重跑通过 593 项.
-`f05a35d` 的干净源码正式重跑全部 539 项算子数值案例通过, 覆盖完整且无干扰.
-容量, 服务与一小时记录属于 `3324a7f`, 不属于本检查点.
-最终源码验收及第四里程碑待完成.
-绑定源码的检查点摘要见 [验收索引](acceptance.zh.md).
+全部 539 项未提交源码诊断案例通过, `passed=false`, `selected_passed=true`.
+干净的 `f05a35d` 正式数值验证通过全部 539 项, 覆盖完整且无干扰.
+容量, 服务及一小时记录属于 `3324a7f`, 最终源码验收仍待完成.
 
 ## 窄 FP8 检查点
 
@@ -173,7 +163,18 @@ CPU 通过 1682/153. 全部十一项 hooks 通过.
 
 三级调度通过 36 项内存检查: 十八种形状中两种更快, 十六种更慢. 统一选择器已被排除.
 [原生调度证据](evidence/native-scheduling/verification.json)将 FP8 投影和 GDN scan 列为优先研究项.
-FP32 双通道投影和隔离注意力属于外部实验, 尚未选用.
+FP32 双通道投影仍是未选用的外部实验.
+
+## 注意力合并检查点
+
+[128 分段合并](kernels/attention-merge.zh.md)改变 FP32 总和分组, 最大值, 分母, BF16 边界和容差不变.
+主分支通过五项内存检查, 115 项选定 GPU 测试, 以及 539 项数值诊断. CPU 通过 1682/153, 无跳过.
+批次 1/2/4 的完整部分计算加合并操作分别改善 9.13%/7.24%/8.82%, bootstrap 下界均为正.
+
+生产编译选项不变, 失败的双模块启动及修正后的实验隔离记录均保留.
+同一 GPU 上的 ordinary 批次一诊断各有两次预热, 五次测量, 观测到解码从 34.079 降至 33.770 秒, 预填充从 1.897 增至 1.902 秒.
+候选延迟比值 4.305/2.181 失败, 波动检查通过. 这两组顺序采集不能证明整模型归因.
+最终源码正式数值, 十五行性能, 服务, 以及整本书长跑仍待完成.
 
 ## 一小时证据
 
