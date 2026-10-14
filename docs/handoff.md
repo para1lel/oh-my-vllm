@@ -9,7 +9,7 @@ Keep block size 784, 16 FA layers, 48 GDN layers, `mamba_cache_mode="align"`, an
 Keep API behavior, numerical tolerances, ordinary/MTP4/DSpark, and unchanged DSpark weights.
 
 Use native CUDA libraries through repository CUDA. Remove external Python operator providers and project comparison dependencies.
-Keep independent numerical/state contracts. Framework phase latency must meet the 2-times lower-bound gate, with the prefix-hit prefill exception.
+Keep independent numerical/state contracts. Framework phase latency must meet the two-times lower-bound gate, with the prefix-hit prefill exception.
 Keep the theoretical model, two warmups, five repetitions, and 10% spread gates.
 
 ## Milestones
@@ -22,96 +22,65 @@ Keep the theoretical model, two warmups, five repetitions, and 10% spread gates.
 Obtain independent review before each milestone commit. Commit on `main` and continue until all work passes.
 Do not push or open pull requests.
 
-## Verification scope
+## Current source verification
 
-Milestone one passed required Rust/style/document checks, 55 selected Python tests, 14 Node tests, and 9 browser tests.
-The tutorial build passed. Independent review findings were corrected.
-
-Milestone two passed required Rust/style/document checks, 14 Node tests, and 9 browser tests.
-The full CPU run passed 1572 cases and 156 subtests. One stale environment-path assertion failed.
-After correction, all seven environment tests passed. No other CPU failure occurred.
-
-GPU selection kept all 487 nodes, with six isolated boundary cases. This was collection validation, not GPU execution.
-
-Milestone three passed required Rust/style/document checks, 14 Node tests, and 9 browser tests.
-Its broad CPU collection passed 1073 cases and 56 subtests. One obsolete evidence-path assertion failed.
-All nine affected formal-case tests passed after replacement with unchanged case IDs.
-The final harness checks passed 47 cases and 31 subtests. Runtime-contract checks passed all 32 cases.
-
-Selected native GPU checks passed 76 cases for attention, GDN state/replay/invalid offsets, FP8, logits, and TileFoundry twins.
-A checkpoint-loaded ordinary smoke run completed and released its worker.
-All 22 TileFoundry analyses and one CUDA twin CLI check passed after the upstream rebase.
-
-The full GPU suite, framework phases, six capacity boundaries, and two one-hour runs are pending for milestone four.
-Operator results below apply only to their recorded source. The final-source matrix is pending.
-No new-source full GPU acceptance is claimed. Historical repair results belong to source `b98a83a` and earlier recorded commits.
-
-Milestone four's diagnostic checkpoint adds default-off small Torch profiler windows and dark cache-hit request plots.
-Selected CPU checks passed 117 cases and 11 subtests. Rust benchmark boundary checks passed all three cases.
-The profiler GPU test and a checkpoint-loaded small benchmark passed. The trace recorded two steps and 3930 CUDA kernels.
-
-Required Rust/style/document checks and tutorial checks passed before the checkpoint.
-Independent review checked profiler cleanup, default-off semantics, and paired document scope.
-
-Committed source `a17b031` passed the complete CPU suite: 1587 cases and 153 subtests.
-Its formal 517-case operator matrix passed with complete coverage and no interference.
-
-The next CUDA checkpoint improves GDN chunk execution and small FP8 projections while retaining independent numerical and state contracts.
-Selected integrated GPU checks passed 29 cases. Added tail-tile and unaligned-storage checks passed seven cases.
-A canary variable in a test masked the output storage before correction. All seven affected checks passed afterward.
-
-Independent review found no correctness blocker and approved refreshing source identities without changing the lower-bound model.
-
-The tuned-source diagnostic matrix passed all 517 operator cases with complete coverage and no interference.
-A framework diagnostic completed two warmups and five measurements with no OOM or preemption.
-
-Steady prefill was about 1.57 seconds and decode about 42 seconds for one ordinary 32768-input/4096-output request.
-The two-times gate is not met. These diagnostic results are not formal acceptance.
-The final-source matrix and framework phases must be recollected after further tuning.
-External CUDA candidates are not production changes or acceptance evidence.
-
-Source `af749d3` passed 490 GPU cases and failed 20 cases in the complete non-boundary selection.
-The failures identified permanent stream-slot limits and incorrect Q/K timing-reference selection.
-The repair enforces zero native scheduler workspace and uses one persistent device sentinel.
-Q/K timing uses repository CUDA, while numerical observation uses independent Torch and rejects timing-baseline selection.
-
-All 49 affected GPU checks and 56 selected CPU checks passed after repair.
-Independent review found no blocker. Required hooks passed.
-The complete GPU selection must run again on the final source.
-
-The repeated non-boundary GPU selection on `10d45c9` passed all 510 cases.
-An earlier attempt stopped after detecting a foreign GPU process. Its records are separate.
-
-The next checkpoint corrects GDN state tolerance failures on correlated keys and improves small FP8 projections.
-See [GDN](../python/oh_my_vllm/kernels/gdn.py) and [native GEMM](../python/oh_my_vllm/kernels/cuda_backend/groupwise.py).
-Independent review checked storage, replay, source identity, and unchanged theoretical rules.
-
-GDN GPU checks passed 72 cases. A corrected deterministic graph routing check passed its separate repeat.
-Split-K checks passed 26 GPU cases. Seven selected precision and replay cases passed Compute Sanitizer with zero errors.
-The complete CPU suite passed 1589 cases and 153 subtests. Required hooks passed.
-
-All 517 operator cases passed the dirty-source diagnostic matrix, with complete coverage and no detected interference.
-It is not formal acceptance. Current-source complete GPU, capacity, phase, and one-hour acceptance is pending.
-Model probes are diagnostic and do not meet the two-times latency gate.
-
-Committed source `51dea95` passed the formal 517-case operator matrix with complete coverage and no interference.
-Its complete non-boundary GPU selection passed 586 cases and failed one MTP changed-metadata greedy-equivalence check.
-The failing record is kept. It is not complete GPU acceptance.
-
-The repair keeps the attention sigmoid's BF16 rounding before its BF16 product.
+Source `3324a7f` keeps the attention sigmoid's BF16 rounding before its BF16 product.
 See [attention gate](../python/oh_my_vllm/ir/attention_gate.py).
-The unchanged full-model compile test and gate precision/replay checks passed all five cases.
-The independent native gate matched Torch for all BF16 gate bit patterns.
+The unchanged full-model MTP compile check passes after this correction.
+The gate matches Torch for all BF16 gate bit patterns.
 
-Selected CPU checks passed 23 cases and two subtests. Formal-case and coverage checks passed 16 cases.
-Independent review corrected a host launch-grid overflow and found no further source blocker.
+The formal operator matrix passes all 539 cases with complete coverage and no interference.
+It adds 22 gate cases to the unchanged previous 517 case IDs.
+The complete non-boundary GPU suite passes 589 cases.
+Six ordinary/MTP4 capacity cases at batches 1, 2, and 4 finish 258048 input and 4096 output tokens per request with zero OOM and recompute preemption.
 
-The formal harness adds 22 full and selected gate shapes without removing any of the previous 517 case IDs.
-Their numerical gate is exact. Current-source formal matrix and full GPU acceptance are pending.
-The theoretical equations are unchanged. Framework phase, capacity, and one-hour acceptance are pending.
+MTP and DSpark each pass six service clients: constraints, Chat/Responses lifecycle, long context, and Chat/Responses agentic interaction.
+Each mode passes allocator OOM recovery at four stages, with worker replacement, cache reuse, and final release.
+These collections have independent reviews of original requests, source identities, and cleanup records.
 
-Summaries with obsolete comparison provenance were removed from the working tree. Git history keeps their original results.
-See the [acceptance index](acceptance.md) for current collection scope.
+The complete CPU repeat passes all 1592 cases and 153 subtests.
+The previous run passed 1568 cases and 153 subtests but failed 23 fixture control-flow cases.
+All failures identified the missing attention-gate configuration in the fixture inventory.
+The repair adds that configuration without a production implementation change.
+The original failed record is kept.
+
+Required Rust/style/document checks passed before `3324a7f`.
+The tutorial previously passed 14 Node tests, 9 browser tests, and its build. Its final-source repeat is pending.
+The default-off bounded Torch profiler and dark cache-hit request plots have selected CPU/GPU verification.
+
+## One-hour evidence
+
+MTP4 and DSpark each collect four persistent OMP goal sessions for one hour in new disposable sandbox workspaces.
+The measured window has no intermediate drain or model warmup.
+The same service and worker process identities have zero restart and OOM.
+The four sandboxes and their owned image in each collection are deleted.
+
+DSpark's collector reports operational completion and awaits independent resource review.
+MTP's collector reports an SSE audit failure on its final client-aborted request, whose generation finished at the collection deadline.
+Its failed record is kept. Independent review must distinguish the deadline race from normal-stream failures.
+The two external drivers report an unproved adopted-process cleanup error after service shutdown.
+
+The recorded service and worker identities have exited, and temporary listeners and GPUs are released.
+The missing adopted-process identity record is a verification limit.
+
+Agent task completion, goal transitions, and workload journal diagnostics are not inference-framework gates.
+Original collection summaries keep their results. Separate reviews must bind the unchanged raw evidence.
+Final request figures and portable evidence summaries are pending.
+
+## Performance and next work
+
+The formal ordinary 32768-input/4096-output batch-one attempt on `3324a7f` collects two warmups and five measurements without OOM or preemption.
+Median prefill is 2.394 seconds against a 0.442-second lower bound, a ratio of 5.419.
+Median decode is 36.055 seconds against a 15.484-second lower bound, a ratio of 2.329.
+The two phase spreads pass 10%. The two latency ratios fail the two-times gate.
+
+The theoretical equations are unchanged. All fifteen final-source framework rows are pending.
+External CUDA candidates are diagnostic experiments. They are not selected production changes or acceptance evidence.
+Continue tuning without weakening numerical, state, workload, or theoretical contracts.
+
+After selection, refresh source identities and run affected checks, complete final-source acceptance, generate collected request plots, and obtain independent review before delivery.
+See the [acceptance index](acceptance.md) for collection scope.
+Obsolete working-tree reports were removed. Git history keeps their original results.
 
 ## Active exception and cleanup
 
