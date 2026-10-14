@@ -9,6 +9,7 @@ See the [formal protocol](../requirements/performance.md) and [commands](../test
 Record source, loaded modules, compiler, checkpoint, shapes, process birth identities, and GPU identity.
 Finish compilation and graph capture before timing. Put persistent state back to its baseline between comparisons.
 Measure the complete operation, with conversion, copies, and reduction.
+The [affine diagnostics](../kernels/affine-diagnostics.md) show why isolated matrix timing and random-input accuracy are not sufficient.
 Use interleaved candidate/baseline pairs before a full framework collection.
 
 Synthetic inputs can change numerical branches. Record branch frequencies from model inputs before selecting a specialization.

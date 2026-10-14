@@ -36,6 +36,9 @@ It identifies source snapshots, original hashes, samples, failed attempts, and v
 These collections are diagnostic. They do not select a production change or prove formal acceptance.
 See the [measurement method](profiling/measurement.md) and [algorithm research](kernels/optimization.md).
 
+Later [affine diagnostics](evidence/affine-diagnostics/verification.json) bind complete matrix chains, FP32/FP64 emulation, and cancellation failures.
+Layout candidates have diagnostic timing benefits. Complete numerical admission is not available. None is selected.
+
 ## Source 3324a7f
 
 The [portable verification summary](evidence/refactor-3324a7f/verification.json) records source hashes and original report identities.

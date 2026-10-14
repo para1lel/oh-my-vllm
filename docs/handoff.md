@@ -105,6 +105,10 @@ Current scan/GEMM counters, isolated FP64 emulation, and three-layer wavefront p
 Eager FP64 emulation is slower for the tested shapes. Token slicing lacks complete equivalence proof.
 Neither candidate is selected.
 
+Later [native affine diagnostics](kernels/affine-diagnostics.md) find complete-operation layout benefits but final-state cancellation failures.
+Three affine variants fail all eight cancellation workloads. Repository CUDA passes all eight.
+Larger finite-only FP64 emulation is also slower. Continue precision-path work without selecting these candidates.
+
 The instrumented ordinary model recomputes route flags on 48 GDN layers for one repeated-token input.
 Of those layers, 46 use the precision route for all chunks. Other prompt distributions are unmeasured.
 

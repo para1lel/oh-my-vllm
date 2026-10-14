@@ -36,6 +36,9 @@ prefill 和 decode 比例为 4.436 和 2.320. 波动检查通过, 但两倍延�
 这些采集只用于诊断. 它们没有选出生产修改, 也不能证明正式验收通过.
 参见 [测量方法](profiling/measurement.zh.md) 和 [算法调研](kernels/optimization.zh.md).
 
+后续 [仿射诊断](evidence/affine-diagnostics/verification.json) 绑定完整矩阵链路, FP32/FP64 仿真和抵消失败.
+布局候选具有诊断计时收益. 完整数值准入不可用. 没有选用这些候选.
+
 ## 源码 3324a7f
 
 [可移植验证摘要](evidence/refactor-3324a7f/verification.json)记录源码哈希和原始报告身份.

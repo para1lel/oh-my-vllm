@@ -47,6 +47,7 @@ Approximate exponentials or rescale elimination must have separate numerical pro
 
 The [diagnostic summary](../evidence/optimization-observations/verification.json) binds inputs, sources, raw hashes, samples, and limitations.
 These experiments did not select a new production implementation.
+Later [affine-scan diagnostics](affine-diagnostics.md) record matrix-layout benefits, complete emulation costs, and final-state cancellation failures.
 
 ### Native FP64 emulation
 

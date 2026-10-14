@@ -47,6 +47,7 @@ FlashQLA 的 [decay 相关上下文路径](https://github.com/QwenLM/FlashQLA/bl
 
 [诊断摘要](../evidence/optimization-observations/verification.json) 绑定输入, 源码, 原始哈希, 样本和限制.
 这些实验没有选出新的生产实现.
+后续 [仿射扫描诊断](affine-diagnostics.zh.md) 记录矩阵布局收益, 完整仿真成本和最终状态抵消失败.
 
 ### 原生 FP64 仿真
 
