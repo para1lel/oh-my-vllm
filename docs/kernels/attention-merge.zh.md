@@ -11,8 +11,11 @@
 检查包括全新写入, 输出哨兵, 输入不变, 以及在非默认流上改变输入后的图重放.
 
 主分支通过五项全新内存检查, 115 项选定 GPU 测试, 以及全部 539 项算子数值诊断.
-CPU 通过 1682 项测试和 153 项子测试, 无跳过. 完整数值和整模型报告保留 `diagnostic=true` 和 `passed=false`.
+CPU 通过 1682 项测试和 153 项子测试, 无跳过. 这些先前的数值和整模型报告保留 `diagnostic=true` 和 `passed=false`.
 [证据摘要](../evidence/attention-merge/verification.json)绑定源码, 模块, 原始结果和独立审查.
+
+干净提交 `96ad82c` 随后通过全部 539 项正式数值检查, 覆盖完整且未检测到干扰.
+[源码绑定报告](../evidence/attention-merge/final-numerical.json)绑定该结果及其独立审查, 不能代替完整项目验收.
 
 ## 完整操作对照
 

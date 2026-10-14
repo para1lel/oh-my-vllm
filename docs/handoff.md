@@ -168,14 +168,14 @@ Packed projection is an unselected external experiment.
 ## Attention merge checkpoint
 
 The [128-split merge](kernels/attention-merge.md) changes FP32 sum grouping and keeps maximum, denominator, BF16 boundaries, and tolerances.
-Main passes five memchecks, 115 selected GPU tests, and 539 diagnostic numerical cases. CPU passes 1682/153 without skips.
+Main passes five memchecks and 115 selected GPU tests. Clean `96ad82c` passes all 539 formal numerical cases. CPU passes 1682/153 without skips.
 Complete partial-plus-merge operations improve 9.13%/7.24%/8.82% at batches 1/2/4, with positive bootstrap bounds.
 
 Production compiler flags stay equal. The failed dual-module launch and corrected experimental isolation stay available.
 Same-GPU ordinary batch-one, two-warmup/five-run diagnostics observe decode 34.079→33.770 seconds and prefill 1.897→1.902 seconds.
 Candidate latency ratios 4.305/2.181 fail. Spreads pass. These sequential sets do not prove whole-model attribution.
 
-Final-source formal numerical, fifteen-row performance, service, and book soaks are pending.
+Fifteen-row performance, service, and book soaks are pending.
 
 ## One-hour evidence
 

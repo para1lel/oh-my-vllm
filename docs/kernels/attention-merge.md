@@ -11,8 +11,11 @@ Five shapes test cancellation, one dominant split, mixed empty splits, and empty
 Checks cover fresh writes, output guards, immutable inputs, and changed inputs on a non-default stream during graph replay.
 
 Main passes five fresh memchecks, 115 selected GPU tests, and all 539 operator diagnostic cases.
-CPU passes 1682 tests and 153 subtests without skips. The full numerical and framework reports keep `diagnostic=true` and `passed=false`.
+CPU passes 1682 tests and 153 subtests without skips. These previous numerical and framework reports keep `diagnostic=true` and `passed=false`.
 The [evidence summary](../evidence/attention-merge/verification.json) binds sources, modules, original results, and independent reviews.
+
+Clean `96ad82c` then passes all 539 formal numerical cases, with complete coverage and no interference.
+The [source-bound report](../evidence/attention-merge/final-numerical.json) binds this result and its independent review. It does not supply full project acceptance.
 
 ## Complete operation comparison
 
