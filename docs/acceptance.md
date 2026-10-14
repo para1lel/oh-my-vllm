@@ -24,6 +24,11 @@ All 539 operator numerical cases pass. Their uncommitted-source report keeps `di
 The FP32 reduction order changes. Numerical tolerances and the theoretical model stay equal.
 Final-source capacity, service, one-hour, and framework performance verification are pending.
 
+The [clean-source repeat](evidence/refactor-f05a35d/verification.json) at `f05a35d` passes all 539 operator numerical cases.
+The ordinary 32768-input/4096-output batch-one attempt collects two warmups and five measurements, with zero OOM and recompute preemption.
+Prefill and decode ratios are 4.436 and 2.320. Their spread checks pass, but their two-times latency checks fail.
+The failed record stays unchanged. This one row does not complete the fifteen-row framework matrix.
+
 ## Source 3324a7f
 
 The [portable verification summary](evidence/refactor-3324a7f/verification.json) records source hashes and original report identities.

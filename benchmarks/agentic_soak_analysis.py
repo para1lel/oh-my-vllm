@@ -683,7 +683,6 @@ def plot_points(points: list[dict], mode: str, directory: Path):
                 cmap="viridis",
                 norm=normalization,
                 marker=marker,
-                label="Task" if purpose == "task" else "Compaction",
             )
         axes.set(
             xlabel="Request processing start (minutes since measured start)",
@@ -711,8 +710,6 @@ def plot_points(points: list[dict], mode: str, directory: Path):
                 label="Prefix cache hit fraction",
                 format=ticker.PercentFormatter(1),
             )
-        if any(point.get("purpose", "task") != "task" for point in points):
-            axes.legend(frameon=False)
         for suffix in ("svg", "png"):
             figure.savefig(
                 directory / f"{mode}-agentic-soak.{suffix}",

@@ -24,6 +24,11 @@ Prefix-hit prefill 保持 ratio 例外. 全部阶段 spread 门槛仍有效.
 FP32 归约顺序改变. 数值容差和理论模型保持相同.
 最终源码的容量, 服务, 一小时及框架性能验证尚待完成.
 
+`f05a35d` 的[干净源码重跑](evidence/refactor-f05a35d/verification.json)全部 539 个算子数值案例通过.
+ordinary 单请求 32768 输入/4096 输出尝试完成两次预热与五次测量, OOM 和重计算抢占均为零.
+prefill 和 decode 比例为 4.436 和 2.320. 波动检查通过, 但两倍延迟检查失败.
+失败记录保持不变. 这一组案例不能构成完整十五组框架矩阵.
+
 ## 源码 3324a7f
 
 [可移植验证摘要](evidence/refactor-3324a7f/verification.json)记录源码哈希和原始报告身份.

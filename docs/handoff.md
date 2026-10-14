@@ -20,7 +20,10 @@ Keep the theoretical model, two warmups, five repetitions, and 10% spread gates.
 4. Profiler, request plots, performance tuning, and complete acceptance: pending.
 
 Obtain independent review before each milestone commit. Commit on `main` and continue until all work passes.
-Do not push or open pull requests.
+Do not push the main project or open pull requests.
+
+The user authorized publication of the TileFoundry fork update.
+Its `main` follows upstream `e9820eb`. Its `oh-my-vllm-integration` branch matches the pinned `5b9a310` compatibility source.
 
 ## Previous source verification
 
@@ -61,7 +64,8 @@ The complete 539-case operator numerical collection passes with no interference.
 Its uncommitted-source report is diagnostic and has `passed=false` with `selected_passed=true`.
 
 The complete non-boundary GPU repeat passes 593 cases.
-Capacity, service, one-hour, and formal framework records belong to `3324a7f`, not this checkpoint.
+The clean-source formal repeat at `f05a35d` passes all 539 operator numerical cases, with complete coverage and no interference.
+Capacity, service, and one-hour records belong to `3324a7f`, not this checkpoint.
 Final-source acceptance and the fourth milestone are pending.
 The source-bound checkpoint summary is in the [acceptance index](acceptance.md).
 
@@ -87,12 +91,12 @@ Worker RSS increases during collection. The evidence does not prove a memory pla
 
 ## Performance and next work
 
-The formal ordinary 32768-input/4096-output batch-one attempt on `3324a7f` collects two warmups and five measurements without OOM or preemption.
-Median prefill is 2.394 seconds against a 0.442-second lower bound, a ratio of 5.419.
-Median decode is 36.055 seconds against a 15.484-second lower bound, a ratio of 2.329.
+The formal ordinary 32768-input/4096-output batch-one attempt on `f05a35d` collects two warmups and five measurements without OOM or preemption.
+Median prefill is 1.960 seconds against a 0.442-second lower bound, a ratio of 4.436.
+Median decode is 35.918 seconds against a 15.484-second lower bound, a ratio of 2.320.
 The two phase spreads pass 10%. The two latency ratios fail the two-times gate.
 
-The theoretical equations are unchanged. All fifteen final-source framework rows are pending.
+The theoretical equations are unchanged. The complete fifteen-row final-source framework matrix is pending.
 External CUDA candidates are diagnostic experiments. They are not selected production changes or acceptance evidence.
 Continue tuning without weakening numerical, state, workload, or theoretical contracts.
 
