@@ -9,7 +9,6 @@ See the [formal protocol](../requirements/performance.md) and [commands](../test
 Record source, loaded modules, compiler, checkpoint, shapes, process birth identities, and GPU identity.
 Finish compilation and graph capture before timing. Put persistent state back to its baseline between comparisons.
 Measure the complete operation, with conversion, copies, and reduction.
-The [affine diagnostics](../kernels/affine-diagnostics.md) show why isolated matrix timing and random-input accuracy are not sufficient.
 Use interleaved candidate/baseline pairs before a full framework collection.
 
 Synthetic inputs can change numerical branches. Record branch frequencies from model inputs before selecting a specialization.
@@ -52,58 +51,6 @@ Keep counter units and denominators. An instruction-normalized stall ratio is no
 SM throughput is a pipeline metric, not measured FLOPS divided by the model peak.
 Occupancy alone does not show the cause of latency. See [NVIDIA compute triage](https://docs.nvidia.com/nsight-compute/ComputeTriage/).
 Report counters that the collection does not supply.
-
-## Reproduced observations
-
-The [source-bound diagnostic summary](../evidence/optimization-observations/verification.json) records the original reports and input scope.
-Nsight Compute 2026.1.1 collected counters for one scan from the 32144-token GDN fixture, with 16 replay passes.
-Its grid has 192 blocks and 768 warps across 148 SMs. The shared-memory limit is two resident blocks per SM.
-
-The reported 0.65 waves equals `192 / (148 * 2)`. It does not mean 35% of SMs are idle.
-Average active warps are 5.251 per SM, with 8.205% occupancy and zero register spills.
-Tensor activity is 0.815% for this invocation. Branch frequencies were not collected.
-
-Changing block count without increasing total independent warps cannot show improved latency hiding.
-Smaller blocks might improve workload distribution or shared-memory residency. A paired measurement must test that hypothesis.
-The 12.456-ms profiler duration is not formal operator timing.
-
-The fused normalization/FP8 gate-up fixture has 32144 tokens, width 5120, and 34816 output columns.
-One CUTLASS kernel has 57.649% Tensor Core activity and 31.319% FMA pipeline activity, with 18 replay passes.
-Its 5.457-ms profiler duration does not include the other kernels in the operation.
-Examine state-scan dependencies and block-scale accumulation as separate research directions.
-These observations do not show a complete framework speedup.
-
-### Model-input branches
-
-A separate instrumented model run used one request with token 42 repeated 32768 times and manually supplied cache tables.
-It recomputed the current classifier on each GDN layer's inputs, without changing the original prefill result.
-After capture and replay, 46 of 48 layers used the precision route for all chunks.
-Across the 48 layers, the counts were 1153392 precision, 26256 constant-key, and zero matrix chunk/head pairs.
-The captured observer buffers were read after synchronization.
-
-This is one ordinary-model input, not a prompt distribution or formal scheduler collection.
-Checkpoint byte hashes and physical layer IDs were not collected.
-The run includes capture and observation cost. Its duration is not acceptance timing.
-Use these branch counts to prioritize precision-path research, without expanding their input scope.
-
-### Complete request timeline
-
-A separate Nsight Systems 2025.5.2 collection uses clean `6b456b8`, ordinary 32768-input/32-output batch one, one warmup, and one measurement.
-Checkpoint, source, runtime, and GPU identities match before and after collection.
-Worker logs and semantic traces bind loaded modules to source, header, build-input, and binary hashes.
-Owned processes exit naturally with complete cleanup.
-The [native scheduling summary](../evidence/native-scheduling/verification.json) binds original traces and independent interval analysis.
-
-Measured prefill executes chunks 32144/624. Its kernel spans are 1802.575/62.317 ms.
-For the large chunk, FP8 projection union/exclusive intervals are 768.704/763.868 ms. GDN scan intervals are 730.708/730.641 ms.
-
-The last 31 decode graphs span a median 7.248 ms. FP8 projection mean union/exclusive intervals are 5.171/4.110 ms.
-Attention-merge mean union is 0.650 ms, but its exclusive interval is 0.006 ms.
-Cross-category overlap is 6.085/2.859 ms in the prefill chunks and a median 2.146 ms in decode.
-
-These intervals support projection and scan research. They do not prove instruction stalls, occupancy causes, or critical-path savings.
-Categories overlap and cannot be added as wall time. Kernel spans exclude framework host gaps.
-The profiler and short output budget do not supply two-warmup/five-run performance acceptance.
 
 ## Select the change
 

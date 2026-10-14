@@ -1,108 +1,60 @@
 # Acceptance evidence index
 
-Each result applies only to its recorded source, environment, configuration, and workload.
-Use [requirements](requirements.md) for gates and [testing](testing.md) for collection commands.
-Original records supply formal verification. Portable summaries support reading and offline analysis.
+Each result applies only to its recorded source, configuration, and workload.
+[Requirements](requirements.md) define acceptance. [Testing](testing.md) supplies collection commands.
+Unchanged raw records and independent reviews supply verification. Portable summaries identify their scope and hashes.
 
-## Current refactor
+## Current delivery status
 
-The accepted plan replaces external Python operator providers with repository CUDA and native libraries.
-It also replaces the previous comparison gate with independent numerical contracts and framework phase latency at most 2 times the lower bound.
-Prefix-hit prefill keeps its ratio exception. All phase spread gates stay active.
+After the final runtime selection, repeat numerical, regression, capacity, service, and fifteen-workload acceptance.
+The workload matrix has 27 latency gates, two warmups, five measurements, and 10% spread gates.
+Prefix-hit prefill keeps its latency-ratio exception. The [handoff](handoff.md) records current work and the authorized numerical-policy review.
 
-The final-source performance matrix and delivery checks are pending.
-The [handoff](handoff.md) records completed milestones and pending checks.
-Do not mark final acceptance from historical measurements or incomplete matrices.
+Clean `96ad82c` passes all 539 formal numerical cases with complete coverage and no interference.
+Its [report](evidence/attention-merge/final-numerical.json) binds the raw result, sources, ownership, and independent review.
+The previous [attention diagnostic record](evidence/attention-merge/verification.json) keeps its diagnostic status.
 
-## Selected subgroup scan checkpoint
+Ordinary 32768-input/4096-output batch-one diagnostics observe prefill/decode ratios 4.305/2.181.
+Latency gates fail. Spreads pass. These records do not complete the matrix or final-source service verification.
 
-The [source-bound summary](evidence/refactor-s8-scan/verification.json) identifies the changed scan and its original verification records.
-The complete CPU suite passes 1592 cases and 153 subtests. The complete non-boundary GPU suite passes 593 cases.
-Selected GPU verification passes 99 cases. Four alignment and cancellation cases pass Compute Sanitizer with zero errors.
+## Source-scoped records
 
-All 539 operator numerical cases pass. Their uncommitted-source report keeps `diagnostic=true`, `passed=false`, and `selected_passed=true`.
-The FP32 reduction order changes. Numerical tolerances and the theoretical model stay equal.
-Final-source capacity, service, one-hour, and framework performance verification are pending.
+| Record | Scope |
+| --- | --- |
+| [3324a7f](evidence/refactor-3324a7f/verification.json) | Numerical, regression, six capacity cases, and MTP/DSpark service and recovery |
+| [Subgroup scan](evidence/refactor-s8-scan/verification.json) | Numerical and replay diagnostics |
+| [f05a35d](evidence/refactor-f05a35d/verification.json) | Clean 539-case numerical repeat and failed framework phase gates |
+| [Narrow FP8](evidence/narrow-fp8/verification.json) | Source-scoped numerical and operation diagnostics |
+| [Persistent state](evidence/persistent-state/verification.json) | Numerical, state, capacity, and framework diagnostics |
+| [Split-K](evidence/split-k/verification.json) | Numerical and operation diagnostics |
+| [Native scheduling](evidence/native-scheduling/verification.json) | Device intervals and rejected schedule records |
+| [Rejected schedules](evidence/rejected-schedules/verification.json) | Rejected candidate identities and unchanged results |
+| [Precision records](evidence/precision-lessons/verification.json) | Rejected numerical experiments |
+| [Affine records](evidence/affine-diagnostics/verification.json) | Matrix-chain diagnostics and failed cancellation cases |
+| [Hardware records](evidence/optimization-observations/verification.json) | Source-scoped counters, inputs, and failed experiments |
 
-The [clean-source repeat](evidence/refactor-f05a35d/verification.json) at `f05a35d` passes all 539 operator numerical cases.
-The ordinary 32768-input/4096-output batch-one attempt collects two warmups and five measurements, with zero OOM and recompute preemption.
-Prefill and decode ratios are 4.436 and 2.320. Their spread checks pass, but their two-times latency checks fail.
-The failed record stays unchanged. This one row does not complete the fifteen-row framework matrix.
+Pre-refactor delivery records stay in Git history and external raw storage.
+Current guides contain contracts. Add verified optimization methods after the required performance goals pass.
 
-## Optimization observations
-
-The [portable diagnostic summary](evidence/optimization-observations/verification.json) binds current scan/GEMM counters, isolated cuBLAS probes, and a three-layer wavefront experiment.
-It identifies source snapshots, original hashes, samples, failed attempts, and verification limits.
-These collections are diagnostic. They do not select a production change or prove formal acceptance.
-See the [measurement method](profiling/measurement.md) and [algorithm research](kernels/optimization.md).
-
-Later [affine diagnostics](evidence/affine-diagnostics/verification.json) bind complete matrix chains, FP32/FP64 emulation, and cancellation failures.
-Layout candidates have diagnostic timing benefits. Complete numerical admission is not available. None is selected.
-
-## Narrow FP8 checkpoint
-
-The [portable checkpoint summary](evidence/narrow-fp8/verification.json) binds selected CUDA sources, paired samples, critical tests, and failed attempts.
-The twelve-shape projection collection has positive one-sided 95% confidence lower bounds and GPU latency reductions of 13.4%–18.4%.
-The CPU repeat passes 1592 cases and 153 subtests. The non-boundary GPU repeat passes 621 cases.
-All 539 operator diagnostic cases pass, with full coverage and no interference.
-
-The ordinary 32768-input/4096-output batch-one diagnostic has two warmups and five measurements.
-Prefill and decode ratios are 4.461 and 2.203. The spreads pass, but the two-times latency checks fail.
-It keeps `diagnostic=true` and `passed=false`. It does not prove final-source framework acceptance.
-
-The [precision-path summary](evidence/precision-lessons/verification.json) binds later rejected GDN experiments and the independently checked CPU rounding counterexample.
-These records do not select a GDN change or complete the fourth milestone.
-See [narrow projection measurements](kernels/narrow-fp8.md) and [precision lessons](kernels/precision-lessons.md) for their scope.
+## Historical service-hour scope
 
 ## Source 3324a7f
 
-The [portable verification summary](evidence/refactor-3324a7f/verification.json) records source hashes and original report identities.
-It is a derived reading artifact. Unchanged original records and independent reviews supply formal verification.
+Source `3324a7f` has four OMP sessions per mode over one hour. These workloads are different from the required full-book translation collection.
+The previous MTP collector fails its SSE deadline-race audit. The DSpark collector's recorded result keeps `passed=false`.
+Separate independent reviews do not change the collector results.
 
-The numerical matrix passes 539 cases. The complete non-boundary GPU suite passes 589 cases.
-Six ordinary/MTP4 capacity cases pass at batches 1, 2, and 4 with 258048 input and 4096 output tokens.
-MTP and DSpark each pass six service clients and four allocator OOM recovery stages.
-The fixture-only repair at `f5b13d7` passes the complete CPU suite: 1592 cases and 153 subtests.
-
-Each mode has four persistent OMP goal sessions over one hour with zero OOM and restart.
-Independent reviews verify sampled resource bounds, final release, normal SSE/SDK requests, and sandbox deletion.
-MTP completes 389 normal streams and DSpark completes 76. Each mode has four controller deadline aborts.
-
-The original MTP collector fails its SSE audit on a generation/abort deadline race. Its failed result stays unchanged.
-The original DSpark collector reports operational completion with `passed=false`, pending independent resource review.
-Separate independent reviews bind each unchanged original summary and raw manifest.
-
-Each external driver reports unproved adopted processes after service exit, before it saves their identities.
+The external drivers report unproved adopted-process cleanup. Those historical identities cannot be reconstructed.
 Recorded service, worker, and sandbox identities have exited. Temporary inference listeners and GPUs are released.
-The historical unknown adopted-process identities cannot be reconstructed.
-Worker RSS increases during collection. The evidence does not prove a memory plateau or complete allocation attribution.
 
-The ordinary 32768-input/4096-output batch-one phase attempt fails the two-times latency gate.
-Prefill and decode ratios are 5.419 and 2.329. Their spread checks pass.
-The theoretical equations are unchanged. The complete fifteen-row matrix and final delivery are pending.
+Worker RSS increased. These records do not prove a memory plateau, complete attribution, or current-source stability.
 
-## Historical scope
+## Collection identity and limits
 
-Pre-refactor repair delivery is recorded at `b98a83a`.
-Its source-bound measurements, failures, limitations, and reviewed collector scope stay in Git history and original external records.
-They do not prove acceptance of the refactored source or the new 2-times gate.
-Obsolete comparison summaries were removed from the current working tree.
-
-## Collection identity
-
-Record source and executable hashes, dependency pins, loaded module and header hashes, compiler flags, and checkpoint identity.
-Record process birth identities, worker epoch, GPU UUID, and collection times in original external records.
-Portable summaries must omit host paths and secrets, and identify their original record hashes.
-
-Keep complete failed sets and interrupted attempts with reasons. Do not select favorable samples.
+Bind source, executable, runtime pins, loaded modules, headers, compiler, checkpoints, hardware, capacities, and process birth identities.
+Keep raw logs, complete failed sets, and interrupted attempts in external storage. Keep all samples.
 Compiler activity, capture, cache eviction, interference, or source changes invalidate measured repetitions.
-Profile independently from formal timing.
+Profile separately from formal timing. A portable summary cannot replace a complete raw record.
 
-## Service-hour scope
-
-Check continuous framework availability, sampled resource limits, serving contracts, and owned sandbox cleanup.
-OMP goal completion, task progress, tool errors, and final answers are workload observations.
-Original client failures keep their status. State configured deadlines and cancellations separately.
-
-A one-hour result does not prove a memory plateau, complete allocation attribution, or operation after the measured interval.
-Report snapshot lag and the request-drain tail. Keep memory observations in evidence, not README memory charts.
+For service collections, report continuous availability, resource samples, configured deadlines, aborts, request-drain tails, and owned resource cleanup.
+Keep workload progress separate from performance and serving acceptance.

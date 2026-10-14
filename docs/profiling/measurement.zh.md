@@ -9,7 +9,6 @@
 记录源码, 已加载模块, 编译器, checkpoint, 形状, 进程出生身份和 GPU 身份.
 计时前完成编译和图捕获. 比较之间将持久状态恢复到基线.
 测量完整算子, 包括转换, 复制和归约.
-[仿射诊断](../kernels/affine-diagnostics.zh.md) 说明单独的矩阵计时和随机输入精度为何不足.
 完整框架采集之前, 交错测量候选和基线的配对样本.
 
 合成输入可能改变数值分支. 选择特化路径前, 记录模型输入对应的分支频率.
@@ -52,58 +51,6 @@ profiler 时长只用于诊断. 不要同时运行 Torch profiler 和 Nsight Com
 SM throughput 是管线指标, 不代表实测 FLOPS 除以模型峰值.
 仅凭 occupancy 无法确定延迟原因. 参见 [NVIDIA compute triage](https://docs.nvidia.com/nsight-compute/ComputeTriage/).
 说明采集没有提供哪些计数器.
-
-## 已复现的观测
-
-[绑定源码的诊断摘要](../evidence/optimization-observations/verification.json) 记录原始报告和输入范围.
-Nsight Compute 2026.1.1 采集 32144-token GDN 夹具一次 scan 的计数器, 使用 16 轮重放采集.
-其 grid 有 192 个 block 和 768 个 warp, GPU 有 148 个 SM. 共享内存允许每 SM 驻留两个 block.
-
-报告的 0.65 waves 等于 `192 / (148 * 2)`. 它不表示 35% 的 SM 空闲.
-平均每 SM 有 5.251 个 active warp, occupancy 为 8.205%, register spill 为零.
-本次调用的 Tensor 活跃度为 0.815%. 未采集分支频率.
-
-如果不增加独立 warp 总数, 改变 block 数不能证明延迟隐藏改善.
-较小 block 可能改善工作分布或共享内存驻留. 需要配对测量检验该假设.
-profiler 的 12.456-ms 时长不是正式算子计时.
-
-融合 normalization/FP8 gate-up 夹具有 32144 个 token, 宽度 5120, 输出列数 34816.
-其中一个 CUTLASS kernel 的 Tensor Core 活跃度为 57.649%, FMA 管线活跃度为 31.319%, 使用 18 轮重放采集.
-其 profiler 时长 5.457-ms 不包含算子的其他 kernel.
-将状态 scan 依赖和 block-scale 累加作为独立的调研方向检查.
-这些观测不能证明完整框架加速.
-
-### 模型输入分支
-
-一次独立的带观测模型运行使用一个请求, 将 token 42 重复 32768 次, 并手动提供缓存表.
-它在各 GDN 层输入上重算当前分类器, 不改变原始 prefill 结果.
-捕获和重放后, 48 层中的 46 层全部 chunk 使用精度路径.
-48 层的 chunk/head 对计数为精度路径 1153392, constant-key 路径 26256, 矩阵路径为零.
-同步之后才读取捕获的观测 buffer.
-
-这只是 ordinary 模型的一种输入, 不代表 prompt 分布或正式调度器采集.
-未采集 checkpoint 字节哈希和物理层 ID.
-运行包含捕获和观测成本. 其时长不是验收计时.
-用这些分支计数确定精度路径调研的优先级, 不扩大输入范围.
-
-### 完整请求时序图
-
-另一次 Nsight Systems 2025.5.2 采集使用干净的 `6b456b8`, ordinary 32768 输入/32 输出, batch 1, 一次预热和一次测量.
-采集前后的 checkpoint, 源码, 运行环境和 GPU 身份相同.
-Worker 日志和语义轨迹将已加载模块绑定到源码, 头文件, 构建输入及二进制哈希.
-自有进程自然退出, 清理完整.
-[原生调度摘要](../evidence/native-scheduling/verification.json)绑定原始轨迹和独立区间分析.
-
-实测 prefill 分为 32144/624 两个 chunk. kernel 跨度为 1802.575/62.317 ms.
-大 chunk 的 FP8 投影并集/独占区间为 768.704/763.868 ms, GDN scan 为 730.708/730.641 ms.
-
-最后 31 个 decode 图的跨度中位数为 7.248 ms. FP8 投影并集/独占区间均值为 5.171/4.110 ms.
-注意力合并的并集均值为 0.650 ms, 但独占区间为 0.006 ms.
-两个 prefill chunk 的类别间重叠为 6.085/2.859 ms, decode 的中位数为 2.146 ms.
-
-这些区间支持继续研究投影和 scan, 不能证明指令 stall, occupancy 原因或关键路径收益.
-类别之间存在重叠, 不能相加作为墙钟时间. kernel 跨度不包含框架主机间隙.
-分析器采集和较短的输出长度不能提供两次预热/五次测量的性能验收.
 
 ## 选择修改
 
