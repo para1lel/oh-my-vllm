@@ -17,6 +17,18 @@ scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker ser
 The default endpoint is `127.0.0.1:8000`.
 See [service usage](docs/serving.md) for requests, tools, limits, and DSpark configuration.
 
+## Request measurements
+
+These one-hour observations use four concurrent OMP sessions per mode on source `3324a7f`.
+Color shows the fraction of input tokens reused from the prefix cache.
+The vertical axis is output tokens divided by request processing time. It is not decode-only throughput.
+Four controller deadline aborts per mode are listed separately in [evidence](docs/acceptance.md#source-3324a7f).
+The final framework performance gate is pending.
+
+![MTP4 request scatter with cache-hit gradient](docs/assets/mtp-agentic-soak-3324a7f.svg)
+
+![DSpark request scatter with cache-hit gradient](docs/assets/dspark-agentic-soak-3324a7f.svg)
+
 ## Learn and verify
 
 - [Interactive code journey](code-journey/README.md): thirteen Chinese chapters with current source and scheduler experiments.

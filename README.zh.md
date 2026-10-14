@@ -17,6 +17,18 @@ scripts/with-gpu.sh scripts/with-env.sh target/release/oh-my-vllm-zmq-worker ser
 默认 endpoint 为 `127.0.0.1:8000`.
 请求, 工具, 限制和 DSpark 配置见[服务用法](docs/serving.zh.md).
 
+## 请求测量
+
+以下一小时观察使用源码 `3324a7f`, 每种模式有四个并发 OMP 会话.
+颜色表示从前缀缓存复用的输入 token 比例.
+纵轴是输出 token 数除以请求处理时长, 不是仅 decode 的吞吐率.
+每种模式的四次 controller 截止中断在[证据](docs/acceptance.zh.md#源码-3324a7f)中单列.
+最终框架性能门槛尚待通过.
+
+![MTP4 请求散点图, 渐变表示缓存命中率](docs/assets/mtp-agentic-soak-3324a7f.svg)
+
+![DSpark 请求散点图, 渐变表示缓存命中率](docs/assets/dspark-agentic-soak-3324a7f.svg)
+
 ## 学习与验证
 
 - [交互式代码讲解](code-journey/README.zh.md): 十三章中文教程, 包含当前源码和调度器实验.

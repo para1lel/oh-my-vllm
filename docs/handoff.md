@@ -45,7 +45,7 @@ The repair adds that configuration without a production implementation change.
 The original failed record is kept.
 
 Required Rust/style/document checks passed before `3324a7f`.
-The tutorial previously passed 14 Node tests, 9 browser tests, and its build. Its final-source repeat is pending.
+The current tutorial repeat passes 14 Node tests and 9 browser tests. Its build passes after source coverage updates.
 The default-off bounded Torch profiler and dark cache-hit request plots have selected CPU/GPU verification.
 
 ## One-hour evidence
@@ -55,9 +55,9 @@ The measured window has no intermediate drain or model warmup.
 The same service and worker process identities have zero restart and OOM.
 The four sandboxes and their owned image in each collection are deleted.
 
-DSpark's collector reports operational completion and awaits independent resource review.
+DSpark's collector reports operational completion. Independent reviews verify each mode's framework continuity, sampled resource bounds, normal streams, and final release.
 MTP's collector reports an SSE audit failure on its final client-aborted request, whose generation finished at the collection deadline.
-Its failed record is kept. Independent review must distinguish the deadline race from normal-stream failures.
+Its failed record is kept. Independent review binds the tail abort to native RPC and SDK deadline evidence.
 The two external drivers report an unproved adopted-process cleanup error after service shutdown.
 
 The recorded service and worker identities have exited, and temporary listeners and GPUs are released.
@@ -65,7 +65,8 @@ The missing adopted-process identity record is a verification limit.
 
 Agent task completion, goal transitions, and workload journal diagnostics are not inference-framework gates.
 Original collection summaries keep their results. Separate reviews must bind the unchanged raw evidence.
-Final request figures and portable evidence summaries are pending.
+Source-bound request figures and a portable evidence summary are in the [acceptance index](acceptance.md).
+Worker RSS increases during collection. The evidence does not prove a memory plateau or complete allocation attribution.
 
 ## Performance and next work
 
