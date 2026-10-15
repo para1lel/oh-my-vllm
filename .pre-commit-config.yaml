@@ -1,0 +1,85 @@
+fail_fast: false
+
+repos:
+  - repo: local
+    hooks:
+      - id: cuda-format
+        name: clang-format and CUDA module size
+        description: Format owned CUDA modules and enforce the 800-line limit.
+        entry: scripts/with-env.sh python scripts/format_cuda.py
+        language: system
+        pass_filenames: false
+        files: (\.(cu|cuh|cpp|hpp|h)$|^python/oh_my_vllm/kernels/cuda_backend/.*\.py$|^\.clang-format$|^scripts/format_cuda\.py$|^\.pre-commit-config\.yaml$)
+
+      - id: cargo-fmt
+        name: cargo fmt
+        description: Reject Rust formatting drift; run cargo fmt --all to fix it.
+        entry: scripts/with-env.sh python scripts/run_cargo_hook.py fmt
+        language: system
+        pass_filenames: false
+        files: (\.rs$|(^|/)rustfmt\.toml$|^scripts/run_cargo_hook\.py$|^\.pre-commit-config\.yaml$)
+
+      - id: rust-line-width
+        name: Rust hard line-width limit (including macros)
+        entry: scripts/with-env.sh python scripts/check_rust_line_width.py
+        language: system
+        pass_filenames: false
+        files: (\.rs$|(^|/)rustfmt\.toml$|^scripts/check_rust_line_width\.py$|^\.pre-commit-config\.yaml$)
+
+      - id: definition-spacing
+        name: function and module definition spacing
+        entry: scripts/with-env.sh python scripts/check_definition_spacing.py
+        language: system
+        pass_filenames: false
+        files: (\.(rs|py|js|mjs|cjs|ts)$|^Cargo\.(toml|lock)$|^development/javascript/package(-lock)?\.json$|^\.pre-commit-config\.yaml$)
+
+      - id: cargo-clippy
+        name: cargo clippy
+        description: Lint Rust sources, warnings are errors.
+        entry: scripts/with-env.sh python scripts/run_cargo_hook.py clippy
+        language: system
+        pass_filenames: false
+        files: (\.rs|Cargo\.toml|Cargo\.lock)$|^scripts/run_cargo_hook\.py$
+
+      - id: cargo-test
+        name: cargo test
+        description: Run the Rust test suite.
+        entry: scripts/with-env.sh python scripts/run_cargo_hook.py test
+        language: system
+        pass_filenames: false
+        files: (\.rs|Cargo\.toml|Cargo\.lock)$|^scripts/run_cargo_hook\.py$
+
+      - id: ruff-format
+        name: ruff format
+        description: Format Python sources in place.
+        entry: scripts/with-env.sh ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
+
+      - id: ruff-check
+        name: ruff check
+        description: Lint Python sources, fixing what is auto-fixable.
+        entry: scripts/with-env.sh ruff check --force-exclude --fix
+        language: system
+        types_or: [python, pyi]
+
+      - id: whitespace
+        name: whitespace
+        description: Strip trailing whitespace and enforce a final newline.
+        entry: scripts/with-env.sh python scripts/fix_whitespace.py
+        language: system
+        types: [text]
+
+      - id: documentation
+        name: portable bilingual documentation
+        entry: scripts/with-env.sh python scripts/check_docs.py --fix-source-links
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: glossary
+        name: generated glossary source consistency
+        entry: scripts/with-env.sh python scripts/build_glossary.py --check
+        language: system
+        pass_filenames: false
+        files: (^docs/(terms\.json|glossary/.*\.md)$|^scripts/build_glossary\.py$|^\.pre-commit-config\.yaml$)

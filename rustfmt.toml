@@ -1,0 +1,8 @@
+# Keep stable rustfmt settings; pre-commit separately enforces the hard line cap
+# because rustfmt cannot reliably reflow arbitrary macro bodies or string literals.
+edition = "2024"
+style_edition = "2024"
+max_width = 100
+newline_style = "Unix"
+single_line_if_else_max_width = 0
+single_line_let_else_max_width = 0
