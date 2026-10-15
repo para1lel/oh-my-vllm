@@ -10,7 +10,7 @@ Rust sends media references through the inference worker's process and protocol 
 The [operator contracts](operators/model.md) have 18 internal stages and 7 serving boundaries.
 The workload has six request profiles and one decode context per profile.
 
-CUDA C++ and CUTLASS providers supply the seven boundaries through the [kernel development tools](operators/development.md).
+Repository CUDA C++ providers use pinned CUTLASS headers for the seven boundaries through the [kernel development tools](operators/development.md).
 The build tools are different from the inference loader.
 Each provider supplies numerical checks and restores mutable state before measurement.
 Reports bind checkpoint shards, source files, binaries, and build dependencies.

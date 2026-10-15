@@ -24,6 +24,5 @@ Keep the hooks active. Commit only the files for the change.
 
 Push the working branch to GitHub after each delivery.
 Before work in other repositories or other publication, get instructions from the maintainer.
-Work and publication on the available TileFoundry adaptation branch are permitted.
 
 Put host settings in the ignored `LOCAL.md` file. Stop the workers and temporary services that you start.

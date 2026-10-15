@@ -10,7 +10,7 @@ Rust 通过推理 worker 的进程和协议边界发送媒体引用.
 [算子契约](operators/model.zh.md)包含 18 个内部阶段及 7 个 serving 边界.
 负载包含六类请求模板, 每类使用一个 decode context.
 
-CUDA C++ 和 CUTLASS provider 通过[算子开发工具](operators/development.zh.md)提供七个边界.
+仓库内的 CUDA C++ provider 使用固定版本的 CUTLASS 头文件, 通过[算子开发工具](operators/development.zh.md)提供七个边界.
 构建工具与推理加载器分开.
 每个 provider 提供数值检查, 并在测量前恢复可变状态.
 报告绑定 checkpoint shards, 源文件, 二进制文件及构建依赖.
