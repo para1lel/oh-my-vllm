@@ -5,6 +5,7 @@
 constexpr int Vocabulary = 248320;
 constexpr int TokenBits = 18;
 constexpr uint64_t TokenMask = (1ull << TokenBits) - 1;
+constexpr int SampleNormThreads = 640;
 
 #include "sample_accept.cuh"
 
@@ -28,24 +29,25 @@ int64_t sample_workspace(int64_t rows) {
 __global__ void sample_norm_kernel(const __nv_bfloat16 *x, const __nv_bfloat16 *residual,
                                    const float *weight, __nv_bfloat16 *normalized) {
   int row = blockIdx.x, lane = threadIdx.x & 31, warp = threadIdx.x / 32;
-  float values[20], total = 0;
+  constexpr int Values = 5120 / SampleNormThreads, Warps = SampleNormThreads / 32;
+  float values[Values], total = 0;
 #pragma unroll
-  for (int j = 0; j < 20; ++j) {
-    int column = threadIdx.x + 256 * j;
+  for (int j = 0; j < Values; ++j) {
+    int column = threadIdx.x + SampleNormThreads * j;
     values[j] =
         __bfloat162float(x[row * 5120 + column]) + __bfloat162float(residual[row * 5120 + column]);
     total += values[j] * values[j];
   }
-  __shared__ float partial[8];
+  __shared__ float partial[Warps];
   total = warp_sum(total);
   if (!lane)
     partial[warp] = total;
   __syncthreads();
-  total = warp_sum(lane < 8 ? partial[lane] : 0);
+  total = warp_sum(lane < Warps ? partial[lane] : 0);
   float inverse = rsqrtf(total / 5120.f + 1e-6f);
 #pragma unroll
-  for (int j = 0; j < 20; ++j) {
-    int column = threadIdx.x + 256 * j;
+  for (int j = 0; j < Values; ++j) {
+    int column = threadIdx.x + SampleNormThreads * j;
     normalized[row * 5120 + column] =
         __float2bfloat16_rn(values[j] * inverse * (weight[column] + 1.f));
   }
@@ -263,7 +265,7 @@ void sample(TensorView x, TensorView residual, TensorView norm, TensorView weigh
   size_t bytes = 0;
   check_cuda(sort_scores(nullptr, bytes, nullptr, nullptr, rows, stream));
   TVM_FFI_ICHECK(workspace.numel() >= bytes);
-  sample_norm_kernel<<<rows, 256, 0, stream>>>(
+  sample_norm_kernel<<<rows, SampleNormThreads, 0, stream>>>(
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),
       static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
       static_cast<const float *>(norm.data_ptr()),

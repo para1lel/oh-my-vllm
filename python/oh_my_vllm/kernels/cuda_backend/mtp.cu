@@ -1,12 +1,12 @@
 #include "common.cuh"
 #include "linear.cuh"
 
-__global__ void mtp_norm_kernel(const __nv_bfloat16 *hidden, const int64_t *tokens,
-                                const __nv_bfloat16 *embedding, const float *norm_hidden,
-                                const float *norm_embedding, const int32_t *hidden_rows,
-                                const __nv_bfloat16 *boundary_hidden, const int32_t *boundary_rows,
-                                __nv_bfloat16 *packed, __nv_bfloat16 *zero, int hidden_count,
-                                int boundaries) {
+template <int Threads>
+__global__ void
+mtp_norm_kernel(const __nv_bfloat16 *hidden, const int64_t *tokens, const __nv_bfloat16 *embedding,
+                const float *norm_hidden, const float *norm_embedding, const int32_t *hidden_rows,
+                const __nv_bfloat16 *boundary_hidden, const int32_t *boundary_rows,
+                __nv_bfloat16 *packed, __nv_bfloat16 *zero, int hidden_count, int boundaries) {
   int row = blockIdx.x, kind = blockIdx.y, tid = threadIdx.x;
   int source = hidden_rows[row], boundary = boundary_rows[row];
   int64_t token = tokens[row];
@@ -19,23 +19,24 @@ __global__ void mtp_norm_kernel(const __nv_bfloat16 *hidden, const int64_t *toke
                                : source >= 0 ? hidden + int64_t(source) * 5120
                                              : boundary_hidden + int64_t(boundary) * 5120;
   const float *weight = kind == 0 ? norm_embedding : norm_hidden;
-  float values[20];
+  constexpr int Values = 5120 / Threads, Warps = Threads / 32;
+  float values[Values];
   float total = 0;
 #pragma unroll
-  for (int j = 0; j < 20; ++j) {
-    values[j] = __bfloat162float(input[tid + j * 256]);
+  for (int j = 0; j < Values; ++j) {
+    values[j] = __bfloat162float(input[tid + j * Threads]);
     total += values[j] * values[j];
   }
-  __shared__ float scratch[8];
+  __shared__ float scratch[Warps];
   total = warp_sum(total);
   if ((tid & 31) == 0)
     scratch[tid / 32] = total;
   __syncthreads();
-  total = warp_sum((tid & 31) < 8 ? scratch[tid & 31] : 0.f);
+  total = warp_sum((tid & 31) < Warps ? scratch[tid & 31] : 0.f);
   float inverse = rsqrtf(total / 5120.f + 1e-6f);
 #pragma unroll
-  for (int j = 0; j < 20; ++j) {
-    int col = tid + j * 256;
+  for (int j = 0; j < Values; ++j) {
+    int col = tid + j * Threads;
     packed[int64_t(row) * 10240 + kind * 5120 + col] =
         __float2bfloat16_rn(values[j] * inverse * (weight[col] + 1.f));
     if (kind == 0)
@@ -76,17 +77,24 @@ void mtp_input(TensorView hidden, TensorView tokens, TensorView embedding, Tenso
   disjoint(output, zero);
   tvm::ffi::CUDADeviceGuard guard(hidden.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, hidden.device().device_id));
-  mtp_norm_kernel<<<dim3(rows, 2), 256, 0, stream>>>(
-      static_cast<const __nv_bfloat16 *>(hidden.data_ptr()),
-      static_cast<const int64_t *>(tokens.data_ptr()),
-      static_cast<const __nv_bfloat16 *>(embedding.data_ptr()),
-      static_cast<const float *>(norm_hidden.data_ptr()),
-      static_cast<const float *>(norm_embedding.data_ptr()),
-      static_cast<const int32_t *>(hidden_rows.data_ptr()),
-      static_cast<const __nv_bfloat16 *>(boundary_hidden.data_ptr()),
-      static_cast<const int32_t *>(boundary_rows.data_ptr()),
-      static_cast<__nv_bfloat16 *>(packed.data_ptr()),
-      static_cast<__nv_bfloat16 *>(zero.data_ptr()), hidden_count, boundaries);
+  auto normalize = [&](auto threads) {
+    constexpr int Threads = decltype(threads)::value;
+    mtp_norm_kernel<Threads><<<dim3(rows, 2), Threads, 0, stream>>>(
+        static_cast<const __nv_bfloat16 *>(hidden.data_ptr()),
+        static_cast<const int64_t *>(tokens.data_ptr()),
+        static_cast<const __nv_bfloat16 *>(embedding.data_ptr()),
+        static_cast<const float *>(norm_hidden.data_ptr()),
+        static_cast<const float *>(norm_embedding.data_ptr()),
+        static_cast<const int32_t *>(hidden_rows.data_ptr()),
+        static_cast<const __nv_bfloat16 *>(boundary_hidden.data_ptr()),
+        static_cast<const int32_t *>(boundary_rows.data_ptr()),
+        static_cast<__nv_bfloat16 *>(packed.data_ptr()),
+        static_cast<__nv_bfloat16 *>(zero.data_ptr()), hidden_count, boundaries);
+  };
+  if (rows <= 32)
+    normalize(std::integral_constant<int, 640>{});
+  else
+    normalize(std::integral_constant<int, 256>{});
   check_cuda(cudaGetLastError());
   bf16_linear(static_cast<const __nv_bfloat16 *>(packed.data_ptr()),
               static_cast<const __nv_bfloat16 *>(weight.data_ptr()), output.data_ptr(), rows, 5120,
