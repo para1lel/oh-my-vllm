@@ -9,6 +9,7 @@ import math
 import re
 from pathlib import Path
 
+from benchmarks.agentic_native_goals import collection_record
 from benchmarks.agentic_rpc_evidence import control_command, control_receipt
 from benchmarks.agentic_sdk_trace import read_sdk_spans
 from benchmarks.agentic_session_evidence import sdk_api_binding
@@ -157,7 +158,9 @@ def deadline_abort(
         or wire.get("transport_outcome") != "failed"
     ):
         raise ValueError("deadline abort lacks a canonical downstream disconnect")
-    collection = session["goal_collection"]
+    collection = collection_record(session)
+    if not collection:
+        raise ValueError("deadline abort session has no workload collection record")
     deadline = finite_time(collection["collection_deadline_monotonic_s"])
     deadline_unix = finite_time(collection["collection_deadline_unix_s"])
     if (
@@ -291,6 +294,9 @@ def deadline_abort(
         "response_id": identity,
         "deadline_monotonic_s": deadline,
         "deadline_unix_s": deadline_unix,
+        "disconnect_direction": wire["error_direction"],
+        "disconnect_monotonic_s": disconnected,
+        "collection_ended_monotonic_s": ended,
         "pause": pause,
         "abort": abort,
         "native_result": receipt,

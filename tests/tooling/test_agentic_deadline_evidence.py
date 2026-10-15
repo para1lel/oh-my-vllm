@@ -10,6 +10,8 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
 )
 
 from benchmarks.agentic_framework_evidence import audit_framework_session
+from benchmarks.agentic_lane_transport import lane_transport_evidence
+from benchmarks.agentic_soak import explained_aborts
 from tests.support.framework_evidence import request_fixture as fixture
 from tests.support.sdk_trace import export, saved_trace
 
@@ -35,11 +37,11 @@ def save_journals(directory, commands, messages, records):
     )
 
 
-def deadline_fixture(directory, api):
+def deadline_fixture(directory, api, *, status="completed"):
     _, metrics, wire = fixture(directory, api, cancelled=True)
     identity, metric = next(iter(metrics.items()))
     metric.update(
-        status="completed",
+        status=status,
         received_unix_s=1199,
         processing_started_unix_s=1199.1,
         generation_completed_unix_s=1200.01,
@@ -82,7 +84,8 @@ def deadline_fixture(directory, api):
     session.update(
         lane=0,
         active_seconds=100,
-        goal_collection={
+        workload="translation",
+        workload_collection={
             "collection_deadline_monotonic_s": 200,
             "collection_deadline_unix_s": 1200,
             "controller_ended_monotonic_s": 201,
@@ -152,8 +155,13 @@ def deadline_fixture(directory, api):
 
 
 @pytest.mark.parametrize("api", ["chat", "responses"])
-def test_server_completion_racing_client_abort_has_a_separate_outcome(tmp_path, api):
+@pytest.mark.parametrize("collection_key", ["workload_collection", "goal_collection"])
+def test_server_completion_racing_client_abort_has_a_separate_outcome(
+    tmp_path, api, collection_key
+):
+    """The neutral workload key and the historical goal-only key both audit."""
     session, metrics, *_ = deadline_fixture(tmp_path, api)
+    session[collection_key] = session.pop("workload_collection")
     points, audit = audit_framework_session(tmp_path, session, metrics, 1100)
     assert points == []
     assert audit["completed_requests"] == audit["cancelled_requests"] == 0
@@ -162,6 +170,44 @@ def test_server_completion_racing_client_abort_has_a_separate_outcome(tmp_path, 
     assert outcome["status"] == "completed"
     assert outcome["protocol"]["success"] is False
     assert outcome["deadline_abort_proof"]["kind"] == "host_collection_deadline_abort"
+    assert outcome["deadline_abort_proof"]["deadline_unix_s"] == 1200
+
+
+def test_neutral_collection_record_wins_over_a_stale_historical_key(tmp_path):
+    session, metrics, *_ = deadline_fixture(tmp_path, "chat")
+    session["goal_collection"] = {
+        "collection_deadline_monotonic_s": 102,
+        "collection_deadline_unix_s": 1102,
+        "controller_ended_monotonic_s": 103,
+    }
+    _points, audit = audit_framework_session(tmp_path, session, metrics, 1100)
+    assert audit["deadline_aborted_completed_requests"] == 1
+    [outcome] = audit["outcomes"]
+    assert outcome["deadline_abort_proof"]["deadline_monotonic_s"] == 200
+
+
+@pytest.mark.parametrize("api", ["chat", "responses"])
+def test_translation_session_without_disconnect_proof_cannot_claim_an_abort(
+    tmp_path, api
+):
+    session, metrics, wire, *_ = deadline_fixture(tmp_path, api)
+    wire["error"] = None
+    wire.pop("transport_error_kind")
+    (tmp_path / "wire/http.jsonl").write_text(json.dumps(wire) + "\n")
+    with pytest.raises(ValueError, match="lacks a canonical downstream disconnect"):
+        audit_framework_session(tmp_path, session, metrics, 1100)
+
+
+@pytest.mark.parametrize("api", ["chat", "responses"])
+def test_translation_session_with_an_early_disconnect_cannot_explain_itself(
+    tmp_path, api
+):
+    session, metrics, wire, *_ = deadline_fixture(tmp_path, api)
+    wire["transport_error_monotonic_s"] = 199.9
+    wire["transport_error_unix_s"] = 1199.9
+    (tmp_path / "wire/http.jsonl").write_text(json.dumps(wire) + "\n")
+    with pytest.raises(ValueError, match="deadline abort"):
+        audit_framework_session(tmp_path, session, metrics, 1100)
 
 
 @pytest.mark.parametrize("api", ["chat", "responses"])
@@ -262,7 +308,8 @@ def test_partial_or_unrelated_abort_evidence_cannot_supply_acceptance(
     elif failure == "wrong_prompt":
         wire["prompt_id"] = "unrelated-goal"
     elif failure == "ordinary_missing_terminal":
-        session.pop("goal_collection")
+        session.pop("workload_collection", None)
+        session.pop("goal_collection", None)
     elif failure == "unrecorded_ack":
         messages.append(messages[-1])
     elif failure == "unrecorded_command":
@@ -358,7 +405,7 @@ def test_receipt_requires_the_original_decompressed_rpc_line(tmp_path, changed):
 
 def test_deadline_marker_cannot_relax_a_normal_successful_usage_check(tmp_path):
     session, metrics, _ = fixture(tmp_path, "chat")
-    session["goal_collection"] = {"collection_deadline_monotonic_s": 102}
+    session["workload_collection"] = {"collection_deadline_monotonic_s": 102}
     next(iter(metrics.values()))["output_tokens"] = 999
     with pytest.raises(ValueError, match="usage differs"):
         audit_framework_session(tmp_path, session, metrics, 100)
@@ -398,3 +445,235 @@ def test_one_abort_cannot_exempt_multiple_model_requests(tmp_path):
     save_journals(tmp_path, commands, messages, records)
     with pytest.raises(ValueError, match="multiple aborted native requests"):
         audit_framework_session(tmp_path, session, metrics, 1100)
+
+
+def model_hop(
+    directory, digest, *, path, failed=True, received=199.2, completed=200.008
+):
+    """One recorded model-hop entry in the mounted-socket journal shape.
+
+    The fixture's recorded abort action starts at 200.0025 and its client
+    disconnect happens at 200.015, so an attempt that completes at 200.008 lies
+    inside the window the original evidence proves.
+    """
+    entry = {
+        "path": path,
+        "body_sha256": digest,
+        "upstream_dispatched": True,
+        "received_monotonic_s": received,
+        "completed_monotonic_s": completed,
+    }
+    if failed:
+        entry.update(
+            error="BrokenPipeError: [Errno 32] Broken pipe",
+            error_kind="BrokenPipeError",
+            error_direction="downstream_write",
+        )
+    return entry
+
+
+def write_model_hops(directory, bridge, guest):
+    """Write one model-only lane closure record set from hop entry lists."""
+    bridge, guest = list(bridge), list(guest)
+    transport = directory / "transport"
+    transport.mkdir(exist_ok=True)
+    for name, entries in (("model", bridge), ("guest-model", guest)):
+        (transport / f"{name}.jsonl").write_text(
+            "".join(json.dumps(entry) + "\n" for entry in entries)
+        )
+    (transport / "bridge.json").write_text(
+        json.dumps(
+            {
+                "closed": True,
+                "errors": [],
+                "handlers_released": True,
+                "remaining_sockets": [],
+                "telemetry_upstream": None,
+                "journals": {"bridge-model": {"entries": len(bridge), "error": None}},
+            }
+        )
+    )
+    (transport / "guest-close.json").write_text(
+        json.dumps(
+            {
+                "released": True,
+                "servers": [
+                    {
+                        "errors": [],
+                        "journal_error": None,
+                        "journal_entries": len(guest),
+                    }
+                ],
+            }
+        )
+    )
+
+
+def audited_lane(directory, api, *, status="completed"):
+    """Run the collector path once and return its audit, outcome and digest."""
+    directory.mkdir(parents=True, exist_ok=True)
+    session, metrics, wire, *_ = deadline_fixture(directory, api, status=status)
+    _, audit = audit_framework_session(directory, session, metrics, 1100)
+    assert len(audit["outcomes"]) == 1
+    digest = hashlib.sha256(
+        (directory / "wire" / wire["request_file"]).read_bytes()
+    ).hexdigest()
+    return audit, audit["outcomes"][0], digest, wire
+
+
+@pytest.mark.parametrize("api", ["chat", "responses"])
+@pytest.mark.parametrize("status", ["completed", "cancelled"])
+def test_collector_path_binds_every_mounted_hop(tmp_path, api, status):
+    """The framework audit, its explanation and the transport audit agree.
+
+    A service cancellation used to skip the deadline proof entirely, so the
+    soak runner produced no explanation and the real hop disconnects failed
+    transport acceptance.
+    """
+    audit, outcome, digest, wire = audited_lane(tmp_path, api, status=status)
+    assert outcome["status"] == status
+    assert outcome["client_completion"] == "collection_deadline_aborted"
+    proof = outcome["deadline_abort_proof"]
+    assert proof["disconnect_direction"] == "downstream_write"
+    assert proof["deadline_monotonic_s"] == 200
+
+    explained = explained_aborts(tmp_path, audit)
+    assert set(explained) == {digest}
+    bound = explained[digest][0]
+    assert bound["direction"] == "downstream_write"
+    assert bound["deadline_monotonic_s"] == 200
+    # The window is the recorded abort action through the client disconnect.
+    assert bound["abort_monotonic_s"] == bound["first_monotonic_s"] == 200.0025
+    assert bound["last_monotonic_s"] == 200.015
+
+    entry = model_hop(tmp_path, digest, path=wire["path"])
+    write_model_hops(tmp_path, [entry], [entry])
+    evidence = lane_transport_evidence(tmp_path, explained={"model": explained})
+    assert evidence["bridge-model"]["reached_records"] == 0
+    assert evidence["bridge-model"]["explained_aborts"] == 1
+    assert evidence["guest-model"]["explained_aborts"] == 1
+    assert evidence["unused_explanations"] == []
+    assert evidence["explained_aborts"] == {"model": [digest]}
+
+
+def test_cancelled_outcome_keeps_unknown_cause_when_proof_evidence_is_missing(
+    tmp_path,
+):
+    """A cancellation stays unproved, not fatal, when optional evidence is gone.
+
+    Only the completed-server tail is required to fail closed; a cancelled
+    request that cannot be bound keeps an explicit diagnostic instead of
+    aborting the whole framework audit.
+    """
+    session, metrics, *_ = deadline_fixture(tmp_path, "chat", status="cancelled")
+    (tmp_path / "turns.json").unlink()
+    _, audit = audit_framework_session(tmp_path, session, metrics, 1100)
+    outcome = audit["outcomes"][0]
+    assert outcome["status"] == "cancelled"
+    assert "deadline_abort_proof" not in outcome
+    assert outcome["cancellation_evidence"].startswith("FileNotFoundError")
+    assert explained_aborts(tmp_path, audit) == {}
+
+
+def test_cancelled_outcome_keeps_unknown_cause_when_proof_evidence_is_malformed(
+    tmp_path,
+):
+    """Malformed optional evidence is diagnosed instead of failing the audit."""
+    session, metrics, *_ = deadline_fixture(tmp_path, "chat", status="cancelled")
+    (tmp_path / "turns.json").write_text("{not json")
+    _, audit = audit_framework_session(tmp_path, session, metrics, 1100)
+    outcome = audit["outcomes"][0]
+    assert "deadline_abort_proof" not in outcome
+    assert outcome["cancellation_evidence"].startswith("JSONDecodeError")
+    assert explained_aborts(tmp_path, audit) == {}
+
+
+def test_cancelled_outcome_without_canonical_evidence_claims_no_abort(tmp_path):
+    """A cancellation stays unproved when its original disconnect differs."""
+    session, metrics, wire, *_ = deadline_fixture(tmp_path, "chat", status="cancelled")
+    wire.update(
+        transport_error_kind="ConnectionRefusedError",
+        error="ConnectionRefusedError: refused",
+    )
+    (tmp_path / "wire/http.jsonl").write_text(json.dumps(wire) + "\n")
+    _, audit = audit_framework_session(tmp_path, session, metrics, 1100)
+    outcome = audit["outcomes"][0]
+    assert outcome["status"] == "cancelled"
+    assert "deadline_abort_proof" not in outcome
+    assert "canonical downstream disconnect" in outcome["cancellation_evidence"]
+    assert explained_aborts(tmp_path, audit) == {}
+    # Without an explanation the recorded hop failure stays visible.
+    digest = hashlib.sha256(
+        (tmp_path / "wire" / wire["request_file"]).read_bytes()
+    ).hexdigest()
+    entry = model_hop(tmp_path, digest, path=wire["path"])
+    write_model_hops(tmp_path, [entry], [entry])
+    with pytest.raises(ValueError, match="unexplained bridge model transport failure"):
+        lane_transport_evidence(tmp_path)
+
+
+@pytest.mark.parametrize("shape", ["asymmetric", "zero_errors"])
+def test_collector_path_accepts_completed_hops(tmp_path, shape):
+    """One hop may complete while the other records the explained failure."""
+    audit, _, digest, wire = audited_lane(tmp_path, "chat")
+    explained = explained_aborts(tmp_path, audit)
+    failed = model_hop(tmp_path, digest, path=wire["path"])
+    relayed = model_hop(tmp_path, digest, path=wire["path"], failed=False)
+    bridge, guest = (failed, relayed) if shape == "asymmetric" else (relayed, relayed)
+    write_model_hops(tmp_path, [bridge], [guest])
+    evidence = lane_transport_evidence(tmp_path, explained={"model": explained})
+    assert evidence["bridge-model"]["explained_aborts"] == (
+        1 if shape == "asymmetric" else 0
+    )
+    assert evidence["guest-model"]["explained_aborts"] == 0
+    assert evidence["unused_explanations"] == (
+        [] if shape == "asymmetric" else [f"model:{digest}"]
+    )
+
+
+def test_collector_path_rejects_an_unrelated_upstream_failure(tmp_path):
+    """A deadline bound never covers a failure in another direction or window."""
+    audit, _, digest, wire = audited_lane(tmp_path, "chat")
+    explained = explained_aborts(tmp_path, audit)
+    unrelated = model_hop(tmp_path, digest, path=wire["path"])
+    unrelated.update(
+        error="TimeoutError: upstream stalled",
+        error_kind="TimeoutError",
+        error_direction="upstream_read",
+    )
+    write_model_hops(tmp_path, [unrelated], [unrelated])
+    with pytest.raises(ValueError, match="unexplained bridge model transport failure"):
+        lane_transport_evidence(tmp_path, explained={"model": explained})
+
+    # A same-direction failure that ended before the deadline or just before the
+    # recorded abort action is a different attempt, not the deadline release.
+    for completed in (199.9999, 200.0024):
+        predeadline = model_hop(
+            tmp_path, digest, path=wire["path"], completed=completed
+        )
+        write_model_hops(tmp_path, [predeadline], [predeadline])
+        with pytest.raises(
+            ValueError, match="unexplained bridge model transport failure"
+        ):
+            lane_transport_evidence(tmp_path, explained={"model": explained})
+
+
+def test_collector_path_keeps_distinct_originals_with_equal_bodies(tmp_path):
+    """Two aborted originals with identical bodies keep two distinct bounds."""
+    audit, outcome, digest, wire = audited_lane(tmp_path, "chat")
+    doubled = {**audit, "outcomes": [outcome, dict(outcome)]}
+    explained = explained_aborts(tmp_path, doubled)
+    assert len(explained[digest]) == 2
+
+    # Two recorded originals with equal bytes must be covered by two attempts.
+    (tmp_path / "wire/http.jsonl").write_text((json.dumps(wire) + "\n") * 2)
+    failed = model_hop(tmp_path, digest, path=wire["path"])
+    write_model_hops(tmp_path, [failed], [failed])
+    with pytest.raises(ValueError, match="is missing a recorded attempt"):
+        lane_transport_evidence(tmp_path, explained={"model": explained})
+
+    write_model_hops(tmp_path, [failed, failed], [failed, failed])
+    evidence = lane_transport_evidence(tmp_path, explained={"model": explained})
+    assert evidence["bridge-model"]["explained_aborts"] == 2
+    assert evidence["guest-model"]["explained_aborts"] == 2
+    assert evidence["unused_explanations"] == []

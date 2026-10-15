@@ -75,8 +75,6 @@ def test_oneoff_sigterm_releases_builder_and_copied_tools(tmp_path, monkeypatch,
             "chat",
             "--output-dir",
             str(directory),
-            "--sandbox-host",
-            "test-host",
         ],
     )
     old_handler = signal.getsignal(signal.SIGTERM)

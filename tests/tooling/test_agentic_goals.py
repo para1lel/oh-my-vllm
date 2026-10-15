@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from benchmarks import agentic_goals as goals
+from benchmarks import agentic_native_goals as native
 
 
 @pytest.mark.parametrize("terminal", ["complete", "paused", "dropped", "settled"])
@@ -15,7 +16,7 @@ def test_early_goal_stop_submits_next_goal_in_the_same_client(
 ):
     now = [100.0]
     monkeypatch.setattr(
-        goals,
+        native,
         "time",
         SimpleNamespace(
             monotonic=lambda: now[0],
@@ -83,7 +84,11 @@ def test_early_goal_stop_submits_next_goal_in_the_same_client(
             pass
 
     client = Client()
-    collection = goals.run_goal(client, {"monotonic": 100.0}, 6)
+    collection = native.run_goal(
+        client, {"monotonic": 100.0, "unix": 1000.0}, 6, lambda index: f"goal {index}"
+    )
+    assert collection["collection_deadline_unix_s"] == 1006.0
+    assert collection["collection_deadline_monotonic_s"] == 106.0
     assert len(client.created) == 2
     assert client.created[0]["objective"] != client.created[1]["objective"]
     assert [turn["goal_id"] for turn in client.turns] == ["goal-1", "goal-2"]
@@ -115,7 +120,7 @@ def test_new_task_has_no_project_snapshot_and_rejects_nonempty_workspace(tmp_pat
 
 def test_uncommanded_goal_replacement_is_still_an_integrity_failure():
     with pytest.raises(ValueError, match="without a host command"):
-        goals.goal_state({"goal": {"goal": {"id": "other"}}}, "owned")
+        native.goal_state({"goal": {"goal": {"id": "other"}}}, "owned")
 
 
 def test_incomplete_goal_products_are_recorded_without_ending_service_acceptance(

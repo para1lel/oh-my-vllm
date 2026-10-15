@@ -8,23 +8,32 @@ Build the service and CPU request normalizer together:
 
 ```bash
 scripts/with-env.sh cargo build --release --bins
-scripts/with-env.sh python scripts/agentic-soak.py --mode mtp --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --output-dir "$EVIDENCE_DIR/mtp-soak"
-scripts/with-env.sh python scripts/agentic-soak.py --mode dspark --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/dspark-server.log" --output-dir "$EVIDENCE_DIR/dspark-soak"
+scripts/with-env.sh python scripts/agentic-soak.py --mode mtp --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/server.log" --corpus "$CORPUS_DIR" --output-dir "$EVIDENCE_DIR/mtp-soak"
+scripts/with-env.sh python scripts/agentic-soak.py --mode dspark --base-url "$SERVICE_URL" --server-log "$EVIDENCE_DIR/dspark-server.log" --corpus "$CORPUS_DIR" --output-dir "$EVIDENCE_DIR/dspark-soak"
 ```
 
 Set `OH_MY_VLLM_MODEL` or supply `--model`. Install OMP on `PATH` or supply `--omp`.
+Set `CORPUS_DIR` to the external directory that holds the validated book and its original manifest.
 Use the matching service for each command. Stop that service and worker after collection.
 Use [dedicated process ownership](process-ownership.md) for an isolated service process scope.
 
 Use the pinned OMP `18.10.3` executable and Docker with its `rootless` mode enabled.
-The collector builds a temporary image with OMP, Python, Bash, and certificates.
-Set `--sandbox-host` or `OH_MY_VLLM_SANDBOX_HOST` to the container gateway for host loopback access.
+The collector builds a temporary image with OMP, Python, Bash, certificates, and the lane forwarder.
 
 Keep host-specific selection in ignored `LOCAL.md`.
 The collector owns four sandbox containers, persistent OMP processes, and temporary recording proxies.
 
-Only each agent's new external directory enters its container. Inference source and the Docker socket do not enter it.
-The containers have separate PID namespaces and no GPU devices.
+Each lane runs with `--network none`, no GPU devices, and no inference source, weight or Docker-socket mount.
+Only the disposable lane directory and one owned socket directory enter its container.
+The containers have separate PID namespaces.
+
+The collector owns one AF_UNIX bridge per lane for model calls and one for telemetry.
+Guest loopback endpoints forward the original request and response bodies to those sockets.
+Each bridge upstream must be a local plain HTTP collector origin, so no network fallback exists.
+Bodies, connections, listeners and shutdown are bounded, and the sockets are removed after all exits.
+
+The model socket carries generation routes only. Telemetry has its own socket.
+A fake-upstream check proves model SSE and protobuf export framing without an external interface.
 
 Each process keeps its session ID and history through successive native goals.
 Two sessions use Chat and two use Responses. A shared four-slot limit also includes summary calls.
@@ -62,25 +71,49 @@ Check the same session identity and report subsequent requests after each observ
 Natural compaction is not required during the hour. Report absent coverage explicitly.
 See the pinned [OMP compaction procedure](https://github.com/can1357/oh-my-pi/blob/v18.10.3/docs/compaction.md).
 
-Each lane receives an embedded database task in an empty workspace with Python standard-library tools.
-The task includes SQL, transactions, indexes, durable storage, crash recovery, independent tests, and measured benchmarks.
+Each lane translates the same complete English book in a new empty workspace.
+`--corpus` names the external directory that holds the six volumes and their original manifest.
+The manifest pins the book totals and each volume's identifier, size and full SHA256 digest.
+Validation checks the pinned manifest digest and each staged input before a lane starts.
+
+```json
+{
+  "title": "<book>",
+  "author": "<author>",
+  "source": "Project Gutenberg, <volumes>",
+  "derivation": "<normalization note>",
+  "book_file": "book.txt",
+  "book_sha256": "<64 hex>",
+  "book_bytes": 1,
+  "book_english_words": 1,
+  "downloaded_unix_s": 1.0,
+  "volumes": [{"volume": 1, "gutenberg_id": 731, "sha256": "<64 hex>", "bytes": 1}]
+}
+```
+
+The staged copy is read-only. The lane tool guard allows read, grep, write and goal inspection, and it rejects edit.
+Writes to the corpus and the specification are rejected too, because pinned OMP edit calls carry `{i, input}` hashline sections with REM and MV operations.
+Translation outputs and the progress notes stay writable.
+
 The controller uses native RPC `goal create`, with automatic continuation enabled for `rpc`.
 No token budget applies. Goal completion, pause, or stopped continuation selects the next prepared goal.
-Follow-up goals examine faults, concurrency, SQL results, storage changes, performance, and open requirements.
+
+The next goal resumes from `notes/progress.md`. No one-hour translation-completion requirement applies.
 
 The same process, session ID, history, and workspace continue. Goal changes keep their original reasons and timestamps.
 A goal command ID supplies host correlation. It does not represent a native `prompt_result`.
 
-Record source reads, tool errors, task progress, and goal changes as workload observations. They do not decide framework acceptance.
+Record source reads, tool errors, translation progress, and goal changes as workload observations. They do not decide framework acceptance.
 Keep incremental journals, native session and raw tool-output logs, and complete RPC/wire records.
 
 After the hour, pause continuation and abort active agent work. Report the tail separately from the collection window.
 Use the [deadline-tail evidence rules](deadline-tail.md) for a client abort during server completion.
-Hash generated source before and after independent sandbox test commands. Record failures without claiming that the database task is completed.
+Hash the staged corpus and the specification before and after collection, and fail on a changed input.
+Record translation progress without claiming translation quality or completion.
 
 Then remove owned containers, modified files, installed tools, caches, and the temporary image.
 Keep original logs, hash manifests, summaries, and resource figures in a separate evidence directory. Failure and cancellation use the same cleanup.
-The optional `--workload audit --diagnostic` path keeps the older source-audit fixture. It cannot supply formal acceptance.
+The `--workload goal` or `--workload audit` diagnostic fixtures cannot supply formal acceptance.
 
 Verify original request coverage, completed SSE terminals, usage, and server metrics independently of native task outcomes.
 Report cancelled requests with their original protocol and transport observations. Do not infer their cause from a shared error message.
@@ -109,11 +142,42 @@ Only `message_end` supplies an RPC SDK completion. A normal `turn_end` can inclu
 Run the CPU instrumentation checks with the pinned OMP executable available:
 
 ```bash
-scripts/with-env.sh python -m pytest tests/tooling/test_agentic_sdk_trace.py tests/integration/test_agentic_sdk_integration.py tests/integration/test_agentic_goal_integration.py tests/tooling/test_agentic_goals.py tests/unit/test_host_allocator.py
+scripts/with-env.sh python -m pytest tests/tooling/test_agentic_sdk_trace.py tests/integration/test_agentic_sdk_integration.py tests/integration/test_agentic_goal_integration.py tests/integration/test_agentic_translation_integration.py tests/integration/test_agentic_deadline_cancellation.py tests/tooling/test_agentic_goals.py tests/tooling/test_agentic_lane_transport.py tests/tooling/test_agentic_corpus.py tests/tooling/test_agentic_translation.py tests/tooling/test_agentic_soak_inputs.py tests/unit/test_host_allocator.py
 ```
 
 The integration fixture supplies API responses from fixed test data. It checks full request JSON equality and all three automatic-compaction purposes.
 It does not test target inference or tokenizer counts from the target model.
+
+The sandbox fixtures carry the `omp` marker and use fixed CPU API data only.
+Run them with rootless Docker and the pinned OMP executable present.
+They prove the sealed container has no network interface, remove their containers, and remove their image.
+
+The goal lane keeps the diagnostic database fixture.
+The translation lane stages the accepted corpus and exercises the mounted sockets inside the container.
+It reads a staged volume, and the guard rejects a corpus write plus two hashline edit payloads.
+One translation output lands, and the original SDK exports stay complete.
+
+The deadline fixture streams an unterminated response, so its request is in flight at the deadline.
+It binds the recorded pause and abort, the aborted native result, and the unchanged bytes.
+It binds each hop's own failed attempt through the collector path from framework audit to transport audit.
+Chat and Responses run separately, and a cancellation carries the same proof.
+
+The transport check drives a fake model server and a fake OTLP receiver through the two socket hops.
+It proves SSE delivery order and byte identity, protobuf export framing, body bounds, and loopback-only listeners.
+The Docker lanes above cross the same hops from a sealed container, so the mounted-socket path is covered.
+Neither check proves target inference or the target model endpoint.
+
+The hop audit demands a closure record for each configured hop.
+Journal count, journal error, released handlers, removed sockets and guest endpoint release must agree.
+Each digest attempt covers exactly one original or export, so equal bodies stay separate.
+A deadline bound accepts one failed attempt of that direction and error between the recorded abort action and the client disconnect.
+A digest alone binds nothing, and an unrelayed request fails.
+Model-only and zero-request lanes stay valid.
+
+The corpus and workload checks use synthetic books. They prove manifest and digest rejection, staging, objective resumption, and read-only guards.
+They do not prove the book contents or translation quality. Independent review must bind the external corpus manifest.
+
+Start the one-hour soak only after all fifteen framework rows pass. Translation completion and quality stay unproven.
 
 Check resource count and byte limits throughout collection. Check empty Rust/Python request state after the final drain.
 Each logical pool then has `blocks - 1` free blocks, with cached blocks available for eviction.

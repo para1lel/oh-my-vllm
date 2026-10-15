@@ -12,7 +12,9 @@ import pytest
 
 from benchmarks import agentic_sandbox
 from benchmarks.agentic_context import ContextGuard
-from benchmarks.agentic_goals import run_goal
+from benchmarks.agentic_goals import objective
+from benchmarks.agentic_lane_transport import LaneBridge
+from benchmarks.agentic_native_goals import run_goal
 from benchmarks.agentic_sandbox import AgentSandbox, docker
 from benchmarks.agentic_sessions import RpcClient
 
@@ -191,7 +193,7 @@ def test_native_goal_completion_advances_queue_without_replacing_session(
         f"http://127.0.0.1:{server.server_port}/v1",
         threading.Event(),
         30,
-        goal_mode=True,
+        workload="goal",
         sandbox_image=agentic_sandbox_image,
     )
     (client.workspace / "tests").mkdir()
@@ -216,7 +218,12 @@ def test_native_goal_completion_advances_queue_without_replacing_session(
             ],
         )
         session, process = client.session_id, client.process.pid
-        run_goal(client, {"monotonic": time.monotonic()}, 6)
+        run_goal(
+            client,
+            {"monotonic": time.monotonic()},
+            6,
+            lambda index: objective(0, index),
+        )
         result = client.collect()
         assert client.session_id == session and client.process.pid == process
         assert len(client.turns) >= 2
@@ -284,10 +291,13 @@ def test_sandbox_deletes_installed_tools_changes_and_child_processes(
     directory = tmp_path / "isolation"
     directory.mkdir()
     sandbox = AgentSandbox(agentic_sandbox_image, directory)
+    bridge = LaneBridge(directory / "transport", "http://127.0.0.1:1", read_timeout=120)
+    sandbox.attach_transport(bridge)
     code = (
         "import pathlib,subprocess,time; "
         f"assert not pathlib.Path({str(Path.cwd())!r}).exists(); "
         "assert not pathlib.Path('/var/run/docker.sock').exists(); "
+        "assert not pathlib.Path('/sys/class/net/eth0').exists(); "
         "pathlib.Path('/usr/local/bin/sandbox-installed-tool')"
         ".write_text('temporary'); "
         "pathlib.Path('changed.txt').write_text('temporary'); "
@@ -310,7 +320,8 @@ def test_sandbox_deletes_installed_tools_changes_and_child_processes(
     try:
         assert process.stdout.readline().strip() == "isolated"
         record = sandbox.inspect()
-        assert len(record["mounts"]) == 1
+        assert len(record["mounts"]) == 2
+        assert record["network_mode"] == "none"
         assert record["devices"] == []
         assert record["cap_drop"] == ["ALL"]
         assert (sandbox.root / "workspace/changed.txt").exists()
@@ -320,6 +331,7 @@ def test_sandbox_deletes_installed_tools_changes_and_child_processes(
         )
     finally:
         sandbox.close()
+        bridge.close()
         process.communicate(timeout=15)
     assert not sandbox.root.exists()
     assert not docker(
@@ -351,7 +363,7 @@ def test_rpc_cleanup_releases_real_sandbox_after_evidence_failure(
         "http://127.0.0.1:1/v1",
         threading.Event(),
         30,
-        goal_mode=True,
+        workload="goal",
         sandbox_image=agentic_sandbox_image,
     )
     client.initialize()

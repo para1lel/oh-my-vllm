@@ -6,6 +6,90 @@ from types import SimpleNamespace
 import pytest
 
 from benchmarks import agentic_sandbox as sandbox
+from benchmarks.agentic_lane_transport import LaneBridge
+
+
+def sealed_lane(tmp_path, monkeypatch):
+    monkeypatch.setattr(sandbox, "docker", lambda *args, **kwargs: "")
+    directory = tmp_path / "lane"
+    directory.mkdir()
+    agent = sandbox.AgentSandbox(
+        SimpleNamespace(owner="owned", identity={"Id": "image-id"}), directory
+    )
+    bridge = LaneBridge(
+        directory / "transport",
+        "http://127.0.0.1:8123",
+        telemetry_upstream="http://127.0.0.1:8124",
+        read_timeout=30,
+    )
+    return agent, bridge
+
+
+def environment_of(command):
+    values = {}
+    for index, item in enumerate(command):
+        if item == "--env":
+            key, _, value = command[index + 1].partition("=")
+            values[key] = value
+    return values
+
+
+def test_sealed_lane_command_mounts_sockets_and_rewrites_endpoints(
+    tmp_path, monkeypatch
+):
+    agent, bridge = sealed_lane(tmp_path, monkeypatch)
+    try:
+        with pytest.raises(ValueError, match="attached bridged transport"):
+            agent.command(["omp"], {})
+        agent.attach_transport(bridge)
+        with pytest.raises(ValueError, match="already has a transport"):
+            agent.attach_transport(bridge)
+        command = agent.command(
+            ["omp", "--mode", "rpc"],
+            {
+                "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": (
+                    "http://127.0.0.1:8123/abc/v1/traces"
+                ),
+                "OTEL_METRICS_EXPORTER": "none",
+            },
+        )
+        assert command[command.index("--network") + 1] == "none"
+        mounts = [item for item in command if item.startswith("type=bind,source=")]
+        assert mounts == [
+            f"type=bind,source={agent.root},target={agent.root}",
+            *bridge.mounts(),
+        ]
+        values = environment_of(command)
+        assert values["CUDA_VISIBLE_DEVICES"] == ""
+        assert values["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"] == (
+            "http://127.0.0.1:18081/abc/v1/traces"
+        )
+        assert values["OTEL_METRICS_EXPORTER"] == "none"
+        assert command[-4:] == ["--", "/usr/local/bin/omp", "--mode", "rpc"]
+        assert "/usr/local/bin/lane-forward.py" in command
+        assert str(bridge.model_socket) in command
+    finally:
+        bridge.close()
+        agent.close()
+
+
+def test_lane_transport_must_listen_outside_the_sandbox(tmp_path, monkeypatch):
+    agent, bridge = sealed_lane(tmp_path, monkeypatch)
+    try:
+        with pytest.raises(ValueError, match="must already listen"):
+            agent.attach_transport(SimpleNamespace(directory=tmp_path / "missing"))
+        inside = LaneBridge(
+            agent.root / "bridge", "http://127.0.0.1:8123", read_timeout=30
+        )
+        try:
+            assert inside.model_socket.is_socket()
+            with pytest.raises(ValueError, match="outside the workspace"):
+                agent.attach_transport(inside)
+        finally:
+            inside.close()
+    finally:
+        bridge.close()
+        agent.close()
 
 
 def test_readonly_agent_directories_are_removed_without_following_links(

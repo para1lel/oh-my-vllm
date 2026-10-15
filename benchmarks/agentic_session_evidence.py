@@ -11,6 +11,7 @@ from itertools import pairwise
 from pathlib import Path
 
 from benchmarks.agentic_context import CONTEXT_WINDOW
+from benchmarks.agentic_native_goals import collection_record
 from benchmarks.agentic_sdk_trace import read_sdk_spans
 from benchmarks.agentic_soak_analysis import request_metric
 from benchmarks.agentic_soak_transport import completed_transport_close
@@ -301,6 +302,13 @@ def text_content(message: dict) -> str:
     )
 
 
+WORK_ITEM_PREFIXES = {
+    "native_goal_database": ("TASK.md", "goaldb"),
+    "native_goal_translation": ("TASK.md", "corpus", "translation", "notes"),
+}
+SOURCE_PREFIXES = ("crates", "python", "tests", "docs", "benchmarks")
+
+
 def work_item_reads(
     read_starts: dict,
     successful_tools: dict,
@@ -308,9 +316,11 @@ def work_item_reads(
     turns: list[dict],
     workspace: Path,
     *,
-    goal_mode: bool = False,
+    workspace_kind: str | None = None,
 ) -> list[dict]:
-    """Each completed audit item must read immutable source, not only notes."""
+    """Each completed work item must read its own immutable inputs, not only notes."""
+    native = workspace_kind in WORK_ITEM_PREFIXES
+    prefixes = SOURCE_PREFIXES + WORK_ITEM_PREFIXES.get(workspace_kind, ())
     verified = []
     for turn in turns:
         calls = []
@@ -326,16 +336,9 @@ def work_item_reads(
                 )
             except ValueError:
                 continue
-            if relative.parts and relative.parts[0] in (
-                "crates",
-                "python",
-                "tests",
-                "docs",
-                "benchmarks",
-                *(("TASK.md", "goaldb") if goal_mode else ()),
-            ):
+            if relative.parts and relative.parts[0] in prefixes:
                 calls.append(identity)
-        if not calls and not goal_mode:
+        if not calls and not native:
             raise ValueError("completed audit work item lacks forwarded source reads")
         verified.append(
             {"prompt_id": turn["prompt_id"], "forwarded_source_reads": len(calls)}
@@ -623,7 +626,7 @@ def audit_session(
         forwarded,
         turns,
         Path(session.get("workspace_path", directory / "workspace")),
-        goal_mode=session.get("workspace", {}).get("kind") == "native_goal_database",
+        workspace_kind=session.get("workspace", {}).get("kind"),
     )
     if not any(item["forwarded_source_reads"] for item in work_reads):
         raise ValueError("persistent workload has no forwarded task or source read")
@@ -655,8 +658,9 @@ def audit_session(
         "compaction_continuation_covered": bool(continuations)
         and all(item["continued"] for item in continuations),
         "process": session["process"],
-        "goal_artifacts": session.get("goal_artifacts"),
-        "goal_collection": session.get("goal_collection"),
+        "workload_artifacts": session.get("workload_artifacts")
+        or session.get("goal_artifacts"),
+        "workload_collection": collection_record(session),
         "goals": turns if session.get("goal_id") else None,
         "active_seconds": session["active_seconds"],
         "context_usage": context_usage,

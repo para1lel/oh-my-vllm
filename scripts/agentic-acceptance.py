@@ -353,9 +353,6 @@ def main():
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--omp", default="omp")
     parser.add_argument(
-        "--sandbox-host", default=os.environ.get("OH_MY_VLLM_SANDBOX_HOST")
-    )
-    parser.add_argument(
         "--thinking",
         default="medium",
         choices=["off", "minimal", "low", "medium", "high", "xhigh", "max"],
@@ -407,15 +404,16 @@ def main():
 
 
 def collect_oneoff(args, directory, state, settings, cancelled):
-    from benchmarks.agentic_sandbox import AgentSandbox, SandboxImage, host_endpoint
+    from benchmarks.agentic_lane_transport import LaneBridge
+    from benchmarks.agentic_sandbox import AgentSandbox, SandboxImage
     from benchmarks.agentic_sessions import prepare_workspace
 
-    image, sandbox, workspace = None, None, None
+    image, sandbox, workspace, bridge = None, None, None, None
     requests, command, collection_errors = [], [], []
     exit_code, started, log_offset, log_identity = 1, time.monotonic(), None, None
 
     try:
-        image = SandboxImage(args.omp, directory / "sandbox-runtime", args.sandbox_host)
+        image = SandboxImage(args.omp, directory / "sandbox-runtime")
         sandbox = AgentSandbox(image, directory)
         workspace = sandbox.root / "workspace"
         prepare_workspace(workspace)
@@ -456,9 +454,9 @@ def collect_oneoff(args, directory, state, settings, cancelled):
             proxy_url,
             requests,
         ):
-            models = json.dumps(
-                configuration(host_endpoint(proxy_url, image.gateway)), indent=2
-            )
+            bridge = LaneBridge(directory / "transport", proxy_url, read_timeout=1860)
+            sandbox.attach_transport(bridge)
+            models = json.dumps(configuration(bridge.guest_model_base()), indent=2)
             (state / "models.yml").write_text(models)
             (sandbox.root / "state/models.yml").write_text(models)
             (sandbox.root / "state/settings.yml").write_text(
@@ -482,7 +480,7 @@ def collect_oneoff(args, directory, state, settings, cancelled):
     except Exception as error:
         collection_errors.append(f"{type(error).__name__}: {error}")
     finally:
-        for owner in (sandbox, image):
+        for owner in (sandbox, image, bridge):
             if owner:
                 try:
                     owner.close()
@@ -536,6 +534,9 @@ def collect_oneoff(args, directory, state, settings, cancelled):
             }
         if not requests:
             raise ValueError("OMP sent no model requests")
+        from benchmarks.agentic_lane_transport import lane_transport_evidence
+
+        summary["transport_audit"] = lane_transport_evidence(directory)
         if args.server_log:
             if log_identity != (
                 args.server_log.stat().st_dev,

@@ -31,7 +31,7 @@ scripts/with-env.sh python -m benchmarks.engine_supervisor --log "$EVIDENCE_DIR/
 只有任务退出码为零且后代清理得到验证时, 此模式才通过.
 默认服务模式仍要求控制器发送 `stop`.
 
-将监督进程的意外退出连接到[采集器取消事件](../../benchmarks/agentic_soak.py#L73) <!-- source: def run(args, -->.
+将监督进程的意外退出连接到[采集器取消事件](../../benchmarks/agentic_soak.py#L129) <!-- source: def run(args, -->.
 等待采集器清理, 监督进程退出和控制器监控线程退出.
 监控线程仍使用归属句柄时, 不要关闭这些句柄.
 

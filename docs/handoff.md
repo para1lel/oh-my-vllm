@@ -41,10 +41,19 @@ The two latency gates fail. Spreads pass. Full fifteen-workload and 27-latency-g
 The book is downloaded. Translation work on OMP Issue 4 stays in its separate checkout and awaits integration.
 Its two previous configured CPU attempts each have 1802 passing tests and 153 subtests, with one failed Chat deadline proof.
 
-The local OMP repair passes four selected fixtures and 1803 CPU tests with 153 subtests and no skips.
-This collection uses Issue 4 source `97de922` with 39 changed paths, before rebase and integration.
-The [clock report](evidence/omp-clock/verification.json) records 98 native/SDK completion pairs, each with a 0 ns difference.
-The 2 ms guard stays equal.
+The [clock report](evidence/omp-clock/verification.json) covers the old `97de922` source with the 39 changed paths.
+It records four selected Chat and Responses fixtures and a full CPU collection of 1803 tests and 153 subtests with no skips.
+That portable report records 98 native/SDK completion pairs, each with a 0 ns difference.
+
+The rebased branch at `828d5e9` repeats the full CPU collection with 1803 tests and 153 subtests and no skips.
+It records 84 native/SDK pairs at 0 ns, and its conditional production normalizer block does not run in that full CPU collection.
+
+Two separate CPU ContextGuard checks, one per API, drive that production normalizer block through the built client and record 60 native/SDK pairs at 0 ns.
+They cover the block the full collection leaves conditional.
+The 2 ms guard stays unchanged, and it bounds that native/SDK difference rather than being the compared value.
+
+The two handoff files are updated here, and the reviewed set's other 37 files stay unchanged, with documents and tests in that set.
+The branch awaits reviewed integration.
 
 Local oh-my-pi repair and isolated verification are authorized. Upstream publication is not authorized.
 Use the verified isolated client for Issue 4. Keep the installed client and failed evidence.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import hashlib
 import json
 import math
 import os
@@ -13,7 +14,13 @@ import time
 from pathlib import Path
 
 from benchmarks.agentic_context import ContextGuard
+from benchmarks.agentic_corpus import Corpus
 from benchmarks.agentic_framework_evidence import audit_framework_session
+from benchmarks.agentic_lane_transport import (
+    deadline_attempt_bound,
+    lane_transport_evidence,
+)
+from benchmarks.agentic_native_goals import run_goal
 from benchmarks.agentic_session_evidence import audit_session
 from benchmarks.agentic_sessions import RpcClient, curriculum, followup
 from benchmarks.agentic_soak_analysis import (
@@ -52,11 +59,16 @@ def build_parser():
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--omp", default="omp")
-    parser.add_argument("--workload", choices=("goal", "audit"), default="goal")
     parser.add_argument(
-        "--sandbox-host",
-        default=os.environ.get("OH_MY_VLLM_SANDBOX_HOST"),
-        help="rootless Docker gateway to host loopback collectors",
+        "--workload",
+        choices=("translation", "goal", "audit"),
+        default="translation",
+        help="accepted corpus translation; goal and audit are diagnostic fixtures",
+    )
+    parser.add_argument(
+        "--corpus",
+        type=Path,
+        help="external directory holding the validated book and its manifest",
     )
     parser.add_argument("--duration", type=float, default=3600)
     parser.add_argument("--agents", type=int, choices=(4,), default=4)
@@ -70,14 +82,58 @@ def build_parser():
     return parser
 
 
+def explained_aborts(lane_directory: Path, audit: dict) -> dict[str, list[dict]]:
+    """Bind each recorded deadline abort to its original request evidence.
+
+    Every outcome that carries a deadline proof contributes one canonical
+    attempt bound for its own request digest, so identical bodies from distinct
+    originals keep distinct explanations.
+    """
+    explained: dict[str, list[dict]] = {}
+    for outcome in audit["outcomes"]:
+        proof = outcome.get("deadline_abort_proof")
+        if not proof:
+            continue
+        name = outcome.get("request_file")
+        if not name:
+            raise ValueError("deadline abort outcome has no recorded request file")
+        digest = hashlib.sha256(
+            (lane_directory / "wire" / name).read_bytes()
+        ).hexdigest()
+        explained.setdefault(digest, []).append(deadline_attempt_bound(proof))
+    return explained
+
+
+def workload_objective(args, lane: int):
+    """One queued goal per workload; the database fixture stays diagnostic."""
+    if args.workload == "translation":
+        from benchmarks.agentic_translation import objective
+
+        return objective
+    from benchmarks.agentic_goals import objective as database_objective
+
+    return lambda index: database_objective(lane, index)
+
+
+def workload_observer(workload: str):
+    """Post-collection workload observation; it never decides acceptance."""
+    if workload == "translation":
+        from benchmarks.agentic_translation import observe
+
+        return observe
+    from benchmarks.agentic_goals import observe_artifacts
+
+    return observe_artifacts
+
+
 def run(args, *, cancelled=None):
     directory = args.output_dir.resolve()
     if directory.is_relative_to(ROOT):
         raise ValueError("raw soak evidence must be outside the source repository")
     if not args.diagnostic and (args.duration < 3600 or args.skip_plots):
         raise ValueError("formal soak requires >=3600 seconds and real scatter figures")
-    if not args.diagnostic and args.workload != "goal":
-        raise ValueError("formal soak requires the native goal workload")
+    if not args.diagnostic and args.workload != "translation":
+        raise ValueError("formal soak requires the accepted translation workload")
     if any(
         not math.isfinite(value) or value <= 0
         for value in (
@@ -92,6 +148,12 @@ def run(args, *, cancelled=None):
         raise ValueError(
             "supply --model or OH_MY_VLLM_MODEL for exact CPU token checks"
         )
+    if args.workload == "translation":
+        if args.corpus is None:
+            raise ValueError("supply --corpus with the validated English book")
+        corpus = Corpus(args.corpus)
+    else:
+        corpus = None
     directory.mkdir(parents=True, exist_ok=False)
     evidence = Evidence(directory)
     source = runtime_source_identity(args.binary)
@@ -114,13 +176,15 @@ def run(args, *, cancelled=None):
         for sig in (signal.SIGINT, signal.SIGTERM)
     }
     summary = {
-        "schema": 3,
+        "schema": 4,
         "acceptance_scope": "inference framework continuity and serving contracts",
         "kind": "persistent_agentic_soak",
         "mode": args.mode,
         "passed": False,
         "diagnostic": args.diagnostic,
         "source": source,
+        "workload": args.workload,
+        "corpus": corpus.record() if corpus else None,
         "observed_service_configuration": observed,
         "collector_environment": collector_environment(args.omp),
         "protocol": {
@@ -136,7 +200,9 @@ def run(args, *, cancelled=None):
             "performance_gate": None,
             "compaction_coverage_required": False,
             "workload": args.workload,
-            "goal_continuation": "native_rpc" if args.workload == "goal" else None,
+            "goal_continuation": (
+                "native_rpc" if args.workload in ("goal", "translation") else None
+            ),
         },
     }
     evidence.write("summary.json", summary)
@@ -186,8 +252,9 @@ def run(args, *, cancelled=None):
                     proxy,
                     stop,
                     args.turn_timeout,
-                    goal_mode=args.workload == "goal",
+                    workload=args.workload,
                     sandbox_image=sandbox_image,
+                    corpus=corpus,
                 )
                 client.initialize()
                 with lock:
@@ -197,10 +264,10 @@ def run(args, *, cancelled=None):
                     if not clock:
                         clock.update(monotonic=time.monotonic(), unix=time.time())
                         evidence.append("clock.jsonl", clock)
-                if args.workload == "goal":
-                    from benchmarks.agentic_goals import run_goal
-
-                    goal_collection = run_goal(client, clock, args.duration)
+                if args.workload in ("goal", "translation"):
+                    collection = run_goal(
+                        client, clock, args.duration, workload_objective(args, lane)
+                    )
                 paths, index = (curriculum(lane) if args.workload == "audit" else []), 0
                 while (
                     args.workload == "audit"
@@ -235,23 +302,21 @@ def run(args, *, cancelled=None):
                 if stop.is_set():
                     raise ValueError("persistent soak stopped before normal completion")
                 active_ended = client.turns[-1]["completed_monotonic_s"]
-                if args.workload == "goal":
-                    active_ended = goal_collection["collection_deadline_monotonic_s"]
+                if args.workload in ("goal", "translation"):
+                    active_ended = collection["collection_deadline_monotonic_s"]
                 collected = client.collect()
-                if args.workload == "goal":
-                    collected["goal_collection"] = goal_collection
-                    from benchmarks.agentic_goals import observe_artifacts
+                if args.workload in ("goal", "translation"):
+                    observed = workload_observer(args.workload)(client)
+                    if args.workload == "translation":
+                        from benchmarks.agentic_translation import require_intact
 
-                    collected["goal_artifacts"] = observe_artifacts(client)
-                    collected["goal_specification_unchanged"] = (
-                        collected["goal_artifacts"]["before_checks"]
-                        .get("files_sha256", {})
-                        .get("TASK.md")
-                        == collected["workspace"]["specification_sha256"]
-                    )
-                    evidence.write(
-                        f"lane-{lane}/artifacts.json", collected["goal_artifacts"]
-                    )
+                        observed.update(require_intact(client, corpus))
+                    collected["workload_collection"] = collection
+                    collected["workload_artifacts"] = observed
+                    collected["specification_unchanged"] = observed[
+                        "specification_unchanged"
+                    ]
+                    evidence.write(f"lane-{lane}/artifacts.json", observed)
                 collected["active_seconds"] = active_ended - clock["monotonic"]
                 evidence.write(f"lane-{lane}/session.json", collected)
                 with lock:
@@ -301,11 +366,11 @@ def run(args, *, cancelled=None):
             }
         guard = ContextGuard(args.model, args.normalizer, directory)
         summary["context_guard"] = guard.identity
-        if args.workload == "goal":
+        if args.workload in ("goal", "translation"):
             from benchmarks.agentic_sandbox import SandboxImage
 
             sandbox_image = SandboxImage(
-                args.omp, directory / "sandbox-runtime", args.sandbox_host, stop=stop
+                args.omp, directory / "sandbox-runtime", stop=stop
             )
         sampler = threading.Thread(target=sample_memory, daemon=True)
         sampler.start()
@@ -368,6 +433,21 @@ def run(args, *, cancelled=None):
         points.sort(key=lambda point: point["processing_started_unix_s"])
         for point in points:
             evidence.append("requests.jsonl", point)
+        if args.workload in ("goal", "translation"):
+            summary["transport_audit"] = [
+                {
+                    "lane": lane,
+                    **lane_transport_evidence(
+                        directory / f"lane-{lane}",
+                        explained={
+                            "model": explained_aborts(
+                                directory / f"lane-{lane}", audits[lane]
+                            )
+                        },
+                    ),
+                }
+                for lane in range(4)
+            ]
         final_source = runtime_source_identity(args.binary)
         if final_source != source:
             raise ValueError("source or executable changed during collection")
@@ -410,6 +490,18 @@ def run(args, *, cancelled=None):
             else "awaiting_resource_review",
             passed=False,
         )
+        if args.workload in ("goal", "translation") and len(sessions) == 4:
+            observations = [
+                session["workload_artifacts"] for session in sessions.values()
+            ]
+            summary["workload_specification_unchanged"] = all(
+                observation["specification_unchanged"] for observation in observations
+            )
+            summary["corpus_unchanged"] = (
+                all(observation["corpus_unchanged"] for observation in observations)
+                if args.workload == "translation"
+                else None
+            )
     except Exception as error:
         summary.update(error=f"{type(error).__name__}: {error}", errors=errors)
     finally:

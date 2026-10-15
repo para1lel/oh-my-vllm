@@ -11,6 +11,7 @@ import signal
 import subprocess
 import threading
 import time
+from contextlib import suppress
 from pathlib import Path
 
 from benchmarks.agentic_context import isolated_environment, session_configuration
@@ -18,6 +19,7 @@ from benchmarks.agentic_rpc_evidence import ControlRpcEvidence
 from benchmarks.agentic_sdk_trace import SdkTrace
 
 ROOT = Path(__file__).resolve().parents[1]
+PROCESS_REAP_SECONDS = 5.0
 EVENTS = [
     "agent_start",
     "agent_end",
@@ -32,6 +34,17 @@ EVENTS = [
     "auto_retry_end",
     "session_settled",
 ]
+TOOLS = {
+    # The translation guard itself rejects edit, so the offered set keeps it.
+    "translation": "read,grep,write,edit",
+    "goal": "read,grep,write,edit,bash",
+    "audit": "read,grep,write",
+}
+GUARDS = {
+    "translation": "agentic_translation_tool_guard.ts",
+    "goal": "agentic_goal_tool_guard.ts",
+    "audit": "agentic_tool_guard.ts",
+}
 DOMAINS = (
     ("scheduling and logical KV ownership", ("crates/scheduler/", "crates/kv-cache/")),
     (
@@ -125,8 +138,9 @@ class RpcClient:
         stop: threading.Event,
         timeout: float,
         *,
-        goal_mode: bool = False,
+        workload: str = "audit",
         sandbox_image=None,
+        corpus=None,
     ):
         self.sandbox = None
         try:
@@ -138,17 +152,72 @@ class RpcClient:
                 proxy,
                 stop,
                 timeout,
-                goal_mode=goal_mode,
+                workload=workload,
                 sandbox_image=sandbox_image,
+                corpus=corpus,
             )
-        except BaseException:
-            if self.sandbox:
-                self.sandbox.close()
-            if hasattr(self, "sdk_trace"):
-                self.sdk_trace.close()
-            if hasattr(self, "stderr"):
-                self.stderr.close()
+        except BaseException as error:
+            # Attempt every owner and keep the original failure authoritative:
+            # a cleanup fault must not mask it or skip the remaining owners.
+            self._rollback(error, process=True)
             raise
+
+    def _release_owner(self, name: str, owner, error: BaseException, action=None):
+        """Attempt one owner cleanup; keep the original failure authoritative."""
+        if owner is None:
+            return
+        try:
+            (action or owner.close)()
+        except BaseException as cleanup:
+            error.add_note(
+                f"lane {name} cleanup failed: {type(cleanup).__name__}: {cleanup}"
+            )
+
+    def _reap(self, process):
+        """Terminate one launched guest, release its pipes, report survival.
+
+        The wait stays bounded, and a guest that survives it raises so the
+        caller records the timeout on the original failure instead of hiding a
+        still-running process behind a silent suppression.
+        """
+        if process.poll() is None:
+            with suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+        try:
+            process.wait(timeout=PROCESS_REAP_SECONDS)
+        except subprocess.TimeoutExpired as error:
+            raise ValueError(
+                f"guest survived its {PROCESS_REAP_SECONDS:g}-second reap"
+            ) from error
+        finally:
+            for stream in (process.stdin, process.stdout):
+                if stream is not None:
+                    with suppress(OSError):
+                        stream.close()
+
+    def _rollback(self, error: BaseException, *, process: bool = False):
+        """Attempt every started owner once, without masking the original error.
+
+        Initialization has three failure points: the sandbox/transport owners,
+        the launch itself, and the post-launch reader start. All three funnel
+        here so no inner cleanup can replace the original exception, and a
+        launched guest is always reaped before its sandbox is released.
+        """
+        launched = getattr(self, "process", None)
+        if process and launched is not None:
+            self._release_owner(
+                "process", launched, error, lambda: self._reap(launched)
+            )
+        self._release_owner("sandbox", getattr(self, "sandbox", None), error)
+        self._release_owner("transport", getattr(self, "transport", None), error)
+        sdk_trace = getattr(self, "sdk_trace", None)
+        self._release_owner(
+            "sdk-trace",
+            sdk_trace,
+            error,
+            None if sdk_trace is None else lambda: sdk_trace.close(strict=False),
+        )
+        self._release_owner("stderr", getattr(self, "stderr", None), error)
 
     def _initialize(
         self,
@@ -160,19 +229,34 @@ class RpcClient:
         stop,
         timeout,
         *,
-        goal_mode=False,
+        workload="audit",
         sandbox_image=None,
+        corpus=None,
     ):
+        if workload not in ("audit", "goal", "translation"):
+            raise ValueError(f"unknown lane workload: {workload}")
         self.directory, self.api, self.lane = directory, api, lane
-        self.goal_mode, self.goal_id = goal_mode, None
-        self.sandbox = None
-        if goal_mode or sandbox_image is not None:
+        self.workload = workload
+        self.goal_mode, self.goal_id = workload in ("goal", "translation"), None
+        self.sandbox, self.transport = None, None
+        if self.goal_mode or sandbox_image is not None:
             if sandbox_image is None:
                 raise ValueError("native goal clients require an actual sandbox image")
-            from benchmarks.agentic_sandbox import AgentSandbox, host_endpoint
+            from benchmarks.agentic_sandbox import AgentSandbox
 
             self.sandbox = AgentSandbox(sandbox_image, directory)
-            proxy = host_endpoint(proxy, sandbox_image.gateway)
+        self.sdk_trace = SdkTrace(directory / "sdk-trace")
+        if self.sandbox:
+            from benchmarks.agentic_lane_transport import LaneBridge
+
+            self.transport = LaneBridge(
+                directory / "transport",
+                proxy,
+                telemetry_upstream=self.sdk_trace.endpoint,
+                read_timeout=timeout + 60,
+            )
+            self.sandbox.attach_transport(self.transport)
+            proxy = self.transport.guest_model_base()
         self.stop, self.timeout = stop, timeout
         self.condition = threading.Condition()
         self.responses, self.results = {}, {}
@@ -186,7 +270,7 @@ class RpcClient:
         self.state.mkdir()
         models, settings = session_configuration(proxy, api)
         settings["telemetry"] = {"otlpExportEnabled": True}
-        if goal_mode:
+        if self.goal_mode:
             settings["goal"] = {"enabled": True, "continuationModes": ["rpc"]}
         for name, value in (("models.yml", models), ("settings.yml", settings)):
             (self.state / name).write_text(json.dumps(value, indent=2) + "\n")
@@ -199,14 +283,20 @@ class RpcClient:
         )
         if not self.sandbox:
             self.workspace.mkdir()
-        if goal_mode:
-            from benchmarks.agentic_goals import prepare_workspace as prepare_goal
+        if workload == "translation":
+            if corpus is None:
+                raise ValueError("translation lanes require a validated corpus")
+            from benchmarks.agentic_translation import prepare_workspace as prepare
 
-            self.workspace_manifest = prepare_goal(self.workspace, lane)
+            self.workspace_manifest = prepare(self.workspace, corpus)
+        elif self.goal_mode:
+            from benchmarks.agentic_goals import prepare_workspace as prepare
+
+            self.workspace_manifest = prepare(self.workspace, lane)
         else:
             self.workspace_manifest = prepare_workspace(self.workspace)
         tool_guard = directory / "tool-guard.ts"
-        guard = "agentic_goal_tool_guard.ts" if goal_mode else "agentic_tool_guard.ts"
+        guard = GUARDS[workload]
         shutil.copyfile(ROOT / "benchmarks" / guard, tool_guard)
         if self.sandbox:
             for name in ("models.yml", "settings.yml"):
@@ -227,7 +317,7 @@ class RpcClient:
             "--model",
             f"oh-my-vllm-{api}/qwen3.8-27b-fp8",
             "--tools",
-            "read,grep,write,edit,bash" if goal_mode else "read,grep,write",
+            TOOLS[workload],
             "--no-lsp",
             "--no-extensions",
             "--no-skills",
@@ -242,7 +332,6 @@ class RpcClient:
             str((self.sandbox.root if self.sandbox else directory) / "sessions"),
         ]
         self.stderr = (directory / "stderr.log").open("x")
-        self.sdk_trace = SdkTrace(directory / "sdk-trace")
         try:
             environment = (
                 isolated_environment(self.state) | self.sdk_trace.environment()
@@ -261,11 +350,10 @@ class RpcClient:
                 env=environment,
                 start_new_session=True,
             )
-        except BaseException:
-            self.sdk_trace.close()
-            self.stderr.close()
-            if self.sandbox:
-                self.sandbox.close()
+        except BaseException as error:
+            # The launch failed before any reader existed: release every owner
+            # that was already started without replacing this failure.
+            self._rollback(error)
             raise
         try:
             stat = Path("/proc", str(self.process.pid), "stat").read_text()
@@ -278,16 +366,10 @@ class RpcClient:
             }
             self.reader = threading.Thread(target=self._read, daemon=True)
             self.reader.start()
-        except BaseException:
-            if self.process.poll() is None:
-                os.killpg(self.process.pid, signal.SIGKILL)
-            self.process.wait()
-            self.process.stdin.close()
-            self.process.stdout.close()
-            self.stderr.close()
-            self.sdk_trace.close()
-            if self.sandbox:
-                self.sandbox.close()
+        except BaseException as error:
+            # The guest is already running: reap it first, then release the
+            # remaining owners, and keep this failure authoritative throughout.
+            self._rollback(error, process=True)
             raise
 
     def _read(self):
@@ -505,6 +587,7 @@ class RpcClient:
         return {
             "lane": self.lane,
             "api": self.api,
+            "workload": self.workload,
             "session_id": self.session_id,
             "turns": len(self.turns),
             "process": self.process_record,
@@ -565,6 +648,8 @@ class RpcClient:
         attempt(lambda: self.sdk_trace.close(strict=False))
         if self.sandbox:
             attempt(self.sandbox.close)
+        if self.transport:
+            attempt(self.transport.close)
         if self.reader.is_alive():
             failures.append("persistent RPC reader did not exit")
         if failures:

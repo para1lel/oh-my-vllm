@@ -69,8 +69,9 @@ OMP uses runtime provider usage and its conversation estimate to decide automati
 Independent token checks verify the input and output capacity. They do not select compaction times.
 Report natural compaction coverage and subsequent requests in the same session. Summary content and task results are workload observations.
 
-Each session starts a new database project in a separate sandbox, without a copy of inference source.
-Use OMP native goals and automatic continuation. Keep a prepared sequence of implementation, fault, concurrency, and differential-test goals.
+Each session translates the same validated English book in a separate sandbox, without a copy of inference source.
+Supply the external corpus directory, which holds the volumes and their original manifest.
+Use OMP native goals and automatic continuation. Keep a prepared sequence of volume, passage and verification goals.
 Submit the next goal after completion, pause, or stopped continuation. These changes do not fail acceptance.
 
 Keep the same process, session ID, history, and workspace throughout the hour.

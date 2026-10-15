@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from benchmarks.agentic_native_goals import collection_record
 from benchmarks.agentic_session_evidence import terminal_usage
 from benchmarks.agentic_soak_analysis import file_identity, request_metric
 from benchmarks.agentic_soak_protocol import StreamCompletion
@@ -176,6 +177,7 @@ def audit_framework_session(
                 raise ValueError("model response violates its SSE contract")
             outcome = {
                 "response_id": identity,
+                "request_file": record["request_file"],
                 "status": metric["status"],
                 "wire_error": record.get("error"),
                 "error_direction": record.get("error_direction"),
@@ -185,9 +187,29 @@ def audit_framework_session(
             }
             outcomes.append(outcome)
             if metric["status"] == "cancelled":
+                # A cancellation is reported without asserting its cause unless
+                # the original canonical abort evidence binds this request, in
+                # which case its own failure direction and window travel with it.
+                # The proof is optional evidence here, so an unavailable or
+                # malformed record leaves the cancellation unproved with an
+                # explicit diagnostic instead of failing the whole audit.
+                if collection_record(session):
+                    from benchmarks.agentic_deadline_evidence import deadline_abort
+
+                    try:
+                        proof = deadline_abort(
+                            directory, session, record, metric, measured_start
+                        )
+                    except Exception as error:
+                        outcome["cancellation_evidence"] = (
+                            f"{type(error).__name__}: {error}"
+                        )
+                    else:
+                        outcome["client_completion"] = "collection_deadline_aborted"
+                        outcome["deadline_abort_proof"] = proof
                 continue
             if errors or not protocol["success"]:
-                if not errors and session.get("goal_collection"):
+                if not errors and collection_record(session):
                     from benchmarks.agentic_deadline_evidence import deadline_abort
 
                     outcome["client_completion"] = "collection_deadline_aborted"

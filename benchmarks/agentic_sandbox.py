@@ -13,29 +13,20 @@ import time
 import uuid
 from contextlib import suppress
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
 
 from benchmarks.agentic_goals import OMP_VERSION
 from benchmarks.common import _children, _process_record
 
+ROOT = Path(__file__).resolve().parents[1]
 LABEL = "oh-my-vllm.agentic-sandbox"
 BASE = "ubuntu@sha256:561618e2c15bf2397621dd04f96926663a3b5616c189cf7e38db7e82f5c538ea"
+FORWARDER = "lane-forward.py"
 
 
 def docker(*arguments: str, timeout: float = 60) -> str:
     return subprocess.check_output(
         ["docker", *arguments], text=True, stderr=subprocess.PIPE, timeout=timeout
     ).strip()
-
-
-def host_endpoint(url: str, gateway: str) -> str:
-    """Expose only collector endpoint addresses, without mounting its directory."""
-    parts = urlsplit(url)
-    if parts.hostname not in ("127.0.0.1", "localhost", "::1"):
-        raise ValueError("sandbox collector endpoint must be on host loopback")
-    if not gateway or any(character in gateway for character in " /\n\r"):
-        raise ValueError("invalid sandbox host gateway")
-    return urlunsplit(parts._replace(netloc=f"{gateway}:{parts.port}"))
 
 
 def remove_directory(root: Path):
@@ -53,10 +44,8 @@ def remove_directory(root: Path):
 class SandboxImage:
     """One temporary image per collector; never prune other Docker resources."""
 
-    def __init__(self, omp: str, directory: Path, gateway: str, *, stop=None):
-        if not gateway:
-            raise ValueError("set --sandbox-host or OH_MY_VLLM_SANDBOX_HOST")
-        self.directory, self.gateway = directory, gateway
+    def __init__(self, omp: str, directory: Path, *, stop=None):
+        self.directory = directory
         self.owner = uuid.uuid4().hex
         self.tag = f"oh-my-vllm-agentic:{self.owner}"
         self.identity = None
@@ -76,13 +65,18 @@ class SandboxImage:
         try:
             context.mkdir()
             shutil.copyfile(executable, context / "omp")
+            shutil.copyfile(
+                ROOT / "benchmarks/agentic_lane_forwarder.py", context / FORWARDER
+            )
             (context / "Dockerfile").write_text(
                 f"FROM {BASE}\nLABEL {LABEL}={self.owner}\n"
                 "RUN apt-get update && apt-get install -y --no-install-recommends "
                 "python3 python3-venv bash ca-certificates "
                 "&& rm -rf /var/lib/apt/lists/*\n"
                 "COPY omp /usr/local/bin/omp\n"
-                "RUN chmod 755 /usr/local/bin/omp "
+                f"COPY {FORWARDER} /usr/local/bin/{FORWARDER}\n"
+                "RUN chmod 755 /usr/local/bin/omp /usr/local/bin/"
+                f"{FORWARDER} "
                 "&& ln -s /usr/bin/python3 /usr/local/bin/python\n"
             )
             if stop and stop.is_set():
@@ -220,12 +214,25 @@ class AgentSandbox:
         for name in ("home", "tmp", "state", "workspace", "sessions"):
             (self.root / name).mkdir()
         self.name = f"omv-agent-{image.owner}-{directory.name}"
+        self.transport = None
         self.container_id = None
         self.closed = False
         self.stopped = False
         self.cleanup_record = {}
 
+    def attach_transport(self, transport):
+        """Mount one owned socket directory as the lane's only host channel."""
+        if self.transport is not None:
+            raise ValueError("sandbox lane already has a transport")
+        if not (transport.directory / "model.sock").is_socket():
+            raise ValueError("lane transport sockets must already listen")
+        if transport.directory.is_relative_to(self.root):
+            raise ValueError("lane transport directory must stay outside the workspace")
+        self.transport = transport
+
     def command(self, arguments: list[str], environment: dict) -> list[str]:
+        if self.transport is None:
+            raise ValueError("sealed lane requires an attached bridged transport")
         command = [
             "docker",
             "run",
@@ -236,6 +243,8 @@ class AgentSandbox:
             f"{LABEL}={self.image.owner}",
             "--hostname",
             "agent-sandbox",
+            "--network",
+            "none",
             "--cap-drop",
             "ALL",
             "--security-opt",
@@ -251,6 +260,8 @@ class AgentSandbox:
             "--mount",
             f"type=bind,source={self.root},target={self.root}",
         ]
+        for mount in self.transport.mounts():
+            command.extend(("--mount", mount))
         values = {
             "HOME": str(self.root / "home"),
             "TMPDIR": str(self.root / "tmp"),
@@ -263,14 +274,17 @@ class AgentSandbox:
         for key, value in environment.items():
             if key.startswith("OTEL_"):
                 values[key] = (
-                    host_endpoint(value, self.image.gateway)
+                    self.transport.guest_endpoint(value)
                     if key.endswith("ENDPOINT")
                     else value
                 )
         for key, value in sorted(values.items()):
             command.extend(("--env", f"{key}={value}"))
         command.extend(
-            (self.image.identity["Id"], "/usr/local/bin/omp", *arguments[1:])
+            (
+                self.image.identity["Id"],
+                *self.transport.entry_point(["/usr/local/bin/omp", *arguments[1:]]),
+            )
         )
         return command
 
@@ -294,11 +308,16 @@ class AgentSandbox:
             "host_process": _process_record(host_pid),
             "pid_namespace": os.readlink(f"/proc/{host_pid}/ns/pid"),
             "mounts": state["Mounts"],
+            "network_mode": state["HostConfig"]["NetworkMode"],
             "security_options": state["HostConfig"]["SecurityOpt"],
             "cap_drop": state["HostConfig"]["CapDrop"],
             "devices": state["HostConfig"]["Devices"],
             "workspace": str(self.root / "workspace"),
         }
+        if record["network_mode"] != "none":
+            raise ValueError("sandbox lane must have no network interface")
+        if record["devices"]:
+            raise ValueError("sandbox lane must not receive GPU devices")
         (self.directory / "sandbox.json").write_text(
             json.dumps(record, indent=2) + "\n"
         )
