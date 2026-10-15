@@ -58,7 +58,15 @@ scripts/with-env.sh python scripts/thinking-budget-acceptance.py --mode mtp --ba
 
 ## Accuracy
 
-Use independent references with CPU FP64 computation on rounded inference inputs.
+Use independent FP64 equations on stored inference inputs.
+Production and previous implementations supply no numerical reference values.
+Full-model numerical experiments use short sequences and small batches.
+Use individual operators for large numerical comparisons.
+
+The independent [model reference](../../development/qwen_fp64_reference.py) keeps all arithmetic, intermediate activations, caches, and logits in FP64.
+The independent [operator references](../../development/kernels/oracles.py) use explicit casts for prescribed storage rounding between FP64 calculations.
+Normalize logits and calculate numerical-error and distribution metrics in FP64.
+
 Tests must include prefill, decode, boundary writes, strided views, grouped MTP verification, and speculative rollback.
 BF16 operator output uses `atol=rtol=0.03`.
 Recurrent state must have NRMSE at most 1% and maximum absolute error at most 2% of reference peak.

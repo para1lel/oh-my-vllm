@@ -48,11 +48,11 @@ def _compare(operation, path, expected, actual):
         if (operation == "recurrent" and path == "written_state") or (
             operation == "gdn_prefill" and path == "return[1]"
         ):
-            error = actual.float() - expected.float()
+            error = actual.double() - expected.double()
             if not torch.isfinite(error).all():
                 raise AssertionError(f"{operation}/{path}: nonfinite state error")
             axes = tuple(range(1, error.ndim))
-            reference = expected.float()
+            reference = expected.double()
             nrmse = error.square().mean(axes).sqrt() / reference.square().mean(
                 axes
             ).sqrt().clamp_min(1e-10)
@@ -68,9 +68,20 @@ def _compare(operation, path, expected, actual):
                 )
             return 1
         atol, rtol = _tolerance(operation, path)
+        if atol == 0 and rtol == 0:
+            if (
+                torch.isnan(expected.double()).any()
+                or torch.isnan(actual.double()).any()
+            ):
+                raise AssertionError(f"{operation}/{path}: NaN in exact comparison")
+            expected_bytes = expected.contiguous().view(torch.uint8)
+            actual_bytes = actual.contiguous().view(torch.uint8)
+            if not torch.equal(actual_bytes, expected_bytes):
+                raise AssertionError(f"{operation}/{path}: exact storage bytes differ")
+            return 1
         torch.testing.assert_close(
-            actual.float(),
-            expected.float(),
+            actual.double(),
+            expected.double(),
             atol=atol,
             rtol=rtol,
             msg=lambda message: f"{operation}/{path}: {message}",

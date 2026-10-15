@@ -41,6 +41,22 @@ def test_verification_rejects_missing_or_mismatched_returns():
         verify("norm", lambda: torch.ones(1), lambda: torch.ones(1).half())
 
 
+@pytest.mark.parametrize(
+    "operation,dtype", [("append", torch.bfloat16), ("quant", torch.float8_e4m3fn)]
+)
+def test_exact_storage_contract_rejects_signed_zero_byte_changes(operation, dtype):
+    positive = torch.tensor([0.0], dtype=dtype)
+    negative = torch.tensor([-0.0], dtype=dtype)
+    with pytest.raises(AssertionError, match="exact storage bytes differ"):
+        verify(operation, lambda: positive, lambda: negative)
+
+
+def test_exact_storage_comparison_keeps_nan_rejection():
+    values = torch.tensor([float("nan")])
+    with pytest.raises(AssertionError, match="NaN in exact comparison"):
+        verify("attention_gate", lambda: values, lambda: values.clone())
+
+
 @pytest.mark.parametrize("operation", ["prepare_attention", "prepare_context"])
 def test_verification_uses_exact_copy_tolerances(operation):
     value = torch.tensor([1.0])

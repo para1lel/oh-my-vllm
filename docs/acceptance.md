@@ -10,8 +10,9 @@ After the final runtime selection, repeat numerical, regression, capacity, servi
 The workload matrix has 27 latency gates, two warmups, five measurements, and 10% spread gates.
 Prefix-hit prefill keeps its latency-ratio exception. The [handoff](handoff.md) records current work and the authorized numerical-policy review.
 
-Clean `96ad82c` passes all 539 formal numerical cases with complete coverage and no interference.
-Its [report](evidence/attention-merge/final-numerical.json) binds the raw result, sources, ownership, and independent review.
+Historical clean `96ad82c` passes all 539 formal numerical cases with its original mixed-precision references and no interference.
+Its [report](evidence/attention-merge/final-numerical.json) records the raw result, sources, ownership, and independent review.
+It does not supply independent FP64 numerical acceptance.
 The previous [attention diagnostic record](evidence/attention-merge/verification.json) keeps its diagnostic status.
 
 Ordinary 32768-input/4096-output batch-one diagnostics observe prefill/decode ratios 4.305/2.181.
@@ -21,6 +22,7 @@ Latency gates fail. Spreads pass. These records do not complete the matrix or fi
 
 | Record | Scope |
 | --- | --- |
+| [FP64 references](evidence/fp64-reference/verification.json) | Independent equations, CPU checks, and a small checkpoint reference artifact, without candidate numerical or performance acceptance |
 | [3324a7f](evidence/refactor-3324a7f/verification.json) | Numerical, regression, six capacity cases, and MTP/DSpark service and recovery |
 | [Subgroup scan](evidence/refactor-s8-scan/verification.json) | Numerical and replay diagnostics |
 | [f05a35d](evidence/refactor-f05a35d/verification.json) | Clean 539-case numerical repeat and failed framework phase gates |

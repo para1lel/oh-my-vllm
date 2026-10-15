@@ -14,15 +14,26 @@ A small measured numerical error can be accepted for a large measured performanc
 Current thresholds stay source-bound until a reviewed change supplies new error, performance, and model-output evidence.
 Keep state commit/rollback, cache isolation, memory safety, and workload contracts.
 
+Numerical comparisons always use an independent FP64 reference.
+Full-model comparisons use small experiments. Use individual operators for large numerical comparisons.
+Previous implementations supply timing baselines only.
+
 The user requests reproduction of the previous operator implementations as the optimization starting point.
 Keep only contracts and open work in guides until the required performance goals pass.
 
 ## Verification checkpoint
 
-Clean `96ad82c` passes all 539 formal operator numerical cases, with complete coverage and no interference.
-Its [report](evidence/attention-merge/final-numerical.json) binds the unchanged collection and independent review.
-The earlier CPU collection passes 1682 tests and 153 subtests without skips.
-The latest documentation checkpoint passes all eleven hooks and twenty documentation tests.
+The historical `96ad82c` collection passes 539 cases with its original mixed-precision references.
+Its [report](evidence/attention-merge/final-numerical.json) stays unchanged and does not supply independent FP64 acceptance.
+
+The new [FP64 reference record](evidence/fp64-reference/verification.json) covers independent equations and 22 small CPU tests.
+A CPU experiment reads the checkpoint and runs 64 prefix tokens and 8 continuation tokens through all 64 layers.
+Its 260 floating-point artifact tensors use FP64. Independent review accepts this reference only for its exact checkpoint and token sequence.
+This record does not supply candidate numerical or performance acceptance.
+
+The complete CPU collection passes 1828 tests and 153 subtests without skips, with 637 GPU tests deselected.
+The earlier attempt with missing corpus configuration keeps its one skip.
+The scoped collection passes 75 tests, with 13 GPU tests deselected. All eleven hooks pass.
 
 Source `3324a7f` has six maximum-context and MTP/DSpark service/recovery records.
 These historical records do not supply final-source acceptance. See the [acceptance index](acceptance.md).
@@ -38,26 +49,13 @@ The two latency gates fail. Spreads pass. Full fifteen-workload and 27-latency-g
 4. Complete the final-source numerical, CPU/GPU regression, capacity, service, and performance checks.
 5. Run MTP4 and DSpark full-book translation collections, each for at least one hour in four isolated OMP sandboxes.
 
-The book is downloaded. Translation work on OMP Issue 4 stays in its separate checkout and awaits integration.
-Its two previous configured CPU attempts each have 1802 passing tests and 153 subtests, with one failed Chat deadline proof.
-
-The [clock report](evidence/omp-clock/verification.json) covers the old `97de922` source with the 39 changed paths.
-It records four selected Chat and Responses fixtures and a full CPU collection of 1803 tests and 153 subtests with no skips.
-That portable report records 98 native/SDK completion pairs, each with a 0 ns difference.
-
-The rebased branch at `828d5e9` repeats the full CPU collection with 1803 tests and 153 subtests and no skips.
-It records 84 native/SDK pairs at 0 ns, and its conditional production normalizer block does not run in that full CPU collection.
-
-Two separate CPU ContextGuard checks, one per API, drive that production normalizer block through the built client and record 60 native/SDK pairs at 0 ns.
-They cover the block the full collection leaves conditional.
-The 2 ms guard stays unchanged, and it bounds that native/SDK difference rather than being the compared value.
-
-The two handoff files are updated here, and the reviewed set's other 37 files stay unchanged, with documents and tests in that set.
-The branch awaits reviewed integration.
+The book is downloaded. Reviewed PR 21 is integrated at `004765b` by fast-forward from `828d5e9`.
+Issue 19 is closed. The [clock report](evidence/omp-clock/verification.json) keeps the older source-scoped collection and failed-attempt identities.
+The 2 ms native/SDK completion-difference guard stays unchanged.
 
 Local oh-my-pi repair and isolated verification are authorized. Upstream publication is not authorized.
 Use the verified isolated client for Issue 4. Keep the installed client and failed evidence.
-Issue 19 stays open until the project correction is integrated with applicable checks.
+Issue 4's full-book collections and final-source acceptance stay open.
 
 Use [contribution](../CONTRIBUTING.md) and [collaboration](collaboration.md) for independent reviews, checks, intentional paths, and reviewed publication.
 Codex uses `main`. OMP uses its assigned branch. Rebase, repeat checks, squash, and fast-forward before integration.

@@ -25,9 +25,16 @@ scripts/with-env.sh python scripts/check_definition_spacing.py
 ## Numerical and state contracts
 
 Each operation has input/output shape, dtype, stride, alignment, and mutation contracts.
-Use an independent Torch reference with the specified precision and rounding boundaries.
-Higher precision does not replace prescribed FP32 division or observable BF16 casts.
+Use independent FP64 equations for each numerical comparison.
+Production implementations and previous implementations are not numerical references.
+Use explicit casts between FP64 calculations for prescribed FP32 division and observable BF16 storage.
 Keep written-state witnesses and untouched storage checks, with returned-output comparisons.
+
+The [operator references](../development/kernels/oracles.py) import independent [FP64 mathematics](../development/fp64_math.py).
+The [small full-model reference](../development/qwen_fp64_reference.py) independently reads stored checkpoint weights and applies their scales in FP64.
+Its activations, caches, projections, nonlinearities, attention, and logits stay FP64 without intermediate quantization.
+Run only small full-model numerical experiments. Large numerical comparisons belong to individual operators.
+Performance baselines stay separate from numerical references.
 
 Fusion must keep mathematical semantics, accepted-state boundaries, and numerical tolerances.
 Cache and state storage cannot become temporary donation targets.

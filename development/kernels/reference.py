@@ -9,10 +9,13 @@ ROOT = Path(__file__).resolve().parents[2]
 def verify_reference(root=ROOT):
     paths = [
         root / "development/kernels/oracles.py",
-        *sorted((root / "python/oh_my_vllm/ir").glob("*.py")),
+        root / "development/fp64_math.py",
+        root / "development/qwen_fp64_reference.py",
     ]
     return {
         "kind": "independent_torch_mathematics",
+        "arithmetic_dtype": "float64",
+        "storage_boundaries": "explicit casts in independent operator equations",
         "files": {
             str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in paths
@@ -32,6 +35,8 @@ def source_hashes(root=ROOT):
         root / "python/oh_my_vllm/models/dspark.py",
         *root.glob("python/oh_my_vllm/ir/**/*.py"),
         *root.glob("development/kernels/*.py"),
+        root / "development/fp64_math.py",
+        root / "development/qwen_fp64_reference.py",
         root / "requirements/runtime.txt",
         root / "benchmarks/kernels.py",
         root / "development/kernels/original-case-ids.json",

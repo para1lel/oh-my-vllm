@@ -10,8 +10,9 @@
 工作负载矩阵包含 27 项延迟门槛, 两次预热, 五次测量和 10% 波动门槛.
 前缀命中预填充保留延迟比值例外, [交接](handoff.zh.md)记录当前工作和已获授权的数值策略审查.
 
-干净提交 `96ad82c` 通过全部 539 项正式数值检查, 覆盖完整且未检测到干扰.
-[报告](evidence/attention-merge/final-numerical.json)绑定原始结果, 源码, 资源归属和独立审查.
+历史干净提交 `96ad82c` 使用原先的混合精度 reference, 通过全部 539 项正式数值检查, 未检测到干扰.
+[报告](evidence/attention-merge/final-numerical.json)记录原始结果, 源码, 资源归属和独立审查.
+它不能提供独立 FP64 数值验收.
 此前 [注意力诊断记录](evidence/attention-merge/verification.json)保留诊断状态.
 
 ordinary 模式 32768 输入/4096 输出批次一诊断观测到预填充/解码比值 4.305/2.181.
@@ -21,6 +22,7 @@ ordinary 模式 32768 输入/4096 输出批次一诊断观测到预填充/解码
 
 | 记录 | 范围 |
 | --- | --- |
+| [FP64 reference](evidence/fp64-reference/verification.json) | 独立公式, CPU 检查和小规模实际检查点 reference 产物, 不提供候选实现的数值或性能验收 |
 | [3324a7f](evidence/refactor-3324a7f/verification.json) | 数值, 回归, 六项容量案例, 以及 MTP/DSpark 服务和恢复 |
 | [子组扫描](evidence/refactor-s8-scan/verification.json) | 数值和重放诊断 |
 | [f05a35d](evidence/refactor-f05a35d/verification.json) | 干净源码 539 项数值重跑及失败的整模型阶段门槛 |

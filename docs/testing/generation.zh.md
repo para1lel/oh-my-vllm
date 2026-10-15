@@ -58,11 +58,20 @@ scripts/with-env.sh python scripts/thinking-budget-acceptance.py --mode mtp --ba
 
 ## 精度
 
-用独立计算的 FP64 参考比较实际舍入输入.
+在已存储的推理输入上使用独立 FP64 方程.
+生产实现和旧实现不能提供数值 reference 值.
+全模型数值实验使用短序列和小批次.
+大规模数值比较限定在单个算子内.
+
+独立[模型 reference](../../development/qwen_fp64_reference.py) 的所有计算, 中间激活, 缓存和 logits 均保持 FP64.
+独立[算子 reference](../../development/kernels/oracles.py) 在 FP64 计算之间显式模拟规定的存储舍入.
+logits 归一化, 数值误差和分布指标计算均使用 FP64.
+
 覆盖 prefill, decode, 边界写入, strided view, grouped MTP verification 和 speculative rollback.
 BF16 算子输出使用 `atol=rtol=0.03`.
 Recurrent state 的 NRMSE 至多 1%, 最大绝对误差至多为参考峰值 2%.
 检查每个写入 slot 和未改动的受保护状态.
+
 融合链包括全部舍入, scale, copy 和 reduction 行为.
 参见 `tests/probe_worker.py` 和相关内核测试.
 

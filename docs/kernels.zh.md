@@ -25,9 +25,16 @@ scripts/with-env.sh python scripts/check_definition_spacing.py
 ## 数值与状态契约
 
 每个算子有输入/输出 shape, dtype, stride, 对齐和 mutation 契约.
-使用独立 Torch reference, 遵守规定精度与舍入边界.
-更高精度不能替代规定的 FP32 除法或可观察的 BF16 cast.
+每项数值比较均使用独立 FP64 方程.
+生产实现和旧实现不能作为数值 reference.
+通过 FP64 计算之间的显式 cast, 模拟规定的 FP32 除法和可观察的 BF16 存储.
 除返回值比较外, 保留已写状态 witness 和未修改存储检查.
+
+[算子 reference](../development/kernels/oracles.py) 导入独立 [FP64 数学](../development/fp64_math.py).
+[小规模全模型 reference](../development/qwen_fp64_reference.py) 独立读取和解码检查点权重.
+其激活, 缓存, 投影, 非线性函数, attention 和 logits 全程保持 FP64, 无中间量化.
+全模型数值实验仅用小规模, 大规模数值比较限定在单个算子内.
+性能基线与数值 reference 分开.
 
 融合必须保持数学语义, 已接受状态边界和数值容差.
 缓存和状态存储不能作为临时 donation 目标.
