@@ -18,6 +18,7 @@ Vision MLP 激活使用投影输出存储.
 
 采样归一化每块使用 640 个线程.
 MTP 输入行数不超过 32 时, 输入归一化每块使用 640 个线程.
+残差归一化使用 [16 字节输入加载](../python/oh_my_vllm/kernels/cuda_backend/normalization.cuh#L24)<!-- source: uint4 input = *reinterpret_cast<const uint4 *>(x + row * 5120 + column); -->.
 
 FFN 对行数不超过 8 的输入使用单独的 [down projection 实现](../python/oh_my_vllm/kernels/cuda_backend/ffn.cu#L115)<!-- source: ffn_down_decode_launch(quantized_product, -->.
 FFN 使用 [CUDA 启动控制](../python/oh_my_vllm/kernels/cuda_backend/programmatic.cuh#L9)<!-- source: attribute.id = cudaLaunchAttributeProgrammaticStreamSerialization; -->.
