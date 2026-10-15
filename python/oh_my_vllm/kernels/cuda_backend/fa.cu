@@ -3,6 +3,7 @@
 #include "normalization.cuh"
 #include "fa_attention.cuh"
 #include "fa_input.cuh"
+#include "fa_prefill.cuh"
 
 void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_weight,
         TensorView input_weight_scale, TensorView q_norm, TensorView k_norm, TensorView positions,
@@ -99,21 +100,39 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
   check_cuda(cudaGetLastError());
   if (variant == 1)
     return;
-  constexpr int shared_bytes = (32 * 256 + 2 * 64 * 256 + 32 * 64) * 2 + 8 * 32 * 4;
-  static std::once_flag configured;
-  std::call_once(configured, [] {
-    check_cuda(cudaFuncSetAttribute(fa_partial_kernel<true, true, int32_t, 1>,
-                                    cudaFuncAttributeMaxDynamicSharedMemorySize, shared_bytes));
-  });
-  int tiles = (max_queries * 6 + 31) / 32;
-  fa_partial_kernel<true, true, int32_t, 1>
-      <<<dim3(batch * tiles, 4, splits), 128, shared_bytes, stream>>>(
-          static_cast<const __nv_bfloat16 *>(query.data_ptr()),
-          static_cast<const __nv_bfloat16 *>(cache.data_ptr()), tables.data_ptr(),
-          lengths.data_ptr(), sequence_rows.data_ptr(), static_cast<float *>(partial.data_ptr()),
-          static_cast<float *>(lse.data_ptr()), 24, 4, tables.size(1), splits, first_token, false,
-          false, false, tiles, max_queries, rows, blocks);
-  check_cuda(cudaGetLastError());
+  if (rows > 32 && splits == 1) {
+    static std::once_flag sm100_configured;
+    std::call_once(sm100_configured, [] {
+      check_cuda(cudaFuncSetAttribute(
+          fa_prefill_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, FAPrefillSharedBytes));
+    });
+    int tiles = (max_queries * 6 + 127) / 128;
+    fa_prefill_kernel<<<dim3(batch * tiles, 4), 128, FAPrefillSharedBytes, stream>>>(
+        static_cast<const __nv_bfloat16 *>(query.data_ptr()),
+        static_cast<const __nv_bfloat16 *>(cache.data_ptr()),
+        static_cast<const int32_t *>(tables.data_ptr()),
+        static_cast<const int32_t *>(lengths.data_ptr()),
+        static_cast<const int32_t *>(sequence_rows.data_ptr()),
+        static_cast<float *>(partial.data_ptr()), static_cast<float *>(lse.data_ptr()),
+        tables.size(1), tiles, max_queries, rows, blocks, first_token);
+    check_cuda(cudaGetLastError());
+  } else {
+    constexpr int shared_bytes = (32 * 256 + 2 * 64 * 256 + 32 * 64) * 2 + 8 * 32 * 4;
+    static std::once_flag configured;
+    std::call_once(configured, [] {
+      check_cuda(cudaFuncSetAttribute(fa_partial_kernel<true, true, int32_t, 1>,
+                                      cudaFuncAttributeMaxDynamicSharedMemorySize, shared_bytes));
+    });
+    int tiles = (max_queries * 6 + 31) / 32;
+    fa_partial_kernel<true, true, int32_t, 1>
+        <<<dim3(batch * tiles, 4, splits), 128, shared_bytes, stream>>>(
+            static_cast<const __nv_bfloat16 *>(query.data_ptr()),
+            static_cast<const __nv_bfloat16 *>(cache.data_ptr()), tables.data_ptr(),
+            lengths.data_ptr(), sequence_rows.data_ptr(), static_cast<float *>(partial.data_ptr()),
+            static_cast<float *>(lse.data_ptr()), 24, 4, tables.size(1), splits, first_token, false,
+            false, false, tiles, max_queries, rows, blocks);
+    check_cuda(cudaGetLastError());
+  }
   auto merge = [&](auto warps) {
     constexpr int Warps = decltype(warps)::value;
     fa_merge_quant_kernel<Warps><<<rows * 48, Warps * 32, 0, stream>>>(

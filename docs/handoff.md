@@ -19,6 +19,7 @@ Vision MLP activation uses projection output stores.
 Sampling normalization uses 640 threads per block.
 MTP input normalization uses 640 threads per block when the input has 32 rows or fewer.
 
+FA has a separate prefill implementation.
 FA combines two or more partial attention results with 256 threads per block.
 It uses 32 threads per block when there is only one partial result.
 
