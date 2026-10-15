@@ -39,6 +39,7 @@ FA 每块使用 256 个线程合并两份或更多注意力的部分结果.
 完整算子实现尚未完成. 60% 性能要求仍有工作待完成.
 
 下一步: 优化已测量的瓶颈.
+Recurrent 与 prefill 变更使用 [GDN 执行计划](operators/gdn.zh.md).
 完成每个算子的负载验收.
 然后将模型计算接入 worker.
 使用[实现计划](operators/implementation.zh.md).

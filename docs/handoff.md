@@ -39,6 +39,7 @@ Named tolerances apply to specific outputs. Cache checks and state selection kee
 The full operator implementation is not completed. More work is necessary for the 60% performance requirement.
 
 Next work: optimize the measured bottlenecks.
+Use the [GDN execution plan](operators/gdn.md) for recurrent and prefill changes.
 Complete workload acceptance for each operator.
 Then connect model computation to the worker.
 Use the [implementation plan](operators/implementation.md).

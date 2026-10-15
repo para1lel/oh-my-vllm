@@ -68,6 +68,7 @@ An implementation can fuse stages. Each measured operation must supply all stage
 
 If this reduces the time for the full operation, fuse producer work into GEMM input loads or output stores.
 Use different small-row and prefill implementations when necessary.
+Use the [GDN execution plan](gdn.md) for recurrent and prefill algorithm selection.
 
 Use small norm, activation, quantization, and position operations only in the full serving operators.
 Keep their reference functions in the evaluation tools only.

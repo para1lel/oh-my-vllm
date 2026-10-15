@@ -68,6 +68,7 @@ MTP 与 target 模型使用相同的 FA 和 FFN 算子.
 
 在能降低完整操作耗时的位置, 将 producer 计算融合到 GEMM 输入加载或输出存储中.
 必要时分别实现小行数与 prefill 路径.
+Recurrent 与 prefill 算法选择使用 [GDN 执行计划](gdn.zh.md).
 
 小型 norm, activation, quantization 和位置操作只能包含在完整 serving 算子中.
 对应参考函数只保留在评测工具中.
