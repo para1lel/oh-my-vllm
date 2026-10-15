@@ -8,8 +8,7 @@ Python 负责 GPU 计算. 使用 ZMQ DEALER socket 和 msgpack 进行进程通�
 
 工作前先查看 Git 状态, [交接](docs/handoff.zh.md)及适用的目录说明.
 遵守 [CONTRIBUTING.md](CONTRIBUTING.zh.md).
-Codex 使用 `main`. OMP 在不同 checkout 中使用分配的 Issue 分支.
-遵守[协作流程](docs/collaboration.zh.md).
+Codex 使用 `main`.
 
 根目录指南保持简短. 局部说明放在对应目录.
 所有英文文档遵循 ASD-STE100. 每篇英文文档都提供完整中文翻译.
@@ -24,5 +23,7 @@ Codex 使用 `main`. OMP 在不同 checkout 中使用分配的 Issue 分支.
 保持 hooks 启用. 只提交本轮修改的文件.
 
 每轮交付后将工作分支推送到 GitHub.
+在其他仓库工作或进行其他发布前, 先取得维护者明确指示.
+允许在现有 TileFoundry 适配分支工作和发布.
 
 主机配置放在被忽略的 `LOCAL.md` 中. 停止自己启动的 worker 和临时服务.

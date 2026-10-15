@@ -18,7 +18,7 @@ Rust 通过推理 worker 的进程和协议边界发送媒体引用.
 下一步: 优化 FFN, 添加其余 provider, 并将模型计算接入 worker.
 每个 provider 都要有数值检查和完整边界测量.
 
-工作使用 [main 和 Issue 分支](collaboration.zh.md).
+工作使用 `main`.
 主机路径和产物位置保存在被忽略的本地配置中.
 保持[运行时契约](requirements.zh.md)及[进程边界](architecture.zh.md).
 
