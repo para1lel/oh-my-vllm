@@ -45,14 +45,24 @@ def main() -> int:
         }
     )
     flags = ["--dry-run", "--Werror"] if options.check else ["-i"]
-    result = subprocess.run(
-        ["clang-format", "--style=file", "--fail-on-incomplete-format", *flags, *files],
-        check=False,
+    result = (
+        subprocess.run(
+            [
+                "clang-format",
+                "--style=file",
+                "--fail-on-incomplete-format",
+                *flags,
+                *files,
+            ],
+            check=False,
+        )
+        if files
+        else None
     )
     oversized = oversized_files(BACKEND)
     for path, lines in oversized:
         print(f"{path.relative_to(ROOT)}: {lines} lines exceeds {MAX_LINES}")
-    if result.returncode or oversized:
+    if (result is not None and result.returncode) or oversized:
         return 1
     print(f"CUDA formatting and module size passed ({len(files)} native files)")
     return 0

@@ -1,0 +1,11 @@
+{
+  "name": "oh-my-vllm-style-tools",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "acorn": "8.19.0"
+  }
+}

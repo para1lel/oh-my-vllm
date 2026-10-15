@@ -1,21 +1,3 @@
-//! Request scheduler for oh-my-vllm.
-//!
-//! A port of the core scheduling logic from vLLM's
-//! `vllm/v1/core/sched/scheduler.py`, focused on the paths that matter for
-//! Qwen3.8 on a single B200:
-//!
-//! - FCFS waiting queue → running queue.
-//! - Per-step token budget; chunked prefill is a natural consequence of
-//!   `remaining.min(budget)` rather than a dedicated branch.
-//! - Continuous batching: decode-step requests are scheduled before new prefills.
-//! - Prefix cache lookup via [`HybridCoordinator::get_computed_blocks`].
-//! - KV block allocation via [`HybridCoordinator::allocate_slots`].
-//! - Preemption by recompute: when the pool is full, the last running request is
-//!   evicted back to the waiting queue and its blocks are freed.
-//! - MTP speculative decoding accounting: `num_tokens_with_spec` is the budget
-//!   unit; rollback via `set_drafts([])` + `num_computed_tokens` correction when
-//!   the worker rejects draft tokens.
-
 pub mod output;
 pub mod request;
 
@@ -33,18 +15,11 @@ pub struct UpdateError {
     pub reason: &'static str,
 }
 
-// ── config ────────────────────────────────────────────────────────────────────
-
-/// Scheduler construction parameters.
 #[derive(Clone)]
 pub struct SchedulerConfig {
-    /// Maximum total tokens across all requests in a single step.
     pub max_num_batched_tokens: usize,
-    /// Maximum number of requests that can run concurrently.
     pub max_num_seqs: usize,
-    /// Whether MTP speculative decoding is enabled.
     pub enable_mtp: bool,
-    /// Number of MTP draft tokens to request per decode step.
     pub mtp_draft_len: usize,
 }
 
@@ -59,15 +34,10 @@ impl Default for SchedulerConfig {
     }
 }
 
-// ── scheduler ─────────────────────────────────────────────────────────────────
-
 pub struct Scheduler {
     config: SchedulerConfig,
-    /// Requests waiting for their first KV block allocation, in arrival order.
     waiting: VecDeque<Request>,
-    /// Requests with live KV blocks, currently being executed.
     running: VecDeque<Request>,
-    /// Backpressured streams stop stepping; lower-priority ones may still be preempted.
     paused: rustc_hash::FxHashSet<RequestId>,
     kv: HybridCoordinator,
     finished_ids: Vec<u64>,
@@ -112,9 +82,6 @@ impl Scheduler {
                 end = stop;
             }
         }
-        // Guard: rounding down must not produce 0 tokens — that would stall the
-        // request forever. Clamp to at least 1 token so the request always
-        // makes progress on every schedule call.
         end.saturating_sub(start).max(if count > 0 {
             1
         } else {
@@ -143,8 +110,6 @@ impl Scheduler {
             && end.saturating_sub(request.prefill_start) > self.config.max_num_batched_tokens
     }
 
-    /// Share long prefill work without changing admission or preemption order.
-    /// Prefix lookups here are read-only; admission looks up and touches again.
     fn long_prefill_quota(&self) -> Option<usize> {
         let mut count = 0;
         let mut decode = 0_usize;
@@ -182,12 +147,6 @@ impl Scheduler {
         Some(budget / count / block * block)
     }
 
-    /// Defer a rounded one-token prefill after a block-sized prefill chunk.
-    ///
-    /// A later step can reach the next aligned checkpoint without adding a
-    /// one-token sequence to a large GPU batch. Keep single-token decode,
-    /// final prompt tails, reachable checkpoints, and sub-block configurations.
-    /// Decode-only and speculative steps keep the progress fallback.
     fn defer_aligned_prefill(
         &self,
         request: &Request,
@@ -218,24 +177,13 @@ impl Scheduler {
         }
     }
 
-    /// Add a new request to the waiting queue.
-    ///
-    /// Returns `true` if the request was admitted. Returns `false` and drops
-    /// the request if it is impossible to serve even with an empty pool: a
-    /// request whose prompt + max_tokens or GDN state cannot fit the pool
-    /// would preempt itself indefinitely (SCH-04).
     pub fn add_request(&mut self, mut req: Request) -> bool {
         let block = self.kv.block_size();
-        // The last generated token is returned to the caller without another
-        // forward pass, so it does not occupy an FA page.
         let fa_blocks_needed = req
             .prompt_len
             .saturating_add(req.max_tokens.saturating_sub(1))
             .div_ceil(block);
         let fa_usable = self.kv.pool().num_blocks().saturating_sub(1) as usize;
-        // The next forward pass must hold the preceding state while writing a
-        // new checkpoint. A one-token output after one full prefill needs only
-        // its first state; chunked prefill still requires the second slot.
         let one_forward = req.max_tokens == 1
             && req.prompt_len > 0
             && self.aligned_prefill(
@@ -275,17 +223,14 @@ impl Scheduler {
         true
     }
 
-    /// Number of requests currently in the waiting queue.
     pub fn num_waiting(&self) -> usize {
         self.waiting.len()
     }
 
-    /// Number of requests currently running.
     pub fn num_running(&self) -> usize {
         self.running.len()
     }
 
-    /// Suspend a stream without immediately releasing KV; pool pressure may preempt it.
     pub fn pause(&mut self, request_id: RequestId) {
         if self.running.iter().any(|req| req.id == request_id)
             || self.waiting.iter().any(|req| req.id == request_id)
@@ -306,17 +251,9 @@ impl Scheduler {
         req.draft_token_ids.clear();
         req.status = RequestStatus::Preempted;
         output.preempted_request_ids.push(req.id);
-        // Victims come from the tail (youngest first), so pushing each at the
-        // front restores FCFS order ahead of newer requests already waiting.
         self.waiting.push_front(req);
     }
 
-    // ── main scheduling entry point ───────────────────────────────────────────
-
-    /// Produce the next step's batch.
-    ///
-    /// Call this once per inference step. After the worker finishes, call
-    /// [`update`] with the results before calling `schedule` again.
     pub fn schedule(&mut self) -> SchedulerOutput {
         let started = std::time::Instant::now();
         self.kv.new_step_starts();
@@ -335,10 +272,6 @@ impl Scheduler {
             .map(Self::decode_tokens)
             .fold(0_usize, usize::saturating_add);
 
-        // ── phase 1: running requests (decode / continued prefill) ────────────
-        //
-        // Walk the running queue first so already-warm requests are never
-        // starved by new arrivals. Preempt from the tail if the pool is full.
         let mut still_running: VecDeque<Request> = VecDeque::new();
         while let Some(mut req) = self.running.pop_front() {
             if self.paused.contains(&req.id) {
@@ -348,8 +281,6 @@ impl Scheduler {
             let tokens_needed = req.num_tokens_with_spec() - req.num_computed_tokens;
             let decode = Self::decode_tokens(&req);
             pending_decode = pending_decode.saturating_sub(decode);
-            // Short and continued prefills cannot spend later decode budgets.
-            // Queue order still controls admission and preemption priority.
             let available = if decode == 0 {
                 token_budget.saturating_sub(pending_decode)
             } else {
@@ -375,7 +306,6 @@ impl Scheduler {
                 continue;
             }
 
-            // Re-allocate for the new tokens (no cache-hit lookup for running reqs).
             let alloc = loop {
                 let result = self.kv.allocate_slots(
                     &req,
@@ -388,8 +318,6 @@ impl Scheduler {
                 if result.is_some() {
                     break result;
                 }
-                // Running requests have no new prefix-hit blocks, so this
-                // failure is capacity pressure rather than same-step deferral.
                 let Some(victim) = self.running.pop_back() else {
                     break None;
                 };
@@ -406,8 +334,6 @@ impl Scheduler {
                         && to_schedule >= self.kv.block_size();
                     let fa_table = self.kv.full_attn_blocks(req.id).to_vec();
                     let mb_table = self.kv.mamba_blocks(req.id).to_vec();
-                    // Combine confirmed + draft tokens so the worker receives the full
-                    // speculative sequence. For non-MTP requests draft_token_ids is empty.
                     let scheduled_tokens = req
                         .token_ids
                         .iter()
@@ -429,14 +355,12 @@ impl Scheduler {
                     still_running.push_back(req);
                 }
                 None => {
-                    // The current request is now the last remaining priority.
                     self.preempt_request(req, &mut output);
                 }
             }
         }
         self.running = still_running;
 
-        // ── phase 2: waiting requests (new prefills) ──────────────────────────
         let mut paused_waiting = VecDeque::new();
         while let Some(mut req) = self.waiting.pop_front() {
             if self.paused.contains(&req.id) {
@@ -448,7 +372,6 @@ impl Scheduler {
                 break;
             }
 
-            // Prefix cache lookup.
             let (fa_hit, mb_hit, hit_len) = self.kv.get_computed_blocks(&req);
 
             let total_tokens = req.num_tokens_with_spec();
@@ -482,9 +405,6 @@ impl Scheduler {
                     let prefill_end = req.prompt_len.max(req.token_ids.len().saturating_sub(1));
                     has_prefill_chunk |=
                         hit_len < prefill_end && to_schedule >= self.kv.block_size();
-                    // Build the block table: hit blocks (from add_local_computed_blocks,
-                    // which registered them inside allocate_slots) plus new blocks.
-                    // The coordinator tracks per-request blocks internally; expose them.
                     let fa_table = self.kv.full_attn_blocks(req.id).to_vec();
                     let mb_table = self.kv.mamba_blocks(req.id).to_vec();
 
@@ -506,7 +426,6 @@ impl Scheduler {
                     self.running.push_back(req);
                 }
                 None => {
-                    // Pool exhausted even for a new request — stop admitting.
                     self.waiting.push_front(req);
                     break;
                 }
@@ -527,18 +446,6 @@ impl Scheduler {
         output
     }
 
-    // ── post-step update ──────────────────────────────────────────────────────
-
-    /// Integrate worker results after one inference step.
-    ///
-    /// For each scheduled request:
-    /// - Appends the verified next token.
-    /// - Handles MTP acceptance: advances `num_computed_tokens` by the number
-    ///   of accepted draft tokens and sets new drafts for the next step.
-    /// - Marks finished requests and removes them from the running queue.
-    ///
-    /// Returns an error before changing any request when worker output violates
-    /// the scheduled token contract.
     pub fn validate_output(&self, worker: &WorkerOutput) -> Result<(), UpdateError> {
         let mut seen = rustc_hash::FxHashSet::default();
         for result in &worker.outputs {
@@ -627,7 +534,6 @@ impl Scheduler {
                 .find(|r| r.id == result.request_id)
                 .expect("validated request must remain scheduled");
 
-            // Only drafts actually scheduled in this step can be rejected.
             let scheduled_end = req.num_computed_tokens + req.num_in_flight_tokens;
             let scheduled_drafts = scheduled_end.saturating_sub(req.token_ids.len());
 
@@ -635,7 +541,6 @@ impl Scheduler {
                 scheduled_end - scheduled_drafts + result.num_accepted_draft_tokens;
             req.num_in_flight_tokens = 0;
 
-            // Append the verified output token and install new drafts.
             result
                 .token_ids
                 .truncate(req.max_tokens.saturating_sub(req.num_generated_tokens()));
@@ -671,7 +576,6 @@ impl Scheduler {
 
         self.finished_ids.extend_from_slice(&finished_ids);
 
-        // Remove finished requests and free their blocks.
         for id in &finished_ids {
             self.running.retain(|r| r.id != *id);
             self.paused.remove(id);
@@ -680,8 +584,6 @@ impl Scheduler {
         Ok(worker)
     }
 
-    /// Abort between completed steps. The next schedule notifies the worker,
-    /// including for registered requests that have not yet been admitted.
     pub fn abort(&mut self, request_id: RequestId) {
         self.paused.remove(&request_id);
         if self.running.iter().any(|r| r.id == request_id) {

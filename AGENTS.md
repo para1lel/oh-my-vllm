@@ -1,40 +1,28 @@
-# Collaboration principles
+# Project principles
 
-Build single-B200 inference for Qwen3.8-27B-FP8.
-Rust owns service, scheduling, and logical KV. Python owns GPU computation.
-Use ZMQ DEALER and msgpack between the processes.
+Build the Qwen3.8-27B-FP8 service for one NVIDIA B200.
+Use Rust for the service, the scheduler, and the logical KV cache.
 
-## Invariants
+Use Python for GPU computation. Use a ZMQ DEALER socket and msgpack for process communication.
+Obey the [runtime contracts](docs/requirements.md).
 
-Keep features, numerical tolerances, and [active requirements](docs/requirements.md).
-Keep block size 784, 16 FA layers, 48 GDN layers, `mamba_cache_mode="align"`, and 262144 total tokens.
-Do not change DSpark weights or introduce vLLM dependencies, environments, or caches.
+Read the Git status, the [handoff](docs/handoff.md), and the applicable directory instructions before work.
+Obey [CONTRIBUTING.md](CONTRIBUTING.md).
+Codex uses `main`. OMP uses an assigned Issue branch in a different checkout.
+Obey the [collaboration procedure](docs/collaboration.md).
 
-Use repository CUDA for operations that Torch does not supply. Native CUDA libraries are permitted.
-Keep development tools separate from inference dependencies.
+Keep the root guides short. Put local instructions in the related directory.
+Write all English documents in ASD-STE100. Supply a full Chinese translation for each English document.
 
-## Workflow
+Use clear names and small functions. Add a comment only when the code cannot give the necessary information.
+Keep the tests few. Before you add a test, tell the user why it is necessary.
 
-Read Git status, then read [handoff](docs/handoff.md) and applicable directory instructions.
-Codex uses `main`. OMP uses its assigned Issue branch in a separate checkout.
-Use the simplest change that meets the contracts. Add tests for critical behavior, not implementation details.
-After each milestone, obtain an independent sub-agent review, correct findings, update the handoff, and commit intentional paths.
+Do the applicable tests in the repository. Do not put test results in project files.
+Use the [test scope](docs/testing.md).
 
-Follow [contribution rules](CONTRIBUTING.md). Keep hooks enabled.
-The user authorizes project Issues, OMP branches and pull requests, and reviewed milestone publication.
-Follow [collaboration](docs/collaboration.md): rebase, repeat checks, squash, and fast-forward `main`.
-Obtain explicit user instruction for other repositories and publication.
-The existing TileFoundry adaptation branch is the permitted exception.
+Get a code review from another agent before each delivery. Correct the errors.
+Keep the hooks active. Commit only the files for the change.
 
-## Required checks
+Push the working branch to GitHub after each delivery.
 
-Use [development commands](docs/development.md#build-and-checks) and applicable [tests](docs/testing.md).
-Measure performance claims. Report skipped checks and verification limits.
-
-## Ownership
-
-Use the environment and GPU wrappers. Stop owned GPU processes and temporary services after each run or handoff.
-Only an explicit user request permits a service to stay active. Record it in ignored `LOCAL.md` and the handoff.
-Keep host configuration in `LOCAL.md`, raw traces and experiments in external storage, and current documents short.
-
-Keep English documents and their Chinese companions equal in scope.
+Put host settings in the ignored `LOCAL.md` file. Stop the workers and temporary services that you start.

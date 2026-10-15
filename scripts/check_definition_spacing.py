@@ -85,35 +85,47 @@ def main() -> int:
         if path.suffix == ".py":
             failed |= check_python(path, options.fix)
     rust = [str(path) for path in files if path.suffix == ".rs"]
-    result = subprocess.run(
-        [
-            "cargo",
-            "run",
-            "--quiet",
-            "--locked",
-            "-p",
-            "oh-my-vllm-style-check",
-            "--",
-            *(["--fix"] if options.fix else []),
-            *rust,
-        ],
-        cwd=ROOT,
-        check=False,
+    result = (
+        subprocess.run(
+            [
+                "cargo",
+                "run",
+                "--quiet",
+                "--locked",
+                "--manifest-path",
+                str(ROOT / "development/style-check/Cargo.toml"),
+                "--",
+                *(["--fix"] if options.fix else []),
+                *rust,
+            ],
+            cwd=ROOT,
+            check=False,
+        )
+        if rust
+        else None
     )
     javascript = [
         str(path) for path in files if path.suffix in {".js", ".mjs", ".cjs", ".ts"}
     ]
-    javascript_result = subprocess.run(
-        [
-            "node",
-            str(ROOT / "code-journey/scripts/check-spacing.mjs"),
-            *(["--fix"] if options.fix else []),
-            *javascript,
-        ],
-        cwd=ROOT,
-        check=False,
+    javascript_result = (
+        subprocess.run(
+            [
+                "node",
+                str(ROOT / "development/javascript/check-spacing.mjs"),
+                *(["--fix"] if options.fix else []),
+                *javascript,
+            ],
+            cwd=ROOT,
+            check=False,
+        )
+        if javascript
+        else None
     )
-    if result.returncode or javascript_result.returncode or failed:
+    if (
+        (result is not None and result.returncode)
+        or (javascript_result is not None and javascript_result.returncode)
+        or failed
+    ):
         return 1
     print("Function and module definition spacing passed")
     return 0

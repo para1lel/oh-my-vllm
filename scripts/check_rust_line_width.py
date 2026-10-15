@@ -38,7 +38,11 @@ def main() -> int:
             )
             .decode()
             .split("\0")
-            if name and (ROOT / name).is_file()
+            if name
+            and not name.startswith("3rdparty/")
+            and (ROOT / name).is_file()
+            and not (ROOT / name).is_symlink()
+            and (ROOT / name).resolve().is_relative_to(ROOT)
         ]
     )
     errors = [

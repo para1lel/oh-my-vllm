@@ -1,0 +1,6 @@
+name: oh-my-vllm
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12.14
+  - rust=1.97.0

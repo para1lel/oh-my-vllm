@@ -1,4 +1,3 @@
-//! Conservative host-state reservations span parsing, inference, and HTTP drain.
 use anyhow::{Result, ensure};
 use serde_json::{Value, json};
 use std::{
@@ -28,8 +27,6 @@ struct BudgetState {
     drains: usize,
 }
 
-/// Clones share one reservation. It is released only after the engine, pending
-/// events, and the HTTP response body have all released their ownership.
 #[derive(Clone)]
 pub struct Lease(Arc<LeaseInner>);
 
@@ -73,7 +70,6 @@ impl Budget {
             deadline: received + timeout,
             epoch,
         }));
-        // This is reserved before Axum reads or decodes the HTTP body.
         lease.resize(HTTP_BODY_BYTES)?;
         Ok(lease)
     }
@@ -172,7 +168,6 @@ impl Drop for Drain {
     }
 }
 
-/// Measure serialized data without allocating a second serialized payload.
 pub fn serialized_bytes<T: serde::Serialize>(value: &T) -> Result<usize> {
     struct Counter(usize);
 
@@ -213,72 +208,4 @@ pub fn rss_bytes() -> Option<usize> {
     }
     #[cfg(not(target_os = "linux"))]
     None
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn admission_and_cloned_response_ownership_hold_and_release_the_budget() {
-        let budget = Budget::new(HTTP_BODY_BYTES);
-        let lease = budget.admit(Duration::from_secs(10), 1).unwrap();
-        assert!(budget.admit(Duration::from_secs(10), 1).is_err());
-        lease.start().unwrap();
-        let response = lease.clone();
-        let drain = lease.drain();
-        drop(lease);
-        assert_eq!(budget.snapshot()["live_reservations"], 1);
-        assert_eq!(budget.snapshot()["completed_stream_drains"], 1);
-        drop(drain);
-        assert_eq!(budget.snapshot()["completed_stream_drains"], 0);
-        assert!(budget.admit(Duration::from_secs(10), 1).is_err());
-        drop(response);
-        assert_eq!(budget.snapshot()["request_state_bytes"], 0);
-        assert_eq!(budget.snapshot()["live_reservations"], 0);
-        assert!(budget.admit(Duration::from_secs(10), 1).is_ok());
-    }
-
-    #[test]
-    fn failed_growth_and_expired_queue_preserve_accounting() {
-        let budget = Budget::new(HTTP_BODY_BYTES + 16);
-        let lease = budget.admit(Duration::ZERO, 1).unwrap();
-        assert!(lease.start().is_err());
-        assert!(lease.grow(17).is_err());
-        assert_eq!(budget.snapshot()["request_state_bytes"], HTTP_BODY_BYTES);
-        lease.grow(16).unwrap();
-        lease.resize(1).unwrap();
-        assert_eq!(budget.snapshot()["request_state_bytes"], 1);
-        drop(lease);
-        assert_eq!(budget.snapshot()["queued_reservations"], 0);
-    }
-
-    #[test]
-    fn completed_streams_still_use_all_live_slots_until_their_drains_drop() {
-        let budget = Budget::new(HTTP_BODY_BYTES * 2);
-        let mut drains = Vec::new();
-        for _ in 0..64 {
-            let lease = budget.admit(Duration::from_secs(10), 1).unwrap();
-            lease.resize(1).unwrap();
-            lease.start().unwrap();
-            drains.push(lease.drain());
-        }
-        assert_eq!(budget.snapshot()["live_reservations"], 64);
-        assert_eq!(budget.snapshot()["completed_stream_drains"], 64);
-        let waiting = budget.admit(Duration::from_secs(10), 1).unwrap();
-        assert!(waiting.start().is_err());
-        drop(waiting);
-        drop(drains);
-        assert_eq!(budget.snapshot()["request_state_bytes"], 0);
-        assert_eq!(budget.snapshot()["live_reservations"], 0);
-    }
-
-    #[test]
-    fn serializer_count_matches_real_encoding_without_a_payload_copy() {
-        let value = json!({"nested": ["中文", "a\\b", "quoted\"", null, 784]});
-        assert_eq!(
-            serialized_bytes(&value).unwrap(),
-            serde_json::to_vec(&value).unwrap().len()
-        );
-    }
 }

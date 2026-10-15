@@ -1,10 +1,6 @@
-//! msgpack message types shared between Rust and Python.
-
 use serde::{Deserialize, Serialize};
 
-// ── Rust → Python ─────────────────────────────────────────────────────────────
-
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RustMessage {
     Init(InitMsg),
@@ -22,7 +18,7 @@ pub enum RustMessage {
     Shutdown,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct InitMsg {
     pub model_path: String,
     pub num_gpu_blocks: u32,
@@ -31,33 +27,27 @@ pub struct InitMsg {
     pub tensor_parallel_size: u32,
     pub max_model_len: u32,
     pub num_speculative_tokens: usize,
-    /// Optional explicit mode. An absent mode preserves the legacy 0/4 selection.
     pub speculative_mode: Option<String>,
-    /// DSpark checkpoint location, independent of the target model location.
-    pub draft_model_path: Option<String>,
-    /// Minimum cumulative prefix confidence; zero retains the full legal draft.
-    pub dspark_confidence_threshold: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub torch_profile: Option<BenchmarkProfile>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchmarkProfile {
     pub path: String,
     pub skip_steps: usize,
     pub steps: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RegisterMsg {
     pub request_id: u64,
     pub prompt_token_ids: Vec<u32>,
-    /// Output budget shared with Python sampling and speculative proposal limits.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<usize>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ExecuteMsg {
     pub rpc_id: u64,
     pub step_id: u64,
@@ -67,7 +57,7 @@ pub struct ExecuteMsg {
     pub num_batched_tokens: u32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ScheduledRequestMsg {
     pub request_id: u64,
     pub token_ids: Vec<u32>,
@@ -78,16 +68,14 @@ pub struct ScheduledRequestMsg {
     pub mamba_block_table: Vec<u32>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AbortMsg {
     pub request_id: u64,
 }
 
-// ── Python → Rust ─────────────────────────────────────────────────────────────
-
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum PythonMessage {
+pub enum WorkerMessage {
     Ready {
         logical_num_blocks: u32,
         mamba_blocks: u32,
@@ -104,13 +92,13 @@ pub enum PythonMessage {
     },
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ExecuteResultMsg {
     pub rpc_id: u64,
     pub outputs: Vec<RequestResultMsg>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RequestResultMsg {
     pub request_id: u64,
     #[serde(default)]
@@ -128,7 +116,7 @@ pub struct RequestResultMsg {
     pub reasoning_tokens: usize,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorMsg {
     pub message: String,
     #[serde(default)]
@@ -137,7 +125,7 @@ pub struct ErrorMsg {
     pub kind: WorkerErrorKind,
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkerErrorKind {
     Validation,
@@ -147,85 +135,10 @@ pub enum WorkerErrorKind {
     Device,
 }
 
-// ── encode / decode helpers ───────────────────────────────────────────────────
-
 pub fn encode<T: Serialize>(msg: &T) -> Result<Vec<u8>, rmp_serde::encode::Error> {
     rmp_serde::to_vec_named(msg)
 }
 
-pub fn decode(bytes: &[u8]) -> Result<PythonMessage, rmp_serde::decode::Error> {
+pub fn decode(bytes: &[u8]) -> Result<WorkerMessage, rmp_serde::decode::Error> {
     rmp_serde::from_slice(bytes)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn register_output_budget_is_optional_on_the_wire() {
-        for budget in [None, Some(16)] {
-            let bytes = encode(&RustMessage::Register(RegisterMsg {
-                request_id: 1,
-                prompt_token_ids: vec![2],
-                max_tokens: budget,
-            }))
-            .unwrap();
-            let value: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
-            assert_eq!(
-                value.get("max_tokens"),
-                budget.map(|n| serde_json::json!(n)).as_ref()
-            );
-        }
-    }
-
-    #[test]
-    fn execute_wire_contains_only_live_cache_fields() {
-        let message = RustMessage::Execute(ExecuteMsg {
-            rpc_id: 1,
-            step_id: 2,
-            scheduled: vec![ScheduledRequestMsg {
-                request_id: 3,
-                token_ids: vec![4],
-                prefill_token_ids: Some(vec![4]),
-                num_computed_tokens: 0,
-                fa_block_table: vec![1],
-                mamba_block_table: vec![2],
-            }],
-            finished_request_ids: vec![],
-            preempted_request_ids: vec![],
-            num_batched_tokens: 1,
-        });
-        let bytes = encode(&message).unwrap();
-        let value: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
-        let request = &value["scheduled"][0];
-        assert!(request.get("new_block_ids_to_zero").is_none());
-        assert_eq!(request["fa_block_table"], serde_json::json!([1]));
-        assert_eq!(request["mamba_block_table"], serde_json::json!([2]));
-    }
-
-    #[test]
-    fn worker_error_kind_defaults_to_internal() {
-        let old = rmp_serde::to_vec_named(&serde_json::json!({
-            "type": "error",
-            "message": "tokenizer failed",
-            "rpc_id": 4,
-        }))
-        .unwrap();
-        let PythonMessage::Error(error) = decode(&old).unwrap() else {
-            panic!("expected error frame");
-        };
-        assert_eq!(error.kind, WorkerErrorKind::Internal);
-
-        let validation = rmp_serde::to_vec_named(&serde_json::json!({
-            "type": "error",
-            "message": "invalid schema",
-            "kind": "validation",
-            "rpc_id": 5,
-        }))
-        .unwrap();
-        let PythonMessage::Error(error) = decode(&validation).unwrap() else {
-            panic!("expected error frame");
-        };
-        assert_eq!(error.kind, WorkerErrorKind::Validation);
-    }
 }

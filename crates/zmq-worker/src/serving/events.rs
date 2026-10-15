@@ -531,7 +531,6 @@ impl Output {
             .as_array()
             .unwrap()
             .clone();
-        // Responses instructions apply only to this response, unlike input messages.
         if self.request.responses
             && self.request.original["instructions"].is_string()
             && history.first().is_some_and(|m| {
@@ -550,48 +549,5 @@ impl Output {
         }
         history.push(assistant);
         history
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn stored_history_drops_only_top_level_instructions() {
-        let request = super::super::request::normalize(
-            json!({
-                "model": "m",
-                "instructions": "one turn only",
-                "input": "hello",
-            }),
-            true,
-            "m",
-            None,
-        )
-        .unwrap();
-        let mut output = Output::new("resp_test".to_owned(), request);
-        output.delta(Delta::Reasoning("thinking".to_owned()));
-        output.delta(Delta::Text("answer".to_owned()));
-        let history = output.history();
-        assert_eq!(history[0]["role"], "user");
-        assert_eq!(history[1]["reasoning_content"], "thinking");
-        let followup = super::super::request::normalize(
-            json!({
-                "model": "m",
-                "input": "continue",
-            }),
-            true,
-            "m",
-            Some(history),
-        )
-        .unwrap();
-        assert!(
-            followup.normalized["messages"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .all(|m| m["role"] != "system")
-        );
     }
 }

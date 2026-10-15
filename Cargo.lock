@@ -680,14 +680,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oh-my-vllm-style-check"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "oh-my-vllm-zmq-worker"
 version = "0.1.0"
 dependencies = [

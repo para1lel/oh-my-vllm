@@ -1,35 +1,18 @@
 #!/usr/bin/env bash
-# Start a command with the configured project environment.
 set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_PREFIX="${OH_MY_VLLM_CONDA_PREFIX:-${VIRTUAL_ENV:-${CONDA_PREFIX:-$REPO_ROOT/.venv}}}"
+ENV_PREFIX="${OH_MY_VLLM_CONDA_PREFIX:-${CONDA_PREFIX:-${VIRTUAL_ENV:-$REPO_ROOT/.venv}}}"
 
-if [[ ! -d "$ENV_PREFIX/bin" ]]; then
-	echo "with-env.sh: environment does not exist: $ENV_PREFIX" >&2
-	echo "  set OH_MY_VLLM_CONDA_PREFIX, activate an environment, or create .venv" >&2
+if [[ ! -x "$ENV_PREFIX/bin/python" ]]; then
+	echo "Activate the development environment or set OH_MY_VLLM_CONDA_PREFIX." >&2
 	exit 1
 fi
 
 export PATH="$ENV_PREFIX/bin:$PATH"
-# uv otherwise prefers an inherited active environment over PATH.
 export UV_PYTHON="$ENV_PREFIX/bin/python"
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$REPO_ROOT/target}"
 export PYTHONPATH="$REPO_ROOT/python:$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export OH_MY_VLLM_WORKER_PYTHON="${OH_MY_VLLM_WORKER_PYTHON:-$ENV_PREFIX/bin/python}"
-# Keep independently built kernels separate from other frameworks' artifacts.
-RUNTIME_CACHE="${OH_MY_VLLM_RUNTIME_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/oh-my-vllm/native-cuda-v1}"
-export TRITON_CACHE_DIR="${TRITON_CACHE_DIR:-$RUNTIME_CACHE/triton}"
-export TVM_FFI_CACHE_DIR="${TVM_FFI_CACHE_DIR:-$RUNTIME_CACHE/native-cuda}"
-export TVM_FFI_CUDA_ARCH_LIST="${TVM_FFI_CUDA_ARCH_LIST:-10.0a}"
-export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
-# Reuse buffers after joined stream frontiers during long CUDA Graph captures.
-# An explicit allocator configuration remains authoritative for experiments.
-if [[ ! ${PYTORCH_ALLOC_CONF+x} ]]; then
-	export PYTORCH_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF-graph_capture_record_stream_reuse:True}"
-fi
-export PYTORCH_ALLOC_CONF
-# PyTorch checks the legacy alias first. Keep one authoritative configuration.
-unset PYTORCH_CUDA_ALLOC_CONF
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$REPO_ROOT/target}"
 
 exec "$@"

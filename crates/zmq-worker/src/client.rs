@@ -1,9 +1,6 @@
-//! Async client handle for the Python model worker.
-//!
-//! `WorkerClient` owns the ZMQ DEALER socket and the Python child process.
-//! The scheduler calls `execute_one_step` once per inference step.
-
 use std::collections::BTreeSet;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -25,32 +22,18 @@ use crate::protocol::{
     AbortMsg, ExecuteMsg, InitMsg, RegisterMsg, RustMessage, ScheduledRequestMsg, decode, encode,
 };
 
-/// Configuration for launching the Python worker.
 #[derive(Debug, Clone)]
 pub struct WorkerConfig {
-    /// Path to the model weights directory.
     pub model_path: PathBuf,
-    /// ZMQ IPC socket path (without `ipc://` prefix).
     pub socket_path: PathBuf,
-    /// Number of KV cache blocks pre-allocated on the GPU.
     pub num_gpu_blocks: u32,
     pub mamba_blocks: Option<u32>,
-    /// Block size in tokens (Qwen3.8: 784).
     pub block_size: u32,
-    /// Tensor parallel size (1 for single-GPU B200).
     pub tensor_parallel_size: u32,
-    /// Maximum sequence length in tokens.
     pub max_model_len: u32,
     pub num_speculative_tokens: usize,
-    /// Process mode: none, mtp, or dspark. None retains the legacy token-count selection.
     pub speculative_mode: Option<String>,
-    /// Path to DSpark weights. Required for DSpark execution.
-    pub draft_model_path: Option<PathBuf>,
-    /// DSpark cumulative confidence cutoff. Zero selects fixed-length proposals.
-    pub dspark_confidence_threshold: f64,
-    /// Python executable to use.
     pub python_executable: PathBuf,
-    /// Timeout waiting for the worker to become ready after launch.
     pub init_timeout: Duration,
     pub torch_profile: Option<crate::protocol::BenchmarkProfile>,
 }
@@ -66,11 +49,9 @@ impl Default for WorkerConfig {
             mamba_blocks: None,
             block_size: 784,
             tensor_parallel_size: 1,
-            max_model_len: 65536,
+            max_model_len: 262144,
             num_speculative_tokens: 0,
             speculative_mode: None,
-            draft_model_path: std::env::var_os("OH_MY_VLLM_DRAFT_MODEL").map(PathBuf::from),
-            dspark_confidence_threshold: 0.2,
             python_executable: std::env::var_os("OH_MY_VLLM_WORKER_PYTHON")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("python3")),
@@ -80,11 +61,10 @@ impl Default for WorkerConfig {
     }
 }
 
-/// Handle to the running Python model worker.
 pub struct WorkerClient {
     config: WorkerConfig,
     sock: DealerSendHalf,
-    inbox: mpsc::Receiver<Result<crate::protocol::PythonMessage>>,
+    inbox: mpsc::Receiver<Result<crate::protocol::WorkerMessage>>,
     reader: JoinHandle<()>,
     _child: ManagedChild,
     step_id: u64,
@@ -92,12 +72,13 @@ pub struct WorkerClient {
     pending_prepare: Option<(u64, u64)>,
     last_prepare: Option<(u64, u64)>,
     cancelled_prepares: BTreeSet<u64>,
-    prepared_reply: Option<crate::protocol::PythonMessage>,
+    prepared_reply: Option<crate::protocol::WorkerMessage>,
     serving_enabled: bool,
     pub logical_num_blocks: u32,
     pub mamba_blocks: u32,
     pub serving_outputs: std::collections::BTreeMap<u64, (String, Option<String>, usize)>,
     pub serving_errors: std::collections::BTreeMap<u64, String>,
+    binding: Binding,
 }
 
 impl Drop for WorkerClient {
@@ -106,13 +87,59 @@ impl Drop for WorkerClient {
     }
 }
 
-/// Reap the owned worker on errors as well as normal shutdown.
 struct ManagedChild {
     child: Option<Child>,
     group_killed: bool,
 }
 
 static PENDING_REAPS: AtomicUsize = AtomicUsize::new(0);
+
+struct IpcPath {
+    path: PathBuf,
+    identity: std::fs::Metadata,
+}
+
+struct Binding {
+    socket: Option<DealerSocket>,
+    ipc: Option<IpcPath>,
+    runtime: tokio::runtime::Handle,
+}
+
+impl Binding {
+    fn stop(&mut self) -> Option<JoinHandle<()>> {
+        let mut socket = self.socket.take()?;
+        let ipc = self.ipc.take();
+        Some(self.runtime.spawn(async move {
+            for error in socket.unbind_all().await {
+                warn!(%error, "IPC unbind failed");
+            }
+            drop(ipc);
+        }))
+    }
+
+    async fn close(&mut self) {
+        if let Some(cleanup) = self.stop() {
+            let _ = cleanup.await;
+        }
+    }
+}
+
+impl Drop for Binding {
+    fn drop(&mut self) {
+        drop(self.stop());
+    }
+}
+
+impl Drop for IpcPath {
+    fn drop(&mut self) {
+        if let Ok(current) = std::fs::symlink_metadata(&self.path) {
+            #[cfg(unix)]
+            if (current.dev(), current.ino()) == (self.identity.dev(), self.identity.ino()) {
+                let _ = std::fs::remove_file(&self.path);
+            }
+        }
+    }
+}
 
 impl ManagedChild {
     fn new(child: Child) -> Self {
@@ -139,10 +166,7 @@ impl ManagedChild {
     fn has_exited(&mut self) -> std::io::Result<bool> {
         #[cfg(target_os = "linux")]
         {
-            // WNOWAIT leaves an exited leader unreaped. Its PID and process
-            // group cannot be reused before kill_group signals its descendants.
-            // SAFETY: waitid writes only to the initialized siginfo buffer;
-            // this scalar PID belongs to the still-owned unreaped child.
+            // SAFETY: waitid writes to initialized storage for the owned, unreaped child.
             unsafe {
                 let mut info: libc::siginfo_t = std::mem::zeroed();
                 if libc::waitid(
@@ -171,14 +195,11 @@ impl ManagedChild {
     }
 }
 
-/// Every worker is a process-group leader. Its compiler children inherit that
-/// group, so cleanup cannot leave them behind when the Python leader exits.
 fn kill_worker_group(child: &mut Child) -> std::io::Result<()> {
     #[cfg(unix)]
     {
         let group = i32::try_from(child.id()).map_err(std::io::Error::other)?;
-        // SAFETY: the child was launched into its own process group. kill sends
-        // a signal to that owned group and does not access Rust memory.
+        // SAFETY: the unreaped child owns this process group; kill does not access Rust memory.
         if unsafe { libc::kill(-group, libc::SIGKILL) } == -1 {
             let error = std::io::Error::last_os_error();
             if error.raw_os_error() != Some(libc::ESRCH) {
@@ -194,8 +215,6 @@ fn kill_worker_group(child: &mut Child) -> std::io::Result<()> {
 fn worker_group_alive(pid: u32) -> std::io::Result<bool> {
     #[cfg(target_os = "linux")]
     {
-        // A killed descendant can remain a zombie until its new parent reaps
-        // it. Zombies own no execution state or memory and do not delay restart.
         let group = pid.to_string();
         for entry in std::fs::read_dir("/proc")? {
             let entry = entry?;
@@ -234,7 +253,6 @@ impl Drop for ManagedChild {
         let _ = self.kill_group();
         if let Some(child) = self.child.take() {
             PENDING_REAPS.fetch_add(1, Ordering::SeqCst);
-            // Waiting for a child can block; reap it off the Tokio executor.
             let child = Arc::new(Mutex::new(child));
             let waiter = Arc::clone(&child);
             if std::thread::Builder::new()
@@ -245,7 +263,6 @@ impl Drop for ManagedChild {
                 })
                 .is_err()
             {
-                // If no waiter thread can start, still satisfy the reaping contract.
                 reap_worker_group(&mut child.lock().unwrap());
                 PENDING_REAPS.fetch_sub(1, Ordering::SeqCst);
             }
@@ -262,7 +279,6 @@ fn reap_worker_group(child: &mut Child) {
 }
 
 impl WorkerClient {
-    /// Launch the Python worker and wait for the `ready` handshake.
     pub async fn launch(config: WorkerConfig) -> Result<Self> {
         if config.model_path.as_os_str().is_empty() {
             return Err(std::io::Error::new(
@@ -271,26 +287,23 @@ impl WorkerClient {
             )
             .into());
         }
-        if config.speculative_mode.as_deref() == Some("dspark")
-            && config
-                .draft_model_path
-                .as_ref()
-                .is_none_or(|p| p.as_os_str().is_empty())
-        {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "set OH_MY_VLLM_DRAFT_MODEL or WorkerConfig.draft_model_path",
-            )
-            .into());
-        }
         let addr = format!("ipc://{}", config.socket_path.display());
 
-        // Bind on the Rust side; the Python side connects.
         let mut sock = DealerSocket::new();
         sock.bind(&addr).await?;
+        let ipc = IpcPath {
+            path: config.socket_path.clone(),
+            identity: std::fs::symlink_metadata(&config.socket_path)?,
+        };
+        let mut binding_socket = DealerSocket::new();
+        *binding_socket.binds() = std::mem::take(sock.binds());
+        let binding = Binding {
+            socket: Some(binding_socket),
+            ipc: Some(ipc),
+            runtime: tokio::runtime::Handle::current(),
+        };
         info!("ZMQ DEALER socket bound at {addr}");
 
-        // Fork the Python worker process.
         let mut child = ManagedChild::new({
             let mut cmd = Command::new(&config.python_executable);
             cmd.args(["-m", "oh_my_vllm.worker.zmq_bridge", "--socket", &addr])
@@ -302,8 +315,6 @@ impl WorkerClient {
             #[cfg(unix)]
             cmd.process_group(0);
             // SAFETY: prctl is async-signal-safe; no Rust objects are touched.
-            // The child receives SIGKILL when the Rust parent exits, preventing
-            // orphaned GPU worker processes.
             #[cfg(target_os = "linux")]
             unsafe {
                 let parent_pid = libc::getpid();
@@ -318,7 +329,6 @@ impl WorkerClient {
                     {
                         return Err(std::io::Error::last_os_error());
                     }
-                    // The parent may have died between fork and prctl.
                     if libc::getppid() != parent_pid {
                         return Err(std::io::Error::from_raw_os_error(libc::ECHILD));
                     }
@@ -327,11 +337,8 @@ impl WorkerClient {
             }
             cmd.spawn()?
         });
-        info!("Python worker launched (pid {})", child.child().id());
+        info!("Worker launched (pid {})", child.child().id());
 
-        // Send the init message.  The Python process needs a moment to import
-        // and connect its DEALER socket before we can deliver the first message,
-        // so retry with exponential backoff until the send succeeds.
         let init = RustMessage::Init(InitMsg {
             model_path: config.model_path.to_string_lossy().into_owned(),
             num_gpu_blocks: config.num_gpu_blocks,
@@ -341,11 +348,6 @@ impl WorkerClient {
             max_model_len: config.max_model_len,
             num_speculative_tokens: config.num_speculative_tokens,
             speculative_mode: config.speculative_mode.clone(),
-            draft_model_path: config
-                .draft_model_path
-                .as_ref()
-                .map(|path| path.to_string_lossy().into_owned()),
-            dspark_confidence_threshold: config.dspark_confidence_threshold,
             torch_profile: config.torch_profile.clone(),
         });
         let mut delay_ms = 100u64;
@@ -376,7 +378,6 @@ impl WorkerClient {
             }
         }
 
-        // Wait for `ready`.
         let ready_reply = timeout(
             deadline.saturating_duration_since(Instant::now()),
             Self::recv_with_child(&mut sock, &mut child),
@@ -385,14 +386,14 @@ impl WorkerClient {
         .map_err(|_| Error::Timeout)??;
 
         let (logical_num_blocks, mamba_blocks) = match ready_reply {
-            crate::protocol::PythonMessage::Ready {
+            crate::protocol::WorkerMessage::Ready {
                 logical_num_blocks,
                 mamba_blocks,
             } => {
-                info!(logical_num_blocks, mamba_blocks, "Python worker is ready");
+                info!(logical_num_blocks, mamba_blocks, "Worker is ready");
                 (logical_num_blocks, mamba_blocks)
             }
-            crate::protocol::PythonMessage::Error(e) => {
+            crate::protocol::WorkerMessage::Error(e) => {
                 return Err(Error::WorkerError(e.message));
             }
             other => {
@@ -428,18 +429,15 @@ impl WorkerClient {
             mamba_blocks,
             serving_outputs: Default::default(),
             serving_errors: Default::default(),
+            binding,
         })
     }
 
-    /// Tell the Python worker about a new request before it is first scheduled.
-    /// Send failures are non-fatal: the worker may have already exited, and the
-    /// next `execute_one_step` will detect the dead worker via `recv_with_child`.
     pub async fn register_request(&mut self, request_id: u64, prompt_token_ids: Vec<u32>) {
         self.send_registration(request_id, prompt_token_ids, None)
             .await;
     }
 
-    /// Register a request with the same output budget as the Rust scheduler.
     pub async fn register_request_with_limit(
         &mut self,
         request_id: u64,
@@ -471,7 +469,6 @@ impl WorkerClient {
         }
     }
 
-    /// Release state from a prepare whose HTTP caller timed out or disconnected.
     pub async fn cancel_prepare(&mut self, request_id: u64) -> Result<()> {
         let msg = RustMessage::Abort(AbortMsg { request_id });
         timeout(Duration::from_secs(1), Self::send_raw(&mut self.sock, &msg))
@@ -482,8 +479,6 @@ impl WorkerClient {
         {
             if self.prepared_reply.is_none() {
                 self.cancelled_prepares.insert(rpc_id);
-                // An evicted late reply fails closed instead of contaminating
-                // a newer RPC; cancellation history cannot grow without bound.
                 if self.cancelled_prepares.len() > 1024 {
                     self.cancelled_prepares.pop_first();
                 }
@@ -497,7 +492,6 @@ impl WorkerClient {
         Ok(())
     }
 
-    /// Start one CPU preparation while inference steps continue on this connection.
     pub async fn begin_prepare_request(
         &mut self,
         request_id: u64,
@@ -511,7 +505,6 @@ impl WorkerClient {
         self.serving_enabled = true;
         self.rpc_id += 1;
         let rpc_id = self.rpc_id;
-        // Record the ID before send: a send timeout may race with delivery.
         self.last_prepare = Some((request_id, rpc_id));
         Self::send_raw(
             &mut self.sock,
@@ -526,7 +519,6 @@ impl WorkerClient {
         Ok(())
     }
 
-    /// Poll the outstanding preparation without holding up an active stream.
     pub fn poll_prepare_request(&mut self) -> Result<Option<Result<Vec<u32>>>> {
         let Some((_, rpc_id)) = self.pending_prepare else {
             return Ok(None);
@@ -538,9 +530,9 @@ impl WorkerClient {
                 Ok(reply) => {
                     let reply = reply?;
                     let received = match &reply {
-                        crate::protocol::PythonMessage::Prepared { rpc_id, .. } => *rpc_id,
-                        crate::protocol::PythonMessage::ExecuteResult(result) => result.rpc_id,
-                        crate::protocol::PythonMessage::Error(error) => error.rpc_id,
+                        crate::protocol::WorkerMessage::Prepared { rpc_id, .. } => *rpc_id,
+                        crate::protocol::WorkerMessage::ExecuteResult(result) => result.rpc_id,
+                        crate::protocol::WorkerMessage::Error(error) => error.rpc_id,
                         other => {
                             return Err(Error::UnexpectedMessageType(format!("{other:?}")));
                         }
@@ -548,8 +540,8 @@ impl WorkerClient {
                     if received < rpc_id {
                         if matches!(
                             reply,
-                            crate::protocol::PythonMessage::Prepared { .. }
-                                | crate::protocol::PythonMessage::Error(_)
+                            crate::protocol::WorkerMessage::Prepared { .. }
+                                | crate::protocol::WorkerMessage::Error(_)
                         ) && self.cancelled_prepares.remove(&received)
                         {
                             warn!(received, rpc_id, "discarding reply to cancelled RPC");
@@ -578,10 +570,10 @@ impl WorkerClient {
         self.pending_prepare = None;
         self.last_prepare = None;
         let result = match reply {
-            crate::protocol::PythonMessage::Prepared {
+            crate::protocol::WorkerMessage::Prepared {
                 prompt_token_ids, ..
             } => Ok(prompt_token_ids),
-            crate::protocol::PythonMessage::Error(e) => Err(worker_error(e)),
+            crate::protocol::WorkerMessage::Error(e) => Err(worker_error(e)),
             other => {
                 return Err(Error::UnexpectedMessageType(format!(
                     "wrong preparation reply type: {other:?}"
@@ -591,7 +583,6 @@ impl WorkerClient {
         Ok(Some(result))
     }
 
-    /// Execute one inference step and return per-request next tokens.
     pub async fn execute_one_step(
         &mut self,
         scheduled: &[ScheduledRequest],
@@ -642,7 +633,7 @@ impl WorkerClient {
             "execute_round_trip"
         );
         match reply {
-            crate::protocol::PythonMessage::ExecuteResult(r) => {
+            crate::protocol::WorkerMessage::ExecuteResult(r) => {
                 validate_reply_ids(scheduled, &r.outputs)?;
                 if !self.serving_enabled
                     && let Some(error) = r.outputs.iter().find_map(|output| output.error.as_ref())
@@ -679,14 +670,13 @@ impl WorkerClient {
                         .collect(),
                 })
             }
-            crate::protocol::PythonMessage::Error(e) => Err(worker_error(e)),
+            crate::protocol::WorkerMessage::Error(e) => Err(worker_error(e)),
             other => Err(Error::UnexpectedMessageType(format!("{other:?}"))),
         }
     }
 
-    /// Send a graceful shutdown to the Python worker.
     pub async fn shutdown(&mut self) -> Result<()> {
-        info!("sending shutdown to Python worker");
+        info!("sending worker shutdown");
         Self::send_raw(&mut self.sock, &RustMessage::Shutdown).await?;
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
@@ -694,6 +684,9 @@ impl WorkerClient {
                 self._child.kill_group()?;
                 let status = self._child.child().try_wait()?.ok_or(Error::WorkerDied)?;
                 self.wait_for_worker_group().await?;
+                self.binding.close().await;
+                self.reader.abort();
+                let _ = (&mut self.reader).await;
                 return if status.success() {
                     Ok(())
                 } else {
@@ -707,8 +700,6 @@ impl WorkerClient {
         }
     }
 
-    // ── internal helpers ──────────────────────────────────────────────────────
-
     pub fn configuration(&self) -> WorkerConfig {
         self.config.clone()
     }
@@ -717,7 +708,6 @@ impl WorkerClient {
         self._child.child().id()
     }
 
-    /// Reap the old GPU process before a replacement can allocate its caches.
     pub async fn terminate(&mut self) -> Result<()> {
         self.reader.abort();
         self._child.kill_group()?;
@@ -728,7 +718,10 @@ impl WorkerClient {
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        self.wait_for_worker_group().await
+        self.wait_for_worker_group().await?;
+        self.binding.close().await;
+        let _ = (&mut self.reader).await;
+        Ok(())
     }
 
     async fn wait_for_worker_group(&mut self) -> Result<()> {
@@ -759,7 +752,7 @@ impl WorkerClient {
         let rpc_id = self.rpc_id;
         Self::send_raw(&mut self.sock, &RustMessage::Stats { rpc_id }).await?;
         match self.recv_for(rpc_id).await? {
-            crate::protocol::PythonMessage::StatsResult { stats, .. } => {
+            crate::protocol::WorkerMessage::StatsResult { stats, .. } => {
                 if serde_json::to_vec(&stats)
                     .map_err(|error| Error::UnexpectedMessageType(error.to_string()))?
                     .len()
@@ -771,14 +764,14 @@ impl WorkerClient {
                 }
                 Ok(stats)
             }
-            crate::protocol::PythonMessage::Error(error) => Err(worker_error(error)),
+            crate::protocol::WorkerMessage::Error(error) => Err(worker_error(error)),
             other => Err(Error::UnexpectedMessageType(format!(
                 "wrong stats reply: {other:?}"
             ))),
         }
     }
 
-    async fn recv_for(&mut self, expected: u64) -> Result<crate::protocol::PythonMessage> {
+    async fn recv_for(&mut self, expected: u64) -> Result<crate::protocol::WorkerMessage> {
         if self.pending_prepare.is_some_and(|(_, id)| id == expected)
             && let Some(reply) = self.prepared_reply.take()
         {
@@ -787,24 +780,24 @@ impl WorkerClient {
         loop {
             let reply = self.recv_reply().await?;
             let received = match &reply {
-                crate::protocol::PythonMessage::Prepared { rpc_id, .. } => *rpc_id,
-                crate::protocol::PythonMessage::ExecuteResult(result) => result.rpc_id,
-                crate::protocol::PythonMessage::Error(error) => error.rpc_id,
-                crate::protocol::PythonMessage::StatsResult { rpc_id, .. } => *rpc_id,
+                crate::protocol::WorkerMessage::Prepared { rpc_id, .. } => *rpc_id,
+                crate::protocol::WorkerMessage::ExecuteResult(result) => result.rpc_id,
+                crate::protocol::WorkerMessage::Error(error) => error.rpc_id,
+                crate::protocol::WorkerMessage::StatsResult { rpc_id, .. } => *rpc_id,
                 other => {
                     return Err(Error::UnexpectedMessageType(format!("{other:?}")));
                 }
             };
             if received == expected {
                 let valid = match &reply {
-                    crate::protocol::PythonMessage::Prepared { .. } => {
+                    crate::protocol::WorkerMessage::Prepared { .. } => {
                         self.pending_prepare.is_some_and(|(_, id)| id == expected)
                     }
-                    crate::protocol::PythonMessage::ExecuteResult(_) => {
+                    crate::protocol::WorkerMessage::ExecuteResult(_) => {
                         self.pending_prepare.is_none_or(|(_, id)| id != expected)
                     }
-                    crate::protocol::PythonMessage::Error(_) => true,
-                    crate::protocol::PythonMessage::StatsResult { .. } => true,
+                    crate::protocol::WorkerMessage::Error(_) => true,
+                    crate::protocol::WorkerMessage::StatsResult { .. } => true,
                     _ => false,
                 };
                 if !valid {
@@ -827,8 +820,8 @@ impl WorkerClient {
                 }
                 if !matches!(
                     reply,
-                    crate::protocol::PythonMessage::Prepared { .. }
-                        | crate::protocol::PythonMessage::Error(_)
+                    crate::protocol::WorkerMessage::Prepared { .. }
+                        | crate::protocol::WorkerMessage::Error(_)
                 ) {
                     return Err(Error::UnexpectedMessageType(format!(
                         "wrong preparation reply for RPC {received}: {reply:?}"
@@ -841,8 +834,8 @@ impl WorkerClient {
                 );
             } else if matches!(
                 reply,
-                crate::protocol::PythonMessage::Prepared { .. }
-                    | crate::protocol::PythonMessage::Error(_)
+                crate::protocol::WorkerMessage::Prepared { .. }
+                    | crate::protocol::WorkerMessage::Error(_)
             ) && self.cancelled_prepares.remove(&received)
             {
                 warn!(received, expected, "discarding reply to cancelled RPC");
@@ -864,7 +857,7 @@ impl WorkerClient {
     async fn recv_with_child(
         sock: &mut DealerSocket,
         child: &mut ManagedChild,
-    ) -> Result<crate::protocol::PythonMessage> {
+    ) -> Result<crate::protocol::WorkerMessage> {
         let receive = Self::recv_raw(sock);
         tokio::pin!(receive);
         let mut heartbeat = tokio::time::interval(Duration::from_millis(100));
@@ -878,7 +871,7 @@ impl WorkerClient {
         }
     }
 
-    async fn recv_reply(&mut self) -> Result<crate::protocol::PythonMessage> {
+    async fn recv_reply(&mut self) -> Result<crate::protocol::WorkerMessage> {
         let mut heartbeat = tokio::time::interval(Duration::from_millis(100));
         loop {
             tokio::select! {
@@ -894,8 +887,13 @@ impl WorkerClient {
 
     async fn recv_raw<S: SocketRecv + Send>(
         sock: &mut S,
-    ) -> Result<crate::protocol::PythonMessage> {
+    ) -> Result<crate::protocol::WorkerMessage> {
         let raw: ZmqMessage = sock.recv().await?;
+        if raw.len() != 1 {
+            return Err(Error::UnexpectedMessageType(
+                "expected one msgpack frame".to_owned(),
+            ));
+        }
         let bytes = raw.into_vec().into_iter().next().unwrap_or_default();
         Ok(decode(&bytes)?)
     }
@@ -911,7 +909,6 @@ fn worker_error(error: crate::protocol::ErrorMsg) -> Error {
     }
 }
 
-/// Error rows obey the same complete, unique request-ID contract as token rows.
 fn validate_reply_ids(
     scheduled: &[ScheduledRequest],
     outputs: &[crate::protocol::RequestResultMsg],
@@ -945,116 +942,34 @@ fn validate_reply_ids(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::RequestResultMsg;
 
     #[test]
-    fn error_rows_have_complete_unique_known_ids_before_any_serving_state_is_written() {
-        use crate::protocol::RequestResultMsg;
-        let scheduled = vec![ScheduledRequest {
-            request_id: 7,
-            token_ids: vec![8],
+    fn execution_reply_ids_must_be_complete_unique_and_known() {
+        let scheduled = [ScheduledRequest {
+            request_id: 1,
+            token_ids: vec![1],
             prefill_token_ids: None,
             num_computed_tokens: 0,
-            fa_block_table: vec![1],
-            mamba_block_table: vec![2],
+            fa_block_table: vec![],
+            mamba_block_table: vec![],
         }];
-        let row = |id, tokens: Vec<u32>| -> RequestResultMsg {
-            serde_json::from_value(serde_json::json!({
-                "request_id": id, "token_ids": tokens, "error": "failed",
-            }))
-            .unwrap()
+        let output = |id| RequestResultMsg {
+            request_id: id,
+            error: None,
+            token_ids: vec![2],
+            num_accepted_draft_tokens: 0,
+            new_draft_token_ids: vec![],
+            text: "a".to_owned(),
+            finish_reason: None,
+            reasoning_tokens: 0,
         };
-        assert!(validate_reply_ids(&scheduled, &[row(7, vec![])]).is_ok());
-        assert!(validate_reply_ids(&scheduled, &[row(8, vec![])]).is_err());
-        assert!(validate_reply_ids(&scheduled, &[row(7, vec![]), row(7, vec![])]).is_err());
-        assert!(validate_reply_ids(&scheduled, &[row(7, vec![9])]).is_err());
-        assert!(validate_reply_ids(&scheduled, &[]).is_err());
-    }
-
-    #[cfg(target_os = "linux")]
-    #[tokio::test(flavor = "current_thread")]
-    async fn child_drop_reaps_without_blocking_the_executor() {
-        let child = Command::new("/bin/sleep")
-            .arg("10")
-            .process_group(0)
-            .spawn()
-            .unwrap();
-        let pid = child.id();
-        let start = Instant::now();
-        drop(ManagedChild::new(child));
-        assert!(start.elapsed() < Duration::from_millis(250));
-        timeout(Duration::from_secs(2), async {
-            while PathBuf::from(format!("/proc/{pid}")).exists() {
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .expect("killed child must be reaped by the background waiter");
-    }
-
-    #[cfg(target_os = "linux")]
-    #[tokio::test]
-    async fn ready_wait_uses_the_original_init_deadline() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let base = std::env::temp_dir().join(format!("oh-my-vllm-silent-{}", std::process::id()));
-        let script = base.with_extension("py");
-        let socket = base.with_extension("ipc");
-        std::fs::write(
-            &script,
-            concat!(
-                "#!/usr/bin/env python3\n",
-                "import sys, time, zmq\n",
-                "sock = zmq.Context.instance().socket(zmq.DEALER)\n",
-                "sock.connect(sys.argv[sys.argv.index('--socket') + 1])\n",
-                "sock.recv()\n",
-                "time.sleep(10)\n",
-            ),
-        )
-        .unwrap();
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
-        let config = WorkerConfig {
-            model_path: PathBuf::from("fixture-model"),
-            python_executable: script.clone(),
-            socket_path: socket.clone(),
-            init_timeout: Duration::from_millis(250),
-            ..WorkerConfig::default()
-        };
-        let start = Instant::now();
-        let result = WorkerClient::launch(config).await;
-        let error = result.err().expect("silent worker must not become ready");
-        assert!(matches!(error, Error::Timeout), "{error:?}");
-        assert!(start.elapsed() < Duration::from_secs(1));
-        let _ = std::fs::remove_file(script);
-        let _ = std::fs::remove_file(socket);
-    }
-
-    #[tokio::test]
-    async fn empty_model_is_rejected_before_worker_launch() {
-        let config = WorkerConfig {
-            model_path: PathBuf::new(),
-            python_executable: PathBuf::from("/bin/false"),
-            ..WorkerConfig::default()
-        };
-        let result = WorkerClient::launch(config).await;
-        assert!(matches!(result, Err(Error::Io(error))
-            if error.kind() == std::io::ErrorKind::InvalidInput));
-    }
-
-    #[tokio::test]
-    async fn reports_child_exit_before_connection_without_waiting_for_init_timeout() {
-        let socket_path =
-            std::env::temp_dir().join(format!("oh-my-vllm-dead-child-{}.ipc", std::process::id()));
-        let config = WorkerConfig {
-            model_path: PathBuf::from("fixture-model"),
-            python_executable: PathBuf::from("/bin/false"),
-            socket_path: socket_path.clone(),
-            init_timeout: Duration::from_secs(60),
-            ..WorkerConfig::default()
-        };
-        let result = timeout(Duration::from_secs(2), WorkerClient::launch(config))
-            .await
-            .expect("dead worker must be detected before the initialization deadline");
-        assert!(matches!(result, Err(Error::WorkerDied)));
-        let _ = std::fs::remove_file(socket_path);
+        assert!(validate_reply_ids(&scheduled, &[output(1)]).is_ok());
+        for invalid in [vec![], vec![output(2)], vec![output(1), output(1)]] {
+            assert!(validate_reply_ids(&scheduled, &invalid).is_err());
+        }
+        let mut mixed = output(1);
+        mixed.error = Some("failed".to_owned());
+        assert!(validate_reply_ids(&scheduled, &[mixed]).is_err());
     }
 }

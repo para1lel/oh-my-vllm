@@ -3,9 +3,9 @@ members = [
     "crates/kv-cache",
     "crates/scheduler",
     "crates/zmq-worker",
-    "development/style-check",
 ]
 resolver = "3"
+exclude = ["development/style-check"]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,7 +13,6 @@ edition = "2024"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-# Pin the compatible workspace dependencies.
 anyhow = "1.0.98"
 clap = { version = "4.5.40", features = ["derive", "env"] }
 rustc-hash = "2.1.1"
@@ -30,8 +29,6 @@ oh-my-vllm-kv-cache = { path = "crates/kv-cache" }
 oh-my-vllm-scheduler = { path = "crates/scheduler" }
 
 [profile.release]
-# The scheduler + KV cache are latency-critical and small enough that whole-program
-# optimization is cheap; we care about per-step CPU time, not build time.
 lto = "fat"
 codegen-units = 1
 

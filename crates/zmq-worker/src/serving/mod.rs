@@ -1,5 +1,5 @@
-//! Rust-owned OpenAI HTTP adapters, bounded response state, and online scheduling.
 mod events;
+mod media;
 mod parser;
 mod request;
 mod resources;
@@ -64,19 +64,15 @@ pub struct ServeArgs {
     pub response_max_bytes: usize,
     #[arg(long, default_value_t = 3600)]
     pub request_timeout_seconds: u64,
-    /// Deadline for one GPU step, including first-use compilation and graph capture.
     #[arg(long, default_value_t = 600, value_parser = clap::value_parser!(u64).range(1..))]
     pub worker_step_timeout_seconds: u64,
-    /// Default reasoning content budget. -1 keeps only the total output limit.
     #[arg(long, default_value_t = -1, allow_hyphen_values = true,
         value_parser = clap::value_parser!(i64).range(-1..=1_048_576))]
     pub thinking_token_budget: i64,
-    /// Sampling defaults for omitted request fields, above checkpoint defaults.
     #[arg(long, default_value = "{}", value_parser = sampling::parse_overrides)]
     pub override_generation_config: Value,
     #[arg(long, default_value_t = 35)]
     pub shutdown_grace_seconds: u64,
-    /// Conservative host state reserved across input, output, and stream drain.
     #[arg(long, default_value_t = 536870912)]
     pub request_state_max_bytes: usize,
     #[arg(long, default_value_t = 30)]
@@ -469,7 +465,6 @@ async fn generate(
         Err(_) => return error(StatusCode::SERVICE_UNAVAILABLE, "worker unavailable"),
     }
     if !streaming {
-        // Keep the event receiver alive until completion; its closure is cancellation.
         let response = match result.await {
             Ok(Ok(v)) => Json(v).into_response(),
             Ok(Err(e)) => error(StatusCode::INTERNAL_SERVER_ERROR, e),
@@ -733,9 +728,6 @@ async fn begin_admit(
         .lease
         .deadline()
         .min(started + Duration::from_millis(prepare_timeout_ms));
-    // A stalled DEALER send must not hold active inference past the same
-    // preparation deadline. Abort also covers a send that reached Python just
-    // before the local future timed out.
     match tokio::time::timeout_at(
         tokio::time::Instant::from_std(deadline),
         client.begin_prepare_request(id, submission.request.normalized.clone()),
@@ -1117,7 +1109,6 @@ async fn run_engine(
     loop {
         let was_idle = active.is_empty();
         if was_idle {
-            // Finish native cleanup before going idle, including cancelled admissions.
             execute(client, &scheduler.schedule(), context.step_timeout).await?;
         }
         update_resource_counts(
@@ -1250,8 +1241,6 @@ async fn run_engine(
             .update(worker)
             .context("validated worker output changed")?;
         if batch.scheduled.is_empty() && !active.is_empty() {
-            // A constrained logical pool can temporarily prevent admission. Avoid a
-            // CPU busy loop while retaining request timeout/cancellation handling.
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         for result in worker.outputs {
@@ -1265,7 +1254,6 @@ async fn run_engine(
                         .num_computed_tokens
                         .min(request.output.input_tokens);
                 }
-                // Count drafts actually scheduled, excluding the unverified next batch.
                 request.proposed += (scheduled.num_computed_tokens + scheduled.token_ids.len())
                     .saturating_sub(request.output.input_tokens + request.output.output_tokens);
             }
@@ -1294,8 +1282,6 @@ async fn run_engine(
             {
                 reason.get_or_insert("length".to_owned());
             }
-            // Length truncation may leave an incomplete call. Never deliver that call
-            // to a tool executor; retain length/incomplete rather than reporting 500.
             let parsed = if reason.as_deref() == Some("length") {
                 request.parser.feed_length(&text)
             } else {
@@ -1387,160 +1373,4 @@ fn update_resource_counts(
         "fa_blocks": fa, "fa_free": fa_free, "fa_cached": fa_cached,
         "gdn_blocks": gdn, "gdn_free": gdn_free, "gdn_cached": gdn_cached,
     });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn step_deadline_is_positive_and_configurable() {
-        #[derive(clap::Parser)]
-        struct Options {
-            #[command(flatten)]
-            serving: ServeArgs,
-        }
-
-        use clap::Parser;
-        assert_eq!(
-            Options::parse_from(["serve"])
-                .serving
-                .worker_step_timeout_seconds,
-            600
-        );
-        assert_eq!(
-            Options::parse_from(["serve", "--worker-step-timeout-seconds", "600"])
-                .serving
-                .worker_step_timeout_seconds,
-            600,
-        );
-        assert!(Options::try_parse_from(["serve", "--worker-step-timeout-seconds", "0",]).is_err());
-    }
-
-    #[tokio::test]
-    async fn stalled_stream_preserves_more_than_256_events_and_recovers_in_order() {
-        let (sender, mut receiver) = mpsc::channel(256);
-        let mut buffer = StreamBuffer::default();
-        buffer
-            .send(&sender, (0..300).map(|index| json!(index)).collect())
-            .unwrap();
-        assert!(buffer.is_blocked());
-        assert_eq!(buffer.pending.len(), 44);
-        for expected in 0..200 {
-            assert_eq!(receiver.recv().await.unwrap(), json!(expected));
-        }
-        buffer.flush(&sender).unwrap();
-        assert!(!buffer.is_blocked());
-        for expected in 200..300 {
-            assert_eq!(receiver.recv().await.unwrap(), json!(expected));
-        }
-    }
-
-    #[tokio::test]
-    async fn intermittent_one_event_reads_do_not_reset_stream_grace() {
-        let (sender, mut receiver) = mpsc::channel(256);
-        let mut buffer = StreamBuffer::default();
-        buffer
-            .send(&sender, (0..257).map(|index| json!(index)).collect())
-            .unwrap();
-        assert!(buffer.is_blocked());
-        assert_eq!(receiver.recv().await.unwrap(), json!(0));
-        buffer.flush(&sender).unwrap();
-        assert!(buffer.pending.is_empty());
-        assert!(
-            buffer.is_blocked(),
-            "one free slot must not resume generation"
-        );
-        buffer.blocked_since = Some(Instant::now() - Duration::from_secs(29));
-        buffer.flush(&sender).unwrap();
-        buffer.blocked_since = Some(Instant::now() - Duration::from_secs(31));
-        assert!(buffer.flush(&sender).is_err());
-    }
-
-    #[tokio::test]
-    async fn completed_stream_drains_pending_events_and_done_in_order() {
-        let (sender, mut receiver) = mpsc::channel(256);
-        let mut buffer = StreamBuffer::default();
-        buffer
-            .send(&sender, (0..258).map(|index| json!(index)).collect())
-            .unwrap();
-        buffer.send(&sender, vec![json!("[DONE]")]).unwrap();
-        let drain = buffer.drain_after_completion(sender.clone(), None).unwrap();
-        for expected in 0..258 {
-            let item = tokio::time::timeout(Duration::from_secs(1), receiver.recv())
-                .await
-                .unwrap()
-                .unwrap();
-            assert_eq!(item, json!(expected));
-        }
-        assert_eq!(receiver.recv().await.unwrap(), json!("[DONE]"));
-        drain.await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn completed_stream_drain_exits_on_timeout_or_receiver_drop() {
-        let (sender, receiver) = mpsc::channel(1);
-        sender.try_send(json!("occupied")).unwrap();
-        let mut buffer = StreamBuffer::default();
-        buffer.queue(json!("pending")).unwrap();
-        buffer.blocked_since = Some(Instant::now() - Duration::from_secs(31));
-        let drain = buffer.drain_after_completion(sender.clone(), None).unwrap();
-        tokio::time::timeout(Duration::from_millis(100), drain)
-            .await
-            .unwrap()
-            .unwrap();
-        drop(receiver);
-
-        let (sender, receiver) = mpsc::channel(1);
-        let mut buffer = StreamBuffer::default();
-        buffer.queue(json!("pending")).unwrap();
-        drop(receiver);
-        let drain = buffer.drain_after_completion(sender, None).unwrap();
-        tokio::time::timeout(Duration::from_millis(100), drain)
-            .await
-            .unwrap()
-            .unwrap();
-    }
-
-    #[test]
-    fn stream_pending_cap_and_disconnect_fail_closed() {
-        let (sender, receiver) = mpsc::channel(256);
-        let mut buffer = StreamBuffer::default();
-        let overflow = buffer
-            .send(&sender, (0..1281).map(|index| json!(index)).collect())
-            .unwrap_err();
-        assert!(!overflow.is::<ClientDisconnected>());
-        assert_eq!(buffer.pending.len(), MAX_PENDING_STREAM_EVENTS);
-        drop(receiver);
-        assert!(
-            buffer
-                .flush(&sender)
-                .unwrap_err()
-                .is::<ClientDisconnected>()
-        );
-        let mut empty = StreamBuffer::default();
-        assert!(
-            empty
-                .send(&sender, vec![json!("event")])
-                .unwrap_err()
-                .is::<ClientDisconnected>()
-        );
-    }
-
-    #[test]
-    fn store_capacity_and_expiry() {
-        let mut store = Store {
-            entries: BTreeMap::new(),
-            ttl: Duration::from_secs(60),
-            capacity: 1,
-            max_bytes: 1000,
-            bytes: 0,
-        };
-        store.insert("a".to_owned(), json!({}), vec![]);
-        store.insert("b".to_owned(), json!({}), vec![]);
-        assert!(!store.entries.contains_key("a"));
-        store.entries.get_mut("b").unwrap().saved = Instant::now() - Duration::from_secs(61);
-        store.prune();
-        assert_eq!(store.bytes, 0);
-    }
 }

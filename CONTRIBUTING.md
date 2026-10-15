@@ -1,65 +1,50 @@
 # Contribution procedure
 
-Read [collaboration rules](AGENTS.md) and [current work](docs/handoff.md) before changes.
-Codex develops on `main`. OMP develops assigned Issues on separate branches and submits pull requests.
-Keep existing changes from other work.
-The user authorizes this project's reviewed publication and [collaboration procedure](docs/collaboration.md).
+Read the root [AGENTS.md](AGENTS.md) and the applicable directory instructions before changes.
+Use the [development guide](docs/development.md) to install the tools and hooks.
 
-## Implementation
+## Code
 
-Keep Rust service, scheduler, and logical cache ownership.
-Keep GPU computation in Python with Torch and repository CUDA.
-Keep the block size, numerical tolerances, API features, and active acceptance criteria.
-Select stable compatible dependencies and pin the combination with satisfactory compatibility tests.
-Install Python dependencies with `uv`. Do not use `pip` directly.
+Use names that show what each function and module does.
+Use a comment only for information that the code cannot give.
 
-Use `rustfmt.toml` and a hard Rust line width of 100 characters.
-This limit includes macros, strings, comments, and expanded tabs.
-Split long JSON macros into fields and long literals with `concat!`.
-Put a `// SAFETY:` comment at each `unsafe` block.
-Use Python 3.12 or later and `ruff.toml`.
+Keep necessary safety, mathematical, and external-contract information.
+Put blank lines between functions and module definitions. Keep related imports together.
 
-Use clang-format 23.1.3 for owned CUDA modules. Keep each backend code file at most 800 lines.
+Use the repository formatters. Use different dependency files for development and inference.
 
-Add a meaningful test for new behavior.
-If a test is impractical, record the reason.
-Measure performance with the formal protocol. Identify estimates as estimates.
-Keep temporary tuning and raw traces in an external directory.
+## Documents
 
-## Review and checks
+Put user information in README. Put rules for all directories in the root guides.
+Put local details in the related directory guides.
 
-Start a review by another sub-agent after each milestone.
-Correct its correctness, performance, and engineering findings before the commit.
-Complete the required [checks](AGENTS.md#required-checks) and applicable [tests](docs/testing.md).
-Use `scripts/with-env.sh` for environment selection.
-The local hooks in `.pre-commit-config.yaml` use this wrapper.
+Write English documents in ASD-STE100. Obey the [document rules](docs/AGENTS.md).
+Keep each English Markdown document at most 2000 English words.
 
-Update each changed English Markdown document and its full Chinese companion together.
-Follow [writing rules](docs/writing.md), [glossary](docs/glossary.md), and the document update table in `AGENTS.md`.
-Keep host configuration in ignored `LOCAL.md`.
-Keep original evidence in ignored local storage. Commit clearly marked portable summaries.
+Supply its full Chinese translation in the same directory and change.
+Keep this procedure applicable to other contributors. Do not add chat history.
 
-## Commit
+## Tests
 
-Stage only the paths that belong to the change:
+Keep a small set of behavior tests.
+Use tests for failure conditions. Do not copy the implementation into expected values.
 
-```bash
-git add path/to/changed-file path/to/another-file
-scripts/with-env.sh pre-commit run --all-files
-git commit
-```
+Before you add a test, tell the maintainer why it is necessary.
+Tell the maintainer why the other tests are not sufficient.
+Agents do the applicable tests in the repository for the maintainer.
 
-The commit hooks must have the same configured environment as the manual checks.
-Keep hooks active. Do not use `git add .` or `--no-verify`.
-Use a Conventional Commits title, such as `docs: make deployment guides portable`.
-Give the resulting behavior, validation, skipped checks, and open limitations in the body.
+Do not commit test reports, logs, result tables, or pass/fail histories.
 
-Include this attribution line in each commit:
+## Delivery
 
-```text
-Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
-```
+Get a code review from another agent. Correct the errors before delivery.
+Do the applicable hooks in the configured development environment.
 
-Update `docs/handoff.md` with current results and open work.
-Stop owned GPU processes and temporary listeners.
-For a user-requested active service, record its purpose in the handoff and its host details in `LOCAL.md`.
+Keep the hooks active. Do not use `--no-verify`.
+Stage the files for the change. Do not use `git add .`.
+
+Use a Conventional Commits title. Give a short description of the change.
+Update the [handoff](docs/handoff.md) with the work state and next steps, without test results.
+
+Commit the change. Push the working branch to GitHub after each delivery.
+Stop the workers and temporary services that you start. Put host settings in the ignored `LOCAL.md` file.

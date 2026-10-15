@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-"""Strip trailing whitespace and enforce exactly one final newline.
-
-Stands in for pre-commit-hooks' trailing-whitespace/end-of-file-fixer so the hook
-set stays `repo: local` and needs no network. Binary files are skipped; so are
-files whose content is already clean, which keeps mtimes stable.
-"""
 
 from __future__ import annotations
 
@@ -13,12 +7,7 @@ from pathlib import Path
 
 
 def fix(path: Path) -> bool:
-    """Rewrite ``path`` if it needs cleaning. Returns True if it was changed."""
-    try:
-        original = path.read_bytes()
-    except OSError as exc:
-        print(f"{path}: cannot read: {exc}", file=sys.stderr)
-        return False
+    original = path.read_bytes()
 
     if b"\x00" in original:
         return False

@@ -1,64 +1,50 @@
 # 贡献流程
 
-修改前阅读 [协作规则](AGENTS.zh.md) 和 [当前工作](docs/handoff.zh.md).
-Codex 在 `main` 开发. OMP 在独立分支开发分配的 Issue, 并提交 pull request.
-保留其他任务已有的修改.
-用户已授权本项目经审查的发布及[协作流程](docs/collaboration.zh.md).
+修改前先阅读根目录的 [AGENTS.md](AGENTS.zh.md) 及适用的目录说明.
+使用[开发指南](docs/development.zh.md)安装工具和 hooks.
 
-## 实现
+## 代码
 
-保持 Rust 对服务, 调度和逻辑缓存的所有权.
-GPU 计算保留在 Python, 使用 Torch 和仓库 CUDA.
-保留块大小, 数值容差, API 功能和有效验收条件.
-选择兼容的稳定依赖, 固定经过验证的组合.
-Python 依赖使用 `uv` 安装; 不直接使用 `pip`.
+通过名称表达每个函数和模块的行为.
+注释仅用于补充代码无法表达的信息.
 
-使用 `rustfmt.toml`, Rust 行宽硬限制为 100 字符.
-限制包括宏, 字符串, 注释和展开后的制表符.
-长 JSON 宏拆成字段, 长字符串使用 `concat!`.
-每个 `unsafe` 块都添加 `// SAFETY:` 注释.
-使用 Python 3.12 或更高版本及 `ruff.toml`.
+保留必要的安全, 数学和外部契约说明.
+函数和模块定义之间留空行. 相关导入放在一起.
 
-自有 CUDA 模块使用 clang-format 23.1.3. 每个后端代码文件至多 800 行.
+使用仓库的格式化工具. 开发和推理使用不同的依赖文件.
 
-新增行为添加有实际意义的测试.
-无法测试时记录原因.
-按正式协议测量性能; 估算值明确标为估算.
-临时调优和原始 trace 放在仓库外.
+## 文档
 
-## 审查与检查
+README 只写使用者需要的信息. 根目录指南只写适用于所有目录的规则.
+局部细节放在对应目录指南中.
 
-每个里程碑后, 安排另一子代理进行审查.
-提交前修复审查发现的正确性, 性能和工程规范问题.
-完成必需 [检查](AGENTS.zh.md#必需检查) 和适用 [测试](docs/testing.zh.md).
-使用 `scripts/with-env.sh` 选择环境.
-`.pre-commit-config.yaml` 的本地钩子使用此包装脚本.
+英文文档遵循 ASD-STE100. 遵守[文档规则](docs/AGENTS.zh.md).
+每篇英文 Markdown 文档不超过 2000 个英语单词.
 
-英文 Markdown 修改时同步更新完整中文译文.
-遵循 [写作规则](docs/writing.zh.md), [术语表](docs/glossary.zh.md) 和 `AGENTS.md` 的文档更新表.
-主机配置记入被忽略的 `LOCAL.md`.
-原始证据保存在被忽略的本地存储; 仓库提交明确标识的可移植摘要.
+在同次修改中提供同目录的完整中文翻译.
+贡献流程应适用于其他贡献者. 不添加会话历史.
 
-## 提交
+## 测试
 
-只暂存属于当前修改的路径:
+保留少量行为测试.
+测试失败条件. 不将实现复制到期望值中.
 
-```bash
-git add path/to/changed-file path/to/another-file
-scripts/with-env.sh pre-commit run --all-files
-git commit
-```
+新增测试前, 向维护者说明必要性.
+向维护者说明其他测试为何不足.
+代理代维护者执行适用的已有测试.
 
-提交钩子需要与手动检查相同的配置环境.
-保持钩子启用; 不使用 `git add .` 或 `--no-verify`.
-标题采用 Conventional Commits, 例如 `docs: make deployment guides portable`.
-正文说明最终行为, 验证, 跳过的检查和剩余限制.
-每次提交包含以下原样署名:
+不提交测试报告, 日志, 结果表或通过与失败的历史记录.
 
-```text
-Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
-```
+## 交付
 
-更新 `docs/handoff.md`, 说明当前结果和开放工作.
-停止所属 GPU 进程和临时监听器.
-用户要求持续运行的服务, 在交接文档记录用途, 在 `LOCAL.md` 记录本机信息.
+由另一个代理进行代码审查. 交付前修正错误.
+在配置好的开发环境中执行适用的 hooks.
+
+保持 hooks 启用. 不使用 `--no-verify`.
+暂存本轮相关文件. 不使用 `git add .`.
+
+使用 Conventional Commits 标题. 简要描述修改.
+在[交接](docs/handoff.zh.md)中更新工作状态和后续步骤, 不写测试结果.
+
+提交修改. 每轮交付后将工作分支推送到 GitHub.
+停止自己启动的 worker 和临时服务. 主机配置放在被忽略的 `LOCAL.md` 中.

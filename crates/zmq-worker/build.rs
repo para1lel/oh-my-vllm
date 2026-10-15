@@ -1,5 +1,3 @@
-//! Bind the executable to its Cargo inputs and project Rust source tree.
-
 use sha2::{Digest, Sha256};
 use std::{env, fs, path::Path};
 

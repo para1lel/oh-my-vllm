@@ -1,40 +1,28 @@
-# 协作原则
+# 项目原则
 
-构建面向单张 B200 的 Qwen3.8-27B-FP8 推理框架.
-Rust 负责服务, 调度和逻辑 KV. Python 负责 GPU 计算.
-进程之间使用 ZMQ DEALER 和 msgpack.
+构建在单张 NVIDIA B200 上运行的 Qwen3.8-27B-FP8 服务.
+Rust 负责服务, 调度器和逻辑 KV cache.
 
-## 不变量
+Python 负责 GPU 计算. 使用 ZMQ DEALER socket 和 msgpack 进行进程通信.
+遵守[运行时契约](docs/requirements.zh.md).
 
-保持现有功能, 数值容差和[有效需求](docs/requirements.zh.md).
-保持 block 大小 784, 16 个 FA 层, 48 个 GDN 层, `mamba_cache_mode="align"`, 以及 262144 个总 token.
-不修改 DSpark 权重, 不引入 vLLM 依赖, 环境或缓存.
+工作前先查看 Git 状态, [交接](docs/handoff.zh.md)及适用的目录说明.
+遵守 [CONTRIBUTING.md](CONTRIBUTING.zh.md).
+Codex 使用 `main`. OMP 在不同 checkout 中使用分配的 Issue 分支.
+遵守[协作流程](docs/collaboration.zh.md).
 
-Torch 不提供的算子使用仓库 CUDA 实现. 允许原生 CUDA 库.
-开发工具与推理依赖分开.
+根目录指南保持简短. 局部说明放在对应目录.
+所有英文文档遵循 ASD-STE100. 每篇英文文档都提供完整中文翻译.
 
-## 工作流程
+使用清晰名称和小函数. 仅当代码无法提供必要信息时添加注释.
+测试保持少量. 新增测试前, 向用户说明必要性.
 
-读取 Git 状态, 然后读取[交接](docs/handoff.zh.md)和适用的目录指令.
-Codex 使用 `main`. OMP 在独立 checkout 使用分配的 Issue 分支.
-使用满足契约的简单改动. 为关键行为添加测试, 不测试实现细节.
-每个里程碑都由独立 sub-agent review, 修正发现, 更新交接, 然后提交有意修改的路径.
+自行执行适用的已有测试. 不在项目文件中记录测试结果.
+使用[测试范围](docs/testing.zh.md).
 
-遵循[贡献规则](CONTRIBUTING.zh.md). 保持 hooks 启用.
-用户已授权项目 Issue, OMP 分支和 pull request, 以及经审查里程碑的发布.
-遵循[协作流程](docs/collaboration.zh.md): rebase, 重跑检查, squash, 再 fast-forward `main`.
-其他仓库及发布操作仍需用户明确指令.
-现有 TileFoundry 适配分支是已许可的例外.
+每轮交付前由另一个代理进行代码审查. 修正错误.
+保持 hooks 启用. 只提交本轮修改的文件.
 
-## 必需检查
+每轮交付后将工作分支推送到 GitHub.
 
-使用[开发命令](docs/development.zh.md#构建与检查)和适用的[测试](docs/testing.zh.md).
-性能声明须有测量依据. 报告跳过的检查和验证范围限制.
-
-## 所有权
-
-使用环境和 GPU 包装脚本. 每次运行或交接后停止自有 GPU 进程和临时服务.
-只有用户明确请求才允许服务继续运行. 在被忽略的 `LOCAL.md` 和交接中记录.
-主机配置放在 `LOCAL.md`, 原始 trace 和实验放在外部存储, 当前文档保持简短.
-
-英文文档及其中文配套文档保持相同范围.
+主机配置放在被忽略的 `LOCAL.md` 中. 停止自己启动的 worker 和临时服务.

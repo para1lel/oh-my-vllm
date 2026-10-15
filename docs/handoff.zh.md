@@ -1,97 +1,25 @@
-# 当前状态和待完成工作
+# 工作状态
 
-更新: 2026-10-15. 开发仍在进行, 最终交付待完成.
+Rust 提供 HTTP API, CLI, 调度器, 逻辑 KV cache 和 worker 生命周期控制.
+服务模式为普通解码和 MTP4.
+HTTP 输入可包含文本, 图片和视频.
 
-## 已接受范围
+Python worker 是占位实现, 不加载模型权重, 不使用 GPU.
+Rust 通过推理 worker 的进程和协议边界发送媒体引用.
 
-保留单 B200 Qwen3.8-27B-FP8 推理, Rust 服务/调度器/逻辑 KV, Python GPU 计算, 以及 ZMQ DEALER/msgpack.
-保留块大小 784, 16 个 FA 层, 48 个 GDN 层, `mamba_cache_mode="align"`, 以及 262144 个总 token.
-保留 ordinary/MTP4/DSpark, API 功能和 DSpark 检查点字节. 不引入 vLLM 依赖, 环境或缓存.
-使用仓库 CUDA 和原生 CUDA 库, 开发工具与推理依赖分离.
+[算子契约](operators/model.zh.md)包含 18 个内部阶段及 7 个计划中的 serving 边界.
+负载包含六类请求模板, 每类使用一个 decode context.
 
-用户授权对照 vLLM, FlashInfer 和 FLA 的算子及模型测试, 审查数值门槛.
-若较小的实测数值误差能带来较大的实测性能收益, 可以接受该误差.
-在审查通过的改动提供新的误差, 性能和模型输出证据之前, 当前阈值继续绑定各自源码.
-保留状态提交/回滚, 缓存隔离, 内存安全和工作负载契约.
+[算子开发工具](operators/development.zh.md)提供 CUDA C++ 和 CUTLASS FFN 基础版本.
+构建工具与推理加载器分开.
+其余 serving provider 尚不可用.
 
-数值比较始终使用独立 FP64 reference.
-全模型只做小规模比较实验, 大规模数值比较限定在单个算子内.
-旧实现仅提供耗时基线.
+完整算子实现尚未完成. 60% 性能要求仍有工作待完成.
+下一步: 优化 FFN, 添加其余 provider, 并将模型计算接入 worker.
+每个 provider 都要有数值检查和完整边界测量.
 
-用户要求以复刻原先的算子实现为优化起点.
-达到规定的性能目标之前, 当前指南只保留契约和待完成工作.
+工作使用 [main 和 Issue 分支](collaboration.zh.md).
+主机路径和产物位置保存在被忽略的本地配置中.
+保持[运行时契约](requirements.zh.md)及[进程边界](architecture.zh.md).
 
-## 验证检查点
-
-历史 `96ad82c` 采集使用原先的混合精度 reference, 通过 539 项检查.
-[报告](evidence/attention-merge/final-numerical.json)保持原状, 不能提供独立 FP64 验收.
-
-新的 [FP64 reference 记录](evidence/fp64-reference/verification.json)涵盖独立公式和 22 项小规模 CPU 测试.
-实际检查点 CPU 实验使用 64 个前缀 token 和 8 个续接 token, 覆盖全部 64 层.
-产物中 260 个浮点张量使用 FP64. 独立审查仅认可该 reference 对应的精确检查点和 token 序列.
-此记录不提供候选实现的数值或性能验收.
-
-`de33fd4` 的 CPU 采集通过 1828 项测试和 153 项子测试, 无跳过, 637 项 GPU 测试未选中.
-此前缺少语料配置的尝试保留其一项跳过记录.
-定向采集通过 75 项测试, 13 项 GPU 测试未选中. 全部十一项 hooks 通过.
-
-新的 [GDN FP64 记录](evidence/gdn-fp64/verification.json)涵盖单个算子的六组输入, 每组 32768 个 token.
-当前 GDN 的九项记录均通过. 复刻原实现在输出门槛保持不变时通过九项中的七项.
-
-两项失败记录各有 74 个输出超差. 全部十八项状态检查通过, 数值门槛未改动.
-插入检查节点的图不能提供生产或计时验收.
-
-四个旧数值测试文件现已使用独立 FP64 期望值. 定向检查通过 28 项 CPU 和 12 项 GPU 测试, 无跳过.
-attention-gate reference 现已包含规定的中间 BF16 存储. compiled/eager 状态零容差检查与数值 reference 分开保留.
-
-另外五个旧文件现已使用 FP64 期望值, 涵盖逐元素操作, logits 和 FP8 重放.
-[回归记录](evidence/fp64-regressions/verification.json)涵盖 31 项 CPU 和 42 项 GPU 测试, 无跳过.
-精确闭式用例保留 SiLU, 残差归一化和 logits 的 BF16 存储边界.
-单独的精度检查使用已发布的算子容差.
-
-又有两个文件开始从原始输入独立计算 FP64 公式, 检查完整的归一化和门控 FP8 融合投影.
-[融合投影记录](evidence/fp64-fused-projections/verification.json)涵盖 28 项 CPU 和 54 项 GPU 测试, 无跳过.
-精确编码检查以固定的 BF16 边界为输入, 与全链精度检查分开. 独立的特殊值和负零检查保留存储行为.
-之前两项理想归一化值的字节比较失败仍保留在记录中.
-
-又有三个文件开始用 FP64 公式检查 attention 准备, 向量卷积和 attention gate.
-[缓存与门控记录](evidence/fp64-cache-and-gates/verification.json)涵盖 2 项 CPU 和 19 项 GPU 测试, 无跳过.
-卷积历史写回仍要求精确相等. Attention 准备对归一化后的缓存值使用规范容差, 并单独保留精确执行检查.
-
-[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) 跟踪另外十个有 reference 缺口的文件.
-这些改动完成后, 需重跑完整数值和 CPU 采集.
-
-尚未完成的 MN 布局投影检查在 `1,140,850,688` 个元素中有一项 FP64 精度失败.
-该次尝试没有保存完整输入或 RNG 状态, 因此尚未确定误差来源. 失败记录保留, 未修改门槛.
-
-源码 `3324a7f` 有六项最大上下文检查, 以及 MTP/DSpark 服务/恢复记录.
-这些历史记录不能代替最终源码验收. 参见 [验收索引](acceptance.zh.md).
-
-ordinary 模式 32768 输入/4096 输出批次一诊断的预填充/解码比值为 4.305/2.181.
-两项延迟门槛均失败, 波动检查通过. 完整十五组工作负载和 27 项延迟门槛仍待验收.
-
-## 当前工作
-
-1. 使用完整操作对照, 比较原 FlashInfer GDN 和小行数 TRT-LLM FP8 实现与当前路径.
-2. 审查对应的数值门槛, 为拟议的取舍采集误差和模型输出质量证据.
-3. 完成当前隔离 CUDA 诊断, 保留所有结果和精确源码身份.
-4. 完成最终源码的数值, CPU/GPU 回归, 容量, 服务和性能检查.
-5. 对 MTP4 和 DSpark 分别运行至少一小时的整本书翻译采集, 每种模式使用四个隔离 OMP 沙箱.
-
-书籍已下载. 经审查的 PR 21 已从 `828d5e9` 快进集成到 `004765b`.
-Issue 19 已关闭. [时钟报告](evidence/omp-clock/verification.json)保留较早的绑定源码采集和失败尝试身份.
-2 毫秒原生/SDK 完成时间差守则保持不变.
-
-用户授权本地修复 oh-my-pi 并隔离验证, 未授权上游发布.
-Issue 4 使用已验证的隔离客户端, 保留原安装和失败证据.
-Issue 4 的整本书采集和最终源码验收仍待完成.
-
-按 [贡献规则](../CONTRIBUTING.zh.md) 和 [协作规则](collaboration.zh.md)完成独立审查, 检查, 精确路径提交和审查后的发布.
-Codex 使用 `main`, OMP 使用指定分支. 集成前先 rebase, 重跑检查, squash, 再快进合入.
-项目 Issues 和审查后的里程碑发布已获授权, TileFoundry 现有适配分支是其他仓库发布的许可例外.
-
-## 资源和记录
-
-用户授权的 CPU 教程预览继续运行, 主机配置保存在忽略的 `LOCAL.md`.
-每次运行后停止自有 GPU 进程和临时服务. 原始轨迹, 实验和失败记录保存在外部存储.
-当前指南只保留契约和待完成工作, 历史记录继续绑定各自源码.
+所有英文文档继续遵循 ASD-STE100. 不在本文档中记录测试结果.

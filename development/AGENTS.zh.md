@@ -1,24 +1,15 @@
 # 开发工具
 
-工具不得成为推理依赖. 实验和原始测量放在外部存储.
-使用 `uv` 在选定的项目环境中安装 Python 工具.
-环境选择见[开发](../docs/development.zh.md), 验收见[测试](../docs/testing.zh.md).
+语法解析器和其他开发工具放在此目录树中.
+固定依赖版本. 跟踪锁文件.
 
-## GPU 所有权
+推理代码不导入这些工具.
+开发工具和运行时包使用不同的依赖文件.
 
-设置 `OH_MY_VLLM_MODEL` 或提供 `--model`. 使用 `scripts/with-gpu.sh` 等待空闲 B200 并固定 UUID.
-成功, 失败, 取消或交接后停止自有 GPU 进程及子进程.
-检查进程出生身份和 `nvidia-smi`. 只停止任务拥有的进程.
+Rust 空行检查器使用语法位置处理定义, 属性, 注释和嵌套方法.
+JavaScript 检查器使用 Acorn 及 Node 中的 TypeScript 类型移除函数.
 
-仅在用户明确请求时保留服务; 在交接中记录用途, 在 `LOCAL.md` 中记录主机身份.
+不使用文本模式识别代码定义.
 
-## 依赖与证据
-
-按依赖顺序使用兼容稳定依赖, 通过兼容测试后固定组合.
-TileFoundry 是固定 fork 的开发依赖. 简单不兼容可以直接修复.
-重大 fork 修改先讨论. 不开 upstream pull request.
-
-TileFoundry 适配分支例外与已授权的 OMP Issue 分支分别适用.
-OMP 工作遵循项目[协作流程](../docs/collaboration.zh.md).
-记录测量源码, 环境, 配置, 模块和 checkpoint 身份.
-不挑选有利样本, 不通过修改理论下界隐藏开销.
+此目录同样使用 Rust 格式化工具. 行宽不超过 100 列.
+测试和交付遵守[贡献流程](../CONTRIBUTING.zh.md).

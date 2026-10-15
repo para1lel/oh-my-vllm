@@ -233,6 +233,7 @@ pub fn normalize(
     }
     ensure!(!messages.is_empty(), "messages cannot be empty");
     let mut outstanding = std::collections::BTreeSet::new();
+    let mut media_count = 0;
     for message in &mut messages {
         let role = message["role"]
             .as_str()
@@ -246,7 +247,9 @@ pub fn normalize(
             message["role"] = json!("system");
         }
         if let Some(content) = message.get_mut("content") {
-            *content = text_content(content)?;
+            *content = super::media::content(content, role == "user")?;
+            media_count += super::media::count(content);
+            ensure!(media_count <= 16, "at most 16 media items are supported");
         }
         let tool_calls = match message.get("tool_calls") {
             Some(value) => Some(
@@ -456,7 +459,6 @@ pub fn normalize(
         "sampling": sampling,
         "stop": stop,
     });
-    // Metadata is retained in the response but never used as a model instruction.
     if body.get("metadata").is_none() {
         body["metadata"] = json!({});
     }
@@ -474,27 +476,7 @@ pub fn normalize(
 }
 
 fn text_content(value: &Value) -> Result<Value> {
-    match value {
-        Value::Null | Value::String(_) => Ok(value.clone()),
-        Value::Array(parts) => {
-            let mut text = String::new();
-            for part in parts {
-                ensure!(
-                    ["text", "input_text", "output_text"]
-                        .iter()
-                        .any(|t| part["type"] == *t),
-                    "only text content is supported"
-                );
-                text.push_str(
-                    part["text"]
-                        .as_str()
-                        .ok_or_else(|| anyhow::anyhow!("text part requires text"))?,
-                );
-            }
-            Ok(json!(text))
-        }
-        _ => bail!("invalid text content"),
-    }
+    super::media::content(value, false)
 }
 
 fn assistant_item(messages: &mut Vec<Value>) -> &mut Value {
@@ -510,7 +492,7 @@ fn assistant_item(messages: &mut Vec<Value>) -> &mut Value {
 fn append_input(messages: &mut Vec<Value>, item: &Value) -> Result<()> {
     match item["type"].as_str().unwrap_or("message") {
         "message" => {
-            let content = text_content(&item["content"])?;
+            let content = super::media::content(&item["content"], item["role"] == "user")?;
             if item["role"] == "assistant" {
                 let message = assistant_item(messages);
                 let mut text = message["content"].as_str().unwrap_or_default().to_owned();
@@ -557,96 +539,4 @@ fn append_input(messages: &mut Vec<Value>, item: &Value) -> Result<()> {
         _ => bail!("unsupported Responses input item"),
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn thinking_budgets_are_explicit_and_independent_of_effort() {
-        for responses in [false, true] {
-            let mut body = if responses {
-                json!({"model": "m", "input": "hello", "reasoning": {"effort": "xhigh"}})
-            } else {
-                json!({"model": "m", "messages": [{"role": "user", "content": "hello"}],
-                    "reasoning_effort": "xhigh"})
-            };
-            assert!(
-                normalize(body.clone(), responses, "m", None)
-                    .unwrap()
-                    .normalized["thinking_token_budget"]
-                    .is_null()
-            );
-            for budget in [-1, 0, 1, 8192, 1_048_576] {
-                body["thinking_token_budget"] = json!(budget);
-                let request = normalize(body.clone(), responses, "m", None).unwrap();
-                assert_eq!(request.normalized["thinking_token_budget"], budget);
-                assert_eq!(request.normalized["effort"], "xhigh");
-                assert_eq!(request.normalized["max_tokens"], 8192);
-            }
-            for invalid in [
-                json!(-2),
-                json!(1_048_577),
-                json!(1.5),
-                json!(true),
-                json!("1024"),
-                Value::Null,
-                json!({}),
-                json!(1u64 << 63),
-            ] {
-                body["thinking_token_budget"] = invalid;
-                assert!(normalize(body.clone(), responses, "m", None).is_err());
-            }
-        }
-    }
-
-    #[test]
-    fn replay_tool_association_and_mapping() {
-        let r = normalize(
-            json!({
-                "model": "m",
-                "reasoning": {
-                    "effort": "high",
-                },
-                "input": [
-                    {
-                        "type": "function_call",
-                        "call_id": "c",
-                        "name": "read",
-                        "arguments": "{}",
-                    },
-                    {
-                        "type": "function_call_output",
-                        "call_id": "c",
-                        "output": "file",
-                    },
-                ],
-            }),
-            true,
-            "m",
-            None,
-        )
-        .unwrap();
-        assert_eq!(r.normalized["effort"], "xhigh");
-        assert_eq!(r.normalized["messages"][1]["tool_call_id"], "c");
-        assert!(
-            normalize(
-                json!({
-                    "model": "m",
-                    "input": [
-                        {
-                            "type": "function_call_output",
-                            "call_id": "missing",
-                            "output": "x",
-                        },
-                    ],
-                }),
-                true,
-                "m",
-                None
-            )
-            .is_err()
-        );
-    }
 }

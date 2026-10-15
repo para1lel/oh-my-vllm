@@ -1,10 +1,11 @@
-//! CPU-only request normalization for independent acceptance tools.
-
 use std::io::{self, BufRead, Write};
 
 use serde_json::{Value, json};
 
-// Compile the production normalizer itself, including its unit tests.
+#[allow(dead_code)]
+#[path = "../serving/media.rs"]
+mod media;
+
 #[allow(dead_code)]
 #[path = "../serving/request.rs"]
 mod request;

@@ -1,6 +1,0 @@
-[submodule "3rdparty/TileFoundry"]
-	path = 3rdparty/TileFoundry
-	url = https://github.com/para1lel/TileFoundry.git
-[submodule "3rdparty/cutlass"]
-	path = 3rdparty/cutlass
-	url = https://github.com/NVIDIA/cutlass.git

@@ -1,87 +1,55 @@
-# Development environment
+# Development setup
 
-Use a CUDA-capable Linux host with one available B200, Python 3.12 or later, and Rust.
-Use Node 24 LTS for the tutorial.
-The host supplies the NVIDIA driver. Keep model weights separate from source.
+Use Python 3.12, Rust, uv, and Node 24 or later for development.
+The Conda definition supplies Python and Rust.
+Use the hook dependency versions from the Python and JavaScript lock files.
+
+Use different files for development and runtime dependencies.
 
 ## Installation
 
-Initialize pinned native headers and development sources:
+Install Conda, uv, and Node first.
+Do these commands:
 
 ```bash
-git submodule update --init --recursive
-uv venv --python 3.12
-uv pip install --python .venv/bin/python -r requirements/runtime.txt -r requirements/tools.txt
-uv pip install --python .venv/bin/python --no-deps -e python
-```
-
-[Runtime metadata](../python/pyproject.toml) declares dependencies. [Runtime lock](../requirements/runtime.txt) pins their closure.
-[Tool inputs](../requirements/tools.in) and [tool lock](../requirements/tools.txt) keep maintenance tools separate.
-Regenerate tool pins with the runtime constraint and compatibility checks.
-Ninja is a build tool for fresh native CUDA modules. Keep its executable on `PATH` for compilation.
-
-CUDA C++ uses the pinned [CUTLASS source](../3rdparty/cutlass/) and the selected CUDA toolkit's CCCL headers.
-Python operator libraries are not runtime dependencies.
-The current native migration must complete final GPU acceptance as recorded in [handoff](handoff.md).
-
-## Configuration selection
-
-Use `scripts/with-env.sh` for Cargo and Python commands.
-Its [selection and defaults](../scripts/with-env.sh) are authoritative.
-Set `OH_MY_VLLM_CONDA_PREFIX` for an existing environment, or activate a virtual/conda environment.
-Otherwise the wrapper selects repository `.venv`.
-A missing selected environment fails before command execution.
-
-Set `OH_MY_VLLM_MODEL` or provide `--model` before model execution.
-Set `OH_MY_VLLM_DRAFT_MODEL` or provide `--draft-model` for DSpark.
-Keep host paths and maintenance records in ignored `LOCAL.md`.
-
-## GPU ownership
-
-```bash
-scripts/with-gpu.sh scripts/with-env.sh python -m pytest tests/numerical/test_ir_fp8.py -q
-```
-
-The wrapper waits for an idle B200, locks it, and provides its UUID.
-Stop task-owned GPU processes and children after each run. Verify their exit and released device memory.
-Use process birth records. Do not stop other users' processes.
-Only an explicit user request permits a service to stay active.
-
-## Build and checks
-
-```bash
-scripts/with-env.sh cargo test --workspace
-scripts/with-env.sh cargo fmt --all --check
-scripts/with-env.sh python scripts/check_rust_line_width.py
-scripts/with-env.sh cargo clippy --all-targets --all-features -- -D warnings
-scripts/with-env.sh ruff format python/
-scripts/with-env.sh ruff check python/
-scripts/with-env.sh python scripts/format_cuda.py --check
-scripts/with-env.sh python scripts/check_docs.py
+conda env create -f environment.yml
+conda activate oh-my-vllm
+uv pip install --python "$CONDA_PREFIX/bin/python" -r requirements/development.txt
+npm --prefix development/javascript ci --ignore-scripts --no-audit --no-fund
 scripts/with-env.sh pre-commit install
-scripts/with-env.sh pre-commit run --all-files
-scripts/test.sh cpu
 ```
 
-Use [test layers and GPU selection](testing/suites.md) for scoped and complete runs.
-Hooks enforce formatting, definition spacing, Rust width, bilingual documents, word caps, and source references.
-Keep hooks enabled and configure their environment before committing.
+If the environment is available, do the last four commands.
+The wrapper selects `OH_MY_VLLM_CONDA_PREFIX`, then `CONDA_PREFIX`, then `VIRTUAL_ENV`, then the repository `.venv`.
 
-## TileFoundry development tools
+Use `scripts/with-env.sh` for Python and Cargo commands.
+The wrapper sets the executable paths, Python module paths, worker interpreter, and Cargo build output.
+
+Install the [runtime packages](../requirements/runtime.txt) for service work.
+
+## Git hooks
 
 ```bash
-scripts/with-env.sh uv pip install setuptools-scm==10.2.3 vcs-versioning==2.4.1
-scripts/with-env.sh uv pip install --no-build-isolation -r requirements/development.txt
-scripts/with-env.sh tilefoundry --help
+scripts/with-env.sh pre-commit run --all-files
 ```
 
-The [pinned fork](../3rdparty/TileFoundry/) is rebased to current upstream and keeps the project compatibility changes.
-It is a development dependency. Production native headers have their own pin.
-Do not push or open an upstream pull request without instruction.
-Use the [kernel harness](kernels.md) for tuning and independent mathematics.
+| Hook | Contract |
+|---|---|
+| cuda-format | clang-format 23.1.3, native backend modules at most 800 lines |
+| cargo-fmt | Rust formatter |
+| rust-line-width | Rust line width at most 100 columns |
+| definition-spacing | Function and module spacing through Python, Rust, and JavaScript/TypeScript syntax trees |
+| cargo-clippy | All workspace members, targets, and features, with warnings as errors |
+| cargo-test | Rust workspace tests in the repository and the Python service tests |
+| kernel-contracts | Workload coverage, performance gate, low-precision rounding, and recurrent-state reference |
+| ruff-format | Python formatter |
+| ruff-check | Python lint rules |
+| whitespace | No trailing whitespace, one final newline |
+| documentation | Translation pairs, word limits, host paths, links, and source anchors |
+| glossary | Generated glossary agrees with its source |
 
-## Deployment records
+The Cargo hooks include all owned manifests. They process each workspace once.
+A hook has no work if there are no applicable files. The documentation hook always runs.
 
-Keep host configuration in `LOCAL.md`, temporary work and raw traces in external storage, and portable summaries in the [evidence index](acceptance.md).
-A new environment must have its own checkpoint, GPU selection, and source-scoped measurements.
-Historical results do not prove current acceptance.
+Use the [test policy](../CONTRIBUTING.md) before you add tests.
+Agents do the tests in the repository for the maintainer.

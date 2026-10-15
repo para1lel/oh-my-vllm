@@ -1,29 +1,39 @@
-# Document ownership
+# Document rules
 
-Use [writing rules](writing.md) and [technical terms](glossary.md).
-Maintain the full same-directory `<stem>.zh.md` translation with each English source change.
-Keep commands, identifiers, numbers, evidence scope, and limits equal. English is authoritative.
+Write all English documents for this project in [ASD-STE100 Issue 9](https://www.asd-ste100.org/assets/files/ASD-STE100_ISSUE9.pdf).
+Use the approved words with their approved meanings and parts of speech.
 
-Exclude third-party sources and generated dependency content.
+Use each project [technical term](glossary.md) only with the meaning in the glossary.
+Do not use general words as new technical terms.
 
-## Disclosure and sources
+Put each fact in one location. Use links from other locations.
+README gives user information. CONTRIBUTING gives the contribution procedure.
 
-README supplies user setup and entry links. Root AGENTS supplies shared principles. Directory AGENTS supplies local contracts.
-LOCAL supplies current host configuration and maintenance entry links. Put maintenance history in separate ignored records.
-Keep each owned English document at most 2000 English words.
+The root AGENTS gives rules for all directories. A child AGENTS gives rules for its directory tree.
+Add a child guide only when a directory has local rules.
 
-Count headings, prose, tables, link labels, and inline identifiers. Exclude fenced code, link destinations, and source-anchor metadata.
-Give background, mathematics, observable behavior, and design decisions. Link code for implementation details.
-Use file links for whole-file references. Use a unique text anchor for a specific implementation.
+Keep each English Markdown document at most 2000 English words.
+Count the visible text, headings, table text, and inline identifiers.
 
-Generate displayed line numbers.
-Keep one authoritative source for each fact. Do not repeat API signatures, defaults, or tuning parameters from code.
-Historical evidence must not claim current-source acceptance. Keep obsolete repair narratives in Git history.
+Do not count fenced code or link destinations.
+Keep procedure sentences at most 20 words. Give one action in each procedure sentence.
 
-## Checks
+Keep descriptive sentences at most 25 words. Keep descriptive paragraphs at most 6 sentences.
 
-Run document checks and source-link updates through the environment wrapper.
-The hook checks local links, unique source anchors, word limits, and translation contracts.
-A reviewer must examine technical meaning and full translation fidelity.
+Supply a full Chinese translation in a same-directory `<stem>.zh.md` file.
+Keep facts, conditions, uncertainty, commands, identifiers, numbers, and heading levels the same.
 
-Update requirements, architecture, decisions, test commands, and handoff when their contracts change.
+Use the English document as the source. Use Chinese links when the related files exist.
+Use halfwidth Chinese punctuation. Put spaces between Chinese text and English words or numbers.
+
+Use source links for implementation details. Do not copy the implementation into prose.
+Use a text anchor that occurs only once in the source file for each source line link.
+
+The documentation hook updates the line numbers.
+Put host paths and addresses in ignored local configuration.
+
+Do not add test results, logs, or delivery histories.
+
+Get a document review from another agent. Examine the word meanings, parts of speech, and translation.
+Use the official standard. The automated checks do not examine all STE rules.
+Compare the Chinese text with the English text.

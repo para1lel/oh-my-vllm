@@ -1,5 +1,3 @@
-//! Error types for the ZMQ worker crate.
-
 use thiserror::Error;
 
 #[derive(Debug, Error)]

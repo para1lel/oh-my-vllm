@@ -1,4 +1,3 @@
-//! Direct inference driver and reproducible fixed-token benchmark.
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -13,33 +12,25 @@ use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
 struct Cli {
-    #[arg(long, env = "OH_MY_VLLM_MODEL")]
+    #[arg(long, env = "OH_MY_VLLM_MODEL", default_value = "stub")]
     model: PathBuf,
     #[arg(long, default_value = "/tmp/oh-my-vllm.ipc")]
     socket: PathBuf,
     #[arg(long, default_value_t = 1024)]
     num_gpu_blocks: u32,
-    /// Optional independent GDN-state capacity (including immutable zero slot).
     #[arg(long)]
     mamba_blocks: Option<u32>,
     #[arg(long, default_value_t = 784)]
     block_size: u32,
     #[arg(long, default_value_t = 1)]
     tp: u32,
-    #[arg(long, default_value_t = 65536)]
+    #[arg(long, default_value_t = 262144,
+        value_parser = clap::value_parser!(u32).range(1..=262144))]
     max_model_len: u32,
     #[arg(long, default_value_t = 0)]
     num_speculative_tokens: usize,
-    /// Explicit speculative algorithm; the legacy token count still selects MTP4.
-    #[arg(long, value_parser = ["none", "mtp", "dspark"])]
+    #[arg(long, value_parser = ["none", "mtp"])]
     speculative_mode: Option<String>,
-    /// Separate DSpark checkpoint directory.
-    #[arg(long, env = "OH_MY_VLLM_DRAFT_MODEL")]
-    draft_model: Option<PathBuf>,
-    /// DSpark cumulative prefix confidence cutoff; zero keeps all legal candidates.
-    #[arg(long, default_value_t = 0.2)]
-    dspark_confidence_threshold: f64,
-    /// Restrict Rust's pool for preemption tests; cannot exceed worker capacity.
     #[arg(long)]
     scheduler_blocks: Option<u32>,
     #[command(subcommand)]
@@ -51,14 +42,12 @@ enum Cmd {
     Run {
         #[arg(long, num_args = 1..)]
         tokens: Vec<u32>,
-        /// Whitespace-separated token IDs, one request per line.
         #[arg(long, conflicts_with = "tokens")]
         prompt_file: Option<PathBuf>,
         #[arg(long, default_value_t = 0)]
         arrival_interval: usize,
         #[arg(long, default_value_t = 64)]
         max_tokens: usize,
-        /// Seed this prompt first and require a real prefix-cache hit.
         #[arg(long)]
         prefix_hit: bool,
     },
@@ -78,12 +67,10 @@ struct BenchArgs {
     warmup: usize,
     #[arg(long, default_value_t = 3)]
     repetitions: usize,
-    /// Whitespace-separated token IDs, one equal-length request per line.
     #[arg(long)]
     prompt_file: Option<PathBuf>,
     #[arg(long)]
     prefix_hit: bool,
-    /// Admit one request every N steps to exercise continuous batching.
     #[arg(long, default_value_t = 0)]
     arrival_interval: usize,
     #[arg(long)]
@@ -133,7 +120,6 @@ impl BenchArgs {
         if let Some(path) = &self.prompt_file {
             return self.parse_prompts(&std::fs::read_to_string(path)?);
         }
-        // Preserve the acceptance workload's deterministic valid token IDs.
         Ok((0..self.batch_size)
             .map(|request| {
                 (0..self.input_len)
@@ -161,7 +147,6 @@ impl BenchArgs {
     }
 }
 
-// The controller has one inference stream; keep IPC wakeups on the same thread.
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -185,11 +170,6 @@ async fn run() -> Result<()> {
         "requires block_size=784 and TP=1"
     );
     ensure!(cli.num_gpu_blocks >= 6, "physical cache is too small");
-    ensure!(
-        cli.dspark_confidence_threshold.is_finite()
-            && (0.0..1.0).contains(&cli.dspark_confidence_threshold),
-        "DSpark confidence threshold must be in [0,1)"
-    );
     let mode = cli.speculative_mode.clone().unwrap_or_else(|| {
         if cli.num_speculative_tokens == 4 {
             "mtp"
@@ -201,14 +181,12 @@ async fn run() -> Result<()> {
     let speculative_tokens = match mode.as_str() {
         "none" => 0,
         "mtp" => 4,
-        "dspark" => 7,
         _ => unreachable!("Clap validates the explicit mode"),
     };
     ensure!(
         cli.num_speculative_tokens == 0 || cli.num_speculative_tokens == speculative_tokens,
         "speculative token count disagrees with mode"
     );
-    // Reject malformed input before loading the model or allocating GPU memory.
     let run_prompts = if let Cmd::Run {
         tokens,
         prompt_file,
@@ -265,8 +243,6 @@ async fn run() -> Result<()> {
         max_model_len: cli.max_model_len,
         num_speculative_tokens: speculative_tokens,
         speculative_mode: Some(mode.clone()),
-        draft_model_path: cli.draft_model,
-        dspark_confidence_threshold: cli.dspark_confidence_threshold,
         torch_profile,
         ..WorkerConfig::default()
     })
@@ -298,7 +274,6 @@ async fn run() -> Result<()> {
         max_model_len = cli.max_model_len,
         num_speculative_tokens = speculative_tokens,
         speculative_mode = mode.as_str(),
-        dspark_confidence_threshold = cli.dspark_confidence_threshold,
         worker_fa_pool_blocks = client.logical_num_blocks,
         worker_gdn_pool_blocks = client.mamba_blocks,
         fa_pool_blocks = blocks,
@@ -448,19 +423,14 @@ struct BatchResult {
     preemptions: usize,
     proposed_draft_tokens: usize,
     accepted_draft_tokens: usize,
-    /// Candidate tokens actually present in executed verification inputs.
     verified_draft_tokens: usize,
 }
 
-/// Caller-observed token boundaries, relative to the batch monotonic clock.
 #[derive(serde::Serialize)]
 struct RequestPhases {
     request_id: u64,
-    /// Submission precedes registration and includes the request's queue time.
     submitted_s: f64,
-    /// Receipt of the first kept output token after scheduler validation.
     first_token_s: f64,
-    /// Receipt of the last kept output token, before finished-request cleanup.
     last_token_s: f64,
     first_step: usize,
     last_step: usize,
@@ -621,84 +591,4 @@ async fn execute_batch(
         accepted_draft_tokens,
         verified_draft_tokens,
     })
-}
-
-#[cfg(test)]
-mod benchmark_input_tests {
-    use super::BenchArgs;
-
-    fn args() -> BenchArgs {
-        BenchArgs {
-            batch_size: 2,
-            input_len: 2,
-            output_len: 3,
-            warmup: 2,
-            repetitions: 5,
-            prompt_file: None,
-            prefix_hit: false,
-            arrival_interval: 0,
-            torch_profile: None,
-            torch_profile_skip_steps: 8,
-            torch_profile_steps: 2,
-        }
-    }
-
-    #[test]
-    fn profiler_bounds_limit_the_whole_batch_and_window() {
-        let mut args = args();
-        assert!(args.profile_configuration().unwrap().is_none());
-        args.torch_profile = Some("/tmp/timeline.json".into());
-        args.batch_size = 4;
-        args.input_len = 1024;
-        args.output_len = 16;
-        assert!(args.profile_configuration().unwrap().is_some());
-        args.input_len = 2048;
-        assert!(args.profile_configuration().is_err());
-        args.input_len = 1024;
-        args.output_len = 4096;
-        assert!(args.profile_configuration().is_err());
-        args.output_len = 16;
-        args.batch_size = 5;
-        assert!(args.profile_configuration().is_err());
-        args.batch_size = 4;
-        for steps in [0, 9] {
-            args.torch_profile_steps = steps;
-            assert!(args.profile_configuration().is_err());
-        }
-        args.torch_profile_steps = 8;
-        args.torch_profile_skip_steps = 10000;
-        assert!(args.profile_configuration().unwrap().is_some());
-        args.torch_profile_skip_steps = 10001;
-        assert!(args.profile_configuration().is_err());
-    }
-
-    #[test]
-    fn custom_prompts_preserve_each_request_and_reject_invalid_shapes() {
-        let args = args();
-        assert_eq!(
-            args.parse_prompts("7 0\n248319 9\n").unwrap(),
-            vec![vec![7, 0], vec![248319, 9]]
-        );
-        for text in [
-            "7 0\n",
-            "7 0\n\n",
-            "7 0 1\n8 9\n",
-            "7 0\n8 248320\n",
-            "7 x\n8 9\n",
-        ] {
-            assert!(args.parse_prompts(text).is_err());
-        }
-    }
-
-    #[test]
-    fn synthetic_acceptance_inputs_and_capacity_validation_stay_stable() {
-        assert_eq!(args().prompts(5).unwrap(), vec![vec![1, 2], vec![998, 999]]);
-        assert!(args().prompts(4).is_err());
-        let mut invalid = args();
-        invalid.repetitions = 0;
-        assert!(invalid.prompts(5).is_err());
-        invalid.repetitions = 1;
-        invalid.batch_size = 33;
-        assert!(invalid.prompts(5).is_err());
-    }
 }

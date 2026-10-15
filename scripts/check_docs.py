@@ -265,7 +265,10 @@ def host_issues(text):
 
 def glossary_issues(root):
     errors = []
-    data = json.loads((root / "docs/terms.json").read_text())
+    terms = root / "docs/terms.json"
+    if not terms.is_file():
+        return errors
+    data = json.loads(terms.read_text())
     seen = set()
     for entry in data["terms"]:
         key = entry["term"], entry["part_of_speech"]

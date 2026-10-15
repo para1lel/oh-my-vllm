@@ -1,97 +1,25 @@
-# Current state and open work
+# Work state
 
-Updated: 2026-10-15. Development is active. Final delivery is pending.
+Rust supplies the HTTP APIs, CLI, scheduler, logical KV cache, and worker lifecycle controls.
+The service modes are ordinary decode and MTP4.
+HTTP input can contain text, images, and video.
 
-## Accepted scope
+The Python worker is a placeholder. It does not load model weights or use a GPU.
+Rust sends media references through the inference worker's process and protocol boundary.
 
-Keep single-B200 Qwen3.8-27B-FP8 inference, Rust service/scheduler/logical KV, Python GPU computation, and ZMQ DEALER/msgpack.
-Keep block size 784, 16 FA layers, 48 GDN layers, `mamba_cache_mode="align"`, and 262144 total tokens.
-Keep ordinary/MTP4/DSpark, API features, and DSpark checkpoint bytes. Do not introduce vLLM dependencies, environments, or caches.
-Use repository CUDA and native CUDA libraries. Keep development tools separate from inference dependencies.
+The [operator contracts](operators/model.md) have 18 internal stages and 7 planned serving boundaries.
+The workload has six request profiles and one decode context per profile.
 
-The user authorizes numerical-threshold review against vLLM, FlashInfer, and FLA operator and model tests.
-A small measured numerical error can be accepted for a large measured performance benefit.
-Current thresholds stay source-bound until a reviewed change supplies new error, performance, and model-output evidence.
-Keep state commit/rollback, cache isolation, memory safety, and workload contracts.
+A CUDA C++ and CUTLASS FFN baseline is available through the [kernel development tools](operators/development.md).
+The build tools are different from the inference loader.
+The other serving providers are not available.
 
-Numerical comparisons always use an independent FP64 reference.
-Full-model comparisons use small experiments. Use individual operators for large numerical comparisons.
-Previous implementations supply timing baselines only.
+The full operator implementation is not completed. More work is necessary for the 60% performance requirement.
+Next work: optimize FFN, add the other providers, and connect model computation to the worker.
+Keep numerical checks and full-boundary measurements with each provider.
 
-The user requests reproduction of the previous operator implementations as the optimization starting point.
-Keep only contracts and open work in guides until the required performance goals pass.
+Use [main and Issue branches](collaboration.md) for work.
+Keep host paths and artifact locations in ignored local configuration.
+Keep the [runtime contracts](requirements.md) and [process boundary](architecture.md).
 
-## Verification checkpoint
-
-The historical `96ad82c` collection passes 539 cases with its original mixed-precision references.
-Its [report](evidence/attention-merge/final-numerical.json) stays unchanged and does not supply independent FP64 acceptance.
-
-The new [FP64 reference record](evidence/fp64-reference/verification.json) covers independent equations and 22 small CPU tests.
-A CPU experiment reads the checkpoint and runs 64 prefix tokens and 8 continuation tokens through all 64 layers.
-Its 260 floating-point artifact tensors use FP64. Independent review accepts this reference only for its exact checkpoint and token sequence.
-This record does not supply candidate numerical or performance acceptance.
-
-The `de33fd4` CPU collection passes 1828 tests and 153 subtests without skips, with 637 GPU tests deselected.
-The earlier attempt with missing corpus configuration keeps its one skip.
-The scoped collection passes 75 tests, with 13 GPU tests deselected. All eleven hooks pass.
-
-The new [GDN FP64 record](evidence/gdn-fp64/verification.json) covers six input tuples for one operator, each with 32768 tokens.
-The current GDN passes its nine records. The reproduced original passes seven of nine records with the unchanged output gate.
-
-The two failed records each contain 74 output failures. All eighteen state checks pass. No numerical threshold changes.
-The instrumented graphs do not supply production or timing acceptance.
-
-Four legacy numerical files now use independent FP64 expectations. Scoped checks pass 28 CPU and 12 GPU tests without skips.
-The attention-gate reference now includes its specified intermediate BF16 store. Zero-tolerance compiled/eager state checks stay separate from numerical references.
-
-Five more legacy files now use FP64 expectations for pointwise operations, logits, and FP8 replay.
-The [regression record](evidence/fp64-regressions/verification.json) covers 31 CPU and 42 GPU tests without skips.
-Exact closed-form cases keep SiLU, residual normalization, and logits BF16 storage boundaries.
-Separate accuracy checks use the published operator tolerances.
-
-Two more files now check full fused normalized and gated FP8 projections against original-input FP64 equations.
-The [fused projection record](evidence/fp64-fused-projections/verification.json) covers 28 CPU and 54 GPU tests without skips.
-Exact encoding checks use a fixed BF16 boundary separately from full-chain accuracy. Independent special-value and negative-zero checks keep storage behavior.
-The earlier two ideal-norm byte-comparison failures stay recorded.
-
-Three more files now check attention preparation, vector convolution, and attention gates against FP64 equations.
-The [cache and gate record](evidence/fp64-cache-and-gates/verification.json) covers 2 CPU and 19 GPU tests without skips.
-Convolution history writes stay exact. Attention preparation uses the canonical tolerance for normalized cache values, with separate exact execution checks.
-
-[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) tracks ten other files with reference gaps.
-The full numerical and CPU collections must repeat after these changes.
-
-The pending MN-layout projection check has one FP64 accuracy failure among `1,140,850,688` elements.
-That attempt did not save its full inputs or RNG state, so the cause of its error is not known. The failure stays recorded, with no threshold change.
-
-Source `3324a7f` has six maximum-context and MTP/DSpark service/recovery records.
-These historical records do not supply final-source acceptance. See the [acceptance index](acceptance.md).
-
-The ordinary 32768-input/4096-output batch-one diagnostic has prefill/decode ratios 4.305/2.181.
-The two latency gates fail. Spreads pass. Full fifteen-workload and 27-latency-gate acceptance is pending.
-
-## Active work
-
-1. Compare the previous FlashInfer GDN and small TRT-LLM FP8 implementations with the current complete operations.
-2. Review matched numerical thresholds and collect error and model-output quality evidence for proposed tradeoffs.
-3. Finish current isolated CUDA diagnostics. Keep all outcomes and exact source identities.
-4. Complete the final-source numerical, CPU/GPU regression, capacity, service, and performance checks.
-5. Run MTP4 and DSpark full-book translation collections, each for at least one hour in four isolated OMP sandboxes.
-
-The book is downloaded. Reviewed PR 21 is integrated at `004765b` by fast-forward from `828d5e9`.
-Issue 19 is closed. The [clock report](evidence/omp-clock/verification.json) keeps the older source-scoped collection and failed-attempt identities.
-The 2 ms native/SDK completion-difference guard stays unchanged.
-
-Local oh-my-pi repair and isolated verification are authorized. Upstream publication is not authorized.
-Use the verified isolated client for Issue 4. Keep the installed client and failed evidence.
-Issue 4's full-book collections and final-source acceptance stay open.
-
-Use [contribution](../CONTRIBUTING.md) and [collaboration](collaboration.md) for independent reviews, checks, intentional paths, and reviewed publication.
-Codex uses `main`. OMP uses its assigned branch. Rebase, repeat checks, squash, and fast-forward before integration.
-Project Issues and reviewed milestones are authorized. TileFoundry's existing adaptation branch is the permitted publication exception.
-
-## Ownership and records
-
-The user-authorized CPU tutorial preview stays active. Its host configuration is in ignored `LOCAL.md`.
-Stop owned GPU processes and temporary services after each run. Keep raw traces, experiments, and failed records in external storage.
-Current guides contain contracts and open work. Historical records stay source-scoped.
+Keep all English documents in ASD-STE100. Do not put test results in this document.

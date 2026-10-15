@@ -1,25 +1,15 @@
 # Development tools
 
-Tools must not become inference dependencies. Keep experiments and raw measurements in external storage.
-Install Python tools with `uv` in the selected project environment.
-Use [development](../docs/development.md) for environment selection and [testing](../docs/testing.md) for acceptance.
+Put syntax parsers and other development tools in this directory tree.
+Pin the dependency versions. Track the lock files.
 
-## GPU ownership
+Do not import these tools from inference code.
+Use different dependency files for development tools and runtime packages.
 
-Set `OH_MY_VLLM_MODEL` or supply `--model`. Use `scripts/with-gpu.sh` to wait for an idle B200 and pin its UUID.
-Stop owned GPU processes and children after success, failure, cancellation, or handoff.
-Check process birth identities and `nvidia-smi`. Stop only task-owned processes.
+The Rust spacing checker uses syntax spans for definitions, attributes, comments, and nested methods.
+The JavaScript checker uses Acorn and the TypeScript type removal function in Node.
 
-Keep a service active only for an explicit user request.
-Record its purpose in the handoff and host identity in `LOCAL.md`.
+Do not use text patterns to find code definitions.
 
-## Dependencies and evidence
-
-Use compatible stable dependencies in dependency order and pin the combination after compatibility tests.
-TileFoundry is a development dependency from the pinned fork. Fix simple incompatibilities directly.
-Discuss substantial fork changes first. Do not open upstream pull requests.
-
-The TileFoundry adaptation exception is separate from the authorized OMP Issue branches.
-Use the project's [collaboration procedure](../docs/collaboration.md) for OMP work.
-Keep measurement source, environment, configuration, module, and checkpoint identities.
-Do not select favorable samples or change theoretical bounds to hide overhead.
+Use the Rust formatter here. Keep the line width at most 100 columns.
+Obey the [contribution procedure](../CONTRIBUTING.md) for tests and delivery.
