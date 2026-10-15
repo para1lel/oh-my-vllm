@@ -27,9 +27,8 @@ The internal stages are parts of these boundaries. They are not serving or accep
 The first MTP draft uses `query_only`. The other 3 drafts use `full`.
 The first draft uses the context endpoint that is already available.
 
-These boundaries are implementation plans. The FFN provider is a baseline.
-The other serving providers are not available.
-The plan gives no fusion evidence or evidence of the 60% performance gate.
+Native providers supply these boundaries. Full workload acceptance is necessary.
+The implementation plan gives no evidence of the 60% performance gate.
 
 ## Internal language stages
 

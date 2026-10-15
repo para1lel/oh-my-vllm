@@ -1,7 +1,7 @@
 # Kernel development
 
 Use the [operator specification](model.md), [fusion plan](fusion.md), and [evaluation procedure](evaluation.md).
-The FFN provider is a baseline. The other serving providers are not available.
+Native providers supply all seven serving boundaries. Full workload acceptance is necessary.
 The worker still uses its placeholder backend.
 
 ## Tools
@@ -38,6 +38,7 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels build
 
 The inference loader uses these modules. It does not use the compiler or development tools.
 The loader rejects source or binary identities that do not agree with its manifest.
+Each binary has an immutable copy and build manifest in the external cache.
 
 ## Evaluation commands
 
@@ -71,15 +72,30 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels profile --
 Before the command, select a profile directory path that does not exist.
 Profiling does not supply acceptance timing.
 
+Use `--operator` to select `ffn`, `fa_attention`, `gdn_attention`, `vision_block`, `sample`, `mtp_context`, or `mtp_draft`.
 Use `--rows` for a subset of the modeled rows.
 A subset is not sufficient for the operator coverage gate.
-The missing providers prevent acceptance of the full implementation.
+An incomplete workload or failed provider prevents acceptance.
+
+Supply one complete report for each operator and mode from the same frozen sources.
+Use the report paths for a full acceptance audit:
+
+```bash
+scripts/with-env.sh python -m development.kernels audit --reports "$ARTIFACT_ROOT"/suite-*.json --output "$ARTIFACT_ROOT/acceptance.json"
+```
+
+The audit checks current sources, immutable binaries, checkpoint identities, cold weights, numerical checks, and all modeled shapes.
+Old reports do not qualify after a source change.
 
 The FFN check examines all output elements for finite values.
 It compares all residual elements for exact BF16 equality.
 
-The FP64 projection reference compares all columns in the first, middle, and final rows.
-The report identifies this sample scope. It gives no tolerance evidence for the other output rows.
+The FFN FP64 projection reference compares all columns in the first, middle, and final rows.
+Each provider identifies its numerical sample scope in the report.
+
+GDN checks all input projections and private state writes. Sampling checks all rows and vocabulary columns.
+FA and MTP check KV writes and unchanged guard storage. Vision checks raw patches, output samples, and frame isolation.
+These checks do not supply tolerance evidence for elements not covered by their stated scope.
 
 Keep raw reports and profiler files external to the repository.
 Do not put measurement results in project documents.

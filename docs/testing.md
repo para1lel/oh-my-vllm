@@ -13,7 +13,12 @@ The reference tests include checks of low-precision rounding and GDN carry state
 
 Use the [kernel development commands](operators/development.md) for GPU numerical checks and measurements.
 The FFN output reference uses selected rows. The report gives the sample scope.
-Missing providers prevent full operator acceptance.
+Each provider states its numerical sample scope.
+
+Sampling checks seeded selection and MTP state slot selection.
+FA, GDN, and MTP check persistent writes and unchanged guard storage.
+Vision checks patch order and frame isolation.
+Incomplete coverage or failed checks prevent full operator acceptance.
 
 Use the GPU wrapper for GPU work.
 After each run, stop the processes that you started.

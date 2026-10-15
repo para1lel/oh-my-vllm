@@ -7,15 +7,20 @@ HTTP 输入可包含文本, 图片和视频.
 Python worker 是占位实现, 不加载模型权重, 不使用 GPU.
 Rust 通过推理 worker 的进程和协议边界发送媒体引用.
 
-[算子契约](operators/model.zh.md)包含 18 个内部阶段及 7 个计划中的 serving 边界.
+[算子契约](operators/model.zh.md)包含 18 个内部阶段及 7 个 serving 边界.
 负载包含六类请求模板, 每类使用一个 decode context.
 
-[算子开发工具](operators/development.zh.md)提供 CUDA C++ 和 CUTLASS FFN 基础版本.
+CUDA C++ 和 CUTLASS provider 通过[算子开发工具](operators/development.zh.md)提供七个边界.
 构建工具与推理加载器分开.
-其余 serving provider 尚不可用.
+每个 provider 提供数值检查, 并在测量前恢复可变状态.
+报告绑定 checkpoint shards, 源文件, 二进制文件及构建依赖.
 
 完整算子实现尚未完成. 60% 性能要求仍有工作待完成.
-下一步: 优化 FFN, 添加其余 provider, 并将模型计算接入 worker.
+
+下一步: 完成 MTP draft 边界的数值检查, 并优化已测量的瓶颈.
+完成每个算子的负载验收.
+然后将模型计算接入 worker.
+使用[实现计划](operators/implementation.zh.md).
 每个 provider 都要有数值检查和完整边界测量.
 
 工作使用 `main`.

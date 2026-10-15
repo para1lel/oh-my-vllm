@@ -1,13 +1,16 @@
 from .roofline import Work
 
 
-def linear(rows, columns, width, *, fp8=False):
+def linear(rows, columns, width, *, fp8=False, fp64=False):
+    if fp8 and fp64:
+        raise ValueError("a projection must have one compute precision")
     weights = columns * width * (1 if fp8 else 2)
     scales = 4 * ((columns + 127) // 128) * ((width + 127) // 128) if fp8 else 0
     return Work(
         weights + scales,
         fp8_flops=2 * rows * columns * width if fp8 else 0,
-        bf16_flops=0 if fp8 else 2 * rows * columns * width,
+        bf16_flops=0 if fp8 or fp64 else 2 * rows * columns * width,
+        fp64_flops=2 * rows * columns * width if fp64 else 0,
     )
 
 
@@ -20,7 +23,8 @@ def add(*items):
 def attention(shape, *, vision=False):
     rows, batch = shape.rows, shape.batch
     if vision:
-        return Work(0, bf16_flops=4 * rows * shape.frame_tokens * 1152)
+        flops = 2 * rows * shape.frame_tokens * 1152
+        return Work(0, bf16_flops=flops, tf32_flops=flops)
     queries = rows // batch
     pairs = batch * (
         queries * max(0, shape.context - queries) + queries * (queries + 1) // 2
@@ -47,7 +51,7 @@ def work_for(shape):
             linear(rows, 5120, 6144, fp8=True),
             Work(
                 external + state + 4 * (5120 + 128 + 96) + 10240 * 4 * 2,
-                bf16_flops=rows * 48 * (7 * 128 * 128 + 3 * 128),
+                fp32_flops=rows * 48 * (7 * 128 * 128 + 3 * 128),
             ),
         )
     if name == "fa_attention":
@@ -67,19 +71,23 @@ def work_for(shape):
                 4 * rows * 5120
                 + 4 * 5120
                 + rows * 12
-                + (batch * (248320 * 4 + 4 * 12 + 16 + 8) if verification else 0)
+                + (batch * (248320 * 4 + 4 * 12 + 16 + 8) if verification else 0),
+                fp64_flops=2 * batch * 248320 if verification else 0,
             ),
         )
     if name == "mtp_context":
         return add(
-            linear(rows, 5120, 10240),
+            linear(rows, 5120, 10240, fp64=rows <= 4),
             linear(rows, 2048, 5120, fp8=True),
-            Work(4 * rows * 5120 + rows * 4096 + 4 * (3 * 5120 + 256)),
+            Work(
+                4 * rows * 5120 + rows * 4096 + 4 * (3 * 5120 + 256),
+                fp64_flops=rows * (8 * 5120 + 8),
+            ),
         )
     if name == "mtp_draft":
         full = shape.variant == "full"
         return add(
-            linear(rows, 5120, 10240) if full else Work(0),
+            linear(rows, 5120, 10240, fp64=rows <= 4) if full else Work(0),
             linear(rows, 14336 if full else 12288, 5120, fp8=True),
             linear(rows, 5120, 6144, fp8=True),
             ffn(rows),
@@ -89,7 +97,8 @@ def work_for(shape):
                 (6 if full else 4) * rows * 5120
                 + 4 * rows * 248320
                 + (rows * 4096 if full else 0)
-                + 4 * ((6 if full else 4) * 5120 + 512)
+                + 4 * ((6 if full else 4) * 5120 + 512),
+                fp64_flops=rows * (8 * 5120 + 8) if full else 0,
             ),
         )
     if name == "vision_block":

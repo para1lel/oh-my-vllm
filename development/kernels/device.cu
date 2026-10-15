@@ -15,7 +15,8 @@ void cuda_check(cudaError_t status) {
 struct DeviceAllocator {
   void AllocData(DLTensor *tensor) {
     tvm::ffi::CUDADeviceGuard guard(tensor->device.device_id);
-    cuda_check(cudaMalloc(&tensor->data, tvm::ffi::GetDataSize(*tensor)));
+    auto bytes = tvm::ffi::GetDataSize(*tensor);
+    cuda_check(cudaMalloc(&tensor->data, bytes ? bytes : 1));
   }
 
   void FreeData(DLTensor *tensor) {
@@ -27,7 +28,7 @@ struct DeviceAllocator {
 Tensor allocate(Shape shape, String dtype, int64_t device) {
   TVM_FFI_ICHECK(device >= 0 && device <= INT32_MAX);
   for (auto extent : shape)
-    TVM_FFI_ICHECK(extent > 0);
+    TVM_FFI_ICHECK(extent >= 0);
   return Tensor::FromNDAlloc(DeviceAllocator{}, shape, tvm::ffi::StringToDLDataType(dtype),
                              DLDevice{kDLCUDA, static_cast<int>(device)});
 }

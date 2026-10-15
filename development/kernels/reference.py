@@ -182,9 +182,19 @@ def numerical_error(actual, expected, *, state=False):
         if state
         else bool(np.all(np.abs(error) <= 0.03 + 0.03 * np.abs(expected)))
     )
+    if state:
+        maximum_ratio = (
+            maximum / (0.02 * peak) if peak else (0 if maximum == 0 else math.inf)
+        )
+        tolerance_ratio = max(nrmse / 0.01, maximum_ratio)
+    else:
+        tolerance_ratio = float(
+            np.max(np.abs(error) / (0.03 + 0.03 * np.abs(expected)))
+        )
     return {
         "passed": passed,
         "nrmse": nrmse,
         "max_abs": maximum,
         "reference_peak": peak,
+        "max_tolerance_ratio": tolerance_ratio,
     }

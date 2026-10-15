@@ -47,7 +47,8 @@ o = S_next @ q / sqrt(128)
 ```
 
 保持推理路径中的 BF16 舍入点.
-prefill 分块内部使用 FP32 累加.
+Prefill 和 recurrent 验证行使用 FP32 live carry.
+持久 checkpoints 使用 BF16 存储.
 
 在每个 784-token 边界和最终行保存 checkpoint.
 验证写入私有状态. 只有已接受行可以替换已接受状态.
@@ -94,6 +95,33 @@ merger 在 2-by-2 gather 前归一化每个 1152-element patch.
 
 将输出 embeddings 写入对应语言 token 行.
 保持文本, 图片和视频之间的输入顺序.
+
+## 中间精度
+
+数值检查失败时, 必要时提高中间精度.
+验收前更新此契约. 保持输出和状态误差限制.
+工作量计算使用所选实现的操作数, 累加器及存储类型.
+不能因为选用更慢但提供相同数值计算的指令而增加工作量.
+
+| 区域 | 计算 | 存储结果 |
+|---|---|---|
+| FP8 投影 | E4M3 操作数, FP32 scales 和累加 | BF16 |
+| BF16 投影 | BF16 操作数, FP32 累加 | BF16 |
+| GDN recurrence | FP32 live carry, 乘积和求和 | BF16 checkpoints |
+| FA softmax 和 split merge | FP32 | FP32 partials, BF16 输出 |
+| Vision attention | TF32 QK 和 PV 指令, FP32 累加. Q/K/V 保持其 BF16 数值 | TF32 概率, BF16 输出 |
+| MTP dual RMS | FP64 统计量和增益计算 | BF16 packed input |
+| MTP FC, 不超过 4 行 | BF16 操作数, FP64 乘积和累加 | BF16 |
+| MTP FC, 超过 4 行 | BF16 操作数, FP32 Tensor Core 累加 | BF16 |
+| Sampling 接受和 residual CDF | FP64 乘积, 差值和求和 | FP64 masses, 整数选择 |
+
+Vision 概率使用 TF32 最近值舍入: 8 位指数和 10 位尾数.
+QK 操作数保持 BF16 数值, 因此按 BF16 工作量计算. PV 的概率精度提高, 因此按 TF32 工作量计算.
+视觉参考使用独立 FP64 softmax 和 FP32 概率.
+它不复制实现的在线分块舍入.
+
+[工作量计算](../../development/kernels/work.py)确定每个建模 shape 适用的精度.
+临时存储和重复工作不能抬高理论下界.
 
 ## 数值检查
 

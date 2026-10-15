@@ -3,17 +3,35 @@ import hashlib
 import importlib.metadata
 import json
 import os
+import re
 from pathlib import Path
 
 SOURCES = Path(__file__).with_name("cuda_backend")
 
 
-def source_fingerprint(name):
+def source_files(source):
+    pending, visited = [Path(source).resolve()], set()
+    while pending:
+        path = pending.pop()
+        if path in visited:
+            continue
+        visited.add(path)
+        for include in re.findall(r'^\s*#include\s+"([^"]+)"', path.read_text(), re.M):
+            pending.append((path.parent / include).resolve())
+    return sorted(visited)
+
+
+def source_digest(source):
+    source = Path(source).resolve()
     digest = hashlib.sha256()
-    for file in [*sorted(SOURCES.glob("*.cuh")), SOURCES / f"{name}.cu"]:
-        digest.update(file.name.encode())
+    for file in source_files(source):
+        digest.update(os.path.relpath(file, source.parent).encode())
         digest.update(file.read_bytes())
     return digest.hexdigest()
+
+
+def source_fingerprint(name):
+    return source_digest(SOURCES / f"{name}.cu")
 
 
 def cache_directory():

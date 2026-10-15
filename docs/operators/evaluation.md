@@ -4,8 +4,7 @@ Use the [model contracts](model.md) and [fusion plan](fusion.md).
 The [workload model](../../development/kernels/workload.py) supplies six request profiles.
 Use its 7 serving boundaries for acceptance. Do not apply the gate to the 18 internal stages.
 
-The serving boundaries are plans. The FFN provider is a baseline.
-The other serving providers are not available.
+Native providers supply the serving boundaries. Full workload acceptance is necessary.
 Use the [development commands](development.md) for the available tools.
 
 ## Shape distribution
@@ -39,16 +38,24 @@ Do numerical checks of MTP acceptance branches and other boundary conditions wit
 
 ## Performance gate
 
-Use single-GPU dense B200 peaks: FP8 Tensor 4.5 PFLOPS, BF16 Tensor 2.25 PFLOPS, FP32 75 TFLOPS, HBM 7.7 TB/s.
+Use single-GPU dense B200 peaks.
+Tensor Core peaks are FP8 4.5 PFLOPS, BF16 2.25 PFLOPS, and TF32 1.125 PFLOPS.
+Scalar peaks are FP32 75 TFLOPS and FP64 37 TFLOPS. HBM bandwidth is 7.7 TB/s.
 The [NVIDIA B200 reference](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-b200/latest/_downloads/4b3d3302fa4fc6854b595ccff50b9932/RA11334001-DSPB200-ReferenceArch.pdf) identifies the platform.
+
+The [NVIDIA HGX specifications](https://www.nvidia.com/en-au/data-center/hgx/) give eight-GPU FP64 and sparse TF32 figures.
+Divide these figures by 8 for one GPU. Divide the sparse TF32 figure by 2 for dense computation.
+Use the [intermediate precision contract](model.md#intermediate-precision).
+Apply the FP32 and FP64 ceilings separately. Do not add their times without a verified shared-resource model.
 
 Use this work model for each full operator:
 
 ```text
 t_lower = max(
     necessary_HBM_bytes / HBM_peak,
-    FP8_work / FP8_peak + BF16_work / BF16_peak,
-    FP32_work / FP32_peak
+    FP8_work / FP8_peak + BF16_work / BF16_peak + TF32_work / TF32_peak,
+    FP32_work / FP32_peak,
+    FP64_work / FP64_peak
 )
 eta(shape) = t_lower(shape) / measured_seconds(shape)
 E_eta(operator) = sum(probability(shape | operator) * eta(shape))
@@ -62,7 +69,7 @@ Count the necessary cold weight reads. Do not add HBM bytes for tensors between 
 Include all accesses to temporary storage in the timed operation.
 Acceptance selects state slots. It does not copy the full recurrent or convolution state.
 
-FP8 and BF16 share Tensor Core resources. Do not calculate their resource limits as two different resources.
+FP8, BF16, and TF32 share Tensor Core resources. Do not calculate their limits as separate resources.
 Padding and unnecessary copies cannot increase the lower bound.
 
 Do not add measured launch time or empirical efficiency factors to the lower bound.
@@ -70,6 +77,7 @@ The work model has no parameter for a measured or calibrated latency.
 Keep each shape's time and efficiency. Do not replace the expected efficiency with a ratio of total times.
 
 Missing implementations, failed numerical checks, missing cases, or mixed source identities prevent acceptance.
+Reports include the maximum normalized tolerance ratio. The ratio must be at most 1. The necessary guard checks must pass.
 If an efficiency is greater than 1.05, do a work-model check.
 
 If a provider is missing or fails, stop the evaluation with an error.

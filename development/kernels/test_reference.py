@@ -18,6 +18,7 @@ class Reference(unittest.TestCase):
         values[0, :2] = [2.15625, 0.404296875]
         self.assertEqual(quantize(values)[0][0, 1], 106)
         self.assertFalse(numerical_error([0.04], [0])["passed"])
+        self.assertGreater(numerical_error([0.04], [0])["max_tolerance_ratio"], 1)
         self.assertFalse(numerical_error([0.001], [0], state=True)["passed"])
         with self.assertRaises(ValueError):
             numerical_error([np.nan], [0])

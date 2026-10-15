@@ -47,7 +47,8 @@ o = S_next @ q / sqrt(128)
 ```
 
 Keep the BF16 rounding points of the inference path.
-Use FP32 accumulation inside a prefill chunk.
+Use FP32 live carry for prefill and recurrent verification rows.
+Store persistent checkpoints in BF16.
 
 Save checkpoints at each 784-token boundary and at the final row.
 Verification writes private states. Only accepted rows can replace the accepted state.
@@ -94,6 +95,33 @@ Its two projections have shapes `4608x4608` and `5120x4608`.
 
 Put the output embeddings in the related language-token rows.
 Keep the input order for text, images, and video.
+
+## Intermediate precision
+
+If a numerical check fails, increase intermediate precision when necessary.
+Update this contract before acceptance. Keep the output and state error limits.
+Use the operand, accumulator, and storage types of the selected implementation for the work calculation.
+Do not increase work for a slower instruction choice that supplies the same numerical computation.
+
+| Region | Computation | Stored result |
+|---|---|---|
+| FP8 projections | E4M3 operands, FP32 scales and accumulation | BF16 |
+| BF16 projections | BF16 operands, FP32 accumulation | BF16 |
+| GDN recurrence | FP32 live carry, products, and sums | BF16 checkpoints |
+| FA softmax and split merge | FP32 | FP32 partials, BF16 output |
+| Vision attention | TF32 QK and PV instructions, FP32 accumulation. Q/K/V keep their BF16 values | TF32 probabilities, BF16 output |
+| MTP dual RMS | FP64 statistics and gain computation | BF16 packed input |
+| MTP FC, at most 4 rows | BF16 operands, FP64 products and accumulation | BF16 |
+| MTP FC, more than 4 rows | BF16 operands, FP32 Tensor Core accumulation | BF16 |
+| Sampling acceptance and residual CDF | FP64 products, differences, and sums | FP64 masses, integer selections |
+
+Vision probabilities use TF32 round-to-nearest: 8 exponent bits and 10 mantissa bits.
+Count QK as BF16 work because its operands keep BF16 values. Count PV as TF32 work because probability precision increases.
+The vision reference uses independent FP64 softmax with FP32 probabilities.
+It does not reproduce the implementation's online block rounding.
+
+The [work calculation](../../development/kernels/work.py) identifies the applicable precision for each modeled shape.
+Temporary storage and duplicated work cannot increase the theoretical lower bound.
 
 ## Numerical checks
 

@@ -27,9 +27,8 @@ Python 可以分配张量及启动 CUDA 实现.
 第一个 MTP draft 使用 `query_only`. 其余 3 个 draft 使用 `full`.
 第一个 draft 使用已就绪的 context 端点.
 
-这些边界是实现计划. FFN provider 是基础版本.
-其余 serving provider 尚不可用.
-计划不提供 fusion 证据, 也不提供达到 60% 性能门槛的证据.
+原生 provider 提供这些边界. 完整负载验收是必要的.
+实现计划不提供达到 60% 性能门槛的证据.
 
 ## 内部语言阶段
 

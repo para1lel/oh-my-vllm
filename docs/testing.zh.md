@@ -13,7 +13,12 @@ HTTP 测试通过进程边界使用 Python 占位实现.
 
 GPU 数值检查和测量使用[算子开发命令](operators/development.zh.md).
 FFN 输出参考使用选定的行. 报告注明抽样范围.
-缺失 provider 会阻止完整算子验收.
+每个 provider 声明其数值抽样范围.
+
+Sampling 检查带种子的选择及 MTP 状态 slot 选择.
+FA, GDN 和 MTP 检查持久写入及未改动的保护存储.
+Vision 检查 patch 顺序和帧隔离.
+覆盖率不完整或检查失败会阻止完整算子验收.
 
 GPU 工作使用 GPU wrapper.
 每轮运行后停止自己启动的进程.

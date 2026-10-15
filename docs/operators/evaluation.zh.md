@@ -4,8 +4,7 @@
 [负载模型](../../development/kernels/workload.py)提供六个请求模板.
 验收使用其中的 7 个 serving 边界. 不对 18 个内部阶段应用门槛.
 
-Serving 边界是计划. FFN provider 是基础版本.
-其余 serving provider 尚不可用.
+原生 provider 提供这些 serving 边界. 完整负载验收是必要的.
 可用工具见[开发命令](development.zh.md).
 
 ## Shape 分布
@@ -39,16 +38,24 @@ MTP 每个请求有五行验证输入. 在模型中, 每个 MTP 步骤保留四�
 
 ## 性能门槛
 
-使用单 GPU dense B200 峰值: FP8 Tensor 4.5 PFLOPS, BF16 Tensor 2.25 PFLOPS, FP32 75 TFLOPS, HBM 7.7 TB/s.
+使用单 GPU dense B200 峰值.
+Tensor Core 峰值为 FP8 4.5 PFLOPS, BF16 2.25 PFLOPS 及 TF32 1.125 PFLOPS.
+Scalar 峰值为 FP32 75 TFLOPS 和 FP64 37 TFLOPS. HBM 带宽为 7.7 TB/s.
 [NVIDIA B200 参考](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-b200/latest/_downloads/4b3d3302fa4fc6854b595ccff50b9932/RA11334001-DSPB200-ReferenceArch.pdf)标识平台.
+
+[NVIDIA HGX 规格](https://www.nvidia.com/en-au/data-center/hgx/)提供八 GPU 的 FP64 及 sparse TF32 数据.
+将这些数据除以 8 得到单 GPU 数据. 将 sparse TF32 数据除以 2 得到 dense 计算数据.
+使用[中间精度契约](model.zh.md#中间精度).
+分别应用 FP32 和 FP64 上限. 没有经过验证的共享资源模型时, 不将两者时间相加.
 
 每个完整算子使用以下工作量模型:
 
 ```text
 t_lower = max(
     necessary_HBM_bytes / HBM_peak,
-    FP8_work / FP8_peak + BF16_work / BF16_peak,
-    FP32_work / FP32_peak
+    FP8_work / FP8_peak + BF16_work / BF16_peak + TF32_work / TF32_peak,
+    FP32_work / FP32_peak,
+    FP64_work / FP64_peak
 )
 eta(shape) = t_lower(shape) / measured_seconds(shape)
 E_eta(operator) = sum(probability(shape | operator) * eta(shape))
@@ -62,7 +69,7 @@ PASS(operator) = accuracy_pass AND complete_coverage AND E_eta(operator) >= 0.60
 将全部临时存储访问包含在计时操作中.
 接受操作选择状态 slots, 不复制完整的 recurrent 或卷积状态.
 
-FP8 和 BF16 共享 Tensor Core 资源. 不按两个不同的资源计算它们的资源限制.
+FP8, BF16 和 TF32 共享 Tensor Core 资源. 不将它们的限制按独立资源计算.
 Padding 和不必要的复制不能抬高理论下界.
 
 不在理论下界中加入实测启动耗时或经验效率因子.
@@ -70,6 +77,7 @@ Padding 和不必要的复制不能抬高理论下界.
 保留各 shape 的耗时及效率. 不以总耗时之比替代期望效率.
 
 缺少实现, 精度失败, case 缺失或混用源码标识都会阻止验收.
+报告包含最大归一化容差比. 该比值必须不大于 1. 必要的保护检查必须通过.
 效率超过 1.05 时必须检查工作量模型.
 
 如果 provider 缺失或失败, 以错误结束评测.

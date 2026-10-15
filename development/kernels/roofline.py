@@ -8,14 +8,19 @@ class Work:
     fp8_flops: int = 0
     bf16_flops: int = 0
     fp32_flops: int = 0
+    tf32_flops: int = 0
+    fp64_flops: int = 0
 
     def lower_bound_seconds(self):
         if any(value < 0 or not math.isfinite(value) for value in vars(self).values()):
             raise ValueError("work must be finite and nonnegative")
         return max(
             self.hbm_bytes / 7.7e12,
-            self.fp8_flops / 4.5e15 + self.bf16_flops / 2.25e15,
+            self.fp8_flops / 4.5e15
+            + self.bf16_flops / 2.25e15
+            + self.tf32_flops / 1.125e15,
             self.fp32_flops / 75e12,
+            self.fp64_flops / 37e12,
         )
 
 
