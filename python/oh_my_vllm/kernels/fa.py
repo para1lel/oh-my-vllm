@@ -46,6 +46,7 @@ class FA:
                 ((rows, 24, splits), "float32"),
                 ((rows, 6144), "float8_e4m3fn"),
                 ((rows, 48), "float32"),
+                ((8, rows, 5120) if rows <= 8 else (1,), "float32"),
             )
         )
 

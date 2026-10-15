@@ -1,9 +1,20 @@
 #include "common.cuh"
+#include "projection_decode.cuh"
 #include "groupwise.cuh"
 #include "normalization.cuh"
 #include "fa_attention.cuh"
 #include "fa_input.cuh"
 #include "fa_prefill.cuh"
+
+__global__ void fa_output_merge_kernel(const float *partials, __nv_bfloat16 *output, int count) {
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < count) {
+    float value = 0;
+    for (int split = 0; split < 8; ++split)
+      value += partials[split * count + index];
+    output[index] = __float2bfloat16_rn(value);
+  }
+}
 
 void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_weight,
         TensorView input_weight_scale, TensorView q_norm, TensorView k_norm, TensorView positions,
@@ -11,8 +22,8 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
         TensorView lengths, TensorView output_weight, TensorView output_weight_scale,
         TensorView output, TensorView summed, TensorView quantized, TensorView scales,
         TensorView packed, TensorView query, TensorView gate, TensorView partial, TensorView lse,
-        TensorView gated, TensorView gated_scale, int64_t variant, int64_t max_queries,
-        int64_t first_token) {
+        TensorView gated, TensorView gated_scale, TensorView projection_partials, int64_t variant,
+        int64_t max_queries, int64_t first_token) {
   TVM_FFI_ICHECK(x.ndim() == 2 && x.size(1) == 5120 && x.size(0) > 0 && x.size(0) <= 32768);
   int rows = x.size(0), columns = variant == 1 ? 2048 : variant == 2 ? 12288 : 14336;
   TVM_FFI_ICHECK(first_token == 0 || first_token == 1);
@@ -47,6 +58,10 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
   tensor_contract(lse, x, kDLFloat, 32, {rows, 24, splits});
   tensor_contract(gated, x, kDLFloat8_e4m3fn, 8, {rows, 6144});
   tensor_contract(gated_scale, x, kDLFloat, 32, {rows, 48});
+  if (rows <= 8)
+    tensor_contract(projection_partials, x, kDLFloat, 32, {8, rows, 5120});
+  else
+    tensor_contract(projection_partials, x, kDLFloat, 32, {1});
   auto inputs = {x,
                  residual,
                  norm,
@@ -61,8 +76,9 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
                  lengths,
                  output_weight,
                  output_weight_scale};
-  auto outputs = {output, summed,  quantized, scales, packed,      query,
-                  gate,   partial, lse,       gated,  gated_scale, cache};
+  auto outputs = {
+      output,      summed, quantized,          scales, packed, query, gate, partial, lse, gated,
+      gated_scale, cache,  projection_partials};
   int left = 0;
   for (auto a : outputs) {
     for (auto b : inputs)
@@ -146,9 +162,17 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
   else
     merge(std::integral_constant<int, 8>{});
   check_cuda(cudaGetLastError());
-  groupwise(static_cast<const __nv_fp8_e4m3 *>(gated.data_ptr()),
-            static_cast<const __nv_fp8_e4m3 *>(output_weight.data_ptr()),
-            static_cast<const float *>(gated_scale.data_ptr()),
-            static_cast<const float *>(output_weight_scale.data_ptr()),
-            static_cast<__nv_bfloat16 *>(output.data_ptr()), rows, 5120, 6144, stream);
+  if (rows <= 8) {
+    decode_projection_launch<false>(gated, output_weight, gated_scale, output_weight_scale,
+                                    projection_partials, rows, 8, stream);
+    fa_output_merge_kernel<<<(rows * 5120 + 255) / 256, 256, 0, stream>>>(
+        static_cast<const float *>(projection_partials.data_ptr()),
+        static_cast<__nv_bfloat16 *>(output.data_ptr()), rows * 5120);
+    check_cuda(cudaGetLastError());
+  } else
+    groupwise(static_cast<const __nv_fp8_e4m3 *>(gated.data_ptr()),
+              static_cast<const __nv_fp8_e4m3 *>(output_weight.data_ptr()),
+              static_cast<const float *>(gated_scale.data_ptr()),
+              static_cast<const float *>(output_weight_scale.data_ptr()),
+              static_cast<__nv_bfloat16 *>(output.data_ptr()), rows, 5120, 6144, stream);
 }

@@ -5,16 +5,19 @@
 
 #include <cute/tensor.hpp>
 #include <map>
+#include <tuple>
 
 #include <cute/arch/tmem_allocator_sm100.hpp>
 #include <cute/arch/copy_sm90_tma.hpp>
 #include <cutlass/cuda_host_adapter.hpp>
 #include <cutlass/arch/barrier.h>
 
-__global__ void ffn_down_decode_kernel(const __nv_fp8_e4m3 *activation, const __nv_fp8_e4m3 *weight,
-                                       const float *activation_scale, const float *weight_scale,
-                                       float *output, int rows, int columns, int inner, int splits,
-                                       const __grid_constant__ CUtensorMap weight_map) {
+template <bool Programmatic = true>
+__global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
+                                         const __nv_fp8_e4m3 *weight, const float *activation_scale,
+                                         const float *weight_scale, float *output, int rows,
+                                         int columns, int inner, int splits,
+                                         const __grid_constant__ CUtensorMap weight_map) {
   using namespace cute;
   using Element = cutlass::float_e4m3_t;
   using MMA = decltype(make_tiled_mma(
@@ -47,9 +50,11 @@ __global__ void ffn_down_decode_kernel(const __nv_fp8_e4m3 *activation, const __
         make_uint4(0, 0, 0, 0);
   }
   __syncthreads();
-  cudaGridDependencySynchronize();
-  if (thread == 0)
-    cudaTriggerProgrammaticLaunchCompletion();
+  if constexpr (Programmatic) {
+    cudaGridDependencySynchronize();
+    if (thread == 0)
+      cudaTriggerProgrammaticLaunchCompletion();
+  }
   MMA mma;
   auto weight_fragment = mma.get_slice(0).make_fragment_A(weight_tile);
   auto input_fragment = mma.get_slice(0).make_fragment_B(input_tile);
@@ -138,18 +143,22 @@ __global__ void ffn_down_decode_kernel(const __nv_fp8_e4m3 *activation, const __
   }
 }
 
-inline void ffn_down_decode_launch(TensorView activation, TensorView weight,
-                                   TensorView activation_scale, TensorView weight_scale,
-                                   TensorView partials, int rows, int splits, cudaStream_t stream) {
-  using WeightKey = std::pair<int, uintptr_t>;
+template <bool Programmatic = true>
+inline void decode_projection_launch(TensorView activation, TensorView weight,
+                                     TensorView activation_scale, TensorView weight_scale,
+                                     TensorView partials, int rows, int splits,
+                                     cudaStream_t stream) {
+  using WeightKey = std::tuple<int, uintptr_t, int64_t, int64_t>;
   static thread_local std::map<WeightKey, CUtensorMap> weight_maps;
-  WeightKey key{weight.device().device_id, reinterpret_cast<uintptr_t>(weight.data_ptr())};
+  int columns = weight.size(0), inner = weight.size(1);
+  WeightKey key{weight.device().device_id, reinterpret_cast<uintptr_t>(weight.data_ptr()), columns,
+                inner};
   auto found = weight_maps.find(key);
   if (found == weight_maps.end()) {
-    check_cuda(cudaFuncSetAttribute(ffn_down_decode_kernel,
+    check_cuda(cudaFuncSetAttribute(decode_projection_kernel<Programmatic>,
                                     cudaFuncAttributeMaxDynamicSharedMemorySize, 36992));
     CUtensorMap descriptor{};
-    uint64_t dimensions[2] = {17408, 5120}, strides[1] = {17408};
+    uint64_t dimensions[2] = {uint64_t(inner), uint64_t(columns)}, strides[1] = {uint64_t(inner)};
     uint32_t box[2] = {128, 64}, elements[2] = {1, 1};
     auto status = CUTLASS_CUDA_DRIVER_WRAPPER_CALL(cuTensorMapEncodeTiled)(
         &descriptor, CU_TENSOR_MAP_DATA_TYPE_UINT8, 2, weight.data_ptr(), dimensions, strides, box,
@@ -158,12 +167,17 @@ inline void ffn_down_decode_launch(TensorView activation, TensorView weight,
     TVM_FFI_ICHECK(status == CUDA_SUCCESS) << status;
     found = weight_maps.emplace(key, descriptor).first;
   }
-  launch_programmatic(ffn_down_decode_kernel, dim3(80, splits), dim3(128), 36992, stream,
-                      static_cast<const __nv_fp8_e4m3 *>(activation.data_ptr()),
-                      static_cast<const __nv_fp8_e4m3 *>(weight.data_ptr()),
-                      static_cast<const float *>(activation_scale.data_ptr()),
-                      static_cast<const float *>(weight_scale.data_ptr()),
-                      static_cast<float *>(partials.data_ptr()), rows, 5120, 17408, splits,
-                      found->second);
+  const auto *a = static_cast<const __nv_fp8_e4m3 *>(activation.data_ptr());
+  const auto *w = static_cast<const __nv_fp8_e4m3 *>(weight.data_ptr());
+  const auto *sa = static_cast<const float *>(activation_scale.data_ptr());
+  const auto *sw = static_cast<const float *>(weight_scale.data_ptr());
+  auto *out = static_cast<float *>(partials.data_ptr());
+  if constexpr (Programmatic)
+    launch_programmatic(decode_projection_kernel<true>, dim3(columns / 64, splits), dim3(128),
+                        36992, stream, a, w, sa, sw, out, rows, columns, inner, splits,
+                        found->second);
+  else
+    decode_projection_kernel<false><<<dim3(columns / 64, splits), 128, 36992, stream>>>(
+        a, w, sa, sw, out, rows, columns, inner, splits, found->second);
   check_cuda(cudaGetLastError());
 }

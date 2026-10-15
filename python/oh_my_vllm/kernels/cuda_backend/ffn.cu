@@ -1,6 +1,6 @@
 #define CUTLASS_ENABLE_GDC_FOR_SM100 1
 #include "common.cuh"
-#include "ffn_decode.cuh"
+#include "projection_decode.cuh"
 #include "groupwise.cuh"
 #include "normalization.cuh"
 
@@ -112,8 +112,8 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
   check_cuda(cudaGetLastError());
   if (rows <= 32) {
     if (rows <= 8)
-      ffn_down_decode_launch(quantized_product, down_weight, product_scale, down_scale, partials,
-                             rows, splits, stream);
+      decode_projection_launch(quantized_product, down_weight, product_scale, down_scale, partials,
+                               rows, splits, stream);
     else {
       auto run = [&](auto count) {
         groupwise<64, 128, 128, 1, 128, false, decltype(count)::value, float>(
