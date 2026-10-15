@@ -1,5 +1,6 @@
 #define CUTLASS_ENABLE_GDC_FOR_SM100 1
 #include "common.cuh"
+#include "ffn_up.cuh"
 #include "projection_decode.cuh"
 #include "groupwise.cuh"
 #include "normalization.cuh"
@@ -92,24 +93,37 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
                                   static_cast<__nv_bfloat16 *>(summed.data_ptr()),
                                   static_cast<__nv_fp8_e4m3 *>(quantized_input.data_ptr()),
                                   static_cast<float *>(input_scale.data_ptr()), rows, stream);
-  if (rows <= 32)
-    groupwise<128, 32, 256, 128, 1, true>(
-        static_cast<const __nv_fp8_e4m3 *>(gate_up_weight.data_ptr()),
-        static_cast<const __nv_fp8_e4m3 *>(quantized_input.data_ptr()),
-        static_cast<const float *>(gate_up_scale.data_ptr()),
-        static_cast<const float *>(input_scale.data_ptr()), gate_up.data_ptr(), 34816, rows, 5120,
-        stream, true);
-  else
-    groupwise(static_cast<const __nv_fp8_e4m3 *>(quantized_input.data_ptr()),
-              static_cast<const __nv_fp8_e4m3 *>(gate_up_weight.data_ptr()),
-              static_cast<const float *>(input_scale.data_ptr()),
-              static_cast<const float *>(gate_up_scale.data_ptr()),
-              static_cast<__nv_bfloat16 *>(gate_up.data_ptr()), rows, 34816, 5120, stream, true);
-  launch_programmatic(silu_product_quant_kernel, dim3((rows * 136 + 7) / 8), dim3(256), 0, stream,
-                      static_cast<const __nv_bfloat16 *>(gate_up.data_ptr()),
-                      static_cast<__nv_fp8_e4m3 *>(quantized_product.data_ptr()),
-                      static_cast<float *>(product_scale.data_ptr()), rows * 136);
-  check_cuda(cudaGetLastError());
+  auto paired = [&](auto count) {
+    paired_up_launch<decltype(count)::value>(quantized_input, input_scale, gate_up_weight,
+                                             gate_up_scale, gate_up, quantized_product,
+                                             product_scale, stream);
+  };
+  if (rows == 1)
+    paired(std::integral_constant<int, 1>{});
+  else if (rows == 4)
+    paired(std::integral_constant<int, 4>{});
+  else if (rows == 5)
+    paired(std::integral_constant<int, 5>{});
+  else {
+    if (rows <= 32)
+      groupwise<128, 32, 256, 128, 1, true>(
+          static_cast<const __nv_fp8_e4m3 *>(gate_up_weight.data_ptr()),
+          static_cast<const __nv_fp8_e4m3 *>(quantized_input.data_ptr()),
+          static_cast<const float *>(gate_up_scale.data_ptr()),
+          static_cast<const float *>(input_scale.data_ptr()), gate_up.data_ptr(), 34816, rows, 5120,
+          stream, true);
+    else
+      groupwise(static_cast<const __nv_fp8_e4m3 *>(quantized_input.data_ptr()),
+                static_cast<const __nv_fp8_e4m3 *>(gate_up_weight.data_ptr()),
+                static_cast<const float *>(input_scale.data_ptr()),
+                static_cast<const float *>(gate_up_scale.data_ptr()),
+                static_cast<__nv_bfloat16 *>(gate_up.data_ptr()), rows, 34816, 5120, stream, true);
+    launch_programmatic(silu_product_quant_kernel, dim3((rows * 136 + 7) / 8), dim3(256), 0, stream,
+                        static_cast<const __nv_bfloat16 *>(gate_up.data_ptr()),
+                        static_cast<__nv_fp8_e4m3 *>(quantized_product.data_ptr()),
+                        static_cast<float *>(product_scale.data_ptr()), rows * 136);
+    check_cuda(cudaGetLastError());
+  }
   if (rows <= 32) {
     if (rows <= 8)
       decode_projection_launch(quantized_product, down_weight, product_scale, down_scale, partials,
