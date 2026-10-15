@@ -98,8 +98,11 @@ merger 在 2-by-2 gather 前归一化每个 1152-element patch.
 
 ## 中间精度
 
-数值检查失败时, 必要时提高中间精度.
-验收前更新此契约. 保持输出和状态误差限制.
+数值行为与 [vLLM commit e8e1e961](https://github.com/vllm-project/vllm/commit/e8e1e96196725f097eae2394cbc458b1f5a679b8) 对齐.
+采用其 BF16 模型路径及项目的 cache 设置. 此源码参考不引入 vLLM 依赖.
+使用源码中的类型和舍入点. 不为通过数值检查而提高精度.
+检查失败时, 测量误差, 并在验收前仅调整必要的具名容差.
+
 工作量计算使用所选实现的操作数, 累加器及存储类型.
 不能因为选用更慢但提供相同数值计算的指令而增加工作量.
 
@@ -107,18 +110,21 @@ merger 在 2-by-2 gather 前归一化每个 1152-element patch.
 |---|---|---|
 | FP8 投影 | E4M3 操作数, FP32 scales 和累加 | BF16 |
 | BF16 投影 | BF16 操作数, FP32 累加 | BF16 |
+| 残差加法和 RMS | FP32 求和及统计量. 对未舍入的和执行归一化 | BF16 残差及归一化结果 |
+| Q/K RoPE | BF16 归一化 Q/K 及 cos/sin. FP32 乘积和求和 | BF16 |
+| GDN Q/K norm | FP32 | Prefill 使用 BF16. Recurrent 行使用 FP32 live values |
 | GDN recurrence | FP32 live carry, 乘积和求和 | BF16 checkpoints |
-| FA softmax 和 split merge | FP32 | FP32 partials, BF16 输出 |
-| Vision attention | TF32 QK 和 PV 指令, FP32 累加. Q/K/V 保持其 BF16 数值 | TF32 概率, BF16 输出 |
-| MTP dual RMS | FP64 统计量和增益计算 | BF16 packed input |
-| MTP FC, 不超过 4 行 | BF16 操作数, FP64 乘积和累加 | BF16 |
-| MTP FC, 超过 4 行 | BF16 操作数, FP32 Tensor Core 累加 | BF16 |
-| Sampling 接受和 residual CDF | FP64 乘积, 差值和求和 | FP64 masses, 整数选择 |
+| GDN head norm 和 gate | BF16 attention 结果, 随后使用 FP32 RMS, weight, SiLU 和乘积 | 一个 BF16 结果 |
+| FA attention 和 gate | BF16 Q/K/V/P, FP32 softmax 及累加 | FP8 前的 BF16 attention, sigmoid 和乘积 |
+| Vision attention | BF16 Q/K/V/P, FP32 softmax 及累加 | BF16 |
+| MTP dual RMS | FP32 统计量和增益计算 | BF16 packed input |
+| MTP FC, 全部行数 | BF16 操作数, FP32 累加 | BF16 |
+| Sampling 接受和 residual CDF | FP32 概率, 比值, masses 和求和. FP64 随机阈值 | 整数选择 |
 
-Vision 概率使用 TF32 最近值舍入: 8 位指数和 10 位尾数.
-QK 操作数保持 BF16 数值, 因此按 BF16 工作量计算. PV 的概率精度提高, 因此按 TF32 工作量计算.
-视觉参考使用独立 FP64 softmax 和 FP32 概率.
-它不复制实现的在线分块舍入.
+固定版本的 [RMS 参考](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/ir/ops/layernorm.py#L44) 区分 FP32 归一化输入和 BF16 残差存储.
+[GDN decode 路径](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/csrc/gdn/fused_gdn_decode_kernel.cu#L226) 将 recurrent Q/K 保持为 FP32.
+[视觉注意力依赖](https://github.com/vllm-project/flash-attention/blob/b273a02621d3c94bc747df67204f591b67f38fae/flash_attn/cute/flash_fwd_sm100.py#L2522) 在 PV 前将在线概率舍入为 BF16.
+独立参考使用完整 FP64 softmax. 它不复制在线分块舍入.
 
 [工作量计算](../../development/kernels/work.py)确定每个建模 shape 适用的精度.
 临时存储和重复工作不能抬高理论下界.
@@ -128,7 +134,22 @@ QK 操作数保持 BF16 数值, 因此按 BF16 工作量计算. PV 的概率精�
 使用不依赖算子实现的 CPU FP64 参考.
 [CPU 参考函数](../../development/kernels/reference.py)提供采用模型舍入点的 FP64 计算.
 参考与算子使用相同的舍入输入.
-BF16 输出容差为 `atol=rtol=0.03`.
+每项检查使用[具名数值限制](../../python/oh_my_vllm/kernels/specification.py).
+输出检查使用 `rtol=0.03`.
+具名绝对误差限制如下:
+
+| 容差 | 输出 | `atol` |
+|---|---|---|
+| `bf16` | 单独算子 | 0.03 |
+| `vision` | Vision 边界 | 0.03 |
+| `mtp_attention` | MTP draft 边界内的 attention | 0.1 |
+| `mtp_residual` | MTP draft 边界内的 FFN 残差 | 0.25 |
+| `mtp_hidden` | MTP draft 边界内的 FFN | 1.5 |
+| `mtp_logits` | MTP draft 边界内的 logits | 0.5 |
+
+记录容差名称和最大归一化误差比.
+检查 MTP 残差存储与算子输入之和是否满足精确 BF16 相等.
+保留相对独立参考链路的单独残差误差检查.
 
 状态 NRMSE 不超过 1%.
 状态最大误差不超过参考峰值的 2%.

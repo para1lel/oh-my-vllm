@@ -16,9 +16,13 @@ Each provider supplies numerical checks and restores mutable state before measur
 Reports bind checkpoint shards, source files, binaries, and build dependencies.
 Vision MLP activation uses projection output stores.
 
+The [numerical contract](operators/model.md#intermediate-precision) follows the pinned vLLM source types and rounding points.
+The project has no vLLM runtime dependency.
+Named tolerances apply to specific outputs. Cache checks and state selection keep their separate requirements.
+
 The full operator implementation is not completed. More work is necessary for the 60% performance requirement.
 
-Next work: complete the numerical checks for the MTP draft boundary and optimize the measured bottlenecks.
+Next work: optimize the measured bottlenecks.
 Complete workload acceptance for each operator.
 Then connect model computation to the worker.
 Use the [implementation plan](operators/implementation.md).

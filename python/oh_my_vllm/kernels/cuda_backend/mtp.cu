@@ -1,12 +1,6 @@
 #include "common.cuh"
 #include "linear.cuh"
 
-__device__ inline double mtp_sum(double value) {
-  for (int offset = 16; offset; offset >>= 1)
-    value += __shfl_xor_sync(0xffffffff, value, offset);
-  return value;
-}
-
 __global__ void mtp_norm_kernel(const __nv_bfloat16 *hidden, const int64_t *tokens,
                                 const __nv_bfloat16 *embedding, const float *norm_hidden,
                                 const float *norm_embedding, const int32_t *hidden_rows,
@@ -26,43 +20,27 @@ __global__ void mtp_norm_kernel(const __nv_bfloat16 *hidden, const int64_t *toke
                                              : boundary_hidden + int64_t(boundary) * 5120;
   const float *weight = kind == 0 ? norm_embedding : norm_hidden;
   float values[20];
-  double total = 0;
+  float total = 0;
 #pragma unroll
   for (int j = 0; j < 20; ++j) {
     values[j] = __bfloat162float(input[tid + j * 256]);
-    total += double(values[j]) * double(values[j]);
+    total += values[j] * values[j];
   }
-  __shared__ double scratch[8];
-  total = mtp_sum(total);
+  __shared__ float scratch[8];
+  total = warp_sum(total);
   if ((tid & 31) == 0)
     scratch[tid / 32] = total;
   __syncthreads();
-  total = mtp_sum((tid & 31) < 8 ? scratch[tid & 31] : 0.0);
-  double inverse = 1.0 / sqrt(total / 5120.0 + 1e-6);
+  total = warp_sum((tid & 31) < 8 ? scratch[tid & 31] : 0.f);
+  float inverse = rsqrtf(total / 5120.f + 1e-6f);
 #pragma unroll
   for (int j = 0; j < 20; ++j) {
     int col = tid + j * 256;
-    packed[int64_t(row) * 10240 + kind * 5120 + col] = __float2bfloat16_rn(
-        __double2float_rn(double(values[j]) * inverse * double(weight[col] + 1.f)));
+    packed[int64_t(row) * 10240 + kind * 5120 + col] =
+        __float2bfloat16_rn(values[j] * inverse * (weight[col] + 1.f));
     if (kind == 0)
       zero[int64_t(row) * 5120 + col] = __float2bfloat16_rn(0.f);
   }
-}
-
-__global__ void mtp_exact_fc_kernel(const __nv_bfloat16 *packed, const __nv_bfloat16 *weight,
-                                    __nv_bfloat16 *output, int count) {
-  int index = blockIdx.x * 8 + threadIdx.x / 32, lane = threadIdx.x & 31;
-  if (index >= count)
-    return;
-  int row = index / 5120, column = index % 5120;
-  double total = 0;
-  for (int inner = lane; inner < 10240; inner += 32)
-    total += double(__bfloat162float(packed[int64_t(row) * 10240 + inner])) *
-             double(__bfloat162float(weight[int64_t(column) * 10240 + inner]));
-  for (int offset = 16; offset; offset >>= 1)
-    total += __shfl_xor_sync(0xffffffff, total, offset);
-  if (lane == 0)
-    output[index] = __float2bfloat16_rn(__double2float_rn(total));
 }
 
 void mtp_input(TensorView hidden, TensorView tokens, TensorView embedding, TensorView norm_hidden,
@@ -110,17 +88,9 @@ void mtp_input(TensorView hidden, TensorView tokens, TensorView embedding, Tenso
       static_cast<__nv_bfloat16 *>(packed.data_ptr()),
       static_cast<__nv_bfloat16 *>(zero.data_ptr()), hidden_count, boundaries);
   check_cuda(cudaGetLastError());
-  if (rows <= 4) {
-    mtp_exact_fc_kernel<<<(rows * 5120 + 7) / 8, 256, 0, stream>>>(
-        static_cast<const __nv_bfloat16 *>(packed.data_ptr()),
-        static_cast<const __nv_bfloat16 *>(weight.data_ptr()),
-        static_cast<__nv_bfloat16 *>(output.data_ptr()), rows * 5120);
-    check_cuda(cudaGetLastError());
-  } else {
-    bf16_linear(static_cast<const __nv_bfloat16 *>(packed.data_ptr()),
-                static_cast<const __nv_bfloat16 *>(weight.data_ptr()), output.data_ptr(), rows,
-                5120, 10240, stream);
-  }
+  bf16_linear(static_cast<const __nv_bfloat16 *>(packed.data_ptr()),
+              static_cast<const __nv_bfloat16 *>(weight.data_ptr()), output.data_ptr(), rows, 5120,
+              10240, stream);
 }
 
 __global__ void mtp_endpoints_kernel(const __nv_bfloat16 *value, const __nv_bfloat16 *zero,

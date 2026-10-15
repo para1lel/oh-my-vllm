@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from oh_my_vllm.kernels.native import source_digest
-from oh_my_vllm.kernels.specification import MODEL, OPERATORS
+from oh_my_vllm.kernels.specification import MODEL, OPERATORS, UPSTREAM_COMMIT
 
 from .acceptance import CHECKS, FLAGS, assess
 from .provenance import case_id
@@ -22,16 +22,24 @@ def numerical_evidence(operator, variant="default"):
         "max_abs": 0,
         "reference_peak": 1,
         "max_tolerance_ratio": 0,
+        "tolerance_name": "bf16",
+        "required_atol": 0,
     }
     evidence = {key: deepcopy(metric) for key in CHECKS[operator]}
     evidence.update({key: True for key in FLAGS[operator]})
     evidence.update(passed=True, acceptance_state_selection=True)
     for key in {"cache_writes", "state_writes", "convolution_writes"} & evidence.keys():
         evidence[key] = [deepcopy(metric)]
+        evidence[key][0]["tolerance_name"] = "state"
     if operator == "fa_attention" and variant == "query_only":
         evidence["cache_writes"] = []
     if operator == "gdn_attention":
         evidence["activation_quantization"].update(codes_exact=True, scales_exact=True)
+        for key in ("normalization", "input_projection", "ba_projection"):
+            evidence[key]["worst_chunk_nrmse"] = evidence[key].pop("nrmse")
+            evidence[key]["rows_checked"] = 1
+    if operator == "vision_block":
+        evidence["output"]["tolerance_name"] = "vision"
     if operator in {"mtp_context", "mtp_draft"}:
         evidence["attention"] = numerical_evidence(
             "fa_attention", "kv_only" if operator == "mtp_context" else variant
@@ -40,6 +48,10 @@ def numerical_evidence(operator, variant="default"):
             evidence["endpoints"] = {"passed": True, "reference": deepcopy(metric)}
         else:
             evidence["sample"] = numerical_evidence("sample")
+            evidence["attention"]["output"]["tolerance_name"] = "mtp_attention"
+            evidence["ffn"]["tolerance_name"] = "mtp_hidden"
+            evidence["ffn_residual"]["tolerance_name"] = "mtp_residual"
+            evidence["sample"]["logits"]["tolerance_name"] = "mtp_logits"
     return evidence
 
 
@@ -74,6 +86,7 @@ class Contracts(unittest.TestCase):
                         "context": {
                             "mode": mode,
                             "device": "GPU-test",
+                            "upstream_commit": UPSTREAM_COMMIT,
                             "checkpoint": {
                                 "config": MODEL["config_sha256"],
                                 "index": "a" * 64,
@@ -135,6 +148,10 @@ class Contracts(unittest.TestCase):
                 }
             ),
             lambda report: report["work"][key].update(fp64_flops=1),
+            lambda report: report["checks"][key]["output"].update(
+                tolerance_name="mtp_hidden"
+            ),
+            lambda report: report["checks"][key]["output"].update(required_atol=0.04),
             lambda report: report["samples"][key].pop(),
             lambda report: report["observations"].pop(),
             lambda report: report["cache_policy"].update(bytes=128),
@@ -156,6 +173,8 @@ class Contracts(unittest.TestCase):
             ("vision_block", "all_rows_finite"),
             ("mtp_context", "attention"),
             ("mtp_draft", "sample"),
+            ("mtp_draft", "ffn_residual"),
+            ("mtp_draft", "ffn_residual_store_exact"),
         ):
             changed = deepcopy(reports)
             report = next(
@@ -266,16 +285,16 @@ class Contracts(unittest.TestCase):
         )
         self.assertEqual(work_for(gdn).fp32_flops, 48 * (7 * 128 * 128 + 3 * 128))
         mtp = replace(gdn, operator="mtp_context", rows=4)
-        self.assertGreaterEqual(work_for(mtp).fp64_flops, 4 * 2 * 5120 * 10240)
-        self.assertLess(work_for(mtp).bf16_flops, 4 * 2 * 5120 * 10240)
+        self.assertEqual(work_for(mtp).fp64_flops, 0)
+        self.assertGreaterEqual(work_for(mtp).bf16_flops, 4 * 2 * 5120 * 10240)
         vision = next(
             case.shape
             for case in modeled_cases()
             if case.shape.operator == "vision_block"
         )
         attention = 2 * vision.rows * vision.frame_tokens * 1152
-        self.assertEqual(work_for(vision).tf32_flops, attention)
-        self.assertGreaterEqual(work_for(vision).bf16_flops, attention)
+        self.assertEqual(work_for(vision).tf32_flops, 0)
+        self.assertGreaterEqual(work_for(vision).bf16_flops, 2 * attention)
         with self.assertRaises(ValueError):
             Work(-1).lower_bound_seconds()
         with self.assertRaises(ValueError):

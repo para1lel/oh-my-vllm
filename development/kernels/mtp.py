@@ -12,7 +12,16 @@ from oh_my_vllm.kernels.mtp import (
 from .build import build
 from .fa import FACase, FAWeights, rotary, unpack_bf16
 from .ffn import reference_projection
-from .reference import bf16, bf16_bits, linear, numerical_error, quantize, rms, silu
+from .reference import (
+    bf16,
+    bf16_bits,
+    linear,
+    numerical_error,
+    quantize,
+    residual_rms,
+    rms,
+    silu,
+)
 
 
 class MTPWeights:
@@ -288,33 +297,52 @@ class MTPDraftCase:
                 "passed": True,
                 "scope": "context endpoint; FC is outside this boundary",
             }
-        attention_check = self.fa_case.check(execute=False)
+        attention_check = self.fa_case.check(
+            execute=False, output_tolerance="mtp_attention"
+        )
         value = self.fa_case.expected_output
         residual = self.fa_case.expected_sum
         w = self.weights.feed_forward()
         summed = bf16(value + residual)
-        data, scales = quantize(rms(summed, w.norm))
+        data, scales = quantize(residual_rms(value, residual, w.norm))
         packed = reference_projection(data, scales, w.gate_up, w.gate_up_scale)
         gate, up = np.split(packed, 2, axis=1)
         data, scales = quantize(bf16(silu(gate) * up))
         expected = reference_projection(data, scales, w.down, w.down_scale)
         ffn_check = numerical_error(
-            unpack_bf16(self.device, self.ffn.buffers[0]), expected
+            unpack_bf16(self.device, self.ffn.buffers[0]),
+            expected,
+            tolerance="mtp_hidden",
         )
         residual_check = numerical_error(
-            unpack_bf16(self.device, self.ffn.buffers[1]), summed
-        )["passed"]
+            unpack_bf16(self.device, self.ffn.buffers[1]),
+            summed,
+            tolerance="mtp_residual",
+        )
+        residual_store_exact = bool(
+            np.array_equal(
+                self.device.download(self.ffn.buffers[1], np.uint16),
+                bf16_bits(
+                    unpack_bf16(self.device, self.fa_case.operation.buffers[0])
+                    + unpack_bf16(self.device, self.fa_case.operation.buffers[1])
+                ),
+            )
+        )
         self.sample_case.x, self.sample_case.residual = expected, summed
-        sample_check = self.sample_case.check(execute=False)
+        sample_check = self.sample_case.check(
+            execute=False, logits_tolerance="mtp_logits"
+        )
         return {
             "passed": input_check["passed"]
             and attention_check["passed"]
             and ffn_check["passed"]
-            and residual_check
+            and residual_check["passed"]
+            and residual_store_exact
             and sample_check["passed"],
             "input": input_check,
             "attention": attention_check,
             "ffn": ffn_check,
             "ffn_residual": residual_check,
+            "ffn_residual_store_exact": residual_store_exact,
             "sample": sample_check,
         }

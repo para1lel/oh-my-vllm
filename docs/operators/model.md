@@ -98,8 +98,11 @@ Keep the input order for text, images, and video.
 
 ## Intermediate precision
 
-If a numerical check fails, increase intermediate precision when necessary.
-Update this contract before acceptance. Keep the output and state error limits.
+Follow [vLLM commit e8e1e961](https://github.com/vllm-project/vllm/commit/e8e1e96196725f097eae2394cbc458b1f5a679b8) for numerical behavior.
+Use its BF16 model path with the project cache settings. This reference adds no vLLM dependency.
+Use the source types and rounding points. Do not increase precision to pass a numerical check.
+If a check fails, measure the error and change only the necessary named tolerance before acceptance.
+
 Use the operand, accumulator, and storage types of the selected implementation for the work calculation.
 Do not increase work for a slower instruction choice that supplies the same numerical computation.
 
@@ -107,18 +110,21 @@ Do not increase work for a slower instruction choice that supplies the same nume
 |---|---|---|
 | FP8 projections | E4M3 operands, FP32 scales and accumulation | BF16 |
 | BF16 projections | BF16 operands, FP32 accumulation | BF16 |
+| Residual add and RMS | FP32 sum and statistics. Normalize the unrounded sum | BF16 residual and normalized result |
+| Q/K RoPE | BF16 normalized Q/K and cos/sin. FP32 products and sum | BF16 |
+| GDN Q/K norm | FP32 | BF16 for prefill. FP32 live values for recurrent rows |
 | GDN recurrence | FP32 live carry, products, and sums | BF16 checkpoints |
-| FA softmax and split merge | FP32 | FP32 partials, BF16 output |
-| Vision attention | TF32 QK and PV instructions, FP32 accumulation. Q/K/V keep their BF16 values | TF32 probabilities, BF16 output |
-| MTP dual RMS | FP64 statistics and gain computation | BF16 packed input |
-| MTP FC, at most 4 rows | BF16 operands, FP64 products and accumulation | BF16 |
-| MTP FC, more than 4 rows | BF16 operands, FP32 Tensor Core accumulation | BF16 |
-| Sampling acceptance and residual CDF | FP64 products, differences, and sums | FP64 masses, integer selections |
+| GDN head norm and gate | BF16 attention result, then FP32 RMS, weight, SiLU, and product | One BF16 result |
+| FA attention and gate | BF16 Q/K/V/P, FP32 softmax and accumulation | BF16 attention, sigmoid, and product before FP8 |
+| Vision attention | BF16 Q/K/V/P, FP32 softmax and accumulation | BF16 |
+| MTP dual RMS | FP32 statistics and gain computation | BF16 packed input |
+| MTP FC, all row counts | BF16 operands, FP32 accumulation | BF16 |
+| Sampling acceptance and residual CDF | FP32 probabilities, ratio, masses, and sums. FP64 random thresholds | Integer selections |
 
-Vision probabilities use TF32 round-to-nearest: 8 exponent bits and 10 mantissa bits.
-Count QK as BF16 work because its operands keep BF16 values. Count PV as TF32 work because probability precision increases.
-The vision reference uses independent FP64 softmax with FP32 probabilities.
-It does not reproduce the implementation's online block rounding.
+The pinned [RMS reference](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/ir/ops/layernorm.py#L44) separates FP32 normalization input from BF16 residual storage.
+The [GDN decode path](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/csrc/gdn/fused_gdn_decode_kernel.cu#L226) keeps recurrent Q/K in FP32.
+The [vision attention dependency](https://github.com/vllm-project/flash-attention/blob/b273a02621d3c94bc747df67204f591b67f38fae/flash_attn/cute/flash_fwd_sm100.py#L2522) rounds online probabilities to BF16 before PV.
+The independent reference uses full FP64 softmax. It does not reproduce online block rounding.
 
 The [work calculation](../../development/kernels/work.py) identifies the applicable precision for each modeled shape.
 Temporary storage and duplicated work cannot increase the theoretical lower bound.
@@ -128,7 +134,22 @@ Temporary storage and duplicated work cannot increase the theoretical lower boun
 Use CPU FP64 references that do not use the operator implementation.
 The [CPU reference functions](../../development/kernels/reference.py) supply FP64 computations with the model rounding points.
 Use the same rounded inputs for the references and the operators.
-BF16 output limits are `atol=rtol=0.03`.
+Use the [named numerical limits](../../python/oh_my_vllm/kernels/specification.py) for each check.
+Use `rtol=0.03` for output checks.
+The named absolute limits are:
+
+| Tolerance | Output | `atol` |
+|---|---|---|
+| `bf16` | Individual operators | 0.03 |
+| `vision` | Vision boundary | 0.03 |
+| `mtp_attention` | Attention in the MTP draft boundary | 0.1 |
+| `mtp_residual` | FFN residual in the MTP draft boundary | 0.25 |
+| `mtp_hidden` | FFN in the MTP draft boundary | 1.5 |
+| `mtp_logits` | Logits in the MTP draft boundary | 0.5 |
+
+Record the tolerance name and maximum normalized error ratio.
+Check MTP residual storage for exact BF16 equality against the sum of the operator inputs.
+Keep the separate residual error check against the independent reference chain.
 
 State NRMSE must be at most 1%.
 The maximum state error must be at most 2% of the reference peak.

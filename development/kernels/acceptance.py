@@ -6,7 +6,11 @@ from dataclasses import asdict
 from pathlib import Path
 
 from oh_my_vllm.kernels.native import SOURCES, source_digest
-from oh_my_vllm.kernels.specification import MODEL
+from oh_my_vllm.kernels.specification import (
+    MODEL,
+    NUMERICAL_TOLERANCES,
+    UPSTREAM_COMMIT,
+)
 
 from .provenance import ROOT, case_id, source_identity, suite_identity
 from .providers import MODULES, RUNTIME_MODULES
@@ -44,7 +48,14 @@ CHECKS = {
         "rng_counter",
     ),
     "mtp_context": ("input", "zero_residual", "endpoints", "attention"),
-    "mtp_draft": ("input", "attention", "ffn", "ffn_residual", "sample"),
+    "mtp_draft": (
+        "input",
+        "attention",
+        "ffn",
+        "ffn_residual",
+        "ffn_residual_store_exact",
+        "sample",
+    ),
     "vision_block": (
         "output",
         "patch_order",
@@ -59,7 +70,7 @@ FLAGS = {
     "gdn_attention": ("all_rows_finite", "unchanged_slots"),
     "sample": ("all_rows_finite", "normalized", "valid_selected_tokens", "rng_counter"),
     "mtp_context": ("zero_residual",),
-    "mtp_draft": ("ffn_residual",),
+    "mtp_draft": ("ffn_residual_store_exact",),
     "vision_block": ("all_rows_finite",),
 }
 METRICS = {
@@ -74,7 +85,7 @@ METRICS = {
     ),
     "sample": ("logits", "probabilities"),
     "mtp_context": ("input",),
-    "mtp_draft": ("input", "ffn"),
+    "mtp_draft": ("input", "ffn", "ffn_residual"),
     "vision_block": ("output",),
 }
 
@@ -111,6 +122,8 @@ def verify_identity(report):
     if len(names) > 1:
         identities = hashlib.sha256(identities.encode()).hexdigest()
     context = report["context"]
+    if context.get("upstream_commit") != UPSTREAM_COMMIT:
+        raise ValueError("report uses a different upstream numerical contract")
     if (
         report["native_id"] != identities
         or context["device_source"] != builds["device"]["source_id"]
@@ -126,10 +139,34 @@ def verify_identity(report):
         raise ValueError("provider source or binary has changed")
 
 
-def verify_checks(value, operator, *, state=False):
+def tolerance_for(operator, path, mtp=False):
+    return {
+        ("vision_block", ("output",)): "vision",
+        ("mtp_draft", ("attention", "output")): "mtp_attention",
+        ("mtp_draft", ("ffn",)): "mtp_hidden",
+        ("mtp_draft", ("ffn_residual",)): "mtp_residual",
+        ("mtp_draft", ("sample", "logits")): "mtp_logits",
+        ("fa_attention", ("output",)): "mtp_attention" if mtp else "bf16",
+        ("sample", ("logits",)): "mtp_logits" if mtp else "bf16",
+    }.get((operator, path), "bf16")
+
+
+def verify_checks(value, operator, *, state=False, path=(), mtp=False):
     numerical = 0
     if isinstance(value, dict):
         if "max_abs" in value:
+            name = value.get("tolerance_name")
+            expected = "state" if state else tolerance_for(operator, path, mtp)
+            if name != expected:
+                raise ValueError("unknown or incorrect numerical tolerance policy")
+            limits = NUMERICAL_TOLERANCES[name]
+            required_atol = value.get("required_atol")
+            if not state and (
+                not isinstance(required_atol, (int, float))
+                or not math.isfinite(required_atol)
+                or not 0 <= required_atol <= limits["atol"]
+            ):
+                raise ValueError("required absolute tolerance exceeds the contract")
             if not math.isfinite(value["max_abs"]) or value["max_abs"] < 0:
                 raise ValueError("invalid maximum absolute error")
             ratio = value.get("max_tolerance_ratio")
@@ -140,17 +177,21 @@ def verify_checks(value, operator, *, state=False):
             ):
                 raise ValueError("recorded elementwise or state tolerance check failed")
             numerical += 1
-        if {"max_abs", "nrmse", "reference_peak"} <= value.keys():
+        nrmse_key = "worst_chunk_nrmse" if "rows_checked" in value else "nrmse"
+        if {"max_abs", nrmse_key, "reference_peak"} <= value.keys():
             maximum, nrmse, peak = (
-                value[key] for key in ("max_abs", "nrmse", "reference_peak")
+                value[key] for key in ("max_abs", nrmse_key, "reference_peak")
             )
             if any(
                 not math.isfinite(item) or item < 0 for item in (maximum, nrmse, peak)
             ):
                 raise ValueError("invalid numerical error metrics")
-            if maximum > (0.02 * peak if state else 0.03 + 0.03 * peak) or (
-                state and nrmse > 0.01
-            ):
+            limits = NUMERICAL_TOLERANCES[value["tolerance_name"]]
+            if maximum > (
+                limits["peak"] * peak
+                if state
+                else limits["atol"] + limits["rtol"] * peak
+            ) or (state and nrmse > limits["nrmse"]):
                 raise ValueError("numerical error exceeds the contract")
         for key, item in value.items():
             if operator == "gdn_attention" and key == "input_projection_upstream_drift":
@@ -160,25 +201,34 @@ def verify_checks(value, operator, *, state=False):
                 operator,
                 state=state
                 or key in {"state_writes", "convolution_writes", "cache_writes"},
+                path=path if key == "graph" else (*path, key),
+                mtp=mtp,
             )
     elif isinstance(value, list):
         for item in value:
-            numerical += verify_checks(item, operator, state=state)
+            numerical += verify_checks(item, operator, state=state, path=path, mtp=mtp)
     elif value is False:
         raise ValueError("numerical evidence contains a failed check")
     return numerical
 
 
-def verify_metric(value):
+def verify_metric(value, tolerance="bf16"):
+    nrmse_key = (
+        "worst_chunk_nrmse"
+        if isinstance(value, dict) and "rows_checked" in value
+        else "nrmse"
+    )
     if (
         not isinstance(value, dict)
-        or not {"max_abs", "max_tolerance_ratio"} <= value.keys()
+        or not {"max_abs", nrmse_key, "reference_peak", "max_tolerance_ratio"}
+        <= value.keys()
         or value.get("passed") is not True
+        or value.get("tolerance_name") != tolerance
     ):
         raise ValueError("required numerical error evidence is missing")
 
 
-def verify_case(check, operator, *, variant="default"):
+def verify_case(check, operator, *, variant="default", mtp=False):
     if not isinstance(check, dict) or not set(CHECKS[operator]) <= check.keys():
         raise ValueError("required numerical or guard evidence is missing")
     if any(check[key] is not True for key in FLAGS[operator]):
@@ -188,7 +238,7 @@ def verify_case(check, operator, *, variant="default"):
             ("fa_attention", "kv_only", "output"),
             ("mtp_draft", "query_only", "input"),
         }:
-            verify_metric(check[key])
+            verify_metric(check[key], tolerance_for(operator, (key,), mtp))
     for key in CHECKS[operator]:
         if (
             key not in FLAGS[operator]
@@ -217,7 +267,7 @@ def verify_case(check, operator, *, variant="default"):
         if not check[key]:
             raise ValueError("persistent-write numerical evidence is missing")
         for value in check[key]:
-            verify_metric(value)
+            verify_metric(value, "state")
     if operator == "gdn_attention" and any(
         check["activation_quantization"].get(key) is not True
         for key in ("codes_exact", "scales_exact")
@@ -228,18 +278,19 @@ def verify_case(check, operator, *, variant="default"):
             check["attention"],
             "fa_attention",
             variant="kv_only" if operator == "mtp_context" else variant,
+            mtp=operator == "mtp_draft",
         )
         if operator == "mtp_context":
             verify_metric(check["endpoints"].get("reference"))
         else:
-            verify_case(check["sample"], "sample")
+            verify_case(check["sample"], "sample", mtp=True)
     if (
         operator == "sample"
         and variant == "verify"
         and check.get("acceptance_state_selection") is not True
     ):
         raise ValueError("MTP acceptance evidence is missing or failed")
-    if check.get("passed") is not True or verify_checks(check, operator) == 0:
+    if check.get("passed") is not True or verify_checks(check, operator, mtp=mtp) == 0:
         raise ValueError("numerical check is missing or did not pass")
 
 
@@ -262,6 +313,8 @@ def assess(reports):
         ):
             raise ValueError("report has a failed or incomplete evaluation")
         context = report["context"]
+        if context.get("upstream_commit") != UPSTREAM_COMMIT:
+            raise ValueError("report uses a different upstream numerical contract")
         if (
             context["mode"] != mode
             or not context["device"].startswith("GPU-")

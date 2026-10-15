@@ -15,10 +15,10 @@ __global__ void residual_rms_quant_kernel(const __nv_bfloat16 *x, const __nv_bfl
     int column = chunk * Threads * 8 + threadIdx.x * 8;
 #pragma unroll
     for (int j = 0; j < 8; ++j) {
-      auto value = __float2bfloat16_rn(__bfloat162float(x[row * 5120 + column + j]) +
-                                       __bfloat162float(residual[row * 5120 + column + j]));
-      summed[row * 5120 + column + j] = value;
-      values[chunk][j] = __bfloat162float(value);
+      float value = __bfloat162float(x[row * 5120 + column + j]) +
+                    __bfloat162float(residual[row * 5120 + column + j]);
+      summed[row * 5120 + column + j] = __float2bfloat16_rn(value);
+      values[chunk][j] = value;
       total += values[chunk][j] * values[chunk][j];
     }
   }

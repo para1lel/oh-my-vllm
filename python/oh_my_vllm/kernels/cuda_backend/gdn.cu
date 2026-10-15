@@ -22,7 +22,7 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
          TensorView a_log, TensorView dt_bias, TensorView head_norm, TensorView output_weight,
          TensorView output_scale, TensorView state, TensorView convolution_state, TensorView starts,
          TensorView reads, TensorView writes, TensorView embedding, TensorView tokens,
-         TensorView media, TensorView media_rows, bool first_layer, TensorView output,
+         TensorView media, TensorView media_rows, bool first_layer, bool verify, TensorView output,
          TensorView summed, TensorView gathered, TensorView normalized, TensorView input_data,
          TensorView input_scales, TensorView qkvz, TensorView ba, TensorView qkv,
          TensorView output_data, TensorView output_scales) {
@@ -112,7 +112,7 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
       static_cast<__nv_bfloat16 *>(convolution_state.data_ptr()),
       static_cast<const int *>(starts.data_ptr()), static_cast<const int *>(reads.data_ptr()),
       static_cast<const int *>(writes.data_ptr()), static_cast<__nv_bfloat16 *>(qkv.data_ptr()),
-      rows, batch, slots);
+      rows, batch, slots, verify);
   check_cuda(cudaGetLastError());
   auto scan = [&](auto fused) {
     gdn_scan_quant_kernel<decltype(fused)::value><<<dim3(batch, 48), 256, 0, stream>>>(
@@ -127,7 +127,7 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
         static_cast<__nv_bfloat16 *>(state.data_ptr()), static_cast<const int *>(starts.data_ptr()),
         static_cast<const int *>(reads.data_ptr()), static_cast<const int *>(writes.data_ptr()),
         static_cast<__nv_fp8_e4m3 *>(output_data.data_ptr()),
-        static_cast<float *>(output_scales.data_ptr()), rows, slots);
+        static_cast<float *>(output_scales.data_ptr()), rows, slots, verify);
   };
   if (rows <= 32)
     scan(std::true_type{});

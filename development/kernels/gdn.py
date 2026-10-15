@@ -7,7 +7,15 @@ from oh_my_vllm.kernels.gdn import GDN, Schedule, Weights
 
 from .build import build
 from .ffn import reference_projection
-from .reference import bf16, bf16_bits, numerical_error, quantize, rms, sigmoid, silu
+from .reference import (
+    bf16,
+    bf16_bits,
+    numerical_error,
+    quantize,
+    residual_rms,
+    sigmoid,
+    silu,
+)
 
 
 def decode_bf16(value):
@@ -19,7 +27,10 @@ def summarize_rows(checks, rows):
         "passed": all(check["passed"] for check in checks),
         "max_abs": max(check["max_abs"] for check in checks),
         "worst_chunk_nrmse": max(check["nrmse"] for check in checks),
+        "reference_peak": max(check["reference_peak"] for check in checks),
         "max_tolerance_ratio": max(check["max_tolerance_ratio"] for check in checks),
+        "tolerance_name": checks[0]["tolerance_name"],
+        "required_atol": max(check["required_atol"] for check in checks),
         "rows_checked": rows,
     }
     violations = [item for check in checks for item in check.get("violations", ())]
@@ -226,7 +237,9 @@ class GDNCase:
         recomputed_rows = 0
         for first in range(0, rows, 256):
             last = min(rows, first + 256)
-            normalized = rms(expected_sum[first:last], self.weights.norm)
+            normalized = residual_rms(
+                inputs[first:last], self.residual[first:last], self.weights.norm
+            )
             data, scales = quantize(normalized)
             projected = reference_projection(
                 data, scales, self.weights.qkvz, self.weights.qkvz_scale
@@ -369,12 +382,17 @@ class GDNCase:
                 history = window[:, 1:]
                 q, k, value = np.split(convolution, (2048, 4096))
                 q, k = (item.reshape(16, 128) for item in (q, k))
-                q = bf16(q / np.sqrt(np.sum(q * q, axis=-1, keepdims=True) + 1e-6))[
-                    mapping
-                ]
-                k = bf16(k / np.sqrt(np.sum(k * k, axis=-1, keepdims=True) + 1e-6))[
-                    mapping
-                ]
+                q, k = (
+                    item / np.sqrt(np.sum(item * item, axis=-1, keepdims=True) + 1e-6)
+                    for item in (q, k)
+                )
+                if self.schedule.verify:
+                    q, k = (
+                        item.astype(np.float32).astype(np.float64) for item in (q, k)
+                    )
+                else:
+                    q, k = (bf16(item) for item in (q, k))
+                q, k = q[mapping], k[mapping]
                 a = ba[row, 48:].astype(np.float64) + weight.dt_bias
                 decay = -np.exp(weight.a_log.astype(np.float64)) * np.logaddexp(0, a)
                 beta = sigmoid(ba[row, :48].astype(np.float64))
@@ -396,13 +414,10 @@ class GDNCase:
                     convolution_checks.append(check)
                 if row in selected:
                     output = bf16(np.einsum("hvk,hk->hv", state, q) / np.sqrt(128))
-                    output = bf16(
-                        output
-                        / np.sqrt(
-                            np.mean(output * output, axis=-1, keepdims=True) + 1e-6
-                        )
+                    output = output / np.sqrt(
+                        np.mean(output * output, axis=-1, keepdims=True) + 1e-6
                     )
-                    output = bf16(output * weight.head_norm)
+                    output = output * weight.head_norm
                     gate = projection[row, 10240:].reshape(48, 128)
                     outputs[selected[row]] = bf16(
                         output * silu(gate.astype(np.float64))

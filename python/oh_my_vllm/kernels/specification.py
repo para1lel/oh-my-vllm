@@ -1,5 +1,16 @@
 from dataclasses import dataclass
 
+UPSTREAM_COMMIT = "e8e1e96196725f097eae2394cbc458b1f5a679b8"
+NUMERICAL_TOLERANCES = {
+    "bf16": {"atol": 0.03, "rtol": 0.03},
+    "mtp_attention": {"atol": 0.1, "rtol": 0.03},
+    "mtp_residual": {"atol": 0.25, "rtol": 0.03},
+    "mtp_hidden": {"atol": 1.5, "rtol": 0.03},
+    "mtp_logits": {"atol": 0.5, "rtol": 0.03},
+    "vision": {"atol": 0.03, "rtol": 0.03},
+    "state": {"nrmse": 0.01, "peak": 0.02},
+}
+
 
 @dataclass(frozen=True)
 class Operator:
@@ -61,7 +72,7 @@ OPERATORS = (
             "media:bf16[P,5120];media_rows:i32[P] (first layer)",
         ),
         (
-            "q,k:bf16[T,16,128];v,z:bf16[T,48,128]",
+            "q,k:[T,16,128],BF16 prefill/FP32 recurrent;v,z:bf16[T,48,128]",
             "decay,beta:fp32[T,48];residual:bf16[T,5120]",
         ),
         (

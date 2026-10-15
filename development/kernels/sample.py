@@ -5,13 +5,13 @@ import tvm_ffi
 from oh_my_vllm.kernels.sample import MTPAccept, Sample, Weights
 
 from .build import build
-from .reference import bf16, bf16_bits, numerical_error, rms
+from .reference import bf16, bf16_bits, numerical_error, residual_rms
 
 FUNCTIONS = ("sample_workspace", "sample", "mtp_accept")
 VOCABULARY = 248320
 
 
-def philox_uniform(seed, offset):
+def philox_word(seed, offset):
     block, lane = divmod(int(offset), 4)
     values = [block & 0xFFFFFFFF, block >> 32, 0, 0]
     key = [int(seed) & 0xFFFFFFFF, int(seed) >> 32]
@@ -24,7 +24,17 @@ def philox_uniform(seed, offset):
             a & 0xFFFFFFFF,
         ]
         key = [(key[0] + 0x9E3779B9) & 0xFFFFFFFF, (key[1] + 0xBB67AE85) & 0xFFFFFFFF]
-    return float(np.float32(values[lane]) * np.float32(2.0**-32) + np.float32(2.0**-33))
+    return values[lane]
+
+
+def philox_uniform(seed, offset):
+    word = philox_word(seed, offset)
+    return float(np.float32(word) * np.float32(2.0**-32) + np.float32(2.0**-33))
+
+
+def philox_uniform64(seed, offset):
+    bits = philox_word(seed, offset) ^ (philox_word(seed, int(offset) + 1) << 21)
+    return bits * 2.0**-53 + 2.0**-54
 
 
 def probabilities(logits, history, mask, parameters):
@@ -89,22 +99,22 @@ def acceptance_reference(target, proposal, drafts, rng, private_slots):
             token = drafts[request, index]
             p = float(target[request, index, token])
             q = float(proposal[request, index, token])
-            draw = philox_uniform(rng[request, 0], int(rng[request, 1]) + draws)
+            draw = philox_uniform64(rng[request, 0], int(rng[request, 1]) + 2 * draws)
             draws += 1
-            if draw * q > p:
+            if q == 0 or float(np.float32(p) / np.float32(q)) < draw:
                 break
             kept[request, index] = token
             accepted += 1
-        mass = target[request, accepted].astype(np.float64)
+        mass = target[request, accepted].astype(np.float32)
         if accepted < 4:
             mass = np.maximum(mass - proposal[request, accepted], 0)
         cumulative = np.cumsum(mass)
-        draw = philox_uniform(rng[request, 0], int(rng[request, 1]) + draws)
+        draw = philox_uniform64(rng[request, 0], int(rng[request, 1]) + 2 * draws)
         kept[request, accepted] = min(
-            np.searchsorted(cumulative, draw * cumulative[-1], side="left"),
+            np.searchsorted(cumulative, draw * float(cumulative[-1]), side="left"),
             len(mass) - 1,
         )
-        counters[request, 1] += draws + 1
+        counters[request, 1] += 2 * (draws + 1)
         counts[request] = accepted + 1
         slots[request] = private_slots[request, accepted]
     return kept, counts, slots, counters
@@ -210,7 +220,7 @@ class SampleCase:
             + self.parameters.tobytes()
         ).digest()
         if identity != self.expected_identity:
-            normalized = rms(bf16(self.x + self.residual), self.weights.norm)
+            normalized = residual_rms(self.x, self.residual, self.weights.norm)
             self.expected_logits = projection(normalized, self.weights.projection)
             self.expected_probability = probabilities(
                 self.expected_logits, self.history, self.mask, self.parameters
@@ -244,7 +254,7 @@ class SampleCase:
             self.accept(output[2], *self.accept_arguments)
         return output
 
-    def check(self, *, execute=True):
+    def check(self, *, execute=True, logits_tolerance="bf16"):
         expected = self.expected()
         if execute:
             self.run()
@@ -252,7 +262,9 @@ class SampleCase:
         actual = self.device.download(self.operation.buffers[6], np.float32)
         tokens = self.device.download(self.operation.buffers[7], np.int64)
         selected = self.device.download(self.operation.buffers[8], np.float32)
-        logit_check = numerical_error(actual_logits, self.expected_logits)
+        logit_check = numerical_error(
+            actual_logits, self.expected_logits, tolerance=logits_tolerance
+        )
         probability_check = numerical_error(actual, expected)
         finite = bool(np.isfinite(actual).all() and np.all(actual >= 0))
         normalized = bool(np.allclose(actual.sum(-1), 1, atol=1e-5))

@@ -3,7 +3,15 @@ from oh_my_vllm.kernels.fa import FA, Weights
 
 from .build import build
 from .ffn import reference_projection
-from .reference import bf16, bf16_bits, numerical_error, quantize, rms, sigmoid
+from .reference import (
+    bf16,
+    bf16_bits,
+    numerical_error,
+    quantize,
+    residual_rms,
+    rms,
+    sigmoid,
+)
 
 
 def unpack_bf16(device, tensor):
@@ -21,8 +29,8 @@ def rotary(value, positions):
     )
     cosine, sine = bf16(np.cos(angles))[:, None], bf16(np.sin(angles))[:, None]
     a, b = value[..., :32], value[..., 32:64]
-    result[..., :32] = bf16(bf16(a * cosine) - bf16(b * sine))
-    result[..., 32:64] = bf16(bf16(b * cosine) + bf16(a * sine))
+    result[..., :32] = bf16(a * cosine - b * sine)
+    result[..., 32:64] = bf16(b * cosine + a * sine)
     return result
 
 
@@ -144,8 +152,8 @@ class FACase:
         )
 
     def project(self, indices, *, kv=False):
-        normalized = rms(
-            bf16(self.x[indices] + self.residual[indices]), self.weights.norm
+        normalized = residual_rms(
+            self.x[indices], self.residual[indices], self.weights.norm
         )
         data, scales = quantize(normalized)
         first = 0 if self.weights.variant == "kv_only" else 12288 if kv else 0
@@ -157,7 +165,7 @@ class FACase:
             self.weights.projection_scale[first // 128 : last // 128],
         )
 
-    def check(self, *, execute=True):
+    def check(self, *, execute=True, output_tolerance="bf16"):
         actual, summed = self.run() if execute else self.operation.buffers[:2]
         expected_sum = bf16(self.x + self.residual)
         actual_sum = unpack_bf16(self.device, summed)
@@ -235,7 +243,9 @@ class FACase:
             )
             result = unpack_bf16(self.device, actual)
             finite = bool(np.all(np.isfinite(result)))
-            output_check = numerical_error(result[indices], expected)
+            output_check = numerical_error(
+                result[indices], expected, tolerance=output_tolerance
+            )
             self.expected_output = expected
             self.expected_sum = expected_sum[indices]
         return {

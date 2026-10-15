@@ -2,6 +2,12 @@
 
 constexpr int AcceptBlocks = (Vocabulary + 255) / 256;
 
+__device__ inline double acceptance_uniform(curandStatePhilox4_32_10_t *state) {
+  uint64_t bits = curand(state);
+  bits ^= uint64_t(curand(state)) << 21;
+  return double(bits) * 0x1p-53 + 0x1p-54;
+}
+
 __global__ void mtp_accept_metadata_kernel(const float *target, const float *proposal,
                                            const int64_t *drafts, uint64_t *rng,
                                            const int *private_slots, int64_t *kept, int *counts,
@@ -32,30 +38,30 @@ __global__ void mtp_accept_metadata_kernel(const float *target, const float *pro
     }
     float p = target[(request * 5 + i) * Vocabulary + token];
     float q = proposal[(request * 4 + i) * Vocabulary + token];
-    if (!(isfinite(p) && p >= 0 && isfinite(q) && q > 0)) {
+    if (!(isfinite(p) && p >= 0 && isfinite(q) && q >= 0)) {
       asm volatile("trap;");
       return;
     }
-    float draw = curand_uniform(&state);
+    double draw = acceptance_uniform(&state);
     ++attempts;
-    if (double(draw) * double(q) > double(p))
+    if (q == 0 || double(p / q) < draw)
       break;
     kept[request * 5 + i] = token;
     ++accepted;
   }
-  uniform[request] = double(curand_uniform(&state));
-  rng[request * 2 + 1] += attempts + 1;
+  uniform[request] = acceptance_uniform(&state);
+  rng[request * 2 + 1] += 2 * (attempts + 1);
   counts[request] = accepted + 1;
   selected_slots[request] = private_slots[request * 5 + accepted];
 }
 
 __global__ void mtp_accept_mass_kernel(const float *target, const float *proposal,
-                                       const int *counts, double *partials) {
-  using Reduce = cub::BlockReduce<double, 256>;
+                                       const int *counts, float *partials) {
+  using Reduce = cub::BlockReduce<float, 256>;
   __shared__ typename Reduce::TempStorage temporary;
   int request = blockIdx.x, block = blockIdx.y;
   int token = block * 256 + threadIdx.x, accepted = counts[request] - 1;
-  double mass = 0;
+  float mass = 0;
   if (token < Vocabulary) {
     float p = target[(request * 5 + accepted) * Vocabulary + token];
     float q = accepted < 4 ? proposal[(request * 4 + accepted) * Vocabulary + token] : 0;
@@ -63,20 +69,20 @@ __global__ void mtp_accept_mass_kernel(const float *target, const float *proposa
       asm volatile("trap;");
       return;
     }
-    mass = accepted == 4 ? double(p) : fmax(double(p) - double(q), 0.0);
+    mass = accepted == 4 ? p : fmaxf(p - q, 0.f);
   }
-  double total = Reduce(temporary).Sum(mass);
+  float total = Reduce(temporary).Sum(mass);
   if (!threadIdx.x)
     partials[request * AcceptBlocks + block] = total;
 }
 
 __global__ void mtp_accept_select_kernel(const float *target, const float *proposal,
                                          const int *counts, const double *uniform,
-                                         const double *partials, int64_t *kept) {
-  using Scan = cub::BlockScan<double, 256>;
+                                         const float *partials, int64_t *kept) {
+  using Scan = cub::BlockScan<float, 256>;
   __shared__ typename Scan::TempStorage temporary;
   __shared__ int selected_block, last_block, selected_token, last_token;
-  __shared__ double block_prefix;
+  __shared__ float block_prefix;
   int request = blockIdx.x, lane = threadIdx.x, accepted = counts[request] - 1;
   if (!lane) {
     selected_block = AcceptBlocks;
@@ -84,7 +90,7 @@ __global__ void mtp_accept_select_kernel(const float *target, const float *propo
     selected_token = Vocabulary;
     last_token = -1;
   }
-  double masses[4], inclusive[4], total;
+  float masses[4], inclusive[4], total;
 #pragma unroll
   for (int i = 0; i < 4; ++i) {
     int block = lane * 4 + i;
@@ -118,13 +124,13 @@ __global__ void mtp_accept_select_kernel(const float *target, const float *propo
     block_prefix = inclusive[selected_block % 4] - masses[selected_block % 4];
   __syncthreads();
   int token = selected_block * 256 + lane;
-  double mass = 0;
+  float mass = 0;
   if (token < Vocabulary) {
     float p = target[(request * 5 + accepted) * Vocabulary + token];
     float q = accepted < 4 ? proposal[(request * 4 + accepted) * Vocabulary + token] : 0;
-    mass = accepted == 4 ? double(p) : fmax(double(p) - double(q), 0.0);
+    mass = accepted == 4 ? p : fmaxf(p - q, 0.f);
   }
-  double cumulative;
+  float cumulative;
   Scan(temporary).InclusiveSum(mass, cumulative);
   if (mass > 0) {
     atomicMax(&last_token, token);
@@ -163,7 +169,7 @@ void mtp_accept(TensorView target, TensorView proposal, TensorView drafts, Tenso
   for (auto tensor : {counts, selected_slots})
     tensor_contract(tensor, target, kDLInt, 32, {batch});
   tensor_contract(uniform, target, kDLFloat, 64, {batch});
-  tensor_contract(partials, target, kDLFloat, 64, {batch, AcceptBlocks});
+  tensor_contract(partials, target, kDLFloat, 32, {batch, AcceptBlocks});
   auto tensors = {target, proposal, drafts,         rng,     private_slots,
                   kept,   counts,   selected_slots, uniform, partials};
   int left = 0;
@@ -187,12 +193,12 @@ void mtp_accept(TensorView target, TensorView proposal, TensorView drafts, Tenso
   mtp_accept_mass_kernel<<<dim3(batch, AcceptBlocks), 256, 0, stream>>>(
       static_cast<const float *>(target.data_ptr()),
       static_cast<const float *>(proposal.data_ptr()), static_cast<const int *>(counts.data_ptr()),
-      static_cast<double *>(partials.data_ptr()));
+      static_cast<float *>(partials.data_ptr()));
   check_cuda(cudaGetLastError());
   mtp_accept_select_kernel<<<batch, 256, 0, stream>>>(
       static_cast<const float *>(target.data_ptr()),
       static_cast<const float *>(proposal.data_ptr()), static_cast<const int *>(counts.data_ptr()),
       static_cast<const double *>(uniform.data_ptr()),
-      static_cast<const double *>(partials.data_ptr()), static_cast<int64_t *>(kept.data_ptr()));
+      static_cast<const float *>(partials.data_ptr()), static_cast<int64_t *>(kept.data_ptr()));
   check_cuda(cudaGetLastError());
 }

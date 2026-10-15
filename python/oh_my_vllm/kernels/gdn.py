@@ -158,6 +158,7 @@ class GDN:
             media if media is not None else self.empty_media,
             media_rows if media_rows is not None else self.empty_media_rows,
             embedding,
+            self.schedule.verify,
             *self.buffers,
         )
         return self.buffers[:2]

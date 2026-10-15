@@ -2,7 +2,15 @@ import unittest
 
 import numpy as np
 
-from .reference import bf16, fp8_decode, fp8_encode, gdn, numerical_error, quantize
+from .reference import (
+    bf16,
+    fp8_decode,
+    fp8_encode,
+    gdn,
+    numerical_error,
+    quantize,
+    residual_rms,
+)
 
 
 class Reference(unittest.TestCase):
@@ -19,6 +27,9 @@ class Reference(unittest.TestCase):
         self.assertEqual(quantize(values)[0][0, 1], 106)
         self.assertFalse(numerical_error([0.04], [0])["passed"])
         self.assertGreater(numerical_error([0.04], [0])["max_tolerance_ratio"], 1)
+        np.testing.assert_array_equal(
+            residual_rms([1, 1], [2**-8, 2**-7], np.zeros(2)), [1, 1]
+        )
         self.assertFalse(numerical_error([0.001], [0], state=True)["passed"])
         with self.assertRaises(ValueError):
             numerical_error([np.nan], [0])

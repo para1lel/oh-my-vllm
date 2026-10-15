@@ -1,6 +1,7 @@
 import math
 
 import numpy as np
+from oh_my_vllm.kernels.specification import NUMERICAL_TOLERANCES
 
 
 def bf16_bits(value):
@@ -63,6 +64,13 @@ def rms(value, weight, *, offset=True, epsilon=1e-6):
         / np.sqrt(np.mean(value * value, axis=-1, keepdims=True) + epsilon)
         * (weight + int(offset))
     )
+
+
+def residual_rms(value, residual, weight):
+    summed = np.asarray(value, dtype=np.float32) + np.asarray(
+        residual, dtype=np.float32
+    )
+    return rms(summed, weight)
 
 
 def layer_norm(value, weight, bias, epsilon=1e-6):
@@ -156,7 +164,7 @@ def gdn(query, key, value, decay, beta, state):
     return np.asarray(outputs), np.asarray(snapshots)
 
 
-def numerical_error(actual, expected, *, state=False):
+def numerical_error(actual, expected, *, state=False, tolerance="bf16"):
     actual, expected = (
         np.asarray(item, dtype=np.float64) for item in (actual, expected)
     )
@@ -177,24 +185,30 @@ def numerical_error(actual, expected, *, state=False):
         else (0 if not rms_error else math.inf)
     )
     maximum = float(np.max(np.abs(error)))
-    passed = (
-        nrmse <= 0.01 and maximum <= 0.02 * peak
-        if state
-        else bool(np.all(np.abs(error) <= 0.03 + 0.03 * np.abs(expected)))
-    )
+    tolerance_name = "state" if state else tolerance
+    limits = NUMERICAL_TOLERANCES[tolerance_name]
     if state:
         maximum_ratio = (
-            maximum / (0.02 * peak) if peak else (0 if maximum == 0 else math.inf)
+            maximum / (limits["peak"] * peak)
+            if peak
+            else (0 if maximum == 0 else math.inf)
         )
-        tolerance_ratio = max(nrmse / 0.01, maximum_ratio)
+        tolerance_ratio = max(nrmse / limits["nrmse"], maximum_ratio)
+        required_atol = None
     else:
+        absolute = np.abs(error)
         tolerance_ratio = float(
-            np.max(np.abs(error) / (0.03 + 0.03 * np.abs(expected)))
+            np.max(absolute / (limits["atol"] + limits["rtol"] * np.abs(expected)))
+        )
+        required_atol = max(
+            0.0, float(np.max(absolute - limits["rtol"] * np.abs(expected)))
         )
     return {
-        "passed": passed,
+        "passed": tolerance_ratio <= 1,
         "nrmse": nrmse,
         "max_abs": maximum,
         "reference_peak": peak,
         "max_tolerance_ratio": tolerance_ratio,
+        "tolerance_name": tolerance_name,
+        "required_atol": required_atol,
     }

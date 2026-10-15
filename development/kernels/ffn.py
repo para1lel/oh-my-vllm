@@ -2,7 +2,15 @@ import numpy as np
 from oh_my_vllm.kernels.ffn import FFN, Weights
 
 from .build import build
-from .reference import bf16, bf16_bits, fp8_decode, numerical_error, quantize, rms, silu
+from .reference import (
+    bf16,
+    bf16_bits,
+    fp8_decode,
+    numerical_error,
+    quantize,
+    residual_rms,
+    silu,
+)
 
 
 def reference_projection(data, scales, weight, weight_scales):
@@ -79,7 +87,9 @@ class FFNCase:
         residual_check["passed"] = bool(np.array_equal(summed, expected_sum))
         finite = bool(np.all(np.isfinite(actual)))
         indices = np.unique([0, self.shape.rows // 2, self.shape.rows - 1])
-        normalized = rms(expected_sum[indices], self.weights.norm)
+        normalized = residual_rms(
+            self.x[indices], self.residual[indices], self.weights.norm
+        )
         data, scales = quantize(normalized)
         gate_up = reference_projection(
             data, scales, self.weights.gate_up, self.weights.gate_up_scale

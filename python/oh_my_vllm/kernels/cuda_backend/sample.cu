@@ -33,8 +33,7 @@ __global__ void sample_norm_kernel(const __nv_bfloat16 *x, const __nv_bfloat16 *
   for (int j = 0; j < 20; ++j) {
     int column = threadIdx.x + 256 * j;
     values[j] =
-        __bfloat162float(__float2bfloat16_rn(__bfloat162float(x[row * 5120 + column]) +
-                                             __bfloat162float(residual[row * 5120 + column])));
+        __bfloat162float(x[row * 5120 + column]) + __bfloat162float(residual[row * 5120 + column]);
     total += values[j] * values[j];
   }
   __shared__ float partial[8];

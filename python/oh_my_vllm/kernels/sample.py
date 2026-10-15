@@ -63,7 +63,7 @@ class MTPAccept:
         )
         self.scratch = (
             allocate((batch,), "float64"),
-            allocate((batch, (248320 + 255) // 256), "float64"),
+            allocate((batch, (248320 + 255) // 256), "float32"),
         )
 
     def __call__(self, target, proposal, drafts, rng, private_slots, capacity):

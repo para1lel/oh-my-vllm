@@ -60,7 +60,7 @@ class VisionBlock:
         self.normalized = allocate((rows, 1152), "bfloat16")
         self.projected = allocate((rows * 4304,), "float32")
         self.qkv = tuple(
-            allocate((groups, frame_tokens, 128), "float32") for _ in range(3)
+            allocate((groups, frame_tokens, 128), "bfloat16") for _ in range(3)
         )
         self.padded_attention = allocate((groups, frame_tokens, 128), "bfloat16")
         self.normalizer = allocate((groups, frame_tokens), "float32")

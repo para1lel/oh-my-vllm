@@ -32,8 +32,8 @@ __global__ void fa_heads_kernel(const __nv_bfloat16 *packed, const float *q_norm
       float(positions[int64_t(axis) * rows + row]) * powf(10000000.f, -float(lane) / 32.f);
   float cosine = fa_bf16(cosf(angle)), sine = fa_bf16(sinf(angle));
   float a = values[0], b = values[1];
-  values[0] = fa_bf16(fa_bf16(a * cosine) - fa_bf16(b * sine));
-  values[1] = fa_bf16(fa_bf16(b * cosine) + fa_bf16(a * sine));
+  values[0] = fa_bf16(a * cosine - b * sine);
+  values[1] = fa_bf16(b * cosine + a * sine);
   int slot = is_query ? 0 : slots[row];
   if (!is_query && (slot < 0 || slot >= cache_tokens)) {
     asm volatile("trap;");

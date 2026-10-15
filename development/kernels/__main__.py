@@ -7,6 +7,8 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
+from oh_my_vllm.kernels.specification import UPSTREAM_COMMIT
+
 from .provenance import ROOT, case_id, source_identity, suite_identity
 from .providers import MODULES, RUNTIME_MODULES, prepare
 from .roofline import ExpectedCase, Observation, expected_efficiencies
@@ -69,6 +71,7 @@ def evaluate(arguments, report):
         "mode": arguments.mode,
         "device": selected_gpu,
         "device_source": device.source_id,
+        "upstream_commit": UPSTREAM_COMMIT,
     }
     libraries = tuple(
         dict.fromkeys(

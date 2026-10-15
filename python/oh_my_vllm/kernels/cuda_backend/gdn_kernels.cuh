@@ -41,7 +41,7 @@ __global__ void gdn_gather_kernel(const __nv_bfloat16 *embedding, const int64_t 
 __global__ void gdn_convolution_kernel(const __nv_bfloat16 *projection, const __nv_bfloat16 *weight,
                                        __nv_bfloat16 *pool, const int *starts, const int *reads,
                                        const int *writes, __nv_bfloat16 *output, int rows,
-                                       int batch, int slots) {
+                                       int batch, int slots, bool verify) {
   int group = blockIdx.y * 4 + threadIdx.x / 32;
   int row = blockIdx.x, lane = threadIdx.x & 31;
   int sequence = 0;
@@ -51,6 +51,7 @@ __global__ void gdn_convolution_kernel(const __nv_bfloat16 *projection, const __
   int first = starts[sequence], last = starts[sequence + 1];
   int source = reads[sequence], target = writes[row];
   gdn_require(first >= 0 && first <= row && row < last && last <= rows);
+  gdn_require(!verify || last - first <= 5);
   gdn_require(source >= 0 && source < slots && target >= -1 && target < slots);
   if (target >= 0)
     for (int request = 0; request < batch; ++request)
@@ -73,7 +74,7 @@ __global__ void gdn_convolution_kernel(const __nv_bfloat16 *projection, const __
     values[element] = __bfloat162float(__float2bfloat16_rn(sum * gdn_sigmoid(sum)));
     total_square += values[element] * values[element];
   }
-  float inverse = group < 32 ? rsqrtf(warp_sum(total_square) + 1e-6f) : 1.f;
+  float inverse = !verify && group < 32 ? rsqrtf(warp_sum(total_square) + 1e-6f) : 1.f;
 #pragma unroll
   for (int element = 0; element < 4; ++element)
     output[int64_t(row) * 10240 + group * 128 + lane * 4 + element] =
@@ -87,11 +88,12 @@ __global__ void __launch_bounds__(256, 1)
                           const float *a_log, const float *dt_bias, const float *norm,
                           __nv_bfloat16 *pool, const int *starts, const int *reads,
                           const int *writes, __nv_fp8_e4m3 *output, float *scales, int rows,
-                          int slots) {
+                          int slots, bool verify) {
   int sequence = blockIdx.x, head = blockIdx.y, lane = threadIdx.x & 31;
   int warp = threadIdx.x / 32;
   int first = starts[sequence], last = starts[sequence + 1], source = reads[sequence];
   gdn_require(first >= 0 && first <= last && last <= rows && source >= 0 && source < slots);
+  gdn_require(!verify || last - first <= 5);
   float state[16][4];
 #pragma unroll
   for (int value = 0; value < 16; ++value)
@@ -107,8 +109,24 @@ __global__ void __launch_bounds__(256, 1)
 #pragma unroll
     for (int element = 0; element < 4; ++element) {
       int column = head / 3 * 128 + lane * 4 + element;
-      q[element] = __bfloat162float(qkv[int64_t(row) * 10240 + column]) * 0.08838834764831844f;
+      q[element] = __bfloat162float(qkv[int64_t(row) * 10240 + column]);
       k[element] = __bfloat162float(qkv[int64_t(row) * 10240 + 2048 + column]);
+    }
+    float q_scale = 0.08838834764831844f, k_scale = 1.f;
+    if (verify) {
+      float q_square = 0, k_square = 0;
+#pragma unroll
+      for (int element = 0; element < 4; ++element) {
+        q_square += q[element] * q[element];
+        k_square += k[element] * k[element];
+      }
+      q_scale *= rsqrtf(warp_sum(q_square) + 1e-6f);
+      k_scale = rsqrtf(warp_sum(k_square) + 1e-6f);
+    }
+#pragma unroll
+    for (int element = 0; element < 4; ++element) {
+      q[element] *= q_scale;
+      k[element] *= k_scale;
     }
     float projected_b, projected_a;
     if constexpr (FusedBA) {
@@ -181,11 +199,10 @@ __global__ void __launch_bounds__(256, 1)
 #pragma unroll
       for (int element = 0; element < 4; ++element) {
         int column = lane * 4 + element;
-        float normalized = __bfloat162float(__float2bfloat16_rn(result[column] * inverse));
-        normalized = __bfloat162float(__float2bfloat16_rn(normalized * norm[column]));
+        float normalized = result[column] * inverse * norm[column];
         float gate = __bfloat162float(qkvz[int64_t(row) * 16384 + 10240 + head * 128 + column]);
-        values[element] =
-            __bfloat162float(__float2bfloat16_rn(normalized * gate * gdn_sigmoid(gate)));
+        float activated_gate = gate * gdn_sigmoid(gate);
+        values[element] = __bfloat162float(__float2bfloat16_rn(normalized * activated_gate));
       }
       quantize_four(make_float4(values[0], values[1], values[2], values[3]),
                     output + int64_t(row) * 6144 + head * 128 + lane * 4,

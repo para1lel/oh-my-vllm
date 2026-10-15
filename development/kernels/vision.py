@@ -102,7 +102,7 @@ def reference_rope(value, grid):
     angle = np.concatenate((py[:, None] * frequency, px[:, None] * frequency), axis=-1)
     angle = np.concatenate((angle, angle), axis=-1)[:, None, :]
     rotated = np.concatenate((-value[..., 36:], value[..., :36]), axis=-1)
-    return bf16(value * np.cos(angle) + rotated * np.sin(angle))
+    return bf16(value * bf16(np.cos(angle)) + rotated * bf16(np.sin(angle)))
 
 
 def reference_block(value, weights, indices, grid):
@@ -342,7 +342,9 @@ class VisionCase:
         finite = bool(np.all(np.isfinite(actual)))
         tokens = self.shape.frame_tokens // (4 if self.shape.variant == "merge" else 1)
         indices = np.unique([0, 1, 2, 3, tokens - 1, len(actual) // 2, len(actual) - 1])
-        output = numerical_error(actual[indices], self.output_reference(indices))
+        output = numerical_error(
+            actual[indices], self.output_reference(indices), tolerance="vision"
+        )
         patch_order = self.check_patch_order()
         patch_boundaries = self.check_patch_boundaries()
         isolation = self.check_frame_isolation(actual)

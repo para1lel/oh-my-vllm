@@ -1,7 +1,6 @@
 #pragma once
 
 #include "common.cuh"
-#include "vision_tf32.cuh"
 #include <collective/fmha_fusion.hpp>
 #include <collective/sm100_fmha_fwd_epilogue_tma_warpspecialized.hpp>
 #include <collective/sm100_fmha_fwd_mainloop_tma_warpspecialized.hpp>
@@ -10,11 +9,12 @@
 #include <kernel/sm100_fmha_fwd_kernel_tma_warpspecialized.hpp>
 
 template <bool Normalized>
-inline void vision_attention_launch(const float *query, const float *key, const float *value,
-                                    __nv_bfloat16 *output, float *normalizer, int tokens,
-                                    int groups, int device, cudaStream_t stream) {
+inline void vision_attention_launch(const __nv_bfloat16 *query, const __nv_bfloat16 *key,
+                                    const __nv_bfloat16 *value, __nv_bfloat16 *output,
+                                    float *normalizer, int tokens, int groups, int device,
+                                    cudaStream_t stream) {
   using namespace cute;
-  using Element = cutlass::tfloat32_t;
+  using Element = cutlass::bfloat16_t;
   using Problem = tuple<int, int, int, tuple<tuple<int, int>, int>>;
   using Stride = tuple<int, _1, tuple<tuple<int, int>, int>>;
   using KeyStride = tuple<int, _1, tuple<tuple<_0, int>, int>>;

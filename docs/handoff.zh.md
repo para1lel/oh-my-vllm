@@ -16,9 +16,13 @@ CUDA C++ 和 CUTLASS provider 通过[算子开发工具](operators/development.z
 报告绑定 checkpoint shards, 源文件, 二进制文件及构建依赖.
 Vision MLP 激活使用投影输出存储.
 
+[数值契约](operators/model.zh.md#中间精度)遵循固定 vLLM 源码版本的类型及舍入点.
+项目不引入 vLLM 运行时依赖.
+具名容差适用于特定输出. Cache 检查和状态选择保持各自的独立要求.
+
 完整算子实现尚未完成. 60% 性能要求仍有工作待完成.
 
-下一步: 完成 MTP draft 边界的数值检查, 并优化已测量的瓶颈.
+下一步: 优化已测量的瓶颈.
 完成每个算子的负载验收.
 然后将模型计算接入 worker.
 使用[实现计划](operators/implementation.zh.md).

@@ -40,9 +40,9 @@ __device__ inline float vision_biased(const float *projected, const __nv_bfloat1
   return __bfloat162float(__float2bfloat16_rn(projected[index] + __bfloat162float(bias[column])));
 }
 
-__global__ void vision_qkv_kernel(const float *projected, const __nv_bfloat16 *bias, float *query,
-                                  float *key, float *value, int rows, int grid_height,
-                                  int grid_width) {
+__global__ void vision_qkv_kernel(const float *projected, const __nv_bfloat16 *bias,
+                                  __nv_bfloat16 *query, __nv_bfloat16 *key, __nv_bfloat16 *value,
+                                  int rows, int grid_height, int grid_width) {
   int64_t index = int64_t(blockIdx.x) * blockDim.x + threadIdx.x;
   if (index >= int64_t(rows) * 16 * 128)
     return;
@@ -50,7 +50,7 @@ __global__ void vision_qkv_kernel(const float *projected, const __nv_bfloat16 *b
   int tokens = grid_height * grid_width, group = row / tokens, local = row % tokens;
   int64_t output = ((int64_t(group) * 16 + head) * tokens + local) * 128 + dimension;
   if (dimension >= 72) {
-    query[output] = key[output] = value[output] = 0;
+    query[output] = key[output] = value[output] = __float2bfloat16_rn(0.f);
     return;
   }
   int column = head * 72 + dimension, paired = head * 72 + (dimension + 36) % 72;
@@ -59,15 +59,16 @@ __global__ void vision_qkv_kernel(const float *projected, const __nv_bfloat16 *b
   int px = (block % (grid_width / 2)) * 2 + local % 2;
   int frequency = dimension % 36;
   float angle = (frequency < 18 ? py : px) * powf(10000.f, -float(frequency % 18) / 18.f);
-  float cosine = cosf(angle), sine = sinf(angle) * (dimension < 36 ? -1.f : 1.f);
+  float cosine = __bfloat162float(__float2bfloat16_rn(cosf(angle)));
+  float sine = __bfloat162float(__float2bfloat16_rn(sinf(angle))) * (dimension < 36 ? -1.f : 1.f);
   float q = vision_biased(projected, bias, int64_t(row) * 3456 + column, column);
   float qp = vision_biased(projected, bias, int64_t(row) * 3456 + paired, paired);
   float k = vision_biased(projected, bias, int64_t(row) * 3456 + 1152 + column, 1152 + column);
   float kp = vision_biased(projected, bias, int64_t(row) * 3456 + 1152 + paired, 1152 + paired);
-  query[output] = __bfloat162float(__float2bfloat16_rn(q * cosine + qp * sine));
-  key[output] = __bfloat162float(__float2bfloat16_rn(k * cosine + kp * sine));
-  value[output] =
-      vision_biased(projected, bias, int64_t(row) * 3456 + 2304 + column, 2304 + column);
+  query[output] = __float2bfloat16_rn(q * cosine + qp * sine);
+  key[output] = __float2bfloat16_rn(k * cosine + kp * sine);
+  value[output] = __float2bfloat16_rn(
+      vision_biased(projected, bias, int64_t(row) * 3456 + 2304 + column, 2304 + column));
 }
 
 __global__ void vision_residual_kernel(const float *projected, const __nv_bfloat16 *bias,
@@ -211,7 +212,7 @@ void vision_block(TensorView value, TensorView norm1_weight, TensorView norm1_bi
   tensor_contract(projected, value, kDLFloat, 32, {int64_t(rows) * 4304});
   tensor_contract(activated, value, kDLBfloat, 16, {int64_t(rows) * 4304});
   for (auto tensor : {query, key, values})
-    tensor_contract(tensor, value, kDLFloat, 32, {heads, tokens, 128});
+    tensor_contract(tensor, value, kDLBfloat, 16, {heads, tokens, 128});
   tensor_contract(padded_attention, value, kDLBfloat, 16, {heads, tokens, 128});
   tensor_contract(normalizer, value, kDLFloat, 32, {heads, tokens});
   vision_disjoint({value, norm1_weight, norm1_bias, qkv_weight, qkv_bias, attention_weight,
@@ -227,14 +228,12 @@ void vision_block(TensorView value, TensorView norm1_weight, TensorView norm1_bi
                                                vision_read(norm1_bias), norm);
   bf16_linear<float>(norm, vision_read(qkv_weight), matrix, rows, 3456, 1152, stream);
   vision_qkv_kernel<<<(int64_t(rows) * 2048 + 255) / 256, 256, 0, stream>>>(
-      matrix, vision_read(qkv_bias), static_cast<float *>(query.data_ptr()),
-      static_cast<float *>(key.data_ptr()), static_cast<float *>(values.data_ptr()), rows,
-      grid_height, grid_width);
-  vision_attention_launch<true>(
-      static_cast<const float *>(query.data_ptr()), static_cast<const float *>(key.data_ptr()),
-      static_cast<const float *>(values.data_ptr()), vision_write(padded_attention),
-      static_cast<float *>(normalizer.data_ptr()), tokens, rows / tokens, value.device().device_id,
-      stream);
+      matrix, vision_read(qkv_bias), vision_write(query), vision_write(key), vision_write(values),
+      rows, grid_height, grid_width);
+  vision_attention_launch<true>(vision_read(query), vision_read(key), vision_read(values),
+                                vision_write(padded_attention),
+                                static_cast<float *>(normalizer.data_ptr()), tokens, rows / tokens,
+                                value.device().device_id, stream);
   vision_attention_unpack_kernel<<<(int64_t(rows) * 1152 + 255) / 256, 256, 0, stream>>>(
       vision_read(padded_attention), vision_write(attended), rows, tokens);
   bf16_linear<float>(vision_read(attended), vision_read(attention_weight), matrix, rows, 1152, 1152,
