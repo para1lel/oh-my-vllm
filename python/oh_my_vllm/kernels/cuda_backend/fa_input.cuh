@@ -62,31 +62,55 @@ __device__ inline float fa_maximum(float value) {
   return value;
 }
 
+template <int Warps>
 __global__ void fa_merge_quant_kernel(const float *partial, const float *lse,
                                       const __nv_bfloat16 *gate, __nv_fp8_e4m3 *output,
                                       float *scales, int splits) {
-  int group = blockIdx.x, head_row = group / 2, half = group % 2, lane = threadIdx.x;
+  int group = blockIdx.x, head_row = group / 2, half = group % 2;
+  int lane = threadIdx.x & 31, warp = threadIdx.x / 32;
   __shared__ float weights[128];
-  float maximum = -INFINITY;
-  for (int i = lane; i < splits; i += 32)
-    maximum = fmaxf(maximum, lse[int64_t(head_row) * splits + i]);
-  maximum = fa_maximum(maximum);
-  float safe = maximum == -INFINITY ? 0.f : maximum, denominator = 0;
-  for (int i = lane; i < splits; i += 32) {
-    float weight = fa_exp2(lse[int64_t(head_row) * splits + i] - safe);
-    weights[i] = weight;
-    denominator += weight;
+  __shared__ float4 totals[Warps][32];
+  float denominator = 0;
+  if (warp == 0) {
+    float maximum = -INFINITY;
+    for (int i = lane; i < splits; i += 32)
+      maximum = fmaxf(maximum, lse[int64_t(head_row) * splits + i]);
+    maximum = fa_maximum(maximum);
+    float safe = maximum == -INFINITY ? 0.f : maximum;
+    for (int i = lane; i < splits; i += 32) {
+      float weight = fa_exp2(lse[int64_t(head_row) * splits + i] - safe);
+      weights[i] = weight;
+      denominator += weight;
+    }
+    denominator = warp_sum(denominator);
   }
-  denominator = warp_sum(denominator);
-  __syncwarp();
+  if constexpr (Warps == 1)
+    __syncwarp();
+  else
+    __syncthreads();
   float values[4] = {};
-  for (int i = 0; i < splits; ++i) {
+  for (int i = warp; i < splits; i += Warps) {
     float4 part = *reinterpret_cast<const float4 *>(
         partial + (int64_t(head_row) * splits + i) * 256 + half * 128 + lane * 4);
     values[0] += part.x * weights[i];
     values[1] += part.y * weights[i];
     values[2] += part.z * weights[i];
     values[3] += part.w * weights[i];
+  }
+  if constexpr (Warps > 1) {
+    totals[warp][lane] = make_float4(values[0], values[1], values[2], values[3]);
+    __syncthreads();
+    if (warp != 0)
+      return;
+    values[0] = values[1] = values[2] = values[3] = 0;
+#pragma unroll
+    for (int w = 0; w < Warps; ++w) {
+      float4 part = totals[w][lane];
+      values[0] += part.x;
+      values[1] += part.y;
+      values[2] += part.z;
+      values[3] += part.w;
+    }
   }
 #pragma unroll
   for (int j = 0; j < 4; ++j) {

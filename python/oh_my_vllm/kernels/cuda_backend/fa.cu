@@ -114,11 +114,18 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
           static_cast<float *>(lse.data_ptr()), 24, 4, tables.size(1), splits, first_token, false,
           false, false, tiles, max_queries, rows, blocks);
   check_cuda(cudaGetLastError());
-  fa_merge_quant_kernel<<<rows * 48, 32, 0, stream>>>(
-      static_cast<const float *>(partial.data_ptr()), static_cast<const float *>(lse.data_ptr()),
-      static_cast<const __nv_bfloat16 *>(gate.data_ptr()),
-      static_cast<__nv_fp8_e4m3 *>(gated.data_ptr()), static_cast<float *>(gated_scale.data_ptr()),
-      splits);
+  auto merge = [&](auto warps) {
+    constexpr int Warps = decltype(warps)::value;
+    fa_merge_quant_kernel<Warps><<<rows * 48, Warps * 32, 0, stream>>>(
+        static_cast<const float *>(partial.data_ptr()), static_cast<const float *>(lse.data_ptr()),
+        static_cast<const __nv_bfloat16 *>(gate.data_ptr()),
+        static_cast<__nv_fp8_e4m3 *>(gated.data_ptr()),
+        static_cast<float *>(gated_scale.data_ptr()), splits);
+  };
+  if (splits == 1)
+    merge(std::integral_constant<int, 1>{});
+  else
+    merge(std::integral_constant<int, 8>{});
   check_cuda(cudaGetLastError());
   groupwise(static_cast<const __nv_fp8_e4m3 *>(gated.data_ptr()),
             static_cast<const __nv_fp8_e4m3 *>(output_weight.data_ptr()),
