@@ -1,0 +1,193 @@
+{
+  "terms": [
+    {
+      "term": "CLI",
+      "part_of_speech": "noun",
+      "meaning": "The command line interface.",
+      "translation": "命令行接口.",
+      "forms": [
+        "CLI"
+      ]
+    },
+    {
+      "term": "DEALER",
+      "part_of_speech": "noun",
+      "meaning": "The ZMQ socket type for the Rust and Python processes.",
+      "translation": "Rust 和 Python 进程使用的 ZMQ socket 类型.",
+      "forms": [
+        "DEALER"
+      ]
+    },
+    {
+      "term": "FA",
+      "part_of_speech": "noun",
+      "meaning": "Full attention in the target model.",
+      "translation": "目标模型中的全注意力.",
+      "forms": [
+        "FA"
+      ]
+    },
+    {
+      "term": "GDN",
+      "part_of_speech": "noun",
+      "meaning": "The gated delta network in the target model.",
+      "translation": "目标模型中的门控增量网络.",
+      "forms": [
+        "GDN"
+      ]
+    },
+    {
+      "term": "KV cache",
+      "part_of_speech": "noun",
+      "meaning": "The key and value state for model tokens.",
+      "translation": "模型 token 的 key 和 value 状态.",
+      "forms": [
+        "KV cache"
+      ]
+    },
+    {
+      "term": "RPC",
+      "part_of_speech": "noun",
+      "meaning": "A request and its related reply across a process boundary.",
+      "translation": "跨进程边界的请求及对应回复.",
+      "forms": [
+        "RPC"
+      ]
+    },
+    {
+      "term": "SSE",
+      "part_of_speech": "noun",
+      "meaning": "The HTTP event stream that the service sends to a client.",
+      "translation": "服务发送给客户端的 HTTP 事件流.",
+      "forms": [
+        "SSE"
+      ]
+    },
+    {
+      "term": "checkpoint",
+      "part_of_speech": "noun",
+      "meaning": "The model weights or the saved recurrent state for accepted tokens.",
+      "translation": "模型权重或已接受 token 对应的循环状态快照.",
+      "forms": [
+        "checkpoint"
+      ]
+    },
+    {
+      "term": "commit",
+      "part_of_speech": "verb",
+      "meaning": "Save selected files as a new Git revision.",
+      "translation": "将选定文件保存为新的 Git 修订版本.",
+      "forms": [
+        "commit"
+      ]
+    },
+    {
+      "term": "decode",
+      "part_of_speech": "noun",
+      "meaning": "The worker operation for a new output token.",
+      "translation": "worker 为新输出 token 执行的操作.",
+      "forms": [
+        "decode"
+      ]
+    },
+    {
+      "term": "draft",
+      "part_of_speech": "noun",
+      "meaning": "A proposed token before target validation.",
+      "translation": "target 验证前的候选 token.",
+      "forms": [
+        "draft"
+      ]
+    },
+    {
+      "term": "hook",
+      "part_of_speech": "noun",
+      "meaning": "A program that Git starts before Git saves a revision.",
+      "translation": "Git 保存修订版本前启动的程序.",
+      "forms": [
+        "hook"
+      ]
+    },
+    {
+      "term": "inference",
+      "part_of_speech": "noun",
+      "meaning": "Model computation that supplies output tokens from input tokens.",
+      "translation": "根据输入 token 产生输出 token 的模型计算.",
+      "forms": [
+        "inference"
+      ]
+    },
+    {
+      "term": "msgpack",
+      "part_of_speech": "noun",
+      "meaning": "The binary message format at the process boundary.",
+      "translation": "进程边界使用的二进制消息格式.",
+      "forms": [
+        "msgpack"
+      ]
+    },
+    {
+      "term": "prefill",
+      "part_of_speech": "noun",
+      "meaning": "The worker operation for a prompt or an accepted history.",
+      "translation": "worker 对 prompt 或已接受历史执行的操作.",
+      "forms": [
+        "prefill"
+      ]
+    },
+    {
+      "term": "prefix reuse",
+      "part_of_speech": "noun",
+      "meaning": "The use of cached state for the same accepted token prefix.",
+      "translation": "对相同的已接受 token 前缀复用缓存状态.",
+      "forms": [
+        "prefix reuse"
+      ]
+    },
+    {
+      "term": "push",
+      "part_of_speech": "verb",
+      "meaning": "Send Git revisions to a remote repository.",
+      "translation": "将 Git 修订版本发送至远端仓库.",
+      "forms": [
+        "push"
+      ]
+    },
+    {
+      "term": "rollback",
+      "part_of_speech": "noun",
+      "meaning": "The removal of unaccepted token or cache state.",
+      "translation": "移除尚未接受的 token 或 cache 状态.",
+      "forms": [
+        "rollback"
+      ]
+    },
+    {
+      "term": "state commit",
+      "part_of_speech": "noun",
+      "meaning": "The operation that accepts validated token history and cache state.",
+      "translation": "接受已验证 token 历史和 cache 状态的操作.",
+      "forms": [
+        "state commit"
+      ]
+    },
+    {
+      "term": "worker",
+      "part_of_speech": "noun",
+      "meaning": "The Python process that prepares tokens and supplies computation results.",
+      "translation": "准备 token 并返回计算结果的 Python 进程.",
+      "forms": [
+        "worker"
+      ]
+    },
+    {
+      "term": "workspace",
+      "part_of_speech": "noun",
+      "meaning": "A group of Rust packages with one root Cargo manifest.",
+      "translation": "由一个根 Cargo manifest 管理的一组 Rust 包.",
+      "forms": [
+        "workspace"
+      ]
+    }
+  ]
+}

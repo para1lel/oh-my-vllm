@@ -1,18 +1,25 @@
 # Project principles
 
-Build single-B200 Qwen3.8-27B-FP8 inference. Rust owns service, scheduling, and logical KV. Python owns GPU computation.
-Use ZMQ DEALER and msgpack. Keep the [runtime contracts](docs/requirements.md).
+Build the Qwen3.8-27B-FP8 service for one NVIDIA B200.
+Use Rust for the service, the scheduler, and the logical KV cache.
 
-Read Git status, the [handoff](docs/handoff.md), and applicable directory instructions before work.
-Follow [CONTRIBUTING.md](CONTRIBUTING.md). Add directory instructions when local contracts appear.
+Use Python for GPU computation. Use a ZMQ DEALER socket and msgpack for process communication.
+Obey the [runtime contracts](docs/requirements.md).
 
-Keep root guides short. Put details near their owner and maintain complete Chinese companions.
-Use clear names and small modules. Add comments only for facts the code cannot express clearly.
+Read the Git status, the [handoff](docs/handoff.md), and the applicable directory instructions before work.
+Obey [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Keep tests few and focused on behavior. Tell the user why each additional test is useful before adding it.
-Run applicable existing tests yourself. Do not store test results in project files.
+Keep the root guides short. Put local instructions in the related directory.
+Write all English documents in ASD-STE100. Supply a full Chinese translation for each English document.
 
-Get an independent sub-agent review at each delivery and correct its findings.
-Keep hooks enabled, commit intentional paths, and synchronize the working branch with GitHub after each delivery.
+Use clear names and small functions. Add a comment only when the code cannot give the necessary information.
+Keep the tests few. Before you add a test, tell the user why it is necessary.
 
-Keep host settings in ignored `LOCAL.md`. Stop owned workers and temporary services after use.
+Do the applicable tests in the repository. Do not put test results in project files.
+
+Get a code review from another agent before each delivery. Correct the errors.
+Keep the hooks active. Commit only the files for the change.
+
+Push the working branch to GitHub after each delivery.
+
+Put host settings in the ignored `LOCAL.md` file. Stop the workers and temporary services that you start.

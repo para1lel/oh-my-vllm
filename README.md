@@ -1,7 +1,8 @@
 # oh-my-vllm
 
-Qwen3.8-27B-FP8 inference on a single NVIDIA B200.
+This program supplies a Rust service for Qwen3.8-27B-FP8 on one NVIDIA B200.
+The Python worker is a placeholder. It makes random tokens without model weights or GPU computation.
 
-The inference service is in development. Installation and serving commands will follow with the first usable release.
+Use the [service guide](docs/serving.md) for installation, commands, and HTTP requests.
 
-[中文](README.zh.md) · [Contributing](CONTRIBUTING.md)
+[中文](README.zh.md) · [Contribution procedure](CONTRIBUTING.md)

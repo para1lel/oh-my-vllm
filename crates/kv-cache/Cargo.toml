@@ -1,0 +1,11 @@
+[package]
+name = "oh-my-vllm-kv-cache"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rustc-hash.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

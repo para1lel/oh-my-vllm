@@ -1,12 +1,14 @@
 # Development setup
 
-Development uses Python 3.12, Rust, uv, and Node 24 or later.
-The Conda definition supplies Python and Rust. The Python and JavaScript locks pin hook dependencies.
-Keep this environment separate from future inference dependencies.
+Use Python 3.12, Rust, uv, and Node 24 or later for development.
+The Conda definition supplies Python and Rust. The Python and JavaScript lock files pin the hook dependencies.
+
+Use different files for development and runtime dependencies.
 
 ## Installation
 
-Install Conda, uv, and Node before these commands:
+Install Conda, uv, and Node first.
+Do these commands:
 
 ```bash
 conda env create -f environment.yml
@@ -16,12 +18,15 @@ npm --prefix development/javascript ci --ignore-scripts --no-audit --no-fund
 scripts/with-env.sh pre-commit install
 ```
 
-For an existing environment, activate it before the last four commands.
-The wrapper selects `OH_MY_VLLM_CONDA_PREFIX`, then `CONDA_PREFIX`, then `VIRTUAL_ENV`, then repository `.venv`.
-Use `scripts/with-env.sh` for Python and Cargo commands.
-The wrapper sets executable lookup, Python module lookup, and Cargo build output consistently for hooks and direct commands.
+If the environment is available, do the last four commands.
+The wrapper selects `OH_MY_VLLM_CONDA_PREFIX`, then `CONDA_PREFIX`, then `VIRTUAL_ENV`, then the repository `.venv`.
 
-## Commit hooks
+Use `scripts/with-env.sh` for Python and Cargo commands.
+The wrapper sets the executable paths, Python module paths, worker interpreter, and Cargo build output.
+
+Install the [runtime packages](../requirements/runtime.txt) for service work.
+
+## Git hooks
 
 ```bash
 scripts/with-env.sh pre-commit run --all-files
@@ -31,16 +36,18 @@ scripts/with-env.sh pre-commit run --all-files
 |---|---|
 | cuda-format | clang-format 23.1.3, native backend modules at most 800 lines |
 | cargo-fmt | Rust formatter |
-| rust-line-width | Hard Rust line width of 100 columns |
-| definition-spacing | Syntax-based function and module spacing in Python, Rust, and JavaScript/TypeScript |
-| cargo-clippy | All targets and features, warnings are errors |
-| cargo-test | Existing Rust workspace tests |
+| rust-line-width | Rust line width at most 100 columns |
+| definition-spacing | Function and module spacing through Python, Rust, and JavaScript/TypeScript syntax trees |
+| cargo-clippy | All workspace members, targets, and features, with warnings as errors |
+| cargo-test | Existing Rust workspace tests and the Python service tests |
 | ruff-format | Python formatter |
 | ruff-check | Python lint rules |
 | whitespace | No trailing whitespace, one final newline |
-| documentation | Bilingual pairs, word limits, portable paths, links, and source anchors |
-| glossary | Generated glossary agrees with its source when a glossary exists |
+| documentation | Translation pairs, word limits, host paths, links, and source anchors |
+| glossary | Agreement between the generated glossary and its source |
 
-Cargo hooks cover owned manifests, with each workspace once.
-Hooks with no applicable files have no work. The documentation hook always runs.
-The [test policy](../CONTRIBUTING.md) governs additions. Agents run existing tests without a manual step for the maintainer.
+The Cargo hooks include all owned manifests, with each workspace once.
+A hook has no work if there are no applicable files. The documentation hook always runs.
+
+Use the [test policy](../CONTRIBUTING.md) before you add tests.
+Agents do the tests in the repository for the maintainer.

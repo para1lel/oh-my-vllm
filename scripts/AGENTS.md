@@ -1,13 +1,21 @@
 # Repository tools
 
-Keep these tools separate from inference code and dependencies.
-Use the Python standard library unless an existing parser supplies necessary syntax handling.
-Keep checks focused on their stated contract. Reuse syntax trees instead of matching code definitions with regular expressions.
-Do not add explanatory comments when clear names and small functions express the logic.
+Put inference code and its dependencies in other directories.
+Use the Python standard library unless a parser is necessary for syntax analysis.
 
-Hooks and direct commands use the same environment wrapper.
-Process owned tracked or unignored files. Exclude third-party trees, symlinks, generated files, and paths beyond the repository.
-Treat absent optional source trees as having no applicable files.
-For an applicable file, report missing tools or invalid input as failures.
+Keep each checker on its stated contract.
+Use syntax trees to find code definitions. Do not use text patterns for this operation.
 
-Follow the [test policy](../CONTRIBUTING.md) before adding tests. Do not save check results in repository documents.
+Use clear names and small functions to give the logic.
+
+Use the same environment wrapper for hooks and direct commands.
+Process owned tracked or unignored files only.
+
+Do not process third-party trees, symlinks, generated files, or paths beyond the repository.
+If an optional source directory does not exist, there are no applicable files in that directory.
+
+If an applicable input has an error, stop the check with an error.
+If a necessary tool is missing, stop the check with an error.
+
+Obey the [test policy](../CONTRIBUTING.md) before you add tests.
+Do not save check results in repository documents.

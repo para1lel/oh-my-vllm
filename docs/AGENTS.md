@@ -1,25 +1,39 @@
 # Document rules
 
-Keep the same scope as the root principles. Put each fact in one place and link to it.
-README gives users the project status and usage. CONTRIBUTING gives contributors a reusable procedure.
-Root AGENTS gives shared direction. Child AGENTS gives instructions for its directory subtree.
+Write all English documents for this project in [ASD-STE100 Issue 9](https://www.asd-ste100.org/assets/files/ASD-STE100_ISSUE9.pdf).
+Use the approved words with their approved meanings and parts of speech.
 
-Add deeper instructions only when that directory has specific contracts.
+Use each project [technical term](glossary.md) only with the meaning in the glossary.
+Do not use general words as new technical terms.
 
-Keep each owned English Markdown document at most 2000 English words.
-Count visible prose, headings, table cells, and inline identifiers. Exclude fenced code and link destinations.
-Use short sentences and focused paragraphs. Limit procedures to 20 words per sentence and descriptions to 25.
+Put each fact in one location. Use links from other locations.
+README gives user information. CONTRIBUTING gives the contribution procedure.
 
-Keep descriptive paragraphs at most 6 sentences. Use plain English and consistent technical terms.
+The root AGENTS gives rules for all directories. A child AGENTS gives rules for its directory tree.
+Add a child guide only when a directory has local rules.
 
-Translate all prose into a same-directory `<stem>.zh.md` companion.
-Keep facts, conditions, uncertainty, commands, identifiers, numbers, and heading structure equal.
-English is authoritative. Use Chinese companion links when available.
-Use halfwidth Chinese punctuation and spaces between Chinese text and English words or numbers.
+Keep each English Markdown document at most 2000 English words.
+Count the visible text, headings, table text, and inline identifiers.
 
-Link to source instead of duplicating implementation details.
-Source line links use a unique text anchor. The documentation hook updates their line numbers.
-Keep host paths and addresses in ignored local configuration.
+Do not count fenced code or link destinations.
+Keep procedure sentences at most 20 words. Give one action in each procedure sentence.
 
-Keep current status and next work in the handoff. Do not add test results, logs, or delivery histories.
-Review translation meaning independently. Automated checks cannot prove semantic equality.
+Keep descriptive sentences at most 25 words. Keep descriptive paragraphs at most 6 sentences.
+
+Supply a full Chinese translation in a same-directory `<stem>.zh.md` file.
+Keep facts, conditions, uncertainty, commands, identifiers, numbers, and heading levels the same.
+
+Use the English document as the source. Use Chinese links when the related files exist.
+Use halfwidth Chinese punctuation. Put spaces between Chinese text and English words or numbers.
+
+Use source links for implementation details. Do not copy the implementation into prose.
+Use a text anchor that occurs only once in the source file for each source line link.
+
+The documentation hook updates the line numbers.
+Put host paths and addresses in ignored local configuration.
+
+Do not add test results, logs, or delivery histories.
+
+Get a document review from another agent. Examine the word meanings, parts of speech, and translation.
+Use the official standard. The automated checks do not examine all STE rules.
+Compare the Chinese text with the English text.

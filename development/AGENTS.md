@@ -1,12 +1,15 @@
 # Development tools
 
-This subtree owns syntax parsers and other development-only helpers.
-Keep dependency versions pinned and lock files tracked. Do not import these tools from inference code.
-Keep compiler and parser dependencies separate from runtime packages.
+Put syntax parsers and other development tools in this directory tree.
+Pin the dependency versions. Track the lock files.
 
-The Rust spacing checker uses syntax spans for parsed definitions, attributes, comments, and nested methods.
-The JavaScript checker uses Acorn and Node's TypeScript stripping support.
-Do not replace syntax parsing with textual guesses.
+Do not import these tools from inference code.
+Use different dependency files for development tools and runtime packages.
 
-Keep the native Rust formatter and hard 100-column limit active here.
-Use the [contribution procedure](../CONTRIBUTING.md) for tests and delivery.
+The Rust spacing checker uses syntax spans for definitions, attributes, comments, and nested methods.
+The JavaScript checker uses Acorn and the TypeScript type removal function in Node.
+
+Do not use text patterns to find code definitions.
+
+Use the Rust formatter here. Keep the line width at most 100 columns.
+Obey the [contribution procedure](../CONTRIBUTING.md) for tests and delivery.

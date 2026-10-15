@@ -1,37 +1,50 @@
-# Contributing
+# Contribution procedure
 
-Read the root [AGENTS.md](AGENTS.md) and applicable directory instructions before changes.
-Use the [development setup](docs/development.md) to install tools and hooks.
+Read the root [AGENTS.md](AGENTS.md) and the applicable directory instructions before changes.
+Use the [development guide](docs/development.md) to install the tools and hooks.
 
 ## Code
 
-Use names, functions, and module boundaries that make each code fragment understandable in context.
-Prefer clear code to explanatory comments. Keep necessary safety, mathematical, and external-contract notes.
-Separate functions and module definitions with blank lines. Keep related imports grouped.
+Use names that show what each function and module does.
+Use a comment only for information that the code cannot give.
 
-Use the repository formatters. Keep development dependencies separate from inference dependencies.
+Keep necessary safety, mathematical, and external-contract information.
+Put blank lines between functions and module definitions. Keep related imports together.
 
-## Documentation
+Use the repository formatters. Use different dependency files for development and inference.
 
-Keep README focused on users. Put shared direction in root guides and local details in directory guides.
+## Documents
+
+Put user information in README. Put rules for all directories in the root guides.
+Put local details in the related directory guides.
+
+Write English documents in ASD-STE100. Obey the [document rules](docs/AGENTS.md).
 Keep each English Markdown document at most 2000 English words.
-Update its complete same-directory Chinese companion in the same change.
-Follow the [document rules](docs/AGENTS.md). Keep contribution instructions useful to future contributors, without chat-specific history.
+
+Supply its full Chinese translation in the same directory and change.
+Keep this procedure applicable to other contributors. Do not add chat history.
 
 ## Tests
 
-Use a small set of independent behavior tests. Cover meaningful failure modes instead of copying implementation steps.
-Before adding a test, tell the maintainer what it protects and why existing coverage is insufficient.
-Agents run applicable existing tests themselves. The maintainer does not have to execute tests manually.
+Keep a small set of behavior tests.
+Use tests for failure conditions. Do not copy the implementation into expected values.
+
+Before you add a test, tell the maintainer why it is necessary.
+Tell the maintainer why the other tests are not sufficient.
+Agents do the applicable tests in the repository for the maintainer.
+
 Do not commit test reports, logs, result tables, or pass/fail histories.
 
 ## Delivery
 
-Get an independent review and correct its findings before delivery.
-Run applicable hooks with the configured development environment. Keep hooks enabled and do not use `--no-verify`.
-Stage intentional paths explicitly. Do not use `git add .`.
+Get a code review from another agent. Correct the errors before delivery.
+Do the applicable hooks in the configured development environment.
 
-Use a Conventional Commits title and a concise description of the resulting change.
-Update the [handoff](docs/handoff.md) with current work and next steps, without test results.
-Commit and push the working branch to GitHub after each delivery.
-Stop owned workers and temporary services. Keep host settings in ignored `LOCAL.md`.
+Keep the hooks active. Do not use `--no-verify`.
+Stage the files for the change. Do not use `git add .`.
+
+Use a Conventional Commits title. Give a short description of the change.
+Update the [handoff](docs/handoff.md) with the work state and next steps, without test results.
+
+Commit the change. Push the working branch to GitHub after each delivery.
+Stop the workers and temporary services that you start. Put host settings in the ignored `LOCAL.md` file.

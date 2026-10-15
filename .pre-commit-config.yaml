@@ -47,7 +47,7 @@ repos:
         entry: scripts/with-env.sh python scripts/run_cargo_hook.py test
         language: system
         pass_filenames: false
-        files: (\.rs|Cargo\.toml|Cargo\.lock)$|^scripts/run_cargo_hook\.py$
+        files: (\.rs|Cargo\.toml|Cargo\.lock)$|^scripts/run_cargo_hook\.py$|^(python|tests)/.*\.py$
 
       - id: ruff-format
         name: ruff format
@@ -82,4 +82,4 @@ repos:
         entry: scripts/with-env.sh python scripts/build_glossary.py --check
         language: system
         pass_filenames: false
-        files: (^docs/(terms\.json|glossary/.*\.md)$|^scripts/build_glossary\.py$|^\.pre-commit-config\.yaml$)
+        files: (^docs/(terms\.json|glossary(\.zh)?\.md)$|^scripts/build_glossary\.py$|^\.pre-commit-config\.yaml$)
