@@ -106,13 +106,24 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
     bf16_linear(static_cast<const __nv_bfloat16 *>(normalized.data_ptr()),
                 static_cast<const __nv_bfloat16 *>(ba_weight.data_ptr()), ba.data_ptr(), rows, 96,
                 5120, stream);
-  gdn_convolution_kernel<<<dim3(rows, 20), 128, 0, stream>>>(
-      static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
-      static_cast<const __nv_bfloat16 *>(convolution_weight.data_ptr()),
-      static_cast<__nv_bfloat16 *>(convolution_state.data_ptr()),
-      static_cast<const int *>(starts.data_ptr()), static_cast<const int *>(reads.data_ptr()),
-      static_cast<const int *>(writes.data_ptr()), static_cast<__nv_bfloat16 *>(qkv.data_ptr()),
-      rows, batch, slots, verify);
+  auto prepare = [&](auto project_ba) {
+    constexpr bool ProjectBA = decltype(project_ba)::value;
+    gdn_convolution_kernel<ProjectBA>
+        <<<dim3(rows, ProjectBA ? 68 : 20), ProjectBA ? 256 : 128, 0, stream>>>(
+            static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
+            static_cast<const __nv_bfloat16 *>(convolution_weight.data_ptr()),
+            static_cast<__nv_bfloat16 *>(convolution_state.data_ptr()),
+            static_cast<const int *>(starts.data_ptr()), static_cast<const int *>(reads.data_ptr()),
+            static_cast<const int *>(writes.data_ptr()),
+            static_cast<__nv_bfloat16 *>(qkv.data_ptr()), rows, batch, slots, verify,
+            static_cast<const __nv_bfloat16 *>(normalized.data_ptr()),
+            static_cast<const __nv_bfloat16 *>(ba_weight.data_ptr()),
+            static_cast<__nv_bfloat16 *>(ba.data_ptr()));
+  };
+  if (rows > 1 && rows <= 32)
+    prepare(std::true_type{});
+  else
+    prepare(std::false_type{});
   check_cuda(cudaGetLastError());
   auto scan = [&](auto fused) {
     gdn_scan_quant_kernel<decltype(fused)::value><<<dim3(batch, 48), 256, 0, stream>>>(
@@ -129,7 +140,7 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
         static_cast<__nv_fp8_e4m3 *>(output_data.data_ptr()),
         static_cast<float *>(output_scales.data_ptr()), rows, slots, verify);
   };
-  if (rows <= 32)
+  if (rows == 1)
     scan(std::true_type{});
   else
     scan(std::false_type{});

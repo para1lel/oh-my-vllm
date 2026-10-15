@@ -38,10 +38,52 @@ __global__ void gdn_gather_kernel(const __nv_bfloat16 *embedding, const int64_t 
     output[int64_t(row) * 5120 + column] = source[column];
 }
 
+__device__ inline float2 gdn_ba_projection(const __nv_bfloat16 *normalized,
+                                           const __nv_bfloat16 *ba_weight, __nv_bfloat16 *ba,
+                                           int row, int head) {
+  int lane = threadIdx.x & 31, warp = threadIdx.x / 32;
+  __shared__ float projection_partial[2][8];
+  float projected_b, projected_a;
+  float b = 0, a = 0;
+#pragma unroll
+  for (int column = threadIdx.x; column < 5120; column += 256) {
+    float value = __bfloat162float(normalized[int64_t(row) * 5120 + column]);
+    b += value * __bfloat162float(ba_weight[head * 5120 + column]);
+    a += value * __bfloat162float(ba_weight[(head + 48) * 5120 + column]);
+  }
+  b = warp_sum(b);
+  a = warp_sum(a);
+  if (lane == 0) {
+    projection_partial[0][warp] = b;
+    projection_partial[1][warp] = a;
+  }
+  __syncthreads();
+  projected_b =
+      __bfloat162float(__float2bfloat16_rn(warp_sum(lane < 8 ? projection_partial[0][lane] : 0.f)));
+  projected_a =
+      __bfloat162float(__float2bfloat16_rn(warp_sum(lane < 8 ? projection_partial[1][lane] : 0.f)));
+  if (threadIdx.x == 0) {
+    ba[int64_t(row) * 96 + head] = __float2bfloat16_rn(projected_b);
+    ba[int64_t(row) * 96 + 48 + head] = __float2bfloat16_rn(projected_a);
+  }
+  return make_float2(projected_b, projected_a);
+}
+
+template <bool ProjectBA>
 __global__ void gdn_convolution_kernel(const __nv_bfloat16 *projection, const __nv_bfloat16 *weight,
                                        __nv_bfloat16 *pool, const int *starts, const int *reads,
                                        const int *writes, __nv_bfloat16 *output, int rows,
-                                       int batch, int slots, bool verify) {
+                                       int batch, int slots, bool verify,
+                                       const __nv_bfloat16 *normalized,
+                                       const __nv_bfloat16 *ba_weight, __nv_bfloat16 *ba) {
+  if constexpr (ProjectBA) {
+    if (blockIdx.y >= 20) {
+      gdn_ba_projection(normalized, ba_weight, ba, blockIdx.x, blockIdx.y - 20);
+      return;
+    }
+    if (threadIdx.x >= 128)
+      return;
+  }
   int group = blockIdx.y * 4 + threadIdx.x / 32;
   int row = blockIdx.x, lane = threadIdx.x & 31;
   int sequence = 0;
@@ -101,7 +143,7 @@ __global__ void __launch_bounds__(256, 1)
     for (int key = 0; key < 4; ++key)
       state[value][key] = __bfloat162float(
           pool[((int64_t(source) * 48 + head) * 128 + warp * 16 + value) * 128 + lane * 4 + key]);
-  __shared__ float result[128], partial[8], projection_partial[2][8];
+  __shared__ float result[128], partial[8];
   for (int row = first; row < last; ++row) {
     int target = writes[row];
     gdn_require(target >= -1 && target < slots && target != source);
@@ -130,28 +172,9 @@ __global__ void __launch_bounds__(256, 1)
     }
     float projected_b, projected_a;
     if constexpr (FusedBA) {
-      float b = 0, a = 0;
-#pragma unroll
-      for (int column = threadIdx.x; column < 5120; column += 256) {
-        float value = __bfloat162float(normalized[int64_t(row) * 5120 + column]);
-        b += value * __bfloat162float(ba_weight[head * 5120 + column]);
-        a += value * __bfloat162float(ba_weight[(head + 48) * 5120 + column]);
-      }
-      b = warp_sum(b);
-      a = warp_sum(a);
-      if (lane == 0) {
-        projection_partial[0][warp] = b;
-        projection_partial[1][warp] = a;
-      }
-      __syncthreads();
-      projected_b = __bfloat162float(
-          __float2bfloat16_rn(warp_sum(lane < 8 ? projection_partial[0][lane] : 0.f)));
-      projected_a = __bfloat162float(
-          __float2bfloat16_rn(warp_sum(lane < 8 ? projection_partial[1][lane] : 0.f)));
-      if (threadIdx.x == 0) {
-        ba[int64_t(row) * 96 + head] = __float2bfloat16_rn(projected_b);
-        ba[int64_t(row) * 96 + 48 + head] = __float2bfloat16_rn(projected_a);
-      }
+      float2 projected = gdn_ba_projection(normalized, ba_weight, ba, row, head);
+      projected_b = projected.x;
+      projected_a = projected.y;
     } else {
       projected_b = __bfloat162float(ba[int64_t(row) * 96 + head]);
       projected_a = __bfloat162float(ba[int64_t(row) * 96 + 48 + head]);
