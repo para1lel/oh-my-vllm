@@ -13,6 +13,11 @@ import torch
 from development import fp64_math as ref
 
 
+def attention_gate(x, gate):
+    factor = ref.store(gate.double().sigmoid(), gate.dtype)
+    return ref.store(x.double() * factor.double(), x.dtype)
+
+
 def normalize_qk(q, k):
     return ref.store(ref.l2(q), q.dtype), ref.store(ref.l2(k), k.dtype)
 
@@ -221,8 +226,39 @@ def quantize(x, *, column_major=False, silu_gate=False):
 
 def linear(x, weight, scale, *, silu_gate=False):
     encoded, activation_scale = quantize(x, silu_gate=silu_gate)
+    return groupwise(encoded, weight, activation_scale, scale)
+
+
+def groupwise(encoded, weight, activation_scale, weight_scale):
     activation = encoded.double() * activation_scale.double().repeat_interleave(128, -1)
-    return ref.store(activation @ ref.decode_weight(weight, scale).T, torch.bfloat16)
+    return ref.store(
+        activation @ ref.decode_weight(weight, weight_scale).T, torch.bfloat16
+    )
+
+
+def dense_linear(x, weight):
+    return ref.store(x.double() @ weight.double().T, torch.bfloat16)
+
+
+def gdn_prepare(
+    x,
+    weight,
+    scale,
+    ba_weight,
+    conv_weight,
+    pool,
+    ids,
+    starts,
+    reads,
+    writes,
+    a_log,
+    bias,
+):
+    packed = linear(x, weight, scale)
+    mixed, z = packed.split((10240, 6144), -1)
+    mixed = convolution(mixed, conv_weight, pool, ids, starts, reads, writes)
+    decay, beta = gates(dense_linear(x, ba_weight), a_log, bias)
+    return mixed, z, decay, beta
 
 
 def add_norm_linear(x, residual, gamma, weight, scale):
@@ -236,9 +272,7 @@ def gated_norm_linear(x, gamma, gate, weight, scale):
 
 def operator(module, name):
     return {
-        ("elementwise", "attention_gate"): lambda x, gate: ref.store(
-            x.double() * gate.double().sigmoid(), x.dtype
-        ),
+        ("elementwise", "attention_gate"): attention_gate,
         ("attention", "append"): append,
         ("attention_prepare", "prepare_attention"): prepare_attention,
         ("partial_attention", "prepare_context"): prepare_context,

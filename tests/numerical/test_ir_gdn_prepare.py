@@ -13,6 +13,22 @@ from oh_my_vllm.ir.gdn_prepare import (
     gdn_prepare,
 )
 
+from development.kernels import oracles
+from tests.support.fp64 import close, cpu
+
+
+def independent_outputs(args):
+    copied = cpu(args)
+    pool = copied[5]
+    outputs = oracles.gdn_prepare(*copied)
+    return outputs, pool
+
+
+def check_independent(outputs, pool, expected, expected_pool):
+    for actual, reference in zip(outputs, expected, strict=True):
+        close(actual, reference, rtol=0.03, atol=0.03)
+    close(pool, expected_pool, rtol=0.03, atol=0.03)
+
 
 def inputs(rows, device):
     # Smaller input width keeps the scheduling/schema cases independent of the
@@ -73,14 +89,18 @@ def test_prepare_fake_rejects_incompatible_projection():
 @pytest.mark.parametrize("rows", [1, 8, 624])
 def test_parallel_prepare_matches_serial_outputs_and_state(monkeypatch, rows):
     args = inputs(rows, "cuda")
+    expected, expected_pool = independent_outputs(args)
     with policy(monkeypatch, False):
-        expected = _kernel_prepare(*args)
+        serial = _kernel_prepare(*args)
     state = args[5].clone()
+    check_independent(serial, state, expected, expected_pool)
     args[5].zero_()
     with policy(monkeypatch, True):
         actual = compile_forward(gdn_prepare)(*args)
     torch.cuda.synchronize()
-    for left, right in zip(actual, expected, strict=True):
+    check_independent(actual, args[5], expected, expected_pool)
+    # Scheduling must preserve the candidate's exact storage bytes.
+    for left, right in zip(actual, serial, strict=True):
         torch.testing.assert_close(left, right, rtol=0, atol=0)
     torch.testing.assert_close(args[5], state, rtol=0, atol=0)
 
@@ -100,17 +120,20 @@ def test_parallel_graph_replay_uses_changed_input_after_allocator_pressure(monke
     for iteration in range(5):
         args[0].fill_(iteration * 0.07 - 0.13)
         args[5].zero_()
+        expected, expected_state = independent_outputs(args)
         with policy(monkeypatch, False):
-            expected = tuple(value.clone() for value in _kernel_prepare(*args))
-        expected_state = args[5].clone()
+            serial = tuple(value.clone() for value in _kernel_prepare(*args))
+        serial_state = args[5].clone()
+        check_independent(serial, serial_state, expected, expected_state)
         args[5].zero_()
         pressure = [torch.empty(65536, device="cuda") for _ in range(32)]
         del pressure
         graph.replay()
         torch.cuda.synchronize()
-        for left, right in zip(actual, expected, strict=True):
+        check_independent(actual, args[5], expected, expected_state)
+        for left, right in zip(actual, serial, strict=True):
             torch.testing.assert_close(left, right, rtol=0, atol=0)
-        torch.testing.assert_close(args[5], expected_state, rtol=0, atol=0)
+        torch.testing.assert_close(args[5], serial_state, rtol=0, atol=0)
 
 
 @pytest.mark.parametrize("branch", ["gates", "convolution"])

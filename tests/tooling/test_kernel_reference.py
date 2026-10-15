@@ -18,6 +18,67 @@ from development.kernels.reference import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.parametrize(
+    ("value", "gate", "expected"),
+    [
+        (0.390625, -8, 0.0001316070556640625),
+        (-0.390625, -8, -0.0001316070556640625),
+    ],
+)
+def test_attention_gate_reference_keeps_intermediate_bf16_storage(
+    value, gate, expected
+):
+    actual = oracles.operator("elementwise", "attention_gate")(
+        torch.tensor([value], dtype=torch.bfloat16),
+        torch.tensor([gate], dtype=torch.bfloat16),
+    )
+    assert actual.item() == expected
+
+
+def test_prequantized_reference_uses_stored_scales_without_requantization():
+    encoded = torch.full((2, 128), 2, dtype=torch.float8_e4m3fn)
+    weight = torch.ones(128, 128).to(torch.float8_e4m3fn)
+    activation_scale = torch.full((1, 2), 0.25).T
+    weight_scale = torch.full((1, 1), 0.125)
+    result = oracles.groupwise(encoded, weight, activation_scale, weight_scale)
+    assert torch.equal(result, torch.full((2, 128), 8, dtype=torch.bfloat16))
+
+
+def test_gdn_prepare_reference_combines_projections_gates_and_history():
+    x = torch.ones(2, 128, dtype=torch.bfloat16)
+    weight = torch.full((16384, 128), 0.0625).to(torch.float8_e4m3fn)
+    scale = torch.full((128, 1), 0.125)
+    ba_weight = torch.zeros(96, 128, dtype=torch.bfloat16)
+    conv = torch.zeros(10240, 4, dtype=torch.bfloat16)
+    conv[:, -1] = 1
+    pool = torch.zeros(2, 10240, 3, dtype=torch.bfloat16)
+    mixed, z, decay, beta = oracles.gdn_prepare(
+        x,
+        weight,
+        scale,
+        ba_weight,
+        conv,
+        pool,
+        torch.zeros(2, dtype=torch.int32),
+        torch.tensor([0, 2]),
+        torch.tensor([0]),
+        torch.tensor([-1, 1]),
+        torch.zeros(48),
+        torch.zeros(48),
+    )
+    assert torch.equal(mixed, torch.full_like(mixed, 0.73046875))
+    assert torch.equal(z, torch.ones_like(z))
+    torch.testing.assert_close(
+        decay.double(),
+        torch.full((2, 48), -0.6931471805599453, dtype=torch.float64),
+        atol=2e-8,
+        rtol=0,
+    )
+    assert torch.equal(beta, torch.full_like(beta, 0.5))
+    assert not pool[0].count_nonzero() and not pool[1, :, 0].count_nonzero()
+    assert torch.equal(pool[1, :, 1:], torch.ones_like(pool[1, :, 1:]))
+
+
 @pytest.mark.parametrize("selected", [None, "cuda"])
 def test_backend_identity_is_fixed_at_process_start(selected):
     environment = dict(os.environ)

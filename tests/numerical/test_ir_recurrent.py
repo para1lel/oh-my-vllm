@@ -4,6 +4,9 @@ import pytest
 import torch
 from oh_my_vllm.ir import compile_forward, operations, recurrent
 
+from development.kernels import oracles, output_verification
+from tests.support.fp64 import close, cpu
+
 
 def test_recurrent_state_schemas_and_native_reference():
     for name in ("causal_conv", "gdn_recurrent"):
@@ -89,9 +92,7 @@ def test_native_gdn_recurrent_updates_only_selected_state():
 
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
-def test_compiled_convolution_matches_existing_cuda_and_ordered_write():
-    from oh_my_vllm.kernels.convolution import causal_conv as old_conv
-
+def test_compiled_convolution_matches_fp64_and_ordered_write():
     x = torch.randn(3, 10240, device="cuda", dtype=torch.bfloat16)
     weight = torch.randn(10240, 4, device="cuda", dtype=torch.bfloat16)
     pool = torch.randn(4, 10240, 3, device="cuda", dtype=torch.bfloat16)
@@ -99,26 +100,30 @@ def test_compiled_convolution_matches_existing_cuda_and_ordered_write():
     starts = torch.tensor([0, 3], device="cuda", dtype=torch.int32)
     reads = torch.tensor([0], device="cuda", dtype=torch.int32)
     writes = torch.tensor([-1, -1, 2], device="cuda", dtype=torch.int32)
-    expected_pool = pool.clone()
-    expected = old_conv(x, weight, expected_pool, ids, starts, reads, writes)
+    reference_args = cpu((x, weight, pool, ids, starts, reads, writes))
+    expected_pool = reference_args[2]
+    expected = oracles.convolution(*reference_args)
 
     def forward(x, weight, pool, ids, starts, reads, writes):
         output = recurrent.causal_conv(x, weight, pool, ids, starts, reads, writes)
         return output, pool[2].clone()
 
+    eager_pool = pool.clone()
+    eager, eager_written = forward(x, weight, eager_pool, ids, starts, reads, writes)
     output, written = compile_forward(forward)(
         x, weight, pool, ids, starts, reads, writes
     )
-    torch.testing.assert_close(output, expected, rtol=0, atol=0)
-    torch.testing.assert_close(written, expected_pool[2], rtol=0, atol=0)
-    torch.testing.assert_close(pool, expected_pool, rtol=0, atol=0)
+    for actual in (eager, output):
+        close(actual, expected, rtol=0.03, atol=0.03)
+    torch.testing.assert_close(output, eager, rtol=0, atol=0)
+    torch.testing.assert_close(written, eager_written, rtol=0, atol=0)
+    close(written, expected_pool[2], rtol=0, atol=0)
+    close(pool, expected_pool, rtol=0, atol=0)
 
 
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
-def test_compiled_gdn_recurrent_matches_existing_cuda_and_ordered_write():
-    from oh_my_vllm.kernels.gdn import recurrent as old_recurrent
-
+def test_compiled_gdn_recurrent_matches_fp64_and_ordered_write():
     q = torch.randn(2, 16, 128, device="cuda", dtype=torch.bfloat16)
     k = torch.randn_like(q)
     v = torch.randn(2, 48, 128, device="cuda", dtype=torch.bfloat16)
@@ -128,8 +133,9 @@ def test_compiled_gdn_recurrent_matches_existing_cuda_and_ordered_write():
     starts = torch.tensor([0, 2], device="cuda", dtype=torch.int32)
     reads = torch.tensor([0], device="cuda", dtype=torch.int32)
     writes = torch.tensor([1, 2], device="cuda", dtype=torch.int32)
-    expected_pool = pool.clone()
-    expected = old_recurrent(q, k, v, decay, beta, expected_pool, starts, reads, writes)
+    reference_args = cpu((q, k, v, decay, beta, pool, starts, reads, writes))
+    expected_pool = reference_args[5]
+    expected = oracles.recurrent(*reference_args)
 
     def forward(q, k, v, decay, beta, pool, starts, reads, writes):
         output = recurrent.gdn_recurrent(
@@ -137,9 +143,31 @@ def test_compiled_gdn_recurrent_matches_existing_cuda_and_ordered_write():
         )
         return output, pool[2].clone()
 
+    eager_pool = pool.clone()
+    eager, eager_written = forward(
+        q, k, v, decay, beta, eager_pool, starts, reads, writes
+    )
     output, written = compile_forward(forward)(
         q, k, v, decay, beta, pool, starts, reads, writes
     )
-    torch.testing.assert_close(output, expected, rtol=0, atol=0)
-    torch.testing.assert_close(written, expected_pool[2], rtol=0, atol=0)
-    torch.testing.assert_close(pool, expected_pool, rtol=0, atol=0)
+    output_verification.verify(
+        "recurrent",
+        lambda: expected,
+        lambda: cpu(output),
+        witnesses=(
+            ("written_state", lambda: expected_pool[1:3], lambda: cpu(pool[1:3])),
+        ),
+    )
+    output_verification.verify(
+        "recurrent",
+        lambda: expected,
+        lambda: cpu(eager),
+        witnesses=(
+            ("written_state", lambda: expected_pool[1:3], lambda: cpu(eager_pool[1:3])),
+        ),
+    )
+    torch.testing.assert_close(output, eager, rtol=0, atol=0)
+    torch.testing.assert_close(written, eager_written, rtol=0, atol=0)
+    torch.testing.assert_close(written, pool[2], rtol=0, atol=0)
+    torch.testing.assert_close(pool, eager_pool, rtol=0, atol=0)
+    close(pool[[0, 3]], expected_pool[[0, 3]], rtol=0, atol=0)

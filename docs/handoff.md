@@ -31,9 +31,20 @@ A CPU experiment reads the checkpoint and runs 64 prefix tokens and 8 continuati
 Its 260 floating-point artifact tensors use FP64. Independent review accepts this reference only for its exact checkpoint and token sequence.
 This record does not supply candidate numerical or performance acceptance.
 
-The complete CPU collection passes 1828 tests and 153 subtests without skips, with 637 GPU tests deselected.
+The `de33fd4` CPU collection passes 1828 tests and 153 subtests without skips, with 637 GPU tests deselected.
 The earlier attempt with missing corpus configuration keeps its one skip.
 The scoped collection passes 75 tests, with 13 GPU tests deselected. All eleven hooks pass.
+
+The new [GDN FP64 record](evidence/gdn-fp64/verification.json) covers six input tuples for one operator, each with 32768 tokens.
+The current GDN passes its nine records. The reproduced original passes seven of nine records with the unchanged output gate.
+
+The two failed records each contain 74 output failures. All eighteen state checks pass. No numerical threshold changes.
+The instrumented graphs do not supply production or timing acceptance.
+
+Four legacy numerical files now use independent FP64 expectations. Scoped checks pass 28 CPU and 12 GPU tests without skips.
+The attention-gate reference now includes its specified intermediate BF16 store. Zero-tolerance compiled/eager state checks stay separate from numerical references.
+[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) tracks twenty other files with reference gaps.
+The full numerical and CPU collections must repeat after these changes.
 
 Source `3324a7f` has six maximum-context and MTP/DSpark service/recovery records.
 These historical records do not supply final-source acceptance. See the [acceptance index](acceptance.md).
