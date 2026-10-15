@@ -65,7 +65,7 @@ scripts/with-env.sh target/release/oh-my-vllm-zmq-worker bench --input-len 785 -
 Run 和 Bench 保持固定输出长度.
 HTTP 占位实现的输出长度在输出预算内随机选择.
 
-通过 `--speculative-mode` 选择 `none`, `mtp` 或 `dspark`, 模拟对应 draft 传输.
+通过 `--speculative-mode` 选择 `none` 或 `mtp`, 模拟对应 draft 传输.
 这些模式不执行模型计算.
 
 占位实现提供随机文本, 示例工具调用和简单 JSON 样例.

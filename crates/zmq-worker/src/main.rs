@@ -29,12 +29,8 @@ struct Cli {
     max_model_len: u32,
     #[arg(long, default_value_t = 0)]
     num_speculative_tokens: usize,
-    #[arg(long, value_parser = ["none", "mtp", "dspark"])]
+    #[arg(long, value_parser = ["none", "mtp"])]
     speculative_mode: Option<String>,
-    #[arg(long, env = "OH_MY_VLLM_DRAFT_MODEL")]
-    draft_model: Option<PathBuf>,
-    #[arg(long, default_value_t = 0.2)]
-    dspark_confidence_threshold: f64,
     #[arg(long)]
     scheduler_blocks: Option<u32>,
     #[command(subcommand)]
@@ -174,11 +170,6 @@ async fn run() -> Result<()> {
         "requires block_size=784 and TP=1"
     );
     ensure!(cli.num_gpu_blocks >= 6, "physical cache is too small");
-    ensure!(
-        cli.dspark_confidence_threshold.is_finite()
-            && (0.0..1.0).contains(&cli.dspark_confidence_threshold),
-        "DSpark confidence threshold must be in [0,1)"
-    );
     let mode = cli.speculative_mode.clone().unwrap_or_else(|| {
         if cli.num_speculative_tokens == 4 {
             "mtp"
@@ -190,7 +181,6 @@ async fn run() -> Result<()> {
     let speculative_tokens = match mode.as_str() {
         "none" => 0,
         "mtp" => 4,
-        "dspark" => 7,
         _ => unreachable!("Clap validates the explicit mode"),
     };
     ensure!(
@@ -253,8 +243,6 @@ async fn run() -> Result<()> {
         max_model_len: cli.max_model_len,
         num_speculative_tokens: speculative_tokens,
         speculative_mode: Some(mode.clone()),
-        draft_model_path: cli.draft_model,
-        dspark_confidence_threshold: cli.dspark_confidence_threshold,
         torch_profile,
         ..WorkerConfig::default()
     })
@@ -286,7 +274,6 @@ async fn run() -> Result<()> {
         max_model_len = cli.max_model_len,
         num_speculative_tokens = speculative_tokens,
         speculative_mode = mode.as_str(),
-        dspark_confidence_threshold = cli.dspark_confidence_threshold,
         worker_fa_pool_blocks = client.logical_num_blocks,
         worker_gdn_pool_blocks = client.mamba_blocks,
         fa_pool_blocks = blocks,

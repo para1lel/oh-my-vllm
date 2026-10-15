@@ -33,8 +33,6 @@ pub struct WorkerConfig {
     pub max_model_len: u32,
     pub num_speculative_tokens: usize,
     pub speculative_mode: Option<String>,
-    pub draft_model_path: Option<PathBuf>,
-    pub dspark_confidence_threshold: f64,
     pub python_executable: PathBuf,
     pub init_timeout: Duration,
     pub torch_profile: Option<crate::protocol::BenchmarkProfile>,
@@ -54,8 +52,6 @@ impl Default for WorkerConfig {
             max_model_len: 262144,
             num_speculative_tokens: 0,
             speculative_mode: None,
-            draft_model_path: std::env::var_os("OH_MY_VLLM_DRAFT_MODEL").map(PathBuf::from),
-            dspark_confidence_threshold: 0.2,
             python_executable: std::env::var_os("OH_MY_VLLM_WORKER_PYTHON")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("python3")),
@@ -352,11 +348,6 @@ impl WorkerClient {
             max_model_len: config.max_model_len,
             num_speculative_tokens: config.num_speculative_tokens,
             speculative_mode: config.speculative_mode.clone(),
-            draft_model_path: config
-                .draft_model_path
-                .as_ref()
-                .map(|path| path.to_string_lossy().into_owned()),
-            dspark_confidence_threshold: config.dspark_confidence_threshold,
             torch_profile: config.torch_profile.clone(),
         });
         let mut delay_ms = 100u64;

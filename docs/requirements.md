@@ -8,15 +8,15 @@ Use Python for GPU computation. Use ZMQ DEALER and msgpack between the processes
 Keep the block size at 784, with 16 FA layers, 48 GDN layers, and `mamba_cache_mode="align"`.
 Support input plus output up to 262144 tokens.
 
-Keep the offline and HTTP functions, ordinary decode, MTP4, DSpark, and the numerical tolerances.
-Do not change DSpark checkpoint bytes.
+Keep the offline and HTTP functions and the numerical tolerances.
+Use ordinary decode and MTP4 only.
 
 Use Torch operations and repository CUDA. Native CUDA libraries are permitted.
 Do not add vLLM dependencies, environments, or caches.
 
 Use different dependency files for development tools and inference packages.
 
-Use these archived contracts for the detailed functional and acceptance criteria:
+Use these archived contracts for the detailed criteria of the functions and modes in this document:
 
 - [Core](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/core.md)
 - [Performance](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/performance.md)

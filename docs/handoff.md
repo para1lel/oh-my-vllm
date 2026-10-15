@@ -1,6 +1,7 @@
 # Work state
 
 The Rust service has the HTTP APIs, CLI, scheduler, logical KV cache, and worker lifecycle controls.
+The service modes are ordinary decode and MTP4.
 The Python placeholder uses the same process and protocol boundary as the inference worker.
 
 It does not load model weights or use a GPU.

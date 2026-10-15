@@ -65,7 +65,7 @@ scripts/with-env.sh target/release/oh-my-vllm-zmq-worker bench --input-len 785 -
 Run and Bench keep fixed output lengths.
 The HTTP placeholder uses a random output length at or below the output budget.
 
-Use `--speculative-mode` with `none`, `mtp`, or `dspark` for the simulated draft traffic.
+Use `--speculative-mode` with `none` or `mtp` for the simulated draft traffic.
 The modes do not run model computation.
 
 The placeholder supplies random text, sample tool calls, and simple JSON samples.

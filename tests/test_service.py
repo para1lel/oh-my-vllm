@@ -316,7 +316,7 @@ class Service(unittest.TestCase):
 class Offline(unittest.TestCase):
     def test_run_bench_and_prefix_reuse(self):
         with tempfile.TemporaryDirectory(prefix="oh-my-vllm-cli-") as directory:
-            for mode in ("none", "mtp", "dspark"):
+            for mode in ("none", "mtp"):
                 result = subprocess.run(
                     [
                         BINARY,

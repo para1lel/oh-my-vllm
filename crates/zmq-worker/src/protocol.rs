@@ -28,8 +28,6 @@ pub struct InitMsg {
     pub max_model_len: u32,
     pub num_speculative_tokens: usize,
     pub speculative_mode: Option<String>,
-    pub draft_model_path: Option<String>,
-    pub dspark_confidence_threshold: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub torch_profile: Option<BenchmarkProfile>,
 }

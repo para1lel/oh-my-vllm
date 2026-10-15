@@ -1,6 +1,7 @@
 # 工作状态
 
 Rust 服务已有 HTTP API, CLI, 调度器, 逻辑 KV cache 和 worker 生命周期控制.
+服务模式为普通解码和 MTP4.
 Python 占位实现与后续推理 worker 使用相同的进程及协议边界.
 
 不加载模型权重, 不使用 GPU.
