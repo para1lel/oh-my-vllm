@@ -5,6 +5,9 @@ from types import SimpleNamespace
 import pytest
 import torch
 
+from development.kernels import oracles
+from tests.support.fp64 import close, cpu
+
 pytestmark = [
     pytest.mark.gpu,
     pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required"),
@@ -43,13 +46,10 @@ def test_projection_replays_changed_inputs_and_scales(rows, width, pdl, monkeypa
         with torch.cuda.stream(stream):
             graph.replay()
         torch.cuda.current_stream().wait_stream(stream)
-        activation = data.float() * scale.repeat_interleave(128, dim=1)
-        weights = weight.float() * weight_scale.repeat_interleave(
-            128, dim=0
-        ).repeat_interleave(128, dim=1)
-        torch.testing.assert_close(
-            actual.float(), activation @ weights.T, rtol=0.01, atol=0.01
+        expected = oracles.groupwise(
+            *cpu((data, weight, scale, weight_scale)), dtype=torch.float64
         )
+        close(actual, expected, rtol=0.01, atol=0.01, check_dtype=False)
         for tensor, snapshot in zip(tensors, snapshots, strict=True):
             torch.testing.assert_close(tensor.view(torch.uint8), snapshot)
     del graph
@@ -102,13 +102,10 @@ def test_native_partial_capacity_alias_and_output_canaries(splits):
     project()
     torch.cuda.synchronize()
     assert torch.isfinite(partials).all().item()
-    activation = data.float() * scale.repeat_interleave(128, dim=1)
-    weights = weight.float() * weight_scale.repeat_interleave(
-        128, dim=0
-    ).repeat_interleave(128, dim=1)
-    torch.testing.assert_close(
-        output.float(), activation @ weights.T, rtol=0.01, atol=0.01
+    expected = oracles.groupwise(
+        *cpu((data, weight, scale, weight_scale)), dtype=torch.float64
     )
+    close(output, expected, rtol=0.01, atol=0.01, check_dtype=False)
     for storage, expected in ((partial_storage, 19), (output_storage, 23)):
         torch.testing.assert_close(
             storage[:32], torch.full_like(storage[:32], expected), rtol=0, atol=0

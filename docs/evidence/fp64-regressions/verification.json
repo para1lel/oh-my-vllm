@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "portable_source_bound_fp64_regression_migration",
+  "recorded_date": "2026-10-15",
+  "project_base_commit": "22049a3be8af875e0f3186e8f55fb3b3ebbd9d77",
+  "runtime_change": false,
+  "full_project_acceptance": false,
+  "performance_acceptance": false,
+  "source_sha256": {
+    "development/kernels/oracles.py": "1defcaec7474aa3fa0a8d59ef72b47e9f238cd055b72ebff26bbe2a198eb7842",
+    "tests/tooling/test_kernel_reference.py": "54e48846158a7fcf28611cef3931a6bc23e26fb4e7187dec167e0ba14ab9b702",
+    "tests/numerical/test_ir_logits.py": "3cfe0a88b3d3c3f6ddaa84f83b5ecadbf78a7ab5f5203783381b23499941847d",
+    "tests/numerical/test_ir_pointwise.py": "965b78efb3931568d6598ee87f20d789e779a948690962dc5bbe0dd5922d34a5",
+    "tests/numerical/test_elementwise.py": "6362e637b641a25e0c9d45d7207babd44d7f68089019c6fdc25a72818e1d135c",
+    "tests/numerical/test_fp8_small_replay.py": "b586ad86ac14cd84b9d657e39c22444a579e09bb095a1029a45af84f9c0d9b8c",
+    "tests/numerical/test_fp8_splitk_replay.py": "2316b21484253758ec269ac61bfbf6f44d36bc392e3c783af6eff8f2514d9a01"
+  },
+  "numerical_reference": "Independent FP64 equations on stored inputs. FP8 dequantization and matmul retain FP64 low bits. Explicit BF16 stores retain public operator boundaries.",
+  "migrated_legacy_files": 5,
+  "total_migrated_gap_files": 9,
+  "remaining_gap_files": 15,
+  "tracking_issue": "https://github.com/para1lel/oh-my-vllm/issues/22",
+  "tolerance_scope": {
+    "fp8_small_and_splitk": "Original raw-matmul atol=rtol=0.01, now against independent FP64 before output rounding.",
+    "pointwise_and_logits": "Canonical BF16 atol=rtol=0.03 for independent accuracy. Earlier semantic assertions compared identical production equations at zero tolerance; these do not define exact accuracy against independent FP64.",
+    "silu": "Existing GPU tolerance atol=0.0001,rtol=0.008 applies to independent accuracy.",
+    "gates": "Decay atol=rtol=2e-6;beta atol=1e-7,rtol=1e-6.",
+    "exact_properties": "Keep compiled/eager and unfused execution equality separate from FP64 accuracy. Preserve state, input-byte, canary, padding, scale, stream, PDL and invalid-binding assertions. New CPU/GPU exact closed forms reject omission of SiLU/add-RMS/logits BF16 intermediate stores. Logits also checks BF16 storage values in FP32 output.",
+    "new_gdn_rms_policy": false
+  },
+  "checks": {
+    "cpu": {
+      "passed": 31,
+      "deselected": 42,
+      "skipped": 0,
+      "failed": 0,
+      "natural_exit_code": 0,
+      "cleanup_passed": true,
+      "junit": {
+        "name": "legacy-group02-cpu-03.xml",
+        "sha256": "2d198dd02484c822a1e9094ecee3844a17aa5d7fba308c0381a4e54ad5acb774",
+        "bytes": 4700
+      },
+      "log": {
+        "name": "legacy-group02-cpu-03-driver.log",
+        "sha256": "ce595471fd8fc1617ac5576e2ea76b620f6f980123bcb5e8c97780692a872d48",
+        "bytes": 114
+      },
+      "sources": {
+        "name": "legacy-group02-cpu-03-source.json",
+        "sha256": "4b87dd5e18eae1fd49482c3b6743a8658be3a59910b064f57b8ba7de5d233a3f",
+        "bytes": 9873
+      },
+      "process_audit": {
+        "name": "legacy-group02-cpu-03-process-audit.json",
+        "sha256": "ab8e8a1b7da3ffca0978e769ab0099da0c26561ab8016018dd36ac72975cd3b2",
+        "bytes": 5420
+      }
+    },
+    "gpu": {
+      "passed": 42,
+      "deselected": 31,
+      "skipped": 0,
+      "failed": 0,
+      "natural_exit_code": 0,
+      "cleanup_passed": true,
+      "junit": {
+        "name": "legacy-group02-gpu-03.xml",
+        "sha256": "320ed1941f10871e26bd414b842edcc30e6857ff777c3579f5627ab37d060e09",
+        "bytes": 6078
+      },
+      "log": {
+        "name": "legacy-group02-gpu-03-driver.log",
+        "sha256": "fa563d98b4737c962d694208af205792d0be5fec98ec36a36925721fb699b5fd",
+        "bytes": 115
+      },
+      "sources": {
+        "name": "legacy-group02-gpu-03-source.json",
+        "sha256": "4b87dd5e18eae1fd49482c3b6743a8658be3a59910b064f57b8ba7de5d233a3f",
+        "bytes": 9873
+      },
+      "process_audit": {
+        "name": "legacy-group02-gpu-03-process-audit.json",
+        "sha256": "346082702610c1742e3a8fdd3d8d7dafd2d29d2743d2a5cb1e12eb6829508451",
+        "bytes": 6953
+      }
+    }
+  },
+  "independent_fault_checks": {
+    "name": "independent-legacy-group02-negative-boundary-check.json",
+    "sha256": "f7e0fb6183df289b28f55b6bfe330b39878bd46e52f01e5273c5699196f12a40",
+    "bytes": 1080
+  },
+  "original_records_kept": [
+    "legacy-group02-cpu-01:29pass",
+    "legacy-group02-gpu-01:40pass",
+    "legacy-group02-cpu-02:31pass",
+    "legacy-group02-before-storage-fix source archive"
+  ],
+  "limitations": [
+    "Five legacy files only;other fifteen audited reference-gap files remain open.",
+    "The complete CPU and complete numerical collections have not repeated for this source.",
+    "No production kernel change, framework performance acceptance, model-quality expansion, or full-book service-hour acceptance."
+  ],
+  "independent_source_review": {
+    "name": "independent-legacy-group02-source-review-01.json",
+    "sha256": "69641b7b2fb202811dffc9d40e77354e4e9fdd7990c3f73d7c963a70e42933ab",
+    "bytes": 50814
+  }
+}

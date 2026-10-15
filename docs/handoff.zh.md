@@ -43,7 +43,12 @@
 
 四个旧数值测试文件现已使用独立 FP64 期望值. 定向检查通过 28 项 CPU 和 12 项 GPU 测试, 无跳过.
 attention-gate reference 现已包含规定的中间 BF16 存储. compiled/eager 状态零容差检查与数值 reference 分开保留.
-[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) 跟踪另外二十个有 reference 缺口的文件.
+
+另外五个旧文件现已使用 FP64 期望值, 涵盖逐元素操作, logits 和 FP8 重放.
+[回归记录](evidence/fp64-regressions/verification.json)涵盖 31 项 CPU 和 42 项 GPU 测试, 无跳过.
+精确闭式用例保留 SiLU, 残差归一化和 logits 的 BF16 存储边界.
+单独的精度检查使用已发布的算子容差.
+[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) 跟踪另外十五个有 reference 缺口的文件.
 这些改动完成后, 需重跑完整数值和 CPU 采集.
 
 源码 `3324a7f` 有六项最大上下文检查, 以及 MTP/DSpark 服务/恢复记录.

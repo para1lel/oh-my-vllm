@@ -43,7 +43,12 @@ The instrumented graphs do not supply production or timing acceptance.
 
 Four legacy numerical files now use independent FP64 expectations. Scoped checks pass 28 CPU and 12 GPU tests without skips.
 The attention-gate reference now includes its specified intermediate BF16 store. Zero-tolerance compiled/eager state checks stay separate from numerical references.
-[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) tracks twenty other files with reference gaps.
+
+Five more legacy files now use FP64 expectations for pointwise operations, logits, and FP8 replay.
+The [regression record](evidence/fp64-regressions/verification.json) covers 31 CPU and 42 GPU tests without skips.
+Exact closed-form cases keep SiLU, residual normalization, and logits BF16 storage boundaries.
+Separate accuracy checks use the published operator tolerances.
+[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) tracks fifteen other files with reference gaps.
 The full numerical and CPU collections must repeat after these changes.
 
 Source `3324a7f` has six maximum-context and MTP/DSpark service/recovery records.

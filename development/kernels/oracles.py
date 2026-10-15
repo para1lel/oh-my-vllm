@@ -229,11 +229,9 @@ def linear(x, weight, scale, *, silu_gate=False):
     return groupwise(encoded, weight, activation_scale, scale)
 
 
-def groupwise(encoded, weight, activation_scale, weight_scale):
+def groupwise(encoded, weight, activation_scale, weight_scale, *, dtype=torch.bfloat16):
     activation = encoded.double() * activation_scale.double().repeat_interleave(128, -1)
-    return ref.store(
-        activation @ ref.decode_weight(weight, weight_scale).T, torch.bfloat16
-    )
+    return ref.store(activation @ ref.decode_weight(weight, weight_scale).T, dtype)
 
 
 def dense_linear(x, weight):

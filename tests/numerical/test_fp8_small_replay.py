@@ -5,6 +5,9 @@ from types import SimpleNamespace
 import pytest
 import torch
 
+from development.kernels import oracles
+from tests.support.fp64 import close, cpu
+
 pytestmark = [
     pytest.mark.gpu,
     pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required"),
@@ -51,13 +54,10 @@ def test_small_projection_replays_data_scales_and_zero_padding(pdl, monkeypatch)
         torch.testing.assert_close(padded_scale[:4], scale, rtol=0, atol=0)
         assert torch.count_nonzero(padded[4:].view(torch.uint8)).item() == 0
         assert torch.count_nonzero(padded_scale[4:]).item() == 0
-        activation = data.float() * scale.repeat_interleave(128, dim=1)
-        weights = weight.float() * weight_scale.repeat_interleave(
-            128, dim=0
-        ).repeat_interleave(128, dim=1)
-        torch.testing.assert_close(
-            actual.float(), activation @ weights.T, rtol=0.01, atol=0.01
+        expected = oracles.groupwise(
+            *cpu((data, weight, scale, weight_scale)), dtype=torch.float64
         )
+        close(actual, expected, rtol=0.01, atol=0.01, check_dtype=False)
     del graph
     torch.cuda.synchronize()
 
@@ -102,13 +102,10 @@ def test_tail_tiles_preserve_output_canaries_and_live_scales(rows):
         weight_scale.mul_(multiplier)
         output.fill_(float("nan"))
         graph.replay()
-        activation = data.float() * scale.repeat_interleave(128, dim=1)
-        weights = weight.float() * weight_scale.repeat_interleave(
-            128, dim=0
-        ).repeat_interleave(128, dim=1)
-        torch.testing.assert_close(
-            output.float(), activation @ weights.T, rtol=0.01, atol=0.01
+        expected = oracles.groupwise(
+            *cpu((data, weight, scale, weight_scale)), dtype=torch.float64
         )
+        close(output, expected, rtol=0.01, atol=0.01, check_dtype=False)
         torch.testing.assert_close(
             storage[[0, -1]], torch.full_like(storage[[0, -1]], 19), rtol=0, atol=0
         )

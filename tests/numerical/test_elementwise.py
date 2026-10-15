@@ -1,8 +1,11 @@
-"""Validate pointwise fusion against the original rounded PyTorch equations."""
+"""Validate pointwise fusion against independent FP64 storage equations."""
 
 import pytest
 import torch
 from oh_my_vllm.kernels.elementwise import delta_gates, silu_mul
+
+from development.kernels import oracles
+from tests.support.fp64 import close, cpu
 
 pytestmark = [
     pytest.mark.gpu,
@@ -14,15 +17,11 @@ pytestmark = [
 def test_pointwise(rows):
     torch.manual_seed(rows)
     packed = torch.randn(rows, 34816, device="cuda", dtype=torch.bfloat16)
-    gate, up = packed.chunk(2, -1)
-    torch.testing.assert_close(
-        silu_mul(packed), torch.nn.functional.silu(gate) * up, atol=0.0001, rtol=0.008
-    )
+    expected = oracles.silu_mul(cpu(packed))
+    close(silu_mul(packed), expected, atol=0.0001, rtol=0.008)
     ba = torch.randn(rows, 96, device="cuda", dtype=torch.bfloat16) * 10
     a_log, bias = torch.randn(48, device="cuda"), torch.randn(48, device="cuda")
-    b, a = ba.float().chunk(2, -1)
+    expected_g, expected_beta = oracles.gates(*cpu((ba, a_log, bias)))
     g, beta = delta_gates(ba, a_log, bias)
-    torch.testing.assert_close(
-        g, -a_log.exp() * torch.nn.functional.softplus(a + bias), atol=2e-6, rtol=2e-6
-    )
-    torch.testing.assert_close(beta, b.sigmoid(), atol=1e-7, rtol=1e-6)
+    close(g, expected_g, atol=2e-6, rtol=2e-6)
+    close(beta, expected_beta, atol=1e-7, rtol=1e-6)

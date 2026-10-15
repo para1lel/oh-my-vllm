@@ -193,3 +193,17 @@ def test_quantization_oracle_keeps_exact_codes_and_single_row_scale_layout(
     assert encoded.float()[:, 1].tolist() == [1] * rows
     assert scale.stride() == ((1, rows) if column else (2, 1))
     assert scale[:, 0].tolist() == [1] * rows
+
+
+def test_prequantized_groupwise_raw_reference_retains_fp64_low_bits():
+    encoded = torch.full((1, 128), 1.5, dtype=torch.float8_e4m3fn)
+    weight = torch.full((128, 128), 1.75, dtype=encoded.dtype)
+    activation_scale = torch.full((1, 1), 0.1)
+    weight_scale = torch.full((1, 1), 0.3)
+    raw = oracles.groupwise(
+        encoded, weight, activation_scale, weight_scale, dtype=torch.float64
+    )
+    expected = 336 * float(activation_scale[0, 0]) * float(weight_scale[0, 0])
+    assert raw.dtype == torch.float64
+    torch.testing.assert_close(raw, torch.full_like(raw, expected), rtol=1e-15, atol=0)
+    assert not torch.equal(raw, raw.float().double())
