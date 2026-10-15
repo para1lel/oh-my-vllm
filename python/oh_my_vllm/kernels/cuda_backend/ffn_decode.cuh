@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.cuh"
+#include "programmatic.cuh"
 
 #include <cute/tensor.hpp>
 #include <map>
@@ -46,6 +47,9 @@ __global__ void ffn_down_decode_kernel(const __nv_fp8_e4m3 *activation, const __
         make_uint4(0, 0, 0, 0);
   }
   __syncthreads();
+  cudaGridDependencySynchronize();
+  if (thread == 0)
+    cudaTriggerProgrammaticLaunchCompletion();
   MMA mma;
   auto weight_fragment = mma.get_slice(0).make_fragment_A(weight_tile);
   auto input_fragment = mma.get_slice(0).make_fragment_B(input_tile);
@@ -154,11 +158,12 @@ inline void ffn_down_decode_launch(TensorView activation, TensorView weight,
     TVM_FFI_ICHECK(status == CUDA_SUCCESS) << status;
     found = weight_maps.emplace(key, descriptor).first;
   }
-  ffn_down_decode_kernel<<<dim3(80, splits), 128, 36992, stream>>>(
-      static_cast<const __nv_fp8_e4m3 *>(activation.data_ptr()),
-      static_cast<const __nv_fp8_e4m3 *>(weight.data_ptr()),
-      static_cast<const float *>(activation_scale.data_ptr()),
-      static_cast<const float *>(weight_scale.data_ptr()),
-      static_cast<float *>(partials.data_ptr()), rows, 5120, 17408, splits, found->second);
+  launch_programmatic(ffn_down_decode_kernel, dim3(80, splits), dim3(128), 36992, stream,
+                      static_cast<const __nv_fp8_e4m3 *>(activation.data_ptr()),
+                      static_cast<const __nv_fp8_e4m3 *>(weight.data_ptr()),
+                      static_cast<const float *>(activation_scale.data_ptr()),
+                      static_cast<const float *>(weight_scale.data_ptr()),
+                      static_cast<float *>(partials.data_ptr()), rows, 5120, 17408, splits,
+                      found->second);
   check_cuda(cudaGetLastError());
 }

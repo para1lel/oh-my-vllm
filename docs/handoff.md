@@ -19,7 +19,8 @@ Vision MLP activation uses projection output stores.
 Sampling normalization uses 640 threads per block.
 MTP input normalization uses 640 threads per block when the input has 32 rows or fewer.
 
-FFN has a separate [down projection implementation](../python/oh_my_vllm/kernels/cuda_backend/ffn.cu#L108)<!-- source: ffn_down_decode_launch(quantized_product, --> for inputs with eight rows or fewer.
+FFN has a separate [down projection implementation](../python/oh_my_vllm/kernels/cuda_backend/ffn.cu#L115)<!-- source: ffn_down_decode_launch(quantized_product, --> for inputs with eight rows or fewer.
+FFN uses [CUDA launch controls](../python/oh_my_vllm/kernels/cuda_backend/programmatic.cuh#L9)<!-- source: attribute.id = cudaLaunchAttributeProgrammaticStreamSerialization; -->.
 
 FA has a separate prefill implementation.
 FA combines two or more partial attention results with 256 threads per block.
