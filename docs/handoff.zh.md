@@ -54,8 +54,15 @@ attention-gate reference 现已包含规定的中间 BF16 存储. compiled/eager
 精确编码检查以固定的 BF16 边界为输入, 与全链精度检查分开. 独立的特殊值和负零检查保留存储行为.
 之前两项理想归一化值的字节比较失败仍保留在记录中.
 
-[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) 跟踪另外十三个有 reference 缺口的文件.
+又有三个文件开始用 FP64 公式检查 attention 准备, 向量卷积和 attention gate.
+[缓存与门控记录](evidence/fp64-cache-and-gates/verification.json)涵盖 2 项 CPU 和 19 项 GPU 测试, 无跳过.
+卷积历史写回仍要求精确相等. Attention 准备对归一化后的缓存值使用规范容差, 并单独保留精确执行检查.
+
+[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) 跟踪另外十个有 reference 缺口的文件.
 这些改动完成后, 需重跑完整数值和 CPU 采集.
+
+尚未完成的 MN 布局投影检查在 `1,140,850,688` 个元素中有一项 FP64 精度失败.
+该次尝试没有保存完整输入或 RNG 状态, 因此尚未确定误差来源. 失败记录保留, 未修改门槛.
 
 源码 `3324a7f` 有六项最大上下文检查, 以及 MTP/DSpark 服务/恢复记录.
 这些历史记录不能代替最终源码验收. 参见 [验收索引](acceptance.zh.md).

@@ -6,6 +6,9 @@ import pytest
 import torch
 from oh_my_vllm.kernels.cuda_backend import compiled
 
+from development.kernels import oracles
+from tests.support.fp64 import close
+
 pytestmark = pytest.mark.gpu
 
 
@@ -42,9 +45,23 @@ def test_vector_convolution_matches_scalar_with_mixed_sequences(rows, types):
     destinations = [0, 1, 2, 3, rows - 2, rows - 1]
     writes[destinations] = torch.arange(6, device="cuda", dtype=types[2])
     out, reference = torch.empty_like(x), torch.empty_like(x)
+
+    def independent():
+        # Immutable source history is separate from the writable destination pool.
+        expected_pool = torch.cat((pool, sources), dim=0)
+        reads = torch.arange(6, 9, device="cuda", dtype=starts.dtype)
+        expected_out = oracles.convolution(
+            x, weight, expected_pool, ids, starts, reads, writes
+        )
+        return expected_out, expected_pool[:6]
+
+    expected_out, expected_pool = independent()
     kernel = compiled().convolution
     kernel(scalar, weight, reference_pool, ids, starts, sources, writes, reference)
     kernel(x, weight, pool, ids, starts, sources, writes, out)
+    close(out, expected_out, rtol=0.03, atol=0.03)
+    close(pool, expected_pool, rtol=0, atol=0)
+    # Scalar/vector equality checks address-dependent execution, not accuracy.
     torch.testing.assert_close(out, reference, rtol=0, atol=0)
     torch.testing.assert_close(pool, reference_pool, rtol=0, atol=0)
     # Captured writes keep the same stream dependencies and addresses.
@@ -62,7 +79,10 @@ def test_vector_convolution_matches_scalar_with_mixed_sequences(rows, types):
     writes[[0, 2, rows - 1]] = torch.tensor([5, 4, 3], device="cuda", dtype=types[2])
     pool.fill_(0.5)
     reference_pool.copy_(pool)
+    expected_out, expected_pool = independent()
     kernel(scalar, weight, reference_pool, ids, starts, sources, writes, reference)
     graph.replay()
+    close(out, expected_out, rtol=0.03, atol=0.03)
+    close(pool, expected_pool, rtol=0, atol=0)
     torch.testing.assert_close(out, reference, rtol=0, atol=0)
     torch.testing.assert_close(pool, reference_pool, rtol=0, atol=0)

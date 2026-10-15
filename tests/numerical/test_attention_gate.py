@@ -5,6 +5,9 @@ import torch
 from oh_my_vllm.ir import compile_forward
 from oh_my_vllm.ir.attention_gate import _native, attention_gate
 
+from development.kernels import oracles
+from tests.support.fp64 import close, cpu, specials
+
 
 def test_attention_gate_reference_schema():
     inputs = (torch.randn(2, 3, 16, dtype=torch.bfloat16),) * 2
@@ -14,6 +17,7 @@ def test_attention_gate_reference_schema():
         test_utils=("test_schema", "test_faketensor", "test_aot_dispatch_dynamic"),
     )
     assert set(result.values()) == {"SUCCESS"}
+    close(_native(*inputs), oracles.attention_gate(*cpu(inputs)), rtol=0.03, atol=0.03)
 
 
 @pytest.mark.gpu
@@ -31,8 +35,17 @@ def test_attention_gate_all_bf16_values_keep_sigmoid_rounding():
     input.view(-1)[:3] = torch.tensor(
         [float("inf"), -float("inf"), float("nan")], device="cuda", dtype=input.dtype
     )
+    input.view(-1)[0xC100] = 0.390625  # BF16 gate bits0xC100 encode -8.
     expected = input * gate.sigmoid()
     actual = attention_gate(input, gate)
+    independent = oracles.attention_gate(*cpu((input, gate)))
+    actual_cpu = cpu(actual)
+    close(actual_cpu, independent, rtol=0.03, atol=0.03, equal_nan=True)
+    for classify in (torch.isnan, torch.isposinf, torch.isneginf):
+        assert torch.equal(classify(actual_cpu), classify(independent))
+    specials(actual_cpu[independent == 0], independent[independent == 0])
+    assert actual_cpu.view(-1)[0xC100].item() == 0.0001316070556640625
+    # Exact Torch composition is a separate intermediate-storage property.
     torch.testing.assert_close(actual, expected, rtol=0, atol=0, equal_nan=True)
 
 
@@ -58,10 +71,22 @@ def test_attention_gate_compiled_graph_uses_changed_packed_views():
             )
         )
         graph.replay()
+        close(
+            output,
+            oracles.attention_gate(*cpu((input, gate))),
+            rtol=0.03,
+            atol=0.03,
+        )
         torch.testing.assert_close(output, input * gate.sigmoid(), rtol=0, atol=0)
     canary = torch.full((input.numel() + 2,), 17, device="cuda", dtype=input.dtype)
     destination = canary[1:-1].view(input.shape)
     compiled().attention_gate(input, gate, destination)
+    close(
+        destination,
+        oracles.attention_gate(*cpu((input, gate))),
+        rtol=0.03,
+        atol=0.03,
+    )
     torch.testing.assert_close(destination, input * gate.sigmoid(), rtol=0, atol=0)
     assert canary[0].item() == 17 and canary[-1].item() == 17
     with pytest.raises(Exception, match="Check failed"):

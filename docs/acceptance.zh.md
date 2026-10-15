@@ -26,6 +26,7 @@ ordinary 模式 32768 输入/4096 输出批次一诊断观测到预填充/解码
 | [GDN FP64 诊断](evidence/gdn-fp64/verification.json) | 六组大规模单算子输入, 保留输出失败记录, 以及四个已迁移的回归文件, 不提供生产验收 |
 | [FP64 回归](evidence/fp64-regressions/verification.json) | 另外五个已迁移文件, 31 项 CPU 和 42 项 GPU 检查, 以及精确存储边界用例, 不提供完整测试集验收 |
 | [FP64 融合投影](evidence/fp64-fused-projections/verification.json) | 另外两个已迁移文件, 28 项 CPU 和 54 项 GPU 检查, 保留的失败与精确特殊存储检查, 不提供完整测试集验收 |
+| [FP64 缓存与门控](evidence/fp64-cache-and-gates/verification.json) | 另外三个已迁移文件, 2 项 CPU 和 19 项 GPU 检查, 另行记录的 MN 布局迁移仍未获验收 |
 | [3324a7f](evidence/refactor-3324a7f/verification.json) | 数值, 回归, 六项容量案例, 以及 MTP/DSpark 服务和恢复 |
 | [子组扫描](evidence/refactor-s8-scan/verification.json) | 数值和重放诊断 |
 | [f05a35d](evidence/refactor-f05a35d/verification.json) | 干净源码 539 项数值重跑及失败的整模型阶段门槛 |

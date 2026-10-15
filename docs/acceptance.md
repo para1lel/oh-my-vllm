@@ -26,6 +26,7 @@ Latency gates fail. Spreads pass. These records do not complete the matrix or fi
 | [GDN FP64 diagnostics](evidence/gdn-fp64/verification.json) | Six large single-operator input tuples, kept output failures, and four migrated regression files, without production acceptance |
 | [FP64 regressions](evidence/fp64-regressions/verification.json) | Five more migrated files, 31 CPU and 42 GPU checks, and exact storage-boundary cases, without complete-suite acceptance |
 | [FP64 fused projections](evidence/fp64-fused-projections/verification.json) | Two more migrated files, 28 CPU and 54 GPU checks, kept failures and exact special storage checks, without complete-suite acceptance |
+| [FP64 cache and gates](evidence/fp64-cache-and-gates/verification.json) | Three more migrated files, 2 CPU and 19 GPU checks, without acceptance of the separately recorded failed MN-layout migration |
 | [3324a7f](evidence/refactor-3324a7f/verification.json) | Numerical, regression, six capacity cases, and MTP/DSpark service and recovery |
 | [Subgroup scan](evidence/refactor-s8-scan/verification.json) | Numerical and replay diagnostics |
 | [f05a35d](evidence/refactor-f05a35d/verification.json) | Clean 539-case numerical repeat and failed framework phase gates |

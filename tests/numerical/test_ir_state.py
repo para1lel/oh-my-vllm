@@ -1,10 +1,20 @@
-"""The IR cache-write contract matches its executable PyTorch reference."""
+"""Attention preparation keeps independent FP64 accuracy and cache writes."""
 
 import re
 
 import pytest
 import torch
 from oh_my_vllm.ir import compile_forward, operations, state
+
+from development.kernels import oracles
+from tests.support.fp64 import close, cpu
+
+
+def assert_fp64_prepare(packed, qw, kw, positions, before, slots, query, cache):
+    args = cpu((packed, qw, kw, positions, before, slots))
+    expected_query = oracles.prepare_attention(*args)
+    close(query, expected_query, rtol=0.03, atol=0.03)
+    close(cache, args[4], rtol=0.03, atol=0.03)
 
 
 def test_attention_prepare_mutation_schema_and_reference():
@@ -17,6 +27,7 @@ def test_attention_prepare_mutation_schema_and_reference():
     cache = torch.full((2, 2, 784, 4, 256), 0.125, dtype=torch.bfloat16)
     before = cache.clone()
     q = state._native_prepare(packed, qw, kw, positions, cache, slots)
+    assert_fp64_prepare(packed, qw, kw, positions, before, slots, q, cache)
     assert q.shape == (2, 24, 256)
     torch.testing.assert_close(cache[0], before[0], rtol=0, atol=0)
     assert not torch.equal(cache[1, :, 1], before[1, :, 1])
@@ -39,9 +50,12 @@ def test_attention_prepare_compiled_cache_effect_matches_cuda_entry():
     positions = torch.tensor([0, 262143], device="cuda", dtype=torch.int64)
     slots = torch.tensor([-1, 785], device="cuda", dtype=torch.int32)
     cache = torch.full((2, 2, 784, 4, 256), 0.125, device="cuda", dtype=torch.bfloat16)
+    original_cache = cpu(cache)
     expected_cache = cache.clone()
     expected = old_prepare(packed, qw, kw, positions, expected_cache, slots)
     eager = state.prepare_attention(packed, qw, kw, positions, cache, slots)
+    assert_fp64_prepare(packed, qw, kw, positions, original_cache, slots, eager, cache)
+    # Exact entry-point/compiled execution checks keep storage effects separate.
     torch.testing.assert_close(eager, expected, rtol=0, atol=0)
     torch.testing.assert_close(cache, expected_cache, rtol=0, atol=0)
     cache.fill_(0.125)
@@ -52,6 +66,9 @@ def test_attention_prepare_compiled_cache_effect_matches_cuda_entry():
 
     compiled, read_after_write = compile_forward(forward)(
         packed, qw, kw, positions, cache, slots
+    )
+    assert_fp64_prepare(
+        packed, qw, kw, positions, original_cache, slots, compiled, cache
     )
     torch.testing.assert_close(compiled, expected, rtol=0, atol=0)
     torch.testing.assert_close(

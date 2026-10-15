@@ -54,8 +54,15 @@ The [fused projection record](evidence/fp64-fused-projections/verification.json)
 Exact encoding checks use a fixed BF16 boundary separately from full-chain accuracy. Independent special-value and negative-zero checks keep storage behavior.
 The earlier two ideal-norm byte-comparison failures stay recorded.
 
-[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) tracks thirteen other files with reference gaps.
+Three more files now check attention preparation, vector convolution, and attention gates against FP64 equations.
+The [cache and gate record](evidence/fp64-cache-and-gates/verification.json) covers 2 CPU and 19 GPU tests without skips.
+Convolution history writes stay exact. Attention preparation uses the canonical tolerance for normalized cache values, with separate exact execution checks.
+
+[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) tracks ten other files with reference gaps.
 The full numerical and CPU collections must repeat after these changes.
+
+The pending MN-layout projection check has one FP64 accuracy failure among `1,140,850,688` elements.
+That attempt did not save its full inputs or RNG state, so the cause of its error is not known. The failure stays recorded, with no threshold change.
 
 Source `3324a7f` has six maximum-context and MTP/DSpark service/recovery records.
 These historical records do not supply final-source acceptance. See the [acceptance index](acceptance.md).
