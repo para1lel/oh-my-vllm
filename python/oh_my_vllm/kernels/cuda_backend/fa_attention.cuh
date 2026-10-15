@@ -90,7 +90,8 @@ __device__ __forceinline__ void fa_stage_kv(const __nv_bfloat16 *cache, const vo
   asm volatile("cp.async.commit_group;" ::: "memory");
 }
 
-template <bool ModelShape, bool Grouped, typename Position, int Buffers>
+template <bool ModelShape, bool Grouped, typename Position, int Buffers,
+          int QueryTile = Grouped ? 32 : 16>
 __global__ void
 fa_partial_kernel(const __nv_bfloat16 *__restrict__ query, const __nv_bfloat16 *__restrict__ cache,
                   const void *__restrict__ tables, const void *__restrict__ lengths,
@@ -98,7 +99,7 @@ fa_partial_kernel(const __nv_bfloat16 *__restrict__ query, const __nv_bfloat16 *
                   float *__restrict__ lse, int runtime_h, int runtime_hk, int table_width,
                   int splits, int first, bool tw, bool lw, bool sw, int query_tiles,
                   int max_query_len, int query_rows, int64_t cache_pages) {
-  constexpr int BQ = Grouped ? 32 : 16, BK = Grouped ? 64 : 32;
+  constexpr int BQ = QueryTile, BK = Grouped ? 64 : 32;
   constexpr int RowGroups = BQ / 8, ScoreTiles = BQ * BK / 512, AccTiles = BQ / 2;
   const int h = ModelShape ? 24 : runtime_h, hk = ModelShape ? 4 : runtime_hk;
   extern __shared__ __align__(32) unsigned char storage[];

@@ -24,6 +24,7 @@ FFN and FA use a shared [projection implementation](../python/oh_my_vllm/kernels
 FFN uses [CUDA launch controls](../python/oh_my_vllm/kernels/cuda_backend/programmatic.cuh#L9)<!-- source: attribute.id = cudaLaunchAttributeProgrammaticStreamSerialization; -->.
 
 FA has a separate prefill implementation.
+FA uses [16-row query tiles](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) --> for one or two queries per request when the input has 32 rows or fewer.
 FA combines two or more partial attention results with 256 threads per block.
 It uses 32 threads per block when there is only one partial result.
 

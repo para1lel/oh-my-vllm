@@ -24,6 +24,7 @@ FFN 和 FA 对行数不超过 8 的输入使用共用的 [projection 实现](../
 FFN 使用 [CUDA 启动控制](../python/oh_my_vllm/kernels/cuda_backend/programmatic.cuh#L9)<!-- source: attribute.id = cudaLaunchAttributeProgrammaticStreamSerialization; -->.
 
 FA 具有独立的 prefill 实现.
+输入行数不超过 32 且每个请求有 1 或 2 个 query 时, FA 使用 [16 行 query tile](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) -->.
 FA 每块使用 256 个线程合并两份或更多注意力的部分结果.
 只有一份部分结果时, 每块使用 32 个线程.
 
