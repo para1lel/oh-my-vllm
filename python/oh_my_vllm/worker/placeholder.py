@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import random
@@ -13,6 +14,21 @@ def control_or_text_token(text):
     if text == "</think>":
         return 151668
     return token_id(text) if text else 151645
+
+
+def prompt_message(message):
+    content = message.get("content")
+    if not isinstance(content, list):
+        return message
+    parts = []
+    for part in content:
+        kind = part["type"]
+        if kind == "text":
+            parts.append(part)
+        else:
+            digest = hashlib.sha256(part[kind]["url"].encode()).hexdigest()
+            parts.append({"type": kind, "digest": digest})
+    return {**message, "content": parts}
 
 
 def schema_value(schema, root=None, depth=0, budget=None):
@@ -99,7 +115,9 @@ class Request:
         limit = request["max_tokens"]
         prompt = json.dumps(
             [
-                request[key]
+                [prompt_message(message) for message in request[key]]
+                if key == "messages"
+                else request[key]
                 for key in ("messages", "tools", "effort", "preserve_thinking")
             ],
             ensure_ascii=False,

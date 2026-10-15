@@ -152,6 +152,79 @@ class Service(unittest.TestCase):
             response["usage"]["output_tokens"], plain["usage"]["completion_tokens"]
         )
 
+    def test_media_chat_responses_and_continuation(self):
+        image = "data:image/png;base64," + "AQID" * 70000
+        content = [
+            {"type": "text", "text": "Compare these."},
+            {"type": "image_url", "image_url": {"url": image, "detail": "low"}},
+            {
+                "type": "video_url",
+                "video_url": {"url": "https://example.invalid/v.mp4"},
+            },
+        ]
+        chat = self.json(
+            "POST",
+            "/v1/chat/completions",
+            self.chat(messages=[{"role": "user", "content": content}]),
+        )
+        response = self.json(
+            "POST",
+            "/v1/responses",
+            {
+                "model": MODEL,
+                "input": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": "Compare these."},
+                            {
+                                "type": "input_image",
+                                "image_url": image,
+                                "detail": "low",
+                            },
+                            {
+                                "type": "input_video",
+                                "video_url": "https://example.invalid/v.mp4",
+                            },
+                        ],
+                    }
+                ],
+                "max_output_tokens": 128,
+                "reasoning": {"effort": "off"},
+                "seed": 7,
+            },
+        )
+        self.assertEqual(
+            chat["choices"][0]["message"]["content"],
+            response["output"][0]["content"][0]["text"],
+        )
+        self.assertEqual(
+            chat["usage"]["prompt_tokens"], response["usage"]["input_tokens"]
+        )
+        child = self.json(
+            "POST",
+            "/v1/responses",
+            {
+                "model": MODEL,
+                "previous_response_id": response["id"],
+                "input": "Continue.",
+                "max_output_tokens": 16,
+            },
+        )
+        self.assertGreater(
+            child["usage"]["input_tokens"], response["usage"]["input_tokens"]
+        )
+        for invalid in (
+            [{"type": "image_url", "image_url": {"url": "file:///tmp/p.png"}}],
+            [content[1]] * 17,
+        ):
+            self.json(
+                "POST",
+                "/v1/chat/completions",
+                self.chat(messages=[{"role": "user", "content": invalid}]),
+                status=400,
+            )
+
     def test_tools_schema_and_stored_history(self):
         function = {
             "name": "lookup",

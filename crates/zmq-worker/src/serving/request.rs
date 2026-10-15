@@ -233,6 +233,7 @@ pub fn normalize(
     }
     ensure!(!messages.is_empty(), "messages cannot be empty");
     let mut outstanding = std::collections::BTreeSet::new();
+    let mut media_count = 0;
     for message in &mut messages {
         let role = message["role"]
             .as_str()
@@ -246,7 +247,9 @@ pub fn normalize(
             message["role"] = json!("system");
         }
         if let Some(content) = message.get_mut("content") {
-            *content = text_content(content)?;
+            *content = super::media::content(content, role == "user")?;
+            media_count += super::media::count(content);
+            ensure!(media_count <= 16, "at most 16 media items are supported");
         }
         let tool_calls = match message.get("tool_calls") {
             Some(value) => Some(
@@ -473,27 +476,7 @@ pub fn normalize(
 }
 
 fn text_content(value: &Value) -> Result<Value> {
-    match value {
-        Value::Null | Value::String(_) => Ok(value.clone()),
-        Value::Array(parts) => {
-            let mut text = String::new();
-            for part in parts {
-                ensure!(
-                    ["text", "input_text", "output_text"]
-                        .iter()
-                        .any(|t| part["type"] == *t),
-                    "only text content is supported"
-                );
-                text.push_str(
-                    part["text"]
-                        .as_str()
-                        .ok_or_else(|| anyhow::anyhow!("text part requires text"))?,
-                );
-            }
-            Ok(json!(text))
-        }
-        _ => bail!("invalid text content"),
-    }
+    super::media::content(value, false)
 }
 
 fn assistant_item(messages: &mut Vec<Value>) -> &mut Value {
@@ -509,7 +492,7 @@ fn assistant_item(messages: &mut Vec<Value>) -> &mut Value {
 fn append_input(messages: &mut Vec<Value>, item: &Value) -> Result<()> {
     match item["type"].as_str().unwrap_or("message") {
         "message" => {
-            let content = text_content(&item["content"])?;
+            let content = super::media::content(&item["content"], item["role"] == "user")?;
             if item["role"] == "assistant" {
                 let message = assistant_item(messages);
                 let mut text = message["content"].as_str().unwrap_or_default().to_owned();

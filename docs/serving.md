@@ -41,10 +41,23 @@ Use Ctrl-C or SIGTERM to stop the service and its worker.
 | `DELETE /v1/responses/{id}` | Stored response removal |
 | `GET /diagnostics` | Service, resource, cache, and worker status |
 
-Send text inputs with the model ID `qwen3.8-27b-fp8`.
+Send inputs with the model ID `qwen3.8-27b-fp8`.
 The service supplies one completion per request.
 
-Unknown fields and unsupported input types cause validation errors.
+User messages can contain text, images, and video in input order.
+Chat content parts use `text`, `image_url`, and `video_url`.
+Responses content parts use `input_text`, `input_image`, and `input_video`.
+
+Supply an HTTP URL, HTTPS URL, or base64 data URI for each image or video.
+The data URI media type must be the same as the image or video type.
+Image detail can be `auto`, `low`, or `high`.
+Each request history can contain at most 16 media items.
+
+The service sends media references to the worker.
+The placeholder uses each reference's digest to calculate the prompt length.
+It does not download or decode media.
+
+The service returns validation errors for fields and input types that it does not accept.
 Use `previous_response_id` for a stored Responses continuation.
 
 A Responses response uses storage unless `store=false`.
@@ -63,7 +76,7 @@ scripts/with-env.sh target/release/oh-my-vllm-zmq-worker bench --input-len 785 -
 ```
 
 Run and Bench keep fixed output lengths.
-The HTTP placeholder uses a random output length at or below the output budget.
+The HTTP placeholder uses a random output length that is at most the output budget.
 
 Use `--speculative-mode` with `none` or `mtp` for the simulated draft traffic.
 The modes do not run model computation.

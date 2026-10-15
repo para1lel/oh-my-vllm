@@ -3,6 +3,10 @@ use std::io::{self, BufRead, Write};
 use serde_json::{Value, json};
 
 #[allow(dead_code)]
+#[path = "../serving/media.rs"]
+mod media;
+
+#[allow(dead_code)]
 #[path = "../serving/request.rs"]
 mod request;
 

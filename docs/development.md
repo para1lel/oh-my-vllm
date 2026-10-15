@@ -1,7 +1,8 @@
 # Development setup
 
 Use Python 3.12, Rust, uv, and Node 24 or later for development.
-The Conda definition supplies Python and Rust. The Python and JavaScript lock files pin the hook dependencies.
+The Conda definition supplies Python and Rust.
+Use the hook dependency versions from the Python and JavaScript lock files.
 
 Use different files for development and runtime dependencies.
 
@@ -39,14 +40,15 @@ scripts/with-env.sh pre-commit run --all-files
 | rust-line-width | Rust line width at most 100 columns |
 | definition-spacing | Function and module spacing through Python, Rust, and JavaScript/TypeScript syntax trees |
 | cargo-clippy | All workspace members, targets, and features, with warnings as errors |
-| cargo-test | Existing Rust workspace tests and the Python service tests |
+| cargo-test | Rust workspace tests in the repository and the Python service tests |
+| kernel-contracts | Workload coverage, performance gate, low-precision rounding, and recurrent-state reference |
 | ruff-format | Python formatter |
 | ruff-check | Python lint rules |
 | whitespace | No trailing whitespace, one final newline |
 | documentation | Translation pairs, word limits, host paths, links, and source anchors |
-| glossary | Agreement between the generated glossary and its source |
+| glossary | Generated glossary agrees with its source |
 
-The Cargo hooks include all owned manifests, with each workspace once.
+The Cargo hooks include all owned manifests. They process each workspace once.
 A hook has no work if there are no applicable files. The documentation hook always runs.
 
 Use the [test policy](../CONTRIBUTING.md) before you add tests.

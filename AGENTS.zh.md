@@ -8,6 +8,8 @@ Python 负责 GPU 计算. 使用 ZMQ DEALER socket 和 msgpack 进行进程通�
 
 工作前先查看 Git 状态, [交接](docs/handoff.zh.md)及适用的目录说明.
 遵守 [CONTRIBUTING.md](CONTRIBUTING.zh.md).
+Codex 使用 `refactor`. OMP 在不同 checkout 中使用分配的 Issue 分支.
+遵守[协作流程](docs/collaboration.zh.md).
 
 根目录指南保持简短. 局部说明放在对应目录.
 所有英文文档遵循 ASD-STE100. 每篇英文文档都提供完整中文翻译.
@@ -16,6 +18,7 @@ Python 负责 GPU 计算. 使用 ZMQ DEALER socket 和 msgpack 进行进程通�
 测试保持少量. 新增测试前, 向用户说明必要性.
 
 自行执行适用的已有测试. 不在项目文件中记录测试结果.
+使用[测试范围](docs/testing.zh.md).
 
 每轮交付前由另一个代理进行代码审查. 修正错误.
 保持 hooks 启用. 只提交本轮修改的文件.

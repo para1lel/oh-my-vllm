@@ -41,10 +41,23 @@ scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/oh-my-vll
 | `DELETE /v1/responses/{id}` | 删除已存储响应 |
 | `GET /diagnostics` | 服务, 资源, cache 和 worker 状态 |
 
-以模型 ID `qwen3.8-27b-fp8` 发送文本输入.
+以模型 ID `qwen3.8-27b-fp8` 发送输入.
 服务为每个请求提供一个 completion.
 
-未知字段和不支持的输入类型会产生验证错误.
+用户消息可按输入顺序包含文本, 图片和视频.
+Chat 内容片段使用 `text`, `image_url` 和 `video_url`.
+Responses 内容片段使用 `input_text`, `input_image` 和 `input_video`.
+
+为每项图片或视频提供 HTTP URL, HTTPS URL 或 base64 data URI.
+Data URI 的媒体类型必须与图片或视频类型相同.
+图片 detail 可为 `auto`, `low` 或 `high`.
+每段请求历史最多包含 16 个媒体项.
+
+服务把媒体引用发送给 worker.
+占位实现用每项引用的摘要计算 prompt 长度.
+不下载或解码媒体.
+
+服务对不接受的字段和输入类型返回验证错误.
 通过 `previous_response_id` 续接已存储的 Responses 响应.
 
 Responses 响应默认存储, 显式设置 `store=false` 时不存储.

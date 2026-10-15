@@ -11,10 +11,16 @@ Python 负责 GPU 计算. 进程间使用 ZMQ DEALER 和 msgpack.
 保留离线及 HTTP 功能和数值容差.
 只使用普通解码和 MTP4.
 
-使用 Torch 操作和仓库 CUDA. 允许使用原生 CUDA 库.
+支持文本, 图片和视频输入.
+所有模型算子使用 CUDA C++ 或 CuTe DSL. 允许使用原生 CUDA 库.
+不使用 DeepGEMM, FlashInfer 等其他外部算子库.
 不引入 vLLM 依赖, 环境或缓存.
 
 开发工具和推理包使用不同的依赖文件.
+
+算子工作使用[模型规格](operators/model.zh.md)和 [fusion 计划](operators/fusion.zh.md).
+在[负载模型](operators/evaluation.zh.md)下, 每个最终 serving 算子的期望 roofline efficiency 必须至少为 60%.
+负载模型可以简单, 但 shape 必须与服务执行相近.
 
 本文所述功能和模式的详细标准见以下历史契约:
 

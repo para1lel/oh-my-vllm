@@ -1,7 +1,8 @@
 # 开发环境
 
 开发使用 Python 3.12, Rust, uv, 以及 Node 24 或更新版本.
-Conda 定义提供 Python 和 Rust. Python 和 JavaScript 锁文件固定 hook 依赖.
+Conda 定义提供 Python 和 Rust.
+使用 Python 和 JavaScript 锁文件中的 hook 依赖版本.
 
 开发和运行时依赖使用不同文件.
 
@@ -39,14 +40,15 @@ scripts/with-env.sh pre-commit run --all-files
 | rust-line-width | Rust 行宽不超过 100 列 |
 | definition-spacing | 通过 Python, Rust 和 JavaScript/TypeScript 语法树检查函数及模块间的空行 |
 | cargo-clippy | 所有 workspace 成员, targets 和 features, 警告视为错误 |
-| cargo-test | 已有 Rust workspace 测试和 Python 服务测试 |
+| cargo-test | 仓库中的 Rust workspace 测试和 Python 服务测试 |
+| kernel-contracts | 负载覆盖, 性能门槛, 低精度舍入和循环状态参考 |
 | ruff-format | Python 格式化 |
 | ruff-check | Python lint 规则 |
 | whitespace | 无行尾空白, 文件末尾保留一个换行 |
 | documentation | 翻译配对, 词数限制, 主机路径, 链接和源码锚点 |
 | glossary | 生成词表与源文件一致 |
 
-Cargo hooks 包含所有自有 manifest, 每个 workspace 只执行一次.
+Cargo hooks 包含所有自有 manifest. 每个 workspace 只处理一次.
 无适用文件的 hook 没有检查对象. 文档 hook 始终运行.
 
 新增测试前遵守[测试策略](../CONTRIBUTING.zh.md).

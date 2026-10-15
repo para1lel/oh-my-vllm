@@ -1,4 +1,5 @@
 mod events;
+mod media;
 mod parser;
 mod request;
 mod resources;

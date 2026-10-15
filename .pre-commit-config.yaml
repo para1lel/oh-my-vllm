@@ -63,6 +63,13 @@ repos:
         language: system
         types_or: [python, pyi]
 
+      - id: kernel-contracts
+        name: operator model and numerical reference contracts
+        entry: scripts/with-env.sh python -m unittest development.kernels.test_contracts development.kernels.test_reference
+        language: system
+        pass_filenames: false
+        files: ^(development/kernels/|python/oh_my_vllm/kernels/).*\.(py|cu|cuh)$|^requirements/|^\.pre-commit-config\.yaml$
+
       - id: whitespace
         name: whitespace
         description: Strip trailing whitespace and enforce a final newline.

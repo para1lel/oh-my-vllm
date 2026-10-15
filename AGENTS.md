@@ -8,6 +8,8 @@ Obey the [runtime contracts](docs/requirements.md).
 
 Read the Git status, the [handoff](docs/handoff.md), and the applicable directory instructions before work.
 Obey [CONTRIBUTING.md](CONTRIBUTING.md).
+Codex uses `refactor`. OMP uses an assigned Issue branch in a different checkout.
+Obey the [collaboration procedure](docs/collaboration.md).
 
 Keep the root guides short. Put local instructions in the related directory.
 Write all English documents in ASD-STE100. Supply a full Chinese translation for each English document.
@@ -16,6 +18,7 @@ Use clear names and small functions. Add a comment only when the code cannot giv
 Keep the tests few. Before you add a test, tell the user why it is necessary.
 
 Do the applicable tests in the repository. Do not put test results in project files.
+Use the [test scope](docs/testing.md).
 
 Get a code review from another agent before each delivery. Correct the errors.
 Keep the hooks active. Commit only the files for the change.
