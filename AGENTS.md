@@ -8,7 +8,7 @@ Obey the [runtime contracts](docs/requirements.md).
 
 Read the Git status, the [handoff](docs/handoff.md), and the applicable directory instructions before work.
 Obey [CONTRIBUTING.md](CONTRIBUTING.md).
-Codex uses `refactor`. OMP uses an assigned Issue branch in a different checkout.
+Codex uses `main`. OMP uses an assigned Issue branch in a different checkout.
 Obey the [collaboration procedure](docs/collaboration.md).
 
 Keep the root guides short. Put local instructions in the related directory.

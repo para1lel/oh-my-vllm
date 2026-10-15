@@ -18,7 +18,7 @@ The full operator implementation is not completed. More work is necessary for th
 Next work: optimize FFN, add the other providers, and connect model computation to the worker.
 Keep numerical checks and full-boundary measurements with each provider.
 
-Use [refactor and Issue branches](collaboration.md) for work.
+Use [main and Issue branches](collaboration.md) for work.
 Keep host paths and artifact locations in ignored local configuration.
 Keep the [runtime contracts](requirements.md) and [process boundary](architecture.md).
 

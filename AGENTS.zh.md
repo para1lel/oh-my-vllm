@@ -8,7 +8,7 @@ Python 负责 GPU 计算. 使用 ZMQ DEALER socket 和 msgpack 进行进程通�
 
 工作前先查看 Git 状态, [交接](docs/handoff.zh.md)及适用的目录说明.
 遵守 [CONTRIBUTING.md](CONTRIBUTING.zh.md).
-Codex 使用 `refactor`. OMP 在不同 checkout 中使用分配的 Issue 分支.
+Codex 使用 `main`. OMP 在不同 checkout 中使用分配的 Issue 分支.
 遵守[协作流程](docs/collaboration.zh.md).
 
 根目录指南保持简短. 局部说明放在对应目录.
