@@ -39,12 +39,16 @@ The two latency gates fail. Spreads pass. Full fifteen-workload and 27-latency-g
 5. Run MTP4 and DSpark full-book translation collections, each for at least one hour in four isolated OMP sandboxes.
 
 The book is downloaded. Translation work on OMP Issue 4 stays in its separate checkout and awaits integration.
-Its two complete configured CPU attempts each have 1802 passing tests and 153 subtests, with one failed Chat deadline proof.
+Its two previous configured CPU attempts each have 1802 passing tests and 153 subtests, with one failed Chat deadline proof.
 
-Issue 19 records the native/SDK completion-clock mismatch above the unchanged 2 ms guard.
+The local OMP repair passes four selected fixtures and 1803 CPU tests with 153 subtests and no skips.
+This collection uses Issue 4 source `97de922` with 39 changed paths, before rebase and integration.
+The [clock report](evidence/omp-clock/verification.json) records 98 native/SDK completion pairs, each with a 0 ns difference.
+The 2 ms guard stays equal.
 
 Local oh-my-pi repair and isolated verification are authorized. Upstream publication is not authorized.
-Keep the installed client and failed evidence while the repaired client is verified.
+Use the verified isolated client for Issue 4. Keep the installed client and failed evidence.
+Issue 19 stays open until the project correction is integrated with applicable checks.
 
 Use [contribution](../CONTRIBUTING.md) and [collaboration](collaboration.md) for independent reviews, checks, intentional paths, and reviewed publication.
 Codex uses `main`. OMP uses its assigned branch. Rebase, repeat checks, squash, and fast-forward before integration.
