@@ -1,5 +1,6 @@
 #define CUTLASS_ENABLE_GDC_FOR_SM100 1
 #include "gdn_kernels.cuh"
+#include "gdn_input.cuh"
 #include "groupwise.cuh"
 #include "linear.cuh"
 #include "normalization.cuh"
@@ -98,11 +99,38 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
                                   static_cast<__nv_fp8_e4m3 *>(input_data.data_ptr()),
                                   static_cast<float *>(input_scales.data_ptr()), rows, stream,
                                   static_cast<__nv_bfloat16 *>(normalized.data_ptr()));
-  gdn_projection(static_cast<const __nv_fp8_e4m3 *>(input_data.data_ptr()),
-                 static_cast<const __nv_fp8_e4m3 *>(qkvz_weight.data_ptr()),
-                 static_cast<const float *>(input_scales.data_ptr()),
-                 static_cast<const float *>(qkvz_scale.data_ptr()),
-                 static_cast<__nv_bfloat16 *>(qkvz.data_ptr()), rows, 16384, 5120, stream);
+  GDNInputConvolution convolution{static_cast<const __nv_bfloat16 *>(convolution_weight.data_ptr()),
+                                  static_cast<__nv_bfloat16 *>(convolution_state.data_ptr()),
+                                  static_cast<const int *>(starts.data_ptr()),
+                                  static_cast<const int *>(reads.data_ptr()),
+                                  static_cast<const int *>(writes.data_ptr()),
+                                  static_cast<__nv_bfloat16 *>(qkv.data_ptr()),
+                                  batch,
+                                  slots};
+  auto project_input = [&](auto count) {
+    constexpr int Rows = decltype(count)::value;
+    if constexpr (Rows == 1) {
+      if (verify) {
+        gdn_input_launch<Rows, true>(input_data, input_scales, qkvz_weight, qkvz_scale, qkvz,
+                                     convolution, stream);
+        return;
+      }
+    }
+    gdn_input_launch<Rows, false>(input_data, input_scales, qkvz_weight, qkvz_scale, qkvz,
+                                  convolution, stream);
+  };
+  if (rows == 1)
+    project_input(std::integral_constant<int, 1>{});
+  else if (rows == 4)
+    project_input(std::integral_constant<int, 4>{});
+  else if (rows == 5)
+    project_input(std::integral_constant<int, 5>{});
+  else
+    gdn_projection(static_cast<const __nv_fp8_e4m3 *>(input_data.data_ptr()),
+                   static_cast<const __nv_fp8_e4m3 *>(qkvz_weight.data_ptr()),
+                   static_cast<const float *>(input_scales.data_ptr()),
+                   static_cast<const float *>(qkvz_scale.data_ptr()),
+                   static_cast<__nv_bfloat16 *>(qkvz.data_ptr()), rows, 16384, 5120, stream);
   if (rows > 32)
     bf16_linear(static_cast<const __nv_bfloat16 *>(normalized.data_ptr()),
                 static_cast<const __nv_bfloat16 *>(ba_weight.data_ptr()), ba.data_ptr(), rows, 96,
@@ -122,7 +150,7 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
   };
   if (rows > 1 && rows <= 32)
     prepare(std::true_type{});
-  else
+  else if (!(rows == 1 && verify))
     prepare(std::false_type{});
   check_cuda(cudaGetLastError());
   auto scan = [&](auto fused) {
