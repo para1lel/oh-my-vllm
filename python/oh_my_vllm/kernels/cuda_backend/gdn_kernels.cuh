@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.cuh"
+#include "programmatic.cuh"
 
 __device__ inline void gdn_require(bool condition) {
   if (!condition)
@@ -76,6 +77,9 @@ __global__ void gdn_convolution_kernel(const __nv_bfloat16 *projection, const __
                                        int batch, int slots, bool verify,
                                        const __nv_bfloat16 *normalized,
                                        const __nv_bfloat16 *ba_weight, __nv_bfloat16 *ba) {
+  cudaGridDependencySynchronize();
+  if (threadIdx.x == 0)
+    cudaTriggerProgrammaticLaunchCompletion();
   if constexpr (ProjectBA) {
     if (blockIdx.y >= 20) {
       gdn_ba_projection(normalized, ba_weight, ba, blockIdx.x, blockIdx.y - 20);
@@ -131,6 +135,9 @@ __global__ void __launch_bounds__(256, 1)
                           __nv_bfloat16 *pool, const int *starts, const int *reads,
                           const int *writes, __nv_fp8_e4m3 *output, float *scales, int rows,
                           int slots, bool verify) {
+  cudaGridDependencySynchronize();
+  if (threadIdx.x == 0)
+    cudaTriggerProgrammaticLaunchCompletion();
   int sequence = blockIdx.x, head = blockIdx.y, lane = threadIdx.x & 31;
   int warp = threadIdx.x / 32;
   int first = starts[sequence], last = starts[sequence + 1], source = reads[sequence];
