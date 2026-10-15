@@ -1,4 +1,5 @@
 #include "common.cuh"
+#include "ffn_decode.cuh"
 #include "groupwise.cuh"
 #include "normalization.cuh"
 
@@ -103,18 +104,23 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
       static_cast<float *>(product_scale.data_ptr()), rows * 136);
   check_cuda(cudaGetLastError());
   if (rows <= 32) {
-    auto run = [&](auto count) {
-      groupwise<64, 128, 128, 1, 128, false, decltype(count)::value, float>(
-          static_cast<const __nv_fp8_e4m3 *>(quantized_product.data_ptr()),
-          static_cast<const __nv_fp8_e4m3 *>(down_weight.data_ptr()),
-          static_cast<const float *>(product_scale.data_ptr()),
-          static_cast<const float *>(down_scale.data_ptr()), partials.data_ptr(), rows, 5120,
-          17408 / splits, stream);
-    };
-    if (splits == 8)
-      run(std::integral_constant<int, 8>{});
-    else
-      run(std::integral_constant<int, 2>{});
+    if (rows <= 8)
+      ffn_down_decode_launch(quantized_product, down_weight, product_scale, down_scale, partials,
+                             rows, splits, stream);
+    else {
+      auto run = [&](auto count) {
+        groupwise<64, 128, 128, 1, 128, false, decltype(count)::value, float>(
+            static_cast<const __nv_fp8_e4m3 *>(quantized_product.data_ptr()),
+            static_cast<const __nv_fp8_e4m3 *>(down_weight.data_ptr()),
+            static_cast<const float *>(product_scale.data_ptr()),
+            static_cast<const float *>(down_scale.data_ptr()), partials.data_ptr(), rows, 5120,
+            17408 / splits, stream);
+      };
+      if (splits == 8)
+        run(std::integral_constant<int, 8>{});
+      else
+        run(std::integral_constant<int, 2>{});
+    }
     merge_partials_kernel<<<(rows * 5120 + 255) / 256, 256, 0, stream>>>(
         static_cast<const float *>(partials.data_ptr()),
         static_cast<__nv_bfloat16 *>(output.data_ptr()), rows * 5120, splits);

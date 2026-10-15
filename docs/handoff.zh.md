@@ -19,6 +19,8 @@ Vision MLP 激活使用投影输出存储.
 采样归一化每块使用 640 个线程.
 MTP 输入行数不超过 32 时, 输入归一化每块使用 640 个线程.
 
+FFN 对行数不超过 8 的输入使用单独的 [down projection 实现](../python/oh_my_vllm/kernels/cuda_backend/ffn.cu#L108)<!-- source: ffn_down_decode_launch(quantized_product, -->.
+
 FA 具有独立的 prefill 实现.
 FA 每块使用 256 个线程合并两份或更多注意力的部分结果.
 只有一份部分结果时, 每块使用 32 个线程.
