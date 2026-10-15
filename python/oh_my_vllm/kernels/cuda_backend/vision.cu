@@ -1,4 +1,5 @@
 #include "linear.cuh"
+#include "vision_mlp.cuh"
 #include "vision_attention.cuh"
 #include "vision_patch.cuh"
 #include <algorithm>
@@ -243,9 +244,8 @@ void vision_block(TensorView value, TensorView norm1_weight, TensorView norm1_bi
       int64_t(rows) * 1152);
   vision_norm_kernel<<<rows, 256, 0, stream>>>(vision_read(output), vision_read(norm2_weight),
                                                vision_read(norm2_bias), norm);
-  bf16_linear<float>(norm, vision_read(up_weight), matrix, rows, 4304, 1152, stream);
-  vision_activation_kernel<<<(int64_t(rows) * 4304 + 255) / 256, 256, 0, stream>>>(
-      matrix, vision_read(up_bias), vision_write(activated), int64_t(rows) * 4304, 4304, true);
+  vision_mlp_up(norm, vision_read(up_weight), vision_read(up_bias), vision_write(activated), rows,
+                stream);
   bf16_linear<float>(vision_read(activated), vision_read(down_weight), matrix, rows, 1152, 4304,
                      stream);
   vision_residual_kernel<<<(int64_t(rows) * 1152 + 255) / 256, 256, 0, stream>>>(

@@ -14,6 +14,7 @@ CUDA C++ 和 CUTLASS provider 通过[算子开发工具](operators/development.z
 构建工具与推理加载器分开.
 每个 provider 提供数值检查, 并在测量前恢复可变状态.
 报告绑定 checkpoint shards, 源文件, 二进制文件及构建依赖.
+Vision MLP 激活使用投影输出存储.
 
 完整算子实现尚未完成. 60% 性能要求仍有工作待完成.
 

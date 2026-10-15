@@ -14,6 +14,7 @@ CUDA C++ and CUTLASS providers supply the seven boundaries through the [kernel d
 The build tools are different from the inference loader.
 Each provider supplies numerical checks and restores mutable state before measurement.
 Reports bind checkpoint shards, source files, binaries, and build dependencies.
+Vision MLP activation uses projection output stores.
 
 The full operator implementation is not completed. More work is necessary for the 60% performance requirement.
 
