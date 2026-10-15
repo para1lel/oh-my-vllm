@@ -25,3 +25,14 @@ def close(actual, expected, *, atol, rtol, equal_nan=False, check_dtype=True):
         rtol=rtol,
         equal_nan=equal_nan,
     )
+
+
+def specials(actual, expected):
+    """Check IEEE classes and signed zeros independently of numeric tolerance."""
+    actual, expected = cpu(actual), cpu(expected)
+    assert actual.shape == expected.shape and actual.dtype == expected.dtype
+    for classify in (torch.isnan, torch.isposinf, torch.isneginf):
+        assert torch.equal(classify(actual), classify(expected))
+    zero = expected == 0
+    assert torch.equal(actual == 0, zero)
+    assert torch.equal(torch.signbit(actual[zero]), torch.signbit(expected[zero]))

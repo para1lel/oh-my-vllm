@@ -14,8 +14,19 @@ from development.kernels.reference import (
     validate_native_inputs,
     verify_reference,
 )
+from tests.support.fp64 import specials
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize("index", [0, 1, 2, 3])
+def test_special_storage_comparison_rejects_independent_class_and_sign_faults(index):
+    expected = torch.tensor([float("nan"), float("inf"), -float("inf"), -0.0])
+    specials(expected.clone(), expected)
+    faulty = expected.clone()
+    faulty[index] = 0.0
+    with pytest.raises(AssertionError):
+        specials(faulty, expected)
 
 
 @pytest.mark.parametrize(
@@ -207,3 +218,14 @@ def test_prequantized_groupwise_raw_reference_retains_fp64_low_bits():
     assert raw.dtype == torch.float64
     torch.testing.assert_close(raw, torch.full_like(raw, expected), rtol=1e-15, atol=0)
     assert not torch.equal(raw, raw.float().double())
+
+
+def test_quantization_reference_keeps_prescribed_fp32_division_before_fp8():
+    x = torch.zeros(1, 128, dtype=torch.float32)
+    x[0, :2] = torch.tensor([1, 0.9642857313156128])
+    encoded, scale = oracles.quantize(x)
+    assert scale[0, 0].item() == 0.0022321429569274187
+    assert encoded.view(torch.uint8)[0, 1].item() == 126
+    raw_quotient = x[0, 1].double() / scale[0, 0].double()
+    assert raw_quotient < 432
+    assert raw_quotient.float().item() == 432

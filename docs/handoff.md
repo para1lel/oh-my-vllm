@@ -48,7 +48,13 @@ Five more legacy files now use FP64 expectations for pointwise operations, logit
 The [regression record](evidence/fp64-regressions/verification.json) covers 31 CPU and 42 GPU tests without skips.
 Exact closed-form cases keep SiLU, residual normalization, and logits BF16 storage boundaries.
 Separate accuracy checks use the published operator tolerances.
-[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) tracks fifteen other files with reference gaps.
+
+Two more files now check full fused normalized and gated FP8 projections against original-input FP64 equations.
+The [fused projection record](evidence/fp64-fused-projections/verification.json) covers 28 CPU and 54 GPU tests without skips.
+Exact encoding checks use a fixed BF16 boundary separately from full-chain accuracy. Independent special-value and negative-zero checks keep storage behavior.
+The earlier two ideal-norm byte-comparison failures stay recorded.
+
+[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) tracks thirteen other files with reference gaps.
 The full numerical and CPU collections must repeat after these changes.
 
 Source `3324a7f` has six maximum-context and MTP/DSpark service/recovery records.

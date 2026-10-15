@@ -7,6 +7,9 @@ from oh_my_vllm.ir import normalized_linear as ir
 from oh_my_vllm.ir.fp8 import _native_linear
 from oh_my_vllm.ir.pointwise import _native_rms_norm
 
+from development.kernels import oracles
+from tests.support.fp64 import close, cpu, specials
+
 
 def inputs(rows, device, columns=256):
     generator = torch.Generator(device=device).manual_seed(821 + rows)
@@ -22,11 +25,20 @@ def inputs(rows, device, columns=256):
     return x, gamma, gate, weight, scale
 
 
+def assert_fp64_projection(args, actual):
+    reference_args = cpu(args) if len(args[0]) <= 33 else args
+    expected = oracles.gated_norm_linear(*reference_args)
+    close(actual, expected, rtol=0.03, atol=0.03)
+
+
 def test_native_keeps_gated_head_rounding_before_quantization():
     args = inputs(2, "cpu")
     normalized = _native_rms_norm(*args[:2], 1e-6, args[2])
     expected = _native_linear(normalized.flatten(1), *args[3:], False)
-    torch.testing.assert_close(ir._gated_native(*args), expected, rtol=0, atol=0)
+    # Exact native composition stays separate from FP64 numerical accuracy.
+    actual = ir._gated_native(*args)
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    assert_fp64_projection(args, actual)
 
 
 def test_native_schema_fake_and_compilation(monkeypatch):
@@ -43,6 +55,8 @@ def test_native_schema_fake_and_compilation(monkeypatch):
     expected = ir._gated_native(*args)
     actual = compile_forward(ir.gated_norm_fp8_linear)(*args)
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    assert_fp64_projection(args, expected)
+    assert_fp64_projection(args, actual)
 
 
 GPU = [
@@ -72,20 +86,22 @@ def test_projection_matches_previous_cuda_chain(rows):
     expected = fp8.linear(normalized.flatten(1), *args[3:])
     actual = ir.gated_norm_fp8_linear(*args)
     assert torch.equal(actual.view(torch.int16), expected.view(torch.int16))
+    assert_fp64_projection(args, actual)
     assert actual.shape == (rows, 5120) and actual.is_contiguous()
     if rows <= 33:
         compiled = compile_forward(ir.gated_norm_fp8_linear)(*args)
         assert torch.equal(compiled.view(torch.int16), expected.view(torch.int16))
+        assert_fp64_projection(args, compiled)
 
 
 @GPU[0]
 @GPU[1]
 @pytest.mark.parametrize("column", [False, True])
 def test_side_stream_replay_reads_changed_packed_inputs(column, replay_stream):
-    from oh_my_vllm.kernels import fp8, normalization
+    from oh_my_vllm.kernels import normalization
     from oh_my_vllm.kernels.cuda_backend import compiled
 
-    x, gamma, gate, _, _ = inputs(8, "cuda")
+    x, gamma, gate, weight, weight_scale = inputs(8, "cuda")
     data = torch.empty((8, 6144), device="cuda", dtype=torch.float8_e4m3fn)
     scales = torch.empty((48, 8) if column else (8, 48), device="cuda")
     if column:
@@ -106,16 +122,27 @@ def test_side_stream_replay_reads_changed_packed_inputs(column, replay_stream):
         gamma.mul_(0.75)
         gate.add_(0.125)
         before = [t.contiguous().view(torch.uint8).clone() for t in (x, gamma, gate)]
-        normalized = normalization.rms_norm(x, gamma, gate=gate)
-        expected_data, expected_scales = fp8.quantize(
-            normalized.flatten(1), column_major=column
+        reference_args = cpu((x, gamma, gate, weight, weight_scale))
+        independent_norm = oracles.rms(*reference_args[:2], gate=reference_args[2])
+        producer_norm = normalization.rms_norm(x, gamma, gate=gate)
+        close(producer_norm, independent_norm, rtol=0.03, atol=0.03)
+        # Encoding truth uses only the given BF16 boundary and FP64 equations.
+        expected_data, expected_scales = oracles.quantize(
+            cpu(producer_norm).flatten(1), column_major=column
         )
+        expected_projection = oracles.gated_norm_linear(*reference_args)
         replay_stream.wait_stream(torch.cuda.current_stream())
         with torch.cuda.stream(replay_stream):
             graph.replay()
         torch.cuda.current_stream().wait_stream(replay_stream)
-        assert torch.equal(data.view(torch.uint8), expected_data.view(torch.uint8))
-        assert torch.equal(scales.view(torch.int32), expected_scales.view(torch.int32))
+        close(data.view(torch.uint8), expected_data.view(torch.uint8), rtol=0, atol=0)
+        close(
+            scales.view(torch.int32), expected_scales.view(torch.int32), rtol=0, atol=0
+        )
+        actual_projection = oracles.groupwise(
+            *cpu((data, weight, scales, weight_scale))
+        )
+        close(actual_projection, expected_projection, rtol=0.03, atol=0.03)
         for actual, expected in zip((x, gamma, gate), before, strict=True):
             assert torch.equal(actual.contiguous().view(torch.uint8), expected)
 
@@ -159,7 +186,7 @@ def test_direct_fusion_rejects_bad_storage_before_writes(scenario):
 @GPU[0]
 @GPU[1]
 def test_fusion_keeps_extreme_and_nonfinite_gates():
-    from oh_my_vllm.kernels import fp8, normalization
+    from oh_my_vllm.kernels import normalization
     from oh_my_vllm.kernels.cuda_backend import compiled
 
     x, gamma, gate, _, _ = inputs(8, "cuda")
@@ -169,10 +196,35 @@ def test_fusion_keeps_extreme_and_nonfinite_gates():
     gate[3].fill_(-torch.finfo(torch.bfloat16).max)
     gate[4, 0, :2] = float("inf")
     gate[5, 0, :2] = float("nan")
-    normalized = normalization.rms_norm(x, gamma, gate=gate)
-    expected_data, expected_scales = fp8.quantize(normalized.flatten(1))
+    raw_x, raw_gamma, raw_gate = cpu((x, gamma, gate))
+    independent_norm = oracles.rms(raw_x, raw_gamma, gate=raw_gate)
+    producer_norm = normalization.rms_norm(x, gamma, gate=gate)
+    close(producer_norm, independent_norm, rtol=0.03, atol=0.03, equal_nan=True)
+    specials(producer_norm, independent_norm)
+    expected_data, expected_scales = oracles.quantize(cpu(producer_norm).flatten(1))
     data = torch.empty((8, 6144), device="cuda", dtype=torch.float8_e4m3fn)
     scales = torch.empty((8, 48), device="cuda")
     compiled().gated_quantize(x, gamma, gate, data, scales, False)
-    assert torch.equal(data.view(torch.uint8), expected_data.view(torch.uint8))
-    assert torch.equal(scales.view(torch.int32), expected_scales.view(torch.int32))
+    close(data.view(torch.uint8), expected_data.view(torch.uint8), rtol=0, atol=0)
+    close(scales.view(torch.int32), expected_scales.view(torch.int32), rtol=0, atol=0)
+
+
+@GPU[0]
+@GPU[1]
+def test_fused_quantization_keeps_independent_negative_zero_codes():
+    from oh_my_vllm.kernels import normalization
+    from oh_my_vllm.kernels.cuda_backend import compiled
+
+    x = torch.ones((1, 48, 128), device="cuda", dtype=torch.bfloat16)
+    gamma = torch.ones(128, device="cuda")
+    gate = torch.full_like(x, -100)
+    expected_norm = oracles.rms(*cpu((x, gamma)), gate=cpu(gate))
+    assert torch.equal(expected_norm, torch.zeros_like(expected_norm))
+    assert torch.signbit(expected_norm).all()
+    specials(normalization.rms_norm(x, gamma, gate=gate), expected_norm)
+    data = torch.empty((1, 6144), device="cuda", dtype=torch.float8_e4m3fn)
+    scales = torch.empty((1, 48), device="cuda")
+    compiled().gated_quantize(x, gamma, gate, data, scales, False)
+    # Literal storage witnesses come from the input, never a production result.
+    assert (data.view(torch.uint8) == 0x80).all()
+    assert (scales == 2.2321428288629014e-13).all()

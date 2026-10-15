@@ -48,7 +48,13 @@ attention-gate reference 现已包含规定的中间 BF16 存储. compiled/eager
 [回归记录](evidence/fp64-regressions/verification.json)涵盖 31 项 CPU 和 42 项 GPU 测试, 无跳过.
 精确闭式用例保留 SiLU, 残差归一化和 logits 的 BF16 存储边界.
 单独的精度检查使用已发布的算子容差.
-[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) 跟踪另外十五个有 reference 缺口的文件.
+
+又有两个文件开始从原始输入独立计算 FP64 公式, 检查完整的归一化和门控 FP8 融合投影.
+[融合投影记录](evidence/fp64-fused-projections/verification.json)涵盖 28 项 CPU 和 54 项 GPU 测试, 无跳过.
+精确编码检查以固定的 BF16 边界为输入, 与全链精度检查分开. 独立的特殊值和负零检查保留存储行为.
+之前两项理想归一化值的字节比较失败仍保留在记录中.
+
+[Issue 22](https://github.com/para1lel/oh-my-vllm/issues/22) 跟踪另外十三个有 reference 缺口的文件.
 这些改动完成后, 需重跑完整数值和 CPU 采集.
 
 源码 `3324a7f` 有六项最大上下文检查, 以及 MTP/DSpark 服务/恢复记录.

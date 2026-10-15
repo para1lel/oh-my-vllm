@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "portable_source_bound_fp64_fused_projection_regressions",
+  "recorded_date": "2026-10-15",
+  "project_base_commit": "c6cd02d15b1769c1d137d9bcbd7a50b7981e7df8",
+  "runtime_change": false,
+  "full_project_acceptance": false,
+  "performance_acceptance": false,
+  "source_sha256": {
+    "tests/numerical/test_ir_normalized_linear.py": "2fc1c7b28866bd60c43ad80a465c95f41a636268990479d138bd760c8511925b",
+    "tests/numerical/test_ir_gated_linear.py": "bd3f09e8e5eb1506eb2cbb1776a1d50a28ab1ba162cf34e6895af774e2bcd98f",
+    "tests/support/fp64.py": "b3afee1e4155114aacc8919cdb4f4273eadb4e11ed40f7207fb09f769b09d439",
+    "tests/tooling/test_kernel_reference.py": "684d1c86c7fabb78cb1d14949b3002afd6be86a029c63929db9d53b1e71b2bc8",
+    "development/kernels/oracles.py": "1defcaec7474aa3fa0a8d59ef72b47e9f238cd055b72ebff26bbe2a198eb7842",
+    "development/fp64_math.py": "863a19438c68b8a4658458bff63ab6e78ff6ab30808b1ea5d0aacb44957e1cec"
+  },
+  "numerical_reference": "Full fused RMS/add-RMS/gated-RMS/FP8 projection independently computed from original stored inputs using FP64 equations with prescribed BF16 stores. Large comparisons remain individual operators.",
+  "migrated_legacy_files": 2,
+  "total_migrated_gap_files": 11,
+  "remaining_gap_files": 13,
+  "tracking_issue": "https://github.com/para1lel/oh-my-vllm/issues/22",
+  "quality_and_execution_scope": {
+    "independent_quality": "Original-input FP64 norm and full projection use canonical atol=rtol=0.03; BF16 residual sum is exact. Large individual-operator references use independent Double Torch math, with prescribed quantizer storage boundaries on CPU.",
+    "fixed_boundary_encoding": "After independent norm quality, the observed stored BF16 boundary is a fixed quantizer input. Independent encoding equations must match exact codes/scales. This stage execution property does not replace original-input full-chain accuracy.",
+    "special_storage": "Independent NaN/+Inf/-Inf and zero masks/signs. Literal original-input gate=-100 witness requires all BF16 negative zeros, FP8 byte0x80, and F32 scale2.2321428288629014e-13. Four CPU negative checks reject class/sign faults.",
+    "division_rounding": "A deterministic midpoint witness requires prescribed F32 quotient rounding before FP8 encoding: rawDouble431.99998831749 becomes432 and unsigned code126.",
+    "execution_properties": "Keep compiled/eager/unfused equality, changed-input replay, packed/offset reads, column scales, input-byte protection and invalid-storage rejection separate from FP64 accuracy.",
+    "new_gdn_rms_policy": false
+  },
+  "checks": {
+    "cpu": {
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0,
+      "deselected": 54,
+      "natural_exit_code": 0,
+      "cleanup_passed": true,
+      "junit": {
+        "name": "legacy-group03-cpu-03.xml",
+        "sha256": "843eb91bf9d4347c873d29bf22f96381bbc4c4f026d1dbd7ce18671a557963b1",
+        "bytes": 4433
+      },
+      "log": {
+        "name": "legacy-group03-cpu-03-driver.log",
+        "sha256": "4897f4306845a71871d0b3cdc04164b9cc976955c33f087175ffca5f6930ad86",
+        "bytes": 114
+      },
+      "sources": {
+        "name": "legacy-group03-cpu-03-source.json",
+        "sha256": "0f36a20f2d8a48ceda7644ee38d4e75fdd44b67e2255385bb23b948f52ef838b",
+        "bytes": 9549
+      },
+      "process_audit": {
+        "name": "legacy-group03-cpu-03-process-audit.json",
+        "sha256": "0b042ba07a1e3cf02217566a685b6deb760b420e5a03d170e909a2364edf5d37",
+        "bytes": 6941
+      }
+    },
+    "gpu": {
+      "passed": 54,
+      "failed": 0,
+      "skipped": 0,
+      "deselected": 28,
+      "natural_exit_code": 0,
+      "cleanup_passed": true,
+      "junit": {
+        "name": "legacy-group03-gpu-03.xml",
+        "sha256": "e0d534e7540f31c0557e7481f18b247be4fae78547b02e6244739253e35d9d04",
+        "bytes": 8153
+      },
+      "log": {
+        "name": "legacy-group03-gpu-03-driver.log",
+        "sha256": "84691eb57f9fc666fb4965c17460b36141f5abed312f27c192c94538d2bdc959",
+        "bytes": 115
+      },
+      "sources": {
+        "name": "legacy-group03-gpu-03-source.json",
+        "sha256": "0f36a20f2d8a48ceda7644ee38d4e75fdd44b67e2255385bb23b948f52ef838b",
+        "bytes": 9549
+      },
+      "process_audit": {
+        "name": "legacy-group03-gpu-03-process-audit.json",
+        "sha256": "cbbf916d180e5ad737006377fd113fa72945fed105e64889019172c904786127",
+        "bytes": 6953
+      }
+    }
+  },
+  "files_per_source_freeze": 82,
+  "original_records_kept": [
+    {
+      "attempt": "legacy-group03-quant-gpu-01",
+      "passed": 4,
+      "failed": 2,
+      "reason": "Ideal FP64 norm followed by exact code identity rejects legitimate norm rounding at one R05 byte in each layout. Failures and source archive retained.",
+      "junit": {
+        "name": "legacy-group03-quant-gpu-01.xml",
+        "sha256": "606e2a1dfb1ef14d08a3c286998c771c9d3c0b864c847eaff6bcb159372539a2",
+        "bytes": 8026
+      },
+      "process_audit": {
+        "name": "legacy-group03-quant-gpu-01-process-audit.json",
+        "sha256": "48134103a865f56dc7a130f828bf0ec75ef6b26a392bd9da3f14794f3a00ac08",
+        "bytes": 1379
+      }
+    },
+    {
+      "attempt": "legacy-group03-cpu-02/gpu-02",
+      "cpu_passed": 24,
+      "gpu_passed": 53,
+      "source_archive_manifest": {
+        "name": "legacy-group03-before-special-storage-02/manifest.json",
+        "sha256": "30146aa713e3f9cc33d14635148ec2e8fe60f5c0768ded0bc3d0f0a4fbf0d4ac",
+        "bytes": 441
+      },
+      "superseded_reason": "Independent review required special classes/zero signs beyond numeric allclose."
+    }
+  ],
+  "independent_source_review": {
+    "name": "independent-legacy-group03-source-review-01.json",
+    "sha256": "1441899feacca1cfd8151d70a69ac0a2e7a348fe3852bfd45283e8675fcd0f8f",
+    "bytes": 17930
+  },
+  "independent_design_review": {
+    "name": "independent-normalized-quantization-reference-design-review-01.json",
+    "sha256": "d4cc3c39b27a70d2e2637310ea6769a79dbdbe1b343c54c90340a8f0542d48db",
+    "bytes": 20401
+  },
+  "independent_counterexamples": {
+    "name": "independent-normalized-quantization-design-counterexamples-01.json",
+    "sha256": "35639cba7f479d5e07f4c92b1472cb1c563411e7c95529545c3923009ef2b218",
+    "bytes": 3377
+  },
+  "limitations": [
+    "Two legacy files only; thirteen audited reference-gap files remain open, including R06.",
+    "Complete CPU and complete numerical collections must repeat for final source.",
+    "No production kernel change, framework performance acceptance, expanded model-quality or full-book service-hour acceptance."
+  ]
+}

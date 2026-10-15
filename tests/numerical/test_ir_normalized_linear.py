@@ -7,6 +7,9 @@ from oh_my_vllm.ir import normalized_linear as ir
 from oh_my_vllm.ir.fp8 import _native_linear
 from oh_my_vllm.ir.pointwise import _native_add_rms_norm
 
+from development.kernels import oracles
+from tests.support.fp64 import close, cpu, specials
+
 
 def inputs(rows, device):
     generator = torch.Generator(device=device).manual_seed(791 + rows)
@@ -20,13 +23,24 @@ def inputs(rows, device):
     return x, residual, gamma, weight, scale
 
 
+def assert_fp64_projection(args, actual):
+    # Large comparisons remain individual fused operators. FP64 Torch math
+    # is independent of the production norm/quantization/CUTLASS chain.
+    reference_args = cpu(args) if len(args[0]) <= 33 else args
+    summed, projection = oracles.add_norm_linear(*reference_args)
+    close(actual[0], summed, rtol=0, atol=0)
+    close(actual[1], projection, rtol=0.03, atol=0.03)
+
+
 def test_native_projection_keeps_rounded_intermediate_values():
     args = inputs(2, "cpu")
     summed, normalized = _native_add_rms_norm(*args[:3])
+    # Exact equality below checks native composition, not numerical accuracy.
     expected = _native_linear(normalized, *args[3:], False)
     result = ir._native(*args)
     torch.testing.assert_close(result[0], summed, rtol=0, atol=0)
     torch.testing.assert_close(result[1], expected, rtol=0, atol=0)
+    assert_fp64_projection(args, result)
 
 
 def test_native_schema_fake_and_compilation(monkeypatch):
@@ -44,6 +58,8 @@ def test_native_schema_fake_and_compilation(monkeypatch):
     result = compile_forward(ir.add_norm_fp8_linear)(*args)
     for actual, reference in zip(result, expected, strict=True):
         torch.testing.assert_close(actual, reference, rtol=0, atol=0)
+    assert_fp64_projection(args, expected)
+    assert_fp64_projection(args, result)
 
 
 @pytest.mark.gpu
@@ -58,10 +74,12 @@ def test_cuda_projection_and_residual_match_unfused_path(rows):
     result = ir.add_norm_fp8_linear(*args)
     torch.testing.assert_close(result[0], summed, rtol=0, atol=0)
     torch.testing.assert_close(result[1], expected, rtol=0, atol=0)
+    assert_fp64_projection(args, result)
     if rows <= 33:
         result = compile_forward(ir.add_norm_fp8_linear)(*args)
         torch.testing.assert_close(result[0], summed, rtol=0, atol=0)
         torch.testing.assert_close(result[1], expected, rtol=0, atol=0)
+        assert_fp64_projection(args, result)
 
 
 @pytest.mark.gpu
@@ -93,6 +111,7 @@ def test_small_projection_replays_changed_inputs_without_padding_or_mutation(row
         torch.cuda.current_stream().wait_stream(stream)
         torch.testing.assert_close(result[0], summed, rtol=0, atol=0)
         torch.testing.assert_close(result[1], expected, rtol=0.03, atol=0.03)
+        assert_fp64_projection(args, result)
         assert result[1].shape == (rows, args[3].shape[0])
         assert result[1].is_contiguous()
         for tensor, protected in zip(args, before, strict=True):
@@ -120,6 +139,7 @@ def test_small_projection_keeps_contiguous_storage_offset_inputs(rows, offset_in
     result = fp8.add_norm_linear(*args)
     torch.testing.assert_close(result[0], summed, rtol=0, atol=0)
     torch.testing.assert_close(result[1], expected, rtol=0, atol=0)
+    assert_fp64_projection(args, result)
     for tensor, protected in zip((*args, storage), before, strict=True):
         assert torch.equal(tensor.view(torch.uint8), protected)
 
@@ -128,10 +148,10 @@ def test_small_projection_keeps_contiguous_storage_offset_inputs(rows, offset_in
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
 @pytest.mark.parametrize("column", [False, True])
 def test_captured_quantization_reads_changed_inputs_and_keeps_exact_scales(column):
-    from oh_my_vllm.kernels import fp8, normalization
+    from oh_my_vllm.kernels import normalization
     from oh_my_vllm.kernels.cuda_backend import compiled
 
-    x, residual, gamma, _, _ = inputs(8, "cuda")
+    x, residual, gamma, weight, weight_scale = inputs(8, "cuda")
     data = torch.empty_like(x, dtype=torch.float8_e4m3fn)
     scales = torch.empty((40, 8) if column else (8, 40), device="cuda")
     if column:
@@ -149,12 +169,24 @@ def test_captured_quantization_reads_changed_inputs_and_keeps_exact_scales(colum
         x.fill_(factor)
         residual.add_(0.125)
         gamma.mul_(0.75)
-        expected_sum, normalized = normalization.add_rms_norm(x, residual, gamma)
-        expected_data, expected_scales = fp8.quantize(normalized, column_major=column)
+        reference_args = cpu((x, residual, gamma, weight, weight_scale))
+        expected_sum, independent_norm = oracles.add_rms(*reference_args[:3])
+        _, producer_norm = normalization.add_rms_norm(x, residual, gamma)
+        close(producer_norm, independent_norm, rtol=0.03, atol=0.03)
+        # Given this BF16 producer boundary, encoding is independently exact.
+        # It is an execution property, not the full-fused numerical oracle.
+        expected_data, expected_scales = oracles.quantize(
+            cpu(producer_norm), column_major=column
+        )
+        expected_projection = oracles.add_norm_linear(*reference_args)[1]
         graph.replay()
-        torch.testing.assert_close(summed, expected_sum, rtol=0, atol=0)
-        assert torch.equal(data.view(torch.uint8), expected_data.view(torch.uint8))
-        torch.testing.assert_close(scales, expected_scales, rtol=0, atol=0)
+        close(summed, expected_sum, rtol=0, atol=0)
+        close(data.view(torch.uint8), expected_data.view(torch.uint8), rtol=0, atol=0)
+        close(scales, expected_scales, rtol=0, atol=0)
+        actual_projection = oracles.groupwise(
+            *cpu((data, weight, scales, weight_scale))
+        )
+        close(actual_projection, expected_projection, rtol=0.03, atol=0.03)
 
 
 @pytest.mark.gpu
@@ -207,18 +239,22 @@ def test_direct_quantization_rejects_bad_storage_without_writes(scenario):
 @pytest.mark.gpu
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU required")
 def test_quantization_keeps_nonfinite_values_and_residual_alias_input():
-    from oh_my_vllm.kernels import fp8, normalization
+    from oh_my_vllm.kernels import normalization
     from oh_my_vllm.kernels.cuda_backend import compiled
 
     x, _, gamma, _, _ = inputs(8, "cuda")
     x[0, :2] = float("inf")
     x[1, :2] = float("nan")
-    summed, normalized = normalization.add_rms_norm(x, x, gamma)
-    expected, expected_scales = fp8.quantize(normalized)
+    summed, independent_norm = oracles.add_rms(*cpu((x, x, gamma)))
+    _, producer_norm = normalization.add_rms_norm(x, x, gamma)
+    close(producer_norm, independent_norm, rtol=0.03, atol=0.03, equal_nan=True)
+    specials(producer_norm, independent_norm)
+    expected, expected_scales = oracles.quantize(cpu(producer_norm))
     data = torch.empty_like(x, dtype=torch.float8_e4m3fn)
     scales = torch.empty((8, 40), device="cuda")
     result_sum = torch.empty_like(x)
     compiled().rms_quantize(x, x, gamma, data, scales, result_sum, False)
-    torch.testing.assert_close(result_sum, summed, rtol=0, atol=0, equal_nan=True)
-    assert torch.equal(data.view(torch.uint8), expected.view(torch.uint8))
-    torch.testing.assert_close(scales, expected_scales, rtol=0, atol=0, equal_nan=True)
+    close(result_sum, summed, rtol=0, atol=0, equal_nan=True)
+    specials(result_sum, summed)
+    close(data.view(torch.uint8), expected.view(torch.uint8), rtol=0, atol=0)
+    close(scales, expected_scales, rtol=0, atol=0, equal_nan=True)
