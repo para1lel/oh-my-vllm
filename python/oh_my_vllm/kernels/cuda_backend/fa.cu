@@ -4,6 +4,7 @@
 #include "normalization.cuh"
 #include "fa_attention.cuh"
 #include "fa_input.cuh"
+#include "fa_kv_split.cuh"
 #include "fa_prefill.cuh"
 #include "fa_small_input.cuh"
 
@@ -98,7 +99,16 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
                             static_cast<__nv_bfloat16 *>(summed.data_ptr()),
                             static_cast<__nv_fp8_e4m3 *>(quantized.data_ptr()),
                             static_cast<float *>(scales.data_ptr()), rows, stream);
-  if (variant != 1 && (rows == 1 || rows == 4 || rows == 5)) {
+  bool split_kv = variant == 1 && (rows == 4 || rows == 16) &&
+                  int64_t(partial.numel()) >= int64_t(8) * rows * 5120;
+  if (split_kv) {
+    if (rows == 4)
+      fa_kv_split_projection_launch<4>(quantized, scales, input_weight, input_weight_scale, partial,
+                                       stream);
+    else
+      fa_kv_split_projection_launch<16>(quantized, scales, input_weight, input_weight_scale,
+                                        partial, stream);
+  } else if (variant != 1 && (rows == 1 || rows == 4 || rows == 5)) {
     if (rows == 1)
       fa_small_input_launch<1>(quantized, scales, input_weight, input_weight_scale, packed, columns,
                                stream);
@@ -114,17 +124,27 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
               static_cast<const float *>(scales.data_ptr()),
               static_cast<const float *>(input_weight_scale.data_ptr()),
               static_cast<__nv_bfloat16 *>(packed.data_ptr()), rows, columns, 5120, stream);
-  fa_heads_kernel<<<dim3(rows, variant == 1   ? 4
-                               : variant == 2 ? 24
-                                              : 28),
-                    32, 0, stream>>>(
-      static_cast<const __nv_bfloat16 *>(packed.data_ptr()),
-      static_cast<const float *>(q_norm.data_ptr()), static_cast<const float *>(k_norm.data_ptr()),
-      static_cast<const int64_t *>(positions.data_ptr()),
-      static_cast<const int32_t *>(slots.data_ptr()),
-      static_cast<__nv_bfloat16 *>(cache.data_ptr()),
-      static_cast<__nv_bfloat16 *>(query.data_ptr()), static_cast<__nv_bfloat16 *>(gate.data_ptr()),
-      rows, columns, variant, int64_t(blocks) * 784);
+  if (split_kv)
+    fa_kv_split_heads_kernel<<<dim3(rows, 4), 32, 0, stream>>>(
+        static_cast<const float *>(partial.data_ptr()),
+        static_cast<__nv_bfloat16 *>(packed.data_ptr()),
+        static_cast<const float *>(k_norm.data_ptr()),
+        static_cast<const int64_t *>(positions.data_ptr()),
+        static_cast<const int32_t *>(slots.data_ptr()),
+        static_cast<__nv_bfloat16 *>(cache.data_ptr()), rows, int64_t(blocks) * 784);
+  else
+    fa_heads_kernel<<<dim3(rows, variant == 1   ? 4
+                                 : variant == 2 ? 24
+                                                : 28),
+                      32, 0, stream>>>(static_cast<const __nv_bfloat16 *>(packed.data_ptr()),
+                                       static_cast<const float *>(q_norm.data_ptr()),
+                                       static_cast<const float *>(k_norm.data_ptr()),
+                                       static_cast<const int64_t *>(positions.data_ptr()),
+                                       static_cast<const int32_t *>(slots.data_ptr()),
+                                       static_cast<__nv_bfloat16 *>(cache.data_ptr()),
+                                       static_cast<__nv_bfloat16 *>(query.data_ptr()),
+                                       static_cast<__nv_bfloat16 *>(gate.data_ptr()), rows, columns,
+                                       variant, int64_t(blocks) * 784);
   check_cuda(cudaGetLastError());
   if (variant == 1)
     return;

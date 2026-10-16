@@ -61,15 +61,19 @@ GDN recurrent computation uses [512 threads per block](../python/oh_my_vllm/kern
 
 FA input projection uses [64 output columns for each block](../python/oh_my_vllm/kernels/cuda_backend/fa_small_input.cuh#L139)<!-- source: inline void fa_small_input_launch(TensorView input, TensorView input_scale, TensorView weight, -->.
 The full and query-only paths use this kernel for 1, 4, or 5 input rows.
-The KV-only path keeps the groupwise implementation.
 FP32 scale updates keep K-group order and the original BF16 output conversion.
+
+The [KV-only path](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L102)<!-- source: bool split_kv = variant == 1 && (rows == 4 || rows == 16) && --> uses eight K partitions for 4 or 16 rows when the attention scratch buffer has sufficient space.
+The head kernel adds the FP32 partials before BF16 conversion, K normalization, RoPE, and private KV writes.
+This changes FP32 association. The named tolerances apply.
+Other KV-only inputs use the groupwise implementation.
 
 FA prefill uses [TMA copies](../python/oh_my_vllm/kernels/cuda_backend/fa_prefill.cuh#L136)<!-- source: if (first % 16 == 0 && base + 64 <= last) { --> for complete aligned KV tiles.
 Each descriptor box is in one 784-token page.
 Vector copies handle unaligned starts and final partial tiles.
 
 FA [decode loads](../python/oh_my_vllm/kernels/cuda_backend/fa_attention.cuh#L75)<!-- source: Position base_offset = base % 784; --> calculate cache page pointers before the vector loop.
-FA uses [16-row query tiles](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L169)<!-- source: if (max_queries * 6 <= 16) --> for one or two queries per request when the input has 32 rows or fewer.
+FA uses [16-row query tiles](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L189)<!-- source: if (max_queries * 6 <= 16) --> for one or two queries per request when the input has 32 rows or fewer.
 FA combines two or more partial attention results with 256 threads per block.
 It uses 32 threads per block when there is only one partial result.
 

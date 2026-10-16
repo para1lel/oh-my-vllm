@@ -128,6 +128,9 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 计入额外的列 block 和尺度请求.
 在 BF16 转换前保留 epilogue 操作及其有符号零行为.
 
+[CUTLASS split-K 实现](https://github.com/NVIDIA/cutlass/blob/098de2a652cf8f00fd70b2df54051c7eccbb855a/include/cutlass/gemm/device/gemm_splitk_parallel.h#L256-L307)先存储累加器 partials, 再做独立归约.
+比较此模式与在现有 consumer 中合并的方法. 包含 scratch 流量及 FP32 结合顺序的变化.
+
 对于 [FlashInfer GDN prefill 接口](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_prefill.py), checkpoint 间隔必须可被 64 整除.
 其 [Blackwell 实现](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py)将 live state 转换为输入类型后执行矩阵乘法.
 使用其算法前, 对照模型契约检查这些条件.

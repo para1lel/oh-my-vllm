@@ -128,6 +128,9 @@ Compare a narrow transposed projection with padded row tiles for small inputs.
 Include the extra column blocks and scale requests.
 Keep the epilogue operations and their signed-zero behavior before BF16 conversion.
 
+The [CUTLASS split-K implementation](https://github.com/NVIDIA/cutlass/blob/098de2a652cf8f00fd70b2df54051c7eccbb855a/include/cutlass/gemm/device/gemm_splitk_parallel.h#L256-L307) stores accumulator partials before a separate reduction.
+Compare this pattern with a merge in an existing consumer. Include scratch traffic and changes to FP32 association.
+
 For the [FlashInfer GDN prefill interface](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_prefill.py), checkpoint intervals must be divisible by 64.
 Its [Blackwell implementation](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py) converts live state to the input type for matrix products.
 Do a check of these conditions against the model contract before you use its algorithm.
