@@ -23,16 +23,16 @@ For these inputs, MTP uses a [BF16 projection](../python/oh_my_vllm/kernels/cuda
 It adds the FP32 partial results before the BF16 output store.
 Residual normalization uses [16-byte input loads](../python/oh_my_vllm/kernels/cuda_backend/normalization.cuh#L19)<!-- source: uint4 input = *reinterpret_cast<const uint4 *>(x + row * 5120 + column); -->.
 
-FFN and FA use a shared [projection implementation](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L147)<!-- source: inline void decode_projection_launch(TensorView activation, TensorView weight, --> for inputs with eight rows or fewer.
+FFN down, FA output, and GDN output use a shared [projection implementation](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L147)<!-- source: inline void decode_projection_launch(TensorView activation, TensorView weight, --> for inputs with eight rows or fewer.
 Native operators use ordinary CUDA stream launches. PDL is not used.
 When the input has 1, 4, or 5 rows, FFN uses one [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L173)<!-- source: inline void paired_up_launch(TensorView input, TensorView input_scale, TensorView weight, --> for its upper projections, activation, and quantization.
 
-GDN uses one [CUDA launch for gate projections and convolution](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L152)<!-- source: if (rows > 1 && rows <= 32) --> when the input has 2 to 32 rows.
+GDN uses one [CUDA launch for gate projections and convolution](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L197)<!-- source: if (rows > 1 && rows <= 32) --> when the input has 2 to 32 rows.
 For one verification row, GDN uses one [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/gdn_input.cuh#L142)<!-- source: if constexpr (FuseConvolution) { --> for input projection and convolution.
-For prefill inputs with more than 32 rows, GDN uses [separate blocks](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L178)<!-- source: scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{}); --> for groups of 16 state value rows.
+For prefill inputs with more than 32 rows, GDN uses [separate blocks](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L223)<!-- source: scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{}); --> for groups of 16 state value rows.
 A separate kernel applies output normalization and quantization.
-This path also applies to [one five-row verification request](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L66)<!-- source: bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5); -->.
-GDN recurrent computation uses [512 threads per block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L187)<!-- source: run(std::integral_constant<int, 512>{}); --> for other verification inputs with more than one row.
+This path also applies to [one five-row verification request](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L79)<!-- source: bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5); -->.
+GDN recurrent computation uses [512 threads per block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L232)<!-- source: run(std::integral_constant<int, 512>{}); --> for other verification inputs with more than one row.
 
 FA has a separate prefill implementation.
 FA uses [16-row query tiles](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) --> for one or two queries per request when the input has 32 rows or fewer.
@@ -46,6 +46,10 @@ Named tolerances apply to specific outputs. Cache checks and state selection kee
 More work is necessary for the 60% performance requirement.
 
 The worker supplies constrained decoding, MTP4, and CUDA Graph execution for batches that contain only decode requests.
+The model, MTP context, and MTP draft use [fixed metadata buffers](../python/oh_my_vllm/worker/metadata.py#L5)<!-- source: class Metadata: -->.
+Arrays with the same data type share a buffer. Each update copies each buffer once.
+Each view starts at a 16-byte boundary.
+
 Sampling uses [fixed CPU buffers](../python/oh_my_vllm/worker/sampling.py#L9)<!-- source: class SamplingInputs: --> for masks, parameters, random counters, and token history.
 It copies token history to the GPU only when a penalty uses the history.
 MTP verification does not download unused sampled tokens.
@@ -67,10 +71,10 @@ FFN uses TMA with `EVICT_FIRST` and `CU_TENSOR_MAP_L2_PROMOTION_NONE` for weight
 The [row copy](../python/oh_my_vllm/kernels/cuda_backend/device.cu#L182)<!-- source: int column_blocks = std::clamp<int64_t>(row_bytes / 4096 + (row_bytes % 4096 != 0), 1, --> can use more than one block for each row.
 The number of rows limits the number of blocks for each row. Each row uses at least one block.
 
-MTP [acceptance](../python/oh_my_vllm/worker/speculation.py#L142)<!-- source: self.gather = device.empty((batch * 5,), "int32") --> keeps a fixed row-index buffer.
-MTP context [reads the model and boundary hidden buffers](../python/oh_my_vllm/worker/speculation.py#L50)<!-- source: self.boundary_hidden = cache.hidden --> directly.
+MTP [acceptance](../python/oh_my_vllm/worker/speculation.py#L147)<!-- source: self.gather = device.empty((batch * 5,), "int32") --> keeps a fixed row-index buffer.
+MTP context [reads the model and boundary hidden buffers](../python/oh_my_vllm/worker/speculation.py#L52)<!-- source: self.boundary_hidden = cache.hidden --> directly.
 The context holds these buffers. Its graph cache key includes the source buffer identity.
-Draft computation uses [views of the sampling output](../python/oh_my_vllm/worker/speculation.py#L445)<!-- source: previous[index] = d.view( --> for the next stage.
+Draft computation uses [views of the sampling output](../python/oh_my_vllm/worker/speculation.py#L448)<!-- source: previous[index] = d.view( --> for the next stage.
 Each stage copies all necessary rows before sampling uses the source buffer again.
 
 Next work: decrease execution time. Complete the two performance audits with the same source files.

@@ -118,6 +118,7 @@ class GDN:
                 ((rows, 6144), "float8_e4m3fn"),
                 ((rows, 48), "float32"),
                 ((rows if split_values else 0, 6144), "bfloat16"),
+                ((8, rows, 5120) if rows <= 8 else (1,), "float32"),
             )
         )
         self.empty_embedding = allocate((1, 5120), "bfloat16")

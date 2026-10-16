@@ -141,6 +141,7 @@ Use these lessons to select another candidate:
 - Include repeated input reads when you move normalization into projection blocks.
 - Limit column blocks when row copies already supply enough parallel work.
 - Before you remove a copy, do a check of buffer lifetime and graph inputs.
+- Combine fixed metadata arrays by data type. Keep aligned views and fixed graph addresses.
 - Exclude invalid K groups from TMA byte counts, matrix products, and accumulator reads. Zero scales do not prevent NaN propagation.
 - Use a separate process without a profiler for comparison timings.
 - Run HTTP comparisons without concurrent reference calculations. Keep the measured speculative acceptance trace.

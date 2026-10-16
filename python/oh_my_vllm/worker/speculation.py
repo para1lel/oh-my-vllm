@@ -7,6 +7,7 @@ from ..kernels.fa import FA
 from ..kernels.ffn import FFN
 from ..kernels.mtp import MTPContext, MTPInput
 from ..kernels.sample import MTPAccept
+from .metadata import Metadata
 from .sampling import Sampling
 
 
@@ -45,7 +46,8 @@ class Context(GraphOperation):
             batch=batch,
             max_queries=max_queries,
         )
-        self.arrays = tuple(device.upload(array) for array in arrays)
+        self.metadata_inputs = Metadata(device, arrays)
+        self.arrays = self.metadata_inputs.arrays
         self.hidden = hidden
         self.boundary_hidden = cache.hidden
         self.cache = cache.fa[-1]
@@ -94,19 +96,22 @@ class Draft(GraphOperation):
         self.ffn = FFN(weights.mtp_layer.feed_forward, batch, device.empty)
         self.hidden = device.empty((batch, 5120), "bfloat16")
         self.zero = device.zeros((batch, 5120), "bfloat16")
-        self.tokens = device.empty((batch,), "int64")
         self.rows = device.upload(np.arange(batch, dtype=np.int32))
         self.boundary_rows = device.upload(np.zeros(batch, dtype=np.int32))
-        self.metadata = tuple(
-            device.empty(shape, dtype)
+        arrays = tuple(
+            np.zeros(shape, dtype=dtype)
             for shape, dtype in (
                 ((3, batch), "int64"),
                 ((batch,), "int32"),
                 ((batch, 335), "int32"),
                 ((batch + 1,), "int32"),
                 ((batch,), "int32"),
+                ((batch,), "int64"),
             )
         )
+        self.metadata_inputs = Metadata(device, arrays)
+        self.metadata = self.metadata_inputs.arrays[:5]
+        self.tokens = self.metadata_inputs.arrays[5]
         self.sampling = Sampling(device, weights.mtp_sample, batch)
         self.cache = None
         self.output = None
@@ -344,8 +349,7 @@ class Speculation:
                 )
                 self.context_key = key
             operation = self.context_prefill
-        for destination, source in zip(operation.arrays, arrays, strict=True):
-            operation.copy(destination, source)
+        operation.metadata_inputs.update(arrays)
         operation.media, indices = self.media.rows(media_entries)
         operation.media_rows = None
         if indices is not None:
@@ -408,10 +412,9 @@ class Speculation:
                     [request.state_position + stage + 1 for request in requests],
                     np.int32,
                 ),
+                np.asarray(tokens, np.int64),
             )
-            for destination, source in zip(operation.metadata, arrays, strict=True):
-                operation.copy(destination, source)
-            operation.copy(operation.tokens, np.asarray(tokens, np.int64))
+            operation.metadata_inputs.update(arrays)
             operation.cache = self.cache.fa[-1]
             self.trace.record(
                 "draft",

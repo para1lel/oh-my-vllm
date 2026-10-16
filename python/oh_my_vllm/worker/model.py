@@ -1,11 +1,21 @@
 from contextlib import ExitStack
 
 import numpy as np
-import tvm_ffi
 
 from ..kernels.fa import FA
 from ..kernels.ffn import FFN
 from ..kernels.gdn import GDN
+from .metadata import Metadata
+
+
+def metadata_arrays(batch):
+    return (
+        *batch.metadata,
+        batch.tokens,
+        np.asarray(batch.schedule.sequence_rows, np.int32),
+        np.asarray(batch.schedule.read_slots, np.int32),
+        np.asarray(batch.writes, np.int32),
+    )
 
 
 class Workspace:
@@ -23,8 +33,10 @@ class Workspace:
         self.ffn = FFN(weights.layers[0].feed_forward, batch.rows, device.empty)
         self.input = device.empty((batch.rows, 5120), "bfloat16")
         self.zero = device.zeros((batch.rows, 5120), "bfloat16")
-        self.tokens = device.upload(batch.tokens)
-        self.metadata = tuple(device.upload(value) for value in batch.metadata)
+        self.metadata_inputs = Metadata(device, metadata_arrays(batch))
+        self.metadata = self.metadata_inputs.arrays[:5]
+        self.tokens = self.metadata_inputs.arrays[5]
+        self.gdn.metadata = self.metadata_inputs.arrays[6:]
         self.hidden = device.empty((batch.rows, 5120), "bfloat16") if hidden else None
         self.resources = ExitStack()
         self.replay = None
@@ -36,17 +48,7 @@ class Workspace:
         self.resources.close()
 
     def update(self, batch):
-        d = self.device
-        for destination, source in zip(self.metadata, batch.metadata, strict=True):
-            d.module.copy_bytes(destination, tvm_ffi.from_dlpack(source))
-        d.module.copy_bytes(self.tokens, tvm_ffi.from_dlpack(batch.tokens))
-        gdn_metadata = (
-            np.asarray(batch.schedule.sequence_rows, np.int32),
-            np.asarray(batch.schedule.read_slots, np.int32),
-            np.asarray(batch.writes, np.int32),
-        )
-        for destination, source in zip(self.gdn.metadata, gdn_metadata, strict=True):
-            d.module.copy_bytes(destination, tvm_ffi.from_dlpack(source))
+        self.metadata_inputs.update(metadata_arrays(batch))
 
     def forward(self, cache):
         value, residual = self.input, self.zero
