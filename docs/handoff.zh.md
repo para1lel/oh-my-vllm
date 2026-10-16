@@ -42,6 +42,10 @@ FA 每块使用 256 个线程合并两份或更多注意力的部分结果.
 60% 性能要求仍有工作待完成.
 
 Worker 提供约束解码, MTP4, 以及仅含 decode 请求的 batch 的 CUDA Graph 执行.
+采样对 mask, 参数, 随机计数器和 token 历史使用[固定 CPU 缓冲区](../python/oh_my_vllm/worker/sampling.py#L9)<!-- source: class SamplingInputs: -->.
+仅当惩罚项使用 token 历史时, 才将其复制到 GPU.
+MTP 验证不下载未使用的采样 token.
+
 算子和端到端优化正在进行.
 下一步: 缩短执行时间. 用同一份源码完成两项性能审查.
 使用 producer 与 consumer 融合. 推理 worker 不使用 PDL.

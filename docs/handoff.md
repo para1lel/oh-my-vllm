@@ -42,6 +42,10 @@ Named tolerances apply to specific outputs. Cache checks and state selection kee
 More work is necessary for the 60% performance requirement.
 
 The worker supplies constrained decoding, MTP4, and CUDA Graph execution for batches that contain only decode requests.
+Sampling uses [fixed CPU buffers](../python/oh_my_vllm/worker/sampling.py#L9)<!-- source: class SamplingInputs: --> for masks, parameters, random counters, and token history.
+It copies token history to the GPU only when a penalty uses the history.
+MTP verification does not download unused sampled tokens.
+
 Operator and end-to-end optimization is in progress.
 Next work: decrease execution time. Complete the two performance audits with the same source files.
 Use producer and consumer fusion. Do not use PDL in the inference worker.

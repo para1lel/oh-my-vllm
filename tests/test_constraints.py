@@ -2,12 +2,54 @@ import unittest
 from types import SimpleNamespace
 
 import llguidance
+import numpy as np
 from oh_my_vllm.worker.constraints import Constraint
 from oh_my_vllm.worker.request import Request
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers
 
 
 class Constraints(unittest.TestCase):
+    def test_sampling_inputs_do_not_retain_speculative_history(self):
+        from oh_my_vllm.worker.sampling import SamplingInputs
+
+        tokenizer = SimpleNamespace(
+            eos={256},
+            grammar=SimpleNamespace(vocab_size=248320),
+            valid_tokens=259,
+            think_end=257,
+            generation={"presence_penalty": 0.5},
+            decode_bytes=lambda tokens: bytes(tokens),
+        )
+        request = Request(
+            tokenizer,
+            [4, 4],
+            {"max_tokens": 16, "sampling": {"seed": 7, "repetition_guard": False}},
+        )
+        request.append([5])
+        request.random_offset, request.proposal_offset = 13, 17
+        inputs = SamplingInputs(2)
+        inputs.update([request, request], [[6, 6], [7]], "target")
+        self.assertTrue(inputs.history_needed)
+        self.assertEqual(inputs.history[:, 0, 4].tolist(), [2, 2])
+        self.assertEqual(inputs.history[:, 1, 5].tolist(), [1, 1])
+        self.assertEqual(inputs.history[:, 1, 6].tolist(), [2, 0])
+        self.assertEqual(inputs.history[:, 1, 7].tolist(), [0, 1])
+        self.assertFalse(request.counts[1, 6:8].any())
+        np.testing.assert_array_equal(inputs.random, [[7, 13], [7, 13]])
+        self.assertFalse(inputs.mask[:, 259:].any())
+
+        request.options["sampling"]["presence_penalty"] = 0
+        inputs.update([request, request], [[], []], "proposal")
+        self.assertFalse(inputs.history_needed)
+        self.assertEqual(inputs.random[0, 0], 7 ^ 0x9E3779B97F4A7C15)
+        self.assertEqual(inputs.random[0, 1], 17)
+        request.options["sampling"]["frequency_penalty"] = 0.25
+        inputs.update([request, request], [[], []], "target")
+        self.assertTrue(inputs.history_needed)
+        self.assertFalse(inputs.history[:, 1, 6:8].any())
+        self.assertEqual(request.history, [4, 4, 5])
+        self.assertEqual((request.random_offset, request.proposal_offset), (13, 17))
+
     def test_thinking_cannot_end_before_the_constraint_starts(self):
         tokenizer = SimpleNamespace(
             eos={256}, grammar=None, valid_tokens=259, think_end=257
