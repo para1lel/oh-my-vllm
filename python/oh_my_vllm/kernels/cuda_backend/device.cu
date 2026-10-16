@@ -57,7 +57,11 @@ void copy_bytes(TensorView destination, TensorView source) {
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, device.device_id));
   cuda_check(cudaMemcpyAsync(destination.data_ptr(), source.data_ptr(),
                              tvm::ffi::GetDataSize(source), cudaMemcpyDefault, stream));
-  cuda_check(cudaStreamSynchronize(stream));
+  // Synchronize only when the destination is on the CPU: the caller reads it
+  // immediately after returning.  Device-destination copies are consumed by
+  // downstream kernels on the same stream and do not need a CPU stall.
+  if (destination.device().device_type == kDLCPU)
+    cuda_check(cudaStreamSynchronize(stream));
 }
 
 void synchronize(int64_t device) {
@@ -134,8 +138,20 @@ __global__ void gather_rows_kernel(uint8_t *destination, const uint8_t *source, 
     asm volatile("trap;");
     return;
   }
-  for (int64_t byte = threadIdx.x; byte < row_bytes; byte += blockDim.x)
-    destination[int64_t(row) * row_bytes + byte] = source[int64_t(index) * row_bytes + byte];
+  // Use 16-byte vectorized loads when the row is 16-byte aligned and a
+  // multiple of 16 bytes.  All model tensor rows satisfy this (BF16 widths
+  // 5120, 6144, 10240 are all divisible by 8 elements = 16 bytes).
+  if ((row_bytes & 15) == 0 && (reinterpret_cast<uintptr_t>(destination) & 15) == 0 &&
+      (reinterpret_cast<uintptr_t>(source) & 15) == 0) {
+    int64_t vec_count = row_bytes / 16;
+    const uint4 *src4 = reinterpret_cast<const uint4 *>(source) + int64_t(index) * vec_count;
+    uint4 *dst4 = reinterpret_cast<uint4 *>(destination) + int64_t(row) * vec_count;
+    for (int64_t i = threadIdx.x; i < vec_count; i += blockDim.x)
+      dst4[i] = src4[i];
+  } else {
+    for (int64_t byte = threadIdx.x; byte < row_bytes; byte += blockDim.x)
+      destination[int64_t(row) * row_bytes + byte] = source[int64_t(index) * row_bytes + byte];
+  }
 }
 
 void gather_rows(TensorView destination, TensorView source, TensorView indices) {
