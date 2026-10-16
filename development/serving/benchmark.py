@@ -61,6 +61,7 @@ def source_identity():
                 "requirements/runtime.txt",
                 "development/kernels/work.py",
                 "development/kernels/roofline.py",
+                "development/kernels/workload.py",
             }
         ):
             digest.update(name.encode())

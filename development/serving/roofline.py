@@ -1,5 +1,6 @@
 from development.kernels.roofline import Work
-from development.kernels.work import add, linear
+from development.kernels.work import add, work_for
+from development.kernels.workload import Shape
 
 from .trace import validate
 
@@ -8,158 +9,158 @@ def scale(work, count):
     return Work(*(value * count for value in vars(work).values()))
 
 
-def feed_forward(rows):
-    return add(linear(rows, 34816, 5120, fp8=True), linear(rows, 5120, 17408, fp8=True))
-
-
-def attention(rows, pairs, reads, *, columns=14336):
-    return add(
-        linear(rows, columns, 5120, fp8=True),
-        linear(rows, 5120, 6144, fp8=True),
-        Work(reads * 4096, bf16_flops=4 * pairs * 24 * 256),
+def operator_work(name, queries, *, variant="default", state_writes=None):
+    shape = Shape(
+        name,
+        sum(count for _, count in queries),
+        len(queries),
+        max(count for _, count in queries),
+        variant=variant,
     )
+    return work_for(shape, queries=queries, state_writes=state_writes)
 
 
-def vocabulary(rows):
-    return linear(rows, 248320, 5120)
-
-
-def target(rows, queries, *, prefill=False):
-    pairs = sum(count * start + count * (count + 1) // 2 for start, count in queries)
-    reads = sum(start + count for start, count in queries)
-    recurrent = add(
-        linear(rows, 16384, 5120, fp8=True),
-        linear(rows, 96, 5120),
-        linear(rows, 5120, 6144, fp8=True),
-        Work(
-            len(queries) * 2 * (48 * 128 * 128 + 10240 * 3) * 2,
-            fp32_flops=rows * 48 * (7 * 128 * 128 + 3 * 128),
+def target_work(rows, verify):
+    queries = [(row["start"], row["count"]) for row in rows]
+    writes = (
+        sum(count for _, count in queries)
+        if verify
+        else sum(
+            (start + count) // 784 - start // 784 + int((start + count) % 784 != 0)
+            for start, count in queries
+        )
+    )
+    return [
+        (
+            "gdn_attention",
+            operator_work(
+                "gdn_attention", queries, variant="embedding", state_writes=writes
+            ),
+            1,
+            queries,
         ),
-    )
-    result = add(
-        scale(recurrent, 48),
-        scale(feed_forward(rows), 64),
-        scale(attention(rows, pairs, reads), 16),
-        Work(rows * 5120 * 2),
-    )
-    return add(result, vocabulary(len(queries) if prefill else rows))
-
-
-def context(rows):
-    return add(
-        linear(rows, 5120, 10240), linear(rows, 2048, 5120, fp8=True), Work(rows * 4096)
-    )
-
-
-def draft(positions, stage):
-    rows = len(positions)
-    result = add(
-        attention(
-            rows,
-            sum(positions),
-            sum(positions),
-            columns=12288 if stage == 0 else 14336,
+        (
+            "gdn_attention",
+            operator_work("gdn_attention", queries, state_writes=writes),
+            47,
+            queries,
         ),
-        feed_forward(rows),
-        vocabulary(rows),
+        ("fa_attention", operator_work("fa_attention", queries), 16, queries),
+        ("ffn", operator_work("ffn", queries), 64, queries),
+    ]
+
+
+def acceptance_work(rows, commits):
+    accepted = {row["id"]: row["accepted"] for row in commits}
+    rejected = sum(accepted[row["id"]] < row["count"] - 1 for row in rows)
+    draws = sum(accepted.values()) + rejected + len(rows)
+    return Work(
+        len(rows) * (248320 * 4 + 4 * 12 + 16 + 8),
+        fp32_flops=rejected * 248320,
+        fp64_flops=draws * 2,
     )
-    return result if stage == 0 else add(result, linear(rows, 5120, 10240))
+
+
+def target_commits(events, request_ids):
+    pending, commits, acceptance = {}, {}, {}
+    for index, event in enumerate(events):
+        for row in event.get("requests", []):
+            request = row["id"]
+            if request not in request_ids:
+                continue
+            if event["operation"] == "target":
+                pending[request] = index
+            elif event["operation"] == "commit":
+                commits.setdefault(pending.pop(request), []).append(row)
+                totals = acceptance.setdefault(
+                    request, dict(tokens=0, accepted=0, proposed=0)
+                )
+                for name in totals:
+                    totals[name] += row[name]
+    return commits, acceptance
+
+
+def event_work(event, rows, commits, mtp):
+    operation = event["operation"]
+    if operation not in {"target", "context", "draft"}:
+        raise ValueError(f"unmodeled trace operation: {operation}")
+    queries = (
+        [(row["start"], row["count"]) for row in rows] if operation != "draft" else []
+    )
+    if operation == "target":
+        result = [(*item, rows) for item in target_work(rows, event["verify"])]
+        if mtp and event["verify"]:
+            sample_rows = rows
+            sample_queries = queries
+        else:
+            sample_rows = [
+                row
+                for row in rows
+                if event["verify"] or row["start"] + row["count"] == row["prompt"]
+            ]
+            sample_queries = [(0, 1) for _ in sample_rows]
+        if sample_queries:
+            sample = operator_work("sample", sample_queries)
+            if mtp and event["verify"]:
+                sample = add(sample, acceptance_work(rows, commits))
+            result.append(("sample", sample, 1, sample_queries, sample_rows))
+        return result
+    if operation == "context":
+        return [
+            ("mtp_context", operator_work("mtp_context", queries), 1, queries, rows)
+        ]
+    if operation == "draft":
+        queries = [(row["position"], 1) for row in rows]
+        variant = "full" if event["stage"] else "query_only"
+        return [
+            (
+                "mtp_draft",
+                operator_work("mtp_draft", queries, variant=variant),
+                1,
+                queries,
+                rows,
+            )
+        ]
+    raise ValueError(f"unmodeled trace operation: {operation}")
 
 
 def lower_bound(events, request_ids, expected_tokens=None):
     mtp = validate(events, request_ids, expected_tokens)
-    rounds, current, prefill, acceptance = {}, {key: -1 for key in request_ids}, {}, {}
-    for event in events:
-        operation = event["operation"]
-        if operation == "identity":
+    commits, acceptance = target_commits(events, request_ids)
+    work, components = Work(0), []
+    for index, event in enumerate(events):
+        if event["operation"] in {"identity", "commit"}:
             continue
         rows = [row for row in event.get("requests", []) if row["id"] in request_ids]
-        for row in rows:
-            request = row["id"]
-            if operation == "target" and not event["verify"]:
-                prefill[request] = row["prompt"]
-                continue
-            if operation == "target":
-                current[request] += 1
-            key = current[request]
-            frame = rounds.setdefault(
-                key,
-                {
-                    "target": [],
-                    "counts": {},
-                    "context": 0,
-                    "draft": {},
-                    "accept": Work(0),
-                },
-            )
-            if operation == "target":
-                frame["target"].append((row["start"], row["count"]))
-                frame["counts"][request] = row["count"]
-            elif operation == "context":
-                frame["context"] += row["count"]
-            elif operation == "draft":
-                frame["draft"].setdefault(event["stage"], []).append(row["position"])
-            elif operation == "commit":
-                if mtp and request in frame["counts"]:
-                    rejected = row["accepted"] < frame["counts"][request] - 1
-                    draws = row["accepted"] + int(rejected) + 1
-                    frame["accept"] = add(
-                        frame["accept"],
-                        Work(
-                            0,
-                            fp32_flops=(248320 if rejected else 0),
-                            fp64_flops=draws * 2,
-                        ),
-                    )
-                totals = acceptance.setdefault(
-                    request, {"tokens": 0, "accepted": 0, "proposed": 0}
-                )
-                for name in totals:
-                    totals[name] += row[name]
-    if set(prefill) != set(request_ids):
-        raise ValueError("missing uncached prefill evidence")
-    prefill_work = target(
-        sum(prefill.values()),
-        [(0, length) for length in prefill.values()],
-        prefill=True,
-    )
-    seconds = prefill_work.lower_bound_seconds()
-    work = prefill_work
-    components = [{"operation": "prefill", "seconds": seconds, **vars(prefill_work)}]
-    for index, frame in sorted(rounds.items()):
-        stages = []
-        queries = frame["target"]
-        if queries:
-            stages.append(
-                ("target", target(sum(count for _, count in queries), queries))
-            )
-        if frame["context"]:
-            stages.append(("context", context(frame["context"])))
-        if any(vars(frame["accept"]).values()):
-            stages.append(("acceptance", frame["accept"]))
-        stages.extend(
-            (f"draft_{stage}", draft(positions, stage))
-            for stage, positions in sorted(frame["draft"].items())
-        )
-        for operation, item in stages:
-            seconds += item.lower_bound_seconds()
-            work = add(work, item)
+        if not rows:
+            continue
+        for name, item, calls, queries, requests in event_work(
+            event, rows, commits.get(index, []), mtp
+        ):
+            work = add(work, scale(item, calls))
             components.append(
                 {
-                    "round": index,
-                    "operation": operation,
-                    "seconds": item.lower_bound_seconds(),
-                    **vars(item),
+                    "event": index,
+                    "trace_operation": event["operation"],
+                    "stage": event.get("stage"),
+                    "request_ids": [row["id"] for row in requests],
+                    "operation": name,
+                    "calls": calls,
+                    "rows": sum(count for _, count in queries),
+                    "queries": queries,
+                    "seconds": calls * item.lower_bound_seconds(),
+                    "work_per_call": vars(item),
                 }
             )
     return {
-        "seconds": work.lower_bound_seconds(),
-        "sequential_regions_seconds": seconds,
+        "seconds": sum(item["seconds"] for item in components),
+        "global_resource_seconds": work.lower_bound_seconds(),
         "work": vars(work),
         "components": components,
         "acceptance": acceptance,
         "method": (
-            "one full prefill; per-request verification rounds combined; "
-            "no padded rows, replay warmup, intermediate copies, or launch floor"
+            "sum of serving-operator roofline times in the serial execution trace; "
+            "preserve batches, prefill chunks, query lengths, and MTP acceptance; "
+            "exclude padding, replay warmup, intermediate copies, and launch floors"
         ),
     }

@@ -17,17 +17,28 @@ def add(*items):
     )
 
 
-def attention(shape, *, vision=False):
+def attention(
+    shape, *, vision=False, queries=None, first_token=0, cached_queries=False
+):
     rows, batch = shape.rows, shape.batch
     if vision:
         flops = 2 * rows * shape.frame_tokens * 1152
         return Work(0, bf16_flops=2 * flops)
-    queries = rows // batch
-    pairs = batch * (
-        queries * max(0, shape.context - queries) + queries * (queries + 1) // 2
+    if queries is None:
+        count = rows // batch
+        queries = [(max(0, shape.context - count), count)] * batch
+    pairs = sum(
+        count * (start - first_token) + count * (count + 1) // 2
+        for start, count in queries
     )
     return Work(
-        batch * max(0, shape.context - queries) * 4 * 256 * 4,
+        sum(
+            max(0, start + (count if cached_queries else 0) - first_token)
+            for start, count in queries
+        )
+        * 4
+        * 256
+        * 4,
         bf16_flops=4 * pairs * 24 * 256,
     )
 
@@ -36,10 +47,14 @@ def ffn(rows):
     return add(linear(rows, 34816, 5120, fp8=True), linear(rows, 5120, 17408, fp8=True))
 
 
-def work_for(shape):
+def work_for(shape, *, queries=None, state_writes=None):
     name, rows, batch = shape.operator, shape.rows, shape.batch
     if name == "gdn_attention":
-        writes = rows if shape.queries <= 5 else batch * ((shape.queries + 783) // 784)
+        writes = state_writes
+        if writes is None:
+            writes = (
+                rows if shape.queries <= 5 else batch * ((shape.queries + 783) // 784)
+            )
         state = (batch + writes) * (48 * 128 * 128 + 10240 * 3) * 2
         external = (6 if shape.variant.startswith("embedding") else 8) * rows * 5120
         return add(
@@ -55,7 +70,7 @@ def work_for(shape):
         return add(
             linear(rows, 14336, 5120, fp8=True),
             linear(rows, 5120, 6144, fp8=True),
-            attention(shape),
+            attention(shape, queries=queries),
             Work(8 * rows * 5120 + rows * 4096 + 4 * (5120 + 512)),
         )
     if name == "ffn":
@@ -90,7 +105,7 @@ def work_for(shape):
             linear(rows, 5120, 6144, fp8=True),
             ffn(rows),
             linear(rows, 248320, 5120),
-            attention(shape),
+            attention(shape, queries=queries, first_token=1, cached_queries=not full),
             Work(
                 (6 if full else 4) * rows * 5120
                 + 4 * rows * 248320

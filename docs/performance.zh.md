@@ -25,9 +25,9 @@
 
 ## 性能限制
 
-实测 batch 延迟不得超过其理论 roofline 下界的 `5 / 3` 倍.
+实测 batch 延迟不得超过其记录的执行 trace 对应 roofline 时间的 `5 / 3` 倍.
 使用 [B200 峰值和精度规则](operators/evaluation.zh.md#性能门槛).
-计算完整模型的必要工作量, 包括 MTP context, proposals, 验证和接受.
+计算每个 serving 算子的必要工作量, 包括 MTP context, proposals, 验证和接受.
 注意力计算使用完整序列长度.
 保留实测 MTP 接受数量. 不假定固定接受率.
 
@@ -84,15 +84,21 @@ Benchmark 为其服务进程设置此变量.
 它包含完整的 causal attention 长度, FP32 GDN 工作量, 词表投影以及 MTP context 和 draft 工作量.
 它包含接受算法的运算及实测接受的 token 数量.
 
-Prefill 分块按一次完整输入计算计数.
-计算会在每个验证轮次中将相关请求的 shape 放在一起.
+每个 trace 事件保留其记录的 batch, prefill 分块, query 长度及 proposal 阶段.
+计算保留独立调用. 计算不按验证轮次编号合并请求.
+每个 prefill 分块都包含该次调用所需的权重和 cache 访问.
+采样按已完成 prefill 的请求及记录的验证行计算.
+
 计算排除中间张量复制和 padding.
 没有指定吞吐模型的小运算不会增加下界.
 
-门槛使用总 HBM 时间, tensor-core 时间, FP32 时间和 FP64 时间中的最大值.
+每个 serving 算子的时间取其 HBM 时间, tensor-core 时间, FP32 时间和 FP64 时间中的最大值.
 Tensor-core 时间按各自峰值累加 FP8, BF16 和 TF32 工作量.
-这个全局下界允许不同资源之间重叠.
-独立区域的估计用于分析, 不用于设置门槛.
+当前 worker 在一个 CUDA stream 上顺序执行这些算子.
+门槛按记录的调用次数累加这些算子的时间.
+有依赖关系的调用之间不允许资源重叠.
+
+全局资源估计用于分析, 不用于设置门槛.
 
 仓库外的产物包含响应, usage, 执行 shape, MTP 计数, 下界分项及源码标识.
 测量期间源码改变会阻止验收.

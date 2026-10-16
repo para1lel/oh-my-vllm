@@ -51,6 +51,7 @@ MTP 验证不下载未使用的采样 token.
 使用 producer 与 consumer 融合. 推理 worker 不使用 PDL.
 
 按[端到端要求](performance.zh.md)测量完整 HTTP 请求时间.
+性能门槛使用记录的 trace, 并累加其中 serving 算子的 roofline 时间.
 每个 provider 都要有数值检查和完整边界测量.
 
 调度器优先选择 decode, 并在 prefill 请求之间分配剩余 token 预算.

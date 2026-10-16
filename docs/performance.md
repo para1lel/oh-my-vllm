@@ -25,9 +25,9 @@ Do not use time to first token as the full latency.
 
 ## Performance limit
 
-The measured batch latency must be at most `5 / 3` times its theoretical roofline lower bound.
+The measured batch latency must be at most `5 / 3` times the roofline time for its recorded execution trace.
 Use the [B200 peaks and precision rules](operators/evaluation.md#performance-gate).
-Calculate necessary work for the full model, with MTP context, proposals, verification, and acceptance.
+Calculate each serving operator's necessary work, with MTP context, proposals, verification, and acceptance.
 Use the full sequence lengths for attention work.
 Keep the measured MTP acceptance counts. Do not assume a fixed acceptance rate.
 
@@ -84,15 +84,21 @@ The [calculation](../development/serving/roofline.py) uses the specified precisi
 It includes full causal attention lengths, FP32 GDN work, vocabulary projections, and MTP context and draft work.
 It includes acceptance arithmetic and the measured accepted token counts.
 
-Prefill chunks count as one full input computation.
-The calculation puts the related request shapes together for each verification round.
+Each trace event keeps its recorded batch, prefill chunk, query lengths, and proposal stage.
+The calculation keeps separate calls. The calculation does not combine requests by their verification round numbers.
+Each prefill chunk includes the weights and cache accesses necessary for that call.
+Sampling follows completed prefill requests and recorded verification rows.
+
 The calculation excludes intermediate tensor copies and padding.
 Small operations without a specified throughput model do not increase the bound.
 
-The gate uses the maximum of the total HBM time, tensor-core time, FP32 time, and FP64 time.
+Each serving operator's time is the maximum of its HBM time, tensor-core time, FP32 time, and FP64 time.
 Tensor-core time adds FP8, BF16, and TF32 work at the peak for each type.
-This global bound permits overlap between different resources.
-Separate region estimates are supplied for analysis. They do not set the gate.
+The current worker executes these operators in sequence on one CUDA stream.
+The gate uses the sum of these operator times, with the recorded call counts.
+It does not permit resource overlap between dependent calls.
+
+The global resource estimate is supplied for analysis. It does not set the gate.
 
 The external artifacts contain responses, usage, execution shapes, MTP counters, bound components, and source identities.
 A source change during measurement prevents acceptance.

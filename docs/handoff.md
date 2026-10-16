@@ -51,6 +51,7 @@ Next work: decrease execution time. Complete the two performance audits with the
 Use producer and consumer fusion. Do not use PDL in the inference worker.
 
 Measure the full HTTP request time with the [end-to-end requirements](performance.md).
+The performance limit uses the recorded trace and the sum of its serving operator roofline times.
 Keep numerical checks and full-boundary measurements with each provider.
 
 The scheduler selects decode first and divides the available token budget between prefill requests.
