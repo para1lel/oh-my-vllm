@@ -57,9 +57,7 @@ def suite_identity():
         {name for names in RUNTIME_MODULES.values() for name in names}
     )
     for name in MODULES:
-        source = (
-            ROOT / "development/kernels" if name == "device" else SOURCES
-        ) / f"{name}.cu"
+        source = SOURCES / f"{name}.cu"
         files.update(source_files(source))
     digest = hashlib.sha256()
     digest_sources(digest, files)
