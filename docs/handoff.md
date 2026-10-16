@@ -27,8 +27,9 @@ When the input has 1, 4, or 5 rows, FFN uses one [CUDA launch](../python/oh_my_v
 
 GDN uses one [CUDA launch for gate projections and convolution](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L152)<!-- source: if (rows > 1 && rows <= 32) --> when the input has 2 to 32 rows.
 For one verification row, GDN uses one [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/gdn_input.cuh#L142)<!-- source: if constexpr (FuseConvolution) { --> for input projection and convolution.
-For prefill inputs with more than 32 rows, GDN uses [separate blocks](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L176)<!-- source: scan(std::false_type{}, std::integral_constant<int, 16>{}); --> for groups of 16 state value rows.
+For prefill inputs with more than 32 rows, GDN uses [separate blocks](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L178)<!-- source: scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{}); --> for groups of 16 state value rows.
 A separate kernel applies output normalization and quantization.
+GDN recurrent computation uses [512 threads per block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L187)<!-- source: run(std::integral_constant<int, 512>{}); --> for verification inputs with more than one row.
 
 FA has a separate prefill implementation.
 FA uses [16-row query tiles](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) --> for one or two queries per request when the input has 32 rows or fewer.

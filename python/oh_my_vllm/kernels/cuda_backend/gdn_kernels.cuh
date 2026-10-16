@@ -47,14 +47,14 @@ __device__ inline float2 gdn_ba_projection(const __nv_bfloat16 *normalized,
   float projected_b, projected_a;
   float b = 0, a = 0;
 #pragma unroll
-  for (int column = threadIdx.x; column < 5120; column += 256) {
+  for (int column = threadIdx.x; threadIdx.x < 256 && column < 5120; column += 256) {
     float value = __bfloat162float(normalized[int64_t(row) * 5120 + column]);
     b += value * __bfloat162float(ba_weight[head * 5120 + column]);
     a += value * __bfloat162float(ba_weight[(head + 48) * 5120 + column]);
   }
   b = warp_sum(b);
   a = warp_sum(a);
-  if (lane == 0) {
+  if (lane == 0 && warp < 8) {
     projection_partial[0][warp] = b;
     projection_partial[1][warp] = a;
   }
@@ -124,8 +124,8 @@ __global__ void gdn_convolution_kernel(const __nv_bfloat16 *projection, const __
         __float2bfloat16_rn(values[element] * inverse);
 }
 
-template <bool FusedBA, int ValueTile = 128>
-__global__ void __launch_bounds__(256, 1)
+template <bool FusedBA, int ValueTile = 128, int Threads = 256>
+__global__ void __launch_bounds__(Threads, 1)
     gdn_scan_quant_kernel(const __nv_bfloat16 *qkv, const __nv_bfloat16 *qkvz, __nv_bfloat16 *ba,
                           const __nv_bfloat16 *normalized, const __nv_bfloat16 *ba_weight,
                           const float *a_log, const float *dt_bias, const float *norm,
@@ -134,7 +134,8 @@ __global__ void __launch_bounds__(256, 1)
                           int slots, bool verify, __nv_bfloat16 *recurrent) {
   int sequence = blockIdx.x, head = blockIdx.y, lane = threadIdx.x & 31;
   int warp = threadIdx.x / 32;
-  constexpr int Values = ValueTile / 8;
+  constexpr int Warps = Threads / 32;
+  constexpr int Values = ValueTile / Warps;
   int value_base = blockIdx.z * ValueTile + warp * Values;
   int first = starts[sequence], last = starts[sequence + 1], source = reads[sequence];
   gdn_require(first >= 0 && first <= last && last <= rows && source >= 0 && source < slots);
@@ -146,7 +147,7 @@ __global__ void __launch_bounds__(256, 1)
     for (int key = 0; key < 4; ++key)
       state[value][key] = __bfloat162float(
           pool[((int64_t(source) * 48 + head) * 128 + value_base + value) * 128 + lane * 4 + key]);
-  __shared__ float result[128], partial[8];
+  __shared__ float result[128], partial[Warps];
   for (int row = first; row < last; ++row) {
     int target = writes[row];
     gdn_require(target >= -1 && target < slots && target != source);
@@ -225,7 +226,7 @@ __global__ void __launch_bounds__(256, 1)
     if (lane == 0)
       partial[warp] = square;
     __syncthreads();
-    float total = warp_sum(lane < 8 ? partial[lane] : 0);
+    float total = warp_sum(lane < Warps ? partial[lane] : 0);
     float inverse = rsqrtf(total / 128.f + 1e-6f);
     if (warp == 0) {
       float values[4];

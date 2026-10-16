@@ -154,11 +154,13 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
   else if (!(rows == 1 && verify))
     prepare(std::false_type{});
   check_cuda(cudaGetLastError());
-  auto scan = [&](auto fused, auto value_tile) {
+  auto scan = [&](auto fused, auto value_tile, auto thread_count) {
     constexpr int ValueTile = decltype(value_tile)::value;
+    constexpr int Threads = decltype(thread_count)::value;
     launch_kernel(
-        gdn_scan_quant_kernel<decltype(fused)::value, ValueTile>, dim3(batch, 48, 128 / ValueTile),
-        dim3(256), 0, stream, static_cast<const __nv_bfloat16 *>(qkv.data_ptr()),
+        gdn_scan_quant_kernel<decltype(fused)::value, ValueTile, Threads>,
+        dim3(batch, 48, 128 / ValueTile), dim3(Threads), 0, stream,
+        static_cast<const __nv_bfloat16 *>(qkv.data_ptr()),
         static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
         static_cast<__nv_bfloat16 *>(ba.data_ptr()),
         static_cast<const __nv_bfloat16 *>(normalized.data_ptr()),
@@ -173,11 +175,19 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
         static_cast<__nv_bfloat16 *>(recurrent.data_ptr()));
   };
   if (split_values)
-    scan(std::false_type{}, std::integral_constant<int, 16>{});
-  else if (rows == 1)
-    scan(std::true_type{}, std::integral_constant<int, 128>{});
-  else
-    scan(std::false_type{}, std::integral_constant<int, 128>{});
+    scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{});
+  else {
+    auto run = [&](auto threads) {
+      if (rows == 1)
+        scan(std::true_type{}, std::integral_constant<int, 128>{}, threads);
+      else
+        scan(std::false_type{}, std::integral_constant<int, 128>{}, threads);
+    };
+    if (verify && rows > 1)
+      run(std::integral_constant<int, 512>{});
+    else
+      run(std::integral_constant<int, 256>{});
+  }
   check_cuda(cudaGetLastError());
   if (split_values) {
     gdn_output_quant_kernel<<<rows * 48, 256, 0, stream>>>(

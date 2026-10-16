@@ -27,8 +27,9 @@ FFN 和 FA 对行数不超过 8 的输入使用共用的 [projection 实现](../
 
 输入为 2 至 32 行时, GDN 通过一次 [CUDA launch 计算门控投影和卷积](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L152)<!-- source: if (rows > 1 && rows <= 32) -->.
 验证输入只有 1 行时, GDN 用一次 [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/gdn_input.cuh#L142)<!-- source: if constexpr (FuseConvolution) { --> 计算输入投影和卷积.
-对于超过 32 行的 prefill 输入, GDN 用[独立 block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L176)<!-- source: scan(std::false_type{}, std::integral_constant<int, 16>{}); --> 处理每组 16 个 state value 行.
+对于超过 32 行的 prefill 输入, GDN 用[独立 block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L178)<!-- source: scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{}); --> 处理每组 16 个 state value 行.
 独立 kernel 执行输出归一化和量化.
+对于超过 1 行的验证输入, GDN 递推计算每块使用 [512 个线程](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L187)<!-- source: run(std::integral_constant<int, 512>{}); -->.
 
 FA 具有独立的 prefill 实现.
 输入行数不超过 32 且每个请求有 1 或 2 个 query 时, FA 使用 [16 行 query tile](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) -->.
