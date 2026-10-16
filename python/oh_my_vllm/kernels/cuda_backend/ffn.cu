@@ -1,4 +1,3 @@
-#define CUTLASS_ENABLE_GDC_FOR_SM100 1
 #include "common.cuh"
 #include "ffn_up.cuh"
 #include "projection_decode.cuh"
@@ -7,9 +6,6 @@
 
 __global__ void merge_partials_kernel(const float *partials, __nv_bfloat16 *output, int count,
                                       int splits) {
-  cudaGridDependencySynchronize();
-  if (threadIdx.x == 0)
-    cudaTriggerProgrammaticLaunchCompletion();
   int index = blockIdx.x * blockDim.x + threadIdx.x;
   if (index < count) {
     float value = 0;
@@ -21,9 +17,6 @@ __global__ void merge_partials_kernel(const float *partials, __nv_bfloat16 *outp
 
 __global__ void silu_product_quant_kernel(const __nv_bfloat16 *gate_up, __nv_fp8_e4m3 *data,
                                           float *scales, int groups) {
-  cudaGridDependencySynchronize();
-  if (threadIdx.x == 0)
-    cudaTriggerProgrammaticLaunchCompletion();
   int group = blockIdx.x * 8 + threadIdx.x / 32;
   if (group >= groups)
     return;
@@ -87,12 +80,12 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
   }
   tvm::ffi::CUDADeviceGuard guard(x.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
-  residual_rms_quant_launch<true>(static_cast<const __nv_bfloat16 *>(x.data_ptr()),
-                                  static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
-                                  static_cast<const float *>(norm.data_ptr()),
-                                  static_cast<__nv_bfloat16 *>(summed.data_ptr()),
-                                  static_cast<__nv_fp8_e4m3 *>(quantized_input.data_ptr()),
-                                  static_cast<float *>(input_scale.data_ptr()), rows, stream);
+  residual_rms_quant_launch(static_cast<const __nv_bfloat16 *>(x.data_ptr()),
+                            static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
+                            static_cast<const float *>(norm.data_ptr()),
+                            static_cast<__nv_bfloat16 *>(summed.data_ptr()),
+                            static_cast<__nv_fp8_e4m3 *>(quantized_input.data_ptr()),
+                            static_cast<float *>(input_scale.data_ptr()), rows, stream);
   auto paired = [&](auto count) {
     paired_up_launch<decltype(count)::value>(quantized_input, input_scale, gate_up_weight,
                                              gate_up_scale, gate_up, quantized_product,
@@ -111,17 +104,17 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
           static_cast<const __nv_fp8_e4m3 *>(quantized_input.data_ptr()),
           static_cast<const float *>(gate_up_scale.data_ptr()),
           static_cast<const float *>(input_scale.data_ptr()), gate_up.data_ptr(), 34816, rows, 5120,
-          stream, true);
+          stream);
     else
       groupwise(static_cast<const __nv_fp8_e4m3 *>(quantized_input.data_ptr()),
                 static_cast<const __nv_fp8_e4m3 *>(gate_up_weight.data_ptr()),
                 static_cast<const float *>(input_scale.data_ptr()),
                 static_cast<const float *>(gate_up_scale.data_ptr()),
-                static_cast<__nv_bfloat16 *>(gate_up.data_ptr()), rows, 34816, 5120, stream, true);
-    launch_programmatic(silu_product_quant_kernel, dim3((rows * 136 + 7) / 8), dim3(256), 0, stream,
-                        static_cast<const __nv_bfloat16 *>(gate_up.data_ptr()),
-                        static_cast<__nv_fp8_e4m3 *>(quantized_product.data_ptr()),
-                        static_cast<float *>(product_scale.data_ptr()), rows * 136);
+                static_cast<__nv_bfloat16 *>(gate_up.data_ptr()), rows, 34816, 5120, stream);
+    launch_kernel(silu_product_quant_kernel, dim3((rows * 136 + 7) / 8), dim3(256), 0, stream,
+                  static_cast<const __nv_bfloat16 *>(gate_up.data_ptr()),
+                  static_cast<__nv_fp8_e4m3 *>(quantized_product.data_ptr()),
+                  static_cast<float *>(product_scale.data_ptr()), rows * 136);
     check_cuda(cudaGetLastError());
   }
   if (rows <= 32) {
@@ -135,21 +128,21 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
             static_cast<const __nv_fp8_e4m3 *>(down_weight.data_ptr()),
             static_cast<const float *>(product_scale.data_ptr()),
             static_cast<const float *>(down_scale.data_ptr()), partials.data_ptr(), rows, 5120,
-            17408 / splits, stream, true);
+            17408 / splits, stream);
       };
       if (splits == 8)
         run(std::integral_constant<int, 8>{});
       else
         run(std::integral_constant<int, 2>{});
     }
-    launch_programmatic(merge_partials_kernel, dim3((rows * 5120 + 255) / 256), dim3(256), 0,
-                        stream, static_cast<const float *>(partials.data_ptr()),
-                        static_cast<__nv_bfloat16 *>(output.data_ptr()), rows * 5120, splits);
+    launch_kernel(merge_partials_kernel, dim3((rows * 5120 + 255) / 256), dim3(256), 0, stream,
+                  static_cast<const float *>(partials.data_ptr()),
+                  static_cast<__nv_bfloat16 *>(output.data_ptr()), rows * 5120, splits);
     check_cuda(cudaGetLastError());
   } else
     groupwise(static_cast<const __nv_fp8_e4m3 *>(quantized_product.data_ptr()),
               static_cast<const __nv_fp8_e4m3 *>(down_weight.data_ptr()),
               static_cast<const float *>(product_scale.data_ptr()),
               static_cast<const float *>(down_scale.data_ptr()),
-              static_cast<__nv_bfloat16 *>(output.data_ptr()), rows, 5120, 17408, stream, true);
+              static_cast<__nv_bfloat16 *>(output.data_ptr()), rows, 5120, 17408, stream);
 }

@@ -2,11 +2,13 @@
 #include "linear.cuh"
 
 template <int Threads>
-__global__ void
-mtp_norm_kernel(const __nv_bfloat16 *hidden, const int64_t *tokens, const __nv_bfloat16 *embedding,
-                const float *norm_hidden, const float *norm_embedding, const int32_t *hidden_rows,
-                const __nv_bfloat16 *boundary_hidden, const int32_t *boundary_rows,
-                __nv_bfloat16 *packed, __nv_bfloat16 *zero, int hidden_count, int boundaries) {
+__global__ void mtp_norm_kernel(const __nv_bfloat16 *hidden, const int64_t *tokens,
+                                const __nv_bfloat16 *embedding, const float *norm_hidden,
+                                const float *norm_embedding, const int32_t *hidden_rows,
+                                const __nv_bfloat16 *boundary_hidden, const int32_t *boundary_rows,
+                                const __nv_bfloat16 *media, const int32_t *media_rows,
+                                bool use_media, int media_count, __nv_bfloat16 *packed,
+                                __nv_bfloat16 *zero, int hidden_count, int boundaries) {
   int row = blockIdx.x, kind = blockIdx.y, tid = threadIdx.x;
   int source = hidden_rows[row], boundary = boundary_rows[row];
   int64_t token = tokens[row];
@@ -15,9 +17,15 @@ mtp_norm_kernel(const __nv_bfloat16 *hidden, const int64_t *tokens, const __nv_b
     asm volatile("trap;");
     return;
   }
-  const __nv_bfloat16 *input = kind == 0     ? embedding + token * 5120
-                               : source >= 0 ? hidden + int64_t(source) * 5120
-                                             : boundary_hidden + int64_t(boundary) * 5120;
+  int media_row = use_media ? media_rows[row] : -1;
+  if (media_row < -1 || media_row >= media_count) {
+    asm volatile("trap;");
+    return;
+  }
+  const __nv_bfloat16 *input =
+      kind == 0 ? (media_row >= 0 ? media + int64_t(media_row) * 5120 : embedding + token * 5120)
+      : source >= 0 ? hidden + int64_t(source) * 5120
+                    : boundary_hidden + int64_t(boundary) * 5120;
   const float *weight = kind == 0 ? norm_embedding : norm_hidden;
   constexpr int Values = 5120 / Threads, Warps = Threads / 32;
   float values[Values];
@@ -46,8 +54,9 @@ mtp_norm_kernel(const __nv_bfloat16 *hidden, const int64_t *tokens, const __nv_b
 
 void mtp_input(TensorView hidden, TensorView tokens, TensorView embedding, TensorView norm_hidden,
                TensorView norm_embedding, TensorView weight, TensorView hidden_rows,
-               TensorView boundary_hidden, TensorView boundary_rows, TensorView packed,
-               TensorView output, TensorView zero) {
+               TensorView boundary_hidden, TensorView boundary_rows, TensorView media,
+               TensorView media_rows, bool use_media, TensorView packed, TensorView output,
+               TensorView zero) {
   TVM_FFI_ICHECK(hidden.ndim() == 2 && hidden.size(0) > 0 && hidden.size(0) <= INT32_MAX &&
                  hidden.size(1) == 5120);
   TVM_FFI_ICHECK(tokens.ndim() == 1 && tokens.size(0) > 0 && tokens.size(0) <= 32768);
@@ -63,11 +72,14 @@ void mtp_input(TensorView hidden, TensorView tokens, TensorView embedding, Tenso
   for (auto tensor : {hidden_rows, boundary_rows})
     tensor_contract(tensor, hidden, kDLInt, 32, {rows});
   tensor_contract(boundary_hidden, hidden, kDLBfloat, 16, {boundaries, 5120});
+  TVM_FFI_ICHECK(media.ndim() == 2 && media.size(0) >= 0 && media.size(0) <= 65536);
+  tensor_contract(media, hidden, kDLBfloat, 16, {media.size(0), 5120});
+  tensor_contract(media_rows, hidden, kDLInt, 32, {rows});
   tensor_contract(packed, hidden, kDLBfloat, 16, {rows, 10240});
   for (auto tensor : {output, zero})
     tensor_contract(tensor, hidden, kDLBfloat, 16, {rows, 5120});
-  auto inputs = {hidden, tokens,      embedding,       norm_hidden,  norm_embedding,
-                 weight, hidden_rows, boundary_hidden, boundary_rows};
+  auto inputs = {hidden,      tokens,          embedding,     norm_hidden, norm_embedding, weight,
+                 hidden_rows, boundary_hidden, boundary_rows, media,       media_rows};
   auto outputs = {packed, output, zero};
   for (auto a : outputs)
     for (auto b : inputs)
@@ -88,6 +100,8 @@ void mtp_input(TensorView hidden, TensorView tokens, TensorView embedding, Tenso
         static_cast<const int32_t *>(hidden_rows.data_ptr()),
         static_cast<const __nv_bfloat16 *>(boundary_hidden.data_ptr()),
         static_cast<const int32_t *>(boundary_rows.data_ptr()),
+        static_cast<const __nv_bfloat16 *>(media.data_ptr()),
+        static_cast<const int32_t *>(media_rows.data_ptr()), use_media, media.size(0),
         static_cast<__nv_bfloat16 *>(packed.data_ptr()),
         static_cast<__nv_bfloat16 *>(zero.data_ptr()), hidden_count, boundaries);
   };

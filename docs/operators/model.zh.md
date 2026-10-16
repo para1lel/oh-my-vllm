@@ -59,12 +59,15 @@ Prefill 和 recurrent 验证行使用 FP32 live carry.
 
 MTP context 第 `p` 行配对 target hidden 第 `p-1` 行和第 `p` 个 token.
 位置零没有 MTP 行. 前缀恢复时提供边界 hidden 行.
+图片和视频行在 MTP 输入 norm 中使用各自的 vision embedding.
 
 Context fill 为全部 context 行投影 K 和 V.
 只有选定端点需要 Q, gate, attention 输出及 FFN 输出.
 
 GQA 输入变体分别使用完整 14336 列, K/V 2048 列或 Q/gate 12288 列.
-MTP target 验证为每个请求产生五行词表输出.
+MTP target 验证为每个请求产生最多五行词表输出.
+未启用的 draft 项构成 token ID 为 `-1` 的后缀.
+每个请求在有效 draft 之后的 target 行直接提供 bonus 分布, 不减去 proposal 分布.
 第一个 draft 在端点使用 Q/gate-only 变体.
 其余 3 个 draft 使用完整的 MTP 输入及层路径.
 
@@ -141,7 +144,7 @@ merger 在 2-by-2 gather 前归一化每个 1152-element patch.
 | 容差 | 输出 | `atol` |
 |---|---|---|
 | `bf16` | 单独算子 | 0.03 |
-| `vision` | Vision 边界 | 0.03 |
+| `vision` | Vision 边界 | 0.03125 |
 | `mtp_attention` | MTP draft 边界内的 attention | 0.1 |
 | `mtp_residual` | MTP draft 边界内的 FFN 残差 | 0.25 |
 | `mtp_hidden` | MTP draft 边界内的 FFN | 1.5 |

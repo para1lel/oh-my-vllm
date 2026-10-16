@@ -3,7 +3,9 @@ pub mod request;
 
 use std::collections::VecDeque;
 
-use oh_my_vllm_kv_cache::{coordinator::HybridCoordinator, group::RequestId};
+use oh_my_vllm_kv_cache::{
+    coordinator::HybridCoordinator, group::RequestId, hash::hash_request_tokens,
+};
 
 pub use output::{RequestOutput, ScheduledRequest, SchedulerOutput, WorkerOutput};
 pub use request::{Request, RequestStatus};
@@ -183,6 +185,19 @@ impl Scheduler {
         }
     }
 
+    fn lookahead(&self, request: &Request, start: usize, count: usize) -> usize {
+        if self.config.enable_mtp {
+            self.config.mtp_draft_len.min(
+                request
+                    .prompt_len
+                    .saturating_add(request.max_tokens.saturating_sub(1))
+                    .saturating_sub(start.saturating_add(count)),
+            )
+        } else {
+            0
+        }
+    }
+
     pub fn add_request(&mut self, mut req: Request) -> bool {
         let block = self.kv.block_size();
         let fa_blocks_needed = req
@@ -225,7 +240,7 @@ impl Scheduler {
             );
             return false;
         }
-        req.block_hashes = self.kv.compute_block_hashes(&req.token_ids);
+        req.block_hashes = hash_request_tokens(req.cache_salt, &req.token_ids, block, &[]);
         self.waiting.push_back(req);
         true
     }
@@ -300,7 +315,7 @@ impl Scheduler {
                     (Vec::new(), Vec::new()),
                     0,
                     to_schedule,
-                    0,
+                    self.lookahead(&req, req.num_computed_tokens, to_schedule),
                     !still_running.is_empty() || !self.running.is_empty(),
                 );
                 if result.is_some() {
@@ -373,7 +388,7 @@ impl Scheduler {
                 (fa_hit, mb_hit),
                 hit_len,
                 to_schedule,
-                0,
+                self.lookahead(&req, hit_len, to_schedule),
                 has_running,
             );
 
@@ -527,8 +542,14 @@ impl Scheduler {
             req.draft_token_ids.clear();
             let full_blocks = req.token_ids.len() / self.kv.block_size();
             if full_blocks > req.block_hashes.len() {
-                self.kv
-                    .extend_block_hashes(&req.token_ids, &mut req.block_hashes);
+                let first = req.block_hashes.len() * self.kv.block_size();
+                let parent = req.block_hashes.last().copied().or(req.cache_salt);
+                req.block_hashes.extend(hash_request_tokens(
+                    parent,
+                    &req.token_ids[first..],
+                    self.kv.block_size(),
+                    &[],
+                ));
             }
 
             if self.config.enable_mtp && !result.new_draft_token_ids.is_empty() {

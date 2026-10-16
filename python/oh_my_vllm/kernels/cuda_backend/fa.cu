@@ -172,8 +172,8 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
     merge(std::integral_constant<int, 8>{});
   check_cuda(cudaGetLastError());
   if (rows <= 8) {
-    decode_projection_launch<false>(gated, output_weight, gated_scale, output_weight_scale,
-                                    projection_partials, rows, 8, stream);
+    decode_projection_launch(gated, output_weight, gated_scale, output_weight_scale,
+                             projection_partials, rows, 8, stream);
     fa_output_merge_kernel<<<(rows * 5120 + 255) / 256, 256, 0, stream>>>(
         static_cast<const float *>(projection_partials.data_ptr()),
         static_cast<__nv_bfloat16 *>(output.data_ptr()), rows * 5120);

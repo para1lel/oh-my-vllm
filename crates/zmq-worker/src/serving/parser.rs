@@ -16,6 +16,11 @@ pub enum Delta {
 #[derive(Clone, Copy)]
 enum ToolStage {
     FunctionTag,
+    Json {
+        depth: usize,
+        in_quotes: bool,
+        escaped: bool,
+    },
     FunctionName {
         start: usize,
     },
@@ -90,6 +95,15 @@ impl ToolProgress {
                 ToolStage::FunctionTag => {
                     self.skip_whitespace(raw);
                     let rest = &raw[self.cursor..];
+                    if rest.starts_with('{') {
+                        self.cursor += 1;
+                        self.stage = ToolStage::Json {
+                            depth: 1,
+                            in_quotes: false,
+                            escaped: false,
+                        };
+                        continue;
+                    }
                     #[cfg(test)]
                     {
                         self.bytes_inspected += rest.len().min("<function=".len());
@@ -113,6 +127,46 @@ impl ToolProgress {
                             .ok_or_else(|| anyhow::anyhow!("unknown generated function: {name}"))?,
                     );
                     self.stage = ToolStage::Body;
+                }
+                ToolStage::Json {
+                    mut depth,
+                    mut in_quotes,
+                    mut escaped,
+                } => {
+                    while self.cursor < raw.len() && depth > 0 {
+                        let byte = raw.as_bytes()[self.cursor];
+                        self.cursor += 1;
+                        #[cfg(test)]
+                        {
+                            self.bytes_inspected += 1;
+                        }
+                        if in_quotes {
+                            if escaped {
+                                escaped = false;
+                            } else if byte == b'\\' {
+                                escaped = true;
+                            } else if byte == b'"' {
+                                in_quotes = false;
+                            }
+                        } else {
+                            match byte {
+                                b'"' => in_quotes = true,
+                                b'{' | b'[' => depth += 1,
+                                b'}' | b']' => depth -= 1,
+                                _ => {}
+                            }
+                        }
+                    }
+                    if depth == 0 {
+                        self.stage = ToolStage::ToolClose;
+                    } else {
+                        self.stage = ToolStage::Json {
+                            depth,
+                            in_quotes,
+                            escaped,
+                        };
+                        return Ok(None);
+                    }
                 }
                 ToolStage::Body => {
                     self.skip_whitespace(raw);
@@ -365,6 +419,27 @@ impl Parser {
     }
 
     fn parse_tool(&self, raw: &str) -> Result<(String, String)> {
+        let body = raw.strip_prefix("<tool_call>").unwrap_or(raw).trim_start();
+        if body.starts_with('{') {
+            let body = body
+                .strip_suffix("</tool_call>")
+                .ok_or_else(|| anyhow::anyhow!("missing tool close"))?;
+            let call: Value = serde_json::from_str(body)?;
+            let name = call["name"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("missing tool name"))?;
+            ensure!(
+                self.tools
+                    .iter()
+                    .any(|tool| tool["function"]["name"] == name),
+                "unknown generated function: {name}"
+            );
+            ensure!(
+                call["arguments"].is_object(),
+                "tool arguments must be an object"
+            );
+            return Ok((name.to_owned(), call["arguments"].to_string()));
+        }
         let function = raw
             .split_once("<function=")
             .ok_or_else(|| anyhow::anyhow!("missing function tag"))?
@@ -524,4 +599,36 @@ fn safe_prefix(text: &str, marker: &str) -> usize {
         .max()
         .unwrap_or(0);
     text.len() - hold
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn json_tool_frames_preserve_strings_across_stream_fragments() {
+        let mut parser = Parser::new(false, vec![json!({"function":{"name":"echo"}})]);
+        let arguments = json!({"text":"中\n</tool_call>\\\"", "nested":[{"ok":true}]});
+        let raw = format!(
+            "<tool_call>{}</tool_call>",
+            json!({"name":"echo", "arguments":arguments})
+        );
+        let mut events = Vec::new();
+        for character in raw.chars() {
+            events.extend(parser.feed(&character.to_string(), false).unwrap());
+        }
+        assert_eq!(events.len(), 1);
+        let Delta::Tool {
+            name,
+            arguments: actual,
+            ..
+        } = &events[0]
+        else {
+            panic!("expected a tool call");
+        };
+        assert_eq!(name, "echo");
+        assert_eq!(serde_json::from_str::<Value>(actual).unwrap(), arguments);
+        assert!(parser.feed("", true).unwrap().is_empty());
+    }
 }

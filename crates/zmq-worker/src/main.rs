@@ -266,10 +266,8 @@ async fn run() -> Result<()> {
             "invalid scheduler GDN pool capacity"
         );
     }
-    let mut kv = HybridCoordinator::new(blocks, 784, true, 0);
-    if let Some(capacity) = cli.mamba_blocks {
-        kv = kv.with_mamba_capacity(capacity);
-    }
+    let mamba_blocks = cli.mamba_blocks.unwrap_or(client.mamba_blocks);
+    let mut kv = HybridCoordinator::new(blocks, 784, true, 0).with_mamba_capacity(mamba_blocks);
     kv.set_speculative_blocks(speculative_tokens);
     let sched_max_num_seqs = cli.max_num_seqs as usize;
     let sched_max_batched = cli.max_num_batched_tokens as usize;
@@ -283,7 +281,7 @@ async fn run() -> Result<()> {
         worker_fa_pool_blocks = client.logical_num_blocks,
         worker_gdn_pool_blocks = client.mamba_blocks,
         fa_pool_blocks = blocks,
-        gdn_pool_blocks = cli.mamba_blocks.unwrap_or(blocks),
+        gdn_pool_blocks = mamba_blocks,
         rust_sources_sha256 = env!("OH_MY_VLLM_RUST_SOURCES_SHA256"),
         "BENCH_CONFIG"
     );

@@ -9,7 +9,9 @@ HTTP 测试通过进程边界使用 Python 占位实现.
 这些测试不提供模型推理或 GPU 性能的验收证据.
 
 算子契约测试包括负载路径和性能计算的检查.
-参考测试包括低精度舍入和 GDN carry state 的检查.
+参考测试包括低精度舍入, GDN carry state 和 MTP 短尾的检查.
+约束测试检查 schema mask 及独立的 speculative grammar 状态.
+Rust 检查流式 JSON 工具帧以及媒体请求的前缀 cache 隔离.
 
 GPU 数值检查和测量使用[算子开发命令](operators/development.zh.md).
 FFN 输出参考使用选定的行. 报告注明抽样范围.
@@ -20,6 +22,8 @@ FA, GDN 和 MTP 检查持久写入及未改动的保护存储.
 Vision 检查 patch 顺序和帧隔离.
 覆盖率不完整或检查失败会阻止完整算子验收.
 
+完整推理计时使用 [HTTP benchmark](performance.zh.md#测量命令).
+它检查准确的输入与输出长度, 未缓存的前缀及实测 MTP 接受情况.
 GPU 工作使用 GPU wrapper.
 每轮运行后停止自己启动的进程.
 原始产物保存在仓库外.

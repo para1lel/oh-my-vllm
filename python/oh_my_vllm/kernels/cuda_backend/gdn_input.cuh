@@ -1,7 +1,7 @@
 #pragma once
 
 #include "gdn_kernels.cuh"
-#include "programmatic.cuh"
+#include "launch.cuh"
 #include <cute/tensor.hpp>
 #include <cute/arch/tmem_allocator_sm100.hpp>
 #include <cute/arch/copy_sm90_tma.hpp>
@@ -72,9 +72,6 @@ __global__ void gdn_input_kernel(const __nv_fp8_e4m3 *input, const float *input_
   };
   prefetch(0, 0);
   prefetch(4, 1);
-  cudaGridDependencySynchronize();
-  if (thread == 0)
-    cudaTriggerProgrammaticLaunchCompletion();
   MMA mma;
   auto input_fragment = mma.get_slice(0).make_fragment_B(input_tile);
   auto partial = partition_fragment_C(mma, Shape<_64, _8>{});
@@ -201,10 +198,10 @@ static inline void gdn_input_launch(TensorView input, TensorView input_scale, Te
     TVM_FFI_ICHECK(status == CUDA_SUCCESS) << status;
     found = weight_maps.emplace(key, descriptor).first;
   }
-  launch_programmatic(gdn_input_kernel<Rows, FuseConvolution>, dim3(256), dim3(128), 102528, stream,
-                      static_cast<const __nv_fp8_e4m3 *>(input.data_ptr()),
-                      static_cast<const float *>(input_scale.data_ptr()),
-                      static_cast<const float *>(weight_scale.data_ptr()),
-                      static_cast<__nv_bfloat16 *>(output.data_ptr()), found->second, convolution);
+  launch_kernel(gdn_input_kernel<Rows, FuseConvolution>, dim3(256), dim3(128), 102528, stream,
+                static_cast<const __nv_fp8_e4m3 *>(input.data_ptr()),
+                static_cast<const float *>(input_scale.data_ptr()),
+                static_cast<const float *>(weight_scale.data_ptr()),
+                static_cast<__nv_bfloat16 *>(output.data_ptr()), found->second, convolution);
   check_cuda(cudaGetLastError());
 }

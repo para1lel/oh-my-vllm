@@ -97,6 +97,12 @@ def acceptance_reference(target, proposal, drafts, rng, private_slots):
         accepted, draws = 0, 0
         for index in range(4):
             token = drafts[request, index]
+            if token == -1:
+                if np.any(drafts[request, index:] != -1):
+                    raise ValueError("inactive drafts must be a suffix")
+                break
+            if token < 0 or token >= target.shape[-1]:
+                raise ValueError("invalid draft token")
             p = float(target[request, index, token])
             q = float(proposal[request, index, token])
             draw = philox_uniform64(rng[request, 0], int(rng[request, 1]) + 2 * draws)
@@ -106,7 +112,7 @@ def acceptance_reference(target, proposal, drafts, rng, private_slots):
             kept[request, index] = token
             accepted += 1
         mass = target[request, accepted].astype(np.float32)
-        if accepted < 4:
+        if accepted < 4 and drafts[request, accepted] >= 0:
             mass = np.maximum(mass - proposal[request, accepted], 0)
         cumulative = np.cumsum(mass)
         draw = philox_uniform64(rng[request, 0], int(rng[request, 1]) + 2 * draws)

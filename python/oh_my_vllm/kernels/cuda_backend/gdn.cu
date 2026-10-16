@@ -1,4 +1,3 @@
-#define CUTLASS_ENABLE_GDC_FOR_SM100 1
 #include "gdn_kernels.cuh"
 #include "gdn_input.cuh"
 #include "groupwise.cuh"
@@ -11,12 +10,12 @@ inline void gdn_projection(const __nv_fp8_e4m3 *input, const __nv_fp8_e4m3 *weig
                            cudaStream_t stream) {
   if (rows <= 16 && columns == 5120)
     groupwise<128, 16, 256, 128, 1, true>(weight, input, weight_scale, input_scale, output, columns,
-                                          rows, width, stream, true);
+                                          rows, width, stream);
   else if (rows <= 32)
     groupwise<128, 32, 256, 128, 1, true>(weight, input, weight_scale, input_scale, output, columns,
-                                          rows, width, stream, true);
+                                          rows, width, stream);
   else
-    groupwise(input, weight, input_scale, weight_scale, output, rows, columns, width, stream, true);
+    groupwise(input, weight, input_scale, weight_scale, output, rows, columns, width, stream);
 }
 
 void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_weight,
@@ -93,12 +92,12 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
     check_cuda(cudaGetLastError());
     input = static_cast<const __nv_bfloat16 *>(gathered.data_ptr());
   }
-  residual_rms_quant_launch<true>(input, static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
-                                  static_cast<const float *>(norm.data_ptr()),
-                                  static_cast<__nv_bfloat16 *>(summed.data_ptr()),
-                                  static_cast<__nv_fp8_e4m3 *>(input_data.data_ptr()),
-                                  static_cast<float *>(input_scales.data_ptr()), rows, stream,
-                                  static_cast<__nv_bfloat16 *>(normalized.data_ptr()));
+  residual_rms_quant_launch(input, static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
+                            static_cast<const float *>(norm.data_ptr()),
+                            static_cast<__nv_bfloat16 *>(summed.data_ptr()),
+                            static_cast<__nv_fp8_e4m3 *>(input_data.data_ptr()),
+                            static_cast<float *>(input_scales.data_ptr()), rows, stream,
+                            static_cast<__nv_bfloat16 *>(normalized.data_ptr()));
   GDNInputConvolution convolution{static_cast<const __nv_bfloat16 *>(convolution_weight.data_ptr()),
                                   static_cast<__nv_bfloat16 *>(convolution_state.data_ptr()),
                                   static_cast<const int *>(starts.data_ptr()),
@@ -137,7 +136,7 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
                 5120, stream);
   auto prepare = [&](auto project_ba) {
     constexpr bool ProjectBA = decltype(project_ba)::value;
-    launch_programmatic(
+    launch_kernel(
         gdn_convolution_kernel<ProjectBA>, dim3(rows, ProjectBA ? 68 : 20),
         dim3(ProjectBA ? 256 : 128), 0, stream, static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
         static_cast<const __nv_bfloat16 *>(convolution_weight.data_ptr()),
@@ -154,7 +153,7 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
     prepare(std::false_type{});
   check_cuda(cudaGetLastError());
   auto scan = [&](auto fused) {
-    launch_programmatic(
+    launch_kernel(
         gdn_scan_quant_kernel<decltype(fused)::value>, dim3(batch, 48), dim3(256), 0, stream,
         static_cast<const __nv_bfloat16 *>(qkv.data_ptr()),
         static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),

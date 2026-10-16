@@ -38,6 +38,7 @@ pub fn normalize(
         "max_tokens",
         "max_completion_tokens",
         "max_output_tokens",
+        "min_tokens",
         "temperature",
         "top_p",
         "top_k",
@@ -411,6 +412,15 @@ pub fn normalize(
         max_tokens > 0 && max_tokens <= 1_048_576,
         "invalid output limit"
     );
+    let min_tokens = body.get("min_tokens").map_or(Ok(0), |value| {
+        value
+            .as_u64()
+            .ok_or_else(|| anyhow::anyhow!("min_tokens must be an integer"))
+    })?;
+    ensure!(
+        min_tokens <= max_tokens,
+        "min_tokens exceeds the output limit"
+    );
     let thinking_budget = match body.get("thinking_token_budget") {
         None => Value::Null,
         Some(value) => {
@@ -455,6 +465,7 @@ pub fn normalize(
         "preserve_thinking": template.get("preserve_thinking").cloned().unwrap_or(json!(true)),
         "format": format,
         "max_tokens": max_tokens,
+        "min_tokens": min_tokens,
         "thinking_token_budget": thinking_budget,
         "sampling": sampling,
         "stop": stop,

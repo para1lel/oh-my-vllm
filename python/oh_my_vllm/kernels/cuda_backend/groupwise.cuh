@@ -28,8 +28,7 @@
 template <int TileM, int TileN = 128, int TileK = 128, int ScaleM = 1, int ScaleN = 128,
           bool Transposed = false, int Splits = 1, typename Result = cutlass::bfloat16_t>
 void groupwise(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *weight, const float *scale_a,
-               const float *scale_weight, void *output, int m, int n, int k, cudaStream_t stream,
-               bool programmatic = false) {
+               const float *scale_weight, void *output, int m, int n, int k, cudaStream_t stream) {
   using namespace cute;
   using Scale = cutlass::detail::Sm100BlockwiseScaleConfig<ScaleM, ScaleN, 128, UMMA::Major::K,
                                                            UMMA::Major::K>;
@@ -86,14 +85,14 @@ void groupwise(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *weight, const float 
   Gemm gemm;
   check(gemm.can_implement(arguments));
   check(gemm.initialize(arguments, nullptr, stream));
-  check(gemm.run(stream, nullptr, programmatic));
+  check(gemm.run(stream));
 }
 
 inline void groupwise(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *weight, const float *scale_a,
                       const float *scale_weight, __nv_bfloat16 *output, int m, int n, int k,
-                      cudaStream_t stream, bool programmatic = false) {
+                      cudaStream_t stream) {
   if (m <= 64)
-    groupwise<64>(a, weight, scale_a, scale_weight, output, m, n, k, stream, programmatic);
+    groupwise<64>(a, weight, scale_a, scale_weight, output, m, n, k, stream);
   else
-    groupwise<128>(a, weight, scale_a, scale_weight, output, m, n, k, stream, programmatic);
+    groupwise<128>(a, weight, scale_a, scale_weight, output, m, n, k, stream);
 }

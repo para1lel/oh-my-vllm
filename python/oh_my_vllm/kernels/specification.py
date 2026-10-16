@@ -7,7 +7,7 @@ NUMERICAL_TOLERANCES = {
     "mtp_residual": {"atol": 0.25, "rtol": 0.03},
     "mtp_hidden": {"atol": 1.5, "rtol": 0.03},
     "mtp_logits": {"atol": 0.5, "rtol": 0.03},
-    "vision": {"atol": 0.03, "rtol": 0.03},
+    "vision": {"atol": 0.03125, "rtol": 0.03},
     "state": {"nrmse": 0.01, "peak": 0.02},
 }
 

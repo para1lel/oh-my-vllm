@@ -19,10 +19,21 @@
 ## Python
 
 [bridge](../python/oh_my_vllm/worker/zmq_bridge.py) 负责 DEALER socket 和 msgpack 帧.
-[占位实现](../python/oh_my_vllm/worker/placeholder.py) 负责 token 准备和执行模拟.
+[推理 worker](../python/oh_my_vllm/worker/inference.py) 负责 token 准备和模型计算.
+[占位实现](../python/oh_my_vllm/worker/placeholder.py) 仅用于 `--model stub`.
 
-后续推理后端沿用此进程边界.
-逻辑 cache 归 Rust 管理. Python 保存 tensors. GPU 计算由 Python 执行.
+Rust 保持逻辑 cache 所有权. Python 存储张量及私有 recurrent state.
+Worker 选择已接受的 state slot, 不为接受 token 而复制整个 recurrent state.
+
+Target 与 proposal 分布保存在独立存储中, 直至验证完成.
+约束状态只随已接受的 token 改变.
+
+模型权重常驻 GPU. Forward buffer 在 64 个语言层之间复用.
+必要时, Worker 将较大的调度步骤拆为原生 batch.
+仅含 decode 的 batch 使用固定地址的 CUDA Graph buffer. 其他 batch 使用普通执行.
+
+FA 与 GDN state pool 具有独立容量.
+媒体请求使用独立的前缀 cache 标识.
 
 [协议类型](../crates/zmq-worker/src/protocol.rs) 给出 Init, Register, Prepare, Execute, Abort, Stats 和 Shutdown 消息的字段.
 回复使用对应 RPC ID. 每个已调度请求有一行结果.
@@ -46,4 +57,4 @@ worker 故障终止受影响的请求. HTTP listener 保持运行.
 worker 清理会停止其进程组, 并移除自己创建的 IPC 路径.
 请求, 步骤和关闭期限的范围不同.
 
-命令和占位限制见[服务指南](serving.zh.md).
+命令和 worker 限制见[服务指南](serving.zh.md).

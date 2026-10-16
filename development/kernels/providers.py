@@ -1,7 +1,9 @@
 from dataclasses import replace
 
+from oh_my_vllm.worker.device import FUNCTIONS as DEVICE_FUNCTIONS
+
 MODULES = {
-    "device": ("allocate", "copy_bytes", "synchronize", "evict", "l2_bytes"),
+    "device": DEVICE_FUNCTIONS,
     "ffn": ("ffn",),
     "fa": ("fa",),
     "gdn": ("gdn",),

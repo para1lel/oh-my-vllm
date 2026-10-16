@@ -11,9 +11,35 @@ from .reference import (
     quantize,
     residual_rms,
 )
+from .sample import acceptance_reference
 
 
 class Reference(unittest.TestCase):
+    def test_mtp_short_tail_selects_its_final_target_and_state(self):
+        target = np.zeros((4, 5, 8), np.float32)
+        proposal = np.zeros((4, 4, 8), np.float32)
+        drafts = np.full((4, 4), -1, np.int64)
+        lengths = np.array([0, 1, 3, 4])
+        for request, length in enumerate(lengths):
+            for index in range(5):
+                target[request, index, index] = 1
+            for index in range(length):
+                drafts[request, index] = index
+                proposal[request, index, index] = 1
+        rng = np.zeros((4, 2), np.uint64)
+        slots = np.arange(20, dtype=np.int32).reshape(4, 5)
+        kept, counts, selected, counters = acceptance_reference(
+            target, proposal, drafts, rng, slots
+        )
+        np.testing.assert_array_equal(counts, lengths + 1)
+        np.testing.assert_array_equal(selected, slots[np.arange(4), lengths])
+        np.testing.assert_array_equal(counters[:, 1], 2 * (lengths + 1))
+        for request, length in enumerate(lengths):
+            np.testing.assert_array_equal(
+                kept[request, : length + 1], range(length + 1)
+            )
+            np.testing.assert_array_equal(kept[request, length + 1 :], -1)
+
     def test_low_precision_rounding_and_invalid_measurements(self):
         np.testing.assert_array_equal(bf16([1 + 2**-8, 1 + 3 * 2**-8]), [1, 1 + 2**-6])
         bits = np.arange(256, dtype=np.uint8)

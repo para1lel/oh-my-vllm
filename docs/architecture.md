@@ -19,10 +19,21 @@ A preempted request keeps its accepted history. Preemption removes its new draft
 ## Python
 
 The [bridge](../python/oh_my_vllm/worker/zmq_bridge.py) controls the DEALER socket and msgpack frames.
-The [placeholder](../python/oh_my_vllm/worker/placeholder.py) supplies token preparation and simulated execution.
+The [inference worker](../python/oh_my_vllm/worker/inference.py) supplies token preparation and model computation.
+The [placeholder](../python/oh_my_vllm/worker/placeholder.py) is used only for `--model stub`.
 
-The inference backend will use this process boundary.
-Rust keeps logical cache ownership. Python will store the tensors. It will do the GPU computation.
+Rust keeps logical cache ownership. Python stores tensors and private recurrent states.
+The worker selects an accepted state slot. It does not copy the full recurrent state for acceptance.
+
+Target and proposal distributions have separate storage until verification completes.
+The constraint state changes only with accepted tokens.
+
+Model weights stay in GPU memory. The worker uses the same forward buffers across the 64 language layers.
+The worker divides a large scheduler step into native batches when necessary.
+Decode-only batches use fixed-address CUDA Graph buffers. Other batches use ordinary execution.
+
+FA and GDN state pools have separate capacities.
+Media requests use separate prefix cache identities.
 
 The [protocol types](../crates/zmq-worker/src/protocol.rs) give the fields for Init, Register, Prepare, Execute, Abort, Stats, and Shutdown messages.
 Replies use the related RPC ID. Each scheduled request has one result row.
@@ -46,4 +57,4 @@ The service does not replay output or tool calls.
 Worker cleanup stops its process group. It removes the IPC path that it creates.
 The request, step, and shutdown deadlines have different scopes.
 
-Use [the service guide](serving.md) for commands and placeholder limits.
+Use [the service guide](serving.md) for commands and worker limits.

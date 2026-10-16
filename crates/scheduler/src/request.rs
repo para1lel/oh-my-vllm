@@ -21,6 +21,7 @@ pub struct Request {
     pub num_in_flight_tokens: usize,
     pub max_tokens: usize,
     pub block_hashes: Vec<BlockHash>,
+    pub cache_salt: Option<BlockHash>,
     pub status: RequestStatus,
 }
 
@@ -42,6 +43,7 @@ impl Request {
             num_in_flight_tokens: 0,
             max_tokens,
             block_hashes,
+            cache_salt: None,
             status: RequestStatus::Waiting,
         }
     }

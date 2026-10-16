@@ -2,7 +2,7 @@
 
 使用[算子规格](model.zh.md), [fusion 计划](fusion.zh.md)和[评测流程](evaluation.zh.md).
 原生 provider 提供全部七个 serving 边界. 完整负载验收是必要的.
-Worker 仍使用占位后端.
+推理 worker 加载原生模块. 占位实现仅用于 `--model stub`.
 
 ## 工具
 

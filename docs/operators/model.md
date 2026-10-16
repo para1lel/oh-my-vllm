@@ -59,12 +59,15 @@ Do not copy the full recurrent or convolution state to accept tokens.
 
 MTP context row `p` pairs target hidden row `p-1` with token `p`.
 Position zero has no MTP row. Prefix restoration supplies the boundary hidden row.
+Image and video rows use their vision embeddings in the MTP input norm.
 
 Context fill projects K and V for all context rows.
 Q, the gate, attention output, and FFN output are necessary only at the selected endpoint.
 
 The GQA input variants use 14336 full columns, 2048 K/V columns, or 12288 Q/gate columns.
-MTP target verification produces five vocabulary rows per request.
+MTP target verification produces at most five vocabulary rows per request.
+Draft entries that are not active form a suffix with token ID `-1`.
+For each request, the target row after the active drafts supplies the bonus distribution without proposal subtraction.
 The first draft uses the endpoint with the Q/gate-only variant.
 The other 3 drafts use the full MTP input and layer path.
 
@@ -141,7 +144,7 @@ The named absolute limits are:
 | Tolerance | Output | `atol` |
 |---|---|---|
 | `bf16` | Individual operators | 0.03 |
-| `vision` | Vision boundary | 0.03 |
+| `vision` | Vision boundary | 0.03125 |
 | `mtp_attention` | Attention in the MTP draft boundary | 0.1 |
 | `mtp_residual` | FFN residual in the MTP draft boundary | 0.25 |
 | `mtp_hidden` | FFN in the MTP draft boundary | 1.5 |

@@ -22,7 +22,7 @@ def build(name, functions):
         cuda = os.environ.get("CUDA_HOME", "/usr/local/cuda")
         nvcc = str(Path(cuda) / "bin/nvcc")
     flags = ("-O3", "--generate-code=arch=compute_100a,code=sm_100a", "-lineinfo")
-    source = (Path(__file__).parent if name == "device" else SOURCES) / f"{name}.cu"
+    source = SOURCES / f"{name}.cu"
     source_fingerprint = source_digest(source)
     digest = hashlib.sha256(source_fingerprint.encode())
     compiler = subprocess.check_output([nvcc, "--version"]).decode()

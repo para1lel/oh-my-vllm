@@ -52,3 +52,49 @@
 
 构建完整 worker 期间停止算子优化.
 [算子负载](operators/evaluation.zh.md)保留供后续算子分析使用.
+
+## 测量命令
+
+将 `MODEL_ROOT` 设为 checkpoint 目录.
+将 `ARTIFACT_ROOT` 设为仓库外的新目录.
+按[服务配置](serving.zh.md#启动)构建原生模块和 release 可执行文件.
+执行完整比较:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark --model "$MODEL_ROOT" --artifacts "$ARTIFACT_ROOT"
+```
+
+命令为每种模式启动并停止服务.
+它在计时前完成短初始化请求.
+它通过 HTTP usage 字段检查 prompt 长度, 输出长度及未缓存的前缀.
+默认 cache 容量为 1024 个 FA block 和 1024 个 GDN slot.
+使用 `--blocks` 和 `--mamba-blocks` 修改这些容量.
+
+使用 `--case ordinary:1:32768` 选择一个配置.
+使用 `--output-tokens 32` 进行短运行.
+短运行或不完整的配置集合不能通过完整门槛.
+
+设置 `OH_MY_VLLM_EXECUTION_TRACE` 后, Worker 写入执行轨迹.
+轨迹路径必须位于仓库外, 且运行前不得已存在.
+Benchmark 为其服务进程设置此变量.
+
+## 下界计算
+
+[计算实现](../development/serving/roofline.py)使用各矩阵运算的规定精度.
+它包含完整的 causal attention 长度, FP32 GDN 工作量, 词表投影以及 MTP context 和 draft 工作量.
+它包含接受算法的运算及实测接受的 token 数量.
+
+Prefill 分块按一次完整输入计算计数.
+计算会在每个验证轮次中将相关请求的 shape 放在一起.
+计算排除中间张量复制和 padding.
+没有指定吞吐模型的小运算不会增加下界.
+
+门槛使用总 HBM 时间, tensor-core 时间, FP32 时间和 FP64 时间中的最大值.
+Tensor-core 时间按各自峰值累加 FP8, BF16 和 TF32 工作量.
+这个全局下界允许不同资源之间重叠.
+独立区域的估计用于分析, 不用于设置门槛.
+
+仓库外的产物包含响应, usage, 执行 shape, MTP 计数, 下界分项及源码标识.
+测量期间源码改变会阻止验收.
+轨迹必须完整覆盖 prefill, 已接受位置必须连续, 输出数量必须与 HTTP usage 一致.
+同一工作计算多次或已接受的位置减少会阻止验收.

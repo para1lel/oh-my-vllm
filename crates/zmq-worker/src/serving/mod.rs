@@ -847,7 +847,22 @@ async fn complete_admit(
         processing_started: started,
         processing_started_unix_s: started_unix_s,
     };
-    if !scheduler.add_request(EngineRequest::new(id, tokens, max_tokens, vec![])) {
+    let mut engine_request = EngineRequest::new(id, tokens, max_tokens, vec![]);
+    if running.output.request.normalized["messages"]
+        .as_array()
+        .is_some_and(|messages| {
+            messages
+                .iter()
+                .any(|message| media::count(&message["content"]) > 0)
+        })
+    {
+        engine_request.cache_salt = Some(oh_my_vllm_kv_cache::hash::hash_block_tokens(
+            None,
+            &[],
+            &[0x6d65646961, id],
+        ));
+    }
+    if !scheduler.add_request(engine_request) {
         client.cancel_prepare(id).await?;
         let _ = ready.send(Err((
             StatusCode::PAYLOAD_TOO_LARGE,

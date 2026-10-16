@@ -295,6 +295,8 @@ class Service(unittest.TestCase):
             {"top_p": -1},
             {"thinking_token_budget": -2},
             {"max_tokens": 262144},
+            {"max_tokens": 8, "min_tokens": 9},
+            {"min_tokens": -1},
         ]:
             self.json("POST", "/v1/chat/completions", self.chat(**invalid), status=400)
         result = self.json(

@@ -14,7 +14,7 @@ Do these commands:
 ```bash
 conda env create -f environment.yml
 conda activate oh-my-vllm
-uv pip install --python "$CONDA_PREFIX/bin/python" -r requirements/development.txt
+uv pip install --python "$CONDA_PREFIX/bin/python" -r requirements/development.txt -r requirements/runtime.txt
 npm --prefix development/javascript ci --ignore-scripts --no-audit --no-fund
 scripts/with-env.sh pre-commit install
 ```
@@ -41,7 +41,7 @@ scripts/with-env.sh pre-commit run --all-files
 | definition-spacing | Function and module spacing through Python, Rust, and JavaScript/TypeScript syntax trees |
 | cargo-clippy | All workspace members, targets, and features, with warnings as errors |
 | cargo-test | Rust workspace tests in the repository and the Python service tests |
-| kernel-contracts | Workload coverage, performance gate, low-precision rounding, and recurrent-state reference |
+| kernel-contracts | Workload coverage, performance bounds, numerical references, and worker constraints |
 | ruff-format | Python formatter |
 | ruff-check | Python lint rules |
 | whitespace | No trailing whitespace, one final newline |

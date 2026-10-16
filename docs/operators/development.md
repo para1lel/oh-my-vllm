@@ -2,7 +2,7 @@
 
 Use the [operator specification](model.md), [fusion plan](fusion.md), and [evaluation procedure](evaluation.md).
 Native providers supply all seven serving boundaries. Full workload acceptance is necessary.
-The worker still uses its placeholder backend.
+The inference worker loads the native modules. The placeholder is used only for `--model stub`.
 
 ## Tools
 
@@ -77,7 +77,7 @@ Use `--rows` for a subset of the modeled rows.
 A subset is not sufficient for the operator coverage gate.
 An incomplete workload or failed provider prevents acceptance.
 
-Supply one complete report for each operator and mode from the same frozen sources.
+Supply one full report for each operator and mode from the same frozen sources.
 Use the report paths for a full acceptance audit:
 
 ```bash

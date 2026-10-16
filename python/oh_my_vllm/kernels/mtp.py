@@ -36,8 +36,18 @@ class MTPInput:
         self.buffers = tuple(
             allocate((rows, width), "bfloat16") for width in (10240, 5120, 5120)
         )
+        self.empty_media = allocate((0, 5120), "bfloat16")
 
-    def __call__(self, hidden, tokens, hidden_rows, boundary_hidden, boundary_rows):
+    def __call__(
+        self,
+        hidden,
+        tokens,
+        hidden_rows,
+        boundary_hidden,
+        boundary_rows,
+        media=None,
+        media_indices=None,
+    ):
         w = self.weights
         self.module.mtp_input(
             hidden,
@@ -49,6 +59,9 @@ class MTPInput:
             hidden_rows,
             boundary_hidden,
             boundary_rows,
+            self.empty_media if media is None else media,
+            hidden_rows if media_indices is None else media_indices,
+            media is not None,
             *self.buffers,
         )
         return self.buffers[1:3]

@@ -4,7 +4,8 @@ Rust supplies the HTTP APIs, CLI, scheduler, logical KV cache, and worker lifecy
 The service modes are ordinary decode and MTP4.
 HTTP input can contain text, images, and video.
 
-The Python worker is a placeholder. It does not load model weights or use a GPU.
+The Python worker loads the checkpoint and executes the language, MTP, and vision model paths.
+The `stub` model selects the placeholder for service tests.
 Rust sends media references through the inference worker's process and protocol boundary.
 
 The [operator contracts](operators/model.md) have 18 internal stages and 7 serving boundaries.
@@ -18,14 +19,14 @@ Vision MLP activation uses projection output stores.
 
 Sampling normalization uses 640 threads per block.
 MTP input normalization uses 640 threads per block when the input has 32 rows or fewer.
-Residual normalization uses [16-byte input loads](../python/oh_my_vllm/kernels/cuda_backend/normalization.cuh#L24)<!-- source: uint4 input = *reinterpret_cast<const uint4 *>(x + row * 5120 + column); -->.
+Residual normalization uses [16-byte input loads](../python/oh_my_vllm/kernels/cuda_backend/normalization.cuh#L19)<!-- source: uint4 input = *reinterpret_cast<const uint4 *>(x + row * 5120 + column); -->.
 
-FFN and FA use a shared [projection implementation](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L147)<!-- source: inline void decode_projection_launch(TensorView activation, TensorView weight, --> for inputs with eight rows or fewer.
-FFN and GDN use [CUDA launch controls](../python/oh_my_vllm/kernels/cuda_backend/programmatic.cuh#L9)<!-- source: attribute.id = cudaLaunchAttributeProgrammaticStreamSerialization; -->.
-When the input has 1, 4, or 5 rows, FFN uses one [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L176)<!-- source: inline void paired_up_launch(TensorView input, TensorView input_scale, TensorView weight, --> for its upper projections, activation, and quantization.
+FFN and FA use a shared [projection implementation](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L140)<!-- source: inline void decode_projection_launch(TensorView activation, TensorView weight, --> for inputs with eight rows or fewer.
+Native operators use ordinary CUDA stream launches. PDL is not used.
+When the input has 1, 4, or 5 rows, FFN uses one [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L173)<!-- source: inline void paired_up_launch(TensorView input, TensorView input_scale, TensorView weight, --> for its upper projections, activation, and quantization.
 
-GDN uses one [CUDA launch for gate projections and convolution](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L151)<!-- source: if (rows > 1 && rows <= 32) --> when the input has 2 to 32 rows.
-For one verification row, GDN uses one [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/gdn_input.cuh#L145)<!-- source: if constexpr (FuseConvolution) { --> for input projection and convolution.
+GDN uses one [CUDA launch for gate projections and convolution](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L150)<!-- source: if (rows > 1 && rows <= 32) --> when the input has 2 to 32 rows.
+For one verification row, GDN uses one [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/gdn_input.cuh#L142)<!-- source: if constexpr (FuseConvolution) { --> for input projection and convolution.
 
 FA has a separate prefill implementation.
 FA uses [16-row query tiles](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) --> for one or two queries per request when the input has 32 rows or fewer.
@@ -36,14 +37,15 @@ The [numerical contract](operators/model.md#intermediate-precision) follows the 
 The project has no vLLM runtime dependency.
 Named tolerances apply to specific outputs. Cache checks and state selection keep their separate requirements.
 
-The full operator implementation is not completed. More work is necessary for the 60% performance requirement.
+More work is necessary for the 60% performance requirement.
 
 Operator optimization is stopped.
-Next work: connect the complete model computation to the Python worker.
-Add constrained decoding, MTP4, and CUDA Graph execution for batches that contain only decode requests.
+The worker supplies constrained decoding, MTP4, and CUDA Graph execution for batches that contain only decode requests.
+Work is stopped at the maintainer's instruction.
+Next work: complete the end-to-end performance audit after instructions from the maintainer.
 Use producer and consumer fusion. Do not use PDL in the inference worker.
 
-Measure the complete HTTP request time with the [end-to-end requirements](performance.md).
+Measure the full HTTP request time with the [end-to-end requirements](performance.md).
 Keep numerical checks and full-boundary measurements with each provider.
 
 The scheduler selects decode first and divides the available token budget between prefill requests.

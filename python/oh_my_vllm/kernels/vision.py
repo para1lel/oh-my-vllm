@@ -35,7 +35,7 @@ class VisionBlock:
             raise ValueError("vision grid and row count are not valid")
         if height * width != frame_tokens or rows % frame_tokens:
             raise ValueError("vision rows do not match the frame grid")
-        if rows > 65536 or not 256 <= frame_tokens <= 65536:
+        if rows > 65536 or not 4 <= frame_tokens <= 65536:
             raise ValueError("vision dimensions exceed the native operator limits")
         if rows % (frame_tokens * ((frames + 1) // 2)):
             raise ValueError("vision rows do not match the temporal groups")

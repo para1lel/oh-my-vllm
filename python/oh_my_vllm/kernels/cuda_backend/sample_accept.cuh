@@ -30,12 +30,20 @@ __global__ void mtp_accept_metadata_kernel(const float *target, const float *pro
   curandStatePhilox4_32_10_t state;
   curand_init(rng[request * 2], 0, rng[request * 2 + 1], &state);
   int attempts = 0, accepted = 0;
+  bool inactive = false;
   for (int i = 0; i < 4; ++i) {
     int64_t token = drafts[request * 4 + i];
-    if (token < 0 || token >= Vocabulary) {
+    if (token == -1)
+      inactive = true;
+    else if (inactive || token < 0 || token >= Vocabulary) {
       asm volatile("trap;");
       return;
     }
+  }
+  for (int i = 0; i < 4; ++i) {
+    int64_t token = drafts[request * 4 + i];
+    if (token == -1)
+      break;
     float p = target[(request * 5 + i) * Vocabulary + token];
     float q = proposal[(request * 4 + i) * Vocabulary + token];
     if (!(isfinite(p) && p >= 0 && isfinite(q) && q >= 0)) {
@@ -56,20 +64,21 @@ __global__ void mtp_accept_metadata_kernel(const float *target, const float *pro
 }
 
 __global__ void mtp_accept_mass_kernel(const float *target, const float *proposal,
-                                       const int *counts, float *partials) {
+                                       const int64_t *drafts, const int *counts, float *partials) {
   using Reduce = cub::BlockReduce<float, 256>;
   __shared__ typename Reduce::TempStorage temporary;
   int request = blockIdx.x, block = blockIdx.y;
   int token = block * 256 + threadIdx.x, accepted = counts[request] - 1;
   float mass = 0;
+  bool rejected = accepted < 4 && drafts[request * 4 + accepted] >= 0;
   if (token < Vocabulary) {
     float p = target[(request * 5 + accepted) * Vocabulary + token];
-    float q = accepted < 4 ? proposal[(request * 4 + accepted) * Vocabulary + token] : 0;
+    float q = rejected ? proposal[(request * 4 + accepted) * Vocabulary + token] : 0;
     if (!(isfinite(p) && p >= 0 && isfinite(q) && q >= 0)) {
       asm volatile("trap;");
       return;
     }
-    mass = accepted == 4 ? p : fmaxf(p - q, 0.f);
+    mass = rejected ? fmaxf(p - q, 0.f) : p;
   }
   float total = Reduce(temporary).Sum(mass);
   if (!threadIdx.x)
@@ -77,13 +86,15 @@ __global__ void mtp_accept_mass_kernel(const float *target, const float *proposa
 }
 
 __global__ void mtp_accept_select_kernel(const float *target, const float *proposal,
-                                         const int *counts, const double *uniform,
-                                         const float *partials, int64_t *kept) {
+                                         const int64_t *drafts, const int *counts,
+                                         const double *uniform, const float *partials,
+                                         int64_t *kept) {
   using Scan = cub::BlockScan<float, 256>;
   __shared__ typename Scan::TempStorage temporary;
   __shared__ int selected_block, last_block, selected_token, last_token;
   __shared__ float block_prefix;
   int request = blockIdx.x, lane = threadIdx.x, accepted = counts[request] - 1;
+  bool rejected = accepted < 4 && drafts[request * 4 + accepted] >= 0;
   if (!lane) {
     selected_block = AcceptBlocks;
     last_block = -1;
@@ -127,8 +138,8 @@ __global__ void mtp_accept_select_kernel(const float *target, const float *propo
   float mass = 0;
   if (token < Vocabulary) {
     float p = target[(request * 5 + accepted) * Vocabulary + token];
-    float q = accepted < 4 ? proposal[(request * 4 + accepted) * Vocabulary + token] : 0;
-    mass = accepted == 4 ? p : fmaxf(p - q, 0.f);
+    float q = rejected ? proposal[(request * 4 + accepted) * Vocabulary + token] : 0;
+    mass = rejected ? fmaxf(p - q, 0.f) : p;
   }
   float cumulative;
   Scan(temporary).InclusiveSum(mass, cumulative);
@@ -192,12 +203,14 @@ void mtp_accept(TensorView target, TensorView proposal, TensorView drafts, Tenso
   check_cuda(cudaGetLastError());
   mtp_accept_mass_kernel<<<dim3(batch, AcceptBlocks), 256, 0, stream>>>(
       static_cast<const float *>(target.data_ptr()),
-      static_cast<const float *>(proposal.data_ptr()), static_cast<const int *>(counts.data_ptr()),
+      static_cast<const float *>(proposal.data_ptr()),
+      static_cast<const int64_t *>(drafts.data_ptr()), static_cast<const int *>(counts.data_ptr()),
       static_cast<float *>(partials.data_ptr()));
   check_cuda(cudaGetLastError());
   mtp_accept_select_kernel<<<batch, 256, 0, stream>>>(
       static_cast<const float *>(target.data_ptr()),
-      static_cast<const float *>(proposal.data_ptr()), static_cast<const int *>(counts.data_ptr()),
+      static_cast<const float *>(proposal.data_ptr()),
+      static_cast<const int64_t *>(drafts.data_ptr()), static_cast<const int *>(counts.data_ptr()),
       static_cast<const double *>(uniform.data_ptr()),
       static_cast<const float *>(partials.data_ptr()), static_cast<int64_t *>(kept.data_ptr()));
   check_cuda(cudaGetLastError());

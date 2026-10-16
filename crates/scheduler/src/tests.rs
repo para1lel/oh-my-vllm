@@ -61,6 +61,40 @@ fn unique_long_request(id: u64) -> Request {
 }
 
 #[test]
+fn media_cache_salts_isolate_identical_placeholder_tokens() {
+    use oh_my_vllm_kv_cache::hash::BlockHash;
+
+    let mut scheduler = make_scheduler(64, 4);
+    let mut first = make_req(1, 9, 1);
+    first.cache_salt = Some(BlockHash(11));
+    assert!(scheduler.add_request(first));
+    for step in 0..3 {
+        scheduler.schedule();
+        let mut result = dummy_output(1);
+        if step < 2 {
+            result.token_ids.clear();
+        }
+        apply(
+            &mut scheduler,
+            WorkerOutput {
+                outputs: vec![result],
+            },
+        );
+    }
+    for (id, salt, expected_hit) in [
+        (2, Some(BlockHash(22)), 0),
+        (3, None, 0),
+        (4, Some(BlockHash(11)), 8),
+    ] {
+        let mut request = make_req(id, 9, 1);
+        request.cache_salt = salt;
+        assert!(scheduler.add_request(request));
+        assert_eq!(scheduler.schedule().cache_hit_tokens, expected_hit);
+        scheduler.abort(id);
+    }
+}
+
+#[test]
 fn malformed_output_does_not_publish_pending_prefix_and_keeps_valid_history() {
     let mut sched = make_scheduler(64, 4);
     assert!(sched.add_request(make_req(1, 9, 1)));
@@ -191,6 +225,17 @@ fn mtp_acceptance_preserves_tokens_and_rejects_only_scheduled_drafts() {
         scheduler.kv.compute_block_hashes(&request.token_ids)
     );
     assert_eq!(scheduler.schedule().scheduled[0].token_ids, vec![99]);
+    let mut ending = Scheduler::new(
+        SchedulerConfig {
+            max_num_batched_tokens: 4,
+            max_num_seqs: 1,
+            enable_mtp: true,
+            mtp_draft_len: 4,
+        },
+        HybridCoordinator::new(2, 4, true, 0).with_mamba_capacity(8),
+    );
+    assert!(ending.add_request(make_req(2, 4, 1)));
+    assert_eq!(ending.schedule().num_batched_tokens, 4);
 }
 
 #[test]

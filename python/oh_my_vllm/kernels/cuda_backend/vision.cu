@@ -122,7 +122,7 @@ inline void vision_disjoint(std::initializer_list<TensorView> reads,
 
 inline void vision_grid(int64_t height, int64_t width) {
   TVM_FFI_ICHECK(height > 0 && width > 0 && height % 2 == 0 && width % 2 == 0);
-  TVM_FFI_ICHECK(height <= 65536 && width <= 65536 && height * width >= 256 &&
+  TVM_FFI_ICHECK(height <= 65536 && width <= 65536 && height * width >= 4 &&
                  height * width <= 65536);
 }
 
@@ -136,23 +136,6 @@ inline cudaStream_t vision_stream(TensorView value) {
   return static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, value.device().device_id));
 }
 
-inline void vision_resize_contract(int64_t height, int64_t width, int64_t grid_height,
-                                   int64_t grid_width) {
-  TVM_FFI_ICHECK(double(std::max(height, width)) / std::min(height, width) <= 200.);
-  int64_t target_height = std::max(int64_t(32), int64_t(nearbyint(double(height) / 32.)) * 32);
-  int64_t target_width = std::max(int64_t(32), int64_t(nearbyint(double(width) / 32.)) * 32);
-  if (target_height * target_width > 16777216) {
-    double ratio = sqrt(double(height * width) / 16777216.);
-    target_height = int64_t(floor(height / ratio / 32.)) * 32;
-    target_width = int64_t(floor(width / ratio / 32.)) * 32;
-  } else if (target_height * target_width < 65536) {
-    double ratio = sqrt(65536. / double(height * width));
-    target_height = int64_t(ceil(height * ratio / 32.)) * 32;
-    target_width = int64_t(ceil(width * ratio / 32.)) * 32;
-  }
-  TVM_FFI_ICHECK(grid_height * 16 == target_height && grid_width * 16 == target_width);
-}
-
 void vision_patch(TensorView images, TensorView weight, TensorView bias, TensorView position,
                   TensorView patches, TensorView projected, TensorView output, int64_t grid_height,
                   int64_t grid_width) {
@@ -161,7 +144,9 @@ void vision_patch(TensorView images, TensorView weight, TensorView bias, TensorV
                  images.size(2) > 0 && images.size(3) > 0 && images.size(4) == 3);
   TVM_FFI_ICHECK(images.size(0) <= 64 && images.size(1) <= 1024 && images.size(2) <= 65536 &&
                  images.size(3) <= 65536);
-  vision_resize_contract(images.size(2), images.size(3), grid_height, grid_width);
+  TVM_FFI_ICHECK(double(std::max(images.size(2), images.size(3))) /
+                     std::min(images.size(2), images.size(3)) <=
+                 200.);
   int64_t rows = images.size(0) * ((images.size(1) + 1) / 2) * grid_height * grid_width;
   TVM_FFI_ICHECK(rows > 0 && rows <= 65536);
   tensor_contract(images, images, kDLUInt, 8,

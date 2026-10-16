@@ -1,7 +1,7 @@
 # Service guide
 
-The Rust service uses a Python placeholder worker through the ZMQ/msgpack process boundary.
-The placeholder does not load model weights or use a GPU.
+The Rust service uses a Python inference worker through the ZMQ/msgpack process boundary.
+The worker loads the local checkpoint. It uses the repository CUDA modules.
 
 ## Start
 
@@ -9,7 +9,7 @@ Use the [development environment](development.md).
 Install the runtime packages:
 
 ```bash
-scripts/with-env.sh uv pip install --python "$CONDA_PREFIX/bin/python" -r requirements/runtime.txt
+scripts/with-env.sh uv pip install --python "$CONDA_PREFIX/bin/python" -r requirements/runtime.txt -r requirements/kernels.txt
 ```
 
 Build the executable:
@@ -18,10 +18,12 @@ Build the executable:
 scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
 ```
 
+Build the native modules with the [kernel setup](operators/development.md#tools).
+Set `MODEL_ROOT` to the checkpoint directory.
 Start the service:
 
 ```bash
-scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/oh-my-vllm.ipc serve
+scripts/with-env.sh scripts/with-gpu.sh target/release/oh-my-vllm-zmq-worker --model "$MODEL_ROOT" --socket /tmp/oh-my-vllm.ipc serve
 ```
 
 Use `--max-num-batched-tokens` to set the token budget per scheduler step. The default is `32768`.
@@ -61,9 +63,14 @@ The data URI media type must be the same as the image or video type.
 Image detail can be `auto`, `low`, or `high`.
 Each request history can contain at most 16 media items.
 
-The service sends media references to the worker.
-The placeholder uses each reference's digest to calculate the prompt length.
-It does not download or decode media.
+The worker downloads and decodes media. Each encoded item has a limit of 64 MiB.
+An image has a decoded limit of 67108864 pixels. Sampled video frames have a limit of 512 MiB.
+Source height and width must be at most 65536 pixels.
+Video sampling uses 2 frames per second, with at most 768 frames.
+
+Each temporal pair has a timestamp in the prompt.
+
+Media tokens use three-axis RoPE positions. Media requests have separate prefix cache identities.
 
 The service returns validation errors for fields and input types that it does not accept.
 Use `previous_response_id` for a stored Responses continuation.
@@ -84,13 +91,34 @@ scripts/with-env.sh target/release/oh-my-vllm-zmq-worker bench --input-len 785 -
 ```
 
 Run and Bench keep fixed output lengths.
-The HTTP placeholder uses a random output length that is at most the output budget.
+Add `--model "$MODEL_ROOT"` before the subcommand for model computation.
 
-Use `--speculative-mode` with `none` or `mtp` for the simulated draft traffic.
-The modes do not run model computation.
+Use `--speculative-mode mtp --num-speculative-tokens 4` before the subcommand for MTP4.
+Use `--speculative-mode none` for ordinary decode.
 
+## Output controls
+
+Use `min_tokens` to prevent EOS and stop strings before the minimum output length.
+The minimum must be at most the output limit.
+Use `temperature`, `top_k`, `top_p`, and the penalty fields for sampling.
+Use `repetition_guard=false` to disable the generated-token cycle guard.
+
+Use `response_format` for JSON output in Chat. Use `text.format` in Responses.
+JSON Schema and enabled tools cannot be used together.
+
+Tool choice can be `auto`, `none`, `required`, or a named function.
+Set `parallel_tool_calls=false` for at most one call.
+The worker applies grammar masks to target and proposal distributions.
+Only accepted tokens change the request grammar state.
+
+Decode-only batches use CUDA Graph execution. Other batches use ordinary execution.
+The worker does not use PDL.
+Use the [end-to-end procedure](performance.md) for inference performance measurements.
+
+## Placeholder
+
+Use `--model stub` for service tests without a GPU.
 The placeholder supplies random text, sample tool calls, and simple JSON samples.
-The placeholder has no model tokenizer, grammar masks, or GPU profiler.
-
+It does not load the checkpoint or do model computation.
 Placeholder timing does not measure inference performance.
-The [runtime contracts](requirements.md) still control the inference implementation.
+A model initialization or execution error does not select the placeholder.
