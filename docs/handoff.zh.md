@@ -48,7 +48,7 @@ Value 分组也适用于[单个五行验证请求](../python/oh_my_vllm/kernels/
 对于其他超过 1 行的验证输入, GDN 递推计算每块使用 [512 个线程](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L254)<!-- source: run(std::integral_constant<int, 512>{}); -->.
 
 FA 具有独立的 prefill 实现.
-其[分页加载](../python/oh_my_vllm/kernels/cuda_backend/fa_attention.cuh#L75)<!-- source: Position base_offset = base % 784; -->在向量循环之前计算 cache page 指针.
+FA 的 [decode 加载](../python/oh_my_vllm/kernels/cuda_backend/fa_attention.cuh#L75)<!-- source: Position base_offset = base % 784; -->在向量循环之前计算 cache page 指针.
 输入行数不超过 32 且每个请求有 1 或 2 个 query 时, FA 使用 [16 行 query tile](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) -->.
 FA 每块使用 256 个线程合并两份或更多注意力的部分结果.
 只有一份部分结果时, 每块使用 32 个线程.
