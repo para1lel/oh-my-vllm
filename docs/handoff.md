@@ -19,6 +19,8 @@ Vision MLP activation uses projection output stores.
 
 Sampling normalization uses 640 threads per block.
 MTP input normalization uses 640 threads per block when the input has 32 rows or fewer.
+For these inputs, MTP uses a [BF16 projection](../python/oh_my_vllm/kernels/cuda_backend/mtp_projection.cuh#L114)<!-- source: inline void mtp_projection_launch(TensorView input, TensorView weight, TensorView partials, --> with four K partitions.
+It adds the FP32 partial results before the BF16 output store.
 Residual normalization uses [16-byte input loads](../python/oh_my_vllm/kernels/cuda_backend/normalization.cuh#L19)<!-- source: uint4 input = *reinterpret_cast<const uint4 *>(x + row * 5120 + column); -->.
 
 FFN and FA use a shared [projection implementation](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L140)<!-- source: inline void decode_projection_launch(TensorView activation, TensorView weight, --> for inputs with eight rows or fewer.
@@ -55,8 +57,11 @@ FFN uses TMA with `EVICT_FIRST` and `CU_TENSOR_MAP_L2_PROMOTION_NONE` for weight
 
 The [row copy](../python/oh_my_vllm/kernels/cuda_backend/device.cu#L182)<!-- source: int column_blocks = std::clamp<int64_t>(row_bytes / 4096 + (row_bytes % 4096 != 0), 1, --> can use more than one block for each row.
 The number of rows limits the number of blocks for each row. Each row uses at least one block.
-MTP [context](../python/oh_my_vllm/worker/speculation.py#L50)<!-- source: self.gather = device.empty((len(arrays[0]),), "int32") --> and [acceptance](../python/oh_my_vllm/worker/speculation.py#L142)<!-- source: self.gather = device.empty((batch * 5,), "int32") --> keep fixed row-index buffers.
-Draft computation uses [views of the sampling output](../python/oh_my_vllm/worker/speculation.py#L444)<!-- source: previous[index] = d.view( --> for the next stage.
+
+MTP [acceptance](../python/oh_my_vllm/worker/speculation.py#L142)<!-- source: self.gather = device.empty((batch * 5,), "int32") --> keeps a fixed row-index buffer.
+MTP context [reads the model and boundary hidden buffers](../python/oh_my_vllm/worker/speculation.py#L50)<!-- source: self.boundary_hidden = cache.hidden --> directly.
+The context holds these buffers. Its graph cache key includes the source buffer identity.
+Draft computation uses [views of the sampling output](../python/oh_my_vllm/worker/speculation.py#L445)<!-- source: previous[index] = d.view( --> for the next stage.
 Each stage copies all necessary rows before sampling uses the source buffer again.
 
 Next work: decrease execution time. Complete the two performance audits with the same source files.

@@ -1,5 +1,6 @@
 #include "common.cuh"
 #include "linear.cuh"
+#include "mtp_projection.cuh"
 
 template <int Threads>
 __global__ void mtp_norm_kernel(const __nv_bfloat16 *hidden, const int64_t *tokens,
@@ -52,16 +53,28 @@ __global__ void mtp_norm_kernel(const __nv_bfloat16 *hidden, const int64_t *toke
   }
 }
 
+__global__ void mtp_merge_projection_kernel(const float *partial, __nv_bfloat16 *output,
+                                            int count) {
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index < count) {
+    float value = 0;
+#pragma unroll
+    for (int split = 0; split < 4; ++split)
+      value += partial[split * count + index];
+    output[index] = __float2bfloat16_rn(value);
+  }
+}
+
 void mtp_input(TensorView hidden, TensorView tokens, TensorView embedding, TensorView norm_hidden,
                TensorView norm_embedding, TensorView weight, TensorView hidden_rows,
                TensorView boundary_hidden, TensorView boundary_rows, TensorView media,
                TensorView media_rows, bool use_media, TensorView packed, TensorView output,
-               TensorView zero) {
+               TensorView zero, TensorView partials) {
   TVM_FFI_ICHECK(hidden.ndim() == 2 && hidden.size(0) > 0 && hidden.size(0) <= INT32_MAX &&
                  hidden.size(1) == 5120);
   TVM_FFI_ICHECK(tokens.ndim() == 1 && tokens.size(0) > 0 && tokens.size(0) <= 32768);
   TVM_FFI_ICHECK(boundary_hidden.ndim() == 2 && boundary_hidden.size(0) > 0 &&
-                 boundary_hidden.size(0) <= 32768);
+                 boundary_hidden.size(0) <= 65536);
   int rows = tokens.size(0), hidden_count = hidden.size(0), boundaries = boundary_hidden.size(0);
   tensor_contract(hidden, hidden, kDLBfloat, 16, {hidden_count, 5120});
   tensor_contract(tokens, hidden, kDLInt, 64, {rows});
@@ -80,13 +93,16 @@ void mtp_input(TensorView hidden, TensorView tokens, TensorView embedding, Tenso
     tensor_contract(tensor, hidden, kDLBfloat, 16, {rows, 5120});
   auto inputs = {hidden,      tokens,          embedding,     norm_hidden, norm_embedding, weight,
                  hidden_rows, boundary_hidden, boundary_rows, media,       media_rows};
-  auto outputs = {packed, output, zero};
+  tensor_contract(partials, hidden, kDLFloat, 32, {rows <= 32 ? 4 : 0, rows, 5120});
+  auto outputs = {packed, output, zero, partials};
   for (auto a : outputs)
     for (auto b : inputs)
       disjoint(a, b);
   disjoint(packed, output);
   disjoint(packed, zero);
   disjoint(output, zero);
+  for (auto tensor : {packed, output, zero})
+    disjoint(partials, tensor);
   tvm::ffi::CUDADeviceGuard guard(hidden.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, hidden.device().device_id));
   auto normalize = [&](auto threads) {
@@ -110,9 +126,17 @@ void mtp_input(TensorView hidden, TensorView tokens, TensorView embedding, Tenso
   else
     normalize(std::integral_constant<int, 256>{});
   check_cuda(cudaGetLastError());
-  bf16_linear(static_cast<const __nv_bfloat16 *>(packed.data_ptr()),
-              static_cast<const __nv_bfloat16 *>(weight.data_ptr()), output.data_ptr(), rows, 5120,
-              10240, stream);
+  if (rows <= 32) {
+    mtp_projection_launch(packed, weight, partials, rows, stream);
+    mtp_merge_projection_kernel<<<(rows * 5120 + 255) / 256, 256, 0, stream>>>(
+        static_cast<const float *>(partials.data_ptr()),
+        static_cast<__nv_bfloat16 *>(output.data_ptr()), rows * 5120);
+    check_cuda(cudaGetLastError());
+  } else {
+    bf16_linear(static_cast<const __nv_bfloat16 *>(packed.data_ptr()),
+                static_cast<const __nv_bfloat16 *>(weight.data_ptr()), output.data_ptr(), rows,
+                5120, 10240, stream);
+  }
 }
 
 __global__ void mtp_endpoints_kernel(const __nv_bfloat16 *value, const __nv_bfloat16 *zero,

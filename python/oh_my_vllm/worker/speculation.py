@@ -35,7 +35,7 @@ class GraphOperation:
 
 
 class Context(GraphOperation):
-    def __init__(self, device, weights, arrays, batch, max_queries):
+    def __init__(self, device, weights, arrays, batch, max_queries, hidden, cache):
         super().__init__(device)
         self.operation = MTPContext(
             weights.mtp_input,
@@ -46,9 +46,9 @@ class Context(GraphOperation):
             max_queries=max_queries,
         )
         self.arrays = tuple(device.upload(array) for array in arrays)
-        self.hidden = device.empty((len(arrays[0]), 5120), "bfloat16")
-        self.gather = device.empty((len(arrays[0]),), "int32")
-        self.cache = None
+        self.hidden = hidden
+        self.boundary_hidden = cache.hidden
+        self.cache = cache.fa[-1]
         self.media = self.media_rows = None
 
     def run(self):
@@ -67,7 +67,7 @@ class Context(GraphOperation):
                 self.hidden,
                 tokens,
                 hidden_rows,
-                self.hidden,
+                self.boundary_hidden,
                 boundary_rows,
                 self.media,
                 self.media_rows,
@@ -307,19 +307,25 @@ class Speculation:
         )
         arrays = (
             np.asarray(tokens, np.int64),
-            np.arange(len(tokens), dtype=np.int32),
-            np.zeros(len(tokens), np.int32),
+            np.asarray(hidden_rows, np.int32),
+            np.asarray(boundaries, np.int32),
             np.asarray(positions, np.int64).T.copy(),
             np.asarray(slots, np.int32),
             batch.metadata[2][active].copy(),
             np.asarray(starts, np.int32),
             np.asarray(lengths, np.int32),
         )
-        key = (len(tokens), len(active), max(np.diff(starts)))
+        key = (len(tokens), len(active), max(np.diff(starts)), id(hidden))
         if graph:
             if key not in self.context_decode:
                 self.context_decode[key] = Context(
-                    self.device, self.weights, arrays, len(active), key[2]
+                    self.device,
+                    self.weights,
+                    arrays,
+                    len(active),
+                    key[2],
+                    hidden,
+                    self.cache,
                 )
             operation = self.context_decode[key]
         else:
@@ -328,23 +334,18 @@ class Speculation:
                     self.context_prefill.close()
                     self.context_prefill = None
                 self.context_prefill = Context(
-                    self.device, self.weights, arrays, len(active), key[2]
+                    self.device,
+                    self.weights,
+                    arrays,
+                    len(active),
+                    key[2],
+                    hidden,
+                    self.cache,
                 )
                 self.context_key = key
             operation = self.context_prefill
         for destination, source in zip(operation.arrays, arrays, strict=True):
             operation.copy(destination, source)
-        operation.copy(operation.gather, np.maximum(hidden_rows, 0).astype(np.int32))
-        self.device.module.gather_rows(operation.hidden, hidden, operation.gather)
-        for row, source in enumerate(hidden_rows):
-            if source < 0:
-                operation.copy(
-                    self.device.view(operation.hidden, (1, 5120), row * 5120),
-                    self.device.view(
-                        self.cache.hidden, (1, 5120), boundaries[row] * 5120
-                    ),
-                )
-        operation.cache = self.cache.fa[-1]
         operation.media, indices = self.media.rows(media_entries)
         operation.media_rows = None
         if indices is not None:

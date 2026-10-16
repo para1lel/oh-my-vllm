@@ -19,6 +19,8 @@ Vision MLP 激活使用投影输出存储.
 
 采样归一化每块使用 640 个线程.
 MTP 输入行数不超过 32 时, 输入归一化每块使用 640 个线程.
+对于这些输入, MTP 使用分为四个 K 分区的 [BF16 投影](../python/oh_my_vllm/kernels/cuda_backend/mtp_projection.cuh#L114)<!-- source: inline void mtp_projection_launch(TensorView input, TensorView weight, TensorView partials, -->.
+它在存储 BF16 输出前累加 FP32 部分结果.
 残差归一化使用 [16 字节输入加载](../python/oh_my_vllm/kernels/cuda_backend/normalization.cuh#L19)<!-- source: uint4 input = *reinterpret_cast<const uint4 *>(x + row * 5120 + column); -->.
 
 FFN 和 FA 对行数不超过 8 的输入使用共用的 [projection 实现](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L140)<!-- source: inline void decode_projection_launch(TensorView activation, TensorView weight, -->.
@@ -55,8 +57,11 @@ FFN 的 [`paired_up_kernel`](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cu
 
 [行拷贝](../python/oh_my_vllm/kernels/cuda_backend/device.cu#L182)<!-- source: int column_blocks = std::clamp<int64_t>(row_bytes / 4096 + (row_bytes % 4096 != 0), 1, -->可为每行使用多个 block.
 行数限制每行的 block 数量. 每行至少使用一个 block.
-MTP [context](../python/oh_my_vllm/worker/speculation.py#L50)<!-- source: self.gather = device.empty((len(arrays[0]),), "int32") --> 和[接受操作](../python/oh_my_vllm/worker/speculation.py#L142)<!-- source: self.gather = device.empty((batch * 5,), "int32") -->保留固定的行索引缓冲区.
-Draft 计算为下一阶段使用[采样输出的视图](../python/oh_my_vllm/worker/speculation.py#L444)<!-- source: previous[index] = d.view( -->.
+
+MTP [接受操作](../python/oh_my_vllm/worker/speculation.py#L142)<!-- source: self.gather = device.empty((batch * 5,), "int32") -->保留固定的行索引缓冲区.
+MTP context [直接读取模型和边界的 hidden 缓冲区](../python/oh_my_vllm/worker/speculation.py#L50)<!-- source: self.boundary_hidden = cache.hidden -->.
+Context 持有这些缓冲区. 它的 graph 缓存键包含源缓冲区身份.
+Draft 计算为下一阶段使用[采样输出的视图](../python/oh_my_vllm/worker/speculation.py#L445)<!-- source: previous[index] = d.view( -->.
 每个阶段先复制所有必要的行, 然后采样才再次使用源缓冲区.
 
 下一步: 缩短执行时间. 用同一份源码完成两项性能审查.

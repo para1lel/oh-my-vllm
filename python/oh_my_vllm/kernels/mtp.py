@@ -36,6 +36,7 @@ class MTPInput:
         self.buffers = tuple(
             allocate((rows, width), "bfloat16") for width in (10240, 5120, 5120)
         )
+        self.partials = allocate((4 if rows <= 32 else 0, rows, 5120), "float32")
         self.empty_media = allocate((0, 5120), "bfloat16")
 
     def __call__(
@@ -63,6 +64,7 @@ class MTPInput:
             hidden_rows if media_indices is None else media_indices,
             media is not None,
             *self.buffers,
+            self.partials,
         )
         return self.buffers[1:3]
 
