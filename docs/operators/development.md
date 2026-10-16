@@ -121,6 +121,12 @@ The [PTX warp matrix instructions](https://docs.nvidia.com/cuda/parallel-thread-
 Compare transposed products when few query rows leave most matrix outputs unused.
 Include score exchange, softmax reduction order, output ownership, and shared-memory access.
 
+The SGLang [BF16 GEMV](https://github.com/sgl-project/sglang/blob/main/python/sglang/kernels/jit/csrc/gemm/hopper_bf16_gemv.cuh) uses vector loads, FP32 FMA, and warp reductions.
+Its [small GEMM](https://github.com/sgl-project/sglang/blob/main/python/sglang/kernels/jit/csrc/gemm/tiny_gemm.cuh) reuses weight values across input rows.
+Compare these methods with matrix products that compute unused rows.
+Include operand conversion, input cache traffic, reductions, and register use.
+Examine the compiled instructions before you use an instruction throughput model.
+
 The [PTX tensor-copy rules](https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk-tensor) include swizzle and transaction barrier requirements.
 Use descriptor boxes with the same physical layout as K/V MMA inputs.
 Keep each box in one cache page. Use vector copies for unaligned starts and partial tiles.
@@ -131,6 +137,10 @@ A known row count can remove unused scale and accumulator work.
 Compare a narrow transposed projection with padded row tiles for small inputs.
 Include the extra column blocks and scale requests.
 Keep the epilogue operations and their signed-zero behavior before BF16 conversion.
+
+The [PTX barrier rules](https://docs.nvidia.com/cuda/parallel-thread-execution/#parallel-synchronization-and-communication-instructions-bar) distinguish counted thread groups from `.aligned` CTA barriers.
+Use an explicit count and the non-`.aligned` form for independent thread groups in one CTA.
+Examine each path and each barrier phase before you reuse its storage.
 
 The [CUTLASS split-K implementation](https://github.com/NVIDIA/cutlass/blob/098de2a652cf8f00fd70b2df54051c7eccbb855a/include/cutlass/gemm/device/gemm_splitk_parallel.h#L256-L307) stores accumulator partials before a separate reduction.
 Compare this pattern with a merge in an existing consumer. Include scratch traffic and changes to FP32 association.
@@ -182,6 +192,8 @@ Use these lessons to select another candidate:
 
 - Include merge work when you compare K partitions. A faster projection alone is not sufficient.
 - Before you extend a fused projection to more rows, do a check of register and shared-memory use.
+- Treat matrix completion, accumulator reads, and buffer reuse as separate dependencies.
+- Use occupancy queries as predictions. Compare them with active-cycle counters and resource lifetimes.
 - Include repeated input reads when you move normalization into projection blocks.
 - Keep the original reduction order when local normalization supplies shared-memory matrix inputs.
 - Compare the work for each thread before you change reduction parameters. Keep the original partial sums and addition order.
@@ -195,6 +207,8 @@ Use these lessons to select another candidate:
 - Combine fixed metadata arrays by data type. Keep aligned views and fixed graph addresses.
 - Exclude invalid K groups from TMA byte counts, matrix products, and accumulator reads. Zero scales do not prevent NaN propagation.
 - Use a separate process without a profiler for comparison timings.
+- Make sure that the profiler collected each selected kernel.
+- Examine the two measurement orders before you accept a small gain from alternating trials.
 - Run HTTP comparisons without concurrent reference calculations. Keep the measured speculative acceptance trace.
 
 Use a temporary external directory for each experiment.

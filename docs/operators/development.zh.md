@@ -121,6 +121,12 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 当 query 行数较少, 大部分矩阵输出未被使用时, 比较转置的矩阵乘法.
 计入 score 交换, softmax reduction 顺序, 输出所有权及共享内存访问.
 
+SGLang 的 [BF16 GEMV](https://github.com/sgl-project/sglang/blob/main/python/sglang/kernels/jit/csrc/gemm/hopper_bf16_gemv.cuh) 使用向量加载, FP32 FMA 和 warp 归约.
+其[小规模 GEMM](https://github.com/sgl-project/sglang/blob/main/python/sglang/kernels/jit/csrc/gemm/tiny_gemm.cuh) 在输入行之间复用权重值.
+比较这些方法与会计算未使用行的矩阵乘法.
+计入操作数转换, 输入缓存流量, 归约和寄存器用量.
+使用指令吞吐模型前, 检查编译后的指令.
+
 [PTX tensor-copy 规则](https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk-tensor)包含 swizzle 和 transaction barrier 要求.
 使用与 K/V MMA 输入具有相同物理布局的描述符 box.
 每个 box 都须位于一个 cache page 内. 对未对齐起点和部分 tile 使用向量拷贝.
@@ -131,6 +137,10 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 对小输入, 比较窄的转置投影与使用填充行的 tile.
 计入额外的列 block 和尺度请求.
 在 BF16 转换前保留 epilogue 操作及其有符号零行为.
+
+[PTX 屏障规则](https://docs.nvidia.com/cuda/parallel-thread-execution/#parallel-synchronization-and-communication-instructions-bar) 区分计数线程组与 `.aligned` CTA 屏障.
+对同一 CTA 中的独立线程组, 使用显式计数和非 `.aligned` 形式.
+复用其存储前, 检查每条路径和每个屏障阶段.
 
 [CUTLASS split-K 实现](https://github.com/NVIDIA/cutlass/blob/098de2a652cf8f00fd70b2df54051c7eccbb855a/include/cutlass/gemm/device/gemm_splitk_parallel.h#L256-L307)先存储累加器 partials, 再做独立归约.
 比较此模式与在现有 consumer 中合并的方法. 包含 scratch 流量及 FP32 结合顺序的变化.
@@ -182,6 +192,8 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 
 - 比较 K 分区时包含合并工作. 只有投影变快并不足够.
 - 将融合投影扩展到更多行前, 检查寄存器和共享内存用量.
+- 将矩阵完成, 累加器读取和缓冲区复用作为不同的依赖处理.
+- 将 occupancy 查询用作预测. 将其与 active-cycle counter 和资源生命周期比较.
 - 将归一化移入投影 block 时, 包含重复的输入读取.
 - 当本地归一化提供 shared-memory 矩阵输入时, 保留原有归约顺序.
 - 调整归约参数前, 比较线程的数据分工. 保留原有部分和及加法顺序.
@@ -195,6 +207,8 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 - 按数据类型合并固定 metadata 数组. 保持视图对齐和 graph 地址固定.
 - 从 TMA 字节计数, 矩阵乘积及累加器读取中排除无效 K 组. 零缩放因子不能阻止 NaN 传播.
 - 使用不带 profiler 的独立进程进行对比计时.
+- 确认 profiler 采集了每个选定 kernel.
+- 接受交替试验中的小幅收益前, 检查两种测量顺序.
 - HTTP 对照期间不并行运行参考计算. 保留实测的推测接受轨迹.
 
 每次实验使用仓库外的临时目录.
