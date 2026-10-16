@@ -153,6 +153,10 @@ Keep the intermediate BF16 rounding before the residual addition.
 The [TensorRT-LLM normalization kernels](https://github.com/NVIDIA/TensorRT-LLM/blob/main/cpp/tensorrt_llm/kernels/layernormKernels.cu) include different variance methods.
 Keep the original centered variance and reduction tree when you combine residual addition and normalization.
 
+The [vLLM vector-copy change](https://github.com/vllm-project/vllm/pull/43437) replaces scalar 16-bit accesses with 128-bit copies.
+Compare generated instructions with the public alignment contract before you use wider accesses.
+Fewer copy instructions do not reduce the payload bytes.
+
 ## Optimization procedure
 
 Use [TileSight](https://github.com/tile-ai/TileSight) to compare tile schedules before GPU experiments.

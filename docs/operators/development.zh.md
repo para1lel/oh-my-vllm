@@ -153,6 +153,10 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 [TensorRT-LLM 归一化 kernel](https://github.com/NVIDIA/TensorRT-LLM/blob/main/cpp/tensorrt_llm/kernels/layernormKernels.cu) 包含不同的方差方法.
 合并 residual 加法和归一化时, 保留原有中心化方差及归约树.
 
+[vLLM 向量复制改动](https://github.com/vllm-project/vllm/pull/43437) 用 128 位复制替代标量 16 位访问.
+使用更宽访问前, 比较生成指令与公开对齐契约.
+复制指令减少不会减少载荷字节数.
+
 ## 优化流程
 
 在 GPU 实验前, 使用 [TileSight](https://github.com/tile-ai/TileSight) 比较 tile 调度方案.

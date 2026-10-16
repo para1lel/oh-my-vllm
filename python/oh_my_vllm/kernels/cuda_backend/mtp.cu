@@ -148,9 +148,11 @@ __global__ void mtp_endpoints_kernel(const __nv_bfloat16 *value, const __nv_bflo
     asm volatile("trap;");
     return;
   }
-  for (int column = threadIdx.x; column < 5120; column += blockDim.x) {
-    endpoints[request * 5120 + column] = value[int64_t(last - 1) * 5120 + column];
-    endpoint_zero[request * 5120 + column] = zero[int64_t(last - 1) * 5120 + column];
+  for (int vector = threadIdx.x; vector < 640; vector += blockDim.x) {
+    reinterpret_cast<uint4 *>(endpoints)[request * 640 + vector] =
+        reinterpret_cast<const uint4 *>(value)[int64_t(last - 1) * 640 + vector];
+    reinterpret_cast<uint4 *>(endpoint_zero)[request * 640 + vector] =
+        reinterpret_cast<const uint4 *>(zero)[int64_t(last - 1) * 640 + vector];
   }
 }
 
