@@ -56,7 +56,7 @@ __global__ void paired_up_kernel(const __nv_fp8_e4m3 *input, const float *input_
 #pragma unroll
         for (int side = 0; side < 2; ++side)
           SM90_TMA_LOAD_2D::copy(&weight_map, barriers + 1 + slot,
-                                 uint64_t(cute::TMA::CacheHintSm90::EVICT_NORMAL),
+                                 uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST),
                                  weights + slot * 65536 + side * 32768 + sub * 16384,
                                  (group + sub) * 128, first_column + side * 17408);
     }
@@ -186,7 +186,7 @@ inline void paired_up_launch(TensorView input, TensorView input_scale, TensorVie
     auto status = CUTLASS_CUDA_DRIVER_WRAPPER_CALL(cuTensorMapEncodeTiled)(
         &descriptor, CU_TENSOR_MAP_DATA_TYPE_UINT8, 2, weight.data_ptr(), dimensions, strides, box,
         elements, CU_TENSOR_MAP_INTERLEAVE_NONE, CU_TENSOR_MAP_SWIZZLE_128B,
-        CU_TENSOR_MAP_L2_PROMOTION_L2_128B, CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE);
+        CU_TENSOR_MAP_L2_PROMOTION_NONE, CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE);
     TVM_FFI_ICHECK(status == CUDA_SUCCESS) << status;
     found = weight_maps.emplace(key, descriptor).first;
   }

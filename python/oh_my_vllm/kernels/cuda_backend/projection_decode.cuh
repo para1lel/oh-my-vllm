@@ -65,7 +65,7 @@ __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
 #pragma unroll
       for (int sub = 0; sub < 4; ++sub)
         SM90_TMA_LOAD_2D::copy(&weight_map, barriers + 1,
-                               uint64_t(cute::TMA::CacheHintSm90::EVICT_NORMAL),
+                               uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST),
                                weight_storage + sub * 8192, (group + sub) * 128, first_column);
     }
     float scale_products[4][8] = {};
@@ -156,7 +156,7 @@ inline void decode_projection_launch(TensorView activation, TensorView weight,
     auto status = CUTLASS_CUDA_DRIVER_WRAPPER_CALL(cuTensorMapEncodeTiled)(
         &descriptor, CU_TENSOR_MAP_DATA_TYPE_UINT8, 2, weight.data_ptr(), dimensions, strides, box,
         elements, CU_TENSOR_MAP_INTERLEAVE_NONE, CU_TENSOR_MAP_SWIZZLE_128B,
-        CU_TENSOR_MAP_L2_PROMOTION_L2_128B, CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE);
+        CU_TENSOR_MAP_L2_PROMOTION_NONE, CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE);
     TVM_FFI_ICHECK(status == CUDA_SUCCESS) << status;
     found = weight_maps.emplace(key, descriptor).first;
   }

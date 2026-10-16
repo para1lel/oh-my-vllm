@@ -51,6 +51,20 @@ MTP 验证不下载未使用的采样 token.
 `copy_bytes` 现在只在目标在 CPU 上时才同步.
 `gather_rows_kernel` 在行和基地址满足 16 字节对齐时使用 16 字节向量化加载.
 
+FFN 的 [`paired_up_kernel`](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L59)<!-- source: uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST), --> 和 [`decode_projection_kernel`](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L68)<!-- source: uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST), --> 对权重加载使用 `EVICT_FIRST` 和 `CU_TENSOR_MAP_L2_PROMOTION_NONE`.
+此变更减少了 L2 cache thrashing, 因为权重工作集 (267 MB) 超过 B200 L2 cache (133 MB).
+该变更将 FFN 效率从 0.45 提高到 0.48 (eager), 从 0.49 提高到 0.53 (graph).
+FFN `expected_efficiency` 仍低于 0.60, 需要进一步优化.
+
+FFN 的 serving 负载中: rows=1 占 41% 的调用次数, rows=4 占 33%, rows=5 占 18%, rows=20 占 6%.
+rows=1, 4, 5 使用带 UMMA 和 TMA 的 [`paired_up_kernel`](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L14)<!-- source: __global__ void paired_up_kernel(const __nv_fp8_e4m3 *input, const float *input_scale, -->.
+rows=20 及以上使用 `groupwise` CUTLASS GEMM, 效率为 0.41.
+graph 模式下的加权平均效率为 0.53.
+
+rows=1, 4, 5 需要达到约 0.63 的效率才能使加权平均达到 0.60.
+当前这些行的 HBM 利用率约为 4.2 TB/s, 峰值为 7.7 TB/s.
+由于权重 tile 数量由权重维度固定, B200 仅使用 160 个 SM 中的 136 个.
+
 下一步: 缩短执行时间. 用同一份源码完成两项性能审查.
 使用 producer 与 consumer 融合. 推理 worker 不使用 PDL.
 

@@ -51,6 +51,20 @@ Operator and end-to-end optimization is in progress.
 `copy_bytes` now synchronizes only when the destination is on the CPU.
 `gather_rows_kernel` uses 16-byte vectorized loads when the row and base pointers are 16-byte aligned.
 
+FFN uses TMA with `EVICT_FIRST` and `CU_TENSOR_MAP_L2_PROMOTION_NONE` for weight loads in [`paired_up_kernel`](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L59)<!-- source: uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST), --> and [`decode_projection_kernel`](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L68)<!-- source: uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST), -->.
+This change reduces L2 thrashing because the weight working set (267 MB) exceeds the B200 L2 cache (133 MB).
+The change improves FFN efficiency from 0.45 to 0.48 (eager) and from 0.49 to 0.53 (graph) for the serving workload.
+FFN `expected_efficiency` is still below 0.60. More work is necessary.
+
+The serving workload for FFN has rows=1 (41% of calls), rows=4 (33%), rows=5 (18%), and rows=20 (6%).
+Rows 1, 4, and 5 use [`paired_up_kernel`](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L14)<!-- source: __global__ void paired_up_kernel(const __nv_fp8_e4m3 *input, const float *input_scale, --> with UMMA and TMA.
+Rows 20 and above use `groupwise` CUTLASS GEMM with efficiency 0.41.
+The weighted average is 0.53 in graph mode.
+
+Rows 1, 4, and 5 must reach efficiency near 0.63 to bring the weighted average to 0.60.
+The current HBM utilization for these rows is approximately 4.2 TB/s out of 7.7 TB/s peak.
+The B200 uses 136 of 160 SMs for this kernel because the weight tile count is fixed by the weight dimensions.
+
 Next work: decrease execution time. Complete the two performance audits with the same source files.
 Use producer and consumer fusion. Do not use PDL in the inference worker.
 
