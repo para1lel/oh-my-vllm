@@ -145,6 +145,13 @@ SGLang 的 [BF16 GEMV](https://github.com/sgl-project/sglang/blob/main/python/sg
 [CUTLASS split-K 实现](https://github.com/NVIDIA/cutlass/blob/098de2a652cf8f00fd70b2df54051c7eccbb855a/include/cutlass/gemm/device/gemm_splitk_parallel.h#L256-L307)先存储累加器 partials, 再做独立归约.
 比较此模式与在现有 consumer 中合并的方法. 包含 scratch 流量及 FP32 结合顺序的变化.
 
+在最后一个 CTA 中执行归并时, 使用 [CCCL 内存模型](https://nvidia.github.io/cccl/unstable/libcudacxx/extended_api/memory_model.html).
+在每个 CTA 的 device-scope release 操作前, 汇合该 CTA 的所有写入线程.
+在最后一个 CTA 读取 partials 前, 使用 device-scope acquire/release RMW 及 CTA 屏障.
+在产生 partials 的 kernel 前, 在调用方 stream 上重置计数器.
+在完整操作的比较中计入原子操作, 屏障, scratch 流量及重复计算.
+不得自旋或等待尚未调度的 CTA.
+
 对于 [FlashInfer GDN prefill 接口](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_prefill.py), checkpoint 间隔必须可被 64 整除.
 其 [Blackwell 实现](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py)将 live state 转换为输入类型后执行矩阵乘法.
 使用其算法前, 对照模型契约检查这些条件.

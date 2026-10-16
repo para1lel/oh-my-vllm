@@ -132,7 +132,7 @@ worker [一次下载四个 draft token](../python/oh_my_vllm/worker/draft_chain.
 其他请求在每个 draft 阶段后下载 token.
 
 下一步: 缩短执行时间. 用同一份源码完成两项性能审查.
-进一步修改 kernel 前, 比较标量 BF16 投影, 归一化融合和状态值分区.
+进一步修改 kernel 前, 比较加载调度, 状态值分区及在最后一个 CTA 中执行的归并.
 使用 producer 与 consumer 融合. 推理 worker 不使用 PDL.
 模型检查, 可复用经验及临时产物清理遵循[优化流程](operators/development.zh.md#优化流程).
 

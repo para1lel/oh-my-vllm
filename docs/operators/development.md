@@ -145,6 +145,13 @@ Examine each path and each barrier phase before you reuse its storage.
 The [CUTLASS split-K implementation](https://github.com/NVIDIA/cutlass/blob/098de2a652cf8f00fd70b2df54051c7eccbb855a/include/cutlass/gemm/device/gemm_splitk_parallel.h#L256-L307) stores accumulator partials before a separate reduction.
 Compare this pattern with a merge in an existing consumer. Include scratch traffic and changes to FP32 association.
 
+For a merge in the last CTA, use the [CCCL memory model](https://nvidia.github.io/cccl/unstable/libcudacxx/extended_api/memory_model.html).
+Join each CTA's writers before its device-scope release operation.
+Use device-scope acquire/release RMWs and a CTA barrier before the last CTA reads the partials.
+Reset the counters on the caller stream before the partial-producing kernel.
+Include atomic operations, barriers, scratch traffic, and duplicated work in the complete operation comparison.
+Do not spin or wait for an unscheduled CTA.
+
 For the [FlashInfer GDN prefill interface](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_prefill.py), checkpoint intervals must be divisible by 64.
 Its [Blackwell implementation](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py) converts live state to the input type for matrix products.
 Do a check of these conditions against the model contract before you use its algorithm.
