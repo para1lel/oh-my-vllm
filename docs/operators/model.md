@@ -134,7 +134,7 @@ Temporary storage and duplicated work cannot increase the theoretical lower boun
 
 ## Numerical checks
 
-Use CPU FP64 references that do not use the operator implementation.
+Use independent CPU FP64 references for the [fixed small numerical cases](evaluation.md#numerical-scope).
 The [CPU reference functions](../../development/kernels/reference.py) supply FP64 computations with the model rounding points.
 Use the same rounded inputs for the references and the operators.
 Use the [named numerical limits](../../python/oh_my_vllm/kernels/specification.py) for each check.

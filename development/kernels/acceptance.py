@@ -16,7 +16,13 @@ from .provenance import case_id, source_identity, suite_identity
 from .providers import MODULES, RUNTIME_MODULES
 from .roofline import ExpectedCase, Observation, expected_efficiencies
 from .work import work_for
-from .workload import SERVING_OPERATORS, modeled_cases
+from .workload import (
+    NUMERICAL_POLICY,
+    REPORT_VERSION,
+    SERVING_OPERATORS,
+    modeled_cases,
+    numerical_cases,
+)
 
 CHECKS = {
     "ffn": ("residual", "output", "all_rows_finite"),
@@ -318,6 +324,54 @@ def verify_case(check, operator, *, variant="default", mtp=False):
         raise ValueError("numerical check is missing or did not pass")
 
 
+def numerical_binding(report):
+    return {
+        **{key: report[key] for key in ("source_id", "suite_id", "native_id")},
+        "binary_ids": dict(report["binary_ids"]),
+        "checkpoint": dict(report["context"]["checkpoint"]),
+    }
+
+
+def verify_numerical_evidence(report):
+    if report.get("report_version") != REPORT_VERSION:
+        raise ValueError("unsupported evaluation report version")
+    evidence = report.get("numerical_evidence")
+    if not isinstance(evidence, dict) or evidence.get("policy") != NUMERICAL_POLICY:
+        raise ValueError("small-shape numerical evidence is missing")
+    if any(
+        evidence.get(key) != value for key, value in numerical_binding(report).items()
+    ):
+        raise ValueError("numerical evidence uses different sources or checkpoint data")
+    operator = report["operator"]
+    required = {
+        case_id(shape): shape
+        for shape in numerical_cases()
+        if shape.operator == operator
+    }
+    cases = evidence.get("cases")
+    if not isinstance(cases, dict) or set(cases) != set(required):
+        raise ValueError("missing or unexpected numerical shapes")
+    for identity, shape in required.items():
+        item = cases[identity]
+        if (
+            not isinstance(item, dict)
+            or item.get("shape") != asdict(shape)
+            or item.get("status") != "passed"
+        ):
+            raise ValueError("numerical shape or status differs from the check policy")
+        for mode in ("eager", "graph"):
+            check = item.get(mode)
+            if operator == "gdn_attention" and shape.rows == 0:
+                if not isinstance(check, dict) or any(
+                    check.get(key) is not True
+                    for key in ("passed", "empty_rows", "unchanged_slots")
+                ):
+                    raise ValueError("empty GDN guard evidence is missing or failed")
+            else:
+                verify_case(check, operator, variant=shape.variant)
+    return required
+
+
 def assess(reports):
     measured, checkpoint, device = {}, {}, None
     for report in reports:
@@ -336,6 +390,7 @@ def assess(reports):
             )
         ):
             raise ValueError("report has a failed or incomplete evaluation")
+        numerical = verify_numerical_evidence(report)
         context = report["context"]
         if context.get("upstream_commit") != UPSTREAM_COMMIT:
             raise ValueError("report uses a different upstream numerical contract")
@@ -389,11 +444,13 @@ def assess(reports):
         ]
         for item in observations:
             identity = item.case_id
-            check = report["checks"][identity]
-            variant = cases[identity].shape.variant
-            verify_case(check, operator, variant=variant)
-            if mode == "graph":
-                verify_case(check["graph"], operator, variant=variant)
+            expected_check = (
+                {"status": "passed", "numerical_case_id": identity}
+                if identity in numerical
+                else {"status": "not_run"}
+            )
+            if report["checks"][identity] != expected_check:
+                raise ValueError("timing case misstates its numerical check scope")
             samples = report["samples"][identity]
             if len(samples) != 5 or any(
                 not math.isfinite(value) or value <= 0 for value in samples
@@ -416,6 +473,8 @@ def assess(reports):
     ]
     return {
         "accepted": not missing and all(value >= 0.60 for value in measured.values()),
+        "report_version": REPORT_VERSION,
+        "numerical_policy": NUMERICAL_POLICY,
         "missing": missing,
         "expected_efficiency": {
             f"{operator}/{mode}": value

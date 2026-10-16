@@ -124,14 +124,76 @@ __global__ void gdn_convolution_kernel(const __nv_bfloat16 *projection, const __
         __float2bfloat16_rn(values[element] * inverse);
 }
 
-template <bool FusedBA, int ValueTile = 128, int Threads = 256>
+__global__ void gdn_gate_kernel(const __nv_bfloat16 *ba, const float *a_log, const float *dt_bias,
+                                float *gates, int rows) {
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index >= rows * 48)
+    return;
+  int row = index / 48, head = index % 48;
+  float projected_b = __bfloat162float(ba[int64_t(row) * 96 + head]);
+  float projected_a = __bfloat162float(ba[int64_t(row) * 96 + 48 + head]);
+  float a = projected_a + dt_bias[head];
+  float softplus = a > 20.f ? a : log1pf(expf(a));
+  float decay = expf(-expf(a_log[head]) * softplus);
+  float beta = gdn_sigmoid(projected_b);
+  gates[int64_t(row) * 96 + head] = beta;
+  gates[int64_t(row) * 96 + 48 + head] = decay;
+}
+
+constexpr int GDNPrefetchRows = 32;
+constexpr int GDNPrefetchSlotBytes = GDNPrefetchRows * 556;
+constexpr int GDNPrefetchSharedBytes = GDNPrefetchSlotBytes * 2;
+
+template <int Bytes>
+__device__ inline void gdn_prefetch_copy(void *destination, const void *source, bool valid) {
+  unsigned address = __cvta_generic_to_shared(destination);
+  int source_bytes = valid ? Bytes : 0;
+  asm volatile("cp.async.ca.shared.global [%0], [%1], %2, %3;" ::"r"(address), "l"(source),
+               "n"(Bytes), "r"(source_bytes)
+               : "memory");
+}
+
+__device__ inline void gdn_prefetch_rows(unsigned char *storage, const __nv_bfloat16 *qkv,
+                                         const float *gates, const int *writes, int base, int last,
+                                         int head, int value_base) {
+  auto *query = reinterpret_cast<__nv_bfloat16 *>(storage);
+  auto *key = query + GDNPrefetchRows * 128;
+  auto *value = key + GDNPrefetchRows * 128;
+  auto *coefficients = reinterpret_cast<float *>(value + GDNPrefetchRows * 16);
+  auto *targets = reinterpret_cast<int *>(coefficients + GDNPrefetchRows * 2);
+  for (int index = threadIdx.x; index < GDNPrefetchRows * 16; index += blockDim.x) {
+    int token = index / 16, column = (index % 16) * 8;
+    int row = base + token, source = min(row, last - 1);
+    int64_t offset = int64_t(source) * 10240 + head / 3 * 128 + column;
+    gdn_prefetch_copy<16>(query + token * 128 + column, qkv + offset, row < last);
+    gdn_prefetch_copy<16>(key + token * 128 + column, qkv + offset + 2048, row < last);
+  }
+  for (int index = threadIdx.x; index < GDNPrefetchRows * 2; index += blockDim.x) {
+    int token = index / 2, column = (index % 2) * 8;
+    int row = base + token, source = min(row, last - 1);
+    int64_t offset = int64_t(source) * 10240 + 4096 + head * 128 + value_base + column;
+    gdn_prefetch_copy<16>(value + token * 16 + column, qkv + offset, row < last);
+  }
+  for (int token = threadIdx.x; token < GDNPrefetchRows; token += blockDim.x) {
+    int row = base + token, source = min(row, last - 1);
+    gdn_prefetch_copy<4>(coefficients + token * 2, gates + int64_t(source) * 96 + head, row < last);
+    gdn_prefetch_copy<4>(coefficients + token * 2 + 1, gates + int64_t(source) * 96 + 48 + head,
+                         row < last);
+    gdn_prefetch_copy<4>(targets + token, writes + source, row < last);
+  }
+  asm volatile("cp.async.commit_group;" ::: "memory");
+}
+
+template <bool FusedBA, int ValueTile = 128, int Threads = 256, bool PrecomputedGates = false,
+          bool Staged = false>
 __global__ void __launch_bounds__(Threads, 1)
     gdn_scan_quant_kernel(const __nv_bfloat16 *qkv, const __nv_bfloat16 *qkvz, __nv_bfloat16 *ba,
                           const __nv_bfloat16 *normalized, const __nv_bfloat16 *ba_weight,
                           const float *a_log, const float *dt_bias, const float *norm,
                           __nv_bfloat16 *pool, const int *starts, const int *reads,
                           const int *writes, __nv_fp8_e4m3 *output, float *scales, int rows,
-                          int slots, bool verify, __nv_bfloat16 *recurrent) {
+                          int slots, bool verify, __nv_bfloat16 *recurrent, const float *gates) {
+  static_assert(!Staged || (PrecomputedGates && ValueTile == 16 && Threads == 256));
   int sequence = blockIdx.x, head = blockIdx.y, lane = threadIdx.x & 31;
   int warp = threadIdx.x / 32;
   constexpr int Warps = Threads / 32;
@@ -148,15 +210,49 @@ __global__ void __launch_bounds__(Threads, 1)
       state[value][key] = __bfloat162float(
           pool[((int64_t(source) * 48 + head) * 128 + value_base + value) * 128 + lane * 4 + key]);
   __shared__ float result[128], partial[Warps];
+  extern __shared__ __align__(16) unsigned char staged[];
+  int tile_value_base = blockIdx.z * ValueTile;
+  if constexpr (Staged) {
+    if (first < last) {
+      gdn_prefetch_rows(staged, qkv, gates, writes, first, last, head, tile_value_base);
+      asm volatile("cp.async.wait_group 0;" ::: "memory");
+      __syncthreads();
+      if (first + GDNPrefetchRows < last)
+        gdn_prefetch_rows(staged + GDNPrefetchSlotBytes, qkv, gates, writes,
+                          first + GDNPrefetchRows, last, head, tile_value_base);
+    }
+  }
   for (int row = first; row < last; ++row) {
-    int target = writes[row];
+    int local_row = (row - first) % GDNPrefetchRows;
+    int slot = ((row - first) / GDNPrefetchRows) & 1;
+    unsigned char *storage = staged + slot * GDNPrefetchSlotBytes;
+    int target;
+    if constexpr (Staged)
+      target = reinterpret_cast<const int *>(storage + GDNPrefetchRows * 552)[local_row];
+    else
+      target = writes[row];
     gdn_require(target >= -1 && target < slots && target != source);
     float q[4], k[4];
+    if constexpr (Staged) {
+      auto *query = reinterpret_cast<const uint2 *>(storage);
+      auto *key = reinterpret_cast<const uint2 *>(storage + GDNPrefetchRows * 256);
+      uint2 packed_q = query[local_row * 32 + lane];
+      uint2 packed_k = key[local_row * 32 + lane];
+      uint32_t q_words[2] = {packed_q.x, packed_q.y};
+      uint32_t k_words[2] = {packed_k.x, packed_k.y};
 #pragma unroll
-    for (int element = 0; element < 4; ++element) {
-      int column = head / 3 * 128 + lane * 4 + element;
-      q[element] = __bfloat162float(qkv[int64_t(row) * 10240 + column]);
-      k[element] = __bfloat162float(qkv[int64_t(row) * 10240 + 2048 + column]);
+      for (int element = 0; element < 4; ++element) {
+        int shift = (element & 1) * 16;
+        q[element] = __uint_as_float(((q_words[element / 2] >> shift) & 0xffffu) << 16);
+        k[element] = __uint_as_float(((k_words[element / 2] >> shift) & 0xffffu) << 16);
+      }
+    } else {
+#pragma unroll
+      for (int element = 0; element < 4; ++element) {
+        int column = head / 3 * 128 + lane * 4 + element;
+        q[element] = __bfloat162float(qkv[int64_t(row) * 10240 + column]);
+        k[element] = __bfloat162float(qkv[int64_t(row) * 10240 + 2048 + column]);
+      }
     }
     float q_scale = 0.08838834764831844f, k_scale = 1.f;
     if (verify) {
@@ -174,19 +270,35 @@ __global__ void __launch_bounds__(Threads, 1)
       q[element] *= q_scale;
       k[element] *= k_scale;
     }
-    float projected_b, projected_a;
-    if constexpr (FusedBA) {
-      float2 projected = gdn_ba_projection(normalized, ba_weight, ba, row, head);
-      projected_b = projected.x;
-      projected_a = projected.y;
+    float decay, beta;
+    if constexpr (Staged) {
+      auto *coefficients = reinterpret_cast<const float2 *>(storage + GDNPrefetchRows * 544);
+      float2 coefficient = coefficients[local_row];
+      beta = coefficient.x;
+      decay = coefficient.y;
+    } else if constexpr (PrecomputedGates) {
+      beta = gates[int64_t(row) * 96 + head];
+      decay = gates[int64_t(row) * 96 + 48 + head];
     } else {
-      projected_b = __bfloat162float(ba[int64_t(row) * 96 + head]);
-      projected_a = __bfloat162float(ba[int64_t(row) * 96 + 48 + head]);
+      float projected_b, projected_a;
+      if constexpr (FusedBA) {
+        float2 projected = gdn_ba_projection(normalized, ba_weight, ba, row, head);
+        projected_b = projected.x;
+        projected_a = projected.y;
+      } else {
+        projected_b = __bfloat162float(ba[int64_t(row) * 96 + head]);
+        projected_a = __bfloat162float(ba[int64_t(row) * 96 + 48 + head]);
+      }
+      float a = projected_a + dt_bias[head];
+      float softplus = a > 20.f ? a : log1pf(expf(a));
+      decay = expf(-expf(a_log[head]) * softplus);
+      beta = gdn_sigmoid(projected_b);
     }
-    float a = projected_a + dt_bias[head];
-    float softplus = a > 20.f ? a : log1pf(expf(a));
-    float decay = expf(-expf(a_log[head]) * softplus);
-    float beta = gdn_sigmoid(projected_b);
+    uint32_t packed_values = 0;
+    if constexpr (Staged) {
+      auto *values = reinterpret_cast<const uint32_t *>(storage + GDNPrefetchRows * 512);
+      packed_values = values[local_row * 8 + warp];
+    }
 #pragma unroll
     for (int value = 0; value < Values; ++value) {
       float recalled = 0;
@@ -196,10 +308,13 @@ __global__ void __launch_bounds__(Threads, 1)
         recalled += state[value][key] * k[key];
       }
       recalled = warp_sum(recalled);
-      float delta =
-          beta *
-          (__bfloat162float(qkv[int64_t(row) * 10240 + 4096 + head * 128 + value_base + value]) -
-           recalled);
+      float input_value;
+      if constexpr (Staged)
+        input_value = __uint_as_float(((packed_values >> (value * 16)) & 0xffffu) << 16);
+      else
+        input_value =
+            __bfloat162float(qkv[int64_t(row) * 10240 + 4096 + head * 128 + value_base + value]);
+      float delta = beta * (input_value - recalled);
       float sum = 0;
 #pragma unroll
       for (int key = 0; key < 4; ++key) {
@@ -216,6 +331,15 @@ __global__ void __launch_bounds__(Threads, 1)
               __float2bfloat16_rn(sum);
         else
           result[value_base + value] = __bfloat162float(__float2bfloat16_rn(sum));
+      }
+    }
+    if constexpr (Staged) {
+      if (local_row + 1 == GDNPrefetchRows && row + 1 < last) {
+        asm volatile("cp.async.wait_group 0;" ::: "memory");
+        __syncthreads();
+        if (row + 1 + GDNPrefetchRows < last)
+          gdn_prefetch_rows(storage, qkv, gates, writes, row + 1 + GDNPrefetchRows, last, head,
+                            tile_value_base);
       }
     }
     if constexpr (ValueTile < 128)

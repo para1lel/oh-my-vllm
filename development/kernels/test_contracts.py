@@ -11,11 +11,20 @@ from oh_my_vllm.kernels.native import SOURCES, source_digest
 from oh_my_vllm.kernels.specification import MODEL, OPERATORS, UPSTREAM_COMMIT
 
 from .acceptance import CHECKS, FLAGS, assess, verify_identity
+from .gdn import make_schedule
 from .provenance import case_id, source_identity, suite_identity
 from .providers import MODULES
 from .roofline import ExpectedCase, Observation, Work, expected_efficiencies
 from .work import work_for
-from .workload import PROFILES, SERVING_OPERATORS, modeled_cases, stage_cases
+from .workload import (
+    NUMERICAL_POLICY,
+    PROFILES,
+    REPORT_VERSION,
+    SERVING_OPERATORS,
+    modeled_cases,
+    numerical_cases,
+    stage_cases,
+)
 
 
 def numerical_evidence(operator, variant="default"):
@@ -81,90 +90,119 @@ def numerical_evidence(operator, variant="default"):
     return evidence
 
 
-class Contracts(unittest.TestCase):
-    def test_suite_requires_both_modes_and_complete_numerical_evidence(self):
-        reports = []
-        for operator in SERVING_OPERATORS:
-            for mode in ("eager", "graph"):
-                cases = [
-                    case for case in modeled_cases() if case.shape.operator == operator
-                ]
-                samples = {
-                    case_id(case.shape): [
-                        work_for(case.shape).lower_bound_seconds() / 0.75
-                    ]
-                    * 5
-                    for case in cases
+def acceptance_reports():
+    reports = []
+    for operator in SERVING_OPERATORS:
+        shapes = [shape for shape in numerical_cases() if shape.operator == operator]
+        for mode in ("eager", "graph"):
+            cases = [
+                case for case in modeled_cases() if case.shape.operator == operator
+            ]
+            samples = {
+                case_id(case.shape): [work_for(case.shape).lower_bound_seconds() / 0.75]
+                * 5
+                for case in cases
+            }
+            evidence = {}
+            for shape in shapes:
+                check = (
+                    {"passed": True, "empty_rows": True, "unchanged_slots": True}
+                    if operator == "gdn_attention" and shape.rows == 0
+                    else numerical_evidence(operator, shape.variant)
+                )
+                evidence[case_id(shape)] = {
+                    "shape": asdict(shape),
+                    "status": "passed",
+                    "eager": check,
+                    "graph": deepcopy(check),
                 }
-                checks = {
-                    case_id(case.shape): numerical_evidence(
-                        operator, case.shape.variant
+            report = {
+                "report_version": REPORT_VERSION,
+                "operator": operator,
+                "mode": mode,
+                "source_id": "source",
+                "suite_id": "suite",
+                "native_id": "native",
+                "binary_ids": {"library": "binary"},
+                "context": {
+                    "mode": mode,
+                    "device": "GPU-test",
+                    "upstream_commit": UPSTREAM_COMMIT,
+                    "checkpoint": {
+                        "config": MODEL["config_sha256"],
+                        "index": "a" * 64,
+                    },
+                },
+                "device": "GPU-test, B200, driver, 1965 MHz, 3996 MHz, 1000 W",
+                "cache_policy": {
+                    "method": "ld.global.cg scan before start event",
+                    "bytes": 512,
+                    "l2_bytes": 128,
+                },
+                "samples": samples,
+                "checks": {
+                    case_id(case.shape): (
+                        {"status": "passed", "numerical_case_id": case_id(case.shape)}
+                        if case_id(case.shape) in evidence
+                        else {"status": "not_run"}
                     )
                     for case in cases
-                }
-                for evidence in checks.values():
-                    evidence["graph"] = deepcopy(evidence)
-                reports.append(
-                    {
-                        "operator": operator,
-                        "mode": mode,
-                        "source_id": "source",
-                        "context": {
-                            "mode": mode,
-                            "device": "GPU-test",
-                            "upstream_commit": UPSTREAM_COMMIT,
-                            "checkpoint": {
-                                "config": MODEL["config_sha256"],
-                                "index": "a" * 64,
-                            },
-                        },
-                        "device": "GPU-test, B200, driver, 1965 MHz, 3996 MHz, 1000 W",
-                        "cache_policy": {
-                            "method": "ld.global.cg scan before start event",
-                            "bytes": 512,
-                            "l2_bytes": 128,
-                        },
-                        "samples": samples,
-                        "checks": checks,
-                        "work": {
-                            case_id(case.shape): asdict(work_for(case.shape))
-                            for case in cases
-                        },
-                        "observations": [
-                            asdict(
-                                Observation(
-                                    operator,
-                                    case_id(case.shape),
-                                    case.calls,
-                                    work_for(case.shape).lower_bound_seconds(),
-                                    samples[case_id(case.shape)][0],
-                                    True,
-                                    "source",
-                                )
-                            )
-                            for case in cases
-                        ],
-                    }
-                )
+                },
+                "work": {
+                    case_id(case.shape): asdict(work_for(case.shape)) for case in cases
+                },
+                "observations": [
+                    asdict(
+                        Observation(
+                            operator,
+                            case_id(case.shape),
+                            case.calls,
+                            work_for(case.shape).lower_bound_seconds(),
+                            samples[case_id(case.shape)][0],
+                            "source",
+                        )
+                    )
+                    for case in cases
+                ],
+            }
+            report["numerical_evidence"] = {
+                "policy": NUMERICAL_POLICY,
+                "source_id": "source",
+                "suite_id": "suite",
+                "native_id": "native",
+                "binary_ids": {"library": "binary"},
+                "checkpoint": dict(report["context"]["checkpoint"]),
+                "cases": evidence,
+            }
+            reports.append(report)
+    return reports
+
+
+def numerical_result(report, *, mode="eager"):
+    return next(iter(report["numerical_evidence"]["cases"].values()))[mode]
+
+
+class Contracts(unittest.TestCase):
+    def test_suite_requires_both_modes_and_complete_numerical_evidence(self):
+        reports = acceptance_reports()
         self.assertTrue(assess(reports)["accepted"])
-        reports[0]["checks"][next(iter(reports[0]["checks"]))][
-            "input_projection_upstream_drift"
-        ] = {"passed": False, "nrmse": 1.0}
+        numerical_result(reports[0])["input_projection_upstream_drift"] = {
+            "passed": False,
+            "nrmse": 1.0,
+        }
         self.assertTrue(assess(reports)["accepted"])
         self.assertFalse(assess(reports[:-1])["accepted"])
         with self.assertRaises(ValueError):
             assess([*reports, reports[0]])
-        key = next(iter(reports[0]["checks"]))
+        key = next(iter(reports[0]["samples"]))
         mutations = (
-            lambda report: report["checks"][key].update(passed=False),
-            lambda report: report["checks"][key].update(output={"passed": False}),
-            lambda report: report["checks"][key].update(
+            lambda report: numerical_result(report).update(passed=False),
+            lambda report: numerical_result(report).update(output={"passed": False}),
+            lambda report: numerical_result(report).update(
                 output={"passed": True, "nrmse": 1, "max_abs": 100, "reference_peak": 1}
             ),
-            lambda report: report["checks"].update(
-                {key: {"passed": True, "graph": {"passed": True}}}
-            ),
-            lambda report: report["checks"][key].update(
+            lambda report: numerical_result(report).clear(),
+            lambda report: numerical_result(report).update(
                 output={
                     "passed": True,
                     "nrmse": 0,
@@ -174,10 +212,12 @@ class Contracts(unittest.TestCase):
                 }
             ),
             lambda report: report["work"][key].update(fp64_flops=1),
-            lambda report: report["checks"][key]["output"].update(
+            lambda report: numerical_result(report)["output"].update(
                 tolerance_name="mtp_hidden"
             ),
-            lambda report: report["checks"][key]["output"].update(required_atol=0.04),
+            lambda report: numerical_result(report)["output"].update(
+                required_atol=0.04
+            ),
             lambda report: report["samples"][key].pop(),
             lambda report: report["observations"].pop(),
             lambda report: report["cache_policy"].update(bytes=128),
@@ -191,8 +231,7 @@ class Contracts(unittest.TestCase):
             with self.subTest(mutate=mutate), self.assertRaises(ValueError):
                 assess(changed)
         changed = deepcopy(reports)
-        key = next(iter(changed[1]["checks"]))
-        changed[1]["checks"][key]["graph"]["passed"] = False
+        numerical_result(changed[1], mode="graph")["passed"] = False
         with self.assertRaises(ValueError):
             assess(changed)
         for operator, field in (
@@ -206,7 +245,7 @@ class Contracts(unittest.TestCase):
             report = next(
                 report for report in changed if report["operator"] == operator
             )
-            report["checks"][next(iter(report["checks"]))][field] = {}
+            numerical_result(report)[field] = {}
             with (
                 self.subTest(operator=operator, field=field),
                 self.assertRaises(ValueError),
@@ -223,12 +262,64 @@ class Contracts(unittest.TestCase):
             report = next(
                 report for report in changed if report["operator"] == "sample"
             )
-            report["checks"][next(iter(report["checks"]))]["greedy"] = greedy
+            numerical_result(report)["greedy"] = greedy
             with self.subTest(greedy=greedy), self.assertRaises(ValueError):
                 assess(changed)
         changed = deepcopy(reports)
         report = next(report for report in changed if report["operator"] == "sample")
-        del report["checks"][next(iter(report["checks"]))]["greedy"]
+        del numerical_result(report)["greedy"]
+        with self.assertRaises(ValueError):
+            assess(changed)
+
+    def test_audit_rejects_missing_or_mismatched_small_numerical_evidence(self):
+        reports = acceptance_reports()
+        self.assertTrue(assess(reports)["accepted"])
+        for shape in numerical_cases():
+            self.assertLessEqual(
+                shape.rows, 392 if shape.operator == "vision_block" else 65
+            )
+            self.assertLessEqual(shape.context, 786)
+            if shape.position == 770:
+                self.assertEqual(make_schedule(shape).checkpoint_rows, (13, 64))
+        for field in ("source_id", "suite_id", "native_id", "binary_ids", "checkpoint"):
+            changed = deepcopy(reports)
+            changed[0]["numerical_evidence"][field] = "different"
+            with self.subTest(binding=field), self.assertRaises(ValueError):
+                assess(changed)
+        for mutate in (
+            lambda report: report.pop("numerical_evidence"),
+            lambda report: report.update(numerical_evidence={}),
+            lambda report: report.update(report_version=1),
+            lambda report: report["numerical_evidence"]["cases"].popitem(),
+            lambda report: next(
+                iter(report["numerical_evidence"]["cases"].values())
+            ).pop("graph"),
+        ):
+            changed = deepcopy(reports)
+            mutate(changed[0])
+            with self.subTest(mutate=mutate), self.assertRaises(ValueError):
+                assess(changed)
+        changed = deepcopy(reports)
+        shifted = next(
+            item
+            for item in changed[0]["numerical_evidence"]["cases"].values()
+            if item["shape"]["position"] == 770
+        )
+        shifted["shape"]["position"] = 0
+        with self.assertRaises(ValueError):
+            assess(changed)
+        changed = deepcopy(reports)
+        large = next(
+            key
+            for key, value in changed[0]["checks"].items()
+            if value["status"] == "not_run"
+        )
+        changed[0]["checks"][large] = {"status": "passed", "numerical_case_id": large}
+        with self.assertRaises(ValueError):
+            assess(changed)
+        changed = deepcopy(reports)
+        item = next(iter(changed[0]["numerical_evidence"]["cases"].values()))
+        item["shape"]["rows"] = 32144
         with self.assertRaises(ValueError):
             assess(changed)
 
@@ -331,8 +422,8 @@ class Contracts(unittest.TestCase):
         lower = work.lower_bound_seconds()
         expected = {"a": ExpectedCase("op", 1, work), "b": ExpectedCase("op", 3, work)}
         observations = [
-            Observation("op", "a", 1, lower, lower * 2, True, "source"),
-            Observation("op", "b", 3, lower, lower * 5, True, "source"),
+            Observation("op", "a", 1, lower, lower * 2, "source"),
+            Observation("op", "b", 3, lower, lower * 5, "source"),
         ]
         efficiency = expected_efficiencies(observations, expected, "source")["op"]
         self.assertAlmostEqual(efficiency, 0.275)
@@ -343,7 +434,6 @@ class Contracts(unittest.TestCase):
             [replace(observations[0], operator="other"), observations[1]],
             [replace(observations[0], lower_bound_seconds=lower * 2), observations[1]],
             [replace(observations[0], source_id="other"), observations[1]],
-            [replace(observations[0], correct=False), observations[1]],
             [replace(observations[0], measured_seconds=math.nan), observations[1]],
         ):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):

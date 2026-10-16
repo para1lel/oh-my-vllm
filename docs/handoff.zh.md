@@ -27,12 +27,17 @@ FFN 下投影, FA 输出和 GDN 输出对行数不超过 8 的输入使用共用
 原生算子使用普通 CUDA stream 启动, 不使用 PDL.
 当输入有 1, 4 或 5 行时, FFN 使用一次 [CUDA 启动](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L173)<!-- source: inline void paired_up_launch(TensorView input, TensorView input_scale, TensorView weight, --> 完成上投影, 激活和量化.
 
-输入为 2 至 32 行时, GDN 通过一次 [CUDA launch 计算门控投影和卷积](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L197)<!-- source: if (rows > 1 && rows <= 32) -->.
+输入为 2 至 32 行时, GDN 通过一次 [CUDA launch 计算门控投影和卷积](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L208)<!-- source: if (rows > 1 && rows <= 32) -->.
 验证输入只有 1 行时, GDN 用一次 [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/gdn_input.cuh#L142)<!-- source: if constexpr (FuseConvolution) { --> 计算输入投影和卷积.
-对于超过 32 行的 prefill 输入, GDN 用[独立 block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L223)<!-- source: scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{}); --> 处理每组 16 个 state value 行.
+
+对于超过 32 行的 prefill 输入, GDN 在 BF16 投影后[预先计算门控](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L81)<!-- source: bool precomputed_gates = !verify && rows > 32; -->.
+独立 block 处理每组 16 个 state value 行.
+每个 block 向两个 shared-memory 槽位[预取 32 个 token](../python/oh_my_vllm/kernels/cuda_backend/gdn_kernels.cuh#L143)<!-- source: constexpr int GDNPrefetchRows = 32; -->.
+跨槽位和 BF16 checkpoint 存储时, FP32 carry 保留在寄存器中.
 独立 kernel 执行输出归一化和量化.
-此路径也适用于[单个五行验证请求](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L79)<!-- source: bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5); -->.
-对于其他超过 1 行的验证输入, GDN 递推计算每块使用 [512 个线程](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L232)<!-- source: run(std::integral_constant<int, 512>{}); -->.
+
+Value 分组也适用于[单个五行验证请求](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L79)<!-- source: bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5); -->.
+对于其他超过 1 行的验证输入, GDN 递推计算每块使用 [512 个线程](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L253)<!-- source: run(std::integral_constant<int, 512>{}); -->.
 
 FA 具有独立的 prefill 实现.
 输入行数不超过 32 且每个请求有 1 或 2 个 query 时, FA 使用 [16 行 query tile](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) -->.
@@ -59,8 +64,8 @@ MTP 验证不下载未使用的采样 token.
 Sampler 为各路径保留[独立的 CUDA Graph](../python/oh_my_vllm/worker/sampling.py#L113)<!-- source: self.replays[self.greedy] = self.resources.enter_context( -->.
 它[在 CPU 上计算采样随机计数器](../python/oh_my_vllm/worker/sampling.py#L122)<!-- source: counters = self.inputs.random[:, 1] + (self.inputs.parameters[:, 0] > 0) -->.
 
-验收审计使用[内核目录中的原生源码](../development/kernels/acceptance.py#L111)<!-- source: source = SOURCES / f"{name}.cu" -->.
-它必须包含[贪心数值证据](../development/kernels/acceptance.py#L230)<!-- source: def verify_greedy(check): -->.
+验收审计使用[内核目录中的原生源码](../development/kernels/acceptance.py#L117)<!-- source: source = SOURCES / f"{name}.cu" -->.
+它必须包含[贪心数值证据](../development/kernels/acceptance.py#L236)<!-- source: def verify_greedy(check): -->.
 
 算子和端到端优化正在进行.
 `copy_bytes` 现在只在目标在 CPU 上时才同步.

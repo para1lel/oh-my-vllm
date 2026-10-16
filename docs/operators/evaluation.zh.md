@@ -36,6 +36,35 @@ MTP 每个请求有五行验证输入. 在模型中, 每个 MTP 步骤保留四�
 不在性能分布中使用边界检查.
 对 MTP 接受分支及其他边界条件做数值检查, 不赋予性能权重.
 
+## 数值范围
+
+使用[固定数值用例](../../development/kernels/workload.py#L70)<!-- source: def numerical_cases(): -->进行数值验收.
+计时前, 每个用例都运行 eager 模式和 CUDA Graph.
+不对大型建模用例运行 CPU FP64 参考计算.
+仅有较小行数不能限制 attention 参考计算量. 上下文长度也决定此计算量.
+
+| 算子 | 数值用例 |
+|---|---|
+| FFN | 1, 4, 5 和 20 行 |
+| GDN | Default 为 1, 4, 5 和 20 行. 一个 embedding 行. 65 行中含两个媒体行 |
+| GDN 边界 | Default 为位置 0 和 770 的 65 行. 空输入保护检查 |
+| FA | 1, 4, 5, 20 和 33 行, 上下文为 256. 五行, 上下文为 786 |
+| Sampling | 全部建模用例: 1, 4, 5 和 20 行, 使用完整词表 |
+| MTP context | 一个请求共四行. 四个请求共 16 行 |
+| MTP draft | 1 和 4 行, 上下文为 256. 包含 `full` 和 `query_only` 两个变体 |
+| Vision | 两个帧组, 每组 196 个 patch. 包含 `input`, `default` 和 `merge` 变体 |
+
+偏移位置的 GDN 用例在第 13 和 64 行保存 checkpoint. 它跨越 784-token 边界.
+FA 检查包含 prefill 路径和 cache 页边界.
+Vision 检查包含对一个帧组的修改, 并确认另一帧组的输出不变.
+
+报告使用版本 2 和 `small_shapes_v1` 数值策略.
+`numerical_evidence` 记录将检查绑定到报告的源码, 二进制及 checkpoint 身份.
+审计要求所列的每个 shape 和两种执行模式.
+每个建模计时用例引用其匹配的数值用例, 或记录 `status: not_run`.
+未检查的用例不得记录数值通过.
+这些检查不能证明更大 shape 或 provider 所述范围之外元素的数值精度.
+
 ## 性能门槛
 
 使用单 GPU dense B200 峰值.
@@ -59,7 +88,7 @@ t_lower = max(
 )
 eta(shape) = t_lower(shape) / measured_seconds(shape)
 E_eta(operator) = sum(probability(shape | operator) * eta(shape))
-PASS(operator) = accuracy_pass AND complete_coverage AND E_eta(operator) >= 0.60
+PASS(operator) = small_checks_pass AND complete_performance_coverage AND E_eta(operator) >= 0.60
 ```
 
 使用[工作量计算](../../development/kernels/work.py)得到每个 serving 边界的必要计算量及 HBM 字节数.
@@ -89,7 +118,8 @@ Padding 和不必要的复制不能抬高理论下界.
 测量前构建实现.
 测量前准备缓冲区.
 
-计时前检查精度. 所有运行之间恢复可变状态.
+计时前运行固定的小型数值检查. 所有运行之间恢复可变状态.
+测量每个建模 shape. 大型建模用例仅提供性能证据.
 在调用者的 stream 上, 在完整操作前后使用 CUDA events.
 Eager 和 CUDA Graph 计时包含全部必要 launches.
 

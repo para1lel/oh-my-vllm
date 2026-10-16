@@ -38,23 +38,18 @@ class Observation:
     calls: float
     lower_bound_seconds: float
     measured_seconds: float
-    correct: bool
     source_id: str
 
     def efficiency(self):
-        if (
-            self.correct is not True
-            or not self.source_id
-            or any(
-                not math.isfinite(value) or value <= 0
-                for value in (
-                    self.calls,
-                    self.lower_bound_seconds,
-                    self.measured_seconds,
-                )
+        if not self.source_id or any(
+            not math.isfinite(value) or value <= 0
+            for value in (
+                self.calls,
+                self.lower_bound_seconds,
+                self.measured_seconds,
             )
         ):
-            raise ValueError("observation has no valid accuracy, identity, or timing")
+            raise ValueError("observation has no valid identity or timing")
         value = self.lower_bound_seconds / self.measured_seconds
         if value > 1.05:
             raise ValueError("lower bound exceeds measurement; examine the work model")

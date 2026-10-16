@@ -9,11 +9,19 @@ from pathlib import Path
 
 from oh_my_vllm.kernels.specification import UPSTREAM_COMMIT
 
+from .acceptance import numerical_binding, verify_numerical_evidence
 from .provenance import ROOT, case_id, source_identity, suite_identity
 from .providers import MODULES, RUNTIME_MODULES, prepare
 from .roofline import ExpectedCase, Observation, expected_efficiencies
 from .work import work_for
-from .workload import PROFILES, SERVING_OPERATORS, modeled_cases
+from .workload import (
+    NUMERICAL_POLICY,
+    PROFILES,
+    REPORT_VERSION,
+    SERVING_OPERATORS,
+    modeled_cases,
+    numerical_cases,
+)
 
 
 def plan():
@@ -21,6 +29,11 @@ def plan():
     return {
         "profiles": [asdict(profile) for profile in PROFILES],
         "serving_operators": SERVING_OPERATORS,
+        "numerical_policy": NUMERICAL_POLICY,
+        "numerical_cases": [
+            {"id": case_id(shape), "shape": asdict(shape)}
+            for shape in numerical_cases()
+        ],
         "cases": [
             {
                 "id": case_id(case.shape),
@@ -31,6 +44,48 @@ def plan():
             for case in cases
         ],
     }
+
+
+def check_numerical_cases(device, checkpoint, make_case, first, report, selected):
+    evidence = {
+        "policy": NUMERICAL_POLICY,
+        **numerical_binding(report),
+        "cases": {},
+    }
+    report["numerical_evidence"] = evidence
+    reusable = {}
+    shapes = [
+        shape for shape in numerical_cases() if shape.operator == report["operator"]
+    ]
+    for index, shape in enumerate(shapes):
+        prepared = first if index == 0 else make_case(shape)
+        if checkpoint.identity != report["context"]["checkpoint"]:
+            raise ValueError("checkpoint identity changed between numerical cases")
+        if prepared.operation.source_id != report["native_id"]:
+            raise ValueError("native provider identity changed between numerical cases")
+        identity = case_id(shape)
+        item = {"shape": asdict(shape), "status": "not_run"}
+        evidence["cases"][identity] = item
+        prepared.reset()
+        item["eager"] = prepared.check()
+        if not item["eager"]["passed"]:
+            item["status"] = "failed"
+            raise ValueError(f"numerical check failed: {identity}")
+        prepared.reset()
+        with device.graph(prepared.run) as replay:
+            prepared.reset()
+            replay()
+            device.synchronize()
+            item["graph"] = prepared.check(execute=False)
+        if not item["graph"]["passed"]:
+            item["status"] = "failed"
+            raise ValueError(f"graph numerical check failed: {identity}")
+        item["status"] = "passed"
+        prepared.reset()
+        if identity in selected:
+            reusable[identity] = prepared
+    verify_numerical_evidence(report)
+    return reusable
 
 
 def evaluate(arguments, report):
@@ -54,6 +109,7 @@ def evaluate(arguments, report):
         {
             "operator": arguments.operator,
             "mode": arguments.mode,
+            "report_version": REPORT_VERSION,
             "accepted": False,
             "observations": [],
             "checks": {},
@@ -62,7 +118,11 @@ def evaluate(arguments, report):
             "missing_providers": sorted(set(SERVING_OPERATORS) - set(RUNTIME_MODULES)),
         }
     )
-    first = make_case(cases[0].shape)
+    first = make_case(
+        next(
+            shape for shape in numerical_cases() if shape.operator == arguments.operator
+        )
+    )
     selected_gpu = os.environ.get("CUDA_VISIBLE_DEVICES")
     if not selected_gpu or "," in selected_gpu:
         raise ValueError("use the single-GPU wrapper")
@@ -109,29 +169,35 @@ def evaluate(arguments, report):
         "l2_bytes": device.l2_bytes,
     }
     try:
-        for index, case in enumerate(cases):
-            prepared = first if index == 0 else make_case(case.shape)
+        reusable = check_numerical_cases(
+            device,
+            checkpoint,
+            make_case,
+            first,
+            report,
+            {case_id(case.shape) for case in cases},
+        )
+        for case in cases:
+            identity = case_id(case.shape)
+            prepared = (
+                reusable.pop(identity)
+                if identity in reusable
+                else make_case(case.shape)
+            )
             if checkpoint.identity != context["checkpoint"]:
                 raise ValueError("checkpoint identity changed between cases")
             if prepared.operation.source_id != native_id:
                 raise ValueError("native provider identity changed between cases")
-            identity = case_id(case.shape)
             work = work_for(case.shape)
             report["work"][identity] = asdict(work)
             prepared.reset()
-            check = prepared.check()
-            report["checks"][identity] = check
-            if not check["passed"]:
-                raise ValueError(f"numerical check failed: {identity}")
+            report["checks"][identity] = (
+                {"status": "passed", "numerical_case_id": identity}
+                if identity in report["numerical_evidence"]["cases"]
+                else {"status": "not_run"}
+            )
             if arguments.mode == "graph":
                 with device.graph(prepared.run) as operation:
-                    prepared.reset()
-                    operation()
-                    device.synchronize()
-                    graph_check = prepared.check(execute=False)
-                    report["checks"][identity]["graph"] = graph_check
-                    if not graph_check["passed"]:
-                        raise ValueError(f"graph numerical check failed: {identity}")
                     if arguments.profile:
                         prepared.reset()
                         device.profile(operation)
@@ -160,7 +226,6 @@ def evaluate(arguments, report):
                 case.calls,
                 work.lower_bound_seconds(),
                 statistics.median(samples),
-                True,
                 source_id,
             )
             report["observations"].append(asdict(observation))
@@ -169,6 +234,7 @@ def evaluate(arguments, report):
                     {
                         "case": identity,
                         "rows": case.shape.rows,
+                        "numerical_status": report["checks"][identity]["status"],
                         "median_seconds": observation.measured_seconds,
                         "efficiency": observation.efficiency(),
                     }

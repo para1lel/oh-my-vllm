@@ -27,12 +27,17 @@ FFN down, FA output, and GDN output use a shared [projection implementation](../
 Native operators use ordinary CUDA stream launches. PDL is not used.
 When the input has 1, 4, or 5 rows, FFN uses one [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L173)<!-- source: inline void paired_up_launch(TensorView input, TensorView input_scale, TensorView weight, --> for its upper projections, activation, and quantization.
 
-GDN uses one [CUDA launch for gate projections and convolution](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L197)<!-- source: if (rows > 1 && rows <= 32) --> when the input has 2 to 32 rows.
+GDN uses one [CUDA launch for gate projections and convolution](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L208)<!-- source: if (rows > 1 && rows <= 32) --> when the input has 2 to 32 rows.
 For one verification row, GDN uses one [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/gdn_input.cuh#L142)<!-- source: if constexpr (FuseConvolution) { --> for input projection and convolution.
-For prefill inputs with more than 32 rows, GDN uses [separate blocks](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L223)<!-- source: scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{}); --> for groups of 16 state value rows.
+
+For prefill inputs with more than 32 rows, GDN [precomputes the gates](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L81)<!-- source: bool precomputed_gates = !verify && rows > 32; --> after the BF16 projection.
+Separate blocks process groups of 16 state value rows.
+Each block [prefetches 32 tokens](../python/oh_my_vllm/kernels/cuda_backend/gdn_kernels.cuh#L143)<!-- source: constexpr int GDNPrefetchRows = 32; --> into two shared-memory slots.
+The FP32 carry stays in registers across these slots and BF16 checkpoint stores.
 A separate kernel applies output normalization and quantization.
-This path also applies to [one five-row verification request](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L79)<!-- source: bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5); -->.
-GDN recurrent computation uses [512 threads per block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L232)<!-- source: run(std::integral_constant<int, 512>{}); --> for other verification inputs with more than one row.
+
+The value groups also apply to [one five-row verification request](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L79)<!-- source: bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5); -->.
+GDN recurrent computation uses [512 threads per block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L253)<!-- source: run(std::integral_constant<int, 512>{}); --> for other verification inputs with more than one row.
 
 FA has a separate prefill implementation.
 FA uses [16-row query tiles](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) --> for one or two queries per request when the input has 32 rows or fewer.
@@ -59,8 +64,8 @@ It keeps one-hot probabilities for MTP acceptance. Random and mixed batches use 
 The sampler keeps a [separate CUDA Graph for each path](../python/oh_my_vllm/worker/sampling.py#L113)<!-- source: self.replays[self.greedy] = self.resources.enter_context( -->.
 It [calculates sampling random counters on the CPU](../python/oh_my_vllm/worker/sampling.py#L122)<!-- source: counters = self.inputs.random[:, 1] + (self.inputs.parameters[:, 0] > 0) -->.
 
-The acceptance audit uses [native sources from the kernel directory](../development/kernels/acceptance.py#L111)<!-- source: source = SOURCES / f"{name}.cu" -->.
-It must include [greedy numerical evidence](../development/kernels/acceptance.py#L230)<!-- source: def verify_greedy(check): -->.
+The acceptance audit uses [native sources from the kernel directory](../development/kernels/acceptance.py#L117)<!-- source: source = SOURCES / f"{name}.cu" -->.
+It must include [greedy numerical evidence](../development/kernels/acceptance.py#L236)<!-- source: def verify_greedy(check): -->.
 
 Operator and end-to-end optimization is in progress.
 `copy_bytes` now synchronizes only when the destination is on the CPU.

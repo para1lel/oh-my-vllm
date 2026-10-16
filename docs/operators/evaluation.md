@@ -36,6 +36,35 @@ Merge only cases with the same execution shapes.
 Do not use boundary checks in the performance distribution.
 Do numerical checks of MTP acceptance branches and other boundary conditions without performance weights.
 
+## Numerical scope
+
+Use the [fixed numerical cases](../../development/kernels/workload.py#L70)<!-- source: def numerical_cases(): --> for numerical acceptance.
+Run each case in eager mode and a CUDA Graph before timing.
+Do not run CPU FP64 references for large modeled cases.
+A small row count alone does not limit attention reference work. The context length also controls this work.
+
+| Operator | Numerical cases |
+|---|---|
+| FFN | Rows 1, 4, 5, and 20 |
+| GDN | Default rows 1, 4, 5, and 20. One embedding row. 65 rows with two media rows |
+| GDN boundaries | Default 65 rows at positions 0 and 770. Empty input guards |
+| FA | Rows 1, 4, 5, 20, and 33 with context 256. Five rows with context 786 |
+| Sampling | All modeled cases: rows 1, 4, 5, and 20, with the full vocabulary |
+| MTP context | Four rows in one request. 16 rows in four requests |
+| MTP draft | Rows 1 and 4 with context 256. The `full` and `query_only` variants |
+| Vision | Two frame groups of 196 patches. `input`, `default`, and `merge` variants |
+
+The shifted GDN case has checkpoint rows 13 and 64. It crosses the 784-token boundary.
+FA checks include the prefill path and a cache page boundary.
+Vision checks include changes to one frame group and unchanged outputs in the other group.
+
+Reports use version 2 and the `small_shapes_v1` numerical policy.
+The `numerical_evidence` record binds checks to the report's sources, binaries, and checkpoint identities.
+The audit must include each listed shape and the two execution modes.
+Each modeled timing case refers to its matching numerical case or records `status: not_run`.
+Unchecked cases must not record a numerical pass.
+These checks do not prove numerical accuracy for larger shapes or elements that the provider's stated scope does not include.
+
 ## Performance gate
 
 Use single-GPU dense B200 peaks.
@@ -59,7 +88,7 @@ t_lower = max(
 )
 eta(shape) = t_lower(shape) / measured_seconds(shape)
 E_eta(operator) = sum(probability(shape | operator) * eta(shape))
-PASS(operator) = accuracy_pass AND complete_coverage AND E_eta(operator) >= 0.60
+PASS(operator) = small_checks_pass AND complete_performance_coverage AND E_eta(operator) >= 0.60
 ```
 
 Use [the work calculation](../../development/kernels/work.py) for the necessary computation and HBM bytes of each serving boundary.
@@ -89,7 +118,8 @@ Get one idle B200 through the GPU wrapper.
 Build the implementation before measurement.
 Prepare the buffers before measurement.
 
-Do the numerical checks before timing. Restore mutable state between all runs.
+Do the fixed small numerical checks before timing. Restore mutable state between all runs.
+Measure each modeled shape. Large modeled cases supply performance evidence only.
 Use CUDA events before and after the full operation on the caller's stream.
 Include all necessary launches in eager and CUDA Graph timing.
 

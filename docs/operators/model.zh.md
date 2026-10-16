@@ -134,7 +134,7 @@ merger 在 2-by-2 gather 前归一化每个 1152-element patch.
 
 ## 数值检查
 
-使用不依赖算子实现的 CPU FP64 参考.
+对[固定的小规模数值用例](evaluation.zh.md#数值范围)使用独立的 CPU FP64 参考.
 [CPU 参考函数](../../development/kernels/reference.py)提供采用模型舍入点的 FP64 计算.
 参考与算子使用相同的舍入输入.
 每项检查使用[具名数值限制](../../python/oh_my_vllm/kernels/specification.py).

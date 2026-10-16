@@ -39,7 +39,7 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
          TensorView summed, TensorView gathered, TensorView normalized, TensorView input_data,
          TensorView input_scales, TensorView qkvz, TensorView ba, TensorView qkv,
          TensorView output_data, TensorView output_scales, TensorView recurrent,
-         TensorView projection_partials) {
+         TensorView projection_partials, TensorView gates) {
   TVM_FFI_ICHECK(x.ndim() == 2 && x.size(1) == 5120 && x.size(0) >= 0 && x.size(0) <= 32768);
   TVM_FFI_ICHECK(reads.ndim() == 1 && reads.size(0) > 0 && reads.size(0) <= 32768);
   TVM_FFI_ICHECK(state.ndim() == 4 && state.size(0) > 0 && state.size(0) <= 65536);
@@ -78,6 +78,8 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
   tensor_contract(output_scales, x, kDLFloat, 32, {rows, 48});
   bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5);
   tensor_contract(recurrent, x, kDLBfloat, 16, {split_values ? rows : 0, 6144});
+  bool precomputed_gates = !verify && rows > 32;
+  tensor_contract(gates, x, kDLFloat, 32, {precomputed_gates ? rows : 0, 96});
   if (rows <= 8)
     tensor_contract(projection_partials, x, kDLFloat, 32, {8, rows, 5120});
   else
@@ -115,7 +117,8 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
                   output_data,
                   output_scales,
                   recurrent,
-                  projection_partials};
+                  projection_partials,
+                  gates};
   int left = 0;
   for (auto a : tensors) {
     int right = 0;
@@ -181,6 +184,14 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
     bf16_linear(static_cast<const __nv_bfloat16 *>(normalized.data_ptr()),
                 static_cast<const __nv_bfloat16 *>(ba_weight.data_ptr()), ba.data_ptr(), rows, 96,
                 5120, stream);
+  if (precomputed_gates) {
+    gdn_gate_kernel<<<(rows * 48 + 255) / 256, 256, 0, stream>>>(
+        static_cast<const __nv_bfloat16 *>(ba.data_ptr()),
+        static_cast<const float *>(a_log.data_ptr()),
+        static_cast<const float *>(dt_bias.data_ptr()), static_cast<float *>(gates.data_ptr()),
+        rows);
+    check_cuda(cudaGetLastError());
+  }
   auto prepare = [&](auto project_ba) {
     constexpr bool ProjectBA = decltype(project_ba)::value;
     launch_kernel(
@@ -199,12 +210,15 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
   else if (!(rows == 1 && verify))
     prepare(std::false_type{});
   check_cuda(cudaGetLastError());
-  auto scan = [&](auto fused, auto value_tile, auto thread_count) {
+  auto scan = [&](auto fused, auto value_tile, auto thread_count, auto prepared_gates,
+                  auto staged) {
     constexpr int ValueTile = decltype(value_tile)::value;
     constexpr int Threads = decltype(thread_count)::value;
+    constexpr int SharedBytes = decltype(staged)::value ? GDNPrefetchSharedBytes : 0;
     launch_kernel(
-        gdn_scan_quant_kernel<decltype(fused)::value, ValueTile, Threads>,
-        dim3(batch, 48, 128 / ValueTile), dim3(Threads), 0, stream,
+        gdn_scan_quant_kernel<decltype(fused)::value, ValueTile, Threads,
+                              decltype(prepared_gates)::value, decltype(staged)::value>,
+        dim3(batch, 48, 128 / ValueTile), dim3(Threads), SharedBytes, stream,
         static_cast<const __nv_bfloat16 *>(qkv.data_ptr()),
         static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
         static_cast<__nv_bfloat16 *>(ba.data_ptr()),
@@ -217,16 +231,23 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
         static_cast<const int *>(reads.data_ptr()), static_cast<const int *>(writes.data_ptr()),
         static_cast<__nv_fp8_e4m3 *>(output_data.data_ptr()),
         static_cast<float *>(output_scales.data_ptr()), rows, slots, verify,
-        static_cast<__nv_bfloat16 *>(recurrent.data_ptr()));
+        static_cast<__nv_bfloat16 *>(recurrent.data_ptr()),
+        static_cast<const float *>(gates.data_ptr()));
   };
-  if (split_values)
-    scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{});
+  if (precomputed_gates)
+    scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{},
+         std::true_type{}, std::true_type{});
+  else if (split_values)
+    scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{},
+         std::false_type{}, std::false_type{});
   else {
     auto run = [&](auto threads) {
       if (rows == 1)
-        scan(std::true_type{}, std::integral_constant<int, 128>{}, threads);
+        scan(std::true_type{}, std::integral_constant<int, 128>{}, threads, std::false_type{},
+             std::false_type{});
       else
-        scan(std::false_type{}, std::integral_constant<int, 128>{}, threads);
+        scan(std::false_type{}, std::integral_constant<int, 128>{}, threads, std::false_type{},
+             std::false_type{});
     };
     if (verify && rows > 1)
       run(std::integral_constant<int, 512>{});

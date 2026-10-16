@@ -73,7 +73,9 @@ Before the command, select a profile directory path that does not exist.
 Profiling does not supply acceptance timing.
 
 Use `--operator` to select `ffn`, `fa_attention`, `gdn_attention`, `vision_block`, `sample`, `mtp_context`, or `mtp_draft`.
-Use `--rows` for a subset of the modeled rows.
+Use `--rows` for a subset of the modeled timing rows.
+This option does not change the [small numerical case list](evaluation.md#numerical-scope).
+Each benchmark does checks of this list in the two execution modes before timing.
 A subset is not sufficient for the operator coverage gate.
 An incomplete workload or failed provider prevents acceptance.
 
@@ -84,10 +86,12 @@ Use the report paths for a full acceptance audit:
 scripts/with-env.sh python -m development.kernels audit --reports "$ARTIFACT_ROOT"/suite-*.json --output "$ARTIFACT_ROOT/acceptance.json"
 ```
 
-The audit checks current sources, immutable binaries, checkpoint identities, cold weights, numerical checks, and all modeled shapes.
+The audit does checks of current sources, immutable binaries, checkpoint identities, cold weights, the small numerical cases, and all modeled timing shapes.
+Version 2 reports keep numerical evidence separate from timing coverage.
+Large timing cases record numerical status `not_run`. This status does not remove a shape from performance coverage.
 Old reports do not qualify after a source change.
 
-The FFN check examines all output elements for finite values.
+For each selected numerical case, the FFN check examines all output elements for finite values.
 It compares all residual elements for exact BF16 equality.
 
 The FFN FP64 projection reference compares all columns in the first, middle, and final rows.

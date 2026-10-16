@@ -73,7 +73,9 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels profile --
 Profiling 不提供验收计时.
 
 使用 `--operator` 选择 `ffn`, `fa_attention`, `gdn_attention`, `vision_block`, `sample`, `mtp_context` 或 `mtp_draft`.
-使用 `--rows` 选择部分建模行数.
+使用 `--rows` 选择部分建模计时行数.
+此选项不改变[小型数值用例清单](evaluation.zh.md#数值范围).
+每次 benchmark 都在计时前使用两种执行模式对此清单进行检查.
 子集不足以满足算子覆盖率门槛.
 负载不完整或 provider 失败会阻止验收.
 
@@ -84,10 +86,12 @@ Profiling 不提供验收计时.
 scripts/with-env.sh python -m development.kernels audit --reports "$ARTIFACT_ROOT"/suite-*.json --output "$ARTIFACT_ROOT/acceptance.json"
 ```
 
-审计检查当前源码, 不可变二进制, checkpoint 身份, 冷权重, 数值检查和全部建模 shape.
+审计对当前源码, 不可变二进制, checkpoint 身份, 冷权重, 小型数值用例及全部建模计时 shape 进行检查.
+版本 2 报告将数值证据与计时覆盖分开.
+大型计时用例将数值状态记为 `not_run`. 此状态不会从性能覆盖中移除该 shape.
 源码变更后, 旧报告不再符合验收条件.
 
-FFN 检查会确认所有输出元素都是有限值.
+对于每个选定的数值用例, FFN 检查会确认所有输出元素都是有限值.
 所有残差元素都必须满足 BF16 精确相等.
 
 FFN 的 FP64 投影参考比较首行, 中间行和末行的全部列.

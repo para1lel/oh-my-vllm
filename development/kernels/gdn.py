@@ -111,7 +111,7 @@ def make_schedule(shape):
             else [
                 row
                 for row in range(first, last)
-                if (row - first + 1) % 784 == 0 or row == last - 1
+                if (shape.position + row - first + 1) % 784 == 0 or row == last - 1
             ]
         )
         for row in selected:
@@ -127,7 +127,7 @@ def make_schedule(shape):
         tuple(writes),
         tuple(checkpoints),
         tuple(checkpoint_slots),
-        (0,) * shape.batch,
+        (shape.position,) * shape.batch,
         next_slot + 2,
         verify,
     )

@@ -44,6 +44,8 @@ PROFILES = (
 )
 
 CONTEXT_SAMPLES = ((0.5, 1.0),)
+REPORT_VERSION = 2
+NUMERICAL_POLICY = "small_shapes_v1"
 
 
 @dataclass(frozen=True, order=True)
@@ -56,12 +58,67 @@ class Shape:
     frame_tokens: int = 0
     variant: str = "default"
     media_rows: int = 0
+    position: int = 0
 
 
 @dataclass(frozen=True)
 class Case:
     shape: Shape
     calls: float
+
+
+def numerical_cases():
+    shapes = [
+        Shape("ffn", rows, batch, 1)
+        for rows, batch in ((1, 1), (4, 4), (5, 1), (20, 4))
+    ]
+    shapes.extend(
+        Shape("gdn_attention", rows, batch, queries)
+        for rows, batch, queries in ((1, 1, 1), (4, 4, 1), (5, 1, 5), (20, 4, 5))
+    )
+    shapes.extend(
+        (
+            Shape("gdn_attention", 1, 1, 1, variant="embedding"),
+            Shape("gdn_attention", 65, 1, 65, variant="embedding_media", media_rows=2),
+            Shape("gdn_attention", 65, 1, 65),
+            Shape("gdn_attention", 65, 1, 65, position=770),
+            Shape("gdn_attention", 0, 1, 0),
+        )
+    )
+    shapes.extend(
+        Shape("fa_attention", rows, batch, queries, 256)
+        for rows, batch, queries in (
+            (1, 1, 1),
+            (4, 4, 1),
+            (5, 1, 5),
+            (20, 4, 5),
+            (33, 1, 33),
+        )
+    )
+    shapes.append(Shape("fa_attention", 5, 1, 5, 786))
+    shapes.extend(
+        Shape("sample", rows, batch, 1, variant=variant)
+        for rows, batch, variant in (
+            (1, 1, "sampling"),
+            (4, 4, "sampling"),
+            (5, 1, "verify"),
+            (20, 4, "verify"),
+        )
+    )
+    shapes.extend(
+        Shape("mtp_context", rows, batch, 1, variant="context")
+        for rows, batch in ((4, 1), (16, 4))
+    )
+    shapes.extend(
+        Shape("mtp_draft", rows, batch, 1, 256, variant=variant)
+        for rows, batch in ((1, 1), (4, 4))
+        for variant in ("full", "query_only")
+    )
+    shapes.extend(
+        Shape("vision_block", 392, 1, 1, frame_tokens=196, variant=variant)
+        for variant in ("input", "default", "merge")
+    )
+    return tuple(shapes)
 
 
 def stage_cases(profiles=PROFILES):
