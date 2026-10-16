@@ -117,6 +117,10 @@ Its paged implementation supplies a load path without TMA.
 Compare this schedule with the current FA implementation for head width 256.
 Keep the 784-token cache pages and BF16 probability storage.
 
+The [PTX warp matrix instructions](https://docs.nvidia.com/cuda/parallel-thread-execution/#warp-level-matrix-instructions-mma) support fixed matrix shapes.
+Compare transposed products when few query rows leave most matrix outputs unused.
+Include score exchange, softmax reduction order, output ownership, and shared-memory access.
+
 The [PTX tensor-copy rules](https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk-tensor) include swizzle and transaction barrier requirements.
 Use descriptor boxes with the same physical layout as K/V MMA inputs.
 Keep each box in one cache page. Use vector copies for unaligned starts and partial tiles.
@@ -151,6 +155,11 @@ Keep the original bias rounding, BF16 coefficients, paired loads, and output con
 
 The [FA4 head layouts](https://github.com/Dao-AILab/flash-attention/blob/main/flash_attn/cute/flash_fwd_sm100.py) round general head widths up to multiples of 16.
 Compare these layouts with the pinned CUTLASS collective before you change storage for the 72-dimensional Vision heads.
+
+Group TMA descriptor dimensions to fit the shared layout before you decrease the logical head width.
+Apply the pinned test for a contiguous prefix. Keep its specified descriptor bit update.
+Examine workload correctness after raw descriptor acceptance. Keep the physical row stride. Examine each output consumer.
+
 The [CUTLASS callbacks](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cutlass/epilogue/fusion/sm100_callbacks_tma_warpspecialized.hpp) can combine bias and residual operations in a projection epilogue.
 Keep the intermediate BF16 rounding before the residual addition.
 The [TensorRT-LLM normalization kernels](https://github.com/NVIDIA/TensorRT-LLM/blob/main/cpp/tensorrt_llm/kernels/layernormKernels.cu) include different variance methods.

@@ -21,6 +21,10 @@ Vision [Q/K/V packing](../python/oh_my_vllm/kernels/cuda_backend/vision.cu#L46)<
 A block shares BF16-rounded sine and cosine values across attention heads.
 Bias rounding, paired dimensions, padded zeros, and frame order stay unchanged.
 
+Vision [attention](../python/oh_my_vllm/kernels/cuda_backend/vision_attention.cuh#L18)<!-- source: static_assert(Dimension == 80); --> computes 80 dimensions for heads with 72 dimensions.
+Global storage keeps a 128-element row stride. The unpack operation reads dimensions 0 through 71.
+Grouped TMA copies use the shared-memory layout from the pinned CUTLASS collective and the original softmax scale.
+
 Sampling normalization uses 640 threads per block.
 MTP input normalization uses 640 threads per block when the input has 32 rows or fewer.
 For these inputs, MTP uses a [BF16 projection](../python/oh_my_vllm/kernels/cuda_backend/mtp_projection.cuh#L114)<!-- source: inline void mtp_projection_launch(TensorView input, TensorView weight, TensorView partials, --> with four K partitions.
@@ -63,7 +67,7 @@ FA input projection uses [64 output columns for each block](../python/oh_my_vllm
 The full and query-only paths use this kernel for 1, 4, or 5 input rows.
 FP32 scale updates keep K-group order and the original BF16 output conversion.
 
-The [KV-only path](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L102)<!-- source: bool split_kv = variant == 1 && (rows == 4 || rows == 16) && --> uses eight K partitions for 4 or 16 rows when the attention scratch buffer has sufficient space.
+The [KV-only path](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L103)<!-- source: bool split_kv = variant == 1 && (rows == 4 || rows == 16) && --> uses eight K partitions for 4 or 16 rows when the attention scratch buffer has sufficient space.
 The head kernel adds the FP32 partials before BF16 conversion, K normalization, RoPE, and private KV writes.
 This changes FP32 association. The named tolerances apply.
 Other KV-only inputs use the groupwise implementation.
@@ -73,7 +77,10 @@ Each descriptor box is in one 784-token page.
 Vector copies handle unaligned starts and final partial tiles.
 
 FA [decode loads](../python/oh_my_vllm/kernels/cuda_backend/fa_attention.cuh#L75)<!-- source: Position base_offset = base % 784; --> calculate cache page pointers before the vector loop.
-FA uses [16-row query tiles](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L189)<!-- source: if (max_queries * 6 <= 16) --> for one or two queries per request when the input has 32 rows or fewer.
+FA uses a [transposed warp matrix product](../python/oh_my_vllm/kernels/cuda_backend/fa_q1_warp_transpose.cuh#L17)<!-- source: __global__ void fa_q1_warp_partial_kernel( --> for one query per request with at most 32 input rows and 64 KV partitions.
+This path keeps BF16 probabilities and the original scalar softmax reduction tree.
+
+Other small inputs use [16-row or 32-row query tiles](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L206)<!-- source: if (max_queries * 6 <= 16) -->.
 FA combines two or more partial attention results with 256 threads per block.
 It uses 32 threads per block when there is only one partial result.
 

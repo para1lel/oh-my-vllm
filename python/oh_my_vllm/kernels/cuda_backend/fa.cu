@@ -6,6 +6,7 @@
 #include "fa_input.cuh"
 #include "fa_kv_split.cuh"
 #include "fa_prefill.cuh"
+#include "fa_q1_warp_transpose.cuh"
 #include "fa_small_input.cuh"
 
 __global__ void fa_output_merge_kernel(const float *partials, __nv_bfloat16 *output, int count) {
@@ -164,6 +165,22 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
         static_cast<const int32_t *>(sequence_rows.data_ptr()),
         static_cast<float *>(partial.data_ptr()), static_cast<float *>(lse.data_ptr()),
         tables.size(1), tiles, max_queries, rows, blocks, first_token, maps.key, maps.value);
+    check_cuda(cudaGetLastError());
+  } else if (max_queries == 1 && rows <= 32 && splits == 64) {
+    static std::once_flag warp_q1_configured;
+    std::call_once(warp_q1_configured, [] {
+      check_cuda(cudaFuncSetAttribute(fa_q1_warp_partial_kernel,
+                                      cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                      FAWarpTransposeSharedBytes));
+    });
+    fa_q1_warp_partial_kernel<<<dim3(batch, 4, splits), 128, FAWarpTransposeSharedBytes, stream>>>(
+        static_cast<const __nv_bfloat16 *>(query.data_ptr()),
+        static_cast<const __nv_bfloat16 *>(cache.data_ptr()),
+        static_cast<const int32_t *>(tables.data_ptr()),
+        static_cast<const int32_t *>(lengths.data_ptr()),
+        static_cast<const int32_t *>(sequence_rows.data_ptr()),
+        static_cast<float *>(partial.data_ptr()), static_cast<float *>(lse.data_ptr()),
+        tables.size(1), splits, first_token, rows, blocks);
     check_cuda(cudaGetLastError());
   } else {
     auto attend = [&](auto query_tile) {

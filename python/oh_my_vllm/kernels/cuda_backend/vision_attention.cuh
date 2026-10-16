@@ -5,36 +5,42 @@
 #include <collective/sm100_fmha_fwd_epilogue_tma_warpspecialized.hpp>
 #include <collective/sm100_fmha_fwd_mainloop_tma_warpspecialized.hpp>
 #include <device/fmha.hpp>
+#include "vision_grouped_transport.cuh"
 #include <kernel/fmha_tile_scheduler.hpp>
 #include <kernel/sm100_fmha_fwd_kernel_tma_warpspecialized.hpp>
 
-template <bool Normalized>
+template <bool Normalized, int Dimension>
 inline void vision_attention_launch(const __nv_bfloat16 *query, const __nv_bfloat16 *key,
                                     const __nv_bfloat16 *value, __nv_bfloat16 *output,
                                     float *normalizer, int tokens, int groups, int device,
                                     cudaStream_t stream) {
   using namespace cute;
+  static_assert(Dimension == 80);
   using Element = cutlass::bfloat16_t;
   using Problem = tuple<int, int, int, tuple<tuple<int, int>, int>>;
   using Stride = tuple<int, _1, tuple<tuple<int, int>, int>>;
   using KeyStride = tuple<int, _1, tuple<tuple<_0, int>, int>>;
   using LogStride = tuple<_1, tuple<tuple<int, int>, int>>;
-  using Mainloop = cutlass::fmha::collective::Sm100FmhaFwdMainloopTmaWarpspecialized<
-      Element, float, float, Shape<_256, _64, _128>, Stride, KeyStride, KeyStride,
+  using BaseMainloop = cutlass::fmha::collective::Sm100FmhaFwdMainloopTmaWarpspecialized<
+      Element, float, float, Shape<_256, _64, Int<Dimension>>, Stride, KeyStride, KeyStride,
       cutlass::fmha::collective::ResidualMask>;
+  using Mainloop = VisionGroupedMainloop<BaseMainloop>;
   using BaseEpilogue = cutlass::fmha::collective::Sm100FmhaFwdEpilogueTmaWarpspecialized<
       cutlass::bfloat16_t, float, typename Mainloop::TileShapePV, Stride, LogStride>;
-  using Epilogue = BaseEpilogue;
+  using Epilogue = VisionGroupedEpilogue<BaseEpilogue>;
   using Kernel = cutlass::fmha::kernel::Sm100FmhaFwdKernelTmaWarpspecialized<
       Problem, Mainloop, Epilogue, cutlass::fmha::kernel::IndividualTileScheduler>;
   using Attention = cutlass::fmha::device::FMHA<Kernel>;
+  static_assert(Kernel::MaxThreadsPerBlock == 512);
+  static_assert(Kernel::SharedStorageSize == 71920);
+  static_assert(int(Mainloop::TmemAllocation::kEnd) == 512);
   Stride stride =
       make_stride(128, _1{}, make_stride(make_stride(0, tokens * 128), 16 * tokens * 128));
   KeyStride key_stride =
       make_stride(128, _1{}, make_stride(make_stride(_0{}, tokens * 128), 16 * tokens * 128));
   LogStride log_stride = make_stride(_1{}, make_stride(make_stride(0, tokens), 16 * tokens));
   typename Attention::Arguments arguments{};
-  arguments.problem_shape = {tokens, tokens, 128, {{1, 16}, groups}};
+  arguments.problem_shape = {tokens, tokens, Dimension, {{1, 16}, groups}};
   arguments.mainloop = {{reinterpret_cast<const Element *>(query), stride,
                          reinterpret_cast<const Element *>(key), key_stride,
                          reinterpret_cast<const Element *>(value), key_stride},

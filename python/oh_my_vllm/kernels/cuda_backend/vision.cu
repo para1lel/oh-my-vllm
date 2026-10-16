@@ -222,10 +222,10 @@ void vision_block(TensorView value, TensorView norm1_weight, TensorView norm1_bi
   vision_qkv_kernel<<<rows, 256, 0, stream>>>(matrix, vision_read(qkv_bias), vision_write(query),
                                               vision_write(key), vision_write(values), rows,
                                               grid_height, grid_width);
-  vision_attention_launch<true>(vision_read(query), vision_read(key), vision_read(values),
-                                vision_write(padded_attention),
-                                static_cast<float *>(normalizer.data_ptr()), tokens, rows / tokens,
-                                value.device().device_id, stream);
+  vision_attention_launch<true, 80>(vision_read(query), vision_read(key), vision_read(values),
+                                    vision_write(padded_attention),
+                                    static_cast<float *>(normalizer.data_ptr()), tokens,
+                                    rows / tokens, value.device().device_id, stream);
   vision_attention_unpack_kernel<<<(int64_t(rows) * 1152 + 255) / 256, 256, 0, stream>>>(
       vision_read(padded_attention), vision_write(attended), rows, tokens);
   bf16_linear<float>(vision_read(attended), vision_read(attention_weight), matrix, rows, 1152, 1152,

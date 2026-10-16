@@ -21,6 +21,10 @@ Vision [Q/K/V 打包](../python/oh_my_vllm/kernels/cuda_backend/vision.cu#L46)<!
 一个 block 在 attention head 之间共享经 BF16 舍入的 sine 和 cosine 值.
 Bias 舍入, 配对维度, 补齐零值及帧顺序保持不变.
 
+Vision [attention](../python/oh_my_vllm/kernels/cuda_backend/vision_attention.cuh#L18)<!-- source: static_assert(Dimension == 80); --> 对具有 72 个维度的 head 计算 80 个维度.
+全局存储保留每行 128 个元素的 stride. Unpack 操作读取第 0 至 71 维.
+分组 TMA 拷贝使用固定 CUTLASS collective 的共享内存布局及原始 softmax scale.
+
 采样归一化每块使用 640 个线程.
 MTP 输入行数不超过 32 时, 输入归一化每块使用 640 个线程.
 对于这些输入, MTP 使用分为四个 K 分区的 [BF16 投影](../python/oh_my_vllm/kernels/cuda_backend/mtp_projection.cuh#L114)<!-- source: inline void mtp_projection_launch(TensorView input, TensorView weight, TensorView partials, -->.
@@ -63,7 +67,7 @@ FA 输入投影为[每个 block 使用 64 个输出列](../python/oh_my_vllm/ker
 full 和 query-only 路径对 1, 4 或 5 个输入行使用此 kernel.
 FP32 缩放更新保留 K-group 顺序及原有 BF16 输出转换.
 
-当 attention scratch 缓冲区空间足够时, [KV-only 路径](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L102)<!-- source: bool split_kv = variant == 1 && (rows == 4 || rows == 16) && -->对 4 或 16 行使用八个 K 分区.
+当 attention scratch 缓冲区空间足够时, [KV-only 路径](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L103)<!-- source: bool split_kv = variant == 1 && (rows == 4 || rows == 16) && -->对 4 或 16 行使用八个 K 分区.
 Head kernel 在 BF16 转换, K 归一化, RoPE 和私有 KV 写入前合并 FP32 partials.
 这会改变 FP32 结合顺序. 使用命名容差.
 其他 KV-only 输入使用 groupwise 实现.
@@ -73,7 +77,10 @@ FA prefill 对完整且对齐的 KV tile 使用 [TMA 拷贝](../python/oh_my_vll
 向量拷贝处理未对齐的起点和最后一个部分 tile.
 
 FA 的 [decode 加载](../python/oh_my_vllm/kernels/cuda_backend/fa_attention.cuh#L75)<!-- source: Position base_offset = base % 784; -->在向量循环之前计算 cache page 指针.
-输入行数不超过 32 且每个请求有 1 或 2 个 query 时, FA 使用 [16 行 query tile](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L189)<!-- source: if (max_queries * 6 <= 16) -->.
+每个请求有 1 个 query, 输入行数不超过 32 且 KV 分区数为 64 时, FA 使用[转置的 warp 矩阵乘法](../python/oh_my_vllm/kernels/cuda_backend/fa_q1_warp_transpose.cuh#L17)<!-- source: __global__ void fa_q1_warp_partial_kernel( -->.
+此路径保留 BF16 概率和原始标量 softmax reduction tree.
+
+其他小输入使用 [16 行或 32 行 query tile](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L206)<!-- source: if (max_queries * 6 <= 16) -->.
 FA 每块使用 256 个线程合并两份或更多注意力的部分结果.
 只有一份部分结果时, 每块使用 32 个线程.
 

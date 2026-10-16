@@ -117,6 +117,10 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 对 head 宽度为 256 的输入, 比较此调度与当前 FA 实现.
 保留 784-token cache page 和 BF16 概率存储.
 
+[PTX warp 矩阵指令](https://docs.nvidia.com/cuda/parallel-thread-execution/#warp-level-matrix-instructions-mma) 支持固定的矩阵形状.
+当 query 行数较少, 大部分矩阵输出未被使用时, 比较转置的矩阵乘法.
+计入 score 交换, softmax reduction 顺序, 输出所有权及共享内存访问.
+
 [PTX tensor-copy 规则](https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk-tensor)包含 swizzle 和 transaction barrier 要求.
 使用与 K/V MMA 输入具有相同物理布局的描述符 box.
 每个 box 都须位于一个 cache page 内. 对未对齐起点和部分 tile 使用向量拷贝.
@@ -151,6 +155,11 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 
 [FA4 head 布局](https://github.com/Dao-AILab/flash-attention/blob/main/flash_attn/cute/flash_fwd_sm100.py) 将一般 head 宽度向上取整为 16 的倍数.
 更改 72 维 Vision head 的存储前, 先将这些布局与固定版本的 CUTLASS collective 比较.
+
+减小逻辑 head 宽度前, 将 TMA 描述符维度分组, 以匹配共享内存布局.
+应用固定版本的连续前缀检查. 保留规定的描述符位更新.
+原始描述符被接受后, 检查 workload 正确性. 保留物理行 stride. 检查每个输出 consumer.
+
 [CUTLASS callbacks](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cutlass/epilogue/fusion/sm100_callbacks_tma_warpspecialized.hpp) 可以在投影 epilogue 中合并 bias 和 residual 操作.
 保留 residual 加法前的中间 BF16 舍入.
 [TensorRT-LLM 归一化 kernel](https://github.com/NVIDIA/TensorRT-LLM/blob/main/cpp/tensorrt_llm/kernels/layernormKernels.cu) 包含不同的方差方法.
