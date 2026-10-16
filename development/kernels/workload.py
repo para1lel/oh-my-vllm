@@ -45,7 +45,7 @@ PROFILES = (
 
 CONTEXT_SAMPLES = ((0.5, 1.0),)
 REPORT_VERSION = 2
-NUMERICAL_POLICY = "small_shapes_v1"
+NUMERICAL_POLICY = "small_shapes_v2"
 
 
 @dataclass(frozen=True, order=True)
@@ -70,7 +70,7 @@ class Case:
 def numerical_cases():
     shapes = [
         Shape("ffn", rows, batch, 1)
-        for rows, batch in ((1, 1), (4, 4), (5, 1), (20, 4))
+        for rows, batch in ((1, 1), (4, 4), (5, 1), (20, 4), (65, 1))
     ]
     shapes.extend(
         Shape("gdn_attention", rows, batch, queries)

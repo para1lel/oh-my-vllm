@@ -107,6 +107,8 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 递推, value tile 和序列分区采用 [GDN 执行计划](gdn.zh.md).
 
 [CUTLASS 分块示例](https://github.com/NVIDIA/cutlass/blob/v4.8.0/examples/81_blackwell_gemm_blockwise/81_blackwell_gemm_blockwise.cu)使用 E4M3 操作数和 FP32 缩放因子.
+其[累加器变换](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cutlass/gemm/collective/sm100_mma_warpspecialized_blockwise_scaling.hpp)按 K-group 顺序执行 FP32 更新.
+[cuBLAS 13.1 缩放支持表](https://docs.nvidia.com/cuda/archive/13.1.2/cublas/index.html#scaling-mode-support-overview)将 FP32 的 128 元素及 128-by-128 缩放限制为 compute capability 9.0.
 当前的 [DeepGEMM SM100 FP8 接口](https://github.com/deepseek-ai/DeepGEMM/blob/main/README.md)仅使用打包的 UE8M0 缩放因子.
 不得为了使用另一种矩阵指令而改变 checkpoint 缩放值.
 

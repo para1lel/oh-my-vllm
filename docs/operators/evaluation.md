@@ -45,7 +45,7 @@ A small row count alone does not limit attention reference work. The context len
 
 | Operator | Numerical cases |
 |---|---|
-| FFN | Rows 1, 4, 5, and 20 |
+| FFN | Rows 1, 4, 5, 20, and 65 |
 | GDN | Default rows 1, 4, 5, and 20. One embedding row. 65 rows with two media rows |
 | GDN boundaries | Default 65 rows at positions 0 and 770. Empty input guards |
 | FA | Rows 1, 4, 5, 20, and 33 with context 256. Five rows with context 786 |
@@ -58,7 +58,9 @@ The shifted GDN case has checkpoint rows 13 and 64. It crosses the 784-token bou
 FA checks include the prefill path and a cache page boundary.
 Vision checks include changes to one frame group and unchanged outputs in the other group.
 
-Reports use version 2 and the `small_shapes_v1` numerical policy.
+The 65-row FFN case uses the prefill projection path.
+
+Reports use version 2 and the `small_shapes_v2` numerical policy.
 The `numerical_evidence` record binds checks to the report's sources, binaries, and checkpoint identities.
 The audit must include each listed shape and the two execution modes.
 Each modeled timing case refers to its matching numerical case or records `status: not_run`.

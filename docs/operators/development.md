@@ -107,6 +107,8 @@ Use external implementations as design references. Obey the [runtime library rul
 Use the [GDN execution plan](gdn.md) for recurrence, value tiles, and sequence partitions.
 
 The [CUTLASS blockwise example](https://github.com/NVIDIA/cutlass/blob/v4.8.0/examples/81_blackwell_gemm_blockwise/81_blackwell_gemm_blockwise.cu) uses E4M3 operands and FP32 scales.
+Its [accumulator transform](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cutlass/gemm/collective/sm100_mma_warpspecialized_blockwise_scaling.hpp) applies FP32 updates in K-group order.
+The [cuBLAS 13.1 scaling table](https://docs.nvidia.com/cuda/archive/13.1.2/cublas/index.html#scaling-mode-support-overview) limits FP32 128-element and 128-by-128 scaling to compute capability 9.0.
 Current [DeepGEMM SM100 FP8 interfaces](https://github.com/deepseek-ai/DeepGEMM/blob/main/README.md) use only packed UE8M0 scales.
 Do not change checkpoint scale values to use another matrix instruction.
 
