@@ -142,6 +142,17 @@ Compare a greedy `argmax` reduction with the full vocabulary sort.
 Apply masks and penalties before token selection.
 Keep the required stochastic distribution for random rows.
 
+The [FlashInfer RoPE kernel](https://github.com/flashinfer-ai/flashinfer/blob/main/include/flashinfer/pos_enc.cuh) and [vLLM Qwen3 vision model](https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/models/qwen3_vl.py) share sine and cosine values across attention heads.
+Compute the original position coefficients once per row if another cache changes their rounded values.
+Keep the original bias rounding, BF16 coefficients, paired loads, and output conversion.
+
+The [FA4 head layouts](https://github.com/Dao-AILab/flash-attention/blob/main/flash_attn/cute/flash_fwd_sm100.py) round general head widths up to multiples of 16.
+Compare these layouts with the pinned CUTLASS collective before you change storage for the 72-dimensional Vision heads.
+The [CUTLASS callbacks](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cutlass/epilogue/fusion/sm100_callbacks_tma_warpspecialized.hpp) can combine bias and residual operations in a projection epilogue.
+Keep the intermediate BF16 rounding before the residual addition.
+The [TensorRT-LLM normalization kernels](https://github.com/NVIDIA/TensorRT-LLM/blob/main/cpp/tensorrt_llm/kernels/layernormKernels.cu) include different variance methods.
+Keep the original centered variance and reduction tree when you combine residual addition and normalization.
+
 ## Optimization procedure
 
 Use [TileSight](https://github.com/tile-ai/TileSight) to compare tile schedules before GPU experiments.

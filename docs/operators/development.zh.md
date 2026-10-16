@@ -142,6 +142,17 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 在 token 选择前应用 mask 和 penalty.
 为随机行保留所需的随机分布.
 
+[FlashInfer RoPE kernel](https://github.com/flashinfer-ai/flashinfer/blob/main/include/flashinfer/pos_enc.cuh) 和 [vLLM Qwen3 视觉模型](https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/models/qwen3_vl.py) 在 attention head 之间共享 sine 和 cosine 值.
+如果其他缓存会改变舍入后的值, 则为每行计算一次原有位置系数.
+保留原有 bias 舍入, BF16 系数, 配对加载及输出转换.
+
+[FA4 head 布局](https://github.com/Dao-AILab/flash-attention/blob/main/flash_attn/cute/flash_fwd_sm100.py) 将一般 head 宽度向上取整为 16 的倍数.
+更改 72 维 Vision head 的存储前, 先将这些布局与固定版本的 CUTLASS collective 比较.
+[CUTLASS callbacks](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cutlass/epilogue/fusion/sm100_callbacks_tma_warpspecialized.hpp) 可以在投影 epilogue 中合并 bias 和 residual 操作.
+保留 residual 加法前的中间 BF16 舍入.
+[TensorRT-LLM 归一化 kernel](https://github.com/NVIDIA/TensorRT-LLM/blob/main/cpp/tensorrt_llm/kernels/layernormKernels.cu) 包含不同的方差方法.
+合并 residual 加法和归一化时, 保留原有中心化方差及归约树.
+
 ## 优化流程
 
 在 GPU 实验前, 使用 [TileSight](https://github.com/tile-ai/TileSight) 比较 tile 调度方案.

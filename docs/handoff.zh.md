@@ -17,6 +17,10 @@ Rust 通过推理 worker 的进程和协议边界发送媒体引用.
 报告绑定 checkpoint shards, 源文件, 二进制文件及构建依赖.
 Vision MLP 激活使用投影输出存储.
 
+Vision [Q/K/V 打包](../python/oh_my_vllm/kernels/cuda_backend/vision.cu#L46)<!-- source: __shared__ float cosines[72], sines[72]; --> 为每个 token 行计算一次位置系数.
+一个 block 在 attention head 之间共享经 BF16 舍入的 sine 和 cosine 值.
+Bias 舍入, 配对维度, 补齐零值及帧顺序保持不变.
+
 采样归一化每块使用 640 个线程.
 MTP 输入行数不超过 32 时, 输入归一化每块使用 640 个线程.
 对于这些输入, MTP 使用分为四个 K 分区的 [BF16 投影](../python/oh_my_vllm/kernels/cuda_backend/mtp_projection.cuh#L114)<!-- source: inline void mtp_projection_launch(TensorView input, TensorView weight, TensorView partials, -->.

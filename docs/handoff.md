@@ -17,6 +17,10 @@ Each provider supplies numerical checks and restores mutable state before measur
 Reports bind checkpoint shards, source files, binaries, and build dependencies.
 Vision MLP activation uses projection output stores.
 
+Vision [Q/K/V packing](../python/oh_my_vllm/kernels/cuda_backend/vision.cu#L46)<!-- source: __shared__ float cosines[72], sines[72]; --> computes position coefficients once for each token row.
+A block shares BF16-rounded sine and cosine values across attention heads.
+Bias rounding, paired dimensions, padded zeros, and frame order stay unchanged.
+
 Sampling normalization uses 640 threads per block.
 MTP input normalization uses 640 threads per block when the input has 32 rows or fewer.
 For these inputs, MTP uses a [BF16 projection](../python/oh_my_vllm/kernels/cuda_backend/mtp_projection.cuh#L114)<!-- source: inline void mtp_projection_launch(TensorView input, TensorView weight, TensorView partials, --> with four K partitions.
