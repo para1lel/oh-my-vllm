@@ -60,13 +60,16 @@ __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
   int first_group = blockIdx.y * split_groups;
   for (int local_group = 0; local_group < split_groups; local_group += 4) {
     int group = first_group + local_group;
+    int valid_groups = min(4, split_groups - local_group);
     if (thread == 0) {
-      cutlass::arch::ClusterTransactionBarrier::arrive_and_expect_tx(barriers + 1, 32768);
+      cutlass::arch::ClusterTransactionBarrier::arrive_and_expect_tx(barriers + 1,
+                                                                     valid_groups * 8192);
 #pragma unroll
       for (int sub = 0; sub < 4; ++sub)
-        SM90_TMA_LOAD_2D::copy(&weight_map, barriers + 1,
-                               uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST),
-                               weight_storage + sub * 8192, (group + sub) * 128, first_column);
+        if (sub < valid_groups)
+          SM90_TMA_LOAD_2D::copy(&weight_map, barriers + 1,
+                                 uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST),
+                                 weight_storage + sub * 8192, (group + sub) * 128, first_column);
     }
     float scale_products[4][8] = {};
 #pragma unroll
@@ -97,6 +100,8 @@ __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
     if (warp == 0) {
 #pragma unroll
       for (int sub = 0; sub < 4; ++sub) {
+        if (sub >= valid_groups)
+          continue;
         partial_fragment.data() = *tensor_memory + sub * 8;
         mma.accumulate_ = UMMA::ScaleOut::Zero;
 #pragma unroll
@@ -112,6 +117,8 @@ __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
     barrier_phase ^= 1;
 #pragma unroll
     for (int sub = 0; sub < 4; ++sub) {
+      if (sub >= valid_groups)
+        continue;
       uint32_t values[8];
       SM100_TMEM_LOAD_32dp32b8x::copy(fragment_address + sub * 8, values[0], values[1], values[2],
                                       values[3], values[4], values[5], values[6], values[7]);

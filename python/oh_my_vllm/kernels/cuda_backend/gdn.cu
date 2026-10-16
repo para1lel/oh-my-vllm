@@ -63,7 +63,7 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
   tensor_contract(qkv, x, kDLBfloat, 16, {rows, 10240});
   tensor_contract(output_data, x, kDLFloat8_e4m3fn, 8, {rows, 6144});
   tensor_contract(output_scales, x, kDLFloat, 32, {rows, 48});
-  bool split_values = !verify && rows > 32;
+  bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5);
   tensor_contract(recurrent, x, kDLBfloat, 16, {split_values ? rows : 0, 6144});
   auto tensors = {
       x,      residual, norm,        qkvz_weight,   qkvz_scale,   ba_weight,    convolution_weight,

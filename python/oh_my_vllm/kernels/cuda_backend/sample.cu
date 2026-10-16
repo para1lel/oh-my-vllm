@@ -53,13 +53,10 @@ __global__ void sample_norm_kernel(const __nv_bfloat16 *x, const __nv_bfloat16 *
   }
 }
 
-__global__ void scores_kernel(const __nv_bfloat16 *logits, const int *history,
-                              const uint8_t *allowed, const float *parameters, uint64_t *keys,
-                              int count) {
-  int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index >= count)
-    return;
-  int row = index / Vocabulary, token = index % Vocabulary;
+__device__ uint64_t sample_key(const __nv_bfloat16 *logits, const int *history,
+                               const uint8_t *allowed, const float *parameters, int row,
+                               int token) {
+  int index = row * Vocabulary + token;
   const float *p = parameters + row * 7;
   int prompt = history[row * 2 * Vocabulary + token];
   int generated = history[(row * 2 + 1) * Vocabulary + token];
@@ -67,12 +64,12 @@ __global__ void scores_kernel(const __nv_bfloat16 *logits, const int *history,
         p[2] > 0 && p[2] <= 1 && p[3] >= 0 && p[3] <= 1 && isfinite(p[4]) && isfinite(p[5]) &&
         p[6] > 0 && isfinite(p[6]) && prompt >= 0 && generated >= 0)) {
     asm volatile("trap;");
-    return;
+    return 0;
   }
   float value = __bfloat162float(logits[index]);
   if (!isfinite(value)) {
     asm volatile("trap;");
-    return;
+    return 0;
   }
   if (prompt || generated)
     value = value > 0 ? value / p[6] : value * p[6];
@@ -80,9 +77,21 @@ __global__ void scores_kernel(const __nv_bfloat16 *logits, const int *history,
   float score = allowed[index] ? value / (p[0] > 0 ? p[0] : 1.f) : -INFINITY;
   unsigned bits = __float_as_uint(score == 0 ? 0.f : score);
   unsigned ordered = bits ^ ((bits >> 31) ? 0xffffffffu : 0x80000000u);
-  keys[index] = (uint64_t(count / Vocabulary - 1 - row) << (TokenBits + 32)) |
-                (uint64_t(ordered) << TokenBits) | (TokenMask - token);
+  return (uint64_t(ordered) << TokenBits) | (TokenMask - token);
 }
+
+__global__ void scores_kernel(const __nv_bfloat16 *logits, const int *history,
+                              const uint8_t *allowed, const float *parameters, uint64_t *keys,
+                              int count) {
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  if (index >= count)
+    return;
+  int row = index / Vocabulary, token = index % Vocabulary;
+  keys[index] = (uint64_t(count / Vocabulary - 1 - row) << (TokenBits + 32)) |
+                sample_key(logits, history, allowed, parameters, row, token);
+}
+
+#include "sample_greedy.cuh"
 
 __global__ void unpack_scores_kernel(const uint64_t *ordered, float *scores, int *order,
                                      float *probability, int count) {
@@ -213,7 +222,8 @@ void sample(TensorView x, TensorView residual, TensorView norm, TensorView weigh
             TensorView history, TensorView allowed, TensorView parameters, TensorView rng,
             TensorView normalized, TensorView logits, TensorView keys, TensorView ordered,
             TensorView sorted, TensorView order, TensorView probability, TensorView tokens,
-            TensorView selected_probability, TensorView workspace, bool allow_invalid) {
+            TensorView selected_probability, TensorView workspace, bool allow_invalid,
+            bool greedy) {
   TVM_FFI_ICHECK(x.ndim() == 2 && x.size(0) > 0 && x.size(0) <= 20 && x.size(1) == 5120);
   int rows = x.size(0);
   for (auto tensor : {x, residual, normalized})
@@ -263,8 +273,10 @@ void sample(TensorView x, TensorView residual, TensorView norm, TensorView weigh
   tvm::ffi::CUDADeviceGuard guard(x.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
   size_t bytes = 0;
-  check_cuda(sort_scores(nullptr, bytes, nullptr, nullptr, rows, stream));
-  TVM_FFI_ICHECK(workspace.numel() >= bytes);
+  if (!greedy) {
+    check_cuda(sort_scores(nullptr, bytes, nullptr, nullptr, rows, stream));
+    TVM_FFI_ICHECK(workspace.numel() >= bytes);
+  }
   sample_norm_kernel<<<rows, SampleNormThreads, 0, stream>>>(
       static_cast<const __nv_bfloat16 *>(x.data_ptr()),
       static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
@@ -274,6 +286,21 @@ void sample(TensorView x, TensorView residual, TensorView norm, TensorView weigh
   bf16_linear(static_cast<const __nv_bfloat16 *>(normalized.data_ptr()),
               static_cast<const __nv_bfloat16 *>(weight.data_ptr()), logits.data_ptr(), rows,
               Vocabulary, 5120, stream);
+  if (greedy) {
+    greedy_scores_kernel<<<dim3(GreedyBlocks, rows), 256, 0, stream>>>(
+        static_cast<const __nv_bfloat16 *>(logits.data_ptr()),
+        static_cast<const int *>(history.data_ptr()),
+        static_cast<const uint8_t *>(allowed.data_ptr()),
+        static_cast<const float *>(parameters.data_ptr()), static_cast<uint64_t *>(keys.data_ptr()),
+        static_cast<float *>(probability.data_ptr()));
+    check_cuda(cudaGetLastError());
+    greedy_select_kernel<<<rows, 256, 0, stream>>>(
+        static_cast<const uint64_t *>(keys.data_ptr()),
+        static_cast<float *>(probability.data_ptr()), static_cast<int64_t *>(tokens.data_ptr()),
+        static_cast<float *>(selected_probability.data_ptr()), allow_invalid);
+    check_cuda(cudaGetLastError());
+    return;
+  }
   scores_kernel<<<(rows * Vocabulary + 255) / 256, 256, 0, stream>>>(
       static_cast<const __nv_bfloat16 *>(logits.data_ptr()),
       static_cast<const int *>(history.data_ptr()),

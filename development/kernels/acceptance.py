@@ -12,7 +12,7 @@ from oh_my_vllm.kernels.specification import (
     UPSTREAM_COMMIT,
 )
 
-from .provenance import ROOT, case_id, source_identity, suite_identity
+from .provenance import case_id, source_identity, suite_identity
 from .providers import MODULES, RUNTIME_MODULES
 from .roofline import ExpectedCase, Observation, expected_efficiencies
 from .work import work_for
@@ -42,6 +42,7 @@ CHECKS = {
     "sample": (
         "logits",
         "probabilities",
+        "greedy",
         "all_rows_finite",
         "normalized",
         "valid_selected_tokens",
@@ -107,9 +108,7 @@ def verify_identity(report):
         binary = Path(build["library"])
         if json.loads((binary.parent / "manifest.json").read_text()) != build:
             raise ValueError("native build manifest has changed")
-        source = (
-            ROOT / "development/kernels" if name == "device" else SOURCES
-        ) / f"{name}.cu"
+        source = SOURCES / f"{name}.cu"
         if source_digest(source) != build["source_fingerprint"]:
             raise ValueError("native source has changed")
         if report["binary_ids"].get(str(binary)) != build["binary_id"]:
@@ -228,6 +227,29 @@ def verify_metric(value, tolerance="bf16"):
         raise ValueError("required numerical error evidence is missing")
 
 
+def verify_greedy(check):
+    cases = check.get("cases")
+    if not isinstance(cases, dict):
+        raise ValueError("greedy numerical cases are missing")
+    for name in ("penalties_and_mask", "tied_logits", "penalized_tie", "empty_mask"):
+        modes = cases.get(name)
+        if not isinstance(modes, dict):
+            raise ValueError("greedy numerical case is missing")
+        for mode in ("eager", "graph"):
+            result = modes.get(mode)
+            if not isinstance(result, dict) or any(
+                result.get(key) is not True
+                for key in (
+                    "passed",
+                    "probabilities_exact",
+                    "tokens_exact",
+                    "selected_probability_exact",
+                    "rng_unchanged",
+                )
+            ):
+                raise ValueError("greedy numerical evidence is missing or failed")
+
+
 def verify_case(check, operator, *, variant="default", mtp=False):
     if not isinstance(check, dict) or not set(CHECKS[operator]) <= check.keys():
         raise ValueError("required numerical or guard evidence is missing")
@@ -273,6 +295,8 @@ def verify_case(check, operator, *, variant="default", mtp=False):
         for key in ("codes_exact", "scales_exact")
     ):
         raise ValueError("FP8 quantization evidence is missing or failed")
+    if operator == "sample":
+        verify_greedy(check["greedy"])
     if operator in {"mtp_context", "mtp_draft"}:
         verify_case(
             check["attention"],

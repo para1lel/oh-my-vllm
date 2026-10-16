@@ -32,7 +32,9 @@ class Sample:
             )
         )
 
-    def __call__(self, value, residual, history, mask, parameters, rng):
+    def __call__(
+        self, value, residual, history, mask, parameters, rng, *, greedy=False
+    ):
         self.module.sample(
             value,
             residual,
@@ -44,6 +46,7 @@ class Sample:
             rng,
             *self.buffers,
             self.allow_invalid,
+            greedy,
         )
         return self.buffers[7], self.buffers[8], self.buffers[6]
 

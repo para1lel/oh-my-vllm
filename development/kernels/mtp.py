@@ -329,6 +329,7 @@ class MTPDraftCase:
             )
         )
         self.sample_case.x, self.sample_case.residual = expected, summed
+        self.sample_case.inputs = self.ffn.buffers[:2]
         sample_check = self.sample_case.check(
             execute=False, logits_tolerance="mtp_logits"
         )

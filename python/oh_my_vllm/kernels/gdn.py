@@ -96,6 +96,9 @@ class GDN:
         self.module, self.source_id, self.library = load("gdn", ("gdn",))
         self.weights, self.schedule = weights, schedule
         rows = schedule.sequence_rows[-1]
+        split_values = (not schedule.verify and rows > 32) or (
+            schedule.verify and len(schedule.read_slots) == 1 and rows == 5
+        )
         self.metadata = tuple(
             upload(array("i", values))
             for values in (schedule.sequence_rows, schedule.read_slots, writes)
@@ -114,7 +117,7 @@ class GDN:
                 ((rows, 10240), "bfloat16"),
                 ((rows, 6144), "float8_e4m3fn"),
                 ((rows, 48), "float32"),
-                ((rows if not schedule.verify and rows > 32 else 0, 6144), "bfloat16"),
+                ((rows if split_values else 0, 6144), "bfloat16"),
             )
         )
         self.empty_embedding = allocate((1, 5120), "bfloat16")

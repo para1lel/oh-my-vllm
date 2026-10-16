@@ -23,7 +23,7 @@ MTP 输入行数不超过 32 时, 输入归一化每块使用 640 个线程.
 它在存储 BF16 输出前累加 FP32 部分结果.
 残差归一化使用 [16 字节输入加载](../python/oh_my_vllm/kernels/cuda_backend/normalization.cuh#L19)<!-- source: uint4 input = *reinterpret_cast<const uint4 *>(x + row * 5120 + column); -->.
 
-FFN 和 FA 对行数不超过 8 的输入使用共用的 [projection 实现](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L140)<!-- source: inline void decode_projection_launch(TensorView activation, TensorView weight, -->.
+FFN 和 FA 对行数不超过 8 的输入使用共用的 [projection 实现](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L147)<!-- source: inline void decode_projection_launch(TensorView activation, TensorView weight, -->.
 原生算子使用普通 CUDA stream 启动, 不使用 PDL.
 当输入有 1, 4 或 5 行时, FFN 使用一次 [CUDA 启动](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L173)<!-- source: inline void paired_up_launch(TensorView input, TensorView input_scale, TensorView weight, --> 完成上投影, 激活和量化.
 
@@ -31,7 +31,8 @@ FFN 和 FA 对行数不超过 8 的输入使用共用的 [projection 实现](../
 验证输入只有 1 行时, GDN 用一次 [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/gdn_input.cuh#L142)<!-- source: if constexpr (FuseConvolution) { --> 计算输入投影和卷积.
 对于超过 32 行的 prefill 输入, GDN 用[独立 block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L178)<!-- source: scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{}); --> 处理每组 16 个 state value 行.
 独立 kernel 执行输出归一化和量化.
-对于超过 1 行的验证输入, GDN 递推计算每块使用 [512 个线程](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L187)<!-- source: run(std::integral_constant<int, 512>{}); -->.
+此路径也适用于[单个五行验证请求](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L66)<!-- source: bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5); -->.
+对于其他超过 1 行的验证输入, GDN 递推计算每块使用 [512 个线程](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L187)<!-- source: run(std::integral_constant<int, 512>{}); -->.
 
 FA 具有独立的 prefill 实现.
 输入行数不超过 32 且每个请求有 1 或 2 个 query 时, FA 使用 [16 行 query tile](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) -->.
@@ -49,11 +50,19 @@ Worker 提供约束解码, MTP4, 以及仅含 decode 请求的 batch 的 CUDA Gr
 仅当惩罚项使用 token 历史时, 才将其复制到 GPU.
 MTP 验证不下载未使用的采样 token.
 
+对于所有行温度均为零的 batch, 采样使用[两阶段最大值归约](../python/oh_my_vllm/kernels/cuda_backend/sample_greedy.cuh#L6)<!-- source: __global__ void greedy_scores_kernel( -->.
+它保留 MTP 接受所需的 one-hot 概率. 随机和混合 batch 使用排序路径.
+Sampler 为各路径保留[独立的 CUDA Graph](../python/oh_my_vllm/worker/sampling.py#L113)<!-- source: self.replays[self.greedy] = self.resources.enter_context( -->.
+它[在 CPU 上计算采样随机计数器](../python/oh_my_vllm/worker/sampling.py#L122)<!-- source: counters = self.inputs.random[:, 1] + (self.inputs.parameters[:, 0] > 0) -->.
+
+验收审计使用[内核目录中的原生源码](../development/kernels/acceptance.py#L111)<!-- source: source = SOURCES / f"{name}.cu" -->.
+它必须包含[贪心数值证据](../development/kernels/acceptance.py#L230)<!-- source: def verify_greedy(check): -->.
+
 算子和端到端优化正在进行.
 `copy_bytes` 现在只在目标在 CPU 上时才同步.
 `gather_rows_kernel` 在行和基地址满足 16 字节对齐时使用 16 字节向量化加载.
 
-FFN 的 [`paired_up_kernel`](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L59)<!-- source: uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST), --> 和 [`decode_projection_kernel`](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L68)<!-- source: uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST), --> 对权重加载使用 `EVICT_FIRST` 和 `CU_TENSOR_MAP_L2_PROMOTION_NONE`.
+FFN 的 [`paired_up_kernel`](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L59)<!-- source: uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST), --> 和 [`decode_projection_kernel`](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L71)<!-- source: uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST), --> 对权重加载使用 `EVICT_FIRST` 和 `CU_TENSOR_MAP_L2_PROMOTION_NONE`.
 
 [行拷贝](../python/oh_my_vllm/kernels/cuda_backend/device.cu#L182)<!-- source: int column_blocks = std::clamp<int64_t>(row_bytes / 4096 + (row_bytes % 4096 != 0), 1, -->可为每行使用多个 block.
 行数限制每行的 block 数量. 每行至少使用一个 block.
@@ -66,6 +75,7 @@ Draft 计算为下一阶段使用[采样输出的视图](../python/oh_my_vllm/wo
 
 下一步: 缩短执行时间. 用同一份源码完成两项性能审查.
 使用 producer 与 consumer 融合. 推理 worker 不使用 PDL.
+模型检查, 可复用经验及临时产物清理遵循[优化流程](operators/development.zh.md#优化流程).
 
 按[端到端要求](performance.zh.md)测量完整 HTTP 请求时间.
 性能门槛使用记录的 trace, 并累加其中 serving 算子的 roofline 时间.

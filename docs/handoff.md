@@ -23,7 +23,7 @@ For these inputs, MTP uses a [BF16 projection](../python/oh_my_vllm/kernels/cuda
 It adds the FP32 partial results before the BF16 output store.
 Residual normalization uses [16-byte input loads](../python/oh_my_vllm/kernels/cuda_backend/normalization.cuh#L19)<!-- source: uint4 input = *reinterpret_cast<const uint4 *>(x + row * 5120 + column); -->.
 
-FFN and FA use a shared [projection implementation](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L140)<!-- source: inline void decode_projection_launch(TensorView activation, TensorView weight, --> for inputs with eight rows or fewer.
+FFN and FA use a shared [projection implementation](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L147)<!-- source: inline void decode_projection_launch(TensorView activation, TensorView weight, --> for inputs with eight rows or fewer.
 Native operators use ordinary CUDA stream launches. PDL is not used.
 When the input has 1, 4, or 5 rows, FFN uses one [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L173)<!-- source: inline void paired_up_launch(TensorView input, TensorView input_scale, TensorView weight, --> for its upper projections, activation, and quantization.
 
@@ -31,7 +31,8 @@ GDN uses one [CUDA launch for gate projections and convolution](../python/oh_my_
 For one verification row, GDN uses one [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/gdn_input.cuh#L142)<!-- source: if constexpr (FuseConvolution) { --> for input projection and convolution.
 For prefill inputs with more than 32 rows, GDN uses [separate blocks](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L178)<!-- source: scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{}); --> for groups of 16 state value rows.
 A separate kernel applies output normalization and quantization.
-GDN recurrent computation uses [512 threads per block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L187)<!-- source: run(std::integral_constant<int, 512>{}); --> for verification inputs with more than one row.
+This path also applies to [one five-row verification request](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L66)<!-- source: bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5); -->.
+GDN recurrent computation uses [512 threads per block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L187)<!-- source: run(std::integral_constant<int, 512>{}); --> for other verification inputs with more than one row.
 
 FA has a separate prefill implementation.
 FA uses [16-row query tiles](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) --> for one or two queries per request when the input has 32 rows or fewer.
@@ -49,11 +50,19 @@ Sampling uses [fixed CPU buffers](../python/oh_my_vllm/worker/sampling.py#L9)<!-
 It copies token history to the GPU only when a penalty uses the history.
 MTP verification does not download unused sampled tokens.
 
+For batches with zero temperature in all rows, sampling uses a [two-stage maximum reduction](../python/oh_my_vllm/kernels/cuda_backend/sample_greedy.cuh#L6)<!-- source: __global__ void greedy_scores_kernel( -->.
+It keeps one-hot probabilities for MTP acceptance. Random and mixed batches use the sort path.
+The sampler keeps a [separate CUDA Graph for each path](../python/oh_my_vllm/worker/sampling.py#L113)<!-- source: self.replays[self.greedy] = self.resources.enter_context( -->.
+It [calculates sampling random counters on the CPU](../python/oh_my_vllm/worker/sampling.py#L122)<!-- source: counters = self.inputs.random[:, 1] + (self.inputs.parameters[:, 0] > 0) -->.
+
+The acceptance audit uses [native sources from the kernel directory](../development/kernels/acceptance.py#L111)<!-- source: source = SOURCES / f"{name}.cu" -->.
+It must include [greedy numerical evidence](../development/kernels/acceptance.py#L230)<!-- source: def verify_greedy(check): -->.
+
 Operator and end-to-end optimization is in progress.
 `copy_bytes` now synchronizes only when the destination is on the CPU.
 `gather_rows_kernel` uses 16-byte vectorized loads when the row and base pointers are 16-byte aligned.
 
-FFN uses TMA with `EVICT_FIRST` and `CU_TENSOR_MAP_L2_PROMOTION_NONE` for weight loads in [`paired_up_kernel`](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L59)<!-- source: uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST), --> and [`decode_projection_kernel`](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L68)<!-- source: uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST), -->.
+FFN uses TMA with `EVICT_FIRST` and `CU_TENSOR_MAP_L2_PROMOTION_NONE` for weight loads in [`paired_up_kernel`](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L59)<!-- source: uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST), --> and [`decode_projection_kernel`](../python/oh_my_vllm/kernels/cuda_backend/projection_decode.cuh#L71)<!-- source: uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST), -->.
 
 The [row copy](../python/oh_my_vllm/kernels/cuda_backend/device.cu#L182)<!-- source: int column_blocks = std::clamp<int64_t>(row_bytes / 4096 + (row_bytes % 4096 != 0), 1, --> can use more than one block for each row.
 The number of rows limits the number of blocks for each row. Each row uses at least one block.
@@ -66,6 +75,7 @@ Each stage copies all necessary rows before sampling uses the source buffer agai
 
 Next work: decrease execution time. Complete the two performance audits with the same source files.
 Use producer and consumer fusion. Do not use PDL in the inference worker.
+Use the [optimization procedure](operators/development.md#optimization-procedure) for model checks, reusable lessons, and temporary artifact cleanup.
 
 Measure the full HTTP request time with the [end-to-end requirements](performance.md).
 The performance limit uses the recorded trace and the sum of its serving operator roofline times.

@@ -97,5 +97,56 @@ GDN 检查全部输入投影及私有状态写入. Sampling 检查所有行和�
 FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patches, 输出抽样和帧隔离.
 这些检查不为所述范围以外的元素提供容差证据.
 
-原始报告和 profiler 文件保存在仓库外.
-不在项目文档中记录测量结果.
+## 方法参考
+
+将外部实现作为设计参考. 遵守[运行时库规则](fusion.zh.md).
+递推, value tile 和序列分区采用 [GDN 执行计划](gdn.zh.md).
+
+[CUTLASS 分块示例](https://github.com/NVIDIA/cutlass/blob/v4.8.0/examples/81_blackwell_gemm_blockwise/81_blackwell_gemm_blockwise.cu)使用 E4M3 操作数和 FP32 缩放因子.
+当前的 [DeepGEMM SM100 FP8 接口](https://github.com/deepseek-ai/DeepGEMM/blob/main/README.md)仅使用打包的 UE8M0 缩放因子.
+不得为了使用另一种矩阵指令而改变 checkpoint 缩放值.
+
+[FlashAttention SM100 实现](https://github.com/Dao-AILab/flash-attention/blob/main/flash_attn/cute/flash_fwd_sm100.py)分离加载, 矩阵乘法, softmax 和输出修正.
+其分页实现提供不使用 TMA 的加载路径.
+对 head 宽度为 256 的输入, 比较此调度与当前 FA 实现.
+保留 784-token cache page 和 BF16 概率存储.
+
+对于 [FlashInfer GDN prefill 接口](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_prefill.py), checkpoint 间隔必须可被 64 整除.
+其 [Blackwell 实现](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py)将 live state 转换为输入类型后执行矩阵乘法.
+使用其算法前, 对照模型契约检查这些条件.
+
+[NVIDIA FP32 仿真](https://docs.nvidia.com/cuda/cublas/index.html#floating-point-emulation)将每个操作数分解为三个 BF16 分量.
+它组合九个乘积. 对于 GDN chunk 变换, 比较此方法与原生 FP32 乘积.
+保留 FP32 live state 和 784-token BF16 checkpoint.
+额外的实现工作不能增加必要工作量的下界.
+
+[固定版本的 vLLM sampler](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/v1/sample/sampler.py) 在 top-k 和 top-p 处理前使用 `argmax` 选择贪心 token.
+比较贪心 `argmax` 归约与完整词表排序.
+在 token 选择前应用 mask 和 penalty.
+为随机行保留所需的随机分布.
+
+## 优化流程
+
+在 GPU 实验前, 使用 [TileSight](https://github.com/tile-ai/TileSight) 比较 tile 调度方案.
+其[模型局限](https://arxiv.org/html/2607.22432v1#S7)包括小批量延迟和 B200 内存拓扑.
+将模型与 kernel 的数据类型, 布局, 依赖及物理内存事务进行比较.
+包含 TMEM 分配, 带 mask 的加载和存储, 部分结果及合并操作.
+检查候选排序是否随不确定的延迟参数改变.
+使用数值检查和完整边界测量选择实现.
+
+使用以下经验选择另一个候选:
+
+- 比较 K 分区时包含合并工作. 只有投影变快并不足够.
+- 将融合投影扩展到更多行前, 检查寄存器和共享内存用量.
+- 将归一化移入投影 block 时, 包含重复的输入读取.
+- 行复制已有足够并行工作时, 限制列 block 数量.
+- 移除复制前, 检查缓冲区生命周期及 graph 输入.
+- 从 TMA 字节计数, 矩阵乘积及累加器读取中排除无效 K 组. 零缩放因子不能阻止 NaN 传播.
+- 使用不带 profiler 的独立进程进行对比计时.
+- HTTP 对照期间不并行运行参考计算. 保留实测的推测接受轨迹.
+
+每次实验使用仓库外的临时目录.
+保留当前报告, 直到该实验的审查及适用的验收审计完成.
+随后删除原始报告, profiler 文件及过时的实验二进制.
+保留当前运行时二进制及其 manifest.
+在本指南中简短记录可复用经验. 不在项目文档中记录测量结果.

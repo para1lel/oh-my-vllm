@@ -62,7 +62,8 @@ class Sampling:
         self.rng = device.empty((rows, 2), "uint64")
         self.inputs = SamplingInputs(rows)
         self.resources = ExitStack()
-        self.replay = None
+        self.greedy = False
+        self.replays = {}
 
     def close(self):
         self.resources.close()
@@ -75,6 +76,7 @@ class Sampling:
             self.mask,
             self.parameters,
             self.rng,
+            greedy=self.greedy,
         )
 
     def select(
@@ -91,6 +93,7 @@ class Sampling:
     ):
         prefixes = [[] for _ in requests] if prefixes is None else prefixes
         self.inputs.update(requests, prefixes, stream)
+        self.greedy = bool(np.all(self.inputs.parameters[:, 0] == 0))
         d = self.device
         if self.inputs.history_needed:
             d.module.copy_bytes(self.history, tvm_ffi.from_dlpack(self.inputs.history))
@@ -104,17 +107,19 @@ class Sampling:
         d.module.gather_rows(self.value, value, self.indices)
         d.module.gather_rows(self.residual, residual, self.indices)
         if graph:
-            if self.replay is None:
+            if self.greedy not in self.replays:
                 self.run()
                 d.module.copy_bytes(self.rng, tvm_ffi.from_dlpack(self.inputs.random))
-                self.replay = self.resources.enter_context(d.graph(self.run))
-            self.replay()
+                self.replays[self.greedy] = self.resources.enter_context(
+                    d.graph(self.run)
+                )
+            self.replays[self.greedy]()
         else:
             self.run()
         tokens = None
         if sample:
             tokens = d.download(self.operation.buffers[7], np.int64)
-            counters = d.download(self.rng, np.uint64)
-            for request, counter in zip(requests, counters[:, 1], strict=True):
+            counters = self.inputs.random[:, 1] + (self.inputs.parameters[:, 0] > 0)
+            for request, counter in zip(requests, counters, strict=True):
                 setattr(request, self.inputs.field, int(counter))
         return tokens, self.operation.buffers[6]

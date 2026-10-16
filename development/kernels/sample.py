@@ -350,4 +350,109 @@ class SampleCase:
                 prefix &= bool(np.all(kept[request, count:] == -1))
             report["acceptance_state_selection"] = prefix
             report["passed"] &= prefix
+        report["greedy"] = self.check_greedy(actual_logits)
+        report["passed"] &= report["greedy"]["passed"]
         return report
+
+    def greedy_result(self, expected, rng):
+        probability = self.device.download(self.operation.buffers[6], np.float32)
+        tokens = self.device.download(self.operation.buffers[7], np.int64)
+        selected = self.device.download(self.operation.buffers[8], np.float32)
+        counters = self.device.download(self.rng, np.uint64)
+        valid = expected.any(axis=1)
+        expected_tokens = np.where(valid, expected.argmax(axis=1), -1)
+        checks = {
+            "probabilities_exact": bool(np.array_equal(probability, expected)),
+            "tokens_exact": bool(np.array_equal(tokens, expected_tokens)),
+            "selected_probability_exact": bool(np.array_equal(selected, valid)),
+            "rng_unchanged": bool(np.array_equal(counters, rng)),
+        }
+        return {"passed": all(checks.values()), **checks}
+
+    def check_greedy(self, logits):
+        parameters = self.parameters.copy()
+        parameters[:, 0] = 0
+        tied_parameters = parameters.copy()
+        tied_parameters[:, 4:6] = 0
+        tied_parameters[:, 6] = 1
+        tied_mask = np.zeros_like(self.mask)
+        penalty_history = np.zeros_like(self.history)
+        for row, values in enumerate(logits):
+            finite, counts = np.unique(
+                values[np.isfinite(values) & (values != 0)], return_counts=True
+            )
+            duplicated = finite[counts > 1]
+            if not len(duplicated):
+                raise ValueError(
+                    "greedy tie check needs duplicate finite nonzero BF16 logits"
+                )
+            tied_ids = np.flatnonzero(values == duplicated[0])[:2]
+            tied_mask[row, tied_ids] = 1
+            penalty_history[row, 1, tied_ids[0]] = 1
+        penalty_parameters = tied_parameters.copy()
+        penalty_parameters[:, 4:7] = (0.2, 0.5, 1.1)
+        d = self.device
+        saved_rng = d.download(self.rng, np.uint64)
+        saved_invalid = self.operation.allow_invalid
+        reports = {}
+
+        def run():
+            return self.operation(*self.inputs, *self.sampling_arguments, greedy=True)
+
+        try:
+            cases = (
+                (
+                    "penalties_and_mask",
+                    self.history,
+                    self.mask,
+                    parameters,
+                    saved_invalid,
+                ),
+                ("tied_logits", self.history, tied_mask, tied_parameters, False),
+                (
+                    "penalized_tie",
+                    penalty_history,
+                    tied_mask,
+                    penalty_parameters,
+                    False,
+                ),
+                (
+                    "empty_mask",
+                    self.history,
+                    np.zeros_like(self.mask),
+                    parameters,
+                    True,
+                ),
+            )
+            for name, history, mask, current_parameters, allow_invalid in cases:
+                self.operation.allow_invalid = allow_invalid
+                for destination, source in (
+                    (self.sampling_arguments[0], history),
+                    (self.sampling_arguments[1], mask),
+                    (self.sampling_arguments[2], current_parameters),
+                ):
+                    d.module.copy_bytes(destination, tvm_ffi.from_dlpack(source))
+                expected = probabilities(logits, history, mask, current_parameters)
+                run()
+                reports[name] = {"eager": self.greedy_result(expected, saved_rng)}
+                with d.graph(run) as replay:
+                    replay()
+                    reports[name]["graph"] = self.greedy_result(expected, saved_rng)
+        finally:
+            self.operation.allow_invalid = saved_invalid
+            for destination, source in (
+                (self.sampling_arguments[0], self.history),
+                (self.sampling_arguments[1], self.mask),
+                (self.sampling_arguments[2], self.parameters),
+                (self.rng, saved_rng),
+            ):
+                d.module.copy_bytes(destination, tvm_ffi.from_dlpack(source))
+        return {
+            "passed": all(
+                result["passed"]
+                for modes in reports.values()
+                for result in modes.values()
+            ),
+            "cases": reports,
+            "output_tolerance_scope": "all vocabulary columns and all rows",
+        }

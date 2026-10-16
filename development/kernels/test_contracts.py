@@ -1,3 +1,5 @@
+import hashlib
+import json
 import math
 import unittest
 from copy import deepcopy
@@ -5,11 +7,12 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from oh_my_vllm.kernels.native import source_digest
+from oh_my_vllm.kernels.native import SOURCES, source_digest
 from oh_my_vllm.kernels.specification import MODEL, OPERATORS, UPSTREAM_COMMIT
 
-from .acceptance import CHECKS, FLAGS, assess
-from .provenance import case_id
+from .acceptance import CHECKS, FLAGS, assess, verify_identity
+from .provenance import case_id, source_identity, suite_identity
+from .providers import MODULES
 from .roofline import ExpectedCase, Observation, Work, expected_efficiencies
 from .work import work_for
 from .workload import PROFILES, SERVING_OPERATORS, modeled_cases, stage_cases
@@ -28,6 +31,29 @@ def numerical_evidence(operator, variant="default"):
     evidence = {key: deepcopy(metric) for key in CHECKS[operator]}
     evidence.update({key: True for key in FLAGS[operator]})
     evidence.update(passed=True, acceptance_state_selection=True)
+    if operator == "sample":
+        flags = {
+            key: True
+            for key in (
+                "passed",
+                "probabilities_exact",
+                "tokens_exact",
+                "selected_probability_exact",
+                "rng_unchanged",
+            )
+        }
+        evidence["greedy"] = {
+            "passed": True,
+            "cases": {
+                case: {mode: deepcopy(flags) for mode in ("eager", "graph")}
+                for case in (
+                    "penalties_and_mask",
+                    "tied_logits",
+                    "penalized_tie",
+                    "empty_mask",
+                )
+            },
+        }
     for key in {"cache_writes", "state_writes", "convolution_writes"} & evidence.keys():
         evidence[key] = [deepcopy(metric)]
         evidence[key][0]["tolerance_name"] = "state"
@@ -192,6 +218,19 @@ class Contracts(unittest.TestCase):
         for observation in slower[0]["observations"]:
             observation["measured_seconds"] *= 2
         self.assertFalse(assess(slower)["accepted"])
+        for greedy in ({"passed": True}, {"passed": True, "cases": {}}):
+            changed = deepcopy(reports)
+            report = next(
+                report for report in changed if report["operator"] == "sample"
+            )
+            report["checks"][next(iter(report["checks"]))]["greedy"] = greedy
+            with self.subTest(greedy=greedy), self.assertRaises(ValueError):
+                assess(changed)
+        changed = deepcopy(reports)
+        report = next(report for report in changed if report["operator"] == "sample")
+        del report["checks"][next(iter(report["checks"]))]["greedy"]
+        with self.assertRaises(ValueError):
+            assess(changed)
 
     def test_native_identity_tracks_only_transitive_dependencies(self):
         with TemporaryDirectory() as directory:
@@ -211,6 +250,49 @@ class Contracts(unittest.TestCase):
             leaf.unlink()
             with self.assertRaises(FileNotFoundError):
                 source_digest(source)
+
+    def test_native_identity_resolves_device_and_rejects_changed_source(self):
+        with TemporaryDirectory() as directory:
+            builds = []
+            for name in ("ffn", "device"):
+                parent = Path(directory) / name
+                parent.mkdir()
+                binary = parent / "library.so"
+                binary.write_bytes(name.encode())
+                build = {
+                    "functions": list(MODULES[name]),
+                    "library": str(binary),
+                    "source_id": hashlib.sha256(name.encode()).hexdigest(),
+                    "binary_id": hashlib.sha256(binary.read_bytes()).hexdigest(),
+                    "source_fingerprint": source_digest(SOURCES / f"{name}.cu"),
+                }
+                (parent / "manifest.json").write_text(json.dumps(build))
+                builds.append(build)
+            context = {
+                "upstream_commit": UPSTREAM_COMMIT,
+                "device_source": builds[1]["source_id"],
+            }
+            identity, binaries = source_identity(
+                builds[0]["source_id"],
+                tuple(Path(build["library"]) for build in builds),
+                context,
+                "ffn",
+            )
+            report = {
+                "suite_id": suite_identity(),
+                "operator": "ffn",
+                "builds": builds,
+                "context": context,
+                "native_id": builds[0]["source_id"],
+                "source_id": identity,
+                "binary_ids": binaries,
+            }
+            verify_identity(report)
+            builds[1]["source_fingerprint"] = "0" * 64
+            manifest = Path(builds[1]["library"]).parent / "manifest.json"
+            manifest.write_text(json.dumps(builds[1]))
+            with self.assertRaisesRegex(ValueError, "native source has changed"):
+                verify_identity(report)
 
     def test_serving_distribution_covers_operator_paths(self):
         cases = modeled_cases()
