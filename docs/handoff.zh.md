@@ -25,8 +25,10 @@ FFN 和 FA 对行数不超过 8 的输入使用共用的 [projection 实现](../
 原生算子使用普通 CUDA stream 启动, 不使用 PDL.
 当输入有 1, 4 或 5 行时, FFN 使用一次 [CUDA 启动](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cuh#L173)<!-- source: inline void paired_up_launch(TensorView input, TensorView input_scale, TensorView weight, --> 完成上投影, 激活和量化.
 
-输入为 2 至 32 行时, GDN 通过一次 [CUDA launch 计算门控投影和卷积](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L150)<!-- source: if (rows > 1 && rows <= 32) -->.
+输入为 2 至 32 行时, GDN 通过一次 [CUDA launch 计算门控投影和卷积](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L152)<!-- source: if (rows > 1 && rows <= 32) -->.
 验证输入只有 1 行时, GDN 用一次 [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/gdn_input.cuh#L142)<!-- source: if constexpr (FuseConvolution) { --> 计算输入投影和卷积.
+对于超过 32 行的 prefill 输入, GDN 用[独立 block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L176)<!-- source: scan(std::false_type{}, std::integral_constant<int, 16>{}); --> 处理每组 16 个 state value 行.
+独立 kernel 执行输出归一化和量化.
 
 FA 具有独立的 prefill 实现.
 输入行数不超过 32 且每个请求有 1 或 2 个 query 时, FA 使用 [16 行 query tile](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) -->.
@@ -39,10 +41,9 @@ FA 每块使用 256 个线程合并两份或更多注意力的部分结果.
 
 60% 性能要求仍有工作待完成.
 
-算子优化已停止.
 Worker 提供约束解码, MTP4, 以及仅含 decode 请求的 batch 的 CUDA Graph 执行.
-工作已按维护者要求暂停.
-下一步: 获得维护者指示后, 继续完成端到端性能审查.
+算子和端到端优化正在进行.
+下一步: 缩短执行时间. 用同一份源码完成两项性能审查.
 使用 producer 与 consumer 融合. 推理 worker 不使用 PDL.
 
 按[端到端要求](performance.zh.md)测量完整 HTTP 请求时间.

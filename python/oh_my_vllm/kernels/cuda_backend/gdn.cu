@@ -26,7 +26,7 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
          TensorView media, TensorView media_rows, bool first_layer, bool verify, TensorView output,
          TensorView summed, TensorView gathered, TensorView normalized, TensorView input_data,
          TensorView input_scales, TensorView qkvz, TensorView ba, TensorView qkv,
-         TensorView output_data, TensorView output_scales) {
+         TensorView output_data, TensorView output_scales, TensorView recurrent) {
   TVM_FFI_ICHECK(x.ndim() == 2 && x.size(1) == 5120 && x.size(0) >= 0 && x.size(0) <= 32768);
   TVM_FFI_ICHECK(reads.ndim() == 1 && reads.size(0) > 0 && reads.size(0) <= 32768);
   TVM_FFI_ICHECK(state.ndim() == 4 && state.size(0) > 0 && state.size(0) <= 65536);
@@ -63,12 +63,14 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
   tensor_contract(qkv, x, kDLBfloat, 16, {rows, 10240});
   tensor_contract(output_data, x, kDLFloat8_e4m3fn, 8, {rows, 6144});
   tensor_contract(output_scales, x, kDLFloat, 32, {rows, 48});
+  bool split_values = !verify && rows > 32;
+  tensor_contract(recurrent, x, kDLBfloat, 16, {split_values ? rows : 0, 6144});
   auto tensors = {
       x,      residual, norm,        qkvz_weight,   qkvz_scale,   ba_weight,    convolution_weight,
       a_log,  dt_bias,  head_norm,   output_weight, output_scale, state,        convolution_state,
       starts, reads,    writes,      embedding,     tokens,       media,        media_rows,
       output, summed,   gathered,    normalized,    input_data,   input_scales, qkvz,
-      ba,     qkv,      output_data, output_scales};
+      ba,     qkv,      output_data, output_scales, recurrent};
   int left = 0;
   for (auto a : tensors) {
     int right = 0;
@@ -152,10 +154,11 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
   else if (!(rows == 1 && verify))
     prepare(std::false_type{});
   check_cuda(cudaGetLastError());
-  auto scan = [&](auto fused) {
+  auto scan = [&](auto fused, auto value_tile) {
+    constexpr int ValueTile = decltype(value_tile)::value;
     launch_kernel(
-        gdn_scan_quant_kernel<decltype(fused)::value>, dim3(batch, 48), dim3(256), 0, stream,
-        static_cast<const __nv_bfloat16 *>(qkv.data_ptr()),
+        gdn_scan_quant_kernel<decltype(fused)::value, ValueTile>, dim3(batch, 48, 128 / ValueTile),
+        dim3(256), 0, stream, static_cast<const __nv_bfloat16 *>(qkv.data_ptr()),
         static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
         static_cast<__nv_bfloat16 *>(ba.data_ptr()),
         static_cast<const __nv_bfloat16 *>(normalized.data_ptr()),
@@ -166,13 +169,25 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
         static_cast<__nv_bfloat16 *>(state.data_ptr()), static_cast<const int *>(starts.data_ptr()),
         static_cast<const int *>(reads.data_ptr()), static_cast<const int *>(writes.data_ptr()),
         static_cast<__nv_fp8_e4m3 *>(output_data.data_ptr()),
-        static_cast<float *>(output_scales.data_ptr()), rows, slots, verify);
+        static_cast<float *>(output_scales.data_ptr()), rows, slots, verify,
+        static_cast<__nv_bfloat16 *>(recurrent.data_ptr()));
   };
-  if (rows == 1)
-    scan(std::true_type{});
+  if (split_values)
+    scan(std::false_type{}, std::integral_constant<int, 16>{});
+  else if (rows == 1)
+    scan(std::true_type{}, std::integral_constant<int, 128>{});
   else
-    scan(std::false_type{});
+    scan(std::false_type{}, std::integral_constant<int, 128>{});
   check_cuda(cudaGetLastError());
+  if (split_values) {
+    gdn_output_quant_kernel<<<rows * 48, 256, 0, stream>>>(
+        static_cast<const __nv_bfloat16 *>(recurrent.data_ptr()),
+        static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
+        static_cast<const float *>(head_norm.data_ptr()),
+        static_cast<__nv_fp8_e4m3 *>(output_data.data_ptr()),
+        static_cast<float *>(output_scales.data_ptr()));
+    check_cuda(cudaGetLastError());
+  }
   gdn_projection(static_cast<const __nv_fp8_e4m3 *>(output_data.data_ptr()),
                  static_cast<const __nv_fp8_e4m3 *>(output_weight.data_ptr()),
                  static_cast<const float *>(output_scales.data_ptr()),

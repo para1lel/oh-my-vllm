@@ -114,6 +114,7 @@ class GDN:
                 ((rows, 10240), "bfloat16"),
                 ((rows, 6144), "float8_e4m3fn"),
                 ((rows, 48), "float32"),
+                ((rows if not schedule.verify and rows > 32 else 0, 6144), "bfloat16"),
             )
         )
         self.empty_embedding = allocate((1, 5120), "bfloat16")

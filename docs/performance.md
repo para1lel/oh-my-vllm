@@ -50,8 +50,8 @@ Use fusion for producer and consumer work when it decreases the full execution t
 Multiple CUDA streams are permitted for independent work with explicit dependencies.
 Do not use PDL in the inference worker.
 
-Operator optimization is stopped while the full worker is built.
-The [operator workload](operators/evaluation.md) stays available for later operator analysis.
+Use operator measurements and full HTTP measurements to select changes.
+Use the [operator workload](operators/evaluation.md) for operator acceptance.
 
 ## Measurement command
 

@@ -124,26 +124,28 @@ __global__ void gdn_convolution_kernel(const __nv_bfloat16 *projection, const __
         __float2bfloat16_rn(values[element] * inverse);
 }
 
-template <bool FusedBA>
+template <bool FusedBA, int ValueTile = 128>
 __global__ void __launch_bounds__(256, 1)
     gdn_scan_quant_kernel(const __nv_bfloat16 *qkv, const __nv_bfloat16 *qkvz, __nv_bfloat16 *ba,
                           const __nv_bfloat16 *normalized, const __nv_bfloat16 *ba_weight,
                           const float *a_log, const float *dt_bias, const float *norm,
                           __nv_bfloat16 *pool, const int *starts, const int *reads,
                           const int *writes, __nv_fp8_e4m3 *output, float *scales, int rows,
-                          int slots, bool verify) {
+                          int slots, bool verify, __nv_bfloat16 *recurrent) {
   int sequence = blockIdx.x, head = blockIdx.y, lane = threadIdx.x & 31;
   int warp = threadIdx.x / 32;
+  constexpr int Values = ValueTile / 8;
+  int value_base = blockIdx.z * ValueTile + warp * Values;
   int first = starts[sequence], last = starts[sequence + 1], source = reads[sequence];
   gdn_require(first >= 0 && first <= last && last <= rows && source >= 0 && source < slots);
   gdn_require(!verify || last - first <= 5);
-  float state[16][4];
+  float state[Values][4];
 #pragma unroll
-  for (int value = 0; value < 16; ++value)
+  for (int value = 0; value < Values; ++value)
 #pragma unroll
     for (int key = 0; key < 4; ++key)
       state[value][key] = __bfloat162float(
-          pool[((int64_t(source) * 48 + head) * 128 + warp * 16 + value) * 128 + lane * 4 + key]);
+          pool[((int64_t(source) * 48 + head) * 128 + value_base + value) * 128 + lane * 4 + key]);
   __shared__ float result[128], partial[8];
   for (int row = first; row < last; ++row) {
     int target = writes[row];
@@ -185,7 +187,7 @@ __global__ void __launch_bounds__(256, 1)
     float decay = expf(-expf(a_log[head]) * softplus);
     float beta = gdn_sigmoid(projected_b);
 #pragma unroll
-    for (int value = 0; value < 16; ++value) {
+    for (int value = 0; value < Values; ++value) {
       float recalled = 0;
 #pragma unroll
       for (int key = 0; key < 4; ++key) {
@@ -195,7 +197,7 @@ __global__ void __launch_bounds__(256, 1)
       recalled = warp_sum(recalled);
       float delta =
           beta *
-          (__bfloat162float(qkv[int64_t(row) * 10240 + 4096 + head * 128 + warp * 16 + value]) -
+          (__bfloat162float(qkv[int64_t(row) * 10240 + 4096 + head * 128 + value_base + value]) -
            recalled);
       float sum = 0;
 #pragma unroll
@@ -203,13 +205,20 @@ __global__ void __launch_bounds__(256, 1)
         state[value][key] += delta * k[key];
         sum += state[value][key] * q[key];
         if (target >= 0)
-          pool[((int64_t(target) * 48 + head) * 128 + warp * 16 + value) * 128 + lane * 4 + key] =
+          pool[((int64_t(target) * 48 + head) * 128 + value_base + value) * 128 + lane * 4 + key] =
               __float2bfloat16_rn(state[value][key]);
       }
       sum = warp_sum(sum);
-      if (lane == 0)
-        result[warp * 16 + value] = __bfloat162float(__float2bfloat16_rn(sum));
+      if (lane == 0) {
+        if constexpr (ValueTile < 128)
+          recurrent[(int64_t(row) * 48 + head) * 128 + value_base + value] =
+              __float2bfloat16_rn(sum);
+        else
+          result[value_base + value] = __bfloat162float(__float2bfloat16_rn(sum));
+      }
     }
+    if constexpr (ValueTile < 128)
+      continue;
     __syncthreads();
     float square = threadIdx.x < 128 ? result[threadIdx.x] * result[threadIdx.x] : 0;
     square = warp_sum(square);
@@ -234,4 +243,37 @@ __global__ void __launch_bounds__(256, 1)
     }
     __syncthreads();
   }
+}
+
+__global__ void gdn_output_quant_kernel(const __nv_bfloat16 *recurrent, const __nv_bfloat16 *qkvz,
+                                        const float *norm, __nv_fp8_e4m3 *output, float *scales) {
+  int row = blockIdx.x / 48, head = blockIdx.x % 48;
+  int lane = threadIdx.x & 31, warp = threadIdx.x / 32;
+  __shared__ float result[128], partial[8];
+  if (threadIdx.x < 128)
+    result[threadIdx.x] =
+        __bfloat162float(recurrent[(int64_t(row) * 48 + head) * 128 + threadIdx.x]);
+  __syncthreads();
+  float square = threadIdx.x < 128 ? result[threadIdx.x] * result[threadIdx.x] : 0;
+  square = warp_sum(square);
+  if (lane == 0)
+    partial[warp] = square;
+  __syncthreads();
+  float total = warp_sum(lane < 8 ? partial[lane] : 0);
+  float inverse = rsqrtf(total / 128.f + 1e-6f);
+  if (warp == 0) {
+    float values[4];
+#pragma unroll
+    for (int element = 0; element < 4; ++element) {
+      int column = lane * 4 + element;
+      float normalized = result[column] * inverse * norm[column];
+      float gate = __bfloat162float(qkvz[int64_t(row) * 16384 + 10240 + head * 128 + column]);
+      float activated_gate = gate * gdn_sigmoid(gate);
+      values[element] = __bfloat162float(__float2bfloat16_rn(normalized * activated_gate));
+    }
+    quantize_four(make_float4(values[0], values[1], values[2], values[3]),
+                  output + int64_t(row) * 6144 + head * 128 + lane * 4,
+                  scales + int64_t(row) * 48 + head);
+  }
+  __syncthreads();
 }

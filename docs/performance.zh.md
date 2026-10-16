@@ -50,8 +50,8 @@
 可以对独立工作使用多个 CUDA streams, 但必须明确依赖关系.
 推理 worker 不使用 PDL.
 
-构建完整 worker 期间停止算子优化.
-[算子负载](operators/evaluation.zh.md)保留供后续算子分析使用.
+使用算子测量和完整 HTTP 测量来选择改动.
+使用[算子负载](operators/evaluation.zh.md)进行算子验收.
 
 ## 测量命令
 
