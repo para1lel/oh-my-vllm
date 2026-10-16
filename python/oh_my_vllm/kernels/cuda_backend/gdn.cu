@@ -217,7 +217,8 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
     constexpr int SharedBytes = decltype(staged)::value ? GDNPrefetchSharedBytes : 0;
     launch_kernel(
         gdn_scan_quant_kernel<decltype(fused)::value, ValueTile, Threads,
-                              decltype(prepared_gates)::value, decltype(staged)::value>,
+                              decltype(prepared_gates)::value, decltype(staged)::value,
+                              decltype(staged)::value>,
         dim3(batch, 48, 128 / ValueTile), dim3(Threads), SharedBytes, stream,
         static_cast<const __nv_bfloat16 *>(qkv.data_ptr()),
         static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),

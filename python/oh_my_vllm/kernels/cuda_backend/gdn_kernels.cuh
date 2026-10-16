@@ -184,8 +184,15 @@ __device__ inline void gdn_prefetch_rows(unsigned char *storage, const __nv_bflo
   asm volatile("cp.async.commit_group;" ::: "memory");
 }
 
+__device__ inline float gdn_half_warp_sum(float value) {
+#pragma unroll
+  for (int distance = 8; distance > 0; distance /= 2)
+    value += __shfl_xor_sync(0xffffffff, value, distance, 16);
+  return value;
+}
+
 template <bool FusedBA, int ValueTile = 128, int Threads = 256, bool PrecomputedGates = false,
-          bool Staged = false>
+          bool Staged = false, bool HalfWarp = false>
 __global__ void __launch_bounds__(Threads, 1)
     gdn_scan_quant_kernel(const __nv_bfloat16 *qkv, const __nv_bfloat16 *qkvz, __nv_bfloat16 *ba,
                           const __nv_bfloat16 *normalized, const __nv_bfloat16 *ba_weight,
@@ -194,21 +201,36 @@ __global__ void __launch_bounds__(Threads, 1)
                           const int *writes, __nv_fp8_e4m3 *output, float *scales, int rows,
                           int slots, bool verify, __nv_bfloat16 *recurrent, const float *gates) {
   static_assert(!Staged || (PrecomputedGates && ValueTile == 16 && Threads == 256));
+  static_assert(!HalfWarp || Staged);
   int sequence = blockIdx.x, head = blockIdx.y, lane = threadIdx.x & 31;
   int warp = threadIdx.x / 32;
   constexpr int Warps = Threads / 32;
   constexpr int Values = ValueTile / Warps;
   int value_base = blockIdx.z * ValueTile + warp * Values;
+  if constexpr (HalfWarp)
+    value_base += lane / 16;
   int first = starts[sequence], last = starts[sequence + 1], source = reads[sequence];
   gdn_require(first >= 0 && first <= last && last <= rows && source >= 0 && source < slots);
   gdn_require(!verify || last - first <= 5);
   float state[Values][4];
+  if constexpr (HalfWarp) {
+    static_assert(Values == 2);
 #pragma unroll
-  for (int value = 0; value < Values; ++value)
+    for (int group = 0; group < 2; ++group)
 #pragma unroll
-    for (int key = 0; key < 4; ++key)
-      state[value][key] = __bfloat162float(
-          pool[((int64_t(source) * 48 + head) * 128 + value_base + value) * 128 + lane * 4 + key]);
+      for (int key = 0; key < 4; ++key)
+        state[group][key] =
+            __bfloat162float(pool[((int64_t(source) * 48 + head) * 128 + value_base) * 128 +
+                                  (lane % 16) * 4 + group * 64 + key]);
+  } else {
+#pragma unroll
+    for (int value = 0; value < Values; ++value)
+#pragma unroll
+      for (int key = 0; key < 4; ++key)
+        state[value][key] =
+            __bfloat162float(pool[((int64_t(source) * 48 + head) * 128 + value_base + value) * 128 +
+                                  lane * 4 + key]);
+  }
   __shared__ float result[128], partial[Warps];
   extern __shared__ __align__(16) unsigned char staged[];
   int tile_value_base = blockIdx.z * ValueTile;
@@ -232,12 +254,13 @@ __global__ void __launch_bounds__(Threads, 1)
     else
       target = writes[row];
     gdn_require(target >= -1 && target < slots && target != source);
-    float q[4], k[4];
+    float q[4], k[4], q_second[4], k_second[4];
     if constexpr (Staged) {
       auto *query = reinterpret_cast<const uint2 *>(storage);
       auto *key = reinterpret_cast<const uint2 *>(storage + GDNPrefetchRows * 256);
-      uint2 packed_q = query[local_row * 32 + lane];
-      uint2 packed_k = key[local_row * 32 + lane];
+      int query_lane = HalfWarp ? lane % 16 : lane;
+      uint2 packed_q = query[local_row * 32 + query_lane];
+      uint2 packed_k = key[local_row * 32 + query_lane];
       uint32_t q_words[2] = {packed_q.x, packed_q.y};
       uint32_t k_words[2] = {packed_k.x, packed_k.y};
 #pragma unroll
@@ -245,6 +268,20 @@ __global__ void __launch_bounds__(Threads, 1)
         int shift = (element & 1) * 16;
         q[element] = __uint_as_float(((q_words[element / 2] >> shift) & 0xffffu) << 16);
         k[element] = __uint_as_float(((k_words[element / 2] >> shift) & 0xffffu) << 16);
+      }
+      if constexpr (HalfWarp) {
+        uint2 second_q = query[local_row * 32 + query_lane + 16];
+        uint2 second_k = key[local_row * 32 + query_lane + 16];
+        uint32_t second_q_words[2] = {second_q.x, second_q.y};
+        uint32_t second_k_words[2] = {second_k.x, second_k.y};
+#pragma unroll
+        for (int element = 0; element < 4; ++element) {
+          int shift = (element & 1) * 16;
+          q_second[element] =
+              __uint_as_float(((second_q_words[element / 2] >> shift) & 0xffffu) << 16);
+          k_second[element] =
+              __uint_as_float(((second_k_words[element / 2] >> shift) & 0xffffu) << 16);
+        }
       }
     } else {
 #pragma unroll
@@ -262,13 +299,30 @@ __global__ void __launch_bounds__(Threads, 1)
         q_square += q[element] * q[element];
         k_square += k[element] * k[element];
       }
-      q_scale *= rsqrtf(warp_sum(q_square) + 1e-6f);
-      k_scale = rsqrtf(warp_sum(k_square) + 1e-6f);
+      if constexpr (HalfWarp) {
+        float q_second_square = 0, k_second_square = 0;
+#pragma unroll
+        for (int element = 0; element < 4; ++element) {
+          q_second_square += q_second[element] * q_second[element];
+          k_second_square += k_second[element] * k_second[element];
+        }
+        q_square = gdn_half_warp_sum(__fadd_rn(q_square, q_second_square));
+        k_square = gdn_half_warp_sum(__fadd_rn(k_square, k_second_square));
+      } else {
+        q_square = warp_sum(q_square);
+        k_square = warp_sum(k_square);
+      }
+      q_scale *= rsqrtf(q_square + 1e-6f);
+      k_scale = rsqrtf(k_square + 1e-6f);
     }
 #pragma unroll
     for (int element = 0; element < 4; ++element) {
       q[element] *= q_scale;
       k[element] *= k_scale;
+      if constexpr (HalfWarp) {
+        q_second[element] *= q_scale;
+        k_second[element] *= k_scale;
+      }
     }
     float decay, beta;
     if constexpr (Staged) {
@@ -299,38 +353,69 @@ __global__ void __launch_bounds__(Threads, 1)
       auto *values = reinterpret_cast<const uint32_t *>(storage + GDNPrefetchRows * 512);
       packed_values = values[local_row * 8 + warp];
     }
+    if constexpr (HalfWarp) {
+      float recalled[2] = {};
 #pragma unroll
-    for (int value = 0; value < Values; ++value) {
-      float recalled = 0;
+      for (int group = 0; group < 2; ++group)
 #pragma unroll
-      for (int key = 0; key < 4; ++key) {
-        state[value][key] *= decay;
-        recalled += state[value][key] * k[key];
-      }
-      recalled = warp_sum(recalled);
-      float input_value;
-      if constexpr (Staged)
-        input_value = __uint_as_float(((packed_values >> (value * 16)) & 0xffffu) << 16);
-      else
-        input_value =
-            __bfloat162float(qkv[int64_t(row) * 10240 + 4096 + head * 128 + value_base + value]);
-      float delta = beta * (input_value - recalled);
-      float sum = 0;
+        for (int key = 0; key < 4; ++key) {
+          float key_value = group == 0 ? k[key] : k_second[key];
+          state[group][key] *= decay;
+          recalled[group] += state[group][key] * key_value;
+        }
+      float recall = gdn_half_warp_sum(__fadd_rn(recalled[0], recalled[1]));
+      float input_value = __uint_as_float(((packed_values >> ((lane / 16) * 16)) & 0xffffu) << 16);
+      float delta = beta * (input_value - recall);
+      float sums[2] = {};
 #pragma unroll
-      for (int key = 0; key < 4; ++key) {
-        state[value][key] += delta * k[key];
-        sum += state[value][key] * q[key];
-        if (target >= 0)
-          pool[((int64_t(target) * 48 + head) * 128 + value_base + value) * 128 + lane * 4 + key] =
-              __float2bfloat16_rn(state[value][key]);
-      }
-      sum = warp_sum(sum);
-      if (lane == 0) {
-        if constexpr (ValueTile < 128)
-          recurrent[(int64_t(row) * 48 + head) * 128 + value_base + value] =
-              __float2bfloat16_rn(sum);
+      for (int group = 0; group < 2; ++group)
+#pragma unroll
+        for (int key = 0; key < 4; ++key) {
+          float key_value = group == 0 ? k[key] : k_second[key];
+          float query_value = group == 0 ? q[key] : q_second[key];
+          state[group][key] += delta * key_value;
+          sums[group] += state[group][key] * query_value;
+          if (target >= 0)
+            pool[((int64_t(target) * 48 + head) * 128 + value_base) * 128 + (lane % 16) * 4 +
+                 group * 64 + key] = __float2bfloat16_rn(state[group][key]);
+        }
+      float sum = gdn_half_warp_sum(__fadd_rn(sums[0], sums[1]));
+      if (lane % 16 == 0)
+        recurrent[(int64_t(row) * 48 + head) * 128 + value_base] = __float2bfloat16_rn(sum);
+    } else {
+#pragma unroll
+      for (int value = 0; value < Values; ++value) {
+        float recalled = 0;
+#pragma unroll
+        for (int key = 0; key < 4; ++key) {
+          state[value][key] *= decay;
+          recalled += state[value][key] * k[key];
+        }
+        recalled = warp_sum(recalled);
+        float input_value;
+        if constexpr (Staged)
+          input_value = __uint_as_float(((packed_values >> (value * 16)) & 0xffffu) << 16);
         else
-          result[value_base + value] = __bfloat162float(__float2bfloat16_rn(sum));
+          input_value =
+              __bfloat162float(qkv[int64_t(row) * 10240 + 4096 + head * 128 + value_base + value]);
+        float delta = beta * (input_value - recalled);
+        float sum = 0;
+#pragma unroll
+        for (int key = 0; key < 4; ++key) {
+          state[value][key] += delta * k[key];
+          sum += state[value][key] * q[key];
+          if (target >= 0)
+            pool[((int64_t(target) * 48 + head) * 128 + value_base + value) * 128 + lane * 4 +
+                 key] = __float2bfloat16_rn(state[value][key]);
+        }
+        sum = warp_sum(sum);
+        if (lane == 0) {
+          if constexpr (ValueTile < 128)
+            recurrent[(int64_t(row) * 48 + head) * 128 + value_base + value] =
+                __float2bfloat16_rn(sum);
+          else
+            result[value_base + value] = __bfloat162float(__float2bfloat16_rn(sum));
+        }
       }
     }
     if constexpr (Staged) {

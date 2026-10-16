@@ -38,8 +38,11 @@ FFN 下投影, FA 输出和 GDN 输出对行数不超过 8 的输入使用共用
 跨槽位和 BF16 checkpoint 存储时, FP32 carry 保留在寄存器中.
 独立 kernel 执行输出归一化和量化.
 
+在此 prefill 路径中, 每个 [16-lane 组](../python/oh_my_vllm/kernels/cuda_backend/gdn_kernels.cuh#L187)<!-- source: __device__ inline float gdn_half_warp_sum(float value) { -->处理一个 value 行.
+两组各含四个 key 的和保持原有归约顺序.
+
 Value 分组也适用于[单个五行验证请求](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L79)<!-- source: bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5); -->.
-对于其他超过 1 行的验证输入, GDN 递推计算每块使用 [512 个线程](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L253)<!-- source: run(std::integral_constant<int, 512>{}); -->.
+对于其他超过 1 行的验证输入, GDN 递推计算每块使用 [512 个线程](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L254)<!-- source: run(std::integral_constant<int, 512>{}); -->.
 
 FA 具有独立的 prefill 实现.
 输入行数不超过 32 且每个请求有 1 或 2 个 query 时, FA 使用 [16 行 query tile](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) -->.

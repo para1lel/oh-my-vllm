@@ -38,8 +38,11 @@ Each block [prefetches 32 tokens](../python/oh_my_vllm/kernels/cuda_backend/gdn_
 The FP32 carry stays in registers across these slots and BF16 checkpoint stores.
 A separate kernel applies output normalization and quantization.
 
+Each [16-lane group](../python/oh_my_vllm/kernels/cuda_backend/gdn_kernels.cuh#L187)<!-- source: __device__ inline float gdn_half_warp_sum(float value) { --> processes one value row in this prefill path.
+Two four-key sums reproduce the original reduction order.
+
 The value groups also apply to [one five-row verification request](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L79)<!-- source: bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5); -->.
-GDN recurrent computation uses [512 threads per block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L253)<!-- source: run(std::integral_constant<int, 512>{}); --> for other verification inputs with more than one row.
+GDN recurrent computation uses [512 threads per block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L254)<!-- source: run(std::integral_constant<int, 512>{}); --> for other verification inputs with more than one row.
 
 FA has a separate prefill implementation.
 FA uses [16-row query tiles](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) --> for one or two queries per request when the input has 32 rows or fewer.
