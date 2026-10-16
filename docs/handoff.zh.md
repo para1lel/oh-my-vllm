@@ -76,11 +76,20 @@ FFN 的 [`paired_up_kernel`](../python/oh_my_vllm/kernels/cuda_backend/ffn_up.cu
 [行拷贝](../python/oh_my_vllm/kernels/cuda_backend/device.cu#L182)<!-- source: int column_blocks = std::clamp<int64_t>(row_bytes / 4096 + (row_bytes % 4096 != 0), 1, -->可为每行使用多个 block.
 行数限制每行的 block 数量. 每行至少使用一个 block.
 
-MTP [接受操作](../python/oh_my_vllm/worker/speculation.py#L147)<!-- source: self.gather = device.empty((batch * 5,), "int32") -->保留固定的行索引缓冲区.
-MTP context [直接读取模型和边界的 hidden 缓冲区](../python/oh_my_vllm/worker/speculation.py#L52)<!-- source: self.boundary_hidden = cache.hidden -->.
+MTP [接受操作](../python/oh_my_vllm/worker/speculation.py#L148)<!-- source: self.gather = device.empty((batch * 5,), "int32") -->保留固定的行索引缓冲区.
+MTP context [直接读取模型和边界的 hidden 缓冲区](../python/oh_my_vllm/worker/speculation.py#L53)<!-- source: self.boundary_hidden = cache.hidden -->.
 Context 持有这些缓冲区. 它的 graph 缓存键包含源缓冲区身份.
-Draft 计算为下一阶段使用[采样输出的视图](../python/oh_my_vllm/worker/speculation.py#L448)<!-- source: previous[index] = d.view( -->.
+Draft 计算为下一阶段使用[采样输出的视图](../python/oh_my_vllm/worker/speculation.py#L469)<!-- source: previous[index] = d.view( -->.
 每个阶段先复制所有必要的行, 然后采样才再次使用源缓冲区.
+
+greedy MTP 请求可以使用[一个 CUDA Graph 执行四个 draft 阶段](../python/oh_my_vllm/worker/speculation.py#L399)<!-- source: if can_chain(batch, active, graph, self.cache.blocks): -->.
+此路径适用于没有 penalties, grammar, thinking, stop strings 或 repetition guard 的请求.
+最小输出长度必须在全部四个阶段禁止选择 EOS.
+四个 draft 位置必须具有私有 KV pages.
+
+各阶段使用相同的 sampling 输入缓冲区. 每个阶段具有不同的输出缓冲区.
+worker [一次下载四个 draft token](../python/oh_my_vllm/worker/draft_chain.py#L122)<!-- source: tokens = d.download(self.tokens, np.int64) -->, 并将概率复制到请求缓冲区.
+其他请求在每个 draft 阶段后下载 token.
 
 下一步: 缩短执行时间. 用同一份源码完成两项性能审查.
 使用 producer 与 consumer 融合. 推理 worker 不使用 PDL.

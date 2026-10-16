@@ -76,11 +76,20 @@ FFN uses TMA with `EVICT_FIRST` and `CU_TENSOR_MAP_L2_PROMOTION_NONE` for weight
 The [row copy](../python/oh_my_vllm/kernels/cuda_backend/device.cu#L182)<!-- source: int column_blocks = std::clamp<int64_t>(row_bytes / 4096 + (row_bytes % 4096 != 0), 1, --> can use more than one block for each row.
 The number of rows limits the number of blocks for each row. Each row uses at least one block.
 
-MTP [acceptance](../python/oh_my_vllm/worker/speculation.py#L147)<!-- source: self.gather = device.empty((batch * 5,), "int32") --> keeps a fixed row-index buffer.
-MTP context [reads the model and boundary hidden buffers](../python/oh_my_vllm/worker/speculation.py#L52)<!-- source: self.boundary_hidden = cache.hidden --> directly.
+MTP [acceptance](../python/oh_my_vllm/worker/speculation.py#L148)<!-- source: self.gather = device.empty((batch * 5,), "int32") --> keeps a fixed row-index buffer.
+MTP context [reads the model and boundary hidden buffers](../python/oh_my_vllm/worker/speculation.py#L53)<!-- source: self.boundary_hidden = cache.hidden --> directly.
 The context holds these buffers. Its graph cache key includes the source buffer identity.
-Draft computation uses [views of the sampling output](../python/oh_my_vllm/worker/speculation.py#L448)<!-- source: previous[index] = d.view( --> for the next stage.
+Draft computation uses [views of the sampling output](../python/oh_my_vllm/worker/speculation.py#L469)<!-- source: previous[index] = d.view( --> for the next stage.
 Each stage copies all necessary rows before sampling uses the source buffer again.
+
+Greedy MTP requests can use [one CUDA Graph for four draft stages](../python/oh_my_vllm/worker/speculation.py#L399)<!-- source: if can_chain(batch, active, graph, self.cache.blocks): -->.
+This path is for requests without penalties, grammar, thinking, stop strings, or a repetition guard.
+The minimum output length must prevent EOS selection in all four stages.
+Four draft positions must have private KV pages.
+
+The stages use the same sampling input buffers. Each stage has different output buffers.
+The worker [downloads the four draft tokens once](../python/oh_my_vllm/worker/draft_chain.py#L122)<!-- source: tokens = d.download(self.tokens, np.int64) --> and copies probabilities to request buffers.
+Other requests have a token download after each draft stage.
 
 Next work: decrease execution time. Complete the two performance audits with the same source files.
 Use producer and consumer fusion. Do not use PDL in the inference worker.

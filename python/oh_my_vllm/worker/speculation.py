@@ -7,6 +7,7 @@ from ..kernels.fa import FA
 from ..kernels.ffn import FFN
 from ..kernels.mtp import MTPContext, MTPInput
 from ..kernels.sample import MTPAccept
+from .draft_chain import DraftChain, can_chain
 from .metadata import Metadata
 from .sampling import Sampling
 
@@ -175,6 +176,7 @@ class Speculation:
         self.context_prefill = None
         self.context_key = None
         self.drafts = {}
+        self.chains = {}
         self.acceptance = {}
         self.media = media
         self.trace = trace
@@ -183,6 +185,7 @@ class Speculation:
         for operation in (
             *self.context_decode.values(),
             *self.drafts.values(),
+            *self.chains.values(),
             *self.acceptance.values(),
         ):
             operation.close()
@@ -367,6 +370,19 @@ class Speculation:
             if index in final
         }
 
+    def record_draft(self, batch, active, stage):
+        self.trace.record(
+            "draft",
+            stage=stage,
+            requests=[
+                {
+                    "id": batch.scheduled[index]["request_id"],
+                    "position": batch.requests[index].state_position + stage,
+                }
+                for index in active
+            ],
+        )
+
     def propose(self, batch, endpoints, graph):
         d = self.device
         active = [
@@ -380,6 +396,21 @@ class Speculation:
             request.drafts = []
             if request.proposals is None:
                 request.proposals = d.empty((4, 248320), "float32")
+        if can_chain(batch, active, graph, self.cache.blocks):
+            count = len(active)
+            if count not in self.chains:
+                self.chains[count] = DraftChain(
+                    d,
+                    [Draft(d, self.weights, count, stage == 0) for stage in range(4)],
+                    count,
+                )
+            operation = self.chains[count]
+            operation.prepare(batch, active, endpoints, self.cache)
+            for stage in range(4):
+                self.record_draft(batch, active, stage)
+            operation.execute()
+            operation.store([batch.requests[index] for index in active])
+            return
         previous = {index: endpoints[index][0] for index in active}
         for stage in range(4):
             if not active:
@@ -416,17 +447,7 @@ class Speculation:
             )
             operation.metadata_inputs.update(arrays)
             operation.cache = self.cache.fa[-1]
-            self.trace.record(
-                "draft",
-                stage=stage,
-                requests=[
-                    {
-                        "id": batch.scheduled[index]["request_id"],
-                        "position": batch.requests[index].state_position + stage,
-                    }
-                    for index in active
-                ],
-            )
+            self.record_draft(batch, active, stage)
             operation.execute(graph)
             chosen, probability = operation.sampling.select(
                 *operation.output,

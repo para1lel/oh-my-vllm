@@ -1,11 +1,97 @@
 import unittest
+from contextlib import contextmanager
+from copy import deepcopy
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import llguidance
 import numpy as np
 from oh_my_vllm.worker.constraints import Constraint
 from oh_my_vllm.worker.request import Request
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers
+
+
+class ChainDevice:
+    def __init__(self):
+        self.downloads = 0
+        self.module = SimpleNamespace(copy_bytes=self.copy, gather_rows=self.gather)
+
+    def empty(self, shape, dtype):
+        return np.empty(shape, np.float32 if dtype == "bfloat16" else dtype)
+
+    def zeros(self, shape, dtype):
+        return np.zeros(shape, np.float32 if dtype == "bfloat16" else dtype)
+
+    def upload(self, value):
+        return value.copy()
+
+    def view(self, value, shape, offset=0):
+        return value.reshape(-1)[offset : offset + int(np.prod(shape))].reshape(shape)
+
+    def copy(self, destination, source):
+        np.copyto(
+            destination,
+            source if isinstance(source, np.ndarray) else np.from_dlpack(source),
+        )
+
+    def gather(self, destination, source, indices):
+        destination[:] = source[indices]
+
+    def download(self, value, dtype):
+        self.downloads += 1
+        return value.astype(dtype, copy=True)
+
+    def synchronize(self):
+        pass
+
+    @contextmanager
+    def graph(self, operation):
+        yield operation
+
+
+class ChainSample:
+    def __init__(self, weights, rows, allocate):
+        self.buffers = [None] * 9
+        self.buffers[0] = allocate((rows, 5120), "bfloat16")
+        self.buffers[6] = allocate((rows, 248320), "float32")
+        self.buffers[7] = allocate((rows,), "int64")
+
+    def __call__(self, value, residual, history, mask, parameters, rng, *, greedy):
+        self.buffers[0][:] = value + residual + 1
+        self.buffers[7][:] = self.buffers[0][:, 0].astype(np.int64)
+        self.buffers[6][:] = 0
+        self.buffers[6][np.arange(len(value)), self.buffers[7]] = 1
+        return self.buffers[7], None, self.buffers[6]
+
+
+class ChainDraft:
+    def __init__(self, device, weights, batch, first):
+        from oh_my_vllm.worker.sampling import Sampling
+
+        self.device, self.first = device, first
+        self.hidden = device.zeros((batch, 5120), "bfloat16")
+        self.tokens = device.zeros((batch,), "int64")
+        self.rows = device.upload(np.arange(batch, dtype=np.int32))
+        self.ffn = SimpleNamespace(buffers=(self.hidden.copy(), self.hidden.copy()))
+        self.output = self.ffn.buffers
+        self.sampling = Sampling(device, None, batch)
+        self.metadata_inputs = SimpleNamespace(
+            update=lambda arrays: self.tokens.__setitem__(slice(None), arrays[-1])
+        )
+
+    def run(self):
+        self.output[0][:] = self.hidden + (0 if self.first else self.tokens[:, None])
+        self.output[1][:] = 0
+        return self.output
+
+    def execute(self, graph):
+        self.run()
+
+    def copy(self, destination, source):
+        self.device.copy(destination, source)
+
+    def close(self):
+        self.sampling.close()
 
 
 class Constraints(unittest.TestCase):
@@ -49,6 +135,114 @@ class Constraints(unittest.TestCase):
         self.assertFalse(inputs.history[:, 1, 6:8].any())
         self.assertEqual(request.history, [4, 4, 5])
         self.assertEqual((request.random_offset, request.proposal_offset), (13, 17))
+
+    def test_greedy_draft_chain_keeps_stage_order_private_probabilities_and_fallback(
+        self,
+    ):
+        from oh_my_vllm.worker.draft_chain import can_chain
+        from oh_my_vllm.worker.speculation import Speculation
+
+        tokenizer = SimpleNamespace(
+            eos={256},
+            grammar=SimpleNamespace(vocab_size=248320),
+            valid_tokens=259,
+            think_end=257,
+            generation={},
+            decode_bytes=lambda tokens: bytes(tokens),
+        )
+        options = {
+            "max_tokens": 32,
+            "min_tokens": 16,
+            "stop": [],
+            "sampling": {"temperature": 0, "repetition_guard": False},
+        }
+
+        def request():
+            value = Request(tokenizer, [4, 4], deepcopy(options))
+            value.append([5])
+            value.state_position = 2
+            return value
+
+        d = ChainDevice()
+        cache = SimpleNamespace(fa=[None], blocks=8)
+        events = []
+        trace = SimpleNamespace(
+            record=lambda *args, **kwargs: events.append((args, kwargs))
+        )
+        speculation = Speculation(d, None, cache, None, trace)
+        with (
+            patch("oh_my_vllm.worker.speculation.Draft", ChainDraft),
+            patch("oh_my_vllm.worker.sampling.Sample", ChainSample),
+        ):
+            first = request()
+            batch = SimpleNamespace(
+                requests=[first],
+                scheduled=[{"request_id": 1, "fa_block_table": [1]}],
+                metadata=(None, None, np.ones((1, 335), np.int32)),
+            )
+            endpoints = {0: (np.full((1, 5120), 2, np.float32), None)}
+            first.proposal_offset = 17
+            speculation.propose(batch, endpoints, True)
+            self.assertEqual(first.drafts, [3, 7, 15, 31])
+            self.assertEqual(d.downloads, 1)
+            self.assertEqual(first.proposal_offset, 17)
+            self.assertEqual(
+                events,
+                [
+                    (
+                        ("draft",),
+                        {"stage": stage, "requests": [{"id": 1, "position": position}]},
+                    )
+                    for stage, position in enumerate((2, 3, 4, 5))
+                ],
+            )
+            saved = first.proposals.copy()
+            np.testing.assert_array_equal(saved.argmax(axis=1), [3, 7, 15, 31])
+            second = request()
+            batch.requests = [second]
+            endpoints[0] = (np.full((1, 5120), 4, np.float32), None)
+            speculation.propose(batch, endpoints, True)
+            self.assertEqual(second.drafts, [5, 11, 23, 47])
+            self.assertEqual(d.downloads, 2)
+            np.testing.assert_array_equal(first.proposals, saved)
+            for update in (
+                {"temperature": 0.5},
+                {"frequency_penalty": 0.2},
+                {"repetition_guard": True},
+            ):
+                rejected = request()
+                rejected.options["sampling"].update(update)
+                batch.requests = [rejected]
+                before = d.downloads
+                speculation.propose(batch, endpoints, True)
+                with self.subTest(update=update):
+                    self.assertEqual(d.downloads - before, 4)
+            for field, value in (("thinking", True), ("minimum", 4), ("limit", 5)):
+                rejected = request()
+                setattr(rejected, field, value)
+                batch.requests = [rejected]
+                before = d.downloads
+                speculation.propose(batch, endpoints, True)
+                with self.subTest(field=field):
+                    self.assertGreater(d.downloads - before, 1)
+            rejected = request()
+            batch.requests = [rejected]
+            before = d.downloads
+            speculation.propose(batch, endpoints, False)
+            self.assertEqual(d.downloads - before, 4)
+            rejected.options["stop"] = ["x"]
+            before = d.downloads
+            speculation.propose(batch, endpoints, True)
+            self.assertEqual(d.downloads - before, 4)
+            rejected.options["stop"] = []
+            rejected.constraint.matcher = object()
+            self.assertFalse(can_chain(batch, [0], True, cache.blocks))
+            rejected.constraint.matcher = None
+            for table in ([], [0], [8]):
+                batch.scheduled[0]["fa_block_table"] = table
+                with self.subTest(table=table):
+                    self.assertFalse(can_chain(batch, [0], True, cache.blocks))
+            speculation.close()
 
     def test_thinking_cannot_end_before_the_constraint_starts(self):
         tokenizer = SimpleNamespace(
