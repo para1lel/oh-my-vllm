@@ -132,7 +132,7 @@ The worker [downloads the four draft tokens once](../python/oh_my_vllm/worker/dr
 Other requests have a token download after each draft stage.
 
 Next work: decrease execution time. Complete the two performance audits with the same source files.
-Compare load schedules, state value partitions, and merges in the last CTA before further kernel changes.
+Compare TMA weight layouts and native BF16 matrix libraries before further kernel changes.
 Use producer and consumer fusion. Do not use PDL in the inference worker.
 Use the [optimization procedure](operators/development.md#optimization-procedure) for model checks, reusable lessons, and temporary artifact cleanup.
 

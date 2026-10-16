@@ -112,6 +112,15 @@ The [cuBLAS 13.1 scaling table](https://docs.nvidia.com/cuda/archive/13.1.2/cubl
 Current [DeepGEMM SM100 FP8 interfaces](https://github.com/deepseek-ai/DeepGEMM/blob/main/README.md) use only packed UE8M0 scales.
 Do not change checkpoint scale values to use another matrix instruction.
 
+The [cuBLAS GEMM table](https://docs.nvidia.com/cuda/archive/13.1.2/cublas/index.html#cublasgemmex) permits BF16 operands with FP32 computation and output.
+Compare `cublasGemmEx` with native GEMMs for this datatype combination.
+Use default math with FP32 computation and `CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION`.
+Keep the original BF16 rounding in each following consumer.
+
+Prepare the owned handle and workspace before graph capture.
+Set the stream before the workspace, as specified in the [cuBLAS workspace rules](https://docs.nvidia.com/cuda/archive/13.1.2/cublas/index.html#cublassetworkspace).
+Keep these resources alive until their graphs are destroyed.
+
 The [FlashAttention SM100 implementation](https://github.com/Dao-AILab/flash-attention/blob/main/flash_attn/cute/flash_fwd_sm100.py) separates loads, matrix products, softmax, and output correction.
 Its paged implementation supplies a load path without TMA.
 Compare this schedule with the current FA implementation for head width 256.

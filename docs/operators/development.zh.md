@@ -112,6 +112,15 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 当前的 [DeepGEMM SM100 FP8 接口](https://github.com/deepseek-ai/DeepGEMM/blob/main/README.md)仅使用打包的 UE8M0 缩放因子.
 不得为了使用另一种矩阵指令而改变 checkpoint 缩放值.
 
+[cuBLAS GEMM 表](https://docs.nvidia.com/cuda/archive/13.1.2/cublas/index.html#cublasgemmex) 支持 BF16 操作数以及 FP32 计算和输出.
+对此数据类型组合, 比较 `cublasGemmEx` 与原生 GEMM.
+使用 default math, FP32 计算及 `CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION`.
+在每个后续 consumer 中保留原有的 BF16 舍入.
+
+在 graph capture 前准备自有的 handle 和 workspace.
+按照 [cuBLAS workspace 规则](https://docs.nvidia.com/cuda/archive/13.1.2/cublas/index.html#cublassetworkspace), 先设置 stream, 再设置 workspace.
+在其 graph 销毁前, 保持这些资源存活.
+
 [FlashAttention SM100 实现](https://github.com/Dao-AILab/flash-attention/blob/main/flash_attn/cute/flash_fwd_sm100.py)分离加载, 矩阵乘法, softmax 和输出修正.
 其分页实现提供不使用 TMA 的加载路径.
 对 head 宽度为 256 的输入, 比较此调度与当前 FA 实现.
