@@ -124,6 +124,9 @@ Keep each box in one cache page. Use vector copies for unaligned starts and part
 The [CUTLASS TMEM copy instructions](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cute/arch/copy_sm100.hpp) supply different load widths for known row counts.
 Keep all participating lanes and the necessary destination registers.
 A known row count can remove unused scale and accumulator work.
+Compare a narrow transposed projection with padded row tiles for small inputs.
+Include the extra column blocks and scale requests.
+Keep the epilogue operations and their signed-zero behavior before BF16 conversion.
 
 For the [FlashInfer GDN prefill interface](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_prefill.py), checkpoint intervals must be divisible by 64.
 Its [Blackwell implementation](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py) converts live state to the input type for matrix products.

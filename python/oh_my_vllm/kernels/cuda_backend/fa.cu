@@ -5,6 +5,7 @@
 #include "fa_attention.cuh"
 #include "fa_input.cuh"
 #include "fa_prefill.cuh"
+#include "fa_small_input.cuh"
 
 __global__ void fa_output_merge_kernel(const float *partials, __nv_bfloat16 *output, int count) {
   int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -97,11 +98,22 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
                             static_cast<__nv_bfloat16 *>(summed.data_ptr()),
                             static_cast<__nv_fp8_e4m3 *>(quantized.data_ptr()),
                             static_cast<float *>(scales.data_ptr()), rows, stream);
-  groupwise(static_cast<const __nv_fp8_e4m3 *>(quantized.data_ptr()),
-            static_cast<const __nv_fp8_e4m3 *>(input_weight.data_ptr()),
-            static_cast<const float *>(scales.data_ptr()),
-            static_cast<const float *>(input_weight_scale.data_ptr()),
-            static_cast<__nv_bfloat16 *>(packed.data_ptr()), rows, columns, 5120, stream);
+  if (variant != 1 && (rows == 1 || rows == 4 || rows == 5)) {
+    if (rows == 1)
+      fa_small_input_launch<1>(quantized, scales, input_weight, input_weight_scale, packed, columns,
+                               stream);
+    else if (rows == 4)
+      fa_small_input_launch<4>(quantized, scales, input_weight, input_weight_scale, packed, columns,
+                               stream);
+    else
+      fa_small_input_launch<5>(quantized, scales, input_weight, input_weight_scale, packed, columns,
+                               stream);
+  } else
+    groupwise(static_cast<const __nv_fp8_e4m3 *>(quantized.data_ptr()),
+              static_cast<const __nv_fp8_e4m3 *>(input_weight.data_ptr()),
+              static_cast<const float *>(scales.data_ptr()),
+              static_cast<const float *>(input_weight_scale.data_ptr()),
+              static_cast<__nv_bfloat16 *>(packed.data_ptr()), rows, columns, 5120, stream);
   fa_heads_kernel<<<dim3(rows, variant == 1   ? 4
                                : variant == 2 ? 24
                                               : 28),

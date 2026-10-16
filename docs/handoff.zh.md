@@ -52,12 +52,17 @@ FFN 下投影, FA 输出和 GDN 输出对行数不超过 8 的输入使用共用
 Value 分组也适用于[单个五行验证请求](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L79)<!-- source: bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5); -->.
 对于其他超过 1 行的验证输入, GDN 递推计算每块使用 [512 个线程](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L259)<!-- source: run(std::integral_constant<int, 512>{}); -->.
 
+FA 输入投影为[每个 block 使用 64 个输出列](../python/oh_my_vllm/kernels/cuda_backend/fa_small_input.cuh#L139)<!-- source: inline void fa_small_input_launch(TensorView input, TensorView input_scale, TensorView weight, -->.
+full 和 query-only 路径对 1, 4 或 5 个输入行使用此 kernel.
+KV-only 路径保留 groupwise 实现.
+FP32 缩放更新保留 K-group 顺序及原有 BF16 输出转换.
+
 FA prefill 对完整且对齐的 KV tile 使用 [TMA 拷贝](../python/oh_my_vllm/kernels/cuda_backend/fa_prefill.cuh#L136)<!-- source: if (first % 16 == 0 && base + 64 <= last) { -->.
 每个描述符 box 都位于一个 784-token 页内.
 向量拷贝处理未对齐的起点和最后一个部分 tile.
 
 FA 的 [decode 加载](../python/oh_my_vllm/kernels/cuda_backend/fa_attention.cuh#L75)<!-- source: Position base_offset = base % 784; -->在向量循环之前计算 cache page 指针.
-输入行数不超过 32 且每个请求有 1 或 2 个 query 时, FA 使用 [16 行 query tile](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L157)<!-- source: if (max_queries * 6 <= 16) -->.
+输入行数不超过 32 且每个请求有 1 或 2 个 query 时, FA 使用 [16 行 query tile](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L169)<!-- source: if (max_queries * 6 <= 16) -->.
 FA 每块使用 256 个线程合并两份或更多注意力的部分结果.
 只有一份部分结果时, 每块使用 32 个线程.
 

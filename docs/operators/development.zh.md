@@ -124,6 +124,9 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 [CUTLASS TMEM 复制指令](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cute/arch/copy_sm100.hpp)为已知行数提供不同加载宽度.
 保留所有参与的 lane 及必要的目标寄存器.
 已知行数可以移除未使用的尺度及累加器计算.
+对小输入, 比较窄的转置投影与使用填充行的 tile.
+计入额外的列 block 和尺度请求.
+在 BF16 转换前保留 epilogue 操作及其有符号零行为.
 
 对于 [FlashInfer GDN prefill 接口](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_prefill.py), checkpoint 间隔必须可被 64 整除.
 其 [Blackwell 实现](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py)将 live state 转换为输入类型后执行矩阵乘法.
