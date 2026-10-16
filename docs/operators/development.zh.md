@@ -153,6 +153,7 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 - 调整归约参数前, 比较线程的数据分工. 保留原有部分和及加法顺序.
 - 检查编译后的向量加载和存储. 对打包 checkpoint 使用成对 BF16 转换. 保留每个元素的 RN 转换.
 - 在 cluster 融合实验之前, 用编译后的 kernel 及其完整 launch 配置查询 active cluster 数.
+- 对于输入 multicast, 让各 block 处理不同的输出列. 检查矩阵指令组, pipeline stage 数和 active cluster 数.
 - 比较输出融合与独立 launch 时, 计入 cluster 同步及调度限制.
 - 对于分页加载, 在向量循环之前计算 page 基地址. 保留原有的跨 page 边界地址及带 mask 的尾部地址.
 - 行复制已有足够并行工作时, 限制列 block 数量.

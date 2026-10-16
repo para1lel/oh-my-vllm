@@ -31,6 +31,8 @@ FFN 下投影, FA 输出和 GDN 输出对行数不超过 8 的输入使用共用
 
 对于超过 64 行的输入, FFN prefill 使用[成对 FP32 累加](../python/oh_my_vllm/kernels/cuda_backend/ffn_pair_accum.cuh#L41)<!-- source: template <class Base> struct FFNPairedAccum : Base { -->.
 它保留原有 K-group 顺序, 缩放因子和 BF16 存储.
+上投影使用 [TMA multicast](../python/oh_my_vllm/kernels/cuda_backend/ffn_prefill.cuh#L43)<!-- source: using Cluster = std::conditional_t<MulticastA, Shape<_1, _2, _1>, Shape<_1, _1, _1>>; -->, 将输入分发给输出列不同的两个 block.
+这些 block 共用相同的输入 tile. 下投影使用独立的 TMA 加载.
 
 输入为 2 至 32 行时, GDN 通过一次 [CUDA launch 计算门控投影和卷积](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L208)<!-- source: if (rows > 1 && rows <= 32) -->.
 验证输入只有 1 行时, GDN 用一次 [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/gdn_input.cuh#L142)<!-- source: if constexpr (FuseConvolution) { --> 计算输入投影和卷积.

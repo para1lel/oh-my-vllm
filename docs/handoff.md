@@ -31,6 +31,8 @@ When the input has 1, 4, or 5 rows, FFN uses one [CUDA launch](../python/oh_my_v
 
 FFN prefill uses [paired FP32 accumulation](../python/oh_my_vllm/kernels/cuda_backend/ffn_pair_accum.cuh#L41)<!-- source: template <class Base> struct FFNPairedAccum : Base { --> for inputs with more than 64 rows.
 It keeps the original K-group order, factors, and BF16 stores.
+The upper projection uses [TMA multicast](../python/oh_my_vllm/kernels/cuda_backend/ffn_prefill.cuh#L43)<!-- source: using Cluster = std::conditional_t<MulticastA, Shape<_1, _2, _1>, Shape<_1, _1, _1>>; --> for two blocks with different output columns.
+These blocks share the same input tile. The down projection uses separate TMA loads.
 
 GDN uses one [CUDA launch for gate projections and convolution](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L208)<!-- source: if (rows > 1 && rows <= 32) --> when the input has 2 to 32 rows.
 For one verification row, GDN uses one [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/gdn_input.cuh#L142)<!-- source: if constexpr (FuseConvolution) { --> for input projection and convolution.

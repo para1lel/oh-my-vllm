@@ -18,6 +18,7 @@
 #include "groupwise.cuh"
 #include "ffn_pair_accum.cuh"
 
+template <bool MulticastA = false>
 inline void ffn_prefill_projection(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *weight,
                                    const float *scale_a, const float *scale_weight,
                                    __nv_bfloat16 *output, int m, int n, int k,
@@ -39,7 +40,7 @@ inline void ffn_prefill_projection(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *
   using LayoutD = std::conditional_t<Transposed, cutlass::layout::ColumnMajor, LayoutA>;
   constexpr int OutputAlignment = 128 / cutlass::sizeof_bits<Result>::value;
   using Tile = Shape<Int<TileM>, Int<TileN>, Int<TileK>>;
-  using Cluster = Shape<_1, _1, _1>;
+  using Cluster = std::conditional_t<MulticastA, Shape<_1, _2, _1>, Shape<_1, _1, _1>>;
   using Epilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
       cutlass::arch::Sm100, cutlass::arch::OpClassTensorOp, Tile, Cluster,
       cutlass::epilogue::collective::EpilogueTileAuto, float, float, Result, LayoutD,
@@ -56,6 +57,10 @@ inline void ffn_prefill_projection(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *
   using Kernel =
       cutlass::gemm::kernel::GemmUniversal<Shape<int, int, int, int>, Mainloop, Epilogue>;
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<Kernel>;
+  static_assert(!MulticastA || size(typename MainloopBase::AtomThrShapeMNK{}) == 1);
+  static_assert(!MulticastA || MainloopBase::DispatchPolicy::Stages == 5);
+  static_assert(!MulticastA || Kernel::SharedStorageSize == 201216);
+  static_assert(!MulticastA || Kernel::MaxThreadsPerBlock == 384);
   auto stride_a = cutlass::make_cute_packed_stride(typename Kernel::StrideA{},
                                                    make_shape(m, k * Splits, Splits));
   auto stride_b = cutlass::make_cute_packed_stride(typename Kernel::StrideB{},

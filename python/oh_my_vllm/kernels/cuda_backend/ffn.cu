@@ -107,12 +107,12 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
           static_cast<const float *>(input_scale.data_ptr()), gate_up.data_ptr(), 34816, rows, 5120,
           stream);
     else
-      ffn_prefill_projection(static_cast<const __nv_fp8_e4m3 *>(quantized_input.data_ptr()),
-                             static_cast<const __nv_fp8_e4m3 *>(gate_up_weight.data_ptr()),
-                             static_cast<const float *>(input_scale.data_ptr()),
-                             static_cast<const float *>(gate_up_scale.data_ptr()),
-                             static_cast<__nv_bfloat16 *>(gate_up.data_ptr()), rows, 34816, 5120,
-                             stream);
+      ffn_prefill_projection<true>(static_cast<const __nv_fp8_e4m3 *>(quantized_input.data_ptr()),
+                                   static_cast<const __nv_fp8_e4m3 *>(gate_up_weight.data_ptr()),
+                                   static_cast<const float *>(input_scale.data_ptr()),
+                                   static_cast<const float *>(gate_up_scale.data_ptr()),
+                                   static_cast<__nv_bfloat16 *>(gate_up.data_ptr()), rows, 34816,
+                                   5120, stream);
     launch_kernel(silu_product_quant_kernel, dim3((rows * 136 + 7) / 8), dim3(256), 0, stream,
                   static_cast<const __nv_bfloat16 *>(gate_up.data_ptr()),
                   static_cast<__nv_fp8_e4m3 *>(quantized_product.data_ptr()),
