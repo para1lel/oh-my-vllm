@@ -12,11 +12,16 @@
 #include <cutlass/cuda_host_adapter.hpp>
 #include <cutlass/arch/barrier.h>
 
+template <int FixedRows = 0>
 __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
                                          const __nv_fp8_e4m3 *weight, const float *activation_scale,
                                          const float *weight_scale, float *output, int rows,
                                          int columns, int inner, int splits,
                                          const __grid_constant__ CUtensorMap weight_map) {
+  static_assert(FixedRows == 0 || FixedRows == 1);
+  constexpr int Capacity = FixedRows == 1 ? 1 : 8;
+  if constexpr (FixedRows == 1)
+    rows = 1;
   using namespace cute;
   using Element = cutlass::float_e4m3_t;
   using MMA = decltype(make_tiled_mma(
@@ -55,7 +60,7 @@ __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
   auto partial_fragment = partition_fragment_C(mma, Shape<_64, _8>{});
   partial_fragment.data() = *tensor_memory;
   uint32_t fragment_address = *tensor_memory + uint32_t(warp * 32) * 65536u;
-  float accumulated[8] = {};
+  float accumulated[Capacity] = {};
   int barrier_phase = 0, scale_groups = inner / 128, split_groups = scale_groups / splits;
   int first_group = blockIdx.y * split_groups;
   for (int local_group = 0; local_group < split_groups; local_group += 4) {
@@ -71,14 +76,14 @@ __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
                                  uint64_t(cute::TMA::CacheHintSm90::EVICT_FIRST),
                                  weight_storage + sub * 8192, (group + sub) * 128, first_column);
     }
-    float scale_products[4][8] = {};
+    float scale_products[4][Capacity] = {};
 #pragma unroll
     for (int sub = 0; sub < 4; ++sub) {
       bool valid = local_group + sub < split_groups;
       float weight_factor =
           valid ? weight_scale[int64_t(blockIdx.x / 2) * scale_groups + group + sub] : 0.f;
 #pragma unroll
-      for (int row = 0; row < 8; ++row)
+      for (int row = 0; row < Capacity; ++row)
         if (row < rows && valid)
           scale_products[sub][row] =
               weight_factor * activation_scale[row * scale_groups + group + sub];
@@ -119,11 +124,14 @@ __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
     for (int sub = 0; sub < 4; ++sub) {
       if (sub >= valid_groups)
         continue;
-      uint32_t values[8];
-      SM100_TMEM_LOAD_32dp32b8x::copy(fragment_address + sub * 8, values[0], values[1], values[2],
-                                      values[3], values[4], values[5], values[6], values[7]);
+      uint32_t values[Capacity];
+      if constexpr (FixedRows == 1)
+        SM100_TMEM_LOAD_32dp32b1x::copy(fragment_address + sub * 8, values[0]);
+      else
+        SM100_TMEM_LOAD_32dp32b8x::copy(fragment_address + sub * 8, values[0], values[1], values[2],
+                                        values[3], values[4], values[5], values[6], values[7]);
 #pragma unroll
-      for (int row = 0; row < 8; ++row) {
+      for (int row = 0; row < Capacity; ++row) {
         if (row < rows && (thread & 31) < 16) {
           float scale = scale_products[sub][row];
           accumulated[row] = fmaf(__uint_as_float(values[row]), scale, accumulated[row]);
@@ -134,7 +142,7 @@ __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
     __syncthreads();
   }
 #pragma unroll
-  for (int row = 0; row < 8; ++row)
+  for (int row = 0; row < Capacity; ++row)
     if (row < rows && (thread & 31) < 16)
       output[(int64_t(blockIdx.y) * rows + row) * columns + first_column + warp * 16 +
              (thread & 31)] = accumulated[row];
@@ -144,10 +152,13 @@ __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
   }
 }
 
-inline void decode_projection_launch(TensorView activation, TensorView weight,
-                                     TensorView activation_scale, TensorView weight_scale,
-                                     TensorView partials, int rows, int splits,
-                                     cudaStream_t stream) {
+template <int FixedRows = 0>
+inline void decode_projection_rows_launch(TensorView activation, TensorView weight,
+                                          TensorView activation_scale, TensorView weight_scale,
+                                          TensorView partials, int rows, int splits,
+                                          cudaStream_t stream) {
+  static_assert(FixedRows == 0 || FixedRows == 1);
+  TVM_FFI_ICHECK(FixedRows == 0 || rows == FixedRows);
   using WeightKey = std::tuple<int, uintptr_t, int64_t, int64_t>;
   static thread_local std::map<WeightKey, CUtensorMap> weight_maps;
   int columns = weight.size(0), inner = weight.size(1);
@@ -155,7 +166,7 @@ inline void decode_projection_launch(TensorView activation, TensorView weight,
                 inner};
   auto found = weight_maps.find(key);
   if (found == weight_maps.end()) {
-    check_cuda(cudaFuncSetAttribute(decode_projection_kernel,
+    check_cuda(cudaFuncSetAttribute(decode_projection_kernel<FixedRows>,
                                     cudaFuncAttributeMaxDynamicSharedMemorySize, 36992));
     CUtensorMap descriptor{};
     uint64_t dimensions[2] = {uint64_t(inner), uint64_t(columns)}, strides[1] = {uint64_t(inner)};
@@ -172,7 +183,19 @@ inline void decode_projection_launch(TensorView activation, TensorView weight,
   const auto *sa = static_cast<const float *>(activation_scale.data_ptr());
   const auto *sw = static_cast<const float *>(weight_scale.data_ptr());
   auto *out = static_cast<float *>(partials.data_ptr());
-  launch_kernel(decode_projection_kernel, dim3(columns / 64, splits), dim3(128), 36992, stream, a,
-                w, sa, sw, out, rows, columns, inner, splits, found->second);
+  launch_kernel(decode_projection_kernel<FixedRows>, dim3(columns / 64, splits), dim3(128), 36992,
+                stream, a, w, sa, sw, out, rows, columns, inner, splits, found->second);
   check_cuda(cudaGetLastError());
+}
+
+inline void decode_projection_launch(TensorView activation, TensorView weight,
+                                     TensorView activation_scale, TensorView weight_scale,
+                                     TensorView partials, int rows, int splits,
+                                     cudaStream_t stream) {
+  if (rows == 1)
+    decode_projection_rows_launch<1>(activation, weight, activation_scale, weight_scale, partials,
+                                     rows, splits, stream);
+  else
+    decode_projection_rows_launch<0>(activation, weight, activation_scale, weight_scale, partials,
+                                     rows, splits, stream);
 }

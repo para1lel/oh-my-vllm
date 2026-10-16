@@ -115,6 +115,10 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 对 head 宽度为 256 的输入, 比较此调度与当前 FA 实现.
 保留 784-token cache page 和 BF16 概率存储.
 
+[CUTLASS TMEM 复制指令](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cute/arch/copy_sm100.hpp)为已知行数提供不同加载宽度.
+保留所有参与的 lane 及必要的目标寄存器.
+已知行数可以移除未使用的尺度及累加器计算.
+
 对于 [FlashInfer GDN prefill 接口](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_prefill.py), checkpoint 间隔必须可被 64 整除.
 其 [Blackwell 实现](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py)将 live state 转换为输入类型后执行矩阵乘法.
 使用其算法前, 对照模型契约检查这些条件.
@@ -143,6 +147,9 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 - 比较 K 分区时包含合并工作. 只有投影变快并不足够.
 - 将融合投影扩展到更多行前, 检查寄存器和共享内存用量.
 - 将归一化移入投影 block 时, 包含重复的输入读取.
+- 当本地归一化提供 shared-memory 矩阵输入时, 保留原有归约顺序.
+- 在 cluster 融合实验之前, 用编译后的 kernel 及其完整 launch 配置查询 active cluster 数.
+- 比较输出融合与独立 launch 时, 计入 cluster 同步及调度限制.
 - 行复制已有足够并行工作时, 限制列 block 数量.
 - 移除复制前, 检查缓冲区生命周期及 graph 输入.
 - 按数据类型合并固定 metadata 数组. 保持视图对齐和 graph 地址固定.

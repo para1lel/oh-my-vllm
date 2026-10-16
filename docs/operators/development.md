@@ -115,6 +115,10 @@ Its paged implementation supplies a load path without TMA.
 Compare this schedule with the current FA implementation for head width 256.
 Keep the 784-token cache pages and BF16 probability storage.
 
+The [CUTLASS TMEM copy instructions](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cute/arch/copy_sm100.hpp) supply different load widths for known row counts.
+Keep all participating lanes and the necessary destination registers.
+A known row count can remove unused scale and accumulator work.
+
 For the [FlashInfer GDN prefill interface](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_prefill.py), checkpoint intervals must be divisible by 64.
 Its [Blackwell implementation](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py) converts live state to the input type for matrix products.
 Do a check of these conditions against the model contract before you use its algorithm.
@@ -143,6 +147,9 @@ Use these lessons to select another candidate:
 - Include merge work when you compare K partitions. A faster projection alone is not sufficient.
 - Before you extend a fused projection to more rows, do a check of register and shared-memory use.
 - Include repeated input reads when you move normalization into projection blocks.
+- Keep the original reduction order when local normalization supplies shared-memory matrix inputs.
+- Query active clusters with the compiled kernel and its full launch configuration before a cluster fusion experiment.
+- Include cluster synchronization and scheduling limits when you compare output fusion with a separate launch.
 - Limit column blocks when row copies already supply enough parallel work.
 - Before you remove a copy, do a check of buffer lifetime and graph inputs.
 - Combine fixed metadata arrays by data type. Keep aligned views and fixed graph addresses.
