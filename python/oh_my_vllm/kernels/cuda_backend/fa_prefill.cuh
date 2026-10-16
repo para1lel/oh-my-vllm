@@ -1,9 +1,13 @@
 #pragma once
 
 #include "fa_attention.cuh"
-#include <cute/tensor.hpp>
+#include <cute/arch/copy_sm90_tma.hpp>
 #include <cute/arch/tmem_allocator_sm100.hpp>
+#include <cute/tensor.hpp>
 #include <cutlass/arch/barrier.h>
+#include <cutlass/cuda_host_adapter.hpp>
+#include <map>
+#include <tuple>
 
 __device__ inline void fa_tmem_load32(uint32_t address, float (&values)[32]) {
   uint32_t words[32];
@@ -38,7 +42,9 @@ __global__ void fa_prefill_kernel(const __nv_bfloat16 *query, const __nv_bfloat1
                                   const int32_t *tables, const int32_t *lengths,
                                   const int32_t *starts, float *partial, float *lse,
                                   int table_width, int tiles, int max_queries, int query_rows,
-                                  int cache_pages, int first) {
+                                  int cache_pages, int first,
+                                  const __grid_constant__ CUtensorMap key_map,
+                                  const __grid_constant__ CUtensorMap value_map) {
   using namespace cute;
   using Element = cutlass::bfloat16_t;
   using QKMma = decltype(make_tiled_mma(
@@ -58,7 +64,7 @@ __global__ void fa_prefill_kernel(const __nv_bfloat16 *query, const __nv_bfloat1
                     2 * sizeof(uint64_t) + sizeof(uint32_t) <=
                 FAPrefillSharedBytes);
   static_assert(128 * 33 * sizeof(float) <= cosize_v<KLayout> * sizeof(Element));
-  extern __shared__ __align__(128) unsigned char storage[];
+  extern __shared__ __align__(1024) unsigned char storage[];
   auto *query_storage = reinterpret_cast<Element *>(storage);
   auto *key_storage = query_storage + cosize_v<QLayout>;
   auto *value_storage = key_storage + cosize_v<KLayout>;
@@ -87,8 +93,11 @@ __global__ void fa_prefill_kernel(const __nv_bfloat16 *query, const __nv_bfloat1
   TMEM::Allocator1Sm allocator;
   if (warp == 0)
     allocator.allocate(512, tmem_base);
-  if (tid == 0)
+  if (tid == 0) {
     initialize_barrier(*barrier, 1);
+    initialize_barrier(barrier[1], 1);
+    cutlass::arch::fence_barrier_init();
+  }
   __syncthreads();
   uint32_t lane_base = *tmem_base + uint32_t(warp * 32) * 65536u;
   float zeros[32] = {};
@@ -115,7 +124,7 @@ __global__ void fa_prefill_kernel(const __nv_bfloat16 *query, const __nv_bfloat1
   auto output = partition_fragment_C(pv, Shape<_128, _256>{});
   score.data() = *tmem_base;
   output.data() = *tmem_base + 64;
-  int phase = 0;
+  int phase = 0, transport_phase = 0;
   float maximum = -INFINITY, denominator = 0;
   int row = start + (qbase + tid) / 6;
   int length = row < end ? lengths[row] : 0;
@@ -124,26 +133,61 @@ __global__ void fa_prefill_kernel(const __nv_bfloat16 *query, const __nv_bfloat1
     return;
   }
   for (int base = first; base < last; base += 64) {
-    for (int i = tid; i < 64 * 32; i += 128) {
-      int r = i / 32, c = (i % 32) * 8, pos = base + r;
-      int logical = min(pos, last - 1), page = tables[seq * table_width + logical / 784];
-      if (page < 0 || page >= cache_pages) {
-        asm volatile("trap;");
-        return;
+    if (first % 16 == 0 && base + 64 <= last) {
+      if (tid == 0) {
+        cutlass::arch::ClusterTransactionBarrier::arrive_and_expect_tx(barrier + 1, 65536);
+#pragma unroll
+        for (int token = 0; token < 64; token += 16) {
+          int position = base + token;
+          int page = tables[seq * table_width + position / 784];
+          if (page < 0 || page >= cache_pages) {
+            asm volatile("trap;");
+            return;
+          }
+#pragma unroll
+          for (int block = 0; block < 4; ++block)
+            SM90_TMA_LOAD_5D::copy(
+                &key_map, barrier + 1, uint64_t(TMA::CacheHintSm90::EVICT_NORMAL),
+                key_storage + block * 4096 + token * 64, 0, position % 784, block, kh, page * 2);
+        }
+#pragma unroll
+        for (int token = 0; token < 64; token += 8) {
+          int position = base + token;
+          int page = tables[seq * table_width + position / 784];
+          if (page < 0 || page >= cache_pages) {
+            asm volatile("trap;");
+            return;
+          }
+          SM90_TMA_LOAD_5D::copy(
+              &value_map, barrier + 1, uint64_t(TMA::CacheHintSm90::EVICT_NORMAL),
+              value_storage + token * 256, 0, position % 784, 0, kh, page * 2 + 1);
+        }
       }
-      int64_t offset = ((int64_t(page) * 1568 + logical % 784) * 4 + kh) * 256 + c;
-      unsigned kd = __cvta_generic_to_shared(&sK(make_coord(r, c % 16), 0, c / 16));
-      unsigned vd = __cvta_generic_to_shared(&sV(make_coord(c, r % 16), 0, r / 16));
-      int bytes = pos < last ? 16 : 0;
-      asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;" ::"r"(kd), "l"(cache + offset),
-                   "r"(bytes)
-                   : "memory");
-      asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;" ::"r"(vd),
-                   "l"(cache + offset + int64_t(784) * 4 * 256), "r"(bytes)
-                   : "memory");
+      wait_barrier(barrier[1], transport_phase);
+      transport_phase ^= 1;
+      __syncthreads();
+    } else {
+      for (int i = tid; i < 64 * 32; i += 128) {
+        int r = i / 32, c = (i % 32) * 8, pos = base + r;
+        int logical = min(pos, last - 1), page = tables[seq * table_width + logical / 784];
+        if (page < 0 || page >= cache_pages) {
+          asm volatile("trap;");
+          return;
+        }
+        int64_t offset = ((int64_t(page) * 1568 + logical % 784) * 4 + kh) * 256 + c;
+        unsigned kd = __cvta_generic_to_shared(&sK(make_coord(r, c % 16), 0, c / 16));
+        unsigned vd = __cvta_generic_to_shared(&sV(make_coord(c, r % 16), 0, r / 16));
+        int bytes = pos < last ? 16 : 0;
+        asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;" ::"r"(kd), "l"(cache + offset),
+                     "r"(bytes)
+                     : "memory");
+        asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;" ::"r"(vd),
+                     "l"(cache + offset + int64_t(784) * 4 * 256), "r"(bytes)
+                     : "memory");
+      }
+      asm volatile("cp.async.commit_group; cp.async.wait_group 0;" ::: "memory");
+      __syncthreads();
     }
-    asm volatile("cp.async.commit_group; cp.async.wait_group 0;" ::: "memory");
-    __syncthreads();
     cutlass::arch::fence_view_async_shared();
     if (warp == 0) {
       qk.accumulate_ = UMMA::ScaleOut::Zero;
@@ -232,4 +276,36 @@ __global__ void fa_prefill_kernel(const __nv_bfloat16 *query, const __nv_bfloat1
     allocator.release_allocation_lock();
     allocator.free(*tmem_base, 512);
   }
+}
+
+struct FAPrefillTensorMaps {
+  alignas(128) CUtensorMap key;
+  alignas(128) CUtensorMap value;
+};
+
+inline const FAPrefillTensorMaps &fa_prefill_tensor_maps(TensorView cache) {
+  using CacheKey = std::tuple<int, uintptr_t, int64_t>;
+  static thread_local std::map<CacheKey, FAPrefillTensorMaps> descriptors;
+  CacheKey key{cache.device().device_id, reinterpret_cast<uintptr_t>(cache.data_ptr()),
+               cache.size(0)};
+  auto found = descriptors.find(key);
+  if (found == descriptors.end()) {
+    FAPrefillTensorMaps maps{};
+    uint64_t dimensions[5] = {64, 784, 4, 4, uint64_t(cache.size(0)) * 2};
+    uint64_t strides[4] = {2048, 128, 512, 1605632};
+    uint32_t key_box[5] = {64, 16, 1, 1, 1};
+    uint32_t value_box[5] = {64, 8, 4, 1, 1};
+    uint32_t elements[5] = {1, 1, 1, 1, 1};
+    auto encode = [&](CUtensorMap *descriptor, const uint32_t *box) {
+      auto status = CUTLASS_CUDA_DRIVER_WRAPPER_CALL(cuTensorMapEncodeTiled)(
+          descriptor, CU_TENSOR_MAP_DATA_TYPE_BFLOAT16, 5, cache.data_ptr(), dimensions, strides,
+          box, elements, CU_TENSOR_MAP_INTERLEAVE_NONE, CU_TENSOR_MAP_SWIZZLE_128B,
+          CU_TENSOR_MAP_L2_PROMOTION_NONE, CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE);
+      TVM_FFI_ICHECK(status == CUDA_SUCCESS) << status;
+    };
+    encode(&maps.key, key_box);
+    encode(&maps.value, value_box);
+    found = descriptors.emplace(key, maps).first;
+  }
+  return found->second;
 }

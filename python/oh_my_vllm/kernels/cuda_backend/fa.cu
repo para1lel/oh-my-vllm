@@ -122,6 +122,7 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
       check_cuda(cudaFuncSetAttribute(
           fa_prefill_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, FAPrefillSharedBytes));
     });
+    const auto &maps = fa_prefill_tensor_maps(cache);
     int tiles = (max_queries * 6 + 127) / 128;
     fa_prefill_kernel<<<dim3(batch * tiles, 4), 128, FAPrefillSharedBytes, stream>>>(
         static_cast<const __nv_bfloat16 *>(query.data_ptr()),
@@ -130,7 +131,7 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
         static_cast<const int32_t *>(lengths.data_ptr()),
         static_cast<const int32_t *>(sequence_rows.data_ptr()),
         static_cast<float *>(partial.data_ptr()), static_cast<float *>(lse.data_ptr()),
-        tables.size(1), tiles, max_queries, rows, blocks, first_token);
+        tables.size(1), tiles, max_queries, rows, blocks, first_token, maps.key, maps.value);
     check_cuda(cudaGetLastError());
   } else {
     auto attend = [&](auto query_tile) {

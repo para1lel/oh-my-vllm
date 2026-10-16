@@ -117,6 +117,10 @@ Its paged implementation supplies a load path without TMA.
 Compare this schedule with the current FA implementation for head width 256.
 Keep the 784-token cache pages and BF16 probability storage.
 
+The [PTX tensor-copy rules](https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk-tensor) include swizzle and transaction barrier requirements.
+Use descriptor boxes with the same physical layout as K/V MMA inputs.
+Keep each box in one cache page. Use vector copies for unaligned starts and partial tiles.
+
 The [CUTLASS TMEM copy instructions](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cute/arch/copy_sm100.hpp) supply different load widths for known row counts.
 Keep all participating lanes and the necessary destination registers.
 A known row count can remove unused scale and accumulator work.

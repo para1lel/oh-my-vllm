@@ -117,6 +117,10 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 对 head 宽度为 256 的输入, 比较此调度与当前 FA 实现.
 保留 784-token cache page 和 BF16 概率存储.
 
+[PTX tensor-copy 规则](https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk-tensor)包含 swizzle 和 transaction barrier 要求.
+使用与 K/V MMA 输入具有相同物理布局的描述符 box.
+每个 box 都须位于一个 cache page 内. 对未对齐起点和部分 tile 使用向量拷贝.
+
 [CUTLASS TMEM 复制指令](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cute/arch/copy_sm100.hpp)为已知行数提供不同加载宽度.
 保留所有参与的 lane 及必要的目标寄存器.
 已知行数可以移除未使用的尺度及累加器计算.

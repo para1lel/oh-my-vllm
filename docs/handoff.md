@@ -52,9 +52,12 @@ Two four-key sums reproduce the original reduction order.
 The value groups also apply to [one five-row verification request](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L79)<!-- source: bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5); -->.
 GDN recurrent computation uses [512 threads per block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L259)<!-- source: run(std::integral_constant<int, 512>{}); --> for other verification inputs with more than one row.
 
-FA has a separate prefill implementation.
+FA prefill uses [TMA copies](../python/oh_my_vllm/kernels/cuda_backend/fa_prefill.cuh#L136)<!-- source: if (first % 16 == 0 && base + 64 <= last) { --> for complete aligned KV tiles.
+Each descriptor box is in one 784-token page.
+Vector copies handle unaligned starts and final partial tiles.
+
 FA [decode loads](../python/oh_my_vllm/kernels/cuda_backend/fa_attention.cuh#L75)<!-- source: Position base_offset = base % 784; --> calculate cache page pointers before the vector loop.
-FA uses [16-row query tiles](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L156)<!-- source: if (max_queries * 6 <= 16) --> for one or two queries per request when the input has 32 rows or fewer.
+FA uses [16-row query tiles](../python/oh_my_vllm/kernels/cuda_backend/fa.cu#L157)<!-- source: if (max_queries * 6 <= 16) --> for one or two queries per request when the input has 32 rows or fewer.
 FA combines two or more partial attention results with 256 threads per block.
 It uses 32 threads per block when there is only one partial result.
 
