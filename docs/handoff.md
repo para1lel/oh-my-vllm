@@ -48,6 +48,9 @@ It copies token history to the GPU only when a penalty uses the history.
 MTP verification does not download unused sampled tokens.
 
 Operator and end-to-end optimization is in progress.
+`copy_bytes` now synchronizes only when the destination is on the CPU.
+`gather_rows_kernel` uses 16-byte vectorized loads when the row and base pointers are 16-byte aligned.
+
 Next work: decrease execution time. Complete the two performance audits with the same source files.
 Use producer and consumer fusion. Do not use PDL in the inference worker.
 

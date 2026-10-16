@@ -48,6 +48,9 @@ Worker 提供约束解码, MTP4, 以及仅含 decode 请求的 batch 的 CUDA Gr
 MTP 验证不下载未使用的采样 token.
 
 算子和端到端优化正在进行.
+`copy_bytes` 现在只在目标在 CPU 上时才同步.
+`gather_rows_kernel` 在行和基地址满足 16 字节对齐时使用 16 字节向量化加载.
+
 下一步: 缩短执行时间. 用同一份源码完成两项性能审查.
 使用 producer 与 consumer 融合. 推理 worker 不使用 PDL.
 
