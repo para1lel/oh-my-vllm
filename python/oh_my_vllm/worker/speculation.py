@@ -47,6 +47,7 @@ class Context(GraphOperation):
         )
         self.arrays = tuple(device.upload(array) for array in arrays)
         self.hidden = device.empty((len(arrays[0]), 5120), "bfloat16")
+        self.gather = device.empty((len(arrays[0]),), "int32")
         self.cache = None
         self.media = self.media_rows = None
 
@@ -138,6 +139,7 @@ class Acceptance(GraphOperation):
         self.drafts = device.empty((batch, 4), "int64")
         self.rng = device.empty((batch, 2), "uint64")
         self.slots = device.empty((batch, 5), "int32")
+        self.gather = device.empty((batch * 5,), "int32")
         self.capacity = None
 
     def run(self):
@@ -226,9 +228,9 @@ class Speculation:
                 d.module.zero(destination)
             else:
                 operation.copy(destination, request.proposals)
-        gather = d.upload(np.asarray(target_rows, np.int32))
+        operation.copy(operation.gather, np.asarray(target_rows, np.int32))
         d.module.gather_rows(
-            d.view(operation.target, (count * 5, 248320)), probability, gather
+            d.view(operation.target, (count * 5, 248320)), probability, operation.gather
         )
         operation.copy(operation.drafts, np.asarray(drafts, np.int64))
         operation.copy(operation.slots, np.asarray(slots, np.int32))
@@ -332,8 +334,8 @@ class Speculation:
             operation = self.context_prefill
         for destination, source in zip(operation.arrays, arrays, strict=True):
             operation.copy(destination, source)
-        gather = self.device.upload(np.maximum(hidden_rows, 0).astype(np.int32))
-        self.device.module.gather_rows(operation.hidden, hidden, gather)
+        operation.copy(operation.gather, np.maximum(hidden_rows, 0).astype(np.int32))
+        self.device.module.gather_rows(operation.hidden, hidden, operation.gather)
         for row, source in enumerate(hidden_rows):
             if source < 0:
                 operation.copy(
@@ -438,15 +440,10 @@ class Speculation:
                     d.view(probability, (1, 248320), local * 248320),
                 )
                 request.drafts.append(int(chosen[local]))
-                # Store the draft hidden before the next sampler reuses its buffers.
-                saved = d.empty((1, 5120), "bfloat16")
-                operation.copy(
-                    saved,
-                    d.view(
-                        operation.sampling.operation.buffers[0], (1, 5120), local * 5120
-                    ),
+                # The next stage copies all rows before the sampler reuses this buffer.
+                previous[index] = d.view(
+                    operation.sampling.operation.buffers[0], (1, 5120), local * 5120
                 )
-                previous[index] = saved
                 if (
                     not request.stops_after(request.drafts)
                     and request.generated + len(request.drafts) + 1 < request.limit
