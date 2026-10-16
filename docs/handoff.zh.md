@@ -35,17 +35,20 @@ FFN 下投影, FA 输出和 GDN 输出对行数不超过 8 的输入使用共用
 输入为 2 至 32 行时, GDN 通过一次 [CUDA launch 计算门控投影和卷积](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L208)<!-- source: if (rows > 1 && rows <= 32) -->.
 验证输入只有 1 行时, GDN 用一次 [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/gdn_input.cuh#L142)<!-- source: if constexpr (FuseConvolution) { --> 计算输入投影和卷积.
 
+对于单请求的一行验证输入, GDN 使用 [64 位状态加载和存储](../python/oh_my_vllm/kernels/cuda_backend/gdn_kernels.cuh#L234)<!-- source: uint2 packed = *reinterpret_cast<const uint2 *>(address); -->.
+成对 BF16 转换保留每个元素的 RN 转换. Live carry 和递推算术保持 FP32.
+
 对于超过 32 行的 prefill 输入, GDN 在 BF16 投影后[预先计算门控](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L81)<!-- source: bool precomputed_gates = !verify && rows > 32; -->.
 独立 block 处理每组 16 个 state value 行.
-每个 block 向两个 shared-memory 槽位[预取 32 个 token](../python/oh_my_vllm/kernels/cuda_backend/gdn_kernels.cuh#L143)<!-- source: constexpr int GDNPrefetchRows = 32; -->.
+每个 block 向两个 shared-memory 槽位[预取 32 个 token](../python/oh_my_vllm/kernels/cuda_backend/gdn_kernels.cuh#L145)<!-- source: constexpr int GDNPrefetchRows = 32; -->.
 跨槽位和 BF16 checkpoint 存储时, FP32 carry 保留在寄存器中.
 独立 kernel 执行输出归一化和量化.
 
-在此 prefill 路径中, 每个 [16-lane 组](../python/oh_my_vllm/kernels/cuda_backend/gdn_kernels.cuh#L187)<!-- source: __device__ inline float gdn_half_warp_sum(float value) { -->处理一个 value 行.
+在此 prefill 路径中, 每个 [16-lane 组](../python/oh_my_vllm/kernels/cuda_backend/gdn_kernels.cuh#L189)<!-- source: __device__ inline float gdn_half_warp_sum(float value) { -->处理一个 value 行.
 两组各含四个 key 的和保持原有归约顺序.
 
 Value 分组也适用于[单个五行验证请求](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L79)<!-- source: bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5); -->.
-对于其他超过 1 行的验证输入, GDN 递推计算每块使用 [512 个线程](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L254)<!-- source: run(std::integral_constant<int, 512>{}); -->.
+对于其他超过 1 行的验证输入, GDN 递推计算每块使用 [512 个线程](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L259)<!-- source: run(std::integral_constant<int, 512>{}); -->.
 
 FA 具有独立的 prefill 实现.
 FA 的 [decode 加载](../python/oh_my_vllm/kernels/cuda_backend/fa_attention.cuh#L75)<!-- source: Position base_offset = base % 784; -->在向量循环之前计算 cache page 指针.

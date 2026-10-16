@@ -151,6 +151,7 @@ Use these lessons to select another candidate:
 - Include repeated input reads when you move normalization into projection blocks.
 - Keep the original reduction order when local normalization supplies shared-memory matrix inputs.
 - Compare the work for each thread before you change reduction parameters. Keep the original partial sums and addition order.
+- Check compiled vector loads and stores. Pair BF16 conversions for packed checkpoints. Keep the RN conversion for each element.
 - Query active clusters with the compiled kernel and its full launch configuration before a cluster fusion experiment.
 - Include cluster synchronization and scheduling limits when you compare output fusion with a separate launch.
 - For paged loads, calculate page bases before the vector loop. Keep page-boundary and masked-tail addresses unchanged.

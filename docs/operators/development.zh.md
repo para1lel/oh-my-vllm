@@ -151,6 +151,7 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 - 将归一化移入投影 block 时, 包含重复的输入读取.
 - 当本地归一化提供 shared-memory 矩阵输入时, 保留原有归约顺序.
 - 调整归约参数前, 比较线程的数据分工. 保留原有部分和及加法顺序.
+- 检查编译后的向量加载和存储. 对打包 checkpoint 使用成对 BF16 转换. 保留每个元素的 RN 转换.
 - 在 cluster 融合实验之前, 用编译后的 kernel 及其完整 launch 配置查询 active cluster 数.
 - 比较输出融合与独立 launch 时, 计入 cluster 同步及调度限制.
 - 对于分页加载, 在向量循环之前计算 page 基地址. 保留原有的跨 page 边界地址及带 mask 的尾部地址.

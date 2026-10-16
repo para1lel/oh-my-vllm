@@ -3,6 +3,8 @@
 #include "common.cuh"
 #include "launch.cuh"
 
+#include <cstring>
+
 __device__ inline void gdn_require(bool condition) {
   if (!condition)
     asm volatile("trap;");
@@ -192,7 +194,7 @@ __device__ inline float gdn_half_warp_sum(float value) {
 }
 
 template <bool FusedBA, int ValueTile = 128, int Threads = 256, bool PrecomputedGates = false,
-          bool Staged = false, bool HalfWarp = false>
+          bool Staged = false, bool HalfWarp = false, bool PackedState = false>
 __global__ void __launch_bounds__(Threads, 1)
     gdn_scan_quant_kernel(const __nv_bfloat16 *qkv, const __nv_bfloat16 *qkvz, __nv_bfloat16 *ba,
                           const __nv_bfloat16 *normalized, const __nv_bfloat16 *ba_weight,
@@ -202,6 +204,8 @@ __global__ void __launch_bounds__(Threads, 1)
                           int slots, bool verify, __nv_bfloat16 *recurrent, const float *gates) {
   static_assert(!Staged || (PrecomputedGates && ValueTile == 16 && Threads == 256));
   static_assert(!HalfWarp || Staged);
+  static_assert(!PackedState || (FusedBA && ValueTile == 128 && Threads == 256 &&
+                                 !PrecomputedGates && !Staged && !HalfWarp));
   int sequence = blockIdx.x, head = blockIdx.y, lane = threadIdx.x & 31;
   int warp = threadIdx.x / 32;
   constexpr int Warps = Threads / 32;
@@ -222,6 +226,18 @@ __global__ void __launch_bounds__(Threads, 1)
         state[group][key] =
             __bfloat162float(pool[((int64_t(source) * 48 + head) * 128 + value_base) * 128 +
                                   (lane % 16) * 4 + group * 64 + key]);
+  } else if constexpr (PackedState) {
+#pragma unroll
+    for (int value = 0; value < Values; ++value) {
+      const auto *address =
+          pool + ((int64_t(source) * 48 + head) * 128 + value_base + value) * 128 + lane * 4;
+      uint2 packed = *reinterpret_cast<const uint2 *>(address);
+      uint32_t words[2] = {packed.x, packed.y};
+#pragma unroll
+      for (int key = 0; key < 4; ++key)
+        state[value][key] = __bfloat162float(
+            __ushort_as_bfloat16(static_cast<unsigned short>(words[key / 2] >> ((key & 1) * 16))));
+    }
   } else {
 #pragma unroll
     for (int value = 0; value < Values; ++value)
@@ -404,9 +420,22 @@ __global__ void __launch_bounds__(Threads, 1)
         for (int key = 0; key < 4; ++key) {
           state[value][key] += delta * k[key];
           sum += state[value][key] * q[key];
-          if (target >= 0)
-            pool[((int64_t(target) * 48 + head) * 128 + value_base + value) * 128 + lane * 4 +
-                 key] = __float2bfloat16_rn(state[value][key]);
+          if constexpr (!PackedState)
+            if (target >= 0)
+              pool[((int64_t(target) * 48 + head) * 128 + value_base + value) * 128 + lane * 4 +
+                   key] = __float2bfloat16_rn(state[value][key]);
+        }
+        if constexpr (PackedState) {
+          if (target >= 0) {
+            auto *address =
+                pool + ((int64_t(target) * 48 + head) * 128 + value_base + value) * 128 + lane * 4;
+            __nv_bfloat162 low = __floats2bfloat162_rn(state[value][0], state[value][1]);
+            __nv_bfloat162 high = __floats2bfloat162_rn(state[value][2], state[value][3]);
+            uint2 checkpoint;
+            memcpy(&checkpoint.x, &low, sizeof(checkpoint.x));
+            memcpy(&checkpoint.y, &high, sizeof(checkpoint.y));
+            *reinterpret_cast<uint2 *>(address) = checkpoint;
+          }
         }
         sum = warp_sum(sum);
         if (lane == 0) {

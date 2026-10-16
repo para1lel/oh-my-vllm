@@ -35,17 +35,20 @@ It keeps the original K-group order, factors, and BF16 stores.
 GDN uses one [CUDA launch for gate projections and convolution](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L208)<!-- source: if (rows > 1 && rows <= 32) --> when the input has 2 to 32 rows.
 For one verification row, GDN uses one [CUDA launch](../python/oh_my_vllm/kernels/cuda_backend/gdn_input.cuh#L142)<!-- source: if constexpr (FuseConvolution) { --> for input projection and convolution.
 
+For one verification row in one request, GDN uses [64-bit state loads and stores](../python/oh_my_vllm/kernels/cuda_backend/gdn_kernels.cuh#L234)<!-- source: uint2 packed = *reinterpret_cast<const uint2 *>(address); -->.
+Paired BF16 conversions keep the RN conversion for each element. The live carry and recurrent arithmetic stay in FP32.
+
 For prefill inputs with more than 32 rows, GDN [precomputes the gates](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L81)<!-- source: bool precomputed_gates = !verify && rows > 32; --> after the BF16 projection.
 Separate blocks process groups of 16 state value rows.
-Each block [prefetches 32 tokens](../python/oh_my_vllm/kernels/cuda_backend/gdn_kernels.cuh#L143)<!-- source: constexpr int GDNPrefetchRows = 32; --> into two shared-memory slots.
+Each block [prefetches 32 tokens](../python/oh_my_vllm/kernels/cuda_backend/gdn_kernels.cuh#L145)<!-- source: constexpr int GDNPrefetchRows = 32; --> into two shared-memory slots.
 The FP32 carry stays in registers across these slots and BF16 checkpoint stores.
 A separate kernel applies output normalization and quantization.
 
-Each [16-lane group](../python/oh_my_vllm/kernels/cuda_backend/gdn_kernels.cuh#L187)<!-- source: __device__ inline float gdn_half_warp_sum(float value) { --> processes one value row in this prefill path.
+Each [16-lane group](../python/oh_my_vllm/kernels/cuda_backend/gdn_kernels.cuh#L189)<!-- source: __device__ inline float gdn_half_warp_sum(float value) { --> processes one value row in this prefill path.
 Two four-key sums reproduce the original reduction order.
 
 The value groups also apply to [one five-row verification request](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L79)<!-- source: bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5); -->.
-GDN recurrent computation uses [512 threads per block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L254)<!-- source: run(std::integral_constant<int, 512>{}); --> for other verification inputs with more than one row.
+GDN recurrent computation uses [512 threads per block](../python/oh_my_vllm/kernels/cuda_backend/gdn.cu#L259)<!-- source: run(std::integral_constant<int, 512>{}); --> for other verification inputs with more than one row.
 
 FA has a separate prefill implementation.
 FA [decode loads](../python/oh_my_vllm/kernels/cuda_backend/fa_attention.cuh#L75)<!-- source: Position base_offset = base % 784; --> calculate cache page pointers before the vector loop.

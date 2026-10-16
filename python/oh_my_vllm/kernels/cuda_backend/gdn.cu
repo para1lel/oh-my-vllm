@@ -215,11 +215,16 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
     constexpr int ValueTile = decltype(value_tile)::value;
     constexpr int Threads = decltype(thread_count)::value;
     constexpr int SharedBytes = decltype(staged)::value ? GDNPrefetchSharedBytes : 0;
+    auto kernel = gdn_scan_quant_kernel<decltype(fused)::value, ValueTile, Threads,
+                                        decltype(prepared_gates)::value, decltype(staged)::value,
+                                        decltype(staged)::value>;
+    if constexpr (decltype(fused)::value && ValueTile == 128 && Threads == 256 &&
+                  !decltype(prepared_gates)::value && !decltype(staged)::value) {
+      if (verify && batch == 1 && rows == 1)
+        kernel = gdn_scan_quant_kernel<true, 128, 256, false, false, false, true>;
+    }
     launch_kernel(
-        gdn_scan_quant_kernel<decltype(fused)::value, ValueTile, Threads,
-                              decltype(prepared_gates)::value, decltype(staged)::value,
-                              decltype(staged)::value>,
-        dim3(batch, 48, 128 / ValueTile), dim3(Threads), SharedBytes, stream,
+        kernel, dim3(batch, 48, 128 / ValueTile), dim3(Threads), SharedBytes, stream,
         static_cast<const __nv_bfloat16 *>(qkv.data_ptr()),
         static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
         static_cast<__nv_bfloat16 *>(ba.data_ptr()),
