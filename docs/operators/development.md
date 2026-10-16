@@ -153,6 +153,7 @@ Use these lessons to select another candidate:
 - Compare the work for each thread before you change reduction parameters. Keep the original partial sums and addition order.
 - Query active clusters with the compiled kernel and its full launch configuration before a cluster fusion experiment.
 - Include cluster synchronization and scheduling limits when you compare output fusion with a separate launch.
+- For paged loads, calculate page bases before the vector loop. Keep page-boundary and masked-tail addresses unchanged.
 - Limit column blocks when row copies already supply enough parallel work.
 - Before you remove a copy, do a check of buffer lifetime and graph inputs.
 - Combine fixed metadata arrays by data type. Keep aligned views and fixed graph addresses.

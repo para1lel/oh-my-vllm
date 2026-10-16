@@ -72,19 +72,25 @@ __device__ __forceinline__ void fa_stage_kv(const __nv_bfloat16 *cache, const vo
     asm volatile("trap;");
     return;
   }
+  Position base_offset = base % 784;
+  const __nv_bfloat16 *first_pointer = cache + (first_block * 1568 * hk + kh) * 256;
+  const __nv_bfloat16 *final_pointer = cache + (final_block * 1568 * hk + kh) * 256;
 #pragma unroll
   for (int i = threadIdx.x; i < BK * 32; i += 128) {
     Position pos = base + i / 32;
-    int64_t page = pos / 784 == first_page ? first_block : final_block;
-    int64_t offset = ((page * 1568 + pos % 784) * hk + kh) * 256 + (i % 32) * 8;
+    Position local = base_offset + i / 32;
+    bool crossing = local >= 784;
+    const __nv_bfloat16 *page_pointer = crossing ? final_pointer : first_pointer;
+    local -= crossing ? 784 : 0;
+    const __nv_bfloat16 *source = page_pointer + int64_t(local) * hk * 256 + (i % 32) * 8;
     unsigned kd = __cvta_generic_to_shared(k + fa_shared_index(i / 32, (i % 32) * 8));
     unsigned vd = __cvta_generic_to_shared(v + fa_shared_index(i / 32, (i % 32) * 8));
     int bytes = pos < last ? 16 : 0;
-    asm volatile("cp.async.cg.shared.global.L2::128B [%0], [%1], 16, %2;" ::"r"(kd),
-                 "l"(cache + offset), "r"(bytes)
+    asm volatile("cp.async.cg.shared.global.L2::128B [%0], [%1], 16, %2;" ::"r"(kd), "l"(source),
+                 "r"(bytes)
                  : "memory");
     asm volatile("cp.async.cg.shared.global.L2::128B [%0], [%1], 16, %2;" ::"r"(vd),
-                 "l"(cache + offset + int64_t(784) * hk * 256), "r"(bytes)
+                 "l"(source + int64_t(784) * hk * 256), "r"(bytes)
                  : "memory");
   }
   asm volatile("cp.async.commit_group;" ::: "memory");
