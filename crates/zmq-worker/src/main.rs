@@ -20,6 +20,10 @@ struct Cli {
     num_gpu_blocks: u32,
     #[arg(long)]
     mamba_blocks: Option<u32>,
+    #[arg(long, default_value_t = 32768, value_parser = clap::value_parser!(u32).range(1..))]
+    max_num_batched_tokens: u32,
+    #[arg(long, default_value_t = 4, value_parser = clap::value_parser!(u32).range(1..))]
+    max_num_seqs: u32,
     #[arg(long, default_value_t = 784)]
     block_size: u32,
     #[arg(long, default_value_t = 1)]
@@ -241,6 +245,8 @@ async fn run() -> Result<()> {
         block_size: cli.block_size,
         tensor_parallel_size: cli.tp,
         max_model_len: cli.max_model_len,
+        max_num_batched_tokens: cli.max_num_batched_tokens,
+        max_num_seqs: cli.max_num_seqs,
         num_speculative_tokens: speculative_tokens,
         speculative_mode: Some(mode.clone()),
         torch_profile,
@@ -265,8 +271,8 @@ async fn run() -> Result<()> {
         kv = kv.with_mamba_capacity(capacity);
     }
     kv.set_speculative_blocks(speculative_tokens);
-    let sched_max_num_seqs = 32.min((cli.num_gpu_blocks - 1) as usize);
-    let sched_max_batched: usize = SchedulerConfig::default().max_num_batched_tokens;
+    let sched_max_num_seqs = cli.max_num_seqs as usize;
+    let sched_max_batched = cli.max_num_batched_tokens as usize;
     info!(
         max_num_seqs = sched_max_num_seqs,
         max_num_batched_tokens = sched_max_batched,
@@ -284,9 +290,9 @@ async fn run() -> Result<()> {
     let mut scheduler = Scheduler::new(
         SchedulerConfig {
             max_num_seqs: sched_max_num_seqs,
+            max_num_batched_tokens: sched_max_batched,
             enable_mtp: speculative_tokens > 0,
             mtp_draft_len: speculative_tokens,
-            ..SchedulerConfig::default()
         },
         kv,
     );

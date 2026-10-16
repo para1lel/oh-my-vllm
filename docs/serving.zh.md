@@ -24,6 +24,14 @@ scripts/with-env.sh cargo build --release --bin oh-my-vllm-zmq-worker
 scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/oh-my-vllm.ipc serve
 ```
 
+使用 `--max-num-batched-tokens` 设置每个调度步骤的 token 预算. 默认为 `32768`.
+使用 `--max-num-seqs` 设置运行中请求的最大数量. 默认为 `4`.
+将这些选项放在 `serve`, `run` 或 `bench` 前面.
+
+调度器优先选择 decode 请求.
+它在 prefill 请求之间分配剩余 token 预算.
+它按 cache 边界调整 prefill 数量, 并将未使用的 token 额度分给其他 prefill 请求.
+
 每个服务进程使用不同的 `--socket` 路径.
 通过 `serve --listen` 设置地址. 默认地址为 `127.0.0.1:8000`.
 

@@ -38,12 +38,17 @@ Named tolerances apply to specific outputs. Cache checks and state selection kee
 
 The full operator implementation is not completed. More work is necessary for the 60% performance requirement.
 
-Next work: optimize the measured bottlenecks.
-Use the [GDN execution plan](operators/gdn.md) for recurrent and prefill changes.
-Complete workload acceptance for each operator.
-Then connect model computation to the worker.
-Use the [implementation plan](operators/implementation.md).
+Operator optimization is stopped.
+Next work: connect the complete model computation to the Python worker.
+Add constrained decoding, MTP4, and CUDA Graph execution for batches that contain only decode requests.
+Use producer and consumer fusion. Do not use PDL in the inference worker.
+
+Measure the complete HTTP request time with the [end-to-end requirements](performance.md).
 Keep numerical checks and full-boundary measurements with each provider.
+
+The scheduler selects decode first and divides the available token budget between prefill requests.
+The default token budget is 32768. The default maximum number of running requests is 4.
+Use the [service options](serving.md#start) to change these settings.
 
 Use `main` for work.
 Keep host paths and artifact locations in ignored local configuration.

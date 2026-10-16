@@ -38,12 +38,17 @@ FA 每块使用 256 个线程合并两份或更多注意力的部分结果.
 
 完整算子实现尚未完成. 60% 性能要求仍有工作待完成.
 
-下一步: 优化已测量的瓶颈.
-Recurrent 与 prefill 变更使用 [GDN 执行计划](operators/gdn.zh.md).
-完成每个算子的负载验收.
-然后将模型计算接入 worker.
-使用[实现计划](operators/implementation.zh.md).
+算子优化已停止.
+下一步: 将完整模型计算接入 Python worker.
+增加约束解码, MTP4, 以及仅含 decode 请求的 batch 的 CUDA Graph 执行.
+使用 producer 与 consumer 融合. 推理 worker 不使用 PDL.
+
+按[端到端要求](performance.zh.md)测量完整 HTTP 请求时间.
 每个 provider 都要有数值检查和完整边界测量.
+
+调度器优先选择 decode, 并在 prefill 请求之间分配剩余 token 预算.
+默认 token 预算为 32768. 默认运行中请求的最大数量为 4.
+使用[服务选项](serving.zh.md#启动)修改这些设置.
 
 工作使用 `main`.
 主机路径和产物位置保存在被忽略的本地配置中.

@@ -27,7 +27,7 @@ impl Default for SchedulerConfig {
     fn default() -> Self {
         Self {
             max_num_batched_tokens: 32768,
-            max_num_seqs: 256,
+            max_num_seqs: 4,
             enable_mtp: false,
             mtp_draft_len: 4,
         }
@@ -41,6 +41,7 @@ pub struct Scheduler {
     paused: rustc_hash::FxHashSet<RequestId>,
     kv: HybridCoordinator,
     finished_ids: Vec<u64>,
+    prefill_cursor: Option<RequestId>,
 }
 
 impl Scheduler {
@@ -102,68 +103,72 @@ impl Scheduler {
         }
     }
 
-    fn long_prefill(&self, request: &Request, start: usize) -> bool {
-        let end = request
-            .prompt_len
-            .max(request.token_ids.len().saturating_sub(1));
-        start < end
-            && end.saturating_sub(request.prefill_start) > self.config.max_num_batched_tokens
-    }
-
-    fn long_prefill_quota(&self) -> Option<usize> {
-        let mut count = 0;
-        let mut decode = 0_usize;
-        for request in &self.running {
-            if self.paused.contains(&request.id) {
-                continue;
-            }
-            if self.long_prefill(request, request.num_computed_tokens) {
-                count += 1;
-            } else {
-                decode = decode.saturating_add(Self::decode_tokens(request));
-            }
-        }
-        let slots = self.config.max_num_seqs.saturating_sub(self.running.len());
-        for request in self
-            .waiting
+    fn prefill_quotas(&mut self) -> rustc_hash::FxHashMap<RequestId, usize> {
+        let decode = self
+            .running
             .iter()
-            .filter(|r| !self.paused.contains(&r.id))
-            .take(slots)
+            .filter(|request| !self.paused.contains(&request.id))
+            .map(Self::decode_tokens)
+            .sum::<usize>();
+        let mut budget = self.config.max_num_batched_tokens.saturating_sub(decode);
+        let mut pending = self
+            .running
+            .iter()
+            .filter(|request| {
+                !self.paused.contains(&request.id) && Self::decode_tokens(request) == 0
+            })
+            .map(|request| (request, request.num_computed_tokens))
+            .chain(
+                self.waiting
+                    .iter()
+                    .filter(|request| !self.paused.contains(&request.id))
+                    .take(self.config.max_num_seqs.saturating_sub(self.running.len()))
+                    .map(|request| (request, self.kv.get_computed_blocks(request).2)),
+            )
+            .collect::<Vec<_>>();
+        if let Some(index) = pending
+            .iter()
+            .position(|(request, _)| Some(request.id) == self.prefill_cursor)
         {
-            let end = request
-                .prompt_len
-                .max(request.token_ids.len().saturating_sub(1));
-            if end <= self.config.max_num_batched_tokens {
-                continue;
+            let length = pending.len();
+            pending.rotate_left((index + 1) % length);
+        }
+        let mut quotas = rustc_hash::FxHashMap::<RequestId, usize>::default();
+        let quantum = if self.config.max_num_batched_tokens >= self.kv.block_size() {
+            self.kv.block_size()
+        } else {
+            1
+        };
+        while !pending.is_empty() && budget > 0 {
+            let share = budget.div_ceil(pending.len()).max(quantum.min(budget));
+            let mut next = Vec::new();
+            let before = budget;
+            for (request, start) in pending {
+                let current = quotas.get(&request.id).copied().unwrap_or(0);
+                let count = self.aligned_prefill(
+                    request,
+                    start,
+                    request
+                        .num_tokens_with_spec()
+                        .saturating_sub(start)
+                        .min(current.saturating_add(share.min(budget))),
+                );
+                let extra = count.saturating_sub(current).min(budget);
+                quotas.insert(request.id, current + extra);
+                if extra > 0 {
+                    self.prefill_cursor = Some(request.id);
+                }
+                budget -= extra;
+                if count < request.num_tokens_with_spec().saturating_sub(start) {
+                    next.push((request, start));
+                }
             }
-            let (_, _, hit) = self.kv.get_computed_blocks(request);
-            count += usize::from(end.saturating_sub(hit) > self.config.max_num_batched_tokens);
+            if before == budget {
+                break;
+            }
+            pending = next;
         }
-        let budget = self.config.max_num_batched_tokens.saturating_sub(decode);
-        let block = self.kv.block_size();
-        if count < 2 || budget / block < count {
-            return None;
-        }
-        Some(budget / count / block * block)
-    }
-
-    fn defer_aligned_prefill(
-        &self,
-        request: &Request,
-        start: usize,
-        count: usize,
-        budget: usize,
-        has_prefill_chunk: bool,
-    ) -> bool {
-        let block = self.kv.block_size();
-        let prefill_end = request
-            .prompt_len
-            .max(request.token_ids.len().saturating_sub(1));
-        has_prefill_chunk
-            && count == 1
-            && self.config.max_num_batched_tokens >= block
-            && prefill_end.saturating_sub(start) > budget
-            && budget < block - start % block
+        quotas
     }
 
     pub fn new(config: SchedulerConfig, kv: HybridCoordinator) -> Self {
@@ -174,6 +179,7 @@ impl Scheduler {
             paused: rustc_hash::FxHashSet::default(),
             kv,
             finished_ids: Vec::new(),
+            prefill_cursor: None,
         }
     }
 
@@ -185,6 +191,7 @@ impl Scheduler {
             .div_ceil(block);
         let fa_usable = self.kv.pool().num_blocks().saturating_sub(1) as usize;
         let one_forward = req.max_tokens == 1
+            && (self.config.max_num_seqs == 1 || req.prompt_len == 1)
             && req.prompt_len > 0
             && self.aligned_prefill(
                 &req,
@@ -263,15 +270,10 @@ impl Scheduler {
             ..Default::default()
         };
         let mut token_budget = self.config.max_num_batched_tokens;
-        let mut has_prefill_chunk = false;
-        let long_quota = self.long_prefill_quota();
-        let mut pending_decode = self
-            .running
-            .iter()
-            .filter(|request| !self.paused.contains(&request.id))
-            .map(Self::decode_tokens)
-            .fold(0_usize, usize::saturating_add);
-
+        let prefill_quotas = self.prefill_quotas();
+        self.running
+            .make_contiguous()
+            .sort_by_key(|request| usize::from(Self::decode_tokens(request) == 0));
         let mut still_running: VecDeque<Request> = VecDeque::new();
         while let Some(mut req) = self.running.pop_front() {
             if self.paused.contains(&req.id) {
@@ -280,28 +282,14 @@ impl Scheduler {
             }
             let tokens_needed = req.num_tokens_with_spec() - req.num_computed_tokens;
             let decode = Self::decode_tokens(&req);
-            pending_decode = pending_decode.saturating_sub(decode);
-            let available = if decode == 0 {
-                token_budget.saturating_sub(pending_decode)
+            let limit = if decode == 0 {
+                token_budget.min(prefill_quotas.get(&req.id).copied().unwrap_or(0))
             } else {
                 token_budget
             };
-            let limit = if self.long_prefill(&req, req.num_computed_tokens) {
-                available.min(long_quota.unwrap_or(available))
-            } else {
-                available
-            };
             let to_schedule =
                 self.aligned_prefill(&req, req.num_computed_tokens, tokens_needed.min(limit));
-            if to_schedule == 0
-                || self.defer_aligned_prefill(
-                    &req,
-                    req.num_computed_tokens,
-                    to_schedule,
-                    limit,
-                    has_prefill_chunk,
-                )
-            {
+            if to_schedule == 0 {
                 still_running.push_back(req);
                 continue;
             }
@@ -321,17 +309,11 @@ impl Scheduler {
                 let Some(victim) = self.running.pop_back() else {
                     break None;
                 };
-                if !self.paused.contains(&victim.id) {
-                    pending_decode = pending_decode.saturating_sub(Self::decode_tokens(&victim));
-                }
                 self.preempt_request(victim, &mut output);
             };
 
             match alloc {
                 Some(_) => {
-                    let prefill_end = req.prompt_len.max(req.token_ids.len().saturating_sub(1));
-                    has_prefill_chunk |= req.num_computed_tokens < prefill_end
-                        && to_schedule >= self.kv.block_size();
                     let fa_table = self.kv.full_attn_blocks(req.id).to_vec();
                     let mb_table = self.kv.mamba_blocks(req.id).to_vec();
                     let scheduled_tokens = req
@@ -361,10 +343,10 @@ impl Scheduler {
         }
         self.running = still_running;
 
-        let mut paused_waiting = VecDeque::new();
+        let mut deferred_waiting = VecDeque::new();
         while let Some(mut req) = self.waiting.pop_front() {
             if self.paused.contains(&req.id) {
-                paused_waiting.push_back(req);
+                deferred_waiting.push_back(req);
                 continue;
             }
             if self.running.len() >= self.config.max_num_seqs {
@@ -377,17 +359,12 @@ impl Scheduler {
             let total_tokens = req.num_tokens_with_spec();
             let remaining = total_tokens - hit_len;
             req.prefill_start = hit_len;
-            let limit = if self.long_prefill(&req, hit_len) {
-                token_budget.min(long_quota.unwrap_or(token_budget))
-            } else {
-                token_budget
-            };
+            let limit =
+                token_budget.min(prefill_quotas.get(&req.id).copied().unwrap_or(token_budget));
             let to_schedule = self.aligned_prefill(&req, hit_len, remaining.min(limit));
-            if to_schedule == 0
-                || self.defer_aligned_prefill(&req, hit_len, to_schedule, limit, has_prefill_chunk)
-            {
-                self.waiting.push_front(req);
-                break;
+            if to_schedule == 0 {
+                deferred_waiting.push_back(req);
+                continue;
             }
 
             let has_running = !self.running.is_empty();
@@ -402,9 +379,6 @@ impl Scheduler {
 
             match alloc {
                 Some(_) => {
-                    let prefill_end = req.prompt_len.max(req.token_ids.len().saturating_sub(1));
-                    has_prefill_chunk |=
-                        hit_len < prefill_end && to_schedule >= self.kv.block_size();
                     let fa_table = self.kv.full_attn_blocks(req.id).to_vec();
                     let mb_table = self.kv.mamba_blocks(req.id).to_vec();
 
@@ -431,8 +405,8 @@ impl Scheduler {
                 }
             }
         }
-        paused_waiting.append(&mut self.waiting);
-        self.waiting = paused_waiting;
+        deferred_waiting.append(&mut self.waiting);
+        self.waiting = deferred_waiting;
 
         output.num_batched_tokens = output.scheduled.iter().map(|s| s.token_ids.len()).sum();
         tracing::debug!(

@@ -248,7 +248,75 @@ fn short_prefill_tails_cannot_take_a_later_active_decode_budget() {
             .iter()
             .map(|row| row.request_id)
             .collect::<Vec<_>>(),
-        vec![1, 2, 3, 4, 6]
+        vec![6, 1, 2, 3, 4, 5]
     );
     assert!(step.preempted_request_ids.is_empty());
+}
+
+#[test]
+fn prefill_budget_is_shared_by_short_and_long_requests() {
+    for (budget, lengths, expected) in [
+        (24, [20, 100, 100], vec![8, 8, 8]),
+        (24, [4, 100, 100], vec![4, 12, 8]),
+        (3, [20, 100, 100], vec![1, 1, 1]),
+    ] {
+        let mut scheduler = make_scheduler(128, budget);
+        for (id, length) in lengths.into_iter().enumerate() {
+            let mut request = make_req(id as u64 + 1, length, 1);
+            for token in &mut request.token_ids {
+                *token += (id as u32 + 1) * 1000;
+            }
+            assert!(scheduler.add_request(request));
+        }
+        let step = scheduler.schedule();
+        assert_eq!(step.num_batched_tokens, budget);
+        assert_eq!(
+            step.scheduled
+                .iter()
+                .map(|row| row.token_ids.len())
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+    for budget in [1, 784] {
+        let mut scheduler = production_long_scheduler(4);
+        scheduler.config.max_num_batched_tokens = budget;
+        for id in 1..=4 {
+            assert!(scheduler.add_request(unique_long_request(id)));
+        }
+        for id in 1..=4 {
+            let step = scheduler.schedule();
+            assert_eq!(step.scheduled.len(), 1);
+            assert_eq!(step.scheduled[0].request_id, id);
+            assert_eq!(step.num_batched_tokens, budget);
+            apply(
+                &mut scheduler,
+                WorkerOutput {
+                    outputs: vec![RequestOutput {
+                        token_ids: Vec::new(),
+                        ..dummy_output(id)
+                    }],
+                },
+            );
+        }
+    }
+}
+
+#[test]
+fn fair_prefill_admission_reserves_the_next_private_state() {
+    for (parallel, admitted) in [(1, true), (2, false)] {
+        let mut scheduler = Scheduler::new(
+            SchedulerConfig {
+                max_num_seqs: parallel,
+                ..SchedulerConfig::default()
+            },
+            HybridCoordinator::new(128, 784, true, 0).with_mamba_capacity(2),
+        );
+        assert_eq!(scheduler.add_request(make_req(1, 23520, 1)), admitted);
+        if admitted {
+            let step = scheduler.schedule();
+            assert_eq!(step.scheduled.len(), 1);
+            assert_eq!(step.scheduled[0].token_ids.len(), 23520);
+        }
+    }
 }

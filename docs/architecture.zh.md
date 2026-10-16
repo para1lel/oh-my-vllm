@@ -7,6 +7,9 @@
 
 [服务 crate](../crates/zmq-worker/src/lib.rs) 负责 CLI, HTTP API, worker 生命周期及传输.
 
+调度器先选择 decode 请求, 再选择 prefill 请求.
+它在 prefill 请求之间分配剩余 token 预算, 并按 cache 边界调整.
+
 每个调度步骤预留 FA 和 GDN 状态.
 调度器先验证全部输出行, 再更新 token 历史或发布前缀.
 

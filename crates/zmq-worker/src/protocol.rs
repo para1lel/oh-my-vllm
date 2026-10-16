@@ -26,6 +26,8 @@ pub struct InitMsg {
     pub block_size: u32,
     pub tensor_parallel_size: u32,
     pub max_model_len: u32,
+    pub max_num_batched_tokens: u32,
+    pub max_num_seqs: u32,
     pub num_speculative_tokens: usize,
     pub speculative_mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

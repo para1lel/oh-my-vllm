@@ -24,6 +24,14 @@ Start the service:
 scripts/with-env.sh target/release/oh-my-vllm-zmq-worker --socket /tmp/oh-my-vllm.ipc serve
 ```
 
+Use `--max-num-batched-tokens` to set the token budget per scheduler step. The default is `32768`.
+Use `--max-num-seqs` to set the maximum number of running requests. The default is `4`.
+Put these options before `serve`, `run`, or `bench`.
+
+The scheduler selects decode requests first.
+It divides the available token budget between prefill requests.
+It adjusts prefill counts for the cache boundaries and supplies unused tokens to other prefill requests.
+
 Use a different `--socket` path for each service process.
 Use `serve --listen` to set the address. The default address is `127.0.0.1:8000`.
 

@@ -7,6 +7,9 @@ The [scheduler](../crates/scheduler/src/lib.rs) controls request admission, deco
 
 The [service crate](../crates/zmq-worker/src/lib.rs) controls the CLI, HTTP APIs, worker lifecycle, and transport.
 
+The scheduler selects decode requests before prefill requests.
+It divides the available token budget between prefill requests, with adjustments for cache boundaries.
+
 A scheduled step reserves FA and GDN state.
 The scheduler validates all output rows before it updates token history or publishes a prefix.
 
