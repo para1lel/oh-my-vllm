@@ -143,6 +143,7 @@ worker [一次下载四个 draft token](../python/oh_my_vllm/worker/draft_chain.
 
 进一步修改 kernel 前, 比较 TMA 权重布局与原生 BF16 矩阵库.
 增加打包权重存储前, 比较 score 缓冲区调度与直接 TMA 描述符.
+将权重补充位置与累加器读取者的完成时机比较.
 使用 producer 与 consumer 融合. 推理 worker 不使用 PDL.
 模型检查, 可复用经验及临时产物清理遵循[优化流程](operators/development.zh.md#优化流程).
 

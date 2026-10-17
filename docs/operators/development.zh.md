@@ -112,6 +112,10 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 当前的 [DeepGEMM SM100 FP8 接口](https://github.com/deepseek-ai/DeepGEMM/blob/main/README.md)仅使用打包的 UE8M0 缩放因子.
 不得为了使用另一种矩阵指令而改变 checkpoint 缩放值.
 
+[Triton 流水线示例](https://github.com/triton-lang/triton/blob/2122e24efc1886bfa36337c1f5b07c47d827b1d4/python/tutorials/gluon/08-warp-specialization.py#L452) 将加载, 矩阵乘积和 epilogue 分开.
+它在整个 K 循环中保留一个 MMA 累加器.
+将此生命周期与所需的 K-group FP32 更新比较.
+
 [cuBLAS GEMM 表](https://docs.nvidia.com/cuda/archive/13.1.2/cublas/index.html#cublasgemmex) 支持 BF16 操作数以及 FP32 计算和输出.
 对此数据类型组合, 比较 `cublasGemmEx` 与原生 GEMM.
 使用 default math, FP32 计算及 `CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION`.

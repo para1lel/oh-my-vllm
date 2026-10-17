@@ -112,6 +112,10 @@ The [cuBLAS 13.1 scaling table](https://docs.nvidia.com/cuda/archive/13.1.2/cubl
 Current [DeepGEMM SM100 FP8 interfaces](https://github.com/deepseek-ai/DeepGEMM/blob/main/README.md) use only packed UE8M0 scales.
 Do not change checkpoint scale values to use another matrix instruction.
 
+The [Triton pipeline example](https://github.com/triton-lang/triton/blob/2122e24efc1886bfa36337c1f5b07c47d827b1d4/python/tutorials/gluon/08-warp-specialization.py#L452) separates loads, matrix products, and epilogues.
+It keeps an MMA accumulator through the full K loop.
+Compare this lifetime with the required K-group FP32 updates.
+
 The [cuBLAS GEMM table](https://docs.nvidia.com/cuda/archive/13.1.2/cublas/index.html#cublasgemmex) permits BF16 operands with FP32 computation and output.
 Compare `cublasGemmEx` with native GEMMs for this datatype combination.
 Use default math with FP32 computation and `CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION`.

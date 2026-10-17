@@ -143,6 +143,7 @@ Next work: decrease execution time. Complete the two performance audits with the
 
 Compare TMA weight layouts and native BF16 matrix libraries before further kernel changes.
 Compare score-buffer schedules and direct TMA descriptors before you add packed weight storage.
+Compare weight refill points with completion of the accumulator readers.
 Use producer and consumer fusion. Do not use PDL in the inference worker.
 Use the [optimization procedure](operators/development.md#optimization-procedure) for model checks, reusable lessons, and temporary artifact cleanup.
 
