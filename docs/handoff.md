@@ -119,7 +119,7 @@ It [calculates sampling random counters on the CPU](../python/oh_my_vllm/worker/
 The acceptance audit uses [native sources from the kernel directory](../development/kernels/acceptance.py#L117)<!-- source: source = SOURCES / f"{name}.cu" -->.
 It must include [greedy numerical evidence](../development/kernels/acceptance.py#L236)<!-- source: def verify_greedy(check): -->.
 
-Operator and end-to-end optimization is in progress.
+The selected kernel and worker changes are integrated. Further optimization is deferred.
 `copy_bytes` now synchronizes only when the destination is on the CPU.
 `gather_rows_kernel` uses 16-byte vectorized loads when the row and base pointers are 16-byte aligned.
 
@@ -143,7 +143,7 @@ The stages use the same sampling input buffers. Each stage has different output 
 The worker [downloads the four draft tokens once](../python/oh_my_vllm/worker/draft_chain.py#L122)<!-- source: tokens = d.download(self.tokens, np.int64) --> and copies probabilities to request buffers.
 Other requests have a token download after each draft stage.
 
-Next work: decrease execution time. Complete the two performance audits with the same source files.
+If optimization starts again, decrease execution time. Complete the two performance audits with the same source files.
 
 Compare TMA weight layouts and native BF16 matrix libraries before further kernel changes.
 Compare score-buffer schedules and direct TMA descriptors before you add packed weight storage.

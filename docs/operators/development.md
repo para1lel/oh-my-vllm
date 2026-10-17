@@ -91,6 +91,8 @@ Version 2 reports keep numerical evidence separate from timing coverage.
 Large timing cases record numerical status `not_run`. This status does not remove a shape from performance coverage.
 Old reports do not qualify after a source change.
 
+Do not use CPU FP64 references for large cases. Use large cases only for timing or profiling.
+
 For each selected numerical case, the FFN check examines all output elements for finite values.
 It compares all residual elements for exact BF16 equality.
 

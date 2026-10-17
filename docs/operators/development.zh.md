@@ -91,6 +91,8 @@ scripts/with-env.sh python -m development.kernels audit --reports "$ARTIFACT_ROO
 大型计时用例将数值状态记为 `not_run`. 此状态不会从性能覆盖中移除该 shape.
 源码变更后, 旧报告不再符合验收条件.
 
+大型用例不使用 CPU FP64 参考. 大型用例仅用于计时或 profiling.
+
 对于每个选定的数值用例, FFN 检查会确认所有输出元素都是有限值.
 所有残差元素都必须满足 BF16 精确相等.
 

@@ -119,7 +119,7 @@ Sampler 为各路径保留[独立的 CUDA Graph](../python/oh_my_vllm/worker/sam
 验收审计使用[内核目录中的原生源码](../development/kernels/acceptance.py#L117)<!-- source: source = SOURCES / f"{name}.cu" -->.
 它必须包含[贪心数值证据](../development/kernels/acceptance.py#L236)<!-- source: def verify_greedy(check): -->.
 
-算子和端到端优化正在进行.
+已选定的 kernel 和 worker 改动已集成. 进一步优化暂缓.
 `copy_bytes` 现在只在目标在 CPU 上时才同步.
 `gather_rows_kernel` 在行和基地址满足 16 字节对齐时使用 16 字节向量化加载.
 
@@ -143,7 +143,7 @@ greedy MTP 请求可以使用[一个 CUDA Graph 执行四个 draft 阶段](../py
 worker [一次下载四个 draft token](../python/oh_my_vllm/worker/draft_chain.py#L122)<!-- source: tokens = d.download(self.tokens, np.int64) -->, 并将概率复制到请求缓冲区.
 其他请求在每个 draft 阶段后下载 token.
 
-下一步: 缩短执行时间. 用同一份源码完成两项性能审查.
+若重新启动优化, 缩短执行时间. 用同一份源码完成两项性能审查.
 
 进一步修改 kernel 前, 比较 TMA 权重布局与原生 BF16 矩阵库.
 增加打包权重存储前, 比较 score 缓冲区调度与直接 TMA 描述符.
