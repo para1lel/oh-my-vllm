@@ -9,7 +9,15 @@ MODULES = {
     "gdn": ("gdn",),
     "mtp": ("mtp_input", "mtp_endpoints"),
     "sample": ("sample_workspace", "sample", "mtp_accept"),
-    "vision": ("vision_patch", "vision_block", "vision_merge"),
+    "vision": (
+        "vision_patch",
+        "vision_block",
+        "vision_merge",
+        "vision_classic_prepare",
+        "vision_classic_close",
+        "vision_classic_images",
+        "vision_classic_state",
+    ),
 }
 
 RUNTIME_MODULES = {

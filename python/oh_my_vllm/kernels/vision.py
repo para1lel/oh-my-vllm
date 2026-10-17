@@ -2,7 +2,15 @@ from dataclasses import dataclass
 
 from .native import load
 
-FUNCTIONS = ("vision_patch", "vision_block", "vision_merge")
+FUNCTIONS = (
+    "vision_patch",
+    "vision_block",
+    "vision_merge",
+    "vision_classic_prepare",
+    "vision_classic_close",
+    "vision_classic_images",
+    "vision_classic_state",
+)
 
 
 @dataclass(frozen=True)
@@ -66,11 +74,34 @@ class VisionBlock:
         self.normalizer = allocate((groups, frame_tokens), "float32")
         self.attended = allocate((rows, 1152), "bfloat16")
         self.activated = allocate((rows * 4304,), "bfloat16")
+        self.classic = None
+        self.closed = False
+        if rows > 32:
+            self._prepare_classic(allocate)
         self.patches = (
             allocate((rows, 1536), "bfloat16") if variant == "input" else None
         )
 
+    def _prepare_classic(self, allocate):
+        workspace = allocate((32 * 1024 * 1024,), "uint8")
+        self.classic = self.module.vision_classic_prepare(workspace)
+
+    def close(self):
+        if not self.closed:
+            if self.classic is not None:
+                self.module.vision_classic_close(self.classic)
+                self.classic = None
+            self.closed = True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
     def __call__(self, value):
+        if self.closed:
+            raise RuntimeError("VisionBlock is closed")
         if self.variant == "input":
             self.module.vision_patch(
                 value,
@@ -94,6 +125,7 @@ class VisionBlock:
             self.attended,
             self.activated,
             *self.grid,
+            self.classic,
         )
         if self.variant == "merge":
             self.module.vision_merge(

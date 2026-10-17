@@ -17,7 +17,12 @@ Rust 通过推理 worker 的进程和协议边界发送媒体引用.
 报告绑定 checkpoint shards, 源文件, 二进制文件及构建依赖.
 Vision MLP 激活使用投影输出存储.
 
-Vision [Q/K/V 打包](../python/oh_my_vllm/kernels/cuda_backend/vision.cu#L46)<!-- source: __shared__ float cosines[72], sines[72]; --> 为每个 token 行计算一次位置系数.
+Vision [MLP 下投影](../python/oh_my_vllm/kernels/cuda_backend/vision_classic.cuh#L147)<!-- source: inline void vision_classic_down( --> 在行数大于 32 时使用经典 cuBLAS.
+BF16 输入生成 FP32 投影存储, 原有 BF16 偏置与残差舍入不变.
+自有 handle 和工作区在首次捕获前准备, 在相关图销毁后关闭.
+构建与加载器绑定供应商头文件, 映像和链接标志, 并核对实际加载的映像.
+
+Vision [Q/K/V 打包](../python/oh_my_vllm/kernels/cuda_backend/vision.cu#L47)<!-- source: __shared__ float cosines[72], sines[72]; --> 为每个 token 行计算一次位置系数.
 一个 block 在 attention head 之间共享经 BF16 舍入的 sine 和 cosine 值.
 Bias 舍入, 配对维度, 补齐零值及帧顺序保持不变.
 

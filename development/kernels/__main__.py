@@ -4,6 +4,7 @@ import os
 import statistics
 import subprocess
 import sys
+from contextlib import ExitStack
 from dataclasses import asdict
 from pathlib import Path
 
@@ -89,6 +90,11 @@ def check_numerical_cases(device, checkpoint, make_case, first, report, selected
 
 
 def evaluate(arguments, report):
+    with ExitStack() as resources:
+        return evaluate_cases(arguments, report, resources)
+
+
+def evaluate_cases(arguments, report, resources):
     from .checkpoint import Checkpoint
     from .device import Device
 
@@ -104,7 +110,15 @@ def evaluate(arguments, report):
         raise ValueError("profiling requires exactly one modeled shape")
     device = Device()
     checkpoint = Checkpoint(arguments.model)
-    make_case = prepare(arguments.operator, device, checkpoint)
+    create_case = prepare(arguments.operator, device, checkpoint)
+
+    def make_case(shape):
+        case = create_case(shape)
+        close = getattr(case, "close", None)
+        if close is not None:
+            resources.callback(close)
+        return case
+
     report.update(
         {
             "operator": arguments.operator,

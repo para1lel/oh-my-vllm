@@ -7,7 +7,14 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from oh_my_vllm.kernels.native import SOURCES, cache_directory, source_digest
+from oh_my_vllm.kernels.native import (
+    SOURCES,
+    build_digest,
+    cache_directory,
+    source_digest,
+    verify_vision_vendor_images,
+    vision_vendor_dependencies,
+)
 
 
 @functools.cache
@@ -24,9 +31,7 @@ def build(name, functions):
     flags = ("-O3", "--generate-code=arch=compute_100a,code=sm_100a", "-lineinfo")
     source = SOURCES / f"{name}.cu"
     source_fingerprint = source_digest(source)
-    digest = hashlib.sha256(source_fingerprint.encode())
     compiler = subprocess.check_output([nvcc, "--version"]).decode()
-    identity = (compiler, flags, importlib.metadata.version("apache-tvm-ffi"))
     include_paths = [str(source.parent), str(SOURCES)]
     commit = None
     if name != "device":
@@ -42,13 +47,24 @@ def build(name, functions):
             ["git", "-C", str(cutlass), "status", "--porcelain"]
         ):
             raise ValueError("CUTLASS checkout must be clean")
-        digest.update(commit.encode())
         flags += ("--expt-relaxed-constexpr", "-static-global-template-stub=false")
         include_paths += [str(cutlass / "include"), str(cutlass / "tools/util/include")]
         if name == "vision":
             include_paths.append(str(cutlass / "examples/77_blackwell_fmha"))
-    digest.update(repr((identity, flags, functions)).encode())
-    source_id = digest.hexdigest()
+    vendor = vision_vendor_dependencies() if name == "vision" else None
+    build_options = {}
+    if vendor is not None:
+        include_paths.append(vendor["include_directory"])
+        build_options["extra_ldflags"] = vendor["ldflags"]
+    source_id = build_digest(
+        source_fingerprint,
+        compiler,
+        flags,
+        importlib.metadata.version("apache-tvm-ffi"),
+        commit,
+        functions,
+        vendor,
+    )
     cache = cache_directory()
     directory = cache / source_id
     directory.mkdir(parents=True, exist_ok=True)
@@ -60,6 +76,7 @@ def build(name, functions):
         extra_include_paths=include_paths,
         build_directory=str(directory),
         backend="cuda",
+        **build_options,
     )
     with Path(library).open("rb") as file:
         binary_id = hashlib.file_digest(file, "sha256").hexdigest()
@@ -81,6 +98,8 @@ def build(name, functions):
         "ffi_version": importlib.metadata.version("apache-tvm-ffi"),
         "cutlass": commit,
     }
+    if vendor is not None:
+        metadata["vision_vendor"] = vendor
     encoded = json.dumps(metadata, indent=2) + "\n"
     immutable_manifest = binary_directory / "manifest.json"
     if immutable_manifest.exists() and immutable_manifest.read_text() != encoded:
@@ -91,4 +110,7 @@ def build(name, functions):
     temporary = cache / f"{name}.{os.getpid()}.json"
     temporary.write_text(encoded)
     temporary.replace(cache / f"{name}.json")
-    return load_module(str(immutable_library)), source_id, immutable_library
+    module = load_module(str(immutable_library))
+    if vendor is not None:
+        verify_vision_vendor_images(module, vendor)
+    return module, source_id, immutable_library

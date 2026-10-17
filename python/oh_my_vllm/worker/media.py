@@ -3,6 +3,7 @@ import copy
 import io
 import math
 import urllib.request
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 
 import av
@@ -212,28 +213,31 @@ class MediaProcessor:
                 item.pixels[None, first * 2 : min((first + count) * 2, frames)]
             )
             rows = count * tokens
-            operations = [
-                VisionBlock(
-                    weights,
-                    rows,
-                    tokens,
-                    d.empty,
-                    variant=variant,
-                    grid=item.grid,
-                    source=(height, width),
-                    frames=min(count * 2, frames - first * 2),
-                )
-                for variant in ("input", "default", "default", "merge")
-            ]
-            value = operations[0](pixels)
-            for layer in range(1, 26):
-                operation = operations[1 + (layer % 2)]
-                operation.layer = layer
-                value = operation(value)
-            value = operations[3](value)
-            destination = d.view(result, value.shape, first * tokens // 4 * 5120)
-            d.module.copy_bytes(destination, value)
-            d.synchronize()
+            with ExitStack() as resources:
+                operations = [
+                    resources.enter_context(
+                        VisionBlock(
+                            weights,
+                            rows,
+                            tokens,
+                            d.empty,
+                            variant=variant,
+                            grid=item.grid,
+                            source=(height, width),
+                            frames=min(count * 2, frames - first * 2),
+                        )
+                    )
+                    for variant in ("input", "default", "default", "merge")
+                ]
+                value = operations[0](pixels)
+                for layer in range(1, 26):
+                    operation = operations[1 + (layer % 2)]
+                    operation.layer = layer
+                    value = operation(value)
+                value = operations[3](value)
+                destination = d.view(result, value.shape, first * tokens // 4 * 5120)
+                d.module.copy_bytes(destination, value)
+                d.synchronize()
         item.embedding, item.pixels = result, None
         return result
 

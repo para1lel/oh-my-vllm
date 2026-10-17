@@ -3,6 +3,7 @@
 #include "vision_attention.cuh"
 #include "vision_patch.cuh"
 #include <algorithm>
+#include "vision_classic.cuh"
 
 __global__ void vision_norm_kernel(const __nv_bfloat16 *value, const __nv_bfloat16 *weight,
                                    const __nv_bfloat16 *bias, __nv_bfloat16 *output) {
@@ -185,7 +186,8 @@ void vision_block(TensorView value, TensorView norm1_weight, TensorView norm1_bi
                   TensorView down_bias, TensorView output, TensorView normalized,
                   TensorView projected, TensorView query, TensorView key, TensorView values,
                   TensorView padded_attention, TensorView normalizer, TensorView attended,
-                  TensorView activated, int64_t grid_height, int64_t grid_width) {
+                  TensorView activated, int64_t grid_height, int64_t grid_width,
+                  tvm::ffi::Optional<VisionClassicOwner> classic) {
   vision_grid(grid_height, grid_width);
   int rows = vision_rows(value), tokens = grid_height * grid_width;
   TVM_FFI_ICHECK(rows % tokens == 0 && rows / tokens <= 4095);
@@ -213,6 +215,10 @@ void vision_block(TensorView value, TensorView norm1_weight, TensorView norm1_bi
                   {output, normalized, projected, query, key, values, padded_attention, normalizer,
                    attended, activated});
   tvm::ffi::CUDADeviceGuard guard(value.device().device_id);
+  if (rows > 32) {
+    TVM_FFI_ICHECK(classic.has_value());
+    vision_classic_context(classic.value(), value.device().device_id);
+  }
   auto stream = vision_stream(value);
   auto norm = vision_write(normalized);
   auto matrix = static_cast<float *>(projected.data_ptr());
@@ -237,8 +243,13 @@ void vision_block(TensorView value, TensorView norm1_weight, TensorView norm1_bi
                                                vision_read(norm2_bias), norm);
   vision_mlp_up(norm, vision_read(up_weight), vision_read(up_bias), vision_write(activated), rows,
                 stream);
-  bf16_linear<float>(vision_read(activated), vision_read(down_weight), matrix, rows, 1152, 4304,
-                     stream);
+  if (rows > 32) {
+    TVM_FFI_ICHECK(classic.has_value());
+    vision_classic_down(classic.value(), vision_read(activated), vision_read(down_weight), matrix,
+                        rows, value.device().device_id, stream);
+  } else
+    bf16_linear<float>(vision_read(activated), vision_read(down_weight), matrix, rows, 1152, 4304,
+                       stream);
   vision_residual_kernel<<<(int64_t(rows) * 1152 + 255) / 256, 256, 0, stream>>>(
       matrix, vision_read(down_bias), vision_read(output), vision_write(output),
       int64_t(rows) * 1152);

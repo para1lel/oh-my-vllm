@@ -193,6 +193,15 @@ class VisionCase:
         )
         self.reference_cache = {}
 
+    def close(self):
+        self.operation.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
     def reset(self):
         pass
 
