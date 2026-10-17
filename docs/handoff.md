@@ -120,7 +120,7 @@ The acceptance audit uses [native sources from the kernel directory](../developm
 It must include [greedy numerical evidence](../development/kernels/acceptance.py#L236)<!-- source: def verify_greedy(check): -->.
 
 The selected kernel and worker changes are integrated. Further optimization is deferred.
-The root [README](../README.md#performance-measurements) has the performance summary and measurement scope.
+The root [README](../README.md#performance-measurements) gives the operator summary, HTTP measurements, and warmup scope.
 `copy_bytes` now synchronizes only when the destination is on the CPU.
 `gather_rows_kernel` uses 16-byte vectorized loads when the row and base pointers are 16-byte aligned.
 

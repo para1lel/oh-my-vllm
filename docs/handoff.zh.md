@@ -120,7 +120,7 @@ Sampler 为各路径保留[独立的 CUDA Graph](../python/oh_my_vllm/worker/sam
 它必须包含[贪心数值证据](../development/kernels/acceptance.py#L236)<!-- source: def verify_greedy(check): -->.
 
 已选定的 kernel 和 worker 改动已集成. 进一步优化暂缓.
-根目录 [README](../README.zh.md#性能测量) 包含性能摘要和测量范围.
+根目录 [README](../README.zh.md#性能测量) 包含算子摘要, HTTP 测量及预热范围.
 `copy_bytes` 现在只在目标在 CPU 上时才同步.
 `gather_rows_kernel` 在行和基地址满足 16 字节对齐时使用 16 字节向量化加载.
 
