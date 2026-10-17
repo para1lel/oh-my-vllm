@@ -1,3 +1,5 @@
+import numpy as np
+
 MAX_PATTERN_TOKENS = 256
 MIN_PATTERN_REPEATS = 3
 MIN_REPEATED_TOKENS = 64
@@ -7,23 +9,26 @@ HISTORY_WINDOW = MAX_PATTERN_TOKENS * MIN_PATTERN_REPEATS
 def cycle_continuations(history):
     if len(history) < MIN_REPEATED_TOKENS:
         return set()
-    tail = list(reversed(history[-HISTORY_WINDOW:]))
+    tail = np.asarray(history[-HISTORY_WINDOW:], dtype=np.int64)[::-1]
     size = len(tail)
-    matches = [0] * size
-    left = right = 0
-    for index in range(1, size):
-        if index <= right:
-            matches[index] = min(right - index + 1, matches[index - left])
-        while (
-            index + matches[index] < size
-            and tail[matches[index]] == tail[index + matches[index]]
-        ):
-            matches[index] += 1
-        if index + matches[index] - 1 > right:
-            left, right = index, index + matches[index] - 1
+    limit = min(MAX_PATTERN_TOKENS, size // MIN_PATTERN_REPEATS)
+    matches = tail[1 : limit + 1] == tail[0]
+    # A valid cycle has at least 43 matching tokens, so this filter cannot reject it.
+    for index in range(1, 4):
+        matches &= tail[1 + index : limit + 1 + index] == tail[index]
+    tail_bytes = tail.tobytes()
+    token_bytes = tail.itemsize
     blocked = set()
-    for period in range(1, min(MAX_PATTERN_TOKENS, size // MIN_PATTERN_REPEATS) + 1):
+    for offset in np.flatnonzero(matches):
+        period = int(offset) + 1
+        continuation = int(tail[period - 1])
+        if continuation in blocked:
+            continue
         span = max(MIN_PATTERN_REPEATS * period, MIN_REPEATED_TOKENS)
-        if span <= size and matches[period] >= span - period:
-            blocked.add(tail[period - 1])
+        if span <= size and tail_bytes.startswith(
+            tail_bytes[: (span - period) * token_bytes],
+            period * token_bytes,
+            span * token_bytes,
+        ):
+            blocked.add(continuation)
     return blocked

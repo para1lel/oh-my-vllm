@@ -104,6 +104,9 @@ Worker 提供约束解码, MTP4, 以及仅含 decode 请求的 batch 的 CUDA Gr
 仅当惩罚项使用 token 历史时, 才将其复制到 GPU.
 MTP 验证不下载未使用的采样 token.
 
+worker 使用 CPU 前缀筛选与完整 token 区间比较来[检查 token 历史](../python/oh_my_vllm/worker/repetition.py#L9)<!-- source: def cycle_continuations(history): -->.
+历史窗口, 循环长度与最小重复次数保持不变.
+
 对于所有行温度均为零的 batch, 采样使用[两阶段最大值归约](../python/oh_my_vllm/kernels/cuda_backend/sample_greedy.cuh#L6)<!-- source: __global__ void greedy_scores_kernel( -->.
 它保留 MTP 接受所需的 one-hot 概率. 随机和混合 batch 使用排序路径.
 Sampler 为各路径保留[独立的 CUDA Graph](../python/oh_my_vllm/worker/sampling.py#L113)<!-- source: self.replays[self.greedy] = self.resources.enter_context( -->.

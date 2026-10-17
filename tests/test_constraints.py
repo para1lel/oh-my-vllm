@@ -95,6 +95,32 @@ class ChainDraft:
 
 
 class Constraints(unittest.TestCase):
+    def test_repetition_mask_requires_complete_cycles(self):
+        tokenizer = SimpleNamespace(
+            eos={248319},
+            grammar=SimpleNamespace(vocab_size=248320),
+            valid_tokens=248320,
+            think_end=248318,
+        )
+        broken = [1, 2, 3, 4, 5, 6, 7] * 11
+        broken[-20] = 9
+        cases = [
+            ([7] * 63, set()),
+            ([7] * 64, {7}),
+            ([3, 5] * 32, {3}),
+            ([7] * 64 + [8], set()),
+            (broken, set()),
+            (list(range(256)) * 3, {0}),
+            (list(range(257)) * 3, set()),
+        ]
+        for history, blocked in cases:
+            with self.subTest(length=len(history), final_token=history[-1]):
+                request = Request(
+                    tokenizer, [], {"max_tokens": 4096, "sampling": {"seed": 1}}
+                )
+                request.history = history
+                self.assertEqual(set(np.flatnonzero(request.mask() == 0)), blocked)
+
     def test_sampling_inputs_do_not_retain_speculative_history(self):
         from oh_my_vllm.worker.sampling import SamplingInputs
 

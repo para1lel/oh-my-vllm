@@ -104,6 +104,9 @@ Sampling uses [fixed CPU buffers](../python/oh_my_vllm/worker/sampling.py#L9)<!-
 It copies token history to the GPU only when a penalty uses the history.
 MTP verification does not download unused sampled tokens.
 
+The worker [examines token history](../python/oh_my_vllm/worker/repetition.py#L9)<!-- source: def cycle_continuations(history): --> with CPU prefix filters and complete token span comparisons.
+The history window, cycle lengths, and minimum repeat count stay unchanged.
+
 For batches with zero temperature in all rows, sampling uses a [two-stage maximum reduction](../python/oh_my_vllm/kernels/cuda_backend/sample_greedy.cuh#L6)<!-- source: __global__ void greedy_scores_kernel( -->.
 It keeps one-hot probabilities for MTP acceptance. Random and mixed batches use the sort path.
 The sampler keeps a [separate CUDA Graph for each path](../python/oh_my_vllm/worker/sampling.py#L113)<!-- source: self.replays[self.greedy] = self.resources.enter_context( -->.
