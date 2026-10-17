@@ -17,12 +17,16 @@ Each provider supplies numerical checks and restores mutable state before measur
 Reports bind checkpoint shards, source files, binaries, and build dependencies.
 Vision MLP activation uses projection output stores.
 
+Vision uses one [kernel](../python/oh_my_vllm/kernels/cuda_backend/vision_residual_norm.cuh#L3)<!-- source: __global__ void vision_residual_norm_kernel( --> for the first residual update and the second normalization.
+It keeps the original BF16 rounding points, centered variance, and reduction tree.
+The rounded residual stays in registers for normalization and in global storage for the later residual update.
+
 Vision [MLP down](../python/oh_my_vllm/kernels/cuda_backend/vision_classic.cuh#L147)<!-- source: inline void vision_classic_down( --> uses classic cuBLAS when the input has more than 32 rows.
 BF16 inputs produce FP32 projected storage. The original BF16 bias and residual rounding stay unchanged.
 The owned handle and workspace are prepared before first capture and closed after the related graphs are destroyed.
 The builder and loader bind vendor headers, images, and link flags, then examine the loaded images.
 
-Vision [Q/K/V packing](../python/oh_my_vllm/kernels/cuda_backend/vision.cu#L47)<!-- source: __shared__ float cosines[72], sines[72]; --> computes position coefficients once for each token row.
+Vision [Q/K/V packing](../python/oh_my_vllm/kernels/cuda_backend/vision.cu#L49)<!-- source: __shared__ float cosines[72], sines[72]; --> computes position coefficients once for each token row.
 A block shares BF16-rounded sine and cosine values across attention heads.
 Bias rounding, paired dimensions, padded zeros, and frame order stay unchanged.
 

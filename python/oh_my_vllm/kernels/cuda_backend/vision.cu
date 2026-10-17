@@ -41,6 +41,8 @@ __device__ inline float vision_biased(const float *projected, const __nv_bfloat1
   return __bfloat162float(__float2bfloat16_rn(projected[index] + __bfloat162float(bias[column])));
 }
 
+#include "vision_residual_norm.cuh"
+
 __global__ void vision_qkv_kernel(const float *projected, const __nv_bfloat16 *bias,
                                   __nv_bfloat16 *query, __nv_bfloat16 *key, __nv_bfloat16 *value,
                                   int rows, int grid_height, int grid_width) {
@@ -236,11 +238,9 @@ void vision_block(TensorView value, TensorView norm1_weight, TensorView norm1_bi
       vision_read(padded_attention), vision_write(attended), rows, tokens);
   bf16_linear<float>(vision_read(attended), vision_read(attention_weight), matrix, rows, 1152, 1152,
                      stream);
-  vision_residual_kernel<<<(int64_t(rows) * 1152 + 255) / 256, 256, 0, stream>>>(
-      matrix, vision_read(attention_bias), vision_read(value), vision_write(output),
-      int64_t(rows) * 1152);
-  vision_norm_kernel<<<rows, 256, 0, stream>>>(vision_read(output), vision_read(norm2_weight),
-                                               vision_read(norm2_bias), norm);
+  vision_residual_norm_kernel<<<rows, 256, 0, stream>>>(
+      matrix, vision_read(attention_bias), vision_read(value), vision_read(norm2_weight),
+      vision_read(norm2_bias), vision_write(output), norm);
   vision_mlp_up(norm, vision_read(up_weight), vision_read(up_bias), vision_write(activated), rows,
                 stream);
   if (rows > 32) {

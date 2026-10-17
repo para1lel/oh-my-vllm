@@ -203,6 +203,8 @@ The [CUTLASS callbacks](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cu
 Keep the intermediate BF16 rounding before the residual addition.
 The [TensorRT-LLM normalization kernels](https://github.com/NVIDIA/TensorRT-LLM/blob/main/cpp/tensorrt_llm/kernels/layernormKernels.cu) include different variance methods.
 Keep the original centered variance and reduction tree when you combine residual addition and normalization.
+Keep the rounded residual in registers for normalization and in global storage for later consumers.
+Keep each lane's reduction result and the original joins when you use shared partial sums again.
 
 The [vLLM vector-copy change](https://github.com/vllm-project/vllm/pull/43437) replaces scalar 16-bit accesses with 128-bit copies.
 Compare generated instructions with the public alignment contract before you use wider accesses.

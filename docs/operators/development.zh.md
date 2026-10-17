@@ -203,6 +203,8 @@ SGLang 的 [BF16 GEMV](https://github.com/sgl-project/sglang/blob/main/python/sg
 保留 residual 加法前的中间 BF16 舍入.
 [TensorRT-LLM 归一化 kernel](https://github.com/NVIDIA/TensorRT-LLM/blob/main/cpp/tensorrt_llm/kernels/layernormKernels.cu) 包含不同的方差方法.
 合并 residual 加法和归一化时, 保留原有中心化方差及归约树.
+将舍入后的 residual 保留在寄存器中供归一化使用, 并保留在全局存储中供后续消费者使用.
+复用共享部分和时, 保留各 lane 的归约结果及原有会合.
 
 [vLLM 向量复制改动](https://github.com/vllm-project/vllm/pull/43437) 用 128 位复制替代标量 16 位访问.
 使用更宽访问前, 比较生成指令与公开对齐契约.
