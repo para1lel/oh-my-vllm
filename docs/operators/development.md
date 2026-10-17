@@ -126,6 +126,11 @@ Its paged implementation supplies a load path without TMA.
 Compare this schedule with the current FA implementation for head width 256.
 Keep the 784-token cache pages and BF16 probability storage.
 
+The [CUTLASS FMHA mainloop](https://github.com/NVIDIA/cutlass/blob/098de2a652cf8f00fd70b2df54051c7eccbb855a/examples/77_blackwell_fmha/collective/sm100_fmha_fwd_mainloop_tma_warpspecialized.hpp) uses separate pipelines for KV, scores, and output correction.
+Use a completion barrier and phase for each score buffer.
+Complete TMEM reads before score reuse.
+Keep the probability buffer until its matrix reads complete.
+
 The [PTX warp matrix instructions](https://docs.nvidia.com/cuda/parallel-thread-execution/#warp-level-matrix-instructions-mma) support fixed matrix shapes.
 Compare transposed products when few query rows leave most matrix outputs unused.
 Include score exchange, softmax reduction order, output ownership, and shared-memory access.
@@ -139,6 +144,10 @@ Examine the compiled instructions before you use an instruction throughput model
 The [PTX tensor-copy rules](https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk-tensor) include swizzle and transaction barrier requirements.
 Use descriptor boxes with the same physical layout as K/V MMA inputs.
 Keep each box in one cache page. Use vector copies for unaligned starts and partial tiles.
+
+Compare grouped descriptor dimensions with the original copy regions before you add packed weights.
+Examine each shared-memory byte and swizzle phase.
+Fewer copy commands do not prove lower latency.
 
 The [CUTLASS TMEM copy instructions](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cute/arch/copy_sm100.hpp) supply different load widths for known row counts.
 Keep all participating lanes and the necessary destination registers.

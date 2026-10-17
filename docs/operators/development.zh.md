@@ -126,6 +126,11 @@ FA 和 MTP 检查 KV 写入及未改动的保护存储. Vision 检查原始 patc
 对 head 宽度为 256 的输入, 比较此调度与当前 FA 实现.
 保留 784-token cache page 和 BF16 概率存储.
 
+[CUTLASS FMHA mainloop](https://github.com/NVIDIA/cutlass/blob/098de2a652cf8f00fd70b2df54051c7eccbb855a/examples/77_blackwell_fmha/collective/sm100_fmha_fwd_mainloop_tma_warpspecialized.hpp) 为 KV, score 和输出修正使用独立的 pipeline.
+为每个 score 缓冲区使用独立的完成 barrier 和 phase.
+在复用 score 前完成 TMEM 读取.
+在概率缓冲区的矩阵读取完成前保留该缓冲区.
+
 [PTX warp 矩阵指令](https://docs.nvidia.com/cuda/parallel-thread-execution/#warp-level-matrix-instructions-mma) 支持固定的矩阵形状.
 当 query 行数较少, 大部分矩阵输出未被使用时, 比较转置的矩阵乘法.
 计入 score 交换, softmax reduction 顺序, 输出所有权及共享内存访问.
@@ -139,6 +144,10 @@ SGLang 的 [BF16 GEMV](https://github.com/sgl-project/sglang/blob/main/python/sg
 [PTX tensor-copy 规则](https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk-tensor)包含 swizzle 和 transaction barrier 要求.
 使用与 K/V MMA 输入具有相同物理布局的描述符 box.
 每个 box 都须位于一个 cache page 内. 对未对齐起点和部分 tile 使用向量拷贝.
+
+增加打包权重前, 将分组的描述符维度与原有复制区域比较.
+检查每个共享内存字节及 swizzle phase.
+复制命令减少不能证明延迟降低.
 
 [CUTLASS TMEM 复制指令](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cute/arch/copy_sm100.hpp)为已知行数提供不同加载宽度.
 保留所有参与的 lane 及必要的目标寄存器.
