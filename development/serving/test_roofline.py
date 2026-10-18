@@ -1,8 +1,12 @@
 import json
 import tempfile
 import unittest
+from functools import partial
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
+
+from development.kernels.test_contracts import PEAKS, calibration_profile
 
 from . import benchmark
 from .benchmark import (
@@ -11,7 +15,9 @@ from .benchmark import (
     gate_result,
     select_configurations,
 )
-from .roofline import lower_bound
+from .roofline import lower_bound as trace_lower_bound
+
+lower_bound = partial(trace_lower_bound, peaks=PEAKS)
 
 
 def tokenizer_fixture(root):
@@ -58,7 +64,8 @@ class BenchmarkGate(unittest.TestCase):
         )
         self.assertFalse(gate_result(CONFIGURATIONS[0], 2.01, 1.0)["passed"])
         self.assertFalse(gate_result(("ordinary", 1, 32768, 32), 2.0, 1.0)["passed"])
-        for times in ((0, 1), (-1, 1), (1, float("nan")), (float("inf"), 1), (1, 1.06)):
+        self.assertTrue(gate_result(CONFIGURATIONS[0], 1, 1.06)["passed"])
+        for times in ((0, 1), (-1, 1), (1, float("nan")), (float("inf"), 1)):
             with self.assertRaises(ValueError):
                 gate_result(CONFIGURATIONS[0], *times)
         for selected, outputs in (
@@ -90,7 +97,9 @@ class BenchmarkGate(unittest.TestCase):
 
             def close():
                 if mutation is not None:
-                    mutation.write_bytes(b"changed CPU mock")
+                    mutation.write_bytes(
+                        b"{}" if mutation.name == "peaks.json" else b"changed CPU mock"
+                    )
 
             instance = Mock(run=Mock(side_effect=run), close=Mock(side_effect=close))
             services.append(instance)
@@ -98,6 +107,9 @@ class BenchmarkGate(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            peaks = root / "peaks.json"
+            profile = calibration_profile()
+            peaks.write_text(json.dumps(profile))
             binary = root / "service"
             binary.write_bytes(b"CPU mock")
             vendor = root / "vendor.so"
@@ -131,6 +143,8 @@ class BenchmarkGate(unittest.TestCase):
             def invoke(artifacts, *extra):
                 arguments = [
                     "benchmark",
+                    "--peaks",
+                    str(peaks),
                     "--model",
                     str(root),
                     "--artifacts",
@@ -140,6 +154,13 @@ class BenchmarkGate(unittest.TestCase):
                     *extra,
                 ]
                 with (
+                    patch.object(benchmark, "selected_uuid", return_value="GPU-test"),
+                    patch.object(benchmark, "device_identity", return_value={}),
+                    patch.object(
+                        benchmark,
+                        "load_profile",
+                        side_effect=lambda path, uuid: json.loads(path.read_text()),
+                    ),
                     patch.object(benchmark, "Service", side_effect=service),
                     patch.object(benchmark, "Tokenization"),
                     patch.object(benchmark, "source_identity", return_value="source"),
@@ -177,6 +198,7 @@ class BenchmarkGate(unittest.TestCase):
                 instance.close.assert_called_once()
                 self.assertEqual(instance.verify_identity.call_count, 2)
             for label, target in (
+                ("calibration", peaks),
                 ("binary", binary),
                 ("native", root / "ffn.so"),
                 ("vendor", vendor),
@@ -223,6 +245,7 @@ class BenchmarkGate(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as directory:
             service = object.__new__(benchmark.Service)
+            service.arguments = SimpleNamespace(peak_rates=PEAKS)
             service.mode, service.port = "ordinary", 0
             service.trace = Path(directory) / "trace.jsonl"
 

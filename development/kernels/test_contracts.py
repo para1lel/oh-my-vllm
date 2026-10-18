@@ -13,6 +13,9 @@ from oh_my_vllm.kernels.native import SOURCES, source_digest
 from oh_my_vllm.kernels.specification import MODEL, OPERATORS, UPSTREAM_COMMIT
 from oh_my_vllm.worker.checkpoint import Checkpoint
 
+from development.peaks import Peaks
+from development.peaks import source_id as calibration_source_id
+
 from .acceptance import CHECKS, FLAGS, assess, verify_identity
 from .gdn import make_schedule
 from .provenance import ROOT, case_id, source_identity, suite_identity
@@ -28,6 +31,35 @@ from .workload import (
     numerical_cases,
     stage_cases,
 )
+
+PEAKS = Peaks(
+    hbm=7.7e12, fp8=4.5e15, bf16=2.25e15, tf32=1.125e15, fp32=75e12, fp64=37e12
+)
+
+
+def calibration_profile(peaks=PEAKS):
+    measurements = {}
+    for name, rate in vars(peaks).items():
+        size = 1 << 30 if name == "hbm" else 4096
+        option = 4 if name == "hbm" else 0 if name in {"fp8", "bf16", "tf32"} else 2
+        work = (
+            2147483648
+            if name == "hbm"
+            else 137438953472
+            if name in {"fp8", "bf16", "tf32"}
+            else 67108864
+        )
+        measurements[name] = [
+            dict(size=size, option=option, work=work, samples_seconds=[work / rate] * 7)
+        ]
+    return dict(
+        version=1,
+        uuid="GPU-test",
+        peaks=vars(peaks),
+        measurements=measurements,
+        hardware=dict(sm_count=1, l2_bytes=16),
+        device={},
+    )
 
 
 def numerical_evidence(operator, variant="default"):
@@ -102,7 +134,9 @@ def acceptance_reports():
                 case for case in modeled_cases() if case.shape.operator == operator
             ]
             samples = {
-                case_id(case.shape): [work_for(case.shape).lower_bound_seconds() / 0.75]
+                case_id(case.shape): [
+                    work_for(case.shape).lower_bound_seconds(PEAKS) / 0.75
+                ]
                 * 5
                 for case in cases
             }
@@ -130,6 +164,7 @@ def acceptance_reports():
                 "context": {
                     "mode": mode,
                     "device": "GPU-test",
+                    "calibration": calibration_profile(),
                     "upstream_commit": UPSTREAM_COMMIT,
                     "checkpoint": {
                         "config": MODEL["config_sha256"],
@@ -160,7 +195,7 @@ def acceptance_reports():
                             operator,
                             case_id(case.shape),
                             case.calls,
-                            work_for(case.shape).lower_bound_seconds(),
+                            work_for(case.shape).lower_bound_seconds(PEAKS),
                             samples[case_id(case.shape)][0],
                             "source",
                         )
@@ -275,7 +310,7 @@ class Contracts(unittest.TestCase):
             slower[0]["samples"][key] = [value * 2 for value in samples]
         for observation in slower[0]["observations"]:
             observation["measured_seconds"] *= 2
-        self.assertFalse(assess(slower)["accepted"])
+        self.assertTrue(assess(slower)["accepted"])
         for greedy in ({"passed": True}, {"passed": True, "cases": {}}):
             changed = deepcopy(reports)
             report = next(
@@ -427,7 +462,19 @@ class Contracts(unittest.TestCase):
                 }
                 (parent / "manifest.json").write_text(json.dumps(build))
                 builds.append(build)
+            calibration = calibration_profile()
+            calibration.update(
+                source_id=calibration_source_id(),
+                native=dict(
+                    library=builds[0]["library"],
+                    binary_id=builds[0]["binary_id"],
+                    cublaslt_library=builds[0]["library"],
+                    cublaslt=builds[0]["binary_id"],
+                ),
+            )
             context = {
+                "device": "GPU-test",
+                "calibration": calibration,
                 "upstream_commit": UPSTREAM_COMMIT,
                 "device_source": builds[1]["source_id"],
             }
@@ -466,7 +513,7 @@ class Contracts(unittest.TestCase):
         )
         self.assertTrue(all(case.calls > 0 for case in cases))
         self.assertTrue(
-            all(work_for(case.shape).lower_bound_seconds() > 0 for case in cases)
+            all(work_for(case.shape).lower_bound_seconds(PEAKS) > 0 for case in cases)
         )
         self.assertTrue(all(case.shape.rows <= MODEL["step_tokens"] for case in cases))
         self.assertTrue(
@@ -487,14 +534,19 @@ class Contracts(unittest.TestCase):
 
     def test_expected_efficiency_uses_fixed_weights_and_complete_coverage(self):
         work = Work(7700)
-        lower = work.lower_bound_seconds()
+        lower = work.lower_bound_seconds(PEAKS)
         expected = {"a": ExpectedCase("op", 1, work), "b": ExpectedCase("op", 3, work)}
         observations = [
             Observation("op", "a", 1, lower, lower * 2, "source"),
             Observation("op", "b", 3, lower, lower * 5, "source"),
         ]
-        efficiency = expected_efficiencies(observations, expected, "source")["op"]
+        efficiency = expected_efficiencies(observations, expected, "source", PEAKS)[
+            "op"
+        ]
         self.assertAlmostEqual(efficiency, 0.275)
+        self.assertEqual(
+            replace(observations[0], measured_seconds=lower / 2).efficiency(), 2
+        )
         for invalid in (
             observations[:1],
             [*observations, observations[0]],
@@ -505,9 +557,9 @@ class Contracts(unittest.TestCase):
             [replace(observations[0], measured_seconds=math.nan), observations[1]],
         ):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
-                expected_efficiencies(invalid, expected, "source")
+                expected_efficiencies(invalid, expected, "source", PEAKS)
         with self.assertRaises(ValueError):
-            expected_efficiencies([], {}, "source")
+            expected_efficiencies([], {}, "source", PEAKS)
 
     def test_tensor_core_work_uses_one_shared_resource(self):
         combined = Work(
@@ -516,8 +568,8 @@ class Contracts(unittest.TestCase):
             bf16_flops=int(2.25e15),
             tf32_flops=int(1.125e15),
         )
-        self.assertEqual(combined.lower_bound_seconds(), 3)
-        self.assertEqual(Work(0, fp64_flops=int(37e12)).lower_bound_seconds(), 1)
+        self.assertEqual(combined.lower_bound_seconds(PEAKS), 3)
+        self.assertEqual(Work(0, fp64_flops=int(37e12)).lower_bound_seconds(PEAKS), 1)
         gdn = next(
             case.shape
             for case in modeled_cases()
@@ -536,9 +588,35 @@ class Contracts(unittest.TestCase):
         self.assertEqual(work_for(vision).tf32_flops, 0)
         self.assertGreaterEqual(work_for(vision).bf16_flops, 2 * attention)
         with self.assertRaises(ValueError):
-            Work(-1).lower_bound_seconds()
+            Work(-1).lower_bound_seconds(PEAKS)
         with self.assertRaises(ValueError):
-            Work(math.nan).lower_bound_seconds()
+            Work(math.nan).lower_bound_seconds(PEAKS)
+
+    def test_measured_peaks_require_complete_rates_and_matching_uuid(self):
+        from development.peaks import Peaks, profile_peaks
+
+        rates = dict(hbm=100, fp8=200, bf16=100, tf32=50, fp32=20, fp64=10)
+        peaks = Peaks(**rates)
+        self.assertEqual(Work(100, 200, 100, 20, 50, 10).lower_bound_seconds(peaks), 3)
+        self.assertEqual(Work(0, fp32_flops=40).lower_bound_seconds(peaks), 2)
+        profile = calibration_profile(peaks)
+        self.assertEqual(profile_peaks(profile, "GPU-test"), peaks)
+        for mutate in (
+            lambda value: value.update(uuid="GPU-other"),
+            lambda value: value["peaks"].pop("fp64"),
+            lambda value: value["peaks"].update(hbm=0),
+            lambda value: value["peaks"].update(fp8=math.nan),
+            lambda value: value["peaks"].update(bf16=200),
+            lambda value: value["measurements"]["hbm"][0].update(work=1),
+            lambda value: value["hardware"].update(sm_count=0),
+            lambda value: value["measurements"]["tf32"][0].update(
+                samples_seconds=[0] * 7
+            ),
+        ):
+            changed = deepcopy(profile)
+            mutate(changed)
+            with self.subTest(mutate=mutate), self.assertRaises(ValueError):
+                profile_peaks(changed, "GPU-test")
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@ Reset mutable state before numerical checks and each measurement.
    Bind each native binary and checkpoint shard to each report.
    Measure all modeled cases in eager and graph modes in separate runs.
    Collect profiles after numerical checks. Optimize the measured bottlenecks.
-   Use the [performance gate](evaluation.md#performance-gate) for each serving operator.
+   Measure each serving operator with the [performance calculation](evaluation.md#performance-calculation).
 
 ## Delivery
 

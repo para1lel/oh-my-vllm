@@ -68,7 +68,7 @@ repos:
         entry: scripts/with-env.sh python -m unittest development.kernels.test_contracts development.kernels.test_reference tests.test_constraints development.serving.test_roofline
         language: system
         pass_filenames: false
-        files: ^(development/kernels/|development/serving/|python/oh_my_vllm/|tests/).*\.(py|cu|cuh)$|^requirements/|^\.pre-commit-config\.yaml$
+        files: ^(development/|python/oh_my_vllm/|tests/).*\.(py|cu|cuh)$|^requirements/|^\.pre-commit-config\.yaml$
 
       - id: whitespace
         name: whitespace

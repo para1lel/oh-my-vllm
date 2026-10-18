@@ -236,11 +236,11 @@ def link_issues(path, text, root):
     return errors
 
 
-def host_issues(text):
+def host_issues(text, *, allow_gpu_identity=False):
     errors = []
     if HOST_PATH.search(text):
         errors.append("host-specific absolute path")
-    if GPU_ID.search(text):
+    if not allow_gpu_identity and GPU_ID.search(text):
         errors.append("host-specific GPU identity")
     for match in IPV4.finditer(text):
         try:
@@ -319,7 +319,14 @@ def check(root):
             text = path.read_text()
         except (UnicodeError, OSError):
             continue
-        issues.extend(f"{relative}: {error}" for error in host_issues(text))
+        issues.extend(
+            f"{relative}: {error}"
+            for error in host_issues(
+                text,
+                allow_gpu_identity=relative
+                in {Path("README.md"), Path("README.zh.md")},
+            )
+        )
         if path.suffix != ".md":
             continue
         chinese = path.name.endswith(".zh.md")

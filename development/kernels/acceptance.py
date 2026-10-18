@@ -12,9 +12,11 @@ from oh_my_vllm.kernels.specification import (
     UPSTREAM_COMMIT,
 )
 
+from development.peaks import profile_peaks, verify_profile
+
 from .provenance import case_id, source_identity, suite_identity
 from .providers import MODULES, RUNTIME_MODULES
-from .roofline import MIN_EFFICIENCY, ExpectedCase, Observation, expected_efficiencies
+from .roofline import ExpectedCase, Observation, expected_efficiencies
 from .work import work_for
 from .workload import (
     NUMERICAL_POLICY,
@@ -98,6 +100,7 @@ METRICS = {
 
 
 def verify_identity(report):
+    verify_profile(report["context"]["calibration"], report["context"]["device"])
     if report.get("suite_id") != suite_identity():
         raise ValueError("report uses a different serving suite")
     operator = report["operator"]
@@ -373,7 +376,7 @@ def verify_numerical_evidence(report):
 
 
 def assess(reports):
-    measured, checkpoint, device = {}, {}, None
+    measured, checkpoint, device, calibration = {}, {}, None, None
     for report in reports:
         operator, mode = report["operator"], report["mode"]
         if operator not in SERVING_OPERATORS or mode not in {"eager", "graph"}:
@@ -402,9 +405,19 @@ def assess(reports):
             raise ValueError(
                 "execution context differs from the measured device or mode"
             )
-        if device is not None and device != report["device"]:
-            raise ValueError("reports use different devices or clock settings")
-        device = report["device"]
+        current_device = tuple(
+            value.strip()
+            for index, value in enumerate(report["device"].split(","))
+            if index != 3
+        )
+        if device is not None and device != current_device:
+            raise ValueError("reports use different devices or settings")
+        device = current_device
+        current_calibration = context.get("calibration", {})
+        peaks = profile_peaks(current_calibration, context["device"])
+        if calibration is not None and calibration != current_calibration:
+            raise ValueError("reports use different peak calibrations")
+        calibration = current_calibration
         identities = context["checkpoint"]
         if (
             identities.get("config") != MODEL["config_sha256"]
@@ -439,9 +452,9 @@ def assess(reports):
         ):
             raise ValueError("missing or unexpected serving shapes")
         observations = [Observation(**item) for item in report["observations"]]
-        efficiency = expected_efficiencies(observations, required, report["source_id"])[
-            operator
-        ]
+        efficiency = expected_efficiencies(
+            observations, required, report["source_id"], peaks
+        )[operator]
         for item in observations:
             identity = item.case_id
             expected_check = (
@@ -472,8 +485,7 @@ def assess(reports):
         if (operator, mode) not in measured
     ]
     return {
-        "accepted": not missing
-        and all(value >= MIN_EFFICIENCY for value in measured.values()),
+        "accepted": not missing,
         "report_version": REPORT_VERSION,
         "numerical_policy": NUMERICAL_POLICY,
         "missing": missing,

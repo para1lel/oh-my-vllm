@@ -16,7 +16,8 @@ Write all English documents in ASD-STE100. Supply a full Chinese translation for
 Use clear names and small functions. Add a comment only when the code cannot give the necessary information.
 Keep the tests few. Before you add a test, tell the user why it is necessary.
 
-Do the applicable tests in the repository. Do not put test results in project files.
+Do the applicable tests in the repository. Update the required performance tables in the two README files.
+Do not put other test results in project files.
 Use the [test scope](docs/testing.md).
 
 Get a code review from another agent before each delivery. Correct the errors.

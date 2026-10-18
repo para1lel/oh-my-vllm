@@ -124,7 +124,7 @@ def event_work(event, rows, commits, mtp):
     raise ValueError(f"unmodeled trace operation: {operation}")
 
 
-def lower_bound(events, request_ids, expected_tokens=None):
+def lower_bound(events, request_ids, expected_tokens=None, *, peaks):
     mtp = validate(events, request_ids, expected_tokens)
     commits, acceptance = target_commits(events, request_ids)
     work, components = Work(0), []
@@ -148,13 +148,13 @@ def lower_bound(events, request_ids, expected_tokens=None):
                     "calls": calls,
                     "rows": sum(count for _, count in queries),
                     "queries": queries,
-                    "seconds": calls * item.lower_bound_seconds(),
+                    "seconds": calls * item.lower_bound_seconds(peaks),
                     "work_per_call": vars(item),
                 }
             )
     return {
         "seconds": sum(item["seconds"] for item in components),
-        "global_resource_seconds": work.lower_bound_seconds(),
+        "global_resource_seconds": work.lower_bound_seconds(peaks),
         "work": vars(work),
         "components": components,
         "acceptance": acceptance,

@@ -34,7 +34,7 @@
 
 每种配置的 roofline efficiency 必须至少为 50%.
 实测 batch 延迟不得超过其记录的执行 trace 对应 roofline 时间的 2 倍.
-使用 [B200 峰值和精度规则](operators/evaluation.zh.md#性能门槛).
+使用选定 GPU UUID 的[实测峰值](calibration.zh.md)及[精度规则](operators/evaluation.zh.md#性能计算).
 
 计算每个 serving 算子的必要工作量, 包括 MTP context, proposals, 验证和接受.
 注意力计算使用完整序列长度.
@@ -61,18 +61,19 @@
 
 使用算子测量和完整 HTTP 测量来选择改动.
 使用[算子负载](operators/evaluation.zh.md)进行算子验收.
-[物理上界分析](operators/upper-bounds.zh.md)定义独立的算子证明条件.
-这些条件不改变 HTTP 门槛.
+算子测量不设最低效率要求.
 
 ## 测量命令
 
 将 `MODEL_ROOT` 设为 checkpoint 目录.
+将 `PEAK_PROFILE` 设为选定 GPU UUID 的校准文件.
+通过 `OH_MY_VLLM_GPU_UUID` 选择此 UUID.
 将 `ARTIFACT_ROOT` 设为仓库外的新目录.
 按[服务配置](serving.zh.md#启动)构建原生模块和 release 可执行文件.
 执行完整比较:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark --model "$MODEL_ROOT" --artifacts "$ARTIFACT_ROOT"
+scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark --peaks "$PEAK_PROFILE" --model "$MODEL_ROOT" --artifacts "$ARTIFACT_ROOT"
 ```
 
 命令为每种模式启动并停止服务.
@@ -117,7 +118,7 @@ Tensor-core 时间按各自峰值累加 FP8, BF16 和 TF32 工作量.
 全局资源估计用于分析, 不用于设置门槛.
 
 仓库外的产物包含响应, usage, 执行 shape, MTP 计数, 下界分项及源码标识.
-[产物检查](../development/serving/benchmark.py#L201)<!-- source: def verify_artifact_identity(arguments, expected): -->在源码, 可执行文件, 原生构建或 checkpoint 标识改变时阻止验收.
+[产物检查](../development/serving/benchmark.py#L210)<!-- source: def verify_artifact_identity(arguments, expected): -->在源码, 可执行文件, 原生构建或 checkpoint 标识改变时阻止验收.
 
 轨迹必须完整覆盖 prefill, 已接受位置必须连续, 输出数量必须与 HTTP usage 一致.
 其唯一的 identity 记录必须匹配服务模式. 其 prompt 长度必须与 HTTP usage 一致.

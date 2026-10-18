@@ -56,17 +56,20 @@ scripts/with-env.sh python -m unittest development.kernels.test_contracts develo
 
 将 `MODEL_ROOT` 设为 checkpoint 目录.
 将 `ARTIFACT_ROOT` 设为仓库外的产物目录.
+对每个可用的 GPU UUID 使用[峰值校准流程](../calibration.zh.md).
+将 `PEAK_PROFILE` 设为选定 GPU UUID 的校准文件.
+通过 `OH_MY_VLLM_GPU_UUID` 选择此 UUID.
 测量 FFN provider:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels bench --model "$MODEL_ROOT" --operator ffn --mode graph --output "$ARTIFACT_ROOT/ffn-graph.json"
-scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels bench --model "$MODEL_ROOT" --operator ffn --mode eager --output "$ARTIFACT_ROOT/ffn-eager.json"
+scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels bench --peaks "$PEAK_PROFILE" --model "$MODEL_ROOT" --operator ffn --mode graph --output "$ARTIFACT_ROOT/ffn-graph.json"
+scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels bench --peaks "$PEAK_PROFILE" --model "$MODEL_ROOT" --operator ffn --mode eager --output "$ARTIFACT_ROOT/ffn-eager.json"
 ```
 
 获取单个 shape 的 Systems trace 和 Compute counters:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels profile --model "$MODEL_ROOT" --operator ffn --rows 1 --mode graph --output "$ARTIFACT_ROOT/ffn-profile"
+scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels profile --peaks "$PEAK_PROFILE" --model "$MODEL_ROOT" --operator ffn --rows 1 --mode graph --output "$ARTIFACT_ROOT/ffn-profile"
 ```
 
 执行命令前, 选择尚不存在的 profile 目录路径.
@@ -87,9 +90,13 @@ scripts/with-env.sh python -m development.kernels audit --reports "$ARTIFACT_ROO
 ```
 
 审计对当前源码, 不可变二进制, checkpoint 身份, 冷权重, 小型数值用例及全部建模计时 shape 进行检查.
-版本 2 报告将数值证据与计时覆盖分开.
+版本 4 报告将数值证据与计时覆盖分开.
 大型计时用例将数值状态记为 `not_run`. 此状态不会从性能覆盖中移除该 shape.
 源码变更后, 旧报告不再符合验收条件.
+
+审计不设最低算子效率要求.
+每次交付前, 重新执行全部测量.
+然后更新两种语言的 README 算子表格.
 
 大型用例不使用 CPU FP64 参考. 大型用例仅用于计时或 profiling.
 

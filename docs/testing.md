@@ -27,4 +27,6 @@ It checks exact input and output lengths, uncached prefixes, and measured MTP ac
 Use the GPU wrapper for GPU work.
 After each run, stop the processes that you started.
 Keep raw artifacts external to the repository.
-Do not put test results in project documents.
+
+Update the required performance tables in the two README files before each delivery.
+Do not put other test results in project documents.

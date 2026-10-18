@@ -121,7 +121,10 @@ The project has no vLLM runtime dependency.
 Named tolerances apply to specific outputs. Cache checks and state selection keep their separate requirements.
 
 For performance measurements, use the [evaluation procedure](performance.md).
-The [physical upper-bound analysis](operators/upper-bounds.md) gives the proof requirements and current limits.
+Operator tests have no minimum efficiency requirement.
+Each delivery must include complete operator measurements and an update to the two README tables.
+The roofline calculations must use [measured peaks](calibration.md) for the selected GPU UUID.
+The HTTP comparison keeps its 50% efficiency requirement.
 
 The worker supplies constrained decoding, MTP4, and CUDA Graph execution for batches that contain only decode requests.
 The model, MTP context, and MTP draft use [fixed metadata buffers](../python/oh_my_vllm/worker/metadata.py#L5)<!-- source: class Metadata: -->.
@@ -140,8 +143,8 @@ It keeps one-hot probabilities for MTP acceptance. Random and mixed batches use 
 The sampler keeps a [separate CUDA Graph for each path](../python/oh_my_vllm/worker/sampling.py#L113)<!-- source: self.replays[self.greedy] = self.resources.enter_context( -->.
 It [calculates sampling random counters on the CPU](../python/oh_my_vllm/worker/sampling.py#L122)<!-- source: counters = self.inputs.random[:, 1] + (self.inputs.parameters[:, 0] > 0) -->.
 
-The acceptance audit uses [native sources from the kernel directory](../development/kernels/acceptance.py#L117)<!-- source: source = SOURCES / f"{name}.cu" -->.
-It must include [greedy numerical evidence](../development/kernels/acceptance.py#L236)<!-- source: def verify_greedy(check): -->.
+The acceptance audit uses [native sources from the kernel directory](../development/kernels/acceptance.py#L120)<!-- source: source = SOURCES / f"{name}.cu" -->.
+It must include [greedy numerical evidence](../development/kernels/acceptance.py#L239)<!-- source: def verify_greedy(check): -->.
 
 `copy_bytes` now synchronizes only when the destination is on the CPU.
 `gather_rows_kernel` uses 16-byte vectorized loads when the row and base pointers are 16-byte aligned.

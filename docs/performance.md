@@ -34,7 +34,7 @@ Do not use time to first token as the full latency.
 
 Each configuration must have roofline efficiency of at least 50%.
 The measured batch latency must be at most 2 times the roofline time for its recorded execution trace.
-Use the [B200 peaks and precision rules](operators/evaluation.md#performance-gate).
+Use the selected GPU UUID's [measured peaks](calibration.md) and [precision rules](operators/evaluation.md#performance-calculation).
 
 Calculate each serving operator's necessary work, with MTP context, proposals, verification, and acceptance.
 Use the full sequence lengths for attention work.
@@ -61,18 +61,19 @@ Do not use PDL in the inference worker.
 
 Use operator measurements and full HTTP measurements to select changes.
 Use the [operator workload](operators/evaluation.md) for operator acceptance.
-The [physical upper-bound analysis](operators/upper-bounds.md) defines the separate operator proof conditions.
-Those conditions do not change the HTTP gate.
+Operator measurements have no minimum efficiency requirement.
 
 ## Measurement command
 
 Set `MODEL_ROOT` to the checkpoint directory.
+Set `PEAK_PROFILE` to the selected GPU UUID's calibration file.
+Select this UUID with `OH_MY_VLLM_GPU_UUID`.
 Set `ARTIFACT_ROOT` to a new directory external to the repository.
 Build the native modules and release executable with the [service setup](serving.md#start).
 Run the full comparison:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark --model "$MODEL_ROOT" --artifacts "$ARTIFACT_ROOT"
+scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark --peaks "$PEAK_PROFILE" --model "$MODEL_ROOT" --artifacts "$ARTIFACT_ROOT"
 ```
 
 The command starts and stops the service for each mode.
@@ -117,7 +118,7 @@ It does not permit resource overlap between dependent calls.
 The global resource estimate is supplied for analysis. It does not set the gate.
 
 The external artifacts contain responses, usage, execution shapes, MTP counters, bound components, and source identities.
-The [artifact check](../development/serving/benchmark.py#L201)<!-- source: def verify_artifact_identity(arguments, expected): --> prevents acceptance if source, executable, native build, or checkpoint identities change.
+The [artifact check](../development/serving/benchmark.py#L210)<!-- source: def verify_artifact_identity(arguments, expected): --> prevents acceptance if source, executable, native build, or checkpoint identities change.
 
 The trace must have full prefill coverage, continuous accepted positions, and output counts that agree with HTTP usage.
 Its single identity record must match the service mode. Its prompt lengths must match HTTP usage.

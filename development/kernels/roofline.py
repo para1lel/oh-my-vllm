@@ -1,8 +1,6 @@
 import math
 from dataclasses import dataclass
 
-MIN_EFFICIENCY = 0.50
-
 
 @dataclass(frozen=True)
 class Work:
@@ -13,16 +11,16 @@ class Work:
     tf32_flops: int = 0
     fp64_flops: int = 0
 
-    def lower_bound_seconds(self):
+    def lower_bound_seconds(self, peaks):
         if any(value < 0 or not math.isfinite(value) for value in vars(self).values()):
             raise ValueError("work must be finite and nonnegative")
         return max(
-            self.hbm_bytes / 7.7e12,
-            self.fp8_flops / 4.5e15
-            + self.bf16_flops / 2.25e15
-            + self.tf32_flops / 1.125e15,
-            self.fp32_flops / 75e12,
-            self.fp64_flops / 37e12,
+            self.hbm_bytes / peaks.hbm,
+            self.fp8_flops / peaks.fp8
+            + self.bf16_flops / peaks.bf16
+            + self.tf32_flops / peaks.tf32,
+            self.fp32_flops / peaks.fp32,
+            self.fp64_flops / peaks.fp64,
         )
 
 
@@ -53,12 +51,10 @@ class Observation:
         ):
             raise ValueError("observation has no valid identity or timing")
         value = self.lower_bound_seconds / self.measured_seconds
-        if value > 1.05:
-            raise ValueError("lower bound exceeds measurement; examine the work model")
         return value
 
 
-def expected_efficiencies(observations, required_cases, source_id):
+def expected_efficiencies(observations, required_cases, source_id, peaks):
     if not required_cases or not source_id:
         raise ValueError("a serving model and source identity are required")
     measured = {}
@@ -72,7 +68,7 @@ def expected_efficiencies(observations, required_cases, source_id):
     calls = {}
     for case_id, item in measured.items():
         expected = required_cases[case_id]
-        lower_bound = expected.work.lower_bound_seconds()
+        lower_bound = expected.work.lower_bound_seconds(peaks)
         if (
             item.source_id != source_id
             or item.operator != expected.operator

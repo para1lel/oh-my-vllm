@@ -19,7 +19,10 @@ Python 负责 GPU 计算. 进程间使用 ZMQ DEALER 和 msgpack.
 开发工具和推理包使用不同的依赖文件.
 
 算子工作使用[模型规格](operators/model.zh.md)和 [fusion 计划](operators/fusion.zh.md).
-在[负载模型](operators/evaluation.zh.md)下, 每个最终 serving 算子的期望 roofline efficiency 必须至少为 50%.
+算子测试不设性能门槛.
+
+每次交付前测量[算子负载](operators/evaluation.zh.md).
+然后更新两种语言的 README 表格.
 负载模型可以简单, 但 shape 必须与服务执行相近.
 每种配置还必须通过[完整 HTTP 比较](performance.zh.md#配置).
 

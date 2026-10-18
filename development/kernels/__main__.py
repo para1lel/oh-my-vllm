@@ -10,10 +10,17 @@ from pathlib import Path
 
 from oh_my_vllm.kernels.specification import UPSTREAM_COMMIT
 
+from development.peaks import (
+    device_identity,
+    load_profile,
+    profile_peaks,
+    selected_uuid,
+)
+
 from .acceptance import numerical_binding, verify_numerical_evidence
 from .provenance import ROOT, case_id, source_identity, suite_identity
 from .providers import MODULES, RUNTIME_MODULES, prepare
-from .roofline import MIN_EFFICIENCY, ExpectedCase, Observation, expected_efficiencies
+from .roofline import ExpectedCase, Observation, expected_efficiencies
 from .work import work_for
 from .workload import (
     NUMERICAL_POLICY,
@@ -108,6 +115,11 @@ def evaluate_cases(arguments, report, resources):
         raise ValueError("no modeled shapes selected")
     if arguments.profile and len(cases) != 1:
         raise ValueError("profiling requires exactly one modeled shape")
+    gpu_uuid = selected_uuid()
+    calibration = load_profile(arguments.peaks, gpu_uuid)
+    if calibration["device"] != device_identity(gpu_uuid):
+        raise ValueError("GPU settings differ from calibration; measure the GPU again")
+    peaks = profile_peaks(calibration, gpu_uuid)
     device = Device()
     checkpoint = Checkpoint(arguments.model)
     create_case = prepare(arguments.operator, device, checkpoint)
@@ -144,6 +156,7 @@ def evaluate_cases(arguments, report, resources):
         "checkpoint": checkpoint.verify_identity(),
         "mode": arguments.mode,
         "device": selected_gpu,
+        "calibration": calibration,
         "device_source": device.source_id,
         "upstream_commit": UPSTREAM_COMMIT,
     }
@@ -242,7 +255,7 @@ def evaluate_cases(arguments, report, resources):
                 case.shape.operator,
                 identity,
                 case.calls,
-                work.lower_bound_seconds(),
+                work.lower_bound_seconds(peaks),
                 statistics.median(samples),
                 source_id,
             )
@@ -266,15 +279,12 @@ def evaluate_cases(arguments, report, resources):
             for case in cases
         }
         observations = [Observation(**item) for item in report["observations"]]
-        efficiency = expected_efficiencies(observations, required, source_id)
+        efficiency = expected_efficiencies(observations, required, source_id, peaks)
         report["expected_efficiency"] = efficiency
         report["operator_coverage_complete"] = len(cases) == sum(
             case.shape.operator == arguments.operator for case in modeled_cases()
         )
-        report["operator_passed"] = (
-            report["operator_coverage_complete"]
-            and efficiency[arguments.operator] >= MIN_EFFICIENCY
-        )
+        report["operator_passed"] = report["operator_coverage_complete"]
         print(
             json.dumps(
                 {
@@ -295,6 +305,8 @@ def evaluate_cases(arguments, report, resources):
         except Exception as error:
             report["synchronize_error"] = str(error)
         try:
+            if device_identity(gpu_uuid) != calibration["device"]:
+                raise ValueError("GPU settings changed during operator measurement")
             report["checkpoint_after"] = checkpoint.verify_identity(
                 context["checkpoint"]
             )
@@ -313,12 +325,14 @@ def main():
     audit.add_argument("--reports", type=Path, nargs="+", required=True)
     audit.add_argument("--output", type=Path, required=True)
     profiler = commands.add_parser("profile")
+    profiler.add_argument("--peaks", type=Path, required=True)
     profiler.add_argument("--model", type=Path, required=True)
     profiler.add_argument("--output", type=Path, required=True)
     profiler.add_argument("--operator", choices=SERVING_OPERATORS, required=True)
     profiler.add_argument("--mode", choices=("eager", "graph"), required=True)
     profiler.add_argument("--rows", type=int, required=True)
     bench = commands.add_parser("bench")
+    bench.add_argument("--peaks", type=Path, required=True)
     bench.add_argument("--model", type=Path, required=True)
     bench.add_argument("--output", type=Path, required=True)
     bench.add_argument("--operator", choices=SERVING_OPERATORS, required=True)

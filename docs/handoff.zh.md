@@ -121,7 +121,10 @@ FA 每块使用 256 个线程合并两份或更多注意力的部分结果.
 具名容差适用于特定输出. Cache 检查和状态选择保持各自的独立要求.
 
 性能测量使用[评估流程](performance.zh.md).
-[物理上界分析](operators/upper-bounds.zh.md)给出证明要求和当前限制.
+算子测试不设最低效率要求.
+每次交付必须完成全部算子测量, 并更新两种语言的 README 表格.
+Roofline 计算要求使用选定 GPU UUID 的[实测峰值](calibration.zh.md).
+HTTP 比较保留 50% 的效率要求.
 
 Worker 提供约束解码, MTP4, 以及仅含 decode 请求的 batch 的 CUDA Graph 执行.
 模型, MTP context 和 MTP draft 使用[固定 metadata 缓冲区](../python/oh_my_vllm/worker/metadata.py#L5)<!-- source: class Metadata: -->.
@@ -140,8 +143,8 @@ worker 使用 CPU 前缀筛选与完整 token 区间比较来[检查 token 历�
 Sampler 为各路径保留[独立的 CUDA Graph](../python/oh_my_vllm/worker/sampling.py#L113)<!-- source: self.replays[self.greedy] = self.resources.enter_context( -->.
 它[在 CPU 上计算采样随机计数器](../python/oh_my_vllm/worker/sampling.py#L122)<!-- source: counters = self.inputs.random[:, 1] + (self.inputs.parameters[:, 0] > 0) -->.
 
-验收审计使用[内核目录中的原生源码](../development/kernels/acceptance.py#L117)<!-- source: source = SOURCES / f"{name}.cu" -->.
-它必须包含[贪心数值证据](../development/kernels/acceptance.py#L236)<!-- source: def verify_greedy(check): -->.
+验收审计使用[内核目录中的原生源码](../development/kernels/acceptance.py#L120)<!-- source: source = SOURCES / f"{name}.cu" -->.
+它必须包含[贪心数值证据](../development/kernels/acceptance.py#L239)<!-- source: def verify_greedy(check): -->.
 
 `copy_bytes` 现在只在目标在 CPU 上时才同步.
 `gather_rows_kernel` 在行和基地址满足 16 字节对齐时使用 16 字节向量化加载.

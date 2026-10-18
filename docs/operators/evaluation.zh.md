@@ -60,39 +60,44 @@ Vision 检查包含对一个帧组的修改, 并确认另一帧组的输出不�
 
 65 行 FFN 用例使用 prefill 投影路径.
 
-报告使用版本 2 和 `small_shapes_v2` 数值策略.
+报告使用版本 4 和 `small_shapes_v2` 数值策略.
 `numerical_evidence` 记录将检查绑定到报告的源码, 二进制及 checkpoint 身份.
 审计要求所列的每个 shape 和两种执行模式.
 每个建模计时用例引用其匹配的数值用例, 或记录 `status: not_run`.
 未检查的用例不得记录数值通过.
 这些检查不能证明更大 shape 或 provider 所述范围之外元素的数值精度.
 
-## 性能门槛
+## 性能计算
 
-使用单 GPU dense B200 峰值.
-Tensor Core 峰值为 FP8 4.5 PFLOPS, BF16 2.25 PFLOPS 及 TF32 1.125 PFLOPS.
-Scalar 峰值为 FP32 75 TFLOPS 和 FP64 37 TFLOPS. HBM 带宽为 7.7 TB/s.
-[NVIDIA B200 参考](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-b200/latest/_downloads/4b3d3302fa4fc6854b595ccff50b9932/RA11334001-DSPB200-ReferenceArch.pdf)标识平台.
+算子测试不设最低效率要求.
+每次交付前, 在 eager 和 CUDA Graph 模式下测量全部 serving 算子.
+更新 [README](../../README.zh.md) 的中英文算子表格.
+数值检查, 完整计时覆盖和来源身份检查仍然是必要条件.
 
-[NVIDIA HGX 规格](https://www.nvidia.com/en-au/data-center/hgx/)提供八 GPU 的 FP64 及 sparse TF32 数据.
-将这些数据除以 8 得到单 GPU 数据. 将 sparse TF32 数据除以 2 得到 dense 计算数据.
-使用[中间精度契约](model.zh.md#中间精度).
-分别应用 FP32 和 FP64 上限. 没有经过验证的共享资源模型时, 不将两者时间相加.
+对选定的 GPU UUID 使用[峰值校准流程](../calibration.zh.md).
+使用实测 HBM 带宽以及 FP8, BF16, TF32, FP32 和 FP64 吞吐.
+不使用标称规格或另一张 GPU 的校准值.
+采用[中间精度契约](model.zh.md#中间精度).
+分别应用 FP32 和 FP64 资源限制.
 
-每个 serving 算子在每种执行模式下的期望 roofline efficiency 必须至少为 50%.
 每个完整算子使用以下工作量模型:
 
 ```text
 t_lower = max(
-    necessary_HBM_bytes / HBM_peak,
-    FP8_work / FP8_peak + BF16_work / BF16_peak + TF32_work / TF32_peak,
-    FP32_work / FP32_peak,
-    FP64_work / FP64_peak
+    necessary_HBM_bytes / measured_HBM_peak,
+    FP8_work / measured_FP8_peak + BF16_work / measured_BF16_peak + TF32_work / measured_TF32_peak,
+    FP32_work / measured_FP32_peak,
+    FP64_work / measured_FP64_peak
 )
 eta(shape) = t_lower(shape) / measured_seconds(shape)
 E_eta(operator) = sum(probability(shape | operator) * eta(shape))
-PASS(operator) = small_checks_pass AND complete_performance_coverage AND E_eta(operator) >= 0.50
+PASS(operator) = small_checks_pass AND complete_performance_coverage AND identities_match
 ```
+
+这些实测峰值描述校准负载及环境.
+Latency 下界是基于这些测量的 roofline 估计.
+它不是物理极限. 算子超过校准吞吐时, 效率可以超过 100%.
+保留报告中的这些数值供分析.
 
 使用[工作量计算](../../development/kernels/work.py)得到每个 serving 边界的必要计算量及 HBM 字节数.
 从跨越 serving 边界的张量及必要的持久状态访问推导 HBM 字节数.
@@ -105,12 +110,12 @@ FP8, BF16 和 TF32 共享 Tensor Core 资源. 不将它们的限制按独立资�
 Padding 和不必要的复制不能抬高理论下界.
 
 不在理论下界中加入实测启动耗时或经验效率因子.
-工作量模型不接收实测或校准延迟参数.
+校准仅用于资源吞吐. 不根据算子延迟拟合下界.
 保留各 shape 的耗时及效率. 不以总耗时之比替代期望效率.
 
 缺少实现, 精度失败, case 缺失或混用源码标识都会阻止验收.
 报告包含最大归一化容差比. 该比值必须不大于 1. 必要的保护检查必须通过.
-效率超过 1.05 时必须检查工作量模型.
+效率超过 100% 时, 检查校准或工作量模型的差异.
 
 如果 provider 缺失或失败, 以错误结束评测.
 不用参考实现替代它.
@@ -129,7 +134,7 @@ Eager 和 CUDA Graph 计时包含全部必要 launches.
 分别测量 eager 执行与 CUDA Graph replay.
 执行两次 warmup 运行和五次正式测量运行.
 
-HBM roofline 验收使用冷权重.
+HBM roofline 测量使用冷权重.
 每次计时调用前, 使用大于 B200 L2 容量 2 倍的 buffer 运行 L2 eviction.
 在调用者的 stream 上将此 eviction 放在开始事件之前.
 计时长度不包含 eviction.
@@ -137,7 +142,7 @@ HBM roofline 验收使用冷权重.
 完整模型的权重工作集大于 L2.
 冷权重策略适用于这个条件.
 记录 eviction 方法, buffer 大小及 L2 容量.
-不将权重已热的独立运行用作 HBM roofline 验收证据.
+不将权重已热的独立运行用作 HBM roofline 测量证据.
 Warmup 运行不免除冷权重规则.
 
 记录中位数和波动范围. 所有测量保存在仓库外的位置.

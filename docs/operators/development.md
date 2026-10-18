@@ -56,17 +56,20 @@ scripts/with-env.sh python -m unittest development.kernels.test_contracts develo
 
 Set `MODEL_ROOT` to the checkpoint directory.
 Set `ARTIFACT_ROOT` to an external artifact directory.
+Use the [peak calibration procedure](../calibration.md) for each available GPU UUID.
+Set `PEAK_PROFILE` to the selected GPU UUID's calibration file.
+Select this UUID with `OH_MY_VLLM_GPU_UUID`.
 Measure the FFN provider:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels bench --model "$MODEL_ROOT" --operator ffn --mode graph --output "$ARTIFACT_ROOT/ffn-graph.json"
-scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels bench --model "$MODEL_ROOT" --operator ffn --mode eager --output "$ARTIFACT_ROOT/ffn-eager.json"
+scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels bench --peaks "$PEAK_PROFILE" --model "$MODEL_ROOT" --operator ffn --mode graph --output "$ARTIFACT_ROOT/ffn-graph.json"
+scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels bench --peaks "$PEAK_PROFILE" --model "$MODEL_ROOT" --operator ffn --mode eager --output "$ARTIFACT_ROOT/ffn-eager.json"
 ```
 
 Get a Systems trace and Compute counters for one shape:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels profile --model "$MODEL_ROOT" --operator ffn --rows 1 --mode graph --output "$ARTIFACT_ROOT/ffn-profile"
+scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels profile --peaks "$PEAK_PROFILE" --model "$MODEL_ROOT" --operator ffn --rows 1 --mode graph --output "$ARTIFACT_ROOT/ffn-profile"
 ```
 
 Before the command, select a profile directory path that does not exist.
@@ -87,9 +90,13 @@ scripts/with-env.sh python -m development.kernels audit --reports "$ARTIFACT_ROO
 ```
 
 The audit does checks of current sources, immutable binaries, checkpoint identities, cold weights, the small numerical cases, and all modeled timing shapes.
-Version 2 reports keep numerical evidence separate from timing coverage.
+Version 4 reports keep numerical evidence separate from timing coverage.
 Large timing cases record numerical status `not_run`. This status does not remove a shape from performance coverage.
 Old reports do not qualify after a source change.
+
+The audit has no minimum operator efficiency requirement.
+Before each delivery, do all measurements again.
+Then update the two README operator tables.
 
 Do not use CPU FP64 references for large cases. Use large cases only for timing or profiling.
 

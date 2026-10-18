@@ -33,7 +33,9 @@ Before you add a test, tell the maintainer why it is necessary.
 Tell the maintainer why the other tests are not sufficient.
 Agents do the applicable tests in the repository for the maintainer.
 
-Do not commit test reports, logs, result tables, or pass/fail histories.
+Keep test reports and logs external to the repository.
+Update the required performance tables in the two README files before each delivery.
+Do not add other result tables or pass/fail histories.
 
 ## Delivery
 

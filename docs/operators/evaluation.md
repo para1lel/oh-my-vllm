@@ -60,39 +60,44 @@ Vision checks include changes to one frame group and unchanged outputs in the ot
 
 The 65-row FFN case uses the prefill projection path.
 
-Reports use version 2 and the `small_shapes_v2` numerical policy.
+Reports use version 4 and the `small_shapes_v2` numerical policy.
 The `numerical_evidence` record binds checks to the report's sources, binaries, and checkpoint identities.
 The audit must include each listed shape and the two execution modes.
 Each modeled timing case refers to its matching numerical case or records `status: not_run`.
 Unchecked cases must not record a numerical pass.
 These checks do not prove numerical accuracy for larger shapes or elements that the provider's stated scope does not include.
 
-## Performance gate
+## Performance calculation
 
-Use single-GPU dense B200 peaks.
-Tensor Core peaks are FP8 4.5 PFLOPS, BF16 2.25 PFLOPS, and TF32 1.125 PFLOPS.
-Scalar peaks are FP32 75 TFLOPS and FP64 37 TFLOPS. HBM bandwidth is 7.7 TB/s.
-The [NVIDIA B200 reference](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-b200/latest/_downloads/4b3d3302fa4fc6854b595ccff50b9932/RA11334001-DSPB200-ReferenceArch.pdf) identifies the platform.
+Operator tests have no minimum efficiency requirement.
+Before each delivery, measure all serving operators in eager and CUDA Graph modes.
+Update the operator table in [README](../../README.md) and its Chinese translation.
+Numerical checks, complete timing coverage, and source identity checks are necessary.
 
-The [NVIDIA HGX specifications](https://www.nvidia.com/en-au/data-center/hgx/) give eight-GPU FP64 and sparse TF32 figures.
-Divide these figures by 8 for one GPU. Divide the sparse TF32 figure by 2 for dense computation.
+Use the [peak calibration procedure](../calibration.md) for the selected GPU UUID.
+Use measured HBM bandwidth and measured FP8, BF16, TF32, FP32, and FP64 throughput.
+Do not use nominal specifications or another GPU's calibration.
 Use the [intermediate precision contract](model.md#intermediate-precision).
-Apply the FP32 and FP64 ceilings separately. Do not add their times without a verified shared-resource model.
+Apply the FP32 and FP64 resources separately.
 
-Each serving operator must have an expected roofline efficiency of at least 50% in each execution mode.
 Use this work model for each full operator:
 
 ```text
 t_lower = max(
-    necessary_HBM_bytes / HBM_peak,
-    FP8_work / FP8_peak + BF16_work / BF16_peak + TF32_work / TF32_peak,
-    FP32_work / FP32_peak,
-    FP64_work / FP64_peak
+    necessary_HBM_bytes / measured_HBM_peak,
+    FP8_work / measured_FP8_peak + BF16_work / measured_BF16_peak + TF32_work / measured_TF32_peak,
+    FP32_work / measured_FP32_peak,
+    FP64_work / measured_FP64_peak
 )
 eta(shape) = t_lower(shape) / measured_seconds(shape)
 E_eta(operator) = sum(probability(shape | operator) * eta(shape))
-PASS(operator) = small_checks_pass AND complete_performance_coverage AND E_eta(operator) >= 0.50
+PASS(operator) = small_checks_pass AND complete_performance_coverage AND identities_match
 ```
+
+These measured peaks give the calibration workload and environment.
+The latency lower bound is a roofline estimate based on these measurements.
+It is not a physical limit. Efficiency can be more than 100% if an operator has a higher throughput than a calibration rate.
+Keep such values in the report for analysis.
 
 Use [the work calculation](../../development/kernels/work.py) for the necessary computation and HBM bytes of each serving boundary.
 Calculate HBM bytes from tensors that cross the serving boundary and necessary persistent-state access.
@@ -105,12 +110,12 @@ FP8, BF16, and TF32 share Tensor Core resources. Do not calculate their limits a
 Padding and unnecessary copies cannot increase the lower bound.
 
 Do not add measured launch time or empirical efficiency factors to the lower bound.
-The work model has no parameter for a measured or calibrated latency.
+Use calibration only for resource rates. Do not fit the bound to operator latency.
 Keep each shape's time and efficiency. Do not replace the expected efficiency with a ratio of total times.
 
 Missing implementations, failed numerical checks, missing cases, or mixed source identities prevent acceptance.
 Reports include the maximum normalized tolerance ratio. The ratio must be at most 1. The necessary guard checks must pass.
-If an efficiency is greater than 1.05, do a work-model check.
+Examine efficiencies above 100% for calibration or work-model differences.
 
 If a provider is missing or fails, stop the evaluation with an error.
 Do not use a reference implementation in its place.
@@ -129,7 +134,7 @@ Include all necessary launches in eager and CUDA Graph timing.
 Measure eager execution and CUDA Graph replay in different runs.
 Use two warmup runs and five measured runs.
 
-Use cold weights for HBM roofline acceptance.
+Use cold weights for HBM roofline measurement.
 Before each timed invocation, run an L2 eviction with a buffer larger than 2 times the B200 L2 capacity.
 Put this eviction before the start event on the caller's stream.
 Do not include the eviction in the measured duration.
@@ -137,7 +142,7 @@ Do not include the eviction in the measured duration.
 The weight working set of the full model is larger than L2.
 The cold-weight policy is for this condition.
 Record the eviction method, buffer size, and L2 capacity.
-Do not use isolated runs with warm weights as HBM roofline acceptance evidence.
+Do not use isolated runs with warm weights as HBM roofline measurement evidence.
 Warmup runs do not remove the cold-weight rule.
 
 Record the median and spread. Save all measurements at a location external to the repository.

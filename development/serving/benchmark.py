@@ -15,9 +15,16 @@ from pathlib import Path
 from oh_my_vllm.kernels.native import cache_directory, file_sha256
 from oh_my_vllm.worker.tokenizer import Tokenization, tokenizer_identity
 
-from development.kernels.roofline import MIN_EFFICIENCY
+from development.peaks import (
+    device_identity,
+    load_profile,
+    profile_peaks,
+    selected_uuid,
+)
 
 from .roofline import lower_bound
+
+MIN_EFFICIENCY = 0.50
 
 ROOT = Path(__file__).resolve().parents[2]
 NATIVE_MODULES = ("device", "ffn", "fa", "gdn", "mtp", "sample", "vision")
@@ -64,8 +71,6 @@ def gate_result(configuration, seconds, roofline_seconds):
     ):
         raise ValueError("measurement and roofline times must be finite and positive")
     efficiency = roofline_seconds / seconds
-    if efficiency > 1.05:
-        raise ValueError("lower bound exceeds measurement; examine the work model")
     applicable = configuration in CONFIGURATIONS
     return {
         "limit_seconds": roofline_seconds / MIN_EFFICIENCY,
@@ -92,7 +97,7 @@ def comparison_passed(results):
     )
 
 
-def trace_bound(events, request_ids, mode, length, output):
+def trace_bound(events, request_ids, mode, length, output, peaks):
     identities = [event for event in events if event["operation"] == "identity"]
     if len(identities) != 1 or identities[0]["config"]["num_speculative_tokens"] != (
         4 if mode == "mtp4" else 0
@@ -105,7 +110,7 @@ def trace_bound(events, request_ids, mode, length, output):
             if row["id"] in request_ids
         ):
             raise ValueError("trace prompt length differs from HTTP usage")
-    return lower_bound(events, request_ids, output)
+    return lower_bound(events, request_ids, output, peaks=peaks)
 
 
 def post(port, body):
@@ -148,6 +153,9 @@ def source_identity():
                 "development/kernels/work.py",
                 "development/kernels/roofline.py",
                 "development/kernels/workload.py",
+                "development/peaks.py",
+                "development/peak_measurement.py",
+                "development/peak_kernels.cu",
             }
         ):
             digest.update(name.encode())
@@ -195,10 +203,13 @@ def artifact_identity(arguments):
         "native": native_identity(),
         "checkpoint": checkpoint_identity(arguments.model),
         "tokenizer": tokenizer_identity(arguments.model),
+        "calibration": load_profile(arguments.peaks, arguments.gpu_uuid),
     }
 
 
 def verify_artifact_identity(arguments, expected):
+    if device_identity(arguments.gpu_uuid) != expected["calibration"]["device"]:
+        raise RuntimeError("GPU settings changed during the benchmark")
     for name, value in artifact_identity(arguments).items():
         if value != expected[name]:
             raise RuntimeError(f"{name} artifacts changed during the benchmark")
@@ -373,7 +384,9 @@ class Service:
         if len(ids) != batch:
             raise ValueError("HTTP responses must have distinct request IDs")
         events = [json.loads(line) for line in self.trace.read_text().splitlines()]
-        bound = trace_bound(events, ids, self.mode, length, output)
+        bound = trace_bound(
+            events, ids, self.mode, length, output, self.arguments.peak_rates
+        )
         return {
             "mode": self.mode,
             "batch": batch,
@@ -390,6 +403,7 @@ class Service:
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--peaks", type=Path, required=True)
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--artifacts", type=Path, required=True)
     parser.add_argument(
@@ -406,6 +420,11 @@ def main():
     parser.add_argument("--blocks", type=int, default=1024)
     parser.add_argument("--mamba-blocks", type=int, default=1024)
     arguments = parser.parse_args()
+    arguments.gpu_uuid = selected_uuid()
+    calibration = load_profile(arguments.peaks, arguments.gpu_uuid)
+    if calibration["device"] != device_identity(arguments.gpu_uuid):
+        parser.error("GPU settings differ from calibration; measure the GPU again")
+    arguments.peak_rates = profile_peaks(calibration, arguments.gpu_uuid)
     arguments.artifacts = arguments.artifacts.resolve()
     arguments.binary = arguments.binary.resolve()
     arguments.model = arguments.model.resolve()
@@ -423,13 +442,19 @@ def main():
         "device": subprocess.check_output(
             [
                 "nvidia-smi",
+                "--id",
+                arguments.gpu_uuid,
                 "--query-gpu=uuid,name,driver_version,clocks.sm,clocks.mem,power.limit",
                 "--format=csv,noheader",
             ],
             text=True,
         ),
         "config": {
-            key: str(value) if isinstance(value, Path) else value
+            key: str(value)
+            if isinstance(value, Path)
+            else vars(value)
+            if key == "peak_rates"
+            else value
             for key, value in vars(arguments).items()
         },
     }

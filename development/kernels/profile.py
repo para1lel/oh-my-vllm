@@ -87,6 +87,8 @@ def profile(arguments):
         "-m",
         "development.kernels",
         "bench",
+        "--peaks",
+        str(arguments.peaks),
         "--model",
         str(arguments.model),
         "--operator",

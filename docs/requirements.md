@@ -19,7 +19,10 @@ Do not add vLLM dependencies, environments, or caches.
 Use different dependency files for development tools and inference packages.
 
 Use the [model specification](operators/model.md) and [fusion plan](operators/fusion.md) for operator work.
-Each final serving operator must have an expected roofline efficiency of at least 50% with the [workload model](operators/evaluation.md).
+Operator tests have no performance gate.
+
+Before each delivery, measure the [operator workload](operators/evaluation.md).
+Then update the two README tables.
 The workload model can be simple. It must have shapes similar to service execution.
 Each configuration must also pass the [full HTTP comparison](performance.md#configurations).
 

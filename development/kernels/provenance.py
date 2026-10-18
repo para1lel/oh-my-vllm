@@ -32,6 +32,10 @@ def case_id(shape):
 
 def python_sources(modules):
     files = {ROOT / "development/kernels" / f"{name}.py" for name in SHARED}
+    files.update(
+        ROOT / "development" / name
+        for name in ("peaks.py", "peak_measurement.py", "peak_kernels.cu")
+    )
     for name in modules:
         files.update(
             (

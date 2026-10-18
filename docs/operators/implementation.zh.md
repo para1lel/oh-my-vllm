@@ -37,7 +37,7 @@ benchmark 包含每个 serving 边界中的全部 launch.
    每份报告绑定全部原生二进制和 checkpoint shard.
    分别在 eager 与 graph 模式的不同运行中测量全部建模 case.
    数值检查后采集 profile. 优化测出的瓶颈.
-   每个 serving 算子均使用[性能门槛](evaluation.zh.md#性能门槛).
+   使用[性能计算](evaluation.zh.md#性能计算)测量每个 serving 算子.
 
 ## 交付
 
