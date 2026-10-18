@@ -7,26 +7,35 @@
 ## 配置
 
 每个 batch 以并发 HTTP 请求开始.
-输入长度适用于每条请求. 每条请求必须生成 8192 个 tokens.
+输入和输出长度适用于每条请求.
 
-| 模式 | Batch 大小 | 每条请求的输入 tokens |
-|---|---|---|
-| 普通 decode | 1, 2, 4 | 32768 |
-| MTP4 | 1, 2, 4 | 32768, 65536, 131072 |
+| 模式 | Batch 大小 | 每条请求的输入 tokens | 每条请求的输出 tokens |
+|---|---|---|---|
+| 普通 decode | 1, 2, 4 | 32768 | 64, 8192 |
+| MTP4 | 1, 2, 4 | 32768, 65536, 131072 | 64, 8192 |
 
-共 12 种配置. 每种配置必须单独通过.
+共 24 种配置. 每种配置必须单独通过.
+64-token 输出使测量对 prefill 时间敏感.
+保留 8192-token 输出, 用于长 decode 测量.
+
 此比较使用 32768 的 token 预算和最多 4 条运行中请求.
 使用没有缓存前缀的请求.
-计时前加载模型并完成初始化.
+计时前加载模型.
+计时前完成初始化.
 
-从 HTTP 提交开始测量, 直到客户端收到该 batch 的全部输出.
-包含请求准备, 排队, prefill, decode, 约束, 采样, 进程通信和输出传输.
+在客户端创建请求线程之前开始计时.
+在客户端读取并解析全部 JSON 响应且请求线程停止之后结束计时.
+包含客户端提交, 服务端请求准备, 排队, prefill, decode, 约束, 采样, 进程通信和输出传输.
+计时前构造精确长度的 prompt 文本.
+计时不包含模型加载, 初始化和 trace 分析.
 不能用首个 token 的时间代替完整延迟.
 
 ## 性能限制
 
-实测 batch 延迟不得超过其记录的执行 trace 对应 roofline 时间的 `5 / 3` 倍.
+每种配置的 roofline efficiency 必须至少为 50%.
+实测 batch 延迟不得超过其记录的执行 trace 对应 roofline 时间的 2 倍.
 使用 [B200 峰值和精度规则](operators/evaluation.zh.md#性能门槛).
+
 计算每个 serving 算子的必要工作量, 包括 MTP context, proposals, 验证和接受.
 注意力计算使用完整序列长度.
 保留实测 MTP 接受数量. 不假定固定接受率.
@@ -52,6 +61,8 @@
 
 使用算子测量和完整 HTTP 测量来选择改动.
 使用[算子负载](operators/evaluation.zh.md)进行算子验收.
+[物理上界分析](operators/upper-bounds.zh.md)定义独立的算子证明条件.
+这些条件不改变 HTTP 门槛.
 
 ## 测量命令
 
@@ -70,9 +81,14 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark 
 默认 cache 容量为 1024 个 FA block 和 1024 个 GDN slot.
 使用 `--blocks` 和 `--mamba-blocks` 修改这些容量.
 
-使用 `--case ordinary:1:32768` 选择一个配置.
+使用 `--case ordinary:1:32768` 选择其两个输出长度.
+使用 `--case ordinary:1:32768:64` 选择一个配置.
+使用 `--output-tokens 64` 进行对 prefill 时间敏感的测量.
 使用 `--output-tokens 32` 进行短运行.
-短运行或不完整的配置集合不能通过完整门槛.
+
+不完整的配置集合或其他输出长度不能通过完整门槛.
+配置重复, 配置缺失或任一配置失败都会阻止完整验收.
+命令拒绝重复选择, 也拒绝与所选输出长度不匹配的 case.
 
 设置 `OH_MY_VLLM_EXECUTION_TRACE` 后, Worker 写入执行轨迹.
 轨迹路径必须位于仓库外, 且运行前不得已存在.
@@ -101,6 +117,9 @@ Tensor-core 时间按各自峰值累加 FP8, BF16 和 TF32 工作量.
 全局资源估计用于分析, 不用于设置门槛.
 
 仓库外的产物包含响应, usage, 执行 shape, MTP 计数, 下界分项及源码标识.
-测量期间源码改变会阻止验收.
+[产物检查](../development/serving/benchmark.py#L201)<!-- source: def verify_artifact_identity(arguments, expected): -->在源码, 可执行文件, 原生构建或 checkpoint 标识改变时阻止验收.
+
 轨迹必须完整覆盖 prefill, 已接受位置必须连续, 输出数量必须与 HTTP usage 一致.
+其唯一的 identity 记录必须匹配服务模式. 其 prompt 长度必须与 HTTP usage 一致.
+每个 HTTP 响应必须标识被测 batch 中不同的请求.
 同一工作计算多次或已接受的位置减少会阻止验收.

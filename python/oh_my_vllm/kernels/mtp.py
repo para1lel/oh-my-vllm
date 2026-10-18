@@ -1,10 +1,11 @@
 import hashlib
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from .fa import FA
 from .native import load
 
-FUNCTIONS = ("mtp_input", "mtp_endpoints")
+FUNCTIONS = ("mtp_input", "mtp_endpoints", "mtp_context")
 
 
 def identity(operations):
@@ -92,8 +93,155 @@ class MTPContext:
         )
         self.source_id, self.libraries = identity((self.input, self.attention))
         self.library = self.libraries[0]
+        self._context_module = self.input.module
+        self._context_source = self.input.source_id
+        self._attention_module = self.attention.module
+        self._attention_source = self.attention.source_id
+        self._input_buffers, self._fa_buffers = (
+            self.input.buffers,
+            self.attention.buffers,
+        )
+        self._input_weights, self._attention_weights = input_weights, attention_weights
+        self._context_function = self.input.module.mtp_context
+        self.kv_partials = None
+        owner = getattr(allocate, "__self__", None)
+        view = getattr(owner, "view", None)
+        if (
+            (rows, batch) in {(4, 1), (16, 4)}
+            and self.attention.max_queries == 4
+            and type(self.input) is MTPInput
+            and type(self.attention) is FA
+            and self._context_format(rows)
+            and callable(view)
+        ):
+            self.kv_partials = view(self.attention.buffers[7], (8, rows, 5120))
+
+    def _context_format(self, rows):
+        layout = (
+            ((rows, 5120), "bfloat16"),
+            ((rows, 5120), "bfloat16"),
+            ((rows, 5120), "float8_e4m3fn"),
+            ((rows, 40), "float32"),
+            ((rows, 2048), "bfloat16"),
+            ((rows, 24, 256), "bfloat16"),
+            ((rows, 24, 256), "bfloat16"),
+            ((rows, 24, 64, 256), "float32"),
+            ((rows, 24, 64), "float32"),
+            ((rows, 6144), "float8_e4m3fn"),
+            ((rows, 48), "float32"),
+            ((8, rows, 5120) if rows <= 8 else (1,), "float32"),
+        )
+        try:
+            return len(self.attention.buffers) == len(layout) and all(
+                tuple(tensor.shape) == shape and str(tensor.dtype) == dtype
+                for tensor, (shape, dtype) in zip(
+                    self.attention.buffers, layout, strict=True
+                )
+            )
+        except (AttributeError, TypeError):
+            return False
+
+    def _context_eligible(self, input_arguments, attention_arguments):
+        if (
+            self.kv_partials is None
+            or type(self.input) is not MTPInput
+            or type(self.attention) is not FA
+            or self.input.module is not self._context_module
+            or self.input.source_id != self._context_source
+            or self.attention.module is not self._attention_module
+            or self.attention.source_id != self._attention_source
+            or self.input.buffers is not self._input_buffers
+            or self.attention.buffers is not self._fa_buffers
+            or self.input.weights is not self._input_weights
+            or self.attention.weights is not self._attention_weights
+            or self.attention.variant != 1
+            or self.attention.first_token != 1
+            or self.attention.max_queries != 4
+            or not isinstance(input_arguments, (tuple, list))
+            or len(input_arguments) not in (5, 6, 7)
+            or not isinstance(attention_arguments, (tuple, list))
+            or len(attention_arguments) != 6
+        ):
+            return False
+        if len(input_arguments) > 5 and input_arguments[5] is not None:
+            return False
+        if len(input_arguments) > 6 and input_arguments[6] is not None:
+            return False
+        try:
+            tokens, sequence_rows = input_arguments[1], attention_arguments[4]
+            if len(tokens.shape) != 1 or len(sequence_rows.shape) != 1:
+                return False
+            rows, batch = tokens.shape[0], sequence_rows.shape[0] - 1
+            return (
+                (rows, batch) in {(4, 1), (16, 4)}
+                and rows == self.input.buffers[1].shape[0]
+                and rows == self.attention.buffers[1].shape[0]
+                and batch == self.endpoints[0].shape[0]
+            )
+        except (AttributeError, IndexError, TypeError):
+            return False
+
+    @contextmanager
+    def graph_lease(self):
+        owners = (
+            self.input.module,
+            self.attention.module,
+            self.input.weights,
+            self.attention.weights,
+            self.input.buffers,
+            self.input.partials,
+            self.attention.buffers,
+            self.kv_partials,
+            self.endpoints,
+        )
+        try:
+            yield
+        finally:
+            del owners
 
     def __call__(self, input_arguments, attention_arguments):
+        if self._context_eligible(input_arguments, attention_arguments):
+            hidden, tokens, hidden_rows, boundary, boundary_rows = input_arguments[:5]
+            positions, cache, slots, tables, sequences, lengths = attention_arguments
+            weight, fa = self.input.weights, self.attention.weights
+            packed, value, zero = self.input.buffers
+            _, summed, quantized, scales, kv_packed = self.attention.buffers[:5]
+            if self._context_function(
+                hidden,
+                tokens,
+                weight.embedding,
+                weight.hidden_norm,
+                weight.embedding_norm,
+                weight.projection,
+                hidden_rows,
+                boundary,
+                boundary_rows,
+                self.input.empty_media,
+                hidden_rows,
+                False,
+                fa.norm,
+                fa.projection,
+                fa.projection_scale,
+                fa.key_norm,
+                positions,
+                cache,
+                slots,
+                tables,
+                sequences,
+                lengths,
+                packed,
+                value,
+                zero,
+                self.input.partials,
+                summed,
+                quantized,
+                scales,
+                kv_packed,
+                self.kv_partials,
+                self.endpoints[0],
+                self.endpoints[1],
+            ):
+                return self.endpoints
         value, zero = self.input(*input_arguments)
         self.attention(value, zero, *attention_arguments)
         self.input.module.mtp_endpoints(

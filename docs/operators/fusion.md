@@ -28,7 +28,7 @@ The first MTP draft uses `query_only`. The other 3 drafts use `full`.
 The first draft uses the context endpoint that is already available.
 
 Native providers supply these boundaries. Full workload acceptance is necessary.
-The implementation plan gives no evidence of the 60% performance gate.
+Use the [evaluation procedure](evaluation.md) for performance acceptance.
 
 ## Internal language stages
 

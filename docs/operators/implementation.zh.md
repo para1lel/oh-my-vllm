@@ -37,11 +37,12 @@ benchmark 包含每个 serving 边界中的全部 launch.
    每份报告绑定全部原生二进制和 checkpoint shard.
    分别在 eager 与 graph 模式的不同运行中测量全部建模 case.
    数值检查后采集 profile. 优化测出的瓶颈.
-   每个 serving 算子都必须覆盖完整且期望 roofline efficiency 至少达到 60%.
+   每个 serving 算子均使用[性能门槛](evaluation.zh.md#性能门槛).
 
 ## 交付
 
 仅使用少量行为检查. 添加新检查前说明其必要性.
 明确数值抽样范围. 不宣称未经检查的元素具备精度证据.
 provider 缺失或检查失败时不得验收.
-取得独立审查. 修正问题, 更新交接, 提交并推送每个里程碑.
+
+取得独立审查. 修正问题. 更新交接. 提交变更. 推送每个里程碑.

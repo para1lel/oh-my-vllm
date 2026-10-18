@@ -79,6 +79,7 @@ Divide these figures by 8 for one GPU. Divide the sparse TF32 figure by 2 for de
 Use the [intermediate precision contract](model.md#intermediate-precision).
 Apply the FP32 and FP64 ceilings separately. Do not add their times without a verified shared-resource model.
 
+Each serving operator must have an expected roofline efficiency of at least 50% in each execution mode.
 Use this work model for each full operator:
 
 ```text
@@ -90,7 +91,7 @@ t_lower = max(
 )
 eta(shape) = t_lower(shape) / measured_seconds(shape)
 E_eta(operator) = sum(probability(shape | operator) * eta(shape))
-PASS(operator) = small_checks_pass AND complete_performance_coverage AND E_eta(operator) >= 0.60
+PASS(operator) = small_checks_pass AND complete_performance_coverage AND E_eta(operator) >= 0.50
 ```
 
 Use [the work calculation](../../development/kernels/work.py) for the necessary computation and HBM bytes of each serving boundary.

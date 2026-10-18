@@ -10,18 +10,35 @@ from ..kernels.specification import MODEL
 
 class Checkpoint:
     def __init__(self, path):
-        self.path = Path(path)
+        self.path = Path(path).resolve()
         config = (self.path / "config.json").read_bytes()
         if hashlib.sha256(config).hexdigest() != MODEL["config_sha256"]:
             raise ValueError("checkpoint configuration differs from the model contract")
         self.identity = {"config": MODEL["config_sha256"]}
-        self.identity["index"] = hashlib.sha256(
-            (self.path / "model.safetensors.index.json").read_bytes()
-        ).hexdigest()
-        self.index = json.loads(
-            (self.path / "model.safetensors.index.json").read_text()
-        )["weight_map"]
+        index = (self.path / "model.safetensors.index.json").read_bytes()
+        self.identity["index"] = hashlib.sha256(index).hexdigest()
+        self.index = json.loads(index)["weight_map"]
         self.headers = {}
+
+    def stream_identity(self):
+        loaded = dict(self.identity)
+        names = {"config": "config.json", "index": "model.safetensors.index.json"}
+        observed = {}
+        for name in loaded:
+            with (self.path / names.get(name, name)).open("rb") as source:
+                observed[name] = hashlib.file_digest(source, "sha256").hexdigest()
+        if self.identity != loaded:
+            raise ValueError("loaded checkpoint set changed during verification")
+        return observed
+
+    def verify_identity(self, expected=None):
+        expected = dict(self.identity) if expected is None else expected
+        if self.identity != expected:
+            raise ValueError("loaded checkpoint set or identity changed")
+        observed = self.stream_identity()
+        if observed != expected:
+            raise ValueError("checkpoint file bytes changed after loading")
+        return observed
 
     def header(self, name):
         if name in self.headers:

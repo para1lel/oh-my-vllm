@@ -142,6 +142,7 @@ class Model:
                 for index, (row, request) in enumerate(
                     zip(batch.scheduled, batch.requests, strict=True)
                 )
+                if request.media
                 for offset in range(len(row["token_ids"]))
             ]
         )

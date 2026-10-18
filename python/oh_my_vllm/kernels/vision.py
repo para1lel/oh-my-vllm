@@ -1,4 +1,6 @@
+from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import partial
 
 from .native import load
 
@@ -10,6 +12,7 @@ FUNCTIONS = (
     "vision_classic_close",
     "vision_classic_images",
     "vision_classic_state",
+    "vision_classic_graph_lease",
 )
 
 
@@ -85,6 +88,26 @@ class VisionBlock:
     def _prepare_classic(self, allocate):
         workspace = allocate((32 * 1024 * 1024,), "uint8")
         self.classic = self.module.vision_classic_prepare(workspace)
+
+    @contextmanager
+    def graph_lease(self):
+        if self.closed:
+            raise RuntimeError("VisionBlock is closed")
+        module = self.module
+        lease = (
+            module.vision_classic_graph_lease(self.classic)
+            if self.classic is not None
+            else None
+        )
+        try:
+            yield
+        finally:
+            del lease
+
+    def graph(self, graph_factory, value):
+        operation = partial(self, value)
+        operation.graph_lease = self.graph_lease
+        return graph_factory(operation)
 
     def close(self):
         if not self.closed:

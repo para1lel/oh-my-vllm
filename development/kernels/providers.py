@@ -1,5 +1,7 @@
 from dataclasses import replace
 
+from oh_my_vllm.kernels.mtp import FUNCTIONS as MTP_FUNCTIONS
+from oh_my_vllm.kernels.vision import FUNCTIONS as VISION_FUNCTIONS
 from oh_my_vllm.worker.device import FUNCTIONS as DEVICE_FUNCTIONS
 
 MODULES = {
@@ -7,17 +9,9 @@ MODULES = {
     "ffn": ("ffn",),
     "fa": ("fa",),
     "gdn": ("gdn",),
-    "mtp": ("mtp_input", "mtp_endpoints"),
+    "mtp": MTP_FUNCTIONS,
     "sample": ("sample_workspace", "sample", "mtp_accept"),
-    "vision": (
-        "vision_patch",
-        "vision_block",
-        "vision_merge",
-        "vision_classic_prepare",
-        "vision_classic_close",
-        "vision_classic_images",
-        "vision_classic_state",
-    ),
+    "vision": VISION_FUNCTIONS,
 }
 
 RUNTIME_MODULES = {

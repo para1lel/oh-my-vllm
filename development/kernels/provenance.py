@@ -43,6 +43,10 @@ def python_sources(modules):
         ROOT / "python/oh_my_vllm/kernels" / f"{name}.py"
         for name in ("native", "specification")
     )
+    files.update(
+        ROOT / "python/oh_my_vllm/worker" / f"{name}.py"
+        for name in ("checkpoint", "device")
+    )
     return files
 
 

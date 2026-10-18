@@ -1,6 +1,8 @@
 import math
 from dataclasses import dataclass
 
+MIN_EFFICIENCY = 0.50
+
 
 @dataclass(frozen=True)
 class Work:

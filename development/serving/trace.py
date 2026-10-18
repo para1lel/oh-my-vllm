@@ -73,14 +73,27 @@ class RequestTrace:
 
 
 def validate(events, request_ids, expected_tokens):
-    mtp = any(
-        event["operation"] == "identity" and event["config"]["num_speculative_tokens"]
-        for event in events
-    )
+    identities = [event for event in events if event["operation"] == "identity"]
+    if len(identities) != 1 or identities[0]["config"][
+        "num_speculative_tokens"
+    ] not in (
+        0,
+        4,
+    ):
+        raise ValueError("trace requires one ordinary or MTP4 identity")
+    mtp = bool(identities[0]["config"]["num_speculative_tokens"])
     states = {request: RequestTrace(expected_tokens) for request in request_ids}
     for event in events:
         operation = event["operation"]
-        for row in event.get("requests", []):
+        if operation not in {"identity", "target", "context", "draft", "commit"}:
+            raise ValueError(f"unsupported trace operation: {operation}")
+        if operation in {"context", "draft"} and not mtp:
+            raise ValueError("ordinary trace cannot contain speculative operations")
+        rows = event.get("requests", [])
+        row_ids = [row["id"] for row in rows]
+        if len(set(row_ids)) != len(row_ids):
+            raise ValueError("trace event repeats a request ID")
+        for row in rows:
             if row["id"] not in states:
                 continue
             state = states[row["id"]]

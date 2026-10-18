@@ -98,6 +98,7 @@ __global__ void paired_up_kernel(const __nv_fp8_e4m3 *input, const float *input_
     wait_barrier(barriers[1 + slot], (tile / 3) & 1);
     cutlass::arch::fence_view_async_shared();
     if (warp == 0) {
+      asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
 #pragma unroll
       for (int sub = 0; sub < 2; ++sub)
 #pragma unroll
@@ -117,6 +118,7 @@ __global__ void paired_up_kernel(const __nv_fp8_e4m3 *input, const float *input_
       cutlass::arch::umma_arrive(barriers);
     }
     wait_barrier(*barriers, tile & 1);
+    asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
 #pragma unroll
     for (int sub = 0; sub < 2; ++sub)
 #pragma unroll
@@ -137,6 +139,7 @@ __global__ void paired_up_kernel(const __nv_fp8_e4m3 *input, const float *input_
               fmaf(__uint_as_float(values[row]), factors[sub][side][row], accumulated[side][row]);
       }
     cutlass::arch::fence_view_async_tmem_load();
+    asm volatile("tcgen05.fence::before_thread_sync;" ::: "memory");
     __syncthreads();
   }
   float products[Rows];

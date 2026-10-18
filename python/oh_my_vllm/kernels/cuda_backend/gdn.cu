@@ -1,7 +1,9 @@
 #include "gdn_kernels.cuh"
+#include "gdn_value_pair.cuh"
 #include "gdn_input.cuh"
-#include "projection_decode.cuh"
+#include "projection_decode_16dp.cuh"
 #include "groupwise.cuh"
+#include "projection_prefill.cuh"
 #include "linear.cuh"
 #include "normalization.cuh"
 
@@ -27,7 +29,8 @@ inline void gdn_projection(const __nv_fp8_e4m3 *input, const __nv_fp8_e4m3 *weig
     groupwise<128, 32, 256, 128, 1, true>(weight, input, weight_scale, input_scale, output, columns,
                                           rows, width, stream);
   else
-    groupwise(input, weight, input_scale, weight_scale, output, rows, columns, width, stream);
+    prefill_projection::launch(input, weight, input_scale, weight_scale, output, rows, columns,
+                               width, stream);
 }
 
 void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_weight,
@@ -39,7 +42,7 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
          TensorView summed, TensorView gathered, TensorView normalized, TensorView input_data,
          TensorView input_scales, TensorView qkvz, TensorView ba, TensorView qkv,
          TensorView output_data, TensorView output_scales, TensorView recurrent,
-         TensorView projection_partials, TensorView gates) {
+         TensorView projection_partials, TensorView gates, int max_queries) {
   TVM_FFI_ICHECK(x.ndim() == 2 && x.size(1) == 5120 && x.size(0) >= 0 && x.size(0) <= 32768);
   TVM_FFI_ICHECK(reads.ndim() == 1 && reads.size(0) > 0 && reads.size(0) <= 32768);
   TVM_FFI_ICHECK(state.ndim() == 4 && state.size(0) > 0 && state.size(0) <= 65536);
@@ -48,6 +51,7 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
   TVM_FFI_ICHECK(media.ndim() == 2 && media.size(0) >= 0 && media.size(0) <= x.size(0));
   TVM_FFI_ICHECK(first_layer || media.size(0) == 0);
   int rows = x.size(0), batch = reads.size(0), slots = state.size(0);
+  TVM_FFI_ICHECK(max_queries >= 0 && max_queries <= rows && (rows == 0 || max_queries > 0));
   for (auto tensor : {x, residual, output, summed, gathered, normalized})
     tensor_contract(tensor, x, kDLBfloat, 16, {rows, 5120});
   tensor_contract(norm, x, kDLFloat, 32, {5120});
@@ -76,7 +80,8 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
   tensor_contract(qkv, x, kDLBfloat, 16, {rows, 10240});
   tensor_contract(output_data, x, kDLFloat8_e4m3fn, 8, {rows, 6144});
   tensor_contract(output_scales, x, kDLFloat, 32, {rows, 48});
-  bool split_values = (!verify && rows > 32) || (verify && batch == 1 && rows == 5);
+  bool split_values = (!verify && rows > 32) ||
+                      (verify && ((batch == 1 && rows == 5) || (batch == 4 && rows == 20)));
   tensor_contract(recurrent, x, kDLBfloat, 16, {split_values ? rows : 0, 6144});
   bool precomputed_gates = !verify && rows > 32;
   tensor_contract(gates, x, kDLFloat, 32, {precomputed_gates ? rows : 0, 96});
@@ -160,13 +165,13 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
     constexpr int Rows = decltype(count)::value;
     if constexpr (Rows == 1) {
       if (verify) {
-        gdn_input_launch<Rows, true>(input_data, input_scales, qkvz_weight, qkvz_scale, qkvz,
-                                     convolution, stream);
+        gdn_input_launch<Rows, true, true, true>(input_data, input_scales, qkvz_weight, qkvz_scale,
+                                                 qkvz, convolution, stream);
         return;
       }
     }
-    gdn_input_launch<Rows, false>(input_data, input_scales, qkvz_weight, qkvz_scale, qkvz,
-                                  convolution, stream);
+    gdn_input_launch<Rows, false, true, true>(input_data, input_scales, qkvz_weight, qkvz_scale,
+                                              qkvz, convolution, stream);
   };
   if (rows == 1)
     project_input(std::integral_constant<int, 1>{});
@@ -214,14 +219,14 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
                   auto staged) {
     constexpr int ValueTile = decltype(value_tile)::value;
     constexpr int Threads = decltype(thread_count)::value;
-    constexpr int SharedBytes = decltype(staged)::value ? GDNPrefetchSharedBytes : 0;
+    constexpr int SharedBytes = decltype(staged)::value ? GDNPrefetchSlotBytes<ValueTile> * 2 : 0;
     auto kernel = gdn_scan_quant_kernel<decltype(fused)::value, ValueTile, Threads,
                                         decltype(prepared_gates)::value, decltype(staged)::value,
                                         decltype(staged)::value>;
-    if constexpr (decltype(fused)::value && ValueTile == 128 && Threads == 256 &&
-                  !decltype(prepared_gates)::value && !decltype(staged)::value) {
-      if (verify && batch == 1 && rows == 1)
-        kernel = gdn_scan_quant_kernel<true, 128, 256, false, false, false, true>;
+    if constexpr (!decltype(staged)::value) {
+      if (verify)
+        kernel = gdn_scan_quant_kernel<decltype(fused)::value, ValueTile, Threads,
+                                       decltype(prepared_gates)::value, false, false, true>;
     }
     launch_kernel(
         kernel, dim3(batch, 48, 128 / ValueTile), dim3(Threads), SharedBytes, stream,
@@ -240,9 +245,25 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
         static_cast<__nv_bfloat16 *>(recurrent.data_ptr()),
         static_cast<const float *>(gates.data_ptr()));
   };
-  if (precomputed_gates)
-    scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{},
-         std::true_type{}, std::true_type{});
+  if (precomputed_gates) {
+    auto paired = [&](auto value_tile, auto kernel) {
+      constexpr int ValueTile = decltype(value_tile)::value;
+      launch_kernel(
+          kernel, dim3(batch, 48, 128 / ValueTile), dim3(128), 2 * GDNPrefetchSlotBytes<ValueTile>,
+          stream, static_cast<const __nv_bfloat16 *>(qkv.data_ptr()),
+          static_cast<__nv_bfloat16 *>(state.data_ptr()),
+          static_cast<const int *>(starts.data_ptr()), static_cast<const int *>(reads.data_ptr()),
+          static_cast<const int *>(writes.data_ptr()),
+          static_cast<__nv_bfloat16 *>(recurrent.data_ptr()),
+          static_cast<const float *>(gates.data_ptr()), rows, slots);
+    };
+    if (gdn_prefill_two_pairs(rows, max_queries, x.device().device_id))
+      paired(std::integral_constant<int, 32>{}, gdn_value_two_pair_kernel<32, 128>);
+    else
+      paired(std::integral_constant<int, 16>{}, gdn_value_pair_kernel<16, 128>);
+  } else if (verify && batch == 4 && rows == 20)
+    scan(std::false_type{}, std::integral_constant<int, 32>{}, std::integral_constant<int, 128>{},
+         std::false_type{}, std::false_type{});
   else if (split_values)
     scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{},
          std::false_type{}, std::false_type{});
@@ -262,7 +283,7 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
   }
   check_cuda(cudaGetLastError());
   if (split_values) {
-    gdn_output_quant_kernel<<<rows * 48, 256, 0, stream>>>(
+    gdn_output_quant_kernel<<<rows * 6, 256, 0, stream>>>(
         static_cast<const __nv_bfloat16 *>(recurrent.data_ptr()),
         static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
         static_cast<const float *>(head_norm.data_ptr()),
@@ -271,8 +292,8 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
     check_cuda(cudaGetLastError());
   }
   if (rows <= 8) {
-    decode_projection_launch(output_data, output_weight, output_scales, output_scale,
-                             projection_partials, rows, 8, stream);
+    down16dp::launch(output_data, output_weight, output_scales, output_scale, projection_partials,
+                     rows, 8, stream);
     gdn_output_projection_merge_kernel<<<(rows * 5120 + 255) / 256, 256, 0, stream>>>(
         static_cast<const float *>(projection_partials.data_ptr()),
         static_cast<__nv_bfloat16 *>(output.data_ptr()), rows * 5120);

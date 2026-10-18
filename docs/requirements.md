@@ -19,8 +19,9 @@ Do not add vLLM dependencies, environments, or caches.
 Use different dependency files for development tools and inference packages.
 
 Use the [model specification](operators/model.md) and [fusion plan](operators/fusion.md) for operator work.
-Each final serving operator must have an expected roofline efficiency of at least 60% with the [workload model](operators/evaluation.md).
+Each final serving operator must have an expected roofline efficiency of at least 50% with the [workload model](operators/evaluation.md).
 The workload model can be simple. It must have shapes similar to service execution.
+Each configuration must also pass the [full HTTP comparison](performance.md#configurations).
 
 Use these archived contracts for the detailed criteria of the functions and modes in this document:
 

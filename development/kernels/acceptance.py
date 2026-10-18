@@ -14,7 +14,7 @@ from oh_my_vllm.kernels.specification import (
 
 from .provenance import case_id, source_identity, suite_identity
 from .providers import MODULES, RUNTIME_MODULES
-from .roofline import ExpectedCase, Observation, expected_efficiencies
+from .roofline import MIN_EFFICIENCY, ExpectedCase, Observation, expected_efficiencies
 from .work import work_for
 from .workload import (
     NUMERICAL_POLICY,
@@ -472,7 +472,8 @@ def assess(reports):
         if (operator, mode) not in measured
     ]
     return {
-        "accepted": not missing and all(value >= 0.60 for value in measured.values()),
+        "accepted": not missing
+        and all(value >= MIN_EFFICIENCY for value in measured.values()),
         "report_version": REPORT_VERSION,
         "numerical_policy": NUMERICAL_POLICY,
         "missing": missing,

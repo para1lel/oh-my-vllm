@@ -96,8 +96,9 @@ class GDN:
         self.module, self.source_id, self.library = load("gdn", ("gdn",))
         self.weights, self.schedule = weights, schedule
         rows = schedule.sequence_rows[-1]
+        self.max_queries = max(b - a for a, b in pairwise(schedule.sequence_rows))
         split_values = (not schedule.verify and rows > 32) or (
-            schedule.verify and len(schedule.read_slots) == 1 and rows == 5
+            schedule.verify and (len(schedule.read_slots), rows) in {(1, 5), (4, 20)}
         )
         self.metadata = tuple(
             upload(array("i", values))
@@ -166,5 +167,6 @@ class GDN:
             embedding,
             self.schedule.verify,
             *self.buffers,
+            self.max_queries,
         )
         return self.buffers[:2]

@@ -193,6 +193,9 @@ class VisionCase:
         )
         self.reference_cache = {}
 
+    def graph_lease(self):
+        return self.operation.graph_lease()
+
     def close(self):
         self.operation.close()
 

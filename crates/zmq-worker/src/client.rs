@@ -573,6 +573,21 @@ impl WorkerClient {
                 Err(mpsc::error::TryRecvError::Disconnected) => return Err(Error::WorkerDied),
             }
         };
+        self.finish_prepare_reply(reply).map(Some)
+    }
+
+    pub async fn wait_prepare_request(&mut self) -> Result<Result<Vec<u32>>> {
+        let (_, rpc_id) = self.pending_prepare.ok_or_else(|| {
+            Error::UnexpectedMessageType("no preparation is in flight".to_owned())
+        })?;
+        let reply = self.recv_for(rpc_id).await?;
+        self.finish_prepare_reply(reply)
+    }
+
+    fn finish_prepare_reply(
+        &mut self,
+        reply: crate::protocol::WorkerMessage,
+    ) -> Result<Result<Vec<u32>>> {
         self.pending_prepare = None;
         self.last_prepare = None;
         let result = match reply {
@@ -586,7 +601,7 @@ impl WorkerClient {
                 )));
             }
         };
-        Ok(Some(result))
+        Ok(result)
     }
 
     pub async fn execute_one_step(
@@ -944,6 +959,10 @@ fn validate_reply_ids(
     }
     Ok(())
 }
+
+#[cfg(all(test, unix))]
+#[path = "test_worker.rs"]
+pub(crate) mod fixture;
 
 #[cfg(test)]
 mod tests {

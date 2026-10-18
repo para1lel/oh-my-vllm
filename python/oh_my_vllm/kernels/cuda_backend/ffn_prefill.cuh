@@ -16,7 +16,7 @@
 #pragma once
 
 #include "groupwise.cuh"
-#include "ffn_pair_accum.cuh"
+#include "projection_prefill.cuh"
 
 template <bool MulticastA = false>
 inline void ffn_prefill_projection(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *weight,
@@ -27,70 +27,5 @@ inline void ffn_prefill_projection(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *
     groupwise(a, weight, scale_a, scale_weight, output, m, n, k, stream);
     return;
   }
-  constexpr int TileM = 128, TileN = 128, TileK = 128;
-  constexpr int ScaleM = 1, ScaleN = 128, Splits = 1;
-  constexpr bool Transposed = false;
-  using Result = cutlass::bfloat16_t;
-  using namespace cute;
-  using Scale = cutlass::detail::Sm100BlockwiseScaleConfig<ScaleM, ScaleN, 128, UMMA::Major::K,
-                                                           UMMA::Major::K>;
-  using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::ColumnMajor;
-  using Element = cutlass::float_e4m3_t;
-  using LayoutD = std::conditional_t<Transposed, cutlass::layout::ColumnMajor, LayoutA>;
-  constexpr int OutputAlignment = 128 / cutlass::sizeof_bits<Result>::value;
-  using Tile = Shape<Int<TileM>, Int<TileN>, Int<TileK>>;
-  using Cluster = std::conditional_t<MulticastA, Shape<_1, _2, _1>, Shape<_1, _1, _1>>;
-  using Epilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
-      cutlass::arch::Sm100, cutlass::arch::OpClassTensorOp, Tile, Cluster,
-      cutlass::epilogue::collective::EpilogueTileAuto, float, float, Result, LayoutD,
-      OutputAlignment, Result, LayoutD, OutputAlignment,
-      cutlass::epilogue::collective::EpilogueScheduleAuto>::CollectiveOp;
-  using MainloopBase = typename cutlass::gemm::collective::CollectiveBuilder<
-      cutlass::arch::Sm100, cutlass::arch::OpClassTensorOp, Element,
-      cute::tuple<LayoutA, decltype(Scale::deduce_layoutSFA())>, 16, Element,
-      cute::tuple<LayoutB, decltype(Scale::deduce_layoutSFB())>, 16, float, Tile, Cluster,
-      cutlass::gemm::collective::StageCountAutoCarveout<static_cast<int>(
-          sizeof(typename Epilogue::SharedStorage))>,
-      cutlass::gemm::KernelScheduleSm100Blockwise>::CollectiveOp;
-  using Mainloop = FFNPairedAccum<MainloopBase>;
-  using Kernel =
-      cutlass::gemm::kernel::GemmUniversal<Shape<int, int, int, int>, Mainloop, Epilogue>;
-  using Gemm = cutlass::gemm::device::GemmUniversalAdapter<Kernel>;
-  static_assert(!MulticastA || size(typename MainloopBase::AtomThrShapeMNK{}) == 1);
-  static_assert(!MulticastA || MainloopBase::DispatchPolicy::Stages == 5);
-  static_assert(!MulticastA || Kernel::SharedStorageSize == 201216);
-  static_assert(!MulticastA || Kernel::MaxThreadsPerBlock == 384);
-  auto stride_a = cutlass::make_cute_packed_stride(typename Kernel::StrideA{},
-                                                   make_shape(m, k * Splits, Splits));
-  auto stride_b = cutlass::make_cute_packed_stride(typename Kernel::StrideB{},
-                                                   make_shape(n, k * Splits, Splits));
-  auto stride_d =
-      cutlass::make_cute_packed_stride(typename Kernel::StrideD{}, make_shape(m, n, Splits));
-  auto layout_a = Scale::tile_atom_to_shape_SFA(make_shape(m, n, k * Splits, Splits));
-  auto layout_b = Scale::tile_atom_to_shape_SFB(make_shape(m, n, k * Splits, Splits));
-  if constexpr (Splits > 1) {
-    cute::get<2>(stride_a) = k;
-    cute::get<2>(stride_b) = k;
-    cute::get<2>(layout_a.stride()) = k / 128;
-    cute::get<2>(layout_b.stride()) = k / 128;
-  }
-  typename Gemm::Arguments arguments{cutlass::gemm::GemmUniversalMode::kGemm,
-                                     {m, n, k, Splits},
-                                     {reinterpret_cast<const Element *>(a), stride_a,
-                                      reinterpret_cast<const Element *>(weight), stride_b, scale_a,
-                                      layout_a, scale_weight, layout_b},
-                                     {{1.f, 0.f},
-                                      reinterpret_cast<const Result *>(output),
-                                      stride_d,
-                                      reinterpret_cast<Result *>(output),
-                                      stride_d}};
-  auto check = [](cutlass::Status status) {
-    TVM_FFI_ICHECK(status == cutlass::Status::kSuccess) << cutlassGetStatusString(status);
-  };
-  TVM_FFI_ICHECK(Gemm::get_workspace_size(arguments) == 0);
-  Gemm gemm;
-  check(gemm.can_implement(arguments));
-  check(gemm.initialize(arguments, nullptr, stream));
-  check(gemm.run(stream));
+  prefill_projection::launch(a, weight, scale_a, scale_weight, output, m, n, k, stream);
 }

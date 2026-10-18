@@ -3,6 +3,7 @@ import concurrent.futures
 import hashlib
 import http.client
 import json
+import math
 import os
 import signal
 import socket
@@ -11,15 +12,100 @@ import time
 import uuid
 from pathlib import Path
 
-from oh_my_vllm.kernels.native import cache_directory
-from oh_my_vllm.worker.tokenizer import Tokenization
+from oh_my_vllm.kernels.native import cache_directory, file_sha256
+from oh_my_vllm.worker.tokenizer import Tokenization, tokenizer_identity
+
+from development.kernels.roofline import MIN_EFFICIENCY
 
 from .roofline import lower_bound
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIGURATIONS = [("ordinary", batch, 32768) for batch in (1, 2, 4)] + [
+NATIVE_MODULES = ("device", "ffn", "fa", "gdn", "mtp", "sample", "vision")
+REQUEST_SHAPES = [("ordinary", batch, 32768) for batch in (1, 2, 4)] + [
     ("mtp4", batch, length) for batch in (1, 2, 4) for length in (32768, 65536, 131072)
 ]
+OUTPUT_LENGTHS = (64, 8192)
+CONFIGURATIONS = [
+    (*shape, output) for shape in REQUEST_SHAPES for output in OUTPUT_LENGTHS
+]
+
+
+def select_configurations(selected, outputs):
+    if (
+        not outputs
+        or len(set(outputs)) != len(outputs)
+        or any(value < 1 for value in outputs)
+    ):
+        raise ValueError("use distinct positive output token counts")
+    selected = list(selected or [])
+    if len(set(selected)) != len(selected):
+        raise ValueError("use distinct case selections")
+    configurations = [
+        (*shape, output)
+        for shape in REQUEST_SHAPES
+        for output in outputs
+        if not selected
+        or ":".join(map(str, shape)) in selected
+        or ":".join(map(str, (*shape, output))) in selected
+    ]
+    matched = {
+        ":".join(map(str, case))
+        for configuration in configurations
+        for case in (configuration[:3], configuration)
+    }
+    if set(selected) - matched:
+        raise ValueError("each case must match the selected output token counts")
+    return configurations
+
+
+def gate_result(configuration, seconds, roofline_seconds):
+    if any(
+        not math.isfinite(value) or value <= 0 for value in (seconds, roofline_seconds)
+    ):
+        raise ValueError("measurement and roofline times must be finite and positive")
+    efficiency = roofline_seconds / seconds
+    if efficiency > 1.05:
+        raise ValueError("lower bound exceeds measurement; examine the work model")
+    applicable = configuration in CONFIGURATIONS
+    return {
+        "limit_seconds": roofline_seconds / MIN_EFFICIENCY,
+        "efficiency": efficiency,
+        "gate_applicable": applicable,
+        "passed": applicable and efficiency >= MIN_EFFICIENCY,
+    }
+
+
+def comparison_passed(results):
+    configurations = [
+        (
+            result["mode"],
+            result["batch"],
+            result["input_tokens"],
+            result["output_tokens"],
+        )
+        for result in results
+    ]
+    return (
+        len(configurations) == len(CONFIGURATIONS)
+        and set(configurations) == set(CONFIGURATIONS)
+        and all(result["passed"] for result in results)
+    )
+
+
+def trace_bound(events, request_ids, mode, length, output):
+    identities = [event for event in events if event["operation"] == "identity"]
+    if len(identities) != 1 or identities[0]["config"]["num_speculative_tokens"] != (
+        4 if mode == "mtp4" else 0
+    ):
+        raise ValueError("trace identity differs from the requested service mode")
+    for event in events:
+        if event["operation"] == "target" and any(
+            row["prompt"] != length
+            for row in event["requests"]
+            if row["id"] in request_ids
+        ):
+            raise ValueError("trace prompt length differs from HTTP usage")
+    return lower_bound(events, request_ids, output)
 
 
 def post(port, body):
@@ -67,6 +153,77 @@ def source_identity():
             digest.update(name.encode())
             digest.update(path.read_bytes())
     return digest.hexdigest()
+
+
+def checkpoint_identity(model):
+    model = Path(model)
+    index = (model / "model.safetensors.index.json").read_bytes()
+    names = set(json.loads(index)["weight_map"].values())
+    if not names or any(
+        Path(name).name != name or not name.endswith(".safetensors") for name in names
+    ):
+        raise ValueError("checkpoint index must name local safetensors shards")
+    return {
+        "config": file_sha256(model / "config.json"),
+        "index": hashlib.sha256(index).hexdigest(),
+        **{name: file_sha256(model / name) for name in sorted(names)},
+    }
+
+
+def native_identity():
+    directory = cache_directory()
+    result = {}
+    for name in NATIVE_MODULES:
+        metadata = json.loads((directory / f"{name}.json").read_text())
+        if file_sha256(metadata["library"]) != metadata["binary_id"]:
+            raise RuntimeError(
+                f"native binary identity differs from its manifest: {name}"
+            )
+        for image in metadata.get("vision_vendor", {}).get("images", []):
+            if file_sha256(image["path"]) != image["sha256"]:
+                raise RuntimeError(
+                    "native vendor image identity differs from its manifest"
+                )
+        result[name] = metadata
+    return result
+
+
+def artifact_identity(arguments):
+    return {
+        "source": source_identity(),
+        "binary": file_sha256(arguments.binary),
+        "native": native_identity(),
+        "checkpoint": checkpoint_identity(arguments.model),
+        "tokenizer": tokenizer_identity(arguments.model),
+    }
+
+
+def verify_artifact_identity(arguments, expected):
+    for name, value in artifact_identity(arguments).items():
+        if value != expected[name]:
+            raise RuntimeError(f"{name} artifacts changed during the benchmark")
+
+
+def verify_trace_identity(events, checkpoint, config, tokenizer=None):
+    identities = [event for event in events if event["operation"] == "identity"]
+    if len(identities) != 1:
+        raise ValueError("trace requires exactly one identity record")
+    identity = identities[0]
+    actual_config = identity.get("config", {})
+    if any(actual_config.get(name) != value for name, value in config.items()):
+        raise ValueError("trace configuration differs from the requested service")
+    actual = identity.get("checkpoint")
+    if (
+        not isinstance(actual, dict)
+        or not {"config", "index"} < actual.keys()
+        or any(
+            name not in checkpoint or checkpoint[name] != value
+            for name, value in actual.items()
+        )
+    ):
+        raise ValueError("trace checkpoint differs from the frozen checkpoint files")
+    if tokenizer is not None and identity.get("tokenizer") != tokenizer:
+        raise ValueError("trace loaded tokenizer assets differ from the frozen files")
 
 
 def prompt(tokenizer, length, identifier):
@@ -166,6 +323,24 @@ class Service:
         if self.ipc.exists():
             raise RuntimeError("service did not remove its IPC socket")
 
+    def verify_identity(self, checkpoint, tokenizer):
+        arguments = self.arguments
+        config = {
+            "model_path": str(arguments.model),
+            "num_gpu_blocks": arguments.blocks,
+            "mamba_blocks": arguments.mamba_blocks,
+            "block_size": 784,
+            "tensor_parallel_size": 1,
+            "max_model_len": 262144,
+            "max_num_batched_tokens": 32768,
+            "max_num_seqs": 4,
+            "num_speculative_tokens": 4 if self.mode == "mtp4" else 0,
+        }
+        with self.trace.open() as source:
+            verify_trace_identity(
+                (json.loads(line) for line in source), checkpoint, config, tokenizer
+            )
+
     def run(self, tokenizer, batch, length, output):
         nonce = uuid.uuid4().hex
         bodies = [
@@ -195,10 +370,10 @@ class Service:
             ):
                 raise ValueError(f"token count or cold-prefix check failed: {usage}")
         ids = {int(value["id"].rsplit("_", 1)[1]) for value in responses}
+        if len(ids) != batch:
+            raise ValueError("HTTP responses must have distinct request IDs")
         events = [json.loads(line) for line in self.trace.read_text().splitlines()]
-        bound = lower_bound(events, ids, output)
-        limit = bound["seconds"] * 5 / 3
-        applicable = output == 8192 and (self.mode, batch, length) in CONFIGURATIONS
+        bound = trace_bound(events, ids, self.mode, length, output)
         return {
             "mode": self.mode,
             "batch": batch,
@@ -206,10 +381,9 @@ class Service:
             "output_tokens": output,
             "seconds": seconds,
             "lower_bound": bound,
-            "limit_seconds": limit,
-            "efficiency": bound["seconds"] / seconds,
-            "gate_applicable": applicable,
-            "passed": applicable and seconds <= limit,
+            **gate_result(
+                (self.mode, batch, length, output), seconds, bound["seconds"]
+            ),
             "responses": responses,
         }
 
@@ -223,27 +397,29 @@ def main():
     )
     parser.add_argument(
         "--case",
-        choices=[f"{mode}:{batch}:{length}" for mode, batch, length in CONFIGURATIONS],
+        choices=[
+            ":".join(map(str, case)) for case in (*REQUEST_SHAPES, *CONFIGURATIONS)
+        ],
         action="append",
     )
-    parser.add_argument("--output-tokens", type=int, default=8192)
+    parser.add_argument("--output-tokens", type=int, nargs="+", default=OUTPUT_LENGTHS)
     parser.add_argument("--blocks", type=int, default=1024)
     parser.add_argument("--mamba-blocks", type=int, default=1024)
     arguments = parser.parse_args()
     arguments.artifacts = arguments.artifacts.resolve()
     arguments.binary = arguments.binary.resolve()
-    if arguments.artifacts.is_relative_to(ROOT) or arguments.output_tokens < 1:
-        parser.error("use external artifacts and a positive output token count")
+    arguments.model = arguments.model.resolve()
+    if arguments.artifacts.is_relative_to(ROOT):
+        parser.error("use external artifacts")
+    try:
+        configurations = select_configurations(arguments.case, arguments.output_tokens)
+    except ValueError as error:
+        parser.error(str(error))
+    if not configurations:
+        parser.error("no configurations match the case and output selections")
     arguments.artifacts.mkdir(parents=True, exist_ok=False)
-    tokenizer = Tokenization(arguments.model)
     identity = {
-        "source": source_identity(),
-        "binary": hashlib.sha256(arguments.binary.read_bytes()).hexdigest(),
-        "native": {
-            name: json.loads(path.read_text())
-            for name in ("device", "ffn", "fa", "gdn", "mtp", "sample", "vision")
-            if (path := cache_directory() / f"{name}.json").exists()
-        },
+        **artifact_identity(arguments),
         "device": subprocess.check_output(
             [
                 "nvidia-smi",
@@ -257,24 +433,22 @@ def main():
             for key, value in vars(arguments).items()
         },
     }
+    tokenizer = Tokenization(arguments.model)
+    tokenizer.verify_identity(identity["tokenizer"])
     (arguments.artifacts / "identity.json").write_text(json.dumps(identity, indent=2))
-    selected = set(arguments.case or [])
-    configurations = [
-        item
-        for item in CONFIGURATIONS
-        if not selected or f"{item[0]}:{item[1]}:{item[2]}" in selected
-    ]
     results = []
     for mode in ("ordinary", "mtp4"):
         cases = [item for item in configurations if item[0] == mode]
         if not cases:
             continue
+        verify_artifact_identity(arguments, identity)
         service = Service(arguments, mode)
         try:
             service.ready()
+            service.verify_identity(identity["checkpoint"], identity["tokenizer"])
             for batch in sorted({item[1] for item in cases}):
                 service.run(tokenizer, batch, 64, 16)
-            for _, batch, length in cases:
+            for _, batch, length, output in cases:
                 print(
                     json.dumps(
                         {
@@ -282,15 +456,16 @@ def main():
                             "mode": mode,
                             "batch": batch,
                             "input": length,
+                            "output": output,
                         }
                     ),
                     flush=True,
                 )
-                result = service.run(tokenizer, batch, length, arguments.output_tokens)
+                result = service.run(tokenizer, batch, length, output)
                 results.append(result)
-                (arguments.artifacts / f"{mode}-{batch}-{length}.json").write_text(
-                    json.dumps(result, indent=2)
-                )
+                (
+                    arguments.artifacts / f"{mode}-{batch}-{length}-{output}.json"
+                ).write_text(json.dumps(result, indent=2))
                 print(
                     json.dumps(
                         {
@@ -299,6 +474,7 @@ def main():
                                 "mode",
                                 "batch",
                                 "input_tokens",
+                                "output_tokens",
                                 "seconds",
                                 "limit_seconds",
                                 "efficiency",
@@ -311,11 +487,10 @@ def main():
                 )
         finally:
             service.close()
-    if source_identity() != identity["source"]:
-        raise RuntimeError("repository sources changed during the benchmark")
-    passed = len(results) == len(CONFIGURATIONS) and all(
-        result["passed"] for result in results
-    )
+        service.verify_identity(identity["checkpoint"], identity["tokenizer"])
+        verify_artifact_identity(arguments, identity)
+    verify_artifact_identity(arguments, identity)
+    passed = comparison_passed(results)
     (arguments.artifacts / "summary.json").write_text(
         json.dumps({"passed": passed, "configurations": len(results)}, indent=2)
     )

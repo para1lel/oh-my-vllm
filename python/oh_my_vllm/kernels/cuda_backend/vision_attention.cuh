@@ -9,7 +9,7 @@
 #include <kernel/fmha_tile_scheduler.hpp>
 #include <kernel/sm100_fmha_fwd_kernel_tma_warpspecialized.hpp>
 
-template <bool Normalized, int Dimension>
+template <bool Normalized, int Dimension, bool Packed = false>
 inline void vision_attention_launch(const __nv_bfloat16 *query, const __nv_bfloat16 *key,
                                     const __nv_bfloat16 *value, __nv_bfloat16 *output,
                                     float *normalizer, int tokens, int groups, int device,
@@ -27,7 +27,8 @@ inline void vision_attention_launch(const __nv_bfloat16 *query, const __nv_bfloa
   using Mainloop = VisionGroupedMainloop<BaseMainloop>;
   using BaseEpilogue = cutlass::fmha::collective::Sm100FmhaFwdEpilogueTmaWarpspecialized<
       cutlass::bfloat16_t, float, typename Mainloop::TileShapePV, Stride, LogStride>;
-  using Epilogue = VisionGroupedEpilogue<BaseEpilogue>;
+  using Epilogue = cute::conditional_t<Packed, VisionPackedEpilogue<BaseEpilogue>,
+                                       VisionGroupedEpilogue<BaseEpilogue>>;
   using Kernel = cutlass::fmha::kernel::Sm100FmhaFwdKernelTmaWarpspecialized<
       Problem, Mainloop, Epilogue, cutlass::fmha::kernel::IndividualTileScheduler>;
   using Attention = cutlass::fmha::device::FMHA<Kernel>;

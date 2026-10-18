@@ -38,7 +38,7 @@ Reset mutable state before numerical checks and each measurement.
    Bind each native binary and checkpoint shard to each report.
    Measure all modeled cases in eager and graph modes in separate runs.
    Collect profiles after numerical checks. Optimize the measured bottlenecks.
-   Accept each serving operator only with full coverage and an expected roofline efficiency of at least 60%.
+   Use the [performance gate](evaluation.md#performance-gate) for each serving operator.
 
 ## Delivery
 
@@ -46,4 +46,5 @@ Use few behavior checks. Before you add a check, tell the user why it is necessa
 
 Keep the numerical sample scope explicit. Do not claim accuracy for unchecked elements.
 Missing providers or failed checks prevent acceptance.
-Get an independent review. Correct the errors, update the handoff, commit, and push each milestone.
+
+Get an independent review. Correct the errors. Update the handoff. Commit the change. Push each milestone.

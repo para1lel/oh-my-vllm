@@ -54,6 +54,16 @@ class Context(GraphOperation):
         self.cache = cache.fa[-1]
         self.media = self.media_rows = None
 
+    def graph_lease(self):
+        return self.operation.graph_lease()
+
+    def execute(self, graph):
+        if self.media is not None or self.media_rows is not None:
+            return self.run()
+        if graph and self.replay is None:
+            self.resources.enter_context(self.graph_lease())
+        return super().execute(graph)
+
     def run(self):
         (
             tokens,

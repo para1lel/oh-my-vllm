@@ -1,7 +1,8 @@
 #include "common.cuh"
 #include "ffn_up.cuh"
 #include "ffn_prefill.cuh"
-#include "projection_decode.cuh"
+#include "ffn_prefill_fused.cuh"
+#include "projection_decode_16dp.cuh"
 #include "groupwise.cuh"
 #include "normalization.cuh"
 
@@ -98,6 +99,14 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
     paired(std::integral_constant<int, 4>{});
   else if (rows == 5)
     paired(std::integral_constant<int, 5>{});
+  else if (rows > 64)
+    ffn_prefill_fused4::upper(static_cast<const __nv_fp8_e4m3 *>(quantized_input.data_ptr()),
+                              static_cast<const __nv_fp8_e4m3 *>(gate_up_weight.data_ptr()),
+                              static_cast<const float *>(input_scale.data_ptr()),
+                              static_cast<const float *>(gate_up_scale.data_ptr()),
+                              static_cast<__nv_fp8_e4m3 *>(quantized_product.data_ptr()),
+                              static_cast<float *>(product_scale.data_ptr()), rows, 34816, 5120,
+                              stream);
   else {
     if (rows <= 32)
       groupwise<128, 32, 256, 128, 1, true>(
@@ -121,8 +130,8 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
   }
   if (rows <= 32) {
     if (rows <= 8)
-      decode_projection_launch(quantized_product, down_weight, product_scale, down_scale, partials,
-                               rows, splits, stream);
+      down16dp::launch(quantized_product, down_weight, product_scale, down_scale, partials, rows,
+                       splits, stream);
     else {
       auto run = [&](auto count) {
         groupwise<64, 128, 128, 1, 128, false, decltype(count)::value, float>(

@@ -29,21 +29,29 @@ template <int Count> struct VisionRoundedGelu<cutlass::Array<float, Count>> {
   }
 };
 
-inline void vision_mlp_up(const __nv_bfloat16 *input, const __nv_bfloat16 *weight,
-                          const __nv_bfloat16 *bias, __nv_bfloat16 *output, int rows,
-                          cudaStream_t stream) {
+#include "vision_lookup.cuh"
+
+template <bool Lookup>
+static void vision_mlp_up_impl(const __nv_bfloat16 *input, const __nv_bfloat16 *weight,
+                               const __nv_bfloat16 *bias, __nv_bfloat16 *output, int rows,
+                               const cutlass::bfloat16_t *table, cudaStream_t stream) {
   using namespace cute;
   using Element = cutlass::bfloat16_t;
   using Row = cutlass::layout::RowMajor;
   using Column = cutlass::layout::ColumnMajor;
   using Tile = Shape<_128, _128, _64>;
   using Cluster = Shape<_1, _1, _1>;
-  using Fusion = cutlass::epilogue::fusion::LinCombPerColBiasEltAct<VisionRoundedGelu, Element,
-                                                                    float, Element>;
+  using Fusion = std::conditional_t<
+      Lookup,
+      cutlass::epilogue::fusion::LinCombPerColBiasEltAct<VisionLookupGelu, Element, float, Element>,
+      cutlass::epilogue::fusion::LinCombPerColBiasEltAct<VisionRoundedGelu, Element, float,
+                                                         Element>>;
+  using EpilogueTile = conditional_t<Lookup, Shape<_128, _64>, Shape<_128, _32>>;
+  using EpilogueSchedule = conditional_t<Lookup, cutlass::epilogue::TmaWarpSpecialized1Sm,
+                                         cutlass::epilogue::NoSmemWarpSpecialized1Sm>;
   using Epilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
-      cutlass::arch::Sm100, cutlass::arch::OpClassTensorOp, Tile, Cluster,
-      cutlass::epilogue::collective::EpilogueTileAuto, float, float, Element, Row, 8, Element, Row,
-      8, cutlass::epilogue::collective::EpilogueScheduleAuto, Fusion>::CollectiveOp;
+      cutlass::arch::Sm100, cutlass::arch::OpClassTensorOp, Tile, Cluster, EpilogueTile, float,
+      float, Element, Row, 8, Element, Row, 8, EpilogueSchedule, Fusion>::CollectiveOp;
   using Mainloop = typename cutlass::gemm::collective::CollectiveBuilder<
       cutlass::arch::Sm100, cutlass::arch::OpClassTensorOp, Element, Row, 8, Element, Column, 8,
       float, Tile, Cluster,
@@ -63,6 +71,8 @@ inline void vision_mlp_up(const __nv_bfloat16 *input, const __nv_bfloat16 *weigh
       {{}, reinterpret_cast<const Element *>(output), sd, reinterpret_cast<Element *>(output), sd}};
   arguments.epilogue.thread.alpha = 1.f;
   arguments.epilogue.thread.beta = 0.f;
+  if constexpr (Lookup)
+    arguments.epilogue.thread.activation.table = table;
   arguments.epilogue.thread.bias_ptr = reinterpret_cast<const Element *>(bias);
   auto check = [](cutlass::Status status) {
     TVM_FFI_ICHECK(status == cutlass::Status::kSuccess) << cutlassGetStatusString(status);
@@ -72,4 +82,13 @@ inline void vision_mlp_up(const __nv_bfloat16 *input, const __nv_bfloat16 *weigh
   check(operation.can_implement(arguments));
   check(operation.initialize(arguments, nullptr, stream));
   check(operation.run(stream));
+}
+
+static void vision_mlp_up(const __nv_bfloat16 *input, const __nv_bfloat16 *weight,
+                          const __nv_bfloat16 *bias, __nv_bfloat16 *output, int rows,
+                          const cutlass::bfloat16_t *table, cudaStream_t stream) {
+  if (rows > 32)
+    vision_mlp_up_impl<true>(input, weight, bias, output, rows, table, stream);
+  else
+    vision_mlp_up_impl<false>(input, weight, bias, output, rows, nullptr, stream);
 }

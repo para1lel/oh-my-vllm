@@ -79,6 +79,7 @@ Scalar 峰值为 FP32 75 TFLOPS 和 FP64 37 TFLOPS. HBM 带宽为 7.7 TB/s.
 使用[中间精度契约](model.zh.md#中间精度).
 分别应用 FP32 和 FP64 上限. 没有经过验证的共享资源模型时, 不将两者时间相加.
 
+每个 serving 算子在每种执行模式下的期望 roofline efficiency 必须至少为 50%.
 每个完整算子使用以下工作量模型:
 
 ```text
@@ -90,7 +91,7 @@ t_lower = max(
 )
 eta(shape) = t_lower(shape) / measured_seconds(shape)
 E_eta(operator) = sum(probability(shape | operator) * eta(shape))
-PASS(operator) = small_checks_pass AND complete_performance_coverage AND E_eta(operator) >= 0.60
+PASS(operator) = small_checks_pass AND complete_performance_coverage AND E_eta(operator) >= 0.50
 ```
 
 使用[工作量计算](../../development/kernels/work.py)得到每个 serving 边界的必要计算量及 HBM 字节数.

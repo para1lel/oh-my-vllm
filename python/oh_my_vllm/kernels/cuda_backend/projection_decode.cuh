@@ -103,6 +103,7 @@ __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
     wait_barrier(barriers[1], barrier_phase);
     cutlass::arch::fence_view_async_shared();
     if (warp == 0) {
+      asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
 #pragma unroll
       for (int sub = 0; sub < 4; ++sub) {
         if (sub >= valid_groups)
@@ -119,6 +120,7 @@ __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
       cutlass::arch::umma_arrive(barriers);
     }
     wait_barrier(*barriers, barrier_phase);
+    asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
     barrier_phase ^= 1;
 #pragma unroll
     for (int sub = 0; sub < 4; ++sub) {
@@ -139,6 +141,7 @@ __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
       }
     }
     cutlass::arch::fence_view_async_tmem_load();
+    asm volatile("tcgen05.fence::before_thread_sync;" ::: "memory");
     __syncthreads();
   }
 #pragma unroll

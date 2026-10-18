@@ -21,7 +21,7 @@ struct GDNInputConvolution {
   int slots;
 };
 
-template <int Rows, bool FuseConvolution>
+template <int Rows, bool FuseConvolution, bool Streaming = false>
 __global__ void gdn_input_kernel(const __nv_fp8_e4m3 *input, const float *input_scale,
                                  const float *weight_scale, __nv_bfloat16 *output,
                                  const __grid_constant__ CUtensorMap weight_map,
@@ -65,9 +65,11 @@ __global__ void gdn_input_kernel(const __nv_fp8_e4m3 *input, const float *input_
       cutlass::arch::ClusterTransactionBarrier::arrive_and_expect_tx(barriers + 1 + slot, 32768);
 #pragma unroll
       for (int sub = 0; sub < 4; ++sub)
-        SM90_TMA_LOAD_2D::copy(
-            &weight_map, barriers + 1 + slot, uint64_t(cute::TMA::CacheHintSm90::EVICT_NORMAL),
-            weights + slot * 32768 + sub * 8192, (group + sub) * 128, first_column);
+        SM90_TMA_LOAD_2D::copy(&weight_map, barriers + 1 + slot,
+                               uint64_t(Streaming ? cute::TMA::CacheHintSm90::EVICT_FIRST
+                                                  : cute::TMA::CacheHintSm90::EVICT_NORMAL),
+                               weights + slot * 32768 + sub * 8192, (group + sub) * 128,
+                               first_column);
     }
   };
   prefetch(0, 0);
@@ -177,28 +179,36 @@ __global__ void gdn_input_kernel(const __nv_fp8_e4m3 *input, const float *input_
     allocator.free(*tensor_memory, 32);
 }
 
-template <int Rows, bool FuseConvolution>
+#include "gdn_input_pipeline.cuh"
+
+template <int Rows, bool FuseConvolution, bool Streaming = false, bool Pipeline = false>
 static inline void gdn_input_launch(TensorView input, TensorView input_scale, TensorView weight,
                                     TensorView weight_scale, TensorView output,
                                     GDNInputConvolution convolution, cudaStream_t stream) {
+  auto kernel = gdn_input_kernel<Rows, FuseConvolution, Streaming>;
+  if constexpr (Pipeline)
+    kernel = gdn_input_pipeline_kernel<Rows, FuseConvolution, Streaming>;
+  constexpr int SharedBytes = Pipeline ? 106624 : 102528;
+  constexpr int Threads = Pipeline ? 192 : 128;
   using WeightKey = std::tuple<int, uintptr_t>;
   static thread_local std::map<WeightKey, CUtensorMap> weight_maps;
   WeightKey key{weight.device().device_id, reinterpret_cast<uintptr_t>(weight.data_ptr())};
   auto found = weight_maps.find(key);
   if (found == weight_maps.end()) {
-    check_cuda(cudaFuncSetAttribute(gdn_input_kernel<Rows, FuseConvolution>,
-                                    cudaFuncAttributeMaxDynamicSharedMemorySize, 102528));
+    check_cuda(
+        cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, SharedBytes));
     CUtensorMap descriptor{};
     uint64_t dimensions[2] = {5120, 16384}, strides[1] = {5120};
     uint32_t box[2] = {128, 64}, elements[2] = {1, 1};
     auto status = CUTLASS_CUDA_DRIVER_WRAPPER_CALL(cuTensorMapEncodeTiled)(
         &descriptor, CU_TENSOR_MAP_DATA_TYPE_UINT8, 2, weight.data_ptr(), dimensions, strides, box,
         elements, CU_TENSOR_MAP_INTERLEAVE_NONE, CU_TENSOR_MAP_SWIZZLE_128B,
-        CU_TENSOR_MAP_L2_PROMOTION_L2_128B, CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE);
+        Streaming ? CU_TENSOR_MAP_L2_PROMOTION_NONE : CU_TENSOR_MAP_L2_PROMOTION_L2_128B,
+        CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE);
     TVM_FFI_ICHECK(status == CUDA_SUCCESS) << status;
     found = weight_maps.emplace(key, descriptor).first;
   }
-  launch_kernel(gdn_input_kernel<Rows, FuseConvolution>, dim3(256), dim3(128), 102528, stream,
+  launch_kernel(kernel, dim3(256), dim3(Threads), SharedBytes, stream,
                 static_cast<const __nv_fp8_e4m3 *>(input.data_ptr()),
                 static_cast<const float *>(input_scale.data_ptr()),
                 static_cast<const float *>(weight_scale.data_ptr()),

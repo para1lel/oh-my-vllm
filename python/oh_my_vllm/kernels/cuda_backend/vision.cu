@@ -217,32 +217,48 @@ void vision_block(TensorView value, TensorView norm1_weight, TensorView norm1_bi
                   {output, normalized, projected, query, key, values, padded_attention, normalizer,
                    attended, activated});
   tvm::ffi::CUDADeviceGuard guard(value.device().device_id);
+  std::unique_lock<std::mutex> lifetime;
   if (rows > 32) {
     TVM_FFI_ICHECK(classic.has_value());
+    lifetime = std::unique_lock<std::mutex>(classic.value()->lifetime_mutex);
     vision_classic_context(classic.value(), value.device().device_id);
+    vision_classic_storage(
+        classic.value(),
+        {value,          norm1_weight,     norm1_bias, qkv_weight, qkv_bias, attention_weight,
+         attention_bias, norm2_weight,     norm2_bias, up_weight,  up_bias,  down_weight,
+         down_bias,      output,           normalized, projected,  query,    key,
+         values,         padded_attention, normalizer, attended,   activated});
   }
   auto stream = vision_stream(value);
+  if (rows > 32)
+    vision_classic_capture(classic.value(), stream);
   auto norm = vision_write(normalized);
   auto matrix = static_cast<float *>(projected.data_ptr());
   vision_norm_kernel<<<rows, 256, 0, stream>>>(vision_read(value), vision_read(norm1_weight),
                                                vision_read(norm1_bias), norm);
-  bf16_linear<float>(norm, vision_read(qkv_weight), matrix, rows, 3456, 1152, stream);
+  if (rows > 32)
+    vision_classic_linear(classic.value(), norm, vision_read(qkv_weight), matrix, rows, 3456, 1152,
+                          value.device().device_id, stream);
+  else
+    bf16_linear<float>(norm, vision_read(qkv_weight), matrix, rows, 3456, 1152, stream);
   vision_qkv_kernel<<<rows, 256, 0, stream>>>(matrix, vision_read(qkv_bias), vision_write(query),
                                               vision_write(key), vision_write(values), rows,
                                               grid_height, grid_width);
-  vision_attention_launch<true, 80>(vision_read(query), vision_read(key), vision_read(values),
-                                    vision_write(padded_attention),
-                                    static_cast<float *>(normalizer.data_ptr()), tokens,
-                                    rows / tokens, value.device().device_id, stream);
-  vision_attention_unpack_kernel<<<(int64_t(rows) * 1152 + 255) / 256, 256, 0, stream>>>(
-      vision_read(padded_attention), vision_write(attended), rows, tokens);
-  bf16_linear<float>(vision_read(attended), vision_read(attention_weight), matrix, rows, 1152, 1152,
-                     stream);
+  vision_attention_launch<true, 80, true>(vision_read(query), vision_read(key), vision_read(values),
+                                          vision_write(attended),
+                                          static_cast<float *>(normalizer.data_ptr()), tokens,
+                                          rows / tokens, value.device().device_id, stream);
+  if (rows > 32)
+    vision_classic_linear(classic.value(), vision_read(attended), vision_read(attention_weight),
+                          matrix, rows, 1152, 1152, value.device().device_id, stream);
+  else
+    bf16_linear<float>(vision_read(attended), vision_read(attention_weight), matrix, rows, 1152,
+                       1152, stream);
   vision_residual_norm_kernel<<<rows, 256, 0, stream>>>(
       matrix, vision_read(attention_bias), vision_read(value), vision_read(norm2_weight),
       vision_read(norm2_bias), vision_write(output), norm);
   vision_mlp_up(norm, vision_read(up_weight), vision_read(up_bias), vision_write(activated), rows,
-                stream);
+                rows > 32 ? classic.value()->gelu_table : nullptr, stream);
   if (rows > 32) {
     TVM_FFI_ICHECK(classic.has_value());
     vision_classic_down(classic.value(), vision_read(activated), vision_read(down_weight), matrix,

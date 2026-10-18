@@ -100,6 +100,7 @@ __global__ void fa_kv_split_projection_kernel(const __nv_fp8_e4m3 *input, const 
     wait_barrier(barriers[1 + tile], 0);
     cutlass::arch::fence_view_async_shared();
     if (warp == 0) {
+      asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
 #pragma unroll
       for (int sub = 0; sub < 4; ++sub)
         if (sub < groups) {
@@ -115,6 +116,7 @@ __global__ void fa_kv_split_projection_kernel(const __nv_fp8_e4m3 *input, const 
       cutlass::arch::umma_arrive(barriers);
     }
     wait_barrier(*barriers, tile & 1);
+    asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
 #pragma unroll
     for (int sub = 0; sub < 4; ++sub)
       if (sub < groups) {
@@ -135,6 +137,7 @@ __global__ void fa_kv_split_projection_kernel(const __nv_fp8_e4m3 *input, const 
               fmaf(__uint_as_float(values[row]), factors[sub][row], accumulated[row]);
       }
     cutlass::arch::fence_view_async_tmem_load();
+    asm volatile("tcgen05.fence::before_thread_sync;" ::: "memory");
     __syncthreads();
   }
 #pragma unroll
@@ -148,9 +151,9 @@ __global__ void fa_kv_split_projection_kernel(const __nv_fp8_e4m3 *input, const 
 }
 
 template <int Rows>
-inline void fa_kv_split_projection_launch(TensorView input, TensorView input_scale,
-                                          TensorView weight, TensorView weight_scale,
-                                          TensorView partial, cudaStream_t stream) {
+static inline void fa_kv_split_projection_launch(TensorView input, TensorView input_scale,
+                                                 TensorView weight, TensorView weight_scale,
+                                                 TensorView partial, cudaStream_t stream) {
   constexpr int Capacity = Rows == 4 ? 8 : 16;
   constexpr int Shared = ((65536 + Capacity * 512 + 28 + 127) / 128) * 128;
   static_assert(Rows == 4 || Rows == 16);
@@ -186,28 +189,55 @@ inline void fa_kv_split_projection_launch(TensorView input, TensorView input_sca
   check_cuda(cudaGetLastError());
 }
 
+__device__ __forceinline__ uint4 fa_kv_pack_eight(const __nv_bfloat16 (&values)[8]) {
+  uint32_t words[4];
+#pragma unroll
+  for (int pair = 0; pair < 4; ++pair)
+    words[pair] = uint32_t(__bfloat16_as_ushort(values[pair * 2])) |
+                  (uint32_t(__bfloat16_as_ushort(values[pair * 2 + 1])) << 16);
+  return make_uint4(words[0], words[1], words[2], words[3]);
+}
+
 __global__ void fa_kv_split_heads_kernel(const float *partial, __nv_bfloat16 *packed,
                                          const float *k_norm, const int64_t *positions,
                                          const int32_t *slots, __nv_bfloat16 *cache, int rows,
                                          int64_t cache_tokens) {
   int row = blockIdx.x, head = blockIdx.y, lane = threadIdx.x;
-  float values[8], total = 0;
-  __nv_bfloat16 value_bits[8];
+  __shared__ __align__(16) __nv_bfloat16 merged_key[256];
+  float keys[8] = {}, value_sums[8] = {};
+  int column = head * 256 + lane * 8;
+#pragma unroll
+  for (int split = 0; split < 8; ++split) {
+    int64_t index = (int64_t(split) * rows + row) * 5120 + column;
+    float4 key_low = *reinterpret_cast<const float4 *>(partial + index);
+    float4 key_high = *reinterpret_cast<const float4 *>(partial + index + 4);
+    float4 value_low = *reinterpret_cast<const float4 *>(partial + index + 1024);
+    float4 value_high = *reinterpret_cast<const float4 *>(partial + index + 1028);
+    float key_values[8] = {key_low.x,  key_low.y,  key_low.z,  key_low.w,
+                           key_high.x, key_high.y, key_high.z, key_high.w};
+    float value_values[8] = {value_low.x,  value_low.y,  value_low.z,  value_low.w,
+                             value_high.x, value_high.y, value_high.z, value_high.w};
+#pragma unroll
+    for (int j = 0; j < 8; ++j) {
+      keys[j] += key_values[j];
+      value_sums[j] += value_values[j];
+    }
+  }
+  __nv_bfloat16 key_bits[8], value_bits[8];
 #pragma unroll
   for (int j = 0; j < 8; ++j) {
-    int column = head * 256 + lane + j * 32;
-    float key = 0, value = 0;
+    key_bits[j] = __float2bfloat16_rn(__fmaf_rn(0.f, 0.f, __fmul_rn(1.f, keys[j])));
+    value_bits[j] = __float2bfloat16_rn(__fmaf_rn(0.f, 0.f, __fmul_rn(1.f, value_sums[j])));
+  }
+  uint4 packed_key = fa_kv_pack_eight(key_bits), packed_value = fa_kv_pack_eight(value_bits);
+  *reinterpret_cast<uint4 *>(packed + int64_t(row) * 2048 + column) = packed_key;
+  *reinterpret_cast<uint4 *>(packed + int64_t(row) * 2048 + column + 1024) = packed_value;
+  *reinterpret_cast<uint4 *>(merged_key + lane * 8) = packed_key;
+  __syncwarp();
+  float values[8], total = 0;
 #pragma unroll
-    for (int split = 0; split < 8; ++split) {
-      int64_t index = (int64_t(split) * rows + row) * 5120 + column;
-      key += partial[index];
-      value += partial[index + 1024];
-    }
-    __nv_bfloat16 key_bits = __float2bfloat16_rn(__fmaf_rn(0.f, 0.f, __fmul_rn(1.f, key)));
-    value_bits[j] = __float2bfloat16_rn(__fmaf_rn(0.f, 0.f, __fmul_rn(1.f, value)));
-    packed[int64_t(row) * 2048 + column] = key_bits;
-    packed[int64_t(row) * 2048 + column + 1024] = value_bits[j];
-    values[j] = __bfloat162float(key_bits);
+  for (int j = 0; j < 8; ++j) {
+    values[j] = __bfloat162float(merged_key[lane + j * 32]);
     total += values[j] * values[j];
   }
   float inverse = rsqrtf(warp_sum(total) / 256.f + 1e-6f);
@@ -229,10 +259,10 @@ __global__ void fa_kv_split_heads_kernel(const float *partial, __nv_bfloat16 *pa
     return;
   }
   int64_t key_base = ((int64_t(slot / 784) * 1568 + slot % 784) * 4 + head) * 256;
+  *reinterpret_cast<uint4 *>(cache + key_base + int64_t(784) * 4 * 256 + lane * 8) = packed_value;
 #pragma unroll
   for (int j = 0; j < 8; ++j) {
     int dim = lane + j * 32;
     cache[key_base + dim] = __float2bfloat16_rn(values[j]);
-    cache[key_base + int64_t(784) * 4 * 256 + dim] = value_bits[j];
   }
 }

@@ -1,6 +1,6 @@
 import ctypes
 import os
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -94,9 +94,18 @@ class Device:
 
     @contextmanager
     def graph(self, operation):
-        stream, graph, executable = (ctypes.c_void_p() for _ in range(3))
-        self.checked(self.runtime.cudaStreamCreateWithFlags(ctypes.byref(stream), 1))
-        try:
+        owner = getattr(operation, "__self__", operation)
+        acquire = getattr(owner, "graph_lease", None)
+        with ExitStack() as resources:
+            if acquire is not None:
+                resources.enter_context(acquire())
+            stream, graph, executable = (ctypes.c_void_p() for _ in range(3))
+            self.checked(
+                self.runtime.cudaStreamCreateWithFlags(ctypes.byref(stream), 1)
+            )
+            resources.callback(
+                lambda: self.checked(self.runtime.cudaStreamDestroy(stream))
+            )
             with tvm_ffi.use_raw_stream(tvm_ffi.device("cuda:0"), stream.value):
                 self.checked(self.runtime.cudaStreamBeginCapture(stream, 1))
                 try:
@@ -105,16 +114,17 @@ class Device:
                     status = self.runtime.cudaStreamEndCapture(
                         stream, ctypes.byref(graph)
                     )
+                    if graph.value:
+                        resources.callback(
+                            lambda: self.checked(self.runtime.cudaGraphDestroy(graph))
+                        )
                 self.checked(status)
-            self.checked(
-                self.runtime.cudaGraphInstantiateWithFlags(
-                    ctypes.byref(executable), graph, 0
-                )
+            status = self.runtime.cudaGraphInstantiateWithFlags(
+                ctypes.byref(executable), graph, 0
             )
-            yield lambda: self.checked(self.runtime.cudaGraphLaunch(executable, None))
-        finally:
             if executable.value:
-                self.checked(self.runtime.cudaGraphExecDestroy(executable))
-            if graph.value:
-                self.checked(self.runtime.cudaGraphDestroy(graph))
-            self.checked(self.runtime.cudaStreamDestroy(stream))
+                resources.callback(
+                    lambda: self.checked(self.runtime.cudaGraphExecDestroy(executable))
+                )
+            self.checked(status)
+            yield lambda: self.checked(self.runtime.cudaGraphLaunch(executable, None))

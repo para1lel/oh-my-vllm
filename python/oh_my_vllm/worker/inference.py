@@ -22,7 +22,11 @@ class Worker:
         self.weights = Weights(
             self.device, config["model_path"], bool(config["num_speculative_tokens"])
         )
-        self.trace = Trace(config, self.weights.checkpoint.identity)
+        self.trace = Trace(
+            config,
+            self.weights.checkpoint.identity,
+            tokenizer=self.tokenizer.identity,
+        )
         self.cache = Cache(self.device, config)
         self.media = MediaProcessor(self.device, self.weights, self.tokenizer)
         self.model = Model(

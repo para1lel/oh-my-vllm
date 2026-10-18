@@ -4,6 +4,8 @@ mod parser;
 mod request;
 mod resources;
 mod sampling;
+#[cfg(all(test, unix))]
+mod tests;
 
 use crate::{client::WorkerClient, error::Error as WorkerError};
 use anyhow::{Context, Result};
@@ -760,6 +762,41 @@ async fn begin_admit(
     }))
 }
 
+async fn cancel_admit(client: &mut WorkerClient, pending: PendingAdmission) -> Result<()> {
+    let disconnected = pending.submission.ready.is_closed();
+    client.cancel_prepare(pending.id).await?;
+    if !disconnected {
+        let _ = pending.submission.ready.send(Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "worker preparation timeout".to_owned(),
+        )));
+    }
+    Ok(())
+}
+
+async fn wait_admit(
+    client: &mut WorkerClient,
+    scheduler: &mut Scheduler,
+    active: &mut BTreeMap<u64, Active>,
+    pending: &mut Option<PendingAdmission>,
+) -> Result<()> {
+    let Some(preparing) = pending.as_mut() else {
+        return Ok(());
+    };
+    let result = tokio::select! {
+        biased;
+        _ = preparing.submission.ready.closed() => None,
+        _ = tokio::time::sleep_until(tokio::time::Instant::from_std(preparing.deadline)) => None,
+        result = client.wait_prepare_request() => Some(result?),
+    };
+    let preparing = pending.take().unwrap();
+    if let Some(result) = result {
+        complete_admit(client, scheduler, active, preparing, result).await
+    } else {
+        cancel_admit(client, preparing).await
+    }
+}
+
 async fn complete_admit(
     client: &mut WorkerClient,
     scheduler: &mut Scheduler,
@@ -1120,6 +1157,7 @@ async fn run_engine(
     let store = &context.store;
     let health = &context.health;
     let diagnostics_interval = context.diagnostics_interval;
+    let max_running = (client.configuration().max_num_seqs as usize).min(64);
     let mut next_diagnostics = Instant::now();
     loop {
         let was_idle = active.is_empty();
@@ -1158,17 +1196,20 @@ async fn run_engine(
             };
             *pending = begin_admit(client, active.len(), submission, epoch).await?;
         }
-        if let Some(preparing) = pending.as_ref() {
+        if was_idle {
+            wait_admit(client, scheduler, active, pending).await?;
+            // Fix the cohort before waiting: later arrivals must not postpone execution.
+            let queued = incoming.len().min(max_running.saturating_sub(active.len()));
+            for _ in 0..queued {
+                let Ok(submission) = incoming.try_recv() else {
+                    break;
+                };
+                *pending = begin_admit(client, active.len(), submission, epoch).await?;
+                wait_admit(client, scheduler, active, pending).await?;
+            }
+        } else if let Some(preparing) = pending.as_ref() {
             if preparing.submission.ready.is_closed() || Instant::now() >= preparing.deadline {
-                let preparing = pending.take().unwrap();
-                let disconnected = preparing.submission.ready.is_closed();
-                client.cancel_prepare(preparing.id).await?;
-                if !disconnected {
-                    let _ = preparing.submission.ready.send(Err((
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "worker preparation timeout".to_owned(),
-                    )));
-                }
+                cancel_admit(client, pending.take().unwrap()).await?;
             } else if let Some(result) = client.poll_prepare_request()? {
                 let preparing = pending.take().unwrap();
                 complete_admit(client, scheduler, active, preparing, result).await?;

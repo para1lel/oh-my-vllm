@@ -1,18 +1,21 @@
 import hashlib
 import json
 import math
+import struct
 import unittest
 from copy import deepcopy
 from dataclasses import asdict, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from oh_my_vllm.kernels.native import SOURCES, source_digest
 from oh_my_vllm.kernels.specification import MODEL, OPERATORS, UPSTREAM_COMMIT
+from oh_my_vllm.worker.checkpoint import Checkpoint
 
 from .acceptance import CHECKS, FLAGS, assess, verify_identity
 from .gdn import make_schedule
-from .provenance import case_id, source_identity, suite_identity
+from .provenance import ROOT, case_id, source_identity, suite_identity
 from .providers import MODULES
 from .roofline import ExpectedCase, Observation, Work, expected_efficiencies
 from .work import work_for
@@ -182,6 +185,22 @@ def numerical_result(report, *, mode="eager"):
     return next(iter(report["numerical_evidence"]["cases"].values()))[mode]
 
 
+def checkpoint_fixture(root):
+    config = b'{"fixture":true}'
+    (root / "config.json").write_bytes(config)
+    weights = {name: f"{name}.safetensors" for name in ("weight", "embedding")}
+    (root / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": weights})
+    )
+    for name, filename in weights.items():
+        header = json.dumps(
+            {name: {"dtype": "F8_E4M3", "shape": [1], "data_offsets": [0, 1]}}
+        ).encode()
+        header += b" " * (-len(header) % 8)
+        (root / filename).write_bytes(struct.pack("<Q", len(header)) + header + b"\x01")
+    return hashlib.sha256(config).hexdigest()
+
+
 class Contracts(unittest.TestCase):
     def test_suite_requires_both_modes_and_complete_numerical_evidence(self):
         reports = acceptance_reports()
@@ -322,6 +341,55 @@ class Contracts(unittest.TestCase):
         item["shape"]["rows"] = 32144
         with self.assertRaises(ValueError):
             assess(changed)
+
+    def test_operator_identities_bind_runtime_checkpoint_and_graph_sources(self):
+        original_read = Path.read_bytes
+        suite = suite_identity()
+        source, _ = source_identity("native", (), {}, "ffn")
+        for name in ("checkpoint", "device"):
+            path = ROOT / "python/oh_my_vllm/worker" / f"{name}.py"
+
+            def changed_runtime_source(value, runtime_path=path):
+                data = original_read(value)
+                return (
+                    data + b"\n# changed runtime dependency\n"
+                    if value == runtime_path
+                    else data
+                )
+
+            with (
+                self.subTest(module=name),
+                patch.object(Path, "read_bytes", changed_runtime_source),
+            ):
+                self.assertNotEqual(suite, suite_identity())
+                self.assertNotEqual(source, source_identity("native", (), {}, "ffn")[0])
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = checkpoint_fixture(root)
+            with patch.dict(MODEL, {"config_sha256": config}):
+                loaded = Checkpoint(root)
+                loaded.raw_tensor("weight")
+                frozen = loaded.verify_identity()
+                for name in (
+                    "config.json",
+                    "model.safetensors.index.json",
+                    "weight.safetensors",
+                ):
+                    path = root / name
+                    original = path.read_bytes()
+                    path.write_bytes(original + b" ")
+                    self.assertEqual(loaded.identity, frozen)
+                    with (
+                        self.subTest(checkpoint=name),
+                        self.assertRaisesRegex(ValueError, "file bytes changed"),
+                    ):
+                        loaded.verify_identity(frozen)
+                    path.write_bytes(original)
+                    self.assertEqual(loaded.verify_identity(frozen), frozen)
+                loaded.raw_tensor("embedding")
+                with self.assertRaisesRegex(ValueError, "loaded checkpoint set"):
+                    loaded.verify_identity(frozen)
 
     def test_native_identity_tracks_only_transitive_dependencies(self):
         with TemporaryDirectory() as directory:

@@ -13,7 +13,7 @@ from oh_my_vllm.kernels.specification import UPSTREAM_COMMIT
 from .acceptance import numerical_binding, verify_numerical_evidence
 from .provenance import ROOT, case_id, source_identity, suite_identity
 from .providers import MODULES, RUNTIME_MODULES, prepare
-from .roofline import ExpectedCase, Observation, expected_efficiencies
+from .roofline import MIN_EFFICIENCY, ExpectedCase, Observation, expected_efficiencies
 from .work import work_for
 from .workload import (
     NUMERICAL_POLICY,
@@ -141,7 +141,7 @@ def evaluate_cases(arguments, report, resources):
     if not selected_gpu or "," in selected_gpu:
         raise ValueError("use the single-GPU wrapper")
     context = {
-        "checkpoint": dict(checkpoint.identity),
+        "checkpoint": checkpoint.verify_identity(),
         "mode": arguments.mode,
         "device": selected_gpu,
         "device_source": device.source_id,
@@ -269,7 +269,7 @@ def evaluate_cases(arguments, report, resources):
         )
         report["operator_passed"] = (
             report["operator_coverage_complete"]
-            and efficiency[arguments.operator] >= 0.60
+            and efficiency[arguments.operator] >= MIN_EFFICIENCY
         )
         print(
             json.dumps(
@@ -290,6 +290,14 @@ def evaluate_cases(arguments, report, resources):
             device.synchronize()
         except Exception as error:
             report["synchronize_error"] = str(error)
+        try:
+            report["checkpoint_after"] = checkpoint.verify_identity(
+                context["checkpoint"]
+            )
+        except Exception as error:
+            report["operator_passed"] = False
+            report["error"] = str(error)
+            raise
 
 
 def main():

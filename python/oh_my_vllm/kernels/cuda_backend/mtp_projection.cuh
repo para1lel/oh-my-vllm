@@ -80,6 +80,7 @@ __global__ void mtp_projection_kernel(const __nv_bfloat16 *input, float *output,
     wait_barrier(barriers[1 + slot], (tile / 2) & 1);
     cutlass::arch::fence_view_async_shared();
     if (warp == 0) {
+      asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
 #pragma unroll
       for (int k = 0; k < 16; ++k) {
         gemm(mma, weight_fragment(_, _, k), input_fragment(_, _, k), partial);
@@ -93,6 +94,7 @@ __global__ void mtp_projection_kernel(const __nv_bfloat16 *input, float *output,
     if (tile + 2 < 10)
       prefetch(tile + 2, slot);
   }
+  asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
   uint32_t address = *tensor_memory + uint32_t(warp * 32) * 65536u;
 #pragma unroll
   for (int first = 0; first < Capacity; first += 8) {
@@ -106,6 +108,7 @@ __global__ void mtp_projection_kernel(const __nv_bfloat16 *input, float *output,
                warp * 16 + (thread & 31)] = __uint_as_float(values[index]);
   }
   cutlass::arch::fence_view_async_tmem_load();
+  asm volatile("tcgen05.fence::before_thread_sync;" ::: "memory");
   __syncthreads();
   if (warp == 0)
     allocator.free(*tensor_memory, 32);

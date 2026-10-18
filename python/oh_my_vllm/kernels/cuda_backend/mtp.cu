@@ -182,3 +182,5 @@ void mtp_endpoints(TensorView value, TensorView zero, TensorView sequence_rows,
       static_cast<__nv_bfloat16 *>(endpoint_zero.data_ptr()), rows, batch);
   check_cuda(cudaGetLastError());
 }
+
+#include "mtp_context.cuh"

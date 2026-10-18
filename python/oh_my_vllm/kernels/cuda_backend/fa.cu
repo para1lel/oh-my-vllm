@@ -1,6 +1,7 @@
 #include "common.cuh"
-#include "projection_decode.cuh"
+#include "projection_decode_16dp.cuh"
 #include "groupwise.cuh"
+#include "projection_prefill.cuh"
 #include "normalization.cuh"
 #include "fa_attention.cuh"
 #include "fa_input.cuh"
@@ -94,12 +95,14 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
   }
   tvm::ffi::CUDADeviceGuard guard(x.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
-  residual_rms_quant_launch(static_cast<const __nv_bfloat16 *>(x.data_ptr()),
-                            static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
-                            static_cast<const float *>(norm.data_ptr()),
-                            static_cast<__nv_bfloat16 *>(summed.data_ptr()),
-                            static_cast<__nv_fp8_e4m3 *>(quantized.data_ptr()),
-                            static_cast<float *>(scales.data_ptr()), rows, stream);
+  bool fused_input = variant != 1 && rows == 1;
+  if (!fused_input)
+    residual_rms_quant_launch(static_cast<const __nv_bfloat16 *>(x.data_ptr()),
+                              static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
+                              static_cast<const float *>(norm.data_ptr()),
+                              static_cast<__nv_bfloat16 *>(summed.data_ptr()),
+                              static_cast<__nv_fp8_e4m3 *>(quantized.data_ptr()),
+                              static_cast<float *>(scales.data_ptr()), rows, stream);
   bool split_kv = variant == 1 && (rows == 4 || rows == 16) &&
                   int64_t(partial.numel()) >= int64_t(8) * rows * 5120;
   if (split_kv) {
@@ -110,16 +113,33 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
       fa_kv_split_projection_launch<16>(quantized, scales, input_weight, input_weight_scale,
                                         partial, stream);
   } else if (variant != 1 && (rows == 1 || rows == 4 || rows == 5)) {
+    auto project = [&](auto count) {
+      constexpr int Rows = decltype(count)::value;
+      if constexpr (Rows == 1)
+        fa_small_input_launch<Rows, true>(quantized, scales, input_weight, input_weight_scale,
+                                          packed, columns, stream,
+                                          static_cast<const __nv_bfloat16 *>(x.data_ptr()),
+                                          static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
+                                          static_cast<const float *>(norm.data_ptr()),
+                                          static_cast<__nv_bfloat16 *>(summed.data_ptr()));
+      else
+        fa_small_input_launch<Rows>(quantized, scales, input_weight, input_weight_scale, packed,
+                                    columns, stream);
+    };
     if (rows == 1)
-      fa_small_input_launch<1>(quantized, scales, input_weight, input_weight_scale, packed, columns,
-                               stream);
+      project(std::integral_constant<int, 1>{});
     else if (rows == 4)
-      fa_small_input_launch<4>(quantized, scales, input_weight, input_weight_scale, packed, columns,
-                               stream);
+      project(std::integral_constant<int, 4>{});
     else
-      fa_small_input_launch<5>(quantized, scales, input_weight, input_weight_scale, packed, columns,
+      project(std::integral_constant<int, 5>{});
+  } else if (rows > 32)
+    prefill_projection::launch(static_cast<const __nv_fp8_e4m3 *>(quantized.data_ptr()),
+                               static_cast<const __nv_fp8_e4m3 *>(input_weight.data_ptr()),
+                               static_cast<const float *>(scales.data_ptr()),
+                               static_cast<const float *>(input_weight_scale.data_ptr()),
+                               static_cast<__nv_bfloat16 *>(packed.data_ptr()), rows, columns, 5120,
                                stream);
-  } else
+  else
     groupwise(static_cast<const __nv_fp8_e4m3 *>(quantized.data_ptr()),
               static_cast<const __nv_fp8_e4m3 *>(input_weight.data_ptr()),
               static_cast<const float *>(scales.data_ptr()),
@@ -149,24 +169,29 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
   check_cuda(cudaGetLastError());
   if (variant == 1)
     return;
+  if (rows <= 32 && splits > 16 && tables.size(1) <= 3)
+    splits = tables.size(1) == 1 ? 16 : 32;
+  else if (rows <= 32 && batch > 1 && max_queries > 1)
+    splits = std::min(splits, 16);
   if (rows > 32 && splits == 1) {
-    static std::once_flag sm100_configured;
-    std::call_once(sm100_configured, [] {
+    static std::once_flag prefill_pipeline_configured;
+    std::call_once(prefill_pipeline_configured, [] {
       check_cuda(cudaFuncSetAttribute(
           fa_prefill_kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, FAPrefillSharedBytes));
     });
-    const auto &maps = fa_prefill_tensor_maps(cache);
+    const auto &maps = fa_prefill_pipeline_tensor_maps(cache);
     int tiles = (max_queries * 6 + 127) / 128;
-    fa_prefill_kernel<<<dim3(batch * tiles, 4), 128, FAPrefillSharedBytes, stream>>>(
+    fa_prefill_kernel<<<dim3(batch * tiles, 4), 320, FAPrefillSharedBytes, stream>>>(
         static_cast<const __nv_bfloat16 *>(query.data_ptr()),
         static_cast<const __nv_bfloat16 *>(cache.data_ptr()),
         static_cast<const int32_t *>(tables.data_ptr()),
         static_cast<const int32_t *>(lengths.data_ptr()),
         static_cast<const int32_t *>(sequence_rows.data_ptr()),
         static_cast<float *>(partial.data_ptr()), static_cast<float *>(lse.data_ptr()),
-        tables.size(1), tiles, max_queries, rows, blocks, first_token, maps.key, maps.value);
+        tables.size(1), tiles, max_queries, rows, blocks, first_token, maps.key, maps.value,
+        fa_prefill_pipeline_l2_bytes(query.device().device_id));
     check_cuda(cudaGetLastError());
-  } else if (max_queries == 1 && rows <= 32 && splits == 64) {
+  } else if (max_queries == 1 && rows <= 32 && splits <= 64) {
     static std::once_flag warp_q1_configured;
     std::call_once(warp_q1_configured, [] {
       check_cuda(cudaFuncSetAttribute(fa_q1_warp_partial_kernel,
@@ -222,13 +247,20 @@ void fa(TensorView x, TensorView residual, TensorView norm, TensorView input_wei
     merge(std::integral_constant<int, 8>{});
   check_cuda(cudaGetLastError());
   if (rows <= 8) {
-    decode_projection_launch(gated, output_weight, gated_scale, output_weight_scale,
-                             projection_partials, rows, 8, stream);
+    down16dp::launch(gated, output_weight, gated_scale, output_weight_scale, projection_partials,
+                     rows, 8, stream);
     fa_output_merge_kernel<<<(rows * 5120 + 255) / 256, 256, 0, stream>>>(
         static_cast<const float *>(projection_partials.data_ptr()),
         static_cast<__nv_bfloat16 *>(output.data_ptr()), rows * 5120);
     check_cuda(cudaGetLastError());
-  } else
+  } else if (rows > 32)
+    prefill_projection::launch(static_cast<const __nv_fp8_e4m3 *>(gated.data_ptr()),
+                               static_cast<const __nv_fp8_e4m3 *>(output_weight.data_ptr()),
+                               static_cast<const float *>(gated_scale.data_ptr()),
+                               static_cast<const float *>(output_weight_scale.data_ptr()),
+                               static_cast<__nv_bfloat16 *>(output.data_ptr()), rows, 5120, 6144,
+                               stream);
+  else
     groupwise(static_cast<const __nv_fp8_e4m3 *>(gated.data_ptr()),
               static_cast<const __nv_fp8_e4m3 *>(output_weight.data_ptr()),
               static_cast<const float *>(gated_scale.data_ptr()),
