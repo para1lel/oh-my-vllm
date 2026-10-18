@@ -211,6 +211,10 @@ def evaluate_cases(arguments, report, resources):
                 else {"status": "not_run"}
             )
             if arguments.mode == "graph":
+                prepared.run()
+                device.synchronize()
+                prepared.reset()
+                report["capture_preparation"] = "one eager run before capture"
                 with device.graph(prepared.run) as operation:
                     if arguments.profile:
                         prepared.reset()
