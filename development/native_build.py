@@ -11,6 +11,7 @@ from pathlib import Path
 from oh_my_vllm.kernels.fa import FUNCTIONS as FA_FUNCTIONS
 from oh_my_vllm.kernels.ffn import FUNCTIONS as FFN_FUNCTIONS
 from oh_my_vllm.kernels.gdn import FUNCTIONS as GDN_FUNCTIONS
+from oh_my_vllm.kernels.mega import FUNCTIONS as MEGA_FUNCTIONS
 from oh_my_vllm.kernels.mtp import FUNCTIONS as MTP_FUNCTIONS
 from oh_my_vllm.kernels.native import (
     SOURCES,
@@ -31,6 +32,7 @@ from oh_my_vllm.worker.device import FUNCTIONS as DEVICE_FUNCTIONS
 
 MODULES = {
     "device": DEVICE_FUNCTIONS,
+    "mega": MEGA_FUNCTIONS,
     "ffn": FFN_FUNCTIONS,
     "fa": FA_FUNCTIONS,
     "gdn": GDN_FUNCTIONS,

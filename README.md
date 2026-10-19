@@ -12,7 +12,9 @@ Use the [service guide](docs/serving.md) for installation, commands, and HTTP re
 
 The [design](docs/tile-execution.md) specifies final GPU coverage and numerical behavior.
 The [plan](docs/tile-migration.md) gives the migration sequence.
-The runtime still uses the existing native operators. Independent HTTP accounting and numerical reference tools support the migration.
+The runtime still uses the existing native operators.
+The [task engine](docs/tile-runtime.md) supplies dependency execution for FP32 copy, scale, and add tasks.
+Model computation does not yet use this engine.
 
 ## End-to-end HTTP performance
 
@@ -22,19 +24,19 @@ The complete timer covers submission, service preparation, inference, sampling, 
 Requests use greedy text generation, uncached prefixes, a 32768-token budget, and at most 4 running requests.
 
 The benchmark uses `http-reference-v1` with the [documented assumptions](docs/accounting.md).
-Two configurations have measurements for source `03282af1de12d42d`. The other 22 configurations are unmeasured.
+Two configurations have measurements for source `02fa315048300eb1`. The other 22 configurations are unmeasured.
 Old calibrated results are not used in this table.
 A dash means no measurement with the new accounting method. It does not mean zero time or a passing result.
 
 | Mode | Batch | Input tokens per request | Output tokens per request | HTTP time (s) | Reference time (s) | Efficiency | Meets 50% |
 |---|---:|---:|---:|---:|---:|---:|---|
-| Ordinary decode | 1 | 32768 | 64 | 2.027 | 0.454 | 22.41% | No |
+| Ordinary decode | 1 | 32768 | 64 | 2.008 | 0.454 | 22.62% | No |
 | Ordinary decode | 1 | 32768 | 8192 | — | — | — | Unmeasured |
 | Ordinary decode | 2 | 32768 | 64 | — | — | — | Unmeasured |
 | Ordinary decode | 2 | 32768 | 8192 | — | — | — | Unmeasured |
 | Ordinary decode | 4 | 32768 | 64 | — | — | — | Unmeasured |
 | Ordinary decode | 4 | 32768 | 8192 | — | — | — | Unmeasured |
-| MTP4 | 1 | 32768 | 64 | 1.718 | 0.457 | 26.58% | No |
+| MTP4 | 1 | 32768 | 64 | 1.700 | 0.457 | 26.86% | No |
 | MTP4 | 1 | 32768 | 8192 | — | — | — | Unmeasured |
 | MTP4 | 1 | 65536 | 64 | — | — | — | Unmeasured |
 | MTP4 | 1 | 65536 | 8192 | — | — | — | Unmeasured |

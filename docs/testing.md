@@ -13,6 +13,10 @@ The reference tests include checks of low-precision rounding, GDN carry state, a
 The constraint test checks schema masks and separate speculative grammar states.
 Rust checks streamed JSON tool frames and prefix cache isolation for media requests.
 
+The CPU task protocol check rejects incorrect dependencies and metadata.
+The [task engine fixture](tile-runtime.md#checks) checks GPU publication, epoch reuse, CUDA Graph replay, and failure termination.
+It does not supply model numerical or performance evidence.
+
 Use the [kernel development commands](operators/development.md) for GPU numerical checks.
 The FFN output reference uses selected rows. The report gives the sample scope.
 Each provider states its numerical sample scope.

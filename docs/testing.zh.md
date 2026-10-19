@@ -13,6 +13,10 @@ CPU 检查涵盖数值容差, checkpoint identity, 规范化 HTTP 计费和 mani
 约束测试检查 schema mask 及独立的 speculative grammar 状态.
 Rust 检查流式 JSON 工具帧以及媒体请求的前缀 cache 隔离.
 
+CPU task 协议检查拒绝错误的依赖和元数据.
+[Task 引擎 fixture](tile-runtime.zh.md#检查) 检查 GPU 发布, epoch 复用, CUDA Graph 重放和故障终止.
+该 fixture 不提供模型数值或性能证据.
+
 GPU 数值检查使用[算子开发命令](operators/development.zh.md).
 FFN 输出参考使用选定的行. 报告注明抽样范围.
 每个 provider 声明其数值抽样范围.

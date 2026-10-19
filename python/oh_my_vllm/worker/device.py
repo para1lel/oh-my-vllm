@@ -131,4 +131,9 @@ class Device:
                     lambda: self.checked(self.runtime.cudaGraphExecDestroy(executable))
                 )
             self.checked(status)
-            yield lambda: self.checked(self.runtime.cudaGraphLaunch(executable, None))
+
+            def replay():
+                caller_stream = tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0"))
+                self.checked(self.runtime.cudaGraphLaunch(executable, caller_stream))
+
+            yield replay

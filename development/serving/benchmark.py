@@ -22,7 +22,7 @@ from .roofline import lower_bound
 MIN_EFFICIENCY = 0.50
 
 ROOT = Path(__file__).resolve().parents[2]
-NATIVE_MODULES = ("device", "ffn", "fa", "gdn", "mtp", "sample", "vision")
+NATIVE_MODULES = ("device", "mega", "ffn", "fa", "gdn", "mtp", "sample", "vision")
 REQUEST_SHAPES = [("ordinary", batch, 32768) for batch in (1, 2, 4)] + [
     ("mtp4", batch, length) for batch in (1, 2, 4) for length in (32768, 65536, 131072)
 ]

@@ -7,7 +7,9 @@ GPU 迁移以 [tile 执行设计](tile-execution.zh.md)为准.
 运行时仍使用 native FFN, FA, GDN, vision, 采样和 MTP 实现.
 Rust 提供 HTTP, 调度, 逻辑 KV 和 worker 生命周期控制.
 Python 通过现有 ZMQ DEALER 和 msgpack 边界提供模型执行.
-HTTP 计费使用固定标称速率和规范化调度. Tile 引擎尚不可用.
+HTTP 计费使用固定标称速率和规范化调度.
+[Task 引擎](tile-runtime.zh.md)为 copy, scale 和 add task 提供依赖执行.
+模型计算尚未使用此引擎.
 
 最终目标覆盖全部 GPU tensor 计算, 也包含准备和初始化阶段.
 迁移阶段不设性能门槛.
@@ -15,7 +17,7 @@ HTTP 计费使用固定标称速率和规范化调度. Tile 引擎尚不可用.
 
 构建器为 `development.native_build`. 数值参考位于 `development/reference/`.
 旧算子计时, 公开比较和峰值校准工具已移除.
-下一步实现 task 引擎, 贯通直到词表投影的普通 decode.
+下一步添加语言 task body, 贯通直到词表投影的普通 decode.
 继续处理 prefill, MTP/采样, vision 及准备/辅助计算.
 替换实现通过适用正确性检查后, 删除旧实现.
 
