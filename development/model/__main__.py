@@ -11,7 +11,6 @@ from .compare import BASELINE_SHA256, LIMITS, difference, load_reference, valida
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=Path, required=True)
-    parser.add_argument("--reference", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--mode", choices=("decode", "prefill"), default="decode")
     args = parser.parse_args()
@@ -23,7 +22,7 @@ def main():
         parser.error("use a new external JSON report path")
     if args.report.resolve().is_relative_to(Path(__file__).resolve().parents[2]):
         parser.error("use external artifacts")
-    reference, expected = load_reference(args.reference)
+    reference, expected = load_reference()
     metadata, outputs = run(
         args.model, decode_token=reference["case"]["decode_token"], mode=args.mode
     )

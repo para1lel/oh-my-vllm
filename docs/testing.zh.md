@@ -6,7 +6,7 @@
 
 Rust 测试包含服务, scheduler, 逻辑 KV 和 worker 生命周期检查.
 HTTP 测试通过进程边界使用 Python placeholder.
-它们不提供模型推理或 GPU 性能的验收证据.
+它们不测量模型推理或 GPU 性能.
 
 CPU 检查涵盖 checkpoint 和 native identities, 全模型报告验证, 规范化 HTTP 计费和 manifest 验证.
 约束测试检查 schema masks 及独立的 speculative grammar 状态.
@@ -30,7 +30,7 @@ Device 内存或同步行为变化时使用 Compute Sanitizer.
 它检查精确的输入和输出长度, 未缓存 prefix 及实测 MTP 接受率.
 GPU 工作使用 GPU wrapper.
 每次运行后停止自己启动的进程.
-原始 artifacts 保存在仓库外.
+测量 artifacts 保存在仓库外.
 
 每轮交付前更新两种语言 README 中要求的性能表.
 不要把其他测试结果写入项目文档.

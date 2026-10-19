@@ -1,10 +1,12 @@
 #pragma once
 #include "gdn_mx_output.cuh"
 #include "gdn_mx_plan.cuh"
-#include "gdn_mx_quant.cuh"
+#include "mx_fp8_convert.cuh"
 #include "mx_fp8_norm.cuh"
 
 namespace gdn_mx_native {
+using mx_fp8::convert_kernel;
+
 inline void lt_alignment(TensorView tensor) {
   TVM_FFI_ICHECK(reinterpret_cast<uintptr_t>(tensor.data_ptr()) % 256 == 0)
       << "GDN MXFP8 GEMM storage requires 256-byte alignment";

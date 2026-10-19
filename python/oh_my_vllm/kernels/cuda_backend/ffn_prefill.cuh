@@ -18,7 +18,6 @@
 #include "groupwise.cuh"
 #include "projection_prefill.cuh"
 
-template <bool MulticastA = false>
 inline void ffn_prefill_projection(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *weight,
                                    const float *scale_a, const float *scale_weight,
                                    __nv_bfloat16 *output, int m, int n, int k,

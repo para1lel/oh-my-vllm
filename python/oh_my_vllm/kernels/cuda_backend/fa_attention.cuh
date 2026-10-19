@@ -103,37 +103,34 @@ __device__ __forceinline__ void fa_stage_kv(const __nv_bfloat16 *cache, const vo
   asm volatile("cp.async.commit_group;" ::: "memory");
 }
 
-template <bool ModelShape, bool Grouped, typename Position, int Buffers,
-          int QueryTile = Grouped ? 32 : 16>
-__global__ void
-fa_partial_kernel(const __nv_bfloat16 *__restrict__ query, const __nv_bfloat16 *__restrict__ cache,
-                  const void *__restrict__ tables, const void *__restrict__ lengths,
-                  const void *__restrict__ starts, float *__restrict__ partial,
-                  float *__restrict__ lse, int runtime_h, int runtime_hk, int table_width,
-                  int splits, int first, bool tw, bool lw, bool sw, int query_tiles,
-                  int max_query_len, int query_rows, int64_t cache_pages) {
-  constexpr int BQ = QueryTile, BK = Grouped ? 64 : 32;
+template <int QueryTile>
+__global__ void fa_partial_kernel(const __nv_bfloat16 *__restrict__ query,
+                                  const __nv_bfloat16 *__restrict__ cache,
+                                  const void *__restrict__ tables, const void *__restrict__ lengths,
+                                  const void *__restrict__ starts, float *__restrict__ partial,
+                                  float *__restrict__ lse, int table_width, int splits, int first,
+                                  bool tw, bool lw, bool sw, int query_tiles, int max_query_len,
+                                  int query_rows, int64_t cache_pages) {
+  using Position = int32_t;
+  constexpr int BQ = QueryTile, BK = 64, h = 24, hk = 4;
   constexpr int RowGroups = BQ / 8, ScoreTiles = BQ * BK / 512, AccTiles = BQ / 2;
-  const int h = ModelShape ? 24 : runtime_h, hk = ModelShape ? 4 : runtime_hk;
   extern __shared__ __align__(32) unsigned char storage[];
   auto *q = reinterpret_cast<__nv_bfloat16 *>(storage);
   auto *key_buffers = q + BQ * 256;
-  auto *value_buffers = key_buffers + Buffers * BK * 256;
-  auto *p = value_buffers + Buffers * BK * 256;
+  auto *value_buffers = key_buffers + BK * 256;
+  auto *p = value_buffers + BK * 256;
   auto *maxima = reinterpret_cast<float *>(p + BQ * 64);
   const int warp = threadIdx.x / 32, lane = threadIdx.x & 31;
   const int fr = lane / 4, fc = (lane % 4) * 2;
   const int seq = blockIdx.x / query_tiles, qbase = (blockIdx.x % query_tiles) * BQ;
   const int kh = blockIdx.y, split = blockIdx.z, ratio = h / hk;
-  const int64_t start64 = Grouped ? index_at(starts, sw, seq) : seq;
-  const int64_t end64 = Grouped ? index_at(starts, sw, seq + 1) : seq + 1;
-  if constexpr (Grouped) {
-    const int sequences = gridDim.x / query_tiles;
-    if (start64 < 0 || end64 > query_rows || end64 <= start64 || end64 - start64 > max_query_len ||
-        index_at(starts, sw, 0) != 0 || index_at(starts, sw, sequences) != query_rows) {
-      asm volatile("trap;");
-      return;
-    }
+  const int64_t start64 = index_at(starts, sw, seq);
+  const int64_t end64 = index_at(starts, sw, seq + 1);
+  const int sequences = gridDim.x / query_tiles;
+  if (start64 < 0 || end64 > query_rows || end64 <= start64 || end64 - start64 > max_query_len ||
+      index_at(starts, sw, 0) != 0 || index_at(starts, sw, sequences) != query_rows) {
+    asm volatile("trap;");
+    return;
   }
   const int start = start64, end = end64;
   if (start + qbase / ratio >= end)
@@ -171,18 +168,11 @@ fa_partial_kernel(const __nv_bfloat16 *__restrict__ query, const __nv_bfloat16 *
   if (begin < limit)
     fa_stage_kv<BK>(cache, tables, seq, table_width, cache_pages, begin, last, hk, kh, tw,
                     key_buffers, value_buffers);
-  int step = 0;
-  for (Position base = begin; base < limit; base += BK, ++step) {
-    auto *k = key_buffers + (step % Buffers) * BK * 256;
-    auto *v = value_buffers + (step % Buffers) * BK * 256;
+  for (Position base = begin; base < limit; base += BK) {
+    auto *k = key_buffers;
+    auto *v = value_buffers;
     asm volatile("cp.async.wait_group 0;" ::: "memory");
     __syncthreads();
-    if constexpr (Buffers == 2) {
-      if (base + BK < limit)
-        fa_stage_kv<BK>(cache, tables, seq, table_width, cache_pages, base + BK, last, hk, kh, tw,
-                        key_buffers + ((step + 1) % Buffers) * BK * 256,
-                        value_buffers + ((step + 1) % Buffers) * BK * 256);
-    }
     float score[ScoreTiles][4] = {};
 #pragma unroll 8
     for (int inner = 0; inner < 256; inner += 16) {
@@ -282,11 +272,9 @@ fa_partial_kernel(const __nv_bfloat16 *__restrict__ query, const __nv_bfloat16 *
       }
     }
     __syncthreads();
-    if constexpr (Buffers == 1) {
-      if (base + BK < limit)
-        fa_stage_kv<BK>(cache, tables, seq, table_width, cache_pages, base + BK, last, hk, kh, tw,
-                        key_buffers, value_buffers);
-    }
+    if (base + BK < limit)
+      fa_stage_kv<BK>(cache, tables, seq, table_width, cache_pages, base + BK, last, hk, kh, tw,
+                      key_buffers, value_buffers);
   }
 #pragma unroll
   for (int rg = 0; rg < RowGroups; ++rg)

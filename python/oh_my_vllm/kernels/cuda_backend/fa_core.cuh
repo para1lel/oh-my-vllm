@@ -181,18 +181,16 @@ inline int fa_attention_core_launch(TensorView query, TensorView cache, TensorVi
           (QueryTile * 256 + 2 * 64 * 256 + QueryTile * 64) * 2 + 8 * QueryTile * 4;
       static std::once_flag configured;
       std::call_once(configured, [] {
-        check_cuda(cudaFuncSetAttribute(fa_partial_kernel<true, true, int32_t, 1, QueryTile>,
+        check_cuda(cudaFuncSetAttribute(fa_partial_kernel<QueryTile>,
                                         cudaFuncAttributeMaxDynamicSharedMemorySize, shared_bytes));
       });
       int tiles = (max_queries * 6 + QueryTile - 1) / QueryTile;
-      fa_partial_kernel<true, true, int32_t, 1, QueryTile>
-          <<<dim3(batch * tiles, 4, splits), 128, shared_bytes, stream>>>(
-              static_cast<const __nv_bfloat16 *>(query.data_ptr()),
-              static_cast<const __nv_bfloat16 *>(cache.data_ptr()), tables.data_ptr(),
-              lengths.data_ptr(), sequence_rows.data_ptr(),
-              static_cast<float *>(partial.data_ptr()), static_cast<float *>(lse.data_ptr()), 24, 4,
-              tables.size(1), splits, first_token, false, false, false, tiles, max_queries, rows,
-              blocks);
+      fa_partial_kernel<QueryTile><<<dim3(batch * tiles, 4, splits), 128, shared_bytes, stream>>>(
+          static_cast<const __nv_bfloat16 *>(query.data_ptr()),
+          static_cast<const __nv_bfloat16 *>(cache.data_ptr()), tables.data_ptr(),
+          lengths.data_ptr(), sequence_rows.data_ptr(), static_cast<float *>(partial.data_ptr()),
+          static_cast<float *>(lse.data_ptr()), tables.size(1), splits, first_token, false, false,
+          false, tiles, max_queries, rows, blocks);
       check_cuda(cudaGetLastError());
     };
     if (max_queries * 6 <= 16)

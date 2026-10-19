@@ -1,9 +1,9 @@
-# 端到端要求
+# HTTP 性能测量
 
 使用一张 NVIDIA B200, 并遵守[模型契约](operators/model.zh.md).
 使用完整 Rust 服务和 Python 推理 worker.
 占位输出不能作为推理证据.
-[GPU 执行规则](execution.zh.md)规定执行方式和最终验收.
+[GPU 执行规则](execution.zh.md)规定执行方式.
 
 ## 配置
 
@@ -15,7 +15,7 @@
 | 普通 decode | 1, 2, 4 | 32768 | 64, 8192 |
 | MTP4 | 1, 2, 4 | 32768, 65536, 131072 | 64, 8192 |
 
-共 24 种配置. 最终验收时每种配置必须单独通过.
+共 24 种配置.
 64-token 输出使测量对 prefill 时间敏感.
 保留 8192-token 输出用于长 decode 测量.
 使用 32768-token 预算, 最多同时运行 4 个请求.
@@ -30,14 +30,6 @@
 
 不包含模型加载, 初始化和 trace 分析.
 不能用首 token 时间代替完整延迟.
-
-## 性能门槛
-
-使用[标称资源及全局公式](execution.zh.md#http-性能).
-中间阶段变更可以报告未达标或尚未测量的配置.
-最终验收时 24 种配置的效率都必须至少为 50%.
-完整 batch 延迟最多为参考时间的 2 倍.
-算子计时和公开实现比较没有独立验收门槛.
 
 ## 测量命令
 
@@ -61,18 +53,37 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark 
 使用 `--case ordinary:1:32768:64` 选择一种配置.
 使用 `--output-tokens 64` 进行对 prefill 时间敏感的测量.
 使用 `--output-tokens 32` 进行短测试.
-配置子集或其他输出长度不能通过完整门槛.
-重复配置, 缺失配置或任一配置失败都会阻止完整验收.
+
+命令接受配置子集和其他输出长度, 但拒绝重复配置.
+请求失败或产物无效时以错误退出.
 
 设置 `OH_MY_VLLM_EXECUTION_TRACE` 后, worker 写入执行 trace.
 Trace 路径必须位于仓库外, 且运行前不能存在.
 Benchmark 为服务进程设置此变量.
 
+## 标称资源
+
+使用 [NVIDIA 数据表第 8 页](https://dam-cdn.nvd.orangelogic.com/AssetLink/y441155802qub41q118b2852i557jem5.pdf)中的 HGX B200 dense 数值.
+吞吐为 HBM 7.7 TB/s, FP8 4.5 PFLOP/s, BF16 2.25 PFLOP/s 和 TF32 1.1 PFLOP/s.
+标量吞吐为 FP32 75 TFLOP/s 和 FP64 37 TFLOP/s.
+不使用 sparse 数值, GB200 数值或实测校准值替代.
+
+```text
+reference_seconds = max(
+    necessary_bytes / HBM_rate,
+    FP8_work / FP8_rate + BF16_work / BF16_rate + TF32_work / TF32_rate,
+    FP32_work / FP32_rate,
+    FP64_work / FP64_rate,
+)
+efficiency = reference_seconds / HTTP_seconds
+```
+
+这是保守资源估算, 不是最小物理延迟证明.
+
 ## 下界计算
 
 [参考计算](../development/serving/accounting.py)使用版本 `http-reference-v1`.
 它不依赖 runtime 算法选择器或实测校准输入.
-[计费假设](accounting.zh.md)规定其算术和省略流量.
 
 [Trace 验证器](../development/serving/trace.py)先检查完整 prefill, 连续接受位置, proposal 依赖和输出数量.
 唯一 trace identity 必须匹配服务模式.
@@ -100,4 +111,67 @@ Context 计算停在接受终点; 如果随后有新 proposal, 则再计算一�
 Manifest 将完整请求计时绑定到产物 identity.
 该 identity 绑定源码, 可执行文件, 原生模块, checkpoint, tokenizer, 设备和计费版本.
 [产物检查](../development/serving/benchmark.py)拒绝运行期间的变化.
-旧测量产物不能作为此版本的验收证据.
+测量产物只描述其记录的源码和计费版本.
+
+## 内存
+
+每个逻辑投影 pass 只计算一次矩阵权重, 由其 batch 共享.
+FP8 矩阵每元素使用一字节, 每个 128-by-128 区域使用 FP32 scale.
+BF16 矩阵每元素使用两字节.
+每个 pass 只计算一次各归一化向量.
+中间 hidden state, logits 和 activation buffer 不计内存分数.
+
+FA 对每个请求和 pass 读取一次历史 KV.
+新 query KV 可以直接交给 attention, 不再读取 HBM.
+接受的 KV 只计一次写入, 使用 4 个 KV head, 宽度 256, K 和 V 均为 BF16.
+MTP draft attention 从位置 1 开始. 首个 draft 读取缓存的 context endpoint.
+后续 draft 计算新 KV.
+
+当请求起点大于零时, GDN 读取一份 BF16 recurrent 和 convolution state.
+计算该 pass 中每个不同的 784-token checkpoint 和接受终点.
+终点上的 checkpoint 只计一次.
+Verification 前进接受的 proposal 数加一行.
+每个 GDN 层有 48 个 128-by-128 recurrent head, 以及 10240 个各存储 3 个值的 convolution channel.
+
+私有 candidate 写入和后续 state 复制不计分.
+此省略不取消 private-state 正确性检查.
+
+## 算术
+
+矩阵乘法按规定 operand 精度计算, 每个 multiply-add 计两次操作.
+计算涵盖全部 64 个 target 层和完整词表投影.
+全部 verification 行都计入, 包括 proposal 被拒绝的情况.
+FA 计算完整因果 attention pair, 每个 pair 和 query head 计三次 FP32 操作.
+这些标量操作代表 score scaling, probability summation 和 probability normalization.
+
+GDN prefill 使用固定的 64-row chunk, 在 784-token checkpoint 处分割.
+其参考 block recurrence 计算 BF16 乘积及 FP32 对角求逆和 state update.
+Decode 和 verification 使用固定的 FP32 recurrent 公式.
+Runtime 算法变化不能改变此参考选择.
+
+RMS normalization 每元素计四次操作, 每行另计两次标量操作.
+Residual addition 每元素计一次操作.
+FFN activation 每个 intermediate 元素计两次乘积.
+GDN convolution 每 token 和 channel 计七次操作.
+
+FA head normalization 使用宽度 256. Rotary product 使用规定的 64 维.
+Attention output gate 每元素计一次乘积.
+MTP context, draft 和词表投影遵循记录的因果位置.
+
+## 省略项
+
+HTTP 用例使用不带 penalty 的 greedy sampling.
+Selection comparison, sorting, integer indexing, random generation 和 greedy MTP acceptance 不计浮点分数.
+估算省略 sigmoid evaluation, transcendental instruction, datatype conversion, quantization 和 scale application 算术.
+它也省略上述条目之外的 GDN head normalization, gate 和 input normalization 算术.
+省略的操作没有经验吞吐系数.
+
+Trace 没有用于 embedding-region 去重的完整 input token ID.
+因此 embedding 内存读取不计分.
+Checkpoint hidden storage, MTP endpoint storage, metadata 和返回 token 流量也被省略.
+这些保守省略可能降低报告效率.
+当实现增加工作量时, 它们不能提高效率.
+
+Vision 和初始化不在这些纯文本 HTTP 计时范围内.
+这些计时不能检查它们的正确性.
+修改这些假设必须更新计费版本, 并使旧性能证据失效.

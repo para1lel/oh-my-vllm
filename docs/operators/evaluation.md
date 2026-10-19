@@ -2,7 +2,6 @@
 
 Use the [model contract](model.md) and [development commands](development.md).
 The [GPU execution rules](../execution.md) control execution.
-Only the [HTTP comparison](../performance.md) has a performance gate.
 
 ## Numerical scope
 
@@ -12,7 +11,7 @@ The [capture code](../../development/model/capture.py) specifies its token IDs.
 The comparison includes all 248320 logits from embedding through all 64 layers and final vocabulary projection.
 It does not compare intermediate operators or apply single-operator tolerances.
 
-The [reference](../../development/model/reference.py) uses direct PyTorch FP64 computations.
+The [reference generator](../../development/model/reference.py) uses direct PyTorch FP64 computations.
 It decodes checkpoint E4M3 weights with their original 128-by-128 scales into FP64.
 The change from BF16 checkpoint values to FP64 has no rounding error.
 All subsequent arithmetic, activations, normalization, attention, and recurrent state use FP64.
@@ -37,7 +36,7 @@ Use different checks for protocols, state ownership, and numerical results.
 
 ## Evidence and limits
 
-Do not change the FP64 artifact after generation.
+Keep the frozen [FP64 artifact](../../development/model/reference.npz) in the repository.
 Record its SHA256, checkpoint identity, reference source identity, PyTorch version, and input token IDs.
 Reject changed artifacts, checkpoint files, inputs, nonfinite logits, or incomplete vocabulary vectors.
 
@@ -55,4 +54,4 @@ All three limits must pass. A failed comparison exits with an error.
 
 These limits control this short case. They do not prove accuracy for other inputs.
 Do not adjust those limits automatically after an implementation change.
-Keep raw vectors and reports external to the repository.
+Keep inference vectors and reports external to the repository.

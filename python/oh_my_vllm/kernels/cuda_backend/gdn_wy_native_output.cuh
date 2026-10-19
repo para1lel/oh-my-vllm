@@ -43,10 +43,9 @@ __device__ inline void native_output_product(NativeElement *a, NativeElement *b,
   }
 }
 
-template <class Snapshot>
 __global__ __launch_bounds__(256, 3) void native_output_qk_kernel(
     const __nv_bfloat16 *qkv, const float *gates, const int *metadata,
-    const __nv_bfloat16 *transforms, const float *prefixes, const Snapshot *snapshots,
+    const __nv_bfloat16 *transforms, const float *prefixes, const __nv_bfloat16 *snapshots,
     __nv_bfloat16 *output, const __nv_bfloat16 *coefficients) {
   using namespace cute;
   int chunk = blockIdx.x, head = blockIdx.y;
@@ -72,15 +71,7 @@ __global__ __launch_bounds__(256, 3) void native_output_qk_kernel(
   for (int local = 0; local < 8; ++local) {
     int index = thread + local * 256, value = index / 16, key = index % 16 * 8;
     int64_t offset = (int64_t(chunk) * 48 + head) * 128 * 128 + index * 8;
-    if constexpr (std::is_same_v<Snapshot, __nv_bfloat16>) {
-      native_copy16(&native_element(states, value, key), snapshots + offset);
-    } else {
-      float4 a = *reinterpret_cast<const float4 *>(snapshots + offset);
-      float4 b = *reinterpret_cast<const float4 *>(snapshots + offset + 4);
-      *reinterpret_cast<uint4 *>(&native_element(states, value, key)) =
-          make_uint4(native_pair(a.x, a.y), native_pair(a.z, a.w), native_pair(b.x, b.y),
-                     native_pair(b.z, b.w));
-    }
+    native_copy16(&native_element(states, value, key), snapshots + offset);
   }
 #pragma unroll
   for (int local = 0; local < 4; ++local) {

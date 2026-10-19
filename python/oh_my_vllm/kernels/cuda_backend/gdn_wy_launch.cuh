@@ -37,7 +37,7 @@ inline void native_launch(const __nv_bfloat16 *qkv, const float *gates, const in
                           : gdn_wy_register::register_carry_kernel<false>;
   check_cuda(cudaFuncSetAttribute(carry, cudaFuncAttributeMaxDynamicSharedMemorySize,
                                   sizeof(gdn_wy_register::RegisterCarryStorage)));
-  check_cuda(cudaFuncSetAttribute(native_output_qk_kernel<__nv_bfloat16>,
+  check_cuda(cudaFuncSetAttribute(native_output_qk_kernel,
                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
                                   sizeof(NativeOutputStorage)));
   if (capacity >= 32) {
@@ -55,9 +55,8 @@ inline void native_launch(const __nv_bfloat16 *qkv, const float *gates, const in
   carry<<<dim3(batch, 48, 2), 128, sizeof(gdn_wy_register::RegisterCarryStorage), stream>>>(
       qkv, metadata, reads, transforms, prefixes, state, snapshots, capacity);
   check_cuda(cudaGetLastError());
-  native_output_qk_kernel<__nv_bfloat16>
-      <<<dim3(batch * capacity, 48), 256, sizeof(NativeOutputStorage), stream>>>(
-          qkv, gates, metadata, transforms, prefixes, snapshots, output, coefficients);
+  native_output_qk_kernel<<<dim3(batch * capacity, 48), 256, sizeof(NativeOutputStorage), stream>>>(
+      qkv, gates, metadata, transforms, prefixes, snapshots, output, coefficients);
   check_cuda(cudaGetLastError());
 }
 

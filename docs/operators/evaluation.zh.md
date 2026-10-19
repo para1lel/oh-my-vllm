@@ -2,7 +2,6 @@
 
 使用[模型契约](model.zh.md)及[开发命令](development.zh.md).
 [GPU 执行规则](../execution.zh.md)规定执行方式.
-只有 [HTTP 对比](../performance.zh.md)设有性能门槛.
 
 ## 数值范围
 
@@ -12,7 +11,7 @@
 对照包含从 embedding, 全部 64 层到最终词表投影的全部 248320 个 logits.
 不比较中间算子, 也不使用单算子容差.
 
-独立[参考](../../development/model/reference.py)直接使用 PyTorch FP64 计算.
+独立[参考生成器](../../development/model/reference.py)直接使用 PyTorch FP64 计算.
 它按原始 128-by-128 scales 将 checkpoint E4M3 权重解码为 FP64.
 BF16 checkpoint 值精确转换为 FP64.
 之后的所有算术, 激活, 归一化, attention 和 recurrent state 均使用 FP64.
@@ -35,7 +34,7 @@ Prefill 变化时, 使用 `--mode prefill` 比较同一提示的末行.
 
 ## 证据与门槛
 
-生成后不改动 FP64 artifact.
+将冻结的 [FP64 artifact](../../development/model/reference.npz) 保存在仓库中.
 记录其 SHA256, checkpoint identity, 参考源码 identity, PyTorch 版本和输入 token IDs.
 拒绝发生变化的 artifact, checkpoint 文件, 输入, 非有限 logits 或不完整词表向量.
 不要用推理输出替换参考.
@@ -51,4 +50,4 @@ Top-1 是否相同仅用于诊断, 因为小误差可能交换接近的 logits.
 三项门槛必须全部通过. 对照失败时以错误退出.
 这些门槛约束该短用例. 它们不能证明其他输入的准确性.
 实现变化后不要自动调整这些门槛.
-原始向量及报告保存在仓库外.
+推理向量及报告保存在仓库外.

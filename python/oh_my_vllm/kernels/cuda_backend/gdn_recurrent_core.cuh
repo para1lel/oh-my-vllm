@@ -398,13 +398,7 @@ inline void launch(const __nv_bfloat16 *q, const __nv_bfloat16 *k, const __nv_bf
   check_cuda(cudaGetLastError());
 }
 
-// The caller must first validate fixed offsets, read slots, and private export slots.
-inline constexpr auto launch_validated_metadata = launch<false, false>;
-
 // Q/K/V share row stride 10240. A/B share row stride 96; pass A=BA+48 and B=BA.
 inline constexpr auto launch_interleaved = launch<true, true>;
-
-// This entry also requires the fixed metadata validation described above.
-inline constexpr auto launch_interleaved_validated_metadata = launch<false, true>;
 
 } // namespace gdn_recurrent

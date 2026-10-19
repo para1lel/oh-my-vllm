@@ -6,7 +6,7 @@
 使用 checkpoint 的维度. 保持原始权重值和 scale.
 
 当完整操作变快时, 将小型 producer 操作融合到 consumer 中.
-性能验收使用完整 HTTP 计时.
+性能测量使用完整 HTTP 计时.
 
 使用调用者的 stream. Eager 和 CUDA Graph 执行使用相同的算子.
 launch 前检查 shape, 类型, stride, device 和存储重叠.

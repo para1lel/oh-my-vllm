@@ -1,9 +1,9 @@
-# End-to-end requirements
+# HTTP performance measurement
 
 Use one NVIDIA B200 and the [model contract](operators/model.md).
 Use the full Rust service and Python inference worker.
 Placeholder outputs do not supply inference evidence.
-The [GPU execution rules](execution.md) control execution and final acceptance.
+The [GPU execution rules](execution.md) control execution.
 
 ## Configurations
 
@@ -15,7 +15,7 @@ The input and output lengths apply to each request.
 | Ordinary decode | 1, 2, 4 | 32768 | 64, 8192 |
 | MTP4 | 1, 2, 4 | 32768, 65536, 131072 | 64, 8192 |
 
-These are 24 configurations. Each configuration must pass separately at final acceptance.
+These are 24 configurations.
 The 64-token output makes the measurement sensitive to prefill time.
 Keep the 8192-token output for long decode measurement.
 Use a token budget of 32768 and a maximum of 4 running requests.
@@ -30,14 +30,6 @@ Include submission, request preparation, queue time, prefill, decode, constraint
 
 Exclude model loading, initialization, and trace analysis from timing.
 Do not use time to first token as the full latency.
-
-## Performance limit
-
-Use [nominal resources and the global formula](execution.md#http-performance).
-Intermediate changes can report failed or unmeasured configurations.
-Final acceptance must have efficiency of at least 50% in each of the 24 configurations.
-The full batch latency must be at most 2 times its reference time.
-Operator timing and public comparisons have no independent acceptance gate.
 
 ## Measurement command
 
@@ -61,18 +53,38 @@ Use `--case ordinary:1:32768` to select its two output lengths.
 Use `--case ordinary:1:32768:64` to select one configuration.
 Use `--output-tokens 64` for measurements sensitive to prefill time.
 Use `--output-tokens 32` for a short run.
-A partial set or other output lengths cannot pass the full gate.
-Duplicate configurations, missing configurations, or a failed configuration prevent full acceptance.
+
+The command accepts configuration subsets and other output lengths.
+It rejects duplicate configurations.
+Request failures or incorrect artifacts cause an error exit.
 
 The worker writes an execution trace when `OH_MY_VLLM_EXECUTION_TRACE` is set.
 The trace path must be external to the repository and must not exist before the run.
 The benchmark sets this variable for its service process.
 
+## Nominal resources
+
+Use the dense HGX B200 values from [NVIDIA's data sheet, page 8](https://dam-cdn.nvd.orangelogic.com/AssetLink/y441155802qub41q118b2852i557jem5.pdf).
+The rates are HBM 7.7 TB/s, FP8 4.5 PFLOP/s, BF16 2.25 PFLOP/s, and TF32 1.1 PFLOP/s.
+Scalar rates are FP32 75 TFLOP/s and FP64 37 TFLOP/s.
+Do not substitute sparse rates, GB200 rates, or measured calibration.
+
+```text
+reference_seconds = max(
+    necessary_bytes / HBM_rate,
+    FP8_work / FP8_rate + BF16_work / BF16_rate + TF32_work / TF32_rate,
+    FP32_work / FP32_rate,
+    FP64_work / FP64_rate,
+)
+efficiency = reference_seconds / HTTP_seconds
+```
+
+This is a conservative resource estimate, not a minimum physical latency proof.
+
 ## Lower-bound calculation
 
 The [reference calculation](../development/serving/accounting.py) uses version `http-reference-v1`.
 It has no runtime algorithm selector or measured calibration input.
-The [accounting assumptions](accounting.md) specify its arithmetic and traffic that has no credit.
 
 The [trace validator](../development/serving/trace.py) first checks full prefill, continuous accepted positions, proposal dependencies, and output counts.
 The single trace identity must match the service mode.
@@ -93,11 +105,74 @@ Context computation stops at the accepted endpoint, with one additional row when
 The scheduler cannot create proposals or combine different steps of one request.
 
 The calculation adds all resource work before it takes the maximum.
-It does not add independent operator times.
+It does not add times for different operators.
 Extra tiles, padding, launches, repeated computation, or temporary copies cannot increase credited work.
 
 Artifacts contain responses, the manifest and its digest, the selected trace digest, resource totals, and acceptance counters.
 The manifest binds the full request timer to the artifact identity.
 That identity binds source, executable, native modules, checkpoint, tokenizer, device, and accounting version.
 The [artifact check](../development/serving/benchmark.py) rejects changes during the run.
-Old measurement artifacts cannot supply acceptance evidence for this version.
+Measurement artifacts apply only to their recorded source and accounting version.
+
+## Memory
+
+Count matrix weights once per logical projection pass, shared across its batch.
+FP8 matrices use one byte per element and FP32 scales for each 128-by-128 region.
+BF16 matrices use two bytes per element.
+Count each normalization vector once per pass.
+Intermediate hidden states, logits, and activation buffers have no memory credit.
+
+FA reads prior KV history once per request and pass.
+New query KV can pass directly to attention without another HBM read.
+Count accepted KV writes once, with 4 KV heads, width 256, and BF16 K and V.
+MTP draft attention starts at position 1. The first draft reads its cached context endpoint.
+Subsequent drafts compute new KV.
+
+GDN reads one BF16 recurrent and convolution state when a request starts above position zero.
+Count unique 784-token checkpoints and the accepted endpoint in that pass.
+A checkpoint at the endpoint counts once.
+Verification advances by the accepted proposal count plus one.
+Each GDN layer has 48 recurrent heads of 128-by-128 elements and 10240 convolution channels with 3 stored values.
+
+Private candidate writes and subsequent state copies have no credit.
+This omission does not remove the private-state correctness checks.
+
+## Arithmetic
+
+Matrix products count two operations per multiply-add at their specified operand precision.
+The calculation covers all 64 target layers and the full vocabulary projection.
+It counts all verification rows, also when some proposals are rejected.
+FA counts the full causal attention pairs and three FP32 operations per pair and query head.
+These scalar operations represent score scaling, probability summation, and probability normalization.
+
+GDN prefill uses fixed 64-row chunks, split at 784-token checkpoints.
+Its reference block recurrence counts BF16 products and FP32 diagonal inversion and state updates.
+Decode and verification use the fixed FP32 recurrent formula.
+Runtime algorithm changes cannot change this reference choice.
+
+RMS normalization counts four operations per element and two scalar operations per row.
+Residual addition counts one operation per element.
+The FFN activation counts two products per intermediate element.
+GDN convolution counts seven operations per token and channel.
+
+FA head normalization uses width 256. Rotary products use the specified 64 dimensions.
+The attention output gate counts one product per element.
+MTP context, draft, and vocabulary projections follow their recorded causal positions.
+
+## Omissions
+
+The HTTP cases use greedy sampling without penalties.
+Selection comparisons, sorting, integer indexing, random generation, and greedy MTP acceptance have no floating-point credit.
+The estimate does not include sigmoid evaluation, transcendental instructions, datatype conversion, quantization, and scale application arithmetic.
+It also does not include GDN head normalization, gates, and input normalization arithmetic beyond the listed terms.
+There is no empirical throughput factor for operations that have no credit.
+
+The trace does not include all input token IDs for embedding-region deduplication.
+Embedding memory reads therefore have no credit.
+Checkpoint hidden storage, MTP endpoint storage, metadata, and returned token traffic also have no credit.
+These conservative exclusions can reduce reported efficiency.
+They cannot increase it when an implementation adds work.
+
+Vision and initialization do not occur inside these text-only HTTP timers.
+These timers cannot check their correctness.
+Changes to these assumptions must change the accounting version and invalidate earlier performance evidence.

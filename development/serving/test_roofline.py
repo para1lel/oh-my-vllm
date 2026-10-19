@@ -10,8 +10,7 @@ from . import benchmark
 from .accounting import draft_work, reference_seconds, reference_work, sample_work
 from .benchmark import (
     CONFIGURATIONS,
-    comparison_passed,
-    gate_result,
+    efficiency,
     select_configurations,
 )
 from .roofline import lower_bound
@@ -30,8 +29,8 @@ def tokenizer_fixture(root):
     (root / "chat_template.jinja").write_text('{{ messages[0]["content"] }}')
 
 
-class BenchmarkGate(unittest.TestCase):
-    def test_output_lengths_and_complete_comparison(self):
+class BenchmarkMeasurements(unittest.TestCase):
+    def test_case_selection_and_timing(self):
         self.assertEqual(len(CONFIGURATIONS), 24)
         self.assertEqual(select_configurations(None, (64, 8192)), CONFIGURATIONS)
         self.assertEqual(select_configurations(None, (8192,)), CONFIGURATIONS[1::2])
@@ -43,29 +42,11 @@ class BenchmarkGate(unittest.TestCase):
             select_configurations(["ordinary:1:32768:64"], (64, 8192)),
             [("ordinary", 1, 32768, 64)],
         )
-        results = [
-            dict(
-                mode=mode,
-                batch=batch,
-                input_tokens=length,
-                output_tokens=output,
-                **gate_result((mode, batch, length, output), 2.0, 1.0),
-            )
-            for mode, batch, length, output in CONFIGURATIONS
-        ]
-        self.assertTrue(comparison_passed(results))
-        self.assertFalse(comparison_passed(results[:-1]))
-        self.assertFalse(comparison_passed([*results[:-1], results[0]]))
-        self.assertFalse(comparison_passed([*results, results[0]]))
-        self.assertFalse(
-            comparison_passed([*results[:-1], dict(results[-1], passed=False)])
-        )
-        self.assertFalse(gate_result(CONFIGURATIONS[0], 2.01, 1.0)["passed"])
-        self.assertFalse(gate_result(("ordinary", 1, 32768, 32), 2.0, 1.0)["passed"])
-        self.assertTrue(gate_result(CONFIGURATIONS[0], 1, 1.06)["passed"])
+        self.assertEqual(efficiency(100, 1), 0.01)
+        self.assertEqual(efficiency(1, 1.06), 1.06)
         for times in ((0, 1), (-1, 1), (1, float("nan")), (float("inf"), 1)):
             with self.assertRaises(ValueError):
-                gate_result(CONFIGURATIONS[0], *times)
+                efficiency(*times)
         for selected, outputs in (
             (None, (64, 64)),
             (None, ()),
@@ -77,7 +58,7 @@ class BenchmarkGate(unittest.TestCase):
             with self.assertRaises(ValueError):
                 select_configurations(selected, outputs)
 
-    def test_full_command_keeps_all_outputs_and_requires_every_configuration(self):
+    def test_command_reports_selected_cases_and_rejects_changed_artifacts(self):
         calls, services = [], []
         mutation = None
 
@@ -89,8 +70,8 @@ class BenchmarkGate(unittest.TestCase):
                     batch=batch,
                     input_tokens=length,
                     output_tokens=output,
-                    seconds=2.0,
-                    **gate_result((mode, batch, length, output), 2.0, 1.0),
+                    seconds=100.0,
+                    efficiency=0.01,
                 )
 
             def close():
@@ -176,7 +157,7 @@ class BenchmarkGate(unittest.TestCase):
                     return benchmark.main()
 
             self.assertEqual(invoke(root / "complete"), 0)
-            self.assertEqual(invoke(root / "partial", "--case", "ordinary:1:32768"), 1)
+            self.assertEqual(invoke(root / "partial", "--case", "ordinary:1:32768"), 0)
             measured = [case for case in calls if case[2] != 64]
             self.assertEqual(measured[:24], CONFIGURATIONS)
             self.assertEqual(measured[24:], CONFIGURATIONS[:2])
@@ -189,11 +170,11 @@ class BenchmarkGate(unittest.TestCase):
                 self.assertEqual(result["output_tokens"], output)
             self.assertEqual(
                 json.loads((root / "complete/summary.json").read_text()),
-                dict(passed=True, configurations=24),
+                dict(configurations=24),
             )
             self.assertEqual(
                 json.loads((root / "partial/summary.json").read_text()),
-                dict(passed=False, configurations=2),
+                dict(configurations=2),
             )
             for instance in services:
                 instance.ready.assert_called_once()
@@ -285,7 +266,9 @@ class BenchmarkGate(unittest.TestCase):
                 result["manifest_id"], benchmark.json_digest(result["manifest"])
             )
             self.assertEqual(result["manifest"]["artifact_id"], "test-artifact")
-            self.assertFalse(result["passed"])
+            self.assertEqual(
+                result["efficiency"], result["lower_bound"]["seconds"] / 2.0
+            )
             with self.assertRaisesRegex(ValueError, "distinct request IDs"):
                 run(batch=2)
             events[0]["config"]["num_speculative_tokens"] = 4

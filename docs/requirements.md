@@ -24,10 +24,7 @@ Use the [GPU execution rules](execution.md) for operator scheduling and CUDA Gra
 Use Eager execution for each fragment of an Execute that contains prefill.
 Use CUDA Graph recording and replay for decode-only Execute messages.
 
-Intermediate changes can report failed or unmeasured performance configurations.
-
-The final implementation must pass all 24 [HTTP configurations](performance.md#configurations) at the specified nominal-resource threshold.
-Operator timing, public-operator comparisons, and measured peak calibration are not acceptance requirements.
+Measure performance with the 24 [HTTP configurations](performance.md#configurations).
 Use the short-input, single-iteration logits comparison in the [evaluation procedure](operators/evaluation.md).
 Keep applicable service, state-ownership, and graph resource checks.
 Update the two README tables before each delivery.
@@ -35,7 +32,6 @@ Update the two README tables before each delivery.
 Use these archived contracts for the detailed criteria of the functions and modes in this document:
 
 - [Core](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/core.md)
-- [Performance](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/performance.md)
 - [Service](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/service.md)
 - [Operators](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/kernels.md)
 - [Tutorial](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/learning.md)

@@ -6,7 +6,7 @@ Use the [GPU execution rules](../../../docs/execution.md).
 Use the checkpoint dimensions. Keep the original weight values and scales.
 
 If the full operation becomes faster, fuse the small producer operations into their consumers.
-Use full HTTP timing for performance acceptance.
+Use full HTTP timing for performance measurement.
 
 Use the caller's stream. Use the same operators for Eager and CUDA Graph execution.
 Before a launch, do checks of shapes, types, strides, devices, and storage overlap.

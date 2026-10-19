@@ -68,9 +68,9 @@ An implementation can fuse stages. Each measured operation must supply all stage
 
 If this reduces the time for the full operation, fuse producer work into GEMM input loads or output stores.
 Use different small-row and prefill implementations when necessary.
-Use the [GDN execution plan](gdn.md) for recurrent and prefill algorithm selection.
+The [GDN entry point](../../python/oh_my_vllm/kernels/cuda_backend/gdn.cu) selects recurrent and prefill implementations.
 
 Small normalization, activation, quantization, and position operations can execute in their producer or consumer kernels.
 Use the independent PyTorch FP64 full-model reference in the numerical tools.
 Use the [GPU execution rules](../execution.md) for graph resources and numerical checks.
-Use the [HTTP comparison](../performance.md) for final performance acceptance.
+Use the [HTTP comparison](../performance.md) for performance measurement.

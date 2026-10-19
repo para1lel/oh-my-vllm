@@ -1,11 +1,11 @@
 #pragma once
 #include "fa_mx_plan.cuh"
 #include "fa_output_mx.cuh"
-#include "fa_mx_quant.cuh"
+#include "mx_fp8_convert.cuh"
 #include "mx_fp8_norm.cuh"
 
 namespace fa_mxio_native {
-using fa_mx_native::convert_kernel;
+using mx_fp8::convert_kernel;
 
 inline void lt_alignment(TensorView tensor) {
   TVM_FFI_ICHECK(reinterpret_cast<uintptr_t>(tensor.data_ptr()) % 256 == 0)

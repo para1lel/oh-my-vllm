@@ -43,33 +43,33 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.native_build
 scripts/with-env.sh python -m unittest development.model.test_identity development.model.test_logits development.serving.test_roofline
 ```
 
-在独立开发环境中安装 `requirements/model-reference.lock`, 用于 PyTorch FP64 参考.
+对照使用仓库内冻结的 [FP64 reference](../../development/model/reference.npz).
+将 `MODEL_ROOT` 设为 checkpoint 目录.
+将 `LOGITS_REPORT` 设为仓库外的新 JSON 路径.
+运行全模型对照:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.model --model "$MODEL_ROOT" --report "$LOGITS_REPORT"
+```
+
+命令还将推理 logits 保存到同名的 `.npz` 文件.
+使用 `--mode prefill` 对照短提示的末行.
+[评估流程](evaluation.zh.md)规定输入, 精度, 指标及范围.
+
+只有明确变更参考时, 才需要生成新文件.
+在独立环境中安装 `requirements/model-reference.lock`.
 使用[官方 PyTorch 包](https://pytorch.org/get-started/previous-versions/).
 推理 worker 不使用 PyTorch.
-将 `MODEL_ROOT` 设为 checkpoint 目录.
-将 `LOGITS_REFERENCE` 设为仓库外的 `.npz` 路径.
-用该环境生成独立参考:
+将 `LOGITS_REFERENCE` 设为仓库外的新 `.npz` 路径.
+用参考环境生成文件:
 
 ```bash
 scripts/with-env.sh scripts/with-gpu.sh python -m development.model.reference --model "$MODEL_ROOT" --output "$LOGITS_REFERENCE"
 ```
 
-命令拒绝已有输出路径.
-数值验收前将其 SHA256 记录到对照策略.
-将 `LOGITS_REPORT` 设为仓库外的新 JSON 路径.
-对照还将实际 logits 保存到同名的 `.npz` 文件.
-用推理开发环境运行完整模型对照:
+生成器不覆盖文件.
+只有 checkpoint, 输入, 生成器和数值策略的审查全部完成后, 才更新冻结文件及其 SHA256.
 
-```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.model --model "$MODEL_ROOT" --reference "$LOGITS_REFERENCE" --report "$LOGITS_REPORT"
-```
-
-使用 `--mode prefill` 对照短提示的末行.
-[评估流程](evaluation.zh.md)规定输入, 精度, 指标及范围.
-命令没有计时或效率门槛.
-性能验收使用 [HTTP benchmark](../performance.zh.md#测量命令).
-当 trace 或 counters 能定位瓶颈时, 使用 Nsight Systems 和 Nsight Compute.
-其 artifacts 保存在仓库外.
-
-比较变更前后的 HTTP 测量时, 使用相同的 `--prompt-seed` 值.
+性能测量使用 [HTTP benchmark](../performance.zh.md#测量命令).
+比较变更前后的测量时, 使用相同的 `--prompt-seed` 值.
 HTTP 产物记录此 seed 和执行策略.

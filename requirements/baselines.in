@@ -1,9 +1,0 @@
-apache-tvm-ffi==0.1.11
-numpy==2.5.4
-ninja==1.13.2
-safetensors==0.8.0
-torch==2.12.0
-tilelang==0.1.12
-nvidia-cutlass-dsl[cu13]==4.8.1
-flashinfer-python @ https://github.com/flashinfer-ai/flashinfer/archive/deca0e2959d521fe37efffdb6074cd357e836042.tar.gz
-flash-qla @ https://github.com/QwenLM/FlashQLA/archive/5538c35f0df33ef804eacd90c77d9d9087c1d4e4.tar.gz

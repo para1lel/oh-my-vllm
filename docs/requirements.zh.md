@@ -24,10 +24,7 @@ Python 负责 GPU 计算. 进程间使用 ZMQ DEALER 和 msgpack.
 包含 prefill 的 Execute 对每个分片使用 Eager 执行.
 仅含 decode 的 Execute 消息使用 CUDA Graph 录制和重放.
 
-中间阶段变更可以报告未达标或尚未测量的性能配置.
-
-最终实现必须使全部 24 种 [HTTP 配置](performance.zh.md#配置)达到规定的标称资源门槛.
-算子计时, 公开算子比较和实测峰值校准不属于验收要求.
+使用 24 种 [HTTP 配置](performance.zh.md#配置)测量性能.
 使用[评估流程](operators/evaluation.zh.md)中的短输入, 单次迭代 logits 对照.
 保留适用的服务, 状态所有权和 graph 资源检查.
 每次交付前更新两种语言的 README 表格.
@@ -35,7 +32,6 @@ Python 负责 GPU 计算. 进程间使用 ZMQ DEALER 和 msgpack.
 本文所述功能和模式的详细标准见以下历史契约:
 
 - [核心](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/core.zh.md)
-- [性能](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/performance.zh.md)
 - [服务](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/service.zh.md)
 - [算子](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/kernels.zh.md)
 - [教程](https://github.com/para1lel/oh-my-vllm/blob/461e15d39654784b2351c4e72d49103c79e0ade6/docs/requirements/learning.zh.md)

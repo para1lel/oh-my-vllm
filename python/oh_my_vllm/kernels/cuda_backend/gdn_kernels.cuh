@@ -3,8 +3,6 @@
 #include "common.cuh"
 #include "launch.cuh"
 
-#include <cstring>
-
 __device__ inline void gdn_require(bool condition) {
   if (!condition)
     asm volatile("trap;");
@@ -241,279 +239,79 @@ __device__ inline void gdn_prefetch_rows(unsigned char *storage, const __nv_bflo
   asm volatile("cp.async.commit_group;" ::: "memory");
 }
 
-__device__ inline float gdn_half_warp_sum(float value) {
-#pragma unroll
-  for (int distance = 8; distance > 0; distance /= 2)
-    value += __shfl_xor_sync(0xffffffff, value, distance, 16);
-  return value;
-}
-
-template <bool FusedBA, int ValueTile = 128, int Threads = 256, bool PrecomputedGates = false,
-          bool Staged = false, bool HalfWarp = false, bool PackedState = false>
-__global__ void __launch_bounds__(Threads, 1)
+template <bool FusedBA>
+__global__ void __launch_bounds__(256, 1)
     gdn_scan_quant_kernel(const __nv_bfloat16 *qkv, const __nv_bfloat16 *qkvz, __nv_bfloat16 *ba,
                           const __nv_bfloat16 *normalized, const __nv_bfloat16 *ba_weight,
                           const float *a_log, const float *dt_bias, const float *norm,
                           __nv_bfloat16 *pool, const int *starts, const int *reads,
                           const int *writes, __nv_fp8_e4m3 *output, float *scales, int rows,
-                          int slots, bool verify, __nv_bfloat16 *recurrent, const float *gates) {
-  static_assert(!Staged || (PrecomputedGates && (ValueTile == 8 || ValueTile == 16) &&
-                            Threads == ValueTile * 16));
-  static_assert(!HalfWarp || Staged);
-  static_assert(!PackedState || (!Staged && !HalfWarp));
+                          int slots) {
   int sequence = blockIdx.x, head = blockIdx.y, lane = threadIdx.x & 31;
   int warp = threadIdx.x / 32;
-  constexpr int Warps = Threads / 32;
-  constexpr int Values = ValueTile / Warps;
-  int value_base = blockIdx.z * ValueTile + warp * Values;
-  if constexpr (HalfWarp)
-    value_base += lane / 16;
+  constexpr int Warps = 8, Values = 16;
+  int value_base = warp * Values;
   int first = starts[sequence], last = starts[sequence + 1], source = reads[sequence];
   gdn_require(first >= 0 && first <= last && last <= rows && source >= 0 && source < slots);
-  gdn_require(!verify || last - first <= 5);
   float state[Values][4];
-  if constexpr (HalfWarp) {
-    static_assert(Values == 2);
 #pragma unroll
-    for (int group = 0; group < 2; ++group)
+  for (int value = 0; value < Values; ++value)
 #pragma unroll
-      for (int key = 0; key < 4; ++key)
-        state[group][key] =
-            __bfloat162float(pool[((int64_t(source) * 48 + head) * 128 + value_base) * 128 +
-                                  (lane % 16) * 4 + group * 64 + key]);
-  } else if constexpr (PackedState) {
-#pragma unroll
-    for (int value = 0; value < Values; ++value) {
-      const auto *address =
-          pool + ((int64_t(source) * 48 + head) * 128 + value_base + value) * 128 + lane * 4;
-      uint2 packed = *reinterpret_cast<const uint2 *>(address);
-      uint32_t words[2] = {packed.x, packed.y};
-#pragma unroll
-      for (int key = 0; key < 4; ++key)
-        state[value][key] = __bfloat162float(
-            __ushort_as_bfloat16(static_cast<unsigned short>(words[key / 2] >> ((key & 1) * 16))));
-    }
-  } else {
-#pragma unroll
-    for (int value = 0; value < Values; ++value)
-#pragma unroll
-      for (int key = 0; key < 4; ++key)
-        state[value][key] =
-            __bfloat162float(pool[((int64_t(source) * 48 + head) * 128 + value_base + value) * 128 +
-                                  lane * 4 + key]);
-  }
+    for (int key = 0; key < 4; ++key)
+      state[value][key] = __bfloat162float(
+          pool[((int64_t(source) * 48 + head) * 128 + value_base + value) * 128 + lane * 4 + key]);
   __shared__ float result[128], partial[Warps];
-  extern __shared__ __align__(16) unsigned char staged[];
-  int tile_value_base = blockIdx.z * ValueTile;
-  unsigned checkpoint_mask = 0;
-  if constexpr (Staged) {
-    if (first < last) {
-      gdn_prefetch_rows<ValueTile>(staged, qkv, gates, writes, first, last, head, tile_value_base,
-                                   source, slots);
-      asm volatile("cp.async.wait_group 0;" ::: "memory");
-      __syncthreads();
-      checkpoint_mask =
-          *reinterpret_cast<const unsigned *>(staged + GDNPrefetchSlotBytes<ValueTile> - 16);
-      if (first + GDNPrefetchRows < last)
-        gdn_prefetch_rows<ValueTile>(staged + GDNPrefetchSlotBytes<ValueTile>, qkv, gates, writes,
-                                     first + GDNPrefetchRows, last, head, tile_value_base, source,
-                                     slots);
-    }
-  }
   for (int row = first; row < last; ++row) {
-    int local_row = (row - first) % GDNPrefetchRows;
-    int slot = ((row - first) / GDNPrefetchRows) & 1;
-    unsigned char *storage = staged + slot * GDNPrefetchSlotBytes<ValueTile>;
-    int target = -1;
-    if constexpr (Staged) {
-      if (checkpoint_mask & (1u << local_row))
-        target = reinterpret_cast<const int *>(
-            storage + GDNPrefetchRows * (GDNStageQKBytes + 8 + ValueTile * 2))[local_row];
-    } else {
-      target = writes[row];
-      gdn_require(target >= -1 && target < slots && target != source);
-    }
-    float q[4], k[4], q_second[4], k_second[4];
-    if constexpr (Staged) {
-      const auto *query = storage;
-      const auto *key = storage + GDNPrefetchRows * GDNStageQueryBytes;
-      int query_lane = HalfWarp ? lane % 16 : lane;
-      gdn_stage_load<GDNStageQ>(query, local_row * 32 + query_lane, q);
-      gdn_stage_load<GDNStageK>(key, local_row * 32 + query_lane, k);
-      if constexpr (HalfWarp) {
-        gdn_stage_load<GDNStageQ>(query, local_row * 32 + query_lane + 16, q_second);
-        gdn_stage_load<GDNStageK>(key, local_row * 32 + query_lane + 16, k_second);
-      }
-    } else {
-#pragma unroll
-      for (int element = 0; element < 4; ++element) {
-        int column = head / 3 * 128 + lane * 4 + element;
-        q[element] = __bfloat162float(qkv[int64_t(row) * 10240 + column]);
-        k[element] = __bfloat162float(qkv[int64_t(row) * 10240 + 2048 + column]);
-      }
-    }
-    float q_scale = 0.08838834764831844f, k_scale = 1.f;
-    if constexpr (!Staged) {
-      if (verify) {
-        float q_square = 0, k_square = 0;
-#pragma unroll
-        for (int element = 0; element < 4; ++element) {
-          q_square += q[element] * q[element];
-          k_square += k[element] * k[element];
-        }
-        if constexpr (HalfWarp) {
-          float q_second_square = 0, k_second_square = 0;
-#pragma unroll
-          for (int element = 0; element < 4; ++element) {
-            q_second_square += q_second[element] * q_second[element];
-            k_second_square += k_second[element] * k_second[element];
-          }
-          q_square = gdn_half_warp_sum(__fadd_rn(q_square, q_second_square));
-          k_square = gdn_half_warp_sum(__fadd_rn(k_square, k_second_square));
-        } else {
-          q_square = warp_sum(q_square);
-          k_square = warp_sum(k_square);
-        }
-        q_scale *= rsqrtf(q_square + 1e-6f);
-        k_scale = rsqrtf(k_square + 1e-6f);
-      }
-    }
+    int target = writes[row];
+    gdn_require(target >= -1 && target < slots && target != source);
+    float q[4], k[4];
 #pragma unroll
     for (int element = 0; element < 4; ++element) {
-      if constexpr (!(Staged && GDNStageQ))
-        q[element] *= q_scale;
-      if constexpr (!Staged)
-        k[element] *= k_scale;
-      if constexpr (HalfWarp) {
-        if constexpr (!(Staged && GDNStageQ))
-          q_second[element] *= q_scale;
-        if constexpr (!Staged)
-          k_second[element] *= k_scale;
-      }
+      int column = head / 3 * 128 + lane * 4 + element;
+      q[element] = __bfloat162float(qkv[int64_t(row) * 10240 + column]);
+      k[element] = __bfloat162float(qkv[int64_t(row) * 10240 + 2048 + column]);
     }
-    float decay, beta;
-    if constexpr (Staged) {
-      auto *coefficients = reinterpret_cast<const float2 *>(
-          storage + GDNPrefetchRows * (GDNStageQKBytes + ValueTile * 2));
-      float2 coefficient = coefficients[local_row];
-      beta = coefficient.x;
-      decay = coefficient.y;
-    } else if constexpr (PrecomputedGates) {
-      beta = gates[int64_t(row) * 96 + head];
-      decay = gates[int64_t(row) * 96 + 48 + head];
+#pragma unroll
+    for (int element = 0; element < 4; ++element)
+      q[element] *= 0.08838834764831844f;
+    float projected_b, projected_a;
+    if constexpr (FusedBA) {
+      float2 projected = gdn_ba_projection(normalized, ba_weight, ba, row, head);
+      projected_b = projected.x;
+      projected_a = projected.y;
     } else {
-      float projected_b, projected_a;
-      if constexpr (FusedBA) {
-        float2 projected = gdn_ba_projection(normalized, ba_weight, ba, row, head);
-        projected_b = projected.x;
-        projected_a = projected.y;
-      } else {
-        projected_b = __bfloat162float(ba[int64_t(row) * 96 + head]);
-        projected_a = __bfloat162float(ba[int64_t(row) * 96 + 48 + head]);
+      projected_b = __bfloat162float(ba[int64_t(row) * 96 + head]);
+      projected_a = __bfloat162float(ba[int64_t(row) * 96 + 48 + head]);
+    }
+    float a = projected_a + dt_bias[head];
+    float softplus = a > 20.f ? a : log1pf(expf(a));
+    float decay = expf(-expf(a_log[head]) * softplus);
+    float beta = gdn_sigmoid(projected_b);
+#pragma unroll
+    for (int value = 0; value < Values; ++value) {
+      float recalled = 0;
+#pragma unroll
+      for (int key = 0; key < 4; ++key) {
+        state[value][key] *= decay;
+        recalled += state[value][key] * k[key];
       }
-      float a = projected_a + dt_bias[head];
-      float softplus = a > 20.f ? a : log1pf(expf(a));
-      decay = expf(-expf(a_log[head]) * softplus);
-      beta = gdn_sigmoid(projected_b);
-    }
-    uint32_t packed_values = 0;
-    if constexpr (Staged) {
-      auto *values =
-          reinterpret_cast<const uint32_t *>(storage + GDNPrefetchRows * GDNStageQKBytes);
-      packed_values = values[local_row * (ValueTile / 2) + warp];
-    }
-    if constexpr (HalfWarp) {
-      float recalled[2] = {};
+      recalled = warp_sum(recalled);
+      float input_value =
+          __bfloat162float(qkv[int64_t(row) * 10240 + 4096 + head * 128 + value_base + value]);
+      float delta = beta * (input_value - recalled);
+      float sum = 0;
 #pragma unroll
-      for (int group = 0; group < 2; ++group)
-#pragma unroll
-        for (int key = 0; key < 4; ++key) {
-          float key_value = group == 0 ? k[key] : k_second[key];
-          state[group][key] *= decay;
-          recalled[group] += state[group][key] * key_value;
-        }
-      float recall = gdn_half_warp_sum(__fadd_rn(recalled[0], recalled[1]));
-      float input_value = __uint_as_float(((packed_values >> ((lane / 16) * 16)) & 0xffffu) << 16);
-      float delta = beta * (input_value - recall);
-      float sums[2] = {};
-#pragma unroll
-      for (int group = 0; group < 2; ++group)
-#pragma unroll
-        for (int key = 0; key < 4; ++key) {
-          float key_value = group == 0 ? k[key] : k_second[key];
-          float query_value = group == 0 ? q[key] : q_second[key];
-          state[group][key] += delta * key_value;
-          sums[group] += state[group][key] * query_value;
-          if (target >= 0)
-            pool[((int64_t(target) * 48 + head) * 128 + value_base) * 128 + (lane % 16) * 4 +
-                 group * 64 + key] = __float2bfloat16_rn(state[group][key]);
-        }
-      float sum = gdn_half_warp_sum(__fadd_rn(sums[0], sums[1]));
-      if (lane % 16 == 0)
-        recurrent[(int64_t(row) * 48 + head) * 128 + value_base] = __float2bfloat16_rn(sum);
-    } else {
-#pragma unroll
-      for (int value = 0; value < Values; ++value) {
-        float recalled = 0;
-#pragma unroll
-        for (int key = 0; key < 4; ++key) {
-          state[value][key] *= decay;
-          recalled += state[value][key] * k[key];
-        }
-        recalled = warp_sum(recalled);
-        float input_value;
-        if constexpr (Staged)
-          input_value = __uint_as_float(((packed_values >> (value * 16)) & 0xffffu) << 16);
-        else
-          input_value =
-              __bfloat162float(qkv[int64_t(row) * 10240 + 4096 + head * 128 + value_base + value]);
-        float delta = beta * (input_value - recalled);
-        float sum = 0;
-#pragma unroll
-        for (int key = 0; key < 4; ++key) {
-          state[value][key] += delta * k[key];
-          sum += state[value][key] * q[key];
-          if constexpr (!PackedState)
-            if (target >= 0)
-              pool[((int64_t(target) * 48 + head) * 128 + value_base + value) * 128 + lane * 4 +
-                   key] = __float2bfloat16_rn(state[value][key]);
-        }
-        if constexpr (PackedState) {
-          if (target >= 0) {
-            auto *address =
-                pool + ((int64_t(target) * 48 + head) * 128 + value_base + value) * 128 + lane * 4;
-            __nv_bfloat162 low = __floats2bfloat162_rn(state[value][0], state[value][1]);
-            __nv_bfloat162 high = __floats2bfloat162_rn(state[value][2], state[value][3]);
-            uint2 checkpoint;
-            memcpy(&checkpoint.x, &low, sizeof(checkpoint.x));
-            memcpy(&checkpoint.y, &high, sizeof(checkpoint.y));
-            *reinterpret_cast<uint2 *>(address) = checkpoint;
-          }
-        }
-        sum = warp_sum(sum);
-        if (lane == 0) {
-          if constexpr (ValueTile < 128)
-            recurrent[(int64_t(row) * 48 + head) * 128 + value_base + value] =
-                __float2bfloat16_rn(sum);
-          else
-            result[value_base + value] = __bfloat162float(__float2bfloat16_rn(sum));
-        }
+      for (int key = 0; key < 4; ++key) {
+        state[value][key] += delta * k[key];
+        sum += state[value][key] * q[key];
+        if (target >= 0)
+          pool[((int64_t(target) * 48 + head) * 128 + value_base + value) * 128 + lane * 4 + key] =
+              __float2bfloat16_rn(state[value][key]);
       }
+      sum = warp_sum(sum);
+      if (lane == 0)
+        result[value_base + value] = __bfloat162float(__float2bfloat16_rn(sum));
     }
-    if constexpr (Staged) {
-      if (local_row + 1 == GDNPrefetchRows && row + 1 < last) {
-        asm volatile("cp.async.wait_group 0;" ::: "memory");
-        __syncthreads();
-        checkpoint_mask = *reinterpret_cast<const unsigned *>(
-            staged + (slot ^ 1) * GDNPrefetchSlotBytes<ValueTile> +
-            GDNPrefetchSlotBytes<ValueTile> - 16);
-        if (row + 1 + GDNPrefetchRows < last)
-          gdn_prefetch_rows<ValueTile>(storage, qkv, gates, writes, row + 1 + GDNPrefetchRows, last,
-                                       head, tile_value_base, source, slots);
-      }
-    }
-    if constexpr (ValueTile < 128)
-      continue;
     __syncthreads();
     float square = threadIdx.x < 128 ? result[threadIdx.x] * result[threadIdx.x] : 0;
     square = warp_sum(square);

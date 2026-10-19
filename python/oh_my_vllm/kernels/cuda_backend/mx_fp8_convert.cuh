@@ -1,7 +1,7 @@
 #pragma once
 #include "common.cuh"
 
-namespace gdn_mx_native {
+namespace mx_fp8 {
 __global__ void convert_kernel(const __nv_fp8_e4m3 *original, const float *scales,
                                __nv_fp8_e4m3 *prepared, unsigned char *prepared_scales, int rows,
                                int padded_rows, int width, bool weights) {
@@ -44,4 +44,4 @@ __global__ void convert_kernel(const __nv_fp8_e4m3 *original, const float *scale
   }
 }
 
-} // namespace gdn_mx_native
+} // namespace mx_fp8

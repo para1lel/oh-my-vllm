@@ -58,14 +58,3 @@ inline void vision_attention_launch(const __nv_bfloat16 *query, const __nv_bfloa
   checked(attention.initialize(arguments, nullptr, stream));
   checked(attention.run(stream));
 }
-
-__global__ void vision_attention_unpack_kernel(const __nv_bfloat16 *padded, __nv_bfloat16 *output,
-                                               int rows, int tokens) {
-  int64_t index = int64_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  if (index >= int64_t(rows) * 1152)
-    return;
-  int row = index / 1152, column = index % 1152;
-  int head = column / 72, dimension = column % 72;
-  int64_t source = ((int64_t(row / tokens) * 16 + head) * tokens + row % tokens) * 128 + dimension;
-  output[index] = padded[source];
-}

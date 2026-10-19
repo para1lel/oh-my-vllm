@@ -68,9 +68,9 @@ MTP 与 target 模型使用相同的 FA 和 FFN 算子.
 
 在能降低完整操作耗时的位置, 将 producer 计算融合到 GEMM 输入加载或输出存储中.
 必要时分别实现小行数与 prefill 路径.
-Recurrent 与 prefill 算法选择使用 [GDN 执行计划](gdn.zh.md).
+[GDN 入口](../../python/oh_my_vllm/kernels/cuda_backend/gdn.cu)选择 recurrent 与 prefill 实现.
 
 小型 normalization, activation, quantization 和位置操作可以在其 producer 或 consumer kernel 中执行.
 数值工具使用独立的 PyTorch FP64 全模型参考.
 Graph 资源和数值检查使用 [GPU 执行规则](../execution.zh.md).
-最终性能验收使用 [HTTP 比较](../performance.zh.md).
+性能测量使用 [HTTP 比较](../performance.zh.md).

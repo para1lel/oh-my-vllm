@@ -43,33 +43,33 @@ Do the CPU evidence and accounting checks:
 scripts/with-env.sh python -m unittest development.model.test_identity development.model.test_logits development.serving.test_roofline
 ```
 
-Install `requirements/model-reference.lock` in a separate development environment for the PyTorch FP64 reference.
+Comparisons use the frozen [FP64 reference](../../development/model/reference.npz) in the repository.
+Set `MODEL_ROOT` to the checkpoint directory.
+Set `LOGITS_REPORT` to a new external JSON path.
+Run the full-model comparison:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.model --model "$MODEL_ROOT" --report "$LOGITS_REPORT"
+```
+
+The command also saves inference logits in a `.npz` file with the same stem.
+Use `--mode prefill` for the short prompt's last row.
+The [evaluation procedure](evaluation.md) specifies the input, precision, metrics, and scope.
+
+Generation is necessary only for an explicit reference change.
+Install `requirements/model-reference.lock` in a different environment.
 Use the [official PyTorch packages](https://pytorch.org/get-started/previous-versions/).
 The inference worker does not use PyTorch.
-Set `MODEL_ROOT` to the checkpoint directory.
-Set `LOGITS_REFERENCE` to an external `.npz` path.
-Generate the PyTorch FP64 reference with that environment:
+Set `LOGITS_REFERENCE` to a new external `.npz` path.
+Generate the file with the reference environment:
 
 ```bash
 scripts/with-env.sh scripts/with-gpu.sh python -m development.model.reference --model "$MODEL_ROOT" --output "$LOGITS_REFERENCE"
 ```
 
-The command rejects output paths that already contain a file.
-Record its SHA256 in the comparison policy before numerical acceptance.
-Set `LOGITS_REPORT` to a new external JSON path.
-The comparison also saves the inference logits in a `.npz` file with the same stem.
-Run the full model comparison with the inference development environment:
+The generator does not overwrite files.
+Update the frozen file and its SHA256 only after review of the checkpoint, inputs, generator, and numerical policy.
 
-```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.model --model "$MODEL_ROOT" --reference "$LOGITS_REFERENCE" --report "$LOGITS_REPORT"
-```
-
-Use `--mode prefill` for the short prompt's last row.
-The [evaluation procedure](evaluation.md) specifies the input, precision, metrics, and scope.
-The command has no timing or efficiency gate.
-Use the [HTTP benchmark](../performance.md#measurement-command) for performance acceptance.
-Use Nsight Systems and Nsight Compute when a trace or counters can identify a bottleneck.
-Keep their artifacts external to the repository.
-
-Use the same `--prompt-seed` value when you compare HTTP measurements before and after a change.
+Use the [HTTP benchmark](../performance.md#measurement-command) for performance measurement.
+Use the same `--prompt-seed` value when you compare measurements before and after a change.
 The HTTP artifact records this seed and the execution policy.

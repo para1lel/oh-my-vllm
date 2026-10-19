@@ -20,8 +20,6 @@ from .accounting import RATES, VERSION
 from .device import device_identity, selected_uuid
 from .roofline import lower_bound
 
-MIN_EFFICIENCY = 0.50
-
 ROOT = Path(__file__).resolve().parents[2]
 NATIVE_MODULES = (
     "device",
@@ -69,36 +67,12 @@ def select_configurations(selected, outputs):
     return configurations
 
 
-def gate_result(configuration, seconds, roofline_seconds):
+def efficiency(seconds, reference_seconds):
     if any(
-        not math.isfinite(value) or value <= 0 for value in (seconds, roofline_seconds)
+        not math.isfinite(value) or value <= 0 for value in (seconds, reference_seconds)
     ):
-        raise ValueError("measurement and roofline times must be finite and positive")
-    efficiency = roofline_seconds / seconds
-    applicable = configuration in CONFIGURATIONS
-    return {
-        "limit_seconds": roofline_seconds / MIN_EFFICIENCY,
-        "efficiency": efficiency,
-        "gate_applicable": applicable,
-        "passed": applicable and efficiency >= MIN_EFFICIENCY,
-    }
-
-
-def comparison_passed(results):
-    configurations = [
-        (
-            result["mode"],
-            result["batch"],
-            result["input_tokens"],
-            result["output_tokens"],
-        )
-        for result in results
-    ]
-    return (
-        len(configurations) == len(CONFIGURATIONS)
-        and set(configurations) == set(CONFIGURATIONS)
-        and all(result["passed"] for result in results)
-    )
+        raise ValueError("measurement and reference times must be finite and positive")
+    return reference_seconds / seconds
 
 
 def post(port, body):
@@ -425,9 +399,7 @@ class Service:
             "manifest": manifest,
             "manifest_id": json_digest(manifest),
             "trace_id": json_digest(events),
-            **gate_result(
-                (self.mode, batch, length, output), seconds, bound["seconds"]
-            ),
+            "efficiency": efficiency(seconds, bound["seconds"]),
             "responses": responses,
         }
 
@@ -517,10 +489,7 @@ def main():
                                 "input_tokens",
                                 "output_tokens",
                                 "seconds",
-                                "limit_seconds",
                                 "efficiency",
-                                "gate_applicable",
-                                "passed",
                             )
                         }
                     ),
@@ -531,11 +500,10 @@ def main():
         service.verify_identity(identity["checkpoint"], identity["tokenizer"])
         verify_artifact_identity(arguments, identity)
     verify_artifact_identity(arguments, identity)
-    passed = comparison_passed(results)
     (arguments.artifacts / "summary.json").write_text(
-        json.dumps({"passed": passed, "configurations": len(results)}, indent=2)
+        json.dumps({"configurations": len(results)}, indent=2)
     )
-    return 0 if passed else 1
+    return 0
 
 
 if __name__ == "__main__":

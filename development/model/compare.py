@@ -1,9 +1,11 @@
 import hashlib
 import json
+from pathlib import Path
 
 import numpy as np
 
 BASELINE_SHA256 = "bb9558a2181a2f6095aef113f1defe4ab7ed7e36091883447230b27ab7e86bc3"
+REFERENCE_PATH = Path(__file__).with_name("reference.npz")
 LIMITS = dict(max_nrmse=0.05, min_cosine=0.999, max_abs=0.5)
 
 
@@ -44,7 +46,7 @@ def validate_case(actual, reference, checkpoint, reference_checkpoint):
         raise ValueError("checkpoint differs from the frozen reference")
 
 
-def load_reference(path):
+def load_reference(path=REFERENCE_PATH):
     with path.open("rb") as source:
         if hashlib.file_digest(source, "sha256").hexdigest() != BASELINE_SHA256:
             raise ValueError("reference artifact differs from the frozen identity")

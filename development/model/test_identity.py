@@ -10,6 +10,9 @@ from oh_my_vllm.kernels.native import source_digest
 from oh_my_vllm.kernels.specification import MODEL
 from oh_my_vllm.worker.checkpoint import Checkpoint
 
+from .capture import PROMPT
+from .compare import REFERENCE_PATH, load_reference
+
 
 def checkpoint_fixture(root):
     config = b'{"fixture":true}'
@@ -28,6 +31,23 @@ def checkpoint_fixture(root):
 
 
 class Identity(unittest.TestCase):
+    def test_frozen_reference_is_complete_and_bound_to_its_source(self):
+        metadata, outputs = load_reference()
+        self.assertEqual(metadata["reference"]["precision"], "torch.float64")
+        self.assertEqual(metadata["case"]["tokens"], list(PROMPT))
+        source = Path(__file__).with_name("reference.py").read_bytes()
+        self.assertEqual(
+            metadata["reference"]["source"], hashlib.sha256(source).hexdigest()
+        )
+        for value in outputs.values():
+            self.assertEqual(value.shape, (248320,))
+            self.assertEqual(str(value.dtype), "float64")
+        with TemporaryDirectory() as directory:
+            changed = Path(directory) / "reference.npz"
+            changed.write_bytes(REFERENCE_PATH.read_bytes() + b"changed")
+            with self.assertRaisesRegex(ValueError, "frozen identity"):
+                load_reference(changed)
+
     def test_checkpoint_identity_tracks_loaded_files(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

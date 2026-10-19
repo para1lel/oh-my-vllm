@@ -192,13 +192,13 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
     constexpr int Rows = decltype(count)::value;
     if constexpr (Rows == 1) {
       if (verify) {
-        gdn_input_launch<Rows, true, true, true>(input_data, input_scales, qkvz_weight, qkvz_scale,
-                                                 qkvz, convolution, stream);
+        gdn_input_launch<Rows, true>(input_data, input_scales, qkvz_weight, qkvz_scale, qkvz,
+                                     convolution, stream);
         return;
       }
     }
-    gdn_input_launch<Rows, false, true, true>(input_data, input_scales, qkvz_weight, qkvz_scale,
-                                              qkvz, convolution, stream);
+    gdn_input_launch<Rows, false>(input_data, input_scales, qkvz_weight, qkvz_scale, qkvz,
+                                  convolution, stream);
   };
   if (mx.active())
     mx.project(qkvz, stream);
@@ -266,16 +266,10 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
   else if (!(rows == 1 && verify))
     prepare(std::false_type{});
   check_cuda(cudaGetLastError());
-  auto scan = [&](auto fused, auto value_tile, auto thread_count, auto prepared_gates,
-                  auto staged) {
-    constexpr int ValueTile = decltype(value_tile)::value;
-    constexpr int Threads = decltype(thread_count)::value;
-    constexpr int SharedBytes = decltype(staged)::value ? GDNPrefetchSlotBytes<ValueTile> * 2 : 0;
-    auto kernel = gdn_scan_quant_kernel<decltype(fused)::value, ValueTile, Threads,
-                                        decltype(prepared_gates)::value, decltype(staged)::value,
-                                        decltype(staged)::value>;
+  auto scan = [&](auto fused) {
+    auto kernel = gdn_scan_quant_kernel<decltype(fused)::value>;
     launch_kernel(
-        kernel, dim3(batch, 48, 128 / ValueTile), dim3(Threads), SharedBytes, stream,
+        kernel, dim3(batch, 48), dim3(256), 0, stream,
         static_cast<const __nv_bfloat16 *>(qkv.data_ptr()),
         static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
         static_cast<__nv_bfloat16 *>(ba.data_ptr()),
@@ -287,9 +281,7 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
         static_cast<__nv_bfloat16 *>(state.data_ptr()), static_cast<const int *>(starts.data_ptr()),
         static_cast<const int *>(reads.data_ptr()), static_cast<const int *>(writes.data_ptr()),
         static_cast<__nv_fp8_e4m3 *>(output_data.data_ptr()),
-        static_cast<float *>(output_scales.data_ptr()), rows, slots, verify,
-        static_cast<__nv_bfloat16 *>(recurrent.data_ptr()),
-        static_cast<const float *>(gates.data_ptr()));
+        static_cast<float *>(output_scales.data_ptr()), rows, slots);
   };
   if (chunked) {
     gdn_wy::native_launch(
@@ -331,17 +323,10 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
         static_cast<__nv_bfloat16 *>(state.data_ptr()),
         static_cast<__nv_bfloat16 *>(recurrent.data_ptr()), rows, batch, slots, max_queries,
         batch >= 4 ? 32 : 16, stream);
-  } else {
-    auto run = [&](auto threads) {
-      if (rows == 1)
-        scan(std::true_type{}, std::integral_constant<int, 128>{}, threads, std::false_type{},
-             std::false_type{});
-      else
-        scan(std::false_type{}, std::integral_constant<int, 128>{}, threads, std::false_type{},
-             std::false_type{});
-    };
-    run(std::integral_constant<int, 256>{});
-  }
+  } else if (rows == 1)
+    scan(std::true_type{});
+  else
+    scan(std::false_type{});
   check_cuda(cudaGetLastError());
   if (split_values && mx.active())
     mx.quantize_output(recurrent, qkvz, head_norm, output_data, output_scales, stream);
