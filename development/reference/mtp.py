@@ -11,7 +11,8 @@ from oh_my_vllm.kernels.mtp import (
     MTPInput,
 )
 
-from .build import build
+from development.native_build import build
+
 from .fa import FACase, FAWeights, rotary, unpack_bf16
 from .ffn import reference_projection
 from .reference import (

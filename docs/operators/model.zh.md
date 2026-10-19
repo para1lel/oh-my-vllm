@@ -170,13 +170,13 @@ Scan 和分块实现使用相同的数值容差.
 [视觉注意力依赖](https://github.com/vllm-project/flash-attention/blob/b273a02621d3c94bc747df67204f591b67f38fae/flash_attn/cute/flash_fwd_sm100.py#L2522) 在 PV 前将在线概率舍入为 BF16.
 独立参考使用完整 FP64 softmax. 它不复制在线分块舍入.
 
-[工作量计算](../../development/kernels/work.py)确定每个建模 shape 适用的精度.
+[HTTP 参考计算](../../development/serving/accounting.py)使用固定精度假设进行性能计费.
 临时存储和重复工作不能抬高理论下界.
 
 ## 数值检查
 
 对[固定的小规模数值用例](evaluation.zh.md#数值范围)使用独立的 CPU FP64 参考.
-[CPU 参考函数](../../development/kernels/reference.py)提供采用模型舍入点的 FP64 计算.
+[CPU 参考函数](../../development/reference/reference.py)提供采用模型舍入点的 FP64 计算.
 参考与算子使用相同的舍入输入.
 每项检查使用[具名数值限制](../../python/oh_my_vllm/kernels/specification.py).
 输出检查使用 `rtol=0.03`.

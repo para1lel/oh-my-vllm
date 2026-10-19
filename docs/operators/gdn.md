@@ -88,11 +88,9 @@ The inverse contributes `H*F` FP32 FLOPs and `H*(T-F)` BF16 FLOPs.
 These counts omit products with structural zero and one values and padded rows.
 The work model keeps the original FP32 token recurrence count for scan paths.
 
-## Implementation gate
+## Migration
 
-Use CUDA C++ or CuTe DSL. Use the external sources as design references.
-Keep the current correct path until a replacement passes its numerical checks and full-boundary comparison.
-
-Use existing modeled shapes to select project parameters. Add intermediate lengths only when a selection question makes them necessary.
-Include all launches, state exports, temporary storage, and tail work in eager and graph timing.
-Keep the workload probabilities and roofline calculation unchanged during each comparison.
+Use CUDA C++ or CuTe DSL. Use external sources as design references.
+Keep the current path until its replacement passes the applicable numerical and state checks.
+Use the [tile design](../tile-execution.md) for execution coverage and migration conditions.
+Use the [HTTP comparison](../performance.md) for final performance acceptance.

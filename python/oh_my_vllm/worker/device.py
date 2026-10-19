@@ -14,8 +14,6 @@ FUNCTIONS = (
     "reserve_scratch",
     "copy_bytes",
     "synchronize",
-    "evict",
-    "l2_bytes",
     "view",
     "zero",
     "gather_rows",

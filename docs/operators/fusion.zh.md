@@ -11,8 +11,8 @@ Python 可以分配张量及启动 CUDA 实现.
 
 ## Serving 边界
 
-实现与验收使用[负载模型](../../development/kernels/workload.py)中 `SERVING_OPERATORS` 的 7 个 serving 边界.
-内部阶段是这些边界的组成部分, 不是独立的 serving 或验收边界.
+现有的 7 个 serving 边界是 [tile 设计](../tile-execution.zh.md)的迁移输入.
+内部阶段是这些边界的组成部分.
 
 | Serving 算子 | 完整计时操作 |
 |---|---|
@@ -27,8 +27,8 @@ Python 可以分配张量及启动 CUDA 实现.
 第一个 MTP draft 使用 `query_only`. 其余 3 个 draft 使用 `full`.
 第一个 draft 使用已就绪的 context 端点.
 
-原生 provider 提供这些边界. 完整负载验收是必要的.
-性能验收使用[评测流程](evaluation.zh.md).
+迁移期间由原生 provider 提供这些边界.
+正确性使用[数值流程](evaluation.zh.md), 性能使用 [HTTP 比较](../performance.zh.md).
 
 ## 内部语言阶段
 
@@ -70,14 +70,7 @@ MTP 与 target 模型使用相同的 FA 和 FFN 算子.
 必要时分别实现小行数与 prefill 路径.
 Recurrent 与 prefill 算法选择使用 [GDN 执行计划](gdn.zh.md).
 
-小型 norm, activation, quantization 和位置操作只能包含在完整 serving 算子中.
-对应参考函数只保留在评测工具中.
-
-一次完整操作可以包含多个 launch.
-计时包含所有 launch, copy, reduction 和临时存储.
-
-使用相同输入及状态, 比较 fusion 与完整未融合链.
-仅保留正确且降低完整操作耗时的 fusion.
-
-不通过从计时操作中移除 launch 来提高效率.
-验收使用[评测流程](evaluation.zh.md).
+小型 normalization, activation, quantization 和位置操作可以在相关 tile task 中执行.
+独立参考函数保留在数值工具中.
+Task 依赖和数值检查使用 [tile 设计](../tile-execution.zh.md).
+最终性能验收使用 [HTTP 比较](../performance.zh.md).

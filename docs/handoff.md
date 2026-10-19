@@ -7,14 +7,15 @@ The [implementation plan](tile-migration.md) gives the next tasks.
 The runtime still uses the native FFN, FA, GDN, vision, sampling, and MTP implementations.
 Rust supplies HTTP, scheduling, logical KV, and worker lifecycle controls.
 Python supplies model execution through the existing ZMQ DEALER and msgpack boundary.
-No tile engine or new HTTP accounting implementation is available yet.
+HTTP accounting uses fixed nominal rates and a canonical schedule. No tile engine is available yet.
 
 The final target covers all GPU tensor computation, also during preparation and initialization.
 Migration stages have no performance threshold.
 Final acceptance combines full task coverage, numerical and state correctness, and all 24 nominal-resource HTTP performance cases.
 
-Start with independent HTTP accounting and extraction of shared build/reference tools.
-Then implement the task engine and complete ordinary decode through vocabulary projection.
+The builder is `development.native_build`. Numerical references are in `development/reference/`.
+Old operator timing, public comparison, and peak calibration tools have been removed.
+Next, implement the task engine and complete ordinary decode through vocabulary projection.
 Continue with prefill, MTP/sampling, vision, and preparation/auxiliary computation.
 Remove old implementations after their replacements pass the applicable correctness checks.
 

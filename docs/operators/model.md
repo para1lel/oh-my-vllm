@@ -170,13 +170,13 @@ The [GDN decode path](https://github.com/vllm-project/vllm/blob/e8e1e96196725f09
 The [vision attention dependency](https://github.com/vllm-project/flash-attention/blob/b273a02621d3c94bc747df67204f591b67f38fae/flash_attn/cute/flash_fwd_sm100.py#L2522) rounds online probabilities to BF16 before PV.
 The independent reference uses full FP64 softmax. It does not reproduce online block rounding.
 
-The [work calculation](../../development/kernels/work.py) identifies the applicable precision for each modeled shape.
+The [HTTP reference calculation](../../development/serving/accounting.py) uses fixed precision assumptions for performance accounting.
 Temporary storage and duplicated work cannot increase the theoretical lower bound.
 
 ## Numerical checks
 
 Use independent CPU FP64 references for the [fixed small numerical cases](evaluation.md#numerical-scope).
-The [CPU reference functions](../../development/kernels/reference.py) supply FP64 computations with the model rounding points.
+The [CPU reference functions](../../development/reference/reference.py) supply FP64 computations with the model rounding points.
 Use the same rounded inputs for the references and the operators.
 Use the [named numerical limits](../../python/oh_my_vllm/kernels/specification.py) for each check.
 Use `rtol=0.03` for output checks.

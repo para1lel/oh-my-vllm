@@ -3,7 +3,8 @@ import math
 import numpy as np
 from oh_my_vllm.kernels.vision import FUNCTIONS, VisionBlock, Weights
 
-from .build import build
+from development.native_build import build
+
 from .reference import bf16, bf16_bits, gelu, layer_norm, linear, numerical_error
 
 BLOCK_NAMES = (

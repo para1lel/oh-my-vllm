@@ -141,14 +141,14 @@ def load(name, functions):
     manifest = cache_directory() / f"{name}.json"
     if not manifest.is_file():
         raise RuntimeError(
-            "native module is missing; run python -m development.kernels build"
+            "native module is missing; run python -m development.native_build"
         )
     metadata = json.loads(manifest.read_text())
     if metadata["source_fingerprint"] != source_fingerprint(name) or metadata[
         "functions"
     ] != list(functions):
         raise RuntimeError(
-            "native module is stale; run python -m development.kernels build"
+            "native module is stale; run python -m development.native_build"
         )
     if metadata["ffi_version"] != importlib.metadata.version("apache-tvm-ffi"):
         raise RuntimeError("native module uses a different FFI version")

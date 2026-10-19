@@ -4,7 +4,8 @@ import numpy as np
 import tvm_ffi
 from oh_my_vllm.kernels.sample import MTPAccept, Sample, Weights
 
-from .build import build
+from development.native_build import build
+
 from .reference import bf16, bf16_bits, numerical_error, residual_rms
 
 FUNCTIONS = ("sample_workspace", "sample", "mtp_accept")

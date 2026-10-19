@@ -2,7 +2,8 @@ import numpy as np
 from oh_my_vllm.kernels.fa import FA, Weights, prepare_weights
 from oh_my_vllm.kernels.fa import FUNCTIONS as FA_FUNCTIONS
 
-from .build import build
+from development.native_build import build
+
 from .ffn import reference_projection
 from .reference import (
     bf16,

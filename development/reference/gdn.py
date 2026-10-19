@@ -6,7 +6,8 @@ import tvm_ffi
 from oh_my_vllm.kernels.gdn import FUNCTIONS, GDN, Schedule, Weights, prepare_weights
 from oh_my_vllm.kernels.specification import NUMERICAL_TOLERANCES
 
-from .build import build
+from development.native_build import build
+
 from .ffn import reference_projection
 from .reference import (
     bf16,

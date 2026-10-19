@@ -1,32 +1,5 @@
 from dataclasses import replace
 
-from oh_my_vllm.kernels.fa import FUNCTIONS as FA_FUNCTIONS
-from oh_my_vllm.kernels.ffn import FUNCTIONS as FFN_FUNCTIONS
-from oh_my_vllm.kernels.gdn import FUNCTIONS as GDN_FUNCTIONS
-from oh_my_vllm.kernels.mtp import FUNCTIONS as MTP_FUNCTIONS
-from oh_my_vllm.kernels.vision import FUNCTIONS as VISION_FUNCTIONS
-from oh_my_vllm.worker.device import FUNCTIONS as DEVICE_FUNCTIONS
-
-MODULES = {
-    "device": DEVICE_FUNCTIONS,
-    "ffn": FFN_FUNCTIONS,
-    "fa": FA_FUNCTIONS,
-    "gdn": GDN_FUNCTIONS,
-    "mtp": MTP_FUNCTIONS,
-    "sample": ("sample_workspace", "sample", "mtp_accept"),
-    "vision": VISION_FUNCTIONS,
-}
-
-RUNTIME_MODULES = {
-    "ffn": ("ffn",),
-    "fa_attention": ("fa",),
-    "gdn_attention": ("gdn",),
-    "sample": ("sample",),
-    "mtp_context": ("mtp", "fa"),
-    "mtp_draft": ("mtp", "fa", "ffn", "sample"),
-    "vision_block": ("vision",),
-}
-
 
 def prepare(operator, device, checkpoint):
     if operator == "ffn":

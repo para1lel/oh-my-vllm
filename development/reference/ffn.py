@@ -1,7 +1,8 @@
 import numpy as np
 from oh_my_vllm.kernels.ffn import FFN, FUNCTIONS, Weights, prepare_weights
 
-from .build import build
+from development.native_build import build
+
 from .reference import (
     bf16,
     bf16_bits,

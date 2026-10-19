@@ -11,8 +11,8 @@ Python can allocate tensors and launch the CUDA implementations.
 
 ## Serving boundaries
 
-Use the 7 serving boundaries in `SERVING_OPERATORS` in the [workload model](../../development/kernels/workload.py) for implementation and acceptance.
-The internal stages are parts of these boundaries. They are not serving or acceptance boundaries.
+The 7 existing serving boundaries are migration inputs for the [tile design](../tile-execution.md).
+The internal stages are parts of these boundaries.
 
 | Serving operator | Full measured operation |
 |---|---|
@@ -27,8 +27,8 @@ The internal stages are parts of these boundaries. They are not serving or accep
 The first MTP draft uses `query_only`. The other 3 drafts use `full`.
 The first draft uses the context endpoint that is already available.
 
-Native providers supply these boundaries. Full workload acceptance is necessary.
-Use the [evaluation procedure](evaluation.md) for performance acceptance.
+Native providers supply these boundaries during migration.
+Use the [numerical procedure](evaluation.md) for correctness and the [HTTP comparison](../performance.md) for performance.
 
 ## Internal language stages
 
@@ -70,14 +70,7 @@ If this reduces the time for the full operation, fuse producer work into GEMM in
 Use different small-row and prefill implementations when necessary.
 Use the [GDN execution plan](gdn.md) for recurrent and prefill algorithm selection.
 
-Use small norm, activation, quantization, and position operations only in the full serving operators.
-Keep their reference functions in the evaluation tools only.
-
-A full operation can have more than one launch.
-Include all launches, copies, reductions, and temporary storage in its measurement.
-
-Compare a fusion with its full unfused chain with the same inputs and state.
-Keep only fusions that are correct and reduce the time for the full operation.
-
-Do not remove a launch from the measured operation to increase its efficiency.
-Use [the evaluation procedure](evaluation.md) for acceptance.
+Small normalization, activation, quantization, and position operations can execute in related tile tasks.
+Keep independent reference functions in the numerical tools.
+Use the [tile design](../tile-execution.md) for task dependencies and numerical checks.
+Use the [HTTP comparison](../performance.md) for final performance acceptance.
