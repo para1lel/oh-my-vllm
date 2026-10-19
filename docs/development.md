@@ -41,7 +41,7 @@ scripts/with-env.sh pre-commit run --all-files
 | definition-spacing | Function and module spacing through Python, Rust, and JavaScript/TypeScript syntax trees |
 | cargo-clippy | All workspace members, targets, and features, with warnings as errors |
 | cargo-test | Rust workspace tests in the repository and the Python service tests |
-| kernel-contracts | Numerical references, HTTP accounting, and worker constraints |
+| kernel-contracts | Model evidence, HTTP accounting, and worker constraints |
 | ruff-format | Python formatter |
 | ruff-check | Python lint rules |
 | whitespace | No trailing whitespace, one final newline |

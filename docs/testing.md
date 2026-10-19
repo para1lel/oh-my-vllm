@@ -8,23 +8,23 @@ The Rust tests include checks of the service, scheduler, logical KV, and worker 
 The HTTP tests use the Python placeholder through the process boundary.
 They supply no acceptance evidence for model inference or GPU performance.
 
-The CPU checks cover numerical tolerances, checkpoint identity, canonical HTTP accounting, and manifest validation.
-The reference tests include checks of low-precision rounding, GDN carry state, and MTP short tails.
+CPU checks cover checkpoint and native identities, full-model report validation, canonical HTTP accounting, and manifest validation.
 The constraint test checks schema masks and separate speculative grammar states.
 Rust checks streamed JSON tool frames and prefix cache isolation for media requests.
 
-The CPU task protocol check rejects incorrect dependencies and metadata.
-The [task engine fixture](tile-runtime.md#checks) checks GPU publication, epoch reuse, CUDA Graph replay, and failure termination.
-It does not supply model numerical or performance evidence.
+The [execution tests](../tests/test_execution.py) check the execution decision for the full Execute message and graph resource release.
+They check recording failures, replay on the caller's stream, interruption, and closure order.
+They do not supply model numerical or performance evidence.
 
-Use the [kernel development commands](operators/development.md) for GPU numerical checks.
-The FFN output reference uses selected rows. The report gives the sample scope.
-Each provider states its numerical sample scope.
+Use the [full-model evaluation](operators/evaluation.md) for numerical checks.
+Compare all vocabulary logits after a fixed short prompt and one decode iteration with an independent PyTorch FP64 model.
+Do not use single-operator tolerance tests, sampled intermediate outputs, or the old low-precision path as the numerical reference.
+Use the same reference artifact for subsequent changes.
+The [development commands](operators/development.md#numerical-commands) generate and compare these artifacts.
 
-Sampling checks seeded selection and MTP state slot selection.
-FA, GDN, and MTP check persistent writes and unchanged guard storage.
-Vision checks patch order and frame isolation.
-Incomplete coverage or failed checks prevent correctness acceptance.
+Keep service contracts for state selection, constraints, media order, and request isolation.
+Keep memory safety and graph resource checks separate from model numerical checks.
+Use Compute Sanitizer for changed device memory or synchronization behavior.
 
 Use the [HTTP benchmark](performance.md#measurement-command) for full inference timing.
 It checks exact input and output lengths, uncached prefixes, and measured MTP acceptance.

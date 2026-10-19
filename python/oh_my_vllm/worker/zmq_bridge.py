@@ -3,8 +3,6 @@ import argparse
 import msgpack
 import zmq
 
-from ..kernels.tile_plan import TileExecutionError
-
 
 def create_worker(config):
     if config["model_path"] == "stub":
@@ -15,8 +13,6 @@ def create_worker(config):
 
 
 def error_kind(message, error):
-    if isinstance(error, TileExecutionError):
-        return "device"
     text = str(error).lower()
     if "out of memory" in text:
         return "oom"

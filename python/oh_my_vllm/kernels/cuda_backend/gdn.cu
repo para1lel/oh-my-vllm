@@ -91,7 +91,7 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
   tensor_contract(qkv, x, kDLBfloat, 16, {rows, 10240});
   tensor_contract(output_data, x, kDLFloat8_e4m3fn, 8, {rows, 6144});
   tensor_contract(output_scales, x, kDLFloat, 32, {rows, 48});
-  bool split_values = (!verify && rows > 32) || (verify && max_queries > 1);
+  bool split_values = rows > 32 || verify;
   tensor_contract(recurrent, x, kDLBfloat, 16, {split_values ? rows : 0, 6144});
   bool precomputed_gates = !verify && rows > 32;
   tensor_contract(gates, x, kDLFloat, 32, {precomputed_gates ? rows : 0, 96});
@@ -214,7 +214,8 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
                    static_cast<const float *>(input_scales.data_ptr()),
                    static_cast<const float *>(qkvz_scale.data_ptr()),
                    static_cast<__nv_bfloat16 *>(qkvz.data_ptr()), rows, 16384, 5120, stream);
-  if (rows > 32)
+  bool single_query_verify = verify && max_queries == 1;
+  if (rows > 32 || single_query_verify)
     bf16_linear(static_cast<const __nv_bfloat16 *>(normalized.data_ptr()),
                 static_cast<const __nv_bfloat16 *>(ba_weight.data_ptr()), ba.data_ptr(), rows, 96,
                 5120, stream);
@@ -260,7 +261,7 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
         static_cast<const __nv_bfloat16 *>(ba_weight.data_ptr()),
         static_cast<__nv_bfloat16 *>(ba.data_ptr()));
   };
-  if (rows > 1 && rows <= 32)
+  if (rows > 1 && rows <= 32 && !single_query_verify)
     prepare(std::true_type{});
   else if (!(rows == 1 && verify))
     prepare(std::false_type{});
@@ -273,11 +274,6 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
     auto kernel = gdn_scan_quant_kernel<decltype(fused)::value, ValueTile, Threads,
                                         decltype(prepared_gates)::value, decltype(staged)::value,
                                         decltype(staged)::value>;
-    if constexpr (!decltype(staged)::value) {
-      if (verify)
-        kernel = gdn_scan_quant_kernel<decltype(fused)::value, ValueTile, Threads,
-                                       decltype(prepared_gates)::value, false, false, true>;
-    }
     launch_kernel(
         kernel, dim3(batch, 48, 128 / ValueTile), dim3(Threads), SharedBytes, stream,
         static_cast<const __nv_bfloat16 *>(qkv.data_ptr()),
@@ -324,7 +320,7 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
       paired(std::integral_constant<int, 32>{}, gdn_value_two_pair_kernel<32, 128>);
     else
       paired(std::integral_constant<int, 16>{}, gdn_value_pair_kernel<16, 128>);
-  } else if (verify && max_queries > 1) {
+  } else if (verify) {
     const auto *interleaved = static_cast<const __nv_bfloat16 *>(qkv.data_ptr());
     const auto *ba_values = static_cast<const __nv_bfloat16 *>(ba.data_ptr());
     gdn_recurrent::launch_interleaved(
@@ -344,10 +340,7 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
         scan(std::false_type{}, std::integral_constant<int, 128>{}, threads, std::false_type{},
              std::false_type{});
     };
-    if (verify && rows > 1)
-      run(std::integral_constant<int, 512>{});
-    else
-      run(std::integral_constant<int, 256>{});
+    run(std::integral_constant<int, 256>{});
   }
   check_cuda(cudaGetLastError());
   if (split_values && mx.active())

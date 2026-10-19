@@ -1,25 +1,28 @@
 # Work state
 
-Use `nightly` for work.
-The [tile execution design](tile-execution.md) controls the GPU migration.
-The [implementation plan](tile-migration.md) gives the next tasks.
+Use `main` for work.
+Use the [GPU execution rules](execution.md).
+The worker uses traditional operator scheduling with the native kernels from the measured historical implementation.
+An Execute that contains prefill uses Eager execution for all fragments.
+A decode-only Execute records and replays CUDA Graphs.
+The tile scheduler, task plans, and protocol fixtures have been removed.
 
-The runtime still uses the native FFN, FA, GDN, vision, sampling, and MTP implementations.
 Rust supplies HTTP, scheduling, logical KV, and worker lifecycle controls.
-Python supplies model execution through the existing ZMQ DEALER and msgpack boundary.
-HTTP accounting uses fixed nominal rates and a canonical schedule.
-The [task engine](tile-runtime.md) supplies dependency execution for copy, scale, and add tasks.
-Model computation does not yet use this engine.
+Python supplies model execution through ZMQ DEALER and msgpack.
+Graph replay uses the caller's stream.
+Graph closure waits for GPU work before it releases resources.
+Failed recording releases its temporary resource leases.
 
-The final target covers all GPU tensor computation, also during preparation and initialization.
-Migration stages have no performance threshold.
-Final acceptance combines full task coverage, numerical and state correctness, and all 24 nominal-resource HTTP performance cases.
+The builder is `development.native_build`.
+The [numerical tools](operators/evaluation.md) compare short-input, single-iteration full-model logits with PyTorch FP64 computation.
+Keep the frozen reference and its identity checks.
+Single-operator tolerance tests and their reference providers have been removed.
+Old operator timing, public comparison, and peak calibration tools have also been removed.
 
-The builder is `development.native_build`. Numerical references are in `development/reference/`.
-Old operator timing, public comparison, and peak calibration tools have been removed.
-Next, add language task bodies and complete ordinary decode through vocabulary projection.
-Continue with prefill, MTP/sampling, vision, and preparation/auxiliary computation.
-Remove old implementations after their replacements pass the applicable correctness checks.
+Use the 24 [HTTP configurations](performance.md) and nominal-resource accounting for performance work.
+Use different artifacts for historical measurements and evidence for this source.
+Optimize the native operators only when full HTTP measurements support the change.
+Do not change numerical precision, state ownership, or service behavior.
+Extend full-model inputs when changes affect MTP, vision, or long contexts.
 
-Keep the original model, state, and process contracts.
 Keep host paths and artifact locations in ignored local configuration.

@@ -111,7 +111,7 @@ Set `parallel_tool_calls=false` for at most one call.
 The worker applies grammar masks to target and proposal distributions.
 Only accepted tokens change the request grammar state.
 
-Decode-only batches use CUDA Graph execution. Other batches use ordinary execution.
+The [execution rules](execution.md) select Eager for Execute messages with prefill and CUDA Graph replay for decode-only messages.
 The worker does not use PDL.
 Use the [end-to-end procedure](performance.md) for inference performance measurements.
 

@@ -3,7 +3,7 @@
 Use one NVIDIA B200 and the [model contract](operators/model.md).
 Use the full Rust service and Python inference worker.
 Placeholder outputs do not supply inference evidence.
-The [tile execution design](tile-execution.md) controls migration and final acceptance.
+The [GPU execution rules](execution.md) control execution and final acceptance.
 
 ## Configurations
 
@@ -33,8 +33,8 @@ Do not use time to first token as the full latency.
 
 ## Performance limit
 
-Use [nominal resources and the global formula](tile-execution.md#http-performance).
-Migration has no performance threshold.
+Use [nominal resources and the global formula](execution.md#http-performance).
+Intermediate changes can report failed or unmeasured configurations.
 Final acceptance must have efficiency of at least 50% in each of the 24 configurations.
 The full batch latency must be at most 2 times its reference time.
 Operator timing and public comparisons have no independent acceptance gate.

@@ -11,7 +11,7 @@ Python 可以分配张量及启动 CUDA 实现.
 
 ## Serving 边界
 
-现有的 7 个 serving 边界是 [tile 设计](../tile-execution.zh.md)的迁移输入.
+7 个 serving 边界使用 [GPU 执行规则](../execution.zh.md).
 内部阶段是这些边界的组成部分.
 
 | Serving 算子 | 完整计时操作 |
@@ -27,7 +27,7 @@ Python 可以分配张量及启动 CUDA 实现.
 第一个 MTP draft 使用 `query_only`. 其余 3 个 draft 使用 `full`.
 第一个 draft 使用已就绪的 context 端点.
 
-迁移期间由原生 provider 提供这些边界.
+原生算子提供这些边界.
 正确性使用[数值流程](evaluation.zh.md), 性能使用 [HTTP 比较](../performance.zh.md).
 
 ## 内部语言阶段
@@ -70,7 +70,7 @@ MTP 与 target 模型使用相同的 FA 和 FFN 算子.
 必要时分别实现小行数与 prefill 路径.
 Recurrent 与 prefill 算法选择使用 [GDN 执行计划](gdn.zh.md).
 
-小型 normalization, activation, quantization 和位置操作可以在相关 tile task 中执行.
-独立参考函数保留在数值工具中.
-Task 依赖和数值检查使用 [tile 设计](../tile-execution.zh.md).
+小型 normalization, activation, quantization 和位置操作可以在其 producer 或 consumer kernel 中执行.
+数值工具使用独立的 PyTorch FP64 全模型参考.
+Graph 资源和数值检查使用 [GPU 执行规则](../execution.zh.md).
 最终性能验收使用 [HTTP 比较](../performance.zh.md).

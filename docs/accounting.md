@@ -1,6 +1,6 @@
 # HTTP reference assumptions
 
-Version `http-reference-v1` uses the [canonical schedule](performance.md#lower-bound-calculation) and [nominal rates](tile-execution.md#http-performance).
+Version `http-reference-v1` uses the [canonical schedule](performance.md#lower-bound-calculation) and [nominal rates](execution.md#http-performance).
 This is a conservative resource estimate, not a minimum physical latency proof.
 The [calculation source](../development/serving/accounting.py) specifies the dimensions and formulas.
 

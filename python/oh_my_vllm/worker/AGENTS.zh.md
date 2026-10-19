@@ -8,8 +8,7 @@
 Rust 管理逻辑 cache 标识. Python 保存 tensors 和私有状态.
 MTP 拒绝后, 约束状态必须与已接受 tokens 一致.
 
-仅含 decode 请求的 batch 使用 CUDA Graph 执行.
-不使用 PDL.
-保持 graph 缓冲区地址固定. Replay 前更新元数据.
+遵守[执行规则](../../../docs/execution.zh.md)中的 Eager 和 CUDA Graph 选择规则.
+拆分 batch 前, 根据完整 Execute 消息选择执行方式.
 
 添加测试前, 向维护者说明其必要性.

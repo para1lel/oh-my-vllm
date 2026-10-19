@@ -2,6 +2,8 @@ import json
 import os
 from pathlib import Path
 
+from .execution import execution_policy
+
 
 class Trace:
     def __init__(self, config, identity, *, tokenizer=None):
@@ -13,7 +15,11 @@ class Trace:
                 raise ValueError("execution trace must be outside the repository")
             self.output = path.open("x")
             self.record(
-                "identity", config=config, checkpoint=identity, tokenizer=tokenizer
+                "identity",
+                config=config,
+                checkpoint=identity,
+                tokenizer=tokenizer,
+                execution=execution_policy(),
             )
 
     def record(self, operation, **values):

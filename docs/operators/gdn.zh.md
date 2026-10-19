@@ -23,6 +23,10 @@ Worker 分别提供 scan 和分块 prefill 路径.
 只加载一次 BF16 状态. 跨 token 更新保持 FP32 live carry.
 保存必要的私有 BF16 状态. 保持读取 slot 不变.
 
+[算子](../../python/oh_my_vllm/kernels/cuda_backend/gdn.cu)对 decode 和推测验证使用同一套成对 FP32 递推及 BF16 输出 buffer.
+单 query 验证使用 BF16 Tensor Core 门控投影.
+不超过 32 行的多 query 验证保持门控投影与卷积融合.
+
 包含 1 或 2 条等长序列的 batch 对 2 至 5 个 token 使用固定 query 数量.
 独立输入使用主机元数据检查. 交错布局的服务输入保留 GPU 元数据检查.
 [门控辅助函数](../../python/oh_my_vllm/kernels/cuda_backend/gdn_recurrent_core.cuh#L137)<!-- source: __device__ inline float2 fast_gate_pair(float alog, float activation, float projected_b) { --> 在限定输入范围内使用快速路径.
@@ -88,9 +92,9 @@ FP32 计数包含 live state 更新, 对角块求逆, gate 缩放和输出合并
 这些计数不包含与结构性零值和单位值的乘积, 也不包含填充行.
 Scan 路径的工作量模型保留原有 FP32 逐 token 递推计数.
 
-## 迁移
+## 变更
 
 使用 CUDA C++ 或 CuTe DSL. 外部源码用于设计参考.
 替换实现通过适用数值与状态检查前, 保持当前路径.
-执行覆盖和迁移条件使用 [tile 设计](../tile-execution.zh.md).
+调度和 graph 资源使用 [GPU 执行规则](../execution.zh.md).
 最终性能验收使用 [HTTP 比较](../performance.zh.md).

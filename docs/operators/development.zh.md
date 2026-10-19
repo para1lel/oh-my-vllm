@@ -1,6 +1,6 @@
 # Kernel 开发
 
-使用[模型契约](model.zh.md), [数值检查](evaluation.zh.md)及 [tile 迁移计划](../tile-migration.zh.md).
+使用[模型契约](model.zh.md), [数值检查](evaluation.zh.md)及 [GPU 执行规则](../execution.zh.md).
 推理 worker 加载原生模块. 占位实现仅适用于 `--model stub`.
 
 ## 工具
@@ -37,32 +37,39 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.native_build
 
 ## 数值命令
 
-执行 CPU 检查:
+运行 CPU 证据和计费检查:
 
 ```bash
-scripts/with-env.sh python -m unittest development.reference.test_contracts development.reference.test_reference development.serving.test_roofline
+scripts/with-env.sh python -m unittest development.model.test_identity development.model.test_logits development.serving.test_roofline
 ```
 
+在独立开发环境中安装 `requirements/model-reference.lock`, 用于 PyTorch FP64 参考.
+使用[官方 PyTorch 包](https://pytorch.org/get-started/previous-versions/).
+推理 worker 不使用 PyTorch.
 将 `MODEL_ROOT` 设为 checkpoint 目录.
-运行小规模 GPU 参考:
+将 `LOGITS_REFERENCE` 设为仓库外的 `.npz` 路径.
+用该环境生成独立参考:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.reference --model "$MODEL_ROOT"
+scripts/with-env.sh scripts/with-gpu.sh python -m development.model.reference --model "$MODEL_ROOT" --output "$LOGITS_REFERENCE"
 ```
 
-使用 `--operator` 选择 `ffn`, `fa_attention`, `gdn_attention`, `vision_block`, `sample`, `mtp_context` 或 `mtp_draft`.
-命令检查 eager 执行和 CUDA Graph replay.
-它在每次检查前恢复可变状态, 并在使用后关闭原生 workspace.
-它没有计时或效率门槛.
+命令拒绝已有输出路径.
+数值验收前将其 SHA256 记录到对照策略.
+将 `LOGITS_REPORT` 设为仓库外的新 JSON 路径.
+对照还将实际 logits 保存到同名的 `.npz` 文件.
+用推理开发环境运行完整模型对照:
 
-每个 provider 声明其数值抽样范围.
-FFN 检查全部 residual 元素并抽样 output 行.
-GDN 检查 private state 写入. FA 和 MTP 检查 KV 写入及未改变的 guard 存储.
-Sampling 检查带种子的选择及接受状态 slot.
-Vision 检查 raw patch, output 样本及 frame isolation.
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.model --model "$MODEL_ROOT" --reference "$LOGITS_REFERENCE" --report "$LOGITS_REPORT"
+```
 
-这些检查不能证明其声明范围之外的元素精度.
-
+使用 `--mode prefill` 对照短提示的末行.
+[评估流程](evaluation.zh.md)规定输入, 精度, 指标及范围.
+命令没有计时或效率门槛.
 性能验收使用 [HTTP benchmark](../performance.zh.md#测量命令).
-当 trace 或 counter 可以识别瓶颈时使用 Nsight Systems 和 Nsight Compute.
-其产物保存在仓库外.
+当 trace 或 counters 能定位瓶颈时, 使用 Nsight Systems 和 Nsight Compute.
+其 artifacts 保存在仓库外.
+
+比较变更前后的 HTTP 测量时, 使用相同的 `--prompt-seed` 值.
+HTTP 产物记录此 seed 和执行策略.

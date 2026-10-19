@@ -111,7 +111,7 @@ Tool choice 可为 `auto`, `none`, `required` 或指定函数名.
 Worker 对 target 和 proposal 分布应用 grammar mask.
 只有已接受的 token 才会修改请求的 grammar 状态.
 
-仅含 decode 的 batch 使用 CUDA Graph 执行. 其他 batch 使用普通执行.
+[执行规则](execution.zh.md)为含 prefill 的 Execute 消息选择 Eager, 为仅含 decode 的消息选择 CUDA Graph 重放.
 Worker 不使用 PDL.
 推理性能测量使用[端到端流程](performance.zh.md).
 

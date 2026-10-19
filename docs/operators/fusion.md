@@ -11,7 +11,7 @@ Python can allocate tensors and launch the CUDA implementations.
 
 ## Serving boundaries
 
-The 7 existing serving boundaries are migration inputs for the [tile design](../tile-execution.md).
+The 7 serving boundaries use the [GPU execution rules](../execution.md).
 The internal stages are parts of these boundaries.
 
 | Serving operator | Full measured operation |
@@ -27,7 +27,7 @@ The internal stages are parts of these boundaries.
 The first MTP draft uses `query_only`. The other 3 drafts use `full`.
 The first draft uses the context endpoint that is already available.
 
-Native providers supply these boundaries during migration.
+Native operators supply these boundaries.
 Use the [numerical procedure](evaluation.md) for correctness and the [HTTP comparison](../performance.md) for performance.
 
 ## Internal language stages
@@ -70,7 +70,7 @@ If this reduces the time for the full operation, fuse producer work into GEMM in
 Use different small-row and prefill implementations when necessary.
 Use the [GDN execution plan](gdn.md) for recurrent and prefill algorithm selection.
 
-Small normalization, activation, quantization, and position operations can execute in related tile tasks.
-Keep independent reference functions in the numerical tools.
-Use the [tile design](../tile-execution.md) for task dependencies and numerical checks.
+Small normalization, activation, quantization, and position operations can execute in their producer or consumer kernels.
+Use the independent PyTorch FP64 full-model reference in the numerical tools.
+Use the [GPU execution rules](../execution.md) for graph resources and numerical checks.
 Use the [HTTP comparison](../performance.md) for final performance acceptance.

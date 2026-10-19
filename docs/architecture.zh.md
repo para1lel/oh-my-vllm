@@ -28,9 +28,10 @@ Worker 选择已接受的 state slot, 不为接受 token 而复制整个 recurre
 Target 与 proposal 分布保存在独立存储中, 直至验证完成.
 约束状态只随已接受的 token 改变.
 
-模型权重常驻 GPU. Forward buffer 在 64 个语言层之间复用.
+模型权重常驻 GPU. Eager 路径在语言层之间复用 forward buffer.
+每个已录制的 graph 保留其算子引用的缓冲区.
 必要时, Worker 将较大的调度步骤拆为原生 batch.
-仅含 decode 的 batch 使用固定地址的 CUDA Graph buffer. 其他 batch 使用普通执行.
+[执行规则](execution.zh.md)为完整 Execute 消息选择 Eager 或 CUDA Graph 执行.
 
 FA 与 GDN state pool 具有独立容量.
 媒体请求使用独立的前缀 cache 标识.
@@ -42,6 +43,20 @@ FA 与 GDN state pool 具有独立容量.
 最终 prefill 或 decode 步骤返回已接受 drafts 加一个 target token.
 
 已接受的历史不包含新 drafts.
+
+## GPU 计算
+
+| 部分 | 职责 |
+|---|---|
+| Python 模型 | 按依赖顺序调用算子并管理 tensor 存储 |
+| Native 算子 | 按模型的精度和私有状态规则计算数值 |
+| Device 资源 | 管理 stream, CUDA Graph 录制, 重放和释放 |
+
+[模型](../python/oh_my_vllm/worker/model.py)在全部语言层调用[算子阶段](operators/fusion.zh.md).
+Eager 执行和 CUDA Graph 录制使用相同的 native 算子.
+[Device wrapper](../python/oh_my_vllm/worker/device.py) 提供 graph 资源.
+每个 workspace 保留其权重, cache, tensor 和资源 lease, 直到 graph 关闭.
+FP8 转换和 tensor 检查在算子类别之间共享.
 
 ## 失败与资源
 

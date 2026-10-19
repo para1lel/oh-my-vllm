@@ -1,6 +1,6 @@
 import ctypes
 import os
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, suppress
 from pathlib import Path
 
 import numpy as np
@@ -45,7 +45,10 @@ class Device:
             ],
             "cudaStreamDestroy": [ctypes.c_void_p],
             "cudaStreamBeginCapture": [ctypes.c_void_p, ctypes.c_int],
-            "cudaStreamEndCapture": [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)],
+            "cudaStreamEndCapture": [
+                ctypes.c_void_p,
+                ctypes.POINTER(ctypes.c_void_p),
+            ],
             "cudaGraphInstantiateWithFlags": [
                 ctypes.POINTER(ctypes.c_void_p),
                 ctypes.c_void_p,
@@ -91,10 +94,64 @@ class Device:
     def synchronize(self):
         self.module.synchronize(0)
 
-    def checked(self, status):
-        if status:
-            message = self.runtime.cudaGetErrorString(status).decode("utf-8", "replace")
-            raise RuntimeError(f"CUDA runtime error {status}: {message}")
+    def destroy_handles(self, handles, *, suppress=False):
+        error = None
+        for name, handle in handles:
+            if handle:
+                try:
+                    self.checked(getattr(self.runtime, name)(handle))
+                except Exception as failure:
+                    error = error or failure
+        if error is not None and not suppress:
+            raise error
+
+    def capture(self, operation):
+        stream, graph, executable = (ctypes.c_void_p() for _ in range(3))
+        temporary = (("cudaGraphDestroy", graph), ("cudaStreamDestroy", stream))
+        try:
+            self.checked(
+                self.runtime.cudaStreamCreateWithFlags(ctypes.byref(stream), 1)
+            )
+            with tvm_ffi.use_raw_stream(tvm_ffi.device("cuda:0"), stream.value):
+                self.checked(self.runtime.cudaStreamBeginCapture(stream, 1))
+                try:
+                    operation()
+                except BaseException:
+                    self.runtime.cudaStreamEndCapture(stream, ctypes.byref(graph))
+                    raise
+                self.checked(
+                    self.runtime.cudaStreamEndCapture(stream, ctypes.byref(graph))
+                )
+            self.checked(
+                self.runtime.cudaGraphInstantiateWithFlags(
+                    ctypes.byref(executable), graph, 0
+                )
+            )
+        except BaseException:
+            self.destroy_handles(
+                (("cudaGraphExecDestroy", executable), *temporary), suppress=True
+            )
+            raise
+        try:
+            self.destroy_handles(temporary)
+        except BaseException:
+            self.destroy_handles((("cudaGraphExecDestroy", executable),), suppress=True)
+            raise
+        return executable
+
+    def release_graph(self, executable):
+        error = None
+        try:
+            self.synchronize()
+        except BaseException as failure:
+            error = failure
+        try:
+            self.checked(self.runtime.cudaGraphExecDestroy(executable))
+        except BaseException:
+            if error is None:
+                raise
+        if error is not None:
+            raise error
 
     @contextmanager
     def graph(self, operation):
@@ -103,37 +160,32 @@ class Device:
         with ExitStack() as resources:
             if acquire is not None:
                 resources.enter_context(acquire())
-            stream, graph, executable = (ctypes.c_void_p() for _ in range(3))
-            self.checked(
-                self.runtime.cudaStreamCreateWithFlags(ctypes.byref(stream), 1)
-            )
-            resources.callback(
-                lambda: self.checked(self.runtime.cudaStreamDestroy(stream))
-            )
-            with tvm_ffi.use_raw_stream(tvm_ffi.device("cuda:0"), stream.value):
-                self.checked(self.runtime.cudaStreamBeginCapture(stream, 1))
-                try:
-                    operation()
-                finally:
-                    status = self.runtime.cudaStreamEndCapture(
-                        stream, ctypes.byref(graph)
-                    )
-                    if graph.value:
-                        resources.callback(
-                            lambda: self.checked(self.runtime.cudaGraphDestroy(graph))
-                        )
-                self.checked(status)
-            status = self.runtime.cudaGraphInstantiateWithFlags(
-                ctypes.byref(executable), graph, 0
-            )
-            if executable.value:
-                resources.callback(
-                    lambda: self.checked(self.runtime.cudaGraphExecDestroy(executable))
-                )
-            self.checked(status)
+            executable = self.capture(operation)
+            active = True
 
             def replay():
-                caller_stream = tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0"))
-                self.checked(self.runtime.cudaGraphLaunch(executable, caller_stream))
+                if not active:
+                    raise RuntimeError("CUDA Graph is closed")
+                stream = tvm_ffi.get_raw_stream(tvm_ffi.device("cuda:0"))
+                try:
+                    self.checked(self.runtime.cudaGraphLaunch(executable, stream))
+                except BaseException:
+                    with suppress(BaseException):
+                        self.synchronize()
+                    raise
 
-            yield replay
+            try:
+                yield replay
+            except BaseException:
+                with suppress(BaseException):
+                    self.release_graph(executable)
+                raise
+            else:
+                self.release_graph(executable)
+            finally:
+                active = False
+
+    def checked(self, status):
+        if status:
+            message = self.runtime.cudaGetErrorString(status).decode("utf-8", "replace")
+            raise RuntimeError(f"CUDA runtime error {status}: {message}")

@@ -1,6 +1,6 @@
 # HTTP 参考计费假设
 
-版本 `http-reference-v1` 使用[规范化调度](performance.zh.md#下界计算)及[标称速率](tile-execution.zh.md#http-性能).
+版本 `http-reference-v1` 使用[规范化调度](performance.zh.md#下界计算)及[标称速率](execution.zh.md#http-性能).
 这是保守资源估算, 不是最小物理延迟证明.
 [计算源码](../development/serving/accounting.py)规定维度和公式.
 

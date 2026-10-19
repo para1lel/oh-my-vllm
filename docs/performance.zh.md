@@ -3,7 +3,7 @@
 使用一张 NVIDIA B200, 并遵守[模型契约](operators/model.zh.md).
 使用完整 Rust 服务和 Python 推理 worker.
 占位输出不能作为推理证据.
-[Tile 执行设计](tile-execution.zh.md)规定迁移和最终验收.
+[GPU 执行规则](execution.zh.md)规定执行方式和最终验收.
 
 ## 配置
 
@@ -33,8 +33,8 @@
 
 ## 性能门槛
 
-使用[标称资源及全局公式](tile-execution.zh.md#http-性能).
-迁移期间没有性能门槛.
+使用[标称资源及全局公式](execution.zh.md#http-性能).
+中间阶段变更可以报告未达标或尚未测量的配置.
 最终验收时 24 种配置的效率都必须至少为 50%.
 完整 batch 延迟最多为参考时间的 2 倍.
 算子计时和公开实现比较没有独立验收门槛.

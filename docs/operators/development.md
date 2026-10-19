@@ -1,6 +1,6 @@
 # Kernel development
 
-Use the [model contract](model.md), [numerical checks](evaluation.md), and [tile migration plan](../tile-migration.md).
+Use the [model contract](model.md), [numerical checks](evaluation.md), and [GPU execution rules](../execution.md).
 The inference worker loads native modules. The placeholder applies only to `--model stub`.
 
 ## Tools
@@ -37,32 +37,39 @@ Each binary has an immutable copy and manifest in the external cache.
 
 ## Numerical commands
 
-Do the CPU checks:
+Do the CPU evidence and accounting checks:
 
 ```bash
-scripts/with-env.sh python -m unittest development.reference.test_contracts development.reference.test_reference development.serving.test_roofline
+scripts/with-env.sh python -m unittest development.model.test_identity development.model.test_logits development.serving.test_roofline
 ```
 
+Install `requirements/model-reference.lock` in a separate development environment for the PyTorch FP64 reference.
+Use the [official PyTorch packages](https://pytorch.org/get-started/previous-versions/).
+The inference worker does not use PyTorch.
 Set `MODEL_ROOT` to the checkpoint directory.
-Run the small GPU references:
+Set `LOGITS_REFERENCE` to an external `.npz` path.
+Generate the PyTorch FP64 reference with that environment:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.reference --model "$MODEL_ROOT"
+scripts/with-env.sh scripts/with-gpu.sh python -m development.model.reference --model "$MODEL_ROOT" --output "$LOGITS_REFERENCE"
 ```
 
-Use `--operator` to select `ffn`, `fa_attention`, `gdn_attention`, `vision_block`, `sample`, `mtp_context`, or `mtp_draft`.
-The command checks eager execution and CUDA Graph replay.
-It restores mutable state before each check and closes native workspaces after use.
-It has no timing or efficiency gate.
+The command rejects output paths that already contain a file.
+Record its SHA256 in the comparison policy before numerical acceptance.
+Set `LOGITS_REPORT` to a new external JSON path.
+The comparison also saves the inference logits in a `.npz` file with the same stem.
+Run the full model comparison with the inference development environment:
 
-Each provider states its numerical sample scope.
-FFN checks all residual elements and samples output rows.
-GDN checks private state writes. FA and MTP check KV writes and unchanged guard storage.
-Sampling checks seeded selection and accepted state slots.
-Vision checks raw patches, output samples, and frame isolation.
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.model --model "$MODEL_ROOT" --reference "$LOGITS_REFERENCE" --report "$LOGITS_REPORT"
+```
 
-These checks do not prove accuracy for elements beyond their stated scope.
-
+Use `--mode prefill` for the short prompt's last row.
+The [evaluation procedure](evaluation.md) specifies the input, precision, metrics, and scope.
+The command has no timing or efficiency gate.
 Use the [HTTP benchmark](../performance.md#measurement-command) for performance acceptance.
 Use Nsight Systems and Nsight Compute when a trace or counters can identify a bottleneck.
 Keep their artifacts external to the repository.
+
+Use the same `--prompt-seed` value when you compare HTTP measurements before and after a change.
+The HTTP artifact records this seed and the execution policy.

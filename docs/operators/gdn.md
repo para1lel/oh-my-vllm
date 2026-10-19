@@ -23,6 +23,10 @@ Use sequential token updates with parallel value tiles as the initial design.
 Load BF16 state once. Keep FP32 live carry across the token updates.
 Save the necessary private BF16 states. Keep read slots unchanged.
 
+The [operator](../../python/oh_my_vllm/kernels/cuda_backend/gdn.cu) uses the same paired FP32 recurrence and BF16 output buffer for decode and speculative verification.
+Single-query verification uses the BF16 Tensor Core gate projection.
+Multiple-query verification with at most 32 rows keeps the gate projection fused with convolution.
+
 Balanced batches with one or two sequences use fixed query counts for two to five tokens.
 Separate inputs use host metadata checks. Interleaved serving inputs keep GPU metadata checks.
 The [gate helper](../../python/oh_my_vllm/kernels/cuda_backend/gdn_recurrent_core.cuh#L137)<!-- source: __device__ inline float2 fast_gate_pair(float alog, float activation, float projected_b) { --> uses a fast path for a limited range of inputs.
@@ -88,9 +92,9 @@ The inverse contributes `H*F` FP32 FLOPs and `H*(T-F)` BF16 FLOPs.
 These counts omit products with structural zero and one values and padded rows.
 The work model keeps the original FP32 token recurrence count for scan paths.
 
-## Migration
+## Changes
 
 Use CUDA C++ or CuTe DSL. Use external sources as design references.
 Keep the current path until its replacement passes the applicable numerical and state checks.
-Use the [tile design](../tile-execution.md) for execution coverage and migration conditions.
+Use the [GPU execution rules](../execution.md) for scheduling and graph resources.
 Use the [HTTP comparison](../performance.md) for final performance acceptance.

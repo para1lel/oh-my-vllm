@@ -1,25 +1,28 @@
 # 工作状态
 
-工作使用 `nightly`.
-GPU 迁移以 [tile 执行设计](tile-execution.zh.md)为准.
-[实施计划](tile-migration.zh.md)给出后续任务.
+在 `main` 上工作.
+使用 [GPU 执行规则](execution.zh.md).
+Worker 使用传统算子调度及历史实测实现中的 native kernel.
+包含 prefill 的 Execute 对所有分片使用 Eager 执行.
+仅含 decode 的 Execute 录制并重放 CUDA Graph.
+Tile 调度器, task plan 和协议 fixture 已移除.
 
-运行时仍使用 native FFN, FA, GDN, vision, 采样和 MTP 实现.
 Rust 提供 HTTP, 调度, 逻辑 KV 和 worker 生命周期控制.
-Python 通过现有 ZMQ DEALER 和 msgpack 边界提供模型执行.
-HTTP 计费使用固定标称速率和规范化调度.
-[Task 引擎](tile-runtime.zh.md)为 copy, scale 和 add task 提供依赖执行.
-模型计算尚未使用此引擎.
+Python 通过 ZMQ DEALER 和 msgpack 提供模型执行.
+Graph 重放使用调用者的 stream.
+Graph 关闭在释放资源前等待 GPU 工作.
+录制失败会释放临时资源 lease.
 
-最终目标覆盖全部 GPU tensor 计算, 也包含准备和初始化阶段.
-迁移阶段不设性能门槛.
-最终验收同时检查完整 task 覆盖, 数值与状态正确性及全部 24 种标称资源 HTTP 性能配置.
+构建入口是 `development.native_build`.
+[数值工具](operators/evaluation.zh.md)将短输入, 单次迭代的全模型 logits 与 PyTorch FP64 计算比较.
+保留冻结的参考及其身份检查.
+单算子容差测试及其参考 provider 已移除.
+旧算子计时, 公开比较和峰值校准工具也已移除.
 
-构建器为 `development.native_build`. 数值参考位于 `development/reference/`.
-旧算子计时, 公开比较和峰值校准工具已移除.
-下一步添加语言 task body, 贯通直到词表投影的普通 decode.
-继续处理 prefill, MTP/采样, vision 及准备/辅助计算.
-替换实现通过适用正确性检查后, 删除旧实现.
+性能工作使用 24 种 [HTTP 配置](performance.zh.md)及标称资源计费.
+历史测量与当前源码的证据分开保存.
+只有完整 HTTP 测量支持变更时, 才优化 native 算子.
+保持数值精度, 状态所有权和服务行为不变.
+变更影响 MTP, vision 或长上下文时, 扩展全模型输入.
 
-保持原有模型, 状态和进程契约.
-主机路径和产物位置放在被忽略的本地配置中.
+Host 路径和 artifact 位置保存在被忽略的本地配置中.

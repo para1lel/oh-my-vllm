@@ -253,7 +253,9 @@ class BenchmarkGate(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as directory:
             service = object.__new__(benchmark.Service)
-            service.arguments = SimpleNamespace(artifact_id="test-artifact")
+            service.arguments = SimpleNamespace(
+                artifact_id="test-artifact", prompt_seed="shared-input"
+            )
             service.mode, service.port = "ordinary", 0
             service.trace = Path(directory) / "trace.jsonl"
 

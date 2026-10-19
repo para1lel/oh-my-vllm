@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 
 from oh_my_vllm.kernels.native import cache_directory, file_sha256
+from oh_my_vllm.worker.execution import execution_policy
 from oh_my_vllm.worker.tokenizer import Tokenization, tokenizer_identity
 
 from .accounting import RATES, VERSION
@@ -22,7 +23,15 @@ from .roofline import lower_bound
 MIN_EFFICIENCY = 0.50
 
 ROOT = Path(__file__).resolve().parents[2]
-NATIVE_MODULES = ("device", "mega", "ffn", "fa", "gdn", "mtp", "sample", "vision")
+NATIVE_MODULES = (
+    "device",
+    "ffn",
+    "fa",
+    "gdn",
+    "mtp",
+    "sample",
+    "vision",
+)
 REQUEST_SHAPES = [("ordinary", batch, 32768) for batch in (1, 2, 4)] + [
     ("mtp4", batch, length) for batch in (1, 2, 4) for length in (32768, 65536, 131072)
 ]
@@ -187,6 +196,8 @@ def json_digest(value):
 def artifact_identity(arguments):
     return {
         "source": source_identity(),
+        "execution": execution_policy(),
+        "prompt_seed": arguments.prompt_seed,
         "binary": file_sha256(arguments.binary),
         "native": native_identity(),
         "checkpoint": checkpoint_identity(arguments.model),
@@ -202,11 +213,13 @@ def verify_artifact_identity(arguments, expected):
             raise RuntimeError(f"{name} artifacts changed during the benchmark")
 
 
-def verify_trace_identity(events, checkpoint, config, tokenizer=None):
+def verify_trace_identity(events, checkpoint, config, tokenizer=None, execution=None):
     identities = [event for event in events if event["operation"] == "identity"]
     if len(identities) != 1:
         raise ValueError("trace requires exactly one identity record")
     identity = identities[0]
+    if execution is not None and identity.get("execution") != execution:
+        raise ValueError("trace execution differs from the selected phase paths")
     actual_config = identity.get("config", {})
     if any(actual_config.get(name) != value for name, value in config.items()):
         raise ValueError("trace configuration differs from the requested service")
@@ -336,11 +349,17 @@ class Service:
         }
         with self.trace.open() as source:
             verify_trace_identity(
-                (json.loads(line) for line in source), checkpoint, config, tokenizer
+                (json.loads(line) for line in source),
+                checkpoint,
+                config,
+                tokenizer,
+                execution_policy(),
             )
 
     def run(self, tokenizer, batch, length, output):
-        nonce = uuid.uuid4().hex
+        nonce = hashlib.sha256(
+            f"{self.arguments.prompt_seed}:{self.mode}:{batch}:{length}:{output}".encode()
+        ).hexdigest()[:32]
         bodies = [
             {
                 "model": "qwen3.8-27b-fp8",
@@ -417,6 +436,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--artifacts", type=Path, required=True)
+    parser.add_argument("--prompt-seed", default=uuid.uuid4().hex)
     parser.add_argument(
         "--binary", type=Path, default=ROOT / "target/release/oh-my-vllm-zmq-worker"
     )
