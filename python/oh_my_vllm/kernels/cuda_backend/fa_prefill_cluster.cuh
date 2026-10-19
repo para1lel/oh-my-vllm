@@ -84,41 +84,43 @@ __device__ inline int fa_prefill_cluster_cached_page(const FAPrefillClusterPageS
 template <bool ExportBFloat16, bool Decouple>
 __global__ __launch_bounds__(Decouple ? 480 : 448, 1) void fa_prefill_cluster_kernel(
     const __nv_bfloat16 *__restrict__ query, const __nv_bfloat16 *__restrict__ cache,
+    const __nv_fp8_e4m3 *__restrict__ encoded_cache, const float *__restrict__ cache_scales,
     const int32_t *__restrict__ tables, const int32_t *__restrict__ lengths,
     const int32_t *__restrict__ starts, float *__restrict__ partial, float *__restrict__ lse,
     int table_width, int tiles, int max_queries, int query_rows, int cache_pages, int first,
     const __grid_constant__ CUtensorMap key_map, const __grid_constant__ CUtensorMap value_map,
-    const __grid_constant__ CUtensorMap key16_map, const __grid_constant__ CUtensorMap value16_map,
-    __nv_bfloat16 *attended) {
+    const __grid_constant__ CUtensorMap value16_map, __nv_bfloat16 *attended) {
   using namespace cute;
   using Element = cutlass::bfloat16_t;
+  using QKElement = cutlass::float_e4m3_t;
   using Barrier = cutlass::arch::ClusterBarrier;
   using QKMma =
-      decltype(make_tiled_mma(SM100_MMA_F16BF16_2x1SM_SS<Element, Element, float, 256, 128,
-                                                         UMMA::Major::K, UMMA::Major::K>{}));
+      decltype(make_tiled_mma(SM100_MMA_F8F6F4_2x1SM_SS<QKElement, QKElement, float, 256, 128,
+                                                        UMMA::Major::K, UMMA::Major::K>{}));
   using PVMma =
       decltype(make_tiled_mma(SM100_MMA_F16BF16_2x1SM_TS<Element, Element, float, 256, 256,
                                                          UMMA::Major::K, UMMA::Major::MN>{}));
   using QLayout = decltype(UMMA::tile_to_mma_shape(
-      UMMA::Layout_K_SW128_Atom<Element>{}, partition_shape_A(QKMma{}, Shape<_256, _256>{})));
+      UMMA::Layout_K_SW128_Atom<QKElement>{}, partition_shape_A(QKMma{}, Shape<_256, _256>{})));
   using KLayout = decltype(UMMA::tile_to_mma_shape(
-      UMMA::Layout_K_SW128_Atom<Element>{}, partition_shape_B(QKMma{}, Shape<_128, _256>{})));
+      UMMA::Layout_K_SW128_Atom<QKElement>{}, partition_shape_B(QKMma{}, Shape<_128, _256>{})));
   using PLayout = decltype(UMMA::tile_to_mma_shape(
       UMMA::Layout_K_SW128_Atom<Element>{}, partition_shape_A(PVMma{}, Shape<_256, _128>{})));
   using VLayout = decltype(UMMA::tile_to_mma_shape(
       UMMA::Layout_MN_SW128_Atom<Element>{}, partition_shape_B(PVMma{}, Shape<_256, _128>{})));
-  static_assert((cosize_v<QLayout> + 2 * cosize_v<KLayout> + 2 * cosize_v<VLayout> +
-                 0 * cosize_v<PLayout>)*sizeof(Element) +
-                    384 * sizeof(float) + 21 * sizeof(uint64_t) + sizeof(uint32_t) <=
+  static_assert((cosize_v<QLayout> + 2 * cosize_v<KLayout>)*sizeof(QKElement) +
+                    2 * cosize_v<VLayout> * sizeof(Element) + 512 * sizeof(float) +
+                    21 * sizeof(uint64_t) + sizeof(uint32_t) <=
                 FAPrefillClusterSharedBytes);
   extern __shared__ __align__(1024) unsigned char storage[];
-  auto *query_storage = reinterpret_cast<Element *>(storage);
+  auto *query_storage = reinterpret_cast<QKElement *>(storage);
   auto *key_storage = query_storage + cosize_v<QLayout>;
-  auto *value_storage = key_storage + 2 * cosize_v<KLayout>;
+  auto *value_storage = reinterpret_cast<Element *>(key_storage + 2 * cosize_v<KLayout>);
   auto *probability_storage = value_storage + 2 * cosize_v<VLayout>;
   auto *alpha_storage = reinterpret_cast<float *>(probability_storage);
   auto *inverse_storage = alpha_storage + 256;
-  auto *barriers = reinterpret_cast<uint64_t *>(inverse_storage + 128);
+  auto *query_scales = inverse_storage + 128;
+  auto *barriers = reinterpret_cast<uint64_t *>(query_scales + 128);
   auto *key_ready = barriers;
   auto *value_ready = barriers + 2;
   auto *consumed = barriers + 4;
@@ -173,13 +175,28 @@ __global__ __launch_bounds__(Decouple ? 480 : 448, 1) void fa_prefill_cluster_ke
   cute::cluster_sync();
   auto sQ = make_tensor(make_smem_ptr(query_storage), QLayout{});
   if (tid < 128) {
-    for (int i = tid; i < 128 * 32; i += 128) {
-      int r = i / 32, c = (i % 32) * 8;
+    for (int r = tid / 4; r < 128; r += 32) {
       int row = start + (qbase + r) / 6, head = kh * 6 + (qbase + r) % 6;
-      uint4 value =
-          row < end ? *reinterpret_cast<const uint4 *>(query + (int64_t(row) * 24 + head) * 256 + c)
-                    : make_uint4(0, 0, 0, 0);
-      *reinterpret_cast<uint4 *>(&sQ(make_coord(r, c % 16), 0, c / 16)) = value;
+      int64_t offset = (int64_t(row) * 24 + head) * 256;
+      float maximum = 0.f;
+      for (int c = tid % 4; c < 256; c += 4)
+        maximum = fmaxf(maximum, row < end ? fabsf(__bfloat162float(query[offset + c])) : 0.f);
+      maximum = fmaxf(maximum, __shfl_xor_sync(0xffffffff, maximum, 1));
+      maximum = fmaxf(maximum, __shfl_xor_sync(0xffffffff, maximum, 2));
+      float scale = fmaxf(maximum, 1e-10f) / 448.f;
+      float inverse = __frcp_rn(scale);
+      if (tid % 4 == 0)
+        query_scales[r] = scale;
+      for (int c = tid % 4 * 4; c < 256; c += 16) {
+        float value[4];
+#pragma unroll
+        for (int j = 0; j < 4; ++j)
+          value[j] = row < end
+                         ? fa_scale_operand(__bfloat162float(query[offset + c + j]), scale, inverse)
+                         : 0.f;
+        *reinterpret_cast<unsigned *>(&sQ(make_coord(r, c % 32), 0, c / 32)) =
+            fa_pack4(value[0], value[1], value[2], value[3]);
+      }
     }
     cutlass::arch::fence_view_async_shared();
   } else if (tid >= 256 && tid < 384) {
@@ -220,59 +237,68 @@ __global__ __launch_bounds__(Decouple ? 480 : 448, 1) void fa_prefill_cluster_ke
                        phase ^ 1);
         __syncwarp();
         auto *signal = is_value ? value_ready : key_ready;
-        if (tma) {
-          if (lane == 0) {
-            cutlass::arch::ClusterTransactionBarrier::arrive_and_expect_tx(signal + slot, 32768);
-            if (is_value)
-              SM90_TMA_LOAD_5D::copy(&value_map, signal + slot,
-                                     uint64_t(TMA::CacheHintSm90::EVICT_NORMAL), values, 0, 0,
-                                     rank * 2, kh, (page * 2 + 1) * 98 + (base % 784) / 8);
-            else
+        if (!is_value) {
+          if (tma) {
+            if (lane == 0) {
+              cutlass::arch::ClusterTransactionBarrier::arrive_and_expect_tx(signal + slot, 16384);
               SM90_TMA_LOAD_5D::copy(&key_map, signal + slot,
                                      uint64_t(TMA::CacheHintSm90::EVICT_NORMAL), keys, 0,
                                      operand_base % 784, 0, kh, page * 2);
+            }
+          } else {
+            auto sK = make_tensor(make_smem_ptr(keys), KLayout{});
+            for (int i = lane; i < 1024; i += 32) {
+              int r = i / 16, c = (i % 16) * 16, pos = operand_base + r;
+              int logical = min(pos, last - 1), p = fa_prefill_cluster_cached_page(pages, logical);
+              auto *source =
+                  encoded_cache + ((int64_t(p) * 1568 + logical % 784) * 4 + kh) * 256 + c;
+              unsigned destination =
+                  __cvta_generic_to_shared(&sK(make_coord(r, c % 32), 0, c / 32));
+              int bytes = pos < last ? 16 : 0;
+              asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;" ::"r"(destination),
+                           "l"(source), "r"(bytes)
+                           : "memory");
+            }
+            asm volatile("cp.async.commit_group; cp.async.wait_group 0;" ::: "memory");
+            cutlass::arch::fence_view_async_shared();
+            __syncwarp();
+            if (lane == 0)
+              Barrier::arrive(signal + slot);
+          }
+        } else if (tma) {
+          if (lane == 0) {
+            cutlass::arch::ClusterTransactionBarrier::arrive_and_expect_tx(signal + slot, 32768);
+            SM90_TMA_LOAD_5D::copy(&value_map, signal + slot,
+                                   uint64_t(TMA::CacheHintSm90::EVICT_NORMAL), values, 0, 0,
+                                   rank * 2, kh, (page * 2 + 1) * 98 + (base % 784) / 8);
           }
         } else if (operand_base % 16 == 0 && operand_base + token_count <= last) {
           if (lane == 0) {
             cutlass::arch::ClusterTransactionBarrier::arrive_and_expect_tx(signal + slot, 32768);
-            auto sK = make_tensor(make_smem_ptr(keys), KLayout{});
             auto sV = make_tensor(make_smem_ptr(values), VLayout{});
             for (int r = 0; r < token_count; r += 16) {
-              int logical = operand_base + r;
-              int page = fa_prefill_cluster_cached_page(pages, logical);
-              if (is_value) {
-                auto *target = &sV(make_coord(0, r % 16), 0, r / 16);
-                SM90_TMA_LOAD_5D::copy(&value16_map, signal + slot,
-                                       uint64_t(TMA::CacheHintSm90::EVICT_NORMAL), target, 0, 0,
-                                       rank * 2, kh, (page * 2 + 1) * 98 + (logical % 784) / 8);
-              } else {
-                for (int c = 0; c < 4; ++c) {
-                  auto *target = &sK(make_coord(r, 0), 0, c * 4);
-                  SM90_TMA_LOAD_5D::copy(&key16_map, signal + slot,
-                                         uint64_t(TMA::CacheHintSm90::EVICT_NORMAL), target, 0,
-                                         logical % 784, c, kh, page * 2);
-                }
-              }
+              int logical = operand_base + r, p = fa_prefill_cluster_cached_page(pages, logical);
+              auto *target = &sV(make_coord(0, r % 16), 0, r / 16);
+              SM90_TMA_LOAD_5D::copy(&value16_map, signal + slot,
+                                     uint64_t(TMA::CacheHintSm90::EVICT_NORMAL), target, 0, 0,
+                                     rank * 2, kh, (p * 2 + 1) * 98 + (logical % 784) / 8);
             }
           }
         } else {
-          auto sK = make_tensor(make_smem_ptr(keys), KLayout{});
           auto sV = make_tensor(make_smem_ptr(values), VLayout{});
           for (int i = lane; i < 2048; i += 32) {
-            int columns = is_value ? 16 : 32;
-            int r = i / columns, c = (i % columns) * 8, pos = operand_base + r;
-            int logical = min(pos, last - 1), page = fa_prefill_cluster_cached_page(pages, logical);
-            int64_t offset = ((int64_t(page) * 1568 + logical % 784) * 4 + kh) * 256 + c;
-            unsigned destination =
-                is_value ? __cvta_generic_to_shared(&sV(make_coord(c, r % 16), 0, r / 16))
-                         : __cvta_generic_to_shared(&sK(make_coord(r, c % 16), 0, c / 16));
-            auto *source = cache + offset + (is_value ? int64_t(784) * 4 * 256 + rank * 128 : 0);
+            int r = i / 16, c = (i % 16) * 8, pos = operand_base + r;
+            int logical = min(pos, last - 1), p = fa_prefill_cluster_cached_page(pages, logical);
+            auto *source = cache + ((int64_t(p) * 1568 + logical % 784) * 4 + kh) * 256 + c +
+                           int64_t(784) * 4 * 256 + rank * 128;
+            unsigned destination = __cvta_generic_to_shared(&sV(make_coord(c, r % 16), 0, r / 16));
             int bytes = pos < last ? 16 : 0;
             asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;" ::"r"(destination),
                          "l"(source), "r"(bytes)
                          : "memory");
           }
           asm volatile("cp.async.commit_group; cp.async.wait_group 0;" ::: "memory");
+          cutlass::arch::fence_view_async_shared();
           __syncwarp();
           if (lane == 0)
             Barrier::arrive(signal + slot);
@@ -312,7 +338,7 @@ __global__ __launch_bounds__(Decouple ? 480 : 448, 1) void fa_prefill_cluster_ke
       score.data() = *tmem_base + (Decouple ? 0 : slot * 128);
       qk.accumulate_ = UMMA::ScaleOut::Zero;
 #pragma unroll
-      for (int k = 0; k < 16; ++k) {
+      for (int k = 0; k < 8; ++k) {
         gemm(qk, qfrag(_, _, k), kfrag(_, _, k), score);
         qk.accumulate_ = UMMA::ScaleOut::One;
       }
@@ -371,6 +397,14 @@ __global__ __launch_bounds__(Decouple ? 480 : 448, 1) void fa_prefill_cluster_ke
     uint32_t lane_base = *tmem_base + uint32_t((warp / 4) * 16) * 65536u;
     int row = start + (qbase + owner) / 6;
     float maximum = -INFINITY, denominator = 0;
+    int first_page = tables[seq * table_width + first / 784];
+    if (first_page < 0 || first_page >= cache_pages) {
+      asm volatile("trap;");
+      return;
+    }
+    float score_scale = query_scales[owner] *
+                        cache_scales[(int64_t(first_page) * 8 + kh) * 784 + first % 784] *
+                        0.09016844005556021f;
     for (int tile = 0, base = first; tile < trips; ++tile, base += 128) {
       int slot = tile & 1, phase = (tile / 2) & 1;
       wait_barrier(score_ready[Decouple ? 0 : slot], Decouple ? tile & 1 : phase);
@@ -395,7 +429,7 @@ __global__ __launch_bounds__(Decouple ? 480 : 448, 1) void fa_prefill_cluster_ke
 #pragma unroll
         for (int j = 0; j < 32; ++j) {
           float2 scaled = __fmul2_rn(make_float2(values[2 * j], values[2 * j + 1]),
-                                     make_float2(0.09016844005556021f, 0.09016844005556021f));
+                                     make_float2(score_scale, score_scale));
           values[2 * j] = scaled.x;
           values[2 * j + 1] = scaled.y;
           maxima[(2 * j) % 4] = fmaxf(maxima[(2 * j) % 4], scaled.x);
@@ -405,7 +439,7 @@ __global__ __launch_bounds__(Decouple ? 480 : 448, 1) void fa_prefill_cluster_ke
 #pragma unroll
         for (int j = 0; j < 32; ++j) {
           float2 scaled = __fmul2_rn(make_float2(values[2 * j], values[2 * j + 1]),
-                                     make_float2(0.09016844005556021f, 0.09016844005556021f));
+                                     make_float2(score_scale, score_scale));
           float first = row < end && base + half * 64 + 2 * j < length ? scaled.x : -INFINITY;
           float second = row < end && base + half * 64 + 2 * j + 1 < length ? scaled.y : -INFINITY;
           values[2 * j] = first;
@@ -490,8 +524,9 @@ __global__ __launch_bounds__(Decouple ? 480 : 448, 1) void fa_prefill_cluster_ke
   }
   __syncthreads();
   fa_prefill_after_sync();
-  static_assert(128 * 257 * sizeof(float) <= (cosize_v<QLayout> + 2 * cosize_v<KLayout> +
-                                              2 * cosize_v<VLayout>)*sizeof(Element));
+  static_assert(128 * 257 * sizeof(float) <=
+                (cosize_v<QLayout> + 2 * cosize_v<KLayout>)*sizeof(QKElement) +
+                    2 * cosize_v<VLayout> * sizeof(Element) + 256 * sizeof(float));
   auto *staged = reinterpret_cast<float *>(storage);
   auto *packed_stage = reinterpret_cast<uint32_t *>(storage);
   if (tid >= 256 && tid < 384) {

@@ -122,8 +122,15 @@ merger 在 2-by-2 gather 前归一化每个 1152-element patch.
 超过 128 行的完整 FA 边界使用 MXFP8 输入投影.
 当 attention 只有一个分区时, 使用 MXFP8 输出投影.
 
-工作量计算使用所选实现的操作数, 累加器及存储类型.
-不能因为选用更慢但提供相同数值计算的指令而增加工作量.
+FA 在相同逻辑槽中保留 BF16 K/V 及其派生的 E4M3 副本.
+每次 BF16 cache 写入后, 在 attention 读取前更新派生副本.
+K 使用由其 RMS 权重确定上界的逐层 scale. V 为每个 token 和 head 使用一个 scale.
+最多含 32 行且每个序列最多含 5 个 query 的 FA batch 使用 E4M3 Q/K/V/P, 以及 FP32 softmax 和累加.
+每个 query 的概率 scale 仅使用该分区内对它可见的 V scales.
+
+至少含 1024 个 query 的 prefill 使用 E4M3 Q/K 和 BF16 P/V.
+其他 attention batch 使用 BF16 操作数.
+这些选择不会改变固定的 [HTTP 参考计算](../performance.zh.md#下界计算).
 
 | 区域 | 计算 | 存储结果 |
 |---|---|---|
@@ -137,7 +144,7 @@ merger 在 2-by-2 gather 前归一化每个 1152-element patch.
 | GDN scan | FP32 live carry, 乘积和求和 | BF16 checkpoints |
 | GDN chunked prefill | BF16 矩阵操作数. FP32 累加, 状态衰减和 live carry | BF16 checkpoints |
 | GDN head norm 和 gate | BF16 attention 结果, 随后使用 FP32 RMS, weight, SiLU 和乘积 | 一个 BF16 结果 |
-| FA attention 和 gate | BF16 Q/K/V/P, FP32 softmax 及累加 | FP8 前的 BF16 attention, sigmoid 和乘积 |
+| FA attention 和 gate | 所选的 FP8 或 BF16 操作数, FP32 softmax 及累加 | FP8 前的 BF16 attention, sigmoid 和乘积 |
 | Vision attention | BF16 Q/K/V/P, FP32 softmax 及累加 | BF16 |
 | MTP dual RMS | FP32 统计量和增益计算 | BF16 packed input |
 | MTP FC, 全部行数 | BF16 操作数, FP32 累加 | BF16 |

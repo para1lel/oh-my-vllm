@@ -1,8 +1,8 @@
 #pragma once
+#include "mx_fp8_norm.cuh"
 #include "mx_fp8_plan.cuh"
 #include "mx_fp8_quant.cuh"
 #include "normalization.cuh"
-#include "mx_fp8_norm.cuh"
 
 namespace ffn_mx_native {
 inline void lt_alignment(TensorView tensor) {
@@ -191,14 +191,12 @@ void ffn_mx(ffn_mx_native::MXContext owner, ffn_mx_native::MXWeights weights, tv
         static_cast<const __nv_bfloat16 *>(x.data_ptr()),
         static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
         static_cast<const float *>(w[0].data_ptr()),
-        static_cast<__nv_bfloat16 *>(summed.data_ptr()),
-        static_cast<__nv_fp8_e4m3 *>(quantized.data_ptr()),
-        static_cast<float *>(input_scale.data_ptr()), nullptr,
+        static_cast<__nv_bfloat16 *>(summed.data_ptr()), nullptr,
         static_cast<__nv_fp8_e4m3 *>(b[1].data_ptr()),
         static_cast<unsigned char *>(b[2].data_ptr()), rows);
     check_cuda(cudaGetLastError());
     owner->upper.run(owner->handle, w[5], b[1], b[3], b[0], stream);
-    activate_mx_kernel<<<(owner->padded_rows * 136 + 7) / 8, 256, 0, stream>>>(
+    activate_mx_kernel<<<(owner->padded_rows * 136 + 31) / 32, 256, 0, stream>>>(
         static_cast<const __nv_bfloat16 *>(b[3].data_ptr()),
         static_cast<__nv_fp8_e4m3 *>(b[4].data_ptr()),
         static_cast<unsigned char *>(b[5].data_ptr()), rows, owner->padded_rows,

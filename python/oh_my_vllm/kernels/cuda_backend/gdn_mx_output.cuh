@@ -4,9 +4,8 @@
 namespace gdn_mx_native {
 
 __global__ void gdn_output_mx_kernel(const __nv_bfloat16 *recurrent, const __nv_bfloat16 *qkvz,
-                                     const float *norm, __nv_fp8_e4m3 *output, float *scales,
-                                     __nv_fp8_e4m3 *prepared, unsigned char *prepared_scales,
-                                     int rows) {
+                                     const float *norm, __nv_fp8_e4m3 *prepared,
+                                     unsigned char *prepared_scales, int rows) {
   int row = blockIdx.x / 6, head = (blockIdx.x % 6) * 8 + threadIdx.x / 32;
   int lane = threadIdx.x & 31;
   if (row >= rows) {
@@ -76,12 +75,6 @@ __global__ void gdn_output_mx_kernel(const __nv_bfloat16 *recurrent, const __nv_
   float divisor = fmaxf(maximum, 1e-10f) / 448.f;
   if (!(divisor >= 0.f && isfinite(divisor)))
     asm volatile("trap;");
-  if (lane == 0)
-    scales[int64_t(row) * 48 + head] = divisor;
-  *reinterpret_cast<uint32_t *>(output + int64_t(row) * 6144 + head * 128 + column) =
-      __nv_fp8x4_e4m3(make_float4(values[0] / divisor, values[1] / divisor, values[2] / divisor,
-                                  values[3] / divisor))
-          .__x;
   unsigned bits = __float_as_uint(divisor);
   unsigned exponent = (bits >> 23) & 255u;
   exponent += (bits & 0x7fffffu) != 0u && exponent < 254u;

@@ -6,7 +6,6 @@ template <int Threads>
 __global__ void
 norm_mx_kernel(const __nv_bfloat16 *__restrict__ x, const __nv_bfloat16 *__restrict__ residual,
                const float *__restrict__ weight, __nv_bfloat16 *__restrict__ summed,
-               __nv_fp8_e4m3 *__restrict__ data, float *__restrict__ scales,
                __nv_bfloat16 *__restrict__ normalized, __nv_fp8_e4m3 *__restrict__ prepared,
                unsigned char *__restrict__ prepared_scales, int rows) {
   constexpr int Chunks = 5120 / (Threads * 8);
@@ -67,8 +66,6 @@ norm_mx_kernel(const __nv_bfloat16 *__restrict__ x, const __nv_bfloat16 *__restr
     unsigned mask = lane < 16 ? 0xffffu : 0xffff0000u;
     maximum = __uint_as_float(__reduce_max_sync(mask, __float_as_uint(maximum)));
     float divisor = fmaxf(maximum, 1e-10f) / 448.f;
-    if (lane % 16 == 0)
-      scales[row * 40 + column / 128] = divisor;
     if (!(divisor >= 0.f && isfinite(divisor)))
       asm volatile("trap;");
     unsigned bits = __float_as_uint(divisor);
@@ -87,13 +84,6 @@ norm_mx_kernel(const __nv_bfloat16 *__restrict__ x, const __nv_bfloat16 *__restr
                                       values[chunk][j + 1] * inverse_scale,
                                       values[chunk][j + 2] * inverse_scale,
                                       values[chunk][j + 3] * inverse_scale))
-              .__x;
-#pragma unroll
-    for (int j = 0; j < 8; j += 4)
-      *reinterpret_cast<uint32_t *>(data + row * 5120 + column + j) =
-          __nv_fp8x4_e4m3(make_float4(values[chunk][j] / divisor, values[chunk][j + 1] / divisor,
-                                      values[chunk][j + 2] / divisor,
-                                      values[chunk][j + 3] / divisor))
               .__x;
   }
 }

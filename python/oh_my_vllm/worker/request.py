@@ -28,7 +28,6 @@ class Request:
         self.thinking_count = 0
         self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
         self.buffer = ""
-        self.sent = 0
         self.finish = None
         self.media = []
         self.rope_positions = None
@@ -36,7 +35,9 @@ class Request:
         self.counts = np.zeros((2, 248320), dtype=np.int32)
         self.counts[0] = np.bincount(tokens, minlength=248320)
         self.drafts = []
+        self.drafts_greedy = True
         self.proposals = None
+        self.proposal_rows = ()
         self.mtp_position = 0
 
     def stop_position(self, text, first_new):
@@ -159,6 +160,6 @@ class Request:
                 for size in range(1, min(len(stop), len(self.buffer) + 1)):
                     if self.buffer.endswith(stop[:size]):
                         end = min(end, len(self.buffer) - size)
-        text = self.buffer[self.sent : end]
-        self.sent = end
+        text = self.buffer[:end]
+        self.buffer = self.buffer[end:]
         return kept, text

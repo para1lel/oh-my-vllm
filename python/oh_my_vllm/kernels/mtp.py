@@ -129,7 +129,7 @@ class MTPContext:
             ((rows, 24, 64), "float32"),
             ((rows, 6144), "float8_e4m3fn"),
             ((rows, 48), "float32"),
-            ((8, rows, 5120) if rows <= 8 else (1,), "float32"),
+            ((8 if rows <= 8 else 3, rows, 5120), "float32"),
         )
         try:
             return len(self.attention.buffers) == len(layout) and all(
@@ -224,7 +224,7 @@ class MTPContext:
                 fa.projection_scale,
                 fa.key_norm,
                 positions,
-                cache,
+                cache[0],
                 slots,
                 tables,
                 sequences,
@@ -241,6 +241,7 @@ class MTPContext:
                 self.endpoints[0],
                 self.endpoints[1],
             ):
+                self.attention.module.fa_cache_encode(*cache, slots, fa.key_norm)
                 return self.endpoints
         value, zero = self.input(*input_arguments)
         self.attention(value, zero, *attention_arguments)

@@ -1,6 +1,7 @@
 import ctypes
 import os
 from contextlib import ExitStack, contextmanager, suppress
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +23,11 @@ FUNCTIONS = (
     "allocated_bytes",
     "reserved_bytes",
 )
+
+
+@lru_cache(maxsize=128)
+def tensor_shape(dimensions):
+    return tvm_ffi.Shape(dimensions)
 
 
 class Device:
@@ -67,10 +73,10 @@ class Device:
         self.runtime.cudaGetErrorString.restype = ctypes.c_char_p
 
     def empty(self, shape, dtype):
-        return self.module.allocate(tvm_ffi.Shape(shape), dtype, 0)
+        return self.module.allocate(tensor_shape(tuple(shape)), dtype, 0)
 
     def scratch(self, shape, dtype):
-        return self.module.allocate_scratch(tvm_ffi.Shape(shape), dtype, 0)
+        return self.module.allocate_scratch(tensor_shape(tuple(shape)), dtype, 0)
 
     def zeros(self, shape, dtype):
         result = self.empty(shape, dtype)
@@ -78,7 +84,7 @@ class Device:
         return result
 
     def view(self, value, shape, offset=0):
-        return self.module.view(value, tvm_ffi.Shape(shape), offset)
+        return self.module.view(value, tensor_shape(tuple(shape)), offset)
 
     def upload(self, value, dtype=None):
         value = np.require(value, requirements=["C", "W"])

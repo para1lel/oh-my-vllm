@@ -3,6 +3,8 @@
 在 `main` 上工作.
 Worker 使用[算子调度](execution.zh.md): 包含 prefill 的 Execute 消息使用 Eager, 仅含 decode 的消息使用 CUDA Graph 重放.
 Native 构建入口是 `development.native_build`.
+FA 的 BF16 cache 状态和派生 FP8 操作数使用相同的逻辑页所有权.
+Attention 精度见[模型契约](operators/model.zh.md#中间精度).
 
 [数值工具](operators/evaluation.zh.md)将全模型 logits 与冻结的 [PyTorch FP64 reference](../development/model/reference.npz) 比较.
 保留其身份检查和数值门槛.

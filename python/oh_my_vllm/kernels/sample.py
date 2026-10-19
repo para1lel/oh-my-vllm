@@ -59,7 +59,7 @@ class MTPAccept:
         self.buffers = tuple(
             allocate(shape, dtype)
             for shape, dtype in (
-                ((batch, 5), "int64"),
+                ((batch, 7), "int64"),
                 ((batch,), "int32"),
                 ((batch,), "int32"),
             )

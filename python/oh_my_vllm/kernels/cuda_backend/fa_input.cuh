@@ -2,6 +2,12 @@
 
 #include "common.cuh"
 
+__device__ inline float fa_scale_operand(float value, float scale, float inverse) {
+  float quotient = __fmul_rn(value, inverse);
+  float residual = __fmaf_rn(-quotient, scale, value);
+  return __fmaf_rn(residual, inverse, quotient);
+}
+
 __device__ inline float fa_bf16(float value) {
   return __bfloat162float(__float2bfloat16_rn(value));
 }
@@ -9,8 +15,9 @@ __device__ inline float fa_bf16(float value) {
 __global__ void fa_heads_kernel(const __nv_bfloat16 *packed, const float *q_norm,
                                 const float *k_norm, const int64_t *positions, const int32_t *slots,
                                 __nv_bfloat16 *cache, __nv_bfloat16 *query, __nv_bfloat16 *gate,
-                                int rows, int columns, int variant, int64_t cache_tokens) {
-  int row = blockIdx.x, head = blockIdx.y, lane = threadIdx.x;
+                                int rows, int columns, int variant, int64_t cache_tokens,
+                                __nv_fp8_e4m3 *query_bytes, float *query_scales) {
+  int row = blockIdx.x, head = blockIdx.y * blockDim.y + threadIdx.y, lane = threadIdx.x;
   bool is_query = variant != 1 && head < 24;
   int kh = variant == 1 ? head : head - 24;
   int offset = is_query ? head * 512 : (variant == 1 ? 0 : 12288) + kh * 256;
@@ -44,7 +51,8 @@ __global__ void fa_heads_kernel(const __nv_bfloat16 *packed, const float *q_norm
   for (int j = 0; j < 8; ++j) {
     int dim = lane + j * 32;
     if (is_query) {
-      query[(int64_t(row) * 24 + head) * 256 + dim] = __float2bfloat16_rn(values[j]);
+      if (!query_bytes)
+        query[(int64_t(row) * 24 + head) * 256 + dim] = __float2bfloat16_rn(values[j]);
       gate[(int64_t(row) * 24 + head) * 256 + dim] =
           packed[int64_t(row) * columns + offset + 256 + dim];
     } else {
@@ -52,6 +60,20 @@ __global__ void fa_heads_kernel(const __nv_bfloat16 *packed, const float *q_norm
       cache[key_base + int64_t(784) * 4 * 256 + dim] =
           packed[int64_t(row) * columns + (variant == 1 ? 1024 : 13312) + kh * 256 + dim];
     }
+  }
+  if (is_query && query_bytes) {
+    float maximum = 0.f;
+#pragma unroll
+    for (int j = 0; j < 8; ++j)
+      maximum = fmaxf(maximum, fabsf(values[j]));
+    maximum = warp_max(maximum);
+    float scale = fmaxf(maximum, 1e-10f) / 448.f, inverse = __frcp_rn(scale);
+    if (lane == 0)
+      query_scales[row * 24 + head] = scale;
+#pragma unroll
+    for (int j = 0; j < 8; ++j)
+      query_bytes[(int64_t(row) * 24 + head) * 256 + lane + j * 32] =
+          __nv_fp8_e4m3(fa_scale_operand(values[j], scale, inverse));
   }
 }
 

@@ -54,7 +54,7 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
   tensor_contract(gate_up, x, kDLBfloat, 16, {rows <= 64 ? rows : 0, 34816});
   tensor_contract(quantized_product, x, kDLFloat8_e4m3fn, 8, {rows, 17408});
   tensor_contract(product_scale, x, kDLFloat, 32, {rows, 136});
-  int splits = rows < 8 ? 8 : 2;
+  int splits = rows == 8 ? 2 : 8;
   tensor_contract(partials, x, kDLFloat, 32,
                   {rows <= 32 ? splits : 1, rows <= 32 ? rows : 1, 5120});
   auto tensors = {x,
@@ -133,12 +133,12 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
       down16dp::launch(quantized_product, down_weight, product_scale, down_scale, partials, rows,
                        splits, stream);
     else
-      groupwise<64, 128, 128, 1, 128, false, 2, float>(
-          static_cast<const __nv_fp8_e4m3 *>(quantized_product.data_ptr()),
+      groupwise<128, 32, 128, 128, 1, true, 8, float>(
           static_cast<const __nv_fp8_e4m3 *>(down_weight.data_ptr()),
-          static_cast<const float *>(product_scale.data_ptr()),
-          static_cast<const float *>(down_scale.data_ptr()), partials.data_ptr(), rows, 5120,
-          17408 / 2, stream);
+          static_cast<const __nv_fp8_e4m3 *>(quantized_product.data_ptr()),
+          static_cast<const float *>(down_scale.data_ptr()),
+          static_cast<const float *>(product_scale.data_ptr()), partials.data_ptr(), 5120, rows,
+          17408 / 8, stream);
     launch_kernel(merge_partials_kernel, dim3((rows * 5120 + 255) / 256), dim3(256), 0, stream,
                   static_cast<const float *>(partials.data_ptr()),
                   static_cast<__nv_bfloat16 *>(output.data_ptr()), rows * 5120, splits);

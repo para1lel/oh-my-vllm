@@ -122,14 +122,12 @@ public:
   bool active() const { return context.has_value(); }
 
   void normalize(const __nv_bfloat16 *input, const Tensor &residual, const Tensor &summed,
-                 const Tensor &normalized, const Tensor &codes, const Tensor &scales,
-                 cudaStream_t stream) const {
+                 const Tensor &normalized, cudaStream_t stream) const {
     const auto &c = context.value();
     ffn_mx_native::norm_mx_kernel<320><<<c->padded_rows, 320, 0, stream>>>(
         input, static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
         static_cast<const float *>(weights.value()->tensors[0].data_ptr()),
         static_cast<__nv_bfloat16 *>(summed.data_ptr()),
-        static_cast<__nv_fp8_e4m3 *>(codes.data_ptr()), static_cast<float *>(scales.data_ptr()),
         static_cast<__nv_bfloat16 *>(normalized.data_ptr()),
         static_cast<__nv_fp8_e4m3 *>(c->buffers[1].data_ptr()),
         static_cast<unsigned char *>(c->buffers[2].data_ptr()), c->rows);
@@ -151,13 +149,12 @@ public:
   }
 
   void quantize_output(const Tensor &recurrent, const Tensor &qkvz, const Tensor &norm,
-                       const Tensor &codes, const Tensor &scales, cudaStream_t stream) const {
+                       cudaStream_t stream) const {
     const auto &c = context.value();
     gdn_output_mx_kernel<<<c->padded_rows * 6, 256, 0, stream>>>(
         static_cast<const __nv_bfloat16 *>(recurrent.data_ptr()),
         static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
-        static_cast<const float *>(norm.data_ptr()), static_cast<__nv_fp8_e4m3 *>(codes.data_ptr()),
-        static_cast<float *>(scales.data_ptr()),
+        static_cast<const float *>(norm.data_ptr()),
         static_cast<__nv_fp8_e4m3 *>(c->buffers[4].data_ptr()),
         static_cast<unsigned char *>(c->buffers[5].data_ptr()), c->rows);
     check_cuda(cudaGetLastError());

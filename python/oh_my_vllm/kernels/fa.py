@@ -5,6 +5,7 @@ from .native import load
 
 FUNCTIONS = (
     "fa",
+    "fa_cache_encode",
     "fa_mx_prepare_weights",
     "fa_mx_prepare",
     "fa_mx_graph_lease",
@@ -88,7 +89,13 @@ class FA:
             splits = 128
         else:
             splits = (
-                64 if rows <= 32 else 4 if rows <= 4096 and self.variant != 1 else 1
+                128
+                if rows <= 32 and self.variant != 1 and 1 < self.max_queries <= 5
+                else 64
+                if rows <= 32
+                else 4
+                if rows <= 4096 and self.variant != 1
+                else 1
             )
         attention_rows = 0 if self.variant == 1 and rows > 32 else rows
         self.buffers = tuple(
@@ -105,7 +112,10 @@ class FA:
                 ((attention_rows, 24, splits), "float32"),
                 ((attention_rows, 6144), "float8_e4m3fn"),
                 ((attention_rows, 48), "float32"),
-                ((8, rows, 5120) if rows <= 8 else (1,), "float32"),
+                (
+                    (8 if rows <= 8 else 3, rows, 5120) if rows <= 32 else (1,),
+                    "float32",
+                ),
             )
         )
 
@@ -167,7 +177,7 @@ class FA:
             w.query_norm,
             w.key_norm,
             positions,
-            cache,
+            *cache,
             slots,
             tables,
             sequence_rows,

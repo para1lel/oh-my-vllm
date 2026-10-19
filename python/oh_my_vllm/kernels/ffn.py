@@ -81,7 +81,7 @@ class FFN:
                 (136, "float32"),
             )
         )
-        splits = 8 if rows < 8 else 2
+        splits = 2 if rows == 8 else 8
         self.buffers += (
             allocate(
                 (splits if rows <= 32 else 1, rows if rows <= 32 else 1, 5120),

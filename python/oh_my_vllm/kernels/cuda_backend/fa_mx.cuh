@@ -57,7 +57,7 @@ public:
     owner_check(c);
     w->binding.check(c->binding.device);
     TVM_FFI_ICHECK(rows > 128 && rows <= 32768 && c->rows == rows && c->columns == 14336 &&
-                   w->columns == 14336 && tensors.size() == 27);
+                   w->columns == 14336 && tensors.size() == 29);
     TVM_FFI_ICHECK(same_storage(norm, w->tensors[0]) && same_storage(weight, w->tensors[1]) &&
                    same_storage(scale, w->tensors[2]) &&
                    same_storage(output_weight, w->tensors[5]) &&
@@ -122,14 +122,13 @@ public:
   bool active() const { return context.has_value(); }
 
   void normalize(const __nv_bfloat16 *input, const Tensor &residual, const Tensor &summed,
-                 const Tensor &codes, const Tensor &scales, cudaStream_t stream) const {
+                 cudaStream_t stream) const {
     const auto &c = context.value();
     ffn_mx_native::norm_mx_kernel<320><<<c->padded_rows, 320, 0, stream>>>(
         input, static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
         static_cast<const float *>(weights.value()->tensors[0].data_ptr()),
-        static_cast<__nv_bfloat16 *>(summed.data_ptr()),
-        static_cast<__nv_fp8_e4m3 *>(codes.data_ptr()), static_cast<float *>(scales.data_ptr()),
-        nullptr, static_cast<__nv_fp8_e4m3 *>(c->buffers[1].data_ptr()),
+        static_cast<__nv_bfloat16 *>(summed.data_ptr()), nullptr,
+        static_cast<__nv_fp8_e4m3 *>(c->buffers[1].data_ptr()),
         static_cast<unsigned char *>(c->buffers[2].data_ptr()), c->rows);
     check_cuda(cudaGetLastError());
   }
@@ -148,12 +147,11 @@ public:
                                  stream));
   }
 
-  void quantize_output(const __nv_bfloat16 *attended, const Tensor &gate, const Tensor &codes,
-                       const Tensor &scales, cudaStream_t stream) const {
+  void quantize_output(const __nv_bfloat16 *attended, const Tensor &gate,
+                       cudaStream_t stream) const {
     const auto &c = context.value();
     fa_output_mx_kernel<<<c->padded_rows * 6, 256, 0, stream>>>(
         attended, static_cast<const __nv_bfloat16 *>(gate.data_ptr()),
-        static_cast<__nv_fp8_e4m3 *>(codes.data_ptr()), static_cast<float *>(scales.data_ptr()),
         static_cast<__nv_fp8_e4m3 *>(c->buffers[4].data_ptr()),
         static_cast<unsigned char *>(c->buffers[5].data_ptr()), c->rows);
     check_cuda(cudaGetLastError());

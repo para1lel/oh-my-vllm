@@ -192,8 +192,14 @@ void gather_rows(TensorView destination, TensorView source, TensorView indices) 
 }
 
 __global__ void final_hidden_kernel(const __nv_bfloat16 *value, const __nv_bfloat16 *residual,
-                                    const float *weight, __nv_bfloat16 *output) {
+                                    const float *weight, __nv_bfloat16 *output,
+                                    __nv_bfloat16 *cache, const int32_t *slots, int cache_rows) {
   int row = blockIdx.x, lane = threadIdx.x & 31, warp = threadIdx.x / 32;
+  int slot = slots[row];
+  if (slot < -1 || slot >= cache_rows) {
+    asm volatile("trap;");
+    return;
+  }
   float values[8], square = 0;
 #pragma unroll
   for (int i = 0; i < 8; ++i) {
@@ -212,25 +218,37 @@ __global__ void final_hidden_kernel(const __nv_bfloat16 *value, const __nv_bfloa
 #pragma unroll
   for (int i = 0; i < 8; ++i) {
     int column = threadIdx.x + i * 640;
-    output[row * 5120 + column] = __float2bfloat16_rn(values[i] * inverse * (weight[column] + 1.f));
+    auto normalized = __float2bfloat16_rn(values[i] * inverse * (weight[column] + 1.f));
+    output[row * 5120 + column] = normalized;
+    if (slot >= 0)
+      cache[int64_t(slot) * 5120 + column] = normalized;
   }
 }
 
-void final_hidden(TensorView value, TensorView residual, TensorView weight, TensorView output) {
+void final_hidden(TensorView value, TensorView residual, TensorView weight, TensorView output,
+                  TensorView cache, TensorView slots) {
   TVM_FFI_ICHECK(value.device().device_type == kDLCUDA && value.ndim() == 2 && value.size(0) > 0 &&
                  value.size(0) <= 32768);
   int rows = value.size(0);
   for (auto tensor : {value, residual, output})
     tensor_contract(tensor, value, kDLBfloat, 16, {rows, 5120});
   tensor_contract(weight, value, kDLFloat, 32, {5120});
-  for (auto tensor : {value, residual, weight})
+  TVM_FFI_ICHECK(cache.ndim() == 2 && cache.size(0) > 0 && cache.size(0) <= 65536);
+  tensor_contract(cache, value, kDLBfloat, 16, {cache.size(0), 5120});
+  tensor_contract(slots, value, kDLInt, 32, {rows});
+  for (auto tensor : {value, residual, weight, slots}) {
     disjoint(tensor, output);
+    disjoint(tensor, cache);
+  }
+  disjoint(output, cache);
   tvm::ffi::CUDADeviceGuard guard(value.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, value.device().device_id));
   final_hidden_kernel<<<rows, 640, 0, stream>>>(
       static_cast<const __nv_bfloat16 *>(value.data_ptr()),
       static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
       static_cast<const float *>(weight.data_ptr()),
-      static_cast<__nv_bfloat16 *>(output.data_ptr()));
+      static_cast<__nv_bfloat16 *>(output.data_ptr()),
+      static_cast<__nv_bfloat16 *>(cache.data_ptr()),
+      static_cast<const int32_t *>(slots.data_ptr()), cache.size(0));
   cuda_check(cudaGetLastError());
 }

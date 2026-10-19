@@ -58,8 +58,9 @@ __device__ uint64_t sample_key(const __nv_bfloat16 *logits, const int *history,
                                int token) {
   int index = row * Vocabulary + token;
   const float *p = parameters + row * 7;
-  int prompt = history[row * 2 * Vocabulary + token];
-  int generated = history[(row * 2 + 1) * Vocabulary + token];
+  bool penalize = p[4] != 0 || p[5] != 0 || p[6] != 1;
+  int prompt = penalize ? history[row * 2 * Vocabulary + token] : 0;
+  int generated = penalize ? history[(row * 2 + 1) * Vocabulary + token] : 0;
   if (!(isfinite(p[0]) && p[0] >= 0 && p[1] >= -1 && p[1] <= Vocabulary && p[1] == truncf(p[1]) &&
         p[2] > 0 && p[2] <= 1 && p[3] >= 0 && p[3] <= 1 && isfinite(p[4]) && isfinite(p[5]) &&
         p[6] > 0 && isfinite(p[6]) && prompt >= 0 && generated >= 0)) {

@@ -41,8 +41,8 @@ void groupwise(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *weight, const float 
   using Cluster = Shape<_1, _1, _1>;
   using Epilogue = typename cutlass::epilogue::collective::CollectiveBuilder<
       cutlass::arch::Sm100, cutlass::arch::OpClassTensorOp, Tile, Cluster,
-      cutlass::epilogue::collective::EpilogueTileAuto, float, float, Result, LayoutD,
-      OutputAlignment, Result, LayoutD, OutputAlignment,
+      cutlass::epilogue::collective::EpilogueTileAuto, float, float, void, LayoutD, OutputAlignment,
+      Result, LayoutD, OutputAlignment,
       cutlass::epilogue::collective::EpilogueScheduleAuto>::CollectiveOp;
   using Mainloop = typename cutlass::gemm::collective::CollectiveBuilder<
       cutlass::arch::Sm100, cutlass::arch::OpClassTensorOp, Element,
@@ -68,16 +68,12 @@ void groupwise(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *weight, const float 
     cute::get<2>(layout_a.stride()) = k / 128;
     cute::get<2>(layout_b.stride()) = k / 128;
   }
-  typename Gemm::Arguments arguments{cutlass::gemm::GemmUniversalMode::kGemm,
-                                     {m, n, k, Splits},
-                                     {reinterpret_cast<const Element *>(a), stride_a,
-                                      reinterpret_cast<const Element *>(weight), stride_b, scale_a,
-                                      layout_a, scale_weight, layout_b},
-                                     {{1.f, 0.f},
-                                      reinterpret_cast<const Result *>(output),
-                                      stride_d,
-                                      reinterpret_cast<Result *>(output),
-                                      stride_d}};
+  typename Gemm::Arguments arguments{
+      cutlass::gemm::GemmUniversalMode::kGemm,
+      {m, n, k, Splits},
+      {reinterpret_cast<const Element *>(a), stride_a, reinterpret_cast<const Element *>(weight),
+       stride_b, scale_a, layout_a, scale_weight, layout_b},
+      {{1.f, 0.f}, nullptr, stride_d, reinterpret_cast<Result *>(output), stride_d}};
   auto check = [](cutlass::Status status) {
     TVM_FFI_ICHECK(status == cutlass::Status::kSuccess) << cutlassGetStatusString(status);
   };

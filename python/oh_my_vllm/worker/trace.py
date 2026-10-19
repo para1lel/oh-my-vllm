@@ -25,7 +25,8 @@ class Trace:
     def record(self, operation, **values):
         if self.output is not None:
             self.output.write(json.dumps({"operation": operation, **values}) + "\n")
-            self.output.flush()
+            if operation in {"identity", "commit"}:
+                self.output.flush()
 
     def close(self):
         if self.output is not None:

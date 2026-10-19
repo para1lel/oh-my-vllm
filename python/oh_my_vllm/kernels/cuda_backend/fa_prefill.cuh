@@ -45,6 +45,7 @@ struct FAPrefillPipelineTensorMaps {
   alignas(128) CUtensorMap value16;
 };
 
+template <int KeyRows = 64>
 static inline const FAPrefillPipelineTensorMaps &fa_prefill_pipeline_tensor_maps(TensorView cache) {
   using CacheKey = std::tuple<int, uintptr_t, int64_t>;
   static thread_local std::map<CacheKey, FAPrefillPipelineTensorMaps> pipeline_maps;
@@ -57,7 +58,7 @@ static inline const FAPrefillPipelineTensorMaps &fa_prefill_pipeline_tensor_maps
     uint64_t key_strides[4] = {2048, 128, 512, 1605632};
     uint64_t value_dimensions[5] = {64, 8, 4, 4, uint64_t(cache.size(0)) * 196};
     uint64_t value_strides[4] = {2048, 128, 512, 16384};
-    uint32_t key_box[5] = {64, 64, 4, 1, 1};
+    uint32_t key_box[5] = {64, KeyRows, 4, 1, 1};
     uint32_t value_box[5] = {64, 8, 4, 1, 8};
     uint32_t elements[5] = {1, 1, 1, 1, 1};
     auto encode = [&](CUtensorMap *descriptor, const uint64_t *dimensions, const uint64_t *strides,

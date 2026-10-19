@@ -3,6 +3,8 @@ from contextlib import ExitStack
 import numpy as np
 import tvm_ffi
 
+from .metadata import Metadata
+
 
 def can_chain(batch, active, graph, blocks):
     if not graph or not active:
@@ -39,7 +41,18 @@ class DraftChain:
         self.token_rows = [
             device.view(self.tokens, (count,), stage * count) for stage in range(4)
         ]
+        self.hidden_rows = tuple(
+            device.view(stages[0].hidden, (1, 5120), index * 5120)
+            for index in range(count)
+        )
+        self.metadata_inputs = Metadata(
+            device,
+            [value for stage in stages for value in stage.metadata_inputs.host_views],
+        )
         for index, stage in enumerate(stages):
+            stage.metadata = self.metadata_inputs.arrays[index * 6 : index * 6 + 5]
+            stage.tokens = self.metadata_inputs.arrays[index * 6 + 5]
+            stage.metadata_inputs = None
             stage.sampling.value, stage.sampling.residual = stage.ffn.buffers[:2]
             stage.sampling.greedy = True
             if index:
@@ -56,23 +69,24 @@ class DraftChain:
             stage.close()
 
     def prepare(self, batch, active, endpoints, cache):
-        d = self.device
         requests = [batch.requests[index] for index in active]
         count = len(active)
         for local, index in enumerate(active):
             self.stages[0].copy(
-                d.view(self.stages[0].hidden, (1, 5120), local * 5120),
+                self.hidden_rows[local],
                 endpoints[index][0],
             )
         sampler = self.stages[0].sampling
         # Eligibility makes the mask independent of the unknown draft prefix.
         sampler.inputs.update(requests, [[] for _ in requests], "proposal")
+        if sampler.inputs.mask_changed:
+            self.stages[0].copy(sampler.mask, tvm_ffi.from_dlpack(sampler.inputs.mask))
         for destination, source in (
-            (sampler.mask, sampler.inputs.mask),
             (sampler.parameters, sampler.inputs.parameters),
             (sampler.rng, sampler.inputs.random),
         ):
             self.stages[0].copy(destination, tvm_ffi.from_dlpack(source))
+        metadata = []
         for number, stage in enumerate(self.stages):
             positions = [request.state_position + number for request in requests]
             arrays = (
@@ -96,8 +110,9 @@ class DraftChain:
                 np.asarray(positions, np.int32) + 1,
                 np.asarray([request.history[-1] for request in requests], np.int64),
             )
-            stage.metadata_inputs.update(arrays)
+            metadata.extend(arrays)
             stage.cache = cache.fa[-1]
+        self.metadata_inputs.update(metadata)
 
     def run(self):
         for index, stage in enumerate(self.stages):
@@ -112,8 +127,6 @@ class DraftChain:
 
     def execute(self):
         if self.replay is None:
-            self.run()
-            self.device.synchronize()
             self.replay = self.resources.enter_context(self.device.graph(self.run))
         self.replay()
 
@@ -122,12 +135,4 @@ class DraftChain:
         tokens = d.download(self.tokens, np.int64)
         for local, request in enumerate(requests):
             request.drafts = tokens[:, local].tolist()
-            for index, stage in enumerate(self.stages):
-                stage.copy(
-                    d.view(request.proposals, (1, 248320), index * 248320),
-                    d.view(
-                        stage.sampling.operation.buffers[6],
-                        (1, 248320),
-                        local * 248320,
-                    ),
-                )
+            request.drafts_greedy = True

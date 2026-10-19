@@ -53,6 +53,13 @@ class Context(GraphOperation):
         self.boundary_hidden = cache.hidden
         self.cache = cache.fa[-1]
         self.media = self.media_rows = None
+        self.endpoint_rows = tuple(
+            tuple(
+                device.view(value, (1, 5120), row * 5120)
+                for value in self.operation.endpoints
+            )
+            for row in range(batch)
+        )
 
     def graph_lease(self):
         return self.operation.graph_lease()
@@ -149,30 +156,39 @@ class Acceptance(GraphOperation):
         super().__init__(device)
         self.operation = MTPAccept(batch, device.empty)
         self.target = device.empty((batch, 5, 248320), "float32")
+        self.target_tokens = device.empty((batch, 5), "int64")
         self.proposal = device.empty((batch, 4, 248320), "float32")
-        self.drafts = device.empty((batch, 4), "int64")
+        self.drafts = device.empty((batch, 5), "int64")
         self.rng = device.empty((batch, 2), "uint64")
         self.slots = device.empty((batch, 5), "int32")
         self.gather = device.empty((batch * 5,), "int32")
+        self.proposal_rows = tuple(
+            device.view(self.proposal, (4, 248320), index * 4 * 248320)
+            for index in range(batch)
+        )
+        self.target_rows = device.view(self.target, (batch * 5, 248320))
+        self.target_token_rows = device.view(self.target_tokens, (batch * 5, 1))
         self.capacity = None
+        self.greedy = False
+        self.replays = {}
 
     def run(self):
         return self.operation(
-            self.target, self.proposal, self.drafts, self.rng, self.slots, self.capacity
+            self.target_tokens if self.greedy else self.target,
+            self.proposal,
+            self.drafts,
+            self.rng,
+            self.slots,
+            self.capacity,
         )
 
     def execute(self, graph):
-        saved = (
-            self.device.download(self.rng, np.uint64)
-            if graph and self.replay is None
-            else None
-        )
-        if graph and self.replay is None:
-            self.run()
-            self.copy(self.rng, saved)
-            self.replay = self.resources.enter_context(self.device.graph(self.run))
         if graph:
-            self.replay()
+            if self.greedy not in self.replays:
+                self.replays[self.greedy] = self.resources.enter_context(
+                    self.device.graph(self.run)
+                )
+            self.replays[self.greedy]()
         else:
             self.run()
 
@@ -217,6 +233,9 @@ class Speculation:
         if count not in self.acceptance:
             self.acceptance[count] = Acceptance(d, count)
         operation = self.acceptance[count]
+        operation.greedy = sampler.greedy and all(
+            request.drafts_greedy for request in requests
+        )
         target_rows, drafts, slots, random = [], [], [], []
         for index, request in enumerate(requests):
             first, last = batch.schedule.sequence_rows[index : index + 2]
@@ -228,7 +247,13 @@ class Speculation:
             target_rows.extend(
                 [*range(first, last), *([last - 1] * (5 - (last - first)))]
             )
-            drafts.append([*request.drafts[:length], *([-1] * (4 - length))])
+            drafts.append(
+                [
+                    *request.drafts[:length],
+                    *([-1] * (4 - length)),
+                    request.drafts_greedy,
+                ]
+            )
             selected = list(batch.writes[first:last])
             for slot in self.cache.private_slots(
                 batch.scheduled[index]["request_id"], batch.schedule.read_slots[index]
@@ -239,14 +264,16 @@ class Speculation:
                     break
             slots.append(selected[:5])
             random.append((request.seed ^ 0xD1B54A32D192ED03, request.accept_offset))
-            destination = d.view(operation.proposal, (4, 248320), index * 4 * 248320)
-            if request.proposals is None:
-                d.module.zero(destination)
-            else:
+            destination = operation.proposal_rows[index]
+            if not request.drafts_greedy:
+                if request.proposals is None:
+                    raise ValueError("stochastic drafts require proposal probabilities")
                 operation.copy(destination, request.proposals)
         operation.copy(operation.gather, np.asarray(target_rows, np.int32))
         d.module.gather_rows(
-            d.view(operation.target, (count * 5, 248320)), probability, operation.gather
+            operation.target_token_rows if operation.greedy else operation.target_rows,
+            sampler.token_rows if operation.greedy else probability,
+            operation.gather,
         )
         operation.copy(operation.drafts, np.asarray(drafts, np.int64))
         operation.copy(operation.slots, np.asarray(slots, np.int32))
@@ -254,11 +281,11 @@ class Speculation:
         operation.capacity = self.cache.slots
         operation.execute(graph)
         kept = d.download(operation.operation.buffers[0], np.int64)
-        counts = d.download(operation.operation.buffers[1], np.int32)
-        counters = d.download(operation.rng, np.uint64)
+        counts = kept[:, 5]
+        counters = kept.view(np.uint64)[:, 6]
         result = []
         for index, request in enumerate(requests):
-            request.accept_offset = int(counters[index, 1])
+            request.accept_offset = int(counters[index])
             request.drafts = []
             result.append(kept[index, : counts[index]].tolist())
         return result
@@ -370,10 +397,7 @@ class Speculation:
             operation.media_rows = self.device.upload(mapping)
         operation.execute(graph)
         return {
-            index: tuple(
-                self.device.view(value, (1, 5120), local * 5120)
-                for value in operation.operation.endpoints
-            )
+            index: operation.endpoint_rows[local]
             for local, index in enumerate(active)
             if index in final
         }
@@ -402,8 +426,13 @@ class Speculation:
         for index in active:
             request = batch.requests[index]
             request.drafts = []
-            if request.proposals is None:
+            request.drafts_greedy = request.parameters()[0] == 0
+            if not request.drafts_greedy and request.proposals is None:
                 request.proposals = d.empty((4, 248320), "float32")
+                request.proposal_rows = tuple(
+                    d.view(request.proposals, (1, 248320), index * 248320)
+                    for index in range(4)
+                )
         if can_chain(batch, active, graph, self.cache.blocks):
             count = len(active)
             if count not in self.chains:
@@ -468,10 +497,11 @@ class Speculation:
             remaining = []
             for local, index in enumerate(active):
                 request = batch.requests[index]
-                operation.copy(
-                    d.view(request.proposals, (1, 248320), stage * 248320),
-                    d.view(probability, (1, 248320), local * 248320),
-                )
+                if not request.drafts_greedy:
+                    operation.copy(
+                        request.proposal_rows[stage],
+                        d.view(probability, (1, 248320), local * 248320),
+                    )
                 request.drafts.append(int(chosen[local]))
                 # The next stage copies all rows before the sampler reuses this buffer.
                 previous[index] = d.view(

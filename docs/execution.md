@@ -19,8 +19,11 @@ CUDA kernels can fuse operations and use matrix tiles internally.
 ## Graph resources
 
 A workspace owns weights, cache references, metadata, and temporary tensors for its recorded operations.
-Warmup prepares storage before recording.
-Sampling and MTP acceptance restore their RNG state after warmup.
+Weight preparation and workspace construction allocate storage before recording.
+Operations with deferred native setup use warmup before recording.
+Sampling, MTP acceptance, and prepared draft chains record without warmup.
+Recording does not execute their RNG updates.
+
 Buffer addresses stay fixed while a graph exists.
 Metadata changes on the caller's stream before replay.
 Replay uses that same stream.

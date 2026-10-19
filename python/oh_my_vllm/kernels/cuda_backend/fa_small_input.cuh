@@ -169,6 +169,8 @@ __global__ __launch_bounds__(Fused ? 640 : 128, Fused ? 2 : 1) void fa_small_inp
       __syncthreads();
     }
     wait_barrier(barriers[1 + slot], (tile / WeightBuffers) & 1);
+    // Every consumer must finish this wait before the slot can change phase again.
+    consumer_sync();
     cutlass::arch::fence_view_async_shared();
     if (warp == 0) {
       asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");

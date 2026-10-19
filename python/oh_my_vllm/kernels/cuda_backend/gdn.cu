@@ -8,28 +8,14 @@
 #include "groupwise.cuh"
 #include "linear.cuh"
 #include "normalization.cuh"
-#include "projection_decode_16dp.cuh"
+#include "projection_output.cuh"
 #include "projection_prefill.cuh"
-
-__global__ void gdn_output_projection_merge_kernel(const float *partials, __nv_bfloat16 *output,
-                                                   int count) {
-  int index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (index < count) {
-    float value = 0;
-    for (int split = 0; split < 8; ++split)
-      value += partials[split * count + index];
-    output[index] = __float2bfloat16_rn(value);
-  }
-}
 
 inline void gdn_projection(const __nv_fp8_e4m3 *input, const __nv_fp8_e4m3 *weight,
                            const float *input_scale, const float *weight_scale,
                            __nv_bfloat16 *output, int rows, int columns, int width,
                            cudaStream_t stream) {
-  if (rows <= 16 && columns == 5120)
-    groupwise<128, 16, 256, 128, 1, true>(weight, input, weight_scale, input_scale, output, columns,
-                                          rows, width, stream);
-  else if (rows <= 32)
+  if (rows <= 32)
     groupwise<128, 32, 256, 128, 1, true>(weight, input, weight_scale, input_scale, output, columns,
                                           rows, width, stream);
   else
@@ -99,8 +85,8 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
   int chunk_capacity = chunked ? gdn_wy::chunk_capacity(max_queries) : 0;
   gdn_wy::workspace_contract(x, chunk_metadata, chunk_transforms, chunk_prefixes, chunk_snapshots,
                              chunk_coefficients, batch * chunk_capacity);
-  if (rows <= 8)
-    tensor_contract(projection_partials, x, kDLFloat, 32, {8, rows, 5120});
+  if (rows <= 32)
+    tensor_contract(projection_partials, x, kDLFloat, 32, {rows <= 8 ? 8 : 3, rows, 5120});
   else
     tensor_contract(projection_partials, x, kDLFloat, 32, {1});
   auto tensors = {x,
@@ -172,7 +158,7 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
     input = static_cast<const __nv_bfloat16 *>(gathered.data_ptr());
   }
   if (mx.active())
-    mx.normalize(input, residual, summed, normalized, input_data, input_scales, stream);
+    mx.normalize(input, residual, summed, normalized, stream);
   else
     residual_rms_quant_launch(input, static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
                               static_cast<const float *>(norm.data_ptr()),
@@ -329,7 +315,7 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
     scan(std::false_type{});
   check_cuda(cudaGetLastError());
   if (split_values && mx.active())
-    mx.quantize_output(recurrent, qkvz, head_norm, output_data, output_scales, stream);
+    mx.quantize_output(recurrent, qkvz, head_norm, stream);
   else if (split_values) {
     gdn_output_quant_kernel<<<rows * 6, 256, 0, stream>>>(
         static_cast<const __nv_bfloat16 *>(recurrent.data_ptr()),
@@ -341,14 +327,10 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
   }
   if (mx.active() && split_values)
     mx.project_output(output, stream);
-  else if (rows <= 8) {
-    down16dp::launch(output_data, output_weight, output_scales, output_scale, projection_partials,
-                     rows, 8, stream);
-    gdn_output_projection_merge_kernel<<<(rows * 5120 + 255) / 256, 256, 0, stream>>>(
-        static_cast<const float *>(projection_partials.data_ptr()),
-        static_cast<__nv_bfloat16 *>(output.data_ptr()), rows * 5120);
-    check_cuda(cudaGetLastError());
-  } else
+  else if (rows <= 32)
+    output_projection(output_data, output_weight, output_scales, output_scale, projection_partials,
+                      output, rows, stream);
+  else
     gdn_projection(static_cast<const __nv_fp8_e4m3 *>(output_data.data_ptr()),
                    static_cast<const __nv_fp8_e4m3 *>(output_weight.data_ptr()),
                    static_cast<const float *>(output_scales.data_ptr()),

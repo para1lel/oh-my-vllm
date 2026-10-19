@@ -19,8 +19,11 @@ CUDA kernel 可以融合操作并在内部使用矩阵 tile.
 ## Graph 资源
 
 Workspace 拥有已录制操作的权重, cache 引用, metadata 和临时 tensor.
-Warmup 在录制前准备存储.
-采样和 MTP acceptance 在 warmup 后恢复 RNG 状态.
+权重准备和 workspace 构造在录制前分配存储.
+具有延迟 native 初始化的操作在录制前执行 warmup.
+采样, MTP acceptance 和已准备的 draft chain 无需 warmup 即可录制.
+录制不会执行这些操作的 RNG 更新.
+
 Graph 存在期间, 缓冲区地址保持固定.
 Metadata 在重放前于调用者的 stream 上更新.
 重放使用同一个 stream.

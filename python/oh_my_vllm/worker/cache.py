@@ -14,7 +14,6 @@ class Batch:
     tokens: np.ndarray
     metadata: tuple
     writes: tuple
-    exports: tuple
 
     @property
     def rows(self):
@@ -41,7 +40,11 @@ class Cache:
         if self.slots > 65536:
             raise ValueError("GDN cache exceeds the state slot limit")
         self.fa = tuple(
-            device.zeros((self.blocks, 2, 784, 4, 256), "bfloat16")
+            (
+                device.zeros((self.blocks, 2, 784, 4, 256), "bfloat16"),
+                device.zeros((self.blocks, 2, 784, 4, 256), "float8_e4m3fn"),
+                device.zeros((self.blocks, 2, 4, 784), "float32"),
+            )
             for _ in range(16 + bool(config["num_speculative_tokens"]))
         )
         self.state = tuple(
@@ -68,9 +71,8 @@ class Cache:
         return [slot for slot in range(first, first + 6) if slot != read]
 
     def batch(self, scheduled, requests, verify):
-        starts, reads, writes, checkpoints, checkpoint_slots, exports = (
+        starts, reads, writes, checkpoints, checkpoint_slots = (
             [0],
-            [],
             [],
             [],
             [],
@@ -121,7 +123,6 @@ class Cache:
                     else:
                         slot = scratch
                         scratch += 1
-                    exports.append((len(tokens) - 1, slot))
                     if not verify:
                         checkpoints.append(len(tokens) - 1)
                         checkpoint_slots.append(slot)
@@ -154,14 +155,7 @@ class Cache:
             np.asarray(tokens, dtype=np.int64),
             metadata,
             actual_writes,
-            tuple(exports),
         )
-
-    def export_hidden(self, value, batch):
-        for row, slot in batch.exports:
-            destination = self.device.view(self.hidden, (1, 5120), slot * 5120)
-            source = self.device.view(value, (1, 5120), row * 5120)
-            self.device.module.copy_bytes(destination, source)
 
     def commit(self, request, batch, index, accepted):
         first = batch.schedule.sequence_rows[index]

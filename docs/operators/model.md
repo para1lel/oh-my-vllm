@@ -122,8 +122,15 @@ The original checkpoint tensors and scales stay unchanged.
 Full FA boundaries with more than 128 rows use MXFP8 input projection.
 They use MXFP8 output projection when attention has one split.
 
-Use the operand, accumulator, and storage types of the selected implementation for the work calculation.
-Do not increase work for a slower instruction choice that supplies the same numerical computation.
+FA keeps BF16 K/V and a derived E4M3 copy in the same logical slots.
+Each BF16 cache write updates the derived copy before attention reads it.
+K uses a layer scale bounded by its RMS weight. V uses a scale for each token and head.
+FA batches with at most 32 rows and 5 queries per sequence use E4M3 Q/K/V/P with FP32 softmax and accumulation.
+Each query's probability scale uses only its visible V scales in that split.
+
+Prefill with at least 1024 queries uses E4M3 Q/K and BF16 P/V.
+Other attention batches use BF16 operands.
+These choices do not change the fixed [HTTP reference calculation](../performance.md#lower-bound-calculation).
 
 | Region | Computation | Stored result |
 |---|---|---|
@@ -137,7 +144,7 @@ Do not increase work for a slower instruction choice that supplies the same nume
 | GDN scan | FP32 live carry, products, and sums | BF16 checkpoints |
 | GDN chunked prefill | BF16 matrix operands. FP32 accumulation, state decay, and live carry | BF16 checkpoints |
 | GDN head norm and gate | BF16 attention result, then FP32 RMS, weight, SiLU, and product | One BF16 result |
-| FA attention and gate | BF16 Q/K/V/P, FP32 softmax and accumulation | BF16 attention, sigmoid, and product before FP8 |
+| FA attention and gate | Selected FP8 or BF16 operands, FP32 softmax and accumulation | BF16 attention, sigmoid, and product before FP8 |
 | Vision attention | BF16 Q/K/V/P, FP32 softmax and accumulation | BF16 |
 | MTP dual RMS | FP32 statistics and gain computation | BF16 packed input |
 | MTP FC, all row counts | BF16 operands, FP32 accumulation | BF16 |

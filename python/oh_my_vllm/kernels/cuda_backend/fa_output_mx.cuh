@@ -2,8 +2,8 @@
 #include "fa_input.cuh"
 
 __global__ void fa_output_mx_kernel(const __nv_bfloat16 *attended, const __nv_bfloat16 *gate,
-                                    __nv_fp8_e4m3 *output, float *scales, __nv_fp8_e4m3 *prepared,
-                                    unsigned char *prepared_scales, int rows) {
+                                    __nv_fp8_e4m3 *prepared, unsigned char *prepared_scales,
+                                    int rows) {
   int group = blockIdx.x * 8 + threadIdx.x / 32, lane = threadIdx.x & 31;
   int64_t offset = int64_t(group) * 128 + lane * 4;
   int row = group / 48, head = group % 48;
@@ -33,12 +33,6 @@ __global__ void fa_output_mx_kernel(const __nv_bfloat16 *attended, const __nv_bf
   float divisor = fmaxf(maximum, 1e-10f) / 448.f;
   if (!(divisor >= 0.f && isfinite(divisor)))
     asm volatile("trap;");
-  if (lane == 0)
-    scales[group] = divisor;
-  *reinterpret_cast<uint32_t *>(output + offset) =
-      __nv_fp8x4_e4m3(make_float4(values[0] / divisor, values[1] / divisor, values[2] / divisor,
-                                  values[3] / divisor))
-          .__x;
   unsigned bits = __float_as_uint(divisor);
   unsigned exponent = (bits >> 23) & 255u;
   exponent += (bits & 0x7fffffu) != 0u && exponent < 254u;

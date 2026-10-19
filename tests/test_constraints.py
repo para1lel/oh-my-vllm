@@ -76,7 +76,18 @@ class ChainDraft:
         self.output = self.ffn.buffers
         self.sampling = Sampling(device, None, batch)
         self.metadata_inputs = SimpleNamespace(
-            update=lambda arrays: self.tokens.__setitem__(slice(None), arrays[-1])
+            host_views=tuple(
+                np.zeros(shape, dtype=dtype)
+                for shape, dtype in (
+                    ((3, batch), "int64"),
+                    ((batch,), "int32"),
+                    ((batch, 335), "int32"),
+                    ((batch + 1,), "int32"),
+                    ((batch,), "int32"),
+                    ((batch,), "int64"),
+                )
+            ),
+            update=lambda arrays: self.tokens.__setitem__(slice(None), arrays[-1]),
         )
 
     def run(self):
@@ -162,6 +173,51 @@ class Constraints(unittest.TestCase):
         self.assertEqual(request.history, [4, 4, 5])
         self.assertEqual((request.random_offset, request.proposal_offset), (13, 17))
 
+    def test_sampling_mask_cache_tracks_output_and_thinking_boundaries(self):
+        from oh_my_vllm.worker.sampling import SamplingInputs
+
+        tokenizer = SimpleNamespace(
+            eos={256},
+            grammar=SimpleNamespace(vocab_size=248320),
+            valid_tokens=259,
+            think_end=257,
+            generation={},
+        )
+        request = Request(
+            tokenizer,
+            [],
+            {
+                "max_tokens": 128,
+                "min_tokens": 2,
+                "sampling": {"repetition_guard": False},
+            },
+        )
+        inputs = SamplingInputs(1)
+
+        def update(prefix, changed):
+            inputs.update([request], [prefix], "target")
+            self.assertEqual(inputs.mask_changed, changed)
+            return set(np.flatnonzero(inputs.mask[0]))
+
+        self.assertNotIn(256, update([], True))
+        self.assertNotIn(256, update([8], False))
+        self.assertIn(256, update([8, 9], True))
+        self.assertIn(256, update([9, 8], False))
+        request.thinking = True
+        request.options["thinking_token_budget"] = 1
+        self.assertEqual(update([8], True), {257})
+        self.assertEqual(update([9], False), {257})
+        self.assertEqual(update([257], True), set(range(259)) - {256})
+        request.thinking = False
+        request.options["sampling"]["repetition_guard"] = True
+        request.history = [7] * 64
+        self.assertNotIn(7, update([], True))
+        self.assertIn(7, update([8], True))
+        request.options["sampling"]["repetition_guard"] = False
+        tokenizer.valid_tokens = 258
+        self.assertNotIn(258, update([], True))
+        self.assertNotIn(258, update([], False))
+
     def test_greedy_draft_chain_keeps_stage_order_private_probabilities_and_fallback(
         self,
     ):
@@ -222,15 +278,16 @@ class Constraints(unittest.TestCase):
                     for stage, position in enumerate((2, 3, 4, 5))
                 ],
             )
-            saved = first.proposals.copy()
-            np.testing.assert_array_equal(saved.argmax(axis=1), [3, 7, 15, 31])
+            self.assertTrue(first.drafts_greedy)
+            self.assertIsNone(first.proposals)
+            saved = first.drafts.copy()
             second = request()
             batch.requests = [second]
             endpoints[0] = (np.full((1, 5120), 4, np.float32), None)
             speculation.propose(batch, endpoints, True)
             self.assertEqual(second.drafts, [5, 11, 23, 47])
             self.assertEqual(d.downloads, 2)
-            np.testing.assert_array_equal(first.proposals, saved)
+            self.assertEqual(first.drafts, saved)
             for update in (
                 {"temperature": 0.5},
                 {"frequency_penalty": 0.2},
@@ -332,7 +389,7 @@ class Constraints(unittest.TestCase):
         tokenizer.decoder = decoders.ByteLevel()
         tokenizer.add_special_tokens(["<eos>", "<tool_call>", "</tool_call>"])
         grammar_tokenizer = llguidance.LLTokenizer(
-            tokenizer.to_str(), n_vocab=259, eos_token=256
+            tokenizer.to_str(), n_vocab=248320, eos_token=256
         )
         constraint = Constraint.for_request(
             grammar_tokenizer,
@@ -352,6 +409,25 @@ class Constraints(unittest.TestCase):
         )
         constraint.accept(tokenizer.encode('{"x":').ids)
         self.assertFalse(constraint.mask()[tokenizer.encode("3").ids[0]])
+        from oh_my_vllm.worker.sampling import SamplingInputs
+
+        request = Request(
+            SimpleNamespace(
+                eos={256},
+                grammar=grammar_tokenizer,
+                valid_tokens=259,
+                think_end=257,
+                generation={},
+            ),
+            [],
+            {"max_tokens": 16, "sampling": {"repetition_guard": False}},
+        )
+        request.constraint = constraint
+        inputs = SamplingInputs(1)
+        for prefix in ([], tokenizer.encode("1}").ids, []):
+            inputs.update([request], [prefix], "target")
+            self.assertTrue(inputs.mask_changed)
+            self.assertEqual(bool(inputs.mask[0, 256]), bool(prefix))
         proposal = constraint.fork()
         proposal.accept(tokenizer.encode("1}").ids)
         self.assertTrue(proposal.accepting)

@@ -3,6 +3,8 @@
 Use `main` for work.
 The worker uses [operator scheduling](execution.md): Eager for Execute messages with prefill, and CUDA Graph replay for decode-only messages.
 The native builder is `development.native_build`.
+FA keeps BF16 cache state and derived FP8 operands with the same logical page ownership.
+See the [model contract](operators/model.md#intermediate-precision) for attention precision.
 
 The [numerical tools](operators/evaluation.md) compare full-model logits with the frozen [PyTorch FP64 reference](../development/model/reference.npz).
 Keep its identity checks and numerical limits.

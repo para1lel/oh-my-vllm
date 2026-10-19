@@ -144,7 +144,12 @@ class Workspace:
             value, residual = self.ffn(value, residual)
         if self.hidden is not None:
             self.device.module.final_hidden(
-                value, residual, self.weights.sample.norm, self.hidden
+                value,
+                residual,
+                self.weights.sample.norm,
+                self.hidden,
+                cache.hidden,
+                self.gdn.metadata[2],
             )
         self.output = (value, residual)
         return self.output
@@ -153,8 +158,11 @@ class Workspace:
         if not graph:
             return self.forward(cache)
         if self.replay is None:
-            self.forward(cache)
-            self.device.synchronize()
+            if self.input.shape[0] > 32 or any(
+                operator.mx is not None for operator in (self.ffn, self.gdn, self.fa)
+            ):
+                self.forward(cache)
+                self.device.synchronize()
             with ExitStack() as recording:
                 for operator in (self.ffn, self.gdn, self.fa):
                     recording.enter_context(operator.graph_lease())
@@ -193,12 +201,6 @@ class Model:
                 (len(batch.requests) >= 4 and int(batch.metadata[4].max()) >= 32768)
                 or (len(batch.requests) == 2 and int(batch.metadata[4].min()) >= 32768)
             ),
-            (34 if batch.max_queries == 2 else 36)
-            if len(batch.requests) == 2
-            and 2 <= batch.max_queries <= 5
-            and batch.rows > batch.max_queries
-            and minimum_context(batch) >= 32768
-            else 0,
         )
         if batch.schedule.verify:
             if key not in self.decode:
@@ -228,6 +230,4 @@ class Model:
             ]
         )
         result = workspace.run(self.cache, graph)
-        if self.mtp:
-            self.cache.export_hidden(workspace.hidden, batch)
         return result, workspace.hidden

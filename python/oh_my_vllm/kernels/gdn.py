@@ -175,7 +175,10 @@ class GDN:
                 ((rows, 6144), "float8_e4m3fn"),
                 ((rows, 48), "float32"),
                 ((rows if split_values else 0, 6144), "bfloat16"),
-                ((8, rows, 5120) if rows <= 8 else (1,), "float32"),
+                (
+                    (8 if rows <= 8 else 3, rows, 5120) if rows <= 32 else (1,),
+                    "float32",
+                ),
                 ((rows if not schedule.verify and rows > 32 else 0, 96), "float32"),
                 *chunk_workspace(
                     rows, len(schedule.read_slots), self.max_queries, schedule.verify
