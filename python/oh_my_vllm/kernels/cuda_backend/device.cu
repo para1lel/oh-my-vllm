@@ -1,4 +1,5 @@
 #include "common.cuh"
+#include "scratch_allocator.cuh"
 #include <algorithm>
 #include <atomic>
 #include <vector>
@@ -36,12 +37,46 @@ struct DeviceAllocator {
 
 int64_t allocated_bytes() { return allocated_storage.load(std::memory_order_relaxed); }
 
+int64_t reserved_bytes() {
+  return allocated_bytes() - scratch_live_bytes.load(std::memory_order_relaxed) +
+         scratch_reserved_bytes();
+}
+
 Tensor allocate(Shape shape, String dtype, int64_t device) {
   TVM_FFI_ICHECK(device >= 0 && device <= INT32_MAX);
   for (auto extent : shape)
     TVM_FFI_ICHECK(extent >= 0);
   return Tensor::FromNDAlloc(DeviceAllocator{}, shape, tvm::ffi::StringToDLDataType(dtype),
                              DLDevice{kDLCUDA, static_cast<int>(device)});
+}
+
+Tensor allocate_scratch(Shape shape, String dtype, int64_t device) {
+  TVM_FFI_ICHECK(device >= 0 && device <= INT32_MAX);
+  for (auto extent : shape)
+    TVM_FFI_ICHECK(extent >= 0);
+  return Tensor::FromNDAlloc(ScratchAllocator{}, shape, tvm::ffi::StringToDLDataType(dtype),
+                             DLDevice{kDLCUDA, static_cast<int>(device)});
+}
+
+void reserve_scratch(int64_t requested) {
+  TVM_FFI_ICHECK(requested >= 0);
+  tvm::ffi::CUDADeviceGuard guard(0);
+  auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, 0));
+  cudaStreamCaptureStatus capture;
+  cuda_check(cudaStreamIsCapturing(stream, &capture));
+  TVM_FFI_ICHECK(capture == cudaStreamCaptureStatusNone);
+  size_t available, total;
+  cuda_check(cudaMemGetInfo(&available, &total));
+  uint64_t bytes = std::min<uint64_t>(requested, available / 2);
+  if (bytes == 0)
+    return;
+  auto pool = scratch_pool(0);
+  uint64_t threshold = std::max<uint64_t>(uint64_t{1} << 30, bytes);
+  cuda_check(cudaMemPoolSetAttribute(pool, cudaMemPoolAttrReleaseThreshold, &threshold));
+  void *storage;
+  cuda_check(cudaMallocFromPoolAsync(&storage, bytes, pool, stream));
+  cuda_check(cudaFreeAsync(storage, stream));
+  cuda_check(cudaStreamSynchronize(stream));
 }
 
 void copy_bytes(TensorView destination, TensorView source) {

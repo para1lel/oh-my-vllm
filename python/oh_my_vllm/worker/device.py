@@ -10,6 +10,8 @@ from ..kernels.native import load
 
 FUNCTIONS = (
     "allocate",
+    "allocate_scratch",
+    "reserve_scratch",
     "copy_bytes",
     "synchronize",
     "evict",
@@ -20,6 +22,7 @@ FUNCTIONS = (
     "final_hidden",
     "free_bytes",
     "allocated_bytes",
+    "reserved_bytes",
 )
 
 
@@ -64,6 +67,9 @@ class Device:
 
     def empty(self, shape, dtype):
         return self.module.allocate(tvm_ffi.Shape(shape), dtype, 0)
+
+    def scratch(self, shape, dtype):
+        return self.module.allocate_scratch(tvm_ffi.Shape(shape), dtype, 0)
 
     def zeros(self, shape, dtype):
         result = self.empty(shape, dtype)

@@ -52,6 +52,13 @@ __device__ __forceinline__ void fa_mma_bf16(float (&c)[4], unsigned a0, unsigned
                : "r"(a0), "r"(a1), "r"(a2), "r"(a3), "r"(b0), "r"(b1));
 }
 
+__device__ __forceinline__ void fa_rowsum_bf16(float *d, const unsigned (&a)[4]) {
+  asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 "
+               "{%0, _, %1, _}, {%2,%3,%4,%5}, {%6,%6}, {%0,0.,%1,0.};"
+               : "+f"(d[0]), "+f"(d[1])
+               : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(0x3f803f80));
+}
+
 template <int BK, typename Position>
 __device__ __forceinline__ void fa_stage_kv(const __nv_bfloat16 *cache, const void *tables,
                                             int start, int table_width, int64_t cache_pages,
@@ -114,7 +121,6 @@ fa_partial_kernel(const __nv_bfloat16 *__restrict__ query, const __nv_bfloat16 *
   auto *value_buffers = key_buffers + Buffers * BK * 256;
   auto *p = value_buffers + Buffers * BK * 256;
   auto *maxima = reinterpret_cast<float *>(p + BQ * 64);
-  auto *sums = maxima + 4 * BQ;
   const int warp = threadIdx.x / 32, lane = threadIdx.x & 31;
   const int fr = lane / 4, fc = (lane % 4) * 2;
   const int seq = blockIdx.x / query_tiles, qbase = (blockIdx.x % query_tiles) * BQ;
@@ -236,7 +242,6 @@ fa_partial_kernel(const __nv_bfloat16 *__restrict__ query, const __nv_bfloat16 *
       float safe = m == -INFINITY ? 0.f : m;
       alpha[rg] = fa_exp2(maximum[rg] - safe);
       maximum[rg] = m;
-      float sum = 0;
 #pragma unroll
       for (int kt = 0; kt < BK / 32; ++kt) {
         int tile = (rg / 2) * (BK / 32) + kt;
@@ -244,25 +249,14 @@ fa_partial_kernel(const __nv_bfloat16 *__restrict__ query, const __nv_bfloat16 *
         for (int j = 0; j < 2; ++j) {
           int col = (kt * 4 + warp) * 8 + fc + j;
           float probability = fa_exp2(score[tile][(rg % 2) * 2 + j] - safe);
-          sum += probability;
           p[fa_shared_index(r, col, 64)] = __float2bfloat16_rn(probability);
         }
       }
-      sum += __shfl_xor_sync(0xffffffff, sum, 1);
-      sum += __shfl_xor_sync(0xffffffff, sum, 2);
-      if (lane % 4 == 0)
-        sums[warp * BQ + r] = sum;
     }
     __syncthreads();
 #pragma unroll
-    for (int rg = 0; rg < RowGroups; ++rg) {
-      int r = (rg / 2) * 16 + fr + (rg % 2) * 8;
-      float sum = 0;
-#pragma unroll
-      for (int w = 0; w < 4; ++w)
-        sum += sums[w * BQ + r];
-      denominator[rg] = denominator[rg] * alpha[rg] + sum;
-    }
+    for (int rg = 0; rg < RowGroups; ++rg)
+      denominator[rg] *= alpha[rg];
 #pragma unroll
     for (int tile = 0; tile < AccTiles; ++tile) {
       int row_base = (tile / 8) * 16;
@@ -274,8 +268,10 @@ fa_partial_kernel(const __nv_bfloat16 *__restrict__ query, const __nv_bfloat16 *
     for (int inner = 0; inner < BK; inner += 16) {
       unsigned pa[BQ / 16][4];
 #pragma unroll
-      for (int rg = 0; rg < BQ / 16; ++rg)
+      for (int rg = 0; rg < BQ / 16; ++rg) {
         fa_load_a(pa[rg], p + rg * 16 * 64, inner, lane, 64);
+        fa_rowsum_bf16(denominator + rg * 2, pa[rg]);
+      }
 #pragma unroll
       for (int ct = 0; ct < 8; ++ct) {
         unsigned vb[2];

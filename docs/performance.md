@@ -98,7 +98,7 @@ The benchmark sets this variable for its service process.
 ## Lower-bound calculation
 
 The [calculation](../development/serving/roofline.py) uses the specified precision of each matrix operation.
-It includes full causal attention lengths, FP32 GDN work, vocabulary projections, and MTP context and draft work.
+It includes full causal attention lengths, GDN work for the selected operand types, vocabulary projections, and MTP context and draft work.
 It includes acceptance arithmetic and the measured accepted token counts.
 
 Each trace event keeps its recorded batch, prefill chunk, query lengths, and proposal stage.
@@ -118,7 +118,7 @@ It does not permit resource overlap between dependent calls.
 The global resource estimate is supplied for analysis. It does not set the gate.
 
 The external artifacts contain responses, usage, execution shapes, MTP counters, bound components, and source identities.
-The [artifact check](../development/serving/benchmark.py#L210)<!-- source: def verify_artifact_identity(arguments, expected): --> prevents acceptance if source, executable, native build, or checkpoint identities change.
+The [artifact check](../development/serving/benchmark.py#L218)<!-- source: def verify_artifact_identity(arguments, expected): --> prevents acceptance if source, executable, native build, or checkpoint identities change.
 
 The trace must have full prefill coverage, continuous accepted positions, and output counts that agree with HTTP usage.
 Its single identity record must match the service mode. Its prompt lengths must match HTTP usage.

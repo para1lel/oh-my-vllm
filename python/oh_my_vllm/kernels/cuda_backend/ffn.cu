@@ -51,7 +51,7 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
   tensor_contract(down_scale, x, kDLFloat, 32, {40, 136});
   tensor_contract(quantized_input, x, kDLFloat8_e4m3fn, 8, {rows, 5120});
   tensor_contract(input_scale, x, kDLFloat, 32, {rows, 40});
-  tensor_contract(gate_up, x, kDLBfloat, 16, {rows, 34816});
+  tensor_contract(gate_up, x, kDLBfloat, 16, {rows <= 64 ? rows : 0, 34816});
   tensor_contract(quantized_product, x, kDLFloat8_e4m3fn, 8, {rows, 17408});
   tensor_contract(product_scale, x, kDLFloat, 32, {rows, 136});
   int splits = rows < 8 ? 8 : 2;
@@ -158,3 +158,5 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
                            static_cast<__nv_bfloat16 *>(output.data_ptr()), rows, 5120, 17408,
                            stream);
 }
+
+#include "ffn_mx.cuh"

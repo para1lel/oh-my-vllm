@@ -3,6 +3,17 @@
 #include "common.cuh"
 #include "launch.cuh"
 
+__device__ inline void store_bf16_eight(__nv_bfloat16 *destination, const float (&values)[8]) {
+  uint4 packed;
+  auto *words = reinterpret_cast<uint32_t *>(&packed);
+#pragma unroll
+  for (int pair = 0; pair < 4; ++pair) {
+    __nv_bfloat162 raw = __floats2bfloat162_rn(values[pair * 2], values[pair * 2 + 1]);
+    words[pair] = *reinterpret_cast<const uint32_t *>(&raw);
+  }
+  *reinterpret_cast<uint4 *>(destination) = packed;
+}
+
 template <int Threads>
 __global__ void
 residual_rms_quant_kernel(const __nv_bfloat16 *__restrict__ x,
@@ -25,10 +36,10 @@ residual_rms_quant_kernel(const __nv_bfloat16 *__restrict__ x,
       int shift = (j & 1) * 16;
       float value = __uint_as_float(((input_words[j / 2] >> shift) & 0xffffu) << 16) +
                     __uint_as_float(((skip_words[j / 2] >> shift) & 0xffffu) << 16);
-      summed[row * 5120 + column + j] = __float2bfloat16_rn(value);
       values[chunk][j] = value;
       total += values[chunk][j] * values[chunk][j];
     }
+    store_bf16_eight(summed + row * 5120 + column, values[chunk]);
   }
   __shared__ float partial[Threads / 32];
   total = warp_sum(total);
@@ -49,10 +60,10 @@ residual_rms_quant_kernel(const __nv_bfloat16 *__restrict__ x,
     for (int j = 0; j < 8; ++j) {
       values[chunk][j] =
           __bfloat162float(__float2bfloat16_rn(values[chunk][j] * inverse * (weights[j] + 1.f)));
-      if (normalized)
-        normalized[row * 5120 + column + j] = __float2bfloat16_rn(values[chunk][j]);
       maximum = fmaxf(maximum, fabsf(values[chunk][j]));
     }
+    if (normalized)
+      store_bf16_eight(normalized + row * 5120 + column, values[chunk]);
     unsigned mask = lane < 16 ? 0xffffu : 0xffff0000u;
     maximum = __uint_as_float(__reduce_max_sync(mask, __float_as_uint(maximum)));
     float divisor = fmaxf(maximum, 1e-10f) / 448.f;

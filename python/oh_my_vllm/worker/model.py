@@ -1,10 +1,12 @@
 from contextlib import ExitStack
+from math import prod
 
 import numpy as np
 
 from ..kernels.fa import FA
 from ..kernels.ffn import FFN
-from ..kernels.gdn import GDN
+from ..kernels.gdn import GDN, Schedule
+from ..kernels.mtp import MTPContext
 from .metadata import Metadata
 
 
@@ -18,26 +20,85 @@ def metadata_arrays(batch):
     )
 
 
+def minimum_context(batch):
+    return int(batch.metadata[4][batch.metadata[3][1:] - 1].min())
+
+
+def scratch_capacity(weights, rows, hidden):
+    size = 0
+
+    def count(shape, dtype):
+        nonlocal size
+        width = {
+            "bfloat16": 2,
+            "float8_e4m3fn": 1,
+            "float32": 4,
+            "int32": 4,
+            "int64": 8,
+            "uint8": 1,
+        }[dtype]
+        size += ((max(prod(shape) * width, 1) + 255) // 256) * 256
+
+    checkpoints = tuple(range(783, rows, 784))
+    if rows - 1 not in checkpoints:
+        checkpoints += (rows - 1,)
+    schedule = Schedule(
+        (0, rows),
+        (0,),
+        (-1,) * rows,
+        checkpoints,
+        tuple(range(1, len(checkpoints) + 1)),
+        (0,),
+        len(checkpoints) + 1,
+        False,
+    )
+    GDN(weights.layers[0].attention, schedule, count, lambda value: None, prepare=False)
+    attention = next(
+        layer.attention for layer in weights.layers if layer.kind == "full_attention"
+    )
+    FA(attention, rows, count, max_queries=rows, prepare=False)
+    FFN(weights.layers[0].feed_forward, rows, count, prepare=False)
+    for _ in range(3 if hidden else 2):
+        count((rows, 5120), "bfloat16")
+    if hidden:
+        MTPContext(
+            weights.mtp_input,
+            weights.attention_variant(weights.mtp_layer.attention, "kv_only"),
+            rows,
+            count,
+            max_queries=rows,
+        )
+    return size
+
+
 class Workspace:
     def __init__(self, device, weights, batch, hidden):
         self.device, self.weights = device, weights
         self.gdn = GDN(
-            weights.layers[0].attention, batch.schedule, device.empty, device.upload
+            weights.layers[0].attention, batch.schedule, device.scratch, device.upload
         )
         attention = next(
             layer.attention
             for layer in weights.layers
             if layer.kind == "full_attention"
         )
-        self.fa = FA(attention, batch.rows, device.empty, max_queries=batch.max_queries)
-        self.ffn = FFN(weights.layers[0].feed_forward, batch.rows, device.empty)
-        self.input = device.empty((batch.rows, 5120), "bfloat16")
-        self.zero = device.zeros((batch.rows, 5120), "bfloat16")
+        self.fa = FA(
+            attention,
+            batch.rows,
+            device.scratch,
+            max_queries=batch.max_queries,
+            max_context=int(batch.metadata[4].max()),
+            min_context=minimum_context(batch),
+        )
+        self.ffn = FFN(weights.layers[0].feed_forward, batch.rows, device.scratch)
+        self.input = device.scratch((batch.rows, 5120), "bfloat16")
+        self.zero = device.scratch((batch.rows, 5120), "bfloat16")
+        device.module.zero(self.zero)
         self.metadata_inputs = Metadata(device, metadata_arrays(batch))
         self.metadata = self.metadata_inputs.arrays[:5]
         self.tokens = self.metadata_inputs.arrays[5]
         self.gdn.metadata = self.metadata_inputs.arrays[6:]
-        self.hidden = device.empty((batch.rows, 5120), "bfloat16") if hidden else None
+        self.hidden = device.scratch((batch.rows, 5120), "bfloat16") if hidden else None
         self.resources = ExitStack()
         self.replay = None
         self.media = None
@@ -46,6 +107,9 @@ class Workspace:
 
     def close(self):
         self.resources.close()
+        self.gdn.close()
+        self.fa.close()
+        self.ffn.close()
 
     def update(self, batch):
         self.metadata_inputs.update(metadata_arrays(batch))
@@ -91,6 +155,9 @@ class Workspace:
         if self.replay is None:
             self.forward(cache)
             self.device.synchronize()
+            self.resources.enter_context(self.ffn.graph_lease())
+            self.resources.enter_context(self.gdn.graph_lease())
+            self.resources.enter_context(self.fa.graph_lease())
             self.replay = self.resources.enter_context(
                 self.device.graph(lambda: self.forward(cache))
             )
@@ -118,6 +185,18 @@ class Model:
             len(batch.requests),
             batch.max_queries,
             batch.schedule.verify,
+            batch.max_queries >= 1024 and int(batch.metadata[4].max()) >= 12544,
+            batch.max_queries == 1
+            and (
+                (len(batch.requests) >= 4 and int(batch.metadata[4].max()) >= 32768)
+                or (len(batch.requests) == 2 and int(batch.metadata[4].min()) >= 32768)
+            ),
+            (34 if batch.max_queries == 2 else 36)
+            if len(batch.requests) == 2
+            and 2 <= batch.max_queries <= 5
+            and batch.rows > batch.max_queries
+            and minimum_context(batch) >= 32768
+            else 0,
         )
         if batch.schedule.verify:
             if key not in self.decode:

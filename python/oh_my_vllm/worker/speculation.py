@@ -43,7 +43,7 @@ class Context(GraphOperation):
             weights.mtp_input,
             weights.attention_variant(weights.mtp_layer.attention, "kv_only"),
             len(arrays[0]),
-            device.empty,
+            device.scratch,
             batch=batch,
             max_queries=max_queries,
         )

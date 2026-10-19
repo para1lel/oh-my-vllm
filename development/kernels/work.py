@@ -1,3 +1,5 @@
+from oh_my_vllm.kernels.gdn import chunked_prefill
+
 from .roofline import Work
 
 
@@ -47,24 +49,78 @@ def ffn(rows):
     return add(linear(rows, 34816, 5120, fp8=True), linear(rows, 5120, 17408, fp8=True))
 
 
+def gdn_chunks(queries):
+    for start, count in queries:
+        while count:
+            rows = min(count, 64, 784 - start % 784)
+            yield rows
+            start += rows
+            count -= rows
+
+
+def gdn_inverse_flops(rows):
+    diagonal = sum(
+        size * (size - 1) * (size - 2) // 3
+        for size in (min(8, rows - first) for first in range(0, rows, 8))
+    )
+    return rows * (rows - 1) * (rows - 2) // 3 - diagonal, diagonal
+
+
+def gdn_math(shape, queries=None):
+    if queries is None:
+        queries = [(shape.position, shape.queries)] * shape.batch
+    maximum = max(count for _, count in queries)
+    if not chunked_prefill(shape.rows, shape.batch, maximum, maximum <= 5):
+        return Work(0, fp32_flops=shape.rows * 48 * (7 * 128 * 128 + 3 * 128))
+    bf16 = fp32 = 0
+    for rows in gdn_chunks(queries):
+        inverse_bf16, inverse_fp32 = gdn_inverse_flops(rows)
+        bf16 += (
+            6 * 48 * 128 * 128 * rows
+            + 48 * 128 * rows * (3 * rows - 1)
+            + 2 * 16 * 128 * rows * rows
+            + 48 * inverse_bf16
+        )
+        fp32 += 48 * (
+            inverse_fp32
+            + 2 * 128 * 128
+            + 8 * 128 * rows
+            + rows * (rows - 1)
+            + rows * (rows + 1) // 2
+            + 2 * rows
+        )
+    return Work(0, bf16_flops=bf16, fp32_flops=fp32)
+
+
 def work_for(shape, *, queries=None, state_writes=None):
     name, rows, batch = shape.operator, shape.rows, shape.batch
     if name == "gdn_attention":
         writes = state_writes
         if writes is None:
             writes = (
-                rows if shape.queries <= 5 else batch * ((shape.queries + 783) // 784)
+                rows
+                if shape.queries <= 5
+                else sum(
+                    (start + count) // 784
+                    - start // 784
+                    + int((start + count) % 784 != 0)
+                    for start, count in (
+                        queries
+                        if queries is not None
+                        else [(shape.position, shape.queries)] * batch
+                    )
+                    if count
+                )
             )
-        state = (batch + writes) * (48 * 128 * 128 + 10240 * 3) * 2
+        active = batch if queries is None else sum(count > 0 for _, count in queries)
+        state = (active + writes) * (48 * 128 * 128 + 10240 * 3) * 2
         external = (6 if shape.variant.startswith("embedding") else 8) * rows * 5120
         return add(
             linear(rows, 16384, 5120, fp8=True),
             linear(rows, 96, 5120),
             linear(rows, 5120, 6144, fp8=True),
-            Work(
-                external + state + 4 * (5120 + 128 + 96) + 10240 * 4 * 2,
-                fp32_flops=rows * 48 * (7 * 128 * 128 + 3 * 128),
-            ),
+            Work(external + state + 4 * (5120 + 128 + 96) + 10240 * 4 * 2),
+            gdn_math(shape, queries),
         )
     if name == "fa_attention":
         return add(

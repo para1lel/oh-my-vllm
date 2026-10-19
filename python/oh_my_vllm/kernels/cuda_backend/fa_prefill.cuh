@@ -41,6 +41,8 @@ __device__ inline void fa_tmem_store32(uint32_t address, const float (&values)[3
 struct FAPrefillPipelineTensorMaps {
   alignas(128) CUtensorMap key;
   alignas(128) CUtensorMap value;
+  alignas(128) CUtensorMap key16;
+  alignas(128) CUtensorMap value16;
 };
 
 static inline const FAPrefillPipelineTensorMaps &fa_prefill_pipeline_tensor_maps(TensorView cache) {

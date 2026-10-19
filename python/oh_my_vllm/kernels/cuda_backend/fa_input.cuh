@@ -62,14 +62,18 @@ __device__ inline float fa_maximum(float value) {
   return value;
 }
 
-template <int Warps>
+template <int Warps, int Groups = 1>
 __global__ void fa_merge_quant_kernel(const float *partial, const float *lse,
                                       const __nv_bfloat16 *gate, __nv_fp8_e4m3 *output,
                                       float *scales, int splits) {
-  int group = blockIdx.x, head_row = group / 2, half = group % 2;
-  int lane = threadIdx.x & 31, warp = threadIdx.x / 32;
-  __shared__ float weights[128];
-  __shared__ float4 totals[Warps][32];
+  static_assert(Groups == 1 || Warps == 1);
+  int local_group = threadIdx.x / (Warps * 32);
+  int group = blockIdx.x * Groups + local_group, head_row = group / 2, half = group % 2;
+  int lane = threadIdx.x & 31, warp = (threadIdx.x / 32) % Warps;
+  __shared__ float group_weights[Groups][128];
+  __shared__ float4 group_totals[Groups][Warps][32];
+  auto &weights = group_weights[local_group];
+  auto &totals = group_totals[local_group];
   float denominator = 0;
   if (warp == 0) {
     float maximum = -INFINITY;
@@ -121,4 +125,49 @@ __global__ void fa_merge_quant_kernel(const float *partial, const float *lse,
   }
   quantize_four(make_float4(values[0], values[1], values[2], values[3]),
                 output + int64_t(group) * 128 + lane * 4, scales + group);
+}
+
+__global__ void fa_one_split_quant_kernel(const float *partial, const float *lse,
+                                          const __nv_bfloat16 *gate, __nv_fp8_e4m3 *output,
+                                          float *scales) {
+  int group = blockIdx.x * 8 + threadIdx.x / 32, head_row = group / 2, lane = threadIdx.x & 31;
+  int64_t offset = int64_t(group) * 128 + lane * 4;
+  bool finite = isfinite(lse[head_row]);
+  float4 part = *reinterpret_cast<const float4 *>(partial + offset);
+  float values[4] = {finite ? 0.f + part.x : 0.f, finite ? 0.f + part.y : 0.f,
+                     finite ? 0.f + part.z : 0.f, finite ? 0.f + part.w : 0.f};
+  uint2 packed = *reinterpret_cast<const uint2 *>(gate + offset);
+  float gates[4] = {__uint_as_float(packed.x << 16), __uint_as_float(packed.x & 0xffff0000u),
+                    __uint_as_float(packed.y << 16), __uint_as_float(packed.y & 0xffff0000u)};
+#pragma unroll
+  for (int j = 0; j < 4; ++j) {
+    float g = gates[j];
+    float exponent = expf(-fabsf(g));
+    float sigmoid = fa_bf16((g >= 0 ? 1.f : exponent) / (1.f + exponent));
+    values[j] = fa_bf16(fa_bf16(values[j]) * sigmoid);
+  }
+  quantize_four(make_float4(values[0], values[1], values[2], values[3]), output + offset,
+                scales + group);
+}
+
+__global__ void fa_bf16_one_split_quant_kernel(const __nv_bfloat16 *attended,
+                                               const __nv_bfloat16 *gate, __nv_fp8_e4m3 *output,
+                                               float *scales) {
+  int group = blockIdx.x * 8 + threadIdx.x / 32, lane = threadIdx.x & 31;
+  int64_t offset = int64_t(group) * 128 + lane * 4;
+  uint2 input = *reinterpret_cast<const uint2 *>(attended + offset);
+  float values[4] = {__uint_as_float(input.x << 16), __uint_as_float(input.x & 0xffff0000u),
+                     __uint_as_float(input.y << 16), __uint_as_float(input.y & 0xffff0000u)};
+  uint2 packed = *reinterpret_cast<const uint2 *>(gate + offset);
+  float gates[4] = {__uint_as_float(packed.x << 16), __uint_as_float(packed.x & 0xffff0000u),
+                    __uint_as_float(packed.y << 16), __uint_as_float(packed.y & 0xffff0000u)};
+#pragma unroll
+  for (int j = 0; j < 4; ++j) {
+    float g = gates[j];
+    float exponent = expf(-fabsf(g));
+    float sigmoid = fa_bf16((g >= 0 ? 1.f : exponent) / (1.f + exponent));
+    values[j] = fa_bf16(fa_bf16(values[j]) * sigmoid);
+  }
+  quantize_four(make_float4(values[0], values[1], values[2], values[3]), output + offset,
+                scales + group);
 }

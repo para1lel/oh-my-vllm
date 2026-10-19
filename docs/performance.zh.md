@@ -98,7 +98,7 @@ Benchmark 为其服务进程设置此变量.
 ## 下界计算
 
 [计算实现](../development/serving/roofline.py)使用各矩阵运算的规定精度.
-它包含完整的 causal attention 长度, FP32 GDN 工作量, 词表投影以及 MTP context 和 draft 工作量.
+它包含完整的 causal attention 长度, 按所选操作数类型计算的 GDN 工作量, 词表投影以及 MTP context 和 draft 工作量.
 它包含接受算法的运算及实测接受的 token 数量.
 
 每个 trace 事件保留其记录的 batch, prefill 分块, query 长度及 proposal 阶段.
@@ -118,7 +118,7 @@ Tensor-core 时间按各自峰值累加 FP8, BF16 和 TF32 工作量.
 全局资源估计用于分析, 不用于设置门槛.
 
 仓库外的产物包含响应, usage, 执行 shape, MTP 计数, 下界分项及源码标识.
-[产物检查](../development/serving/benchmark.py#L210)<!-- source: def verify_artifact_identity(arguments, expected): -->在源码, 可执行文件, 原生构建或 checkpoint 标识改变时阻止验收.
+[产物检查](../development/serving/benchmark.py#L218)<!-- source: def verify_artifact_identity(arguments, expected): -->在源码, 可执行文件, 原生构建或 checkpoint 标识改变时阻止验收.
 
 轨迹必须完整覆盖 prefill, 已接受位置必须连续, 输出数量必须与 HTTP usage 一致.
 其唯一的 identity 记录必须匹配服务模式. 其 prompt 长度必须与 HTTP usage 一致.

@@ -1,5 +1,7 @@
 import numpy as np
+from oh_my_vllm.kernels.fa import FUNCTIONS as FA_FUNCTIONS
 from oh_my_vllm.kernels.ffn import FFN
+from oh_my_vllm.kernels.ffn import FUNCTIONS as FFN_FUNCTIONS
 from oh_my_vllm.kernels.ffn import Weights as FFNDeviceWeights
 from oh_my_vllm.kernels.mtp import (
     FUNCTIONS,
@@ -87,7 +89,7 @@ class MTPWeights:
 class MTPContextCase:
     def __init__(self, device, weights, shape):
         build("mtp", FUNCTIONS)
-        build("fa", ("fa",))
+        build("fa", FA_FUNCTIONS)
         self.device, self.weights, self.shape = device, weights, shape
         rng = np.random.default_rng(shape.rows)
         self.hidden = bf16(rng.normal(0, 0.2, (shape.rows, 5120)))
@@ -194,8 +196,8 @@ class MTPContextCase:
 class MTPDraftCase:
     def __init__(self, device, weights, shape, sample_case):
         build("mtp", FUNCTIONS)
-        build("fa", ("fa",))
-        build("ffn", ("ffn",))
+        build("fa", FA_FUNCTIONS)
+        build("ffn", FFN_FUNCTIONS)
         self.device, self.weights, self.shape = device, weights, shape
         self.sample_case = sample_case
         self.fa_case = FACase(

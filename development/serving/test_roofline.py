@@ -112,8 +112,12 @@ class BenchmarkGate(unittest.TestCase):
             peaks.write_text(json.dumps(profile))
             binary = root / "service"
             binary.write_bytes(b"CPU mock")
-            vendor = root / "vendor.so"
-            vendor.write_bytes(b"CPU vendor mock")
+            vendor_files = {}
+            for name in ("vision", "ffn", "gdn", "fa"):
+                image, header = root / f"{name}-vendor.so", root / f"{name}-vendor.h"
+                image.write_bytes(b"CPU vendor image mock")
+                header.write_bytes(b"CPU vendor header mock")
+                vendor_files[name] = (image, header)
             shard = root / "model-00001-of-00001.safetensors"
             shard.write_bytes(b"CPU weights mock")
             (root / "config.json").write_text("{}")
@@ -132,11 +136,19 @@ class BenchmarkGate(unittest.TestCase):
                 metadata = dict(
                     library=str(library), binary_id=benchmark.file_sha256(library)
                 )
-                if name == "vision":
-                    metadata["vision_vendor"] = dict(
+                if name in vendor_files:
+                    image, header = vendor_files[name]
+                    key = {
+                        "vision": "vision_vendor",
+                        "ffn": "ffn_mx_vendor",
+                        "gdn": "gdn_mx_vendor",
+                        "fa": "fa_mx_vendor",
+                    }[name]
+                    metadata[key] = dict(
                         images=[
-                            dict(path=str(vendor), sha256=benchmark.file_sha256(vendor))
-                        ]
+                            dict(path=str(image), sha256=benchmark.file_sha256(image))
+                        ],
+                        headers={str(header): benchmark.file_sha256(header)},
                     )
                 (root / f"{name}.json").write_text(json.dumps(metadata))
 
@@ -201,7 +213,14 @@ class BenchmarkGate(unittest.TestCase):
                 ("calibration", peaks),
                 ("binary", binary),
                 ("native", root / "ffn.so"),
-                ("vendor", vendor),
+                ("vision-vendor", vendor_files["vision"][0]),
+                ("vision-header", vendor_files["vision"][1]),
+                ("ffn-vendor", vendor_files["ffn"][0]),
+                ("ffn-header", vendor_files["ffn"][1]),
+                ("gdn-vendor", vendor_files["gdn"][0]),
+                ("gdn-header", vendor_files["gdn"][1]),
+                ("fa-vendor", vendor_files["fa"][0]),
+                ("fa-header", vendor_files["fa"][1]),
                 ("checkpoint", shard),
                 ("tokenizer", root / "tokenizer.json"),
                 ("generation", root / "generation_config.json"),

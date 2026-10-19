@@ -36,15 +36,14 @@ __device__ inline int fa_prefill_cached_page(const FAPrefillPageSpan &pages, int
   return logical / 784 == pages.first_logical_page ? pages.first_page : pages.last_page;
 }
 
-__global__ void fa_prefill_kernel(const __nv_bfloat16 *__restrict__ query,
-                                  const __nv_bfloat16 *__restrict__ cache,
-                                  const int32_t *__restrict__ tables,
-                                  const int32_t *__restrict__ lengths,
-                                  const int32_t *__restrict__ starts, float *__restrict__ partial,
-                                  float *__restrict__ lse, int table_width, int tiles,
-                                  int max_queries, int query_rows, int cache_pages, int first,
-                                  const __grid_constant__ CUtensorMap key_map,
-                                  const __grid_constant__ CUtensorMap value_map, int64_t l2_bytes) {
+template <bool ExportBFloat16>
+__global__ void fa_prefill_kernel(
+    const __nv_bfloat16 *__restrict__ query, const __nv_bfloat16 *__restrict__ cache,
+    const int32_t *__restrict__ tables, const int32_t *__restrict__ lengths,
+    const int32_t *__restrict__ starts, float *__restrict__ partial, float *__restrict__ lse,
+    int table_width, int tiles, int max_queries, int query_rows, int cache_pages, int first,
+    const __grid_constant__ CUtensorMap key_map, const __grid_constant__ CUtensorMap value_map,
+    int64_t l2_bytes, __nv_bfloat16 *attended) {
   using namespace cute;
   using Element = cutlass::bfloat16_t;
   using Barrier = cutlass::arch::ClusterBarrier;
@@ -107,6 +106,13 @@ __global__ void fa_prefill_kernel(const __nv_bfloat16 *__restrict__ query,
       return;
     }
   }
+  int splits = gridDim.z;
+  int split = blockIdx.z;
+  int chunk = ((last - first + 63) / 64 + splits - 1) / splits * 64;
+  int lower = first + split * chunk;
+  int upper = min(last, lower + chunk);
+  first = min(lower, last);
+  last = upper;
   TMEM::Allocator1Sm allocator;
   if (warp == 9)
     allocator.allocate(512, tmem_base);
@@ -269,6 +275,7 @@ __global__ void fa_prefill_kernel(const __nv_bfloat16 *__restrict__ query,
         issue_qk(tile + 1);
       if (split_key_value)
         wait_barrier(value_ready[slot], phase);
+      wait_barrier(probability_ready[slot], phase);
       wait_barrier(corrected[slot], phase);
       fa_prefill_after_sync();
       auto sP =
@@ -309,10 +316,12 @@ __global__ void fa_prefill_kernel(const __nv_bfloat16 *__restrict__ query,
           next_max = fmaxf(next_max, s);
         }
       }
-      fa_prefill_before_sync();
-      Barrier::arrive(score_free + slot);
       float safe = next_max == -INFINITY ? 0.f : next_max;
       float alpha = fa_exp2(maximum - safe), sum = 0;
+      alpha_storage[slot * 128 + tid] = alpha;
+      cutlass::arch::fence_view_async_shared();
+      fa_prefill_before_sync();
+      Barrier::arrive(score_free + slot);
       auto sP =
           make_tensor(make_smem_ptr(probability_storage + slot * cosize_v<PLayout>), PLayout{});
 #pragma unroll
@@ -336,13 +345,12 @@ __global__ void fa_prefill_kernel(const __nv_bfloat16 *__restrict__ query,
       }
       maximum = next_max;
       denominator = denominator * alpha + sum;
-      alpha_storage[slot * 128 + tid] = alpha;
       cutlass::arch::fence_view_async_shared();
       Barrier::arrive(probability_ready + slot);
     }
     if (row < end) {
       int head = kh * 6 + (qbase + tid) % 6;
-      lse[int64_t(row) * 24 + head] = maximum + log2f(denominator);
+      lse[(int64_t(row) * 24 + head) * splits + split] = maximum + log2f(denominator);
     }
     inverse_storage[tid] = denominator > 0 ? 1.f / denominator : 1.f;
   } else {
@@ -350,7 +358,7 @@ __global__ void fa_prefill_kernel(const __nv_bfloat16 *__restrict__ query,
     uint32_t address = *tmem_base + uint32_t(owner / 32 * 32) * 65536u + 128;
     for (int tile = 0; tile < trips; ++tile) {
       int slot = tile & 1, phase = (tile / 2) & 1;
-      wait_barrier(probability_ready[slot], phase);
+      wait_barrier(score_free[slot], phase);
       if (tile > 0)
         wait_barrier(consumed[slot ^ 1], ((tile - 1) / 2) & 1);
       fa_prefill_after_sync();
@@ -374,7 +382,44 @@ __global__ void fa_prefill_kernel(const __nv_bfloat16 *__restrict__ query,
   }
   __syncthreads();
   fa_prefill_after_sync();
-  if (tid >= 128 && tid < 256) {
+  if constexpr (ExportBFloat16) {
+    auto *staged = reinterpret_cast<float *>(query_storage);
+    if (tid >= 128 && tid < 256) {
+      int owner = tid - 128;
+      uint32_t address = *tmem_base + uint32_t(owner / 32 * 32) * 65536u + 128;
+      float inverse = inverse_storage[owner];
+#pragma unroll
+      for (int c = 0; c < 256; c += 32) {
+        float block[32];
+        fa_tmem_load32(address + c, block);
+        cutlass::arch::fence_view_async_tmem_load();
+#pragma unroll
+        for (int j = 0; j < 32; ++j)
+          staged[owner * 257 + c + j] = block[j] * inverse;
+      }
+      fa_prefill_before_sync();
+    }
+    __syncthreads();
+    for (int group = warp; group < 256; group += 10) {
+      int owner = group / 2, half = group % 2;
+      int row = start + (qbase + owner) / 6, head = kh * 6 + (qbase + owner) % 6;
+      if (row >= end)
+        continue;
+      int64_t head_row = int64_t(row) * 24 + head;
+      float normalizer = lane == 0 ? lse[head_row] : 0.f;
+      normalizer = __shfl_sync(0xffffffff, normalizer, 0);
+      float maximum = fmaxf(-INFINITY, normalizer);
+      float safe = maximum == -INFINITY ? 0.f : maximum;
+      float weight = fa_exp2(normalizer - safe);
+#pragma unroll
+      for (int j = 0; j < 4; ++j) {
+        float value = 0.f + staged[owner * 257 + half * 128 + lane * 4 + j] * weight;
+        value = weight > 0 ? value / weight : 0.f;
+        value = __bfloat162float(__float2bfloat16_rn(value));
+        attended[head_row * 256 + half * 128 + lane * 4 + j] = __float2bfloat16_rn(value);
+      }
+    }
+  } else if (tid >= 128 && tid < 256) {
     int owner = tid - 128;
     uint32_t address = *tmem_base + uint32_t(owner / 32 * 32) * 65536u + 128;
     float inverse = inverse_storage[owner];
@@ -392,7 +437,8 @@ __global__ void fa_prefill_kernel(const __nv_bfloat16 *__restrict__ query,
         int r = i / 32, column = i % 32, target_row = start + (qbase + r) / 6;
         int head = kh * 6 + (qbase + r) % 6;
         if (target_row < end)
-          partial[(int64_t(target_row) * 24 + head) * 256 + c + column] = staged[r * 33 + column];
+          partial[((int64_t(target_row) * 24 + head) * splits + split) * 256 + c + column] =
+              staged[r * 33 + column];
       }
       asm volatile("barrier.sync 1, 128;" ::: "memory");
     }

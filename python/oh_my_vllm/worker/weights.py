@@ -4,8 +4,11 @@ from dataclasses import dataclass, replace
 import numpy as np
 
 from ..kernels.fa import Weights as FAWeights
+from ..kernels.fa import prepare_weights as prepare_fa_weights
 from ..kernels.ffn import Weights as FFNWeights
+from ..kernels.ffn import prepare_weights as prepare_ffn_weights
 from ..kernels.gdn import Weights as GDNWeights
+from ..kernels.gdn import prepare_weights as prepare_gdn_weights
 from ..kernels.mtp import InputWeights
 from ..kernels.sample import Weights as SampleWeights
 from ..kernels.vision import Weights as VisionWeights
@@ -48,7 +51,9 @@ class Weights:
                 self.floats("mtp.pre_fc_norm_embedding.weight"),
                 self.upload("mtp.fc.weight"),
             )
-            self.mtp_layer = self.layer("mtp.layers.0.", "full_attention")
+            self.mtp_layer = self.layer(
+                "mtp.layers.0.", "full_attention", prepare_ffn=False, prepare_fa=False
+            )
             self.mtp_sample = SampleWeights(
                 self.floats("mtp.norm.weight"), self.sample.projection
             )
@@ -78,8 +83,8 @@ class Weights:
         ]
         return self.device.upload(np.concatenate(arrays), dtype)
 
-    def feed_forward(self, prefix):
-        return FFNWeights(
+    def feed_forward(self, prefix, *, prepare=True):
+        weights = FFNWeights(
             self.floats(prefix + "post_attention_layernorm.weight"),
             self.concatenate(
                 [prefix + f"mlp.{name}_proj.weight" for name in ("gate", "up")]
@@ -93,10 +98,11 @@ class Weights:
             self.upload(prefix + "mlp.down_proj.weight"),
             self.upload(prefix + "mlp.down_proj.weight_scale_inv"),
         )
+        return prepare_ffn_weights(weights, self.device.empty) if prepare else weights
 
-    def attention(self, prefix):
+    def attention(self, prefix, *, prepare=True):
         attention = prefix + "self_attn."
-        return FAWeights(
+        weights = FAWeights(
             self.floats(prefix + "input_layernorm.weight"),
             self.concatenate(
                 [attention + f"{name}_proj.weight" for name in ("q", "k", "v")]
@@ -112,11 +118,12 @@ class Weights:
             self.upload(attention + "o_proj.weight"),
             self.upload(attention + "o_proj.weight_scale_inv"),
         )
+        return prepare_fa_weights(weights, self.device.empty) if prepare else weights
 
     def recurrent(self, prefix):
         attention = prefix + "linear_attn."
         convolution = self.upload(attention + "conv1d.weight")
-        return GDNWeights(
+        weights = GDNWeights(
             self.floats(prefix + "input_layernorm.weight"),
             self.concatenate(
                 [attention + f"in_proj_{name}.weight" for name in ("qkv", "z")]
@@ -137,14 +144,15 @@ class Weights:
             self.upload(attention + "out_proj.weight"),
             self.upload(attention + "out_proj.weight_scale_inv"),
         )
+        return prepare_gdn_weights(weights, self.device.empty)
 
-    def layer(self, prefix, kind):
+    def layer(self, prefix, kind, *, prepare_ffn=True, prepare_fa=True):
         attention = (
-            self.attention(prefix)
+            self.attention(prefix, prepare=prepare_fa)
             if kind == "full_attention"
             else self.recurrent(prefix)
         )
-        return Layer(kind, attention, self.feed_forward(prefix))
+        return Layer(kind, attention, self.feed_forward(prefix, prepare=prepare_ffn))
 
     def attention_variant(self, weights, variant):
         first, rows = {
@@ -154,6 +162,7 @@ class Weights:
         }[variant]
         return replace(
             weights,
+            mx=weights.mx if variant == "full" else None,
             projection=self.device.view(weights.projection, (rows, 5120), first * 5120),
             projection_scale=self.device.view(
                 weights.projection_scale, (rows // 128, 40), first // 128 * 40

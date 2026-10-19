@@ -1,5 +1,5 @@
 import numpy as np
-from oh_my_vllm.kernels.ffn import FFN, Weights
+from oh_my_vllm.kernels.ffn import FFN, FUNCTIONS, Weights, prepare_weights
 
 from .build import build
 from .reference import (
@@ -30,6 +30,7 @@ def reference_projection(data, scales, weight, weight_scales):
 
 class FFNWeights:
     def __init__(self, device, checkpoint):
+        build("ffn", FUNCTIONS)
         prefix = "model.language_model.layers.0."
         self.norm = checkpoint.tensor(prefix + "post_attention_layernorm.weight")
         self.gate_up = np.concatenate(
@@ -46,18 +47,21 @@ class FFNWeights:
         )
         self.down = checkpoint.tensor(prefix + "mlp.down_proj.weight")
         self.down_scale = checkpoint.tensor(prefix + "mlp.down_proj.weight_scale_inv")
-        self.device_weights = Weights(
-            device.upload(self.norm),
-            device.upload(self.gate_up, "float8_e4m3fn"),
-            device.upload(self.gate_up_scale),
-            device.upload(self.down, "float8_e4m3fn"),
-            device.upload(self.down_scale),
+        self.device_weights = prepare_weights(
+            Weights(
+                device.upload(self.norm),
+                device.upload(self.gate_up, "float8_e4m3fn"),
+                device.upload(self.gate_up_scale),
+                device.upload(self.down, "float8_e4m3fn"),
+                device.upload(self.down_scale),
+            ),
+            device.empty,
         )
 
 
 class FFNCase:
     def __init__(self, device, weights, shape):
-        build("ffn", ("ffn",))
+        build("ffn", FUNCTIONS)
         self.device, self.weights, self.shape = device, weights, shape
         rng = np.random.default_rng(shape.rows)
         self.x = bf16(rng.normal(0, 0.2, (shape.rows, 5120)))
@@ -67,6 +71,12 @@ class FFNCase:
             for value in (self.x, self.residual)
         )
         self.operation = FFN(weights.device_weights, shape.rows, device.empty)
+
+    def graph_lease(self):
+        return self.operation.graph_lease()
+
+    def close(self):
+        self.operation.close()
 
     def reset(self):
         pass
@@ -100,7 +110,11 @@ class FFNCase:
         expected = reference_projection(
             data, scales, self.weights.down, self.weights.down_scale
         )
-        output_check = numerical_error(actual[indices], expected)
+        output_check = numerical_error(
+            actual[indices],
+            expected,
+            tolerance="mxfp8_ffn" if self.shape.rows > 128 else "bf16",
+        )
         return {
             "passed": finite and residual_check["passed"] and output_check["passed"],
             "all_rows_finite": finite,

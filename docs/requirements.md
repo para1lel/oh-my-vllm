@@ -19,7 +19,9 @@ Do not add vLLM dependencies, environments, or caches.
 Use different dependency files for development tools and inference packages.
 
 Use the [model specification](operators/model.md) and [fusion plan](operators/fusion.md) for operator work.
-Operator tests have no performance gate.
+Operator tests have no minimum roofline efficiency requirement.
+FA and GDN shapes of interest must match or exceed the fastest applicable public implementation.
+Use the [comparison plan](operators/performance-plan.md) for the shape set and equivalent operation boundaries.
 
 Before each delivery, measure the [operator workload](operators/evaluation.md).
 Then update the two README tables.

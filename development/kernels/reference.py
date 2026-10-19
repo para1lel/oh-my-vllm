@@ -164,7 +164,9 @@ def gdn(query, key, value, decay, beta, state):
     return np.asarray(outputs), np.asarray(snapshots)
 
 
-def numerical_error(actual, expected, *, state=False, tolerance="bf16"):
+def numerical_error(
+    actual, expected, *, state=False, tolerance="bf16", state_tolerance="state"
+):
     actual, expected = (
         np.asarray(item, dtype=np.float64) for item in (actual, expected)
     )
@@ -185,7 +187,7 @@ def numerical_error(actual, expected, *, state=False, tolerance="bf16"):
         else (0 if not rms_error else math.inf)
     )
     maximum = float(np.max(np.abs(error)))
-    tolerance_name = "state" if state else tolerance
+    tolerance_name = state_tolerance if state else tolerance
     limits = NUMERICAL_TOLERANCES[tolerance_name]
     if state:
         maximum_ratio = (
@@ -193,7 +195,8 @@ def numerical_error(actual, expected, *, state=False, tolerance="bf16"):
             if peak
             else (0 if maximum == 0 else math.inf)
         )
-        tolerance_ratio = max(nrmse / limits["nrmse"], maximum_ratio)
+        relative_ratio = max(nrmse / limits["nrmse"], maximum_ratio)
+        tolerance_ratio = min(maximum / limits["ftz_atol"], relative_ratio)
         required_atol = None
     else:
         absolute = np.abs(error)
@@ -205,10 +208,11 @@ def numerical_error(actual, expected, *, state=False, tolerance="bf16"):
         )
     return {
         "passed": tolerance_ratio <= 1,
-        "nrmse": nrmse,
+        "nrmse": "infinity" if state and math.isinf(nrmse) else nrmse,
         "max_abs": maximum,
         "reference_peak": peak,
         "max_tolerance_ratio": tolerance_ratio,
         "tolerance_name": tolerance_name,
         "required_atol": required_atol,
+        **({"state_ftz_atol": limits["ftz_atol"]} if state else {}),
     }

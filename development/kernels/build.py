@@ -11,7 +11,13 @@ from oh_my_vllm.kernels.native import (
     SOURCES,
     build_digest,
     cache_directory,
+    fa_vendor_dependencies,
+    ffn_vendor_dependencies,
+    gdn_vendor_dependencies,
     source_digest,
+    verify_fa_vendor_images,
+    verify_ffn_vendor_images,
+    verify_gdn_vendor_images,
     verify_vision_vendor_images,
     vision_vendor_dependencies,
 )
@@ -51,7 +57,17 @@ def build(name, functions):
         include_paths += [str(cutlass / "include"), str(cutlass / "tools/util/include")]
         if name == "vision":
             include_paths.append(str(cutlass / "examples/77_blackwell_fmha"))
-    vendor = vision_vendor_dependencies() if name == "vision" else None
+    vendor = (
+        vision_vendor_dependencies()
+        if name == "vision"
+        else ffn_vendor_dependencies()
+        if name == "ffn"
+        else gdn_vendor_dependencies()
+        if name == "gdn"
+        else fa_vendor_dependencies()
+        if name == "fa"
+        else None
+    )
     build_options = {}
     if vendor is not None:
         include_paths.append(vendor["include_directory"])
@@ -99,7 +115,13 @@ def build(name, functions):
         "cutlass": commit,
     }
     if vendor is not None:
-        metadata["vision_vendor"] = vendor
+        key = {
+            "vision": "vision_vendor",
+            "ffn": "ffn_mx_vendor",
+            "gdn": "gdn_mx_vendor",
+            "fa": "fa_mx_vendor",
+        }[name]
+        metadata[key] = vendor
     encoded = json.dumps(metadata, indent=2) + "\n"
     immutable_manifest = binary_directory / "manifest.json"
     if immutable_manifest.exists() and immutable_manifest.read_text() != encoded:
@@ -112,5 +134,14 @@ def build(name, functions):
     temporary.replace(cache / f"{name}.json")
     module = load_module(str(immutable_library))
     if vendor is not None:
-        verify_vision_vendor_images(module, vendor)
+        verify = (
+            verify_vision_vendor_images
+            if name == "vision"
+            else verify_ffn_vendor_images
+            if name == "ffn"
+            else verify_gdn_vendor_images
+            if name == "gdn"
+            else verify_fa_vendor_images
+        )
+        verify(module, vendor)
     return module, source_id, immutable_library

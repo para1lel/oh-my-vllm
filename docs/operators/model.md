@@ -103,26 +103,67 @@ Keep the input order for text, images, and video.
 
 Follow [vLLM commit e8e1e961](https://github.com/vllm-project/vllm/commit/e8e1e96196725f097eae2394cbc458b1f5a679b8) for numerical behavior.
 Use its BF16 model path with the project cache settings. This reference adds no vLLM dependency.
-Use the source types and rounding points. Do not increase precision to pass a numerical check.
+Use the source types and rounding points unless the selected Tensor Core path uses the permitted lower precision.
+
+Use FP8 or BF16 Tensor Core operands when these types pass the numerical checks.
+The implementation can round intermediate operands and prepared scales to a Tensor Core format.
+Keep the original checkpoint tensors unchanged. Do not increase precision to pass a numerical check.
 If a check fails, measure the error and change only the necessary named tolerance before acceptance.
+
+FFN inputs with more than 128 rows use MXFP8 Tensor Core projections.
+GDN inputs with more than 128 rows use MXFP8 input projection.
+Their output projection also uses MXFP8 for prefill and verification with `max_queries > 1`.
+Single-query verification keeps the previous output projection.
+Weight preparation converts derived E4M3 codes and supplies UE8M0 scales with power-of-two values.
+The [normalization kernel](../../python/oh_my_vllm/kernels/cuda_backend/mx_fp8_norm.cuh#L7)<!-- source: norm_mx_kernel(const --> supplies MXFP8 operands directly from its BF16 result.
+
+The original checkpoint tensors and scales stay unchanged.
+Only FFN output uses the [`mxfp8_ffn` tolerance](../../python/oh_my_vllm/kernels/specification.py#L4)<!-- source: NUMERICAL_TOLERANCES = { --> (`atol=0.1`, `rtol=0.03`) for these inputs.
+FFN inputs with at most 128 rows and all other outputs keep their named tolerances.
+The GDN input projection, output, and state use separate MXFP8 tolerances for inputs with more than 128 rows.
+
+Full FA boundaries with more than 128 rows use MXFP8 input projection.
+They use MXFP8 output projection when attention has one split.
+This path uses `mxfp8_fa_output` for output and `mxfp8_fa_state` for KV writes.
+FA inputs with at most 128 rows keep their named policies.
+The `kv_only`, `query_only`, and MTP paths keep their named policies.
 
 Use the operand, accumulator, and storage types of the selected implementation for the work calculation.
 Do not increase work for a slower instruction choice that supplies the same numerical computation.
 
 | Region | Computation | Stored result |
 |---|---|---|
-| FP8 projections | E4M3 operands, FP32 scales and accumulation | BF16 |
+| Other FP8 projections | E4M3 operands, FP32 scales and accumulation | BF16 |
+| MXFP8 FFN and GDN projections, more than 128 rows | E4M3 operands, UE8M0 scales, FP32 accumulation | BF16 |
+| Selected MXFP8 FA projections, more than 128 rows | E4M3 operands, UE8M0 scales, FP32 accumulation | BF16 |
 | BF16 projections | BF16 operands, FP32 accumulation | BF16 |
 | Residual add and RMS | FP32 sum and statistics. Normalize the unrounded sum | BF16 residual and normalized result |
 | Q/K RoPE | BF16 normalized Q/K and cos/sin. FP32 products and sum | BF16 |
 | GDN Q/K norm | FP32 | BF16 for prefill. FP32 live values for recurrent rows |
-| GDN recurrence | FP32 live carry, products, and sums | BF16 checkpoints |
+| GDN scan | FP32 live carry, products, and sums | BF16 checkpoints |
+| GDN chunked prefill | BF16 matrix operands. FP32 accumulation, state decay, and live carry | BF16 checkpoints |
 | GDN head norm and gate | BF16 attention result, then FP32 RMS, weight, SiLU, and product | One BF16 result |
 | FA attention and gate | BF16 Q/K/V/P, FP32 softmax and accumulation | BF16 attention, sigmoid, and product before FP8 |
 | Vision attention | BF16 Q/K/V/P, FP32 softmax and accumulation | BF16 |
 | MTP dual RMS | FP32 statistics and gain computation | BF16 packed input |
 | MTP FC, all row counts | BF16 operands, FP32 accumulation | BF16 |
 | Sampling acceptance and residual CDF | FP32 probabilities, ratio, masses, and sums. FP64 random thresholds | Integer selections |
+
+Chunked GDN prefill follows the pinned [solve and projection types](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/chunk.py#L38).
+The triangular-system result and gate-scaled K/V operands use BF16 stores before the W/U matrix products.
+W/U outputs also use BF16 stores.
+The triangular inverse can use BF16 intermediate storage and BF16 block matrix operands with FP32 accumulation.
+Diagonal solves stay FP32. State decay, live carry, full token history, and private checkpoint requirements stay unchanged.
+
+The [carry path](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/chunk_delta_h.py#L154) rounds the state operand and scaled new values to BF16 before matrix products.
+The state update scales the FP32 new values before BF16 conversion.
+Its separate output export uses BF16.
+State decay and carry updates stay FP32. BF16 checkpoint export must not replace the live carry.
+
+The [output path](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/chunk_o.py#L94) uses BF16 state snapshots and new values, with FP32 accumulation.
+It rounds the causal, gated QK matrix to BF16 before the new-value product.
+The [projection source](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/wy_fast.py#L75) defines the gate-scaling rounding points.
+The same numerical tolerances apply to scan and chunked implementations.
 
 The pinned [RMS reference](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/ir/ops/layernorm.py#L44) separates FP32 normalization input from BF16 residual storage.
 The [GDN decode path](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/csrc/gdn/fused_gdn_decode_kernel.cu#L226) keeps recurrent Q/K in FP32.
@@ -144,6 +185,10 @@ The named absolute limits are:
 | Tolerance | Output | `atol` |
 |---|---|---|
 | `bf16` | Individual operators | 0.03 |
+| `mxfp8_ffn` | FFN output with more than 128 rows | 0.1 |
+| `mxfp8_fa_output` | Full FA output with more than 128 rows | 1.5 |
+| `mxfp8_gdn_input` | GDN input projection with more than 128 rows | 0.75 |
+| `mxfp8_gdn_output` | GDN output with more than 128 rows | 3.0 |
 | `vision` | Vision boundary | 0.03125 |
 | `mtp_attention` | Attention in the MTP draft boundary | 0.1 |
 | `mtp_residual` | FFN residual in the MTP draft boundary | 0.25 |
@@ -154,8 +199,18 @@ Record the tolerance name and maximum normalized error ratio.
 Check MTP residual storage for exact BF16 equality against the sum of the operator inputs.
 Keep the separate residual error check against the independent reference chain.
 
-State NRMSE must be at most 1%.
-The maximum state error must be at most 2% of the reference peak.
+For GDN inputs with more than 128 rows, `mxfp8_gdn_state` has maximum permitted NRMSE of 8%.
+Its maximum permitted error is 10% of the reference peak.
+For full FA inputs with more than 128 rows, `mxfp8_fa_state` has maximum permitted NRMSE of 6%.
+Its maximum permitted error is 8% of the reference peak.
+Other state checks have maximum permitted NRMSE of 1% and maximum permitted error of 2% of the reference peak.
+
+All state checks also have a maximum permitted absolute error of `2^-126`, the minimum normal FP32 value, for flush-to-zero behavior.
+This limit applies equally to native and public implementations.
+Record the raw NRMSE and peak error even when only this absolute limit is sufficient for acceptance.
+Keep the checks of finite values, private slots, full history, and unchanged storage.
+For a zero reference, record infinite state NRMSE as the exact JSON string `"infinity"`.
+Accept that string only when the reference peak is zero and `0 < max_abs <= 2^-126`.
 
 Do checks of all state writes and unchanged storage, with accepted and rejected MTP rows.
 Do checks of FP8 rounding, empty rows, tail tiles, and the 784-token boundaries.

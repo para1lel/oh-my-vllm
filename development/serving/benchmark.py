@@ -187,11 +187,19 @@ def native_identity():
             raise RuntimeError(
                 f"native binary identity differs from its manifest: {name}"
             )
-        for image in metadata.get("vision_vendor", {}).get("images", []):
-            if file_sha256(image["path"]) != image["sha256"]:
-                raise RuntimeError(
-                    "native vendor image identity differs from its manifest"
-                )
+        for key in ("vision_vendor", "ffn_mx_vendor", "gdn_mx_vendor", "fa_mx_vendor"):
+            vendor = metadata.get(key, {})
+            files = {
+                **vendor.get("headers", {}),
+                **{
+                    image["path"]: image["sha256"] for image in vendor.get("images", [])
+                },
+            }
+            for path, expected in files.items():
+                if file_sha256(path) != expected:
+                    raise RuntimeError(
+                        "native vendor file identity differs from its manifest"
+                    )
         result[name] = metadata
     return result
 

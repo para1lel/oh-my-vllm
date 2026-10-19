@@ -3,7 +3,7 @@ import os
 from .cache import Cache
 from .device import Device
 from .media import MediaProcessor
-from .model import Model
+from .model import Model, scratch_capacity
 from .request import Request
 from .sampling import Sampling
 from .speculation import Speculation
@@ -40,6 +40,13 @@ class Worker:
             Speculation(self.device, self.weights, self.cache, self.media, self.trace)
             if config["num_speculative_tokens"]
             else None
+        )
+        self.device.module.reserve_scratch(
+            scratch_capacity(
+                self.weights,
+                min(32768, config["max_num_batched_tokens"]),
+                bool(config["num_speculative_tokens"]),
+            )
         )
         self.requests = {}
         self.samplers = {}
@@ -245,7 +252,7 @@ class Worker:
                         "process_id": os.getpid(),
                         "gpu_free_bytes": self.device.module.free_bytes(),
                         "gpu_allocated_bytes": self.device.module.allocated_bytes(),
-                        "gpu_reserved_bytes": self.device.module.allocated_bytes(),
+                        "gpu_reserved_bytes": self.device.module.reserved_bytes(),
                     },
                 }
             case _:

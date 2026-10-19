@@ -45,22 +45,23 @@ MTP 每个请求有五行验证输入. 在模型中, 每个 MTP 步骤保留四�
 
 | 算子 | 数值用例 |
 |---|---|
-| FFN | 1, 4, 5, 20 和 65 行 |
+| FFN | 1, 4, 5, 20, 65, 129 和 144 行 |
 | GDN | Default 为 1, 4, 5 和 20 行. 一个 embedding 行. 65 行中含两个媒体行 |
-| GDN 边界 | Default 为位置 0 和 770 的 65 行. 空输入保护检查 |
+| GDN 边界 | Default 为位置 0 的 65 行. 位置 770 的 129 行. 空输入保护检查 |
 | FA | 1, 4, 5, 20 和 33 行, 上下文为 256. 五行, 上下文为 786 |
 | Sampling | 全部建模用例: 1, 4, 5 和 20 行, 使用完整词表 |
 | MTP context | 一个请求共四行. 四个请求共 16 行 |
 | MTP draft | 1 和 4 行, 上下文为 256. 包含 `full` 和 `query_only` 两个变体 |
 | Vision | 两个帧组, 每组 196 个 patch. 包含 `input`, `default` 和 `merge` 变体 |
 
-偏移位置的 GDN 用例在第 13 和 64 行保存 checkpoint. 它跨越 784-token 边界.
+偏移位置的 GDN 用例在第 13 和 128 行保存 checkpoint.
+它跨越一个 784-token checkpoint, 随后处理一个完整的 64-token 块和一个短尾段.
 FA 检查包含 prefill 路径和 cache 页边界.
 Vision 检查包含对一个帧组的修改, 并确认另一帧组的输出不变.
 
 65 行 FFN 用例使用 prefill 投影路径.
 
-报告使用版本 4 和 `small_shapes_v2` 数值策略.
+报告使用版本 4 和 `small_shapes_v3` 数值策略.
 `numerical_evidence` 记录将检查绑定到报告的源码, 二进制及 checkpoint 身份.
 审计要求所列的每个 shape 和两种执行模式.
 每个建模计时用例引用其匹配的数值用例, 或记录 `status: not_run`.
@@ -70,6 +71,7 @@ Vision 检查包含对一个帧组的修改, 并确认另一帧组的输出不�
 ## 性能计算
 
 算子测试不设最低效率要求.
+FA 和 GDN 还必须通过[公开实现比较](performance-plan.zh.md).
 每次交付前, 在 eager 和 CUDA Graph 模式下测量全部 serving 算子.
 更新 [README](../../README.zh.md) 的中英文算子表格.
 数值检查, 完整计时覆盖和来源身份检查仍然是必要条件.

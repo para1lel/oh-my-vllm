@@ -3,7 +3,8 @@ from itertools import pairwise
 
 import numpy as np
 import tvm_ffi
-from oh_my_vllm.kernels.gdn import GDN, Schedule, Weights
+from oh_my_vllm.kernels.gdn import FUNCTIONS, GDN, Schedule, Weights, prepare_weights
+from oh_my_vllm.kernels.specification import NUMERICAL_TOLERANCES
 
 from .build import build
 from .ffn import reference_projection
@@ -41,6 +42,7 @@ def summarize_rows(checks, rows):
 
 class GDNWeights:
     def __init__(self, device, checkpoint):
+        build("gdn", FUNCTIONS)
         self.checkpoint = checkpoint
         prefix = "model.language_model.layers.0."
         attention = prefix + "linear_attn."
@@ -83,6 +85,7 @@ class GDNWeights:
             device.upload(self.output, "float8_e4m3fn"),
             device.upload(self.output_scale),
         )
+        self.device_weights = prepare_weights(self.device_weights, device.empty)
         self.embedding = None
         self.device_embedding = None
 
@@ -135,7 +138,7 @@ def make_schedule(shape):
 
 class GDNCase:
     def __init__(self, device, weights, shape):
-        build("gdn", ("gdn",))
+        build("gdn", FUNCTIONS)
         self.device, self.weights, self.shape = device, weights, shape
         self.schedule = make_schedule(shape)
         rng = np.random.default_rng(2200 + shape.rows)
@@ -174,6 +177,12 @@ class GDNCase:
         self.media_rows_device = device.upload(self.media_rows)
         self.operation = GDN(device_weights, self.schedule, device.empty, device.upload)
 
+    def graph_lease(self):
+        return self.operation.graph_lease()
+
+    def close(self):
+        self.operation.close()
+
     def reset(self):
         for output, initial in (
             (self.state, self.initial_state),
@@ -202,6 +211,8 @@ class GDNCase:
             self.download_bf16(value) for value in self.operation.buffers[:2]
         )
         rows = self.shape.rows
+        input_tolerance = "mxfp8_gdn_input" if rows > 128 else "bf16"
+        output_tolerance = "mxfp8_gdn_output" if rows > 128 else "bf16"
         if not rows:
             unchanged = bool(
                 np.array_equal(
@@ -259,11 +270,14 @@ class GDNCase:
             quantization["scales_exact"] &= bool(
                 np.array_equal(rounded_scales, actual_scales[first:last])
             )
-            upstream = numerical_error(projection[first:last], projected)
+            upstream = numerical_error(
+                projection[first:last], projected, tolerance=input_tolerance
+            )
             if not upstream["passed"]:
                 errors = np.abs(projection[first:last] - projected)
+                limits = NUMERICAL_TOLERANCES[input_tolerance]
                 local_rows, columns = np.nonzero(
-                    errors > 0.03 + 0.03 * np.abs(projected)
+                    errors > limits["atol"] + limits["rtol"] * np.abs(projected)
                 )
                 upstream["violations"] = [
                     {
@@ -290,7 +304,11 @@ class GDNCase:
                 )
                 recomputed_rows += len(different)
             projection_checks.append(
-                numerical_error(projection[first:last], same_input_projection)
+                numerical_error(
+                    projection[first:last],
+                    same_input_projection,
+                    tolerance=input_tolerance,
+                )
             )
             ba_checks.append(numerical_error(ba[first:last], projected_ba))
         projection_check = summarize_rows(projection_checks, rows)
@@ -324,7 +342,9 @@ class GDNCase:
         expected_output = reference_projection(
             quantized, output_scales, self.weights.output, self.weights.output_scale
         )
-        output_check = numerical_error(output[indices], expected_output)
+        output_check = numerical_error(
+            output[indices], expected_output, tolerance=output_tolerance
+        )
         finite = bool(np.all(np.isfinite(output)))
         checks = [
             residual_check,
@@ -341,7 +361,10 @@ class GDNCase:
             "all_rows_finite": finite,
             "unchanged_slots": guards,
             "projection_tolerance_scope": (
-                "all rows and columns, same rounded FP8 inputs, CPU FP64 GEMM"
+                "all rows and columns, original checkpoint and legacy FP8 inputs; "
+                "CPU FP64 GEMM"
+                if rows > 128
+                else "all rows and columns, same rounded FP8 inputs, CPU FP64 GEMM"
             ),
             "upstream_projection_diagnostic_scope": (
                 "CPU-normalized raw temporary drift; not whole-input equality"
@@ -370,6 +393,7 @@ class GDNCase:
         outputs = np.empty((len(indices), 48, 128), dtype=np.float64)
         selected = {int(row): index for index, row in enumerate(indices)}
         state_checks, convolution_checks = [], []
+        state_tolerance = "mxfp8_gdn_state" if self.shape.rows > 128 else "state"
         mapping = np.arange(48) // 3
         for sequence, (first, last) in enumerate(pairwise(self.schedule.sequence_rows)):
             read = self.schedule.read_slots[sequence]
@@ -403,12 +427,18 @@ class GDNCase:
                 if writes[row] >= 0:
                     slot = writes[row]
                     check = numerical_error(
-                        decode_bf16(actual_states[slot]), bf16(state), state=True
+                        decode_bf16(actual_states[slot]),
+                        bf16(state),
+                        state=True,
+                        state_tolerance=state_tolerance,
                     )
                     check.update(row=row, slot=slot)
                     state_checks.append(check)
                     check = numerical_error(
-                        decode_bf16(actual_conv[slot]), history, state=True
+                        decode_bf16(actual_conv[slot]),
+                        history,
+                        state=True,
+                        state_tolerance=state_tolerance,
                     )
                     check.update(row=row, slot=slot)
                     convolution_checks.append(check)

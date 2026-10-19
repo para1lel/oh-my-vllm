@@ -115,6 +115,11 @@ Decode-only batches use CUDA Graph execution. Other batches use ordinary executi
 The worker does not use PDL.
 Use the [end-to-end procedure](performance.md) for inference performance measurements.
 
+Temporary model buffers use a [CUDA memory pool](../python/oh_my_vllm/kernels/cuda_backend/scratch_allocator.cuh#L19)<!-- source: inline cudaMemPool_t scratch_pool(int device) { -->.
+The worker prepares storage before it reports readiness.
+The size uses the token budget and at most half the free GPU memory.
+The pool keeps this storage for later work. The `gpu_reserved_bytes` statistic includes this storage.
+
 ## Placeholder
 
 Use `--model stub` for service tests without a GPU.

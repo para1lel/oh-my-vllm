@@ -1,5 +1,6 @@
 import numpy as np
-from oh_my_vllm.kernels.fa import FA, Weights
+from oh_my_vllm.kernels.fa import FA, Weights, prepare_weights
+from oh_my_vllm.kernels.fa import FUNCTIONS as FA_FUNCTIONS
 
 from .build import build
 from .ffn import reference_projection
@@ -36,6 +37,7 @@ def rotary(value, positions):
 
 class FAWeights:
     def __init__(self, device, checkpoint, *, prefix=None, variant="full"):
+        build("fa", FA_FUNCTIONS)
         if prefix is None:
             prefix = "model.language_model.layers.3."
         self.norm = checkpoint.tensor(prefix + "input_layernorm.weight")
@@ -70,13 +72,15 @@ class FAWeights:
             device.upload(self.output, "float8_e4m3fn"),
             device.upload(self.output_scale),
         )
+        if variant == "full":
+            self.device_weights = prepare_weights(self.device_weights, device.empty)
 
 
 class FACase:
     def __init__(
         self, device, weights, shape, *, value=None, residual=None, first_token=0
     ):
-        build("fa", ("fa",))
+        build("fa", FA_FUNCTIONS)
         self.device, self.weights, self.shape = device, weights, shape
         self.queries = shape.rows // shape.batch
         if self.queries * shape.batch != shape.rows:
@@ -136,7 +140,15 @@ class FACase:
             variant=weights.variant,
             max_queries=self.queries,
             first_token=first_token,
+            max_context=self.context,
+            min_context=self.context,
         )
+
+    def graph_lease(self):
+        return self.operation.graph_lease()
+
+    def close(self):
+        self.operation.close()
 
     def reset(self):
         import tvm_ffi
@@ -166,6 +178,14 @@ class FACase:
         )
 
     def check(self, *, execute=True, output_tolerance="bf16"):
+        mx = (
+            self.shape.rows > 128
+            and self.weights.variant == "full"
+            and output_tolerance == "bf16"
+        )
+        if mx and output_tolerance == "bf16":
+            output_tolerance = "mxfp8_fa_output"
+        state_tolerance = "mxfp8_fa_state" if mx else "state"
         actual, summed = self.run() if execute else self.operation.buffers[:2]
         expected_sum = bf16(self.x + self.residual)
         actual_sum = unpack_bf16(self.device, summed)
@@ -185,11 +205,19 @@ class FACase:
                 )
                 blocks, offsets = self.slots[indices] // 784, self.slots[indices] % 784
                 write_checks.append(
-                    numerical_error(cache_values[blocks, 0, offsets], keys, state=True)
+                    numerical_error(
+                        cache_values[blocks, 0, offsets],
+                        keys,
+                        state=True,
+                        state_tolerance=state_tolerance,
+                    )
                 )
                 write_checks.append(
                     numerical_error(
-                        cache_values[blocks, 1, offsets], packed[:, 1], state=True
+                        cache_values[blocks, 1, offsets],
+                        packed[:, 1],
+                        state=True,
+                        state_tolerance=state_tolerance,
                     )
                 )
                 cache_values[blocks, 0, offsets] = keys

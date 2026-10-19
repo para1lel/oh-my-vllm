@@ -1,11 +1,15 @@
-#include "gdn_kernels.cuh"
-#include "gdn_value_pair.cuh"
+#include "gdn_convolution_prefill.cuh"
 #include "gdn_input.cuh"
-#include "projection_decode_16dp.cuh"
+#include "gdn_kernels.cuh"
+#include "gdn_mx.cuh"
+#include "gdn_recurrent_core.cuh"
+#include "gdn_value_pair.cuh"
+#include "gdn_wy_launch.cuh"
 #include "groupwise.cuh"
-#include "projection_prefill.cuh"
 #include "linear.cuh"
 #include "normalization.cuh"
+#include "projection_decode_16dp.cuh"
+#include "projection_prefill.cuh"
 
 __global__ void gdn_output_projection_merge_kernel(const float *partials, __nv_bfloat16 *output,
                                                    int count) {
@@ -33,16 +37,23 @@ inline void gdn_projection(const __nv_fp8_e4m3 *input, const __nv_fp8_e4m3 *weig
                                width, stream);
 }
 
-void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_weight,
-         TensorView qkvz_scale, TensorView ba_weight, TensorView convolution_weight,
-         TensorView a_log, TensorView dt_bias, TensorView head_norm, TensorView output_weight,
-         TensorView output_scale, TensorView state, TensorView convolution_state, TensorView starts,
-         TensorView reads, TensorView writes, TensorView embedding, TensorView tokens,
-         TensorView media, TensorView media_rows, bool first_layer, bool verify, TensorView output,
-         TensorView summed, TensorView gathered, TensorView normalized, TensorView input_data,
-         TensorView input_scales, TensorView qkvz, TensorView ba, TensorView qkv,
-         TensorView output_data, TensorView output_scales, TensorView recurrent,
-         TensorView projection_partials, TensorView gates, int max_queries) {
+void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
+         tvm::ffi::Tensor qkvz_weight, tvm::ffi::Tensor qkvz_scale, tvm::ffi::Tensor ba_weight,
+         tvm::ffi::Tensor convolution_weight, tvm::ffi::Tensor a_log, tvm::ffi::Tensor dt_bias,
+         tvm::ffi::Tensor head_norm, tvm::ffi::Tensor output_weight, tvm::ffi::Tensor output_scale,
+         tvm::ffi::Tensor state, tvm::ffi::Tensor convolution_state, tvm::ffi::Tensor starts,
+         tvm::ffi::Tensor reads, tvm::ffi::Tensor writes, tvm::ffi::Tensor embedding,
+         tvm::ffi::Tensor tokens, tvm::ffi::Tensor media, tvm::ffi::Tensor media_rows,
+         bool first_layer, bool verify, tvm::ffi::Tensor output, tvm::ffi::Tensor summed,
+         tvm::ffi::Tensor gathered, tvm::ffi::Tensor normalized, tvm::ffi::Tensor input_data,
+         tvm::ffi::Tensor input_scales, tvm::ffi::Tensor qkvz, tvm::ffi::Tensor ba,
+         tvm::ffi::Tensor qkv, tvm::ffi::Tensor output_data, tvm::ffi::Tensor output_scales,
+         tvm::ffi::Tensor recurrent, tvm::ffi::Tensor projection_partials, tvm::ffi::Tensor gates,
+         tvm::ffi::Tensor chunk_metadata, tvm::ffi::Tensor chunk_transforms,
+         tvm::ffi::Tensor chunk_prefixes, tvm::ffi::Tensor chunk_snapshots,
+         tvm::ffi::Tensor chunk_coefficients, int max_queries,
+         tvm::ffi::Optional<gdn_mx_native::MXContext> mx_context,
+         tvm::ffi::Optional<gdn_mx_native::MXWeights> mx_weights) {
   TVM_FFI_ICHECK(x.ndim() == 2 && x.size(1) == 5120 && x.size(0) >= 0 && x.size(0) <= 32768);
   TVM_FFI_ICHECK(reads.ndim() == 1 && reads.size(0) > 0 && reads.size(0) <= 32768);
   TVM_FFI_ICHECK(state.ndim() == 4 && state.size(0) > 0 && state.size(0) <= 65536);
@@ -80,11 +91,14 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
   tensor_contract(qkv, x, kDLBfloat, 16, {rows, 10240});
   tensor_contract(output_data, x, kDLFloat8_e4m3fn, 8, {rows, 6144});
   tensor_contract(output_scales, x, kDLFloat, 32, {rows, 48});
-  bool split_values = (!verify && rows > 32) ||
-                      (verify && ((batch == 1 && rows == 5) || (batch == 4 && rows == 20)));
+  bool split_values = (!verify && rows > 32) || (verify && max_queries > 1);
   tensor_contract(recurrent, x, kDLBfloat, 16, {split_values ? rows : 0, 6144});
   bool precomputed_gates = !verify && rows > 32;
   tensor_contract(gates, x, kDLFloat, 32, {precomputed_gates ? rows : 0, 96});
+  bool chunked = gdn_wy::selected(rows, batch, max_queries, verify);
+  int chunk_capacity = chunked ? gdn_wy::chunk_capacity(max_queries) : 0;
+  gdn_wy::workspace_contract(x, chunk_metadata, chunk_transforms, chunk_prefixes, chunk_snapshots,
+                             chunk_coefficients, batch * chunk_capacity);
   if (rows <= 8)
     tensor_contract(projection_partials, x, kDLFloat, 32, {8, rows, 5120});
   else
@@ -123,7 +137,12 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
                   output_scales,
                   recurrent,
                   projection_partials,
-                  gates};
+                  gates,
+                  chunk_metadata,
+                  chunk_transforms,
+                  chunk_prefixes,
+                  chunk_snapshots,
+                  chunk_coefficients};
   int left = 0;
   for (auto a : tensors) {
     int right = 0;
@@ -132,10 +151,15 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
         disjoint(a, b);
     ++left;
   }
-  if (!rows)
+  TVM_FFI_ICHECK(mx_context.has_value() == mx_weights.has_value());
+  if (!rows) {
+    TVM_FFI_ICHECK(!mx_context.has_value()) << "GDN MX requires more than 128 rows";
     return;
+  }
   tvm::ffi::CUDADeviceGuard guard(x.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
+  gdn_mx_native::Call mx(mx_context, mx_weights, norm, qkvz_weight, qkvz_scale, output_weight,
+                         output_scale, tensors, rows, stream);
   const auto *input = static_cast<const __nv_bfloat16 *>(x.data_ptr());
   if (first_layer) {
     gdn_gather_kernel<<<rows, 256, 0, stream>>>(
@@ -147,12 +171,15 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
     check_cuda(cudaGetLastError());
     input = static_cast<const __nv_bfloat16 *>(gathered.data_ptr());
   }
-  residual_rms_quant_launch(input, static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
-                            static_cast<const float *>(norm.data_ptr()),
-                            static_cast<__nv_bfloat16 *>(summed.data_ptr()),
-                            static_cast<__nv_fp8_e4m3 *>(input_data.data_ptr()),
-                            static_cast<float *>(input_scales.data_ptr()), rows, stream,
-                            static_cast<__nv_bfloat16 *>(normalized.data_ptr()));
+  if (mx.active())
+    mx.normalize(input, residual, summed, normalized, input_data, input_scales, stream);
+  else
+    residual_rms_quant_launch(input, static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
+                              static_cast<const float *>(norm.data_ptr()),
+                              static_cast<__nv_bfloat16 *>(summed.data_ptr()),
+                              static_cast<__nv_fp8_e4m3 *>(input_data.data_ptr()),
+                              static_cast<float *>(input_scales.data_ptr()), rows, stream,
+                              static_cast<__nv_bfloat16 *>(normalized.data_ptr()));
   GDNInputConvolution convolution{static_cast<const __nv_bfloat16 *>(convolution_weight.data_ptr()),
                                   static_cast<__nv_bfloat16 *>(convolution_state.data_ptr()),
                                   static_cast<const int *>(starts.data_ptr()),
@@ -173,7 +200,9 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
     gdn_input_launch<Rows, false, true, true>(input_data, input_scales, qkvz_weight, qkvz_scale,
                                               qkvz, convolution, stream);
   };
-  if (rows == 1)
+  if (mx.active())
+    mx.project(qkvz, stream);
+  else if (rows == 1)
     project_input(std::integral_constant<int, 1>{});
   else if (rows == 4)
     project_input(std::integral_constant<int, 4>{});
@@ -199,6 +228,27 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
   }
   auto prepare = [&](auto project_ba) {
     constexpr bool ProjectBA = decltype(project_ba)::value;
+    if constexpr (!ProjectBA) {
+      if (!verify && max_queries > 32) {
+        auto tiled = [&](auto tile_rows) {
+          constexpr int TileRows = decltype(tile_rows)::value;
+          launch_kernel(gdn_convolution_tiled_kernel<TileRows>,
+                        dim3((max_queries + TileRows - 1) / TileRows, 20, batch), dim3(128), 0,
+                        stream, static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
+                        static_cast<const __nv_bfloat16 *>(convolution_weight.data_ptr()),
+                        static_cast<__nv_bfloat16 *>(convolution_state.data_ptr()),
+                        static_cast<const int *>(starts.data_ptr()),
+                        static_cast<const int *>(reads.data_ptr()),
+                        static_cast<const int *>(writes.data_ptr()),
+                        static_cast<__nv_bfloat16 *>(qkv.data_ptr()), rows, batch, slots, verify);
+        };
+        if (max_queries < 4096)
+          tiled(std::integral_constant<int, 4>{});
+        else
+          tiled(std::integral_constant<int, 8>{});
+        return;
+      }
+    }
     launch_kernel(
         gdn_convolution_kernel<ProjectBA>, dim3(rows, ProjectBA ? 68 : 20),
         dim3(ProjectBA ? 256 : 128), 0, stream, static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
@@ -245,7 +295,20 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
         static_cast<__nv_bfloat16 *>(recurrent.data_ptr()),
         static_cast<const float *>(gates.data_ptr()));
   };
-  if (precomputed_gates) {
+  if (chunked) {
+    gdn_wy::native_launch(
+        static_cast<const __nv_bfloat16 *>(qkv.data_ptr()),
+        static_cast<const float *>(gates.data_ptr()), static_cast<const int *>(starts.data_ptr()),
+        static_cast<const int *>(reads.data_ptr()), static_cast<const int *>(writes.data_ptr()),
+        static_cast<__nv_bfloat16 *>(state.data_ptr()),
+        static_cast<__nv_bfloat16 *>(recurrent.data_ptr()),
+        static_cast<int *>(chunk_metadata.data_ptr()),
+        static_cast<__nv_bfloat16 *>(chunk_transforms.data_ptr()),
+        static_cast<float *>(chunk_prefixes.data_ptr()),
+        static_cast<__nv_bfloat16 *>(chunk_snapshots.data_ptr()),
+        static_cast<__nv_bfloat16 *>(chunk_coefficients.data_ptr()), rows, slots, batch,
+        chunk_capacity, stream);
+  } else if (precomputed_gates) {
     auto paired = [&](auto value_tile, auto kernel) {
       constexpr int ValueTile = decltype(value_tile)::value;
       launch_kernel(
@@ -261,13 +324,18 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
       paired(std::integral_constant<int, 32>{}, gdn_value_two_pair_kernel<32, 128>);
     else
       paired(std::integral_constant<int, 16>{}, gdn_value_pair_kernel<16, 128>);
-  } else if (verify && batch == 4 && rows == 20)
-    scan(std::false_type{}, std::integral_constant<int, 32>{}, std::integral_constant<int, 128>{},
-         std::false_type{}, std::false_type{});
-  else if (split_values)
-    scan(std::false_type{}, std::integral_constant<int, 16>{}, std::integral_constant<int, 256>{},
-         std::false_type{}, std::false_type{});
-  else {
+  } else if (verify && max_queries > 1) {
+    const auto *interleaved = static_cast<const __nv_bfloat16 *>(qkv.data_ptr());
+    const auto *ba_values = static_cast<const __nv_bfloat16 *>(ba.data_ptr());
+    gdn_recurrent::launch_interleaved(
+        interleaved, interleaved + 2048, interleaved + 4096, ba_values + 48, ba_values,
+        static_cast<const float *>(a_log.data_ptr()),
+        static_cast<const float *>(dt_bias.data_ptr()), static_cast<const int *>(starts.data_ptr()),
+        static_cast<const int *>(reads.data_ptr()), static_cast<const int *>(writes.data_ptr()),
+        static_cast<__nv_bfloat16 *>(state.data_ptr()),
+        static_cast<__nv_bfloat16 *>(recurrent.data_ptr()), rows, batch, slots, max_queries,
+        batch >= 4 ? 32 : 16, stream);
+  } else {
     auto run = [&](auto threads) {
       if (rows == 1)
         scan(std::true_type{}, std::integral_constant<int, 128>{}, threads, std::false_type{},
@@ -282,7 +350,9 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
       run(std::integral_constant<int, 256>{});
   }
   check_cuda(cudaGetLastError());
-  if (split_values) {
+  if (split_values && mx.active())
+    mx.quantize_output(recurrent, qkvz, head_norm, output_data, output_scales, stream);
+  else if (split_values) {
     gdn_output_quant_kernel<<<rows * 6, 256, 0, stream>>>(
         static_cast<const __nv_bfloat16 *>(recurrent.data_ptr()),
         static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
@@ -291,7 +361,9 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
         static_cast<float *>(output_scales.data_ptr()));
     check_cuda(cudaGetLastError());
   }
-  if (rows <= 8) {
+  if (mx.active() && split_values)
+    mx.project_output(output, stream);
+  else if (rows <= 8) {
     down16dp::launch(output_data, output_weight, output_scales, output_scale, projection_partials,
                      rows, 8, stream);
     gdn_output_projection_merge_kernel<<<(rows * 5120 + 255) / 256, 256, 0, stream>>>(
@@ -304,4 +376,5 @@ void gdn(TensorView x, TensorView residual, TensorView norm, TensorView qkvz_wei
                    static_cast<const float *>(output_scales.data_ptr()),
                    static_cast<const float *>(output_scale.data_ptr()),
                    static_cast<__nv_bfloat16 *>(output.data_ptr()), rows, 5120, 6144, stream);
+  mx.finish();
 }

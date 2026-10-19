@@ -45,7 +45,7 @@ PROFILES = (
 
 CONTEXT_SAMPLES = ((0.5, 1.0),)
 REPORT_VERSION = 4
-NUMERICAL_POLICY = "small_shapes_v2"
+NUMERICAL_POLICY = "small_shapes_v3"
 
 
 @dataclass(frozen=True, order=True)
@@ -70,7 +70,15 @@ class Case:
 def numerical_cases():
     shapes = [
         Shape("ffn", rows, batch, 1)
-        for rows, batch in ((1, 1), (4, 4), (5, 1), (20, 4), (65, 1))
+        for rows, batch in (
+            (1, 1),
+            (4, 4),
+            (5, 1),
+            (20, 4),
+            (65, 1),
+            (129, 1),
+            (144, 1),
+        )
     ]
     shapes.extend(
         Shape("gdn_attention", rows, batch, queries)
@@ -81,7 +89,7 @@ def numerical_cases():
             Shape("gdn_attention", 1, 1, 1, variant="embedding"),
             Shape("gdn_attention", 65, 1, 65, variant="embedding_media", media_rows=2),
             Shape("gdn_attention", 65, 1, 65),
-            Shape("gdn_attention", 65, 1, 65, position=770),
+            Shape("gdn_attention", 129, 1, 129, position=770),
             Shape("gdn_attention", 0, 1, 0),
         )
     )

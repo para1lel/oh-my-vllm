@@ -5,7 +5,15 @@ import statistics
 from dataclasses import asdict
 from pathlib import Path
 
-from oh_my_vllm.kernels.native import SOURCES, source_digest
+from oh_my_vllm.kernels.native import (
+    SOURCES,
+    build_digest,
+    fa_vendor_dependencies,
+    ffn_vendor_dependencies,
+    gdn_vendor_dependencies,
+    source_digest,
+    vision_vendor_dependencies,
+)
 from oh_my_vllm.kernels.specification import (
     MODEL,
     NUMERICAL_TOLERANCES,
@@ -122,6 +130,35 @@ def verify_identity(report):
             raise ValueError("native source has changed")
         if report["binary_ids"].get(str(binary)) != build["binary_id"]:
             raise ValueError("binary and build identities differ")
+        if name in {"ffn", "vision", "gdn", "fa"}:
+            vendor = (
+                ffn_vendor_dependencies()
+                if name == "ffn"
+                else gdn_vendor_dependencies()
+                if name == "gdn"
+                else fa_vendor_dependencies()
+                if name == "fa"
+                else vision_vendor_dependencies()
+            )
+            key = {
+                "ffn": "ffn_mx_vendor",
+                "gdn": "gdn_mx_vendor",
+                "fa": "fa_mx_vendor",
+                "vision": "vision_vendor",
+            }[name]
+            if build.get(key) != vendor:
+                raise ValueError("native vendor dependencies have changed")
+            identity = build_digest(
+                build["source_fingerprint"],
+                build["compiler"],
+                build["cuda_flags"],
+                build["ffi_version"],
+                build["cutlass"],
+                build["functions"],
+                vendor,
+            )
+            if identity != build["source_id"]:
+                raise ValueError("native vendor build identity differs")
         builds[name] = build
     names = RUNTIME_MODULES[operator]
     if set(builds) != {*names, "device"}:
@@ -147,7 +184,22 @@ def verify_identity(report):
         raise ValueError("provider source or binary has changed")
 
 
-def tolerance_for(operator, path, mtp=False):
+def tolerance_for(operator, path, mtp=False, *, rows, variant="default"):
+    if operator == "ffn" and path == ("output",) and rows > 128 and not mtp:
+        return "mxfp8_ffn"
+    if (
+        operator == "fa_attention"
+        and path == ("output",)
+        and rows > 128
+        and not mtp
+        and variant in {"default", "full"}
+    ):
+        return "mxfp8_fa_output"
+    if operator == "gdn_attention" and rows > 128 and not mtp:
+        if path == ("input_projection",):
+            return "mxfp8_gdn_input"
+        if path == ("output",):
+            return "mxfp8_gdn_output"
     return {
         ("vision_block", ("output",)): "vision",
         ("mtp_draft", ("attention", "output")): "mtp_attention",
@@ -159,15 +211,36 @@ def tolerance_for(operator, path, mtp=False):
     }.get((operator, path), "bf16")
 
 
-def verify_checks(value, operator, *, state=False, path=(), mtp=False):
+def state_tolerance_for(operator, *, rows, mtp=False, variant="default"):
+    if (
+        operator == "fa_attention"
+        and rows > 128
+        and not mtp
+        and variant in {"default", "full"}
+    ):
+        return "mxfp8_fa_state"
+    if operator == "gdn_attention" and rows > 128 and not mtp:
+        return "mxfp8_gdn_state"
+    return "state"
+
+
+def verify_checks(
+    value, operator, *, rows, state=False, path=(), mtp=False, variant="default"
+):
     numerical = 0
     if isinstance(value, dict):
         if "max_abs" in value:
             name = value.get("tolerance_name")
-            expected = "state" if state else tolerance_for(operator, path, mtp)
+            expected = tolerance_for(operator, path, mtp, rows=rows, variant=variant)
+            if state:
+                expected = state_tolerance_for(
+                    operator, rows=rows, mtp=mtp, variant=variant
+                )
             if name != expected:
                 raise ValueError("unknown or incorrect numerical tolerance policy")
             limits = NUMERICAL_TOLERANCES[name]
+            if state and value.get("state_ftz_atol") != limits["ftz_atol"]:
+                raise ValueError("state FTZ absolute floor differs from the contract")
             required_atol = value.get("required_atol")
             if not state and (
                 not isinstance(required_atol, (int, float))
@@ -190,16 +263,30 @@ def verify_checks(value, operator, *, state=False, path=(), mtp=False):
             maximum, nrmse, peak = (
                 value[key] for key in ("max_abs", nrmse_key, "reference_peak")
             )
-            if any(
-                not math.isfinite(item) or item < 0 for item in (maximum, nrmse, peak)
-            ):
+            if any(not math.isfinite(item) or item < 0 for item in (maximum, peak)):
                 raise ValueError("invalid numerical error metrics")
             limits = NUMERICAL_TOLERANCES[value["tolerance_name"]]
-            if maximum > (
-                limits["peak"] * peak
-                if state
-                else limits["atol"] + limits["rtol"] * peak
-            ) or (state and nrmse > limits["nrmse"]):
+            absolute_state_pass = state and maximum <= limits["ftz_atol"]
+            if isinstance(nrmse, str):
+                if not (
+                    nrmse == "infinity"
+                    and absolute_state_pass
+                    and peak == 0
+                    and maximum > 0
+                ):
+                    raise ValueError("invalid numerical error metrics")
+                nrmse = math.inf
+            elif not math.isfinite(nrmse) or nrmse < 0:
+                raise ValueError("invalid numerical error metrics")
+            if not absolute_state_pass and (
+                maximum
+                > (
+                    limits["peak"] * peak
+                    if state
+                    else limits["atol"] + limits["rtol"] * peak
+                )
+                or (state and nrmse > limits["nrmse"])
+            ):
                 raise ValueError("numerical error exceeds the contract")
         for key, item in value.items():
             if operator == "gdn_attention" and key == "input_projection_upstream_drift":
@@ -207,14 +294,24 @@ def verify_checks(value, operator, *, state=False, path=(), mtp=False):
             numerical += verify_checks(
                 item,
                 operator,
+                rows=rows,
                 state=state
                 or key in {"state_writes", "convolution_writes", "cache_writes"},
                 path=path if key == "graph" else (*path, key),
                 mtp=mtp,
+                variant=variant,
             )
     elif isinstance(value, list):
         for item in value:
-            numerical += verify_checks(item, operator, state=state, path=path, mtp=mtp)
+            numerical += verify_checks(
+                item,
+                operator,
+                rows=rows,
+                state=state,
+                path=path,
+                mtp=mtp,
+                variant=variant,
+            )
     elif value is False:
         raise ValueError("numerical evidence contains a failed check")
     return numerical
@@ -259,7 +356,7 @@ def verify_greedy(check):
                 raise ValueError("greedy numerical evidence is missing or failed")
 
 
-def verify_case(check, operator, *, variant="default", mtp=False):
+def verify_case(check, operator, *, rows, variant="default", mtp=False):
     if not isinstance(check, dict) or not set(CHECKS[operator]) <= check.keys():
         raise ValueError("required numerical or guard evidence is missing")
     if any(check[key] is not True for key in FLAGS[operator]):
@@ -269,7 +366,10 @@ def verify_case(check, operator, *, variant="default", mtp=False):
             ("fa_attention", "kv_only", "output"),
             ("mtp_draft", "query_only", "input"),
         }:
-            verify_metric(check[key], tolerance_for(operator, (key,), mtp))
+            verify_metric(
+                check[key],
+                tolerance_for(operator, (key,), mtp, rows=rows, variant=variant),
+            )
     for key in CHECKS[operator]:
         if (
             key not in FLAGS[operator]
@@ -298,7 +398,10 @@ def verify_case(check, operator, *, variant="default", mtp=False):
         if not check[key]:
             raise ValueError("persistent-write numerical evidence is missing")
         for value in check[key]:
-            verify_metric(value, "state")
+            verify_metric(
+                value,
+                state_tolerance_for(operator, rows=rows, mtp=mtp, variant=variant),
+            )
     if operator == "gdn_attention" and any(
         check["activation_quantization"].get(key) is not True
         for key in ("codes_exact", "scales_exact")
@@ -310,20 +413,24 @@ def verify_case(check, operator, *, variant="default", mtp=False):
         verify_case(
             check["attention"],
             "fa_attention",
+            rows=rows,
             variant="kv_only" if operator == "mtp_context" else variant,
             mtp=operator == "mtp_draft",
         )
         if operator == "mtp_context":
             verify_metric(check["endpoints"].get("reference"))
         else:
-            verify_case(check["sample"], "sample", mtp=True)
+            verify_case(check["sample"], "sample", rows=rows, mtp=True)
     if (
         operator == "sample"
         and variant == "verify"
         and check.get("acceptance_state_selection") is not True
     ):
         raise ValueError("MTP acceptance evidence is missing or failed")
-    if check.get("passed") is not True or verify_checks(check, operator, mtp=mtp) == 0:
+    if (
+        check.get("passed") is not True
+        or verify_checks(check, operator, rows=rows, mtp=mtp, variant=variant) == 0
+    ):
         raise ValueError("numerical check is missing or did not pass")
 
 
@@ -371,7 +478,7 @@ def verify_numerical_evidence(report):
                 ):
                     raise ValueError("empty GDN guard evidence is missing or failed")
             else:
-                verify_case(check, operator, variant=shape.variant)
+                verify_case(check, operator, rows=shape.rows, variant=shape.variant)
     return required
 
 
