@@ -108,7 +108,7 @@ merger 在 2-by-2 gather 前归一化每个 1152-element patch.
 数值检查允许时, 使用 FP8 或 BF16 Tensor Core 操作数.
 实现可以将中间操作数和预处理后的 scales 舍入为 Tensor Core 格式.
 原始 checkpoint 张量保持不变. 不为通过数值检查而提高精度.
-检查失败时, 测量误差, 并在验收前仅调整必要的具名容差.
+使用[评估流程](evaluation.zh.md)中的全模型 logits 门槛.
 
 超过 128 行的 FFN 输入使用 MXFP8 Tensor Core 投影.
 超过 128 行的 GDN 输入使用 MXFP8 输入投影.
@@ -118,15 +118,9 @@ merger 在 2-by-2 gather 前归一化每个 1152-element patch.
 [归一化 kernel](../../python/oh_my_vllm/kernels/cuda_backend/mx_fp8_norm.cuh#L7)<!-- source: norm_mx_kernel(const --> 直接从其 BF16 结果生成 MXFP8 操作数.
 
 原始 checkpoint 张量和 scales 保持不变.
-对于这些输入, 仅 FFN 输出使用 [`mxfp8_ffn` 容差](../../python/oh_my_vllm/kernels/specification.py#L4)<!-- source: NUMERICAL_TOLERANCES = { --> (`atol=0.1`, `rtol=0.03`).
-不超过 128 行的 FFN 输入及所有其他输出保留各自的具名容差.
-对于超过 128 行的 GDN 输入, 输入投影, 输出和状态分别使用独立的 MXFP8 容差.
 
 超过 128 行的完整 FA 边界使用 MXFP8 输入投影.
 当 attention 只有一个分区时, 使用 MXFP8 输出投影.
-此路径的输出使用 `mxfp8_fa_output`, KV 写入使用 `mxfp8_fa_state`.
-不超过 128 行的 FA 输入保留各自的具名策略.
-`kv_only`, `query_only` 和 MTP 路径保留各自的具名策略.
 
 工作量计算使用所选实现的操作数, 累加器及存储类型.
 不能因为选用更慢但提供相同数值计算的指令而增加工作量.
@@ -163,55 +157,21 @@ W/U 输出也使用 BF16 存储.
 [输出路径](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/chunk_o.py#L94)使用 BF16 状态快照和新 value, 使用 FP32 累加.
 它在新 value 的矩阵乘前, 将带因果掩码和 gate 缩放的 QK 矩阵舍入为 BF16.
 [投影源码](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/wy_fast.py#L75)定义 gate 缩放的舍入点.
-Scan 和分块实现使用相同的数值容差.
 
 固定版本的 [RMS 参考](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/ir/ops/layernorm.py#L44) 区分 FP32 归一化输入和 BF16 残差存储.
 [GDN decode 路径](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/csrc/gdn/fused_gdn_decode_kernel.cu#L226) 将 recurrent Q/K 保持为 FP32.
 [视觉注意力依赖](https://github.com/vllm-project/flash-attention/blob/b273a02621d3c94bc747df67204f591b67f38fae/flash_attn/cute/flash_fwd_sm100.py#L2522) 在 PV 前将在线概率舍入为 BF16.
-独立参考使用完整 FP64 softmax. 它不复制在线分块舍入.
+全模型参考全程使用 FP64. 它不复制中间低精度舍入.
 
-[工作量计算](../../development/kernels/work.py)确定每个建模 shape 适用的精度.
+[HTTP 参考计算](../../development/serving/accounting.py)使用固定精度假设进行性能计费.
 临时存储和重复工作不能抬高理论下界.
 
 ## 数值检查
 
-对[固定的小规模数值用例](evaluation.zh.md#数值范围)使用独立的 CPU FP64 参考.
-[CPU 参考函数](../../development/kernels/reference.py)提供采用模型舍入点的 FP64 计算.
-参考与算子使用相同的舍入输入.
-每项检查使用[具名数值限制](../../python/oh_my_vllm/kernels/specification.py).
-输出检查使用 `rtol=0.03`.
-具名绝对误差限制如下:
+使用[全模型评估流程](evaluation.zh.md).
+参考以 checkpoint 权重及其原始 scales 进行直接 PyTorch FP64 计算.
+在短输入和一次 decode 迭代后比较完整词表.
+不使用单算子容差表或逐阶段误差门槛.
 
-| 容差 | 输出 | `atol` |
-|---|---|---|
-| `bf16` | 单独算子 | 0.03 |
-| `mxfp8_ffn` | 超过 128 行的 FFN 输出 | 0.1 |
-| `mxfp8_fa_output` | 超过 128 行的完整 FA 输出 | 1.5 |
-| `mxfp8_gdn_input` | 超过 128 行的 GDN 输入投影 | 0.75 |
-| `mxfp8_gdn_output` | 超过 128 行的 GDN 输出 | 3.0 |
-| `vision` | Vision 边界 | 0.03125 |
-| `mtp_attention` | MTP draft 边界内的 attention | 0.1 |
-| `mtp_residual` | MTP draft 边界内的 FFN 残差 | 0.25 |
-| `mtp_hidden` | MTP draft 边界内的 FFN | 1.5 |
-| `mtp_logits` | MTP draft 边界内的 logits | 0.5 |
-
-记录容差名称和最大归一化误差比.
-检查 MTP 残差存储与算子输入之和是否满足精确 BF16 相等.
-保留相对独立参考链路的单独残差误差检查.
-
-对于超过 128 行的 GDN 输入, `mxfp8_gdn_state` 允许状态 NRMSE 为 8%, 最大误差为参考峰值的 10%.
-对于超过 128 行的完整 FA 输入, `mxfp8_fa_state` 允许 NRMSE 为 6%, 最大误差为参考峰值的 8%.
-其他状态检查允许 NRMSE 为 1%, 最大误差为参考峰值的 2%.
-
-为允许 flush-to-zero 行为, 所有状态检查还允许最大绝对误差为 `2^-126`, 即 FP32 最小正规值.
-此限值同等适用于原生实现和公开实现.
-即使此绝对限值允许接受, 也必须记录原始 NRMSE 和峰值误差.
-保留对有限值, 私有槽位, 完整历史及未更改存储的检查.
-对于零参考值, 将无限大的状态 NRMSE 记录为精确的 JSON 字符串 `"infinity"`.
-仅当参考峰值为零且 `0 < max_abs <= 2^-126` 时, 才能接受此字符串.
-
-检查全部状态写入和不应变化的存储, 包括 MTP 接受及拒绝行.
-检查 FP8 舍入, 空行, 尾部 tiles 和 784-token 边界.
-
-Serving 边界见 [fusion 计划](fusion.zh.md).
-验收使用[评测流程](evaluation.zh.md).
+保持上述状态所有权, checkpoint 和精度契约.
+服务边界使用[融合计划](fusion.zh.md).

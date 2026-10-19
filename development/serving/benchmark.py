@@ -13,21 +13,25 @@ import uuid
 from pathlib import Path
 
 from oh_my_vllm.kernels.native import cache_directory, file_sha256
+from oh_my_vllm.worker.execution import execution_policy
 from oh_my_vllm.worker.tokenizer import Tokenization, tokenizer_identity
 
-from development.peaks import (
-    device_identity,
-    load_profile,
-    profile_peaks,
-    selected_uuid,
-)
-
+from .accounting import RATES, VERSION
+from .device import device_identity, selected_uuid
 from .roofline import lower_bound
 
 MIN_EFFICIENCY = 0.50
 
 ROOT = Path(__file__).resolve().parents[2]
-NATIVE_MODULES = ("device", "ffn", "fa", "gdn", "mtp", "sample", "vision")
+NATIVE_MODULES = (
+    "device",
+    "ffn",
+    "fa",
+    "gdn",
+    "mtp",
+    "sample",
+    "vision",
+)
 REQUEST_SHAPES = [("ordinary", batch, 32768) for batch in (1, 2, 4)] + [
     ("mtp4", batch, length) for batch in (1, 2, 4) for length in (32768, 65536, 131072)
 ]
@@ -97,22 +101,6 @@ def comparison_passed(results):
     )
 
 
-def trace_bound(events, request_ids, mode, length, output, peaks):
-    identities = [event for event in events if event["operation"] == "identity"]
-    if len(identities) != 1 or identities[0]["config"]["num_speculative_tokens"] != (
-        4 if mode == "mtp4" else 0
-    ):
-        raise ValueError("trace identity differs from the requested service mode")
-    for event in events:
-        if event["operation"] == "target" and any(
-            row["prompt"] != length
-            for row in event["requests"]
-            if row["id"] in request_ids
-        ):
-            raise ValueError("trace prompt length differs from HTTP usage")
-    return lower_bound(events, request_ids, output, peaks=peaks)
-
-
 def post(port, body):
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=7200)
     try:
@@ -150,12 +138,7 @@ def source_identity():
                 "Cargo.toml",
                 "Cargo.lock",
                 "requirements/runtime.txt",
-                "development/kernels/work.py",
-                "development/kernels/roofline.py",
-                "development/kernels/workload.py",
-                "development/peaks.py",
-                "development/peak_measurement.py",
-                "development/peak_kernels.cu",
+                "development/native_build.py",
             }
         ):
             digest.update(name.encode())
@@ -204,30 +187,39 @@ def native_identity():
     return result
 
 
+def json_digest(value):
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
 def artifact_identity(arguments):
     return {
         "source": source_identity(),
+        "execution": execution_policy(),
+        "prompt_seed": arguments.prompt_seed,
         "binary": file_sha256(arguments.binary),
         "native": native_identity(),
         "checkpoint": checkpoint_identity(arguments.model),
         "tokenizer": tokenizer_identity(arguments.model),
-        "calibration": load_profile(arguments.peaks, arguments.gpu_uuid),
+        "device": device_identity(arguments.gpu_uuid),
+        "accounting": dict(version=VERSION, rates=RATES),
     }
 
 
 def verify_artifact_identity(arguments, expected):
-    if device_identity(arguments.gpu_uuid) != expected["calibration"]["device"]:
-        raise RuntimeError("GPU settings changed during the benchmark")
     for name, value in artifact_identity(arguments).items():
         if value != expected[name]:
             raise RuntimeError(f"{name} artifacts changed during the benchmark")
 
 
-def verify_trace_identity(events, checkpoint, config, tokenizer=None):
+def verify_trace_identity(events, checkpoint, config, tokenizer=None, execution=None):
     identities = [event for event in events if event["operation"] == "identity"]
     if len(identities) != 1:
         raise ValueError("trace requires exactly one identity record")
     identity = identities[0]
+    if execution is not None and identity.get("execution") != execution:
+        raise ValueError("trace execution differs from the selected phase paths")
     actual_config = identity.get("config", {})
     if any(actual_config.get(name) != value for name, value in config.items()):
         raise ValueError("trace configuration differs from the requested service")
@@ -357,11 +349,17 @@ class Service:
         }
         with self.trace.open() as source:
             verify_trace_identity(
-                (json.loads(line) for line in source), checkpoint, config, tokenizer
+                (json.loads(line) for line in source),
+                checkpoint,
+                config,
+                tokenizer,
+                execution_policy(),
             )
 
     def run(self, tokenizer, batch, length, output):
-        nonce = uuid.uuid4().hex
+        nonce = hashlib.sha256(
+            f"{self.arguments.prompt_seed}:{self.mode}:{batch}:{length}:{output}".encode()
+        ).hexdigest()[:32]
         bodies = [
             {
                 "model": "qwen3.8-27b-fp8",
@@ -376,10 +374,12 @@ class Service:
             }
             for index in range(batch)
         ]
+        previous = self.trace.read_bytes()
         started = time.perf_counter()
         with concurrent.futures.ThreadPoolExecutor(max_workers=batch) as pool:
             responses = list(pool.map(lambda body: post(self.port, body), bodies))
-        seconds = time.perf_counter() - started
+        finished = time.perf_counter()
+        seconds = finished - started
         for value in responses:
             usage = value["usage"]
             if (
@@ -388,13 +388,33 @@ class Service:
                 or usage["prompt_tokens_details"]["cached_tokens"] != 0
             ):
                 raise ValueError(f"token count or cold-prefix check failed: {usage}")
-        ids = {int(value["id"].rsplit("_", 1)[1]) for value in responses}
-        if len(ids) != batch:
-            raise ValueError("HTTP responses must have distinct request IDs")
-        events = [json.loads(line) for line in self.trace.read_text().splitlines()]
-        bound = trace_bound(
-            events, ids, self.mode, length, output, self.arguments.peak_rates
-        )
+        manifest = {
+            "artifact_id": self.arguments.artifact_id,
+            "mode": self.mode,
+            "requests": [
+                dict(
+                    ordinal=index,
+                    id=int(value["id"].rsplit("_", 1)[1]),
+                    response_id=value["id"],
+                    input_tokens=length,
+                    output_tokens=output,
+                )
+                for index, value in enumerate(responses)
+            ],
+            "timer": dict(clock="perf_counter", started=started, finished=finished),
+        }
+        current = self.trace.read_bytes()
+        if not current.startswith(previous):
+            raise ValueError("execution trace changed before the case boundary")
+        identities = [
+            json.loads(line)
+            for line in previous.splitlines()
+            if json.loads(line)["operation"] == "identity"
+        ]
+        events = identities + [
+            json.loads(line) for line in current[len(previous) :].splitlines()
+        ]
+        bound = lower_bound(events, manifest)
         return {
             "mode": self.mode,
             "batch": batch,
@@ -402,6 +422,9 @@ class Service:
             "output_tokens": output,
             "seconds": seconds,
             "lower_bound": bound,
+            "manifest": manifest,
+            "manifest_id": json_digest(manifest),
+            "trace_id": json_digest(events),
             **gate_result(
                 (self.mode, batch, length, output), seconds, bound["seconds"]
             ),
@@ -411,9 +434,9 @@ class Service:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--peaks", type=Path, required=True)
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--artifacts", type=Path, required=True)
+    parser.add_argument("--prompt-seed", default=uuid.uuid4().hex)
     parser.add_argument(
         "--binary", type=Path, default=ROOT / "target/release/oh-my-vllm-zmq-worker"
     )
@@ -429,10 +452,8 @@ def main():
     parser.add_argument("--mamba-blocks", type=int, default=1024)
     arguments = parser.parse_args()
     arguments.gpu_uuid = selected_uuid()
-    calibration = load_profile(arguments.peaks, arguments.gpu_uuid)
-    if calibration["device"] != device_identity(arguments.gpu_uuid):
-        parser.error("GPU settings differ from calibration; measure the GPU again")
-    arguments.peak_rates = profile_peaks(calibration, arguments.gpu_uuid)
+    if "B200" not in device_identity(arguments.gpu_uuid)["name"]:
+        parser.error("the nominal resource model requires one B200")
     arguments.artifacts = arguments.artifacts.resolve()
     arguments.binary = arguments.binary.resolve()
     arguments.model = arguments.model.resolve()
@@ -447,25 +468,12 @@ def main():
     arguments.artifacts.mkdir(parents=True, exist_ok=False)
     identity = {
         **artifact_identity(arguments),
-        "device": subprocess.check_output(
-            [
-                "nvidia-smi",
-                "--id",
-                arguments.gpu_uuid,
-                "--query-gpu=uuid,name,driver_version,clocks.sm,clocks.mem,power.limit",
-                "--format=csv,noheader",
-            ],
-            text=True,
-        ),
         "config": {
-            key: str(value)
-            if isinstance(value, Path)
-            else vars(value)
-            if key == "peak_rates"
-            else value
+            key: str(value) if isinstance(value, Path) else value
             for key, value in vars(arguments).items()
         },
     }
+    arguments.artifact_id = json_digest(identity)
     tokenizer = Tokenization(arguments.model)
     tokenizer.verify_identity(identity["tokenizer"])
     (arguments.artifacts / "identity.json").write_text(json.dumps(identity, indent=2))

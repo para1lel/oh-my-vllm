@@ -60,8 +60,6 @@ class Context(GraphOperation):
     def execute(self, graph):
         if self.media is not None or self.media_rows is not None:
             return self.run()
-        if graph and self.replay is None:
-            self.resources.enter_context(self.graph_lease())
         return super().execute(graph)
 
     def run(self):

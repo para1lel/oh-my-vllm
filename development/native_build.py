@@ -1,3 +1,4 @@
+import argparse
 import functools
 import hashlib
 import importlib.metadata
@@ -7,6 +8,10 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from oh_my_vllm.kernels.fa import FUNCTIONS as FA_FUNCTIONS
+from oh_my_vllm.kernels.ffn import FUNCTIONS as FFN_FUNCTIONS
+from oh_my_vllm.kernels.gdn import FUNCTIONS as GDN_FUNCTIONS
+from oh_my_vllm.kernels.mtp import FUNCTIONS as MTP_FUNCTIONS
 from oh_my_vllm.kernels.native import (
     SOURCES,
     build_digest,
@@ -21,6 +26,18 @@ from oh_my_vllm.kernels.native import (
     verify_vision_vendor_images,
     vision_vendor_dependencies,
 )
+from oh_my_vllm.kernels.vision import FUNCTIONS as VISION_FUNCTIONS
+from oh_my_vllm.worker.device import FUNCTIONS as DEVICE_FUNCTIONS
+
+MODULES = {
+    "device": DEVICE_FUNCTIONS,
+    "ffn": FFN_FUNCTIONS,
+    "fa": FA_FUNCTIONS,
+    "gdn": GDN_FUNCTIONS,
+    "mtp": MTP_FUNCTIONS,
+    "sample": ("sample_workspace", "sample", "mtp_accept"),
+    "vision": VISION_FUNCTIONS,
+}
 
 
 @functools.cache
@@ -145,3 +162,15 @@ def build(name, functions):
         )
         verify(module, vendor)
     return module, source_id, immutable_library
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.parse_args()
+    for name, functions in MODULES.items():
+        _, identity, _ = build(name, functions)
+        print(f"{name}: {identity}")
+
+
+if __name__ == "__main__":
+    main()

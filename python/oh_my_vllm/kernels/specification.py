@@ -1,21 +1,6 @@
 from dataclasses import dataclass
 
 UPSTREAM_COMMIT = "e8e1e96196725f097eae2394cbc458b1f5a679b8"
-NUMERICAL_TOLERANCES = {
-    "bf16": {"atol": 0.03, "rtol": 0.03},
-    "mxfp8_ffn": {"atol": 0.1, "rtol": 0.03},
-    "mxfp8_fa_output": {"atol": 1.5, "rtol": 0.03},
-    "mxfp8_fa_state": {"nrmse": 0.06, "peak": 0.08, "ftz_atol": 2.0**-126},
-    "mxfp8_gdn_input": {"atol": 0.75, "rtol": 0.03},
-    "mxfp8_gdn_output": {"atol": 3.0, "rtol": 0.03},
-    "mxfp8_gdn_state": {"nrmse": 0.08, "peak": 0.1, "ftz_atol": 2.0**-126},
-    "mtp_attention": {"atol": 0.1, "rtol": 0.03},
-    "mtp_residual": {"atol": 0.25, "rtol": 0.03},
-    "mtp_hidden": {"atol": 1.5, "rtol": 0.03},
-    "mtp_logits": {"atol": 0.5, "rtol": 0.03},
-    "vision": {"atol": 0.03125, "rtol": 0.03},
-    "state": {"nrmse": 0.01, "peak": 0.02, "ftz_atol": 2.0**-126},
-}
 
 
 @dataclass(frozen=True)

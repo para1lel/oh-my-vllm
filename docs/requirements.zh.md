@@ -8,25 +8,29 @@ Python 负责 GPU 计算. 进程间使用 ZMQ DEALER 和 msgpack.
 保持块大小 784, 16 层 FA, 48 层 GDN 和 `mamba_cache_mode="align"`.
 输入与输出合计支持到 262144 tokens.
 
-保留离线及 HTTP 功能和数值容差.
+保留离线及 HTTP 功能和全模型数值检查.
 只使用普通解码和 MTP4.
 
 支持文本, 图片和视频输入.
-所有模型算子使用 CUDA C++ 或 CuTe DSL. 允许使用原生 CUDA 库.
+所有模型算子使用 CUDA C++ 或 CuTe DSL.
+原生 CUDA 库可以提供基础设施和算子计算.
 不使用 DeepGEMM, FlashInfer 等其他外部算子库.
 不引入 vLLM 依赖, 环境或缓存.
 
 开发工具和推理包使用不同的依赖文件.
 
-算子工作使用[模型规格](operators/model.zh.md)和 [fusion 计划](operators/fusion.zh.md).
-算子测试不设最低 roofline efficiency 要求.
-FA 和 GDN 的目标 shape 必须达到或超过最快的适用公开实现.
-Shape 集合和等价算子边界见[比较计划](operators/performance-plan.zh.md).
+数学和状态行为使用[模型规格](operators/model.zh.md).
+算子调度和 CUDA Graph 资源使用 [GPU 执行规则](execution.zh.md).
+包含 prefill 的 Execute 对每个分片使用 Eager 执行.
+仅含 decode 的 Execute 消息使用 CUDA Graph 录制和重放.
 
-每次交付前测量[算子负载](operators/evaluation.zh.md).
-然后更新两种语言的 README 表格.
-负载模型可以简单, 但 shape 必须与服务执行相近.
-每种配置还必须通过[完整 HTTP 比较](performance.zh.md#配置).
+中间阶段变更可以报告未达标或尚未测量的性能配置.
+
+最终实现必须使全部 24 种 [HTTP 配置](performance.zh.md#配置)达到规定的标称资源门槛.
+算子计时, 公开算子比较和实测峰值校准不属于验收要求.
+使用[评估流程](operators/evaluation.zh.md)中的短输入, 单次迭代 logits 对照.
+保留适用的服务, 状态所有权和 graph 资源检查.
+每次交付前更新两种语言的 README 表格.
 
 本文所述功能和模式的详细标准见以下历史契约:
 

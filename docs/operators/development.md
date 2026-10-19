@@ -1,258 +1,75 @@
 # Kernel development
 
-Use the [operator specification](model.md), [fusion plan](fusion.md), and [evaluation procedure](evaluation.md).
-Native providers supply all seven serving boundaries. Full workload acceptance is necessary.
-The inference worker loads the native modules. The placeholder is used only for `--model stub`.
+Use the [model contract](model.md), [numerical checks](evaluation.md), and [GPU execution rules](../execution.md).
+The inference worker loads native modules. The placeholder applies only to `--model stub`.
 
 ## Tools
 
-Use CUDA 13.1, Nsight Systems, and Nsight Compute.
-Keep their paths in the ignored `LOCAL.md` file.
+Use CUDA 13.1. Keep host paths in ignored `LOCAL.md`.
 Set `CUDA_HOME` to the CUDA installation directory.
-
 Install the kernel development packages:
 
 ```bash
 scripts/with-env.sh uv pip install --python "$CONDA_PREFIX/bin/python" -r requirements/kernel-development.txt
 ```
 
-The inference binding packages are in `requirements/kernels.txt`.
-The development packages are not worker dependencies.
-
+The inference bindings are in `requirements/kernels.txt`.
+Development packages are not worker dependencies.
 Set `CUTLASS_ROOT` to an external dependency directory.
-Get the specified CUTLASS headers:
+Get the specified headers:
 
 ```bash
 git clone --depth 1 --branch v4.8.0 https://github.com/NVIDIA/cutlass.git "$CUTLASS_ROOT"
 export OH_MY_VLLM_CUTLASS="$CUTLASS_ROOT"
 ```
 
-The build accepts only Git revision `098de2a652cf8f00fd70b2df54051c7eccbb855a` from a clean dependency checkout.
+The build accepts only clean Git revision `098de2a652cf8f00fd70b2df54051c7eccbb855a`.
 Set `OH_MY_VLLM_KERNEL_CACHE` to an external build directory.
-
 Build the native modules:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels build
+scripts/with-env.sh scripts/with-gpu.sh python -m development.native_build
 ```
 
-The inference loader uses these modules. It does not use the compiler or development tools.
-The loader rejects source or binary identities that do not agree with its manifest.
-Each binary has an immutable copy and build manifest in the external cache.
+The inference loader does not use development imports or a compiler.
+It checks source and binary identities against the build manifest.
+Each binary has an immutable copy and manifest in the external cache.
 
-## Evaluation commands
+## Numerical commands
 
-Get the workload plan:
+Do the CPU evidence and accounting checks:
 
 ```bash
-scripts/with-env.sh python -m development.kernels plan
+scripts/with-env.sh python -m unittest development.model.test_identity development.model.test_logits development.serving.test_roofline
 ```
 
-Do the CPU contract checks:
-
-```bash
-scripts/with-env.sh python -m unittest development.kernels.test_contracts development.kernels.test_reference
-```
-
+Install `requirements/model-reference.lock` in a separate development environment for the PyTorch FP64 reference.
+Use the [official PyTorch packages](https://pytorch.org/get-started/previous-versions/).
+The inference worker does not use PyTorch.
 Set `MODEL_ROOT` to the checkpoint directory.
-Set `ARTIFACT_ROOT` to an external artifact directory.
-Use the [peak calibration procedure](../calibration.md) for each available GPU UUID.
-Set `PEAK_PROFILE` to the selected GPU UUID's calibration file.
-Select this UUID with `OH_MY_VLLM_GPU_UUID`.
-Measure the FFN provider:
+Set `LOGITS_REFERENCE` to an external `.npz` path.
+Generate the PyTorch FP64 reference with that environment:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels bench --peaks "$PEAK_PROFILE" --model "$MODEL_ROOT" --operator ffn --mode graph --output "$ARTIFACT_ROOT/ffn-graph.json"
-scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels bench --peaks "$PEAK_PROFILE" --model "$MODEL_ROOT" --operator ffn --mode eager --output "$ARTIFACT_ROOT/ffn-eager.json"
+scripts/with-env.sh scripts/with-gpu.sh python -m development.model.reference --model "$MODEL_ROOT" --output "$LOGITS_REFERENCE"
 ```
 
-Get a Systems trace and Compute counters for one shape:
+The command rejects output paths that already contain a file.
+Record its SHA256 in the comparison policy before numerical acceptance.
+Set `LOGITS_REPORT` to a new external JSON path.
+The comparison also saves the inference logits in a `.npz` file with the same stem.
+Run the full model comparison with the inference development environment:
 
 ```bash
-scripts/with-env.sh scripts/with-gpu.sh python -m development.kernels profile --peaks "$PEAK_PROFILE" --model "$MODEL_ROOT" --operator ffn --rows 1 --mode graph --output "$ARTIFACT_ROOT/ffn-profile"
+scripts/with-env.sh scripts/with-gpu.sh python -m development.model --model "$MODEL_ROOT" --reference "$LOGITS_REFERENCE" --report "$LOGITS_REPORT"
 ```
 
-Before the command, select a profile directory path that does not exist.
-Profiling does not supply acceptance timing.
+Use `--mode prefill` for the short prompt's last row.
+The [evaluation procedure](evaluation.md) specifies the input, precision, metrics, and scope.
+The command has no timing or efficiency gate.
+Use the [HTTP benchmark](../performance.md#measurement-command) for performance acceptance.
+Use Nsight Systems and Nsight Compute when a trace or counters can identify a bottleneck.
+Keep their artifacts external to the repository.
 
-Use `--operator` to select `ffn`, `fa_attention`, `gdn_attention`, `vision_block`, `sample`, `mtp_context`, or `mtp_draft`.
-Use `--rows` for a subset of the modeled timing rows.
-This option does not change the [small numerical case list](evaluation.md#numerical-scope).
-Each benchmark does checks of this list in the two execution modes before timing.
-A subset is not sufficient for the operator coverage gate.
-An incomplete workload or failed provider prevents acceptance.
-
-Supply one full report for each operator and mode from the same frozen sources.
-Use the report paths for a full acceptance audit:
-
-```bash
-scripts/with-env.sh python -m development.kernels audit --reports "$ARTIFACT_ROOT"/suite-*.json --output "$ARTIFACT_ROOT/acceptance.json"
-```
-
-The audit does checks of current sources, immutable binaries, checkpoint identities, cold weights, the small numerical cases, and all modeled timing shapes.
-Version 4 reports keep numerical evidence separate from timing coverage.
-Large timing cases record numerical status `not_run`. This status does not remove a shape from performance coverage.
-Old reports do not qualify after a source change.
-
-The audit has no minimum operator efficiency requirement.
-Before each delivery, do all measurements again.
-Then update the two README operator tables.
-
-Do not use CPU FP64 references for large cases. Use large cases only for timing or profiling.
-
-For each selected numerical case, the FFN check examines all output elements for finite values.
-It compares all residual elements for exact BF16 equality.
-
-The FFN FP64 projection reference compares all columns in the first, middle, and final rows.
-Each provider identifies its numerical sample scope in the report.
-
-GDN checks all input projections and private state writes. Sampling checks all rows and vocabulary columns.
-FA and MTP check KV writes and unchanged guard storage. Vision checks raw patches, output samples, and frame isolation.
-These checks do not supply tolerance evidence for elements not covered by their stated scope.
-
-## Method references
-
-Use external implementations as design references. Obey the [runtime library rules](fusion.md).
-Use the [GDN execution plan](gdn.md) for recurrence, value tiles, and sequence partitions.
-
-The [CUTLASS blockwise example](https://github.com/NVIDIA/cutlass/blob/v4.8.0/examples/81_blackwell_gemm_blockwise/81_blackwell_gemm_blockwise.cu) uses E4M3 operands and FP32 scales.
-Its [accumulator transform](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cutlass/gemm/collective/sm100_mma_warpspecialized_blockwise_scaling.hpp) applies FP32 updates in K-group order.
-The [cuBLAS 13.1 scaling table](https://docs.nvidia.com/cuda/archive/13.1.2/cublas/index.html#scaling-mode-support-overview) limits FP32 128-element and 128-by-128 scaling to compute capability 9.0.
-Current [DeepGEMM SM100 FP8 interfaces](https://github.com/deepseek-ai/DeepGEMM/blob/main/README.md) use only packed UE8M0 scales.
-Do not change checkpoint scale values to use another matrix instruction.
-
-The [Triton pipeline example](https://github.com/triton-lang/triton/blob/2122e24efc1886bfa36337c1f5b07c47d827b1d4/python/tutorials/gluon/08-warp-specialization.py#L452) separates loads, matrix products, and epilogues.
-It keeps an MMA accumulator through the full K loop.
-Compare this lifetime with the required K-group FP32 updates.
-
-The [cuBLAS GEMM table](https://docs.nvidia.com/cuda/archive/13.1.2/cublas/index.html#cublasgemmex) permits BF16 operands with FP32 computation and output.
-Compare `cublasGemmEx` with native GEMMs for this datatype combination.
-Use default math with FP32 computation and `CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION`.
-Keep the original BF16 rounding in each following consumer.
-
-Prepare the owned handle and workspace before graph capture.
-Set the stream before the workspace, as specified in the [cuBLAS workspace rules](https://docs.nvidia.com/cuda/archive/13.1.2/cublas/index.html#cublassetworkspace).
-Keep these resources alive until their graphs are destroyed.
-
-The [FlashAttention SM100 implementation](https://github.com/Dao-AILab/flash-attention/blob/main/flash_attn/cute/flash_fwd_sm100.py) separates loads, matrix products, softmax, and output correction.
-Its paged implementation supplies a load path without TMA.
-Compare this schedule with the current FA implementation for head width 256.
-Keep the 784-token cache pages and BF16 probability storage.
-
-The [CUTLASS FMHA mainloop](https://github.com/NVIDIA/cutlass/blob/098de2a652cf8f00fd70b2df54051c7eccbb855a/examples/77_blackwell_fmha/collective/sm100_fmha_fwd_mainloop_tma_warpspecialized.hpp) uses separate pipelines for KV, scores, and output correction.
-Use a completion barrier and phase for each score buffer.
-Complete TMEM reads before score reuse.
-Keep the probability buffer until its matrix reads complete.
-
-The [PTX warp matrix instructions](https://docs.nvidia.com/cuda/parallel-thread-execution/#warp-level-matrix-instructions-mma) support fixed matrix shapes.
-Compare transposed products when few query rows leave most matrix outputs unused.
-Include score exchange, softmax reduction order, output ownership, and shared-memory access.
-
-The SGLang [BF16 GEMV](https://github.com/sgl-project/sglang/blob/main/python/sglang/kernels/jit/csrc/gemm/hopper_bf16_gemv.cuh) uses vector loads, FP32 FMA, and warp reductions.
-Its [small GEMM](https://github.com/sgl-project/sglang/blob/main/python/sglang/kernels/jit/csrc/gemm/tiny_gemm.cuh) reuses weight values across input rows.
-Compare these methods with matrix products that compute unused rows.
-Include operand conversion, input cache traffic, reductions, and register use.
-Examine the compiled instructions before you use an instruction throughput model.
-
-The [PTX tensor-copy rules](https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk-tensor) include swizzle and transaction barrier requirements.
-Use descriptor boxes with the same physical layout as K/V MMA inputs.
-Keep each box in one cache page. Use vector copies for unaligned starts and partial tiles.
-
-Compare grouped descriptor dimensions with the original copy regions before you add packed weights.
-Examine each shared-memory byte and swizzle phase.
-Fewer copy commands do not prove lower latency.
-
-The [CUTLASS TMEM copy instructions](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cute/arch/copy_sm100.hpp) supply different load widths for known row counts.
-Keep all participating lanes and the necessary destination registers.
-A known row count can remove unused scale and accumulator work.
-Compare a narrow transposed projection with padded row tiles for small inputs.
-Include the extra column blocks and scale requests.
-Keep the epilogue operations and their signed-zero behavior before BF16 conversion.
-
-The [PTX barrier rules](https://docs.nvidia.com/cuda/parallel-thread-execution/#parallel-synchronization-and-communication-instructions-bar) distinguish counted thread groups from `.aligned` CTA barriers.
-Use an explicit count and the non-`.aligned` form for independent thread groups in one CTA.
-Examine each path and each barrier phase before you reuse its storage.
-
-The [CUTLASS split-K implementation](https://github.com/NVIDIA/cutlass/blob/098de2a652cf8f00fd70b2df54051c7eccbb855a/include/cutlass/gemm/device/gemm_splitk_parallel.h#L256-L307) stores accumulator partials before a separate reduction.
-Compare this pattern with a merge in an existing consumer. Include scratch traffic and changes to FP32 association.
-
-For a merge in the last CTA, use the [CCCL memory model](https://nvidia.github.io/cccl/unstable/libcudacxx/extended_api/memory_model.html).
-Join each CTA's writers before its device-scope release operation.
-Use device-scope acquire/release RMWs and a CTA barrier before the last CTA reads the partials.
-Reset the counters on the caller stream before the partial-producing kernel.
-Include atomic operations, barriers, scratch traffic, and duplicated work in the complete operation comparison.
-Do not spin or wait for an unscheduled CTA.
-
-For the [FlashInfer GDN prefill interface](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_prefill.py), checkpoint intervals must be divisible by 64.
-Its [Blackwell implementation](https://github.com/flashinfer-ai/flashinfer/blob/main/flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py) converts live state to the input type for matrix products.
-Do a check of these conditions against the model contract before you use its algorithm.
-
-The [NVIDIA FP32 emulation](https://docs.nvidia.com/cuda/cublas/index.html#floating-point-emulation) divides each operand into three BF16 components.
-It combines nine products. Compare this method with native FP32 products for GDN chunk transforms.
-Keep FP32 live state and the 784-token BF16 checkpoints.
-Extra implementation work cannot increase the necessary-work lower bound.
-
-The [pinned vLLM sampler](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/v1/sample/sampler.py) selects greedy tokens with `argmax` before top-k and top-p processing.
-Compare a greedy `argmax` reduction with the full vocabulary sort.
-Apply masks and penalties before token selection.
-Keep the required stochastic distribution for random rows.
-
-The [FlashInfer RoPE kernel](https://github.com/flashinfer-ai/flashinfer/blob/main/include/flashinfer/pos_enc.cuh) and [vLLM Qwen3 vision model](https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/models/qwen3_vl.py) share sine and cosine values across attention heads.
-Compute the original position coefficients once per row if another cache changes their rounded values.
-Keep the original bias rounding, BF16 coefficients, paired loads, and output conversion.
-
-The [FA4 head layouts](https://github.com/Dao-AILab/flash-attention/blob/main/flash_attn/cute/flash_fwd_sm100.py) round general head widths up to multiples of 16.
-Compare these layouts with the pinned CUTLASS collective before you change storage for the 72-dimensional Vision heads.
-
-Group TMA descriptor dimensions to fit the shared layout before you decrease the logical head width.
-Apply the pinned test for a contiguous prefix. Keep its specified descriptor bit update.
-Examine workload correctness after raw descriptor acceptance. Keep the physical row stride. Examine each output consumer.
-
-The [CUTLASS callbacks](https://github.com/NVIDIA/cutlass/blob/v4.8.0/include/cutlass/epilogue/fusion/sm100_callbacks_tma_warpspecialized.hpp) can combine bias and residual operations in a projection epilogue.
-Keep the intermediate BF16 rounding before the residual addition.
-The [TensorRT-LLM normalization kernels](https://github.com/NVIDIA/TensorRT-LLM/blob/main/cpp/tensorrt_llm/kernels/layernormKernels.cu) include different variance methods.
-Keep the original centered variance and reduction tree when you combine residual addition and normalization.
-Keep the rounded residual in registers for normalization and in global storage for later consumers.
-Keep each lane's reduction result and the original joins when you use shared partial sums again.
-
-The [vLLM vector-copy change](https://github.com/vllm-project/vllm/pull/43437) replaces scalar 16-bit accesses with 128-bit copies.
-Compare generated instructions with the public alignment contract before you use wider accesses.
-Fewer copy instructions do not reduce the payload bytes.
-
-## Optimization procedure
-
-Use [TileSight](https://github.com/tile-ai/TileSight) to compare tile schedules before GPU experiments.
-Its [model limitations](https://arxiv.org/html/2607.22432v1#S7) include small-batch latency and B200 memory topology.
-Compare the model with the kernel's data types, layouts, dependencies, and physical memory transactions.
-Include TMEM allocation, masked loads and stores, partial results, and merge operations.
-Do a check for changes to candidate order with uncertain latency parameters.
-Use numerical checks and full-boundary measurements to select the implementation.
-
-Use these lessons to select another candidate:
-
-- Include merge work when you compare K partitions. A faster projection alone is not sufficient.
-- Before you extend a fused projection to more rows, do a check of register and shared-memory use.
-- Treat matrix completion, accumulator reads, and buffer reuse as separate dependencies.
-- Use occupancy queries as predictions. Compare them with active-cycle counters and resource lifetimes.
-- Include repeated input reads when you move normalization into projection blocks.
-- Keep the original reduction order when local normalization supplies shared-memory matrix inputs.
-- Compare the work for each thread before you change reduction parameters. Keep the original partial sums and addition order.
-- Check compiled vector loads and stores. Pair BF16 conversions for packed checkpoints. Keep the RN conversion for each element.
-- Query active clusters with the compiled kernel and its full launch configuration before a cluster fusion experiment.
-- For input multicast, keep blocks on different output columns. Examine the matrix instruction group, pipeline stages, and active clusters.
-- Include cluster synchronization and scheduling limits when you compare output fusion with a separate launch.
-- For paged loads, calculate page bases before the vector loop. Keep page-boundary and masked-tail addresses unchanged.
-- Limit column blocks when row copies already supply enough parallel work.
-- Before you remove a copy, do a check of buffer lifetime and graph inputs.
-- Combine fixed metadata arrays by data type. Keep aligned views and fixed graph addresses.
-- Exclude invalid K groups from TMA byte counts, matrix products, and accumulator reads. Zero scales do not prevent NaN propagation.
-- Use a separate process without a profiler for comparison timings.
-- Make sure that the profiler collected each selected kernel.
-- Examine the two measurement orders before you accept a small gain from alternating trials.
-- Run HTTP comparisons without concurrent reference calculations. Keep the measured speculative acceptance trace.
-
-Use a temporary external directory for each experiment.
-Keep the current reports until the experiment's review and applicable acceptance audit are completed.
-Then delete raw reports, profiler files, and obsolete experiment binaries.
-Keep the current runtime binaries and their manifests.
-Keep brief reusable lessons in this guide. Do not put measurement results in project documents.
+Use the same `--prompt-seed` value when you compare HTTP measurements before and after a change.
+The HTTP artifact records this seed and the execution policy.

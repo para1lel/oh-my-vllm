@@ -108,7 +108,7 @@ Use the source types and rounding points unless the selected Tensor Core path us
 Use FP8 or BF16 Tensor Core operands when these types pass the numerical checks.
 The implementation can round intermediate operands and prepared scales to a Tensor Core format.
 Keep the original checkpoint tensors unchanged. Do not increase precision to pass a numerical check.
-If a check fails, measure the error and change only the necessary named tolerance before acceptance.
+Use the full-model logits limits from the [evaluation procedure](evaluation.md).
 
 FFN inputs with more than 128 rows use MXFP8 Tensor Core projections.
 GDN inputs with more than 128 rows use MXFP8 input projection.
@@ -118,15 +118,9 @@ Weight preparation converts derived E4M3 codes and supplies UE8M0 scales with po
 The [normalization kernel](../../python/oh_my_vllm/kernels/cuda_backend/mx_fp8_norm.cuh#L7)<!-- source: norm_mx_kernel(const --> supplies MXFP8 operands directly from its BF16 result.
 
 The original checkpoint tensors and scales stay unchanged.
-Only FFN output uses the [`mxfp8_ffn` tolerance](../../python/oh_my_vllm/kernels/specification.py#L4)<!-- source: NUMERICAL_TOLERANCES = { --> (`atol=0.1`, `rtol=0.03`) for these inputs.
-FFN inputs with at most 128 rows and all other outputs keep their named tolerances.
-The GDN input projection, output, and state use separate MXFP8 tolerances for inputs with more than 128 rows.
 
 Full FA boundaries with more than 128 rows use MXFP8 input projection.
 They use MXFP8 output projection when attention has one split.
-This path uses `mxfp8_fa_output` for output and `mxfp8_fa_state` for KV writes.
-FA inputs with at most 128 rows keep their named policies.
-The `kv_only`, `query_only`, and MTP paths keep their named policies.
 
 Use the operand, accumulator, and storage types of the selected implementation for the work calculation.
 Do not increase work for a slower instruction choice that supplies the same numerical computation.
@@ -163,57 +157,21 @@ State decay and carry updates stay FP32. BF16 checkpoint export must not replace
 The [output path](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/chunk_o.py#L94) uses BF16 state snapshots and new values, with FP32 accumulation.
 It rounds the causal, gated QK matrix to BF16 before the new-value product.
 The [projection source](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/wy_fast.py#L75) defines the gate-scaling rounding points.
-The same numerical tolerances apply to scan and chunked implementations.
 
 The pinned [RMS reference](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/ir/ops/layernorm.py#L44) separates FP32 normalization input from BF16 residual storage.
 The [GDN decode path](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/csrc/gdn/fused_gdn_decode_kernel.cu#L226) keeps recurrent Q/K in FP32.
 The [vision attention dependency](https://github.com/vllm-project/flash-attention/blob/b273a02621d3c94bc747df67204f591b67f38fae/flash_attn/cute/flash_fwd_sm100.py#L2522) rounds online probabilities to BF16 before PV.
-The independent reference uses full FP64 softmax. It does not reproduce online block rounding.
+The full-model reference uses FP64 throughout. It does not reproduce intermediate low-precision rounding.
 
-The [work calculation](../../development/kernels/work.py) identifies the applicable precision for each modeled shape.
+The [HTTP reference calculation](../../development/serving/accounting.py) uses fixed precision assumptions for performance accounting.
 Temporary storage and duplicated work cannot increase the theoretical lower bound.
 
 ## Numerical checks
 
-Use independent CPU FP64 references for the [fixed small numerical cases](evaluation.md#numerical-scope).
-The [CPU reference functions](../../development/kernels/reference.py) supply FP64 computations with the model rounding points.
-Use the same rounded inputs for the references and the operators.
-Use the [named numerical limits](../../python/oh_my_vllm/kernels/specification.py) for each check.
-Use `rtol=0.03` for output checks.
-The named absolute limits are:
+Use the [full-model evaluation procedure](evaluation.md).
+The reference uses direct PyTorch FP64 computation with checkpoint weights and their original scales.
+Compare the complete vocabulary after a short input and one decode iteration.
+Do not use single-operator tolerance tables or per-stage error gates.
 
-| Tolerance | Output | `atol` |
-|---|---|---|
-| `bf16` | Individual operators | 0.03 |
-| `mxfp8_ffn` | FFN output with more than 128 rows | 0.1 |
-| `mxfp8_fa_output` | Full FA output with more than 128 rows | 1.5 |
-| `mxfp8_gdn_input` | GDN input projection with more than 128 rows | 0.75 |
-| `mxfp8_gdn_output` | GDN output with more than 128 rows | 3.0 |
-| `vision` | Vision boundary | 0.03125 |
-| `mtp_attention` | Attention in the MTP draft boundary | 0.1 |
-| `mtp_residual` | FFN residual in the MTP draft boundary | 0.25 |
-| `mtp_hidden` | FFN in the MTP draft boundary | 1.5 |
-| `mtp_logits` | Logits in the MTP draft boundary | 0.5 |
-
-Record the tolerance name and maximum normalized error ratio.
-Check MTP residual storage for exact BF16 equality against the sum of the operator inputs.
-Keep the separate residual error check against the independent reference chain.
-
-For GDN inputs with more than 128 rows, `mxfp8_gdn_state` has maximum permitted NRMSE of 8%.
-Its maximum permitted error is 10% of the reference peak.
-For full FA inputs with more than 128 rows, `mxfp8_fa_state` has maximum permitted NRMSE of 6%.
-Its maximum permitted error is 8% of the reference peak.
-Other state checks have maximum permitted NRMSE of 1% and maximum permitted error of 2% of the reference peak.
-
-All state checks also have a maximum permitted absolute error of `2^-126`, the minimum normal FP32 value, for flush-to-zero behavior.
-This limit applies equally to native and public implementations.
-Record the raw NRMSE and peak error even when only this absolute limit is sufficient for acceptance.
-Keep the checks of finite values, private slots, full history, and unchanged storage.
-For a zero reference, record infinite state NRMSE as the exact JSON string `"infinity"`.
-Accept that string only when the reference peak is zero and `0 < max_abs <= 2^-126`.
-
-Do checks of all state writes and unchanged storage, with accepted and rejected MTP rows.
-Do checks of FP8 rounding, empty rows, tail tiles, and the 784-token boundaries.
-
+Keep the state ownership, checkpoint, and precision contracts above.
 Use [the fusion plan](fusion.md) for the serving boundaries.
-Use [the evaluation procedure](evaluation.md) for acceptance.

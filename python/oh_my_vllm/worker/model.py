@@ -155,12 +155,14 @@ class Workspace:
         if self.replay is None:
             self.forward(cache)
             self.device.synchronize()
-            self.resources.enter_context(self.ffn.graph_lease())
-            self.resources.enter_context(self.gdn.graph_lease())
-            self.resources.enter_context(self.fa.graph_lease())
-            self.replay = self.resources.enter_context(
-                self.device.graph(lambda: self.forward(cache))
-            )
+            with ExitStack() as recording:
+                for operator in (self.ffn, self.gdn, self.fa):
+                    recording.enter_context(operator.graph_lease())
+                replay = recording.enter_context(
+                    self.device.graph(lambda: self.forward(cache))
+                )
+                self.resources.enter_context(recording.pop_all())
+                self.replay = replay
         self.replay()
         return self.output
 

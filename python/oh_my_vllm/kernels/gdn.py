@@ -155,9 +155,7 @@ class GDN:
         self.prepared = prepare
         rows = schedule.sequence_rows[-1]
         self.max_queries = max(b - a for a, b in pairwise(schedule.sequence_rows))
-        split_values = (not schedule.verify and rows > 32) or (
-            schedule.verify and self.max_queries > 1
-        )
+        split_values = rows > 32 or schedule.verify
         self.metadata = tuple(
             upload(array("i", values))
             for values in (schedule.sequence_rows, schedule.read_slots, writes)

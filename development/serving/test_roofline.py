@@ -1,23 +1,21 @@
 import json
 import tempfile
 import unittest
-from functools import partial
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from development.kernels.test_contracts import PEAKS, calibration_profile
-
 from . import benchmark
+from .accounting import draft_work, reference_seconds, reference_work, sample_work
 from .benchmark import (
     CONFIGURATIONS,
     comparison_passed,
     gate_result,
     select_configurations,
 )
-from .roofline import lower_bound as trace_lower_bound
-
-lower_bound = partial(trace_lower_bound, peaks=PEAKS)
+from .roofline import lower_bound
+from .trace import canonical_passes
 
 
 def tokenizer_fixture(root):
@@ -97,9 +95,7 @@ class BenchmarkGate(unittest.TestCase):
 
             def close():
                 if mutation is not None:
-                    mutation.write_bytes(
-                        b"{}" if mutation.name == "peaks.json" else b"changed CPU mock"
-                    )
+                    mutation.write_bytes(b"changed CPU mock")
 
             instance = Mock(run=Mock(side_effect=run), close=Mock(side_effect=close))
             services.append(instance)
@@ -107,9 +103,6 @@ class BenchmarkGate(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            peaks = root / "peaks.json"
-            profile = calibration_profile()
-            peaks.write_text(json.dumps(profile))
             binary = root / "service"
             binary.write_bytes(b"CPU mock")
             vendor_files = {}
@@ -155,8 +148,6 @@ class BenchmarkGate(unittest.TestCase):
             def invoke(artifacts, *extra):
                 arguments = [
                     "benchmark",
-                    "--peaks",
-                    str(peaks),
                     "--model",
                     str(root),
                     "--artifacts",
@@ -167,11 +158,10 @@ class BenchmarkGate(unittest.TestCase):
                 ]
                 with (
                     patch.object(benchmark, "selected_uuid", return_value="GPU-test"),
-                    patch.object(benchmark, "device_identity", return_value={}),
                     patch.object(
                         benchmark,
-                        "load_profile",
-                        side_effect=lambda path, uuid: json.loads(path.read_text()),
+                        "device_identity",
+                        return_value={"name": "NVIDIA B200"},
                     ),
                     patch.object(benchmark, "Service", side_effect=service),
                     patch.object(benchmark, "Tokenization"),
@@ -210,7 +200,6 @@ class BenchmarkGate(unittest.TestCase):
                 instance.close.assert_called_once()
                 self.assertEqual(instance.verify_identity.call_count, 2)
             for label, target in (
-                ("calibration", peaks),
                 ("binary", binary),
                 ("native", root / "ffn.so"),
                 ("vision-vendor", vendor_files["vision"][0]),
@@ -255,7 +244,7 @@ class BenchmarkGate(unittest.TestCase):
             ),
         ]
         response = dict(
-            id="chatcmpl_1",
+            id="chatcmpl_744872_6ad586dc_1",
             usage=dict(
                 prompt_tokens=16,
                 completion_tokens=1,
@@ -264,15 +253,23 @@ class BenchmarkGate(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as directory:
             service = object.__new__(benchmark.Service)
-            service.arguments = SimpleNamespace(peak_rates=PEAKS)
+            service.arguments = SimpleNamespace(
+                artifact_id="test-artifact", prompt_seed="shared-input"
+            )
             service.mode, service.port = "ordinary", 0
             service.trace = Path(directory) / "trace.jsonl"
 
             def run(batch=1):
-                service.trace.write_text("\n".join(map(json.dumps, events)) + "\n")
+                service.trace.write_text(json.dumps(events[0]) + "\n")
+
+                def respond(port, body):
+                    with service.trace.open("a") as trace:
+                        trace.write("\n".join(map(json.dumps, events[1:])) + "\n")
+                    return response
+
                 with (
                     patch.object(benchmark, "prompt", return_value=[]),
-                    patch.object(benchmark, "post", return_value=response),
+                    patch.object(benchmark, "post", side_effect=respond),
                     patch.object(
                         benchmark.time, "perf_counter", side_effect=(100.0, 102.0)
                     ),
@@ -281,7 +278,13 @@ class BenchmarkGate(unittest.TestCase):
 
             result = run()
             self.assertEqual(result["seconds"], 2.0)
-            self.assertEqual(result["lower_bound"], lower_bound(events, {1}, 1))
+            self.assertEqual(
+                result["lower_bound"], lower_bound(events, result["manifest"])
+            )
+            self.assertEqual(
+                result["manifest_id"], benchmark.json_digest(result["manifest"])
+            )
+            self.assertEqual(result["manifest"]["artifact_id"], "test-artifact")
             self.assertFalse(result["passed"])
             with self.assertRaisesRegex(ValueError, "distinct request IDs"):
                 run(batch=2)
@@ -359,237 +362,94 @@ class BenchmarkGate(unittest.TestCase):
                 benchmark.verify_trace_identity(events, checkpoint, expected, tokenizer)
 
 
-class Roofline(unittest.TestCase):
-    def test_trace_rejects_mode_mismatches_duplicate_rows_and_bad_identity(self):
-        identity = dict(operation="identity", config=dict(num_speculative_tokens=0))
-        target = dict(
-            operation="target",
-            verify=False,
-            requests=[dict(id=1, start=0, count=16, prompt=16)],
-        )
-        commit = dict(
-            operation="commit",
-            requests=[dict(id=1, tokens=1, accepted=0, proposed=0, position=16)],
-        )
-        self.assertGreater(
-            lower_bound([identity, target, commit], {1}, 1)["seconds"], 0
-        )
-        for operation in (
-            dict(operation="context", requests=[dict(id=1, start=1, count=16)]),
-            dict(operation="draft", stage=0, requests=[dict(id=1, position=16)]),
-        ):
-            with (
-                self.subTest(operation=operation["operation"]),
-                self.assertRaisesRegex(ValueError, "ordinary trace"),
-            ):
-                lower_bound([identity, target, operation, commit], {1}, 1)
-        with self.assertRaisesRegex(ValueError, "unsupported trace operation"):
-            lower_bound(
-                [identity, target, dict(operation="unknown", requests=[]), commit],
-                {1},
-                1,
+def request_manifest(ids=(1,), length=16, output=1, mode="ordinary"):
+    return dict(
+        mode=mode,
+        requests=[
+            dict(
+                ordinal=index,
+                id=key,
+                response_id=f"chatcmpl_744872_6ad586dc_{key}",
+                input_tokens=length,
+                output_tokens=output,
             )
-        for identities in (
-            [],
-            [identity, identity],
-            [dict(operation="identity", config=dict(num_speculative_tokens=2))],
-        ):
-            with (
-                self.subTest(identities=identities),
-                self.assertRaisesRegex(ValueError, "identity"),
-            ):
-                lower_bound([*identities, target, commit], {1}, 1)
-        mtp = dict(operation="identity", config=dict(num_speculative_tokens=4))
-        context = dict(operation="context", requests=[dict(id=1, start=1, count=15)])
-        self.assertGreater(
-            lower_bound([mtp, target, context, commit], {1}, 1)["seconds"], 0
-        )
-        repeated = dict(
-            operation="context",
-            requests=[dict(id=1, start=1, count=7), dict(id=1, start=8, count=8)],
-        )
-        with self.assertRaisesRegex(ValueError, "repeats a request ID"):
-            lower_bound([mtp, target, repeated, commit], {1}, 1)
+            for index, key in enumerate(ids)
+        ],
+    )
 
-    def test_prefill_chunks_keep_the_actual_operator_calls(self):
-        identity = {"operation": "identity", "config": {"num_speculative_tokens": 0}}
 
-        def target(first, count):
-            return {
-                "operation": "target",
-                "verify": False,
-                "requests": [{"id": 1, "start": first, "count": count, "prompt": 16}],
-            }
-
-        def commit(position):
-            return {
-                "operation": "commit",
-                "requests": [
-                    {
-                        "id": 1,
-                        "tokens": int(position == 16),
-                        "accepted": 0,
-                        "proposed": 0,
-                        "position": position,
-                    }
-                ],
-            }
-
-        complete = [identity, target(0, 16), commit(16)]
-        split = [identity]
-        for first in range(0, 16, 4):
-            split.extend([target(first, 4), commit(first + 4)])
-        split.append(
-            {
-                "operation": "target",
-                "verify": True,
-                "requests": [{"id": 2, "start": 100000, "count": 20, "prompt": 16}],
-            }
-        )
-        expected = lower_bound(complete, {1})
-        actual = lower_bound(split, {1})
-        self.assertGreater(actual["work"]["hbm_bytes"], expected["work"]["hbm_bytes"])
-        self.assertEqual(actual["work"]["fp8_flops"], expected["work"]["fp8_flops"])
-        self.assertGreater(actual["seconds"], expected["seconds"])
-        self.assertEqual(
-            [
-                item["rows"]
-                for item in actual["components"]
-                if item["operation"] == "sample"
-            ],
-            [1],
-        )
-        self.assertGreater(actual["seconds"], 0)
-        work = actual["work"]
-        self.assertEqual(
-            actual["seconds"],
-            sum(item["seconds"] for item in actual["components"]),
-        )
-        self.assertGreaterEqual(actual["seconds"], work["hbm_bytes"] / 7.7e12)
-        large = [
-            identity,
-            dict(
-                operation="target",
-                verify=False,
-                requests=[dict(id=1, start=0, count=32768, prompt=32768)],
-            ),
-            dict(
-                operation="commit",
-                requests=[dict(id=1, tokens=1, accepted=0, proposed=0, position=32768)],
-            ),
-        ]
-        large_bound = lower_bound(large, {1}, 1)
-        self.assertGreater(
-            large_bound["seconds"], large_bound["global_resource_seconds"]
-        )
-        with self.assertRaises(ValueError):
-            lower_bound([*complete, target(0, 16)], {1})
-        with self.assertRaises(ValueError):
-            lower_bound(complete, {1}, expected_tokens=8192)
-        mtp = [{"operation": "identity", "config": {"num_speculative_tokens": 4}}]
-        mtp.append(
-            {
-                "operation": "target",
-                "verify": False,
-                "requests": [{"id": 1, "start": 0, "count": 4, "prompt": 4}],
-            }
-        )
-        mtp.append(
-            {"operation": "context", "requests": [{"id": 1, "start": 1, "count": 4}]}
-        )
-        mtp.extend(
-            {
-                "operation": "draft",
-                "stage": stage,
-                "requests": [{"id": 1, "position": 4 + stage}],
-            }
-            for stage in range(4)
-        )
-        mtp.append(
-            {
-                "operation": "commit",
-                "requests": [
-                    {"id": 1, "tokens": 1, "accepted": 0, "proposed": 4, "position": 4}
-                ],
-            }
-        )
-        with self.assertRaises(ValueError):
-            lower_bound(mtp, {1}, expected_tokens=2)
-        unused = {
-            "operation": "target",
-            "verify": True,
-            "requests": [{"id": 1, "start": 4, "count": 1, "prompt": 4}],
-        }
-        with self.assertRaises(ValueError):
-            lower_bound([*mtp, unused], {1}, expected_tokens=6)
-
-    def test_actual_batches_are_not_combined_by_request_round(self):
-        identity = {"operation": "identity", "config": {"num_speculative_tokens": 0}}
-        targets = [dict(id=request, start=0, count=16, prompt=16) for request in (1, 2)]
-        commits = [
-            dict(id=request, tokens=1, accepted=0, proposed=0, position=16)
-            for request in (1, 2)
-        ]
-        together = [
-            identity,
-            dict(operation="target", verify=False, requests=targets),
-            dict(operation="commit", requests=commits),
-        ]
-        separate = [identity]
-        for target, commit in zip(targets, commits, strict=True):
-            separate.extend(
+def prefill_trace(ids=(1,), length=16, chunk=16):
+    events = [dict(operation="identity", config=dict(num_speculative_tokens=0))]
+    for key in ids:
+        for start in range(0, length, chunk):
+            count = min(chunk, length - start)
+            events.extend(
                 [
-                    dict(operation="target", verify=False, requests=[target]),
-                    dict(operation="commit", requests=[commit]),
+                    dict(
+                        operation="target",
+                        verify=False,
+                        requests=[
+                            dict(id=key, start=start, count=count, prompt=length)
+                        ],
+                    ),
+                    dict(
+                        operation="commit",
+                        requests=[
+                            dict(
+                                id=key,
+                                tokens=int(start + count == length),
+                                accepted=0,
+                                proposed=0,
+                                position=start + count,
+                            )
+                        ],
+                    ),
                 ]
             )
-        combined = lower_bound(together, {1, 2}, 1)
-        split = lower_bound(separate, {1, 2}, 1)
-        self.assertGreater(split["seconds"], combined["seconds"])
-        self.assertEqual(
-            [
-                item["rows"]
-                for item in split["components"]
-                if item["operation"] == "sample"
-            ],
-            [1, 1],
-        )
-        ragged = [
-            identity,
-            dict(
-                operation="target",
-                verify=False,
-                requests=[targets[0], dict(id=2, start=0, count=4, prompt=8)],
-            ),
-            dict(
-                operation="commit",
-                requests=[
-                    commits[0],
-                    dict(id=2, tokens=0, accepted=0, proposed=0, position=4),
-                ],
-            ),
-            dict(
-                operation="target",
-                verify=False,
-                requests=[dict(id=2, start=4, count=4, prompt=8)],
-            ),
-            dict(
-                operation="commit",
-                requests=[dict(id=2, tokens=1, accepted=0, proposed=0, position=8)],
-            ),
-        ]
-        result = lower_bound(ragged, {1, 2}, 1)
-        samples = [
-            item for item in result["components"] if item["operation"] == "sample"
-        ]
-        self.assertEqual([item["request_ids"] for item in samples], [[1], [2]])
-        attention = next(
-            item for item in result["components"] if item["operation"] == "fa_attention"
-        )
-        self.assertEqual(attention["work_per_call"]["bf16_flops"], 4 * 146 * 24 * 256)
+    return events
 
-    def test_mtp_keeps_verification_rows_and_actual_proposals(self):
-        events = [
+
+class Roofline(unittest.TestCase):
+    def test_accounting_rejects_inflation_and_unbound_or_fabricated_work(self):
+        manifest = request_manifest((9, 2), length=32768)
+        complete = prefill_trace((9, 2), length=32768, chunk=32768)
+        expected = lower_bound(complete, manifest)
+        for order, chunk in (((2, 9), 4096), ((9, 2), 784), ((2, 9), 32768)):
+            events = prefill_trace(order, length=32768, chunk=chunk)
+            for event in events:
+                event.update(tiles=100000, padded_rows=65536, copied_state_bytes=10**12)
+            with self.subTest(order=order, chunk=chunk):
+                self.assertEqual(lower_bound(events, manifest), expected)
+        passes = canonical_passes(complete, manifest)
+        self.assertEqual(
+            [[row["count"] for row in item["requests"]] for item in passes],
+            [[16464, 15680], [16304, 16464], [624]],
+        )
+        self.assertEqual([row["id"] for row in passes[0]["requests"]], [9, 2])
+        for mutate in (
+            lambda value: value["requests"].append(value["requests"][0]),
+            lambda value: value["requests"].pop(),
+            lambda value: value["requests"][0].update(
+                id=100, response_id="chatcmpl_100"
+            ),
+            lambda value: value["requests"][0].update(response_id="chatcmpl_100"),
+            lambda value: value["requests"][0].update(output_tokens=2),
+            lambda value: value["requests"][0].update(input_tokens=32767),
+            lambda value: value.update(mode="mtp4"),
+        ):
+            changed = deepcopy(manifest)
+            mutate(changed)
+            with self.subTest(mutate=mutate), self.assertRaises(ValueError):
+                lower_bound(complete, changed)
+        for events in (
+            complete[1:],
+            [complete[0], *complete],
+            complete[:-1],
+            [*complete, dict(operation="unknown")],
+        ):
+            with self.subTest(events=events[-1]), self.assertRaises(ValueError):
+                lower_bound(events, manifest)
+        mtp = [
             dict(operation="identity", config=dict(num_speculative_tokens=4)),
             dict(
                 operation="target",
@@ -614,24 +474,63 @@ class Roofline(unittest.TestCase):
                 requests=[dict(id=1, tokens=3, accepted=2, proposed=0, position=7)],
             ),
         ]
-        result = lower_bound(events, {1}, 4)
+        manifest = request_manifest(length=4, output=4, mode="mtp4")
+        result = lower_bound(mtp, manifest)
         self.assertEqual(
             result["acceptance"][1], dict(tokens=4, accepted=2, proposed=2)
         )
-        drafts = [
-            item for item in result["components"] if item["operation"] == "mtp_draft"
-        ]
-        self.assertEqual([item["queries"] for item in drafts], [[(4, 1)], [(5, 1)]])
         self.assertEqual(
-            drafts[0]["work_per_call"]["bf16_flops"],
-            2 * 248320 * 5120 + 4 * 4 * 24 * 256,
+            [
+                row["context_count"]
+                for item in canonical_passes(mtp, manifest)
+                for row in item["requests"]
+            ],
+            [4, 2],
         )
+        for index, field, value in (
+            (5, "proposed", 4),
+            (6, "count", 5),
+            (8, "position", 6),
+            (8, "accepted", 3),
+            (3, "position", 3),
+        ):
+            changed = deepcopy(mtp)
+            changed[index]["requests"][0][field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                lower_bound(changed, manifest)
+        with self.assertRaises(ValueError):
+            lower_bound([*mtp[:2], *mtp[3:5], mtp[2], *mtp[5:]], manifest)
+
+    def test_reference_resources_share_tensor_capacity_and_sum_before_maximum(self):
+        self.assertEqual(sample_work(1)["fp32_flops"], 25602)
+        self.assertEqual(draft_work([dict(end=4)], 0)["fp32_flops"], 147286)
+        work = dict(
+            hbm_bytes=7.7e12,
+            fp8_flops=4.5e15,
+            bf16_flops=2.25e15,
+            tf32_flops=1.1e15,
+            fp32_flops=75e12,
+            fp64_flops=37e12,
+        )
+        self.assertEqual(reference_seconds(work), 3)
+        for value in (-1, float("nan"), float("inf")):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                reference_seconds(dict(work, fp8_flops=value))
+        events = prefill_trace(length=32768, chunk=4096)
+        manifest = request_manifest(length=32768)
+        passes = canonical_passes(events, manifest)
+        bound = lower_bound(events, manifest)
+        self.assertEqual(bound["seconds"], reference_seconds(reference_work(passes)))
+        # A complete prompt fits the budget without a checkpoint-aligned split.
+        self.assertEqual([item["requests"][0]["count"] for item in passes], [32768])
+        small = canonical_passes(prefill_trace(length=16), request_manifest())
         self.assertEqual(
-            drafts[1]["work_per_call"]["bf16_flops"],
-            2 * 248320 * 5120 + 2 * 5120 * 10240 + 4 * 5 * 24 * 256,
+            reference_work(small)["fp8_flops"],
+            2
+            * 16
+            * (
+                48 * (16384 * 5120 + 5120 * 6144)
+                + 16 * (14336 * 5120 + 5120 * 6144)
+                + 64 * (34816 * 5120 + 5120 * 17408)
+            ),
         )
-        samples = [
-            item for item in result["components"] if item["operation"] == "sample"
-        ]
-        self.assertEqual([item["rows"] for item in samples], [1, 3])
-        self.assertEqual(samples[-1]["work_per_call"]["fp64_flops"], 6)

@@ -41,7 +41,7 @@ scripts/with-env.sh pre-commit run --all-files
 | definition-spacing | 通过 Python, Rust 和 JavaScript/TypeScript 语法树检查函数及模块间的空行 |
 | cargo-clippy | 所有 workspace 成员, targets 和 features, 警告视为错误 |
 | cargo-test | 仓库中的 Rust workspace 测试和 Python 服务测试 |
-| kernel-contracts | 负载覆盖, 性能下界, 数值参考及 worker 约束 |
+| kernel-contracts | 模型证据, HTTP 计费及 worker 约束 |
 | ruff-format | Python 格式化 |
 | ruff-check | Python lint 规则 |
 | whitespace | 无行尾空白, 文件末尾保留一个换行 |
