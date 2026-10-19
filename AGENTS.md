@@ -8,7 +8,8 @@ Obey the [runtime contracts](docs/requirements.md).
 
 Read the Git status, the [handoff](docs/handoff.md), and the applicable directory instructions before work.
 Obey [CONTRIBUTING.md](CONTRIBUTING.md).
-Codex uses `main`.
+Codex uses `nightly`.
+Use the [tile execution design](docs/tile-execution.md) for the GPU migration and its acceptance rules.
 
 Keep the root guides short. Put local instructions in the related directory.
 Write all English documents in ASD-STE100. Supply a full Chinese translation for each English document.

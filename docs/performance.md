@@ -1,5 +1,11 @@
 # End-to-end requirements
 
+For `nightly`, the [tile execution design](tile-execution.md) replaces the performance limit and calculation below.
+It also removes mandatory operator measurements, public comparisons, and measured peak calibration from acceptance.
+The configurations and HTTP timer stay applicable.
+The command below still uses legacy accounting until migration task 1 replaces it.
+Its results cannot supply acceptance evidence for the new calculation.
+
 Use one NVIDIA B200 and the [model contract](operators/model.md).
 Use the full Rust service and Python inference worker.
 Placeholder outputs do not supply inference evidence.

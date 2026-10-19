@@ -12,21 +12,24 @@ Keep the offline and HTTP functions and the numerical tolerances.
 Use ordinary decode and MTP4 only.
 
 Accept text, image, and video input.
-Use CUDA C++ or CuTe DSL for all model operators. Native CUDA libraries are permitted.
+Use CUDA C++ or CuTe DSL for all model operators.
+Native CUDA libraries can supply infrastructure and device components for tile tasks.
+Separate library tensor launches are temporary migration paths.
 Do not use other external operator libraries, such as DeepGEMM or FlashInfer.
 Do not add vLLM dependencies, environments, or caches.
 
 Use different dependency files for development tools and inference packages.
 
-Use the [model specification](operators/model.md) and [fusion plan](operators/fusion.md) for operator work.
-Operator tests have no minimum roofline efficiency requirement.
-FA and GDN shapes of interest must match or exceed the fastest applicable public implementation.
-Use the [comparison plan](operators/performance-plan.md) for the shape set and equivalent operation boundaries.
+Use the [model specification](operators/model.md) for mathematical and state behavior.
+Use the [tile execution design](tile-execution.md) and [migration plan](tile-migration.md) for GPU implementation.
+All GPU tensor computation must use tile-dependent MegaKernel execution at final acceptance.
+Temporary native operator paths are permitted during migration.
 
-Before each delivery, measure the [operator workload](operators/evaluation.md).
-Then update the two README tables.
-The workload model can be simple. It must have shapes similar to service execution.
-Each configuration must also pass the [full HTTP comparison](performance.md#configurations).
+Migration has no performance threshold.
+The final implementation must pass all 24 [HTTP configurations](performance.md#configurations) at the specified nominal-resource threshold.
+Operator timing, public-operator comparisons, and measured peak calibration are not acceptance requirements.
+Keep applicable numerical and state checks.
+Update the two README tables before each delivery.
 
 Use these archived contracts for the detailed criteria of the functions and modes in this document:
 
