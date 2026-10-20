@@ -20,6 +20,10 @@ Use the [full-model evaluation](operators/evaluation.md) for numerical checks.
 Compare all vocabulary logits after a fixed short prompt and one decode iteration with an independent PyTorch FP64 model.
 Do not use sampled intermediate outputs or the old low-precision path as the numerical reference.
 Use the same reference artifact for subsequent changes.
+
+Use the fixed MTP restoration, image/video, and long-context cases for changes to those paths.
+Their repository fixtures contain complete PyTorch FP64 endpoint logits.
+Usual tests do not run the reference generator.
 The [development commands](operators/development.md#numerical-commands) generate and compare these artifacts.
 
 Use the [operator microbench design](operators/microbench.md) for fixed operator numerical and performance cases.

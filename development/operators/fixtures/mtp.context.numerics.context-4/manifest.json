@@ -19,8 +19,6 @@
       "value",
       "residual",
       "kv",
-      "fp8_kv",
-      "kv_scales",
       "guards"
     ]
   },
@@ -58,6 +56,14 @@
     "decisions": {
       "minimum_margin": 0.01,
       "records": []
+    },
+    "state_representation": {
+      "previous_manifest_sha256": "0b39413e7c31c8d8b5cb7b9104c6ceb275ad159de117681cfc5a5360f4c0274a",
+      "removed": [
+        "fp8_kv",
+        "kv_scales"
+      ],
+      "retained_arrays": "unchanged except state guard count"
     }
   },
   "files": {
@@ -72,14 +78,10 @@
     "inputs.boundary_rows.0000.npz": "5c61e21e12c8b91d8cdbb9cf657c4e5c3b9f17685270a473d4d4c225ae2d7485",
     "inputs.boundary_hidden.0000.npz": "48e2cdde4696f8f93ff400fd96e8dac9bb508c77f423558b86f3d4fb8a1ac823",
     "state.kv.0000.npz": "7ff5d63d9ddb4e64b9d62cc6327584a099e7bed59d22f10a46e9c92119eccc2f",
-    "state.fp8_kv.0000.npz": "1ce060982b0ed0f02a3f57e4e369333cfe5c363aafb8cc551cac5bcff5187681",
-    "state.kv_scales.0000.npz": "ac9adec34e41d4ad908d9e496d42cf89922df955e192f4f215b88d0840357fbf",
     "expected.value.0000.npz": "863d72e75fb750d3bfc096e347d3cc9f313d93dba10933f104a7a42b56e63885",
     "expected.residual.0000.npz": "a0b874a96926dbb42eedbd859e681a68a977fdb8b0b39d8195fa55f8f63add1e",
     "expected.kv.0000.npz": "851e0e9e0c21799e46f2d17d7eaf115b11ca83eb6201ce983bfbe42a4af39d64",
-    "expected.fp8_kv.0000.npz": "b6f89593178f2a2b94f8e352ea39039f5ca69f51f61193ea59053c0a9bbf7ead",
-    "expected.kv_scales.0000.npz": "4c32c86aca37745d139d4c6c0c489fb885a9b48fbe0315919daa05aa7a6dcfe5",
-    "expected.guards.0000.npz": "fd05631f4642b6836f549cb292e1dbcd0a9730c8fae92d0bc6412d7b388b1d8f"
+    "expected.guards.0000.npz": "443d82108cf665d6c0e1fe56defe8169f4e65e81d6bf8ea6f4036c16c14fba94"
   },
   "tensors": {
     "inputs.positions": {
@@ -255,43 +257,6 @@
         }
       ]
     },
-    "state.fp8_kv": {
-      "shape": [
-        6,
-        2,
-        784,
-        4,
-        256
-      ],
-      "dtype": "uint8",
-      "tensor_dtype": "float8_e4m3fn",
-      "parts": [
-        {
-          "file": "state.fp8_kv.0000.npz",
-          "key": "value",
-          "offset": 0,
-          "count": 9633792
-        }
-      ]
-    },
-    "state.kv_scales": {
-      "shape": [
-        6,
-        2,
-        4,
-        784
-      ],
-      "dtype": "float32",
-      "tensor_dtype": "float32",
-      "parts": [
-        {
-          "file": "state.kv_scales.0000.npz",
-          "key": "value",
-          "offset": 0,
-          "count": 37632
-        }
-      ]
-    },
     "expected.value": {
       "shape": [
         4,
@@ -342,44 +307,9 @@
         }
       ]
     },
-    "expected.fp8_kv": {
-      "shape": [
-        16,
-        2,
-        4,
-        256
-      ],
-      "dtype": "float64",
-      "tensor_dtype": "float64",
-      "parts": [
-        {
-          "file": "expected.fp8_kv.0000.npz",
-          "key": "value",
-          "offset": 0,
-          "count": 32768
-        }
-      ]
-    },
-    "expected.kv_scales": {
-      "shape": [
-        16,
-        2,
-        4
-      ],
-      "dtype": "float64",
-      "tensor_dtype": "float64",
-      "parts": [
-        {
-          "file": "expected.kv_scales.0000.npz",
-          "key": "value",
-          "offset": 0,
-          "count": 128
-        }
-      ]
-    },
     "expected.guards": {
       "shape": [
-        3
+        1
       ],
       "dtype": "bool",
       "tensor_dtype": "bool",
@@ -388,7 +318,7 @@
           "file": "expected.guards.0000.npz",
           "key": "value",
           "offset": 0,
-          "count": 3
+          "count": 1
         }
       ]
     }
@@ -415,50 +345,6 @@
       ],
       "layout": "kv",
       "output": "kv"
-    },
-    "fp8_kv": {
-      "indices": [
-        1564,
-        1565,
-        1566,
-        1567,
-        2348,
-        2349,
-        2350,
-        2351,
-        3132,
-        3133,
-        3134,
-        3135,
-        3916,
-        3917,
-        3918,
-        3919
-      ],
-      "layout": "kv",
-      "output": "fp8_kv"
-    },
-    "kv_scales": {
-      "indices": [
-        1564,
-        1565,
-        1566,
-        1567,
-        2348,
-        2349,
-        2350,
-        2351,
-        3132,
-        3133,
-        3134,
-        3135,
-        3916,
-        3917,
-        3918,
-        3919
-      ],
-      "layout": "kv_scales",
-      "output": "kv_scales"
     }
   }
 }

@@ -1,6 +1,6 @@
 # Operator fusion plan
 
-Use the [stage inventory](../../python/oh_my_vllm/kernels/specification.py) for the tensor contracts of the 18 internal semantic stages.
+Use the [stage inventory](../../python/oh_my_vllm/operators/specification.py) for the tensor contracts of the 20 internal semantic stages.
 Use CUDA C++ and CUTLASS for this implementation.
 The [runtime contracts](../requirements.md) also allow CuTe DSL.
 CUTLASS, cuBLAS, CUB, and native CUDA libraries are permitted.
@@ -11,23 +11,31 @@ Python can allocate tensors and launch the CUDA implementations.
 
 ## Serving boundaries
 
-The 7 serving boundaries use the [GPU execution rules](../execution.md).
+The serving boundaries use the [GPU execution rules](../execution.md).
 The internal stages are parts of these boundaries.
 
 | Serving operator | Full measured operation |
 |---|---|
-| `gdn_attention` | GDN input, recurrent or prefill computation, and output |
-| `fa_attention` | FA input, attention, gate, and output projection |
+| `gdn` | GDN input, recurrent or prefill computation, and output |
+| `fa` | FA input, attention, gate, and output projection |
 | `ffn` | Gate/up projection, activation, and down projection |
-| `sample` | Vocabulary projection and sampling. MTP acceptance, rejection sampling, and selection of accepted state slots if applicable |
-| `mtp_context` | MTP input projection and FA input with the KV-only variant |
-| `mtp_draft` | MTP input projection if applicable, one full FA layer, FFN, and sampling |
-| `vision_block` | One vision layer. The first layer has patch input. The last layer has spatial merge |
+| `output.hidden` | Final normalization and hidden-state export |
+| `output.distribution` | Final normalization, vocabulary projection, penalties, constraints, and probabilities |
+| `output.sample` | Distribution computation and token selection |
+| `mtp.accept` | Acceptance, rejection sampling, and candidate state-slot selection |
+| `mtp.context` | MTP input projection and FA input with the KV-only variant |
+| `mtp.draft` | MTP input projection if applicable, one full FA layer, FFN, and sampling |
+| `vision` | One vision layer. The first layer has patch input. The last layer has spatial merge |
 
 The first MTP draft uses `query_only`. The other 3 drafts use `full`.
 The first draft uses the context endpoint that is already available.
 
 Native operators supply these boundaries.
+The worker applies stop conditions before it commits state from the effective accepted count.
+Candidate slots do not publish state.
+
+The [operator packages](design.md#packages-and-dependencies) own plans, temporary storage, and prepared resource references.
+The seven native libraries are build boundaries. They do not define the public interfaces.
 Use the [numerical procedure](evaluation.md) for correctness and the [HTTP comparison](../performance.md) for performance.
 
 ## Internal language stages
@@ -42,9 +50,11 @@ Use the [numerical procedure](evaluation.md) for correctness and the [HTTP compa
 | `gqa_attention_output` | Causal GQA, sigmoid gate, activation quantization, output projection |
 | `ffn_gate_up` | Residual RMSNorm, activation quantization, packed gate/up projection |
 | `ffn_down` | SiLU product, activation quantization, down projection |
-| `output_sample` | Final norm, vocabulary projection, penalties, grammar, greedy or stochastic selection |
+| `output_hidden` | Final norm and hidden-state export |
+| `output_distribution` | Final norm, vocabulary projection, penalties, grammar, and probabilities |
+| `output_sample` | Distribution computation and greedy or stochastic selection |
 | `mtp_input` | Embedding gather, two norms, concatenation through the projection |
-| `mtp_accept_commit` | Conditional acceptance, rejection sampling, accepted state selection |
+| `mtp_accept` | Conditional acceptance, rejection sampling, candidate state selection |
 
 MTP uses the same FA and FFN operators as the target model.
 A second implementation of those operators is not necessary.
@@ -68,7 +78,7 @@ An implementation can fuse stages. Each measured operation must supply all stage
 
 If this reduces the time for the full operation, fuse producer work into GEMM input loads or output stores.
 Use different small-row and prefill implementations when necessary.
-The [GDN entry point](../../python/oh_my_vllm/kernels/cuda_backend/gdn.cu) selects recurrent and prefill implementations.
+The [GDN entry point](../../python/oh_my_vllm/operators/gdn/cuda/gdn.cu) selects recurrent and prefill implementations.
 
 Small normalization, activation, quantization, and position operations can execute in their producer or consumer kernels.
 Use the independent PyTorch FP64 full-model reference in the numerical tools.

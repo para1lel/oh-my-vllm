@@ -114,14 +114,14 @@ PreparedCase.close() -> None
 使用现有 reference 依赖锁文件.
 修改 `test_contracts.py`.
 
-修改 `python/oh_my_vllm/kernels/sample.py` 和 `python/oh_my_vllm/kernels/cuda_backend/sample.cu`, 完成必要的准备步骤.
-当前实现没有不选择 token 且不改变 RNG 的 distribution-only 路径.
-在词表投影后增加 `Sample.distribution(history, mask, parameters, *, greedy=False)`.
-它返回已准备的概率张量, 不输出 token, 也不接受 RNG 参数.
+修改 `python/oh_my_vllm/operators/output/{api,workspace}.py` 和 `python/oh_my_vllm/operators/output/cuda/sample.cu`, 完成必要的准备步骤.
+提供 `output.distribution(weights, workspace, inputs, settings)`, 用于词表投影和分布准备.
+它返回 `Outputs`, 已准备的概率张量位于 `Outputs.probabilities`.
+它不选择 token, 也不接受 RNG 参数.
 增加 native `sample_distribution` 导出, 并更新函数列表和 manifest.
 保留现有融合采样路径.
 
-**接口:** 各算子族提供 `reference(case, inputs, weights) -> dict[str, numpy.ndarray]`, 直接使用 PyTorch 公式.
+**接口:** 各算子族提供 `reference(case, inputs, state, weights) -> dict[str, numpy.ndarray]`, 直接使用 PyTorch 公式.
 `numerics.compare(actual, fixture, limits) -> NumericalResult` 返回字段指标和精确契约失败项.
 生成器写入新的暂存目录, 不覆盖已跟踪 fixture.
 
@@ -137,7 +137,8 @@ PreparedCase.close() -> None
 
 ## V3: 实现理论延迟验收
 
-**依赖:** V1 和 V2. 源码迁移前完成.
+**依赖:** V1 和 V2. 在源码迁移到 `main` 前冻结经审查的门槛.
+迁移后运行最终性能验收. 按[最终交付流程](plan.zh.md#最终交付流程)统一提交并推送一次.
 
 **新建:** `development/operators/{accounting,timing}.py`.
 修改 CLI, 门槛和 `test_contracts.py`.
@@ -145,18 +146,18 @@ PreparedCase.close() -> None
 
 **接口:** `accounting.work(case) -> ResourceWork` 给出语义资源总量.
 `accounting.lower_bound(case, device_spec) -> float` 返回秒数.
-`timing.measure(prepared, policy) -> TimingSamples` 记录原始 GPU/host 样本.
+`timing.measure(prepared, *, count=MINIMUM_SAMPLES, events_factory=Events, repeats=None) -> list[Sample]` 记录原始 GPU/host 样本.
 `timing.check(samples, lower_bound, max_ratio) -> PerformanceResult` 给出倍率, 区间和判定.
 
-- [ ] 新增 `test_accounting_ignores_implementation_work`, 检查额外 scratch 和重复 launch 不能增加理论计费.
-- [ ] 新增 `test_ratio_gate_excludes_reset_and_fails_uncertainty`, 使用假 events 和固定计时样本.
-- [ ] 检查 cache 常驻与流式访问计费, reset 排除, 固定门槛失败和未决区间.
-- [ ] 实现前先运行这些检查.
-- [ ] 按 microbench 设计实现计费和测量.
-- [ ] 使用固定的 5 次会话流程, 根据当前正确实现校准建议门槛.
-- [ ] 请另一位 agent 检查资源数量, 缓存策略, 实测倍率和建议门槛.
-- [ ] 只将经批准的门槛和来源摘要与测量工具一起提交.
-- [ ] 不提供旧构建或旧计时输入, 运行性能验收.
+- [x] 新增 `test_accounting_ignores_implementation_work`, 检查额外 scratch 和重复 launch 不能增加理论计费.
+- [x] 新增 `test_ratio_gate_excludes_reset_and_fails_uncertainty`, 使用假 events 和固定计时样本.
+- [x] 检查 cache 常驻与流式访问计费, reset 排除, 固定门槛失败和未决区间.
+- [x] 实现前先运行这些检查.
+- [x] 按 microbench 设计实现计费和测量.
+- [x] 使用固定的 5 次会话流程, 根据当前正确实现校准建议门槛.
+- [x] 请另一位 agent 检查资源数量, 缓存策略, 实测倍率和建议门槛.
+- [x] 将经批准的门槛和来源摘要与测量工具一起准备好, 用于最终交付.
+- [x] 不提供旧构建或旧计时输入, 运行性能验收.
 
 ## V4: 保留集成验收
 
@@ -167,20 +168,20 @@ PreparedCase.close() -> None
 为模型 CLI 增加 `--case`. 默认值保持现有短输入用例行为.
 保持 `reference.py`, `reference.npz` 和现有短用例身份检查不变.
 
-- [ ] 数值 capture 使用具名 logits 和全部 7 个 native 模块身份.
-- [ ] 在相应执行路径变化前, 新增 `mtp-restored`, `image-video` 和 `context-32769` 全模型用例.
-- [ ] 分别比较 target 加 MTP 计算, media 到 language 计算和长上下文 decode 后的完整词表端点.
-- [ ] 新增全模型参考同样遵守仓库 fixture 和显式生成规则.
-- [ ] 保持现有短输入用例门槛不变.
-- [ ] 保留执行生命周期, stop 截断, constraints, service 和 Rust 检查.
-- [ ] 使用不变的工作负载设置运行 24 组 HTTP 配置.
-- [ ] 根据已验证 HTTP 产物更新两份 README 的性能表.
-- [ ] 请另一位 agent 检查集成变更.
-- [ ] 提交集成变更.
+- [x] 数值 capture 使用具名 logits 和全部 7 个 native 模块身份.
+- [x] 在相应执行路径变化前, 新增 `mtp-restored`, `image-video` 和 `context-32769` 全模型用例.
+- [x] 分别比较 target 加 MTP 计算, media 到 language 计算和长上下文 decode 后的完整词表端点.
+- [x] 新增全模型参考同样遵守仓库 fixture 和显式生成规则.
+- [x] 保持现有短输入用例门槛不变.
+- [x] 保留执行生命周期, stop 截断, constraints, service 和 Rust 检查.
+- [x] 使用不变的工作负载设置运行 24 组 HTTP 配置.
+- [x] 根据已验证 HTTP 产物更新两份 README 的性能表.
+- [x] 请另一位 agent 检查集成变更.
+- [x] 将集成变更纳入最终交付.
 
 ## 命令与验收
 
-以下算子命令是待实现的目标接口.
+使用以下算子命令进行验证.
 使用前设置本地主机的模型/环境路径及新的仓库外报告路径.
 
 ```bash

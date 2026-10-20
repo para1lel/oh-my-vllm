@@ -8,7 +8,7 @@
 
 ## 字段门槛
 
-使用 `u16 = 1/256` 和 `u8 = 1/16` 作为 BF16 和 E4M3 正规数的舍入单位.
+使用 `u32 = 2^-24`, `u16 = 1/256` 和 `u8 = 1/16` 作为 FP32, BF16 和 E4M3 正规数的舍入单位.
 这些单位用于制定工程精度门槛.
 这些门槛不是最坏情况舍入误差的证明.
 投影的条件性质, 非线性计算和重复层可能放大舍入误差.
@@ -20,7 +20,8 @@
 
 | 字段 | 归一化 L2 门槛 | 最大绝对误差 |
 |---|---|---|
-| 残差 | `u16` | `u16 * P` |
+| FFN 残差 | `u32` | `u32 * P` |
+| 其他残差 | `u16` | `u16 * P` |
 | 最终 hidden 和 hidden cache | `2*u16` | `4*u16 * P` |
 | Output logits | `4*u16` | `8*u16 * P` |
 | MTP context 投影 | `4*u16` | `8*u16 * P` |
@@ -28,9 +29,7 @@
 | FFN value | `u8` | `2*u8 * P` |
 | FA value | `0.1` | `2*u8 * P` |
 | GDN value | `0.1` | 通道 `j` 使用 `2*u8 * P_j` |
-| BF16 KV, recurrent state, convolution state | `u8` | `2*u8 * P` |
-| FP8 KV 编码值 | `2*u8` | `3*u8 * P` |
-| KV scales | `u8` | `2*u8 * P` |
+| BF16 KV, FP32 recurrent state, BF16 convolution state | `u8` | `2*u8 * P` |
 | 单步 MTP draft hidden/logits | `u8 + 4*u16` | `2*u8 * P` |
 | 四步 draft chain hidden/logits | `2*u8` | `4*u8 * P` |
 
@@ -57,30 +56,17 @@ Chain 门槛更高, 因为 draft 步骤会重复.
 拒绝非有限值.
 对整数输出, RNG 计数器, 分配的槽位和未写入的存储进行逐位相等比较.
 
-## Cache 编码
-
-Scale 门槛还必须通过 [cache 一致性检查](../../development/operators/numerics.py).
-将 K scale 与 `max(32 * max(abs(1 + k_norm)), 1e-10) / 448` 比较.
-将每个 V scale 与 `max(max(abs(candidate_BF16_V)), 1e-10) / 448` 比较.
-允许的 scale 相对误差最多为四个 FP32 epsilon.
-要求 scale 为正.
-
-对于每个候选 BF16 值 `v`, 解码后的 FP8 编码值 `q` 和 scale `s`, 要求:
-
-```text
-abs(q*s - v) <= (u8 + 4*FP32_epsilon)*abs(v) + 2^-10*s
-```
-
-最后一项是半个 E4M3 非正规数间隔.
-字段门槛和这些编码检查必须全部通过.
-BF16 KV 比较仍将计算结果与 FP64 对照.
-
 ## 概率门槛
 
 Output 采样用例保留惩罚, 掩码和截断.
 MTP draft 用例使用 temperature 1, 不使用 top-k, top-p 或 min-p 截断.
 这些用例保留惩罚, 掩码和随机选择.
 Output 用例独立于 MTP 计算检查不连续的截断行为.
+
+三个 chain 数值用例为每个请求使用一个固定的允许 token.
+各请求使用不同 token. 此 token 不是请求的初始输入 token.
+使用此固定路径, 测试在四个相连步骤中比较完整 hidden, logits, state 和 guards.
+采样用例检查 token 选择. Worker 行为测试检查 chain 步骤间的 token 反馈.
 
 | 概率路径 | 归一化 L2 门槛 | 最大绝对误差和总变差 |
 |---|---|---|

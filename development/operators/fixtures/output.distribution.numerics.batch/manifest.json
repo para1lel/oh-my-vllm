@@ -42,7 +42,7 @@
     "torch": "2.12.0+cu130",
     "cuda": "13.0",
     "numpy": "2.5.4",
-    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "source": "182a6136bc7fb0e6bd90b3ce39f57f1a49a55f733d2a1fce19d005f9ab4171aa",
     "decisions": {
       "minimum_margin": 0.01,
       "records": []
@@ -50,13 +50,13 @@
   },
   "files": {
     "inputs.value.0000.npz": "8117b7b2fa9fbbbe7b6f87ee774f1c73e144319fa224ef89e7a46f882edf9e10",
-    "inputs.residual.0000.npz": "bcfb81cede90aa215ea43706ce34cb4f0660956eb7915c211f0d3b4be251feb3",
+    "inputs.residual.0000.npz": "04d6df66de49ef56cac2cb69865a400a2efa073b9641013e957e6cee7d68dc22",
     "inputs.history.0000.npz": "7a28eb4eec5f99f51b0e15dfbab2c1d1030d6fa45c974e3eccb9f367eac8ead6",
     "inputs.mask.0000.npz": "ae8448e697b97aa9867f9b03f4dd97e5659beece0973eb46b3a8eba92e5e6b8c",
     "inputs.parameters.0000.npz": "4e20c258314e9c624f2e3e939a46e5ed18f15d08d467720a8d45baea665203ce",
     "state.rng.0000.npz": "4884d1254c83d09244e5a1edda054399cfe6d20f59ea30341d4b151d6dc2b68d",
-    "expected.logits.0000.npz": "8d4826ac0510eb413b6ee4aed1236f52ae38662d4138475eeeda60f73dd9db2a",
-    "expected.probabilities.0000.npz": "7c1d884856ae132f9ce08596ed4676ccb4f052f25dc8e43a2b2b3cb675fbdf8e"
+    "expected.logits.0000.npz": "31da3bc1b293bbd71081464f04ddcbef0a63de3d2fba977be6c1c7c7e7119b08",
+    "expected.probabilities.0000.npz": "69296d49df11af6164025a17f9f9b6c72d700c47fca05bf5ff1576f2a892cde3"
   },
   "tensors": {
     "inputs.value": {
@@ -80,8 +80,8 @@
         4,
         5120
       ],
-      "dtype": "uint16",
-      "tensor_dtype": "bfloat16",
+      "dtype": "float32",
+      "tensor_dtype": "float32",
       "parts": [
         {
           "file": "inputs.residual.0000.npz",

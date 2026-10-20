@@ -1,6 +1,6 @@
 import math
 
-VERSION = "http-reference-v1"
+VERSION = "http-reference-v2"
 RATES = dict(
     hbm_bytes=7.7e12,
     fp8_flops=4.5e15,
@@ -107,7 +107,7 @@ def target_work(rows, verify):
         norm(tokens, 5120),
         gdn_math(queries, verify),
         dict(
-            hbm_bytes=states * (48 * 128 * 128 + 10240 * 3) * 2
+            hbm_bytes=states * (48 * 128 * 128 * 4 + 10240 * 3 * 2)
             + 10240 * 4 * 2
             + 4 * (128 + 96),
             fp32_flops=tokens * (5120 + 7 * 10240),

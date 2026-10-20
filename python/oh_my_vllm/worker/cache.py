@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..kernels.gdn import Schedule
+from ..operators.gdn.api import Schedule
 
 
 @dataclass
@@ -40,15 +40,11 @@ class Cache:
         if self.slots > 65536:
             raise ValueError("GDN cache exceeds the state slot limit")
         self.fa = tuple(
-            (
-                device.zeros((self.blocks, 2, 784, 4, 256), "bfloat16"),
-                device.zeros((self.blocks, 2, 784, 4, 256), "float8_e4m3fn"),
-                device.zeros((self.blocks, 2, 4, 784), "float32"),
-            )
+            (device.zeros((self.blocks, 2, 784, 4, 256), "bfloat16"),)
             for _ in range(16 + bool(config["num_speculative_tokens"]))
         )
         self.state = tuple(
-            device.zeros((self.slots, 48, 128, 128), "bfloat16") for _ in range(48)
+            device.zeros((self.slots, 48, 128, 128), "float32") for _ in range(48)
         )
         self.convolution = tuple(
             device.zeros((self.slots, 10240, 3), "bfloat16") for _ in range(48)

@@ -83,6 +83,8 @@ class Lifecycle(unittest.TestCase):
                 self.assertEqual(events[-3:], ["release", "synchronize", "close"])
             else:
                 prepared.start()
+                prepared.stage_resets()
+                self.assertIsNot(prepared.restores[0][1], value)
                 np.testing.assert_array_equal(value, fixture.state["rng"])
                 prepared.invoke()
                 np.testing.assert_array_equal(value, [[18, 1]])

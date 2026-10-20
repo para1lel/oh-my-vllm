@@ -56,7 +56,7 @@ The command starts and stops the service for each mode.
 It completes short initialization requests before timing.
 It also checks a complete tool call in each mode before timing.
 It checks prompt lengths, output lengths, and uncached prefixes in HTTP usage.
-The default cache capacities are 1024 FA blocks and 1024 GDN slots.
+The default cache capacities are 1024 FA blocks and 128 GDN slots.
 Use `--blocks` and `--mamba-blocks` to change these capacities.
 
 Use `--case ordinary:1:32768` to select its two output lengths.
@@ -93,7 +93,7 @@ This is a conservative resource estimate, not a minimum physical latency proof.
 
 ## Lower-bound calculation
 
-The [reference calculation](../development/serving/accounting.py) uses version `http-reference-v1`.
+The [reference calculation](../development/serving/accounting.py) uses version `http-reference-v2`.
 It has no runtime algorithm selector or measured calibration input.
 
 The [trace validator](../development/serving/trace.py) first checks full prefill, continuous accepted positions, proposal dependencies, and output counts.
@@ -141,7 +141,7 @@ Count accepted KV writes once, with 4 KV heads, width 256, and BF16 K and V.
 MTP draft attention starts at position 1. The first draft reads its cached context endpoint.
 Subsequent drafts compute new KV.
 
-GDN reads one BF16 recurrent and convolution state when a request starts above position zero.
+GDN reads one FP32 recurrent state and one BF16 convolution state when a request starts above position zero.
 Count unique 784-token checkpoints and the accepted endpoint in that pass.
 A checkpoint at the endpoint counts once.
 Verification advances by the accepted proposal count plus one.

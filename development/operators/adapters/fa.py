@@ -1,10 +1,10 @@
-from oh_my_vllm.kernels.fa import FA
+from oh_my_vllm.operators.fa import api as fa
+from oh_my_vllm.operators.fa.plan import make_plan
+from oh_my_vllm.operators.fa.workspace import prepare
 
 
 def cache(prepared, prefix=""):
-    return tuple(
-        prepared.state[prefix + name] for name in ("kv", "fp8_kv", "kv_scales")
-    )
+    return (prepared.state[prefix + "kv"],)
 
 
 def arguments(prepared, prefix="", state_prefix=""):
@@ -19,30 +19,34 @@ def arguments(prepared, prefix="", state_prefix=""):
     )
 
 
+def views(prepared, prefix="", state_prefix=""):
+    positions, kv, slots, tables, starts, lengths = arguments(
+        prepared, prefix, state_prefix
+    )
+    return fa.BatchView(positions, starts, lengths), fa.CacheView(kv, slots, tables)
+
+
 def bind(prepared):
     case, weights, inputs = prepared.case, prepared.weights.bindings, prepared.inputs
-    operation = prepared.own(
-        FA(
-            weights[0],
-            case.shape["rows"],
-            prepared.device.empty,
-            max_queries=case.shape["queries"],
-            max_context=case.shape["context"],
-            min_context=case.shape["context"] - case.shape["queries"] + 1,
-        )
+    plan = make_plan(
+        rows=case.shape["rows"],
+        batch=case.shape["batch"],
+        table_width=inputs["tables"].shape[1],
+        max_queries=case.shape["queries"],
+        max_context=case.shape["context"],
+        min_context=case.shape["context"] - case.shape["queries"] + 1,
     )
-    prepared.outputs.update(
-        zip(("value", "residual"), operation.buffers[:2], strict=True)
-    )
+    operation = prepared.own(prepare(plan, prepared.device, weights))
+    prepared.outputs.update(operation.outputs._asdict())
+    value = fa.Inputs(inputs["value"], inputs["residual"])
     calls = [
-        arguments(prepared, state_prefix=f"layer{layer}." if len(weights) > 1 else "")
+        views(prepared, state_prefix=f"layer{layer}." if len(weights) > 1 else "")
         for layer in case.weights
     ]
 
     def run():
-        for weight, metadata in zip(weights, calls, strict=True):
-            operation.weights = weight
-            operation(inputs["value"], inputs["residual"], *metadata)
+        for weight, (batch, state) in zip(weights, calls, strict=True):
+            fa.run(weight, operation, value, batch, state)
 
     prepared.operation = run
     return run

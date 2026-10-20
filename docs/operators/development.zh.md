@@ -98,6 +98,27 @@ scripts/with-env.sh python -m development.operators.budgets --fixtures "$OPERATO
 
 更新仓库内 fixture, 用例哈希和[门槛](../../development/operators/limits.json)前, 检查数组, 清单, 生成器 identity 和提议门槛.
 
-性能测量使用 [HTTP benchmark](../performance.zh.md#测量命令).
+将 `OPERATOR_PERFORMANCE` 设为仓库外的新目录.
+按已批准的倍率门槛运行全部固定性能用例:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.operators performance --model "$MODEL_ROOT" --report "$OPERATOR_PERFORMANCE"
+```
+
+[资源与计时策略](performance.zh.md)定义测量的操作和理论下界.
+失败或无法判定的用例会导致错误退出.
+
+初始校准时, 将 `OPERATOR_CALIBRATION` 设为仓库外的新目录.
+采集五个完整 session:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.operators calibrate --model "$MODEL_ROOT" --report "$OPERATOR_CALIBRATION"
+```
+
+此命令在外部报告中提议门槛.
+它不修改仓库门槛.
+将批准的性能条目复制到门槛文件前, 审查完整报告及其来源记录.
+
+完整推理计时使用 [HTTP benchmark](../performance.zh.md#测量命令).
 比较变更前后的测量时, 使用相同的 `--prompt-seed` 值.
 HTTP 产物记录此 seed 和执行策略.

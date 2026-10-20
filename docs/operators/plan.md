@@ -34,8 +34,9 @@
 
 ## File and interface map
 
-Complete validation tasks V1–V3 on the current runtime before task 1.
-Their reviewed fixtures and ratio limits control subsequent migration.
+Freeze reviewed fixtures and V3 ratio limits on the current runtime before migration into `main`.
+Use those fixtures and limits for final migration acceptance.
+Validate and review each task. Commit and push the changes together after final acceptance.
 
 Python package paths below are relative to `python/oh_my_vllm`.
 Development, test, and tool paths are relative to the repository root.
@@ -59,7 +60,8 @@ workspace.outputs: Outputs
 workspace.graph_lease()  # Existing context-manager lifetime contract.
 ```
 
-Preparation creates storage and native contexts and does family-specific warmup.
+Preparation creates storage and native contexts.
+Family workspaces supply warmup before Graph recording.
 Its weight tuple contains all layer bindings used by that operator workspace.
 The worker puts family `plan.reuse_key` values together and checks resource identities independently.
 Plans supply storage descriptions for startup sizing. Constructors with counting allocators must no longer select implementations.
@@ -78,15 +80,15 @@ Put `sample.cu` in `output/cuda`.
 Add `MODULE_SOURCES: dict[str, Path]` to `runtime/native.py`.
 Use this mapping in `development/native_build.py` and `source_fingerprint(name)`.
 
-- [ ] Check the pre-change manifests and measurements from validation task V3.
-- [ ] Extend `development/model/test_identity.py::test_native_identity_tracks_only_transitive_dependencies` with sibling-directory includes and an include cycle.
-- [ ] Check that a transitive edit changes the digest and an unrelated edit does not.
-- [ ] Move family-prefixed CUDA headers with their family. Move shared headers according to their existing users and responsibility.
-- [ ] Hash dependency paths relative to the operator source root, together with file contents.
-- [ ] Change quoted includes, builder include roots, all inference/development/test imports, and source links to the new paths.
-- [ ] Update `scripts/format_cuda.py` and `.pre-commit-config.yaml` so the 800-line CUDA limit still applies.
-- [ ] Adapt `tests/test_execution.py` to the new Device import without changing its failure assertions.
-- [ ] Complete the delivery procedure below with the existing short FP64 endpoints and all seven rebuilt modules.
+- [x] Check the pre-change manifests and measurements from validation task V3.
+- [x] Extend `development/model/test_identity.py::test_native_identity_tracks_only_transitive_dependencies` with sibling-directory includes and an include cycle.
+- [x] Check that a transitive edit changes the digest and an unrelated edit does not.
+- [x] Move family-prefixed CUDA headers with their family. Move shared headers according to their existing users and responsibility.
+- [x] Hash dependency paths relative to the operator source root, together with file contents.
+- [x] Change quoted includes, builder include roots, all inference/development/test imports, and source links to the new paths.
+- [x] Update `scripts/format_cuda.py` and `.pre-commit-config.yaml` so the 800-line CUDA limit still applies.
+- [x] Adapt `tests/test_execution.py` to the new Device import without changing its failure assertions.
+- [x] Complete task validation with the existing short FP64 endpoints and all seven rebuilt modules.
 
 ## Task 2: Add full-model validation inputs
 
@@ -94,10 +96,10 @@ Use this mapping in `development/native_build.py` and `source_fingerprint(name)`
 
 **Files and interfaces:** Use validation task V4 in [the validation plan](validation-plan.md).
 
-- [ ] Add MTP and long-context endpoints before FA/MTP changes.
-- [ ] Add media endpoints before vision changes.
-- [ ] Examine reference generation and artifact identities independently of inference changes.
-- [ ] Complete the delivery procedure with unchanged inference behavior.
+- [x] Add MTP and long-context endpoints before FA/MTP changes.
+- [x] Add media endpoints before vision changes.
+- [x] Examine reference generation and artifact identities independently of inference changes.
+- [x] Complete task validation with unchanged inference behavior.
 
 ## Task 3: Apply FA plans and MTP component interfaces
 
@@ -109,7 +111,8 @@ Modify `tests/test_execution.py` and the draft-chain fixtures in `tests/test_con
 **Interfaces:** FA defines these functions:
 
 ```python
-make_plan(*, rows: int, max_queries: int, max_context: int,
+make_plan(*, rows: int, batch: int, table_width: int,
+          max_queries: int, max_context: int,
           min_context: int, variant: str = "full", first_token: int = 0) -> Plan
 run(weights: Weights, workspace: Workspace, inputs: Inputs,
     batch: BatchView, state: CacheView) -> Outputs
@@ -120,15 +123,16 @@ run(weights: Weights, workspace: Workspace, inputs: Inputs,
 `CacheView` contains `cache`, `slots`, and `tables`.
 Private component types in `components.py` give MTP its projection and attention storage contracts.
 
-- [ ] Add `test_fa_plan_separates_recorded_launches` for variants, rows 32/33 and 128/129, and dispatch boundaries 1024, 12544, and 32768.
-- [ ] Check unequal launch conditions with equal storage sizes. Check compatible metadata updates without a new plan.
-- [ ] Add `test_operator_workspace_keeps_outputs_and_graph_owners` with a fake device and multiple layer weights.
-- [ ] Check fixed output identities, no allocation during recording, shared sequential scratch, and release after Graph destruction.
-- [ ] Run the new checks before implementation to show the missing behavior.
-- [ ] Move dispatch and preparation decisions from `worker/model.py` into FA plans.
-- [ ] Replace MTP buffer-index access and copied FA layouts with the explicit component types.
-- [ ] Keep named private adapters for the old FFN/output components until tasks 4 and 5 remove them.
-- [ ] Complete the delivery procedure with FA/MTP microbench cases and V4's full-model endpoints.
+- [x] Add `test_fa_plan_separates_recorded_launches` for variants, rows 32/33 and 128/129, and dispatch boundaries 1024 and 32768.
+- [x] Check reuse across the removed 12544 boundary.
+- [x] Check unequal launch conditions with equal storage sizes. Check compatible metadata updates without a new plan.
+- [x] Add `test_operator_workspace_keeps_outputs_and_graph_owners` with a fake device and multiple layer weights.
+- [x] Check fixed output identities, no allocation during recording, shared sequential scratch, and release after Graph destruction.
+- [x] Run the new checks before implementation to show the missing behavior.
+- [x] Move dispatch and preparation decisions from `worker/model.py` into FA plans.
+- [x] Replace MTP buffer-index access and copied FA layouts with the explicit component types.
+- [x] Keep named private adapters for the old FFN/output components until tasks 4 and 5 remove them.
+- [x] Complete task validation with FA/MTP microbench cases and V4's full-model endpoints.
 
 ## Task 4: Apply GDN and FFN contracts
 
@@ -141,12 +145,12 @@ GDN uses `run(weights, workspace, inputs, batch, state) -> Outputs`.
 Its views use the existing `Schedule` fields and recurrent/convolution tensors.
 Its inputs also name optional token and media tensors.
 
-- [ ] Give hidden export a worker-owned named write-slot view before removal of `gdn.metadata[2]` access.
-- [ ] Move GDN chunk selection, metadata preparation, and FFN dispatch into family plans.
-- [ ] Replace startup counting constructors with plan storage descriptions in `worker/model.py` and `worker/inference.py`.
-- [ ] Remove mutable weight bindings and FFN private-buffer access from consumers.
-- [ ] Apply task 3's lifetime assertions to the GDN/FFN preparation paths.
-- [ ] Complete the delivery procedure with GDN/FFN microbench cases and V4's short, chunk-boundary, and long-context endpoints.
+- [x] Give hidden export a worker-owned named write-slot view before removal of `gdn.metadata[2]` access.
+- [x] Move GDN chunk selection, metadata preparation, and FFN dispatch into family plans.
+- [x] Replace startup counting constructors with plan storage descriptions in `worker/model.py` and `worker/inference.py`.
+- [x] Remove mutable weight bindings and FFN private-buffer access from consumers.
+- [x] Apply task 3's lifetime assertions to the GDN/FFN preparation paths.
+- [x] Complete task validation with GDN/FFN microbench cases and V4's short, chunk-boundary, and long-context endpoints.
 
 ## Task 5: Split output and MTP acceptance
 
@@ -160,16 +164,16 @@ Each takes explicit family weights when applicable, a prepared operator workspac
 Output fields are `hidden`, `logits`, `probabilities`, `tokens`, and `selected_probability`, as applicable.
 Acceptance fields are `tokens`, `counts`, and `candidate_slots`.
 
-- [ ] Add `test_stop_truncation_controls_accepted_slot`: truncate four candidates to one token and check the effective cache commit count.
-- [ ] Check that a stop before the first returned token cannot commit the raw candidate slot.
-- [ ] Run the test before changes to show the uncovered contract.
-- [ ] Move `final_hidden` to the existing sample native module. Keep generic row gather with primitives.
-- [ ] Move `mtp_accept` to the existing MTP native module with its vocabulary, CUB, and Philox dependencies.
-- [ ] Change function lists, loader calls, and manifests together with these exports.
-- [ ] Move V2's distribution-only path into the new API. Keep sample's fused path when compatible.
-- [ ] Hidden export must accept all input rows when vocabulary projection uses fewer rows.
-- [ ] Remove the temporary component adapters and use named logits in numerical capture.
-- [ ] Complete the delivery procedure with output/MTP microbench cases, V4 endpoints, RNG checks, and state-selection checks.
+- [x] Add `test_stop_truncation_controls_accepted_slot`: truncate four candidates to one token and check the effective cache commit count.
+- [x] Check that a stop before the first returned token cannot commit the raw candidate slot.
+- [x] Run the test before changes to show the uncovered contract.
+- [x] Move `final_hidden` to the existing sample native module. Keep generic row gather with primitives.
+- [x] Move `mtp_accept` to the existing MTP native module with its vocabulary, CUB, and Philox dependencies.
+- [x] Change function lists, loader calls, and manifests together with these exports.
+- [x] Move V2's distribution-only path into the new API. Keep sample's fused path when compatible.
+- [x] Hidden export must accept all input rows when vocabulary projection uses fewer rows.
+- [x] Remove the temporary component adapters and use named logits in numerical capture.
+- [x] Complete task validation with output/MTP microbench cases, V4 endpoints, RNG checks, and state-selection checks.
 
 ## Task 6: Apply vision contracts
 
@@ -180,22 +184,22 @@ Acceptance fields are `tokens`, `counts`, and `candidate_slots`.
 **Interfaces:** `run(weights: Weights, workspace: Workspace, inputs: Inputs) -> Outputs` returns named `hidden`.
 Plans give input, transformer, and merge stage conditions, grid/frame capacities, and native context ownership.
 
-- [ ] Move constructor validation and native-context preparation into the vision plan/preparation path.
-- [ ] Keep media decode, request order, and position construction in the worker.
-- [ ] Check first/last layers and odd frame counts with the fixed vision microbench cases.
-- [ ] Check invalid grids and the 65536-row capacity with CPU plan validation.
-- [ ] Complete the delivery procedure with V4's media endpoints and representative media timing.
+- [x] Move constructor validation and native-context preparation into the vision plan/preparation path.
+- [x] Keep media decode, request order, and position construction in the worker.
+- [x] Check first/last layers and odd frame counts with the fixed vision microbench cases.
+- [x] Check invalid grids and the 65536-row capacity with CPU plan validation.
+- [x] Complete task validation with V4's media endpoints and representative media timing.
 
-## Delivery procedure for each task
+## Final delivery procedure
 
-- [ ] Run the applicable validation commands and full hooks from the validation plan.
-- [ ] Update `operators/specification.py` and the bilingual [serving boundaries](fusion.md) when their facts change.
-- [ ] Update the two README performance tables from verified measurements.
-- [ ] Get a different agent to examine the code and documents.
-- [ ] Correct the findings.
-- [ ] Update the bilingual handoff without test logs.
-- [ ] Commit only the task files with a Conventional Commits title.
-- [ ] Push `main` with hooks active.
+- [x] Run the applicable validation commands and full hooks from the validation plan.
+- [x] Update `operators/specification.py` and the bilingual [serving boundaries](fusion.md) when their facts change.
+- [x] Update the two README performance tables from verified measurements.
+- [x] Get a different agent to examine the code and documents.
+- [x] Correct the findings.
+- [x] Update the bilingual handoff without test logs.
+- [x] Commit only the completed change files with a Conventional Commits title.
+- [x] Push `main` with hooks active.
 
 After task 6, remove unused compatibility files and the old kernel package.
 Check imports and direct buffer access across inference, development tools, and tests.

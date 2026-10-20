@@ -8,7 +8,7 @@ It does not read candidate outputs or change approved limits.
 
 ## Field limits
 
-Use `u16 = 1/256` and `u8 = 1/16` for the BF16 and E4M3 normal rounding units.
+Use `u32 = 2^-24`, `u16 = 1/256`, and `u8 = 1/16` for the FP32, BF16, and E4M3 normal rounding units.
 These units supply engineering accuracy limits.
 The limits are not worst-case rounding-error proofs.
 Projection conditioning, nonlinear computation, and repeated layers can amplify rounding error.
@@ -20,7 +20,8 @@ Use only the magnitude of that step in each comparison.
 
 | Field | Normalized L2 limit | Maximum absolute error |
 |---|---|---|
-| Residual | `u16` | `u16 * P` |
+| FFN residual | `u32` | `u32 * P` |
+| Other residuals | `u16` | `u16 * P` |
 | Final hidden and hidden cache | `2*u16` | `4*u16 * P` |
 | Output logits | `4*u16` | `8*u16 * P` |
 | MTP context projection | `4*u16` | `8*u16 * P` |
@@ -28,9 +29,7 @@ Use only the magnitude of that step in each comparison.
 | FFN value | `u8` | `2*u8 * P` |
 | FA value | `0.1` | `2*u8 * P` |
 | GDN value | `0.1` | `2*u8 * P_j` for channel `j` |
-| BF16 KV, recurrent state, convolution state | `u8` | `2*u8 * P` |
-| FP8 KV codes | `2*u8` | `3*u8 * P` |
-| KV scales | `u8` | `2*u8 * P` |
+| BF16 KV, FP32 recurrent state, BF16 convolution state | `u8` | `2*u8 * P` |
 | One MTP draft hidden/logits | `u8 + 4*u16` | `2*u8 * P` |
 | Four-draft chain hidden/logits | `2*u8` | `4*u8 * P` |
 
@@ -57,30 +56,17 @@ All conditions must pass.
 Reject nonfinite values.
 Use bit equality for integer outputs, RNG counters, assigned slots, and untouched storage.
 
-## Cache encoding
-
-The scale limits must also pass the [cache consistency checks](../../development/operators/numerics.py).
-Check the K scale against `max(32 * max(abs(1 + k_norm)), 1e-10) / 448`.
-Check each V scale against `max(max(abs(candidate_BF16_V)), 1e-10) / 448`.
-The maximum permitted relative scale error is four FP32 epsilons.
-Scales must be positive.
-
-For each candidate BF16 value `v`, decoded FP8 code `q`, and scale `s`, check:
-
-```text
-abs(q*s - v) <= (u8 + 4*FP32_epsilon)*abs(v) + 2^-10*s
-```
-
-The final term is half of an E4M3 subnormal step.
-The field limits and these encoding checks must all pass.
-The BF16 KV comparison still checks the computed values against FP64.
-
 ## Probability limits
 
 Output sampling cases keep penalties, masks, and truncation.
 MTP draft cases use temperature 1 without top-k, top-p, or min-p truncation.
 They keep penalties, masks, and stochastic selection.
 The output cases check discontinuous truncation behavior independently of the MTP computation.
+
+The three chain numerical cases use one fixed permitted token per request.
+Each request uses a different token. This token is not the request's initial input token.
+With this fixed path, the tests compare full hidden, logits, state, and guards across four connected steps.
+Sampling cases check token selection. The worker behavior test checks token feedback between chain steps.
 
 | Probability path | Normalized L2 limit | Maximum absolute error and total variation |
 |---|---|---|

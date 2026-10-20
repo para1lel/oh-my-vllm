@@ -56,7 +56,7 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark 
 计时前完成短初始化请求.
 它还在计时前为每个模式检查一次完整工具调用.
 它检查 HTTP usage 中的 prompt 长度, 输出长度和无缓存前缀.
-默认缓存容量为 1024 个 FA block 和 1024 个 GDN slot.
+默认缓存容量为 1024 个 FA block 和 128 个 GDN slot.
 使用 `--blocks` 和 `--mamba-blocks` 调整这些容量.
 
 使用 `--case ordinary:1:32768` 选择两个输出长度.
@@ -92,7 +92,7 @@ efficiency = reference_seconds / HTTP_seconds
 
 ## 下界计算
 
-[参考计算](../development/serving/accounting.py)使用版本 `http-reference-v1`.
+[参考计算](../development/serving/accounting.py)使用版本 `http-reference-v2`.
 它不依赖 runtime 算法选择器或实测校准输入.
 
 [Trace 验证器](../development/serving/trace.py)先检查完整 prefill, 连续接受位置, proposal 依赖和输出数量.
@@ -140,7 +140,7 @@ FA 对每个请求和 pass 读取一次历史 KV.
 MTP draft attention 从位置 1 开始. 首个 draft 读取缓存的 context endpoint.
 后续 draft 计算新 KV.
 
-当请求起点大于零时, GDN 读取一份 BF16 recurrent 和 convolution state.
+当请求起点大于零时, GDN 读取一份 FP32 recurrent state 和一份 BF16 convolution state.
 计算该 pass 中每个不同的 784-token checkpoint 和接受终点.
 终点上的 checkpoint 只计一次.
 Verification 前进接受的 proposal 数加一行.

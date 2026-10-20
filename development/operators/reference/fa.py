@@ -35,13 +35,6 @@ def attend(query, key, value, positions, *, first_token=0):
     return (torch.softmax(scores, dim=-1) @ value).transpose(0, 1)
 
 
-def encode(values, key_norm):
-    scales = values.abs().amax(dim=-1).clamp_min(1e-10) / 448
-    scales[:, 0] = (32 * (key_norm + 1).abs().max()).clamp_min(1e-10) / 448
-    encoded = (values / scales[..., None]).to(torch.float8_e4m3fn).to(torch.float64)
-    return encoded, scales
-
-
 def compute(
     value, residual, inputs, cache, weights, prefix, *, variant="full", first_token=0
 ):
@@ -86,8 +79,7 @@ def compute(
 def written_cache(state, inputs, weights, prefix, *, indices=None):
     slots = inputs["slots"].long() if indices is None else indices
     values = state["kv"][slots // 784, :, slots % 784]
-    encoded, scales = encode(values, weights.tensor(prefix + "self_attn.k_norm.weight"))
-    return {"kv": values, "fp8_kv": encoded, "kv_scales": scales}
+    return {"kv": values}
 
 
 def reference(case, inputs, state, weights):

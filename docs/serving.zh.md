@@ -115,7 +115,7 @@ Worker 对 target 和 proposal 分布应用 grammar mask.
 Worker 不使用 PDL.
 推理性能测量使用[端到端流程](performance.zh.md).
 
-模型临时缓冲区使用 [CUDA 内存池](../python/oh_my_vllm/kernels/cuda_backend/scratch_allocator.cuh#L19)<!-- source: inline cudaMemPool_t scratch_pool(int device) { -->.
+模型临时缓冲区使用 [CUDA 内存池](../python/oh_my_vllm/operators/runtime/cuda/scratch_allocator.cuh#L19)<!-- source: inline cudaMemPool_t scratch_pool(int device) { -->.
 Worker 在报告就绪前准备存储.
 存储大小根据 token 预算确定, 且最多使用空闲 GPU 显存的一半.
 内存池保留这些存储供后续计算使用. `gpu_reserved_bytes` 统计值包含这些存储.

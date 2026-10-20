@@ -4,8 +4,6 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 
-from .fa import encode
-
 
 @dataclass
 class Data:
@@ -34,9 +32,13 @@ class Data:
         }
 
 
-def hidden(data, rng, rows):
+def hidden(data, rng, rows, *, fp32_residual=False):
     for name in ("value", "residual"):
-        data.add("inputs", name, rng.normal(0, 0.5, (rows, 5120)), "bfloat16")
+        value = rng.normal(0, 0.5, (rows, 5120))
+        if name == "residual" and fp32_residual:
+            data.add("inputs", name, value.astype(np.float32))
+        else:
+            data.add("inputs", name, value, "bfloat16")
 
 
 def attention_metadata(data, case, rng, weights, *, mtp=False, chain=False):
@@ -73,34 +75,13 @@ def attention_metadata(data, case, rng, weights, *, mtp=False, chain=False):
             data.add("inputs", prefix + name, value)
     values = torch.from_numpy(rng.normal(0, 0.25, (blocks, 2, 784, 4, 256))).to("cuda")
     values = values.to(torch.bfloat16).to(torch.float64)
-    prefix = (
-        "mtp.layers.0." if mtp else f"model.language_model.layers.{case.weights[0]}."
-    )
-    flat = values.permute(0, 2, 1, 3, 4).reshape(-1, 2, 4, 256)
-    encoded, scales = encode(flat, weights.tensor(prefix + "self_attn.k_norm.weight"))
-    encoded = (
-        encoded.to(torch.float8_e4m3fn)
-        .view(torch.uint8)
-        .reshape(blocks, 784, 2, 4, 256)
-        .permute(0, 2, 1, 3, 4)
-        .contiguous()
-    )
-    scales = (
-        scales.reshape(blocks, 784, 2, 4)
-        .permute(0, 2, 3, 1)
-        .to(torch.float32)
-        .contiguous()
-    )
     data.add("state", "kv", values, "bfloat16")
-    data.add("state", "fp8_kv", encoded, "float8_e4m3fn")
-    data.add("state", "kv_scales", scales)
     written = all_slots[0]
     if chain:
         written = np.stack(all_slots[1:], axis=1).reshape(-1)
     elif case.options.get("variant") == "query_only":
         written = []
-    for name in ("kv", "fp8_kv", "kv_scales"):
-        data.write(name, written, "kv_scales" if name == "kv_scales" else "kv")
+    data.write("kv", written, "kv")
 
 
 def recurrent_metadata(data, case, rng):
@@ -144,7 +125,11 @@ def recurrent_metadata(data, case, rng):
         for request in range(batch):
             if positions[request] == 0:
                 value[request + 1] = 0
-        data.add("state", name, value, "bfloat16")
+        if name == "recurrent":
+            value = torch.from_numpy(value).to(torch.bfloat16).float().numpy()
+            data.add("state", name, value, "float32")
+        else:
+            data.add("state", name, value, "bfloat16")
         data.write(name, slots)
 
 
@@ -171,7 +156,10 @@ def sampling(data, case, rows, *, greedy=False):
             248319,
         ]
     )
-    allowed[:, ids] = 1
+    if case.options.get("sampling") == "fixed_token":
+        allowed[np.arange(rows), ids[:rows]] = 1
+    else:
+        allowed[:, ids] = 1
     parameters = np.tile(
         np.array([0 if greedy else 0.8, -1, 1, 0, 0, 0, 1], np.float32), (rows, 1)
     )
@@ -217,7 +205,7 @@ def make(case, weights):
         "output.distribution",
         "output.sample",
     }:
-        hidden(data, rng, shape["rows"])
+        hidden(data, rng, shape["rows"], fp32_residual=boundary != "ffn")
     if boundary == "fa":
         attention_metadata(data, case, rng, weights)
     elif boundary == "gdn":

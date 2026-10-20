@@ -12,7 +12,7 @@ import time
 import uuid
 from pathlib import Path
 
-from oh_my_vllm.kernels.native import cache_directory, file_sha256
+from oh_my_vllm.operators.runtime.native import cache_directory, file_sha256
 from oh_my_vllm.worker.execution import execution_policy
 from oh_my_vllm.worker.tokenizer import Tokenization, tokenizer_identity
 
@@ -145,19 +145,16 @@ def native_identity():
             raise RuntimeError(
                 f"native binary identity differs from its manifest: {name}"
             )
-        for key in ("vision_vendor", "ffn_mx_vendor", "gdn_mx_vendor", "fa_mx_vendor"):
-            vendor = metadata.get(key, {})
-            files = {
-                **vendor.get("headers", {}),
-                **{
-                    image["path"]: image["sha256"] for image in vendor.get("images", [])
-                },
-            }
-            for path, expected in files.items():
-                if file_sha256(path) != expected:
-                    raise RuntimeError(
-                        "native vendor file identity differs from its manifest"
-                    )
+        vendor = metadata.get("vision_vendor", {})
+        files = {
+            **vendor.get("headers", {}),
+            **{image["path"]: image["sha256"] for image in vendor.get("images", [])},
+        }
+        for path, expected in files.items():
+            if file_sha256(path) != expected:
+                raise RuntimeError(
+                    "native vendor file identity differs from its manifest"
+                )
         result[name] = metadata
     return result
 
@@ -442,7 +439,7 @@ def main():
     )
     parser.add_argument("--output-tokens", type=int, nargs="+", default=OUTPUT_LENGTHS)
     parser.add_argument("--blocks", type=int, default=1024)
-    parser.add_argument("--mamba-blocks", type=int, default=1024)
+    parser.add_argument("--mamba-blocks", type=int, default=128)
     arguments = parser.parse_args()
     arguments.gpu_uuid = selected_uuid()
     if "B200" not in device_identity(arguments.gpu_uuid)["name"]:

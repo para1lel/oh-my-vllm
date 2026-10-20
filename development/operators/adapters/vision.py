@@ -1,4 +1,6 @@
-from oh_my_vllm.kernels.vision import VisionBlock
+from oh_my_vllm.operators.vision import api as vision
+from oh_my_vllm.operators.vision.plan import make_plan
+from oh_my_vllm.operators.vision.workspace import prepare
 
 
 def bind(prepared):
@@ -8,24 +10,22 @@ def bind(prepared):
         "vision.block": "default",
         "vision.merge": "merge",
     }[case.boundary]
-    operation = prepared.own(
-        VisionBlock(
-            prepared.weights.visual,
-            shape["rows"],
-            shape["height"] * shape["width"],
-            prepared.device.empty,
-            variant=variant,
-            grid=(shape["height"], shape["width"]),
-            frames=shape["frames"],
-            layer=case.weights[0],
-        )
+    weights = tuple(
+        vision.layer_weights(prepared.weights.visual, layer) for layer in case.weights
     )
-    prepared.outputs["hidden"] = operation.output
+    plan = make_plan(
+        rows=shape["rows"],
+        variant=variant,
+        grid=(shape["height"], shape["width"]),
+        frames=shape["frames"],
+    )
+    operation = prepared.own(prepare(plan, prepared.device, weights))
+    prepared.outputs["hidden"] = operation.outputs.hidden
+    value = vision.Inputs(prepared.inputs["pixels" if variant == "input" else "hidden"])
 
     def run():
-        for layer in case.weights:
-            operation.layer = layer
-            operation(prepared.inputs["pixels" if variant == "input" else "hidden"])
+        for weight in weights:
+            vision.run(weight, operation, value)
 
     prepared.operation = run
     return run

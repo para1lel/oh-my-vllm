@@ -9,7 +9,7 @@ repos:
         entry: scripts/with-env.sh python scripts/format_cuda.py
         language: system
         pass_filenames: false
-        files: (\.(cu|cuh|cpp|hpp|h)$|^python/oh_my_vllm/kernels/cuda_backend/.*\.py$|^\.clang-format$|^scripts/format_cuda\.py$|^\.pre-commit-config\.yaml$)
+        files: (\.(cu|cuh|cpp|hpp|h)$|^python/oh_my_vllm/operators/.*\.py$|^\.clang-format$|^scripts/format_cuda\.py$|^\.pre-commit-config\.yaml$)
 
       - id: cargo-fmt
         name: cargo fmt
@@ -65,7 +65,7 @@ repos:
 
       - id: kernel-contracts
         name: model evidence, HTTP accounting, and worker contracts
-        entry: scripts/with-env.sh python -m unittest development.model.test_identity development.model.test_logits tests.test_constraints development.serving.test_roofline tests.test_execution development.operators.test_contracts development.operators.test_lifecycle
+        entry: scripts/with-env.sh python -m unittest development.model.test_identity development.model.test_logits tests.test_constraints development.serving.test_roofline tests.test_execution development.operators.test_contracts development.operators.test_lifecycle development.operators.test_performance tests.test_operator_plans
         language: system
         pass_filenames: false
         files: ^(development/|python/oh_my_vllm/|tests/).*\.(py|cu|cuh)$|^development/operators/.*\.(json|npz)$|^development/model/reference\.npz$|^requirements/|^\.pre-commit-config\.yaml$

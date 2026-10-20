@@ -1,4 +1,4 @@
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 
 import numpy as np
 import tvm_ffi
@@ -55,12 +55,19 @@ class DraftChain:
             stage.metadata_inputs = None
             stage.sampling.greedy = True
             if index:
-                stage.tokens = stages[index - 1].sampling.operation.buffers[7]
+                stage.tokens = stages[index - 1].sampling.operation.outputs.tokens
                 sampler = stages[0].sampling
                 stage.sampling.history = sampler.history
                 stage.sampling.mask = sampler.mask
                 stage.sampling.parameters = sampler.parameters
                 stage.sampling.rng = sampler.rng
+
+    @contextmanager
+    def graph_lease(self):
+        with ExitStack() as resources:
+            for stage in self.stages:
+                resources.enter_context(stage.graph_lease())
+            yield
 
     def close(self):
         self.resources.close()
@@ -118,11 +125,11 @@ class DraftChain:
             if index:
                 stage.copy(
                     stage.hidden,
-                    self.stages[index - 1].sampling.operation.buffers[0],
+                    self.stages[index - 1].sampling.operation.outputs.hidden,
                 )
             stage.run()
             stage.sampling.draw()
-            stage.copy(self.token_rows[index], stage.sampling.operation.buffers[7])
+            stage.copy(self.token_rows[index], stage.sampling.operation.outputs.tokens)
 
     def execute(self):
         if self.replay is None:

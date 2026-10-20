@@ -1,6 +1,6 @@
 # Model operator contracts
 
-The [stage inventory](../../python/oh_my_vllm/kernels/specification.py) gives the inputs, outputs, computation, and state writes of the internal semantic stages.
+The [stage inventory](../../python/oh_my_vllm/operators/specification.py) gives the inputs, outputs, computation, and state writes of the internal semantic stages.
 The dimensions come from the checkpoint configuration and tensor headers.
 
 Use the configuration SHA256 in that inventory to identify the model.
@@ -16,7 +16,7 @@ The loader can convert BF16 norm weights, scales, A_log, and dt_bias to FP32 wit
 | GQA | 24 query heads, 4 KV heads, width 256 |
 | GDN | 16 key heads, 48 value heads, width 128 |
 | Convolution | 10240 channels, width 4 |
-| Cache | Block 784, BF16 recurrent state, align mode |
+| Cache | Block 784, FP32 recurrent state, align mode |
 | Context / step | 262144 / 32768 tokens |
 | FP8 | E4M3, 128-by-128 weight scales, dynamic 128-element activation scales |
 | MTP | One FA layer, four proposals |
@@ -46,9 +46,9 @@ S_next = S_decay + outer(delta, k)
 o = S_next @ q / sqrt(128)
 ```
 
-Keep the BF16 rounding points of the inference path.
+Keep the key intermediate types and operator input and output types below.
 Use FP32 live carry for prefill and recurrent verification rows.
-Store persistent checkpoints in BF16.
+Store persistent recurrent checkpoints in FP32. Keep convolution state in BF16.
 
 Save checkpoints at each 784-token boundary and at the final row.
 Verification writes private states. Only accepted rows can replace the accepted state.
@@ -101,72 +101,70 @@ Keep the input order for text, images, and video.
 
 ## Intermediate precision
 
-Follow [vLLM commit e8e1e961](https://github.com/vllm-project/vllm/commit/e8e1e96196725f097eae2394cbc458b1f5a679b8) for numerical behavior.
-Use its BF16 model path with the project cache settings. This reference adds no vLLM dependency.
-Use the source types and rounding points unless the selected Tensor Core path uses the permitted lower precision.
+Follow [vLLM commit 86129933](https://github.com/vllm-project/vllm/commit/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af) for numerical behavior.
+Use its default BF16 model path and FP32 recurrent state. This reference adds no vLLM dependency.
+Keep the checkpoint tensors unchanged.
 
-Use FP8 or BF16 Tensor Core operands when these types pass the numerical checks.
-The implementation can round intermediate operands and prepared scales to a Tensor Core format.
-Keep the original checkpoint tensors unchanged. Do not increase precision to pass a numerical check.
+Use the same key intermediate types and operator input and output types as its default compiled path.
+Rounding can be different.
+Obey these type and numerical limits. Use simple operations with low execution cost.
 Use the full-model logits limits from the [evaluation procedure](evaluation.md).
 
-FFN inputs with more than 128 rows use MXFP8 Tensor Core projections.
-GDN inputs with more than 128 rows use MXFP8 input projection.
-Their output projection also uses MXFP8 for prefill and verification with `max_queries > 1`.
-Single-query verification keeps the previous output projection.
-Weight preparation converts derived E4M3 codes and supplies UE8M0 scales with power-of-two values.
-The [normalization kernel](../../python/oh_my_vllm/kernels/cuda_backend/mx_fp8_norm.cuh#L7)<!-- source: norm_mx_kernel(const --> supplies MXFP8 operands directly from its BF16 result.
+FP8 projections use the checkpoint E4M3 weights and FP32 block scales for all row counts.
+Activation quantization uses dynamic FP32 scales for each 128-element group.
+Do not convert weights or scales to MXFP8.
+The pinned [vLLM exclusion rule](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/vllm/utils/deep_gemm.py#L27) disables DeepGEMM for `qwen3_5_text` on B200 because of accuracy problems.
 
-The original checkpoint tensors and scales stay unchanged.
+FA uses BF16 Q/K/P/V operands, with FP32 softmax and accumulation.
+Its persistent K/V state uses BF16.
+The default B200 backend in the pinned vLLM source is FlashInfer.
 
-Full FA boundaries with more than 128 rows use MXFP8 input projection.
-They use MXFP8 output projection when attention has one split.
+FFN calculates SiLU and its product in FP32 from BF16 projection outputs.
+Convert the product to BF16 before E4M3 quantization, as in the [fused activation](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/csrc/activation_kernels.cu#L676).
+The BF16 value can stay in registers.
+Use a minimum activation scale of `1e-30 / 448` for this fused product.
 
-FA keeps BF16 K/V and a derived E4M3 copy in the same logical slots.
-Each BF16 cache write updates the derived copy before attention reads it.
-K uses a layer scale bounded by its RMS weight. V uses a scale for each token and head.
-FA batches with at most 32 rows and 5 queries per sequence use E4M3 Q/K/V/P with FP32 softmax and accumulation.
-Each query's probability scale uses only its visible V scales in that split.
-
-Prefill with at least 1024 queries uses E4M3 Q/K and BF16 P/V.
-Other attention batches use BF16 operands.
-These choices do not change the fixed [HTTP reference calculation](../performance.md#lower-bound-calculation).
+Keep the FFN residual output in FP32 until the next attention input or final normalization.
+The next attention input adds the FFN value before storing its residual in BF16.
+Normalization uses the FP32 sum before this conversion.
+This keeps the intermediate precision of the default compiled vLLM path.
 
 | Region | Computation | Stored result |
 |---|---|---|
-| Other FP8 projections | E4M3 operands, FP32 scales and accumulation | BF16 |
-| MXFP8 FFN and GDN projections, more than 128 rows | E4M3 operands, UE8M0 scales, FP32 accumulation | BF16 |
-| Selected MXFP8 FA projections, more than 128 rows | E4M3 operands, UE8M0 scales, FP32 accumulation | BF16 |
+| FP8 projections | E4M3 operands, FP32 scales and accumulation | BF16 |
 | BF16 projections | BF16 operands, FP32 accumulation | BF16 |
-| Residual add and RMS | FP32 sum and statistics. Normalize the unrounded sum | BF16 residual and normalized result |
+| Residual add and RMS | FP32 sum and statistics. Normalize the unrounded sum | FP32 FFN residual. BF16 attention residual and normalized result |
 | Q/K RoPE | BF16 normalized Q/K and cos/sin. FP32 products and sum | BF16 |
 | GDN Q/K norm | FP32 | BF16 for prefill. FP32 live values for recurrent rows |
-| GDN scan | FP32 live carry, products, and sums | BF16 checkpoints |
-| GDN chunked prefill | BF16 matrix operands. FP32 accumulation, state decay, and live carry | BF16 checkpoints |
+| GDN scan | FP32 live carry, products, and sums | FP32 checkpoints |
+| GDN chunked prefill | BF16 matrix operands. FP32 accumulation, state decay, and live carry | FP32 checkpoints |
 | GDN head norm and gate | BF16 attention result, then FP32 RMS, weight, SiLU, and product | One BF16 result |
-| FA attention and gate | Selected FP8 or BF16 operands, FP32 softmax and accumulation | BF16 attention, sigmoid, and product before FP8 |
+| FA attention and gate | BF16 operands, FP32 softmax and accumulation | BF16 attention and product before FP8. FP32 sigmoid |
+| Vision position interpolation | BF16 weights, products, and sums | BF16 |
 | Vision attention | BF16 Q/K/V/P, FP32 softmax and accumulation | BF16 |
 | MTP dual RMS | FP32 statistics and gain computation | BF16 packed input |
 | MTP FC, all row counts | BF16 operands, FP32 accumulation | BF16 |
 | Sampling acceptance and residual CDF | FP32 probabilities, ratio, masses, and sums. FP64 random thresholds | Integer selections |
 
-Chunked GDN prefill follows the pinned [solve and projection types](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/chunk.py#L38).
+The default vLLM B200 GDN prefill backend is FlashInfer.
+
+The project chunked implementation uses the FLA [solve and projection types](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/vllm/third_party/flash_linear_attention/ops/chunk.py#L38).
 The triangular-system result and gate-scaled K/V operands use BF16 stores before the W/U matrix products.
 W/U outputs also use BF16 stores.
 The triangular inverse can use BF16 intermediate storage and BF16 block matrix operands with FP32 accumulation.
 Diagonal solves stay FP32. State decay, live carry, full token history, and private checkpoint requirements stay unchanged.
 
-The [carry path](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/chunk_delta_h.py#L154) rounds the state operand and scaled new values to BF16 before matrix products.
+The [carry path](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/vllm/third_party/flash_linear_attention/ops/chunk_delta_h.py#L154) rounds the state operand and scaled new values to BF16 before matrix products.
 The state update scales the FP32 new values before BF16 conversion.
 Its separate output export uses BF16.
-State decay and carry updates stay FP32. BF16 checkpoint export must not replace the live carry.
+State decay, carry updates, and persistent checkpoint exports stay FP32.
 
-The [output path](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/chunk_o.py#L94) uses BF16 state snapshots and new values, with FP32 accumulation.
+The [output path](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/vllm/third_party/flash_linear_attention/ops/chunk_o.py#L94) uses BF16 state snapshots and new values, with FP32 accumulation.
 It rounds the causal, gated QK matrix to BF16 before the new-value product.
-The [projection source](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/wy_fast.py#L75) defines the gate-scaling rounding points.
+The [projection source](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/vllm/third_party/flash_linear_attention/ops/wy_fast.py#L75) defines the gate-scaling rounding points.
 
-The pinned [RMS reference](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/ir/ops/layernorm.py#L44) separates FP32 normalization input from BF16 residual storage.
-The [GDN decode path](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/csrc/gdn/fused_gdn_decode_kernel.cu#L226) keeps recurrent Q/K in FP32.
+The pinned [RMS reference](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/vllm/ir/ops/layernorm.py#L44) separates FP32 normalization input from BF16 residual storage.
+The [GDN decode path](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/csrc/gdn/fused_gdn_decode_kernel.cu#L226) keeps recurrent Q/K in FP32.
 The [vision attention dependency](https://github.com/vllm-project/flash-attention/blob/b273a02621d3c94bc747df67204f591b67f38fae/flash_attn/cute/flash_fwd_sm100.py#L2522) rounds online probabilities to BF16 before PV.
 The full-model reference uses FP64 throughout. It does not reproduce intermediate low-precision rounding.
 

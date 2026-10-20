@@ -1,4 +1,5 @@
 from contextlib import ExitStack, contextmanager
+from time import perf_counter
 
 import numpy as np
 import tvm_ffi
@@ -17,6 +18,7 @@ class PreparedCase:
         self.closed = False
         self.started = False
         self.weights = None
+        self.setup = {}
         self.inputs, self.state = {}, {}
         try:
             self.inputs = self.upload_group("inputs", fixture.inputs)
@@ -53,6 +55,17 @@ class PreparedCase:
         for target, source in self.restores:
             self.device.module.copy_bytes(target, source)
 
+    def stage_resets(self):
+        self.require_open()
+        self.reset()
+        staged = []
+        for target in self.state.values():
+            source = self.device.empty(tuple(target.shape), str(target.dtype))
+            self.device.module.copy_bytes(source, target)
+            staged.append((target, source))
+        self.device.synchronize()
+        self.restores = staged
+
     @contextmanager
     def graph_lease(self):
         with ExitStack() as leases:
@@ -71,11 +84,16 @@ class PreparedCase:
             raise RuntimeError("prepared case has no operation or is already started")
         try:
             if warmup is not None:
+                started = perf_counter()
                 warmup()
+                self.device.synchronize()
+                self.setup["warmup_seconds"] = perf_counter() - started
             self.reset()
             self.device.synchronize()
+            started = perf_counter()
             if self.case.mode == "graph":
                 self.replay = self.graphs.enter_context(self.device.graph(self.run))
+            self.setup["recording_seconds"] = perf_counter() - started
             self.started = True
         except BaseException:
             self.close()
@@ -151,25 +169,29 @@ class PreparedCase:
 
 
 def prepare(case, device, fixture, *, model):
-    from .adapters import fa, ffn, gdn, mtp, output, vision
     from .weights import CaseWeights
 
     prepared = PreparedCase(case, device, fixture)
     try:
         prepared.weights = CaseWeights(device, model, case)
         prepared.weights.verify(fixture.manifest["checkpoint"])
-        family = case.boundary.split(".")[0]
-        adapter = {
-            "fa": fa,
-            "gdn": gdn,
-            "ffn": ffn,
-            "output": output,
-            "mtp": mtp,
-            "vision": vision,
-        }[family]
-        warmup = adapter.bind(prepared)
-        prepared.start(warmup=warmup)
+        bind(prepared)
         return prepared
     except BaseException:
         prepared.close()
         raise
+
+
+def bind(prepared):
+    from .adapters import fa, ffn, gdn, mtp, output, vision
+
+    adapter = {
+        "fa": fa,
+        "gdn": gdn,
+        "ffn": ffn,
+        "output": output,
+        "mtp": mtp,
+        "vision": vision,
+    }[prepared.case.boundary.split(".")[0]]
+    warmup = adapter.bind(prepared)
+    prepared.start(warmup=warmup)

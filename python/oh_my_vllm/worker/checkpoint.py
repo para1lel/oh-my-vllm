@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ..kernels.specification import MODEL
+from ..operators.specification import MODEL
 
 
 class Checkpoint:

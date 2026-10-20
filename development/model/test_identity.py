@@ -2,12 +2,14 @@ import hashlib
 import json
 import struct
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from oh_my_vllm.kernels.native import source_digest
-from oh_my_vllm.kernels.specification import MODEL
+import numpy as np
+from oh_my_vllm.operators.runtime.native import source_digest
+from oh_my_vllm.operators.specification import MODEL
 from oh_my_vllm.worker.checkpoint import Checkpoint
 
 from .capture import PROMPT
@@ -80,17 +82,98 @@ class Identity(unittest.TestCase):
         with TemporaryDirectory() as directory:
             root = Path(directory)
             source, header, leaf, unrelated = (
-                root / name for name in ("op.cu", "shared.cuh", "leaf.cuh", "other.cuh")
+                root / name
+                for name in (
+                    "fa/op.cu",
+                    "shared/common.cuh",
+                    "gdn/leaf.cuh",
+                    "other.cuh",
+                )
             )
-            source.write_text('#include "shared.cuh"\n')
-            header.write_text('#include "leaf.cuh"\n')
-            leaf.write_text('#include "shared.cuh"\n#define WIDTH 128\n')
+            for path in (source, header, leaf):
+                path.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text('#include "../shared/common.cuh"\n')
+            header.write_text('#include "../gdn/leaf.cuh"\n')
+            leaf.write_text('#include "../shared/common.cuh"\n#define WIDTH 128\n')
             unrelated.write_text("unrelated\n")
-            identity = source_digest(source)
+            identity = source_digest(source, root)
             unrelated.write_text("changed\n")
-            self.assertEqual(source_digest(source), identity)
-            leaf.write_text('#include "shared.cuh"\n#define WIDTH 256\n')
-            self.assertNotEqual(source_digest(source), identity)
+            self.assertEqual(source_digest(source, root), identity)
+            leaf.write_text('#include "../shared/common.cuh"\n#define WIDTH 256\n')
+            self.assertNotEqual(source_digest(source, root), identity)
             leaf.unlink()
             with self.assertRaises(FileNotFoundError):
-                source_digest(source)
+                source_digest(source, root)
+
+    def test_added_references_bind_complete_inputs_and_endpoints(self):
+        from development.operators.reference.shards import write_fixture
+
+        from .cases import load_case_fixture, load_cases
+
+        cases = {case.id: case for case in load_cases()}
+        self.assertEqual(set(cases), {"mtp-restored", "image-video", "context-32769"})
+        case = cases["context-32769"]
+        stored = {
+            "inputs.tokens": np.arange(32768, dtype=np.int64),
+            "inputs.positions": np.tile(np.arange(32768, dtype=np.int64), (3, 1)),
+            "inputs.continuation": np.array([271], dtype=np.int64),
+            "expected.prefill": np.ones(248320, dtype=np.float64),
+            "expected.decode": np.ones(248320, dtype=np.float64),
+        }
+        provenance = dict(precision="torch.float64", source="fixed", torch="fixed")
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def write(name, values):
+                location = root / name
+                identity = write_fixture(
+                    location,
+                    case,
+                    values,
+                    {key: str(value.dtype) for key, value in values.items()},
+                    {},
+                    {"config": "fixed"},
+                    provenance,
+                )
+                return replace(case, fixture_sha256=identity), location
+
+            approved, location = write("valid", stored)
+            fixture = load_case_fixture(approved, location)
+            self.assertEqual(fixture.expected["decode"].shape, (248320,))
+            with self.assertRaisesRegex(ValueError, "approved"):
+                load_case_fixture(replace(approved, fixture_sha256=None), location)
+            malformed, location = write(
+                "truncated",
+                {**stored, "expected.decode": stored["expected.decode"][:1]},
+            )
+            with self.assertRaisesRegex(ValueError, "vocabulary"):
+                load_case_fixture(malformed, location)
+            malformed, location = write(
+                "wrong-input", {**stored, "inputs.tokens": stored["inputs.tokens"][:-1]}
+            )
+            with self.assertRaisesRegex(ValueError, "input"):
+                load_case_fixture(malformed, location)
+
+            case = cases["mtp-restored"]
+            stored = {
+                "inputs." + name: np.zeros(shape, dtype=dtype)
+                for name, (dtype, shape) in case.input_shapes.items()
+            }
+            stored.update(
+                {
+                    "expected." + name: np.ones(
+                        (5, 248320) if name == "verified" else (248320,),
+                        dtype=np.float64,
+                    )
+                    for name in case.outputs
+                }
+            )
+            approved, location = write("verification", stored)
+            fixture = load_case_fixture(approved, location)
+            self.assertEqual(fixture.expected["verified"].shape, (5, 248320))
+            malformed, location = write(
+                "last-verification-row",
+                {**stored, "expected.verified": stored["expected.verified"][-1]},
+            )
+            with self.assertRaisesRegex(ValueError, "vocabulary"):
+                load_case_fixture(malformed, location)

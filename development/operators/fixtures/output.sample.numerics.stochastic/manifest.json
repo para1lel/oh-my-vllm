@@ -46,16 +46,16 @@
     "torch": "2.12.0+cu130",
     "cuda": "13.0",
     "numpy": "2.5.4",
-    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "source": "182a6136bc7fb0e6bd90b3ce39f57f1a49a55f733d2a1fce19d005f9ab4171aa",
     "decisions": {
       "minimum_margin": 0.01,
       "records": [
         {
           "kind": "cdf",
-          "distance": 0.0793061964022928,
+          "distance": 0.07864619487746372,
           "draw": 0.3050169050693512,
           "left": 0.0,
-          "right": 0.384323101471644,
+          "right": 0.3836630999468149,
           "budget": 0.0078125
         }
       ]
@@ -63,16 +63,16 @@
   },
   "files": {
     "inputs.value.0000.npz": "397624345d93a0800c14bf3c2b728005d748f47c8b3b2ec5f96aef929e1d043b",
-    "inputs.residual.0000.npz": "394f3b075b43849f77f6128f3223724621c565e6f362587b045105c984d47925",
+    "inputs.residual.0000.npz": "eb60f5481e1c1493f4bacc6ea0b9ec326f21a2ed1fd4d10f41f7bcac5757f448",
     "inputs.history.0000.npz": "4f748b5d0066b1a50377232800033e6a3789fe82a4235c77b9f1776288cece68",
     "inputs.mask.0000.npz": "0c33df99ea987d3e7613264e83a623f176c6351f82a1997403e8e827838632fc",
     "inputs.parameters.0000.npz": "572b708869927d29e7b3a44b265ecb6b141bf786a4a6e9ea956f5142e3bb9cec",
     "state.rng.0000.npz": "073d1b11bd85ff91fb247cfd3ee091ace2c009606e8fcce3fa5462f091c75856",
-    "expected.logits.0000.npz": "8d69654d8ce918aab0cac8b61103e19d2604aa3480bd76e8c0a7abc4cac1d2d7",
-    "expected.probabilities.0000.npz": "bab26b71703994fa7acc08fdfcf28a4efd67cd1f552c6692d5f33800a4a638d3",
+    "expected.logits.0000.npz": "931e860c3108a5a61c4c8efd7d6a706c88dfac983f3e9af5d5c3e4713c14d23c",
+    "expected.probabilities.0000.npz": "d7195de063774e0073de354c782c11b0c3e1fc1ebb6dd9c312d88cef4a5db970",
     "expected.tokens.0000.npz": "a8b5681b18c4b33028457d0af6fda7656874b701ad4352677c9c1627f806f243",
-    "expected.selected_probability.0000.npz": "9a20a0168b14e0b62e7c9dedd35fdf96bb2f083d270a59b7061929133e2bfd53",
-    "expected.selection_cdf.0000.npz": "c6df7e00afcbb5bd64d6e973d603f78f3f6105d249630e135829ef096e7e737c",
+    "expected.selected_probability.0000.npz": "a4b9262e73c7f8c2ff3779138ac91cfed032ad833e832bed2f9c240dfea5a957",
+    "expected.selection_cdf.0000.npz": "27942a5f224864bb41320994c58449bcd005ce8b680a515548ad58f69b078264",
     "expected.rng.0000.npz": "5e28aff5e17fd12b5b251682ff173ae050ce54d318dfe2dba19fed5163089439"
   },
   "tensors": {
@@ -97,8 +97,8 @@
         1,
         5120
       ],
-      "dtype": "uint16",
-      "tensor_dtype": "bfloat16",
+      "dtype": "float32",
+      "tensor_dtype": "float32",
       "parts": [
         {
           "file": "inputs.residual.0000.npz",

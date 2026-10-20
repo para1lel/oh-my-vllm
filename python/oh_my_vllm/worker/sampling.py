@@ -3,7 +3,9 @@ from contextlib import ExitStack
 import numpy as np
 import tvm_ffi
 
-from ..kernels.sample import Sample
+from ..operators.output import api as output
+from ..operators.output.plan import make_plan
+from ..operators.output.workspace import prepare
 from .constraints import batch_masks
 
 
@@ -139,15 +141,20 @@ class SamplingInputs:
 
 
 class Sampling:
-    def __init__(self, device, weights, rows, *, hidden=None):
+    def __init__(self, device, weights, rows, *, hidden=None, operation=None):
         self.device = device
-        self.operation = Sample(weights, rows, device.empty)
-        self.token_rows = device.view(self.operation.buffers[7], (rows, 1))
+        self.weights = weights
+        self.operation = operation or prepare(make_plan(rows=rows), device, (weights,))
+        self.token_rows = device.view(self.operation.outputs.tokens, (rows, 1))
         self.value, self.residual = (
             hidden
             if hidden is not None
-            else tuple(device.empty((rows, 5120), "bfloat16") for _ in range(2))
+            else (
+                device.empty((rows, 5120), "bfloat16"),
+                device.empty((rows, 5120), "float32"),
+            )
         )
+        self.projection_inputs = output.Inputs(self.value, self.residual)
         self.indices = device.empty((rows,), "int32")
         self.history = device.zeros((rows, 2, 248320), "int32")
         self.presence_history = device.zeros((rows, 248320 // 8), "uint8")
@@ -162,18 +169,19 @@ class Sampling:
 
     def close(self):
         self.resources.close()
+        self.operation.close()
 
     def project(self):
-        self.operation.project(self.value, self.residual)
+        self.operation.project(self.weights, self.projection_inputs)
 
     def draw(self):
-        return self.operation.draw(
+        settings = output.Settings(
             self.presence_history if self.inputs.compact else self.history,
             self.mask,
             self.parameters,
-            self.rng,
-            greedy=self.greedy,
+            self.greedy,
         )
+        return self.operation.draw(settings, self.rng)
 
     def execute(self, key, operation, graph):
         if graph:
@@ -227,8 +235,8 @@ class Sampling:
         self.execute((self.greedy, self.inputs.compact), self.draw, graph)
         tokens = None
         if sample:
-            tokens = d.download(self.operation.buffers[7], np.int64)
+            tokens = d.download(self.operation.outputs.tokens, np.int64)
             counters = self.inputs.random[:, 1] + (self.inputs.parameters[:, 0] > 0)
             for request, counter in zip(requests, counters, strict=True):
                 setattr(request, self.inputs.field, int(counter))
-        return tokens, self.operation.buffers[6]
+        return tokens, self.operation.outputs.probabilities

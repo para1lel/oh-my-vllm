@@ -2,7 +2,7 @@
 
 This document gives the numerical and performance acceptance rules for operator development.
 The [validation plan](validation-plan.md) gives implementation tasks and fixed cases.
-The numerical suite is implemented. The performance suite is planned.
+The numerical and performance suites are implemented. Performance limit calibration must be complete before source migration.
 
 ## Scope and boundaries
 
@@ -56,7 +56,7 @@ Stage changed fixtures with their manifests and reference changes for review.
 Do not regenerate or overwrite expected arrays during a test.
 
 Compare all elements of named outputs and assigned state writes.
-These include BF16/derived FP8 KV, scales, GDN recurrent/convolution checkpoints, and hidden exports.
+These include BF16 KV, GDN recurrent/convolution checkpoints, and hidden exports.
 Use per-sequence, per-field normalized L2 error and maximum absolute error.
 Near-zero references also use an absolute-error condition.
 Reject nonfinite values that the contract does not permit.
@@ -122,8 +122,11 @@ This prevents a single hot layer from representing a streaming model workload.
 Calibrate each maximum ratio from the current correct implementation.
 Use five new measurement sessions with at least 30 samples per case in each session.
 Compute a 95% upper confidence limit for each session's median ratio by fixed-seed bootstrap with 10000 resamples.
-Set `max_ratio` to the largest session limit, rounded upward to four decimal places.
-Add no other percentage allowance.
+The raw proposal is the largest session limit, rounded upward to four decimal places.
+
+For the approved `max_ratio`, multiply that proposal by `1.02` and round upward to four decimal places.
+Record the raw proposal and the fixed 2% allowance in the limit provenance.
+This allowance does not change after kernel changes.
 
 Examine these limits with the case identity, accounting version, execution mode, device specification, and calibration-source identity.
 Freeze the approved limits.

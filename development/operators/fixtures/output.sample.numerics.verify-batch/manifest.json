@@ -68,24 +68,24 @@
     "torch": "2.12.0+cu130",
     "cuda": "13.0",
     "numpy": "2.5.4",
-    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "source": "182a6136bc7fb0e6bd90b3ce39f57f1a49a55f733d2a1fce19d005f9ab4171aa",
     "decisions": {
       "minimum_margin": 0.01,
       "records": [
         {
           "kind": "cdf",
-          "distance": 0.08214460145655778,
+          "distance": 0.08221855841493747,
           "draw": 0.3050169050693512,
-          "left": 0.22287230361279342,
-          "right": 0.4099260890025464,
+          "left": 0.22279834665441373,
+          "right": 0.41000040015097033,
           "budget": 0.0078125
         },
         {
           "kind": "cdf",
-          "distance": 0.19488635637061857,
+          "distance": 0.19616985624505168,
           "draw": 0.40180274844169617,
           "left": 0.0,
-          "right": 0.5966891048123147,
+          "right": 0.5979726046867478,
           "budget": 0.0078125
         },
         {
@@ -93,23 +93,23 @@
           "distance": 0.09411750733852386,
           "draw": 0.09411750733852386,
           "left": 0.0,
-          "right": 0.5323789201203794,
+          "right": 0.5315590850902786,
           "budget": 0.0078125
         },
         {
           "kind": "cdf",
-          "distance": 0.02851642444880559,
+          "distance": 0.028544019199502668,
           "draw": 0.3796142637729645,
-          "left": 0.3510978393241589,
-          "right": 0.5685268843318603,
+          "left": 0.3510702445734618,
+          "right": 0.5682373697109142,
           "budget": 0.0078125
         },
         {
           "kind": "cdf",
-          "distance": 0.21326636948610356,
+          "distance": 0.21308704693056368,
           "draw": 0.29619088768959045,
           "left": 0.0,
-          "right": 0.509457257175694,
+          "right": 0.5092779346201541,
           "budget": 0.0078125
         },
         {
@@ -117,7 +117,7 @@
           "distance": 0.09115561842918396,
           "draw": 0.09115561842918396,
           "left": 0.0,
-          "right": 0.807732558089081,
+          "right": 0.8085603048986267,
           "budget": 0.0078125
         },
         {
@@ -125,15 +125,15 @@
           "distance": 0.23247979581356049,
           "draw": 0.23247979581356049,
           "left": 0.0,
-          "right": 0.8924986327801455,
+          "right": 0.8932773365731713,
           "budget": 0.0078125
         },
         {
           "kind": "cdf",
-          "distance": 0.35614971265679507,
+          "distance": 0.3560585158114462,
           "draw": 0.6122682690620422,
           "left": 0.0,
-          "right": 0.9684179817188373,
+          "right": 0.9683267848734884,
           "budget": 0.0078125
         },
         {
@@ -141,15 +141,15 @@
           "distance": 0.05262869969010353,
           "draw": 0.05262869969010353,
           "left": 0.0,
-          "right": 0.5855520763744118,
+          "right": 0.5848273663380905,
           "budget": 0.0078125
         },
         {
           "kind": "cdf",
-          "distance": 0.09703844812718121,
+          "distance": 0.09646346910804393,
           "draw": 0.8649417757987976,
-          "left": 0.7679033276716164,
-          "right": 0.9685118235111165,
+          "left": 0.7684783066907537,
+          "right": 0.9685715766435945,
           "budget": 0.0078125
         },
         {
@@ -157,7 +157,7 @@
           "distance": 0.1923729032278061,
           "draw": 0.1923729032278061,
           "left": 0.0,
-          "right": 0.6003800671174954,
+          "right": 0.6009518857755991,
           "budget": 0.0078125
         },
         {
@@ -165,15 +165,15 @@
           "distance": 0.050967536866664886,
           "draw": 0.050967536866664886,
           "left": 0.0,
-          "right": 0.5048539651051968,
+          "right": 0.5066932955241523,
           "budget": 0.0078125
         },
         {
           "kind": "cdf",
-          "distance": 0.029250466711203238,
+          "distance": 0.02966631964147093,
           "draw": 0.8830674886703491,
-          "left": 0.8538170219591459,
-          "right": 0.9449354161623286,
+          "left": 0.8534011690288782,
+          "right": 0.944721888751511,
           "budget": 0.0078125
         },
         {
@@ -181,15 +181,15 @@
           "distance": 0.01071864366531372,
           "draw": 0.01071864366531372,
           "left": 0.0,
-          "right": 0.30200622666419136,
+          "right": 0.3030722518877914,
           "budget": 0.0078125
         },
         {
           "kind": "cdf",
-          "distance": 0.12844228153625736,
+          "distance": 0.12826577083775903,
           "draw": 0.8014678955078125,
-          "left": 0.6393729474605585,
-          "right": 0.9299101770440699,
+          "left": 0.6382886035273861,
+          "right": 0.9297336663455715,
           "budget": 0.0078125
         },
         {
@@ -205,7 +205,7 @@
           "distance": 0.11599953472614288,
           "draw": 0.11599953472614288,
           "left": 0.0,
-          "right": 0.5717009983136437,
+          "right": 0.5722888945367308,
           "budget": 0.0078125
         },
         {
@@ -213,7 +213,7 @@
           "distance": 0.13894321024417877,
           "draw": 0.13894321024417877,
           "left": 0.0,
-          "right": 0.36186251714331197,
+          "right": 0.3616465741238649,
           "budget": 0.0078125
         },
         {
@@ -221,7 +221,7 @@
           "distance": 0.03463195264339447,
           "draw": 0.03463195264339447,
           "left": 0.0,
-          "right": 0.367868460648162,
+          "right": 0.36649137380434943,
           "budget": 0.0078125
         },
         {
@@ -229,7 +229,7 @@
           "distance": 0.010965336114168167,
           "draw": 0.010965336114168167,
           "left": 0.0,
-          "right": 0.680541537005966,
+          "right": 0.6805969530513002,
           "budget": 0.0078125
         }
       ]
@@ -237,19 +237,19 @@
   },
   "files": {
     "inputs.value.0000.npz": "3b7d41d80428db7d6d2c33f1b5594c847636a222398fb153377474400d846dc8",
-    "inputs.residual.0000.npz": "72734045b539f96ad76b18fa92d8a6112c21c5e71e1a9d82084cf2ee4786d72a",
+    "inputs.residual.0000.npz": "1f3f045fafb432cc1ed645d0eac70228a205c89096f2ffcd4583811c338ebe42",
     "inputs.history.0000.npz": "27fe39158d39adced266a6446d032c5547b492ebd6b5497130e660059c04bd1b",
     "inputs.history.0001.npz": "d7d932e7703418e0d8764623695de99e55afaacbf29ff43e73be388c75acf294",
     "inputs.mask.0000.npz": "da519cf44077e8254f3a9daf8e2fc5c7ed9600103267404f3e792671e5bfeb1f",
     "inputs.parameters.0000.npz": "d9bab2236cf309a85414db59e7c325ffeccea06a8c03f510a78e5db64f6c16b0",
     "state.rng.0000.npz": "a95ca0edd4cc384bae9f36fee2cc8c41614d9d26fdaccc23bbe0fa9e90411aaa",
-    "expected.logits.0000.npz": "1e24ff30684a31345b43b83b4911202128de7e22c44626e715cc5d893f8af4fa",
-    "expected.logits.0001.npz": "31d4377d94a3bb25d30b19542230ec3db8da546e60c3c50c4cc239777e3cdda4",
-    "expected.probabilities.0000.npz": "0f4728619dadc4e9753ed34f812ed4cdcf1777b861f10192bf3be475070c9075",
-    "expected.probabilities.0001.npz": "0ae6dc981e3356f077b0bd6447beffd413e20adb3b286ddd3250371404110d39",
+    "expected.logits.0000.npz": "23cba3174d408c956c96b4715e4f0f0205117ac579cffa90c6295b551077ee97",
+    "expected.logits.0001.npz": "ce767601ecf484e406c0a247ec752c03f1a9aa8e02b15b15a3878350719c4bdc",
+    "expected.probabilities.0000.npz": "57fcce2215c39403b9a1b24e9fe89919ca86a9e031e4887f45c6fdbcdda7439d",
+    "expected.probabilities.0001.npz": "2671be8c86a6d0265a130feb2906904504bae62d80f5d9ad34d522585a9688d3",
     "expected.tokens.0000.npz": "3c5fda1dc326ecc0c825f59a25288d12e052a9751efe9a98cbec5c15c199c74c",
-    "expected.selected_probability.0000.npz": "be569f411eb359ee2426d9e6aafda62b97c37f15ed227c1ed75efb2fac7c5f15",
-    "expected.selection_cdf.0000.npz": "34165f2a3c4da6d6b1afe8e19b6afdba9f7b7e70969d7fb981a1e1662d83512b",
+    "expected.selected_probability.0000.npz": "faabadd8c8aa533c62d2b3edaa0d7695ab46f3d4b9f6837ac832811505b2b722",
+    "expected.selection_cdf.0000.npz": "cf46722c3b59e2c29d33058417d72373a8ad4f0f7f416763988c7da3fed5d38f",
     "expected.rng.0000.npz": "f7c74453f918c5d7615547b2f73461c682f92edcf989f0592f7b2cf4af9b30ba"
   },
   "tensors": {
@@ -274,8 +274,8 @@
         20,
         5120
       ],
-      "dtype": "uint16",
-      "tensor_dtype": "bfloat16",
+      "dtype": "float32",
+      "tensor_dtype": "float32",
       "parts": [
         {
           "file": "inputs.residual.0000.npz",

@@ -4,8 +4,8 @@ import numpy as np
 def observe_cdf(prepared, operation):
     if prepared.case.options.get("greedy"):
         return np.tile([0.0, 1.0], (prepared.case.shape["rows"], 1))
-    ordered = prepared.download(operation.buffers[5])
-    probability = prepared.download(operation.buffers[6])
+    ordered = prepared.download(operation.storage.indices)
+    probability = prepared.download(operation.outputs.probabilities)
     selected = prepared.fixture.expected["tokens"]
     edges = []
     for order, mass, token in zip(ordered, probability, selected, strict=True):

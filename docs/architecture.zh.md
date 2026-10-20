@@ -54,7 +54,7 @@ FA 与 GDN state pool 具有独立容量.
 
 [模型](../python/oh_my_vllm/worker/model.py)在全部语言层调用[算子阶段](operators/fusion.zh.md).
 Eager 执行和 CUDA Graph 录制使用相同的 native 算子.
-[Device wrapper](../python/oh_my_vllm/worker/device.py) 提供 graph 资源.
+[Device wrapper](../python/oh_my_vllm/operators/runtime/device.py) 提供 graph 资源.
 每个 workspace 保留其权重, cache, tensor 和资源 lease, 直到 graph 关闭.
 FP8 转换和 tensor 检查在算子类别之间共享.
 

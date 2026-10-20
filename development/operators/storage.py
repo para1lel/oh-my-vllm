@@ -35,8 +35,6 @@ def decode(value, dtype):
 def state_rows(value, layout):
     if layout == "kv":
         return value.transpose(0, 2, 1, 3, 4).reshape(-1, 2, 4, 256)
-    if layout == "kv_scales":
-        return value.transpose(0, 3, 1, 2).reshape(-1, 2, 4)
     if layout == "rows":
         return value
     raise ValueError(f"unknown state layout: {layout}")

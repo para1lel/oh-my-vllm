@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND = ROOT / "python/oh_my_vllm/kernels/cuda_backend"
+BACKEND = ROOT / "python/oh_my_vllm/operators"
 MAX_LINES = 800
 
 

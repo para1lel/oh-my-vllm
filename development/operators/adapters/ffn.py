@@ -1,19 +1,19 @@
-from oh_my_vllm.kernels.ffn import FFN
+from oh_my_vllm.operators.ffn import api as ffn
+from oh_my_vllm.operators.ffn.plan import make_plan
+from oh_my_vllm.operators.ffn.workspace import prepare
 
 
 def bind(prepared):
     weights, inputs = prepared.weights.bindings, prepared.inputs
     operation = prepared.own(
-        FFN(weights[0], prepared.case.shape["rows"], prepared.device.empty)
+        prepare(make_plan(rows=prepared.case.shape["rows"]), prepared.device, weights)
     )
-    prepared.outputs.update(
-        zip(("value", "residual"), operation.buffers[:2], strict=True)
-    )
+    prepared.outputs.update(operation.outputs._asdict())
+    value = ffn.Inputs(inputs["value"], inputs["residual"])
 
     def run():
         for weight in weights:
-            operation.weights = weight
-            operation(inputs["value"], inputs["residual"])
+            ffn.run(weight, operation, value)
 
     prepared.operation = run
     return run

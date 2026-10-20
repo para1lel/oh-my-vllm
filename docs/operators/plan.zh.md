@@ -34,8 +34,9 @@
 
 ## 文件与接口映射
 
-任务 1 前, 在当前运行时上完成验证任务 V1–V3.
-经审查的 fixture 和倍率门槛控制后续迁移.
+迁移到 `main` 前, 在当前运行时上冻结经审查的 fixture 和 V3 倍率门槛.
+最终迁移验收使用这些 fixture 和门槛.
+逐项验证和审查任务. 最终验收后, 将这些变更一起提交并推送.
 
 以下 Python 包路径相对于 `python/oh_my_vllm`.
 开发, 测试和工具路径相对于仓库根目录.
@@ -59,7 +60,8 @@ workspace.outputs: Outputs
 workspace.graph_lease()  # Existing context-manager lifetime contract.
 ```
 
-准备阶段创建存储和 native context, 并执行各算子族自己的 warmup.
+准备阶段创建存储和 native context.
+各算子族的工作区在 Graph 录制前提供 warmup.
 其权重 tuple 包含该算子 workspace 使用的全部层绑定.
 Worker 组合各算子族的 `plan.reuse_key`, 并独立检查资源身份.
 Plan 提供启动容量计算所需的存储描述. 使用计数分配器的构造函数不再选择实现.
@@ -78,15 +80,15 @@ Plan 提供启动容量计算所需的存储描述. 使用计数分配器的构�
 在 `runtime/native.py` 中增加 `MODULE_SOURCES: dict[str, Path]`.
 `development/native_build.py` 和 `source_fingerprint(name)` 使用此映射.
 
-- [ ] 检查验证任务 V3 的变更前 manifest 和测量结果.
-- [ ] 为 `development/model/test_identity.py::test_native_identity_tracks_only_transitive_dependencies` 增加兄弟目录 include 和 include 环.
-- [ ] 检查传递依赖修改会改变摘要, 无关修改不会改变摘要.
-- [ ] 将算子族前缀的 CUDA header 随算子族迁移. 共享 header 按现有使用者和职责迁移.
-- [ ] 对相对于算子源码根目录的依赖路径及文件内容一起计算摘要.
-- [ ] 修改带引号 include, builder include 根目录, 全部推理/开发/测试导入及源码链接.
-- [ ] 更新 `scripts/format_cuda.py` 和 `.pre-commit-config.yaml`, 使 CUDA 的 800 行限制继续生效.
-- [ ] 将 `tests/test_execution.py` 适配到新的 Device 导入, 保持失败断言不变.
-- [ ] 使用现有短输入 FP64 端点及全部 7 个重建模块完成下方交付流程.
+- [x] 检查验证任务 V3 的变更前 manifest 和测量结果.
+- [x] 为 `development/model/test_identity.py::test_native_identity_tracks_only_transitive_dependencies` 增加兄弟目录 include 和 include 环.
+- [x] 检查传递依赖修改会改变摘要, 无关修改不会改变摘要.
+- [x] 将算子族前缀的 CUDA header 随算子族迁移. 共享 header 按现有使用者和职责迁移.
+- [x] 对相对于算子源码根目录的依赖路径及文件内容一起计算摘要.
+- [x] 修改带引号 include, builder include 根目录, 全部推理/开发/测试导入及源码链接.
+- [x] 更新 `scripts/format_cuda.py` 和 `.pre-commit-config.yaml`, 使 CUDA 的 800 行限制继续生效.
+- [x] 将 `tests/test_execution.py` 适配到新的 Device 导入, 保持失败断言不变.
+- [x] 使用现有短输入 FP64 端点及全部 7 个重建模块完成任务验证.
 
 ## 任务 2: 增加全模型验证输入
 
@@ -94,10 +96,10 @@ Plan 提供启动容量计算所需的存储描述. 使用计数分配器的构�
 
 **文件与接口:** 使用[验证计划](validation-plan.zh.md)中的验证任务 V4.
 
-- [ ] 在 FA/MTP 变化前增加 MTP 和长上下文端点.
-- [ ] 在 vision 变化前增加媒体端点.
-- [ ] 将参考生成和产物身份与推理变更分开审查.
-- [ ] 在推理行为不变的条件下完成交付流程.
+- [x] 在 FA/MTP 变化前增加 MTP 和长上下文端点.
+- [x] 在 vision 变化前增加媒体端点.
+- [x] 将参考生成和产物身份与推理变更分开审查.
+- [x] 在推理行为不变的条件下完成任务验证.
 
 ## 任务 3: 应用 FA 计划和 MTP 组件接口
 
@@ -109,7 +111,8 @@ Plan 提供启动容量计算所需的存储描述. 使用计数分配器的构�
 **接口:** FA 定义以下函数:
 
 ```python
-make_plan(*, rows: int, max_queries: int, max_context: int,
+make_plan(*, rows: int, batch: int, table_width: int,
+          max_queries: int, max_context: int,
           min_context: int, variant: str = "full", first_token: int = 0) -> Plan
 run(weights: Weights, workspace: Workspace, inputs: Inputs,
     batch: BatchView, state: CacheView) -> Outputs
@@ -120,15 +123,16 @@ run(weights: Weights, workspace: Workspace, inputs: Inputs,
 `CacheView` 包含 `cache`, `slots` 和 `tables`.
 `components.py` 中的私有组件类型为 MTP 提供 projection 和 attention 的存储契约.
 
-- [ ] 新增 `test_fa_plan_separates_recorded_launches`, 覆盖变体, 行数 32/33 和 128/129, 以及分派边界 1024, 12544 和 32768.
-- [ ] 检查存储大小相同但 launch 条件不同的情况. 检查兼容元数据更新不需要新 plan.
-- [ ] 使用假 device 和多层权重增加 `test_operator_workspace_keeps_outputs_and_graph_owners`.
-- [ ] 检查固定输出身份, 录制期间无分配, 顺序复用 scratch, 以及 Graph 销毁后才释放资源.
-- [ ] 实现前运行新检查, 显示尚缺的行为.
-- [ ] 将分派和准备决策从 `worker/model.py` 移到 FA plan.
-- [ ] 用显式组件类型替换 MTP 的 buffer 索引访问和复制的 FA 布局.
-- [ ] 为旧 FFN/output 组件保留具名私有适配器, 直到任务 4 和 5 将其移除.
-- [ ] 使用 FA/MTP microbench 用例和 V4 全模型端点完成交付流程.
+- [x] 新增 `test_fa_plan_separates_recorded_launches`, 覆盖变体, 行数 32/33 和 128/129, 以及分派边界 1024 和 32768.
+- [x] 检查跨越已移除的 12544 边界时可以复用.
+- [x] 检查存储大小相同但 launch 条件不同的情况. 检查兼容元数据更新不需要新 plan.
+- [x] 使用假 device 和多层权重增加 `test_operator_workspace_keeps_outputs_and_graph_owners`.
+- [x] 检查固定输出身份, 录制期间无分配, 顺序复用 scratch, 以及 Graph 销毁后才释放资源.
+- [x] 实现前运行新检查, 显示尚缺的行为.
+- [x] 将分派和准备决策从 `worker/model.py` 移到 FA plan.
+- [x] 用显式组件类型替换 MTP 的 buffer 索引访问和复制的 FA 布局.
+- [x] 为旧 FFN/output 组件保留具名私有适配器, 直到任务 4 和 5 将其移除.
+- [x] 使用 FA/MTP microbench 用例和 V4 全模型端点完成任务验证.
 
 ## 任务 4: 应用 GDN 和 FFN 契约
 
@@ -141,12 +145,12 @@ GDN 使用 `run(weights, workspace, inputs, batch, state) -> Outputs`.
 其 view 使用现有 `Schedule` 字段及 recurrent/convolution 张量.
 输入还为可选 token 和 media 张量提供名称.
 
-- [ ] 移除 `gdn.metadata[2]` 访问前, 为 hidden 导出提供由 worker 持有的具名 write-slot view.
-- [ ] 将 GDN chunk 选择, 元数据准备和 FFN 分派移到各算子族 plan.
-- [ ] 在 `worker/model.py` 和 `worker/inference.py` 中用 plan 存储描述替换启动计数构造函数.
-- [ ] 从使用者中移除可变权重绑定和 FFN 私有 buffer 访问.
-- [ ] 将任务 3 的生命周期断言应用到 GDN/FFN 准备路径.
-- [ ] 使用 GDN/FFN microbench 用例及 V4 的短输入, chunk 边界和长上下文端点完成交付流程.
+- [x] 移除 `gdn.metadata[2]` 访问前, 为 hidden 导出提供由 worker 持有的具名 write-slot view.
+- [x] 将 GDN chunk 选择, 元数据准备和 FFN 分派移到各算子族 plan.
+- [x] 在 `worker/model.py` 和 `worker/inference.py` 中用 plan 存储描述替换启动计数构造函数.
+- [x] 从使用者中移除可变权重绑定和 FFN 私有 buffer 访问.
+- [x] 将任务 3 的生命周期断言应用到 GDN/FFN 准备路径.
+- [x] 使用 GDN/FFN microbench 用例及 V4 的短输入, chunk 边界和长上下文端点完成任务验证.
 
 ## 任务 5: 拆分 output 和 MTP acceptance
 
@@ -160,16 +164,16 @@ GDN 使用 `run(weights, workspace, inputs, batch, state) -> Outputs`.
 输出按用途提供 `hidden`, `logits`, `probabilities`, `tokens` 和 `selected_probability` 字段.
 Acceptance 字段为 `tokens`, `counts` 和 `candidate_slots`.
 
-- [ ] 新增 `test_stop_truncation_controls_accepted_slot`: 将 4 个候选截断为 1 个 token, 检查有效 cache commit 数量.
-- [ ] 检查在第一个返回 token 前触发 stop 时, 不能提交原始 candidate slot.
-- [ ] 变更前运行该测试, 显示尚未覆盖的契约.
-- [ ] 将 `final_hidden` 移到现有 sample native 模块. 通用 row gather 保留在 primitives.
-- [ ] 将 `mtp_accept` 连同 vocabulary, CUB 和 Philox 依赖移到现有 MTP native 模块.
-- [ ] 随这些导出一起修改函数列表, loader 调用和 manifest.
-- [ ] 将 V2 的 distribution-only 路径移到新 API. 兼容时保留 sample 的融合路径.
-- [ ] 词表投影使用较少行时, hidden 导出仍须接受全部输入行.
-- [ ] 移除临时组件适配器, 数值 capture 使用具名 logits.
-- [ ] 使用 output/MTP microbench 用例, V4 端点, RNG 检查和状态选择检查完成交付流程.
+- [x] 新增 `test_stop_truncation_controls_accepted_slot`: 将 4 个候选截断为 1 个 token, 检查有效 cache commit 数量.
+- [x] 检查在第一个返回 token 前触发 stop 时, 不能提交原始 candidate slot.
+- [x] 变更前运行该测试, 显示尚未覆盖的契约.
+- [x] 将 `final_hidden` 移到现有 sample native 模块. 通用 row gather 保留在 primitives.
+- [x] 将 `mtp_accept` 连同 vocabulary, CUB 和 Philox 依赖移到现有 MTP native 模块.
+- [x] 随这些导出一起修改函数列表, loader 调用和 manifest.
+- [x] 将 V2 的 distribution-only 路径移到新 API. 兼容时保留 sample 的融合路径.
+- [x] 词表投影使用较少行时, hidden 导出仍须接受全部输入行.
+- [x] 移除临时组件适配器, 数值 capture 使用具名 logits.
+- [x] 使用 output/MTP microbench 用例, V4 端点, RNG 检查和状态选择检查完成任务验证.
 
 ## 任务 6: 应用 vision 契约
 
@@ -180,22 +184,22 @@ Acceptance 字段为 `tokens`, `counts` 和 `candidate_slots`.
 **接口:** `run(weights: Weights, workspace: Workspace, inputs: Inputs) -> Outputs` 返回具名 `hidden`.
 Plan 给出 input, transformer 和 merge 阶段条件, grid/frame 容量, 以及 native context 所有权.
 
-- [ ] 将构造函数验证和 native-context 准备移到 vision plan/准备路径.
-- [ ] 媒体 decode, 请求顺序和 position 构建保留在 worker.
-- [ ] 使用固定 vision microbench 用例检查首末层和奇数帧数.
-- [ ] 使用 CPU plan 验证检查无效 grid 和 65536 行容量.
-- [ ] 使用 V4 媒体端点和代表性媒体计时完成交付流程.
+- [x] 将构造函数验证和 native-context 准备移到 vision plan/准备路径.
+- [x] 媒体 decode, 请求顺序和 position 构建保留在 worker.
+- [x] 使用固定 vision microbench 用例检查首末层和奇数帧数.
+- [x] 使用 CPU plan 验证检查无效 grid 和 65536 行容量.
+- [x] 使用 V4 媒体端点和代表性媒体计时完成任务验证.
 
-## 各任务的交付流程
+## 最终交付流程
 
-- [ ] 运行验证计划中适用的验证命令和全部 hooks.
-- [ ] 事实变化时更新 `operators/specification.py` 和双语[服务边界](fusion.zh.md).
-- [ ] 根据已验证测量结果更新两份 README 的性能表.
-- [ ] 获取另一位 agent 的代码和文档审查.
-- [ ] 修正发现的问题.
-- [ ] 更新双语 handoff, 不写入测试日志.
-- [ ] 仅提交任务文件, 使用 Conventional Commits 标题.
-- [ ] 保持 hooks 开启并推送 `main`.
+- [x] 运行验证计划中适用的验证命令和全部 hooks.
+- [x] 事实变化时更新 `operators/specification.py` 和双语[服务边界](fusion.zh.md).
+- [x] 根据已验证测量结果更新两份 README 的性能表.
+- [x] 获取另一位 agent 的代码和文档审查.
+- [x] 修正发现的问题.
+- [x] 更新双语 handoff, 不写入测试日志.
+- [x] 仅提交已完成变更的文件, 使用 Conventional Commits 标题.
+- [x] 保持 hooks 开启并推送 `main`.
 
 任务 6 后, 移除未使用的兼容文件和旧 kernel 包.
 检查推理, 开发工具和测试中的导入及直接 buffer 访问.

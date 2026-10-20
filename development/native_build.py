@@ -8,27 +8,22 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from oh_my_vllm.kernels.fa import FUNCTIONS as FA_FUNCTIONS
-from oh_my_vllm.kernels.ffn import FUNCTIONS as FFN_FUNCTIONS
-from oh_my_vllm.kernels.gdn import FUNCTIONS as GDN_FUNCTIONS
-from oh_my_vllm.kernels.mtp import FUNCTIONS as MTP_FUNCTIONS
-from oh_my_vllm.kernels.native import (
+from oh_my_vllm.operators.fa.api import FUNCTIONS as FA_FUNCTIONS
+from oh_my_vllm.operators.ffn.api import FUNCTIONS as FFN_FUNCTIONS
+from oh_my_vllm.operators.gdn.api import FUNCTIONS as GDN_FUNCTIONS
+from oh_my_vllm.operators.mtp.api import FUNCTIONS as MTP_FUNCTIONS
+from oh_my_vllm.operators.output.api import FUNCTIONS as SAMPLE_FUNCTIONS
+from oh_my_vllm.operators.runtime.device import FUNCTIONS as DEVICE_FUNCTIONS
+from oh_my_vllm.operators.runtime.native import (
+    MODULE_SOURCES,
     SOURCES,
     build_digest,
     cache_directory,
-    fa_vendor_dependencies,
-    ffn_vendor_dependencies,
-    gdn_vendor_dependencies,
     source_digest,
-    verify_fa_vendor_images,
-    verify_ffn_vendor_images,
-    verify_gdn_vendor_images,
     verify_vision_vendor_images,
     vision_vendor_dependencies,
 )
-from oh_my_vllm.kernels.sample import FUNCTIONS as SAMPLE_FUNCTIONS
-from oh_my_vllm.kernels.vision import FUNCTIONS as VISION_FUNCTIONS
-from oh_my_vllm.worker.device import FUNCTIONS as DEVICE_FUNCTIONS
+from oh_my_vllm.operators.vision.api import FUNCTIONS as VISION_FUNCTIONS
 
 MODULES = {
     "device": DEVICE_FUNCTIONS,
@@ -53,7 +48,7 @@ def build(name, functions):
         cuda = os.environ.get("CUDA_HOME", "/usr/local/cuda")
         nvcc = str(Path(cuda) / "bin/nvcc")
     flags = ("-O3", "--generate-code=arch=compute_100a,code=sm_100a", "-lineinfo")
-    source = SOURCES / f"{name}.cu"
+    source = MODULE_SOURCES[name]
     source_fingerprint = source_digest(source)
     compiler = subprocess.check_output([nvcc, "--version"]).decode()
     include_paths = [str(source.parent), str(SOURCES)]
@@ -75,17 +70,7 @@ def build(name, functions):
         include_paths += [str(cutlass / "include"), str(cutlass / "tools/util/include")]
         if name == "vision":
             include_paths.append(str(cutlass / "examples/77_blackwell_fmha"))
-    vendor = (
-        vision_vendor_dependencies()
-        if name == "vision"
-        else ffn_vendor_dependencies()
-        if name == "ffn"
-        else gdn_vendor_dependencies()
-        if name == "gdn"
-        else fa_vendor_dependencies()
-        if name == "fa"
-        else None
-    )
+    vendor = vision_vendor_dependencies() if name == "vision" else None
     build_options = {}
     if vendor is not None:
         include_paths.append(vendor["include_directory"])
@@ -133,13 +118,7 @@ def build(name, functions):
         "cutlass": commit,
     }
     if vendor is not None:
-        key = {
-            "vision": "vision_vendor",
-            "ffn": "ffn_mx_vendor",
-            "gdn": "gdn_mx_vendor",
-            "fa": "fa_mx_vendor",
-        }[name]
-        metadata[key] = vendor
+        metadata["vision_vendor"] = vendor
     encoded = json.dumps(metadata, indent=2) + "\n"
     immutable_manifest = binary_directory / "manifest.json"
     if immutable_manifest.exists() and immutable_manifest.read_text() != encoded:
@@ -152,16 +131,7 @@ def build(name, functions):
     temporary.replace(cache / f"{name}.json")
     module = load_module(str(immutable_library))
     if vendor is not None:
-        verify = (
-            verify_vision_vendor_images
-            if name == "vision"
-            else verify_ffn_vendor_images
-            if name == "ffn"
-            else verify_gdn_vendor_images
-            if name == "gdn"
-            else verify_fa_vendor_images
-        )
-        verify(module, vendor)
+        verify_vision_vendor_images(module, vendor)
     return module, source_id, immutable_library
 
 

@@ -1,5 +1,8 @@
 import numpy as np
-from oh_my_vllm.kernels.gdn import GDN, Schedule
+from oh_my_vllm.operators.gdn import api as gdn
+from oh_my_vllm.operators.gdn.api import Schedule
+from oh_my_vllm.operators.gdn.plan import make_plan
+from oh_my_vllm.operators.gdn.workspace import prepare
 
 
 def bind(prepared):
@@ -20,30 +23,34 @@ def bind(prepared):
         slots=next(iter(prepared.fixture.state.values())).shape[0],
         verify=case.options["verify"],
     )
-    operation = prepared.own(
-        GDN(
-            weights[0],
-            schedule,
-            prepared.device.empty,
-            lambda values: prepared.device.upload(np.asarray(values, dtype=np.int32)),
+    operation = prepared.own(prepare(make_plan(schedule), prepared.device, weights))
+    prepared.outputs.update(operation.outputs._asdict())
+    batch = gdn.BatchView(
+        *(
+            prepared.device.upload(np.asarray(values, dtype=np.int32))
+            for values in (
+                schedule.sequence_rows,
+                schedule.read_slots,
+                schedule.validate(),
+            )
         )
     )
-    prepared.outputs.update(
-        zip(("value", "residual"), operation.buffers[:2], strict=True)
-    )
+    value = gdn.Inputs(inputs["value"], inputs["residual"], inputs.get("tokens"))
     states = []
     for layer in case.weights:
         prefix = f"layer{layer}." if len(weights) > 1 else ""
         states.append(
-            tuple(
-                prepared.state[prefix + name] for name in ("recurrent", "convolution")
+            gdn.StateView(
+                *(
+                    prepared.state[prefix + name]
+                    for name in ("recurrent", "convolution")
+                )
             )
         )
 
     def run():
         for weight, state in zip(weights, states, strict=True):
-            operation.weights = weight
-            operation(inputs["value"], inputs["residual"], *state, inputs.get("tokens"))
+            gdn.run(weight, operation, value, batch, state)
 
     prepared.operation = run
     return run

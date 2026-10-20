@@ -48,7 +48,7 @@ impl Default for WorkerConfig {
                 .unwrap_or_default(),
             socket_path: PathBuf::from("/tmp/oh-my-vllm.ipc"),
             num_gpu_blocks: 1024,
-            mamba_blocks: None,
+            mamba_blocks: Some(128),
             block_size: 784,
             tensor_parallel_size: 1,
             max_model_len: 262144,

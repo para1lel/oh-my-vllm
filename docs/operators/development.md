@@ -98,6 +98,27 @@ scripts/with-env.sh python -m development.operators.budgets --fixtures "$OPERATO
 
 Examine arrays, manifests, generator identity, and proposed limits before updating repository fixtures, case hashes, and [limits](../../development/operators/limits.json).
 
-Use the [HTTP benchmark](../performance.md#measurement-command) for performance measurement.
+Set `OPERATOR_PERFORMANCE` to a new external directory.
+Run all fixed performance cases with the approved ratio limits:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.operators performance --model "$MODEL_ROOT" --report "$OPERATOR_PERFORMANCE"
+```
+
+The [resource and timing policy](performance.md) defines the measured operation and theoretical lower bound.
+Failed or unresolved cases cause an error exit.
+
+For initial calibration, set `OPERATOR_CALIBRATION` to a new external directory.
+Collect five complete sessions:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.operators calibrate --model "$MODEL_ROOT" --report "$OPERATOR_CALIBRATION"
+```
+
+This command proposes limits in its external report.
+It does not change repository limits.
+Review the complete reports and provenance before copying approved performance entries into the limits file.
+
+Use the [HTTP benchmark](../performance.md#measurement-command) for complete inference timing.
 Use the same `--prompt-seed` value when you compare measurements before and after a change.
 The HTTP artifact records this seed and the execution policy.

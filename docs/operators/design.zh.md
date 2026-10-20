@@ -28,10 +28,9 @@ operators/
     plan.py
     workspace.py
     cuda/
-      entry.cu
-      input.cuh
+      fa.cu
+      input/
       attention/
-      output.cuh
   gdn/
   ffn/
   output/
@@ -61,7 +60,7 @@ MTP 包还可以使用 FA, FFN 和模型输出提供的显式内部组件接口.
 
 执行计划和算子执行存储使用[项目术语](../glossary.zh.md)中的定义.
 每个算子族有自己的计划类型, 输入类型, 状态视图和输出字段.
-以下调用表示接口形式, 不是已实现的函数:
+以下调用表示接口形式:
 
 ```python
 result = fa.run(weights, workspace, inputs, batch_view, cache_view)
@@ -184,7 +183,7 @@ Worker 先对返回的 token 应用请求停止条件.
 3. 将相同契约应用到 GDN, FFN, output 和 vision.
 4. 将新的融合与执行变更和结构迁移分开评估.
 
-随对应实现变更更新[阶段清单](../../python/oh_my_vllm/kernels/specification.py)和 [serving 边界](fusion.zh.md).
+随对应实现变更更新[阶段清单](../../python/oh_my_vllm/operators/specification.py)和 [serving 边界](fusion.zh.md).
 迁移各算子时, 移除对私有 buffer 的直接访问及模型层复制的 kernel 选择规则.
 
 使用[测试范围](../testing.zh.md)和[数值流程](evaluation.zh.md).

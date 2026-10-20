@@ -28,7 +28,11 @@ PROMPT = (
 
 def runtime_identity():
     import oh_my_vllm
-    from oh_my_vllm.kernels.native import cache_directory, file_sha256
+    from oh_my_vllm.operators.runtime.native import (
+        cache_directory,
+        file_sha256,
+        source_fingerprint,
+    )
 
     root = Path(oh_my_vllm.__file__).resolve().parent
     digest = hashlib.sha256()
@@ -37,9 +41,11 @@ def runtime_identity():
             digest.update(str(path.relative_to(root)).encode())
             digest.update(path.read_bytes())
     native = {}
-    names = ["device", "ffn", "fa", "gdn", "sample"]
+    names = ["device", "ffn", "fa", "gdn", "sample", "mtp", "vision"]
     for name in names:
         manifest = json.loads((cache_directory() / f"{name}.json").read_text())
+        if manifest["source_fingerprint"] != source_fingerprint(name):
+            raise ValueError("native module differs from its current source")
         if file_sha256(manifest["library"]) != manifest["binary_id"]:
             raise ValueError("native binary differs from its manifest")
         native[name] = {key: manifest[key] for key in ("source_id", "binary_id")}
@@ -47,9 +53,11 @@ def runtime_identity():
 
 
 def run(model_path, *, decode_token=None, mode="decode"):
-    from oh_my_vllm.kernels.sample import Sample
+    from oh_my_vllm.operators.output import api as output
+    from oh_my_vllm.operators.output.plan import make_plan
+    from oh_my_vllm.operators.output.workspace import prepare
+    from oh_my_vllm.operators.runtime.device import Device
     from oh_my_vllm.worker.cache import Cache
-    from oh_my_vllm.worker.device import Device
     from oh_my_vllm.worker.execution import execution_policy
     from oh_my_vllm.worker.model import Model
     from oh_my_vllm.worker.weights import Weights
@@ -70,7 +78,7 @@ def run(model_path, *, decode_token=None, mode="decode"):
     model = Model(
         device, weights, cache, False, SimpleNamespace(rows=lambda _: (None, None))
     )
-    sample = Sample(weights.sample, 1, device.empty)
+    sample = prepare(make_plan(rows=1), device, (weights.sample,))
     parameters = (
         device.zeros((1, 2, 248320), "int32"),
         device.upload(np.full((1, 248320 // 8), 255, np.uint8)),
@@ -99,7 +107,13 @@ def run(model_path, *, decode_token=None, mode="decode"):
         )
 
         def project():
-            sample(value, residual, *parameters, greedy=True)
+            output.sample(
+                weights.sample,
+                sample,
+                output.Inputs(value, residual),
+                output.Settings(*parameters[:3], greedy=True),
+                parameters[3],
+            )
 
         with ExitStack() as resources:
             project()
@@ -107,7 +121,7 @@ def run(model_path, *, decode_token=None, mode="decode"):
                 device.synchronize()
                 replay = resources.enter_context(device.graph(project))
                 replay()
-            logits = sample.buffers[1]
+            logits = sample.outputs.logits
             bits = device.download(logits, np.uint16).reshape(-1)
         value = (bits.astype(np.uint32) << 16).view(np.float32)
         if value.shape != (248320,) or not np.isfinite(value).all():

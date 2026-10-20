@@ -1,9 +1,9 @@
 import json
 from dataclasses import replace
 
-from oh_my_vllm.kernels.mtp import InputWeights
-from oh_my_vllm.kernels.sample import Weights as OutputWeights
-from oh_my_vllm.kernels.vision import Weights as VisionWeights
+from oh_my_vllm.operators.mtp.api import InputWeights
+from oh_my_vllm.operators.output.api import Weights as OutputWeights
+from oh_my_vllm.operators.vision.api import Weights as VisionWeights
 from oh_my_vllm.worker.checkpoint import Checkpoint
 from oh_my_vllm.worker.weights import Weights
 
@@ -35,13 +35,11 @@ class CaseWeights(Weights):
                 self.upload("mtp.fc.weight"),
             )
             if case.boundary == "mtp.context":
-                self.mtp_attention = self.attention("mtp.layers.0.", prepare=False)
+                self.mtp_attention = self.attention("mtp.layers.0.")
             else:
                 self.mtp_layer = self.layer(
                     "mtp.layers.0.",
                     "full_attention",
-                    prepare_ffn=False,
-                    prepare_fa=False,
                 )
                 self.mtp_sample = OutputWeights(
                     self.floats("mtp.norm.weight"), self.upload("lm_head.weight")

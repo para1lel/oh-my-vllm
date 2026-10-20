@@ -54,7 +54,7 @@ The accepted history does not contain new drafts.
 
 The [model](../python/oh_my_vllm/worker/model.py) calls the [operator stages](operators/fusion.md) through all language layers.
 Eager execution and CUDA Graph recording use the same native operators.
-The [device wrapper](../python/oh_my_vllm/worker/device.py) supplies graph resources.
+The [device wrapper](../python/oh_my_vllm/operators/runtime/device.py) supplies graph resources.
 Each workspace keeps its weights, cache, tensors, and resource leases until graph closure.
 FP8 conversion and tensor checks are shared across operator families.
 

@@ -114,14 +114,14 @@ PreparedCase.close() -> None
 Use the existing reference dependency lock.
 Modify `test_contracts.py`.
 
-Modify `python/oh_my_vllm/kernels/sample.py` and `python/oh_my_vllm/kernels/cuda_backend/sample.cu` for a necessary preparation step.
-The current implementation has no distribution-only path without token selection and RNG changes.
-Add `Sample.distribution(history, mask, parameters, *, greedy=False)` after vocabulary projection.
-It returns the prepared probability tensor without token output or an RNG argument.
+Modify `python/oh_my_vllm/operators/output/{api,workspace}.py` and `python/oh_my_vllm/operators/output/cuda/sample.cu` for a necessary preparation step.
+Supply `output.distribution(weights, workspace, inputs, settings)` for vocabulary projection and distribution preparation.
+It returns `Outputs`, with the prepared probability tensor in `Outputs.probabilities`.
+It does not select tokens or accept an RNG argument.
 Add the native `sample_distribution` export and update the function list and manifests.
 Keep the existing fused sampling path.
 
-**Interfaces:** Each family supplies `reference(case, inputs, weights) -> dict[str, numpy.ndarray]` using direct PyTorch formulas.
+**Interfaces:** Each family supplies `reference(case, inputs, state, weights) -> dict[str, numpy.ndarray]` using direct PyTorch formulas.
 `numerics.compare(actual, fixture, limits) -> NumericalResult` returns field metrics and exact-contract failures.
 The generator writes a new staging directory and never overwrites tracked fixtures.
 
@@ -137,7 +137,8 @@ The generator writes a new staging directory and never overwrites tracked fixtur
 
 ## V3: Implement theoretical-latency acceptance
 
-**Dependencies:** V1 and V2. Complete before source migration.
+**Dependencies:** V1 and V2. Freeze reviewed limits before source migration into `main`.
+Run final performance acceptance after migration. Use the [final delivery procedure](plan.md#final-delivery-procedure) for one commit and push.
 
 **Create:** `development/operators/{accounting,timing}.py`.
 Modify the CLI, limits, and `test_contracts.py`.
@@ -145,18 +146,18 @@ Use rate values and formula helpers from `development/serving/accounting.py` wit
 
 **Interfaces:** `accounting.work(case) -> ResourceWork` gives semantic resource totals.
 `accounting.lower_bound(case, device_spec) -> float` returns seconds.
-`timing.measure(prepared, policy) -> TimingSamples` records raw GPU/host samples.
+`timing.measure(prepared, *, count=MINIMUM_SAMPLES, events_factory=Events, repeats=None) -> list[Sample]` records raw GPU/host samples.
 `timing.check(samples, lower_bound, max_ratio) -> PerformanceResult` gives the ratio, interval, and decision.
 
-- [ ] Add `test_accounting_ignores_implementation_work` with extra scratch and duplicated launches that cannot increase theoretical credit.
-- [ ] Add `test_ratio_gate_excludes_reset_and_fails_uncertainty` with fake events and fixed timing samples.
-- [ ] Check cache-resident versus streaming accounting, reset exclusion, fixed-limit failure, and unresolved intervals.
-- [ ] Run the checks before implementation.
-- [ ] Implement accounting and measurement according to the microbench design.
-- [ ] Calibrate proposed limits from the current correct implementation using the fixed five-session procedure.
-- [ ] Get a different agent to examine resource counts, cache policy, measured ratios, and proposed limits.
-- [ ] Commit only approved limits and their provenance hashes, with the measurement tools.
-- [ ] Run performance acceptance without an old build or old timing input.
+- [x] Add `test_accounting_ignores_implementation_work` with extra scratch and duplicated launches that cannot increase theoretical credit.
+- [x] Add `test_ratio_gate_excludes_reset_and_fails_uncertainty` with fake events and fixed timing samples.
+- [x] Check cache-resident versus streaming accounting, reset exclusion, fixed-limit failure, and unresolved intervals.
+- [x] Run the checks before implementation.
+- [x] Implement accounting and measurement according to the microbench design.
+- [x] Calibrate proposed limits from the current correct implementation using the fixed five-session procedure.
+- [x] Get a different agent to examine resource counts, cache policy, measured ratios, and proposed limits.
+- [x] Prepare approved limits and their provenance hashes with the measurement tools for final delivery.
+- [x] Run performance acceptance without an old build or old timing input.
 
 ## V4: Keep integration acceptance
 
@@ -167,20 +168,20 @@ Create `development/model/{cases,reference_cases}.py` and repository fixtures fo
 Add `--case` to the model CLI. Its default keeps the current short-case behavior.
 Keep `reference.py`, `reference.npz`, and the existing short-case identity check unchanged.
 
-- [ ] Use named logits and all seven native module identities in numerical capture.
-- [ ] Add `mtp-restored`, `image-video`, and `context-32769` full-model cases before changes to their execution paths.
-- [ ] Compare complete vocabulary endpoints after target-plus-MTP computation, media-to-language computation, and long-context decode, respectively.
-- [ ] Apply the repository fixture and explicit-generation rules to those added full-model references.
-- [ ] Keep the existing short-case limits unchanged.
-- [ ] Keep execution lifetime, stop truncation, constraints, service, and Rust checks.
-- [ ] Run the 24 HTTP configurations with unchanged workload settings.
-- [ ] Update the two README performance tables from verified HTTP artifacts.
-- [ ] Get a different agent to examine the integration changes.
-- [ ] Commit the integration changes.
+- [x] Use named logits and all seven native module identities in numerical capture.
+- [x] Add `mtp-restored`, `image-video`, and `context-32769` full-model cases before changes to their execution paths.
+- [x] Compare complete vocabulary endpoints after target-plus-MTP computation, media-to-language computation, and long-context decode, respectively.
+- [x] Apply the repository fixture and explicit-generation rules to those added full-model references.
+- [x] Keep the existing short-case limits unchanged.
+- [x] Keep execution lifetime, stop truncation, constraints, service, and Rust checks.
+- [x] Run the 24 HTTP configurations with unchanged workload settings.
+- [x] Update the two README performance tables from verified HTTP artifacts.
+- [x] Get a different agent to examine the integration changes.
+- [x] Include the integration changes in final delivery.
 
 ## Commands and acceptance
 
-These operator commands are target interfaces to implement.
+Use these operator commands for validation.
 Set local model/environment paths and new external report paths before use.
 
 ```bash

@@ -18,7 +18,7 @@ struct Cli {
     socket: PathBuf,
     #[arg(long, default_value_t = 1024)]
     num_gpu_blocks: u32,
-    #[arg(long)]
+    #[arg(long, default_value = "128")]
     mamba_blocks: Option<u32>,
     #[arg(long, default_value_t = 32768, value_parser = clap::value_parser!(u32).range(1..))]
     max_num_batched_tokens: u32,

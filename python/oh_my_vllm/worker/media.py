@@ -10,7 +10,9 @@ import av
 import numpy as np
 from PIL import Image, ImageOps
 
-from ..kernels.vision import VisionBlock
+from ..operators.vision import api as vision
+from ..operators.vision.plan import make_plan
+from ..operators.vision.workspace import prepare
 
 
 @dataclass
@@ -214,27 +216,26 @@ class MediaProcessor:
             )
             rows = count * tokens
             with ExitStack() as resources:
-                operations = [
-                    resources.enter_context(
-                        VisionBlock(
-                            weights,
-                            rows,
-                            tokens,
-                            d.empty,
-                            variant=variant,
-                            grid=item.grid,
-                            source=(height, width),
-                            frames=min(count * 2, frames - first * 2),
-                        )
+                bindings = tuple(
+                    vision.layer_weights(weights, layer) for layer in range(27)
+                )
+                operations = []
+                for variant in ("input", "default", "default", "merge"):
+                    plan = make_plan(
+                        rows=rows,
+                        variant=variant,
+                        grid=item.grid,
+                        source=(height, width),
+                        frames=min(count * 2, frames - first * 2),
                     )
-                    for variant in ("input", "default", "default", "merge")
-                ]
-                value = operations[0](pixels)
+                    operation = prepare(plan, d, bindings)
+                    resources.callback(operation.close)
+                    operations.append(operation)
+                value = operations[0].run(bindings[0], vision.Inputs(pixels)).hidden
                 for layer in range(1, 26):
                     operation = operations[1 + (layer % 2)]
-                    operation.layer = layer
-                    value = operation(value)
-                value = operations[3](value)
+                    value = operation.run(bindings[layer], vision.Inputs(value)).hidden
+                value = operations[3].run(bindings[26], vision.Inputs(value)).hidden
                 destination = d.view(result, value.shape, first * tokens // 4 * 5120)
                 d.module.copy_bytes(destination, value)
                 d.synchronize()

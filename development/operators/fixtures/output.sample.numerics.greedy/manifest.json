@@ -43,7 +43,7 @@
     "torch": "2.12.0+cu130",
     "cuda": "13.0",
     "numpy": "2.5.4",
-    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "source": "182a6136bc7fb0e6bd90b3ce39f57f1a49a55f733d2a1fce19d005f9ab4171aa",
     "decisions": {
       "minimum_margin": 0.01,
       "records": []
@@ -51,7 +51,7 @@
   },
   "files": {
     "inputs.value.0000.npz": "f6d97c0da9e64877cdf7e2a4bcddc144a1b2aa9ffc64e525f5984ba114afd6a8",
-    "inputs.residual.0000.npz": "f6d97c0da9e64877cdf7e2a4bcddc144a1b2aa9ffc64e525f5984ba114afd6a8",
+    "inputs.residual.0000.npz": "676025a769e595ffce7fffd34e661530c80628f24ebaa8e5076dac41638826ef",
     "inputs.history.0000.npz": "684f8391299049827323d15bdf84b7fa65fcf93f2dd50d3647ab33a1f4d8c476",
     "inputs.mask.0000.npz": "0c33df99ea987d3e7613264e83a623f176c6351f82a1997403e8e827838632fc",
     "inputs.parameters.0000.npz": "96cf15509aa1c327d5288b61b922d0a92fead9a21eb0657765e2c85e6adc1231",
@@ -85,8 +85,8 @@
         1,
         5120
       ],
-      "dtype": "uint16",
-      "tensor_dtype": "bfloat16",
+      "dtype": "float32",
+      "tensor_dtype": "float32",
       "parts": [
         {
           "file": "inputs.residual.0000.npz",

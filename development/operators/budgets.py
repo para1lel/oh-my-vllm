@@ -9,6 +9,7 @@ from .cases import load_cases
 from .fixtures import file_digest, load_fixture
 from .numerics import sequences
 
+FP32_UNIT = 2**-24
 BF16_UNIT = 2**-8
 FP8_UNIT = 2**-4
 VERSION = "operator-precision-v1"
@@ -20,10 +21,9 @@ def coefficients(case, field):
     if field in {"probabilities", "selected_probability"}:
         return (0.5, None) if case.boundary.startswith("mtp.") else (0.03125, None)
     if field == "residual":
-        return BF16_UNIT, BF16_UNIT
-    if field == "fp8_kv":
-        return 2 * FP8_UNIT, 3 * FP8_UNIT
-    if field in {"kv", "kv_scales", "convolution", "recurrent"}:
+        unit = FP32_UNIT if case.boundary == "ffn" else BF16_UNIT
+        return unit, unit
+    if field in {"kv", "convolution", "recurrent"}:
         return FP8_UNIT, 2 * FP8_UNIT
     if case.boundary == "output.hidden":
         return 2 * BF16_UNIT, 4 * BF16_UNIT

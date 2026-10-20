@@ -30,8 +30,6 @@
       "probabilities",
       "rng",
       "kv",
-      "fp8_kv",
-      "kv_scales",
       "guards",
       "selection_cdf"
     ]
@@ -96,6 +94,14 @@
           "budget": 0.125
         }
       ]
+    },
+    "state_representation": {
+      "previous_manifest_sha256": "90c7c1b6d20114ff4b9401fe2651f693020aec7f6568897112b99b7be95ccd6d",
+      "removed": [
+        "fp8_kv",
+        "kv_scales"
+      ],
+      "retained_arrays": "unchanged except state guard count"
     }
   },
   "files": {
@@ -110,8 +116,6 @@
     "inputs.mask.0000.npz": "cc7e837f1a737806b96a6d31fe4cda2194380bac5e0b835c52c66d781796f20a",
     "inputs.parameters.0000.npz": "4b855f9c6f887eca4049606a66ec316a97085060c0de713ff716d5c12befc942",
     "state.kv.0000.npz": "878e35aed100a01666ecea6ec5c198fa4b0bc1bd642a83060ab041dc4d7b7bfa",
-    "state.fp8_kv.0000.npz": "1e0040c04a1aa2914aaa74f39604087a05684abfcdd31e60fd4c4f1d7d8d38e8",
-    "state.kv_scales.0000.npz": "579900efbe3c9841b8a84353b326d59237804c902ec81e1ba8e78566edb5bae6",
     "state.rng.0000.npz": "ef3121a1d29be871fbe609aab59f2c4d63f355f69b69d65e3c5d1c88c3636648",
     "expected.hidden.0000.npz": "69dbec65c44d9b5f3a1d6a05a740b2b34e2e6346a0e3e13e46298ec0fe9d583f",
     "expected.logits.0000.npz": "8f8bf77ae0da903abfcbd8f9bdc788593cc9180574e1fa175438287c2a5d6b99",
@@ -121,9 +125,7 @@
     "expected.selection_cdf.0000.npz": "2e362225df58e8d1da95bbb229cf4854ebf484d0edc2a101d1c8cea1e98eb05f",
     "expected.rng.0000.npz": "0c846c6d05dfab826e57106b8d7fb140087476906b156c52a30831f6e993095e",
     "expected.kv.0000.npz": "768615308314fa38243de101eeb3178f3cf9e19c52266c8be4ffb1250390844c",
-    "expected.fp8_kv.0000.npz": "622a4de560f9329f288bb329052e002d642c78046a88ef96c125e12e774c7a3f",
-    "expected.kv_scales.0000.npz": "9dc126e254ea83b83eeb4ef2f4b61dbb94ad4b7a736936562d5b7e05d0d98243",
-    "expected.guards.0000.npz": "4468b732ea598d35a0965044d71196b97986659a9cd866092ff1442c1437f7af"
+    "expected.guards.0000.npz": "fd87cbb8659658f565200e0dee26b9fe3ef4408b6d3b6859db10d12f6c7a447a"
   },
   "tensors": {
     "inputs.positions": {
@@ -302,43 +304,6 @@
         }
       ]
     },
-    "state.fp8_kv": {
-      "shape": [
-        4,
-        2,
-        784,
-        4,
-        256
-      ],
-      "dtype": "uint8",
-      "tensor_dtype": "float8_e4m3fn",
-      "parts": [
-        {
-          "file": "state.fp8_kv.0000.npz",
-          "key": "value",
-          "offset": 0,
-          "count": 6422528
-        }
-      ]
-    },
-    "state.kv_scales": {
-      "shape": [
-        4,
-        2,
-        4,
-        784
-      ],
-      "dtype": "float32",
-      "tensor_dtype": "float32",
-      "parts": [
-        {
-          "file": "state.kv_scales.0000.npz",
-          "key": "value",
-          "offset": 0,
-          "count": 25088
-        }
-      ]
-    },
     "state.rng": {
       "shape": [
         2,
@@ -483,44 +448,9 @@
         }
       ]
     },
-    "expected.fp8_kv": {
-      "shape": [
-        2,
-        2,
-        4,
-        256
-      ],
-      "dtype": "float64",
-      "tensor_dtype": "float64",
-      "parts": [
-        {
-          "file": "expected.fp8_kv.0000.npz",
-          "key": "value",
-          "offset": 0,
-          "count": 4096
-        }
-      ]
-    },
-    "expected.kv_scales": {
-      "shape": [
-        2,
-        2,
-        4
-      ],
-      "dtype": "float64",
-      "tensor_dtype": "float64",
-      "parts": [
-        {
-          "file": "expected.kv_scales.0000.npz",
-          "key": "value",
-          "offset": 0,
-          "count": 16
-        }
-      ]
-    },
     "expected.guards": {
       "shape": [
-        4
+        2
       ],
       "dtype": "bool",
       "tensor_dtype": "bool",
@@ -529,7 +459,7 @@
           "file": "expected.guards.0000.npz",
           "key": "value",
           "offset": 0,
-          "count": 4
+          "count": 2
         }
       ]
     }
@@ -542,22 +472,6 @@
       ],
       "layout": "kv",
       "output": "kv"
-    },
-    "fp8_kv": {
-      "indices": [
-        1567,
-        2351
-      ],
-      "layout": "kv",
-      "output": "fp8_kv"
-    },
-    "kv_scales": {
-      "indices": [
-        1567,
-        2351
-      ],
-      "layout": "kv_scales",
-      "output": "kv_scales"
     },
     "rng": {
       "indices": [

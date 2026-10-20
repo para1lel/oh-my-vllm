@@ -1,0 +1,8 @@
+{
+  "version": "full-model-fixtures-v1",
+  "fixtures": {
+    "mtp-restored": "33cecb9ba389fa1d85ef84598d4044764f1b4a2b9ef327dd30cae4e40f81ae62",
+    "image-video": "8d776cb5a3be904a93070d0cc3027f0a8c33f97bb9c0ffb6e383103067c2efa9",
+    "context-32769": "dc3dd0b5562448b043e816bf4692bb8abd210f1e0a996e139e6ac55d629f5301"
+  }
+}

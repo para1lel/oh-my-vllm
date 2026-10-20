@@ -1,26 +1,27 @@
 # Work state
 
 Use `main` for work.
-Use the [operator structure design](operators/design.md) for the next refactor.
-Follow the [implementation plan](operators/plan.md) and [microbench design](operators/microbench.md).
+The [operator packages](../python/oh_my_vllm/operators) keep each family's interface, plan, workspace, and CUDA code together.
+The [structure design](operators/design.md) defines their dependencies and ownership.
+Keep shared resource mechanisms in `runtime` and shared computation in `primitives`.
+The native builder is `development.native_build`. It builds seven native modules.
 
-The [operator validation framework](../development/operators) supplies fixed cases, repository fixtures, and numerical acceptance without PyTorch.
-The [precision policy](operators/precision.md) defines field and state limits.
-Continue with theoretical-latency accounting and fixed performance ratios in [validation task V3](operators/validation-plan.md#v3-implement-theoretical-latency-acceptance).
-Complete calibration before source migration.
+The worker uses explicit layer weights, named outputs, and operator plan keys.
+Use the [execution rules](execution.md) for Eager execution, CUDA Graph replay, and resource release.
+Rust and the worker control persistent state selection.
+Operators write only to the state locations supplied by their callers.
 
-The worker uses [operator scheduling](execution.md): Eager for Execute messages with prefill, and CUDA Graph replay for decode-only messages.
-The native builder is `development.native_build`.
-FA keeps BF16 cache state and derived FP8 operands with the same logical page ownership.
-See the [model contract](operators/model.md#intermediate-precision) for attention precision.
+Use the [operator validation framework](../development/operators) before kernel changes.
+It supplies fixed numerical fixtures, direct PyTorch references, and theoretical-latency ratio limits.
+Usual numerical tests load repository fixtures without executing PyTorch.
+Keep the [precision policy](operators/precision.md) and [full-model limits](operators/evaluation.md).
+Do not automatically change limits after implementation changes.
 
-The [numerical tools](operators/evaluation.md) compare full-model logits with the frozen [PyTorch FP64 reference](../development/model/reference.npz).
-Keep its identity checks and numerical limits.
-Use the 24 [HTTP configurations](performance.md) to measure time and nominal-resource efficiency.
-Use serving sampling defaults and auto tool constraints for these measurements.
+FA uses BF16 attention operands and cache state. GDN keeps recurrent state in FP32.
+FP8 projections use checkpoint E4M3 weights and FP32 block scales.
+The [model contract](operators/model.md#intermediate-precision) defines the intermediate precision.
+
+Run the applicable [test scope](testing.md) before delivery.
+Also run all 24 [HTTP configurations](performance.md).
 Keep measurement artifacts external to the repository.
-
-Limit further optimization to changes with a clear performance benefit.
-Keep numerical precision, state ownership, and service behavior.
-Extend full-model inputs when changes affect MTP, vision, or long contexts.
-Keep host settings in ignored `LOCAL.md`.
+Put host settings in ignored `LOCAL.md`.

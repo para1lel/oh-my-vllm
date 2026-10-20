@@ -3,10 +3,10 @@ from contextlib import ExitStack
 import numpy as np
 import tvm_ffi
 
-from ..kernels.fa import FA
-from ..kernels.ffn import FFN
-from ..kernels.mtp import MTPContext, MTPInput
-from ..kernels.sample import MTPAccept
+from ..operators.fa import api as fa
+from ..operators.mtp import api as mtp
+from ..operators.mtp.plan import accept_plan, context_plan, draft_plan
+from ..operators.mtp.workspace import prepare_accept, prepare_context, prepare_draft
 from .draft_chain import DraftChain, can_chain
 from .metadata import Metadata
 from .sampling import Sampling
@@ -37,15 +37,17 @@ class GraphOperation:
 
 
 class Context(GraphOperation):
-    def __init__(self, device, weights, arrays, batch, max_queries, hidden, cache):
+    def __init__(self, device, weights, arrays, plan, hidden, cache):
         super().__init__(device)
-        self.operation = MTPContext(
+        self.weights = mtp.Weights(
             weights.mtp_input,
             weights.attention_variant(weights.mtp_layer.attention, "kv_only"),
-            len(arrays[0]),
-            device.scratch,
-            batch=batch,
-            max_queries=max_queries,
+        )
+        self.operation = prepare_context(
+            plan,
+            device,
+            (self.weights,),
+            allocate=device.scratch,
         )
         self.metadata_inputs = Metadata(device, arrays)
         self.arrays = self.metadata_inputs.arrays
@@ -56,9 +58,9 @@ class Context(GraphOperation):
         self.endpoint_rows = tuple(
             tuple(
                 device.view(value, (1, 5120), row * 5120)
-                for value in self.operation.endpoints
+                for value in self.operation.outputs
             )
-            for row in range(batch)
+            for row in range(plan.batch)
         )
 
     def graph_lease(self):
@@ -68,6 +70,10 @@ class Context(GraphOperation):
         if self.media is not None or self.media_rows is not None:
             return self.run()
         return super().execute(graph)
+
+    def close(self):
+        super().close()
+        self.operation.close()
 
     def run(self):
         (
@@ -80,8 +86,8 @@ class Context(GraphOperation):
             starts,
             lengths,
         ) = self.arrays
-        return self.operation(
-            (
+        inputs = mtp.Inputs(
+            mtp.InputView(
                 self.hidden,
                 tokens,
                 hidden_rows,
@@ -90,26 +96,30 @@ class Context(GraphOperation):
                 self.media,
                 self.media_rows,
             ),
-            (positions, self.cache, slots, tables, starts, lengths),
+            fa.BatchView(positions, starts, lengths),
+            fa.CacheView(self.cache, slots, tables),
         )
+        return self.operation.run(self.weights, inputs)
 
 
 class Draft(GraphOperation):
-    def __init__(self, device, weights, batch, first):
+    def __init__(self, device, weights, batch, first, *, table_width=335):
         super().__init__(device)
         self.first = first
-        self.input = MTPInput(weights.mtp_input, batch, device.empty)
-        self.attention = FA(
+        self.weights = mtp.Weights(
+            weights.mtp_input,
             weights.attention_variant(weights.mtp_layer.attention, "query_only")
             if first
             else weights.mtp_layer.attention,
-            batch,
-            device.empty,
-            variant="query_only" if first else "full",
-            max_queries=1,
-            first_token=1,
+            weights.mtp_layer.feed_forward,
+            weights.mtp_sample,
         )
-        self.ffn = FFN(weights.mtp_layer.feed_forward, batch, device.empty)
+        self.operation = prepare_draft(
+            draft_plan(rows=batch, first=first, table_width=table_width),
+            device,
+            (self.weights,),
+        )
+        self.attention, self.ffn = self.operation.attention, self.operation.ffn
         self.hidden = device.empty((batch, 5120), "bfloat16")
         self.zero = device.zeros((batch, 5120), "bfloat16")
         self.rows = device.upload(np.arange(batch, dtype=np.int32))
@@ -119,7 +129,7 @@ class Draft(GraphOperation):
             for shape, dtype in (
                 ((3, batch), "int64"),
                 ((batch,), "int32"),
-                ((batch, 335), "int32"),
+                ((batch, table_width), "int32"),
                 ((batch + 1,), "int32"),
                 ((batch,), "int32"),
                 ((batch,), "int64"),
@@ -129,35 +139,42 @@ class Draft(GraphOperation):
         self.metadata = self.metadata_inputs.arrays[:5]
         self.tokens = self.metadata_inputs.arrays[5]
         self.sampling = Sampling(
-            device, weights.mtp_sample, batch, hidden=self.ffn.buffers[:2]
+            device,
+            weights.mtp_sample,
+            batch,
+            hidden=self.ffn.outputs,
+            operation=self.operation.output,
         )
         self.cache = None
         self.output = None
 
+    def graph_lease(self):
+        return self.operation.graph_lease()
+
     def close(self):
-        self.sampling.close()
         super().close()
+        self.sampling.close()
+        self.operation.close()
 
     def run(self):
-        value, residual = (
-            (self.hidden, self.zero)
-            if self.first
-            else self.input(
+        positions, slots, tables, starts, lengths = self.metadata
+        inputs = mtp.Inputs(
+            mtp.InputView(
                 self.hidden, self.tokens, self.rows, self.hidden, self.boundary_rows
-            )
+            ),
+            fa.BatchView(positions, starts, lengths),
+            fa.CacheView(self.cache, slots, tables),
+            fa.Inputs(self.hidden, self.zero),
         )
-        value, residual = self.attention(
-            value, residual, self.metadata[0], self.cache, *self.metadata[1:]
-        )
-        self.output = self.ffn(value, residual)
-        self.sampling.project()
+        self.operation.project(self.weights, inputs)
+        self.output = self.ffn.outputs
         return self.output
 
 
 class Acceptance(GraphOperation):
     def __init__(self, device, batch):
         super().__init__(device)
-        self.operation = MTPAccept(batch, device.empty)
+        self.operation = prepare_accept(accept_plan(batch=batch), device)
         self.target = device.empty((batch, 5, 248320), "float32")
         self.target_tokens = device.empty((batch, 5), "int64")
         self.proposal = device.empty((batch, 4, 248320), "float32")
@@ -175,14 +192,23 @@ class Acceptance(GraphOperation):
         self.greedy = False
         self.replays = {}
 
+    def graph_lease(self):
+        return self.operation.graph_lease()
+
+    def close(self):
+        super().close()
+        self.operation.close()
+
     def run(self):
-        return self.operation(
-            self.target_tokens if self.greedy else self.target,
-            self.proposal,
-            self.drafts,
-            self.rng,
-            self.slots,
-            self.capacity,
+        return self.operation.run(
+            mtp.AcceptInputs(
+                self.target_tokens if self.greedy else self.target,
+                self.proposal,
+                self.drafts,
+                self.rng,
+                self.slots,
+                self.capacity,
+            )
         )
 
     def execute(self, graph):
@@ -283,7 +309,7 @@ class Speculation:
         operation.copy(operation.rng, np.asarray(random, np.uint64))
         operation.capacity = self.cache.slots
         operation.execute(graph)
-        kept = d.download(operation.operation.buffers[0], np.int64)
+        kept = d.download(operation.operation.outputs.tokens, np.int64)
         counts = kept[:, 5]
         counters = kept.view(np.uint64)[:, 6]
         result = []
@@ -361,15 +387,20 @@ class Speculation:
             np.asarray(starts, np.int32),
             np.asarray(lengths, np.int32),
         )
-        key = (len(tokens), len(active), max(np.diff(starts)), id(hidden))
+        plan = context_plan(
+            rows=len(tokens),
+            batch=len(active),
+            table_width=arrays[5].shape[1],
+            max_queries=max(np.diff(starts)),
+        )
+        key = (plan.reuse_key, id(hidden))
         if graph:
             if key not in self.context_decode:
                 self.context_decode[key] = Context(
                     self.device,
                     self.weights,
                     arrays,
-                    len(active),
-                    key[2],
+                    plan,
                     hidden,
                     self.cache,
                 )
@@ -383,8 +414,7 @@ class Speculation:
                     self.device,
                     self.weights,
                     arrays,
-                    len(active),
-                    key[2],
+                    plan,
                     hidden,
                     self.cache,
                 )
@@ -506,7 +536,7 @@ class Speculation:
                 request.drafts.append(int(chosen[local]))
                 # The next stage copies all rows before the sampler reuses this buffer.
                 previous[index] = d.view(
-                    operation.sampling.operation.buffers[0], (1, 5120), local * 5120
+                    operation.sampling.operation.outputs.hidden, (1, 5120), local * 5120
                 )
                 if (
                     not request.stops_after(request.drafts)

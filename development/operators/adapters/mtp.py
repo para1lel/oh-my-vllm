@@ -1,43 +1,48 @@
 import numpy as np
-from oh_my_vllm.kernels.mtp import MTPContext
-from oh_my_vllm.kernels.sample import MTPAccept
+from oh_my_vllm.operators.mtp import api as mtp
+from oh_my_vllm.operators.mtp.plan import accept_plan, context_plan
+from oh_my_vllm.operators.mtp.workspace import prepare_accept, prepare_context
 from oh_my_vllm.worker.draft_chain import DraftChain
 from oh_my_vllm.worker.speculation import Draft
 
-from .fa import arguments, cache
+from .fa import cache, views
 from .sampling import observe_cdf
 
 
 def context(prepared):
     weights, case, inputs = prepared.weights, prepared.case, prepared.inputs
+    binding = mtp.Weights(
+        weights.mtp_input, weights.attention_variant(weights.mtp_attention, "kv_only")
+    )
     operation = prepared.own(
-        MTPContext(
-            weights.mtp_input,
-            weights.attention_variant(weights.mtp_attention, "kv_only"),
-            case.shape["rows"],
-            prepared.device.empty,
-            max_queries=case.shape["queries"],
-            batch=case.shape["batch"],
+        prepare_context(
+            context_plan(
+                rows=case.shape["rows"],
+                batch=case.shape["batch"],
+                table_width=inputs["tables"].shape[1],
+                max_queries=case.shape["queries"],
+            ),
+            prepared.device,
+            (binding,),
         )
     )
-    prepared.own(operation.attention)
-    prepared.outputs.update(
-        zip(("value", "residual"), operation.endpoints, strict=True)
-    )
-    input_arguments = tuple(
-        inputs[name]
-        for name in (
-            "hidden",
-            "tokens",
-            "hidden_rows",
-            "boundary_hidden",
-            "boundary_rows",
+    prepared.outputs.update(operation.outputs._asdict())
+    value = mtp.InputView(
+        *(
+            inputs[name]
+            for name in (
+                "hidden",
+                "tokens",
+                "hidden_rows",
+                "boundary_hidden",
+                "boundary_rows",
+            )
         )
     )
-    attention_arguments = arguments(prepared)
+    arguments = mtp.Inputs(value, *views(prepared))
 
     def run():
-        operation(input_arguments, attention_arguments)
+        mtp.context(binding, operation, arguments)
 
     prepared.operation = run
     return run
@@ -47,10 +52,14 @@ def draft(prepared):
     case, inputs = prepared.case, prepared.inputs
     first = case.options["variant"] == "query_only"
     operation = prepared.own(
-        Draft(prepared.device, prepared.weights, case.shape["batch"], first)
+        Draft(
+            prepared.device,
+            prepared.weights,
+            case.shape["batch"],
+            first,
+            table_width=inputs["tables"].shape[1],
+        )
     )
-    prepared.own(operation.attention)
-    prepared.own(operation.ffn)
     operation.hidden = inputs["hidden"]
     operation.cache = cache(prepared)
     operation.metadata = tuple(
@@ -59,16 +68,16 @@ def draft(prepared):
     )
     operation.tokens = inputs["tokens"]
     bind_sampling(operation, prepared)
-    buffers = operation.sampling.operation.buffers
+    outputs = operation.sampling.operation.outputs
     prepared.observers["selection_cdf"] = lambda: observe_cdf(
         prepared, operation.sampling.operation
     )
     prepared.outputs.update(
-        hidden=buffers[0],
-        logits=buffers[1],
-        tokens=buffers[7],
-        selected_probability=buffers[8],
-        probabilities=buffers[6],
+        hidden=outputs.hidden,
+        logits=outputs.logits,
+        tokens=outputs.tokens,
+        selected_probability=outputs.selected_probability,
+        probabilities=outputs.probabilities,
     )
 
     def run():
@@ -95,10 +104,14 @@ def chain(prepared):
     stages = []
     for index in range(4):
         stage = prepared.own(
-            Draft(device, prepared.weights, case.shape["batch"], index == 0)
+            Draft(
+                device,
+                prepared.weights,
+                case.shape["batch"],
+                index == 0,
+                table_width=inputs[f"stage{index}.tables"].shape[1],
+            )
         )
-        prepared.own(stage.attention)
-        prepared.own(stage.ffn)
         stages.append(stage)
     operation = prepared.own(DraftChain(device, stages, case.shape["batch"]))
     for index, stage in enumerate(stages):
@@ -111,10 +124,10 @@ def chain(prepared):
     stages[0].hidden = inputs["hidden"]
     stages[0].tokens = inputs["tokens"]
     prepared.outputs["tokens"] = operation.tokens
-    for name, index in (("hidden", 0), ("logits", 1), ("probabilities", 6)):
-        prepared.observers[name] = lambda index=index: np.stack(
+    for name in ("hidden", "logits", "probabilities"):
+        prepared.observers[name] = lambda name=name: np.stack(
             [
-                prepared.download(stage.sampling.operation.buffers[index])
+                prepared.download(getattr(stage.sampling.operation.outputs, name))
                 for stage in stages
             ]
         )
@@ -124,24 +137,29 @@ def chain(prepared):
 
 def accept(prepared):
     inputs, shape = prepared.inputs, prepared.case.shape
-    operation = prepared.own(MTPAccept(shape["batch"], prepared.device.empty))
-    prepared.outputs.update(
-        counts=operation.buffers[1], candidate_slots=operation.buffers[2]
+    operation = prepared.own(
+        prepare_accept(accept_plan(batch=shape["batch"]), prepared.device)
     )
-    prepared.observers["tokens"] = lambda: prepared.download(operation.buffers[0])[
+    prepared.outputs.update(
+        counts=operation.outputs.counts,
+        candidate_slots=operation.outputs.candidate_slots,
+    )
+    prepared.observers["tokens"] = lambda: prepared.download(operation.outputs.tokens)[
         :, :5
     ]
     capacity = int(prepared.fixture.inputs["capacity"].item())
 
+    arguments = mtp.AcceptInputs(
+        inputs["target"],
+        inputs["proposal"],
+        inputs["drafts"],
+        prepared.state["rng"],
+        inputs["private_slots"],
+        capacity,
+    )
+
     def run():
-        operation(
-            inputs["target"],
-            inputs["proposal"],
-            inputs["drafts"],
-            prepared.state["rng"],
-            inputs["private_slots"],
-            capacity,
-        )
+        mtp.accept(operation, arguments)
 
     prepared.operation = run
     return None

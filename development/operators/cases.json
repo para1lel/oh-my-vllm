@@ -23,11 +23,9 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
-      "fixture_sha256": "0a53bf4233fecbcce9644b5ac2562315b06a9e0aaaeef8a3508eba2cb7707357"
+      "fixture_sha256": "60711fcd309ae9ba1a650d9b7539dc439a005f1f9fd57ef5e9ab1434dcb26b26"
     },
     {
       "id": "fa.numerics.batched-decode",
@@ -51,11 +49,9 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
-      "fixture_sha256": "a7f3d675dc84c8764cdcabe719b63f47ebb34672c6db4b198c63e4286ef1b403"
+      "fixture_sha256": "20ccd390eed570eaf70cf60d5014ff288a765d94416587c36cdde108bcaa9d97"
     },
     {
       "id": "fa.numerics.verification",
@@ -79,11 +75,9 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
-      "fixture_sha256": "73486d658a5c5f925edf6d7279d150ab7dbfd9e75ae681aaf4f1b83c4ab19854"
+      "fixture_sha256": "3f3c644322fc617383e1d2e8b9a923ec7292704085bccbff25a93768275b51dc"
     },
     {
       "id": "fa.numerics.checkpoint-prefill",
@@ -107,11 +101,9 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
-      "fixture_sha256": "0fdca627cb498be334ddebdc475ea8ae1c582c5c450a89b22f3dd7228ddc62d8"
+      "fixture_sha256": "8d2231142daeb479f81f28b7f3e831db0171383d177a87c26aaed0e70ae10ee8"
     },
     {
       "id": "fa.numerics.large-prefill",
@@ -135,11 +127,9 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
-      "fixture_sha256": "78e7775e68a761c311d5096c0262348e75d65f4e6b8f06c3666b4d67d757a082"
+      "fixture_sha256": "c5ec5fe5a16049bb7a5037b957ed72040610a8bc2ec4ef33c3e8fe54024d6d92"
     },
     {
       "id": "gdn.numerics.single-decode",
@@ -166,7 +156,7 @@
         "convolution",
         "guards"
       ],
-      "fixture_sha256": "de5711c0fefce2c9df4b9c62ae116398c4706e1f04462970d654bee91a9dc653"
+      "fixture_sha256": "0c221d169ac196a7d117429d477ad3f862d3f6571ba909ace33941fb18087fb8"
     },
     {
       "id": "gdn.numerics.batched-decode",
@@ -193,7 +183,7 @@
         "convolution",
         "guards"
       ],
-      "fixture_sha256": "d0aab93f12b52531fdb7cf6077a8e39b3aac280323c93e48078170a586401e4d"
+      "fixture_sha256": "7619f899386bb4d5ee9eb199581f48726b1b8be0589c5b1ffa5a31a1690ef7ac"
     },
     {
       "id": "gdn.numerics.verification",
@@ -220,7 +210,7 @@
         "convolution",
         "guards"
       ],
-      "fixture_sha256": "bacd1ae09f316d6ea4dd45f49b34a9dd19426b55274145988b02155a82318a15"
+      "fixture_sha256": "f690b65093ccb4ed6a935ca88399b1a1ddc72042e9fb81cfa516f8e1dd5ad1f4"
     },
     {
       "id": "gdn.numerics.checkpoint-prefill",
@@ -247,7 +237,7 @@
         "convolution",
         "guards"
       ],
-      "fixture_sha256": "1cc0b2a46c9675e76d610aa52ab1d071c6760491a6fd24ddcecdba74aba25b83"
+      "fixture_sha256": "f08057f5a18eb43ea3eaa1c56804e0fe122d5d8a7b0a625abf2fd09161edd6fe"
     },
     {
       "id": "gdn.numerics.large-prefill",
@@ -274,7 +264,7 @@
         "convolution",
         "guards"
       ],
-      "fixture_sha256": "c0ed1992435dcdce189ccd753bdbc8428560c4a7594e5b20270b76d0e912aa3b"
+      "fixture_sha256": "5c5df058e0db82759e05150fc7deb0dbe8516b79ce2540677ecfbfe0e414a8f4"
     },
     {
       "id": "ffn.numerics.single-decode",
@@ -431,7 +421,7 @@
         "hidden_cache",
         "guards"
       ],
-      "fixture_sha256": "9992727cb27ee8f373e614d54a73cc3edb080783474647407911ff961082a977"
+      "fixture_sha256": "074af13406b7e4e7c9d90efa62f2c3b81d071f233c890158454aa51b78f35aed"
     },
     {
       "id": "output.hidden.numerics.batched-decode",
@@ -460,7 +450,7 @@
         "hidden_cache",
         "guards"
       ],
-      "fixture_sha256": "c90bd229e7b33926523409f4baab415608d5c0ead987ddda31acd4e9e5fb7dc7"
+      "fixture_sha256": "5057e1e355c09971e69ea490baf77e20d970d2387f348970c34b7fa6664fcc88"
     },
     {
       "id": "output.hidden.numerics.verification",
@@ -489,7 +479,7 @@
         "hidden_cache",
         "guards"
       ],
-      "fixture_sha256": "8f0ef2c9417ec058303fbe856971151b88ff9c899d27dccceaa6e81fcdd26c2e"
+      "fixture_sha256": "356ef30d8b2db4b0a594010f9e2ad0fcd7048c8f5b2418a61badf0b0a2bfaf01"
     },
     {
       "id": "output.hidden.numerics.checkpoint-prefill",
@@ -515,7 +505,7 @@
         "hidden_cache",
         "guards"
       ],
-      "fixture_sha256": "fc13eeae34e5721b2cf550547d3d05c8341e58afbc57997e74605967f9513f73"
+      "fixture_sha256": "56a522820b6244cad31aa78e8dd6d5506af81cdc5c18da653356c0496a4773ff"
     },
     {
       "id": "output.hidden.numerics.large-prefill",
@@ -541,7 +531,7 @@
         "hidden_cache",
         "guards"
       ],
-      "fixture_sha256": "16a602749e1fd52690684f38b84669feb84a83df920dc7156f9e3a8a5c5612a9"
+      "fixture_sha256": "292b1d7021356f8aff1fabc85790aec4309caf76a9f29d15344cc41523bcd4bc"
     },
     {
       "id": "output.distribution.numerics.greedy",
@@ -565,7 +555,7 @@
         "logits",
         "probabilities"
       ],
-      "fixture_sha256": "d0d57ece2255225851665353392914e59187d23f7ddbe82b95183e4eb7349fed"
+      "fixture_sha256": "8bc27873457b00387f81646514e75f619aaade7a9489ad803951b343d5178fc9"
     },
     {
       "id": "output.distribution.numerics.stochastic",
@@ -589,7 +579,7 @@
         "logits",
         "probabilities"
       ],
-      "fixture_sha256": "4e2011ab0181ed1a5580478d652d4d9b1e6f594a31d4ab30eb7eff404b0796d1"
+      "fixture_sha256": "eec178d6d7ccf7214aa81d52dc2df5baf6b4c529f5b2c6883acdad12e19b632d"
     },
     {
       "id": "output.distribution.numerics.batch",
@@ -616,7 +606,7 @@
         "logits",
         "probabilities"
       ],
-      "fixture_sha256": "c53e28e8e00e77ccf56966daf84b304ab19a9909752eeef8ab2800f7dda50ff9"
+      "fixture_sha256": "8594ca1841bfeb871463e0049cd6969c95886b80087f24abc5ba2b84bd24d232"
     },
     {
       "id": "output.distribution.numerics.verify-one",
@@ -640,7 +630,7 @@
         "logits",
         "probabilities"
       ],
-      "fixture_sha256": "c8a6ea84ebfd2eab7aa6b4af01b37f70577c295cb41fc6be60703aa30ffc6c9c"
+      "fixture_sha256": "ccc64a18880d1875a0f706ea58e49790bd827c36cefd11a9af86c001f22fd877"
     },
     {
       "id": "output.distribution.numerics.verify-batch",
@@ -667,7 +657,7 @@
         "logits",
         "probabilities"
       ],
-      "fixture_sha256": "d4ddc93c560cdca265e77ab8ddba423e7d1754283d621bffa92757f3073cbe96"
+      "fixture_sha256": "3afb0696c7b1fd68aea7cecf55d041581111e72fae19cabc060e3090595b562f"
     },
     {
       "id": "output.sample.numerics.greedy",
@@ -695,7 +685,7 @@
         "rng",
         "selection_cdf"
       ],
-      "fixture_sha256": "2a197d213428453641c6b908b6f1249a54265919287dee6210c27e6a125d4fda"
+      "fixture_sha256": "bf69e123aef02b71f40f129b292acce7b05452473cb95541a7aed030436153f4"
     },
     {
       "id": "output.sample.numerics.stochastic",
@@ -726,7 +716,7 @@
         "rng",
         "selection_cdf"
       ],
-      "fixture_sha256": "d6fc7f7a2456c07b15e150468c2e853a54170158064c1a3817631a4677af7de3"
+      "fixture_sha256": "0e57afe3230c871e2a071afcd1556180dd1bf771a1c668c9030c13a36fd84c80"
     },
     {
       "id": "output.sample.numerics.batch",
@@ -763,7 +753,7 @@
         "rng",
         "selection_cdf"
       ],
-      "fixture_sha256": "5ef165c870aad8eba3da1b9a708ee852a11d8b8c76a45615cee5869965a37f8a"
+      "fixture_sha256": "e2f8d5d1810b7d091ae826e81e0a4e0ff8858cd15473cfe02e9bfe55f2ac9519"
     },
     {
       "id": "output.sample.numerics.verify-one",
@@ -798,7 +788,7 @@
         "rng",
         "selection_cdf"
       ],
-      "fixture_sha256": "988b3021e209df614440134b221e8037b4c92ff412b797137ad42fe32a24fa00"
+      "fixture_sha256": "d8984e3e30f4d88b20c97966a98dd5c6753ebcd0f252f7d61d66ddad0fcc8363"
     },
     {
       "id": "output.sample.numerics.verify-batch",
@@ -851,7 +841,7 @@
         "rng",
         "selection_cdf"
       ],
-      "fixture_sha256": "3dbc9c920aea9e42f7ba3965e71cdedd6678655719343322d32a593af3898ca6"
+      "fixture_sha256": "9d5bf0d06fe577ed8dafa30e08901cb6e4386cce8525dd4f40a0930e34f17855"
     },
     {
       "id": "mtp.context.numerics.context-1",
@@ -872,11 +862,9 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
-      "fixture_sha256": "6b66fa12c2b73aa39cd2a6533cbfd14b37fb717dfa6910c5fe4de9d2c4ba962b"
+      "fixture_sha256": "fbc81d7edeae24bf1da251c89bb5dd0dc8440167fb0ccb6c30b8c9bf6a36435f"
     },
     {
       "id": "mtp.context.numerics.context-2",
@@ -897,11 +885,9 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
-      "fixture_sha256": "b045c544802a3a69583c7029a81d7db9693b69bab95ba7a52f8a0b7f6c927663"
+      "fixture_sha256": "bd7eb1f9a40a9f35975fb2dd8514c9a34a18afaca61822b946acf0b74270acde"
     },
     {
       "id": "mtp.context.numerics.context-3",
@@ -922,11 +908,9 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
-      "fixture_sha256": "a408ffe7dbd2432ed09006d38d60a56c05564f79640520a694f2eaa3ccbd0cab"
+      "fixture_sha256": "044de4ba1725380030caadd0994445c57140cdadd2cbf81556a95c47f49b1fcc"
     },
     {
       "id": "mtp.context.numerics.context-4",
@@ -947,11 +931,9 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
-      "fixture_sha256": "0b39413e7c31c8d8b5cb7b9104c6ceb275ad159de117681cfc5a5360f4c0274a"
+      "fixture_sha256": "fe3b7edb7eb5c2d9c2f6d8276670d186613b902efc7de73a08da44e5192dc5c0"
     },
     {
       "id": "mtp.context.numerics.context-5",
@@ -972,11 +954,9 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
-      "fixture_sha256": "07f1f158e24e4da1861da4c248e29ccce83ae6ee27b1bd07df6b474ca3ee3d34"
+      "fixture_sha256": "3ab541d1f215eb3e5bc4533b966dc838cab700b4ed2b0471b8a806ec35b1517e"
     },
     {
       "id": "mtp.draft.numerics.draft-1",
@@ -1007,12 +987,10 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards",
         "selection_cdf"
       ],
-      "fixture_sha256": "35ef24be6ee9d831a4d456343ffb363477227ea11710914a1820d6b7717a42e5"
+      "fixture_sha256": "5348ae399804a1d6496bd16802be6a54d4b88474d02548a6d5d532e9c2c5d7f6"
     },
     {
       "id": "mtp.draft.numerics.draft-2",
@@ -1043,12 +1021,10 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards",
         "selection_cdf"
       ],
-      "fixture_sha256": "b78a536da11418d796631953af8706e9803e1b41d9e0558438bf2af739340615"
+      "fixture_sha256": "e22c84e35e2379cec3c2a8f057e2ebcae1b04a915abca20e772856fd6de71c0c"
     },
     {
       "id": "mtp.draft.numerics.draft-3",
@@ -1080,12 +1056,10 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards",
         "selection_cdf"
       ],
-      "fixture_sha256": "90c7c1b6d20114ff4b9401fe2651f693020aec7f6568897112b99b7be95ccd6d"
+      "fixture_sha256": "79f29ae5830ddcbe696eedef6cf2583ef55f32ad4fcf1a151b6bf223ae770fb8"
     },
     {
       "id": "mtp.draft.numerics.draft-4",
@@ -1119,12 +1093,10 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards",
         "selection_cdf"
       ],
-      "fixture_sha256": "314dba37d3a35207a54e8a868dfadc3c1977e8701f4e7601370ab659ace94d29"
+      "fixture_sha256": "a72125c0aab2e951c0e2e82429c984538921b9862229e1b3e7c72a5395af41a0"
     },
     {
       "id": "mtp.draft.numerics.draft-5",
@@ -1158,12 +1130,10 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards",
         "selection_cdf"
       ],
-      "fixture_sha256": "9dfb4c2a687999b585bfa764c1d992c3e201d89ad46ddc234b3a1c43b1de686f"
+      "fixture_sha256": "a6ed6019bf39de87d845bf06768aedd24f20026d63717c1e36b23a410281c801"
     },
     {
       "id": "mtp.chain.numerics.batch-1",
@@ -1179,7 +1149,9 @@
       "weights": [
         "mtp"
       ],
-      "options": {},
+      "options": {
+        "sampling": "fixed_token"
+      },
       "outputs": [
         "hidden",
         "logits",
@@ -1187,11 +1159,9 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
-      "fixture_sha256": "9eed76276c294c773059bb8b51a6d332688f80b154a9801d8470f15e3cc99216"
+      "fixture_sha256": "afa1366f218c65c1763b4da3c1db8b70d85074948cd5442081261856e2caa053"
     },
     {
       "id": "mtp.chain.numerics.batch-2",
@@ -1207,7 +1177,9 @@
       "weights": [
         "mtp"
       ],
-      "options": {},
+      "options": {
+        "sampling": "fixed_token"
+      },
       "outputs": [
         "hidden",
         "logits",
@@ -1215,11 +1187,9 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
-      "fixture_sha256": "304c745e6b3713abbfe0a25e12252174cddfab0ba62abf010e2692b5fc9b0609"
+      "fixture_sha256": "712c53d9e98f25e78a5838c5d42a14544c17c2701be65fac3afae4a4bf16a3bd"
     },
     {
       "id": "mtp.chain.numerics.batch-4",
@@ -1235,7 +1205,9 @@
       "weights": [
         "mtp"
       ],
-      "options": {},
+      "options": {
+        "sampling": "fixed_token"
+      },
       "outputs": [
         "hidden",
         "logits",
@@ -1243,11 +1215,9 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
-      "fixture_sha256": "dc390044b3a563b5b97533f60efef180dd391a26a2be43f4186c0549d7d1a4e4"
+      "fixture_sha256": "f451fec90cdfec279db3fca0bc8de8c65580b46ea776c00617251cfca2ae1440"
     },
     {
       "id": "mtp.accept.numerics.all",
@@ -1571,53 +1541,21 @@
         "value",
         "residual",
         "layer3.kv",
-        "layer3.fp8_kv",
-        "layer3.kv_scales",
         "layer7.kv",
-        "layer7.fp8_kv",
-        "layer7.kv_scales",
         "layer11.kv",
-        "layer11.fp8_kv",
-        "layer11.kv_scales",
         "layer15.kv",
-        "layer15.fp8_kv",
-        "layer15.kv_scales",
         "layer19.kv",
-        "layer19.fp8_kv",
-        "layer19.kv_scales",
         "layer23.kv",
-        "layer23.fp8_kv",
-        "layer23.kv_scales",
         "layer27.kv",
-        "layer27.fp8_kv",
-        "layer27.kv_scales",
         "layer31.kv",
-        "layer31.fp8_kv",
-        "layer31.kv_scales",
         "layer35.kv",
-        "layer35.fp8_kv",
-        "layer35.kv_scales",
         "layer39.kv",
-        "layer39.fp8_kv",
-        "layer39.kv_scales",
         "layer43.kv",
-        "layer43.fp8_kv",
-        "layer43.kv_scales",
         "layer47.kv",
-        "layer47.fp8_kv",
-        "layer47.kv_scales",
         "layer51.kv",
-        "layer51.fp8_kv",
-        "layer51.kv_scales",
         "layer55.kv",
-        "layer55.fp8_kv",
-        "layer55.kv_scales",
         "layer59.kv",
-        "layer59.fp8_kv",
-        "layer59.kv_scales",
         "layer63.kv",
-        "layer63.fp8_kv",
-        "layer63.kv_scales",
         "guards"
       ],
       "fixture_sha256": null
@@ -1659,53 +1597,21 @@
         "value",
         "residual",
         "layer3.kv",
-        "layer3.fp8_kv",
-        "layer3.kv_scales",
         "layer7.kv",
-        "layer7.fp8_kv",
-        "layer7.kv_scales",
         "layer11.kv",
-        "layer11.fp8_kv",
-        "layer11.kv_scales",
         "layer15.kv",
-        "layer15.fp8_kv",
-        "layer15.kv_scales",
         "layer19.kv",
-        "layer19.fp8_kv",
-        "layer19.kv_scales",
         "layer23.kv",
-        "layer23.fp8_kv",
-        "layer23.kv_scales",
         "layer27.kv",
-        "layer27.fp8_kv",
-        "layer27.kv_scales",
         "layer31.kv",
-        "layer31.fp8_kv",
-        "layer31.kv_scales",
         "layer35.kv",
-        "layer35.fp8_kv",
-        "layer35.kv_scales",
         "layer39.kv",
-        "layer39.fp8_kv",
-        "layer39.kv_scales",
         "layer43.kv",
-        "layer43.fp8_kv",
-        "layer43.kv_scales",
         "layer47.kv",
-        "layer47.fp8_kv",
-        "layer47.kv_scales",
         "layer51.kv",
-        "layer51.fp8_kv",
-        "layer51.kv_scales",
         "layer55.kv",
-        "layer55.fp8_kv",
-        "layer55.kv_scales",
         "layer59.kv",
-        "layer59.fp8_kv",
-        "layer59.kv_scales",
         "layer63.kv",
-        "layer63.fp8_kv",
-        "layer63.kv_scales",
         "guards"
       ],
       "fixture_sha256": null
@@ -1747,53 +1653,21 @@
         "value",
         "residual",
         "layer3.kv",
-        "layer3.fp8_kv",
-        "layer3.kv_scales",
         "layer7.kv",
-        "layer7.fp8_kv",
-        "layer7.kv_scales",
         "layer11.kv",
-        "layer11.fp8_kv",
-        "layer11.kv_scales",
         "layer15.kv",
-        "layer15.fp8_kv",
-        "layer15.kv_scales",
         "layer19.kv",
-        "layer19.fp8_kv",
-        "layer19.kv_scales",
         "layer23.kv",
-        "layer23.fp8_kv",
-        "layer23.kv_scales",
         "layer27.kv",
-        "layer27.fp8_kv",
-        "layer27.kv_scales",
         "layer31.kv",
-        "layer31.fp8_kv",
-        "layer31.kv_scales",
         "layer35.kv",
-        "layer35.fp8_kv",
-        "layer35.kv_scales",
         "layer39.kv",
-        "layer39.fp8_kv",
-        "layer39.kv_scales",
         "layer43.kv",
-        "layer43.fp8_kv",
-        "layer43.kv_scales",
         "layer47.kv",
-        "layer47.fp8_kv",
-        "layer47.kv_scales",
         "layer51.kv",
-        "layer51.fp8_kv",
-        "layer51.kv_scales",
         "layer55.kv",
-        "layer55.fp8_kv",
-        "layer55.kv_scales",
         "layer59.kv",
-        "layer59.fp8_kv",
-        "layer59.kv_scales",
         "layer63.kv",
-        "layer63.fp8_kv",
-        "layer63.kv_scales",
         "guards"
       ],
       "fixture_sha256": null
@@ -1835,53 +1709,21 @@
         "value",
         "residual",
         "layer3.kv",
-        "layer3.fp8_kv",
-        "layer3.kv_scales",
         "layer7.kv",
-        "layer7.fp8_kv",
-        "layer7.kv_scales",
         "layer11.kv",
-        "layer11.fp8_kv",
-        "layer11.kv_scales",
         "layer15.kv",
-        "layer15.fp8_kv",
-        "layer15.kv_scales",
         "layer19.kv",
-        "layer19.fp8_kv",
-        "layer19.kv_scales",
         "layer23.kv",
-        "layer23.fp8_kv",
-        "layer23.kv_scales",
         "layer27.kv",
-        "layer27.fp8_kv",
-        "layer27.kv_scales",
         "layer31.kv",
-        "layer31.fp8_kv",
-        "layer31.kv_scales",
         "layer35.kv",
-        "layer35.fp8_kv",
-        "layer35.kv_scales",
         "layer39.kv",
-        "layer39.fp8_kv",
-        "layer39.kv_scales",
         "layer43.kv",
-        "layer43.fp8_kv",
-        "layer43.kv_scales",
         "layer47.kv",
-        "layer47.fp8_kv",
-        "layer47.kv_scales",
         "layer51.kv",
-        "layer51.fp8_kv",
-        "layer51.kv_scales",
         "layer55.kv",
-        "layer55.fp8_kv",
-        "layer55.kv_scales",
         "layer59.kv",
-        "layer59.fp8_kv",
-        "layer59.kv_scales",
         "layer63.kv",
-        "layer63.fp8_kv",
-        "layer63.kv_scales",
         "guards"
       ],
       "fixture_sha256": null
@@ -1923,53 +1765,21 @@
         "value",
         "residual",
         "layer3.kv",
-        "layer3.fp8_kv",
-        "layer3.kv_scales",
         "layer7.kv",
-        "layer7.fp8_kv",
-        "layer7.kv_scales",
         "layer11.kv",
-        "layer11.fp8_kv",
-        "layer11.kv_scales",
         "layer15.kv",
-        "layer15.fp8_kv",
-        "layer15.kv_scales",
         "layer19.kv",
-        "layer19.fp8_kv",
-        "layer19.kv_scales",
         "layer23.kv",
-        "layer23.fp8_kv",
-        "layer23.kv_scales",
         "layer27.kv",
-        "layer27.fp8_kv",
-        "layer27.kv_scales",
         "layer31.kv",
-        "layer31.fp8_kv",
-        "layer31.kv_scales",
         "layer35.kv",
-        "layer35.fp8_kv",
-        "layer35.kv_scales",
         "layer39.kv",
-        "layer39.fp8_kv",
-        "layer39.kv_scales",
         "layer43.kv",
-        "layer43.fp8_kv",
-        "layer43.kv_scales",
         "layer47.kv",
-        "layer47.fp8_kv",
-        "layer47.kv_scales",
         "layer51.kv",
-        "layer51.fp8_kv",
-        "layer51.kv_scales",
         "layer55.kv",
-        "layer55.fp8_kv",
-        "layer55.kv_scales",
         "layer59.kv",
-        "layer59.fp8_kv",
-        "layer59.kv_scales",
         "layer63.kv",
-        "layer63.fp8_kv",
-        "layer63.kv_scales",
         "guards"
       ],
       "fixture_sha256": null
@@ -3693,8 +3503,6 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
       "fixture_sha256": null
@@ -3718,8 +3526,6 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
       "fixture_sha256": null
@@ -3743,8 +3549,6 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
       "fixture_sha256": null
@@ -3768,8 +3572,6 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
       "fixture_sha256": null
@@ -3793,8 +3595,6 @@
         "value",
         "residual",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
       "fixture_sha256": null
@@ -3825,8 +3625,6 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards",
         "selection_cdf"
       ],
@@ -3858,8 +3656,6 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards",
         "selection_cdf"
       ],
@@ -3891,8 +3687,6 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards",
         "selection_cdf"
       ],
@@ -3924,8 +3718,6 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards",
         "selection_cdf"
       ],
@@ -3957,8 +3749,6 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards",
         "selection_cdf"
       ],
@@ -3986,8 +3776,6 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
       "fixture_sha256": null
@@ -4014,8 +3802,6 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
       "fixture_sha256": null
@@ -4042,8 +3828,6 @@
         "probabilities",
         "rng",
         "kv",
-        "fp8_kv",
-        "kv_scales",
         "guards"
       ],
       "fixture_sha256": null

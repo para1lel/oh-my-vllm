@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from oh_my_vllm.worker.device import Device
+from oh_my_vllm.operators.runtime.device import Device
 from oh_my_vllm.worker.inference import Worker
 
 
@@ -97,6 +97,50 @@ class Execution(unittest.TestCase):
                 {row["request_id"] for row in result["outputs"]},
                 {row["request_id"] for row in rows},
             )
+
+    def test_stop_truncation_controls_accepted_slot(self):
+        from oh_my_vllm.worker.cache import Cache
+
+        for emitted, expected_slot, expected_position in ((1, 10, 101), (0, 99, 100)):
+            worker = Worker.__new__(Worker)
+            request = SimpleNamespace(
+                prompt_len=16,
+                state_slot=99,
+                state_position=100,
+                finish="stop",
+                thinking_count=0,
+                drafts=[],
+                append=lambda tokens, n=emitted: (tokens[:n], ""),
+            )
+            rows = [
+                dict(
+                    request_id="stop",
+                    num_computed_tokens=100,
+                    token_ids=[1, 2, 3, 4, 5],
+                )
+            ]
+            batch = SimpleNamespace(
+                rows=5,
+                scheduled=rows,
+                writes=[10, 11, 12, 13, 14],
+                schedule=SimpleNamespace(sequence_rows=(0, 5)),
+            )
+            worker.requests = {"stop": request}
+            cache = Cache.__new__(Cache)
+            cache.batch = lambda *_, batch=batch: batch
+            worker.cache = cache
+            worker.model = SimpleNamespace(forward=lambda *_: ((None, None), None))
+            worker.sampler = lambda *_: None
+            worker.trace = SimpleNamespace(record=lambda *args, **kwargs: None)
+            worker.speculation = SimpleNamespace(
+                accept=lambda *_: [[2, 3, 4, 5]],
+                context=lambda *_: {},
+                propose=lambda *_: None,
+            )
+            result = worker.execute_batch(rows, True, True)
+            self.assertEqual(result[0]["token_ids"], [2][:emitted])
+            self.assertEqual(request.state_slot, expected_slot)
+            self.assertEqual(request.state_position, expected_position)
 
     def test_graph_owns_capture_replay_and_cleanup(self):
         with (

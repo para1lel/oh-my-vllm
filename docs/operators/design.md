@@ -28,10 +28,9 @@ operators/
     plan.py
     workspace.py
     cuda/
-      entry.cu
-      input.cuh
+      fa.cu
+      input/
       attention/
-      output.cuh
   gdn/
   ffn/
   output/
@@ -61,7 +60,7 @@ The number of operator packages does not control the number of native libraries 
 
 Use the [project terms](../glossary.md) for execution plan and operator workspace.
 Each operator family has its own plan type, input types, state views, and output fields.
-The following call shows the interface form, not an implemented function:
+The following call shows the interface form:
 
 ```python
 result = fa.run(weights, workspace, inputs, batch_view, cache_view)
@@ -184,7 +183,7 @@ Source packages, semantic interfaces, native libraries, and kernel launches are 
 3. Apply the same contracts to GDN, FFN, output, and vision.
 4. Examine new fusion and execution changes independently from structural migration.
 
-Update the [stage inventory](../../python/oh_my_vllm/kernels/specification.py) and [serving boundaries](fusion.md) with the related implementation changes.
+Update the [stage inventory](../../python/oh_my_vllm/operators/specification.py) and [serving boundaries](fusion.md) with the related implementation changes.
 Remove direct access to private buffers and model-level copies of kernel selection rules during each operator migration.
 
 Use the [test scope](../testing.md) and [numerical procedure](evaluation.md).

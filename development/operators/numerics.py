@@ -141,9 +141,6 @@ def compare(actual, fixture, limits):
             failures.update(softmax_envelope(actual, fixture, limits))
     if "selection_cdf" in actual and "selection_cdf" not in failures:
         failures.update(selection_contract(actual, fixture, limits))
-    cache_fields = {"kv", "fp8_kv", "kv_scales"}
-    if cache_fields <= actual.keys() and not cache_fields.intersection(failures):
-        failures.update(cache_contract(actual, expected))
     return NumericalResult(metrics, failures)
 
 
@@ -174,25 +171,6 @@ def probability_contract(actual, inputs):
             return {
                 "probability_contract": "selected probability differs from its token"
             }
-    return {}
-
-
-def cache_contract(actual, expected):
-    values, scales = actual["kv"], actual["kv_scales"]
-    tolerance = 4 * np.finfo(np.float32).eps
-    if np.any(scales <= 0):
-        return {"cache_contract": "cache scales must be positive"}
-    if not np.allclose(
-        scales[:, 0], expected["kv_scales"][:, 0], rtol=tolerance, atol=0
-    ):
-        return {"cache_contract": "K scales differ from the fixed norm bound"}
-    value_scales = np.maximum(np.abs(values[:, 1]).max(axis=-1), 1e-10) / 448
-    if not np.allclose(scales[:, 1], value_scales, rtol=tolerance, atol=0):
-        return {"cache_contract": "V scales differ from their BF16 cache values"}
-    decoded = actual["fp8_kv"] * scales[..., None]
-    rounding = (1 / 16 + tolerance) * np.abs(values) + 2**-10 * scales[..., None]
-    if np.any(np.abs(decoded - values) > rounding):
-        return {"cache_contract": "FP8 cache exceeds the E4M3 rounding envelope"}
     return {}
 
 

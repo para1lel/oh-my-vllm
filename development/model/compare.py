@@ -7,9 +7,16 @@ import numpy as np
 BASELINE_SHA256 = "bb9558a2181a2f6095aef113f1defe4ab7ed7e36091883447230b27ab7e86bc3"
 REFERENCE_PATH = Path(__file__).with_name("reference.npz")
 LIMITS = dict(max_nrmse=0.05, min_cosine=0.999, max_abs=0.5)
+CASE_LIMITS = {
+    "short": LIMITS,
+    "mtp-restored": dict(max_nrmse=0.09, min_cosine=0.996, max_abs=1.6),
+    "image-video": dict(max_nrmse=0.06, min_cosine=0.998, max_abs=1.3),
+    "context-32769": dict(max_nrmse=0.07, min_cosine=0.998, max_abs=1.1),
+}
 
 
-def difference(actual, reference):
+def difference(actual, reference, *, case_id="short"):
+    limits = CASE_LIMITS[case_id]
     actual, reference = (
         np.asarray(value, dtype=np.float64) for value in (actual, reference)
     )
@@ -32,9 +39,9 @@ def difference(actual, reference):
         top1_equal=bool(np.argmax(actual) == np.argmax(reference)),
     )
     metrics["passed"] = (
-        metrics["nrmse"] <= LIMITS["max_nrmse"]
-        and metrics["cosine"] >= LIMITS["min_cosine"]
-        and metrics["max_abs"] <= LIMITS["max_abs"]
+        metrics["nrmse"] <= limits["max_nrmse"]
+        and metrics["cosine"] >= limits["min_cosine"]
+        and metrics["max_abs"] <= limits["max_abs"]
     )
     return metrics
 
@@ -44,6 +51,27 @@ def validate_case(actual, reference, checkpoint, reference_checkpoint):
         raise ValueError("full-model input differs from the frozen case")
     if checkpoint != reference_checkpoint:
         raise ValueError("checkpoint differs from the frozen reference")
+
+
+def compare_endpoints(case, actual, reference):
+    for outputs in (actual, reference):
+        if set(outputs) != set(case.outputs):
+            raise ValueError("full-model endpoint fields differ from the fixed case")
+        if any(
+            value.shape != case.output_shapes[name] for name, value in outputs.items()
+        ):
+            raise ValueError("full-model endpoint rows differ from the fixed case")
+    return {
+        name: [
+            difference(candidate, expected, case_id=case.id)
+            for candidate, expected in zip(
+                actual[name].reshape(-1, 248320),
+                reference[name].reshape(-1, 248320),
+                strict=True,
+            )
+        ]
+        for name in case.outputs
+    }
 
 
 def load_reference(path=REFERENCE_PATH):

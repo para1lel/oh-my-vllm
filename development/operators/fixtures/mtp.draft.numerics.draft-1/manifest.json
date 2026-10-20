@@ -29,8 +29,6 @@
       "probabilities",
       "rng",
       "kv",
-      "fp8_kv",
-      "kv_scales",
       "guards",
       "selection_cdf"
     ]
@@ -87,6 +85,14 @@
           "budget": 0.125
         }
       ]
+    },
+    "state_representation": {
+      "previous_manifest_sha256": "35ef24be6ee9d831a4d456343ffb363477227ea11710914a1820d6b7717a42e5",
+      "removed": [
+        "fp8_kv",
+        "kv_scales"
+      ],
+      "retained_arrays": "unchanged except state guard count"
     }
   },
   "files": {
@@ -101,8 +107,6 @@
     "inputs.mask.0000.npz": "0c33df99ea987d3e7613264e83a623f176c6351f82a1997403e8e827838632fc",
     "inputs.parameters.0000.npz": "1c53f728256178a7bf7e194be208660abeb6b3521946c9c08b0f20202ddd771c",
     "state.kv.0000.npz": "6d5e7c9d09285a42c07d9743c27540e2637be4d0f3c310769d51944f2689e42a",
-    "state.fp8_kv.0000.npz": "3db85a708a4da1ac9043e31deab1bfdcf8d320cd0630862a0a78af79a183f029",
-    "state.kv_scales.0000.npz": "068f13a2eaca9e6cda6bd4900f0964b98d44d00ed99bb1c600c33d08b1bd9d52",
     "state.rng.0000.npz": "0725d5f7e8c3fc225a3e2fe3d715528b1b77a0c3fe832c3b398ba15f10d01350",
     "expected.hidden.0000.npz": "2ac1d3240726ccf491b1f725c67678b09c8bb8fe81eed79dc6a363553a5e5579",
     "expected.logits.0000.npz": "76a2bf6e98fa0cf8d58ae3e189e0a8acf295227e6fe2dde77f270c0baa58bbe2",
@@ -111,7 +115,7 @@
     "expected.selected_probability.0000.npz": "fc00ae6e1be3c38542549aa8554785c6a40287081c96f86b51dd8c818a647f2a",
     "expected.selection_cdf.0000.npz": "d17a27305499defa73164e99083a8d8354cfd71f86523c26d895fe10bcfe2ba3",
     "expected.rng.0000.npz": "d9adb6200f9fbf879ac9ef381f69c4b6234ff913e147faf68cb126668ff213bc",
-    "expected.guards.0000.npz": "4468b732ea598d35a0965044d71196b97986659a9cd866092ff1442c1437f7af"
+    "expected.guards.0000.npz": "fd87cbb8659658f565200e0dee26b9fe3ef4408b6d3b6859db10d12f6c7a447a"
   },
   "tensors": {
     "inputs.positions": {
@@ -290,43 +294,6 @@
         }
       ]
     },
-    "state.fp8_kv": {
-      "shape": [
-        3,
-        2,
-        784,
-        4,
-        256
-      ],
-      "dtype": "uint8",
-      "tensor_dtype": "float8_e4m3fn",
-      "parts": [
-        {
-          "file": "state.fp8_kv.0000.npz",
-          "key": "value",
-          "offset": 0,
-          "count": 4816896
-        }
-      ]
-    },
-    "state.kv_scales": {
-      "shape": [
-        3,
-        2,
-        4,
-        784
-      ],
-      "dtype": "float32",
-      "tensor_dtype": "float32",
-      "parts": [
-        {
-          "file": "state.kv_scales.0000.npz",
-          "key": "value",
-          "offset": 0,
-          "count": 18816
-        }
-      ]
-    },
     "state.rng": {
       "shape": [
         1,
@@ -464,30 +431,9 @@
       "tensor_dtype": "float64",
       "parts": []
     },
-    "expected.fp8_kv": {
-      "shape": [
-        0,
-        2,
-        4,
-        256
-      ],
-      "dtype": "float64",
-      "tensor_dtype": "float64",
-      "parts": []
-    },
-    "expected.kv_scales": {
-      "shape": [
-        0,
-        2,
-        4
-      ],
-      "dtype": "float64",
-      "tensor_dtype": "float64",
-      "parts": []
-    },
     "expected.guards": {
       "shape": [
-        4
+        2
       ],
       "dtype": "bool",
       "tensor_dtype": "bool",
@@ -496,7 +442,7 @@
           "file": "expected.guards.0000.npz",
           "key": "value",
           "offset": 0,
-          "count": 4
+          "count": 2
         }
       ]
     }
@@ -506,16 +452,6 @@
       "indices": [],
       "layout": "kv",
       "output": "kv"
-    },
-    "fp8_kv": {
-      "indices": [],
-      "layout": "kv",
-      "output": "fp8_kv"
-    },
-    "kv_scales": {
-      "indices": [],
-      "layout": "kv_scales",
-      "output": "kv_scales"
     },
     "rng": {
       "indices": [

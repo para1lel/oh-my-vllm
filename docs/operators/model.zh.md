@@ -1,6 +1,6 @@
 # 模型算子契约
 
-[阶段清单](../../python/oh_my_vllm/kernels/specification.py)给出内部语义阶段的输入, 输出, 计算和状态写入.
+[阶段清单](../../python/oh_my_vllm/operators/specification.py)给出内部语义阶段的输入, 输出, 计算和状态写入.
 维度来自 checkpoint 配置和张量头.
 
 使用清单中的配置 SHA256 标识模型.
@@ -16,7 +16,7 @@
 | GQA | 24 query heads, 4 KV heads, 宽度 256 |
 | GDN | 16 key heads, 48 value heads, 宽度 128 |
 | 卷积 | 10240 channels, 宽度 4 |
-| Cache | Block 784, BF16 循环状态, align 模式 |
+| Cache | Block 784, FP32 循环状态, align 模式 |
 | 上下文 / 步骤 | 262144 / 32768 tokens |
 | FP8 | E4M3, 128-by-128 权重 scale, 动态 128-element 激活 scale |
 | MTP | 一层 FA, 四个 proposals |
@@ -46,9 +46,9 @@ S_next = S_decay + outer(delta, k)
 o = S_next @ q / sqrt(128)
 ```
 
-保持推理路径中的 BF16 舍入点.
+保持下文规定的关键中间类型和算子输入输出类型.
 Prefill 和 recurrent 验证行使用 FP32 live carry.
-持久 checkpoints 使用 BF16 存储.
+持久 recurrent checkpoints 使用 FP32 存储. 卷积状态保持 BF16.
 
 在每个 784-token 边界和最终行保存 checkpoint.
 验证写入私有状态. 只有已接受行可以替换已接受状态.
@@ -101,72 +101,70 @@ merger 在 2-by-2 gather 前归一化每个 1152-element patch.
 
 ## 中间精度
 
-数值行为与 [vLLM commit e8e1e961](https://github.com/vllm-project/vllm/commit/e8e1e96196725f097eae2394cbc458b1f5a679b8) 对齐.
-采用其 BF16 模型路径及项目的 cache 设置. 此源码参考不引入 vLLM 依赖.
-使用源码中的类型和舍入点, 但所选 Tensor Core 路径可以采用获准的较低精度.
+数值行为与 [vLLM commit 86129933](https://github.com/vllm-project/vllm/commit/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af) 对齐.
+采用其默认 BF16 模型路径及 FP32 循环状态. 此源码参考不引入 vLLM 依赖.
+原始 checkpoint 张量保持不变.
 
-数值检查允许时, 使用 FP8 或 BF16 Tensor Core 操作数.
-实现可以将中间操作数和预处理后的 scales 舍入为 Tensor Core 格式.
-原始 checkpoint 张量保持不变. 不为通过数值检查而提高精度.
+采用与其默认编译路径相同的关键中间类型和算子输入输出类型.
+舍入方式可以不同.
+遵守这些类型及数值门槛. 使用简单且执行成本低的运算.
 使用[评估流程](evaluation.zh.md)中的全模型 logits 门槛.
 
-超过 128 行的 FFN 输入使用 MXFP8 Tensor Core 投影.
-超过 128 行的 GDN 输入使用 MXFP8 输入投影.
-对于 prefill 及 `max_queries > 1` 的验证, 其输出投影也使用 MXFP8.
-单查询验证保留先前的输出投影.
-权重预处理转换派生的 E4M3 编码, 并提供值为 2 的幂的 UE8M0 scales.
-[归一化 kernel](../../python/oh_my_vllm/kernels/cuda_backend/mx_fp8_norm.cuh#L7)<!-- source: norm_mx_kernel(const --> 直接从其 BF16 结果生成 MXFP8 操作数.
+所有行数的 FP8 投影均使用 checkpoint 中的 E4M3 权重和 FP32 分块 scales.
+激活量化为每个 128 元素组使用动态 FP32 scale.
+不要将权重或 scales 转换为 MXFP8.
+锁定版本的 [vLLM 排除规则](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/vllm/utils/deep_gemm.py#L27) 因精度问题, 在 B200 上为 `qwen3_5_text` 禁用 DeepGEMM.
 
-原始 checkpoint 张量和 scales 保持不变.
+FA 使用 BF16 Q/K/P/V 操作数, 以及 FP32 softmax 和累加.
+持久 K/V 状态使用 BF16.
+锁定的 vLLM 源码在 B200 上默认使用 FlashInfer 后端.
 
-超过 128 行的完整 FA 边界使用 MXFP8 输入投影.
-当 attention 只有一个分区时, 使用 MXFP8 输出投影.
+FFN 从 BF16 投影输出开始, 用 FP32 计算 SiLU 及其乘积.
+与[融合激活](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/csrc/activation_kernels.cu#L676)一致, 在 E4M3 量化前将乘积转换为 BF16.
+BF16 值可保留在寄存器中.
+此融合乘积的激活 scale 下限为 `1e-30 / 448`.
 
-FA 在相同逻辑槽中保留 BF16 K/V 及其派生的 E4M3 副本.
-每次 BF16 cache 写入后, 在 attention 读取前更新派生副本.
-K 使用由其 RMS 权重确定上界的逐层 scale. V 为每个 token 和 head 使用一个 scale.
-最多含 32 行且每个序列最多含 5 个 query 的 FA batch 使用 E4M3 Q/K/V/P, 以及 FP32 softmax 和累加.
-每个 query 的概率 scale 仅使用该分区内对它可见的 V scales.
-
-至少含 1024 个 query 的 prefill 使用 E4M3 Q/K 和 BF16 P/V.
-其他 attention batch 使用 BF16 操作数.
-这些选择不会改变固定的 [HTTP 参考计算](../performance.zh.md#下界计算).
+FFN 残差输出保持 FP32, 直到下一 attention 输入或最终归一化.
+下一 attention 输入先加上 FFN value, 再将其残差存为 BF16.
+归一化使用此转换前的 FP32 和.
+这保持了 vLLM 默认编译路径的中间精度.
 
 | 区域 | 计算 | 存储结果 |
 |---|---|---|
-| 其他 FP8 投影 | E4M3 操作数, FP32 scales 和累加 | BF16 |
-| MXFP8 FFN 和 GDN 投影, 超过 128 行 | E4M3 操作数, UE8M0 scales, FP32 累加 | BF16 |
-| 所选的 MXFP8 FA 投影, 超过 128 行 | E4M3 操作数, UE8M0 scales, FP32 累加 | BF16 |
+| FP8 投影 | E4M3 操作数, FP32 scales 和累加 | BF16 |
 | BF16 投影 | BF16 操作数, FP32 累加 | BF16 |
-| 残差加法和 RMS | FP32 求和及统计量. 对未舍入的和执行归一化 | BF16 残差及归一化结果 |
+| 残差加法和 RMS | FP32 求和及统计量. 对未舍入的和执行归一化 | FP32 FFN 残差. BF16 attention 残差及归一化结果 |
 | Q/K RoPE | BF16 归一化 Q/K 及 cos/sin. FP32 乘积和求和 | BF16 |
 | GDN Q/K norm | FP32 | Prefill 使用 BF16. Recurrent 行使用 FP32 live values |
-| GDN scan | FP32 live carry, 乘积和求和 | BF16 checkpoints |
-| GDN chunked prefill | BF16 矩阵操作数. FP32 累加, 状态衰减和 live carry | BF16 checkpoints |
+| GDN scan | FP32 live carry, 乘积和求和 | FP32 checkpoints |
+| GDN chunked prefill | BF16 矩阵操作数. FP32 累加, 状态衰减和 live carry | FP32 checkpoints |
 | GDN head norm 和 gate | BF16 attention 结果, 随后使用 FP32 RMS, weight, SiLU 和乘积 | 一个 BF16 结果 |
-| FA attention 和 gate | 所选的 FP8 或 BF16 操作数, FP32 softmax 及累加 | FP8 前的 BF16 attention, sigmoid 和乘积 |
+| FA attention 和 gate | BF16 操作数, FP32 softmax 及累加 | FP8 前的 BF16 attention 和乘积. FP32 sigmoid |
+| Vision 位置插值 | BF16 权重, 乘积和求和 | BF16 |
 | Vision attention | BF16 Q/K/V/P, FP32 softmax 及累加 | BF16 |
 | MTP dual RMS | FP32 统计量和增益计算 | BF16 packed input |
 | MTP FC, 全部行数 | BF16 操作数, FP32 累加 | BF16 |
 | Sampling 接受和 residual CDF | FP32 概率, 比值, masses 和求和. FP64 随机阈值 | 整数选择 |
 
-分块 GDN prefill 遵循固定版本的[求解及投影类型](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/chunk.py#L38).
+vLLM 在 B200 上的默认 GDN prefill 后端为 FlashInfer.
+
+项目的分块实现使用 FLA 的[求解及投影类型](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/vllm/third_party/flash_linear_attention/ops/chunk.py#L38).
 三角系统结果和经过 gate 缩放的 K/V 操作数, 在 W/U 矩阵乘前使用 BF16 存储.
 W/U 输出也使用 BF16 存储.
 三角逆可以使用 BF16 中间存储及 BF16 分块矩阵操作数, 并使用 FP32 累加.
 对角块求解保持 FP32. 状态衰减, live carry, 完整 token 历史及私有 checkpoint 要求保持不变.
 
-[Carry 路径](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/chunk_delta_h.py#L154)在矩阵乘前将状态操作数及缩放后的新 value 舍入为 BF16.
+[Carry 路径](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/vllm/third_party/flash_linear_attention/ops/chunk_delta_h.py#L154)在矩阵乘前将状态操作数及缩放后的新 value 舍入为 BF16.
 状态更新先缩放 FP32 新 value, 再转换为 BF16.
 独立的输出导出使用 BF16.
-状态衰减和 carry 更新保持 FP32. BF16 checkpoint 导出不得替换 live carry.
+状态衰减, carry 更新及持久 checkpoint 导出保持 FP32.
 
-[输出路径](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/chunk_o.py#L94)使用 BF16 状态快照和新 value, 使用 FP32 累加.
+[输出路径](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/vllm/third_party/flash_linear_attention/ops/chunk_o.py#L94)使用 BF16 状态快照和新 value, 使用 FP32 累加.
 它在新 value 的矩阵乘前, 将带因果掩码和 gate 缩放的 QK 矩阵舍入为 BF16.
-[投影源码](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/third_party/flash_linear_attention/ops/wy_fast.py#L75)定义 gate 缩放的舍入点.
+[投影源码](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/vllm/third_party/flash_linear_attention/ops/wy_fast.py#L75)定义 gate 缩放的舍入点.
 
-固定版本的 [RMS 参考](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/vllm/ir/ops/layernorm.py#L44) 区分 FP32 归一化输入和 BF16 残差存储.
-[GDN decode 路径](https://github.com/vllm-project/vllm/blob/e8e1e96196725f097eae2394cbc458b1f5a679b8/csrc/gdn/fused_gdn_decode_kernel.cu#L226) 将 recurrent Q/K 保持为 FP32.
+固定版本的 [RMS 参考](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/vllm/ir/ops/layernorm.py#L44) 区分 FP32 归一化输入和 BF16 残差存储.
+[GDN decode 路径](https://github.com/vllm-project/vllm/blob/86129933fb2ddc5f1e4d9ce32c4062277c7ac2af/csrc/gdn/fused_gdn_decode_kernel.cu#L226) 将 recurrent Q/K 保持为 FP32.
 [视觉注意力依赖](https://github.com/vllm-project/flash-attention/blob/b273a02621d3c94bc747df67204f591b67f38fae/flash_attn/cute/flash_fwd_sm100.py#L2522) 在 PV 前将在线概率舍入为 BF16.
 全模型参考全程使用 FP64. 它不复制中间低精度舍入.
 

@@ -1,7 +1,7 @@
 import os
 
+from ..operators.runtime.device import Device
 from .cache import Cache
-from .device import Device
 from .media import MediaProcessor
 from .model import Model, scratch_capacity
 from .request import Request
@@ -140,7 +140,8 @@ class Worker:
                 request.append(chosen[index]) if index in chosen else ([], "")
             )
             accepted = len(tokens) - 1 if verify and tokens else None
-            self.cache.commit(request, batch, index, accepted)
+            if not verify or tokens:
+                self.cache.commit(request, batch, index, accepted)
             outputs.append(
                 {
                     "request_id": row["request_id"],

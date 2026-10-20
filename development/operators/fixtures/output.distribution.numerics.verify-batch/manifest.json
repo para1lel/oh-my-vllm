@@ -42,7 +42,7 @@
     "torch": "2.12.0+cu130",
     "cuda": "13.0",
     "numpy": "2.5.4",
-    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "source": "182a6136bc7fb0e6bd90b3ce39f57f1a49a55f733d2a1fce19d005f9ab4171aa",
     "decisions": {
       "minimum_margin": 0.01,
       "records": []
@@ -50,16 +50,16 @@
   },
   "files": {
     "inputs.value.0000.npz": "3545c222f511b8c73eca4f9e7372ae7ca95ac595b92b84a215d4f22164b2571c",
-    "inputs.residual.0000.npz": "823f4358f65d8106d5424f306560ee693f7718a9453348c857e79d0978c87374",
+    "inputs.residual.0000.npz": "e635f8f0e7fd7bd44e940d15f9d1fb7276796962b6db05e1aae7a7c486fff96f",
     "inputs.history.0000.npz": "27fe39158d39adced266a6446d032c5547b492ebd6b5497130e660059c04bd1b",
     "inputs.history.0001.npz": "d7d932e7703418e0d8764623695de99e55afaacbf29ff43e73be388c75acf294",
     "inputs.mask.0000.npz": "da519cf44077e8254f3a9daf8e2fc5c7ed9600103267404f3e792671e5bfeb1f",
     "inputs.parameters.0000.npz": "d9bab2236cf309a85414db59e7c325ffeccea06a8c03f510a78e5db64f6c16b0",
     "state.rng.0000.npz": "bb4a863d832f6cfb0a546d9da8e4e14e70649305dcab344925acb1d7db838705",
-    "expected.logits.0000.npz": "8b36b8bfb04bb0fd14be8fd11df3277d4aac79179ea236cbbb7c94b4e266c124",
-    "expected.logits.0001.npz": "c0291f81c49854bccfdd356804af7323fbf4c30386a1f6c75e2524f7e5e134b2",
-    "expected.probabilities.0000.npz": "a22f4e3191e95366d58e987c5d1bd04dd0112a5a26632fcf40751310a100d299",
-    "expected.probabilities.0001.npz": "d63228857518ccc76b3bc38eb709af74f02890191ac72f8c12342d78fc2da7d0"
+    "expected.logits.0000.npz": "192cfebaed15599b0ae73331049f8adaa79404b986cd965416d392ecf2410e54",
+    "expected.logits.0001.npz": "f1521facd82708d10dc4c06cff19801c6c25686f7945a6caf38e2d0d88b46536",
+    "expected.probabilities.0000.npz": "78c13ac7048b30a5cae9e4c71d8df35840ae2b8ea73658ac3bf02fe53f7dd1cb",
+    "expected.probabilities.0001.npz": "8df58304cc0ee1c3977343e1ac62081093de4314d59f00eaa66e9f12fd40d2c5"
   },
   "tensors": {
     "inputs.value": {
@@ -83,8 +83,8 @@
         20,
         5120
       ],
-      "dtype": "uint16",
-      "tensor_dtype": "bfloat16",
+      "dtype": "float32",
+      "tensor_dtype": "float32",
       "parts": [
         {
           "file": "inputs.residual.0000.npz",

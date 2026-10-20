@@ -4,7 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
-from oh_my_vllm.worker.device import Device
+from oh_my_vllm.operators.runtime.device import Device
 
 from .budgets import propose
 from .cases import load_cases

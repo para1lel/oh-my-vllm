@@ -87,7 +87,7 @@ class BenchmarkMeasurements(unittest.TestCase):
             binary = root / "service"
             binary.write_bytes(b"CPU mock")
             vendor_files = {}
-            for name in ("vision", "ffn", "gdn", "fa"):
+            for name in ("vision",):
                 image, header = root / f"{name}-vendor.so", root / f"{name}-vendor.h"
                 image.write_bytes(b"CPU vendor image mock")
                 header.write_bytes(b"CPU vendor header mock")
@@ -112,13 +112,7 @@ class BenchmarkMeasurements(unittest.TestCase):
                 )
                 if name in vendor_files:
                     image, header = vendor_files[name]
-                    key = {
-                        "vision": "vision_vendor",
-                        "ffn": "ffn_mx_vendor",
-                        "gdn": "gdn_mx_vendor",
-                        "fa": "fa_mx_vendor",
-                    }[name]
-                    metadata[key] = dict(
+                    metadata["vision_vendor"] = dict(
                         images=[
                             dict(path=str(image), sha256=benchmark.file_sha256(image))
                         ],
@@ -185,12 +179,6 @@ class BenchmarkMeasurements(unittest.TestCase):
                 ("native", root / "ffn.so"),
                 ("vision-vendor", vendor_files["vision"][0]),
                 ("vision-header", vendor_files["vision"][1]),
-                ("ffn-vendor", vendor_files["ffn"][0]),
-                ("ffn-header", vendor_files["ffn"][1]),
-                ("gdn-vendor", vendor_files["gdn"][0]),
-                ("gdn-header", vendor_files["gdn"][1]),
-                ("fa-vendor", vendor_files["fa"][0]),
-                ("fa-header", vendor_files["fa"][1]),
                 ("checkpoint", shard),
                 ("tokenizer", root / "tokenizer.json"),
                 ("generation", root / "generation_config.json"),

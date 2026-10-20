@@ -9,7 +9,7 @@ LIMITS_PATH = Path(__file__).with_name("limits.json")
 
 
 def candidate_identity():
-    from oh_my_vllm.kernels.native import cache_directory, source_fingerprint
+    from oh_my_vllm.operators.runtime.native import cache_directory, source_fingerprint
 
     from development.model.capture import runtime_identity
 
@@ -52,7 +52,7 @@ def load_limits(purpose):
 
 
 def numerical(model, report):
-    from oh_my_vllm.worker.device import Device
+    from oh_my_vllm.operators.runtime.device import Device
 
     from .run import prepare
 

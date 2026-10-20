@@ -20,6 +20,10 @@ Rust 检查流式 JSON tool frames 和媒体请求的 prefix cache 隔离.
 在固定短提示和一次 decode 迭代后, 将全部词表 logits 与独立 PyTorch FP64 模型比较.
 不使用抽样中间输出或旧低精度路径作为数值参考.
 后续变更使用同一参考 artifact.
+
+这些路径变化时使用固定的 MTP 恢复, 图像/视频和长上下文用例.
+它们的仓库 fixture 包含完整 PyTorch FP64 endpoint logits.
+常规测试不运行参考生成器.
 [开发命令](operators/development.zh.md#数值命令)负责生成和比较这些 artifacts.
 
 固定算子数值和性能用例使用[算子 microbench 设计](operators/microbench.zh.md).

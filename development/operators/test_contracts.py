@@ -143,17 +143,6 @@ class Contracts(unittest.TestCase):
             else:
                 actual[field][0, column] = value
             self.assertFalse(compare(actual, fixture, limits).passed)
-        from .numerics import cache_contract
-
-        cache = {
-            "kv": np.ones((1, 2, 4, 256)),
-            "kv_scales": np.full((1, 2, 4), 1 / 448),
-            "fp8_kv": np.full((1, 2, 4, 256), 448.0),
-        }
-        self.assertFalse(cache_contract(cache, cache))
-        changed = {name: value.copy() for name, value in cache.items()}
-        changed["kv_scales"][:, 1] *= 1.001
-        self.assertTrue(cache_contract(changed, cache))
         case = next(c for c in load_cases() if c.id == "mtp.chain.numerics.batch-2")
         reference = np.full((4, 2, 2), 1e6)
         reference[0] = 1

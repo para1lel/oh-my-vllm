@@ -1,26 +1,27 @@
 # 工作状态
 
-在 `main` 上工作.
-下一次重构使用[算子结构设计](operators/design.zh.md).
-遵守[实施计划](operators/plan.zh.md)和 [microbench 设计](operators/microbench.zh.md).
+使用 `main` 开展工作.
+[算子包](../python/oh_my_vllm/operators) 将各算子族的接口, 计划, 工作区和 CUDA 代码放在一起.
+[结构设计](operators/design.zh.md) 定义其依赖关系和所有权.
+将共享资源机制放入 `runtime`, 将共享计算放入 `primitives`.
+native 构建器为 `development.native_build`. 它构建七个 native 模块.
 
-[算子验证框架](../development/operators)提供固定用例, 仓库内 fixture 和不使用 PyTorch 的数值验收.
-[精度策略](operators/precision.zh.md)定义字段与状态门槛.
-继续完成[验证任务 V3](operators/validation-plan.zh.md#v3-实现理论延迟验收) 中的理论延迟计费和固定性能倍率.
-在源码迁移前完成校准.
+worker 使用显式层权重, 命名输出和算子计划键.
+按照[执行规则](execution.zh.md) 使用 Eager 执行, CUDA Graph 重放和资源释放.
+Rust 和 worker 控制持久状态选择.
+算子只写入调用方提供的状态位置.
 
-Worker 使用[算子调度](execution.zh.md): 包含 prefill 的 Execute 消息使用 Eager, 仅含 decode 的消息使用 CUDA Graph 重放.
-Native 构建入口是 `development.native_build`.
-FA 的 BF16 cache 状态和派生 FP8 操作数使用相同的逻辑页所有权.
-Attention 精度见[模型契约](operators/model.zh.md#中间精度).
+修改 kernel 前使用[算子验证框架](../development/operators).
+该框架提供固定数值 fixture, 直接 PyTorch 参考实现和理论延迟倍率门槛.
+常规数值测试读取仓库 fixture, 不执行 PyTorch.
+保持[精度策略](operators/precision.zh.md)和[全模型门槛](operators/evaluation.zh.md).
+实现改变后不得自动修改门槛.
 
-[数值工具](operators/evaluation.zh.md)将全模型 logits 与冻结的 [PyTorch FP64 reference](../development/model/reference.npz) 比较.
-保留其身份检查和数值门槛.
-使用 24 种 [HTTP 配置](performance.zh.md)测量时间和标称资源效率.
-这些测量使用 serving 默认采样参数和 auto 工具约束.
-测量产物保存在仓库外.
+FA 使用 BF16 attention 操作数和缓存状态. GDN 使用 FP32 保存循环状态.
+FP8 投影使用 checkpoint 中的 E4M3 权重和 FP32 block scales.
+[模型契约](operators/model.zh.md#中间精度)定义中间计算精度.
 
-后续优化只限于有明确性能收益的变更.
-保持数值精度, 状态所有权和服务行为.
-变更影响 MTP, vision 或长上下文时, 扩展全模型输入.
-主机配置保存在被忽略的 `LOCAL.md` 中.
+交付前执行适用的[测试范围](testing.zh.md).
+同时执行全部 24 组 [HTTP 配置](performance.zh.md).
+将测量产物保存在仓库外.
+将主机设置放入被忽略的 `LOCAL.md`.

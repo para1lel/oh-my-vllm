@@ -55,20 +55,31 @@ class ChainDevice:
 
 
 class ChainSample:
-    def __init__(self, weights, rows, allocate):
-        self.buffers = [None] * 9
-        self.buffers[0] = allocate((rows, 5120), "bfloat16")
-        self.buffers[6] = allocate((rows, 248320), "float32")
-        self.buffers[7] = allocate((rows,), "int64")
+    def __init__(self, plan, device, weights):
+        rows, allocate = plan.rows, device.empty
+        self.outputs = SimpleNamespace(
+            hidden=allocate((rows, 5120), "bfloat16"),
+            probabilities=allocate((rows, 248320), "float32"),
+            tokens=allocate((rows,), "int64"),
+        )
 
-    def project(self, value, residual):
-        self.buffers[0][:] = value + residual + 1
+    def project(self, weights, inputs):
+        self.outputs.hidden[:] = inputs.value + inputs.residual + 1
 
-    def draw(self, history, mask, parameters, rng, *, greedy):
-        self.buffers[7][:] = self.buffers[0][:, 0].astype(np.int64)
-        self.buffers[6][:] = 0
-        self.buffers[6][np.arange(len(self.buffers[0])), self.buffers[7]] = 1
-        return self.buffers[7], None, self.buffers[6]
+    def draw(self, settings, rng):
+        self.outputs.tokens[:] = self.outputs.hidden[:, 0].astype(np.int64)
+        self.outputs.probabilities[:] = 0
+        self.outputs.probabilities[
+            np.arange(len(self.outputs.hidden)), self.outputs.tokens
+        ] = 1
+        return self.outputs
+
+    def close(self):
+        pass
+
+    @contextmanager
+    def graph_lease(self):
+        yield
 
 
 class ChainDraft:
@@ -79,8 +90,8 @@ class ChainDraft:
         self.hidden = device.zeros((batch, 5120), "bfloat16")
         self.tokens = device.zeros((batch,), "int64")
         self.rows = device.upload(np.arange(batch, dtype=np.int32))
-        self.ffn = SimpleNamespace(buffers=(self.hidden.copy(), self.hidden.copy()))
-        self.output = self.ffn.buffers
+        self.ffn = SimpleNamespace(outputs=(self.hidden.copy(), self.hidden.copy()))
+        self.output = self.ffn.outputs
         self.sampling = Sampling(device, None, batch, hidden=self.output)
         self.metadata_inputs = SimpleNamespace(
             host_views=tuple(
@@ -108,6 +119,10 @@ class ChainDraft:
 
     def copy(self, destination, source):
         self.device.copy(destination, source)
+
+    @contextmanager
+    def graph_lease(self):
+        yield
 
     def close(self):
         self.sampling.close()
@@ -288,7 +303,7 @@ class Constraints(unittest.TestCase):
         speculation = Speculation(d, None, cache, None, trace)
         with (
             patch("oh_my_vllm.worker.speculation.Draft", ChainDraft),
-            patch("oh_my_vllm.worker.sampling.Sample", ChainSample),
+            patch("oh_my_vllm.worker.sampling.prepare", ChainSample),
         ):
             first = request()
             batch = SimpleNamespace(

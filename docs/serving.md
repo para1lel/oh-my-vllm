@@ -115,7 +115,7 @@ The [execution rules](execution.md) select Eager for Execute messages with prefi
 The worker does not use PDL.
 Use the [end-to-end procedure](performance.md) for inference performance measurements.
 
-Temporary model buffers use a [CUDA memory pool](../python/oh_my_vllm/kernels/cuda_backend/scratch_allocator.cuh#L19)<!-- source: inline cudaMemPool_t scratch_pool(int device) { -->.
+Temporary model buffers use a [CUDA memory pool](../python/oh_my_vllm/operators/runtime/cuda/scratch_allocator.cuh#L19)<!-- source: inline cudaMemPool_t scratch_pool(int device) { -->.
 The worker prepares storage before it reports readiness.
 The size uses the token budget and at most half the free GPU memory.
 The pool keeps this storage for later work. The `gpu_reserved_bytes` statistic includes this storage.
