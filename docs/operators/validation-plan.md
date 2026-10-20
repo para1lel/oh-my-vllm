@@ -56,9 +56,10 @@ GDN cases check all assigned checkpoints, with a restored-state decode case.
 | One `mtp.draft` | Batch 1 query-only, 1 full, 2 full, 4 query-only, 4 full | Same five cases |
 | Four-draft chain | Batch 1, 2, 4 | Same three cases |
 | `mtp.accept` | Batch 1 all accepted, 1 first rejection, 2 partial acceptance, 4 mixed rejection, 4 inactive suffixes | Same five cases |
-| Each vision boundary | Grid/frame pairs `(14x14,1),(28x28,1),(14x14,3)` | Same three cases |
+| Each vision boundary | Grid/frame pairs `(16x16,1),(28x28,1),(14x14,3)` | Same three cases |
 
 MTP contexts use length 784 for numerical cases and length 32768 for performance cases when prior context exists.
+The 784-row MTP prefill starts at position 1 and ends with context length 785.
 Draft cases use those same respective context lengths.
 Layer indices start at zero.
 Numerical cases use checkpoint layer 3 for FA, layer 0 for GDN/FFN, and vision layers 0/1/26 for input/internal/merge.
@@ -89,21 +90,21 @@ Remove that translation as each public operator migrates.
 `run.py` supplies:
 
 ```python
-prepare(case: Case, device: Device, fixture: Fixture) -> PreparedCase
+prepare(case: Case, device: Device, fixture: Fixture, *, model: Path) -> PreparedCase
 PreparedCase.reset() -> None
 PreparedCase.invoke() -> None
 PreparedCase.observe() -> dict[str, numpy.ndarray]
 PreparedCase.close() -> None
 ```
 
-- [ ] Add `test_fixture_loading_is_strict_and_reference_free` to `test_contracts.py`.
-- [ ] Check missing shards, changed hashes, incomplete fields, and forbidden PyTorch imports during usual tests.
-- [ ] Add `test_case_limits_reject_shape_sweeps` for more than five cases or an unlisted shape.
-- [ ] Run the checks before implementation.
-- [ ] Implement cases, stable-address fixtures, named observations, and cleanup.
-- [ ] Add the CPU checks to the existing pre-commit command.
-- [ ] Get a different agent to examine the framework.
-- [ ] Commit the framework.
+- [x] Add `test_fixture_loading_is_strict_and_reference_free` to `test_contracts.py`.
+- [x] Check missing shards, changed hashes, incomplete fields, and forbidden PyTorch imports during usual tests.
+- [x] Add `test_case_limits_reject_shape_sweeps` for more than five cases or an unlisted shape.
+- [x] Run the checks before implementation.
+- [x] Implement cases, stable-address fixtures, named observations, and cleanup.
+- [x] Add the CPU checks to the existing pre-commit command.
+- [x] Get a different agent to examine the framework.
+- [x] Commit the framework.
 
 ## V2: Generate and commit numerical fixtures
 

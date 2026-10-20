@@ -2,9 +2,10 @@
 
 在 `main` 上工作.
 下一次重构使用[算子结构设计](operators/design.zh.md).
-[实施计划](operators/plan.zh.md)和 [microbench 设计](operators/microbench.zh.md)已写入. 实现尚未开始.
-实现前先检查计划并选择执行方式.
-从当前运行时上的[验证任务](operators/validation-plan.zh.md)开始.
+遵守[实施计划](operators/plan.zh.md)和 [microbench 设计](operators/microbench.zh.md).
+[算子验证框架](../development/operators)提供固定用例, fixture 加载和当前运行时的适配器.
+继续完成[验证任务 V2](operators/validation-plan.zh.md#v2-生成并提交数值-fixture) 中的 PyTorch fixture 生成和数值门槛.
+然后在源码迁移前校准固定的性能倍率.
 
 Worker 使用[算子调度](execution.zh.md): 包含 prefill 的 Execute 消息使用 Eager, 仅含 decode 的消息使用 CUDA Graph 重放.
 Native 构建入口是 `development.native_build`.

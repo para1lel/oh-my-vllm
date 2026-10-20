@@ -1,0 +1,4063 @@
+{
+  "version": "operator-cases-v1",
+  "cases": [
+    {
+      "id": "fa.numerics.single-decode",
+      "boundary": "fa",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 1,
+        "rows": 1,
+        "queries": 1,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        3
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "fa.numerics.batched-decode",
+      "boundary": "fa",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 4,
+        "rows": 4,
+        "queries": 1,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        3
+      ],
+      "options": {
+        "verify": true,
+        "restored": true
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "fa.numerics.verification",
+      "boundary": "fa",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 4,
+        "rows": 20,
+        "queries": 5,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        3
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "fa.numerics.checkpoint-prefill",
+      "boundary": "fa",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 1,
+        "rows": 784,
+        "queries": 784,
+        "context": 784
+      },
+      "mode": "eager",
+      "weights": [
+        3
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "fa.numerics.large-prefill",
+      "boundary": "fa",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 1,
+        "rows": 1568,
+        "queries": 1568,
+        "context": 1568
+      },
+      "mode": "eager",
+      "weights": [
+        3
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "gdn.numerics.single-decode",
+      "boundary": "gdn",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 1,
+        "rows": 1,
+        "queries": 1,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        0
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "recurrent",
+        "convolution",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "gdn.numerics.batched-decode",
+      "boundary": "gdn",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 4,
+        "rows": 4,
+        "queries": 1,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        0
+      ],
+      "options": {
+        "verify": true,
+        "restored": true
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "recurrent",
+        "convolution",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "gdn.numerics.verification",
+      "boundary": "gdn",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 4,
+        "rows": 20,
+        "queries": 5,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        0
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "recurrent",
+        "convolution",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "gdn.numerics.checkpoint-prefill",
+      "boundary": "gdn",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 1,
+        "rows": 784,
+        "queries": 784,
+        "context": 784
+      },
+      "mode": "eager",
+      "weights": [
+        0
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "recurrent",
+        "convolution",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "gdn.numerics.large-prefill",
+      "boundary": "gdn",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 1,
+        "rows": 1568,
+        "queries": 1568,
+        "context": 1568
+      },
+      "mode": "eager",
+      "weights": [
+        0
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "recurrent",
+        "convolution",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "ffn.numerics.single-decode",
+      "boundary": "ffn",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 1
+      },
+      "mode": "graph",
+      "weights": [
+        0
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "ffn.numerics.batched-decode",
+      "boundary": "ffn",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 4
+      },
+      "mode": "graph",
+      "weights": [
+        0
+      ],
+      "options": {
+        "verify": true,
+        "restored": true
+      },
+      "outputs": [
+        "value",
+        "residual"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "ffn.numerics.verification",
+      "boundary": "ffn",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 20
+      },
+      "mode": "graph",
+      "weights": [
+        0
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "ffn.numerics.checkpoint-prefill",
+      "boundary": "ffn",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 784
+      },
+      "mode": "eager",
+      "weights": [
+        0
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "ffn.numerics.large-prefill",
+      "boundary": "ffn",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 1568
+      },
+      "mode": "eager",
+      "weights": [
+        0
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.hidden.numerics.single-decode",
+      "boundary": "output.hidden",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 1
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "hidden",
+        "hidden_cache",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.hidden.numerics.batched-decode",
+      "boundary": "output.hidden",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 4
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "verify": true,
+        "restored": true
+      },
+      "outputs": [
+        "hidden",
+        "hidden_cache",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.hidden.numerics.verification",
+      "boundary": "output.hidden",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 20
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "hidden",
+        "hidden_cache",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.hidden.numerics.checkpoint-prefill",
+      "boundary": "output.hidden",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 784
+      },
+      "mode": "eager",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "hidden",
+        "hidden_cache",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.hidden.numerics.large-prefill",
+      "boundary": "output.hidden",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 1568
+      },
+      "mode": "eager",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "hidden",
+        "hidden_cache",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.distribution.numerics.greedy",
+      "boundary": "output.distribution",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 1
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": true
+      },
+      "outputs": [
+        "logits",
+        "probabilities"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.distribution.numerics.stochastic",
+      "boundary": "output.distribution",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 1
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.distribution.numerics.batch",
+      "boundary": "output.distribution",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 4
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.distribution.numerics.verify-one",
+      "boundary": "output.distribution",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 5
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.distribution.numerics.verify-batch",
+      "boundary": "output.distribution",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 20
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.sample.numerics.greedy",
+      "boundary": "output.sample",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 1
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": true
+      },
+      "outputs": [
+        "logits",
+        "probabilities",
+        "tokens",
+        "selected_probability",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.sample.numerics.stochastic",
+      "boundary": "output.sample",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 1
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities",
+        "tokens",
+        "selected_probability",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.sample.numerics.batch",
+      "boundary": "output.sample",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 4
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities",
+        "tokens",
+        "selected_probability",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.sample.numerics.verify-one",
+      "boundary": "output.sample",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 5
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities",
+        "tokens",
+        "selected_probability",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.sample.numerics.verify-batch",
+      "boundary": "output.sample",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 20
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities",
+        "tokens",
+        "selected_probability",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.context.numerics.context-1",
+      "boundary": "mtp.context",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 1,
+        "batch": 1,
+        "queries": 1,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.context.numerics.context-2",
+      "boundary": "mtp.context",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 4,
+        "batch": 1,
+        "queries": 4,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.context.numerics.context-3",
+      "boundary": "mtp.context",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 8,
+        "batch": 2,
+        "queries": 4,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.context.numerics.context-4",
+      "boundary": "mtp.context",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 16,
+        "batch": 4,
+        "queries": 4,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.context.numerics.context-5",
+      "boundary": "mtp.context",
+      "purpose": "numerics",
+      "shape": {
+        "rows": 784,
+        "batch": 1,
+        "queries": 784,
+        "context": 785
+      },
+      "mode": "eager",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.draft.numerics.draft-1",
+      "boundary": "mtp.draft",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 1,
+        "rows": 1,
+        "queries": 1,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {
+        "variant": "query_only"
+      },
+      "outputs": [
+        "tokens",
+        "selected_probability",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.draft.numerics.draft-2",
+      "boundary": "mtp.draft",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 1,
+        "rows": 1,
+        "queries": 1,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {
+        "variant": "full"
+      },
+      "outputs": [
+        "tokens",
+        "selected_probability",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.draft.numerics.draft-3",
+      "boundary": "mtp.draft",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 2,
+        "rows": 2,
+        "queries": 1,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {
+        "variant": "full"
+      },
+      "outputs": [
+        "tokens",
+        "selected_probability",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.draft.numerics.draft-4",
+      "boundary": "mtp.draft",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 4,
+        "rows": 4,
+        "queries": 1,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {
+        "variant": "query_only"
+      },
+      "outputs": [
+        "tokens",
+        "selected_probability",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.draft.numerics.draft-5",
+      "boundary": "mtp.draft",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 4,
+        "rows": 4,
+        "queries": 1,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {
+        "variant": "full"
+      },
+      "outputs": [
+        "tokens",
+        "selected_probability",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.chain.numerics.batch-1",
+      "boundary": "mtp.chain",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 1,
+        "rows": 1,
+        "queries": 1,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "tokens",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.chain.numerics.batch-2",
+      "boundary": "mtp.chain",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 2,
+        "rows": 2,
+        "queries": 1,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "tokens",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.chain.numerics.batch-4",
+      "boundary": "mtp.chain",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 4,
+        "rows": 4,
+        "queries": 1,
+        "context": 784
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "tokens",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.accept.numerics.all",
+      "boundary": "mtp.accept",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 1
+      },
+      "mode": "graph",
+      "weights": [],
+      "options": {
+        "acceptance": "all"
+      },
+      "outputs": [
+        "tokens",
+        "counts",
+        "candidate_slots",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.accept.numerics.first-rejection",
+      "boundary": "mtp.accept",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 1
+      },
+      "mode": "graph",
+      "weights": [],
+      "options": {
+        "acceptance": "first-rejection"
+      },
+      "outputs": [
+        "tokens",
+        "counts",
+        "candidate_slots",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.accept.numerics.partial",
+      "boundary": "mtp.accept",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 2
+      },
+      "mode": "graph",
+      "weights": [],
+      "options": {
+        "acceptance": "partial"
+      },
+      "outputs": [
+        "tokens",
+        "counts",
+        "candidate_slots",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.accept.numerics.mixed",
+      "boundary": "mtp.accept",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 4
+      },
+      "mode": "graph",
+      "weights": [],
+      "options": {
+        "acceptance": "mixed"
+      },
+      "outputs": [
+        "tokens",
+        "counts",
+        "candidate_slots",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.accept.numerics.inactive",
+      "boundary": "mtp.accept",
+      "purpose": "numerics",
+      "shape": {
+        "batch": 4
+      },
+      "mode": "graph",
+      "weights": [],
+      "options": {
+        "acceptance": "inactive"
+      },
+      "outputs": [
+        "tokens",
+        "counts",
+        "candidate_slots",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.input.numerics.grid-16-16-frames-1",
+      "boundary": "vision.input",
+      "purpose": "numerics",
+      "shape": {
+        "height": 16,
+        "width": 16,
+        "frames": 1,
+        "rows": 256
+      },
+      "mode": "eager",
+      "weights": [
+        0
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.input.numerics.grid-28-28-frames-1",
+      "boundary": "vision.input",
+      "purpose": "numerics",
+      "shape": {
+        "height": 28,
+        "width": 28,
+        "frames": 1,
+        "rows": 784
+      },
+      "mode": "eager",
+      "weights": [
+        0
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.input.numerics.grid-14-14-frames-3",
+      "boundary": "vision.input",
+      "purpose": "numerics",
+      "shape": {
+        "height": 14,
+        "width": 14,
+        "frames": 3,
+        "rows": 392
+      },
+      "mode": "eager",
+      "weights": [
+        0
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.block.numerics.grid-16-16-frames-1",
+      "boundary": "vision.block",
+      "purpose": "numerics",
+      "shape": {
+        "height": 16,
+        "width": 16,
+        "frames": 1,
+        "rows": 256
+      },
+      "mode": "eager",
+      "weights": [
+        1
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.block.numerics.grid-28-28-frames-1",
+      "boundary": "vision.block",
+      "purpose": "numerics",
+      "shape": {
+        "height": 28,
+        "width": 28,
+        "frames": 1,
+        "rows": 784
+      },
+      "mode": "eager",
+      "weights": [
+        1
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.block.numerics.grid-14-14-frames-3",
+      "boundary": "vision.block",
+      "purpose": "numerics",
+      "shape": {
+        "height": 14,
+        "width": 14,
+        "frames": 3,
+        "rows": 392
+      },
+      "mode": "eager",
+      "weights": [
+        1
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.merge.numerics.grid-16-16-frames-1",
+      "boundary": "vision.merge",
+      "purpose": "numerics",
+      "shape": {
+        "height": 16,
+        "width": 16,
+        "frames": 1,
+        "rows": 256
+      },
+      "mode": "eager",
+      "weights": [
+        26
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.merge.numerics.grid-28-28-frames-1",
+      "boundary": "vision.merge",
+      "purpose": "numerics",
+      "shape": {
+        "height": 28,
+        "width": 28,
+        "frames": 1,
+        "rows": 784
+      },
+      "mode": "eager",
+      "weights": [
+        26
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.merge.numerics.grid-14-14-frames-3",
+      "boundary": "vision.merge",
+      "purpose": "numerics",
+      "shape": {
+        "height": 14,
+        "width": 14,
+        "frames": 3,
+        "rows": 392
+      },
+      "mode": "eager",
+      "weights": [
+        26
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "fa.performance.single-decode",
+      "boundary": "fa",
+      "purpose": "performance",
+      "shape": {
+        "batch": 1,
+        "rows": 1,
+        "queries": 1,
+        "context": 32768
+      },
+      "mode": "graph",
+      "weights": [
+        3,
+        7,
+        11,
+        15,
+        19,
+        23,
+        27,
+        31,
+        35,
+        39,
+        43,
+        47,
+        51,
+        55,
+        59,
+        63
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "layer3.kv",
+        "layer3.fp8_kv",
+        "layer3.kv_scales",
+        "layer7.kv",
+        "layer7.fp8_kv",
+        "layer7.kv_scales",
+        "layer11.kv",
+        "layer11.fp8_kv",
+        "layer11.kv_scales",
+        "layer15.kv",
+        "layer15.fp8_kv",
+        "layer15.kv_scales",
+        "layer19.kv",
+        "layer19.fp8_kv",
+        "layer19.kv_scales",
+        "layer23.kv",
+        "layer23.fp8_kv",
+        "layer23.kv_scales",
+        "layer27.kv",
+        "layer27.fp8_kv",
+        "layer27.kv_scales",
+        "layer31.kv",
+        "layer31.fp8_kv",
+        "layer31.kv_scales",
+        "layer35.kv",
+        "layer35.fp8_kv",
+        "layer35.kv_scales",
+        "layer39.kv",
+        "layer39.fp8_kv",
+        "layer39.kv_scales",
+        "layer43.kv",
+        "layer43.fp8_kv",
+        "layer43.kv_scales",
+        "layer47.kv",
+        "layer47.fp8_kv",
+        "layer47.kv_scales",
+        "layer51.kv",
+        "layer51.fp8_kv",
+        "layer51.kv_scales",
+        "layer55.kv",
+        "layer55.fp8_kv",
+        "layer55.kv_scales",
+        "layer59.kv",
+        "layer59.fp8_kv",
+        "layer59.kv_scales",
+        "layer63.kv",
+        "layer63.fp8_kv",
+        "layer63.kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "fa.performance.batched-decode",
+      "boundary": "fa",
+      "purpose": "performance",
+      "shape": {
+        "batch": 4,
+        "rows": 4,
+        "queries": 1,
+        "context": 131072
+      },
+      "mode": "graph",
+      "weights": [
+        3,
+        7,
+        11,
+        15,
+        19,
+        23,
+        27,
+        31,
+        35,
+        39,
+        43,
+        47,
+        51,
+        55,
+        59,
+        63
+      ],
+      "options": {
+        "verify": true,
+        "restored": true
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "layer3.kv",
+        "layer3.fp8_kv",
+        "layer3.kv_scales",
+        "layer7.kv",
+        "layer7.fp8_kv",
+        "layer7.kv_scales",
+        "layer11.kv",
+        "layer11.fp8_kv",
+        "layer11.kv_scales",
+        "layer15.kv",
+        "layer15.fp8_kv",
+        "layer15.kv_scales",
+        "layer19.kv",
+        "layer19.fp8_kv",
+        "layer19.kv_scales",
+        "layer23.kv",
+        "layer23.fp8_kv",
+        "layer23.kv_scales",
+        "layer27.kv",
+        "layer27.fp8_kv",
+        "layer27.kv_scales",
+        "layer31.kv",
+        "layer31.fp8_kv",
+        "layer31.kv_scales",
+        "layer35.kv",
+        "layer35.fp8_kv",
+        "layer35.kv_scales",
+        "layer39.kv",
+        "layer39.fp8_kv",
+        "layer39.kv_scales",
+        "layer43.kv",
+        "layer43.fp8_kv",
+        "layer43.kv_scales",
+        "layer47.kv",
+        "layer47.fp8_kv",
+        "layer47.kv_scales",
+        "layer51.kv",
+        "layer51.fp8_kv",
+        "layer51.kv_scales",
+        "layer55.kv",
+        "layer55.fp8_kv",
+        "layer55.kv_scales",
+        "layer59.kv",
+        "layer59.fp8_kv",
+        "layer59.kv_scales",
+        "layer63.kv",
+        "layer63.fp8_kv",
+        "layer63.kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "fa.performance.verification",
+      "boundary": "fa",
+      "purpose": "performance",
+      "shape": {
+        "batch": 4,
+        "rows": 20,
+        "queries": 5,
+        "context": 131072
+      },
+      "mode": "graph",
+      "weights": [
+        3,
+        7,
+        11,
+        15,
+        19,
+        23,
+        27,
+        31,
+        35,
+        39,
+        43,
+        47,
+        51,
+        55,
+        59,
+        63
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "layer3.kv",
+        "layer3.fp8_kv",
+        "layer3.kv_scales",
+        "layer7.kv",
+        "layer7.fp8_kv",
+        "layer7.kv_scales",
+        "layer11.kv",
+        "layer11.fp8_kv",
+        "layer11.kv_scales",
+        "layer15.kv",
+        "layer15.fp8_kv",
+        "layer15.kv_scales",
+        "layer19.kv",
+        "layer19.fp8_kv",
+        "layer19.kv_scales",
+        "layer23.kv",
+        "layer23.fp8_kv",
+        "layer23.kv_scales",
+        "layer27.kv",
+        "layer27.fp8_kv",
+        "layer27.kv_scales",
+        "layer31.kv",
+        "layer31.fp8_kv",
+        "layer31.kv_scales",
+        "layer35.kv",
+        "layer35.fp8_kv",
+        "layer35.kv_scales",
+        "layer39.kv",
+        "layer39.fp8_kv",
+        "layer39.kv_scales",
+        "layer43.kv",
+        "layer43.fp8_kv",
+        "layer43.kv_scales",
+        "layer47.kv",
+        "layer47.fp8_kv",
+        "layer47.kv_scales",
+        "layer51.kv",
+        "layer51.fp8_kv",
+        "layer51.kv_scales",
+        "layer55.kv",
+        "layer55.fp8_kv",
+        "layer55.kv_scales",
+        "layer59.kv",
+        "layer59.fp8_kv",
+        "layer59.kv_scales",
+        "layer63.kv",
+        "layer63.fp8_kv",
+        "layer63.kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "fa.performance.checkpoint-prefill",
+      "boundary": "fa",
+      "purpose": "performance",
+      "shape": {
+        "batch": 1,
+        "rows": 784,
+        "queries": 784,
+        "context": 784
+      },
+      "mode": "eager",
+      "weights": [
+        3,
+        7,
+        11,
+        15,
+        19,
+        23,
+        27,
+        31,
+        35,
+        39,
+        43,
+        47,
+        51,
+        55,
+        59,
+        63
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "layer3.kv",
+        "layer3.fp8_kv",
+        "layer3.kv_scales",
+        "layer7.kv",
+        "layer7.fp8_kv",
+        "layer7.kv_scales",
+        "layer11.kv",
+        "layer11.fp8_kv",
+        "layer11.kv_scales",
+        "layer15.kv",
+        "layer15.fp8_kv",
+        "layer15.kv_scales",
+        "layer19.kv",
+        "layer19.fp8_kv",
+        "layer19.kv_scales",
+        "layer23.kv",
+        "layer23.fp8_kv",
+        "layer23.kv_scales",
+        "layer27.kv",
+        "layer27.fp8_kv",
+        "layer27.kv_scales",
+        "layer31.kv",
+        "layer31.fp8_kv",
+        "layer31.kv_scales",
+        "layer35.kv",
+        "layer35.fp8_kv",
+        "layer35.kv_scales",
+        "layer39.kv",
+        "layer39.fp8_kv",
+        "layer39.kv_scales",
+        "layer43.kv",
+        "layer43.fp8_kv",
+        "layer43.kv_scales",
+        "layer47.kv",
+        "layer47.fp8_kv",
+        "layer47.kv_scales",
+        "layer51.kv",
+        "layer51.fp8_kv",
+        "layer51.kv_scales",
+        "layer55.kv",
+        "layer55.fp8_kv",
+        "layer55.kv_scales",
+        "layer59.kv",
+        "layer59.fp8_kv",
+        "layer59.kv_scales",
+        "layer63.kv",
+        "layer63.fp8_kv",
+        "layer63.kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "fa.performance.large-prefill",
+      "boundary": "fa",
+      "purpose": "performance",
+      "shape": {
+        "batch": 4,
+        "rows": 32768,
+        "queries": 8192,
+        "context": 32768
+      },
+      "mode": "eager",
+      "weights": [
+        3,
+        7,
+        11,
+        15,
+        19,
+        23,
+        27,
+        31,
+        35,
+        39,
+        43,
+        47,
+        51,
+        55,
+        59,
+        63
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "layer3.kv",
+        "layer3.fp8_kv",
+        "layer3.kv_scales",
+        "layer7.kv",
+        "layer7.fp8_kv",
+        "layer7.kv_scales",
+        "layer11.kv",
+        "layer11.fp8_kv",
+        "layer11.kv_scales",
+        "layer15.kv",
+        "layer15.fp8_kv",
+        "layer15.kv_scales",
+        "layer19.kv",
+        "layer19.fp8_kv",
+        "layer19.kv_scales",
+        "layer23.kv",
+        "layer23.fp8_kv",
+        "layer23.kv_scales",
+        "layer27.kv",
+        "layer27.fp8_kv",
+        "layer27.kv_scales",
+        "layer31.kv",
+        "layer31.fp8_kv",
+        "layer31.kv_scales",
+        "layer35.kv",
+        "layer35.fp8_kv",
+        "layer35.kv_scales",
+        "layer39.kv",
+        "layer39.fp8_kv",
+        "layer39.kv_scales",
+        "layer43.kv",
+        "layer43.fp8_kv",
+        "layer43.kv_scales",
+        "layer47.kv",
+        "layer47.fp8_kv",
+        "layer47.kv_scales",
+        "layer51.kv",
+        "layer51.fp8_kv",
+        "layer51.kv_scales",
+        "layer55.kv",
+        "layer55.fp8_kv",
+        "layer55.kv_scales",
+        "layer59.kv",
+        "layer59.fp8_kv",
+        "layer59.kv_scales",
+        "layer63.kv",
+        "layer63.fp8_kv",
+        "layer63.kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "gdn.performance.single-decode",
+      "boundary": "gdn",
+      "purpose": "performance",
+      "shape": {
+        "batch": 1,
+        "rows": 1,
+        "queries": 1,
+        "context": 32768
+      },
+      "mode": "graph",
+      "weights": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        12,
+        13,
+        14,
+        16,
+        17,
+        18,
+        20,
+        21,
+        22,
+        24,
+        25,
+        26,
+        28,
+        29,
+        30,
+        32,
+        33,
+        34,
+        36,
+        37,
+        38,
+        40,
+        41,
+        42,
+        44,
+        45,
+        46,
+        48,
+        49,
+        50,
+        52,
+        53,
+        54,
+        56,
+        57,
+        58,
+        60,
+        61,
+        62
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "layer0.recurrent",
+        "layer0.convolution",
+        "layer1.recurrent",
+        "layer1.convolution",
+        "layer2.recurrent",
+        "layer2.convolution",
+        "layer4.recurrent",
+        "layer4.convolution",
+        "layer5.recurrent",
+        "layer5.convolution",
+        "layer6.recurrent",
+        "layer6.convolution",
+        "layer8.recurrent",
+        "layer8.convolution",
+        "layer9.recurrent",
+        "layer9.convolution",
+        "layer10.recurrent",
+        "layer10.convolution",
+        "layer12.recurrent",
+        "layer12.convolution",
+        "layer13.recurrent",
+        "layer13.convolution",
+        "layer14.recurrent",
+        "layer14.convolution",
+        "layer16.recurrent",
+        "layer16.convolution",
+        "layer17.recurrent",
+        "layer17.convolution",
+        "layer18.recurrent",
+        "layer18.convolution",
+        "layer20.recurrent",
+        "layer20.convolution",
+        "layer21.recurrent",
+        "layer21.convolution",
+        "layer22.recurrent",
+        "layer22.convolution",
+        "layer24.recurrent",
+        "layer24.convolution",
+        "layer25.recurrent",
+        "layer25.convolution",
+        "layer26.recurrent",
+        "layer26.convolution",
+        "layer28.recurrent",
+        "layer28.convolution",
+        "layer29.recurrent",
+        "layer29.convolution",
+        "layer30.recurrent",
+        "layer30.convolution",
+        "layer32.recurrent",
+        "layer32.convolution",
+        "layer33.recurrent",
+        "layer33.convolution",
+        "layer34.recurrent",
+        "layer34.convolution",
+        "layer36.recurrent",
+        "layer36.convolution",
+        "layer37.recurrent",
+        "layer37.convolution",
+        "layer38.recurrent",
+        "layer38.convolution",
+        "layer40.recurrent",
+        "layer40.convolution",
+        "layer41.recurrent",
+        "layer41.convolution",
+        "layer42.recurrent",
+        "layer42.convolution",
+        "layer44.recurrent",
+        "layer44.convolution",
+        "layer45.recurrent",
+        "layer45.convolution",
+        "layer46.recurrent",
+        "layer46.convolution",
+        "layer48.recurrent",
+        "layer48.convolution",
+        "layer49.recurrent",
+        "layer49.convolution",
+        "layer50.recurrent",
+        "layer50.convolution",
+        "layer52.recurrent",
+        "layer52.convolution",
+        "layer53.recurrent",
+        "layer53.convolution",
+        "layer54.recurrent",
+        "layer54.convolution",
+        "layer56.recurrent",
+        "layer56.convolution",
+        "layer57.recurrent",
+        "layer57.convolution",
+        "layer58.recurrent",
+        "layer58.convolution",
+        "layer60.recurrent",
+        "layer60.convolution",
+        "layer61.recurrent",
+        "layer61.convolution",
+        "layer62.recurrent",
+        "layer62.convolution",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "gdn.performance.batched-decode",
+      "boundary": "gdn",
+      "purpose": "performance",
+      "shape": {
+        "batch": 4,
+        "rows": 4,
+        "queries": 1,
+        "context": 131072
+      },
+      "mode": "graph",
+      "weights": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        12,
+        13,
+        14,
+        16,
+        17,
+        18,
+        20,
+        21,
+        22,
+        24,
+        25,
+        26,
+        28,
+        29,
+        30,
+        32,
+        33,
+        34,
+        36,
+        37,
+        38,
+        40,
+        41,
+        42,
+        44,
+        45,
+        46,
+        48,
+        49,
+        50,
+        52,
+        53,
+        54,
+        56,
+        57,
+        58,
+        60,
+        61,
+        62
+      ],
+      "options": {
+        "verify": true,
+        "restored": true
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "layer0.recurrent",
+        "layer0.convolution",
+        "layer1.recurrent",
+        "layer1.convolution",
+        "layer2.recurrent",
+        "layer2.convolution",
+        "layer4.recurrent",
+        "layer4.convolution",
+        "layer5.recurrent",
+        "layer5.convolution",
+        "layer6.recurrent",
+        "layer6.convolution",
+        "layer8.recurrent",
+        "layer8.convolution",
+        "layer9.recurrent",
+        "layer9.convolution",
+        "layer10.recurrent",
+        "layer10.convolution",
+        "layer12.recurrent",
+        "layer12.convolution",
+        "layer13.recurrent",
+        "layer13.convolution",
+        "layer14.recurrent",
+        "layer14.convolution",
+        "layer16.recurrent",
+        "layer16.convolution",
+        "layer17.recurrent",
+        "layer17.convolution",
+        "layer18.recurrent",
+        "layer18.convolution",
+        "layer20.recurrent",
+        "layer20.convolution",
+        "layer21.recurrent",
+        "layer21.convolution",
+        "layer22.recurrent",
+        "layer22.convolution",
+        "layer24.recurrent",
+        "layer24.convolution",
+        "layer25.recurrent",
+        "layer25.convolution",
+        "layer26.recurrent",
+        "layer26.convolution",
+        "layer28.recurrent",
+        "layer28.convolution",
+        "layer29.recurrent",
+        "layer29.convolution",
+        "layer30.recurrent",
+        "layer30.convolution",
+        "layer32.recurrent",
+        "layer32.convolution",
+        "layer33.recurrent",
+        "layer33.convolution",
+        "layer34.recurrent",
+        "layer34.convolution",
+        "layer36.recurrent",
+        "layer36.convolution",
+        "layer37.recurrent",
+        "layer37.convolution",
+        "layer38.recurrent",
+        "layer38.convolution",
+        "layer40.recurrent",
+        "layer40.convolution",
+        "layer41.recurrent",
+        "layer41.convolution",
+        "layer42.recurrent",
+        "layer42.convolution",
+        "layer44.recurrent",
+        "layer44.convolution",
+        "layer45.recurrent",
+        "layer45.convolution",
+        "layer46.recurrent",
+        "layer46.convolution",
+        "layer48.recurrent",
+        "layer48.convolution",
+        "layer49.recurrent",
+        "layer49.convolution",
+        "layer50.recurrent",
+        "layer50.convolution",
+        "layer52.recurrent",
+        "layer52.convolution",
+        "layer53.recurrent",
+        "layer53.convolution",
+        "layer54.recurrent",
+        "layer54.convolution",
+        "layer56.recurrent",
+        "layer56.convolution",
+        "layer57.recurrent",
+        "layer57.convolution",
+        "layer58.recurrent",
+        "layer58.convolution",
+        "layer60.recurrent",
+        "layer60.convolution",
+        "layer61.recurrent",
+        "layer61.convolution",
+        "layer62.recurrent",
+        "layer62.convolution",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "gdn.performance.verification",
+      "boundary": "gdn",
+      "purpose": "performance",
+      "shape": {
+        "batch": 4,
+        "rows": 20,
+        "queries": 5,
+        "context": 131072
+      },
+      "mode": "graph",
+      "weights": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        12,
+        13,
+        14,
+        16,
+        17,
+        18,
+        20,
+        21,
+        22,
+        24,
+        25,
+        26,
+        28,
+        29,
+        30,
+        32,
+        33,
+        34,
+        36,
+        37,
+        38,
+        40,
+        41,
+        42,
+        44,
+        45,
+        46,
+        48,
+        49,
+        50,
+        52,
+        53,
+        54,
+        56,
+        57,
+        58,
+        60,
+        61,
+        62
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "layer0.recurrent",
+        "layer0.convolution",
+        "layer1.recurrent",
+        "layer1.convolution",
+        "layer2.recurrent",
+        "layer2.convolution",
+        "layer4.recurrent",
+        "layer4.convolution",
+        "layer5.recurrent",
+        "layer5.convolution",
+        "layer6.recurrent",
+        "layer6.convolution",
+        "layer8.recurrent",
+        "layer8.convolution",
+        "layer9.recurrent",
+        "layer9.convolution",
+        "layer10.recurrent",
+        "layer10.convolution",
+        "layer12.recurrent",
+        "layer12.convolution",
+        "layer13.recurrent",
+        "layer13.convolution",
+        "layer14.recurrent",
+        "layer14.convolution",
+        "layer16.recurrent",
+        "layer16.convolution",
+        "layer17.recurrent",
+        "layer17.convolution",
+        "layer18.recurrent",
+        "layer18.convolution",
+        "layer20.recurrent",
+        "layer20.convolution",
+        "layer21.recurrent",
+        "layer21.convolution",
+        "layer22.recurrent",
+        "layer22.convolution",
+        "layer24.recurrent",
+        "layer24.convolution",
+        "layer25.recurrent",
+        "layer25.convolution",
+        "layer26.recurrent",
+        "layer26.convolution",
+        "layer28.recurrent",
+        "layer28.convolution",
+        "layer29.recurrent",
+        "layer29.convolution",
+        "layer30.recurrent",
+        "layer30.convolution",
+        "layer32.recurrent",
+        "layer32.convolution",
+        "layer33.recurrent",
+        "layer33.convolution",
+        "layer34.recurrent",
+        "layer34.convolution",
+        "layer36.recurrent",
+        "layer36.convolution",
+        "layer37.recurrent",
+        "layer37.convolution",
+        "layer38.recurrent",
+        "layer38.convolution",
+        "layer40.recurrent",
+        "layer40.convolution",
+        "layer41.recurrent",
+        "layer41.convolution",
+        "layer42.recurrent",
+        "layer42.convolution",
+        "layer44.recurrent",
+        "layer44.convolution",
+        "layer45.recurrent",
+        "layer45.convolution",
+        "layer46.recurrent",
+        "layer46.convolution",
+        "layer48.recurrent",
+        "layer48.convolution",
+        "layer49.recurrent",
+        "layer49.convolution",
+        "layer50.recurrent",
+        "layer50.convolution",
+        "layer52.recurrent",
+        "layer52.convolution",
+        "layer53.recurrent",
+        "layer53.convolution",
+        "layer54.recurrent",
+        "layer54.convolution",
+        "layer56.recurrent",
+        "layer56.convolution",
+        "layer57.recurrent",
+        "layer57.convolution",
+        "layer58.recurrent",
+        "layer58.convolution",
+        "layer60.recurrent",
+        "layer60.convolution",
+        "layer61.recurrent",
+        "layer61.convolution",
+        "layer62.recurrent",
+        "layer62.convolution",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "gdn.performance.checkpoint-prefill",
+      "boundary": "gdn",
+      "purpose": "performance",
+      "shape": {
+        "batch": 1,
+        "rows": 784,
+        "queries": 784,
+        "context": 784
+      },
+      "mode": "eager",
+      "weights": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        12,
+        13,
+        14,
+        16,
+        17,
+        18,
+        20,
+        21,
+        22,
+        24,
+        25,
+        26,
+        28,
+        29,
+        30,
+        32,
+        33,
+        34,
+        36,
+        37,
+        38,
+        40,
+        41,
+        42,
+        44,
+        45,
+        46,
+        48,
+        49,
+        50,
+        52,
+        53,
+        54,
+        56,
+        57,
+        58,
+        60,
+        61,
+        62
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "layer0.recurrent",
+        "layer0.convolution",
+        "layer1.recurrent",
+        "layer1.convolution",
+        "layer2.recurrent",
+        "layer2.convolution",
+        "layer4.recurrent",
+        "layer4.convolution",
+        "layer5.recurrent",
+        "layer5.convolution",
+        "layer6.recurrent",
+        "layer6.convolution",
+        "layer8.recurrent",
+        "layer8.convolution",
+        "layer9.recurrent",
+        "layer9.convolution",
+        "layer10.recurrent",
+        "layer10.convolution",
+        "layer12.recurrent",
+        "layer12.convolution",
+        "layer13.recurrent",
+        "layer13.convolution",
+        "layer14.recurrent",
+        "layer14.convolution",
+        "layer16.recurrent",
+        "layer16.convolution",
+        "layer17.recurrent",
+        "layer17.convolution",
+        "layer18.recurrent",
+        "layer18.convolution",
+        "layer20.recurrent",
+        "layer20.convolution",
+        "layer21.recurrent",
+        "layer21.convolution",
+        "layer22.recurrent",
+        "layer22.convolution",
+        "layer24.recurrent",
+        "layer24.convolution",
+        "layer25.recurrent",
+        "layer25.convolution",
+        "layer26.recurrent",
+        "layer26.convolution",
+        "layer28.recurrent",
+        "layer28.convolution",
+        "layer29.recurrent",
+        "layer29.convolution",
+        "layer30.recurrent",
+        "layer30.convolution",
+        "layer32.recurrent",
+        "layer32.convolution",
+        "layer33.recurrent",
+        "layer33.convolution",
+        "layer34.recurrent",
+        "layer34.convolution",
+        "layer36.recurrent",
+        "layer36.convolution",
+        "layer37.recurrent",
+        "layer37.convolution",
+        "layer38.recurrent",
+        "layer38.convolution",
+        "layer40.recurrent",
+        "layer40.convolution",
+        "layer41.recurrent",
+        "layer41.convolution",
+        "layer42.recurrent",
+        "layer42.convolution",
+        "layer44.recurrent",
+        "layer44.convolution",
+        "layer45.recurrent",
+        "layer45.convolution",
+        "layer46.recurrent",
+        "layer46.convolution",
+        "layer48.recurrent",
+        "layer48.convolution",
+        "layer49.recurrent",
+        "layer49.convolution",
+        "layer50.recurrent",
+        "layer50.convolution",
+        "layer52.recurrent",
+        "layer52.convolution",
+        "layer53.recurrent",
+        "layer53.convolution",
+        "layer54.recurrent",
+        "layer54.convolution",
+        "layer56.recurrent",
+        "layer56.convolution",
+        "layer57.recurrent",
+        "layer57.convolution",
+        "layer58.recurrent",
+        "layer58.convolution",
+        "layer60.recurrent",
+        "layer60.convolution",
+        "layer61.recurrent",
+        "layer61.convolution",
+        "layer62.recurrent",
+        "layer62.convolution",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "gdn.performance.large-prefill",
+      "boundary": "gdn",
+      "purpose": "performance",
+      "shape": {
+        "batch": 4,
+        "rows": 32768,
+        "queries": 8192,
+        "context": 32768
+      },
+      "mode": "eager",
+      "weights": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        12,
+        13,
+        14,
+        16,
+        17,
+        18,
+        20,
+        21,
+        22,
+        24,
+        25,
+        26,
+        28,
+        29,
+        30,
+        32,
+        33,
+        34,
+        36,
+        37,
+        38,
+        40,
+        41,
+        42,
+        44,
+        45,
+        46,
+        48,
+        49,
+        50,
+        52,
+        53,
+        54,
+        56,
+        57,
+        58,
+        60,
+        61,
+        62
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual",
+        "layer0.recurrent",
+        "layer0.convolution",
+        "layer1.recurrent",
+        "layer1.convolution",
+        "layer2.recurrent",
+        "layer2.convolution",
+        "layer4.recurrent",
+        "layer4.convolution",
+        "layer5.recurrent",
+        "layer5.convolution",
+        "layer6.recurrent",
+        "layer6.convolution",
+        "layer8.recurrent",
+        "layer8.convolution",
+        "layer9.recurrent",
+        "layer9.convolution",
+        "layer10.recurrent",
+        "layer10.convolution",
+        "layer12.recurrent",
+        "layer12.convolution",
+        "layer13.recurrent",
+        "layer13.convolution",
+        "layer14.recurrent",
+        "layer14.convolution",
+        "layer16.recurrent",
+        "layer16.convolution",
+        "layer17.recurrent",
+        "layer17.convolution",
+        "layer18.recurrent",
+        "layer18.convolution",
+        "layer20.recurrent",
+        "layer20.convolution",
+        "layer21.recurrent",
+        "layer21.convolution",
+        "layer22.recurrent",
+        "layer22.convolution",
+        "layer24.recurrent",
+        "layer24.convolution",
+        "layer25.recurrent",
+        "layer25.convolution",
+        "layer26.recurrent",
+        "layer26.convolution",
+        "layer28.recurrent",
+        "layer28.convolution",
+        "layer29.recurrent",
+        "layer29.convolution",
+        "layer30.recurrent",
+        "layer30.convolution",
+        "layer32.recurrent",
+        "layer32.convolution",
+        "layer33.recurrent",
+        "layer33.convolution",
+        "layer34.recurrent",
+        "layer34.convolution",
+        "layer36.recurrent",
+        "layer36.convolution",
+        "layer37.recurrent",
+        "layer37.convolution",
+        "layer38.recurrent",
+        "layer38.convolution",
+        "layer40.recurrent",
+        "layer40.convolution",
+        "layer41.recurrent",
+        "layer41.convolution",
+        "layer42.recurrent",
+        "layer42.convolution",
+        "layer44.recurrent",
+        "layer44.convolution",
+        "layer45.recurrent",
+        "layer45.convolution",
+        "layer46.recurrent",
+        "layer46.convolution",
+        "layer48.recurrent",
+        "layer48.convolution",
+        "layer49.recurrent",
+        "layer49.convolution",
+        "layer50.recurrent",
+        "layer50.convolution",
+        "layer52.recurrent",
+        "layer52.convolution",
+        "layer53.recurrent",
+        "layer53.convolution",
+        "layer54.recurrent",
+        "layer54.convolution",
+        "layer56.recurrent",
+        "layer56.convolution",
+        "layer57.recurrent",
+        "layer57.convolution",
+        "layer58.recurrent",
+        "layer58.convolution",
+        "layer60.recurrent",
+        "layer60.convolution",
+        "layer61.recurrent",
+        "layer61.convolution",
+        "layer62.recurrent",
+        "layer62.convolution",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "ffn.performance.single-decode",
+      "boundary": "ffn",
+      "purpose": "performance",
+      "shape": {
+        "rows": 1
+      },
+      "mode": "graph",
+      "weights": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "ffn.performance.batched-decode",
+      "boundary": "ffn",
+      "purpose": "performance",
+      "shape": {
+        "rows": 4
+      },
+      "mode": "graph",
+      "weights": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63
+      ],
+      "options": {
+        "verify": true,
+        "restored": true
+      },
+      "outputs": [
+        "value",
+        "residual"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "ffn.performance.verification",
+      "boundary": "ffn",
+      "purpose": "performance",
+      "shape": {
+        "rows": 20
+      },
+      "mode": "graph",
+      "weights": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "ffn.performance.checkpoint-prefill",
+      "boundary": "ffn",
+      "purpose": "performance",
+      "shape": {
+        "rows": 784
+      },
+      "mode": "eager",
+      "weights": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "ffn.performance.large-prefill",
+      "boundary": "ffn",
+      "purpose": "performance",
+      "shape": {
+        "rows": 32768
+      },
+      "mode": "eager",
+      "weights": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "value",
+        "residual"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.hidden.performance.single-decode",
+      "boundary": "output.hidden",
+      "purpose": "performance",
+      "shape": {
+        "rows": 1
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "hidden",
+        "hidden_cache",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.hidden.performance.batched-decode",
+      "boundary": "output.hidden",
+      "purpose": "performance",
+      "shape": {
+        "rows": 4
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "verify": true,
+        "restored": true
+      },
+      "outputs": [
+        "hidden",
+        "hidden_cache",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.hidden.performance.verification",
+      "boundary": "output.hidden",
+      "purpose": "performance",
+      "shape": {
+        "rows": 20
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "verify": true,
+        "restored": false
+      },
+      "outputs": [
+        "hidden",
+        "hidden_cache",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.hidden.performance.checkpoint-prefill",
+      "boundary": "output.hidden",
+      "purpose": "performance",
+      "shape": {
+        "rows": 784
+      },
+      "mode": "eager",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "hidden",
+        "hidden_cache",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.hidden.performance.large-prefill",
+      "boundary": "output.hidden",
+      "purpose": "performance",
+      "shape": {
+        "rows": 32768
+      },
+      "mode": "eager",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "verify": false,
+        "restored": false
+      },
+      "outputs": [
+        "hidden",
+        "hidden_cache",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.distribution.performance.greedy",
+      "boundary": "output.distribution",
+      "purpose": "performance",
+      "shape": {
+        "rows": 1
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": true
+      },
+      "outputs": [
+        "logits",
+        "probabilities"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.distribution.performance.stochastic",
+      "boundary": "output.distribution",
+      "purpose": "performance",
+      "shape": {
+        "rows": 1
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.distribution.performance.batch",
+      "boundary": "output.distribution",
+      "purpose": "performance",
+      "shape": {
+        "rows": 4
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.distribution.performance.verify-one",
+      "boundary": "output.distribution",
+      "purpose": "performance",
+      "shape": {
+        "rows": 5
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.distribution.performance.verify-batch",
+      "boundary": "output.distribution",
+      "purpose": "performance",
+      "shape": {
+        "rows": 20
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.sample.performance.greedy",
+      "boundary": "output.sample",
+      "purpose": "performance",
+      "shape": {
+        "rows": 1
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": true
+      },
+      "outputs": [
+        "logits",
+        "probabilities",
+        "tokens",
+        "selected_probability",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.sample.performance.stochastic",
+      "boundary": "output.sample",
+      "purpose": "performance",
+      "shape": {
+        "rows": 1
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities",
+        "tokens",
+        "selected_probability",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.sample.performance.batch",
+      "boundary": "output.sample",
+      "purpose": "performance",
+      "shape": {
+        "rows": 4
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities",
+        "tokens",
+        "selected_probability",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.sample.performance.verify-one",
+      "boundary": "output.sample",
+      "purpose": "performance",
+      "shape": {
+        "rows": 5
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities",
+        "tokens",
+        "selected_probability",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "output.sample.performance.verify-batch",
+      "boundary": "output.sample",
+      "purpose": "performance",
+      "shape": {
+        "rows": 20
+      },
+      "mode": "graph",
+      "weights": [
+        "output"
+      ],
+      "options": {
+        "greedy": false
+      },
+      "outputs": [
+        "logits",
+        "probabilities",
+        "tokens",
+        "selected_probability",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.context.performance.context-1",
+      "boundary": "mtp.context",
+      "purpose": "performance",
+      "shape": {
+        "rows": 1,
+        "batch": 1,
+        "queries": 1,
+        "context": 32768
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.context.performance.context-2",
+      "boundary": "mtp.context",
+      "purpose": "performance",
+      "shape": {
+        "rows": 4,
+        "batch": 1,
+        "queries": 4,
+        "context": 32768
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.context.performance.context-3",
+      "boundary": "mtp.context",
+      "purpose": "performance",
+      "shape": {
+        "rows": 8,
+        "batch": 2,
+        "queries": 4,
+        "context": 32768
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.context.performance.context-4",
+      "boundary": "mtp.context",
+      "purpose": "performance",
+      "shape": {
+        "rows": 16,
+        "batch": 4,
+        "queries": 4,
+        "context": 32768
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.context.performance.context-5",
+      "boundary": "mtp.context",
+      "purpose": "performance",
+      "shape": {
+        "rows": 32768,
+        "batch": 4,
+        "queries": 8192,
+        "context": 32768
+      },
+      "mode": "eager",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "value",
+        "residual",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.draft.performance.draft-1",
+      "boundary": "mtp.draft",
+      "purpose": "performance",
+      "shape": {
+        "batch": 1,
+        "rows": 1,
+        "queries": 1,
+        "context": 32768
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {
+        "variant": "query_only"
+      },
+      "outputs": [
+        "tokens",
+        "selected_probability",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.draft.performance.draft-2",
+      "boundary": "mtp.draft",
+      "purpose": "performance",
+      "shape": {
+        "batch": 1,
+        "rows": 1,
+        "queries": 1,
+        "context": 32768
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {
+        "variant": "full"
+      },
+      "outputs": [
+        "tokens",
+        "selected_probability",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.draft.performance.draft-3",
+      "boundary": "mtp.draft",
+      "purpose": "performance",
+      "shape": {
+        "batch": 2,
+        "rows": 2,
+        "queries": 1,
+        "context": 32768
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {
+        "variant": "full"
+      },
+      "outputs": [
+        "tokens",
+        "selected_probability",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.draft.performance.draft-4",
+      "boundary": "mtp.draft",
+      "purpose": "performance",
+      "shape": {
+        "batch": 4,
+        "rows": 4,
+        "queries": 1,
+        "context": 32768
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {
+        "variant": "query_only"
+      },
+      "outputs": [
+        "tokens",
+        "selected_probability",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.draft.performance.draft-5",
+      "boundary": "mtp.draft",
+      "purpose": "performance",
+      "shape": {
+        "batch": 4,
+        "rows": 4,
+        "queries": 1,
+        "context": 32768
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {
+        "variant": "full"
+      },
+      "outputs": [
+        "tokens",
+        "selected_probability",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.chain.performance.batch-1",
+      "boundary": "mtp.chain",
+      "purpose": "performance",
+      "shape": {
+        "batch": 1,
+        "rows": 1,
+        "queries": 1,
+        "context": 32768
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "tokens",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.chain.performance.batch-2",
+      "boundary": "mtp.chain",
+      "purpose": "performance",
+      "shape": {
+        "batch": 2,
+        "rows": 2,
+        "queries": 1,
+        "context": 32768
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "tokens",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.chain.performance.batch-4",
+      "boundary": "mtp.chain",
+      "purpose": "performance",
+      "shape": {
+        "batch": 4,
+        "rows": 4,
+        "queries": 1,
+        "context": 32768
+      },
+      "mode": "graph",
+      "weights": [
+        "mtp"
+      ],
+      "options": {},
+      "outputs": [
+        "tokens",
+        "probabilities",
+        "rng",
+        "kv",
+        "fp8_kv",
+        "kv_scales",
+        "guards"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.accept.performance.all",
+      "boundary": "mtp.accept",
+      "purpose": "performance",
+      "shape": {
+        "batch": 1
+      },
+      "mode": "graph",
+      "weights": [],
+      "options": {
+        "acceptance": "all"
+      },
+      "outputs": [
+        "tokens",
+        "counts",
+        "candidate_slots",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.accept.performance.first-rejection",
+      "boundary": "mtp.accept",
+      "purpose": "performance",
+      "shape": {
+        "batch": 1
+      },
+      "mode": "graph",
+      "weights": [],
+      "options": {
+        "acceptance": "first-rejection"
+      },
+      "outputs": [
+        "tokens",
+        "counts",
+        "candidate_slots",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.accept.performance.partial",
+      "boundary": "mtp.accept",
+      "purpose": "performance",
+      "shape": {
+        "batch": 2
+      },
+      "mode": "graph",
+      "weights": [],
+      "options": {
+        "acceptance": "partial"
+      },
+      "outputs": [
+        "tokens",
+        "counts",
+        "candidate_slots",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.accept.performance.mixed",
+      "boundary": "mtp.accept",
+      "purpose": "performance",
+      "shape": {
+        "batch": 4
+      },
+      "mode": "graph",
+      "weights": [],
+      "options": {
+        "acceptance": "mixed"
+      },
+      "outputs": [
+        "tokens",
+        "counts",
+        "candidate_slots",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "mtp.accept.performance.inactive",
+      "boundary": "mtp.accept",
+      "purpose": "performance",
+      "shape": {
+        "batch": 4
+      },
+      "mode": "graph",
+      "weights": [],
+      "options": {
+        "acceptance": "inactive"
+      },
+      "outputs": [
+        "tokens",
+        "counts",
+        "candidate_slots",
+        "rng"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.input.performance.grid-16-16-frames-1",
+      "boundary": "vision.input",
+      "purpose": "performance",
+      "shape": {
+        "height": 16,
+        "width": 16,
+        "frames": 1,
+        "rows": 256
+      },
+      "mode": "eager",
+      "weights": [
+        0
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.input.performance.grid-28-28-frames-1",
+      "boundary": "vision.input",
+      "purpose": "performance",
+      "shape": {
+        "height": 28,
+        "width": 28,
+        "frames": 1,
+        "rows": 784
+      },
+      "mode": "eager",
+      "weights": [
+        0
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.input.performance.grid-14-14-frames-3",
+      "boundary": "vision.input",
+      "purpose": "performance",
+      "shape": {
+        "height": 14,
+        "width": 14,
+        "frames": 3,
+        "rows": 392
+      },
+      "mode": "eager",
+      "weights": [
+        0
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.block.performance.grid-16-16-frames-1",
+      "boundary": "vision.block",
+      "purpose": "performance",
+      "shape": {
+        "height": 16,
+        "width": 16,
+        "frames": 1,
+        "rows": 256
+      },
+      "mode": "eager",
+      "weights": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.block.performance.grid-28-28-frames-1",
+      "boundary": "vision.block",
+      "purpose": "performance",
+      "shape": {
+        "height": 28,
+        "width": 28,
+        "frames": 1,
+        "rows": 784
+      },
+      "mode": "eager",
+      "weights": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.block.performance.grid-14-14-frames-3",
+      "boundary": "vision.block",
+      "purpose": "performance",
+      "shape": {
+        "height": 14,
+        "width": 14,
+        "frames": 3,
+        "rows": 392
+      },
+      "mode": "eager",
+      "weights": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.merge.performance.grid-16-16-frames-1",
+      "boundary": "vision.merge",
+      "purpose": "performance",
+      "shape": {
+        "height": 16,
+        "width": 16,
+        "frames": 1,
+        "rows": 256
+      },
+      "mode": "eager",
+      "weights": [
+        26
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.merge.performance.grid-28-28-frames-1",
+      "boundary": "vision.merge",
+      "purpose": "performance",
+      "shape": {
+        "height": 28,
+        "width": 28,
+        "frames": 1,
+        "rows": 784
+      },
+      "mode": "eager",
+      "weights": [
+        26
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    },
+    {
+      "id": "vision.merge.performance.grid-14-14-frames-3",
+      "boundary": "vision.merge",
+      "purpose": "performance",
+      "shape": {
+        "height": 14,
+        "width": 14,
+        "frames": 3,
+        "rows": 392
+      },
+      "mode": "eager",
+      "weights": [
+        26
+      ],
+      "options": {},
+      "outputs": [
+        "hidden"
+      ],
+      "fixture_sha256": null
+    }
+  ]
+}

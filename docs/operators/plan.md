@@ -49,7 +49,7 @@ Each family defines its own `Weights`, `Plan`, `Workspace`, inputs, views, and o
 Keep tensor shapes and datatypes from the current native contracts.
 Use frozen data classes for plans and views.
 Use the existing `Device` allocation interface during preparation.
-Plan construction must not alfind GPU storage or execute GPU work.
+Plan construction must not allocate GPU storage or execute GPU work.
 
 The naming convention does not add a base class:
 

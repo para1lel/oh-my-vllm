@@ -56,9 +56,10 @@ GDN 用例检查全部指定 checkpoint, 并包含恢复状态后的 decode 用�
 | 单次 `mtp.draft` | Batch 1 query-only, 1 full, 2 full, 4 query-only, 4 full | 相同的 5 个用例 |
 | 四步 draft 链 | Batch 1, 2, 4 | 相同的 3 个用例 |
 | `mtp.accept` | Batch 1 全接受, 1 首次拒绝, 2 部分接受, 4 混合拒绝, 4 含未激活后缀 | 相同的 5 个用例 |
-| 各 vision 边界 | Grid/frame 组合 `(14x14,1),(28x28,1),(14x14,3)` | 相同的 3 个用例 |
+| 各 vision 边界 | Grid/frame 组合 `(16x16,1),(28x28,1),(14x14,3)` | 相同的 3 个用例 |
 
 存在历史上下文时, MTP context 数值用例使用长度 784, 性能用例使用长度 32768.
+784 行 MTP prefill 从位置 1 开始, 结束时的 context length 为 785.
 Draft 用例分别使用相同的上下文长度.
 层索引从 0 开始.
 数值用例中, FA 使用 checkpoint 层索引 3, GDN/FFN 使用层索引 0, vision 输入/内部/merge 使用层索引 0/1/26.
@@ -89,21 +90,21 @@ Manifest 记录完整权重张量名.
 `run.py` 提供:
 
 ```python
-prepare(case: Case, device: Device, fixture: Fixture) -> PreparedCase
+prepare(case: Case, device: Device, fixture: Fixture, *, model: Path) -> PreparedCase
 PreparedCase.reset() -> None
 PreparedCase.invoke() -> None
 PreparedCase.observe() -> dict[str, numpy.ndarray]
 PreparedCase.close() -> None
 ```
 
-- [ ] 在 `test_contracts.py` 中新增 `test_fixture_loading_is_strict_and_reference_free`.
-- [ ] 检查分片缺失, 摘要改变, 字段不完整, 以及常规测试中被禁止的 PyTorch 导入.
-- [ ] 新增 `test_case_limits_reject_shape_sweeps`, 检查用例超过 5 个或出现未列出的 shape.
-- [ ] 实现前先运行这些检查.
-- [ ] 实现用例, 固定地址 fixture, 具名观测结果和清理逻辑.
-- [ ] 将 CPU 检查加入现有 pre-commit 命令.
-- [ ] 请另一位 agent 检查框架.
-- [ ] 提交框架.
+- [x] 在 `test_contracts.py` 中新增 `test_fixture_loading_is_strict_and_reference_free`.
+- [x] 检查分片缺失, 摘要改变, 字段不完整, 以及常规测试中被禁止的 PyTorch 导入.
+- [x] 新增 `test_case_limits_reject_shape_sweeps`, 检查用例超过 5 个或出现未列出的 shape.
+- [x] 实现前先运行这些检查.
+- [x] 实现用例, 固定地址 fixture, 具名观测结果和清理逻辑.
+- [x] 将 CPU 检查加入现有 pre-commit 命令.
+- [x] 请另一位 agent 检查框架.
+- [x] 提交框架.
 
 ## V2: 生成并提交数值 fixture
 

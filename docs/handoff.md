@@ -2,9 +2,10 @@
 
 Use `main` for work.
 Use the [operator structure design](operators/design.md) for the next refactor.
-The [implementation plan](operators/plan.md) and [microbench design](operators/microbench.md) are written. Implementation has not started.
-Examine the plans and select the execution method before implementation.
-Start with the [validation tasks](operators/validation-plan.md) on the current runtime.
+Follow the [implementation plan](operators/plan.md) and [microbench design](operators/microbench.md).
+The [operator validation framework](../development/operators) supplies fixed cases, fixture loading, and adapters for the current runtime.
+Continue with PyTorch fixture generation and numerical limits in [validation task V2](operators/validation-plan.md#v2-generate-and-commit-numerical-fixtures).
+Then calibrate the fixed performance ratios before source migration.
 
 The worker uses [operator scheduling](execution.md): Eager for Execute messages with prefill, and CUDA Graph replay for decode-only messages.
 The native builder is `development.native_build`.
