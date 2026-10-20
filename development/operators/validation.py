@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import numpy as np
+
 from .cases import digest, load_cases
 from .fixtures import file_digest, load_fixture
 from .numerics import compare
@@ -51,6 +53,29 @@ def load_limits(purpose):
     return selected
 
 
+def check_dependent_replay(prepared, fixture, limits):
+    if prepared.case.boundary not in {"ffn", "gdn"} or prepared.case.mode != "graph":
+        return {}
+    failures = {}
+    for cycle in range(3):
+        prepared.reset()
+        for name in ("value", "residual"):
+            prepared.device.module.zero(prepared.inputs[name])
+        prepared.invoke()
+        if prepared.case.boundary == "ffn":
+            for name, tensor in prepared.outputs.items():
+                if np.any(prepared.download(tensor)):
+                    failures[f"zero.{cycle}.{name}"] = (
+                        "zero input produced nonzero output"
+                    )
+        prepared.reset()
+        prepared.invoke()
+        restored = compare(prepared.observe(), fixture, limits)
+        if not restored.passed:
+            failures[f"restored.{cycle}"] = restored.failures
+    return failures
+
+
 def numerical(model, report):
     from oh_my_vllm.operators.runtime.device import Device
 
@@ -74,6 +99,9 @@ def numerical(model, report):
             prepared.reset()
             prepared.invoke()
             result = compare(prepared.observe(), fixture, limits[case.id])
+            replay_failures = check_dependent_replay(prepared, fixture, limits[case.id])
+            if replay_failures:
+                result.failures["replay"] = replay_failures
         payload = {
             "case_sha256": case.identity,
             "fixture_sha256": case.fixture_sha256,

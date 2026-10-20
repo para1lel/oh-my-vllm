@@ -123,7 +123,7 @@ __device__ inline int fa_ring_cached_page(const FARingPageSpan &pages, int logic
   return logical / 784 == pages.first_logical_page ? pages.first_page : pages.last_page;
 }
 
-template <bool ExportBFloat16>
+template <bool ExportBFloat16, bool RoundMax = false>
 __global__ __launch_bounds__(480, 1) void fa_ring_kernel(
     const __nv_bfloat16 *__restrict__ query, const __nv_bfloat16 *__restrict__ cache,
     const int32_t *__restrict__ tables, const int32_t *__restrict__ lengths,
@@ -413,6 +413,8 @@ __global__ __launch_bounds__(480, 1) void fa_ring_kernel(
       }
       next_max = fmaxf(fmaxf(maxima[0], maxima[1]), fmaxf(maxima[2], maxima[3]));
       next_max = fmaxf(next_max, __shfl_xor_sync(0xffffffff, next_max, 16));
+      if constexpr (RoundMax)
+        next_max = ceilf(next_max);
       float safe = next_max == -INFINITY ? 0.f : next_max;
       float alpha = fa_exp2(maximum - safe), sum = 0;
       if (half == 0) {

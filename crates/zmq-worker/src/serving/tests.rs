@@ -352,23 +352,32 @@ async fn cancelled_or_expired_prepare_releases_lease_and_discards_late_reply() {
             .unwrap();
             next_response.ready.take().unwrap().await.unwrap().unwrap();
             assert!(!active.contains_key(&request_id));
-            let batch = scheduler.schedule();
-            let mut execute = Box::pin(worker.client.execute_one_step(
-                &batch.scheduled,
-                &batch.finished_request_ids,
-                &batch.preempted_request_ids,
-                batch.num_batched_tokens,
-            ));
-            let RustMessage::Execute(message) =
-                next_message(&mut execute, &mut worker.socket).await
-            else {
-                panic!("expected execution");
-            };
-            assert_eq!(message.scheduled.len(), 1);
-            assert_eq!(message.scheduled[0].request_id, next_id);
-            executed(&mut worker.socket, &message).await;
-            let output = scheduler.update(execute.await.unwrap()).unwrap();
-            assert_eq!(output.outputs[0].token_ids, vec![42]);
+            for tail in [false, true] {
+                let batch = scheduler.schedule();
+                let mut execute = Box::pin(worker.client.execute_one_step(
+                    &batch.scheduled,
+                    &batch.finished_request_ids,
+                    &batch.preempted_request_ids,
+                    batch.num_batched_tokens,
+                ));
+                let RustMessage::Execute(message) =
+                    next_message(&mut execute, &mut worker.socket).await
+                else {
+                    panic!("expected execution");
+                };
+                assert_eq!(message.scheduled.len(), 1);
+                assert_eq!(message.scheduled[0].request_id, next_id);
+                executed(&mut worker.socket, &message).await;
+                let output = scheduler.update(execute.await.unwrap()).unwrap();
+                assert_eq!(
+                    output.outputs[0].token_ids,
+                    if tail {
+                        vec![42]
+                    } else {
+                        vec![]
+                    },
+                );
+            }
             active.clear();
             assert_eq!(budget.snapshot()["request_state_bytes"], 0);
             worker.close().await;

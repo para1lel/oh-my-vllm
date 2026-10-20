@@ -426,7 +426,7 @@ class Offline(unittest.TestCase):
                     "--batch-size",
                     "2",
                     "--input-len",
-                    "785",
+                    "786",
                     "--output-len",
                     "8",
                     "--prefix-hit",
@@ -440,6 +440,12 @@ class Offline(unittest.TestCase):
                 timeout=10,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
+            row = next(
+                json.loads(line.split(" ", 1)[1])
+                for line in result.stdout.splitlines()
+                if line.startswith("BENCH_RESULT ")
+            )
+            self.assertEqual(row["initial_prefix_hit_tokens"], 2 * 785)
 
 
 if __name__ == "__main__":

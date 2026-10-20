@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../recurrent/gdn_kernels.cuh"
-#include "../../../runtime/cuda/launch.cuh"
+#include "../../../runtime/cuda/dependent.cuh"
 #include <cute/tensor.hpp>
 #include <cute/arch/tmem_allocator_sm100.hpp>
 #include <cute/arch/copy_sm90_tma.hpp>
@@ -46,10 +46,11 @@ static inline void gdn_input_launch(TensorView input, TensorView input_scale, Te
     TVM_FFI_ICHECK(status == CUDA_SUCCESS) << status;
     found = weight_maps.emplace(key, descriptor).first;
   }
-  launch_kernel(kernel, dim3(256), dim3(Threads), SharedBytes, stream,
-                static_cast<const __nv_fp8_e4m3 *>(input.data_ptr()),
-                static_cast<const float *>(input_scale.data_ptr()),
-                static_cast<const float *>(weight_scale.data_ptr()),
-                static_cast<__nv_bfloat16 *>(output.data_ptr()), found->second, convolution);
+  launch_dependent_kernel(kernel, dim3(256), dim3(Threads), SharedBytes, stream,
+                          static_cast<const __nv_fp8_e4m3 *>(input.data_ptr()),
+                          static_cast<const float *>(input_scale.data_ptr()),
+                          static_cast<const float *>(weight_scale.data_ptr()),
+                          static_cast<__nv_bfloat16 *>(output.data_ptr()), found->second,
+                          convolution);
   check_cuda(cudaGetLastError());
 }

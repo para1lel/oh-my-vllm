@@ -83,6 +83,26 @@ Responses 默认存储 response, `store=false` 时不存储.
 curl http://127.0.0.1:8000/v1/chat/completions   -H 'Content-Type: application/json'   -d '{"model":"qwen3.8-27b-fp8","messages":[{"role":"user","content":"Hello"}],"max_tokens":64,"reasoning_effort":"off"}'
 ```
 
+## 前缀 cache
+
+请求可以使用已缓存的完整块, 以及最后一块不完整的前缀.
+对于最后一块不完整的提示, 调度器可以在最后一个 token 之前记录 checkpoint.
+该 checkpoint 包含同一位置的 FA, GDN, 卷积和 MTP hidden state.
+只有对 worker 输出的检查未发现错误时, 调度器才使 checkpoint 对其他请求可用.
+
+对于媒体请求, 调度器只记录完整块 checkpoint.
+
+具有相同提示的请求可以从该 checkpoint 继续计算, 并重新计算最后一个 token.
+更长的提示可以从同一个已记录位置继续计算.
+Cache 不能从没有 GDN checkpoint 的位置继续计算.
+
+继续计算之前, worker 将共享的 FA 尾部复制到私有块.
+复制内容包括目标层和 MTP 层的 K 与 V.
+GDN 读取 checkpoint, 并写入另一个 slot.
+调度器保留源块, 直到它对 worker 结果的检查未发现错误.
+
+没有足够容量分配这些私有块时, cache 使用完整块.
+
 ## 离线命令
 
 ```bash
@@ -112,7 +132,7 @@ Worker 对 target 和 proposal 分布应用 grammar mask.
 只有已接受的 token 才会修改请求的 grammar 状态.
 
 [执行规则](execution.zh.md)为含 prefill 的 Execute 消息选择 Eager, 为仅含 decode 的消息选择 CUDA Graph 重放.
-Worker 不使用 PDL.
+选定的 FFN 和 GDN kernel 使用这些规则规定的依赖启动.
 推理性能测量使用[端到端流程](performance.zh.md).
 
 模型临时缓冲区使用 [CUDA 内存池](../python/oh_my_vllm/operators/runtime/cuda/scratch_allocator.cuh#L19)<!-- source: inline cudaMemPool_t scratch_pool(int device) { -->.

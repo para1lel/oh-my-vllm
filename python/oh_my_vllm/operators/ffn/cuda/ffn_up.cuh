@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../../primitives/cuda/common.cuh"
-#include "../../runtime/cuda/launch.cuh"
+#include "../../runtime/cuda/dependent.cuh"
 #include <cute/tensor.hpp>
 #include <cute/arch/tmem_allocator_sm100.hpp>
 #include <cute/arch/copy_sm90_tma.hpp>
@@ -63,6 +63,8 @@ __global__ void paired_up_kernel(const __nv_fp8_e4m3 *input, const float *input_
   };
   prefetch(0, 0);
   prefetch(2, 1);
+  wait_for_producer();
+  launch_consumer();
   MMA mma;
   auto input_fragment = mma.get_slice(0).make_fragment_B(input_tile);
   auto partial = partition_fragment_C(mma, Shape<_128, _16>{});
@@ -193,12 +195,12 @@ inline void paired_up_launch(TensorView input, TensorView input_scale, TensorVie
     TVM_FFI_ICHECK(status == CUDA_SUCCESS) << status;
     found = weight_maps.emplace(key, descriptor).first;
   }
-  launch_kernel(paired_up_kernel<Rows>, dim3(136), dim3(128), 200832, stream,
-                static_cast<const __nv_fp8_e4m3 *>(input.data_ptr()),
-                static_cast<const float *>(input_scale.data_ptr()),
-                static_cast<const float *>(weight_scale.data_ptr()),
-                static_cast<__nv_bfloat16 *>(gate_up.data_ptr()),
-                static_cast<__nv_fp8_e4m3 *>(product.data_ptr()),
-                static_cast<float *>(product_scale.data_ptr()), found->second);
+  launch_dependent_kernel(paired_up_kernel<Rows>, dim3(136), dim3(128), 200832, stream,
+                          static_cast<const __nv_fp8_e4m3 *>(input.data_ptr()),
+                          static_cast<const float *>(input_scale.data_ptr()),
+                          static_cast<const float *>(weight_scale.data_ptr()),
+                          static_cast<__nv_bfloat16 *>(gate_up.data_ptr()),
+                          static_cast<__nv_fp8_e4m3 *>(product.data_ptr()),
+                          static_cast<float *>(product_scale.data_ptr()), found->second);
   check_cuda(cudaGetLastError());
 }

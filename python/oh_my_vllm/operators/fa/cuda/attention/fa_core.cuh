@@ -21,33 +21,42 @@ inline int fa_attention_core_launch(TensorView query, TensorView cache, TensorVi
     splits = tables.size(1) == 1 ? 16 : 32;
   if (rows > 32) {
     splits = splits >= 4 && tables.size(1) >= 64 ? 4 : 1;
-    if (max_queries >= 512 && max_queries < 1024 && batch == 1) {
+    if ((max_queries >= 512 && max_queries < 1024 && batch == 1) ||
+        (max_queries >= 1024 && rows > 4096)) {
       splits = 1;
       const auto &maps = fa_ring_pipeline_tensor_maps(cache);
       int tiles = (max_queries * 6 + 127) / 128;
-      auto launch = [&](auto mode) {
+      auto launch = [&](auto mode, auto rounding) {
         constexpr bool ExportBFloat16 = decltype(mode)::value;
+        constexpr bool RoundMax = decltype(rounding)::value;
         static std::once_flag configured;
         std::call_once(configured, [] {
-          check_cuda(cudaFuncSetAttribute(fa_ring_kernel<ExportBFloat16>,
+          check_cuda(cudaFuncSetAttribute(fa_ring_kernel<ExportBFloat16, RoundMax>,
                                           cudaFuncAttributeMaxDynamicSharedMemorySize,
                                           FARingSharedBytes));
         });
-        fa_ring_kernel<ExportBFloat16><<<dim3(batch * tiles, 4), 480, FARingSharedBytes, stream>>>(
-            static_cast<const __nv_bfloat16 *>(query.data_ptr()),
-            static_cast<const __nv_bfloat16 *>(cache.data_ptr()),
-            static_cast<const int32_t *>(tables.data_ptr()),
-            static_cast<const int32_t *>(lengths.data_ptr()),
-            static_cast<const int32_t *>(sequence_rows.data_ptr()),
-            static_cast<float *>(partial.data_ptr()), static_cast<float *>(lse.data_ptr()),
-            int(tables.size(1)), tiles, max_queries, rows, blocks, first_token, maps.key,
-            maps.value, fa_ring_pipeline_l2_bytes(query.device().device_id), maps.key16,
-            maps.value16, attended);
+        fa_ring_kernel<ExportBFloat16, RoundMax>
+            <<<dim3(batch * tiles, 4), 480, FARingSharedBytes, stream>>>(
+                static_cast<const __nv_bfloat16 *>(query.data_ptr()),
+                static_cast<const __nv_bfloat16 *>(cache.data_ptr()),
+                static_cast<const int32_t *>(tables.data_ptr()),
+                static_cast<const int32_t *>(lengths.data_ptr()),
+                static_cast<const int32_t *>(sequence_rows.data_ptr()),
+                static_cast<float *>(partial.data_ptr()), static_cast<float *>(lse.data_ptr()),
+                int(tables.size(1)), tiles, max_queries, rows, blocks, first_token, maps.key,
+                maps.value, fa_ring_pipeline_l2_bytes(query.device().device_id), maps.key16,
+                maps.value16, attended);
       };
-      if (attended != nullptr)
-        launch(std::true_type{});
-      else
-        launch(std::false_type{});
+      if (max_queries >= 1024) {
+        if (attended != nullptr)
+          launch(std::true_type{}, std::true_type{});
+        else
+          launch(std::false_type{}, std::true_type{});
+      } else if (attended != nullptr) {
+        launch(std::true_type{}, std::false_type{});
+      } else {
+        launch(std::false_type{}, std::false_type{});
+      }
       check_cuda(cudaGetLastError());
       return 1;
     }
@@ -101,7 +110,10 @@ inline int fa_attention_core_launch(TensorView query, TensorView cache, TensorVi
           fa_prefill_pipeline_tensor_maps(cache).key);
       check_cuda(cudaGetLastError());
     };
-    attend(std::integral_constant<int, 32>{});
+    if (max_queries == 1)
+      attend(std::integral_constant<int, 16>{});
+    else
+      attend(std::integral_constant<int, 32>{});
   }
   return splits;
 }

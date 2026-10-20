@@ -18,6 +18,16 @@ pub trait CacheRequest {
 
     fn block_hashes(&self) -> &[BlockHash];
 
+    fn token_ids(&self) -> &[u32];
+
+    fn cache_salt(&self) -> Option<BlockHash> {
+        None
+    }
+
+    fn record_partial_prefix(&self) -> bool {
+        true
+    }
+
     fn is_waiting_or_preempted(&self) -> bool;
 }
 
@@ -45,6 +55,7 @@ pub struct GroupManager {
     last_state_block_idx: FxHashMap<RequestId, usize>,
     cached_blocks_this_step: FxHashSet<BlockHashWithGroupId>,
     pending_cache: FxHashMap<RequestId, Vec<(usize, u32)>>,
+    held_sources: FxHashMap<RequestId, Vec<u32>>,
 }
 
 #[inline]
@@ -67,6 +78,7 @@ impl GroupManager {
             last_state_block_idx: FxHashMap::default(),
             cached_blocks_this_step: FxHashSet::default(),
             pending_cache: FxHashMap::default(),
+            held_sources: FxHashMap::default(),
         }
     }
 
@@ -166,7 +178,7 @@ impl GroupManager {
                 if self.allocated_block_reqs.contains(&request_id) {
                     1
                 } else {
-                    1 + self.num_speculative_blocks
+                    (num_new as usize).min(1 + self.num_speculative_blocks)
                 }
             } else {
                 0
@@ -198,11 +210,6 @@ impl GroupManager {
         pool: &mut BlockPool,
     ) {
         assert!(self.blocks(request_id).is_empty());
-        assert_eq!(
-            num_local_computed_tokens % self.block_size,
-            0,
-            "hits are block-aligned here, so no partial-hit copy-on-write exists"
-        );
         let num_skipped_blocks =
             self.num_skipped_tokens(num_local_computed_tokens) / self.block_size;
         let kept = &new_computed_blocks[num_skipped_blocks.min(new_computed_blocks.len())..];
@@ -216,7 +223,71 @@ impl GroupManager {
         let blocks = self.req_to_blocks.entry(request_id).or_default();
         blocks.extend(std::iter::repeat_n(NULL_BLOCK_ID, num_skipped_blocks));
         blocks.extend_from_slice(kept);
-        self.num_cached_block.insert(request_id, blocks.len());
+        self.num_cached_block
+            .insert(request_id, num_local_computed_tokens / self.block_size);
+    }
+
+    pub fn partial_source(
+        &self,
+        request_id: RequestId,
+        hits: &[u32],
+        computed: usize,
+        pool: &BlockPool,
+    ) -> Option<u32> {
+        if computed.is_multiple_of(self.block_size) {
+            return None;
+        }
+        let blocks = if self.blocks(request_id).is_empty() {
+            hits
+        } else {
+            self.blocks(request_id)
+        };
+        let id = *blocks.get(computed / self.block_size)?;
+        let block = pool.block(id);
+        (id != NULL_BLOCK_ID
+            && block.cache_is_committed()
+            && block.num_hashed_tokens() as usize == computed)
+            .then_some(id)
+    }
+
+    pub fn replace_partial(
+        &mut self,
+        request_id: RequestId,
+        computed: usize,
+        pool: &mut BlockPool,
+    ) -> (u32, u32) {
+        let destination = pool.get_new_blocks(1).expect("capacity was checked")[0];
+        let blocks = self
+            .req_to_blocks
+            .get_mut(&request_id)
+            .expect("request exists");
+        let source = std::mem::replace(&mut blocks[computed / self.block_size], destination);
+        self.held_sources
+            .entry(request_id)
+            .or_default()
+            .push(source);
+        (source, destination)
+    }
+
+    pub fn stage_partial(
+        &mut self,
+        request_id: RequestId,
+        end: usize,
+        hash: BlockHash,
+        pool: &mut BlockPool,
+    ) -> u32 {
+        let id = self.blocks(request_id)[end / self.block_size];
+        assert_ne!(id, NULL_BLOCK_ID);
+        pool.stage_cache_block(
+            id,
+            BlockHashWithGroupId::new(hash, self.group_id),
+            end as u32,
+        );
+        self.pending_cache
+            .entry(request_id)
+            .or_default()
+            .push((end, id));
+        id
     }
 
     pub fn allocate_new_blocks(
@@ -329,17 +400,23 @@ impl GroupManager {
                 self.cached_blocks_this_step.insert(key);
             }
         }
-        self.pending_cache.entry(rid).or_default().extend(to_cache);
+        self.pending_cache.entry(rid).or_default().extend(
+            to_cache
+                .into_iter()
+                .map(|(index, id)| ((index + 1) * self.block_size, id)),
+        );
         self.num_cached_block.insert(rid, num_full);
     }
 
     pub fn commit_cache(&mut self, request_id: RequestId, computed: usize, pool: &mut BlockPool) {
+        if let Some(sources) = self.held_sources.remove(&request_id) {
+            pool.free_blocks(&sources);
+        }
         let Some(pending) = self.pending_cache.get_mut(&request_id) else {
             return;
         };
-        let completed_blocks = computed / self.block_size;
-        pending.retain(|&(index, id)| {
-            if index < completed_blocks {
+        pending.retain(|&(end, id)| {
+            if end <= computed {
                 pool.commit_cache_block(id);
                 false
             } else {
@@ -415,6 +492,9 @@ impl GroupManager {
         self.allocated_block_reqs.remove(&request_id);
         self.last_state_block_idx.remove(&request_id);
         self.pending_cache.remove(&request_id);
+        if let Some(sources) = self.held_sources.remove(&request_id) {
+            pool.free_blocks(&sources);
+        }
         if let Some(mut blocks) = self.req_to_blocks.remove(&request_id) {
             blocks.reverse();
             pool.free_blocks(&blocks);

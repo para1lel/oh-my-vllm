@@ -16,6 +16,20 @@ Eager and CUDA Graph execution use the same native operators.
 Python calls these operators in model dependency order.
 CUDA kernels can fuse operations and use matrix tiles internally.
 
+## Dependent kernel launch
+
+Small FFN and GDN operations use [Programmatic Dependent Launch](https://docs.nvidia.com/cuda/archive/13.1.0/cuda-programming-guide/04-special-topics/programmatic-dependent-launch.html) between normalization and input projection.
+They also use PDL between output quantization and output projection.
+Stream capture records these selected dependencies in the CUDA Graph.
+The consumer can prepare its storage and read constant weights before its producer completes execution.
+It waits for its producer to complete execution before it reads the inputs or scales that the producer supplies.
+
+The launch signal lets the consumer start. The consumer must wait before it reads the producer's outputs.
+
+At output merging and layer boundaries, a kernel must complete execution before the next kernel starts.
+These rules prevent temporary storage reuse before the previous kernels complete execution.
+PDL does not change state selection or the Eager and Graph execution rules.
+
 ## Graph resources
 
 A workspace owns weights, cache references, metadata, and temporary tensors for its recorded operations.

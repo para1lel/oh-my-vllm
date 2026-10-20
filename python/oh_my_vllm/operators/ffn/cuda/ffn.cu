@@ -1,3 +1,4 @@
+#define CUTLASS_ENABLE_GDC_FOR_SM100
 #include "../../primitives/cuda/common.cuh"
 #include "ffn_up.cuh"
 #include "ffn_prefill.cuh"
@@ -19,6 +20,7 @@ __global__ void merge_partials_kernel(const float *partials, __nv_bfloat16 *outp
 
 __global__ void silu_product_quant_kernel(const __nv_bfloat16 *gate_up, __nv_fp8_e4m3 *data,
                                           float *scales, int groups) {
+  launch_consumer();
   int group = blockIdx.x * 8 + threadIdx.x / 32;
   if (group >= groups)
     return;
@@ -83,12 +85,12 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
   }
   tvm::ffi::CUDADeviceGuard guard(x.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
-  residual_rms_quant_launch(static_cast<const __nv_bfloat16 *>(x.data_ptr()),
-                            static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
-                            static_cast<const float *>(norm.data_ptr()),
-                            static_cast<float *>(summed.data_ptr()),
-                            static_cast<__nv_fp8_e4m3 *>(quantized_input.data_ptr()),
-                            static_cast<float *>(input_scale.data_ptr()), rows, stream);
+  residual_rms_quant_launch<true>(static_cast<const __nv_bfloat16 *>(x.data_ptr()),
+                                  static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
+                                  static_cast<const float *>(norm.data_ptr()),
+                                  static_cast<float *>(summed.data_ptr()),
+                                  static_cast<__nv_fp8_e4m3 *>(quantized_input.data_ptr()),
+                                  static_cast<float *>(input_scale.data_ptr()), rows, stream);
   auto paired = [&](auto count) {
     paired_up_launch<decltype(count)::value>(quantized_input, input_scale, gate_up_weight,
                                              gate_up_scale, gate_up, quantized_product,
@@ -115,7 +117,7 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
           static_cast<const __nv_fp8_e4m3 *>(quantized_input.data_ptr()),
           static_cast<const float *>(gate_up_scale.data_ptr()),
           static_cast<const float *>(input_scale.data_ptr()), gate_up.data_ptr(), 34816, rows, 5120,
-          stream);
+          stream, true);
     else
       ffn_prefill_projection(static_cast<const __nv_fp8_e4m3 *>(quantized_input.data_ptr()),
                              static_cast<const __nv_fp8_e4m3 *>(gate_up_weight.data_ptr()),
@@ -131,15 +133,15 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
   }
   if (rows <= 32) {
     if (rows <= 8)
-      down16dp::launch(quantized_product, down_weight, product_scale, down_scale, partials, rows,
-                       splits, stream);
+      down16dp::launch<true>(quantized_product, down_weight, product_scale, down_scale, partials,
+                             rows, splits, stream);
     else
       groupwise<128, 32, 128, 128, 1, true, 8, float>(
           static_cast<const __nv_fp8_e4m3 *>(down_weight.data_ptr()),
           static_cast<const __nv_fp8_e4m3 *>(quantized_product.data_ptr()),
           static_cast<const float *>(down_scale.data_ptr()),
           static_cast<const float *>(product_scale.data_ptr()), partials.data_ptr(), 5120, rows,
-          17408 / 8, stream);
+          17408 / 8, stream, true);
     launch_kernel(merge_partials_kernel, dim3((rows * 5120 + 255) / 256), dim3(256), 0, stream,
                   static_cast<const float *>(partials.data_ptr()),
                   static_cast<__nv_bfloat16 *>(output.data_ptr()), rows * 5120, splits);

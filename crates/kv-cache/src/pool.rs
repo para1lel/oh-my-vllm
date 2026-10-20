@@ -113,6 +113,23 @@ impl BlockPool {
             .and_then(|entry| entry.first_committed(&self.free_queue))
     }
 
+    pub fn partial_blocks(
+        &self,
+        group: u32,
+        block_size: usize,
+    ) -> impl Iterator<Item = (u32, usize)> + '_ {
+        (1..self.num_blocks()).filter_map(move |id| {
+            let block = self.block(id);
+            let end = block.num_hashed_tokens() as usize;
+            (block.cache_is_committed()
+                && !end.is_multiple_of(block_size)
+                && block
+                    .block_hash()
+                    .is_some_and(|hash| hash.group_id == group))
+            .then_some((id, end))
+        })
+    }
+
     pub fn get_new_blocks(&mut self, n: usize) -> Option<Vec<u32>> {
         let ids = self.free_queue.popleft_n(n)?;
         for &id in &ids {

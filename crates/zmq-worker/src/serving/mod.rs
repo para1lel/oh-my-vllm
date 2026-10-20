@@ -893,6 +893,7 @@ async fn complete_admit(
                 .any(|message| media::count(&message["content"]) > 0)
         })
     {
+        engine_request.record_partial_prefix = false;
         engine_request.cache_salt = Some(oh_my_vllm_kv_cache::hash::hash_block_tokens(
             None,
             &[],

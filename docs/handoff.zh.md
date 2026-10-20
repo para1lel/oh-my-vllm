@@ -11,6 +11,10 @@ worker 使用显式层权重, 命名输出和算子计划键.
 Rust 和 worker 控制持久状态选择.
 算子只写入调用方提供的状态位置.
 
+小规模 FFN 和 GDN 运算在执行规则规定的边界使用依赖启动.
+[前缀 cache](serving.zh.md#前缀-cache) 可以使用来自未满块的 checkpoint.
+保留源块, 直到续算结果没有校验错误.
+
 修改 kernel 前使用[算子验证框架](../development/operators).
 该框架提供固定数值 fixture, 直接 PyTorch 参考实现和理论延迟倍率门槛.
 常规数值测试读取仓库 fixture, 不执行 PyTorch.
@@ -20,6 +24,10 @@ Rust 和 worker 控制持久状态选择.
 FA 使用 BF16 attention 操作数和缓存状态. GDN 使用 FP32 保存循环状态.
 FP8 投影使用 checkpoint 中的 E4M3 权重和 FP32 block scales.
 [模型契约](operators/model.zh.md#中间精度)定义中间计算精度.
+
+降低长上下文 attention 的延迟.
+将所有长输出配置的 efficiency 提高到 40% 以上.
+每种配置至少测量两次.
 
 交付前执行适用的[测试范围](testing.zh.md).
 同时执行全部 24 组 [HTTP 配置](performance.zh.md).

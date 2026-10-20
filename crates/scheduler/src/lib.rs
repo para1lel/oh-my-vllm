@@ -68,13 +68,17 @@ impl Scheduler {
         }
         let block = self.kv.block_size();
         let mut end = start + count;
-        if end < prefill_end && self.config.max_num_batched_tokens >= block {
+        if end < prefill_end
+            && self.config.max_num_batched_tokens >= block
+            && self.kv.partial_checkpoint(request) != Some(end)
+        {
             end = end / block * block;
         }
         let last_boundary = request.token_ids.len() / block * block;
         let next_boundary = (start / block + 1) * block;
         for stop in [
             last_boundary,
+            self.kv.partial_checkpoint(request).unwrap_or(0),
             if start.is_multiple_of(block) {
                 0
             } else {
@@ -346,6 +350,9 @@ impl Scheduler {
                         num_computed_tokens: req.num_computed_tokens,
                         fa_block_table: fa_table,
                         mamba_block_table: mb_table,
+                        fa_block_copies: self.kv.block_copies(req.id),
+                        prefix_state_slot: self.kv.prefix_state_slot(req.id),
+                        cache_checkpoint: self.kv.cache_checkpoint(req.id),
                     });
                     token_budget -= to_schedule;
                     req.num_in_flight_tokens = to_schedule;
@@ -369,21 +376,21 @@ impl Scheduler {
                 break;
             }
 
-            let (fa_hit, mb_hit, hit_len) = self.kv.get_computed_blocks(&req);
+            let (fa_hit, mb_hit, mut hit_len) = self.kv.get_computed_blocks(&req);
 
             let total_tokens = req.num_tokens_with_spec();
             let remaining = total_tokens - hit_len;
             req.prefill_start = hit_len;
             let limit =
                 token_budget.min(prefill_quotas.get(&req.id).copied().unwrap_or(token_budget));
-            let to_schedule = self.aligned_prefill(&req, hit_len, remaining.min(limit));
+            let mut to_schedule = self.aligned_prefill(&req, hit_len, remaining.min(limit));
             if to_schedule == 0 {
                 deferred_waiting.push_back(req);
                 continue;
             }
 
             let has_running = !self.running.is_empty();
-            let alloc = self.kv.allocate_slots(
+            let mut alloc = self.kv.allocate_slots(
                 &req,
                 (fa_hit, mb_hit),
                 hit_len,
@@ -391,6 +398,24 @@ impl Scheduler {
                 self.lookahead(&req, hit_len, to_schedule),
                 has_running,
             );
+            if alloc.is_none() && !hit_len.is_multiple_of(self.kv.block_size()) {
+                let (fa, mb, aligned_hit) = self.kv.find_longest_cache_hit(
+                    &req.block_hashes,
+                    req.token_ids.len().saturating_sub(1),
+                );
+                hit_len = aligned_hit;
+                req.prefill_start = hit_len;
+                to_schedule =
+                    self.aligned_prefill(&req, hit_len, (total_tokens - hit_len).min(limit));
+                alloc = self.kv.allocate_slots(
+                    &req,
+                    (fa, mb),
+                    hit_len,
+                    to_schedule,
+                    self.lookahead(&req, hit_len, to_schedule),
+                    has_running,
+                );
+            }
 
             match alloc {
                 Some(_) => {
@@ -407,6 +432,9 @@ impl Scheduler {
                         num_computed_tokens: hit_len,
                         fa_block_table: fa_table,
                         mamba_block_table: mb_table,
+                        fa_block_copies: self.kv.block_copies(req.id),
+                        prefix_state_slot: self.kv.prefix_state_slot(req.id),
+                        cache_checkpoint: self.kv.cache_checkpoint(req.id),
                     });
                     token_budget -= to_schedule;
                     req.num_computed_tokens = hit_len;

@@ -66,6 +66,27 @@ class Cache:
         first = self.private_start + self.indices[request_id] * 6
         return [slot for slot in range(first, first + 6) if slot != read]
 
+    def copy_prefix(self, copies):
+        for source, destination, length in copies:
+            if (
+                not 0 < source < self.blocks
+                or not 0 < destination < self.blocks
+                or source == destination
+                or not 0 < length < 784
+            ):
+                raise ValueError("invalid FA prefix copy")
+            for (cache,) in self.fa:
+                for plane in range(2):
+                    views = [
+                        self.device.view(
+                            cache,
+                            (length, 4, 256),
+                            (block * 2 + plane) * 784 * 4 * 256,
+                        )
+                        for block in (source, destination)
+                    ]
+                    self.device.module.copy_bytes(views[1], views[0])
+
     def batch(self, scheduled, requests, verify):
         starts, reads, writes, checkpoints, checkpoint_slots = (
             [0],
@@ -80,7 +101,14 @@ class Cache:
         for index, (row, request) in enumerate(zip(scheduled, requests, strict=True)):
             start = row["num_computed_tokens"]
             count = len(row["token_ids"])
-            if request.state_position == start and request.state_slot is not None:
+            restored = row.get("prefix_state_slot")
+            if restored is not None and (
+                request.state_position != start or request.state_slot is None
+            ):
+                if not start or not 0 < restored < self.mamba_blocks:
+                    raise ValueError("invalid prefix state slot")
+                read = restored
+            elif request.state_position == start and request.state_slot is not None:
                 read = request.state_slot
             elif start:
                 read = row["mamba_block_table"][(start - 1) // 784]
@@ -95,6 +123,7 @@ class Cache:
                 raise ValueError("FA block table exceeds the context limit")
             tables[index, : len(table)] = table
             first = len(tokens)
+            cached_endpoint = row.get("cache_checkpoint")
             for offset, token in enumerate(row["token_ids"]):
                 position = start + offset
                 tokens.append(token)
@@ -112,6 +141,13 @@ class Cache:
                         if checkpoint
                         else 0
                     )
+                    if (
+                        cached_endpoint is not None
+                        and position + 1 == cached_endpoint[0]
+                    ):
+                        logical = cached_endpoint[1]
+                        if not 0 < logical < self.mamba_blocks:
+                            raise ValueError("invalid prefix checkpoint slot")
                     if logical:
                         slot = logical
                     elif offset + 1 == count or verify:

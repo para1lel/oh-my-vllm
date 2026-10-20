@@ -68,6 +68,12 @@ pub struct ScheduledRequestMsg {
     pub num_computed_tokens: u32,
     pub fa_block_table: Vec<u32>,
     pub mamba_block_table: Vec<u32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fa_block_copies: Vec<(u32, u32, u32)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefix_state_slot: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_checkpoint: Option<(usize, u32)>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

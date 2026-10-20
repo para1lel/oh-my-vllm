@@ -64,70 +64,84 @@ fn unique_long_request(id: u64) -> Request {
 fn media_cache_salts_isolate_identical_placeholder_tokens() {
     use oh_my_vllm_kv_cache::hash::BlockHash;
 
-    let mut scheduler = make_scheduler(64, 4);
-    let mut first = make_req(1, 9, 1);
-    first.cache_salt = Some(BlockHash(11));
-    assert!(scheduler.add_request(first));
-    for step in 0..3 {
-        scheduler.schedule();
-        let mut result = dummy_output(1);
-        if step < 2 {
-            result.token_ids.clear();
+    for length in [3, 9, 10] {
+        let mut scheduler = make_scheduler(64, 4);
+        let mut first = make_req(1, length, 1);
+        first.cache_salt = Some(BlockHash(11));
+        assert!(scheduler.add_request(first));
+        loop {
+            let batch = scheduler.schedule();
+            let row = &batch.scheduled[0];
+            let final_chunk = row.num_computed_tokens + row.token_ids.len() == length;
+            let mut result = dummy_output(1);
+            if !final_chunk {
+                result.token_ids.clear();
+            }
+            apply(
+                &mut scheduler,
+                WorkerOutput {
+                    outputs: vec![result],
+                },
+            );
+            if final_chunk {
+                break;
+            }
         }
-        apply(
-            &mut scheduler,
-            WorkerOutput {
-                outputs: vec![result],
-            },
-        );
-    }
-    for (id, salt, expected_hit) in [
-        (2, Some(BlockHash(22)), 0),
-        (3, None, 0),
-        (4, Some(BlockHash(11)), 8),
-    ] {
-        let mut request = make_req(id, 9, 1);
-        request.cache_salt = salt;
-        assert!(scheduler.add_request(request));
-        assert_eq!(scheduler.schedule().cache_hit_tokens, expected_hit);
-        scheduler.abort(id);
+        for (id, salt, expected_hit) in [
+            (2, Some(BlockHash(22)), 0),
+            (3, None, 0),
+            (4, Some(BlockHash(11)), length - 1),
+        ] {
+            let mut request = make_req(id, length, 1);
+            request.cache_salt = salt;
+            assert!(scheduler.add_request(request));
+            assert_eq!(scheduler.schedule().cache_hit_tokens, expected_hit);
+            scheduler.abort(id);
+        }
     }
 }
 
 #[test]
 fn malformed_output_does_not_publish_pending_prefix_and_keeps_valid_history() {
-    let mut sched = make_scheduler(64, 4);
-    assert!(sched.add_request(make_req(1, 9, 1)));
-    sched.schedule();
-    apply(
-        &mut sched,
-        WorkerOutput {
-            outputs: vec![RequestOutput {
-                token_ids: vec![],
-                ..dummy_output(1)
-            }],
-        },
-    );
-    sched.schedule();
-    assert!(
-        sched
-            .update(WorkerOutput {
-                outputs: vec![dummy_output(1)],
-            })
-            .is_err()
-    );
-    sched.abort(1);
-    assert!(sched.add_request(make_req(2, 9, 1)));
-    let batch = sched.schedule();
-    assert_eq!(batch.scheduled[0].num_computed_tokens, 4);
-    assert_eq!(batch.cache_hit_tokens, 4);
+    for (length, completed) in [(9, 4), (10, 8)] {
+        let mut sched = make_scheduler(64, 4);
+        assert!(sched.add_request(make_req(1, length, 1)));
+        for _ in 0..completed / 4 {
+            sched.schedule();
+            apply(
+                &mut sched,
+                WorkerOutput {
+                    outputs: vec![RequestOutput {
+                        token_ids: vec![],
+                        ..dummy_output(1)
+                    }],
+                },
+            );
+        }
+        sched.schedule();
+        assert!(
+            sched
+                .update(WorkerOutput {
+                    outputs: vec![dummy_output(1)]
+                })
+                .is_err()
+        );
+        sched.abort(1);
+        assert!(sched.add_request(make_req(2, length, 1)));
+        let batch = sched.schedule();
+        assert_eq!(batch.scheduled[0].num_computed_tokens, completed);
+        assert_eq!(batch.cache_hit_tokens, completed);
+    }
 }
 
 #[test]
 fn preemption_resends_accepted_history_without_drafts() {
     let mut sched = make_scheduler(9, 128);
-    sched.add_request(make_req(1, 8, 10));
-    sched.add_request(make_req(2, 8, 10));
+    for id in 1..=2 {
+        let mut request = make_req(id, 8, 10);
+        request.record_partial_prefix = false;
+        sched.add_request(request);
+    }
     let first = sched.schedule();
     for request in &first.scheduled {
         assert_eq!(request.prefill_token_ids, Some((0..8).collect()));
@@ -148,12 +162,14 @@ fn preemption_resends_accepted_history_without_drafts() {
         .iter()
         .find(|request| request.request_id == 2)
         .unwrap();
+    assert_eq!(resumed.num_computed_tokens, 8);
     assert_eq!(
         resumed.prefill_token_ids,
         Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 42])
     );
     assert!(sched.running.back().unwrap().draft_token_ids.is_empty());
     let readmitted = sched.running.back().unwrap();
+    assert!(!readmitted.record_partial_prefix);
     assert_eq!(
         readmitted.block_hashes,
         sched.kv.compute_block_hashes(&readmitted.token_ids)
@@ -300,6 +316,38 @@ fn short_prefill_tails_cannot_take_a_later_active_decode_budget() {
 
 #[test]
 fn prefill_budget_is_shared_by_short_and_long_requests() {
+    for (length, record_partial, fragments) in [
+        (317, true, vec![316, 1]),
+        (1234, true, vec![784, 449, 1]),
+        (32768, true, vec![32144, 623, 1]),
+        (178, false, vec![178]),
+        (1234, false, vec![784, 450]),
+        (32768, false, vec![32144, 624]),
+    ] {
+        let mut scheduler = production_long_scheduler(1);
+        let mut request = make_req(1, length, 1);
+        request.record_partial_prefix = record_partial;
+        assert!(scheduler.add_request(request));
+        for count in fragments {
+            let batch = scheduler.schedule();
+            assert_eq!(batch.scheduled.len(), 1);
+            assert_eq!(batch.scheduled[0].token_ids.len(), count);
+            let final_chunk = batch.scheduled[0].num_computed_tokens + count == length;
+            apply(
+                &mut scheduler,
+                WorkerOutput {
+                    outputs: vec![RequestOutput {
+                        token_ids: if final_chunk {
+                            vec![42]
+                        } else {
+                            vec![]
+                        },
+                        ..dummy_output(1)
+                    }],
+                },
+            );
+        }
+    }
     for (budget, lengths, expected) in [
         (24, [20, 100, 100], vec![8, 8, 8]),
         (24, [4, 100, 100], vec![4, 12, 8]),
@@ -364,4 +412,41 @@ fn fair_prefill_admission_reserves_the_next_private_state() {
             assert_eq!(step.scheduled[0].token_ids.len(), 23520);
         }
     }
+
+    let mut kv = HybridCoordinator::new(3, 784, true, 0).with_mamba_capacity(7);
+    kv.set_speculative_blocks(4);
+    let mut scheduler = Scheduler::new(
+        SchedulerConfig {
+            max_num_batched_tokens: 2048,
+            max_num_seqs: 1,
+            enable_mtp: true,
+            mtp_draft_len: 4,
+        },
+        kv,
+    );
+    assert!(scheduler.add_request(make_req(1, 317, 1)));
+    while scheduler.num_waiting() + scheduler.num_running() > 0 {
+        let batch = scheduler.schedule();
+        let row = &batch.scheduled[0];
+        let final_chunk = row.num_computed_tokens + row.token_ids.len() == 317;
+        apply(
+            &mut scheduler,
+            WorkerOutput {
+                outputs: vec![RequestOutput {
+                    token_ids: if final_chunk {
+                        vec![42]
+                    } else {
+                        vec![]
+                    },
+                    ..dummy_output(1)
+                }],
+            },
+        );
+    }
+    assert!(scheduler.add_request(make_req(2, 1500, 1)));
+    let batch = scheduler.schedule();
+    assert_eq!(batch.scheduled.len(), 1);
+    assert_eq!(batch.cache_hit_tokens, 0);
+    assert_eq!(batch.scheduled[0].num_computed_tokens, 0);
+    assert!(!batch.scheduled[0].token_ids.is_empty());
 }

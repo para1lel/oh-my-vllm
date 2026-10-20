@@ -108,7 +108,7 @@ class Request:
                 max(self.prompt_len, len(self.history) - HISTORY_WINDOW) :
             ] + list(prefix)
             blocked = list(cycle_continuations(history))
-            if blocked and mask[blocked].sum() < mask.sum():
+            if blocked and np.count_nonzero(mask[blocked]) < np.count_nonzero(mask):
                 mask[blocked] = 0
         return mask
 

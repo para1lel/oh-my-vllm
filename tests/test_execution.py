@@ -1,5 +1,6 @@
 import ctypes
 import unittest
+from collections import deque
 from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -60,6 +61,58 @@ def graph_device(events, failure=None):
 
 
 class Execution(unittest.TestCase):
+    def test_partial_prefix_copies_both_planes_and_restores_exact_state(self):
+        from oh_my_vllm.worker.cache import Cache
+
+        copies = []
+        cache = Cache.__new__(Cache)
+        cache.blocks = cache.mamba_blocks = 8
+        cache.private_start, cache.scratch_start, cache.slots = 8, 20, 24
+        cache.indices, cache.free_indices = {}, deque(range(2))
+        cache.fa = tuple((layer,) for layer in range(17))
+        cache.device = SimpleNamespace(
+            view=lambda tensor, shape, offset: (tensor, shape, offset),
+            module=SimpleNamespace(
+                copy_bytes=lambda dst, src: copies.append((dst, src))
+            ),
+        )
+        cache.copy_prefix([(2, 3, 316)])
+        self.assertEqual(len(copies), 34)
+        for layer in range(17):
+            for plane in range(2):
+                destination, source = copies[layer * 2 + plane]
+                self.assertEqual(
+                    source, (layer, (316, 4, 256), (4 + plane) * 784 * 1024)
+                )
+                self.assertEqual(
+                    destination, (layer, (316, 4, 256), (6 + plane) * 784 * 1024)
+                )
+        request = SimpleNamespace(
+            state_position=0, state_slot=None, position=lambda token: (token,) * 3
+        )
+        row = dict(
+            request_id=1,
+            num_computed_tokens=316,
+            token_ids=[7],
+            prefix_state_slot=5,
+            fa_block_table=[3],
+            mamba_block_table=[6],
+            cache_checkpoint=(317, 6),
+        )
+        batch = cache.batch([row], [request], False)
+        self.assertEqual(batch.schedule.read_slots, (5,))
+        self.assertEqual(batch.writes, (6,))
+        self.assertEqual(batch.metadata[1].tolist(), [3 * 784 + 316])
+        cache.commit(request, batch, 0, None)
+        self.assertEqual((request.state_position, request.state_slot), (317, 6))
+        row.update(num_computed_tokens=317, cache_checkpoint=None)
+        continued = cache.batch([row], [request], False)
+        self.assertEqual(continued.schedule.read_slots, (6,))
+        self.assertNotIn(continued.writes[0], (5, 6))
+        row["cache_checkpoint"] = (318, 6)
+        with self.assertRaisesRegex(ValueError, "distinct private state"):
+            cache.batch([row], [request], False)
+
     def test_prefill_controls_the_entire_execute(self):
         worker = Worker.__new__(Worker)
         worker.speculation = None

@@ -74,6 +74,11 @@ Do not choose limits only by multiplying current-kernel errors.
 Missing or unreviewed limits prevent acceptance.
 A candidate cannot widen limits or update fixtures to make itself pass.
 
+The FFN and GDN Graph cases use zero inputs and then fixture inputs during numerical checks.
+FFN outputs must be zero when its inputs are zero.
+Outputs for fixture inputs must meet the same numerical limits after a replay with zero inputs.
+This check finds values from previous replays. It uses the same shapes and reference fixtures.
+
 Sampling fixtures include complete distributions and seed/counter expectations calculated without production code.
 Use fixed random thresholds away from numerically ambiguous CDF boundaries for exact token checks.
 Check greedy ties, masks, rejection residuals, bonus selection, and RNG counters through the fixed cases.

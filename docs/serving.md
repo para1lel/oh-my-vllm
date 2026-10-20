@@ -83,6 +83,26 @@ For a sample request:
 curl http://127.0.0.1:8000/v1/chat/completions   -H 'Content-Type: application/json'   -d '{"model":"qwen3.8-27b-fp8","messages":[{"role":"user","content":"Hello"}],"max_tokens":64,"reasoning_effort":"off"}'
 ```
 
+## Prefix cache
+
+Requests can use cached full blocks and prefixes with a final block that is not full.
+For a prompt with a final block that is not full, the scheduler can record a checkpoint before the last token.
+The checkpoint contains FA, GDN, convolution, and MTP hidden state for the same position.
+The scheduler makes a checkpoint available to other requests only if its checks of the worker output find no errors.
+
+For a media request, the scheduler records only full block checkpoints.
+
+A request with the same prompt can continue from this checkpoint and do computation for its last token again.
+A longer prompt can continue from the same recorded position.
+The cache cannot continue from a position that has no GDN checkpoint.
+
+Before computation continues, the worker makes a copy of the shared FA tail in a private block.
+The copy contains K and V from the target and MTP layers.
+GDN reads the checkpoint and writes to a different slot.
+The scheduler keeps the source blocks until its checks of the worker result find no errors.
+
+Without sufficient capacity for these private blocks, the cache uses full blocks.
+
 ## Offline commands
 
 ```bash
@@ -112,7 +132,7 @@ The worker applies grammar masks to target and proposal distributions.
 Only accepted tokens change the request grammar state.
 
 The [execution rules](execution.md) select Eager for Execute messages with prefill and CUDA Graph replay for decode-only messages.
-The worker does not use PDL.
+Selected FFN and GDN kernels use the dependent launches specified in those rules.
 Use the [end-to-end procedure](performance.md) for inference performance measurements.
 
 Temporary model buffers use a [CUDA memory pool](../python/oh_my_vllm/operators/runtime/cuda/scratch_allocator.cuh#L19)<!-- source: inline cudaMemPool_t scratch_pool(int device) { -->.

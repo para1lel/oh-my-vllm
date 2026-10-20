@@ -7,6 +7,7 @@
 | `FA` | noun | Full attention in the target model. |
 | `GDN` | noun | The gated delta network in the target model. |
 | `KV cache` | noun | The key and value state for model tokens. |
+| `PDL` | noun | The CUDA launch method that lets a dependent kernel start before its producer completes execution. |
 | `RPC` | noun | A request and its related reply across a process boundary. |
 | `SSE` | noun | The HTTP event stream that the service sends to a client. |
 | `checkpoint` | noun | The model weights or the saved recurrent state for accepted tokens. |

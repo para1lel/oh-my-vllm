@@ -184,6 +184,8 @@ class Worker:
             request.drafts = []
         groups = {False: [], True: []}
         for row in message["scheduled"]:
+            if row.get("fa_block_copies"):
+                self.cache.copy_prefix(row["fa_block_copies"])
             request = self.requests[row["request_id"]]
             if "prefill_token_ids" in row:
                 request.history = list(row["prefill_token_ids"])

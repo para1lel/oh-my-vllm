@@ -12,6 +12,7 @@ struct Req {
     num_computed_tokens: usize,
     num_in_flight_tokens: usize,
     block_hashes: Vec<BlockHash>,
+    token_ids: Vec<u32>,
     waiting: bool,
 }
 
@@ -24,6 +25,7 @@ impl Req {
             num_computed_tokens: 0,
             num_in_flight_tokens: 0,
             block_hashes: Vec::new(),
+            token_ids: (0..num_tokens as u32).collect(),
             waiting: true,
         }
     }
@@ -62,6 +64,10 @@ impl CacheRequest for Req {
 
     fn block_hashes(&self) -> &[BlockHash] {
         &self.block_hashes
+    }
+
+    fn token_ids(&self) -> &[u32] {
+        &self.token_ids
     }
 
     fn is_waiting_or_preempted(&self) -> bool {
@@ -130,4 +136,98 @@ fn speculative_prefix_hit_allocates_private_state_and_draft_slots() {
         kv.free(2);
         assert_eq!(kv.pool().num_free_blocks(), 63);
     }
+}
+
+#[test]
+fn partial_prefixes_keep_private_continuations_and_transactional_ownership() {
+    for (length, speculative, separate) in [(317, 0, false), (1234, 4, true)] {
+        let mut kv = HybridCoordinator::new(64, 784, true, 0);
+        if separate {
+            kv = kv.with_mamba_capacity(16);
+        }
+        kv.set_speculative_blocks(speculative);
+        let mut source = Req::new(1, length);
+        source.block_hashes = kv.compute_block_hashes(&source.token_ids);
+        let endpoint = length - 1;
+        for end in [784.min(endpoint), endpoint] {
+            if end == source.num_computed_tokens {
+                continue;
+            }
+            kv.new_step_starts();
+            kv.allocate_slots(
+                &source,
+                (vec![], vec![]),
+                0,
+                end - source.num_computed_tokens,
+                0,
+                false,
+            )
+            .unwrap();
+            source.num_computed_tokens = end;
+            if end == endpoint {
+                assert_eq!(kv.get_computed_blocks(&source).2, endpoint / 784 * 784);
+                assert_eq!(kv.cache_checkpoint(1).unwrap().0, endpoint);
+            }
+            kv.commit_cache(&source);
+        }
+        kv.free(1);
+        kv.new_step_starts();
+        let mut first = source.clone();
+        first.id = 2;
+        first.num_computed_tokens = 0;
+        let (fa, mb, hit) = kv.get_computed_blocks(&first);
+        assert_eq!(hit, endpoint);
+        let tail = *fa.last().unwrap();
+        let state = *mb.last().unwrap();
+        kv.allocate_slots(&first, (fa, mb), hit, 1, 0, false)
+            .unwrap();
+        assert_eq!(kv.prefix_state_slot(2), Some(state));
+        assert_eq!(
+            kv.block_copies(2),
+            vec![(
+                tail,
+                *kv.full_attn_blocks(2).last().unwrap(),
+                (hit % 784) as u32
+            )],
+        );
+        assert_ne!(kv.full_attn_blocks(2)[hit / 784], tail);
+        assert_ne!(kv.mamba_blocks(2)[hit / 784], state);
+        assert!(kv.pool().block(tail).ref_cnt > 0);
+
+        let mut second = first.clone();
+        second.id = 3;
+        let (fa, mb, hit) = kv.get_computed_blocks(&second);
+        assert_eq!(hit, endpoint);
+        kv.allocate_slots(&second, (fa, mb), hit, 1, 0, true)
+            .unwrap();
+        assert_ne!(kv.full_attn_blocks(2), kv.full_attn_blocks(3));
+        assert_ne!(kv.mamba_blocks(2)[hit / 784], kv.mamba_blocks(3)[hit / 784]);
+        first.num_computed_tokens = length;
+        kv.commit_cache(&first);
+        kv.free(2);
+        assert_eq!(kv.get_computed_blocks(&second).2, endpoint);
+        kv.free(3);
+        assert_eq!(kv.pool().num_free_blocks(), 63);
+        assert!(kv.reset_prefix_cache());
+        assert_eq!(kv.get_computed_blocks(&second).2, 0);
+    }
+
+    let mut kv = HybridCoordinator::new(8, 784, true, 0).with_mamba_capacity(3);
+    let source = Req::new(1, 317);
+    kv.allocate_slots(&source, (vec![], vec![]), 0, 316, 0, false)
+        .unwrap();
+    kv.commit_cache(&source.clone().with_computed(316));
+    kv.free(1);
+    kv.allocate_slots(&Req::new(3, 1), (vec![], vec![]), 0, 1, 0, false)
+        .unwrap();
+    let request = Req::new(2, 317);
+    let (fa, mb, hit) = kv.get_computed_blocks(&request);
+    let before = kv.resource_counts();
+    assert_eq!(hit, 316);
+    assert!(
+        kv.allocate_slots(&request, (fa, mb), hit, 1, 0, false)
+            .is_none()
+    );
+    assert_eq!(kv.resource_counts(), before);
+    assert_eq!(kv.get_computed_blocks(&request).2, 316);
 }

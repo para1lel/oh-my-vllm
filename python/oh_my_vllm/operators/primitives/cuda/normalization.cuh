@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common.cuh"
-#include "../../runtime/cuda/launch.cuh"
+#include "../../runtime/cuda/dependent.cuh"
 
 __device__ inline void store_normalization_eight(__nv_bfloat16 *destination,
                                                  const float (&values)[8]) {
@@ -22,11 +22,13 @@ __device__ inline void store_normalization_eight(float *destination, const float
         make_float4(values[i * 4], values[i * 4 + 1], values[i * 4 + 2], values[i * 4 + 3]);
 }
 
-template <int Threads, class Residual, class Sum>
+template <int Threads, bool Programmatic, class Residual, class Sum>
 __global__ void residual_rms_quant_kernel(
     const __nv_bfloat16 *__restrict__ x, const Residual *__restrict__ residual,
     const float *__restrict__ weight, Sum *__restrict__ summed, __nv_fp8_e4m3 *__restrict__ data,
     float *__restrict__ scales, __nv_bfloat16 *__restrict__ normalized = nullptr) {
+  if constexpr (Programmatic)
+    launch_consumer();
   constexpr int Chunks = 5120 / (Threads * 8);
   int row = blockIdx.x, lane = threadIdx.x & 31, warp = threadIdx.x / 32;
   float values[Chunks][8], total = 0;
@@ -82,16 +84,16 @@ __global__ void residual_rms_quant_kernel(
   }
 }
 
-template <class Residual, class Sum>
+template <bool Programmatic = false, class Residual, class Sum>
 inline void residual_rms_quant_launch(const __nv_bfloat16 *x, const Residual *residual,
                                       const float *norm, Sum *summed, __nv_fp8_e4m3 *quantized,
                                       float *scales, int rows, cudaStream_t stream,
                                       __nv_bfloat16 *normalized = nullptr) {
   if (rows <= 32)
-    residual_rms_quant_kernel<640>
+    residual_rms_quant_kernel<640, Programmatic>
         <<<rows, 640, 0, stream>>>(x, residual, norm, summed, quantized, scales, normalized);
   else
-    residual_rms_quant_kernel<320>
+    residual_rms_quant_kernel<320, false>
         <<<rows, 320, 0, stream>>>(x, residual, norm, summed, quantized, scales, normalized);
   check_cuda(cudaGetLastError());
 }

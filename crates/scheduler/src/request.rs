@@ -22,6 +22,7 @@ pub struct Request {
     pub max_tokens: usize,
     pub block_hashes: Vec<BlockHash>,
     pub cache_salt: Option<BlockHash>,
+    pub record_partial_prefix: bool,
     pub status: RequestStatus,
 }
 
@@ -44,6 +45,7 @@ impl Request {
             max_tokens,
             block_hashes,
             cache_salt: None,
+            record_partial_prefix: true,
             status: RequestStatus::Waiting,
         }
     }
@@ -93,6 +95,18 @@ impl CacheRequest for Request {
 
     fn block_hashes(&self) -> &[BlockHash] {
         &self.block_hashes
+    }
+
+    fn token_ids(&self) -> &[u32] {
+        &self.token_ids
+    }
+
+    fn cache_salt(&self) -> Option<BlockHash> {
+        self.cache_salt
+    }
+
+    fn record_partial_prefix(&self) -> bool {
+        self.record_partial_prefix
     }
 
     fn is_waiting_or_preempted(&self) -> bool {

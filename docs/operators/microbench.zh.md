@@ -74,6 +74,11 @@ Kernel 变更前, 根据直接 PyTorch 输出校准门槛.
 缺失或未经审查的门槛阻止验收.
 待测实现不得通过放宽门槛或更新 fixture 来使自身通过.
 
+FFN 和 GDN Graph 用例在数值检查期间先使用零输入, 然后使用 fixture 输入.
+FFN 输入为零时, 输出必须为零.
+使用零输入重放后, fixture 输入的输出必须满足相同的数值门槛.
+此检查检测前次重放的值. 它使用相同的 shape 和 reference fixture.
+
 采样 fixture 包含完整分布和不使用生产代码计算的 seed/counter 预期值.
 精确 token 检查使用远离数值歧义 CDF 边界的固定随机阈值.
 通过固定用例检查 greedy 并列顺序, mask, rejection residual, bonus 选择和 RNG counter.

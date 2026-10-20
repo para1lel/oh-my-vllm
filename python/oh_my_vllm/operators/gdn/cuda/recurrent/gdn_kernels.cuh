@@ -1,4 +1,5 @@
 #pragma once
+#include "../../../runtime/cuda/dependent.cuh"
 
 #include "../../../primitives/cuda/common.cuh"
 #include "../../../runtime/cuda/launch.cuh"
@@ -246,6 +247,7 @@ __global__ void __launch_bounds__(256, 1)
                           const float *a_log, const float *dt_bias, const float *norm, float *pool,
                           const int *starts, const int *reads, const int *writes,
                           __nv_fp8_e4m3 *output, float *scales, int rows, int slots) {
+  launch_consumer();
   int sequence = blockIdx.x, head = blockIdx.y, lane = threadIdx.x & 31;
   int warp = threadIdx.x / 32;
   constexpr int Warps = 8, Values = 16;
@@ -337,8 +339,11 @@ __global__ void __launch_bounds__(256, 1)
   }
 }
 
+template <bool Programmatic>
 __global__ void gdn_output_quant_kernel(const __nv_bfloat16 *recurrent, const __nv_bfloat16 *qkvz,
                                         const float *norm, __nv_fp8_e4m3 *output, float *scales) {
+  if constexpr (Programmatic)
+    launch_consumer();
   int row = blockIdx.x / 6, head = (blockIdx.x % 6) * 8 + threadIdx.x / 32;
   int lane = threadIdx.x & 31;
   const auto *source = recurrent + (int64_t(row) * 48 + head) * 128;

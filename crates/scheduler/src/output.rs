@@ -8,6 +8,9 @@ pub struct ScheduledRequest {
     pub num_computed_tokens: usize,
     pub fa_block_table: Vec<u32>,
     pub mamba_block_table: Vec<u32>,
+    pub fa_block_copies: Vec<(u32, u32, u32)>,
+    pub prefix_state_slot: Option<u32>,
+    pub cache_checkpoint: Option<(usize, u32)>,
 }
 
 #[derive(Debug, Default)]

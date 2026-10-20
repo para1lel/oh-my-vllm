@@ -174,14 +174,19 @@ class Sampling:
     def project(self):
         self.operation.project(self.weights, self.projection_inputs)
 
-    def draw(self):
-        settings = output.Settings(
+    def settings(self):
+        return output.Settings(
             self.presence_history if self.inputs.compact else self.history,
             self.mask,
             self.parameters,
             self.greedy,
         )
-        return self.operation.draw(settings, self.rng)
+
+    def draw(self):
+        return self.operation.draw(self.settings(), self.rng)
+
+    def distribution(self):
+        return self.operation.distribution(self.settings())
 
     def execute(self, key, operation, graph):
         if graph:
@@ -227,12 +232,17 @@ class Sampling:
             )
         if self.inputs.mask_changed:
             d.module.copy_bytes(self.mask, tvm_ffi.from_dlpack(self.inputs.mask))
-        for destination, source in (
-            (self.parameters, self.inputs.parameters),
-            (self.rng, self.inputs.random),
-        ):
-            d.module.copy_bytes(destination, tvm_ffi.from_dlpack(source))
-        self.execute((self.greedy, self.inputs.compact), self.draw, graph)
+        d.module.copy_bytes(
+            self.parameters, tvm_ffi.from_dlpack(self.inputs.parameters)
+        )
+        select_token = sample or self.greedy
+        if select_token:
+            d.module.copy_bytes(self.rng, tvm_ffi.from_dlpack(self.inputs.random))
+        self.execute(
+            (self.greedy, self.inputs.compact, select_token),
+            self.draw if select_token else self.distribution,
+            graph,
+        )
         tokens = None
         if sample:
             tokens = d.download(self.operation.outputs.tokens, np.int64)

@@ -16,6 +16,20 @@ Eager 和 CUDA Graph 执行使用相同的 native 算子.
 Python 按模型依赖顺序调用这些算子.
 CUDA kernel 可以融合操作并在内部使用矩阵 tile.
 
+## 依赖 kernel 启动
+
+小规模 FFN 和 GDN 操作在归一化与输入投影之间使用 [Programmatic Dependent Launch](https://docs.nvidia.com/cuda/archive/13.1.0/cuda-programming-guide/04-special-topics/programmatic-dependent-launch.html).
+它们也在输出量化与输出投影之间使用 PDL.
+Stream capture 将这些选定的依赖记录在 CUDA Graph 中.
+Consumer 可以在 producer 完成执行前准备自身存储并读取固定权重.
+读取 producer 提供的输入或 scale 前, consumer 等待 producer 完成执行.
+
+启动信号允许 consumer 启动. Consumer 读取 producer 的输出前必须等待.
+
+在输出合并和层边界, 一个 kernel 必须完成执行后下一个 kernel 才能启动.
+这些规则阻止在前序 kernel 完成执行前复用临时存储.
+PDL 不改变状态选择或 Eager 与 Graph 执行规则.
+
 ## Graph 资源
 
 Workspace 拥有已录制操作的权重, cache 引用, metadata 和临时 tensor.

@@ -1,3 +1,4 @@
+#define CUTLASS_ENABLE_GDC_FOR_SM100
 #include "input/gdn_convolution_prefill.cuh"
 #include "input/gdn_input.cuh"
 #include "recurrent/gdn_kernels.cuh"
@@ -16,7 +17,7 @@ inline void gdn_projection(const __nv_fp8_e4m3 *input, const __nv_fp8_e4m3 *weig
                            cudaStream_t stream) {
   if (rows <= 32)
     groupwise<128, 32, 256, 128, 1, true>(weight, input, weight_scale, input_scale, output, columns,
-                                          rows, width, stream);
+                                          rows, width, stream, true);
   else
     prefill_projection::launch(input, weight, input_scale, weight_scale, output, rows, columns,
                                width, stream);
@@ -151,11 +152,11 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
     input = static_cast<const __nv_bfloat16 *>(gathered.data_ptr());
   }
   dispatch_residual(residual, [&](auto skip) {
-    residual_rms_quant_launch(input, skip, static_cast<const float *>(norm.data_ptr()),
-                              static_cast<__nv_bfloat16 *>(summed.data_ptr()),
-                              static_cast<__nv_fp8_e4m3 *>(input_data.data_ptr()),
-                              static_cast<float *>(input_scales.data_ptr()), rows, stream,
-                              static_cast<__nv_bfloat16 *>(normalized.data_ptr()));
+    residual_rms_quant_launch<true>(input, skip, static_cast<const float *>(norm.data_ptr()),
+                                    static_cast<__nv_bfloat16 *>(summed.data_ptr()),
+                                    static_cast<__nv_fp8_e4m3 *>(input_data.data_ptr()),
+                                    static_cast<float *>(input_scales.data_ptr()), rows, stream,
+                                    static_cast<__nv_bfloat16 *>(normalized.data_ptr()));
   });
   GDNInputConvolution convolution{static_cast<const __nv_bfloat16 *>(convolution_weight.data_ptr()),
                                   static_cast<__nv_bfloat16 *>(convolution_state.data_ptr()),
@@ -301,17 +302,24 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
     scan(std::false_type{});
   check_cuda(cudaGetLastError());
   if (split_values) {
-    gdn_output_quant_kernel<<<rows * 6, 256, 0, stream>>>(
-        static_cast<const __nv_bfloat16 *>(recurrent.data_ptr()),
-        static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
-        static_cast<const float *>(head_norm.data_ptr()),
-        static_cast<__nv_fp8_e4m3 *>(output_data.data_ptr()),
-        static_cast<float *>(output_scales.data_ptr()));
+    auto quantize = [&](auto programmatic) {
+      constexpr bool Programmatic = decltype(programmatic)::value;
+      gdn_output_quant_kernel<Programmatic>
+          <<<rows * 6, 256, 0, stream>>>(static_cast<const __nv_bfloat16 *>(recurrent.data_ptr()),
+                                         static_cast<const __nv_bfloat16 *>(qkvz.data_ptr()),
+                                         static_cast<const float *>(head_norm.data_ptr()),
+                                         static_cast<__nv_fp8_e4m3 *>(output_data.data_ptr()),
+                                         static_cast<float *>(output_scales.data_ptr()));
+    };
+    if (rows <= 32)
+      quantize(std::true_type{});
+    else
+      quantize(std::false_type{});
     check_cuda(cudaGetLastError());
   }
   if (rows <= 32)
-    output_projection(output_data, output_weight, output_scales, output_scale, projection_partials,
-                      output, rows, stream);
+    output_projection<true>(output_data, output_weight, output_scales, output_scale,
+                            projection_partials, output, rows, stream);
   else
     gdn_projection(static_cast<const __nv_fp8_e4m3 *>(output_data.data_ptr()),
                    static_cast<const __nv_fp8_e4m3 *>(output_weight.data_ptr()),

@@ -129,6 +129,54 @@ class ChainDraft:
 
 
 class Constraints(unittest.TestCase):
+    def test_verification_distribution_does_not_reuse_sampling_graph(self):
+        from oh_my_vllm.worker.sampling import Sampling
+
+        tokenizer = SimpleNamespace(
+            eos={256},
+            grammar=SimpleNamespace(vocab_size=248320),
+            valid_tokens=259,
+            think_end=257,
+            generation={},
+        )
+        request = Request(tokenizer, [4], {"max_tokens": 16, "sampling": {"seed": 7}})
+        calls = []
+
+        class Sample(ChainSample):
+            def draw(self, settings, rng):
+                calls.append("draw")
+                return super().draw(settings, rng)
+
+            def distribution(self, settings):
+                calls.append("distribution")
+                self.outputs.probabilities[:] = 0.5
+                return self.outputs
+
+        with patch("oh_my_vllm.worker.sampling.prepare", Sample):
+            sample = Sampling(ChainDevice(), None, 1)
+            sample.operation.outputs.hidden[:] = 3
+            sample.rng[:] = 91
+            for graph in (False, True, True):
+                for draw in (False, True, False):
+                    before = request.random_offset
+                    tokens, probabilities = sample.select_from_logits(
+                        [request], graph, sample=draw
+                    )
+                    self.assertEqual(calls[-1], "draw" if draw else "distribution")
+                    self.assertEqual(request.random_offset, before + draw)
+                    if draw:
+                        self.assertEqual(tokens.tolist(), [3])
+                    else:
+                        self.assertIsNone(tokens)
+                        self.assertTrue(np.all(probabilities == 0.5))
+            request.options["sampling"]["temperature"] = 0
+            before = request.random_offset
+            sample.select_from_logits([request], True, sample=False)
+            self.assertEqual(calls[-1], "draw")
+            self.assertEqual(sample.operation.outputs.tokens.tolist(), [3])
+            self.assertEqual(request.random_offset, before)
+            sample.close()
+
     def test_repetition_mask_requires_complete_cycles(self):
         from oh_my_vllm.worker.sampling import SamplingInputs
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common.cuh"
-#include "../../runtime/cuda/launch.cuh"
+#include "../../runtime/cuda/dependent.cuh"
 
 #include <cute/tensor.hpp>
 #include <map>
@@ -12,7 +12,7 @@
 #include <cutlass/cuda_host_adapter.hpp>
 #include <cutlass/arch/barrier.h>
 
-template <int FixedRows = 0>
+template <int FixedRows = 0, bool Dependent = false>
 __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
                                          const __nv_fp8_e4m3 *weight, const float *activation_scale,
                                          const float *weight_scale, float *output, int rows,
@@ -63,6 +63,8 @@ __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
   float accumulated[Capacity] = {};
   int barrier_phase = 0, scale_groups = inner / 128, split_groups = scale_groups / splits;
   int first_group = blockIdx.y * split_groups;
+  if constexpr (Dependent)
+    wait_for_producer();
   for (int local_group = 0; local_group < split_groups; local_group += 4) {
     int group = first_group + local_group;
     int valid_groups = min(4, split_groups - local_group);
@@ -155,7 +157,7 @@ __global__ void decode_projection_kernel(const __nv_fp8_e4m3 *activation,
   }
 }
 
-template <int FixedRows = 0>
+template <int FixedRows = 0, bool Dependent = false>
 inline void decode_projection_rows_launch(TensorView activation, TensorView weight,
                                           TensorView activation_scale, TensorView weight_scale,
                                           TensorView partials, int rows, int splits,
@@ -169,7 +171,7 @@ inline void decode_projection_rows_launch(TensorView activation, TensorView weig
                 inner};
   auto found = weight_maps.find(key);
   if (found == weight_maps.end()) {
-    check_cuda(cudaFuncSetAttribute(decode_projection_kernel<FixedRows>,
+    check_cuda(cudaFuncSetAttribute(decode_projection_kernel<FixedRows, Dependent>,
                                     cudaFuncAttributeMaxDynamicSharedMemorySize, 36992));
     CUtensorMap descriptor{};
     uint64_t dimensions[2] = {uint64_t(inner), uint64_t(columns)}, strides[1] = {uint64_t(inner)};
@@ -186,19 +188,21 @@ inline void decode_projection_rows_launch(TensorView activation, TensorView weig
   const auto *sa = static_cast<const float *>(activation_scale.data_ptr());
   const auto *sw = static_cast<const float *>(weight_scale.data_ptr());
   auto *out = static_cast<float *>(partials.data_ptr());
-  launch_kernel(decode_projection_kernel<FixedRows>, dim3(columns / 64, splits), dim3(128), 36992,
-                stream, a, w, sa, sw, out, rows, columns, inner, splits, found->second);
+  launch_dependent_kernel<Dependent>(decode_projection_kernel<FixedRows, Dependent>,
+                                     dim3(columns / 64, splits), dim3(128), 36992, stream, a, w, sa,
+                                     sw, out, rows, columns, inner, splits, found->second);
   check_cuda(cudaGetLastError());
 }
 
+template <bool Dependent = false>
 inline void decode_projection_launch(TensorView activation, TensorView weight,
                                      TensorView activation_scale, TensorView weight_scale,
                                      TensorView partials, int rows, int splits,
                                      cudaStream_t stream) {
   if (rows == 1)
-    decode_projection_rows_launch<1>(activation, weight, activation_scale, weight_scale, partials,
-                                     rows, splits, stream);
+    decode_projection_rows_launch<1, Dependent>(activation, weight, activation_scale, weight_scale,
+                                                partials, rows, splits, stream);
   else
-    decode_projection_rows_launch<0>(activation, weight, activation_scale, weight_scale, partials,
-                                     rows, splits, stream);
+    decode_projection_rows_launch<0, Dependent>(activation, weight, activation_scale, weight_scale,
+                                                partials, rows, splits, stream);
 }

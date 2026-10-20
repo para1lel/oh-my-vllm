@@ -46,6 +46,16 @@
       ]
     },
     {
+      "term": "PDL",
+      "part_of_speech": "noun",
+      "meaning": "The CUDA launch method that lets a dependent kernel start before its producer completes execution.",
+      "translation": "允许依赖 kernel 在其 producer 完成执行前启动的 CUDA 启动方法.",
+      "forms": [
+        "PDL",
+        "Programmatic Dependent Launch"
+      ]
+    },
+    {
       "term": "RPC",
       "part_of_speech": "noun",
       "meaning": "A request and its related reply across a process boundary.",

@@ -11,6 +11,10 @@ Use the [execution rules](execution.md) for Eager execution, CUDA Graph replay, 
 Rust and the worker control persistent state selection.
 Operators write only to the state locations supplied by their callers.
 
+Small FFN and GDN operations use dependent launches at the boundaries in the execution rules.
+The [prefix cache](serving.md#prefix-cache) can use a checkpoint from a block that is not full.
+Keep source blocks available until continuation results have no validation errors.
+
 Use the [operator validation framework](../development/operators) before kernel changes.
 It supplies fixed numerical fixtures, direct PyTorch references, and theoretical-latency ratio limits.
 Usual numerical tests load repository fixtures without executing PyTorch.
@@ -20,6 +24,10 @@ Do not automatically change limits after implementation changes.
 FA uses BF16 attention operands and cache state. GDN keeps recurrent state in FP32.
 FP8 projections use checkpoint E4M3 weights and FP32 block scales.
 The [model contract](operators/model.md#intermediate-precision) defines the intermediate precision.
+
+Decrease attention latency for long contexts.
+Increase efficiency to more than 40% for all configurations with long outputs.
+Measure each configuration two or more times.
 
 Run the applicable [test scope](testing.md) before delivery.
 Also run all 24 [HTTP configurations](performance.md).

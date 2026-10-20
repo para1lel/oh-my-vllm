@@ -28,7 +28,8 @@
 template <int TileM, int TileN = 128, int TileK = 128, int ScaleM = 1, int ScaleN = 128,
           bool Transposed = false, int Splits = 1, typename Result = cutlass::bfloat16_t>
 void groupwise(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *weight, const float *scale_a,
-               const float *scale_weight, void *output, int m, int n, int k, cudaStream_t stream) {
+               const float *scale_weight, void *output, int m, int n, int k, cudaStream_t stream,
+               bool dependent = false) {
   using namespace cute;
   using Scale = cutlass::detail::Sm100BlockwiseScaleConfig<ScaleM, ScaleN, 128, UMMA::Major::K,
                                                            UMMA::Major::K>;
@@ -81,7 +82,7 @@ void groupwise(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *weight, const float 
   Gemm gemm;
   check(gemm.can_implement(arguments));
   check(gemm.initialize(arguments, nullptr, stream));
-  check(gemm.run(stream));
+  check(gemm.run(stream, nullptr, dependent));
 }
 
 inline void groupwise(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *weight, const float *scale_a,

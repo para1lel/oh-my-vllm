@@ -637,6 +637,9 @@ impl WorkerClient {
                     num_computed_tokens: s.num_computed_tokens as u32,
                     fa_block_table: s.fa_block_table.clone(),
                     mamba_block_table: s.mamba_block_table.clone(),
+                    fa_block_copies: s.fa_block_copies.clone(),
+                    prefix_state_slot: s.prefix_state_slot,
+                    cache_checkpoint: s.cache_checkpoint,
                 })
                 .collect(),
             finished_request_ids: finished_request_ids.to_vec(),
@@ -978,6 +981,9 @@ mod tests {
             num_computed_tokens: 0,
             fa_block_table: vec![],
             mamba_block_table: vec![],
+            fa_block_copies: vec![],
+            prefix_state_slot: None,
+            cache_checkpoint: None,
         }];
         let output = |id| RequestResultMsg {
             request_id: id,

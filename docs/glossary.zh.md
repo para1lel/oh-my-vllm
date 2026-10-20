@@ -7,6 +7,7 @@
 | `FA` | 名词 | 目标模型中的全注意力. |
 | `GDN` | 名词 | 目标模型中的门控增量网络. |
 | `KV cache` | 名词 | 模型 token 的 key 和 value 状态. |
+| `PDL` | 名词 | 允许依赖 kernel 在其 producer 完成执行前启动的 CUDA 启动方法. |
 | `RPC` | 名词 | 跨进程边界的请求及对应回复. |
 | `SSE` | 名词 | 服务发送给客户端的 HTTP 事件流. |
 | `checkpoint` | 名词 | 模型权重或已接受 token 对应的循环状态快照. |

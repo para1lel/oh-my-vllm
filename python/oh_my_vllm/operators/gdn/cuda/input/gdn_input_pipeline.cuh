@@ -58,6 +58,10 @@ __global__ void gdn_input_pipeline_kernel(const __nv_fp8_e4m3 *input, const floa
     prefetch(0);
     prefetch(1);
     prefetch(2);
+  }
+  wait_for_producer();
+  launch_consumer();
+  if (warp == 0) {
     for (int tile = 0; tile < 10; ++tile) {
       int slot = tile & 1;
       if (tile >= 2) {
