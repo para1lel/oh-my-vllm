@@ -18,9 +18,14 @@ Rust 检查流式 JSON tool frames 和媒体请求的 prefix cache 隔离.
 
 数值检查使用 [全模型评估](operators/evaluation.zh.md).
 在固定短提示和一次 decode 迭代后, 将全部词表 logits 与独立 PyTorch FP64 模型比较.
-不使用单算子容差测试, 抽样中间输出或旧低精度路径作为数值参考.
+不使用抽样中间输出或旧低精度路径作为数值参考.
 后续变更使用同一参考 artifact.
 [开发命令](operators/development.zh.md#数值命令)负责生成和比较这些 artifacts.
+
+固定算子数值和性能用例使用[算子 microbench 设计](operators/microbench.zh.md).
+数值 fixture 和预期 PyTorch 输出保存在仓库内.
+常规数值测试直接加载这些 fixture, 不生成参考数据.
+性能验收使用冻结的理论延迟倍率门槛.
 
 保持状态选择, 约束, 媒体顺序和请求隔离的服务契约.
 内存安全和 graph 资源检查与模型数值检查分开.

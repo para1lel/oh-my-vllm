@@ -18,9 +18,14 @@ They do not supply model numerical or performance evidence.
 
 Use the [full-model evaluation](operators/evaluation.md) for numerical checks.
 Compare all vocabulary logits after a fixed short prompt and one decode iteration with an independent PyTorch FP64 model.
-Do not use single-operator tolerance tests, sampled intermediate outputs, or the old low-precision path as the numerical reference.
+Do not use sampled intermediate outputs or the old low-precision path as the numerical reference.
 Use the same reference artifact for subsequent changes.
 The [development commands](operators/development.md#numerical-commands) generate and compare these artifacts.
+
+Use the [operator microbench design](operators/microbench.md) for fixed operator numerical and performance cases.
+Keep numerical fixtures and expected PyTorch outputs in the repository.
+Normal numerical tests load these fixtures without reference generation.
+Performance acceptance uses frozen theoretical-latency ratio limits.
 
 Keep service contracts for state selection, constraints, media order, and request isolation.
 Keep memory safety and graph resource checks separate from model numerical checks.

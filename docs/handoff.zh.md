@@ -2,8 +2,9 @@
 
 在 `main` 上工作.
 下一次重构使用[算子结构设计](operators/design.zh.md).
-设计文档已写入. 实现尚未开始.
-准备实施计划前, 先检查书面设计.
+[实施计划](operators/plan.zh.md)和 [microbench 设计](operators/microbench.zh.md)已写入. 实现尚未开始.
+实现前先检查计划并选择执行方式.
+从当前运行时上的[验证任务](operators/validation-plan.zh.md)开始.
 
 Worker 使用[算子调度](execution.zh.md): 包含 prefill 的 Execute 消息使用 Eager, 仅含 decode 的消息使用 CUDA Graph 重放.
 Native 构建入口是 `development.native_build`.

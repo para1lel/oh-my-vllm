@@ -10,6 +10,7 @@ The prompt is `The quick brown fox jumps over the lazy dog. Explain why the sky 
 The [capture code](../../development/model/capture.py) specifies its token IDs.
 The comparison includes all 248320 logits from embedding through all 64 layers and final vocabulary projection.
 It does not compare intermediate operators or apply single-operator tolerances.
+The [operator microbench suite](microbench.md) supplies additional local checks with stored PyTorch fixtures.
 
 The [reference generator](../../development/model/reference.py) uses direct PyTorch FP64 computations.
 It decodes checkpoint E4M3 weights with their original 128-by-128 scales into FP64.

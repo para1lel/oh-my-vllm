@@ -2,8 +2,9 @@
 
 Use `main` for work.
 Use the [operator structure design](operators/design.md) for the next refactor.
-The design is written. Implementation has not started.
-Examine the written design before preparation of the implementation plan.
+The [implementation plan](operators/plan.md) and [microbench design](operators/microbench.md) are written. Implementation has not started.
+Examine the plans and select the execution method before implementation.
+Start with the [validation tasks](operators/validation-plan.md) on the current runtime.
 
 The worker uses [operator scheduling](execution.md): Eager for Execute messages with prefill, and CUDA Graph replay for decode-only messages.
 The native builder is `development.native_build`.

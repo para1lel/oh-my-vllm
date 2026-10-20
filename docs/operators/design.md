@@ -10,7 +10,7 @@ Keep the interface, execution plan, temporary storage, and CUDA implementation f
 The model calls complete sublayers in dependency sequence.
 An operator can change its internal kernels without changes to the model call site.
 The refactor can change fusion boundaries and execution paths.
-Measurements done again and again must show no performance decrease caused by the refactor.
+Operator performance must meet the fixed theoretical-latency ratio limits in the [microbench contract](microbench.md).
 
 The design uses functions and types for each operator.
 It does not use an operator base class, a backend registry, or automatic fusion through an operation graph.
@@ -188,12 +188,13 @@ Update the [stage inventory](../../python/oh_my_vllm/kernels/specification.py) a
 Remove direct access to private buffers and model-level copies of kernel selection rules during each operator migration.
 
 Use the [test scope](../testing.md) and [numerical procedure](evaluation.md).
+Use the [operator microbench design](microbench.md) for local numerical, state, and performance checks.
 Extend full-model inputs when a change has an effect on MTP, vision, or long contexts.
 Use Compute Sanitizer when device memory or synchronization behavior changes.
 New tests follow the [contribution procedure](../../CONTRIBUTING.md).
 
-Compare all 24 [HTTP configurations](../performance.md) with the same workload settings.
-Reject performance decreases caused by the abstraction when they occur again in more measurements.
-Do more measurements to check whether a performance decrease is an effect of measurement noise.
+Run all 24 [HTTP configurations](../performance.md) with the same workload settings for integration checks.
+Apply the fixed operator performance limits without comparison to old builds or timings.
+Do more measurements when uncertainty prevents a decision against a limit.
 Check the other configurations when a new fusion makes selected workloads faster.
-Keep measurement artifacts external and update the two README performance tables.
+Keep timing artifacts external and update the two README performance tables.

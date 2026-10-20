@@ -178,7 +178,7 @@ W/U 输出也使用 BF16 存储.
 使用[全模型评估流程](evaluation.zh.md).
 参考以 checkpoint 权重及其原始 scales 进行直接 PyTorch FP64 计算.
 在短输入和一次 decode 迭代后比较完整词表.
-不使用单算子容差表或逐阶段误差门槛.
+固定局部用例及其经审查的数值门槛使用[算子 microbench 契约](microbench.zh.md).
 
 保持上述状态所有权, checkpoint 和精度契约.
 服务边界使用[融合计划](fusion.zh.md).

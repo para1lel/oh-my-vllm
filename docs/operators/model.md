@@ -178,7 +178,7 @@ Temporary storage and duplicated work cannot increase the theoretical lower boun
 Use the [full-model evaluation procedure](evaluation.md).
 The reference uses direct PyTorch FP64 computation with checkpoint weights and their original scales.
 Compare the complete vocabulary after a short input and one decode iteration.
-Do not use single-operator tolerance tables or per-stage error gates.
+Use the [operator microbench contract](microbench.md) for fixed local cases and their reviewed numerical limits.
 
 Keep the state ownership, checkpoint, and precision contracts above.
 Use [the fusion plan](fusion.md) for the serving boundaries.

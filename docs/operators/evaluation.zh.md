@@ -10,6 +10,7 @@
 [采集代码](../../development/model/capture.py)规定其 token IDs.
 对照包含从 embedding, 全部 64 层到最终词表投影的全部 248320 个 logits.
 不比较中间算子, 也不使用单算子容差.
+[算子 microbench 套件](microbench.zh.md)使用已存储的 PyTorch fixture 提供额外的局部检查.
 
 独立[参考生成器](../../development/model/reference.py)直接使用 PyTorch FP64 计算.
 它按原始 128-by-128 scales 将 checkpoint E4M3 权重解码为 FP64.
