@@ -100,6 +100,15 @@
       ]
     },
     {
+      "term": "execution plan",
+      "part_of_speech": "noun",
+      "meaning": "A description of implementation selection, storage, preparation, and execution conditions for one operator.",
+      "translation": "特定算子的实现选择, 存储, 准备工作和执行条件描述.",
+      "forms": [
+        "execution plan"
+      ]
+    },
+    {
       "term": "hook",
       "part_of_speech": "noun",
       "meaning": "A program that Git starts before Git saves a revision.",
@@ -124,6 +133,15 @@
       "translation": "进程边界使用的二进制消息格式.",
       "forms": [
         "msgpack"
+      ]
+    },
+    {
+      "term": "operator workspace",
+      "part_of_speech": "noun",
+      "meaning": "An owner of temporary GPU tensors and mutable native execution resources for operator computation.",
+      "translation": "持有算子计算所用临时 GPU 张量和可变 native 执行资源的对象.",
+      "forms": [
+        "operator workspace"
       ]
     },
     {

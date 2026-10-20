@@ -1,6 +1,10 @@
 # Work state
 
 Use `main` for work.
+Use the [operator structure design](operators/design.md) for the next refactor.
+The design is written. Implementation has not started.
+Examine the written design before preparation of the implementation plan.
+
 The worker uses [operator scheduling](execution.md): Eager for Execute messages with prefill, and CUDA Graph replay for decode-only messages.
 The native builder is `development.native_build`.
 FA keeps BF16 cache state and derived FP8 operands with the same logical page ownership.

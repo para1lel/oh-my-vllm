@@ -1,6 +1,10 @@
 # 工作状态
 
 在 `main` 上工作.
+下一次重构使用[算子结构设计](operators/design.zh.md).
+设计文档已写入. 实现尚未开始.
+准备实施计划前, 先检查书面设计.
+
 Worker 使用[算子调度](execution.zh.md): 包含 prefill 的 Execute 消息使用 Eager, 仅含 decode 的消息使用 CUDA Graph 重放.
 Native 构建入口是 `development.native_build`.
 FA 的 BF16 cache 状态和派生 FP8 操作数使用相同的逻辑页所有权.
