@@ -26,6 +26,7 @@ from oh_my_vllm.kernels.native import (
     verify_vision_vendor_images,
     vision_vendor_dependencies,
 )
+from oh_my_vllm.kernels.sample import FUNCTIONS as SAMPLE_FUNCTIONS
 from oh_my_vllm.kernels.vision import FUNCTIONS as VISION_FUNCTIONS
 from oh_my_vllm.worker.device import FUNCTIONS as DEVICE_FUNCTIONS
 
@@ -35,7 +36,7 @@ MODULES = {
     "fa": FA_FUNCTIONS,
     "gdn": GDN_FUNCTIONS,
     "mtp": MTP_FUNCTIONS,
-    "sample": ("sample_workspace", "sample", "mtp_accept"),
+    "sample": SAMPLE_FUNCTIONS,
     "vision": VISION_FUNCTIONS,
 }
 

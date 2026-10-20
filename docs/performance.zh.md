@@ -21,6 +21,15 @@
 使用 32768-token 预算, 最多同时运行 4 个请求.
 使用没有缓存前缀的请求.
 
+使用 workload `serving-tools-v1` 及 checkpoint 和服务的默认采样参数.
+当前默认值为 temperature 1.0, top-k 20, top-p 0.95, presence penalty 0.5, 并开启重复循环保护.
+使用客户端序号作为随机 seed. 固定 seed 不会选择 greedy 采样.
+
+关闭 reasoning.
+设置 `tool_choice=auto`, 并使用 [benchmark 工具 schema](../development/serving/workload.py).
+允许普通文本. 语法检查工具名称和 JSON 参数.
+Target 和 proposal 采样使用与 serving 相同的语法及惩罚规则.
+
 计时前加载模型.
 计时前完成初始化.
 计时前构造 prompt 文本.
@@ -45,6 +54,7 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark 
 
 命令为每个模式启动并停止服务.
 计时前完成短初始化请求.
+它还在计时前为每个模式检查一次完整工具调用.
 它检查 HTTP usage 中的 prompt 长度, 输出长度和无缓存前缀.
 默认缓存容量为 1024 个 FA block 和 1024 个 GDN slot.
 使用 `--blocks` 和 `--mamba-blocks` 调整这些容量.
@@ -108,6 +118,9 @@ Context 计算停在接受终点; 如果随后有新 proposal, 则再计算一�
 额外 tile, padding, launch, 重复计算或临时复制不能增加计分工作量.
 
 产物包含响应, manifest 及其摘要, 所选 trace 摘要, 资源总量和接受计数.
+Manifest 还记录采样默认值, 工具 schema, seed, 请求哈希和工具校验计数.
+工具参数必须符合 schema. 因输出上限而停止的最后一次调用可以包含合法的参数前缀.
+
 Manifest 将完整请求计时绑定到产物 identity.
 该 identity 绑定源码, 可执行文件, 原生模块, checkpoint, tokenizer, 设备和计费版本.
 [产物检查](../development/serving/benchmark.py)拒绝运行期间的变化.
@@ -160,8 +173,8 @@ MTP context, draft 和词表投影遵循记录的因果位置.
 
 ## 省略项
 
-HTTP 用例使用不带 penalty 的 greedy sampling.
-Selection comparison, sorting, integer indexing, random generation 和 greedy MTP acceptance 不计浮点分数.
+采样, 惩罚, 语法处理, 排序, 整数索引, 随机数生成和 MTP acceptance 不计资源分数.
+它们的运行时间仍计入 HTTP timer.
 估算省略 sigmoid evaluation, transcendental instruction, datatype conversion, quantization 和 scale application 算术.
 它也省略上述条目之外的 GDN head normalization, gate 和 input normalization 算术.
 省略的操作没有经验吞吐系数.

@@ -21,6 +21,15 @@ Keep the 8192-token output for long decode measurement.
 Use a token budget of 32768 and a maximum of 4 running requests.
 Use requests without a cached prefix.
 
+Use workload `serving-tools-v1` with checkpoint and service sampling defaults.
+The current defaults are temperature 1.0, top-k 20, top-p 0.95, presence penalty 0.5, and the repetition guard.
+Use the client ordinal as the random seed. A fixed seed does not select greedy sampling.
+
+Keep reasoning off.
+Set `tool_choice=auto` with the [benchmark tool schema](../development/serving/workload.py).
+Ordinary text is permitted. The grammar checks tool names and JSON arguments.
+Target and proposal sampling use the same grammar and penalty rules as serving.
+
 Load the model before timing.
 Complete initialization before timing.
 Construct the prompt text before timing.
@@ -45,6 +54,7 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark 
 
 The command starts and stops the service for each mode.
 It completes short initialization requests before timing.
+It also checks a complete tool call in each mode before timing.
 It checks prompt lengths, output lengths, and uncached prefixes in HTTP usage.
 The default cache capacities are 1024 FA blocks and 1024 GDN slots.
 Use `--blocks` and `--mamba-blocks` to change these capacities.
@@ -109,6 +119,9 @@ It does not add times for different operators.
 Extra tiles, padding, launches, repeated computation, or temporary copies cannot increase credited work.
 
 Artifacts contain responses, the manifest and its digest, the selected trace digest, resource totals, and acceptance counters.
+The manifest also records sampling defaults, the tool schema, seeds, request hashes, and tool validation counts.
+Tool arguments must match the schema. A final call stopped at the output limit can contain a valid argument prefix.
+
 The manifest binds the full request timer to the artifact identity.
 That identity binds source, executable, native modules, checkpoint, tokenizer, device, and accounting version.
 The [artifact check](../development/serving/benchmark.py) rejects changes during the run.
@@ -161,8 +174,8 @@ MTP context, draft, and vocabulary projections follow their recorded causal posi
 
 ## Omissions
 
-The HTTP cases use greedy sampling without penalties.
-Selection comparisons, sorting, integer indexing, random generation, and greedy MTP acceptance have no floating-point credit.
+Sampling, penalties, grammar processing, sorting, integer indexing, random generation, and MTP acceptance have no resource credit.
+Their runtime cost stays inside the HTTP timer.
 The estimate does not include sigmoid evaluation, transcendental instructions, datatype conversion, quantization, and scale application arithmetic.
 It also does not include GDN head normalization, gates, and input normalization arithmetic beyond the listed terms.
 There is no empirical throughput factor for operations that have no credit.

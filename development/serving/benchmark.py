@@ -19,6 +19,7 @@ from oh_my_vllm.worker.tokenizer import Tokenization, tokenizer_identity
 from .accounting import RATES, VERSION
 from .device import device_identity, selected_uuid
 from .roofline import lower_bound
+from .workload import PROFILE, SAMPLING_FIELDS, TOOLS, request_body, validate_tools
 
 ROOT = Path(__file__).resolve().parents[2]
 NATIVE_MODULES = (
@@ -178,6 +179,7 @@ def artifact_identity(arguments):
         "tokenizer": tokenizer_identity(arguments.model),
         "device": device_identity(arguments.gpu_uuid),
         "accounting": dict(version=VERSION, rates=RATES),
+        "workload": PROFILE,
     }
 
 
@@ -215,8 +217,9 @@ def prompt(tokenizer, length, identifier):
     options = {
         "messages": [{"role": "user", "content": ""}],
         "effort": "off",
-        "tools": [],
-        "tool_choice": "none",
+        # Rust sorts object keys before tool JSON enters the chat template.
+        "tools": json.loads(json.dumps(TOOLS, sort_keys=True)),
+        "tool_choice": "auto",
     }
     copies = length
     for _ in range(10):
@@ -288,6 +291,9 @@ class Service:
                 connection.request("GET", "/diagnostics")
                 response = connection.getresponse()
                 if response.status == 200:
+                    self.sampling_defaults = json.loads(response.read())["limits"][
+                        "override_generation_config"
+                    ]
                     return
             except OSError:
                 pass
@@ -330,24 +336,34 @@ class Service:
                 execution_policy(),
             )
 
+    def check_tools(self, tokenizer):
+        body = request_body(
+            [{"role": "user", "content": "Find a reference about field research."}],
+            128,
+            0,
+        )
+        body.update(tool_choice="required", min_tokens=0)
+        response = post(self.port, body)
+        validate_tools(response, tokenizer, required=True)
+        (self.arguments.artifacts / f"{self.mode}-tool-check.json").write_text(
+            json.dumps(dict(request=body, response=response), indent=2)
+        )
+
     def run(self, tokenizer, batch, length, output):
         nonce = hashlib.sha256(
             f"{self.arguments.prompt_seed}:{self.mode}:{batch}:{length}:{output}".encode()
         ).hexdigest()[:32]
         bodies = [
-            {
-                "model": "qwen3.8-27b-fp8",
-                "messages": prompt(tokenizer, length, f"{nonce}-{index}"),
-                "max_tokens": output,
-                "min_tokens": output,
-                "temperature": 0,
-                "presence_penalty": 0,
-                "repetition_guard": False,
-                "reasoning_effort": "off",
-                "seed": index,
-            }
+            request_body(prompt(tokenizer, length, f"{nonce}-{index}"), output, index)
             for index in range(batch)
         ]
+        sampling = {
+            key: value
+            for key, value in (tokenizer.generation | self.sampling_defaults).items()
+            if key in SAMPLING_FIELDS
+        }
+        if sampling.get("temperature", 1) <= 0:
+            raise ValueError("benchmark requires stochastic serving defaults")
         previous = self.trace.read_bytes()
         started = time.perf_counter()
         with concurrent.futures.ThreadPoolExecutor(max_workers=batch) as pool:
@@ -365,6 +381,8 @@ class Service:
         manifest = {
             "artifact_id": self.arguments.artifact_id,
             "mode": self.mode,
+            "sampling": sampling,
+            "workload": PROFILE,
             "requests": [
                 dict(
                     ordinal=index,
@@ -372,6 +390,9 @@ class Service:
                     response_id=value["id"],
                     input_tokens=length,
                     output_tokens=output,
+                    seed=index,
+                    body_sha256=json_digest(bodies[index]),
+                    tools=validate_tools(value, tokenizer),
                 )
                 for index, value in enumerate(responses)
             ],
@@ -459,8 +480,9 @@ def main():
         try:
             service.ready()
             service.verify_identity(identity["checkpoint"], identity["tokenizer"])
+            service.check_tools(tokenizer)
             for batch in sorted({item[1] for item in cases}):
-                service.run(tokenizer, batch, 64, 16)
+                service.run(tokenizer, batch, 1024, 16)
             for _, batch, length, output in cases:
                 print(
                     json.dumps(

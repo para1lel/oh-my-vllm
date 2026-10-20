@@ -9,6 +9,7 @@ See the [model contract](operators/model.md#intermediate-precision) for attentio
 The [numerical tools](operators/evaluation.md) compare full-model logits with the frozen [PyTorch FP64 reference](../development/model/reference.npz).
 Keep its identity checks and numerical limits.
 Use the 24 [HTTP configurations](performance.md) to measure time and nominal-resource efficiency.
+Use serving sampling defaults and auto tool constraints for these measurements.
 Keep measurement artifacts external to the repository.
 
 Limit further optimization to changes with a clear performance benefit.

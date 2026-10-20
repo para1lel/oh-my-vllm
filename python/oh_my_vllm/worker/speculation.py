@@ -128,7 +128,9 @@ class Draft(GraphOperation):
         self.metadata_inputs = Metadata(device, arrays)
         self.metadata = self.metadata_inputs.arrays[:5]
         self.tokens = self.metadata_inputs.arrays[5]
-        self.sampling = Sampling(device, weights.mtp_sample, batch)
+        self.sampling = Sampling(
+            device, weights.mtp_sample, batch, hidden=self.ffn.buffers[:2]
+        )
         self.cache = None
         self.output = None
 
@@ -148,6 +150,7 @@ class Draft(GraphOperation):
             value, residual, self.metadata[0], self.cache, *self.metadata[1:]
         )
         self.output = self.ffn(value, residual)
+        self.sampling.project()
         return self.output
 
 
@@ -486,9 +489,7 @@ class Speculation:
             operation.cache = self.cache.fa[-1]
             self.record_draft(batch, active, stage)
             operation.execute(graph)
-            chosen, probability = operation.sampling.select(
-                *operation.output,
-                list(range(count)),
+            chosen, probability = operation.sampling.select_from_logits(
                 requests,
                 graph,
                 prefixes=[request.drafts for request in requests],

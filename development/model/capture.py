@@ -73,7 +73,7 @@ def run(model_path, *, decode_token=None, mode="decode"):
     sample = Sample(weights.sample, 1, device.empty)
     parameters = (
         device.zeros((1, 2, 248320), "int32"),
-        device.upload(np.ones((1, 248320), np.uint8)),
+        device.upload(np.full((1, 248320 // 8), 255, np.uint8)),
         device.upload(np.array([[0, -1, 1, 0, 0, 0, 1]], np.float32)),
         device.upload(np.zeros((1, 2), np.uint64)),
     )

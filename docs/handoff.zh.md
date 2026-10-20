@@ -9,6 +9,7 @@ Attention 精度见[模型契约](operators/model.zh.md#中间精度).
 [数值工具](operators/evaluation.zh.md)将全模型 logits 与冻结的 [PyTorch FP64 reference](../development/model/reference.npz) 比较.
 保留其身份检查和数值门槛.
 使用 24 种 [HTTP 配置](performance.zh.md)测量时间和标称资源效率.
+这些测量使用 serving 默认采样参数和 auto 工具约束.
 测量产物保存在仓库外.
 
 后续优化只限于有明确性能收益的变更.

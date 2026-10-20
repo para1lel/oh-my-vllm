@@ -2,6 +2,8 @@ from dataclasses import dataclass
 
 from .native import load
 
+FUNCTIONS = ("sample_workspace", "sample_project", "sample", "mtp_accept")
+
 
 @dataclass(frozen=True)
 class Weights:
@@ -11,9 +13,7 @@ class Weights:
 
 class Sample:
     def __init__(self, weights, rows, allocate, *, allow_invalid=False):
-        self.module, self.source_id, self.library = load(
-            "sample", ("sample_workspace", "sample", "mtp_accept")
-        )
+        self.module, self.source_id, self.library = load("sample", FUNCTIONS)
         self.weights = weights
         self.allow_invalid = allow_invalid
         self.buffers = tuple(
@@ -35,16 +35,26 @@ class Sample:
     def __call__(
         self, value, residual, history, mask, parameters, rng, *, greedy=False
     ):
-        self.module.sample(
+        self.project(value, residual)
+        return self.draw(history, mask, parameters, rng, greedy=greedy)
+
+    def project(self, value, residual):
+        self.module.sample_project(
             value,
             residual,
             self.weights.norm,
             self.weights.projection,
+            *self.buffers[:2],
+        )
+
+    def draw(self, history, mask, parameters, rng, *, greedy=False):
+        self.module.sample(
+            self.buffers[1],
             history,
             mask,
             parameters,
             rng,
-            *self.buffers,
+            *self.buffers[2:],
             self.allow_invalid,
             greedy,
         )
@@ -53,9 +63,7 @@ class Sample:
 
 class MTPAccept:
     def __init__(self, batch, allocate):
-        self.module, self.source_id, self.library = load(
-            "sample", ("sample_workspace", "sample", "mtp_accept")
-        )
+        self.module, self.source_id, self.library = load("sample", FUNCTIONS)
         self.buffers = tuple(
             allocate(shape, dtype)
             for shape, dtype in (

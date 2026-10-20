@@ -34,6 +34,8 @@ class Request:
         self.rope_delta = 0
         self.counts = np.zeros((2, 248320), dtype=np.int32)
         self.counts[0] = np.bincount(tokens, minlength=248320)
+        self.presence = np.zeros(248320 // 8, dtype=np.uint8)
+        self.sample_masks = {}
         self.drafts = []
         self.drafts_greedy = True
         self.proposals = None
@@ -84,6 +86,7 @@ class Request:
         generated=None,
         thinking_count=None,
         prefix=(),
+        mask=None,
     ):
         constraint = self.constraint if constraint is None else constraint
         thinking = self.thinking if thinking is None else thinking
@@ -91,7 +94,8 @@ class Request:
         thinking_count = (
             self.thinking_count if thinking_count is None else thinking_count
         )
-        mask = np.ones(248320, dtype=np.uint8) if thinking else constraint.mask()
+        if mask is None:
+            mask = np.ones(248320, dtype=np.uint8) if thinking else constraint.mask()
         mask[self.tokenizer.valid_tokens :] = 0
         budget = self.options.get("thinking_token_budget")
         if thinking and budget is not None and budget >= 0 and thinking_count >= budget:
@@ -124,6 +128,7 @@ class Request:
         )
 
     def append(self, tokens):
+        self.sample_masks.clear()
         kept = []
         for token in tokens:
             if self.generated >= self.limit or self.finish:
@@ -137,6 +142,7 @@ class Request:
                 self.constraint.accept([token])
             self.history.append(token)
             self.counts[1, token] += 1
+            self.presence[token // 8] |= 1 << (token % 8)
             kept.append(token)
             if token in self.tokenizer.eos:
                 self.finish = "stop"

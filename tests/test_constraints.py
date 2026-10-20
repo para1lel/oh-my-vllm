@@ -1,4 +1,5 @@
 import unittest
+import weakref
 from contextlib import contextmanager
 from copy import deepcopy
 from types import SimpleNamespace
@@ -9,6 +10,10 @@ import numpy as np
 from oh_my_vllm.worker.constraints import Constraint
 from oh_my_vllm.worker.request import Request
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers
+
+
+def sampling_mask(inputs, index=0):
+    return np.unpackbits(inputs.mask[index], bitorder="little")
 
 
 class ChainDevice:
@@ -56,11 +61,13 @@ class ChainSample:
         self.buffers[6] = allocate((rows, 248320), "float32")
         self.buffers[7] = allocate((rows,), "int64")
 
-    def __call__(self, value, residual, history, mask, parameters, rng, *, greedy):
+    def project(self, value, residual):
         self.buffers[0][:] = value + residual + 1
+
+    def draw(self, history, mask, parameters, rng, *, greedy):
         self.buffers[7][:] = self.buffers[0][:, 0].astype(np.int64)
         self.buffers[6][:] = 0
-        self.buffers[6][np.arange(len(value)), self.buffers[7]] = 1
+        self.buffers[6][np.arange(len(self.buffers[0])), self.buffers[7]] = 1
         return self.buffers[7], None, self.buffers[6]
 
 
@@ -74,7 +81,7 @@ class ChainDraft:
         self.rows = device.upload(np.arange(batch, dtype=np.int32))
         self.ffn = SimpleNamespace(buffers=(self.hidden.copy(), self.hidden.copy()))
         self.output = self.ffn.buffers
-        self.sampling = Sampling(device, None, batch)
+        self.sampling = Sampling(device, None, batch, hidden=self.output)
         self.metadata_inputs = SimpleNamespace(
             host_views=tuple(
                 np.zeros(shape, dtype=dtype)
@@ -93,6 +100,7 @@ class ChainDraft:
     def run(self):
         self.output[0][:] = self.hidden + (0 if self.first else self.tokens[:, None])
         self.output[1][:] = 0
+        self.sampling.project()
         return self.output
 
     def execute(self, graph):
@@ -107,11 +115,15 @@ class ChainDraft:
 
 class Constraints(unittest.TestCase):
     def test_repetition_mask_requires_complete_cycles(self):
+        from oh_my_vllm.worker.sampling import SamplingInputs
+
         tokenizer = SimpleNamespace(
             eos={248319},
             grammar=SimpleNamespace(vocab_size=248320),
             valid_tokens=248320,
             think_end=248318,
+            decode_bytes=bytes,
+            generation={},
         )
         broken = [1, 2, 3, 4, 5, 6, 7] * 11
         broken[-20] = 9
@@ -130,7 +142,15 @@ class Constraints(unittest.TestCase):
                     tokenizer, [], {"max_tokens": 4096, "sampling": {"seed": 1}}
                 )
                 request.history = history
-                self.assertEqual(set(np.flatnonzero(request.mask() == 0)), blocked)
+                inputs = SamplingInputs(1)
+                inputs.update([request], [[]], "proposal")
+                inputs.update([request], [[]], "target")
+                self.assertEqual(
+                    set(np.flatnonzero(sampling_mask(inputs) == 0)), blocked
+                )
+                request.append([8])
+                inputs.update([request], [[]], "target")
+                self.assertFalse(np.any(sampling_mask(inputs) == 0))
 
     def test_sampling_inputs_do_not_retain_speculative_history(self):
         from oh_my_vllm.worker.sampling import SamplingInputs
@@ -151,15 +171,19 @@ class Constraints(unittest.TestCase):
         request.append([5])
         request.random_offset, request.proposal_offset = 13, 17
         inputs = SamplingInputs(2)
-        inputs.update([request, request], [[6, 6], [7]], "target")
+        inputs.update([request, request], [[6, 6], [7, 8]], "target")
         self.assertTrue(inputs.history_needed)
-        self.assertEqual(inputs.history[:, 0, 4].tolist(), [2, 2])
-        self.assertEqual(inputs.history[:, 1, 5].tolist(), [1, 1])
-        self.assertEqual(inputs.history[:, 1, 6].tolist(), [2, 0])
-        self.assertEqual(inputs.history[:, 1, 7].tolist(), [0, 1])
+        self.assertTrue(inputs.compact)
+        self.assertEqual(inputs.history.dtype, np.uint8)
+        self.assertEqual(inputs.history.shape, (2, 248320 // 8))
+        self.assertEqual(inputs.history[:, 0].tolist(), [0b01100000, 0b10100000])
+        self.assertEqual(inputs.history[:, 1].tolist(), [0, 1])
+        self.assertFalse(inputs.history[:, -1].any())
         self.assertFalse(request.counts[1, 6:8].any())
         np.testing.assert_array_equal(inputs.random, [[7, 13], [7, 13]])
-        self.assertFalse(inputs.mask[:, 259:].any())
+        self.assertFalse(
+            any(sampling_mask(inputs, row)[259:].any() for row in range(2))
+        )
 
         request.options["sampling"]["presence_penalty"] = 0
         inputs.update([request, request], [[], []], "proposal")
@@ -167,9 +191,14 @@ class Constraints(unittest.TestCase):
         self.assertEqual(inputs.random[0, 0], 7 ^ 0x9E3779B97F4A7C15)
         self.assertEqual(inputs.random[0, 1], 17)
         request.options["sampling"]["frequency_penalty"] = 0.25
-        inputs.update([request, request], [[], []], "target")
+        inputs.update([request, request], [[6, 6], []], "target")
         self.assertTrue(inputs.history_needed)
-        self.assertFalse(inputs.history[:, 1, 6:8].any())
+        self.assertFalse(inputs.compact)
+        self.assertEqual(inputs.history[:, 0, 4].tolist(), [2, 2])
+        self.assertEqual(inputs.history[:, 1, 6].tolist(), [2, 0])
+        request.options["sampling"].update(frequency_penalty=0, repetition_penalty=1.1)
+        inputs.update([request, request], [[], []], "target")
+        self.assertFalse(inputs.compact)
         self.assertEqual(request.history, [4, 4, 5])
         self.assertEqual((request.random_offset, request.proposal_offset), (13, 17))
 
@@ -197,7 +226,7 @@ class Constraints(unittest.TestCase):
         def update(prefix, changed):
             inputs.update([request], [prefix], "target")
             self.assertEqual(inputs.mask_changed, changed)
-            return set(np.flatnonzero(inputs.mask[0]))
+            return set(np.flatnonzero(sampling_mask(inputs)))
 
         self.assertNotIn(256, update([], True))
         self.assertNotIn(256, update([8], False))
@@ -217,6 +246,11 @@ class Constraints(unittest.TestCase):
         tokenizer.valid_tokens = 258
         self.assertNotIn(258, update([], True))
         self.assertNotIn(258, update([], False))
+        request.options["sampling"]["repetition_guard"] = True
+        update([], True)
+        constraint = weakref.ref(request.constraint)
+        request = None
+        self.assertIsNone(constraint())
 
     def test_greedy_draft_chain_keeps_stage_order_private_probabilities_and_fallback(
         self,
@@ -427,7 +461,48 @@ class Constraints(unittest.TestCase):
         for prefix in ([], tokenizer.encode("1}").ids, []):
             inputs.update([request], [prefix], "target")
             self.assertTrue(inputs.mask_changed)
-            self.assertEqual(bool(inputs.mask[0, 256]), bool(prefix))
+            self.assertEqual(bool(sampling_mask(inputs)[256]), bool(prefix))
+        thinking = Request(request.tokenizer, [], {"max_tokens": 16, "effort": "high"})
+        thinking.constraint = constraint.fork()
+        plain = Request(request.tokenizer, [], {"max_tokens": 16})
+        inputs = SamplingInputs(4)
+        inputs.update(
+            [request, thinking, plain, request],
+            [[], [], [], tokenizer.encode("2}").ids],
+            "target",
+        )
+        self.assertFalse(sampling_mask(inputs, 0)[tokenizer.encode("3").ids[0]])
+        self.assertTrue(sampling_mask(inputs, 1)[tokenizer.encode("3").ids[0]])
+        self.assertFalse(sampling_mask(inputs, 1)[256])
+        self.assertTrue(sampling_mask(inputs, 2)[256])
+        self.assertTrue(sampling_mask(inputs, 3)[256])
+        self.assertFalse(request.constraint.accepting)
+        before = constraint.mask()
+        for paths in (("", "1", "1}"), ("1}", "2}"), ("1}", "")):
+            prefixes = [tokenizer.encode(path).ids for path in paths]
+            inputs = SamplingInputs(len(paths))
+            inputs.update([request] * len(paths), prefixes, "target")
+            for index, prefix in enumerate(prefixes):
+                branch = constraint.fork()
+                branch.accept(prefix)
+                np.testing.assert_array_equal(
+                    sampling_mask(inputs, index), request.mask(branch)
+                )
+            np.testing.assert_array_equal(constraint.mask(), before)
+        for text in ("3", "1}3"):
+            inputs = SamplingInputs(1)
+            for _ in range(2):
+                with self.assertRaisesRegex(
+                    ValueError, "violates the output constraint"
+                ):
+                    inputs.update([request], [tokenizer.encode(text).ids], "target")
+            inputs.update([request], [[]], "target")
+            np.testing.assert_array_equal(sampling_mask(inputs), request.mask())
+            np.testing.assert_array_equal(constraint.mask(), before)
+        inputs = SamplingInputs(1)
+        inputs.update([request], [[*tokenizer.encode("1}").ids, 256]], "target")
+        self.assertTrue(sampling_mask(inputs)[256])
+        np.testing.assert_array_equal(constraint.mask(), before)
         proposal = constraint.fork()
         proposal.accept(tokenizer.encode("1}").ids)
         self.assertTrue(proposal.accepting)

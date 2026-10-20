@@ -158,7 +158,7 @@ class BenchmarkMeasurements(unittest.TestCase):
 
             self.assertEqual(invoke(root / "complete"), 0)
             self.assertEqual(invoke(root / "partial", "--case", "ordinary:1:32768"), 0)
-            measured = [case for case in calls if case[2] != 64]
+            measured = [case for case in calls if case[2] != 1024]
             self.assertEqual(measured[:24], CONFIGURATIONS)
             self.assertEqual(measured[24:], CONFIGURATIONS[:2])
             for mode, batch, length, output in CONFIGURATIONS:
@@ -226,6 +226,7 @@ class BenchmarkMeasurements(unittest.TestCase):
         ]
         response = dict(
             id="chatcmpl_744872_6ad586dc_1",
+            choices=[dict(message=dict(content="x"), finish_reason="length")],
             usage=dict(
                 prompt_tokens=16,
                 completion_tokens=1,
@@ -238,12 +239,26 @@ class BenchmarkMeasurements(unittest.TestCase):
                 artifact_id="test-artifact", prompt_seed="shared-input"
             )
             service.mode, service.port = "ordinary", 0
+            service.sampling_defaults = dict(
+                presence_penalty=0.5, repetition_guard=True
+            )
             service.trace = Path(directory) / "trace.jsonl"
 
             def run(batch=1):
                 service.trace.write_text(json.dumps(events[0]) + "\n")
 
                 def respond(port, body):
+                    self.assertEqual(body["tool_choice"], "auto")
+                    self.assertTrue(body["tools"])
+                    self.assertIn(body["seed"], range(batch))
+                    for name in (
+                        "temperature",
+                        "top_k",
+                        "top_p",
+                        "presence_penalty",
+                        "repetition_guard",
+                    ):
+                        self.assertNotIn(name, body)
                     with service.trace.open("a") as trace:
                         trace.write("\n".join(map(json.dumps, events[1:])) + "\n")
                     return response
@@ -255,7 +270,14 @@ class BenchmarkMeasurements(unittest.TestCase):
                         benchmark.time, "perf_counter", side_effect=(100.0, 102.0)
                     ),
                 ):
-                    return service.run(None, batch, 16, 1)
+                    return service.run(
+                        SimpleNamespace(
+                            generation=dict(temperature=1.0, top_k=20, top_p=0.95)
+                        ),
+                        batch,
+                        16,
+                        1,
+                    )
 
             result = run()
             self.assertEqual(result["seconds"], 2.0)
@@ -266,6 +288,9 @@ class BenchmarkMeasurements(unittest.TestCase):
                 result["manifest_id"], benchmark.json_digest(result["manifest"])
             )
             self.assertEqual(result["manifest"]["artifact_id"], "test-artifact")
+            self.assertEqual(result["manifest"]["sampling"]["temperature"], 1)
+            self.assertEqual(result["manifest"]["sampling"]["presence_penalty"], 0.5)
+            self.assertTrue(result["manifest"]["sampling"]["repetition_guard"])
             self.assertEqual(
                 result["efficiency"], result["lower_bound"]["seconds"] / 2.0
             )

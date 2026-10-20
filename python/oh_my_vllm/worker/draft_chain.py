@@ -53,7 +53,6 @@ class DraftChain:
             stage.metadata = self.metadata_inputs.arrays[index * 6 : index * 6 + 5]
             stage.tokens = self.metadata_inputs.arrays[index * 6 + 5]
             stage.metadata_inputs = None
-            stage.sampling.value, stage.sampling.residual = stage.ffn.buffers[:2]
             stage.sampling.greedy = True
             if index:
                 stage.tokens = stages[index - 1].sampling.operation.buffers[7]
@@ -122,7 +121,7 @@ class DraftChain:
                     self.stages[index - 1].sampling.operation.buffers[0],
                 )
             stage.run()
-            stage.sampling.run()
+            stage.sampling.draw()
             stage.copy(self.token_rows[index], stage.sampling.operation.buffers[7])
 
     def execute(self):
