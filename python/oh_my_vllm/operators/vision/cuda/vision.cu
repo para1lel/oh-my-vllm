@@ -148,7 +148,8 @@ inline cudaStream_t vision_stream(TensorView value) {
 
 void vision_patch(TensorView images, TensorView weight, TensorView bias, TensorView position,
                   TensorView patches, TensorView projected, TensorView output, int64_t grid_height,
-                  int64_t grid_width) {
+                  int64_t grid_width, TensorView norm_weight, TensorView norm_bias,
+                  TensorView normalized) {
   vision_grid(grid_height, grid_width);
   TVM_FFI_ICHECK(images.ndim() == 5 && images.size(0) > 0 && images.size(1) > 0 &&
                  images.size(2) > 0 && images.size(3) > 0 && images.size(4) == 3);
@@ -167,7 +168,11 @@ void vision_patch(TensorView images, TensorView weight, TensorView bias, TensorV
   tensor_contract(patches, images, kDLBfloat, 16, {rows, 1536});
   tensor_contract(projected, images, kDLFloat, 32, {rows * 4304});
   tensor_contract(output, images, kDLBfloat, 16, {rows, 1152});
-  vision_disjoint({images, weight, bias, position}, {patches, projected, output});
+  tensor_contract(norm_weight, images, kDLBfloat, 16, {1152});
+  tensor_contract(norm_bias, images, kDLBfloat, 16, {1152});
+  tensor_contract(normalized, images, kDLBfloat, 16, {rows, 1152});
+  vision_disjoint({images, weight, bias, position, norm_weight, norm_bias},
+                  {patches, projected, output, normalized});
   tvm::ffi::CUDADeviceGuard guard(images.device().device_id);
   auto stream = vision_stream(images);
   vision_patch_kernel<<<(rows * 1536 + 255) / 256, 256, 0, stream>>>(
@@ -175,9 +180,10 @@ void vision_patch(TensorView images, TensorView weight, TensorView bias, TensorV
       images.size(2), images.size(3), grid_height, grid_width);
   bf16_linear<float>(vision_read(patches), vision_read(weight), projected.data_ptr(), rows, 1152,
                      1536, stream);
-  vision_position_kernel<<<(rows * 1152 + 255) / 256, 256, 0, stream>>>(
+  vision_position_norm_kernel<<<rows, 256, 0, stream>>>(
       static_cast<const float *>(projected.data_ptr()), vision_read(bias), vision_read(position),
-      vision_write(output), rows, grid_height, grid_width);
+      vision_read(norm_weight), vision_read(norm_bias), vision_write(output),
+      vision_write(normalized), grid_height, grid_width);
   check_cuda(cudaGetLastError());
 }
 
@@ -189,7 +195,7 @@ void vision_block(TensorView value, TensorView norm1_weight, TensorView norm1_bi
                   TensorView projected, TensorView query, TensorView key, TensorView values,
                   TensorView padded_attention, TensorView normalizer, TensorView attended,
                   TensorView activated, int64_t grid_height, int64_t grid_width,
-                  tvm::ffi::Optional<VisionClassicOwner> classic) {
+                  tvm::ffi::Optional<VisionClassicOwner> classic, bool normalized_input) {
   vision_grid(grid_height, grid_width);
   int rows = vision_rows(value), tokens = grid_height * grid_width;
   TVM_FFI_ICHECK(rows % tokens == 0 && rows / tokens <= 4095);
@@ -234,8 +240,9 @@ void vision_block(TensorView value, TensorView norm1_weight, TensorView norm1_bi
     vision_classic_capture(classic.value(), stream);
   auto norm = vision_write(normalized);
   auto matrix = static_cast<float *>(projected.data_ptr());
-  vision_norm_kernel<<<rows, 256, 0, stream>>>(vision_read(value), vision_read(norm1_weight),
-                                               vision_read(norm1_bias), norm);
+  if (!normalized_input)
+    vision_norm_kernel<<<rows, 256, 0, stream>>>(vision_read(value), vision_read(norm1_weight),
+                                                 vision_read(norm1_bias), norm);
   if (rows > 32)
     vision_classic_linear(classic.value(), norm, vision_read(qkv_weight), matrix, rows, 3456, 1152,
                           value.device().device_id, stream);

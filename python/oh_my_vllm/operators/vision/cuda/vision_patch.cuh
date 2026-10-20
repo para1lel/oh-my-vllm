@@ -56,13 +56,11 @@ __global__ void vision_patch_kernel(const uint8_t *images, __nv_bfloat16 *patche
   patches[index] = __float2bfloat16_rn(pixel * (2.f / 255.f) - 1.f);
 }
 
-__global__ void vision_position_kernel(const float *projected, const __nv_bfloat16 *bias,
-                                       const __nv_bfloat16 *position, __nv_bfloat16 *output,
-                                       int rows, int grid_height, int grid_width) {
-  int64_t index = int64_t(blockIdx.x) * blockDim.x + threadIdx.x;
-  if (index >= int64_t(rows) * 1152)
-    return;
-  int row = index / 1152, column = index % 1152;
+__device__ inline __nv_bfloat16 vision_position_value(const float *projected,
+                                                      const __nv_bfloat16 *bias,
+                                                      const __nv_bfloat16 *position, int row,
+                                                      int column, int grid_height, int grid_width) {
+  int64_t index = int64_t(row) * 1152 + column;
   int local = row % (grid_height * grid_width), block = local / 4;
   int py = (block / (grid_width / 2)) * 2 + (local % 4) / 2;
   int px = (block % (grid_width / 2)) * 2 + local % 2;
@@ -79,5 +77,57 @@ __global__ void vision_position_kernel(const float *projected, const __nv_bfloat
   __nv_bfloat16 embedded = __hadd_rn(__hadd_rn(__hadd_rn(p00, p01), p10), p11);
   float patch =
       __bfloat162float(__float2bfloat16_rn(projected[index] + __bfloat162float(bias[column])));
-  output[index] = __float2bfloat16_rn(patch + __bfloat162float(embedded));
+  return __float2bfloat16_rn(patch + __bfloat162float(embedded));
+}
+
+__global__ void vision_position_norm_kernel(const float *projected, const __nv_bfloat16 *patch_bias,
+                                            const __nv_bfloat16 *position,
+                                            const __nv_bfloat16 *weight, const __nv_bfloat16 *bias,
+                                            __nv_bfloat16 *output, __nv_bfloat16 *normalized_output,
+                                            int grid_height, int grid_width) {
+  int row = blockIdx.x, lane = threadIdx.x & 31, warp = threadIdx.x / 32;
+  __shared__ float partial[8];
+  float cached[5];
+  float sum = 0;
+#pragma unroll
+  for (int slot = 0; slot < 5; ++slot) {
+    int column = threadIdx.x + 256 * slot;
+    if (column < 1152) {
+      int64_t index = int64_t(row) * 1152 + column;
+      __nv_bfloat16 stored = vision_position_value(projected, patch_bias, position, row, column,
+                                                   grid_height, grid_width);
+      output[index] = stored;
+      cached[slot] = __bfloat162float(stored);
+      sum += cached[slot];
+    }
+  }
+  sum = warp_sum(sum);
+  if (lane == 0)
+    partial[warp] = sum;
+  __syncthreads();
+  float mean = warp_sum(lane < 8 ? partial[lane] : 0) / 1152.f;
+  float variance = 0;
+#pragma unroll
+  for (int slot = 0; slot < 5; ++slot) {
+    int column = threadIdx.x + 256 * slot;
+    if (column < 1152) {
+      float centered = cached[slot] - mean;
+      variance += centered * centered;
+    }
+  }
+  variance = warp_sum(variance);
+  __syncthreads();
+  if (lane == 0)
+    partial[warp] = variance;
+  __syncthreads();
+  float inverse = rsqrtf(warp_sum(lane < 8 ? partial[lane] : 0) / 1152.f + 1e-6f);
+#pragma unroll
+  for (int slot = 0; slot < 5; ++slot) {
+    int column = threadIdx.x + 256 * slot;
+    if (column < 1152) {
+      float normalized = (cached[slot] - mean) * inverse;
+      normalized_output[int64_t(row) * 1152 + column] = __float2bfloat16_rn(
+          normalized * __bfloat162float(weight[column]) + __bfloat162float(bias[column]));
+    }
+  }
 }

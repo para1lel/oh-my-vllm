@@ -69,7 +69,14 @@ class Workspace:
         p, s, value = self.plan, self.storage, inputs.value
         if p.variant == "input":
             self.module.vision_patch(
-                value, *weights.patch, self.patches, s.projected, s.hidden, *p.grid
+                value,
+                *weights.patch,
+                self.patches,
+                s.projected,
+                s.hidden,
+                *p.grid,
+                *weights.block[:2],
+                s.normalized,
             )
             value = s.hidden
         block_output = s.hidden if p.variant == "merge" else s.output
@@ -88,6 +95,7 @@ class Workspace:
             s.activated,
             *p.grid,
             self.classic,
+            p.variant == "input",
         )
         if p.variant == "merge":
             self.module.vision_merge(

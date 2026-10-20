@@ -134,9 +134,15 @@ void mtp_input(TensorView hidden, TensorView tokens, TensorView embedding, Tenso
         static_cast<__nv_bfloat16 *>(output.data_ptr()), rows * 5120);
     check_cuda(cudaGetLastError());
   } else {
-    bf16_linear(static_cast<const __nv_bfloat16 *>(packed.data_ptr()),
-                static_cast<const __nv_bfloat16 *>(weight.data_ptr()), output.data_ptr(), rows,
-                5120, 10240, stream);
+    if (rows >= 4096)
+      bf16_gemm<128, 256, false, cutlass::bfloat16_t>(
+          static_cast<const __nv_bfloat16 *>(packed.data_ptr()),
+          static_cast<const __nv_bfloat16 *>(weight.data_ptr()), output.data_ptr(), rows, 5120,
+          10240, stream);
+    else
+      bf16_linear(static_cast<const __nv_bfloat16 *>(packed.data_ptr()),
+                  static_cast<const __nv_bfloat16 *>(weight.data_ptr()), output.data_ptr(), rows,
+                  5120, 10240, stream);
   }
 }
 
