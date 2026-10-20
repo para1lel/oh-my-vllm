@@ -1,0 +1,279 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "mtp.accept.numerics.inactive",
+    "boundary": "mtp.accept",
+    "purpose": "numerics",
+    "shape": {
+      "batch": 4
+    },
+    "mode": "graph",
+    "weights": [],
+    "options": {
+      "acceptance": "inactive",
+      "target": "probabilities"
+    },
+    "outputs": [
+      "tokens",
+      "counts",
+      "candidate_slots",
+      "rng"
+    ]
+  },
+  "checkpoint": {
+    "files": {
+      "config": "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc",
+      "index": "f0838c766951bdfe76d6afbdb2771a8f67aaa2231dedb3d33cebd817729843a2"
+    },
+    "weights": []
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "numpy": "2.5.4",
+    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "decisions": {
+      "minimum_margin": 0.01,
+      "records": [
+        {
+          "kind": "cdf",
+          "distance": 0.13172883380736766,
+          "draw": 0.8682711661926323,
+          "left": 0.0,
+          "right": 1.0
+        },
+        {
+          "kind": "acceptance",
+          "distance": 1.3226930697970425
+        },
+        {
+          "kind": "cdf",
+          "distance": 0.2913584175010607,
+          "draw": 0.2913584175010607,
+          "left": 0.0,
+          "right": 1.0
+        },
+        {
+          "kind": "acceptance",
+          "distance": 1.1285998369233146
+        },
+        {
+          "kind": "acceptance",
+          "distance": 0.5909647822862656
+        },
+        {
+          "kind": "cdf",
+          "distance": 0.3471559215320748,
+          "draw": 0.3471559215320748,
+          "left": 0.0,
+          "right": 1.0
+        },
+        {
+          "kind": "acceptance",
+          "distance": 0.8262598454011705
+        },
+        {
+          "kind": "acceptance",
+          "distance": 0.8651998354916279
+        },
+        {
+          "kind": "acceptance",
+          "distance": 0.8071482085345509
+        },
+        {
+          "kind": "cdf",
+          "distance": 0.2145105950187543,
+          "draw": 0.2145105950187543,
+          "left": 0.0,
+          "right": 1.0
+        }
+      ]
+    }
+  },
+  "files": {
+    "inputs.target.0000.npz": "c29ab1c273a821aa0efb566d4809bffb5ee4fe72ea6dc4cc05ddf906f54f90a6",
+    "inputs.proposal.0000.npz": "0219244ffb6c810f67501f69ae8c9b8e2bca9696a8ed3088bdc517cf9769121a",
+    "inputs.drafts.0000.npz": "90f1c97394dbc91c454d0d278b37ec3d87939029118fc3ebff646ce9822bc426",
+    "inputs.private_slots.0000.npz": "df16c91a970bb70af14ecae6eaec4781e5486802dc6fb7ce28fa858c65a00b87",
+    "inputs.capacity.0000.npz": "29d138b23ed1d19b2b97e2a0c07f2b568280a190de040cb230c6f5c8502ffbb3",
+    "state.rng.0000.npz": "bdb5ff310bcade54f71fc93d395c355807923042a3d87dd9e240c8adf88ff165",
+    "expected.tokens.0000.npz": "fe6586f211ea016eb0fc7375a51392cf4aae74009e0591f1f57d86a50da0b714",
+    "expected.counts.0000.npz": "57f73a7f96c4c085da3b7763cf9767122a1b57e2b231480ef6a59bec36591ee7",
+    "expected.candidate_slots.0000.npz": "89a738227537efb0a5104042ab129e1c084fbfdc926423d53044b62e4f95297b",
+    "expected.rng.0000.npz": "9069facdb983f82a12f509d2760030d633fc564399fc0b20459ce6b48a100c2a"
+  },
+  "tensors": {
+    "inputs.target": {
+      "shape": [
+        4,
+        5,
+        248320
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.target.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4966400
+        }
+      ]
+    },
+    "inputs.proposal": {
+      "shape": [
+        4,
+        4,
+        248320
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.proposal.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 3973120
+        }
+      ]
+    },
+    "inputs.drafts": {
+      "shape": [
+        4,
+        5
+      ],
+      "dtype": "int64",
+      "tensor_dtype": "int64",
+      "parts": [
+        {
+          "file": "inputs.drafts.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 20
+        }
+      ]
+    },
+    "inputs.private_slots": {
+      "shape": [
+        4,
+        5
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.private_slots.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 20
+        }
+      ]
+    },
+    "inputs.capacity": {
+      "shape": [
+        1
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.capacity.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 1
+        }
+      ]
+    },
+    "state.rng": {
+      "shape": [
+        4,
+        2
+      ],
+      "dtype": "uint64",
+      "tensor_dtype": "uint64",
+      "parts": [
+        {
+          "file": "state.rng.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 8
+        }
+      ]
+    },
+    "expected.tokens": {
+      "shape": [
+        4,
+        5
+      ],
+      "dtype": "int64",
+      "tensor_dtype": "int64",
+      "parts": [
+        {
+          "file": "expected.tokens.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 20
+        }
+      ]
+    },
+    "expected.counts": {
+      "shape": [
+        4
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "expected.counts.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4
+        }
+      ]
+    },
+    "expected.candidate_slots": {
+      "shape": [
+        4
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "expected.candidate_slots.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4
+        }
+      ]
+    },
+    "expected.rng": {
+      "shape": [
+        4,
+        2
+      ],
+      "dtype": "uint64",
+      "tensor_dtype": "uint64",
+      "parts": [
+        {
+          "file": "expected.rng.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 8
+        }
+      ]
+    }
+  },
+  "writes": {
+    "rng": {
+      "indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "layout": "rows",
+      "output": "rng"
+    }
+  }
+}

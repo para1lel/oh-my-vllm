@@ -1,0 +1,179 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "output.hidden.numerics.checkpoint-prefill",
+    "boundary": "output.hidden",
+    "purpose": "numerics",
+    "shape": {
+      "rows": 784
+    },
+    "mode": "eager",
+    "weights": [
+      "output"
+    ],
+    "options": {
+      "verify": false,
+      "restored": false,
+      "sequence_rows": [
+        0,
+        784
+      ]
+    },
+    "outputs": [
+      "hidden",
+      "hidden_cache",
+      "guards"
+    ]
+  },
+  "checkpoint": {
+    "files": {
+      "config": "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc",
+      "index": "f0838c766951bdfe76d6afbdb2771a8f67aaa2231dedb3d33cebd817729843a2",
+      "outside.safetensors": "ddff1d6665a2b39f2612fce0ef955e2436724c565bfbcbc127c7ffd078b698ff"
+    },
+    "weights": [
+      "model.language_model.norm.weight"
+    ]
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "numpy": "2.5.4",
+    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "decisions": {
+      "minimum_margin": 0.01,
+      "records": []
+    }
+  },
+  "files": {
+    "inputs.value.0000.npz": "a8c2b9d6339adb4f1d69b921680bd6eb74744eb9e700f64f0d144471a3926018",
+    "inputs.residual.0000.npz": "55a370cba34b31e4f43cbdc923ab84da6992648a5d085ee4aa2bb586c79ba16d",
+    "inputs.slots.0000.npz": "a155ce1818cd87441f04ad1aa6f2b992c9f7fa8e3a3066f8de77f41fb85bc766",
+    "state.hidden_cache.0000.npz": "1b6e1a10f26806568b1afc6efe6e090652b8a118d2d5fde4c33c3443a9fc6d34",
+    "expected.hidden.0000.npz": "46062b3dce1083051675f98ef257a797030e73b6ec5921e35bc59425e15c9fb0",
+    "expected.hidden_cache.0000.npz": "b0effb0bb54e9bafc62b02841cd066d6852d720eb82d9aef6cd49956ac66e71b",
+    "expected.guards.0000.npz": "443d82108cf665d6c0e1fe56defe8169f4e65e81d6bf8ea6f4036c16c14fba94"
+  },
+  "tensors": {
+    "inputs.value": {
+      "shape": [
+        784,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.value.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4014080
+        }
+      ]
+    },
+    "inputs.residual": {
+      "shape": [
+        784,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.residual.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4014080
+        }
+      ]
+    },
+    "inputs.slots": {
+      "shape": [
+        784
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.slots.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 784
+        }
+      ]
+    },
+    "state.hidden_cache": {
+      "shape": [
+        3,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "state.hidden_cache.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 15360
+        }
+      ]
+    },
+    "expected.hidden": {
+      "shape": [
+        784,
+        5120
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.hidden.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4014080
+        }
+      ]
+    },
+    "expected.hidden_cache": {
+      "shape": [
+        1,
+        5120
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.hidden_cache.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 5120
+        }
+      ]
+    },
+    "expected.guards": {
+      "shape": [
+        1
+      ],
+      "dtype": "bool",
+      "tensor_dtype": "bool",
+      "parts": [
+        {
+          "file": "expected.guards.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 1
+        }
+      ]
+    }
+  },
+  "writes": {
+    "hidden_cache": {
+      "indices": [
+        1
+      ],
+      "layout": "rows",
+      "output": "hidden_cache"
+    }
+  }
+}

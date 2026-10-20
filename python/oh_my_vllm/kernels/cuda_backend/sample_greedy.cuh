@@ -26,6 +26,7 @@ __global__ void greedy_scores_kernel(const __nv_bfloat16 *logits, const void *hi
     partials[row * GreedyBlocks + blockIdx.x] = maximum;
 }
 
+template <bool Select>
 __global__ void greedy_select_kernel(const uint64_t *partials, float *probability, int64_t *tokens,
                                      float *selected_probability, bool allow_invalid) {
   using Reduce = cub::BlockReduce<uint64_t, 256>;
@@ -42,12 +43,16 @@ __global__ void greedy_select_kernel(const uint64_t *partials, float *probabilit
       asm volatile("trap;");
       return;
     }
-    tokens[row] = -1;
-    selected_probability[row] = 0;
+    if constexpr (Select) {
+      tokens[row] = -1;
+      selected_probability[row] = 0;
+    }
     return;
   }
   int token = int(TokenMask - (key & TokenMask));
   probability[row * Vocabulary + token] = 1;
-  tokens[row] = token;
-  selected_probability[row] = 1;
+  if constexpr (Select) {
+    tokens[row] = token;
+    selected_probability[row] = 1;
+  }
 }

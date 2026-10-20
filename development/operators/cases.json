@@ -27,7 +27,7 @@
         "kv_scales",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "0a53bf4233fecbcce9644b5ac2562315b06a9e0aaaeef8a3508eba2cb7707357"
     },
     {
       "id": "fa.numerics.batched-decode",
@@ -55,7 +55,7 @@
         "kv_scales",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "a7f3d675dc84c8764cdcabe719b63f47ebb34672c6db4b198c63e4286ef1b403"
     },
     {
       "id": "fa.numerics.verification",
@@ -83,7 +83,7 @@
         "kv_scales",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "73486d658a5c5f925edf6d7279d150ab7dbfd9e75ae681aaf4f1b83c4ab19854"
     },
     {
       "id": "fa.numerics.checkpoint-prefill",
@@ -111,7 +111,7 @@
         "kv_scales",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "0fdca627cb498be334ddebdc475ea8ae1c582c5c450a89b22f3dd7228ddc62d8"
     },
     {
       "id": "fa.numerics.large-prefill",
@@ -139,7 +139,7 @@
         "kv_scales",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "78e7775e68a761c311d5096c0262348e75d65f4e6b8f06c3666b4d67d757a082"
     },
     {
       "id": "gdn.numerics.single-decode",
@@ -166,7 +166,7 @@
         "convolution",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "de5711c0fefce2c9df4b9c62ae116398c4706e1f04462970d654bee91a9dc653"
     },
     {
       "id": "gdn.numerics.batched-decode",
@@ -193,7 +193,7 @@
         "convolution",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "d0aab93f12b52531fdb7cf6077a8e39b3aac280323c93e48078170a586401e4d"
     },
     {
       "id": "gdn.numerics.verification",
@@ -220,7 +220,7 @@
         "convolution",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "bacd1ae09f316d6ea4dd45f49b34a9dd19426b55274145988b02155a82318a15"
     },
     {
       "id": "gdn.numerics.checkpoint-prefill",
@@ -247,7 +247,7 @@
         "convolution",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "1cc0b2a46c9675e76d610aa52ab1d071c6760491a6fd24ddcecdba74aba25b83"
     },
     {
       "id": "gdn.numerics.large-prefill",
@@ -274,7 +274,7 @@
         "convolution",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "c0ed1992435dcdce189ccd753bdbc8428560c4a7594e5b20270b76d0e912aa3b"
     },
     {
       "id": "ffn.numerics.single-decode",
@@ -289,13 +289,17 @@
       ],
       "options": {
         "verify": true,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          1
+        ]
       },
       "outputs": [
         "value",
         "residual"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "e17a30fcdf4366afd7cda5d031513aef43bc62209d760547eb80c1986781f4c9"
     },
     {
       "id": "ffn.numerics.batched-decode",
@@ -310,13 +314,20 @@
       ],
       "options": {
         "verify": true,
-        "restored": true
+        "restored": true,
+        "sequence_rows": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
       },
       "outputs": [
         "value",
         "residual"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "cd2b19f6be998e2a5949f7654a0374337ca6bbb37276642f23ff19007284ee4a"
     },
     {
       "id": "ffn.numerics.verification",
@@ -331,13 +342,20 @@
       ],
       "options": {
         "verify": true,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          5,
+          10,
+          15,
+          20
+        ]
       },
       "outputs": [
         "value",
         "residual"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "3996fc5d009b328190644cdbb4069976db4a302b5a298d834344685a22869dc0"
     },
     {
       "id": "ffn.numerics.checkpoint-prefill",
@@ -352,13 +370,17 @@
       ],
       "options": {
         "verify": false,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          784
+        ]
       },
       "outputs": [
         "value",
         "residual"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "70003f7881b9d5639be9e0ef37d108b9e45f678dca4d66fd1e4aec6ebcd63707"
     },
     {
       "id": "ffn.numerics.large-prefill",
@@ -373,13 +395,17 @@
       ],
       "options": {
         "verify": false,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          1568
+        ]
       },
       "outputs": [
         "value",
         "residual"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "83965a259a2f9eb3a88b3d28c307e6c243c82151d51bab48642910515150dd90"
     },
     {
       "id": "output.hidden.numerics.single-decode",
@@ -394,14 +420,18 @@
       ],
       "options": {
         "verify": true,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          1
+        ]
       },
       "outputs": [
         "hidden",
         "hidden_cache",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "9992727cb27ee8f373e614d54a73cc3edb080783474647407911ff961082a977"
     },
     {
       "id": "output.hidden.numerics.batched-decode",
@@ -416,14 +446,21 @@
       ],
       "options": {
         "verify": true,
-        "restored": true
+        "restored": true,
+        "sequence_rows": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
       },
       "outputs": [
         "hidden",
         "hidden_cache",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "c90bd229e7b33926523409f4baab415608d5c0ead987ddda31acd4e9e5fb7dc7"
     },
     {
       "id": "output.hidden.numerics.verification",
@@ -438,14 +475,21 @@
       ],
       "options": {
         "verify": true,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          5,
+          10,
+          15,
+          20
+        ]
       },
       "outputs": [
         "hidden",
         "hidden_cache",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "8f0ef2c9417ec058303fbe856971151b88ff9c899d27dccceaa6e81fcdd26c2e"
     },
     {
       "id": "output.hidden.numerics.checkpoint-prefill",
@@ -460,14 +504,18 @@
       ],
       "options": {
         "verify": false,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          784
+        ]
       },
       "outputs": [
         "hidden",
         "hidden_cache",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "fc13eeae34e5721b2cf550547d3d05c8341e58afbc57997e74605967f9513f73"
     },
     {
       "id": "output.hidden.numerics.large-prefill",
@@ -482,14 +530,18 @@
       ],
       "options": {
         "verify": false,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          1568
+        ]
       },
       "outputs": [
         "hidden",
         "hidden_cache",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "16a602749e1fd52690684f38b84669feb84a83df920dc7156f9e3a8a5c5612a9"
     },
     {
       "id": "output.distribution.numerics.greedy",
@@ -503,13 +555,17 @@
         "output"
       ],
       "options": {
-        "greedy": true
+        "greedy": true,
+        "sequence_rows": [
+          0,
+          1
+        ]
       },
       "outputs": [
         "logits",
         "probabilities"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "d0d57ece2255225851665353392914e59187d23f7ddbe82b95183e4eb7349fed"
     },
     {
       "id": "output.distribution.numerics.stochastic",
@@ -523,13 +579,17 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          1
+        ]
       },
       "outputs": [
         "logits",
         "probabilities"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "4e2011ab0181ed1a5580478d652d4d9b1e6f594a31d4ab30eb7eff404b0796d1"
     },
     {
       "id": "output.distribution.numerics.batch",
@@ -543,13 +603,20 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
       },
       "outputs": [
         "logits",
         "probabilities"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "c53e28e8e00e77ccf56966daf84b304ab19a9909752eeef8ab2800f7dda50ff9"
     },
     {
       "id": "output.distribution.numerics.verify-one",
@@ -563,13 +630,17 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          5
+        ]
       },
       "outputs": [
         "logits",
         "probabilities"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "c8a6ea84ebfd2eab7aa6b4af01b37f70577c295cb41fc6be60703aa30ffc6c9c"
     },
     {
       "id": "output.distribution.numerics.verify-batch",
@@ -583,13 +654,20 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          5,
+          10,
+          15,
+          20
+        ]
       },
       "outputs": [
         "logits",
         "probabilities"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "d4ddc93c560cdca265e77ab8ddba423e7d1754283d621bffa92757f3073cbe96"
     },
     {
       "id": "output.sample.numerics.greedy",
@@ -603,16 +681,21 @@
         "output"
       ],
       "options": {
-        "greedy": true
+        "greedy": true,
+        "sequence_rows": [
+          0,
+          1
+        ]
       },
       "outputs": [
         "logits",
         "probabilities",
         "tokens",
         "selected_probability",
-        "rng"
+        "rng",
+        "selection_cdf"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "2a197d213428453641c6b908b6f1249a54265919287dee6210c27e6a125d4fda"
     },
     {
       "id": "output.sample.numerics.stochastic",
@@ -626,16 +709,24 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          1
+        ],
+        "rng_seeds": [
+          17
+        ]
       },
       "outputs": [
         "logits",
         "probabilities",
         "tokens",
         "selected_probability",
-        "rng"
+        "rng",
+        "selection_cdf"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "d6fc7f7a2456c07b15e150468c2e853a54170158064c1a3817631a4677af7de3"
     },
     {
       "id": "output.sample.numerics.batch",
@@ -649,16 +740,30 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "rng_seeds": [
+          17,
+          48,
+          79,
+          110
+        ]
       },
       "outputs": [
         "logits",
         "probabilities",
         "tokens",
         "selected_probability",
-        "rng"
+        "rng",
+        "selection_cdf"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "5ef165c870aad8eba3da1b9a708ee852a11d8b8c76a45615cee5869965a37f8a"
     },
     {
       "id": "output.sample.numerics.verify-one",
@@ -672,16 +777,28 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          5
+        ],
+        "rng_seeds": [
+          17,
+          48,
+          79,
+          110,
+          141
+        ]
       },
       "outputs": [
         "logits",
         "probabilities",
         "tokens",
         "selected_probability",
-        "rng"
+        "rng",
+        "selection_cdf"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "988b3021e209df614440134b221e8037b4c92ff412b797137ad42fe32a24fa00"
     },
     {
       "id": "output.sample.numerics.verify-batch",
@@ -695,16 +812,46 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          5,
+          10,
+          15,
+          20
+        ],
+        "rng_seeds": [
+          17,
+          48,
+          79,
+          110,
+          141,
+          172,
+          203,
+          234,
+          265,
+          296,
+          327,
+          359,
+          389,
+          420,
+          451,
+          482,
+          513,
+          544,
+          575,
+          607
+        ]
       },
       "outputs": [
         "logits",
         "probabilities",
         "tokens",
         "selected_probability",
-        "rng"
+        "rng",
+        "selection_cdf"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "3dbc9c920aea9e42f7ba3965e71cdedd6678655719343322d32a593af3898ca6"
     },
     {
       "id": "mtp.context.numerics.context-1",
@@ -729,7 +876,7 @@
         "kv_scales",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "6b66fa12c2b73aa39cd2a6533cbfd14b37fb717dfa6910c5fe4de9d2c4ba962b"
     },
     {
       "id": "mtp.context.numerics.context-2",
@@ -754,7 +901,7 @@
         "kv_scales",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "b045c544802a3a69583c7029a81d7db9693b69bab95ba7a52f8a0b7f6c927663"
     },
     {
       "id": "mtp.context.numerics.context-3",
@@ -779,7 +926,7 @@
         "kv_scales",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "a408ffe7dbd2432ed09006d38d60a56c05564f79640520a694f2eaa3ccbd0cab"
     },
     {
       "id": "mtp.context.numerics.context-4",
@@ -804,7 +951,7 @@
         "kv_scales",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "0b39413e7c31c8d8b5cb7b9104c6ceb275ad159de117681cfc5a5360f4c0274a"
     },
     {
       "id": "mtp.context.numerics.context-5",
@@ -829,7 +976,7 @@
         "kv_scales",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "07f1f158e24e4da1861da4c248e29ccce83ae6ee27b1bd07df6b474ca3ee3d34"
     },
     {
       "id": "mtp.draft.numerics.draft-1",
@@ -846,9 +993,15 @@
         "mtp"
       ],
       "options": {
-        "variant": "query_only"
+        "variant": "query_only",
+        "sampling": "smooth",
+        "rng_seeds": [
+          19
+        ]
       },
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "selected_probability",
         "probabilities",
@@ -856,9 +1009,10 @@
         "kv",
         "fp8_kv",
         "kv_scales",
-        "guards"
+        "guards",
+        "selection_cdf"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "35ef24be6ee9d831a4d456343ffb363477227ea11710914a1820d6b7717a42e5"
     },
     {
       "id": "mtp.draft.numerics.draft-2",
@@ -875,9 +1029,15 @@
         "mtp"
       ],
       "options": {
-        "variant": "full"
+        "variant": "full",
+        "sampling": "smooth",
+        "rng_seeds": [
+          17
+        ]
       },
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "selected_probability",
         "probabilities",
@@ -885,9 +1045,10 @@
         "kv",
         "fp8_kv",
         "kv_scales",
-        "guards"
+        "guards",
+        "selection_cdf"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "b78a536da11418d796631953af8706e9803e1b41d9e0558438bf2af739340615"
     },
     {
       "id": "mtp.draft.numerics.draft-3",
@@ -904,9 +1065,16 @@
         "mtp"
       ],
       "options": {
-        "variant": "full"
+        "variant": "full",
+        "sampling": "smooth",
+        "rng_seeds": [
+          17,
+          48
+        ]
       },
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "selected_probability",
         "probabilities",
@@ -914,9 +1082,10 @@
         "kv",
         "fp8_kv",
         "kv_scales",
-        "guards"
+        "guards",
+        "selection_cdf"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "90c7c1b6d20114ff4b9401fe2651f693020aec7f6568897112b99b7be95ccd6d"
     },
     {
       "id": "mtp.draft.numerics.draft-4",
@@ -933,9 +1102,18 @@
         "mtp"
       ],
       "options": {
-        "variant": "query_only"
+        "variant": "query_only",
+        "sampling": "smooth",
+        "rng_seeds": [
+          17,
+          48,
+          80,
+          110
+        ]
       },
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "selected_probability",
         "probabilities",
@@ -943,9 +1121,10 @@
         "kv",
         "fp8_kv",
         "kv_scales",
-        "guards"
+        "guards",
+        "selection_cdf"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "314dba37d3a35207a54e8a868dfadc3c1977e8701f4e7601370ab659ace94d29"
     },
     {
       "id": "mtp.draft.numerics.draft-5",
@@ -962,9 +1141,18 @@
         "mtp"
       ],
       "options": {
-        "variant": "full"
+        "variant": "full",
+        "sampling": "smooth",
+        "rng_seeds": [
+          17,
+          53,
+          80,
+          111
+        ]
       },
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "selected_probability",
         "probabilities",
@@ -972,9 +1160,10 @@
         "kv",
         "fp8_kv",
         "kv_scales",
-        "guards"
+        "guards",
+        "selection_cdf"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "9dfb4c2a687999b585bfa764c1d992c3e201d89ad46ddc234b3a1c43b1de686f"
     },
     {
       "id": "mtp.chain.numerics.batch-1",
@@ -992,6 +1181,8 @@
       ],
       "options": {},
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "probabilities",
         "rng",
@@ -1000,7 +1191,7 @@
         "kv_scales",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "9eed76276c294c773059bb8b51a6d332688f80b154a9801d8470f15e3cc99216"
     },
     {
       "id": "mtp.chain.numerics.batch-2",
@@ -1018,6 +1209,8 @@
       ],
       "options": {},
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "probabilities",
         "rng",
@@ -1026,7 +1219,7 @@
         "kv_scales",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "304c745e6b3713abbfe0a25e12252174cddfab0ba62abf010e2692b5fc9b0609"
     },
     {
       "id": "mtp.chain.numerics.batch-4",
@@ -1044,6 +1237,8 @@
       ],
       "options": {},
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "probabilities",
         "rng",
@@ -1052,7 +1247,7 @@
         "kv_scales",
         "guards"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "dc390044b3a563b5b97533f60efef180dd391a26a2be43f4186c0549d7d1a4e4"
     },
     {
       "id": "mtp.accept.numerics.all",
@@ -1064,7 +1259,8 @@
       "mode": "graph",
       "weights": [],
       "options": {
-        "acceptance": "all"
+        "acceptance": "all",
+        "target": "probabilities"
       },
       "outputs": [
         "tokens",
@@ -1072,7 +1268,7 @@
         "candidate_slots",
         "rng"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "c9c780f90ba92171c567f90b79407731b6fdbc9fd0b904a021861bcd7d77f292"
     },
     {
       "id": "mtp.accept.numerics.first-rejection",
@@ -1084,7 +1280,8 @@
       "mode": "graph",
       "weights": [],
       "options": {
-        "acceptance": "first-rejection"
+        "acceptance": "first-rejection",
+        "target": "probabilities"
       },
       "outputs": [
         "tokens",
@@ -1092,7 +1289,7 @@
         "candidate_slots",
         "rng"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "a15ac71d3bb1b40c7c6144acf59b41abac05b26d0eea6c2aedfc0112c9b5e877"
     },
     {
       "id": "mtp.accept.numerics.partial",
@@ -1104,7 +1301,8 @@
       "mode": "graph",
       "weights": [],
       "options": {
-        "acceptance": "partial"
+        "acceptance": "partial",
+        "target": "probabilities"
       },
       "outputs": [
         "tokens",
@@ -1112,7 +1310,7 @@
         "candidate_slots",
         "rng"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "e582fbe9376801fc3292a02686bea902dc2bc16065ed61662c83dcad9205ce8e"
     },
     {
       "id": "mtp.accept.numerics.mixed",
@@ -1124,7 +1322,8 @@
       "mode": "graph",
       "weights": [],
       "options": {
-        "acceptance": "mixed"
+        "acceptance": "mixed",
+        "target": "greedy"
       },
       "outputs": [
         "tokens",
@@ -1132,7 +1331,7 @@
         "candidate_slots",
         "rng"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "5a2c8b39812d4d456964aa9960bd2bb85dd792eb6c8979595d632eb31037a010"
     },
     {
       "id": "mtp.accept.numerics.inactive",
@@ -1144,7 +1343,8 @@
       "mode": "graph",
       "weights": [],
       "options": {
-        "acceptance": "inactive"
+        "acceptance": "inactive",
+        "target": "probabilities"
       },
       "outputs": [
         "tokens",
@@ -1152,7 +1352,7 @@
         "candidate_slots",
         "rng"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "637339b15ad53fe795c8873592f0766bb50b68a1f31f7f44764256c2efaa7468"
     },
     {
       "id": "vision.input.numerics.grid-16-16-frames-1",
@@ -1172,7 +1372,7 @@
       "outputs": [
         "hidden"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "66f6975971357a85a727069e16473ea54ae9efa569387abc47ec12b03d3e8d89"
     },
     {
       "id": "vision.input.numerics.grid-28-28-frames-1",
@@ -1192,7 +1392,7 @@
       "outputs": [
         "hidden"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "d1aa3f28489efb7cd8bf0cde0c94600c9a22f69dd08c0c837f6d80d62cd4e2ab"
     },
     {
       "id": "vision.input.numerics.grid-14-14-frames-3",
@@ -1212,7 +1412,7 @@
       "outputs": [
         "hidden"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "81c2c590f149aa10d5d7d1c5118c1487ab44562a514a6d07a6a2ea6a7628bd3f"
     },
     {
       "id": "vision.block.numerics.grid-16-16-frames-1",
@@ -1232,7 +1432,7 @@
       "outputs": [
         "hidden"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "790b76fb07f5d034d69f3c529ad74966bf42c1c801ea42f60a1cd15cd5df6daf"
     },
     {
       "id": "vision.block.numerics.grid-28-28-frames-1",
@@ -1252,7 +1452,7 @@
       "outputs": [
         "hidden"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "97bb545ade421d877551b80ad04ff88fa1bb7733c18bde8f344cfc926b53d1bc"
     },
     {
       "id": "vision.block.numerics.grid-14-14-frames-3",
@@ -1272,7 +1472,7 @@
       "outputs": [
         "hidden"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "5856829b694e10823128af38bbbee680dffa3ee08e9e482d295cd6e92f2f09e5"
     },
     {
       "id": "vision.merge.numerics.grid-16-16-frames-1",
@@ -1292,7 +1492,7 @@
       "outputs": [
         "hidden"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "d23c9029b98e7215e65c1e2623000c49baed8e50f7f89a323421580bc65b4126"
     },
     {
       "id": "vision.merge.numerics.grid-28-28-frames-1",
@@ -1312,7 +1512,7 @@
       "outputs": [
         "hidden"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "5d78f36a85f65dade26cb8c47a425e1ce62de950de31eac6e03bf833bd7e25b5"
     },
     {
       "id": "vision.merge.numerics.grid-14-14-frames-3",
@@ -1332,7 +1532,7 @@
       "outputs": [
         "hidden"
       ],
-      "fixture_sha256": null
+      "fixture_sha256": "aca8529eaf9db4396386fea886e276bd548e51e9ca8df4f6ec41a2ee0a6aaf24"
     },
     {
       "id": "fa.performance.single-decode",
@@ -2690,7 +2890,11 @@
       ],
       "options": {
         "verify": true,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          1
+        ]
       },
       "outputs": [
         "value",
@@ -2774,7 +2978,14 @@
       ],
       "options": {
         "verify": true,
-        "restored": true
+        "restored": true,
+        "sequence_rows": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
       },
       "outputs": [
         "value",
@@ -2858,7 +3069,14 @@
       ],
       "options": {
         "verify": true,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          5,
+          10,
+          15,
+          20
+        ]
       },
       "outputs": [
         "value",
@@ -2942,7 +3160,11 @@
       ],
       "options": {
         "verify": false,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          784
+        ]
       },
       "outputs": [
         "value",
@@ -3026,7 +3248,14 @@
       ],
       "options": {
         "verify": false,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          8192,
+          16384,
+          24576,
+          32768
+        ]
       },
       "outputs": [
         "value",
@@ -3047,7 +3276,11 @@
       ],
       "options": {
         "verify": true,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          1
+        ]
       },
       "outputs": [
         "hidden",
@@ -3069,7 +3302,14 @@
       ],
       "options": {
         "verify": true,
-        "restored": true
+        "restored": true,
+        "sequence_rows": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
       },
       "outputs": [
         "hidden",
@@ -3091,7 +3331,14 @@
       ],
       "options": {
         "verify": true,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          5,
+          10,
+          15,
+          20
+        ]
       },
       "outputs": [
         "hidden",
@@ -3113,7 +3360,11 @@
       ],
       "options": {
         "verify": false,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          784
+        ]
       },
       "outputs": [
         "hidden",
@@ -3135,7 +3386,14 @@
       ],
       "options": {
         "verify": false,
-        "restored": false
+        "restored": false,
+        "sequence_rows": [
+          0,
+          8192,
+          16384,
+          24576,
+          32768
+        ]
       },
       "outputs": [
         "hidden",
@@ -3156,7 +3414,11 @@
         "output"
       ],
       "options": {
-        "greedy": true
+        "greedy": true,
+        "sequence_rows": [
+          0,
+          1
+        ]
       },
       "outputs": [
         "logits",
@@ -3176,7 +3438,11 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          1
+        ]
       },
       "outputs": [
         "logits",
@@ -3196,7 +3462,14 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
       },
       "outputs": [
         "logits",
@@ -3216,7 +3489,11 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          5
+        ]
       },
       "outputs": [
         "logits",
@@ -3236,7 +3513,14 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          5,
+          10,
+          15,
+          20
+        ]
       },
       "outputs": [
         "logits",
@@ -3256,14 +3540,19 @@
         "output"
       ],
       "options": {
-        "greedy": true
+        "greedy": true,
+        "sequence_rows": [
+          0,
+          1
+        ]
       },
       "outputs": [
         "logits",
         "probabilities",
         "tokens",
         "selected_probability",
-        "rng"
+        "rng",
+        "selection_cdf"
       ],
       "fixture_sha256": null
     },
@@ -3279,14 +3568,19 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          1
+        ]
       },
       "outputs": [
         "logits",
         "probabilities",
         "tokens",
         "selected_probability",
-        "rng"
+        "rng",
+        "selection_cdf"
       ],
       "fixture_sha256": null
     },
@@ -3302,14 +3596,22 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
       },
       "outputs": [
         "logits",
         "probabilities",
         "tokens",
         "selected_probability",
-        "rng"
+        "rng",
+        "selection_cdf"
       ],
       "fixture_sha256": null
     },
@@ -3325,14 +3627,19 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          5
+        ]
       },
       "outputs": [
         "logits",
         "probabilities",
         "tokens",
         "selected_probability",
-        "rng"
+        "rng",
+        "selection_cdf"
       ],
       "fixture_sha256": null
     },
@@ -3348,14 +3655,22 @@
         "output"
       ],
       "options": {
-        "greedy": false
+        "greedy": false,
+        "sequence_rows": [
+          0,
+          5,
+          10,
+          15,
+          20
+        ]
       },
       "outputs": [
         "logits",
         "probabilities",
         "tokens",
         "selected_probability",
-        "rng"
+        "rng",
+        "selection_cdf"
       ],
       "fixture_sha256": null
     },
@@ -3499,9 +3814,12 @@
         "mtp"
       ],
       "options": {
-        "variant": "query_only"
+        "variant": "query_only",
+        "sampling": "smooth"
       },
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "selected_probability",
         "probabilities",
@@ -3509,7 +3827,8 @@
         "kv",
         "fp8_kv",
         "kv_scales",
-        "guards"
+        "guards",
+        "selection_cdf"
       ],
       "fixture_sha256": null
     },
@@ -3528,9 +3847,12 @@
         "mtp"
       ],
       "options": {
-        "variant": "full"
+        "variant": "full",
+        "sampling": "smooth"
       },
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "selected_probability",
         "probabilities",
@@ -3538,7 +3860,8 @@
         "kv",
         "fp8_kv",
         "kv_scales",
-        "guards"
+        "guards",
+        "selection_cdf"
       ],
       "fixture_sha256": null
     },
@@ -3557,9 +3880,12 @@
         "mtp"
       ],
       "options": {
-        "variant": "full"
+        "variant": "full",
+        "sampling": "smooth"
       },
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "selected_probability",
         "probabilities",
@@ -3567,7 +3893,8 @@
         "kv",
         "fp8_kv",
         "kv_scales",
-        "guards"
+        "guards",
+        "selection_cdf"
       ],
       "fixture_sha256": null
     },
@@ -3586,9 +3913,12 @@
         "mtp"
       ],
       "options": {
-        "variant": "query_only"
+        "variant": "query_only",
+        "sampling": "smooth"
       },
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "selected_probability",
         "probabilities",
@@ -3596,7 +3926,8 @@
         "kv",
         "fp8_kv",
         "kv_scales",
-        "guards"
+        "guards",
+        "selection_cdf"
       ],
       "fixture_sha256": null
     },
@@ -3615,9 +3946,12 @@
         "mtp"
       ],
       "options": {
-        "variant": "full"
+        "variant": "full",
+        "sampling": "smooth"
       },
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "selected_probability",
         "probabilities",
@@ -3625,7 +3959,8 @@
         "kv",
         "fp8_kv",
         "kv_scales",
-        "guards"
+        "guards",
+        "selection_cdf"
       ],
       "fixture_sha256": null
     },
@@ -3645,6 +3980,8 @@
       ],
       "options": {},
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "probabilities",
         "rng",
@@ -3671,6 +4008,8 @@
       ],
       "options": {},
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "probabilities",
         "rng",
@@ -3697,6 +4036,8 @@
       ],
       "options": {},
       "outputs": [
+        "hidden",
+        "logits",
         "tokens",
         "probabilities",
         "rng",
@@ -3717,7 +4058,8 @@
       "mode": "graph",
       "weights": [],
       "options": {
-        "acceptance": "all"
+        "acceptance": "all",
+        "target": "probabilities"
       },
       "outputs": [
         "tokens",
@@ -3737,7 +4079,8 @@
       "mode": "graph",
       "weights": [],
       "options": {
-        "acceptance": "first-rejection"
+        "acceptance": "first-rejection",
+        "target": "probabilities"
       },
       "outputs": [
         "tokens",
@@ -3757,7 +4100,8 @@
       "mode": "graph",
       "weights": [],
       "options": {
-        "acceptance": "partial"
+        "acceptance": "partial",
+        "target": "probabilities"
       },
       "outputs": [
         "tokens",
@@ -3777,7 +4121,8 @@
       "mode": "graph",
       "weights": [],
       "options": {
-        "acceptance": "mixed"
+        "acceptance": "mixed",
+        "target": "greedy"
       },
       "outputs": [
         "tokens",
@@ -3797,7 +4142,8 @@
       "mode": "graph",
       "weights": [],
       "options": {
-        "acceptance": "inactive"
+        "acceptance": "inactive",
+        "target": "probabilities"
       },
       "outputs": [
         "tokens",

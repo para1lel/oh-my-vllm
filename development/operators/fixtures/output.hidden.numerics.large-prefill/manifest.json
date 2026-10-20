@@ -1,0 +1,187 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "output.hidden.numerics.large-prefill",
+    "boundary": "output.hidden",
+    "purpose": "numerics",
+    "shape": {
+      "rows": 1568
+    },
+    "mode": "eager",
+    "weights": [
+      "output"
+    ],
+    "options": {
+      "verify": false,
+      "restored": false,
+      "sequence_rows": [
+        0,
+        1568
+      ]
+    },
+    "outputs": [
+      "hidden",
+      "hidden_cache",
+      "guards"
+    ]
+  },
+  "checkpoint": {
+    "files": {
+      "config": "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc",
+      "index": "f0838c766951bdfe76d6afbdb2771a8f67aaa2231dedb3d33cebd817729843a2",
+      "outside.safetensors": "ddff1d6665a2b39f2612fce0ef955e2436724c565bfbcbc127c7ffd078b698ff"
+    },
+    "weights": [
+      "model.language_model.norm.weight"
+    ]
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "numpy": "2.5.4",
+    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "decisions": {
+      "minimum_margin": 0.01,
+      "records": []
+    }
+  },
+  "files": {
+    "inputs.value.0000.npz": "d52b2efa6601ee58bb3766af18cc61efa8c10f842b540bee82d3ed81230cdd4a",
+    "inputs.residual.0000.npz": "002a7a4841e630c627c01adc456369a877df027a96101b466f2ad5aed39a824e",
+    "inputs.slots.0000.npz": "4316dbb29d92e3c215cde65b573952c6f819f7cbb7dde9bce421dea077f50e09",
+    "state.hidden_cache.0000.npz": "5296791d04686b6a61c1599b974182ab24170fb4a8cf620edd17fd2915a129b6",
+    "expected.hidden.0000.npz": "e85f7994e89765ec582215734685cda1ea199f0b3821b4c64ed7345b05190afd",
+    "expected.hidden.0001.npz": "8c2b2abd1e9dcb405adc54c384db2cd323f86d2e3996774c427537b39794e0c1",
+    "expected.hidden_cache.0000.npz": "b9dc8d7a8e175a81ca71b044de31d29394adbdea118243c80ab5de11b415c914",
+    "expected.guards.0000.npz": "443d82108cf665d6c0e1fe56defe8169f4e65e81d6bf8ea6f4036c16c14fba94"
+  },
+  "tensors": {
+    "inputs.value": {
+      "shape": [
+        1568,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.value.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 8028160
+        }
+      ]
+    },
+    "inputs.residual": {
+      "shape": [
+        1568,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.residual.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 8028160
+        }
+      ]
+    },
+    "inputs.slots": {
+      "shape": [
+        1568
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.slots.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 1568
+        }
+      ]
+    },
+    "state.hidden_cache": {
+      "shape": [
+        4,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "state.hidden_cache.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 20480
+        }
+      ]
+    },
+    "expected.hidden": {
+      "shape": [
+        1568,
+        5120
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.hidden.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4193792
+        },
+        {
+          "file": "expected.hidden.0001.npz",
+          "key": "value",
+          "offset": 4193792,
+          "count": 3834368
+        }
+      ]
+    },
+    "expected.hidden_cache": {
+      "shape": [
+        2,
+        5120
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.hidden_cache.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 10240
+        }
+      ]
+    },
+    "expected.guards": {
+      "shape": [
+        1
+      ],
+      "dtype": "bool",
+      "tensor_dtype": "bool",
+      "parts": [
+        {
+          "file": "expected.guards.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 1
+        }
+      ]
+    }
+  },
+  "writes": {
+    "hidden_cache": {
+      "indices": [
+        1,
+        2
+      ],
+      "layout": "rows",
+      "output": "hidden_cache"
+    }
+  }
+}

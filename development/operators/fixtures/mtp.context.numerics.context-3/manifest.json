@@ -1,0 +1,440 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "mtp.context.numerics.context-3",
+    "boundary": "mtp.context",
+    "purpose": "numerics",
+    "shape": {
+      "rows": 8,
+      "batch": 2,
+      "queries": 4,
+      "context": 784
+    },
+    "mode": "graph",
+    "weights": [
+      "mtp"
+    ],
+    "options": {},
+    "outputs": [
+      "value",
+      "residual",
+      "kv",
+      "fp8_kv",
+      "kv_scales",
+      "guards"
+    ]
+  },
+  "checkpoint": {
+    "files": {
+      "config": "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc",
+      "index": "f0838c766951bdfe76d6afbdb2771a8f67aaa2231dedb3d33cebd817729843a2",
+      "mtp.safetensors": "e5e4464a3793cc261de536592830bca40e7f3af159ed038c358f5660917cf43b",
+      "outside.safetensors": "ddff1d6665a2b39f2612fce0ef955e2436724c565bfbcbc127c7ffd078b698ff"
+    },
+    "weights": [
+      "model.language_model.embed_tokens.weight",
+      "mtp.fc.weight",
+      "mtp.layers.0.input_layernorm.weight",
+      "mtp.layers.0.self_attn.k_norm.weight",
+      "mtp.layers.0.self_attn.k_proj.weight",
+      "mtp.layers.0.self_attn.k_proj.weight_scale_inv",
+      "mtp.layers.0.self_attn.o_proj.weight",
+      "mtp.layers.0.self_attn.o_proj.weight_scale_inv",
+      "mtp.layers.0.self_attn.q_norm.weight",
+      "mtp.layers.0.self_attn.q_proj.weight",
+      "mtp.layers.0.self_attn.q_proj.weight_scale_inv",
+      "mtp.layers.0.self_attn.v_proj.weight",
+      "mtp.layers.0.self_attn.v_proj.weight_scale_inv",
+      "mtp.pre_fc_norm_embedding.weight",
+      "mtp.pre_fc_norm_hidden.weight"
+    ]
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "numpy": "2.5.4",
+    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "decisions": {
+      "minimum_margin": 0.01,
+      "records": []
+    }
+  },
+  "files": {
+    "inputs.positions.0000.npz": "44a670dbdd1c0c477cdff969b391f2973271e5bee1e462c7d9513490ee67dc5c",
+    "inputs.slots.0000.npz": "9241b90f57ed2f8aa55d486903b79342178c91324069185404d74e56ad1aac59",
+    "inputs.tables.0000.npz": "1be1b546d27e3166cca2c40b71a49fb0d62addfa7deafaba04aea7f8a79b6b83",
+    "inputs.sequence_rows.0000.npz": "73fd7a7251275e8f55b636579ae160816908470e6fb3e02ca08045ee53b5dbc1",
+    "inputs.lengths.0000.npz": "e1790c24ce46f42f37d97ae7eb9e822c666785bcf5e4934935ab1f71d60838f8",
+    "inputs.hidden.0000.npz": "b4d393e8f0140c7795a595ac5f2ee22ad21c3b0e5cf0278fdc21e46c7e4d5a34",
+    "inputs.tokens.0000.npz": "a58f29afc6d25bd225015b7340e6069d72c1805acbe88fc2cf165a927616e42f",
+    "inputs.hidden_rows.0000.npz": "93f50ef06ff8072f736ae90eb50f9d33aa17605eac5d050f6d89cc4b7fb92922",
+    "inputs.boundary_rows.0000.npz": "84842432dc0feda26c2c55882fcc5a81d713d67844428519083345a4b21fda82",
+    "inputs.boundary_hidden.0000.npz": "b2ea2d588d937c4b696d2d3291a545dc5324e8c94ac062f449229bce8a0e9ff9",
+    "state.kv.0000.npz": "6a10ed5c9bd25d2bb101e9a2c967fb7f85a9ab00cc84abea067da7980adf60c7",
+    "state.fp8_kv.0000.npz": "40fc0dfc5780c34b003d5ae62c2c6bfe7dcdd5d4d1f51899aef856510b7d6932",
+    "state.kv_scales.0000.npz": "f7154c0daf79274c63edd7b27fa37b5e6314683a261ec96ef54fc2dcae3c0f31",
+    "expected.value.0000.npz": "df9ede488d0fe1b8192aeb35500a8fb37d53e12521e05440bfd3ad6567ae8173",
+    "expected.residual.0000.npz": "520a245c94f3e78d200906a2605432916f160978d2851c9a18dbcd7c419d2885",
+    "expected.kv.0000.npz": "7945d401ecf19c3e4c4030e9c085aa36d4b04d8a0ade51b0d38eac91f0b88152",
+    "expected.fp8_kv.0000.npz": "1db7d198d2444c1b4e96d4159b9c37e3944d51e06097abfd04a59517b1089955",
+    "expected.kv_scales.0000.npz": "2975ee367c0a85fd2bf594cd146b4083b229284f21315890bf7679c5be93dc6b",
+    "expected.guards.0000.npz": "fd05631f4642b6836f549cb292e1dbcd0a9730c8fae92d0bc6412d7b388b1d8f"
+  },
+  "tensors": {
+    "inputs.positions": {
+      "shape": [
+        3,
+        8
+      ],
+      "dtype": "int64",
+      "tensor_dtype": "int64",
+      "parts": [
+        {
+          "file": "inputs.positions.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 24
+        }
+      ]
+    },
+    "inputs.slots": {
+      "shape": [
+        8
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.slots.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 8
+        }
+      ]
+    },
+    "inputs.tables": {
+      "shape": [
+        2,
+        335
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.tables.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 670
+        }
+      ]
+    },
+    "inputs.sequence_rows": {
+      "shape": [
+        3
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.sequence_rows.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 3
+        }
+      ]
+    },
+    "inputs.lengths": {
+      "shape": [
+        8
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.lengths.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 8
+        }
+      ]
+    },
+    "inputs.hidden": {
+      "shape": [
+        8,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.hidden.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 40960
+        }
+      ]
+    },
+    "inputs.tokens": {
+      "shape": [
+        8
+      ],
+      "dtype": "int64",
+      "tensor_dtype": "int64",
+      "parts": [
+        {
+          "file": "inputs.tokens.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 8
+        }
+      ]
+    },
+    "inputs.hidden_rows": {
+      "shape": [
+        8
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.hidden_rows.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 8
+        }
+      ]
+    },
+    "inputs.boundary_rows": {
+      "shape": [
+        8
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.boundary_rows.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 8
+        }
+      ]
+    },
+    "inputs.boundary_hidden": {
+      "shape": [
+        2,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.boundary_hidden.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 10240
+        }
+      ]
+    },
+    "state.kv": {
+      "shape": [
+        4,
+        2,
+        784,
+        4,
+        256
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "state.kv.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 6422528
+        }
+      ]
+    },
+    "state.fp8_kv": {
+      "shape": [
+        4,
+        2,
+        784,
+        4,
+        256
+      ],
+      "dtype": "uint8",
+      "tensor_dtype": "float8_e4m3fn",
+      "parts": [
+        {
+          "file": "state.fp8_kv.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 6422528
+        }
+      ]
+    },
+    "state.kv_scales": {
+      "shape": [
+        4,
+        2,
+        4,
+        784
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "state.kv_scales.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 25088
+        }
+      ]
+    },
+    "expected.value": {
+      "shape": [
+        2,
+        5120
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.value.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 10240
+        }
+      ]
+    },
+    "expected.residual": {
+      "shape": [
+        2,
+        5120
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.residual.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 10240
+        }
+      ]
+    },
+    "expected.kv": {
+      "shape": [
+        8,
+        2,
+        4,
+        256
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.kv.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 16384
+        }
+      ]
+    },
+    "expected.fp8_kv": {
+      "shape": [
+        8,
+        2,
+        4,
+        256
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.fp8_kv.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 16384
+        }
+      ]
+    },
+    "expected.kv_scales": {
+      "shape": [
+        8,
+        2,
+        4
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.kv_scales.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 64
+        }
+      ]
+    },
+    "expected.guards": {
+      "shape": [
+        3
+      ],
+      "dtype": "bool",
+      "tensor_dtype": "bool",
+      "parts": [
+        {
+          "file": "expected.guards.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 3
+        }
+      ]
+    }
+  },
+  "writes": {
+    "kv": {
+      "indices": [
+        1564,
+        1565,
+        1566,
+        1567,
+        2348,
+        2349,
+        2350,
+        2351
+      ],
+      "layout": "kv",
+      "output": "kv"
+    },
+    "fp8_kv": {
+      "indices": [
+        1564,
+        1565,
+        1566,
+        1567,
+        2348,
+        2349,
+        2350,
+        2351
+      ],
+      "layout": "kv",
+      "output": "fp8_kv"
+    },
+    "kv_scales": {
+      "indices": [
+        1564,
+        1565,
+        1566,
+        1567,
+        2348,
+        2349,
+        2350,
+        2351
+      ],
+      "layout": "kv_scales",
+      "output": "kv_scales"
+    }
+  }
+}

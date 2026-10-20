@@ -2,7 +2,7 @@
 
 This document gives the numerical and performance acceptance rules for operator development.
 The [validation plan](validation-plan.md) gives implementation tasks and fixed cases.
-The suite is planned. It is not an implemented command.
+The numerical suite is implemented. The performance suite is planned.
 
 ## Scope and boundaries
 
@@ -66,7 +66,7 @@ The reference output includes only assigned state writes, without a second copy 
 
 Store numerical limits in versioned `development/operators/limits.json`.
 Calibrate limits against the direct PyTorch outputs before kernel changes.
-Give each field a reviewed precision budget based on its datatype and mathematical behavior.
+Use the reviewed [field precision policy](precision.md) for each datatype and mathematical operation.
 Check simple exact cases when you examine the reference formulas.
 
 Do not copy the full-model limits into all operator fields.

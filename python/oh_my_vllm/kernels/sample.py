@@ -2,7 +2,13 @@ from dataclasses import dataclass
 
 from .native import load
 
-FUNCTIONS = ("sample_workspace", "sample_project", "sample", "mtp_accept")
+FUNCTIONS = (
+    "sample_workspace",
+    "sample_project",
+    "sample_distribution",
+    "sample",
+    "mtp_accept",
+)
 
 
 @dataclass(frozen=True)
@@ -59,6 +65,19 @@ class Sample:
             greedy,
         )
         return self.buffers[7], self.buffers[8], self.buffers[6]
+
+    def distribution(self, history, mask, parameters, *, greedy=False):
+        self.module.sample_distribution(
+            self.buffers[1],
+            history,
+            mask,
+            parameters,
+            *self.buffers[2:7],
+            self.buffers[9],
+            self.allow_invalid,
+            greedy,
+        )
+        return self.buffers[6]
 
 
 class MTPAccept:

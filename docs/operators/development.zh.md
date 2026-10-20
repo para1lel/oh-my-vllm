@@ -70,6 +70,34 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.model.reference --
 生成器不覆盖文件.
 只有 checkpoint, 输入, 生成器和数值策略的审查全部完成后, 才更新冻结文件及其 SHA256.
 
+## 算子命令
+
+将 `OPERATOR_REPORT` 设为仓库外的新目录.
+在推理环境中运行全部固定数值用例:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.operators numerics --model "$MODEL_ROOT" --report "$OPERATOR_REPORT"
+```
+
+该命令加载仓库内 fixture 和批准的门槛, 不使用 PyTorch.
+fixture 缺失, identity 改变或未通过门槛都会导致错误退出.
+
+明确更新 fixture 时, 将 `OPERATOR_FIXTURES` 设为仓库外的新暂存目录.
+在参考环境中生成固定数组:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.operators.reference --model "$MODEL_ROOT" --output "$OPERATOR_FIXTURES"
+```
+
+将 `OPERATOR_LIMITS` 设为仓库外的新 JSON 路径.
+按已批准的[精度策略](precision.zh.md)提议门槛:
+
+```bash
+scripts/with-env.sh python -m development.operators.budgets --fixtures "$OPERATOR_FIXTURES" --output "$OPERATOR_LIMITS"
+```
+
+更新仓库内 fixture, 用例哈希和[门槛](../../development/operators/limits.json)前, 检查数组, 清单, 生成器 identity 和提议门槛.
+
 性能测量使用 [HTTP benchmark](../performance.zh.md#测量命令).
 比较变更前后的测量时, 使用相同的 `--prompt-seed` 值.
 HTTP 产物记录此 seed 和执行策略.

@@ -1,0 +1,190 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "output.distribution.numerics.verify-one",
+    "boundary": "output.distribution",
+    "purpose": "numerics",
+    "shape": {
+      "rows": 5
+    },
+    "mode": "graph",
+    "weights": [
+      "output"
+    ],
+    "options": {
+      "greedy": false,
+      "sequence_rows": [
+        0,
+        5
+      ]
+    },
+    "outputs": [
+      "logits",
+      "probabilities"
+    ]
+  },
+  "checkpoint": {
+    "files": {
+      "config": "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc",
+      "index": "f0838c766951bdfe76d6afbdb2771a8f67aaa2231dedb3d33cebd817729843a2",
+      "outside.safetensors": "ddff1d6665a2b39f2612fce0ef955e2436724c565bfbcbc127c7ffd078b698ff"
+    },
+    "weights": [
+      "lm_head.weight",
+      "model.language_model.norm.weight"
+    ]
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "numpy": "2.5.4",
+    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "decisions": {
+      "minimum_margin": 0.01,
+      "records": []
+    }
+  },
+  "files": {
+    "inputs.value.0000.npz": "225b64576ab6c48007f5ad055d256189616f701b6075c27d150dcc135c74f77a",
+    "inputs.residual.0000.npz": "269927a34c564d83bc7e7493bb1067465a28a0e7fb0184925ad878015140d2aa",
+    "inputs.history.0000.npz": "935fce51e5c5ec2a5b83ef7336cb43d1919cdf9c5683c62861e24ff8dd0d8433",
+    "inputs.mask.0000.npz": "c9228b1fc6c6247e06a3728fb64f9aa04e56f3bc0dc775faf89af52e0aaa5f00",
+    "inputs.parameters.0000.npz": "cb26d8e90a514d333995ec53b5878b5a3778d93d02bccc43589ad8364c5fbae5",
+    "state.rng.0000.npz": "674ca649d9039f6afbda6fb7012f4c1b978a5f8e4bb16f9e92ddd6c62910cbec",
+    "expected.logits.0000.npz": "95ae894727790c302da9675fa969f9a79694aa6c083e1a9d4cc4ba02f7384948",
+    "expected.probabilities.0000.npz": "2458c2960efbc1eccbf3069adbc513ed75006774361940057015694fdb8e0bfb"
+  },
+  "tensors": {
+    "inputs.value": {
+      "shape": [
+        5,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.value.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 25600
+        }
+      ]
+    },
+    "inputs.residual": {
+      "shape": [
+        5,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.residual.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 25600
+        }
+      ]
+    },
+    "inputs.history": {
+      "shape": [
+        5,
+        2,
+        248320
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.history.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 2483200
+        }
+      ]
+    },
+    "inputs.mask": {
+      "shape": [
+        5,
+        31040
+      ],
+      "dtype": "uint8",
+      "tensor_dtype": "uint8",
+      "parts": [
+        {
+          "file": "inputs.mask.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 155200
+        }
+      ]
+    },
+    "inputs.parameters": {
+      "shape": [
+        5,
+        7
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.parameters.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 35
+        }
+      ]
+    },
+    "state.rng": {
+      "shape": [
+        5,
+        2
+      ],
+      "dtype": "uint64",
+      "tensor_dtype": "uint64",
+      "parts": [
+        {
+          "file": "state.rng.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 10
+        }
+      ]
+    },
+    "expected.logits": {
+      "shape": [
+        5,
+        248320
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.logits.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 1241600
+        }
+      ]
+    },
+    "expected.probabilities": {
+      "shape": [
+        5,
+        248320
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.probabilities.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 1241600
+        }
+      ]
+    }
+  },
+  "writes": {}
+}

@@ -1,0 +1,130 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "ffn.numerics.verification",
+    "boundary": "ffn",
+    "purpose": "numerics",
+    "shape": {
+      "rows": 20
+    },
+    "mode": "graph",
+    "weights": [
+      0
+    ],
+    "options": {
+      "verify": true,
+      "restored": false,
+      "sequence_rows": [
+        0,
+        5,
+        10,
+        15,
+        20
+      ]
+    },
+    "outputs": [
+      "value",
+      "residual"
+    ]
+  },
+  "checkpoint": {
+    "files": {
+      "config": "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc",
+      "index": "f0838c766951bdfe76d6afbdb2771a8f67aaa2231dedb3d33cebd817729843a2",
+      "layers-0.safetensors": "07f700e293baeaf3cd4240c3df1a948c4403f16961ea7979e86c8d6a9f8fd466"
+    },
+    "weights": [
+      "model.language_model.layers.0.mlp.down_proj.weight",
+      "model.language_model.layers.0.mlp.down_proj.weight_scale_inv",
+      "model.language_model.layers.0.mlp.gate_proj.weight",
+      "model.language_model.layers.0.mlp.gate_proj.weight_scale_inv",
+      "model.language_model.layers.0.mlp.up_proj.weight",
+      "model.language_model.layers.0.mlp.up_proj.weight_scale_inv",
+      "model.language_model.layers.0.post_attention_layernorm.weight"
+    ]
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "numpy": "2.5.4",
+    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "decisions": {
+      "minimum_margin": 0.01,
+      "records": []
+    }
+  },
+  "files": {
+    "inputs.value.0000.npz": "b424b22e8c12449a999cb673c964db4a2337bc0d3a220f0ca6dd5cab613d543f",
+    "inputs.residual.0000.npz": "576fbad48403ea286c053577b25f783d36770098787b27458a636505cbfdbf3c",
+    "expected.value.0000.npz": "07a6ac26fc7dab385a6ee1ee114ed07ef03a46d97ed832b0d0178d165160b6c1",
+    "expected.residual.0000.npz": "61bd9484b7dba8879d29095031fd75efb5cc67b33be4bd2650ef679c944d889e"
+  },
+  "tensors": {
+    "inputs.value": {
+      "shape": [
+        20,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.value.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 102400
+        }
+      ]
+    },
+    "inputs.residual": {
+      "shape": [
+        20,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.residual.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 102400
+        }
+      ]
+    },
+    "expected.value": {
+      "shape": [
+        20,
+        5120
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.value.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 102400
+        }
+      ]
+    },
+    "expected.residual": {
+      "shape": [
+        20,
+        5120
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.residual.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 102400
+        }
+      ]
+    }
+  },
+  "writes": {}
+}

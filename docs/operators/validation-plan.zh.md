@@ -125,15 +125,15 @@ PreparedCase.close() -> None
 `numerics.compare(actual, fixture, limits) -> NumericalResult` 返回字段指标和精确契约失败项.
 生成器写入新的暂存目录, 不覆盖已跟踪 fixture.
 
-- [ ] 新增 `test_numerics_rejects_wrong_state_and_missing_limits`, 包含错误 checkpoint, guard 写入和缺失预算.
-- [ ] 使用零权重投影, 单可见 key attention, 以及可解析的 recurrence/acceptance 示例检查参考公式.
-- [ ] 实现前先运行这些检查.
-- [ ] 在该边界数值验收或性能校准前, 实现 distribution-only 路径.
-- [ ] 实现直接 PyTorch 参考和完整字段比较.
-- [ ] 在 reference 环境中生成固定输入和预期数组.
-- [ ] 请另一位 agent 检查公式, 数值预算, checkpoint 身份和完整 fixture manifest.
-- [ ] 将经过审查的 NumPy 分片, manifest, 源码和数值门槛一起提交.
-- [ ] 在不含 PyTorch 的推理环境中运行数值验收.
+- [x] 新增 `test_numerics_rejects_wrong_state_and_missing_limits`, 包含错误 checkpoint, guard 写入和缺失预算.
+- [x] 使用零权重投影, 单可见 key attention, 以及可解析的 recurrence/acceptance 示例检查参考公式.
+- [x] 实现前先运行这些检查.
+- [x] 在该边界数值验收或性能校准前, 实现 distribution-only 路径.
+- [x] 实现直接 PyTorch 参考和完整字段比较.
+- [x] 在 reference 环境中生成固定输入和预期数组.
+- [x] 请另一位 agent 检查公式, 数值预算, checkpoint 身份和完整 fixture manifest.
+- [x] 将经过审查的 NumPy 分片, manifest, 源码和数值门槛一起提交.
+- [x] 在不含 PyTorch 的推理环境中运行数值验收.
 
 ## V3: 实现理论延迟验收
 

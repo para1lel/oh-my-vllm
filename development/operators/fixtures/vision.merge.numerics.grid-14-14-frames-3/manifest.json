@@ -1,0 +1,99 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "vision.merge.numerics.grid-14-14-frames-3",
+    "boundary": "vision.merge",
+    "purpose": "numerics",
+    "shape": {
+      "height": 14,
+      "width": 14,
+      "frames": 3,
+      "rows": 392
+    },
+    "mode": "eager",
+    "weights": [
+      26
+    ],
+    "options": {},
+    "outputs": [
+      "hidden"
+    ]
+  },
+  "checkpoint": {
+    "files": {
+      "config": "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc",
+      "index": "f0838c766951bdfe76d6afbdb2771a8f67aaa2231dedb3d33cebd817729843a2",
+      "outside.safetensors": "ddff1d6665a2b39f2612fce0ef955e2436724c565bfbcbc127c7ffd078b698ff"
+    },
+    "weights": [
+      "model.visual.blocks.26.attn.proj.bias",
+      "model.visual.blocks.26.attn.proj.weight",
+      "model.visual.blocks.26.attn.qkv.bias",
+      "model.visual.blocks.26.attn.qkv.weight",
+      "model.visual.blocks.26.mlp.linear_fc1.bias",
+      "model.visual.blocks.26.mlp.linear_fc1.weight",
+      "model.visual.blocks.26.mlp.linear_fc2.bias",
+      "model.visual.blocks.26.mlp.linear_fc2.weight",
+      "model.visual.blocks.26.norm1.bias",
+      "model.visual.blocks.26.norm1.weight",
+      "model.visual.blocks.26.norm2.bias",
+      "model.visual.blocks.26.norm2.weight",
+      "model.visual.merger.linear_fc1.bias",
+      "model.visual.merger.linear_fc1.weight",
+      "model.visual.merger.linear_fc2.bias",
+      "model.visual.merger.linear_fc2.weight",
+      "model.visual.merger.norm.bias",
+      "model.visual.merger.norm.weight"
+    ]
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "numpy": "2.5.4",
+    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "decisions": {
+      "minimum_margin": 0.01,
+      "records": []
+    }
+  },
+  "files": {
+    "inputs.hidden.0000.npz": "92de175def07d2733a5e795ca746a30dc2c3730f27da1ba6d8079eaa0d7006e4",
+    "expected.hidden.0000.npz": "3199014e0b4c5dab7c4c1a5211a0febf2cca491ecb4450919e3c38cc8770f912"
+  },
+  "tensors": {
+    "inputs.hidden": {
+      "shape": [
+        392,
+        1152
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.hidden.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 451584
+        }
+      ]
+    },
+    "expected.hidden": {
+      "shape": [
+        98,
+        5120
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.hidden.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 501760
+        }
+      ]
+    }
+  },
+  "writes": {}
+}

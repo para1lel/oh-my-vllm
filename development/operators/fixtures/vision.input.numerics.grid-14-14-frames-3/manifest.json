@@ -1,0 +1,99 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "vision.input.numerics.grid-14-14-frames-3",
+    "boundary": "vision.input",
+    "purpose": "numerics",
+    "shape": {
+      "height": 14,
+      "width": 14,
+      "frames": 3,
+      "rows": 392
+    },
+    "mode": "eager",
+    "weights": [
+      0
+    ],
+    "options": {},
+    "outputs": [
+      "hidden"
+    ]
+  },
+  "checkpoint": {
+    "files": {
+      "config": "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc",
+      "index": "f0838c766951bdfe76d6afbdb2771a8f67aaa2231dedb3d33cebd817729843a2",
+      "outside.safetensors": "ddff1d6665a2b39f2612fce0ef955e2436724c565bfbcbc127c7ffd078b698ff"
+    },
+    "weights": [
+      "model.visual.blocks.0.attn.proj.bias",
+      "model.visual.blocks.0.attn.proj.weight",
+      "model.visual.blocks.0.attn.qkv.bias",
+      "model.visual.blocks.0.attn.qkv.weight",
+      "model.visual.blocks.0.mlp.linear_fc1.bias",
+      "model.visual.blocks.0.mlp.linear_fc1.weight",
+      "model.visual.blocks.0.mlp.linear_fc2.bias",
+      "model.visual.blocks.0.mlp.linear_fc2.weight",
+      "model.visual.blocks.0.norm1.bias",
+      "model.visual.blocks.0.norm1.weight",
+      "model.visual.blocks.0.norm2.bias",
+      "model.visual.blocks.0.norm2.weight",
+      "model.visual.patch_embed.proj.bias",
+      "model.visual.patch_embed.proj.weight",
+      "model.visual.pos_embed.weight"
+    ]
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "numpy": "2.5.4",
+    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "decisions": {
+      "minimum_margin": 0.01,
+      "records": []
+    }
+  },
+  "files": {
+    "inputs.pixels.0000.npz": "c89c21094aeb21d7c98bfaa72b9636075f535fafc5ad9860f5c9e9e781582bba",
+    "expected.hidden.0000.npz": "4d3a83e14d2c8f7295db8b8bb7e5406c609ed4a97b1392e2f29abaa7e4d08ae4"
+  },
+  "tensors": {
+    "inputs.pixels": {
+      "shape": [
+        1,
+        3,
+        224,
+        224,
+        3
+      ],
+      "dtype": "uint8",
+      "tensor_dtype": "uint8",
+      "parts": [
+        {
+          "file": "inputs.pixels.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 451584
+        }
+      ]
+    },
+    "expected.hidden": {
+      "shape": [
+        392,
+        1152
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.hidden.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 451584
+        }
+      ]
+    }
+  },
+  "writes": {}
+}

@@ -1,6 +1,7 @@
 #include "linear.cuh"
 #include <cub/cub.cuh>
 #include <curand_kernel.h>
+#include <optional>
 
 constexpr int Vocabulary = 248320;
 constexpr int TokenBits = 18;
@@ -113,6 +114,7 @@ __global__ void unpack_scores_kernel(const uint64_t *ordered, float *scores, int
   probability[index] = 0;
 }
 
+template <bool Select>
 __global__ void distribution_kernel(const float *sorted, const int *order, const float *parameters,
                                     uint64_t *rng, float *probability, int64_t *tokens,
                                     float *selected_probability, bool allow_invalid) {
@@ -133,9 +135,11 @@ __global__ void distribution_kernel(const float *sorted, const int *order, const
   const float *p = parameters + row * 7;
   if (!isfinite(scores[0])) {
     if (allow_invalid) {
-      if (!lane) {
-        tokens[row] = -1;
-        selected_probability[row] = 0;
+      if constexpr (Select) {
+        if (!lane) {
+          tokens[row] = -1;
+          selected_probability[row] = 0;
+        }
       }
       return;
     }
@@ -166,18 +170,22 @@ __global__ void distribution_kernel(const float *sorted, const int *order, const
     prefix = 0;
     retained = 0;
     selected = Vocabulary;
-    curandStatePhilox4_32_10_t state;
-    curand_init(rng[row * 2], 0, rng[row * 2 + 1], &state);
-    uniform = curand_uniform(&state);
-    if (p[0] > 0)
-      ++rng[row * 2 + 1];
+    if constexpr (Select) {
+      curandStatePhilox4_32_10_t state;
+      curand_init(rng[row * 2], 0, rng[row * 2 + 1], &state);
+      uniform = curand_uniform(&state);
+      if (p[0] > 0)
+        ++rng[row * 2 + 1];
+    }
   }
   __syncthreads();
   if (p[0] == 0) {
     if (!lane) {
       output[ids[0]] = 1;
-      tokens[row] = ids[0];
-      selected_probability[row] = 1;
+      if constexpr (Select) {
+        tokens[row] = ids[0];
+        selected_probability[row] = 1;
+      }
     }
     return;
   }
@@ -197,6 +205,11 @@ __global__ void distribution_kernel(const float *sorted, const int *order, const
       prefix += aggregate;
     }
     __syncthreads();
+  }
+  if constexpr (!Select) {
+    for (int i = lane; i < active; i += 256)
+      output[ids[i]] /= retained;
+    return;
   }
   if (!lane)
     prefix = 0;
@@ -256,11 +269,12 @@ void sample_project(TensorView x, TensorView residual, TensorView norm, TensorVi
               Vocabulary, 5120, stream);
 }
 
-void sample(TensorView x, TensorView history, TensorView allowed, TensorView parameters,
-            TensorView rng, TensorView keys, TensorView ordered, TensorView sorted,
-            TensorView order, TensorView probability, TensorView tokens,
-            TensorView selected_probability, TensorView workspace, bool allow_invalid,
-            bool greedy) {
+template <bool Select>
+void sample_impl(TensorView x, TensorView history, TensorView allowed, TensorView parameters,
+                 std::optional<TensorView> rng, TensorView keys, TensorView ordered,
+                 TensorView sorted, TensorView order, TensorView probability,
+                 std::optional<TensorView> tokens, std::optional<TensorView> selected_probability,
+                 TensorView workspace, bool allow_invalid, bool greedy) {
   TVM_FFI_ICHECK(x.ndim() == 2 && x.size(0) > 0 && x.size(0) <= 20 && x.size(1) == Vocabulary);
   int rows = x.size(0);
   TensorView logits = x;
@@ -272,19 +286,23 @@ void sample(TensorView x, TensorView history, TensorView allowed, TensorView par
     tensor_contract(history, x, kDLInt, 32, {rows, 2, Vocabulary});
   tensor_contract(allowed, x, kDLUInt, 8, {rows, Vocabulary / 8});
   tensor_contract(parameters, x, kDLFloat, 32, {rows, 7});
-  tensor_contract(rng, x, kDLUInt, 64, {rows, 2});
+  if constexpr (Select)
+    tensor_contract(*rng, x, kDLUInt, 64, {rows, 2});
   for (auto tensor : {sorted, probability})
     tensor_contract(tensor, x, kDLFloat, 32, {rows, Vocabulary});
   for (auto tensor : {keys, ordered})
     tensor_contract(tensor, x, kDLUInt, 64, {rows, Vocabulary});
   tensor_contract(order, x, kDLInt, 32, {rows, Vocabulary});
-  tensor_contract(tokens, x, kDLInt, 64, {rows});
-  tensor_contract(selected_probability, x, kDLFloat, 32, {rows});
+  if constexpr (Select) {
+    tensor_contract(*tokens, x, kDLInt, 64, {rows});
+    tensor_contract(*selected_probability, x, kDLFloat, 32, {rows});
+  }
   TVM_FFI_ICHECK(workspace.ndim() == 1);
   tensor_contract(workspace, x, kDLUInt, 8, {workspace.size(0)});
-  auto tensors = {logits,   history, allowed, parameters,  rng,    keys,
-                  ordered,  sorted,  order,   probability, tokens, selected_probability,
-                  workspace};
+  std::vector<TensorView> tensors = {logits,  history, allowed, parameters,  keys,
+                                     ordered, sorted,  order,   probability, workspace};
+  if constexpr (Select)
+    tensors.insert(tensors.end(), {*rng, *tokens, *selected_probability});
   int left = 0;
   for (auto a : tensors) {
     int right = 0;
@@ -307,10 +325,11 @@ void sample(TensorView x, TensorView history, TensorView allowed, TensorView par
         static_cast<const float *>(parameters.data_ptr()), static_cast<uint64_t *>(keys.data_ptr()),
         static_cast<float *>(probability.data_ptr()), compact);
     check_cuda(cudaGetLastError());
-    greedy_select_kernel<<<rows, 256, 0, stream>>>(
+    greedy_select_kernel<Select><<<rows, 256, 0, stream>>>(
         static_cast<const uint64_t *>(keys.data_ptr()),
-        static_cast<float *>(probability.data_ptr()), static_cast<int64_t *>(tokens.data_ptr()),
-        static_cast<float *>(selected_probability.data_ptr()), allow_invalid);
+        static_cast<float *>(probability.data_ptr()),
+        Select ? static_cast<int64_t *>(tokens->data_ptr()) : nullptr,
+        Select ? static_cast<float *>(selected_probability->data_ptr()) : nullptr, allow_invalid);
     check_cuda(cudaGetLastError());
     return;
   }
@@ -328,10 +347,29 @@ void sample(TensorView x, TensorView history, TensorView allowed, TensorView par
       static_cast<int *>(order.data_ptr()), static_cast<float *>(probability.data_ptr()),
       rows * Vocabulary);
   check_cuda(cudaGetLastError());
-  distribution_kernel<<<rows, 256, 0, stream>>>(
+  distribution_kernel<Select><<<rows, 256, 0, stream>>>(
       static_cast<const float *>(sorted.data_ptr()), static_cast<const int *>(order.data_ptr()),
-      static_cast<const float *>(parameters.data_ptr()), static_cast<uint64_t *>(rng.data_ptr()),
-      static_cast<float *>(probability.data_ptr()), static_cast<int64_t *>(tokens.data_ptr()),
-      static_cast<float *>(selected_probability.data_ptr()), allow_invalid);
+      static_cast<const float *>(parameters.data_ptr()),
+      Select ? static_cast<uint64_t *>(rng->data_ptr()) : nullptr,
+      static_cast<float *>(probability.data_ptr()),
+      Select ? static_cast<int64_t *>(tokens->data_ptr()) : nullptr,
+      Select ? static_cast<float *>(selected_probability->data_ptr()) : nullptr, allow_invalid);
   check_cuda(cudaGetLastError());
+}
+
+void sample(TensorView x, TensorView history, TensorView allowed, TensorView parameters,
+            TensorView rng, TensorView keys, TensorView ordered, TensorView sorted,
+            TensorView order, TensorView probability, TensorView tokens,
+            TensorView selected_probability, TensorView workspace, bool allow_invalid,
+            bool greedy) {
+  sample_impl<true>(x, history, allowed, parameters, rng, keys, ordered, sorted, order, probability,
+                    tokens, selected_probability, workspace, allow_invalid, greedy);
+}
+
+void sample_distribution(TensorView x, TensorView history, TensorView allowed,
+                         TensorView parameters, TensorView keys, TensorView ordered,
+                         TensorView sorted, TensorView order, TensorView probability,
+                         TensorView workspace, bool allow_invalid, bool greedy) {
+  sample_impl<false>(x, history, allowed, parameters, std::nullopt, keys, ordered, sorted, order,
+                     probability, std::nullopt, std::nullopt, workspace, allow_invalid, greedy);
 }

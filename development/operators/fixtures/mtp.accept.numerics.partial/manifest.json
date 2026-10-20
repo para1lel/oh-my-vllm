@@ -1,0 +1,259 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "mtp.accept.numerics.partial",
+    "boundary": "mtp.accept",
+    "purpose": "numerics",
+    "shape": {
+      "batch": 2
+    },
+    "mode": "graph",
+    "weights": [],
+    "options": {
+      "acceptance": "partial",
+      "target": "probabilities"
+    },
+    "outputs": [
+      "tokens",
+      "counts",
+      "candidate_slots",
+      "rng"
+    ]
+  },
+  "checkpoint": {
+    "files": {
+      "config": "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc",
+      "index": "f0838c766951bdfe76d6afbdb2771a8f67aaa2231dedb3d33cebd817729843a2"
+    },
+    "weights": []
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "numpy": "2.5.4",
+    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "decisions": {
+      "minimum_margin": 0.01,
+      "records": [
+        {
+          "kind": "acceptance",
+          "distance": 0.6317288338073677
+        },
+        {
+          "kind": "acceptance",
+          "distance": 0.7222659737165718
+        },
+        {
+          "kind": "cdf",
+          "distance": 0.06758634171057826,
+          "draw": 0.06758634171057826,
+          "left": 0.0,
+          "right": 0.25
+        },
+        {
+          "kind": "acceptance",
+          "distance": 1.3226930697970425
+        },
+        {
+          "kind": "acceptance",
+          "distance": 1.2086415824989394
+        },
+        {
+          "kind": "acceptance",
+          "distance": 0.8314497991549079
+        },
+        {
+          "kind": "cdf",
+          "distance": 0.31761460327670554,
+          "draw": 0.5676146032767055,
+          "left": 0.25,
+          "right": 1.0
+        }
+      ]
+    }
+  },
+  "files": {
+    "inputs.target.0000.npz": "91eefa377547dde071f04db10bbb6ac0ab30b88c086ebff12a3c971f119c1010",
+    "inputs.proposal.0000.npz": "11a41621d410043bca2cf4aeff98b590fa2f992ebe09fc4958a3858a46593a09",
+    "inputs.drafts.0000.npz": "898ce95ede9a4f8236454b11afc6926f4e757a5fd29d9c4488502f59d40c0f3d",
+    "inputs.private_slots.0000.npz": "a8443d6686d03be003cd607541c7716907d8171cdbba771ca0731464cd156edb",
+    "inputs.capacity.0000.npz": "065f5d456cb8ac66bfb9891a66ea9b640249759e0438e74b981a7c2bffb8f562",
+    "state.rng.0000.npz": "5b505807c0b594f6abd04f325ec13c870533002bae0db695af69e97937492214",
+    "expected.tokens.0000.npz": "907e8ba0b2d652bc2003d05e8ca0d4be6944091b8f41e9eae855c055f19c5950",
+    "expected.counts.0000.npz": "5ad6fbd6dd6487b6ebc31e2c13bec0ebc018b9d67494ee851f800050f2b06294",
+    "expected.candidate_slots.0000.npz": "03a000c4d410d24f43848b985d94174e58a0cf0eaaf54eec3d883fdc69403a5e",
+    "expected.rng.0000.npz": "2ec7f75a09b3b69fd18d1e9d85c07c54102a19624987d91861db52e76ec14db9"
+  },
+  "tensors": {
+    "inputs.target": {
+      "shape": [
+        2,
+        5,
+        248320
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.target.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 2483200
+        }
+      ]
+    },
+    "inputs.proposal": {
+      "shape": [
+        2,
+        4,
+        248320
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.proposal.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 1986560
+        }
+      ]
+    },
+    "inputs.drafts": {
+      "shape": [
+        2,
+        5
+      ],
+      "dtype": "int64",
+      "tensor_dtype": "int64",
+      "parts": [
+        {
+          "file": "inputs.drafts.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 10
+        }
+      ]
+    },
+    "inputs.private_slots": {
+      "shape": [
+        2,
+        5
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.private_slots.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 10
+        }
+      ]
+    },
+    "inputs.capacity": {
+      "shape": [
+        1
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.capacity.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 1
+        }
+      ]
+    },
+    "state.rng": {
+      "shape": [
+        2,
+        2
+      ],
+      "dtype": "uint64",
+      "tensor_dtype": "uint64",
+      "parts": [
+        {
+          "file": "state.rng.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4
+        }
+      ]
+    },
+    "expected.tokens": {
+      "shape": [
+        2,
+        5
+      ],
+      "dtype": "int64",
+      "tensor_dtype": "int64",
+      "parts": [
+        {
+          "file": "expected.tokens.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 10
+        }
+      ]
+    },
+    "expected.counts": {
+      "shape": [
+        2
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "expected.counts.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 2
+        }
+      ]
+    },
+    "expected.candidate_slots": {
+      "shape": [
+        2
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "expected.candidate_slots.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 2
+        }
+      ]
+    },
+    "expected.rng": {
+      "shape": [
+        2,
+        2
+      ],
+      "dtype": "uint64",
+      "tensor_dtype": "uint64",
+      "parts": [
+        {
+          "file": "expected.rng.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4
+        }
+      ]
+    }
+  },
+  "writes": {
+    "rng": {
+      "indices": [
+        0,
+        1
+      ],
+      "layout": "rows",
+      "output": "rng"
+    }
+  }
+}

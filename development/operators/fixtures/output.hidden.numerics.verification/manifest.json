@@ -1,0 +1,201 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "output.hidden.numerics.verification",
+    "boundary": "output.hidden",
+    "purpose": "numerics",
+    "shape": {
+      "rows": 20
+    },
+    "mode": "graph",
+    "weights": [
+      "output"
+    ],
+    "options": {
+      "verify": true,
+      "restored": false,
+      "sequence_rows": [
+        0,
+        5,
+        10,
+        15,
+        20
+      ]
+    },
+    "outputs": [
+      "hidden",
+      "hidden_cache",
+      "guards"
+    ]
+  },
+  "checkpoint": {
+    "files": {
+      "config": "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc",
+      "index": "f0838c766951bdfe76d6afbdb2771a8f67aaa2231dedb3d33cebd817729843a2",
+      "outside.safetensors": "ddff1d6665a2b39f2612fce0ef955e2436724c565bfbcbc127c7ffd078b698ff"
+    },
+    "weights": [
+      "model.language_model.norm.weight"
+    ]
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "numpy": "2.5.4",
+    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "decisions": {
+      "minimum_margin": 0.01,
+      "records": []
+    }
+  },
+  "files": {
+    "inputs.value.0000.npz": "24a5285b0d00b9963452f00ecc7eac38fa346f96301eb20340eef2e4155ed426",
+    "inputs.residual.0000.npz": "929cf5d7e791585c31d1616edb933734fa324221f71441c293a6eb0d4daa76dd",
+    "inputs.slots.0000.npz": "df16c91a970bb70af14ecae6eaec4781e5486802dc6fb7ce28fa858c65a00b87",
+    "state.hidden_cache.0000.npz": "d60c5d964738d8cbf5e64286a9130b726e02a1ca30fa4d92677aad911012b4a5",
+    "expected.hidden.0000.npz": "907766de51d5273b1cf365ca20a55781e91bba2c43ff1435bfe9d316632485c9",
+    "expected.hidden_cache.0000.npz": "907766de51d5273b1cf365ca20a55781e91bba2c43ff1435bfe9d316632485c9",
+    "expected.guards.0000.npz": "443d82108cf665d6c0e1fe56defe8169f4e65e81d6bf8ea6f4036c16c14fba94"
+  },
+  "tensors": {
+    "inputs.value": {
+      "shape": [
+        20,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.value.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 102400
+        }
+      ]
+    },
+    "inputs.residual": {
+      "shape": [
+        20,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.residual.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 102400
+        }
+      ]
+    },
+    "inputs.slots": {
+      "shape": [
+        20
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.slots.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 20
+        }
+      ]
+    },
+    "state.hidden_cache": {
+      "shape": [
+        22,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "state.hidden_cache.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 112640
+        }
+      ]
+    },
+    "expected.hidden": {
+      "shape": [
+        20,
+        5120
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.hidden.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 102400
+        }
+      ]
+    },
+    "expected.hidden_cache": {
+      "shape": [
+        20,
+        5120
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.hidden_cache.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 102400
+        }
+      ]
+    },
+    "expected.guards": {
+      "shape": [
+        1
+      ],
+      "dtype": "bool",
+      "tensor_dtype": "bool",
+      "parts": [
+        {
+          "file": "expected.guards.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 1
+        }
+      ]
+    }
+  },
+  "writes": {
+    "hidden_cache": {
+      "indices": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "layout": "rows",
+      "output": "hidden_cache"
+    }
+  }
+}

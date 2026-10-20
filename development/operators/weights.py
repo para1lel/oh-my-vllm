@@ -3,8 +3,11 @@ from dataclasses import replace
 
 from oh_my_vllm.kernels.mtp import InputWeights
 from oh_my_vllm.kernels.sample import Weights as OutputWeights
+from oh_my_vllm.kernels.vision import Weights as VisionWeights
 from oh_my_vllm.worker.checkpoint import Checkpoint
 from oh_my_vllm.worker.weights import Weights
+
+from .bindings import VISION_BLOCK, VISION_MERGER, weight_names
 
 
 class CaseWeights(Weights):
@@ -44,7 +47,34 @@ class CaseWeights(Weights):
                     self.floats("mtp.norm.weight"), self.upload("lm_head.weight")
                 )
         elif family == "vision":
-            self.vision()
+            self.vision_case(case)
+        if sorted(self.names) != weight_names(case):
+            raise ValueError("loaded tensor names differ from the fixed weight binding")
+
+    def vision_case(self, case):
+        blocks = tuple(
+            tuple(
+                self.upload(f"model.visual.blocks.{layer}.{name}")
+                for name in VISION_BLOCK
+            )
+            if layer in case.weights
+            else ()
+            for layer in range(27)
+        )
+        patch, merger = (), ()
+        if case.boundary == "vision.input":
+            patch = (
+                self.device.view(
+                    self.upload("model.visual.patch_embed.proj.weight"), (1152, 1536)
+                ),
+                self.upload("model.visual.patch_embed.proj.bias"),
+                self.upload("model.visual.pos_embed.weight"),
+            )
+        if case.boundary == "vision.merge":
+            merger = tuple(
+                self.upload("model.visual.merger." + name) for name in VISION_MERGER
+            )
+        self.visual = VisionWeights(blocks, patch, merger)
 
     def upload(self, name):
         self.names.add(name)

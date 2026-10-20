@@ -70,6 +70,34 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.model.reference --
 The generator does not overwrite files.
 Update the frozen file and its SHA256 only after review of the checkpoint, inputs, generator, and numerical policy.
 
+## Operator commands
+
+Set `OPERATOR_REPORT` to a new external directory.
+Run all fixed numerical cases in the inference environment:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.operators numerics --model "$MODEL_ROOT" --report "$OPERATOR_REPORT"
+```
+
+This command loads repository fixtures and approved limits without PyTorch.
+Missing fixtures, changed identities, or failed limits cause an error exit.
+
+For an explicit fixture update, set `OPERATOR_FIXTURES` to a new external staging directory.
+Generate fixed arrays in the reference environment:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.operators.reference --model "$MODEL_ROOT" --output "$OPERATOR_FIXTURES"
+```
+
+Set `OPERATOR_LIMITS` to a new external JSON path.
+Propose limits with the approved [precision policy](precision.md):
+
+```bash
+scripts/with-env.sh python -m development.operators.budgets --fixtures "$OPERATOR_FIXTURES" --output "$OPERATOR_LIMITS"
+```
+
+Examine arrays, manifests, generator identity, and proposed limits before updating repository fixtures, case hashes, and [limits](../../development/operators/limits.json).
+
 Use the [HTTP benchmark](../performance.md#measurement-command) for performance measurement.
 Use the same `--prompt-seed` value when you compare measurements before and after a change.
 The HTTP artifact records this seed and the execution policy.

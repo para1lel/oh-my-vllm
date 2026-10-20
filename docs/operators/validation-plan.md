@@ -125,15 +125,15 @@ Keep the existing fused sampling path.
 `numerics.compare(actual, fixture, limits) -> NumericalResult` returns field metrics and exact-contract failures.
 The generator writes a new staging directory and never overwrites tracked fixtures.
 
-- [ ] Add `test_numerics_rejects_wrong_state_and_missing_limits` with a wrong checkpoint, a guard write, and an absent budget.
-- [ ] Check reference formulas with zero-weight projections, one-visible-key attention, and analytical recurrence/acceptance examples.
-- [ ] Run these checks before implementation.
-- [ ] Implement the distribution-only path before numerical acceptance or performance calibration of that boundary.
-- [ ] Implement direct PyTorch references and full-field comparison.
-- [ ] Generate the fixed inputs and expected arrays in the reference environment.
-- [ ] Get a different agent to examine formulas, numerical budgets, checkpoint identity, and complete fixture manifests.
-- [ ] Commit reviewed NumPy shards, manifests, source, and numerical limits together.
-- [ ] Run numerical acceptance in the inference environment without PyTorch.
+- [x] Add `test_numerics_rejects_wrong_state_and_missing_limits` with a wrong checkpoint, a guard write, and an absent budget.
+- [x] Check reference formulas with zero-weight projections, one-visible-key attention, and analytical recurrence/acceptance examples.
+- [x] Run these checks before implementation.
+- [x] Implement the distribution-only path before numerical acceptance or performance calibration of that boundary.
+- [x] Implement direct PyTorch references and full-field comparison.
+- [x] Generate the fixed inputs and expected arrays in the reference environment.
+- [x] Get a different agent to examine formulas, numerical budgets, checkpoint identity, and complete fixture manifests.
+- [x] Commit reviewed NumPy shards, manifests, source, and numerical limits together.
+- [x] Run numerical acceptance in the inference environment without PyTorch.
 
 ## V3: Implement theoretical-latency acceptance
 

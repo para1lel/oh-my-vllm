@@ -3,9 +3,11 @@
 在 `main` 上工作.
 下一次重构使用[算子结构设计](operators/design.zh.md).
 遵守[实施计划](operators/plan.zh.md)和 [microbench 设计](operators/microbench.zh.md).
-[算子验证框架](../development/operators)提供固定用例, fixture 加载和当前运行时的适配器.
-继续完成[验证任务 V2](operators/validation-plan.zh.md#v2-生成并提交数值-fixture) 中的 PyTorch fixture 生成和数值门槛.
-然后在源码迁移前校准固定的性能倍率.
+
+[算子验证框架](../development/operators)提供固定用例, 仓库内 fixture 和不使用 PyTorch 的数值验收.
+[精度策略](operators/precision.zh.md)定义字段与状态门槛.
+继续完成[验证任务 V3](operators/validation-plan.zh.md#v3-实现理论延迟验收) 中的理论延迟计费和固定性能倍率.
+在源码迁移前完成校准.
 
 Worker 使用[算子调度](execution.zh.md): 包含 prefill 的 Execute 消息使用 Eager, 仅含 decode 的消息使用 CUDA Graph 重放.
 Native 构建入口是 `development.native_build`.

@@ -5,6 +5,7 @@ from oh_my_vllm.worker.draft_chain import DraftChain
 from oh_my_vllm.worker.speculation import Draft
 
 from .fa import arguments, cache
+from .sampling import observe_cdf
 
 
 def context(prepared):
@@ -59,8 +60,15 @@ def draft(prepared):
     operation.tokens = inputs["tokens"]
     bind_sampling(operation, prepared)
     buffers = operation.sampling.operation.buffers
+    prepared.observers["selection_cdf"] = lambda: observe_cdf(
+        prepared, operation.sampling.operation
+    )
     prepared.outputs.update(
-        tokens=buffers[7], selected_probability=buffers[8], probabilities=buffers[6]
+        hidden=buffers[0],
+        logits=buffers[1],
+        tokens=buffers[7],
+        selected_probability=buffers[8],
+        probabilities=buffers[6],
     )
 
     def run():
@@ -103,9 +111,13 @@ def chain(prepared):
     stages[0].hidden = inputs["hidden"]
     stages[0].tokens = inputs["tokens"]
     prepared.outputs["tokens"] = operation.tokens
-    prepared.observers["probabilities"] = lambda: np.stack(
-        [prepared.download(stage.sampling.operation.buffers[6]) for stage in stages]
-    )
+    for name, index in (("hidden", 0), ("logits", 1), ("probabilities", 6)):
+        prepared.observers[name] = lambda index=index: np.stack(
+            [
+                prepared.download(stage.sampling.operation.buffers[index])
+                for stage in stages
+            ]
+        )
     prepared.operation = operation.run
     return None
 

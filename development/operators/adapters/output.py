@@ -1,5 +1,7 @@
 from oh_my_vllm.kernels.sample import Sample
 
+from .sampling import observe_cdf
+
 
 def bind(prepared):
     inputs, case, device = prepared.inputs, prepared.case, prepared.device
@@ -30,8 +32,6 @@ def bind(prepared):
         operation.project(inputs["value"], inputs["residual"])
 
     if case.boundary == "output.distribution":
-        if not hasattr(operation, "distribution"):
-            raise RuntimeError("distribution-only execution is not implemented")
 
         def run():
             project()
@@ -42,6 +42,7 @@ def bind(prepared):
                 greedy=case.options["greedy"],
             )
     else:
+        prepared.observers["selection_cdf"] = lambda: observe_cdf(prepared, operation)
         prepared.outputs.update(
             tokens=operation.buffers[7], selected_probability=operation.buffers[8]
         )

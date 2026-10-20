@@ -1,0 +1,214 @@
+{
+  "version": "operator-fixture-v1",
+  "case": {
+    "id": "output.distribution.numerics.verify-batch",
+    "boundary": "output.distribution",
+    "purpose": "numerics",
+    "shape": {
+      "rows": 20
+    },
+    "mode": "graph",
+    "weights": [
+      "output"
+    ],
+    "options": {
+      "greedy": false,
+      "sequence_rows": [
+        0,
+        5,
+        10,
+        15,
+        20
+      ]
+    },
+    "outputs": [
+      "logits",
+      "probabilities"
+    ]
+  },
+  "checkpoint": {
+    "files": {
+      "config": "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc",
+      "index": "f0838c766951bdfe76d6afbdb2771a8f67aaa2231dedb3d33cebd817729843a2",
+      "outside.safetensors": "ddff1d6665a2b39f2612fce0ef955e2436724c565bfbcbc127c7ffd078b698ff"
+    },
+    "weights": [
+      "lm_head.weight",
+      "model.language_model.norm.weight"
+    ]
+  },
+  "reference": {
+    "precision": "torch.float64",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "numpy": "2.5.4",
+    "source": "3c4b8c703b2c44a7ff8ee81ba6269fc1d9df682148977259c56620b0ed24aa3d",
+    "decisions": {
+      "minimum_margin": 0.01,
+      "records": []
+    }
+  },
+  "files": {
+    "inputs.value.0000.npz": "3545c222f511b8c73eca4f9e7372ae7ca95ac595b92b84a215d4f22164b2571c",
+    "inputs.residual.0000.npz": "823f4358f65d8106d5424f306560ee693f7718a9453348c857e79d0978c87374",
+    "inputs.history.0000.npz": "27fe39158d39adced266a6446d032c5547b492ebd6b5497130e660059c04bd1b",
+    "inputs.history.0001.npz": "d7d932e7703418e0d8764623695de99e55afaacbf29ff43e73be388c75acf294",
+    "inputs.mask.0000.npz": "da519cf44077e8254f3a9daf8e2fc5c7ed9600103267404f3e792671e5bfeb1f",
+    "inputs.parameters.0000.npz": "d9bab2236cf309a85414db59e7c325ffeccea06a8c03f510a78e5db64f6c16b0",
+    "state.rng.0000.npz": "bb4a863d832f6cfb0a546d9da8e4e14e70649305dcab344925acb1d7db838705",
+    "expected.logits.0000.npz": "8b36b8bfb04bb0fd14be8fd11df3277d4aac79179ea236cbbb7c94b4e266c124",
+    "expected.logits.0001.npz": "c0291f81c49854bccfdd356804af7323fbf4c30386a1f6c75e2524f7e5e134b2",
+    "expected.probabilities.0000.npz": "a22f4e3191e95366d58e987c5d1bd04dd0112a5a26632fcf40751310a100d299",
+    "expected.probabilities.0001.npz": "d63228857518ccc76b3bc38eb709af74f02890191ac72f8c12342d78fc2da7d0"
+  },
+  "tensors": {
+    "inputs.value": {
+      "shape": [
+        20,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.value.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 102400
+        }
+      ]
+    },
+    "inputs.residual": {
+      "shape": [
+        20,
+        5120
+      ],
+      "dtype": "uint16",
+      "tensor_dtype": "bfloat16",
+      "parts": [
+        {
+          "file": "inputs.residual.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 102400
+        }
+      ]
+    },
+    "inputs.history": {
+      "shape": [
+        20,
+        2,
+        248320
+      ],
+      "dtype": "int32",
+      "tensor_dtype": "int32",
+      "parts": [
+        {
+          "file": "inputs.history.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 8387584
+        },
+        {
+          "file": "inputs.history.0001.npz",
+          "key": "value",
+          "offset": 8387584,
+          "count": 1545216
+        }
+      ]
+    },
+    "inputs.mask": {
+      "shape": [
+        20,
+        31040
+      ],
+      "dtype": "uint8",
+      "tensor_dtype": "uint8",
+      "parts": [
+        {
+          "file": "inputs.mask.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 620800
+        }
+      ]
+    },
+    "inputs.parameters": {
+      "shape": [
+        20,
+        7
+      ],
+      "dtype": "float32",
+      "tensor_dtype": "float32",
+      "parts": [
+        {
+          "file": "inputs.parameters.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 140
+        }
+      ]
+    },
+    "state.rng": {
+      "shape": [
+        20,
+        2
+      ],
+      "dtype": "uint64",
+      "tensor_dtype": "uint64",
+      "parts": [
+        {
+          "file": "state.rng.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 40
+        }
+      ]
+    },
+    "expected.logits": {
+      "shape": [
+        20,
+        248320
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.logits.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4193792
+        },
+        {
+          "file": "expected.logits.0001.npz",
+          "key": "value",
+          "offset": 4193792,
+          "count": 772608
+        }
+      ]
+    },
+    "expected.probabilities": {
+      "shape": [
+        20,
+        248320
+      ],
+      "dtype": "float64",
+      "tensor_dtype": "float64",
+      "parts": [
+        {
+          "file": "expected.probabilities.0000.npz",
+          "key": "value",
+          "offset": 0,
+          "count": 4193792
+        },
+        {
+          "file": "expected.probabilities.0001.npz",
+          "key": "value",
+          "offset": 4193792,
+          "count": 772608
+        }
+      ]
+    }
+  },
+  "writes": {}
+}
