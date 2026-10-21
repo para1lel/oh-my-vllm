@@ -1,6 +1,6 @@
 import math
 
-VERSION = "http-reference-v3"
+VERSION = "http-reference-v4"
 RATES = dict(
     hbm_bytes=7.7e12,
     fp8_flops=4.5e15,

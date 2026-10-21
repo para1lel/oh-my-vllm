@@ -20,11 +20,12 @@
 
 inline void ffn_prefill_projection(const __nv_fp8_e4m3 *a, const __nv_fp8_e4m3 *weight,
                                    const float *scale_a, const float *scale_weight,
-                                   __nv_bfloat16 *output, int m, int n, int k,
-                                   cudaStream_t stream) {
+                                   __nv_bfloat16 *output, int m, int n, int k, cudaStream_t stream,
+                                   bool programmatic = false) {
   if (m <= 64) {
     groupwise(a, weight, scale_a, scale_weight, output, m, n, k, stream);
     return;
   }
-  prefill_projection::launch(a, weight, scale_a, scale_weight, output, m, n, k, stream);
+  prefill_projection::launch(a, weight, scale_a, scale_weight, output, m, n, k, stream,
+                             programmatic);
 }

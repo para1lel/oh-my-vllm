@@ -20,6 +20,10 @@ CUDA kernel 可以融合操作并在内部使用矩阵 tile.
 
 小规模 FFN 和 GDN 操作在归一化与输入投影之间使用 [Programmatic Dependent Launch](https://docs.nvidia.com/cuda/archive/13.1.0/cuda-programming-guide/04-special-topics/programmatic-dependent-launch.html).
 它们也在输出量化与输出投影之间使用 PDL.
+65 到 1024 行的 FFN prefill 在这两个边界使用 PDL.
+其融合输入投影包括激活和输出量化.
+更大的 prefill 操作保留串行启动.
+
 Stream capture 将这些选定的依赖记录在 CUDA Graph 中.
 Consumer 可以在 producer 完成执行前准备自身存储并读取固定权重.
 读取 producer 提供的输入或 scale 前, consumer 等待 producer 完成执行.

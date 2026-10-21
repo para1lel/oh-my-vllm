@@ -1,5 +1,5 @@
 import unittest
-from dataclasses import replace
+from dataclasses import asdict, replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -12,6 +12,8 @@ class PerformanceContracts(unittest.TestCase):
         from development.serving.accounting import add, attention
 
         from .accounting import CACHE_CAPACITY, lower_bound, position_bytes, work
+        from .performance import accounting_identity
+        from .validation import load_limits
 
         self.assertEqual(position_bytes(14, 14), 1679616)
         self.assertEqual(position_bytes(16, 16), 2214144)
@@ -22,8 +24,39 @@ class PerformanceContracts(unittest.TestCase):
 
         cases = [case for case in load_cases() if case.purpose == "performance"]
         device = dict(name="NVIDIA B200", l2_bytes=126 * 1024 * 1024)
+        limits = load_limits("performance")
+        identity = accounting_identity()
         for case in cases:
             self.assertGreater(lower_bound(case, device), 0, case.id)
+            approved = limits[case.id]
+            self.assertEqual(approved["accounting"], identity, case.id)
+            self.assertEqual(approved["work"], asdict(work(case)), case.id)
+            self.assertEqual(
+                approved["lower_seconds"], lower_bound(case, device), case.id
+            )
+            migration = approved["provenance"]["accounting_migration"]
+            previous = migration["previous"]
+            self.assertLessEqual(
+                approved["lower_seconds"], previous["lower_seconds"], case.id
+            )
+            self.assertEqual(
+                migration["maximum_seconds"],
+                previous["max_ratio"] * previous["lower_seconds"],
+                case.id,
+            )
+            self.assertLessEqual(
+                approved["max_ratio"] * approved["lower_seconds"],
+                migration["maximum_seconds"],
+                case.id,
+            )
+            self.assertEqual(
+                approved["work"]["arithmetic"], previous["work"]["arithmetic"], case.id
+            )
+            self.assertEqual(
+                approved["work"]["unique_read_bytes"],
+                previous["work"]["unique_read_bytes"],
+                case.id,
+            )
             changed = replace(
                 case,
                 options={

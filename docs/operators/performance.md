@@ -1,7 +1,7 @@
 # Operator performance accounting
 
 The [microbench contract](microbench.md) defines fixed cases, calibration, timing, and acceptance.
-This document defines the `operator-reference-v2` resource policy.
+This document defines the `operator-reference-v3` resource policy.
 The [calculation](../../development/operators/accounting.py) uses the HTTP resource rates and resource-time formula.
 It has a separate version and does not change HTTP accounting.
 

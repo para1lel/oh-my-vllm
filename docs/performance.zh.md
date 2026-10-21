@@ -93,7 +93,7 @@ efficiency = reference_seconds / HTTP_seconds
 
 ## 下界计算
 
-[参考计算](../development/serving/kernels.py)使用版本 `http-reference-v3`.
+[参考计算](../development/serving/kernels.py)使用版本 `http-reference-v4`.
 它使用当前 kernel 边界和精度规则, 不使用实测校准输入.
 
 [Trace 验证器](../development/serving/trace.py)先检查完整 prefill, 连续接受位置, proposal 依赖和输出数量.
@@ -119,6 +119,11 @@ Context 计算停在接受终点; 如果随后有新 proposal, 则再计算一�
 Prefill 的计算时间与 decode 的访存时间相加.
 融合 kernel 构成一个组.
 若 consumer 等待前的必要工作可以重叠, 则 PDL producer 和 consumer 使用同一组.
+
+FFN 的 65 至 1024 行使用一个组, 包含 normalization, 融合 upper 计算和 down projection.
+每个 consumer 都可以在等待前读取常量权重和 weight scales.
+Activation values 和 activation scales 在等待后读取.
+其他 prefill 行数保留原有分组.
 
 最多八行的 down16dp projection 在等待后才读取权重.
 其计分工作保留为独立组.

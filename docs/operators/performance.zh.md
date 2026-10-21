@@ -1,7 +1,7 @@
 # 算子性能计费
 
 [Microbench 契约](microbench.zh.md)定义固定用例, 校准, 计时和验收.
-本文定义 `operator-reference-v2` 资源策略.
+本文定义 `operator-reference-v3` 资源策略.
 [计算实现](../../development/operators/accounting.py)使用 HTTP 资源速率和资源时间公式.
 它使用独立版本, 不改变 HTTP 计费.
 

@@ -228,11 +228,13 @@ class Model:
     def forward(self, batch, graph):
         plans = make_plans(batch, self.mtp)
         key = tuple(plan.reuse_key for plan in plans if plan is not None)
+        created = False
         if batch.schedule.verify:
             if key not in self.decode:
                 self.decode[key] = Workspace(
                     self.device, self.weights, self.cache, batch, plans
                 )
+                created = True
             workspace = self.decode[key]
         else:
             if self.prefill_key != key:
@@ -243,8 +245,10 @@ class Model:
                     self.device, self.weights, self.cache, batch, plans
                 )
                 self.prefill_key = key
+                created = True
             workspace = self.prefill
-        workspace.update(batch)
+        if not created:
+            workspace.update(batch)
         workspace.media, workspace.media_rows = self.media.rows(
             [
                 (

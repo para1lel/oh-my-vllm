@@ -12,6 +12,7 @@ Rust and the worker control persistent state selection.
 Operators write only to the state locations supplied by their callers.
 
 Small FFN and GDN operations use dependent launches at the boundaries in the execution rules.
+FFN prefill uses these dependencies for 65 to 1024 rows.
 The [prefix cache](serving.md#prefix-cache) can use a checkpoint from a block that is not full.
 Keep source blocks available until continuation results have no validation errors.
 
@@ -28,7 +29,10 @@ The [model contract](operators/model.md#intermediate-precision) defines the inte
 HTTP accounting uses serial kernel groups and the current precision rules.
 Use the [performance calculation](performance.md#lower-bound-calculation) when fusion or execution boundaries change.
 Operator ratio limits keep the approved maximum latency across accounting changes.
+
 Keep long-output efficiency at more than 40%. Measure each configuration two or more times.
+For each short-output configuration with a measured time of 5 seconds or more, the efficiency must be 40% or more.
+Continue optimization of large prefill operations.
 
 Run the applicable [test scope](testing.md) before delivery.
 Also run all 24 [HTTP configurations](performance.md).

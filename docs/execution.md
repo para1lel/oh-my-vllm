@@ -20,6 +20,10 @@ CUDA kernels can fuse operations and use matrix tiles internally.
 
 Small FFN and GDN operations use [Programmatic Dependent Launch](https://docs.nvidia.com/cuda/archive/13.1.0/cuda-programming-guide/04-special-topics/programmatic-dependent-launch.html) between normalization and input projection.
 They also use PDL between output quantization and output projection.
+FFN prefill with 65 to 1024 rows uses PDL at these boundaries.
+Its fused input projection includes activation and output quantization.
+Larger prefill operations keep serial launches.
+
 Stream capture records these selected dependencies in the CUDA Graph.
 The consumer can prepare its storage and read constant weights before its producer completes execution.
 It waits for its producer to complete execution before it reads the inputs or scales that the producer supplies.

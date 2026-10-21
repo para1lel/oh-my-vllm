@@ -88,10 +88,14 @@ template <bool Programmatic = false, class Residual, class Sum>
 inline void residual_rms_quant_launch(const __nv_bfloat16 *x, const Residual *residual,
                                       const float *norm, Sum *summed, __nv_fp8_e4m3 *quantized,
                                       float *scales, int rows, cudaStream_t stream,
-                                      __nv_bfloat16 *normalized = nullptr) {
+                                      __nv_bfloat16 *normalized = nullptr,
+                                      bool prefill_programmatic = false) {
   if (rows <= 32)
     residual_rms_quant_kernel<640, Programmatic>
         <<<rows, 640, 0, stream>>>(x, residual, norm, summed, quantized, scales, normalized);
+  else if (prefill_programmatic)
+    residual_rms_quant_kernel<320, true>
+        <<<rows, 320, 0, stream>>>(x, residual, norm, summed, quantized, scales, normalized);
   else
     residual_rms_quant_kernel<320, false>
         <<<rows, 320, 0, stream>>>(x, residual, norm, summed, quantized, scales, normalized);

@@ -12,6 +12,7 @@ Rust 和 worker 控制持久状态选择.
 算子只写入调用方提供的状态位置.
 
 小规模 FFN 和 GDN 运算在执行规则规定的边界使用依赖启动.
+FFN prefill 在 65 到 1024 行时使用这些依赖.
 [前缀 cache](serving.zh.md#前缀-cache) 可以使用来自未满块的 checkpoint.
 保留源块, 直到续算结果没有校验错误.
 
@@ -28,7 +29,10 @@ FP8 投影使用 checkpoint 中的 E4M3 权重和 FP32 block scales.
 HTTP 计费使用串行 kernel 分组和当前精度规则.
 融合或执行边界变化时, 使用[性能计算](performance.zh.md#下界计算).
 计费变化时, 算子倍率门槛保持已批准的最大延迟.
+
 保持长输出 efficiency 高于 40%. 每种配置至少测量两次.
+每种实测耗时为 5 秒或更长的短输出配置, 其 efficiency 必须为 40% 或更高.
+继续优化大规模 prefill 操作.
 
 交付前执行适用的[测试范围](testing.zh.md).
 同时执行全部 24 组 [HTTP 配置](performance.zh.md).

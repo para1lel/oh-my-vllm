@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from . import benchmark
-from .accounting import RATES, reference_seconds
+from .accounting import RATES, linear, reference_seconds
 from .benchmark import (
     CONFIGURATIONS,
     efficiency,
@@ -15,8 +15,10 @@ from .benchmark import (
 )
 from .kernels import (
     draft_groups,
+    ffn_groups,
     gdn_groups,
     group,
+    normalization,
     reference,
     resources,
     sample_groups,
@@ -543,6 +545,34 @@ class Roofline(unittest.TestCase):
         )
 
     def test_serial_groups_cache_budget_and_precision_dispatch(self):
+        for rows in (64, 65, 624, 784, 1024, 1025):
+            with self.subTest(ffn_rows=rows):
+                serial = [
+                    group("norm", normalization(rows)),
+                    group(
+                        "upper",
+                        linear(rows, 34816, 5120, fp8=True),
+                        dict(fp32_flops=rows * 2 * 17408),
+                    ),
+                    group("down", linear(rows, 5120, 17408, fp8=True)),
+                ]
+                selected = ffn_groups(rows)
+                self.assertEqual(resources(selected), resources(serial))
+                if 65 <= rows <= 1024:
+                    self.assertEqual(
+                        [item.name for item in selected], ["ffn.prefill-pdl"]
+                    )
+                    self.assertEqual(
+                        serial_seconds(selected), reference_seconds(resources(serial))
+                    )
+                    self.assertLess(serial_seconds(selected), serial_seconds(serial))
+                else:
+                    self.assertEqual(
+                        [item.name for item in selected],
+                        ["ffn.norm", "ffn.upper", "ffn.activation", "ffn.down"]
+                        if rows == 64
+                        else ["ffn.norm", "ffn.upper", "ffn.down"],
+                    )
         memory = group("memory", {"hbm_bytes": 8 * RATES["hbm_bytes"]})
         compute = group("compute", {"fp8_flops": 6 * RATES["fp8_flops"]})
         self.assertEqual(serial_seconds([memory, compute]), 14)

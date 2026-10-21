@@ -80,6 +80,8 @@ def ffn_groups(rows):
                 else [group("ffn.output-pdl", activation, down)]
             ),
         ]
+    if 65 <= rows <= 1024:
+        return [group("ffn.prefill-pdl", normalize, upper, activation, down)]
     return [
         group("ffn.norm", normalize),
         *(

@@ -53,8 +53,10 @@ def load_limits(purpose):
     return selected
 
 
-def check_dependent_replay(prepared, fixture, limits):
-    if prepared.case.boundary not in {"ffn", "gdn"} or prepared.case.mode != "graph":
+def check_dependent_inputs(prepared, fixture, limits):
+    if prepared.case.boundary != "ffn" and not (
+        prepared.case.boundary == "gdn" and prepared.case.mode == "graph"
+    ):
         return {}
     failures = {}
     for cycle in range(3):
@@ -99,7 +101,7 @@ def numerical(model, report):
             prepared.reset()
             prepared.invoke()
             result = compare(prepared.observe(), fixture, limits[case.id])
-            replay_failures = check_dependent_replay(prepared, fixture, limits[case.id])
+            replay_failures = check_dependent_inputs(prepared, fixture, limits[case.id])
             if replay_failures:
                 result.failures["replay"] = replay_failures
         payload = {

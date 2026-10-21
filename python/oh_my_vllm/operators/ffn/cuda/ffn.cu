@@ -85,12 +85,13 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
   }
   tvm::ffi::CUDADeviceGuard guard(x.device().device_id);
   auto stream = static_cast<cudaStream_t>(TVMFFIEnvGetStream(kDLCUDA, x.device().device_id));
-  residual_rms_quant_launch<true>(static_cast<const __nv_bfloat16 *>(x.data_ptr()),
-                                  static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
-                                  static_cast<const float *>(norm.data_ptr()),
-                                  static_cast<float *>(summed.data_ptr()),
-                                  static_cast<__nv_fp8_e4m3 *>(quantized_input.data_ptr()),
-                                  static_cast<float *>(input_scale.data_ptr()), rows, stream);
+  bool prefill_programmatic = rows > 64 && rows <= 1024;
+  residual_rms_quant_launch<true>(
+      static_cast<const __nv_bfloat16 *>(x.data_ptr()),
+      static_cast<const __nv_bfloat16 *>(residual.data_ptr()),
+      static_cast<const float *>(norm.data_ptr()), static_cast<float *>(summed.data_ptr()),
+      static_cast<__nv_fp8_e4m3 *>(quantized_input.data_ptr()),
+      static_cast<float *>(input_scale.data_ptr()), rows, stream, nullptr, prefill_programmatic);
   auto paired = [&](auto count) {
     paired_up_launch<decltype(count)::value>(quantized_input, input_scale, gate_up_weight,
                                              gate_up_scale, gate_up, quantized_product,
@@ -109,7 +110,7 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
                               static_cast<const float *>(gate_up_scale.data_ptr()),
                               static_cast<__nv_fp8_e4m3 *>(quantized_product.data_ptr()),
                               static_cast<float *>(product_scale.data_ptr()), rows, 34816, 5120,
-                              stream);
+                              stream, prefill_programmatic);
   else {
     if (rows <= 32)
       groupwise<128, 32, 256, 128, 1, true>(
@@ -152,5 +153,5 @@ void ffn(TensorView x, TensorView residual, TensorView norm, TensorView gate_up_
                            static_cast<const float *>(product_scale.data_ptr()),
                            static_cast<const float *>(down_scale.data_ptr()),
                            static_cast<__nv_bfloat16 *>(output.data_ptr()), rows, 5120, 17408,
-                           stream);
+                           stream, prefill_programmatic);
 }

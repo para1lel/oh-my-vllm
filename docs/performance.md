@@ -94,7 +94,7 @@ This is a conservative resource estimate, not a minimum physical latency proof.
 
 ## Lower-bound calculation
 
-The [reference calculation](../development/serving/kernels.py) uses version `http-reference-v3`.
+The [reference calculation](../development/serving/kernels.py) uses version `http-reference-v4`.
 It uses the current kernel boundaries and precision rules. It has no measured calibration input.
 
 The [trace validator](../development/serving/trace.py) first checks full prefill, continuous accepted positions, proposal dependencies, and output counts.
@@ -120,6 +120,11 @@ It then adds the times across serial groups.
 Prefill compute time and decode memory time are added.
 A fused kernel is one group.
 PDL producers and consumers use one group when their necessary work can occur at the same time before the consumer wait.
+
+FFN rows 65 to 1024 use one group for normalization, fused upper computation, and down projection.
+Each consumer can read constant weights and weight scales before its wait.
+Activation values and activation scales are read after those waits.
+Other prefill row counts keep their previous groups.
 
 The down16dp projection for at most eight rows reads weights after that wait.
 Its credited work stays in a different group.

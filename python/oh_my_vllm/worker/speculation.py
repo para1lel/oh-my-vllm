@@ -397,6 +397,7 @@ class Speculation:
             max_queries=max(np.diff(starts)),
         )
         key = (plan.reuse_key, id(hidden))
+        created = False
         if graph:
             if key not in self.context_decode:
                 self.context_decode[key] = Context(
@@ -407,6 +408,7 @@ class Speculation:
                     hidden,
                     self.cache,
                 )
+                created = True
             operation = self.context_decode[key]
         else:
             if self.context_key != key:
@@ -422,8 +424,10 @@ class Speculation:
                     self.cache,
                 )
                 self.context_key = key
+                created = True
             operation = self.context_prefill
-        operation.metadata_inputs.update(arrays)
+        if not created:
+            operation.metadata_inputs.update(arrays)
         operation.media, indices = self.media.rows(media_entries)
         operation.media_rows = None
         if indices is not None:
