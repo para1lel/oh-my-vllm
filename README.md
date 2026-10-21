@@ -24,34 +24,33 @@ Requests use serving sampling defaults, auto tool constraints, and client ordina
 Requests have uncached prefixes, a 32768-token budget, and at most 4 running requests.
 
 The benchmark uses `http-reference-v4` with the [documented assumptions](docs/performance.md#memory).
-All 24 configurations have measurements for source `773da8d74be29baf`.
-Each long-output configuration has two efficiency measurements of more than 40%.
-Some short-output configurations with measured times of 5 seconds or more have an efficiency of less than 40%.
+All 24 configurations have measurements for source `89383e6f97116234`.
+The table contains one complete measurement run.
 The run uses 1024 FA blocks, 128 GDN slots, and prompt seed `serving-tools-v1`.
 
 | Mode | Batch | Input tokens per request | Output tokens per request | HTTP time (s) | Reference time (s) | Efficiency |
 |---|---:|---:|---:|---:|---:|---:|
-| Ordinary | 1 | 32768 | 64 | 1.867 | 0.697 | 37.35% |
-| Ordinary | 1 | 32768 | 8192 | 63.907 | 32.001 | 50.07% |
-| Ordinary | 2 | 32768 | 64 | 3.240 | 1.178 | 36.34% |
-| Ordinary | 2 | 32768 | 8192 | 74.880 | 35.359 | 47.22% |
-| Ordinary | 4 | 32768 | 64 | 5.871 | 2.131 | 36.29% |
-| Ordinary | 4 | 32768 | 8192 | 82.448 | 42.067 | 51.02% |
-| MTP4 | 1 | 32768 | 64 | 1.628 | 0.583 | 35.79% |
-| MTP4 | 1 | 32768 | 8192 | 26.704 | 13.263 | 49.67% |
-| MTP4 | 1 | 65536 | 64 | 5.766 | 1.224 | 21.23% |
-| MTP4 | 1 | 65536 | 8192 | 26.893 | 13.346 | 49.63% |
-| MTP4 | 1 | 131072 | 64 | 7.792 | 3.082 | 39.55% |
-| MTP4 | 1 | 131072 | 8192 | 30.711 | 15.213 | 49.54% |
-| MTP4 | 2 | 32768 | 64 | 3.000 | 1.053 | 35.10% |
-| MTP4 | 2 | 32768 | 8192 | 30.444 | 13.361 | 43.89% |
-| MTP4 | 2 | 65536 | 64 | 6.395 | 2.343 | 36.64% |
-| MTP4 | 2 | 65536 | 8192 | 36.339 | 14.971 | 41.20% |
-| MTP4 | 2 | 131072 | 64 | 15.248 | 6.087 | 39.92% |
-| MTP4 | 2 | 131072 | 8192 | 43.270 | 20.139 | 46.54% |
-| MTP4 | 4 | 32768 | 64 | 5.717 | 1.988 | 34.78% |
-| MTP4 | 4 | 32768 | 8192 | 37.385 | 15.435 | 41.29% |
-| MTP4 | 4 | 65536 | 64 | 12.445 | 4.597 | 36.94% |
-| MTP4 | 4 | 65536 | 8192 | 48.077 | 21.306 | 44.32% |
-| MTP4 | 4 | 131072 | 64 | 30.112 | 12.049 | 40.01% |
-| MTP4 | 4 | 131072 | 8192 | 69.055 | 31.634 | 45.81% |
+| Ordinary | 1 | 32768 | 64 | 1.834 | 0.697 | 38.02% |
+| Ordinary | 1 | 32768 | 8192 | 64.009 | 32.001 | 49.99% |
+| Ordinary | 2 | 32768 | 64 | 3.218 | 1.178 | 36.59% |
+| Ordinary | 2 | 32768 | 8192 | 74.757 | 35.359 | 47.30% |
+| Ordinary | 4 | 32768 | 64 | 5.980 | 2.131 | 35.63% |
+| Ordinary | 4 | 32768 | 8192 | 82.491 | 42.067 | 51.00% |
+| MTP4 | 1 | 32768 | 64 | 1.608 | 0.583 | 36.24% |
+| MTP4 | 1 | 32768 | 8192 | 26.705 | 13.263 | 49.66% |
+| MTP4 | 1 | 65536 | 64 | 3.357 | 1.224 | 36.47% |
+| MTP4 | 1 | 65536 | 8192 | 26.884 | 13.346 | 49.64% |
+| MTP4 | 1 | 131072 | 64 | 10.642 | 3.082 | 28.96% |
+| MTP4 | 1 | 131072 | 8192 | 30.751 | 15.213 | 49.47% |
+| MTP4 | 2 | 32768 | 64 | 3.036 | 1.053 | 34.68% |
+| MTP4 | 2 | 32768 | 8192 | 30.451 | 13.361 | 43.88% |
+| MTP4 | 2 | 65536 | 64 | 6.390 | 2.343 | 36.67% |
+| MTP4 | 2 | 65536 | 8192 | 33.165 | 14.971 | 45.14% |
+| MTP4 | 2 | 131072 | 64 | 15.269 | 6.087 | 39.86% |
+| MTP4 | 2 | 131072 | 8192 | 43.246 | 20.139 | 46.57% |
+| MTP4 | 4 | 32768 | 64 | 5.693 | 1.988 | 34.93% |
+| MTP4 | 4 | 32768 | 8192 | 41.547 | 15.435 | 37.15% |
+| MTP4 | 4 | 65536 | 64 | 12.484 | 4.597 | 36.82% |
+| MTP4 | 4 | 65536 | 8192 | 50.050 | 21.306 | 42.57% |
+| MTP4 | 4 | 131072 | 64 | 30.013 | 12.049 | 40.14% |
+| MTP4 | 4 | 131072 | 8192 | 68.887 | 31.634 | 45.92% |

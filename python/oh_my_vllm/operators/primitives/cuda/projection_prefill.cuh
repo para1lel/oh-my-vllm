@@ -54,10 +54,11 @@ __global__ __launch_bounds__(640, 1) void projection_kernel(
   int thread = threadIdx.x, warp = thread / 32;
   unsigned logical_m = blockIdx.x, logical_n = blockIdx.y;
   if constexpr (Grouped) {
-    if (gridDim.x > 16) {
+    unsigned group_size = inner == 5120 ? 64u : inner == 6144 ? 4u : 16u;
+    if (gridDim.x > group_size) {
       unsigned flat = blockIdx.y * gridDim.x + blockIdx.x;
-      unsigned group_first = (flat / (16 * gridDim.y)) * 16;
-      unsigned group_rows = min(16u, gridDim.x - group_first);
+      unsigned group_first = (flat / (group_size * gridDim.y)) * group_size;
+      unsigned group_rows = min(group_size, gridDim.x - group_first);
       unsigned local = flat - group_first * gridDim.y;
       logical_m = group_first + local % group_rows;
       logical_n = local / group_rows;
@@ -115,7 +116,8 @@ __global__ __launch_bounds__(640, 1) void projection_kernel(
     load_weight_scales();
   __syncthreads();
   if (thread < 128) {
-    cutlass::arch::warpgroup_reg_dealloc<48>();
+    // Keep both roles within the CTA's initial 640 * 96 register allocation.
+    cutlass::arch::warpgroup_reg_dealloc<32>();
     if (warp == 0) {
       for (int group = 0; group < groups; ++group) {
         int slot = group % 3, phase = (group / 3) & 1;
@@ -161,7 +163,7 @@ __global__ __launch_bounds__(640, 1) void projection_kernel(
       }
     }
   } else {
-    cutlass::arch::warpgroup_reg_alloc<104>();
+    cutlass::arch::warpgroup_reg_alloc<112>();
     float accumulated[64];
 #pragma unroll
     for (int i = 0; i < 64; ++i)

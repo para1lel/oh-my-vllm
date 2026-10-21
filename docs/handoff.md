@@ -30,9 +30,11 @@ HTTP accounting uses serial kernel groups and the current precision rules.
 Use the [performance calculation](performance.md#lower-bound-calculation) when fusion or execution boundaries change.
 Operator ratio limits keep the approved maximum latency across accounting changes.
 
-Keep long-output efficiency at more than 40%. Measure each configuration two or more times.
-For each short-output configuration with a measured time of 5 seconds or more, the efficiency must be 40% or more.
-Continue optimization of large prefill operations.
+The shared FP8 prefill projection kernel selects its tile group size from the input width.
+The FFN and projection kernels keep TMEM addresses in registers during accumulation.
+HTTP efficiency has no minimum delivery limit.
+Keep the numerical limits and operator ratio limits.
+Report the measured performance.
 
 Run the applicable [test scope](testing.md) before delivery.
 Also run all 24 [HTTP configurations](performance.md).

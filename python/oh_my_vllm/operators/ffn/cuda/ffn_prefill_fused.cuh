@@ -113,7 +113,8 @@ __global__ __launch_bounds__(640, 1) void upper_kernel(
     load_weight_scales();
   __syncthreads();
   if (thread < 128) {
-    cutlass::arch::warpgroup_reg_dealloc<48>();
+    // Keep both roles within the CTA's initial 640 * 96 register allocation.
+    cutlass::arch::warpgroup_reg_dealloc<32>();
     if (warp == 0) {
       for (int group = 0; group < groups; ++group) {
         int slot = group & 3, phase = (group / 4) & 1;
@@ -161,7 +162,7 @@ __global__ __launch_bounds__(640, 1) void upper_kernel(
       }
     }
   } else {
-    cutlass::arch::warpgroup_reg_alloc<104>();
+    cutlass::arch::warpgroup_reg_alloc<112>();
     float accumulated[64];
 #pragma unroll
     for (int i = 0; i < 64; ++i)
