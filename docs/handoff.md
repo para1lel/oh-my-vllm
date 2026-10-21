@@ -25,9 +25,10 @@ FA uses BF16 attention operands and cache state. GDN keeps recurrent state in FP
 FP8 projections use checkpoint E4M3 weights and FP32 block scales.
 The [model contract](operators/model.md#intermediate-precision) defines the intermediate precision.
 
-Decrease attention latency for long contexts.
-Increase efficiency to more than 40% for all configurations with long outputs.
-Measure each configuration two or more times.
+HTTP accounting uses serial kernel groups and the current precision rules.
+Use the [performance calculation](performance.md#lower-bound-calculation) when fusion or execution boundaries change.
+Operator ratio limits keep the approved maximum latency across accounting changes.
+Keep long-output efficiency at more than 40%. Measure each configuration two or more times.
 
 Run the applicable [test scope](testing.md) before delivery.
 Also run all 24 [HTTP configurations](performance.md).

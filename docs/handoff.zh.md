@@ -25,9 +25,10 @@ FA 使用 BF16 attention 操作数和缓存状态. GDN 使用 FP32 保存循环�
 FP8 投影使用 checkpoint 中的 E4M3 权重和 FP32 block scales.
 [模型契约](operators/model.zh.md#中间精度)定义中间计算精度.
 
-降低长上下文 attention 的延迟.
-将所有长输出配置的 efficiency 提高到 40% 以上.
-每种配置至少测量两次.
+HTTP 计费使用串行 kernel 分组和当前精度规则.
+融合或执行边界变化时, 使用[性能计算](performance.zh.md#下界计算).
+计费变化时, 算子倍率门槛保持已批准的最大延迟.
+保持长输出 efficiency 高于 40%. 每种配置至少测量两次.
 
 交付前执行适用的[测试范围](testing.zh.md).
 同时执行全部 24 组 [HTTP 配置](performance.zh.md).

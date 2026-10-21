@@ -42,6 +42,12 @@ Graph 存在期间, 缓冲区地址保持固定.
 Metadata 在重放前于调用者的 stream 上更新.
 重放使用同一个 stream.
 
+Metadata 和采样输入使用可复用的页锁定 host 缓冲区上传.
+每次上传在返回前复制一份 CPU 输入.
+调用者 stream 上的事件保护这份副本, 直到传输完成.
+复用或释放存储前, 必须等待该事件.
+不要在 Graph 录制期间更新这些输入.
+
 录制使用独立的 nonblocking stream, 并在退出时恢复调用者的 stream.
 录制失败会释放失败前创建的资源.
 录制成功后, 资源 lease 转交给 workspace.

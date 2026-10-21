@@ -19,16 +19,18 @@ from .run import PreparedCase, bind
 
 def accounting_identity():
     from development.serving import accounting as http
+    from development.serving import kernels
 
     return {
         "version": accounting.VERSION,
         "sources": {
             "operator": file_digest(accounting.__file__),
             "http": file_digest(http.__file__),
+            "kernels": file_digest(kernels.__file__),
         },
         "rates": accounting.RATES,
         "cache_capacity": accounting.CACHE_CAPACITY,
-        "cache_policy": "unique-read-bytes-minus-128MiB; no write credit",
+        "cache_policy": "one 128MiB budget for serial memory excess; no writes",
     }
 
 

@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import numpy as np
 from oh_my_vllm.operators.runtime.device import Device
 from oh_my_vllm.worker.inference import Worker
 
@@ -61,6 +62,109 @@ def graph_device(events, failure=None):
 
 
 class Execution(unittest.TestCase):
+    def test_upload_snapshots_source_and_waits_before_reuse_or_release(self):
+        from oh_my_vllm.operators.runtime.uploads import Uploads
+
+        events, allocations, pending = [], {}, []
+
+        def allocate(pointer, size, flags):
+            storage = ctypes.create_string_buffer(size)
+            address = ctypes.addressof(storage)
+            allocations[address] = storage
+            ctypes.cast(pointer, ctypes.POINTER(ctypes.c_void_p))[0] = address
+            return 0
+
+        def create(pointer, flags):
+            ctypes.cast(pointer, ctypes.POINTER(ctypes.c_void_p))[0] = 1
+            return 0
+
+        def wait(event):
+            events.append("wait")
+            for destination, source in pending:
+                np.copyto(destination, source)
+            pending.clear()
+            return 0
+
+        def release(pointer):
+            self.assertFalse(pending)
+            events.append("free")
+            del allocations[pointer.value]
+            return 0
+
+        def capture(stream, status):
+            ctypes.cast(status, ctypes.POINTER(ctypes.c_int))[0] = 0
+            return 0
+
+        device = SimpleNamespace(
+            runtime=SimpleNamespace(
+                cudaHostAlloc=allocate,
+                cudaFreeHost=release,
+                cudaEventCreateWithFlags=create,
+                cudaEventDestroy=lambda _: 0,
+                cudaEventRecord=lambda *_: 0,
+                cudaEventSynchronize=wait,
+                cudaStreamIsCapturing=capture,
+            ),
+            module=SimpleNamespace(
+                copy_bytes=lambda dst, src: pending.append((dst, src))
+            ),
+            checked=lambda status: self.assertEqual(status, 0),
+            synchronize=lambda: wait(None),
+        )
+        source, destination = np.array([1, 2], np.int32), np.zeros(2, np.int32)
+        with (
+            patch("tvm_ffi.from_dlpack", side_effect=lambda array: array),
+            patch("tvm_ffi.get_raw_stream", return_value=7),
+        ):
+            uploads = Uploads(device)
+            uploads.copy(destination, source)
+            source[:] = 3
+            self.assertEqual(destination.tolist(), [0, 0])
+            uploads.copy(destination, source)
+            self.assertEqual(destination.tolist(), [1, 2])
+            source[:] = 4
+            uploads.close()
+            self.assertEqual(destination.tolist(), [3, 3])
+            self.assertEqual(events, ["wait", "wait", "free"])
+            self.assertFalse(allocations)
+            uploads.close()
+
+            device.runtime.cudaStreamIsCapturing = capture
+            device.runtime.cudaEventRecord = lambda *_: 0
+            uploads = Uploads(device)
+            uploads.copy(destination, source)
+            uploads.copy(destination.copy(), source)
+            failed_address = next(iter(allocations))
+            device.runtime.cudaFreeHost = lambda pointer: (
+                1 if pointer.value == failed_address else release(pointer)
+            )
+            with self.assertRaises(AssertionError):
+                uploads.close()
+            self.assertEqual(list(allocations), [failed_address])
+            device.runtime.cudaFreeHost = release
+            uploads.close()
+            self.assertFalse(allocations)
+            with self.assertRaisesRegex(RuntimeError, "closed"):
+                uploads.copy(destination, source)
+            uploads = Uploads(device)
+            device.runtime.cudaEventRecord = lambda *_: 1
+            with self.assertRaises(AssertionError):
+                uploads.copy(destination, source)
+            self.assertEqual(destination.tolist(), [4, 4])
+            uploads.close()
+            self.assertFalse(allocations)
+
+            def captured(stream, status):
+                ctypes.cast(status, ctypes.POINTER(ctypes.c_int))[0] = 1
+                return 0
+
+            device.runtime.cudaStreamIsCapturing = captured
+            uploads = Uploads(device)
+            with self.assertRaisesRegex(RuntimeError, "before CUDA Graph"):
+                uploads.copy(destination, source)
+            self.assertFalse(allocations)
+            uploads.close()
+
     def test_partial_prefix_copies_both_planes_and_restores_exact_state(self):
         from oh_my_vllm.worker.cache import Cache
 

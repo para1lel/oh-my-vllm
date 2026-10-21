@@ -64,18 +64,15 @@ def make_plan(
         if long_batch and rows == 2 and first_token == 0 and minimum >= 32768
         else 0
     )
-    if long_batch and ((rows >= 4 and context >= 32768) or minimum >= 32768):
-        splits = 128
-    else:
-        splits = (
-            128
-            if rows <= 32 and variant != 1 and 1 < queries <= 5
-            else 64
-            if rows <= 32
-            else 4
-            if rows <= 4096 and variant != 1
-            else 1
-        )
+    splits = (
+        (16 if batch >= 3 else 32 if batch == 2 else 64)
+        if rows <= 32 and queries <= 5
+        else 64
+        if rows <= 32
+        else 4
+        if rows <= 4096 and variant != 1
+        else 1
+    )
     active = 0 if variant == 1 and rows > 32 else rows
     storage = (
         ((active, 5120), "bfloat16"),

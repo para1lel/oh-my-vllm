@@ -1,7 +1,7 @@
 # Operator performance accounting
 
 The [microbench contract](microbench.md) defines fixed cases, calibration, timing, and acceptance.
-This document defines the initial `operator-reference-v1` resource policy.
+This document defines the `operator-reference-v2` resource policy.
 The [calculation](../../development/operators/accounting.py) uses the HTTP resource rates and resource-time formula.
 It has a separate version and does not change HTTP accounting.
 
@@ -14,9 +14,19 @@ FFN value and residual inputs use BF16.
 Count each layer's different weights and initial state once.
 Count matrix scales and normalization vectors at their stored precision.
 
-Subtract 128 MiB from these unique read bytes before giving HBM credit.
-Use zero when this subtraction gives a negative value.
-This capacity is a conservative cache allowance.
+Use the serial kernel groups from [HTTP accounting](../performance.md#lower-bound-calculation).
+Each group first uses its maximum resource time.
+Give the complete pass one 128 MiB cache allowance:
+
+```text
+raw = sum(group_resource_maximum)
+compute_floor = sum(group_compute_maximum)
+reference = max(compute_floor, raw - 128MiB / HBM_rate)
+```
+
+The cache budget cannot decrease a group's time to less than its compute floor.
+Do not subtract a cache allowance from each kernel.
+Count shared input bytes only in the first group that reads them.
 The runner reads the device L2 capacity through the CUDA driver.
 Reject devices with a larger L2 capacity or a different GPU model.
 
@@ -41,8 +51,7 @@ These assumptions stay fixed when candidate dispatch changes.
 The candidate cannot select a larger theoretical workload.
 
 Text projection, normalization, FFN, and GDN recurrence counts use the fixed dimensions and formulas in the calculation.
-GDN prefill uses the fixed 64-row reference chunks, split at 784-token checkpoints.
-Decode and verification use the scalar recurrent formula.
+GDN uses the fixed precision and dispatch rules in [HTTP accounting](../performance.md#arithmetic).
 Private checkpoint count does not increase memory credit.
 
 Output distribution and sampling include normalization and the full vocabulary projection.
@@ -69,10 +78,18 @@ The generated input and initial-state arrays have a combined SHA256 identity.
 Reports also bind the prototype manifest, generator, NumPy version, and checkpoint.
 
 The accounting identity binds operator and imported HTTP calculation sources.
-It includes the rates and cache policy.
+It includes kernel group definitions, rates, and cache policy.
 Approved limits also bind the complete resource totals and lower-bound value.
 Approved limits bind this identity, the timing-policy identity, the case, generated inputs, and compatible device settings.
 Ordinary acceptance does not load calibration timings.
+When accounting changes, keep each approved maximum latency during ratio conversion:
+
+```text
+new_max_ratio = old_max_ratio * old_reference / new_reference
+```
+
+Keep the previous accounting identity, resource values, and ratio in migration provenance.
+This conversion must not increase the approved maximum latency.
 
 Restore state and RNG from prepared device copies before each independent sample.
 Complete each reset before the start event.

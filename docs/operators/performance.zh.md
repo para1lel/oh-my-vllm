@@ -1,7 +1,7 @@
 # 算子性能计费
 
 [Microbench 契约](microbench.zh.md)定义固定用例, 校准, 计时和验收.
-本文定义初始 `operator-reference-v1` 资源策略.
+本文定义 `operator-reference-v2` 资源策略.
 [计算实现](../../development/operators/accounting.py)使用 HTTP 资源速率和资源时间公式.
 它使用独立版本, 不改变 HTTP 计费.
 
@@ -14,9 +14,19 @@ FFN 的这两个输入字段均使用 BF16.
 各层不同的权重和初始状态各计一次.
 矩阵 scales 和归一化向量按存储精度计费.
 
-给出 HBM 计费前, 从这些不重复的读取字节中减去 128 MiB.
-若相减结果为负数, 则使用零.
-此容量是保守的 cache 额度.
+使用 [HTTP 计费](../performance.zh.md#下界计算)中的串行 kernel 分组.
+各组先取资源时间的最大值.
+完整执行序列只使用一份 128 MiB cache 额度:
+
+```text
+raw = sum(group_resource_maximum)
+compute_floor = sum(group_compute_maximum)
+reference = max(compute_floor, raw - 128MiB / HBM_rate)
+```
+
+此 cache 预算不能将各组时间减少到计算时间下界以下.
+不要对每个 kernel 单独扣除额度.
+共享输入只在首次使用处获得内存额度.
 Runner 通过 CUDA driver 读取设备 L2 容量.
 拒绝 L2 容量更大或 GPU 型号不同的设备.
 
@@ -41,8 +51,7 @@ Chain 也不给 embedding 读取额度, 因为生成的 token 可能共享 embed
 候选实现不能选择更大的理论工作量.
 
 文本投影, 归一化, FFN 和 GDN 递推按计算实现中的固定维度与公式计费.
-GDN prefill 使用固定的 64 行参考 chunk, 在 784-token checkpoint 处切分.
-Decode 和 verification 使用标量递推公式.
+GDN 使用 [HTTP 计费](../performance.zh.md#算术)中固定的精度与分派规则.
 私有 checkpoint 数量不增加内存计费额度.
 
 Output distribution 和 sampling 包含归一化及完整词表投影.
@@ -69,10 +78,18 @@ Input 边界还统计像素归一化.
 报告还绑定原型清单, 生成器, NumPy 版本和 checkpoint.
 
 计费 identity 同时绑定算子计费源码及其导入的 HTTP 计算源码.
-它包含速率和 cache 策略.
+它包含 kernel 分组定义, 速率和 cache 策略.
 批准的门槛还绑定完整资源总量和下界值.
 批准的门槛绑定此 identity, 计时策略 identity, 用例, 生成的输入以及兼容的设备设置.
 常规验收不加载校准耗时.
+计费变化时, 按下式换算倍率, 保持每项已批准的最大延迟:
+
+```text
+new_max_ratio = old_max_ratio * old_reference / new_reference
+```
+
+在迁移来源信息中保留旧计费 identity, 资源值和倍率.
+此换算不得提高已批准的最大延迟.
 
 在每个独立样本前, 从准备好的设备副本恢复状态与 RNG.
 在开始事件前完成每次恢复.

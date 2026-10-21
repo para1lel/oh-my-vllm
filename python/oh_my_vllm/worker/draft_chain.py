@@ -52,6 +52,7 @@ class DraftChain:
         for index, stage in enumerate(stages):
             stage.metadata = self.metadata_inputs.arrays[index * 6 : index * 6 + 5]
             stage.tokens = self.metadata_inputs.arrays[index * 6 + 5]
+            stage.metadata_inputs.close()
             stage.metadata_inputs = None
             stage.sampling.greedy = True
             if index:
@@ -71,6 +72,7 @@ class DraftChain:
 
     def close(self):
         self.resources.close()
+        self.metadata_inputs.close()
         for stage in self.stages:
             stage.close()
 

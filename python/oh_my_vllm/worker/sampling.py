@@ -162,6 +162,7 @@ class Sampling:
         self.parameters = device.empty((rows, 7), "float32")
         self.rng = device.empty((rows, 2), "uint64")
         self.inputs = SamplingInputs(rows)
+        self.uploads = device.uploads()
         self.resources = ExitStack()
         self.greedy = False
         self.replays = {}
@@ -169,6 +170,7 @@ class Sampling:
 
     def close(self):
         self.resources.close()
+        self.uploads.close()
         self.operation.close()
 
     def project(self):
@@ -226,18 +228,16 @@ class Sampling:
         self.inputs.update(requests, prefixes, stream)
         self.greedy = bool(np.all(self.inputs.parameters[:, 0] == 0))
         if self.inputs.history_needed:
-            d.module.copy_bytes(
+            self.uploads.copy(
                 self.presence_history if self.inputs.compact else self.history,
-                tvm_ffi.from_dlpack(self.inputs.history),
+                self.inputs.history,
             )
         if self.inputs.mask_changed:
-            d.module.copy_bytes(self.mask, tvm_ffi.from_dlpack(self.inputs.mask))
-        d.module.copy_bytes(
-            self.parameters, tvm_ffi.from_dlpack(self.inputs.parameters)
-        )
+            self.uploads.copy(self.mask, self.inputs.mask)
+        self.uploads.copy(self.parameters, self.inputs.parameters)
         select_token = sample or self.greedy
         if select_token:
-            d.module.copy_bytes(self.rng, tvm_ffi.from_dlpack(self.inputs.random))
+            self.uploads.copy(self.rng, self.inputs.random)
         self.execute(
             (self.greedy, self.inputs.compact, select_token),
             self.draw if select_token else self.distribution,

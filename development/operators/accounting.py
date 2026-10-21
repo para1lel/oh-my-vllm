@@ -1,17 +1,25 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from development.serving.accounting import (
-    RATES,
-    add,
-    ffn,
-    gdn_math,
-    linear,
-    norm,
-    reference_seconds,
-    scale,
+import numpy as np
+
+from development.serving.accounting import RATES, linear
+from development.serving.kernels import (
+    Group,
+    context_groups,
+    draft_groups,
+    fa_groups,
+    ffn_groups,
+    gdn_groups,
+    group,
+    input_credit,
+    normalization,
+    repeated,
+    resources,
+    sample_groups,
+    serial_seconds,
 )
 
-VERSION = "operator-reference-v1"
+VERSION = "operator-reference-v2"
 CACHE_CAPACITY = 128 * 1024 * 1024
 VOCABULARY = 248320
 
@@ -20,6 +28,7 @@ VOCABULARY = 248320
 class ResourceWork:
     unique_read_bytes: int
     arithmetic: dict
+    groups: list[Group]
 
     @property
     def resources(self):
@@ -29,103 +38,29 @@ class ResourceWork:
         }
 
 
-def attention(rows, batch, queries, context, *, first=0, cached=False):
-    start = context - queries
-    pairs = batch * (queries * (start - first) + queries * (queries + 1) // 2)
-    history = batch * max(0, start - first + (queries if cached else 0))
-    product = 2 * pairs * 24 * 256
-    products, cache_bytes = {"bf16_flops": 2 * product}, 4096
-    return add(
-        {"hbm_bytes": history * cache_bytes},
-        products,
-        {"fp32_flops": 3 * pairs * 24},
-    )
+def queries(shape):
+    return [(shape["context"] - shape["queries"], shape["queries"])] * shape["batch"]
 
 
-def fa_work(shape, *, variant="full", first=0):
-    rows, batch, queries, context = (
-        shape[name] for name in ("rows", "batch", "queries", "context")
-    )
-    heads = 28 if variant == "full" else 24
-    return add(
-        linear(rows, 14336 if variant == "full" else 12288, 5120, fp8=True),
-        linear(rows, 5120, 6144, fp8=True),
-        norm(rows, 5120),
-        attention(
-            rows, batch, queries, context, first=first, cached=variant == "query_only"
-        ),
-        dict(
-            hbm_bytes=4 * (512 if variant == "full" else 256),
-            fp32_flops=rows * (5120 + 6144 + heads * (4 * 256 + 2) + heads * 64 * 3),
-        ),
-    )
+def chain_groups(shape):
+    result = []
+    credited = {}
+    for stage in range(4):
+        current = queries({**shape, "context": shape["context"] + stage})
+        for item in draft_groups(current, stage, writes=False):
+            # Later drafts reuse matrices and history; new KV has no read credit.
+            key = item.name.replace("fa.input-fused", "fa.input")
+            memory = item.work["hbm_bytes"]
+            if key == "fa.attention":
+                memory = max(0, shape["context"] - 1) * shape["batch"] * 4096
+            new_bytes = max(0, memory - credited.get(key, 0))
+            credited[key] = max(memory, credited.get(key, 0))
+            result.append(replace(item, work=dict(item.work, hbm_bytes=new_bytes)))
+    return result
 
 
-def gdn_work(shape, verify):
-    rows, batch, queries, context = (
-        shape[name] for name in ("rows", "batch", "queries", "context")
-    )
-    start = context - queries
-    return add(
-        linear(rows, 16384, 5120, fp8=True),
-        linear(rows, 96, 5120),
-        linear(rows, 5120, 6144, fp8=True),
-        norm(rows, 5120),
-        gdn_math([(start, queries)] * batch, verify),
-        dict(
-            hbm_bytes=(batch if start else 0) * (48 * 128 * 128 * 4 + 10240 * 3 * 2)
-            + 10240 * 4 * 2
-            + 4 * (128 + 96),
-            fp32_flops=rows * (5120 + 7 * 10240),
-        ),
-    )
-
-
-def output_work(rows):
-    return add(
-        linear(rows, VOCABULARY, 5120), norm(rows, 5120), dict(fp32_flops=rows * 5120)
-    )
-
-
-def context_work(rows):
-    return add(
-        linear(rows, 5120, 10240),
-        linear(rows, 2048, 5120, fp8=True),
-        scale(norm(rows, 5120), 3),
-        norm(rows * 4, 256),
-        dict(hbm_bytes=min(rows, VOCABULARY) * 5120 * 2, fp32_flops=rows * 4 * 64 * 3),
-    )
-
-
-def draft_work(shape, full):
-    rows = shape["rows"]
-    return add(
-        fa_work(shape, variant="full" if full else "query_only", first=1),
-        ffn(rows),
-        output_work(rows),
-        add(
-            linear(rows, 5120, 10240),
-            scale(norm(rows, 5120), 2),
-            dict(hbm_bytes=rows * 5120 * 2),
-        )
-        if full
-        else add(),
-    )
-
-
-def chain_work(shape):
-    stages = [
-        draft_work({**shape, "context": shape["context"] + index}, index != 0)
-        for index in range(4)
-    ]
-    total = add(*stages)
-    total["hbm_bytes"] = stages[1]["hbm_bytes"] - shape["rows"] * 5120 * 2
-    return total
-
-
-def acceptance_work(case):
-    batch = case.shape["batch"]
-    category = case.options["acceptance"]
+def acceptance_groups(case):
+    batch, category = case.shape["batch"], case.options["acceptance"]
     accepted = {
         "all": [4] * batch,
         "first-rejection": [0] * batch,
@@ -136,104 +71,157 @@ def acceptance_work(case):
     attempts = sum(
         value + int(value < 4 and category != "inactive") for value in accepted
     )
-    residuals = sum(value < 4 for value in accepted) if category != "inactive" else 0
-    greedy = case.options["target"] == "greedy"
-    return add(
-        dict(
-            fp32_flops=attempts + (0 if greedy else (batch + residuals) * VOCABULARY),
-            fp64_flops=0 if greedy else batch,
-            hbm_bytes=0 if greedy else 4 * (batch + residuals) * VOCABULARY,
+    result = [group("mtp.accept.ratio", dict(fp32_flops=attempts))]
+    if case.options["target"] != "greedy":
+        residuals = (
+            sum(value < 4 for value in accepted) if category != "inactive" else 0
         )
-    )
+        result.extend(
+            [
+                group(
+                    "mtp.accept.mass",
+                    dict(
+                        hbm_bytes=4 * (batch + residuals) * VOCABULARY,
+                        fp32_flops=(batch + residuals) * VOCABULARY,
+                    ),
+                ),
+                group("mtp.accept.select", dict(fp64_flops=batch)),
+            ]
+        )
+    return result
 
 
-def vision_block(rows, tokens):
-    return add(
-        linear(rows, 3456, 1152),
-        linear(rows, 1152, 1152),
-        linear(rows, 4304, 1152),
-        linear(rows, 1152, 4304),
-        dict(
-            hbm_bytes=2 * (4 * 1152 + 3456 + 1152 + 4304 + 1152),
-            bf16_flops=4 * rows * tokens * 1152,
-            fp32_flops=rows
-            * (2 * (7 * 1152 + 2) + 2 * 1152 + 2 * 1152 * 3 + 3 * tokens * 16),
-        ),
-    )
+def position_bytes(height, width):
+    counts = []
+    for size in (height, width):
+        first = (
+            np.arange(size, dtype=np.float32) * (np.float32(47) / np.float32(size - 1))
+        ).astype(np.int32)
+        counts.append(len(set(first) | set(np.minimum(first + 1, 47))))
+    return counts[0] * counts[1] * 1152 * 2
 
 
-def vision_work(case):
+def vision_groups(case):
     shape = case.shape
     rows, tokens = shape["rows"], shape["height"] * shape["width"]
-    total = scale(vision_block(rows, tokens), len(case.weights))
+    normalized = dict(hbm_bytes=4 * 1152, fp32_flops=rows * (7 * 1152 + 2))
+    block = [
+        group("vision.norm", normalized),
+        group("vision.qkv", linear(rows, 3456, 1152)),
+        group(
+            "vision.rotary", dict(hbm_bytes=2 * 3456, fp32_flops=rows * 2 * 1152 * 3)
+        ),
+        group(
+            "vision.attention",
+            dict(
+                bf16_flops=4 * rows * tokens * 1152, fp32_flops=rows * 3 * tokens * 16
+            ),
+        ),
+        group("vision.output", linear(rows, 1152, 1152)),
+        group(
+            "vision.residual-norm",
+            normalized,
+            dict(hbm_bytes=2 * 1152, fp32_flops=rows * 1152),
+        ),
+        group("vision.upper", linear(rows, 4304, 1152), dict(hbm_bytes=2 * 4304)),
+        group("vision.down", linear(rows, 1152, 4304)),
+        group("vision.residual", dict(hbm_bytes=2 * 1152, fp32_flops=rows * 1152)),
+    ]
+    result = repeated(block, len(case.weights))
     if case.boundary == "vision.input":
-        total = add(
-            total,
-            linear(rows, 1152, 1536),
-            dict(
-                hbm_bytes=2304 * 1152 * 2
-                + 1152 * 2
-                + shape["frames"] * tokens * 16 * 16 * 3,
-                fp32_flops=rows * (1536 * 2 + 1152),
+        result = [
+            group(
+                "vision.pixels",
+                dict(
+                    hbm_bytes=shape["frames"] * tokens * 16 * 16 * 3,
+                    fp32_flops=rows * 1536 * 2,
+                ),
             ),
-        )
+            group("vision.patch", linear(rows, 1152, 1536)),
+            group(
+                "vision.position-norm",
+                normalized,
+                dict(
+                    hbm_bytes=position_bytes(shape["height"], shape["width"])
+                    + 1152 * 2,
+                    fp32_flops=rows * 1152,
+                ),
+            ),
+            *block[1:],
+            *repeated(block, len(case.weights) - 1),
+        ]
     else:
-        total = add(total, dict(hbm_bytes=rows * 1152 * 2))
+        result = input_credit(result, rows * 1152 * 2)
     if case.boundary == "vision.merge":
-        total = add(
-            total,
-            linear(rows // 4, 4608, 4608),
-            linear(rows // 4, 5120, 4608),
-            dict(
-                hbm_bytes=2 * (2 * 1152 + 4608 + 5120), fp32_flops=rows * (7 * 1152 + 2)
-            ),
+        result.extend(
+            [
+                group("vision.merge.norm", normalized),
+                group("vision.merge.upper", linear(rows // 4, 4608, 4608)),
+                group("vision.merge.activation", dict(hbm_bytes=2 * 4608)),
+                group("vision.merge.down", linear(rows // 4, 5120, 4608)),
+                group("vision.merge.bias", dict(hbm_bytes=2 * 5120)),
+            ]
         )
-    return total
+    return result
 
 
-def work(case):
+def kernel_groups(case):
     boundary, shape = case.boundary, case.shape
     rows = shape.get("rows", 0)
     if boundary == "fa":
-        total = scale(fa_work(shape), len(case.weights))
+        result = repeated(fa_groups(queries(shape)), len(case.weights))
     elif boundary == "gdn":
-        total = scale(gdn_work(shape, case.options["verify"]), len(case.weights))
+        result = repeated(
+            gdn_groups(queries(shape), case.options["verify"]), len(case.weights)
+        )
         if 0 in case.weights:
-            total = add(total, dict(hbm_bytes=min(rows, VOCABULARY) * 5120 * 2))
+            result.insert(
+                0,
+                group(
+                    "gdn.embedding", dict(hbm_bytes=min(rows, VOCABULARY) * 5120 * 2)
+                ),
+            )
     elif boundary == "ffn":
-        total = scale(ffn(rows), len(case.weights))
+        result = repeated(ffn_groups(rows), len(case.weights))
     elif boundary == "output.hidden":
-        total = add(norm(rows, 5120), dict(fp32_flops=rows * 5120))
+        result = [group("output.norm", normalization(rows))]
     elif boundary in {"output.distribution", "output.sample"}:
-        total = output_work(rows)
+        result = sample_groups(rows)
     elif boundary == "mtp.context":
-        total = context_work(rows)
+        result = context_groups(
+            rows, writes=False, embedding_bytes=min(rows, VOCABULARY) * 5120 * 2
+        )
     elif boundary == "mtp.draft":
-        total = draft_work(shape, case.options["variant"] == "full")
+        full = case.options["variant"] == "full"
+        result = draft_groups(
+            queries(shape),
+            int(full),
+            writes=False,
+            embedding_bytes=rows * 5120 * 2 if full else 0,
+        )
     elif boundary == "mtp.chain":
-        total = chain_work(shape)
+        result = chain_groups(shape)
     elif boundary == "mtp.accept":
-        total = acceptance_work(case)
+        return acceptance_groups(case)
     elif boundary.startswith("vision."):
-        total = vision_work(case)
+        return vision_groups(case)
     else:
         raise ValueError("unknown operator boundary")
-    if boundary in {
-        "fa",
-        "gdn",
-        "ffn",
-        "output.hidden",
-        "output.distribution",
-        "output.sample",
-    }:
-        total = add(
-            total, dict(hbm_bytes=rows * 5120 * (4 if boundary == "ffn" else 6))
-        )
-    elif boundary in {"mtp.context", "mtp.draft", "mtp.chain"}:
-        total = add(total, dict(hbm_bytes=rows * 5120 * 2))
+    input_bytes = (
+        rows
+        * 5120
+        * (4 if boundary == "ffn" else 2 if boundary.startswith("mtp.") else 6)
+    )
+    return input_credit(result, input_bytes)
+
+
+def work(case):
+    groups = kernel_groups(case)
+    total = resources(groups)
     return ResourceWork(
         int(total["hbm_bytes"]),
         {key: total[key] for key in RATES if key != "hbm_bytes"},
+        groups,
     )
 
 
@@ -243,7 +231,7 @@ def lower_bound(case, device_spec):
         or not 0 < device_spec["l2_bytes"] <= CACHE_CAPACITY
     ):
         raise ValueError("device differs from the fixed cache policy")
-    result = reference_seconds(work(case).resources)
+    result = serial_seconds(kernel_groups(case), cache_bytes=CACHE_CAPACITY)
     if result <= 0:
         raise ValueError("zero operator theoretical lower bound")
     return result

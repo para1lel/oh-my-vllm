@@ -42,6 +42,12 @@ Buffer addresses stay fixed while a graph exists.
 Metadata changes on the caller's stream before replay.
 Replay uses that same stream.
 
+Metadata and sampling inputs use reusable page-locked host buffers for uploads.
+Each upload takes a copy of its CPU input before it returns.
+An event on the caller's stream protects that copy until the transfer completes.
+Wait for that event before storage reuse or release.
+Do not update these inputs during Graph recording.
+
 Recording uses a different nonblocking stream and restores the caller's stream on exit.
 A failed recording releases the resources created before failure.
 A completed recording transfers its resource leases to the workspace.

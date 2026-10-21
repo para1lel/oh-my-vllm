@@ -73,6 +73,7 @@ class Context(GraphOperation):
 
     def close(self):
         super().close()
+        self.metadata_inputs.close()
         self.operation.close()
 
     def run(self):
@@ -153,6 +154,8 @@ class Draft(GraphOperation):
 
     def close(self):
         super().close()
+        if self.metadata_inputs is not None:
+            self.metadata_inputs.close()
         self.sampling.close()
         self.operation.close()
 

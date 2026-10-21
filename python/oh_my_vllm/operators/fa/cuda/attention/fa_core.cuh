@@ -10,11 +10,7 @@ inline int fa_attention_core_launch(TensorView query, TensorView cache, TensorVi
                                     int max_context) {
   int rows = query.size(0), batch = tables.size(0), blocks = cache.size(0), splits = lse.size(2);
   if (rows <= 32) {
-    int split_limit = max_queries > 1 ? 128
-                      : max_queries == 1 && ((batch >= 4 && max_context >= 32768) ||
-                                             (batch == 2 && first_token == 0 && splits >= 128))
-                          ? 128
-                          : 64;
+    int split_limit = max_queries <= 5 ? (batch >= 3 ? 16 : batch == 2 ? 32 : 64) : 64;
     splits = std::min(splits, split_limit);
   }
   if (rows <= 32 && splits > 16 && tables.size(1) <= 3)

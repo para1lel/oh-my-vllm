@@ -80,12 +80,13 @@ Scalar rates are FP32 75 TFLOP/s and FP64 37 TFLOP/s.
 Do not substitute sparse rates, GB200 rates, or measured calibration.
 
 ```text
-reference_seconds = max(
-    necessary_bytes / HBM_rate,
-    FP8_work / FP8_rate + BF16_work / BF16_rate + TF32_work / TF32_rate,
-    FP32_work / FP32_rate,
-    FP64_work / FP64_rate,
+group_seconds = max(
+    group_bytes / HBM_rate,
+    group_FP8 / FP8_rate + group_BF16 / BF16_rate + group_TF32 / TF32_rate,
+    group_FP32 / FP32_rate,
+    group_FP64 / FP64_rate,
 )
+reference_seconds = sum(group_seconds for each serial group)
 efficiency = reference_seconds / HTTP_seconds
 ```
 
@@ -93,8 +94,8 @@ This is a conservative resource estimate, not a minimum physical latency proof.
 
 ## Lower-bound calculation
 
-The [reference calculation](../development/serving/accounting.py) uses version `http-reference-v2`.
-It has no runtime algorithm selector or measured calibration input.
+The [reference calculation](../development/serving/kernels.py) uses version `http-reference-v3`.
+It uses the current kernel boundaries and precision rules. It has no measured calibration input.
 
 The [trace validator](../development/serving/trace.py) first checks full prefill, continuous accepted positions, proposal dependencies, and output counts.
 The single trace identity must match the service mode.
@@ -114,11 +115,25 @@ MTP verification consumes the previous proposals and keeps its recorded acceptan
 Context computation stops at the accepted endpoint, with one additional row when new proposals follow.
 The scheduler cannot create proposals or combine different steps of one request.
 
-The calculation adds all resource work before it takes the maximum.
-It does not add times for different operators.
+The calculation uses the maximum resource time for each kernel group.
+It then adds the times across serial groups.
+Prefill compute time and decode memory time are added.
+A fused kernel is one group.
+PDL producers and consumers use one group when their necessary work can occur at the same time before the consumer wait.
+
+The down16dp projection for at most eight rows reads weights after that wait.
+Its credited work stays in a different group.
+Layer completion boundaries stay serial.
+
+The [group definitions](../development/serving/kernels.py) use different groups for FA projection, heads, attention, gate, and output work.
+They also use different groups for GDN convolution, recurrence stages, and projections.
+FFN stages, MTP input stages, and vocabulary projection have different groups.
+Count each necessary object's memory bytes in the first group that uses that object.
+The groups use the fixed canonical schedule. Trace launch counts do not change these groups.
+
 Extra tiles, padding, launches, repeated computation, or temporary copies cannot increase credited work.
 
-Artifacts contain responses, the manifest and its digest, the selected trace digest, resource totals, and acceptance counters.
+Artifacts contain responses, the manifest and its digest, the selected trace digest, resource totals, group times, and acceptance counters.
 The manifest also records sampling defaults, the tool schema, seeds, request hashes, and tool validation counts.
 Tool arguments must match the schema. A final call stopped at the output limit can contain a valid argument prefix.
 
@@ -158,10 +173,15 @@ It counts all verification rows, also when some proposals are rejected.
 FA counts the full causal attention pairs and three FP32 operations per pair and query head.
 These scalar operations represent score scaling, probability summation, and probability normalization.
 
-GDN prefill uses fixed 64-row chunks, split at 784-token checkpoints.
-Its reference block recurrence counts BF16 products and FP32 diagonal inversion and state updates.
-Decode and verification use the fixed FP32 recurrent formula.
-Runtime algorithm changes cannot change this reference choice.
+GDN prefill with more than 128 queries per request uses 64-row chunks, split at 784-token checkpoints.
+Preparation, state carry, and output use three serial groups.
+Their products use BF16. Diagonal inversion and state updates use FP32.
+The W/U triangular products include the diagonal after beta multiplication enters the inverse matrix.
+
+Short prefill, decode, and verification use FP32 recurrence.
+Small BA projections use FP32 arithmetic on BF16 inputs when fused into convolution or recurrence.
+Other BA projections use BF16 matrix products.
+Use a new accounting version when these fixed dispatch and fusion rules change.
 
 RMS normalization counts four operations per element and two scalar operations per row.
 Residual addition counts one operation per element.
@@ -177,7 +197,7 @@ MTP context, draft, and vocabulary projections follow their recorded causal posi
 Sampling, penalties, grammar processing, sorting, integer indexing, random generation, and MTP acceptance have no resource credit.
 Their runtime cost stays inside the HTTP timer.
 The estimate does not include sigmoid evaluation, transcendental instructions, datatype conversion, quantization, and scale application arithmetic.
-It also does not include GDN head normalization, gates, and input normalization arithmetic beyond the listed terms.
+It also does not include GDN head normalization, gates, input normalization, and prefix/ratio construction beyond the listed terms.
 There is no empirical throughput factor for operations that have no credit.
 
 The trace does not include all input token IDs for embedding-region deduplication.

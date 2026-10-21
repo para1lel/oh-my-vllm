@@ -79,12 +79,13 @@ Benchmark 为服务进程设置此变量.
 不使用 sparse 数值, GB200 数值或实测校准值替代.
 
 ```text
-reference_seconds = max(
-    necessary_bytes / HBM_rate,
-    FP8_work / FP8_rate + BF16_work / BF16_rate + TF32_work / TF32_rate,
-    FP32_work / FP32_rate,
-    FP64_work / FP64_rate,
+group_seconds = max(
+    group_bytes / HBM_rate,
+    group_FP8 / FP8_rate + group_BF16 / BF16_rate + group_TF32 / TF32_rate,
+    group_FP32 / FP32_rate,
+    group_FP64 / FP64_rate,
 )
+reference_seconds = sum(group_seconds for each serial group)
 efficiency = reference_seconds / HTTP_seconds
 ```
 
@@ -92,8 +93,8 @@ efficiency = reference_seconds / HTTP_seconds
 
 ## 下界计算
 
-[参考计算](../development/serving/accounting.py)使用版本 `http-reference-v2`.
-它不依赖 runtime 算法选择器或实测校准输入.
+[参考计算](../development/serving/kernels.py)使用版本 `http-reference-v3`.
+它使用当前 kernel 边界和精度规则, 不使用实测校准输入.
 
 [Trace 验证器](../development/serving/trace.py)先检查完整 prefill, 连续接受位置, proposal 依赖和输出数量.
 唯一 trace identity 必须匹配服务模式.
@@ -113,11 +114,25 @@ MTP verification 消费上一轮 proposal, 并保留记录的接受结果.
 Context 计算停在接受终点; 如果随后有新 proposal, 则再计算一行.
 调度器不能创建 proposal, 也不能合并同一请求的不同步骤.
 
-计算先累加所有资源工作量, 再取最大值.
-它不累加独立算子时间.
+计算对每个 kernel 组使用资源时间的最大值.
+随后累加串行组的时间.
+Prefill 的计算时间与 decode 的访存时间相加.
+融合 kernel 构成一个组.
+若 consumer 等待前的必要工作可以重叠, 则 PDL producer 和 consumer 使用同一组.
+
+最多八行的 down16dp projection 在等待后才读取权重.
+其计分工作保留为独立组.
+层完成边界保持串行.
+
+[分组定义](../development/serving/kernels.py)拆分 FA projection, heads, attention, gate 和 output 工作.
+它也拆分 GDN convolution, recurrence 阶段及 projection.
+FFN 阶段, MTP input 阶段和词表投影使用独立分组.
+必要对象的内存额度归入首次使用它的组.
+这些组使用固定的 canonical schedule. Trace launch 数量不改变这些组.
+
 额外 tile, padding, launch, 重复计算或临时复制不能增加计分工作量.
 
-产物包含响应, manifest 及其摘要, 所选 trace 摘要, 资源总量和接受计数.
+产物包含响应, manifest 及其摘要, 所选 trace 摘要, 资源总量, 分组时间和接受计数.
 Manifest 还记录采样默认值, 工具 schema, seed, 请求哈希和工具校验计数.
 工具参数必须符合 schema. 因输出上限而停止的最后一次调用可以包含合法的参数前缀.
 
@@ -157,10 +172,15 @@ Verification 前进接受的 proposal 数加一行.
 FA 计算完整因果 attention pair, 每个 pair 和 query head 计三次 FP32 操作.
 这些标量操作代表 score scaling, probability summation 和 probability normalization.
 
-GDN prefill 使用固定的 64-row chunk, 在 784-token checkpoint 处分割.
-其参考 block recurrence 计算 BF16 乘积及 FP32 对角求逆和 state update.
-Decode 和 verification 使用固定的 FP32 recurrent 公式.
-Runtime 算法变化不能改变此参考选择.
+每请求 query 数大于 128 时, GDN prefill 使用 64-row chunk, 在 784-token checkpoint 处分割.
+Preparation, state carry 和 output 构成三个串行组.
+其乘积使用 BF16. 对角求逆和 state update 使用 FP32.
+Beta 乘法进入 inverse matrix 后, W/U 三角乘积包含对角线.
+
+短 prefill, decode 和 verification 使用 FP32 recurrence.
+融合进 convolution 或 recurrence 的小行 BA projection 对 BF16 输入执行 FP32 算术.
+其他 BA projection 使用 BF16 矩阵乘法.
+修改这些固定的分派与融合规则时, 必须更新计费版本.
 
 RMS normalization 每元素计四次操作, 每行另计两次标量操作.
 Residual addition 每元素计一次操作.
@@ -176,7 +196,7 @@ MTP context, draft 和词表投影遵循记录的因果位置.
 采样, 惩罚, 语法处理, 排序, 整数索引, 随机数生成和 MTP acceptance 不计资源分数.
 它们的运行时间仍计入 HTTP timer.
 估算省略 sigmoid evaluation, transcendental instruction, datatype conversion, quantization 和 scale application 算术.
-它也省略上述条目之外的 GDN head normalization, gate 和 input normalization 算术.
+它还省略上述条目之外的 GDN head normalization, gate, input normalization 以及 prefix/ratio 构造.
 省略的操作没有经验吞吐系数.
 
 Trace 没有用于 embedding-region 去重的完整 input token ID.

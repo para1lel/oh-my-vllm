@@ -8,6 +8,7 @@ import numpy as np
 import tvm_ffi
 
 from .native import load
+from .uploads import Uploads
 
 FUNCTIONS = (
     "allocate",
@@ -35,6 +36,17 @@ class Device:
         cuda = Path(os.environ.get("CUDA_HOME", "/usr/local/cuda"))
         self.runtime = ctypes.CDLL(str(cuda / "lib64/libcudart.so"))
         for name, arguments in {
+            "cudaHostAlloc": [
+                ctypes.POINTER(ctypes.c_void_p),
+                ctypes.c_size_t,
+                ctypes.c_uint,
+            ],
+            "cudaFreeHost": [ctypes.c_void_p],
+            "cudaEventCreateWithFlags": [
+                ctypes.POINTER(ctypes.c_void_p),
+                ctypes.c_uint,
+            ],
+            "cudaStreamIsCapturing": [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int)],
             "cudaEventCreate": [ctypes.POINTER(ctypes.c_void_p)],
             "cudaEventDestroy": [ctypes.c_void_p],
             "cudaEventRecord": [ctypes.c_void_p, ctypes.c_void_p],
@@ -73,6 +85,9 @@ class Device:
 
     def empty(self, shape, dtype):
         return self.module.allocate(tensor_shape(tuple(shape)), dtype, 0)
+
+    def uploads(self):
+        return Uploads(self)
 
     def scratch(self, shape, dtype):
         return self.module.allocate_scratch(tensor_shape(tuple(shape)), dtype, 0)

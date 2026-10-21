@@ -1,11 +1,11 @@
 import numpy as np
-import tvm_ffi
 
 
 class Metadata:
     def __init__(self, device, values):
         values = tuple(values)
         self.device = device
+        self.uploads = device.uploads()
         sizes, offsets = {}, []
         for value in values:
             if not isinstance(value, np.ndarray) or value.dtype.itemsize not in (
@@ -30,10 +30,6 @@ class Metadata:
             dtype: device.empty(value.shape, str(dtype))
             for dtype, value in self.host_arenas.items()
         }
-        self.host_tensors = {
-            dtype: tvm_ffi.from_dlpack(value)
-            for dtype, value in self.host_arenas.items()
-        }
         self.host_views = tuple(
             self.host_arenas[value.dtype][offset : offset + value.size].reshape(
                 value.shape
@@ -45,6 +41,9 @@ class Metadata:
             for value, offset in zip(values, offsets, strict=True)
         )
         self.update(values)
+
+    def close(self):
+        self.uploads.close()
 
     def update(self, values):
         values = tuple(values)
@@ -60,4 +59,4 @@ class Metadata:
         for destination, source in zip(self.host_views, values, strict=True):
             np.copyto(destination, source, casting="no")
         for dtype, destination in self.device_arenas.items():
-            self.device.module.copy_bytes(destination, self.host_tensors[dtype])
+            self.uploads.copy(destination, self.host_arenas[dtype])

@@ -169,6 +169,7 @@ class Workspace:
 
     def close(self):
         self.resources.close()
+        self.metadata_inputs.close()
         for operation in (self.gdn, self.fa, self.ffn, self.hidden_operation):
             if operation is not None:
                 operation.close()

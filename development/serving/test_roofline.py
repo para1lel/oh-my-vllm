@@ -7,11 +7,21 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from . import benchmark
-from .accounting import draft_work, reference_seconds, reference_work, sample_work
+from .accounting import RATES, reference_seconds
 from .benchmark import (
     CONFIGURATIONS,
     efficiency,
     select_configurations,
+)
+from .kernels import (
+    draft_groups,
+    gdn_groups,
+    group,
+    reference,
+    resources,
+    sample_groups,
+    serial_seconds,
+    wy_groups,
 )
 from .roofline import lower_bound
 from .trace import canonical_passes
@@ -497,9 +507,9 @@ class Roofline(unittest.TestCase):
         with self.assertRaises(ValueError):
             lower_bound([*mtp[:2], *mtp[3:5], mtp[2], *mtp[5:]], manifest)
 
-    def test_reference_resources_share_tensor_capacity_and_sum_before_maximum(self):
-        self.assertEqual(sample_work(1)["fp32_flops"], 25602)
-        self.assertEqual(draft_work([dict(end=4)], 0)["fp32_flops"], 147286)
+    def test_reference_resources_follow_kernel_dependencies(self):
+        self.assertEqual(resources(sample_groups(1))["fp32_flops"], 25602)
+        self.assertEqual(resources(draft_groups([(4, 1)], 0))["fp32_flops"], 147286)
         work = dict(
             hbm_bytes=7.7e12,
             fp8_flops=4.5e15,
@@ -516,12 +526,13 @@ class Roofline(unittest.TestCase):
         manifest = request_manifest(length=32768)
         passes = canonical_passes(events, manifest)
         bound = lower_bound(events, manifest)
-        self.assertEqual(bound["seconds"], reference_seconds(reference_work(passes)))
+        self.assertEqual(bound["seconds"], reference(passes)["seconds"])
+        self.assertGreater(bound["seconds"], reference_seconds(bound["work"]))
         # A complete prompt fits the budget without a checkpoint-aligned split.
         self.assertEqual([item["requests"][0]["count"] for item in passes], [32768])
         small = canonical_passes(prefill_trace(length=16), request_manifest())
         self.assertEqual(
-            reference_work(small)["fp8_flops"],
+            reference(small)["work"]["fp8_flops"],
             2
             * 16
             * (
@@ -530,3 +541,54 @@ class Roofline(unittest.TestCase):
                 + 64 * (34816 * 5120 + 5120 * 17408)
             ),
         )
+
+    def test_serial_groups_cache_budget_and_precision_dispatch(self):
+        memory = group("memory", {"hbm_bytes": 8 * RATES["hbm_bytes"]})
+        compute = group("compute", {"fp8_flops": 6 * RATES["fp8_flops"]})
+        self.assertEqual(serial_seconds([memory, compute]), 14)
+        self.assertEqual(reference_seconds(resources([memory, compute])), 8)
+        cached = [
+            group(
+                "first",
+                {
+                    "hbm_bytes": 10 * RATES["hbm_bytes"],
+                    "fp8_flops": 3 * RATES["fp8_flops"],
+                },
+            ),
+            group(
+                "second",
+                {
+                    "hbm_bytes": 4 * RATES["hbm_bytes"],
+                    "bf16_flops": 6 * RATES["bf16_flops"],
+                },
+            ),
+        ]
+        self.assertEqual(serial_seconds(cached, cache_bytes=5 * RATES["hbm_bytes"]), 11)
+        self.assertEqual(
+            serial_seconds(cached, cache_bytes=100 * RATES["hbm_bytes"]), 9
+        )
+        for value in (-1, float("nan"), float("inf")):
+            with self.subTest(cache=value), self.assertRaises(ValueError):
+                serial_seconds(cached, cache_bytes=value)
+        small = gdn_groups([(0, 128)], False)
+        large = gdn_groups([(0, 129)], False)
+        self.assertIn("gdn.recurrent", [item.name for item in small])
+        self.assertNotIn("gdn.recurrent", [item.name for item in large])
+        self.assertIn("gdn.wy.prepare", [item.name for item in large])
+        scalar = next(
+            item
+            for item in gdn_groups([(0, 2)], False)
+            if item.name == "gdn.convolution"
+        )
+        self.assertEqual(scalar.work["bf16_flops"], 0)
+        self.assertEqual(scalar.work["fp32_flops"], 2 * (7 * 10240 + 2 * 96 * 5120))
+        matrix = next(
+            item for item in gdn_groups([(1, 1)], True) if item.name == "gdn.ba"
+        )
+        self.assertEqual(matrix.work["bf16_flops"], 2 * 96 * 5120)
+        self.assertEqual(matrix.work["fp32_flops"], 0)
+        prepare, carry, output = wy_groups([(783, 1)], 1234)
+        self.assertEqual(prepare.work["bf16_flops"], 28672)
+        self.assertEqual(prepare.work["fp32_flops"], 6288)
+        self.assertEqual(carry.work["hbm_bytes"], 1234)
+        self.assertEqual(output.work["fp32_flops"], 12336)

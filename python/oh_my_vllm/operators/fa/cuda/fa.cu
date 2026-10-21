@@ -31,7 +31,7 @@ void fa(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
   TVM_FFI_ICHECK(min_context >= 0 && min_context <= max_context);
   TVM_FFI_ICHECK(cache.ndim() == 5 && cache.size(0) > 0 && cache.size(0) <= INT32_MAX / 784);
   TVM_FFI_ICHECK(lse.ndim() == 3 && (lse.size(2) == 1 || lse.size(2) == 4 || lse.size(2) == 16 ||
-                                     lse.size(2) == 64 || lse.size(2) == 128));
+                                     lse.size(2) == 32 || lse.size(2) == 64 || lse.size(2) == 128));
   int splits = lse.size(2), batch = tables.size(0), blocks = cache.size(0);
   for (auto tensor : {x, summed})
     tensor_contract(tensor, x, kDLBfloat, 16, {rows, 5120});

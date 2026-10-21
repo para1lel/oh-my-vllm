@@ -39,6 +39,9 @@ class ChainDevice:
             source if isinstance(source, np.ndarray) else np.from_dlpack(source),
         )
 
+    def uploads(self):
+        return SimpleNamespace(copy=self.copy, close=lambda: None)
+
     def gather(self, destination, source, indices):
         destination[:] = source[indices]
 
@@ -106,6 +109,7 @@ class ChainDraft:
                 )
             ),
             update=lambda arrays: self.tokens.__setitem__(slice(None), arrays[-1]),
+            close=lambda: None,
         )
 
     def run(self):

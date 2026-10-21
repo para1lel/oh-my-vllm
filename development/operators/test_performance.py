@@ -9,9 +9,13 @@ from .cases import load_cases
 
 class PerformanceContracts(unittest.TestCase):
     def test_accounting_ignores_implementation_work(self):
-        from .accounting import CACHE_CAPACITY, attention, lower_bound, work
+        from development.serving.accounting import add, attention
 
-        small = attention(1, 1, 1, 4)
+        from .accounting import CACHE_CAPACITY, lower_bound, position_bytes, work
+
+        self.assertEqual(position_bytes(14, 14), 1679616)
+        self.assertEqual(position_bytes(16, 16), 2214144)
+        small = add(attention([(3, 1)]))
         self.assertEqual(small["fp8_flops"], 0)
         self.assertEqual(small["bf16_flops"], 4 * 4 * 24 * 256)
         self.assertEqual(small["hbm_bytes"], 3 * 4096)
