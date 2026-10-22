@@ -56,7 +56,7 @@
 **输出:** 带版本的身份 manifest, 以及经过批准的数学, 精度, 状态和测量契约.
 
 - [x] 不加载全部张量, 验证全部 48 个分片, 张量名称, offsets, shapes, scales 和文件身份.
-- [ ] 对比本地权重与固定 DeepInfer revision 及其不同的默认 checkpoint.
+- [x] 对比本地权重与固定 DeepInfer revision 及其不同的默认 checkpoint.
 - [ ] 明确 CED, CSA2, FP4, Engram 哈希, 提示编码, 媒体编码和 DSpark 概率规则.
 - [ ] Kernel 调优前冻结独立参考输入, 完整词表输出, 数值门槛和算子性能门槛.
 - [x] 规划逐层流式参考计算, 而非完整的 FP64 权重副本.

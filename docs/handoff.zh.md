@@ -14,8 +14,12 @@
 checkpoint 工具还提供独立 CPU Engram 哈希和续算历史.
 
 [参考构建指南](deepseek-v41/reference.zh.md)规定流式权重和独立的 PyTorch FP64 数学检查.
-使用其中的 CPU 文本生成器生成并验证短用例端点 artifact.
-全模型参考输出和完整的运行时分配上界仍是前置条件.
+[固定夹具](deepseek-v41/fixtures.zh.md) 绑定短文本端点和提示词编码用例.
+其中的上游比较在没有相同权重身份凭据时拒绝检查点替换.
+其中的 DSpark 预测器提供 FP64 块数学实现, 而不是服务执行.
+[采样约定](deepseek-v41/sampling.zh.md) 定义待处理 token 对齐, 精确修正和请求内 RNG 地址.
+
+DSpark, 媒体和长上下文参考输出及完整的运行时分配上界仍是前置条件.
 DeepSeek 和新的 nightly 回归测量放入独立文档, 不放进 README.
 
 以下状态描述 Qwen 实现.

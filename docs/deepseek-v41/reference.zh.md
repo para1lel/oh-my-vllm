@@ -3,8 +3,9 @@
 ## 范围
 
 [阶段计划](plan.zh.md)控制 native 算子调优之前的参考构建.
-当前工具提供 checkpoint 身份, 解码后的权重, Engram 哈希, FP64 数学函数和 CPU 文本参考生成器.
-目前尚未固定全模型参考 artifacts.
+这些工具提供 checkpoint 身份, 解码后的权重, Engram 哈希, FP64 目标模型和预测器数学实现, 以及 CPU 文本参考生成器.
+[固定夹具](fixtures.zh.md) 提供短文本端点和提示词编码用例.
+目前尚未固定 DSpark, 媒体和长上下文端点夹具.
 未声明运行时数值验收.
 [checkpoint 指南](checkpoint.zh.md)规定身份和行加载检查.
 
@@ -94,10 +95,25 @@ scripts/with-env.sh "$REFERENCE_ENV/bin/python" \
 scripts/with-env.sh "$REFERENCE_PYTHON" -m unittest \
   development.model.deepseek_v41.test_reference_math \
   development.model.deepseek_v41.test_reference_attention \
-  development.model.deepseek_v41.test_reference_model
+  development.model.deepseek_v41.test_reference_model \
+  development.model.deepseek_v41.test_reference_dspark
 ```
 
 这些检查对混合方向, 归一化, 旋转元素对, attention sinks 和 routing bias 使用手算数值.
 它们不是全模型数值凭据.
 普通 CPU contract hook 不导入 PyTorch.
 后续 GPU 参考生成遵循 [GPU 执行规则](../execution.zh.md).
+
+## DSpark 参考
+
+[预测器](../../development/model/deepseek_v41/reference_dspark.py) 提供三个 FP64 阶段和五行双向草稿.
+`append_main` 投影原始目标特征, 仅更新三个有界主窗口.
+`forward` 追加一个显式边界行, 并返回完整基础 logits, 加入 Markov 偏置的 logits, 已选 IDs 和原始置信度.
+可选的固定提案 IDs 支持有条件的端点检查.
+默认选择使用较小 ID 优先的 argmax, 而不是随机服务采样.
+每次调用均不修改其输入状态.
+
+预测器注意力位置和输出采样位置相差一.
+待处理 tokens, 验证, 已接受特征更新, RNG 和精确修正遵循[采样约定](sampling.zh.md).
+其 NumPy 参考不使用模型权重或 native 算子.
+这些小型 CPU 检查不是本地 checkpoint 的 DSpark 端点 fixtures.

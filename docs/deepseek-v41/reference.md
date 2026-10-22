@@ -3,8 +3,9 @@
 ## Scope
 
 The [phase plan](plan.md) controls reference construction before native operator tuning.
-The current tools supply checkpoint identities, decoded weights, Engram hashes, FP64 mathematical functions, and a CPU text reference generator.
-Full-model reference artifacts are not fixed at this time.
+The tools supply checkpoint identities, decoded weights, Engram hashes, FP64 target and predictor mathematics, and a CPU text reference generator.
+The [fixed fixtures](fixtures.md) supply short-text endpoints and prompt-codec cases.
+DSpark, media, and long-context endpoint fixtures are not fixed at this time.
 No runtime numerical acceptance is declared.
 The [checkpoint guide](checkpoint.md) specifies identity and row-loading checks.
 
@@ -94,10 +95,25 @@ The following small checks use CPU tensors only:
 scripts/with-env.sh "$REFERENCE_PYTHON" -m unittest \
   development.model.deepseek_v41.test_reference_math \
   development.model.deepseek_v41.test_reference_attention \
-  development.model.deepseek_v41.test_reference_model
+  development.model.deepseek_v41.test_reference_model \
+  development.model.deepseek_v41.test_reference_dspark
 ```
 
 The checks use hand-calculated values for mixing direction, normalization, rotary pairs, attention sinks, and routing bias.
 They are not full-model numerical evidence.
 The normal CPU contract hook does not import PyTorch.
 Use the [GPU execution rules](../execution.md) for later GPU reference generation.
+
+## DSpark reference
+
+The [predictor](../../development/model/deepseek_v41/reference_dspark.py) supplies three FP64 stages and five bidirectional draft rows.
+`append_main` projects raw target features and updates only the three bounded main windows.
+`forward` appends one explicit boundary row and returns full base logits, Markov-biased logits, selected IDs, and raw confidence.
+Optional fixed proposal IDs permit conditional endpoint checks.
+Default selection uses lowest-ID argmax, not stochastic service sampling.
+Each call leaves its input state unchanged.
+
+Predictor attention positions and output sample positions differ by one.
+Use the [sampling contract](sampling.md) for pending tokens, verification, accepted feature updates, RNG, and exact correction.
+Its NumPy oracle does not use model weights or native operators.
+These small CPU checks are not local-checkpoint DSpark endpoint fixtures.

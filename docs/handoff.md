@@ -14,8 +14,12 @@ The [memory planner](deepseek-v41/memory.md) specifies tensor placement and stor
 The checkpoint tools also supply independent CPU Engram hashes and continuation history.
 
 The [reference construction guide](deepseek-v41/reference.md) specifies streamed weights and the separate PyTorch FP64 mathematical checks.
-Use its CPU text generator to produce and validate the short-case endpoint artifact.
-Full-model reference outputs and complete runtime allocation bounds are still prerequisites.
+The [fixed fixtures](deepseek-v41/fixtures.md) bind short-text endpoints and prompt-codec cases.
+Their upstream comparison rejects checkpoint substitution without proof of equal weight identities.
+Its DSpark predictor supplies FP64 block mathematics, not service execution.
+The [sampling contract](deepseek-v41/sampling.md) defines pending-token alignment, exact correction, and request-local RNG addresses.
+
+DSpark, media, and long-context reference outputs and complete runtime allocation bounds are still prerequisites.
 Keep DeepSeek and new nightly regression measurements in separate documents, not README.
 
 The following state applies to the Qwen implementation.

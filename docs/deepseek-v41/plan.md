@@ -57,7 +57,7 @@ Stop all processes started for the phase.
 **Output:** A versioned identity manifest and approved mathematical, precision, state, and measurement contracts.
 
 - [x] Validate all 48 shards, tensor names, offsets, shapes, scales, and file identities without loading all tensors.
-- [ ] Compare local weights with the fixed DeepInfer revision and its different default checkpoint.
+- [x] Compare local weights with the fixed DeepInfer revision and its different default checkpoint.
 - [ ] Specify CED, CSA2, FP4, Engram hashing, prompt encoding, media encoding, and DSpark probability rules.
 - [ ] Freeze independent reference inputs, full vocabulary outputs, numerical limits, and operator performance limits before kernel tuning.
 - [x] Plan layer-streamed reference computation instead of a full FP64 weight copy.

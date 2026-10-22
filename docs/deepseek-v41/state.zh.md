@@ -181,7 +181,7 @@ DeepInfer 的[置信度内核](https://github.com/deepseek-ai/DeepInfer/blob/9bd
 
 DeepInfer 的[采样器](https://github.com/deepseek-ai/DeepInfer/blob/9bd9cf243fc53ef9afbf8f04d391d989117d6ab9/deepinfer/model_executor/layers/tilelang_ops/cuda/fused_sample.py) 在校正期间减去 `exp(draft_logprob-DRAFT_PROB_PENALTY)`.
 不得将这一调整用作前述精确公式.
-实现之前, 冻结概率存储, RNG 流和绝对采样位置.
+实现之前, [采样约定](sampling.zh.md) 固定服务位置, 独立 RNG 流和概率要求.
 被拒绝的行不得推进已接受的语法, 惩罚, token 历史或逻辑输出位置.
 接受和校正随机抽样使用与输出 token 抽样分开的 RNG 分配.
 本地源码没有定义这些服务 RNG 流.

@@ -181,7 +181,7 @@ These are service requirements, not a claim that the local loop implements them.
 
 DeepInfer's [sampler](https://github.com/deepseek-ai/DeepInfer/blob/9bd9cf243fc53ef9afbf8f04d391d989117d6ab9/deepinfer/model_executor/layers/tilelang_ops/cuda/fused_sample.py) subtracts `exp(draft_logprob-DRAFT_PROB_PENALTY)` during correction.
 Do not use that adjustment as the exact formula above.
-Freeze probability storage, RNG streams, and absolute sample positions before implementation.
+The [sampling contract](sampling.md) fixes service positions, independent RNG streams, and probability requirements before implementation.
 Rejected rows cannot advance accepted grammar, penalties, token history, or logical output positions.
 Acceptance and correction draws have separate RNG allocations from output-token draws.
 The local source does not define these service RNG streams.
