@@ -39,6 +39,7 @@ pub fn normalize(
         "max_completion_tokens",
         "max_output_tokens",
         "min_tokens",
+        "ignore_eos",
         "temperature",
         "top_p",
         "top_k",
@@ -68,7 +69,13 @@ pub fn normalize(
     for key in object.keys() {
         ensure!(allowed.contains(&key.as_str()), "unsupported field: {key}");
     }
-    for key in ["stream", "store", "parallel_tool_calls", "background"] {
+    for key in [
+        "stream",
+        "store",
+        "parallel_tool_calls",
+        "background",
+        "ignore_eos",
+    ] {
         if let Some(v) = body.get(key) {
             ensure!(v.is_boolean(), "{key} must be a boolean");
         }
@@ -466,6 +473,7 @@ pub fn normalize(
         "format": format,
         "max_tokens": max_tokens,
         "min_tokens": min_tokens,
+        "ignore_eos": body.get("ignore_eos").cloned().unwrap_or(json!(false)),
         "thinking_token_budget": thinking_budget,
         "sampling": sampling,
         "stop": stop,

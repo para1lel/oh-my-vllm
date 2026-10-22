@@ -133,6 +133,58 @@ class ChainDraft:
 
 
 class Constraints(unittest.TestCase):
+    def test_ignore_eos_keeps_sampling_masks_stop_strings_and_output_bounds(self):
+        from oh_my_vllm.worker.sampling import SamplingInputs
+
+        tokenizer = SimpleNamespace(
+            eos={256, 258},
+            grammar=SimpleNamespace(vocab_size=248320),
+            valid_tokens=259,
+            think_end=257,
+            generation={},
+            decode_bytes=lambda tokens: b"".join(
+                b"<eos>" if token in {256, 258} else bytes([token]) for token in tokens
+            ),
+        )
+        for ignore in (None, False, True):
+            with self.subTest(ignore_eos=ignore):
+                options = {
+                    "max_tokens": 8,
+                    "stop": ["bc"],
+                    "sampling": {"repetition_guard": False},
+                }
+                if ignore is not None:
+                    options["ignore_eos"] = ignore
+                request = Request(tokenizer, [], options)
+                inputs = SamplingInputs(1)
+                inputs.update([request], [[]], "target")
+                self.assertEqual(
+                    set(np.flatnonzero(sampling_mask(inputs))), set(range(259))
+                )
+                self.assertEqual(request.stops_after([97, 256, 98]), not ignore)
+                self.assertTrue(request.stops_after([97, 256, 98, 258, 99]))
+                kept, text = request.append([97, 256, 98])
+                self.assertEqual(text, "a")
+                if ignore:
+                    self.assertEqual(kept, [97, 256, 98])
+                    self.assertIsNone(request.finish)
+                    self.assertTrue(request.stops_after([258, 99]))
+                    self.assertEqual(request.append([258, 99, 100]), ([258, 99], ""))
+                else:
+                    self.assertEqual(kept, [97, 256])
+                self.assertEqual(request.finish, "stop")
+        request = Request(tokenizer, [], {"max_tokens": 4, "ignore_eos": True})
+        self.assertFalse(request.stops_after([256, 258]))
+        self.assertTrue(request.stops_after([256, 258, 97, 256]))
+        self.assertEqual(
+            request.append([256, 258, 97, 256, 98]), ([256, 258, 97, 256], "a")
+        )
+        self.assertEqual(request.finish, "length")
+        request = Request(
+            tokenizer, [], {"max_tokens": 4, "min_tokens": 2, "ignore_eos": True}
+        )
+        self.assertFalse(request.mask()[256])
+
     def test_verification_distribution_does_not_reuse_sampling_graph(self):
         from oh_my_vllm.worker.sampling import Sampling
 
@@ -519,9 +571,14 @@ class Constraints(unittest.TestCase):
                 valid_tokens=259,
                 think_end=257,
                 generation={},
+                decode_bytes=lambda tokens: tokenizer.decode(tokens).encode(),
             ),
             [],
-            {"max_tokens": 16, "sampling": {"repetition_guard": False}},
+            {
+                "max_tokens": 16,
+                "ignore_eos": True,
+                "sampling": {"repetition_guard": False},
+            },
         )
         request.constraint = constraint
         inputs = SamplingInputs(1)
@@ -567,9 +624,17 @@ class Constraints(unittest.TestCase):
             np.testing.assert_array_equal(sampling_mask(inputs), request.mask())
             np.testing.assert_array_equal(constraint.mask(), before)
         inputs = SamplingInputs(1)
-        inputs.update([request], [[*tokenizer.encode("1}").ids, 256]], "target")
+        inputs.update([request], [[*tokenizer.encode("1}").ids, 256, 256]], "target")
         self.assertTrue(sampling_mask(inputs)[256])
         np.testing.assert_array_equal(constraint.mask(), before)
+        constrained = Request(request.tokenizer, [], request.options)
+        constrained.constraint = constraint.fork()
+        tokens = [*tokenizer.encode("1}").ids, 256, 256]
+        self.assertEqual(constrained.append(tokens), (tokens, "1}"))
+        self.assertIsNone(constrained.finish)
+        inputs.update([constrained], [[256, 256]], "target")
+        self.assertTrue(sampling_mask(inputs)[256])
+        self.assertFalse(sampling_mask(inputs)[tokenizer.encode("3").ids[0]])
         proposal = constraint.fork()
         proposal.accept(tokenizer.encode("1}").ids)
         self.assertTrue(proposal.accepting)

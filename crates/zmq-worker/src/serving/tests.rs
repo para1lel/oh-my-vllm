@@ -8,6 +8,41 @@ use zeromq::{DealerSocket, ZmqMessage, prelude::*};
 
 type Ready = oneshot::Receiver<std::result::Result<(), (StatusCode, String)>>;
 
+#[test]
+fn ignore_eos_is_boolean_and_preserves_independent_stop_and_length_options() {
+    for responses in [false, true] {
+        let mut body = json!({
+            "model": "qwen3.8-27b-fp8",
+            "max_tokens": 17,
+            "min_tokens": 2,
+            "stop": ["end"],
+        });
+        if responses {
+            body["input"] = json!("hello");
+        } else {
+            body["messages"] = json!([{"role": "user", "content": "hello"}]);
+        }
+        for option in [None, Some(json!(false)), Some(json!(true))] {
+            let mut input = body.clone();
+            if let Some(value) = &option {
+                input["ignore_eos"] = value.clone();
+            }
+            let request = request::normalize(input, responses, "qwen3.8-27b-fp8", None).unwrap();
+            assert_eq!(
+                request.normalized["ignore_eos"],
+                option.unwrap_or(json!(false))
+            );
+            assert_eq!(request.normalized["max_tokens"], 17);
+            assert_eq!(request.normalized["min_tokens"], 2);
+            assert_eq!(request.normalized["stop"], json!(["end"]));
+        }
+        for invalid in [Value::Null, json!(0), json!(1), json!("true"), json!([])] {
+            body["ignore_eos"] = invalid;
+            assert!(request::normalize(body.clone(), responses, "qwen3.8-27b-fp8", None).is_err());
+        }
+    }
+}
+
 struct Response {
     ready: Option<Ready>,
     _events: mpsc::Receiver<Value>,

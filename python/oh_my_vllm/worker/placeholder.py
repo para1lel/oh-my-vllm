@@ -166,6 +166,8 @@ class Request:
             default=len(answer),
         )
         output = reasoning + list(answer[:end])
+        if request.get("ignore_eos", False) and end == len(answer):
+            output.extend([""] * max(0, limit - len(output)))
         finish = "length" if len(output) >= limit else "stop"
         if not output:
             output = [""]

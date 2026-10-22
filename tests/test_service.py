@@ -152,6 +152,65 @@ class Service(unittest.TestCase):
             response["usage"]["output_tokens"], plain["usage"]["completion_tokens"]
         )
 
+    def test_ignore_eos_bounds_streams_and_preserves_stop_strings(self):
+        for responses in (False, True):
+            path = "/v1/responses" if responses else "/v1/chat/completions"
+            payload = (
+                {
+                    "model": MODEL,
+                    "input": "hello",
+                    "max_output_tokens": 128,
+                    "seed": 7,
+                    "reasoning": {"effort": "off"},
+                    "store": False,
+                }
+                if responses
+                else self.chat()
+            )
+            plain = self.json("POST", path, payload)
+            count_key = "output_tokens" if responses else "completion_tokens"
+            self.assertLess(plain["usage"][count_key], 128)
+            for stream in (False, True):
+                with self.subTest(responses=responses, stream=stream):
+                    options = {**payload, "ignore_eos": True, "stream": stream}
+                    if stream and not responses:
+                        options["stream_options"] = {"include_usage": True}
+                    status, content = self.request("POST", path, options)
+                    self.assertEqual(status, 200, content)
+                    if stream:
+                        chunks = events(content)
+                        result = chunks[-1]["response"] if responses else chunks[-1]
+                        if not responses:
+                            self.assertIn("[DONE]", content)
+                            self.assertEqual(
+                                chunks[-2]["choices"][0]["finish_reason"], "length"
+                            )
+                    else:
+                        result = json.loads(content)
+                    self.assertEqual(result["usage"][count_key], 128)
+                    if responses:
+                        self.assertEqual(result["status"], "incomplete")
+                        self.assertEqual(
+                            result["incomplete_details"]["reason"], "max_output_tokens"
+                        )
+                    elif not stream:
+                        self.assertEqual(
+                            result["choices"][0]["finish_reason"], "length"
+                        )
+            first_text = (
+                plain["output"][0]["content"][0]["text"]
+                if responses
+                else plain["choices"][0]["message"]["content"]
+            )
+            stopped = self.json(
+                "POST", path, {**payload, "ignore_eos": True, "stop": [first_text[0]]}
+            )
+            self.assertLess(stopped["usage"][count_key], 128)
+            if responses:
+                self.assertEqual(stopped["status"], "completed")
+            else:
+                self.assertEqual(stopped["choices"][0]["finish_reason"], "stop")
+
     def test_media_chat_responses_and_continuation(self):
         image = "data:image/png;base64," + "AQID" * 70000
         content = [

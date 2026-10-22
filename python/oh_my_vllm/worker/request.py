@@ -14,6 +14,7 @@ class Request:
         self.history = list(tokens)
         self.limit = options["max_tokens"]
         self.minimum = self.limit if fixed_length else options.get("min_tokens", 0)
+        self.ignore_eos = options.get("ignore_eos", False)
         self.options = options
         self.seed = options.get("sampling", {}).get("seed", secrets.randbits(63)) % (
             1 << 64
@@ -51,9 +52,8 @@ class Request:
 
     def stops_after(self, prefix):
         if (
-            any(token in self.tokenizer.eos for token in prefix)
-            or self.generated + len(prefix) >= self.limit
-        ):
+            not self.ignore_eos and any(token in self.tokenizer.eos for token in prefix)
+        ) or self.generated + len(prefix) >= self.limit:
             return True
         if not self.options.get("stop"):
             return False
@@ -61,6 +61,8 @@ class Request:
         decoder.setstate(self.decoder.getstate())
         text = self.buffer
         for index, token in enumerate(prefix):
+            if token in self.tokenizer.eos:
+                continue
             first_new = len(text)
             text += decoder.decode(self.tokenizer.decode_bytes([token]))
             if (
@@ -145,8 +147,10 @@ class Request:
             self.presence[token // 8] |= 1 << (token % 8)
             kept.append(token)
             if token in self.tokenizer.eos:
-                self.finish = "stop"
-                break
+                if not self.ignore_eos:
+                    self.finish = "stop"
+                    break
+                continue
             first_new = len(self.buffer)
             self.buffer += self.decoder.decode(self.tokenizer.decode_bytes([token]))
             if self.generated >= self.minimum:

@@ -38,5 +38,9 @@ HTTP efficiency 不设最低交付门槛.
 
 交付前执行适用的[测试范围](testing.zh.md).
 同时执行全部 24 组 [HTTP 配置](performance.zh.md).
-将测量产物保存在仓库外.
+
+[AgentX 入口](agentx.zh.md)使用四个会话树测量 MTP4.
+它通过流式 usage 和完整响应 ID 关联服务指标.
+将其获准保存的 CSV 和图片保存在 `docs/assets`.
+将原始测量产物保存在仓库外.
 将主机设置放入被忽略的 `LOCAL.md`.

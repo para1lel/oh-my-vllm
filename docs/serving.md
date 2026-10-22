@@ -120,6 +120,8 @@ Use `--speculative-mode none` for ordinary decode.
 
 Use `min_tokens` to prevent EOS and stop strings before the minimum output length.
 The minimum must be at most the output limit.
+Use `ignore_eos=true` to count EOS tokens without stopping generation.
+This option does not mask EOS or disable stop strings.
 Use `temperature`, `top_k`, `top_p`, and the penalty fields for sampling.
 Use `repetition_guard=false` to disable the generated-token cycle guard.
 

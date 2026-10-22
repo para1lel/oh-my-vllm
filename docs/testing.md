@@ -41,5 +41,10 @@ Use the GPU wrapper for GPU work.
 After each run, stop the processes that you started.
 Keep measurement artifacts external to the repository.
 
+Use the [AgentX procedure](agentx.md) for trace replay with prefix reuse.
+Its approved CSV and figure can be stored in the repository.
+Keep its raw records and logs external to the repository.
+CPU checks cover its fixed configuration and request data validation.
+
 Update the required performance tables in the two README files before each delivery.
 Do not put other test results in project documents.

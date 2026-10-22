@@ -1,0 +1,2 @@
+agentx-harness==1.0.7
+matplotlib==3.10.8

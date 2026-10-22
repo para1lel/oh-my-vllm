@@ -120,6 +120,8 @@ Run 和 Bench 使用固定输出长度.
 
 使用 `min_tokens` 可在最小输出长度之前屏蔽 EOS 和 stop 字符串.
 最小长度不得大于输出上限.
+使用 `ignore_eos=true` 可计入 EOS token, 而不停止生成.
+此选项不屏蔽 EOS, 也不禁用停止字符串.
 使用 `temperature`, `top_k`, `top_p` 和 penalty 字段设置采样.
 使用 `repetition_guard=false` 可关闭生成 token 的循环保护.
 

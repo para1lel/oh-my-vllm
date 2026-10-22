@@ -38,5 +38,9 @@ Report the measured performance.
 
 Run the applicable [test scope](testing.md) before delivery.
 Also run all 24 [HTTP configurations](performance.md).
-Keep measurement artifacts external to the repository.
+
+The [AgentX entry](agentx.md) measures MTP4 with four session trees.
+It uses streaming usage and full response IDs to join service metrics.
+Keep its approved CSV and figure in `docs/assets`.
+Keep raw measurement artifacts external to the repository.
 Put host settings in ignored `LOCAL.md`.
