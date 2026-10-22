@@ -55,3 +55,23 @@ Its output is FP64 mathematical weight data, without runtime activation rounding
 This reader does not execute the model or supply full-model numerical evidence.
 Reference generation must use independent model mathematics and bound temporary weight storage.
 Inference code must not import these development tools.
+
+## Engram reference
+
+The independent CPU Engram reference supplies token normalization, prime buckets, hash multipliers, and row indices.
+It uses the local tokenizer without a Transformers tokenizer adapter.
+Text tokens with the same normalized text share a compressed ID.
+Partial UTF-8 tokens keep their raw token identity.
+Empty text and one space do not merge.
+
+The configured compressed vocabulary size and table row counts must match the derived values.
+Prime buckets are disjoint across layers.
+The multiplier generator uses the source's layer-specific PCG64 seeds.
+Hash products must be in the signed 64-bit integer range.
+
+`hash_rows` accepts compressed token IDs and returns row indices with continuation history.
+The dead-token marker `-1` stops lookback through media spans.
+Missing or blocked history uses the compressed padding ID.
+The history keeps at most `max_ngram_size-1` IDs.
+Dead-token markers are part of that history.
+This reference does not allocate pinned storage or execute Engram projections.

@@ -10,7 +10,9 @@ Phase 0 is active: freeze checkpoint identities, tensor layouts, model mathemati
 
 The [checkpoint tools](deepseek-v41/checkpoint.md) provide full byte identities and a lazy CPU FP64 weight reader.
 The [model contract](deepseek-v41/model.md) and [state contract](deepseek-v41/state.md) give the local mathematical sources and subsequent reference gates.
-Full-model reference outputs and per-rank memory budgets are still prerequisites.
+The [memory planner](deepseek-v41/memory.md) specifies tensor placement and storage budgets for all three four-rank strategies.
+The checkpoint tools also supply independent CPU Engram hashes and continuation history.
+Full-model reference outputs and complete runtime allocation bounds are still prerequisites.
 Keep DeepSeek and new nightly regression measurements in separate documents, not README.
 
 The following state applies to the Qwen implementation.

@@ -10,7 +10,9 @@
 
 [checkpoint 工具](deepseek-v41/checkpoint.zh.md)提供完整字节身份和惰性 CPU FP64 权重读取器.
 [模型契约](deepseek-v41/model.zh.md)和[状态契约](deepseek-v41/state.zh.md)给出本地数学来源和后续参考门槛.
-全模型参考输出和逐 rank 内存预算仍是前置条件.
+[内存规划器](deepseek-v41/memory.zh.md)为全部三种四 rank 策略指定张量放置和存储预算.
+checkpoint 工具还提供独立 CPU Engram 哈希和续算历史.
+全模型参考输出和完整的运行时分配上界仍是前置条件.
 DeepSeek 和新的 nightly 回归测量放入独立文档, 不放进 README.
 
 以下状态描述 Qwen 实现.
