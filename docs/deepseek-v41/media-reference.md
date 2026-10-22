@@ -8,7 +8,10 @@ This case does not validate a video decoder, frame extraction, or service media 
 The [video contract](video.md) specifies frame selection and timestamp blocks.
 
 The generator supplies reference construction, not runtime acceptance.
-No fixed media endpoint fixture is supplied yet.
+The reviewed endpoints are stored in the [fixed media fixture](fixtures.md#media-endpoints).
+Ordinary checks load this fixture through NumPy without reference generation or checkpoint access.
+The fixture does not prove service numerical, performance, or capacity acceptance.
+Long-context reference outputs and model-specific numerical limits are still pending.
 The [reference guide](reference.md) specifies arithmetic, weight streaming, and the separate reference environment.
 
 ## Fixed input

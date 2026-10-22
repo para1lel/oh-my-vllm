@@ -54,8 +54,8 @@ struct ClientDisconnected;
 pub struct ServeArgs {
     #[arg(long, default_value = "127.0.0.1:8000")]
     pub listen: SocketAddr,
-    #[arg(long, default_value = "qwen3.8-27b-fp8")]
-    pub served_model_name: String,
+    #[arg(long)]
+    pub served_model_name: Option<String>,
     #[arg(long, default_value_t = 3600)]
     pub response_ttl_seconds: u64,
     #[arg(long, default_value_t = 1000)]
@@ -543,6 +543,10 @@ async fn delete(State(app): State<App>, Path(id): Path<String>) -> Response {
 }
 
 pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) -> Result<()> {
+    let model_name = args
+        .served_model_name
+        .clone()
+        .unwrap_or_else(|| client.model_policy().served_model_name().to_owned());
     let sampling_defaults = sampling::service_defaults(&args.override_generation_config)?;
     anyhow::ensure!(
         args.response_capacity > 0
@@ -591,7 +595,7 @@ pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) 
     let app = App {
         submit: tx,
         store: store.clone(),
-        model: args.served_model_name.clone(),
+        model: model_name.clone(),
         thinking_token_budget: args.thinking_token_budget,
         sampling_defaults,
         budget: budget.clone(),
@@ -608,7 +612,7 @@ pub async fn serve(client: WorkerClient, scheduler: Scheduler, args: ServeArgs) 
         .layer(DefaultBodyLimit::max(resources::HTTP_BODY_BYTES))
         .layer(middleware::from_fn_with_state(app.clone(), reserve_http))
         .with_state(app);
-    info!(listen = %args.listen, model = %args.served_model_name, "HTTP service ready");
+    info!(listen = %args.listen, model = %model_name, "HTTP service ready");
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let mut engine = tokio::spawn(engine(
         client,
@@ -1008,6 +1012,7 @@ async fn engine(
         client.mamba_blocks,
         client.host_cache_bytes,
     );
+    let model_policy = client.model_policy();
     let template = scheduler.empty_like();
     let mut client = Some(client);
     let mut epoch = 1u64;
@@ -1093,7 +1098,7 @@ async fn engine(
             config.socket_path = socket.into();
             let launched = tokio::select! {
                 _ = &mut shutdown => return,
-                result = WorkerClient::launch(config) => result,
+                result = WorkerClient::launch_with_model(config, model_policy) => result,
             };
             match launched {
                 Ok(mut worker) => {

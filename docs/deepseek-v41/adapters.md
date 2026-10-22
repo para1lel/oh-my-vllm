@@ -2,7 +2,7 @@
 
 ## Current scope
 
-Phase 1 extraction starts with the Python adapter entry.
+Phase 1 extraction uses the Python adapter entry.
 The [registry](../../python/oh_my_vllm/models/registry.py) selects an implemented family from configuration architecture and model type.
 Directory names do not select a family.
 Only Qwen is registered.
@@ -15,8 +15,9 @@ The `stub` path still selects the test placeholder directly.
 All other paths use the registry.
 The Qwen computation and accepted-state rules are unchanged.
 
-This is not the full Phase 1 extraction.
-Shared state contracts, Rust model-specific defaults and validation, and the full Qwen HTTP regression matrix are necessary subsequent steps.
+Phase 1 extraction is complete.
+The [nightly Qwen report](qwen-regression.md) records the full HTTP regression matrix.
+Phase 2 supplies general cache transactions and four-rank control.
 These interfaces do not enable distributed execution or DeepSeek capabilities.
 
 ## Python ownership
@@ -54,8 +55,15 @@ This move does not change Qwen stream parsing or public response fields.
 
 ## Selection and startup
 
-The loader rejects configuration inputs above 1 MiB.
+The [Rust policy selector](../../crates/zmq-worker/src/models/policy.rs) reads original configuration bytes before socket binding or worker startup.
+It selects the family from architecture and model type, then verifies its supported format and configuration identity.
+Only the literal `stub` path selects the test policy.
+Unknown configurations cannot select that policy.
+
+Rust and the Python loader each reject configuration inputs above 1 MiB.
+The Python loader repeats selection before GPU backend imports.
 It rejects duplicate JSON keys and configuration values that are not objects.
+
 The architecture list must contain exactly the registered architecture.
 The model type must also match.
 Unknown architectures and incompatible formats cause an error before GPU backend imports.
@@ -72,6 +80,29 @@ Registry selection alone does not prove weight compatibility or numerical accept
 It does not examine weight payloads, allocate cache state, or change context limits.
 The Qwen backend keeps its existing startup checks and numerical gates.
 The [phase plan](plan.md) specifies the subsequent extraction and regression work.
+
+## Rust model policy
+
+The [Qwen policy](../../crates/zmq-worker/src/models/qwen38/policy.rs) owns model-specific defaults, vocabulary limits, speculation rules, and readiness checks.
+The shared CLI uses the selected policy for options that the caller does not supply.
+Explicit options must pass that policy's validation.
+The paired-cache scheduler uses the resolved block unit.
+This change keeps the current cache transaction format.
+
+`WorkerConfig::default()` keeps the legacy Qwen preset for existing library callers.
+It does not select defaults for another model family.
+The CLI selects the model before it constructs the worker configuration.
+Model selection and option errors occur before IPC binding or process startup.
+
+`launch_with_model` repeats CPU selection before it starts the worker.
+A different selection causes an error.
+Ready must match the selected policy.
+Worker recovery keeps the initial model policy and rejects a different family.
+
+The validated policy supplies the default HTTP model name.
+An explicit served model name changes only the public name, not model selection.
+Qwen keeps its original defaults and accepted modes.
+These checks do not read weight payloads or prove GPU capacity.
 
 ## Rust description contract
 

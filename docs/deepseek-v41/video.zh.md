@@ -118,5 +118,7 @@ message = {"role": "user", "content": content}
 它必须拒绝超限输入, 不得静默截断.
 独立图像和多个视频计入同一个请求预算.
 
-视频解码, 时间戳 token fixtures, 模型数值输出, 运行时分配边界和服务集成属于后续工作.
+[固定媒体夹具](fixtures.zh.md#媒体端点) 提供一张静态图片和两张合成已解码视频帧的完整模型端点.
+[视频提示词夹具](video-fixtures.zh.md) 绑定混合媒体顺序, 格式化后相同的时间戳和上下文续接.
+视频解码, 运行时分配边界和服务集成属于后续工作.
 [行为测试](../../development/model/deepseek_v41/test_reference_video.py) 仅检查选择, 内容顺序和无效输入.

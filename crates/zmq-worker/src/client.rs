@@ -19,7 +19,7 @@ use zeromq::{DealerSendHalf, DealerSocket, ZmqMessage};
 
 use crate::error::{Error, Result};
 use crate::model_ready::validate_ready;
-use crate::models::ModelFamily;
+use crate::models::{ModelFamily, ModelPolicy, select_model};
 use crate::protocol::{
     AbortMsg, ExecuteMsg, InitMsg, MODEL_DESCRIPTOR_VERSION, ModelDescriptor, RegisterMsg,
     RustMessage, ScheduledRequestMsg, decode, encode,
@@ -46,19 +46,20 @@ pub struct WorkerConfig {
 
 impl Default for WorkerConfig {
     fn default() -> Self {
+        let defaults = ModelPolicy::legacy().defaults();
         Self {
             model_path: std::env::var_os("OH_MY_VLLM_MODEL")
                 .map(PathBuf::from)
                 .unwrap_or_default(),
             socket_path: PathBuf::from("/tmp/oh-my-vllm.ipc"),
             num_gpu_blocks: None,
-            mamba_blocks: Some(128),
+            mamba_blocks: Some(defaults.mamba_blocks),
             host_cache_bytes: None,
-            block_size: 784,
-            tensor_parallel_size: 1,
-            max_model_len: 262144,
-            max_num_batched_tokens: 32768,
-            max_num_seqs: 4,
+            block_size: defaults.block_size,
+            tensor_parallel_size: defaults.tensor_parallel_size,
+            max_model_len: defaults.max_model_len,
+            max_num_batched_tokens: defaults.max_num_batched_tokens,
+            max_num_seqs: defaults.max_num_seqs,
             num_speculative_tokens: 0,
             speculative_mode: None,
             python_executable: std::env::var_os("OH_MY_VLLM_WORKER_PYTHON")
@@ -291,7 +292,7 @@ fn reap_worker_group(child: &mut Child) {
 }
 
 impl WorkerClient {
-    pub async fn launch(mut config: WorkerConfig) -> Result<Self> {
+    pub async fn launch(config: WorkerConfig) -> Result<Self> {
         if config.model_path.as_os_str().is_empty() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -299,6 +300,22 @@ impl WorkerClient {
             )
             .into());
         }
+        let model = select_model(&config.model_path)?;
+        Self::launch_selected(config, model).await
+    }
+
+    pub async fn launch_with_model(config: WorkerConfig, model: ModelPolicy) -> Result<Self> {
+        model.validate_options(&config)?;
+        if select_model(&config.model_path)? != model {
+            return Err(Error::ModelConfiguration(
+                "model selection changed before worker startup".into(),
+            ));
+        }
+        Self::launch_selected(config, model).await
+    }
+
+    async fn launch_selected(mut config: WorkerConfig, model: ModelPolicy) -> Result<Self> {
+        model.validate_options(&config)?;
         let addr = format!("ipc://{}", config.socket_path.display());
 
         let mut sock = DealerSocket::new();
@@ -410,8 +427,13 @@ impl WorkerClient {
                     host_cache_bytes,
                     cache_memory,
                 } => {
-                    let model_family =
-                        validate_ready(&config, &descriptor, logical_num_blocks, mamba_blocks)?;
+                    let model_family = validate_ready(
+                        model,
+                        &config,
+                        &descriptor,
+                        logical_num_blocks,
+                        mamba_blocks,
+                    )?;
                     info!(
                         logical_num_blocks,
                         mamba_blocks,
@@ -777,6 +799,10 @@ impl WorkerClient {
 
     pub(crate) fn model_family(&self) -> ModelFamily {
         self.model_family
+    }
+
+    pub fn model_policy(&self) -> ModelPolicy {
+        ModelPolicy::for_family(self.model_family)
     }
 
     pub async fn cache_step(

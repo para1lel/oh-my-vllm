@@ -2,7 +2,7 @@
 
 ## Scope and identity
 
-The [fixture reader](../../development/model/deepseek_v41/fixtures.py) binds three fixed artifacts by SHA256.
+The [fixture reader](../../development/model/deepseek_v41/fixtures.py) binds four fixed artifacts by SHA256.
 Ordinary checks load them without PyTorch, GPU execution, or checkpoint access.
 They are reference inputs and expected outputs, not service performance results.
 Do not replace them with runtime outputs.
@@ -13,8 +13,9 @@ Model and operator numerical limits are separate gates in the [validation plan](
 | [Short text](../../development/model/deepseek_v41/reference.npz) | Two full FP64 vocabulary vectors | `3bda8a9f03c797e65222a6eb85c82b758636514591f70f855e8f691a1f1fead0` |
 | [Prompt codec](../../development/model/deepseek_v41/codec.json) | Twenty encoding cases with complete token IDs | `30a3079291e9326961f3d79937fe25bac3235f49ad79c250edc6763619fe7a75` |
 | [DSpark continuation](../../development/model/deepseek_v41/dspark.npz) | Eighteen full FP64 vocabulary rows and two confidence vectors | `c78d89d66d2ff38999af2aa44b845c6d2fea1702280c217a92e7a0d693ee6fa8` |
+| [Media endpoints](../../development/model/deepseek_v41/media.npz) | Two full FP64 vocabulary vectors after still and video-frame images | `a847254bb8a1b858d67eeb7405edb4a5435c24f2280585ed18f6b4b0eee86223` |
 
-The three artifacts bind checkpoint manifest SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
+The four artifacts bind checkpoint manifest SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 That manifest records full identities for the 48 local weight shards and identified control files.
 The artifacts also record their generator sources and dependency versions.
 The fixed artifact hash binds those records to their outputs.
@@ -70,13 +71,47 @@ The next draft block uses only accepted features, and the target continuation us
 
 This case is not a sampled rejection event.
 It supplies independent CPU FP64 reference values, not service DSpark execution.
-Full media endpoints, long-context endpoints, and model-specific numerical thresholds are later gates.
+Long-context endpoints and model-specific numerical thresholds are later gates.
 Phase 0 is not complete.
 
 The file hash binds the historical generator-source and dependency records to these outputs.
 Ordinary checks do not compare those source records with current generator files.
 Subsequent generator edits do not change this fixed reference.
 The [construction guide](reference.md) gives the generator and its source checks.
+
+## Media endpoints
+
+`load_media()` loads the fixed 2012626-byte `media.npz` through NumPy only.
+The file is a byte-for-byte copy of the reviewed external reference.
+It uses schema 1, case `still-and-video-frames`, and reference kind `independent-pytorch-fp64-no-activation-quantization`.
+The loader checks the full file hash before it reads arrays.
+It also checks the embedded full checkpoint manifest, full input identity, historical source records, and compressed-token-map identity.
+
+The input identity includes messages, encoder options, rendered text, PNG bytes, token IDs, token types, image grids, and patch identities.
+It also includes the decode token, frame selection, and vision-embedding identities.
+Its SHA256 is `968e863392fe7ec3531e4df6a7d43851a295f070c486fec80565abc63a7449bc`.
+The 21 historical source records have SHA256 `c099eb57db022052006567e726dbd3cd4f56c5bebd35eaf7bce45a3ed2383dd7`.
+
+These identities use UTF-8 JSON with sorted keys, separators `(",", ":")`, and `allow_nan=False`, without a final newline.
+JSON uses `ensure_ascii=True`.
+Tests do not compare historical source records with current implementation files.
+The full file hash also binds the recorded dependency versions and CPU settings.
+
+The 37-token placeholder prompt expands to 624 tokens.
+Three vision embeddings have shapes `(200, 5120)`, `(206, 5120)`, and `(184, 5120)` in image order.
+The prefill argmax selects decode token 9544.
+Decode continues from the accepted prefill state.
+
+| Array | Shape | SHA256 of little-endian FP64 bytes |
+|---|---|---|
+| `prefill` | `(129280,)` | `7edd90ed9122b9dab48dffbcc231fd06a284591bc4f04cfbf65ecf2384edfc38` |
+| `decode` | `(129280,)` | `b97f1fd3e53a8e90145a5db261ffa44b78228beb427f337145836336422b6c31` |
+
+The loader checks that all arrays are present, use FP64, and have finite values.
+Their shape, dtype, and hash metadata must agree with the arrays.
+The [media construction guide](media-reference.md) specifies the synthetic decoded still image and video frames.
+This fixture does not prove decoder, service, performance, or capacity acceptance.
+Long-context references and numerical limits are still pending.
 
 ## Prompt codec
 

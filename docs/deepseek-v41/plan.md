@@ -82,9 +82,9 @@ The descriptor binds identity, context limit, capabilities, formats, and schema 
 The adapter supplies preparation, execution, result validation, state selection, and resource closure.
 
 - [x] Add registry rejection checks for unknown architectures, unsupported formats, and capability mismatches.
-- [ ] Move fixed Qwen dimensions, tokenizer rules, media positions, and MTP4 selection out of shared control.
-- [ ] Keep current API validation and defaults for Qwen.
-- [ ] Run existing Rust, service, constraints, execution, and frozen Qwen numerical checks.
+- [x] Move fixed Qwen dimensions, tokenizer rules, media positions, and MTP4 selection out of shared control.
+- [x] Keep current API validation and defaults for Qwen.
+- [x] Run existing Rust, service, constraints, execution, and frozen Qwen numerical checks.
 
 **Gate:** Qwen works through the adapter with unchanged accepted outputs and state semantics.
 **Test reason:** Existing checks do not exercise selection between model families.

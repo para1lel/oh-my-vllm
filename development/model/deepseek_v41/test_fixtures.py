@@ -1,7 +1,9 @@
 import hashlib
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import numpy as np
 
@@ -9,6 +11,169 @@ from . import fixtures
 
 
 class FrozenFixtures(unittest.TestCase):
+    def test_media_reference_keeps_complete_inputs_vectors_and_historical_provenance(
+        self,
+    ):
+        self.assertTrue(
+            callable(getattr(fixtures, "load_media", None)),
+            "media fixture loader is missing",
+        )
+        metadata, arrays = fixtures.load_media()
+        self.assertEqual(metadata["schema_version"], 1)
+        self.assertEqual(metadata["case"], "still-and-video-frames")
+        self.assertEqual(
+            metadata["reference_kind"],
+            "independent-pytorch-fp64-no-activation-quantization",
+        )
+        manifest = (
+            json.dumps(metadata["checkpoint"], sort_keys=True, indent=2) + "\n"
+        ).encode()
+        self.assertEqual(
+            hashlib.sha256(manifest).hexdigest(),
+            "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67",
+        )
+        self.assertEqual(metadata["checkpoint"]["verification"], "full")
+        self.assertEqual(metadata["checkpoint"]["tensor_count"], 96085)
+        self.assertEqual(metadata["checkpoint"]["shard_count"], 48)
+        self.assertEqual(
+            metadata["execution"],
+            {"device": "cpu", "threads": 8, "projection_row_limit": 2048},
+        )
+        for key, expected in (
+            (
+                "inputs",
+                "968e863392fe7ec3531e4df6a7d43851a295f070c486fec80565abc63a7449bc",
+            ),
+            (
+                "reference_sources",
+                "c099eb57db022052006567e726dbd3cd4f56c5bebd35eaf7bce45a3ed2383dd7",
+            ),
+        ):
+            canonical = json.dumps(
+                metadata[key], sort_keys=True, separators=(",", ":"), allow_nan=False
+            ).encode()
+            self.assertEqual(hashlib.sha256(canonical).hexdigest(), expected)
+        self.assertEqual(len(metadata["reference_sources"]), 21)
+        self.assertEqual(
+            metadata["reference_sources"][
+                "development/model/deepseek_v41/reference_media_case.py"
+            ],
+            "e3adcac187cee11c76e05a436d690ad8f92aef9b172da7b35b048624aec58038",
+        )
+        self.assertEqual(
+            metadata["token_map_sha256"],
+            "26b9be2936d236a124ba318a998c417bc7032e3e92a3107fe98deee49f1dc496",
+        )
+        inputs = metadata["inputs"]
+        self.assertEqual(len(inputs["placeholder_tokens"]), 37)
+        self.assertEqual(len(inputs["expanded_tokens"]), 624)
+        self.assertEqual(len(inputs["token_types"]), 624)
+        self.assertEqual(inputs["decode_token"], 9544)
+        self.assertEqual(
+            inputs["video"],
+            {
+                "fps": 2.0,
+                "frame_count": 2,
+                "selected_indices": [0, 1],
+                "scope": "synthetic-decoded-frames; no video decoder",
+            },
+        )
+        self.assertEqual(
+            [value["shape"] for value in inputs["vision_embeddings"]],
+            [[200, 5120], [206, 5120], [184, 5120]],
+        )
+        expected_hashes = {
+            "prefill": (
+                "7edd90ed9122b9dab48dffbcc231fd06a284591bc4f04cfbf65ecf2384edfc38"
+            ),
+            "decode": (
+                "b97f1fd3e53a8e90145a5db261ffa44b78228beb427f337145836336422b6c31"
+            ),
+        }
+        self.assertEqual(set(arrays), set(expected_hashes))
+        self.assertEqual(set(metadata["arrays"]), set(expected_hashes))
+        for name, expected in expected_hashes.items():
+            value = arrays[name]
+            self.assertEqual(value.shape, (129280,))
+            self.assertEqual(value.dtype, np.float64)
+            self.assertTrue(np.isfinite(value).all())
+            self.assertEqual(
+                hashlib.sha256(value.astype("<f8").tobytes()).hexdigest(), expected
+            )
+            self.assertEqual(
+                metadata["arrays"][name],
+                {"shape": [129280], "dtype": "float64", "sha256": expected},
+            )
+        self.assertEqual(int(arrays["prefill"].argmax()), inputs["decode_token"])
+        self.assertEqual(int(arrays["decode"].argmax()), 344)
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "media.npz"
+            original = fixtures.MEDIA_PATH.read_bytes()
+            self.assertEqual(len(original), 2012626)
+            self.assertEqual(
+                hashlib.sha256(original).hexdigest(),
+                "a847254bb8a1b858d67eeb7405edb4a5435c24f2280585ed18f6b4b0eee86223",
+            )
+            path.write_bytes(original)
+            copied_metadata, copied_arrays = fixtures.load_media(path)
+            self.assertEqual(copied_metadata, metadata)
+            for name in arrays:
+                np.testing.assert_array_equal(copied_arrays[name], arrays[name])
+            for altered in (original[:-1], original + b"extra", b"not an artifact"):
+                path.write_bytes(altered)
+                with self.assertRaisesRegex(ValueError, "identity"):
+                    fixtures.load_media(path)
+            for label in (
+                "missing-decode",
+                "partial-decode",
+                "float32",
+                "nonfinite",
+                "changed-value",
+                "array-metadata",
+                "checkpoint",
+                "inputs",
+                "sources",
+                "token-map",
+            ):
+                with self.subTest(altered=label):
+                    changed = json.loads(json.dumps(metadata))
+                    values = {name: value.copy() for name, value in arrays.items()}
+                    if label == "missing-decode":
+                        del values["decode"]
+                    elif label == "partial-decode":
+                        values["decode"] = values["decode"][:128]
+                    elif label == "float32":
+                        values["decode"] = values["decode"].astype(np.float32)
+                    elif label == "nonfinite":
+                        values["decode"][0] = np.inf
+                    elif label == "changed-value":
+                        values["decode"][0] += 1.0
+                    elif label == "array-metadata":
+                        changed["arrays"]["decode"]["dtype"] = "float32"
+                    elif label == "checkpoint":
+                        changed["checkpoint"]["tensor_count"] = 1
+                    elif label == "inputs":
+                        changed["inputs"]["expanded_tokens"][0] += 1
+                    elif label == "sources":
+                        changed["reference_sources"].pop(
+                            "development/model/deepseek_v41/reference_media_case.py"
+                        )
+                    elif label == "token-map":
+                        changed["token_map_sha256"] = "0" * 64
+                    np.savez(path, metadata=np.asarray(json.dumps(changed)), **values)
+                    with self.assertRaises(ValueError):
+                        fixtures.load_media(path)
+                    # Exercise content checks after the whole-file identity gate.
+                    with (
+                        patch.object(
+                            fixtures,
+                            "MEDIA_SHA256",
+                            hashlib.sha256(path.read_bytes()).hexdigest(),
+                        ),
+                        self.assertRaises(ValueError),
+                    ):
+                        fixtures.load_media(path)
+
     def test_dspark_reference_keeps_full_vectors_fixed_state_and_artifact_identity(
         self,
     ):

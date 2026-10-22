@@ -49,7 +49,13 @@ impl TestWorker {
                 logical_num_blocks,
                 mamba_blocks,
                 ..
-            } => validate_ready(&config, &descriptor, logical_num_blocks, mamba_blocks)?,
+            } => validate_ready(
+                ModelPolicy::for_family(ModelFamily::Stub),
+                &config,
+                &descriptor,
+                logical_num_blocks,
+                mamba_blocks,
+            )?,
             other => return Err(Error::UnexpectedMessageType(format!("{other:?}"))),
         };
         let (send, mut receive) = socket.split();
@@ -226,6 +232,46 @@ time.sleep(300)
             init_timeout: Duration::from_secs(5),
             ..Default::default()
         };
+        for selected in [false, true] {
+            let invalid = WorkerConfig {
+                tensor_parallel_size: 4,
+                ..config.clone()
+            };
+            let result = if selected {
+                WorkerClient::launch_with_model(invalid, ModelPolicy::for_family(ModelFamily::Stub))
+                    .await
+            } else {
+                WorkerClient::launch(invalid).await
+            };
+            assert!(matches!(result, Err(Error::ModelConfiguration(_))));
+            assert!(!socket.exists());
+            assert!(!socket.with_extension("ipc.pids").exists());
+        }
+        assert!(matches!(
+            WorkerClient::launch_with_model(
+                config.clone(),
+                ModelPolicy::for_family(ModelFamily::Qwen38),
+            )
+            .await,
+            Err(Error::ModelConfiguration(_))
+        ));
+        assert!(!socket.exists());
+        assert!(!socket.with_extension("ipc.pids").exists());
+        std::fs::write(
+            directory.join("config.json"),
+            r#"{"architectures":["Unsupported"],"model_type":"unsupported"}"#,
+        )
+        .unwrap();
+        let invalid = WorkerConfig {
+            model_path: directory.clone(),
+            ..config.clone()
+        };
+        assert!(matches!(
+            WorkerClient::launch(invalid).await,
+            Err(Error::ModelConfiguration(_))
+        ));
+        assert!(!socket.exists());
+        assert!(!socket.with_extension("ipc.pids").exists());
         // Each synthetic worker and its child stay inside the launcher's owned group.
         let result = WorkerClient::launch(config).await;
         if oversized {

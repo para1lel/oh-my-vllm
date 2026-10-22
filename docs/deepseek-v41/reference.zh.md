@@ -4,8 +4,8 @@
 
 [阶段计划](plan.zh.md)控制 native 算子调优之前的参考构建.
 这些工具提供 checkpoint 身份, 解码后的权重, Engram 哈希, FP64 目标模型和预测器数学实现, 以及 CPU 文本参考生成器.
-[固定夹具](fixtures.zh.md) 提供短文本端点, DSpark 恢复端点和提示词编码用例.
-目前尚未固定媒体和长上下文端点夹具.
+[固定夹具](fixtures.zh.md) 提供短文本, DSpark 恢复和媒体端点, 以及提示词编码用例.
+目前尚未固定长上下文端点夹具.
 未声明运行时数值验收.
 [checkpoint 指南](checkpoint.zh.md)规定身份和行加载检查.
 

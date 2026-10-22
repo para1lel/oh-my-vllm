@@ -8,7 +8,7 @@
 执行全部阶段, 不再逐阶段等待批准.
 阶段 0 正在进行: 冻结 checkpoint 身份, 张量布局, 模型数学行为和独立数值参考.
 
-阶段 1 [适配器抽取](deepseek-v41/adapters.zh.md) 也在参考生成期间进行.
+阶段 1 [适配器抽取](deepseek-v41/adapters.zh.md) 已完成.
 Python 注册表在导入 GPU 后端前选择 Qwen.
 Init 协商描述符版本 1, Ready 提供描述符, 在构建调度器前进行验证.
 Python Qwen 描述符构建器绑定已加载身份和已分配缓存容量, 不导入 GPU 模块.
@@ -16,7 +16,11 @@ Python Qwen 描述符构建器绑定已加载身份和已分配缓存容量, 不
 Qwen Python 控制位于模型系列目录.
 共享工具约束必须使用模型提供的语法.
 Rust 输出解析使用 Ready 阶段接受的模型系列.
-阶段 1 还需完成 Rust 模型特定默认值及验证, 共享状态契约和完整的 Qwen HTTP 回归矩阵.
+Rust 模型策略拥有默认值, 选项验证和模型系列特定的就绪规则.
+CPU 模型选择发生在绑定 socket 或启动 worker 之前.
+
+[Nightly Qwen 报告](deepseek-v41/qwen-regression.zh.md) 记录完整 HTTP 回归矩阵.
+阶段 2 提供通用缓存事务和四 rank 控制.
 
 Qwen 计算和已接受状态语义保持不变.
 DeepSeek 执行未启用.
@@ -35,10 +39,13 @@ checkpoint 工具还提供独立 CPU Engram 哈希和续算历史.
 组合图像和视觉检查时, 使用独立的媒体参考环境.
 [视频参考](deepseek-v41/video.zh.md) 提供帧选择和逐帧时间戳块.
 [媒体生成器](deepseek-v41/media-reference.zh.md) 提供包含静态图片和合成已解码视频帧的完整目标模型端点.
-其固定产物和视频解码尚未提供.
+其固定产物绑定完整的 prefill 和 decode 向量.
+视频解码尚未提供.
+
 [采样约定](deepseek-v41/sampling.zh.md) 定义待处理 token 对齐, 精确修正和请求内 RNG 地址.
 
-媒体和长上下文参考输出, 数值门槛和完整的运行时分配上界仍是前置条件.
+[长上下文生成器](deepseek-v41/long-reference.zh.md) 提供候选池和原始旋转位置编码上下文边界的构建.
+其固定输出, 数值门槛和完整的运行时分配上界仍是前置条件.
 DeepSeek 和新的 nightly 回归测量放入独立文档, 不放进 README.
 
 以下状态描述 Qwen 实现.

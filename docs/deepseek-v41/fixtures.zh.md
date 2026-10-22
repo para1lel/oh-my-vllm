@@ -2,7 +2,7 @@
 
 ## 范围和身份
 
-[夹具读取器](../../development/model/deepseek_v41/fixtures.py) 用 SHA256 绑定三个固定产物.
+[夹具读取器](../../development/model/deepseek_v41/fixtures.py) 用 SHA256 绑定四个固定产物.
 普通检查无需 PyTorch, GPU 执行或访问检查点即可加载它们.
 它们是参考输入和期望输出, 而不是服务性能结果.
 不要用运行时输出替换它们.
@@ -13,8 +13,9 @@
 | [短文本](../../development/model/deepseek_v41/reference.npz) | 两个完整 FP64 词表向量 | `3bda8a9f03c797e65222a6eb85c82b758636514591f70f855e8f691a1f1fead0` |
 | [提示词编码](../../development/model/deepseek_v41/codec.json) | 二十个带完整 token IDs 的编码用例 | `30a3079291e9326961f3d79937fe25bac3235f49ad79c250edc6763619fe7a75` |
 | [DSpark 续算](../../development/model/deepseek_v41/dspark.npz) | 十八个完整 FP64 词表行和两个置信度向量 | `c78d89d66d2ff38999af2aa44b845c6d2fea1702280c217a92e7a0d693ee6fa8` |
+| [媒体端点](../../development/model/deepseek_v41/media.npz) | 静态图片和视频帧图片之后的两个完整 FP64 词表向量 | `a847254bb8a1b858d67eeb7405edb4a5435c24f2280585ed18f6b4b0eee86223` |
 
-三个产物均绑定检查点清单 SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
+四个产物均绑定检查点清单 SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 该清单记录 48 个本地权重分片及已标识控制文件的完整身份.
 产物还记录各自的生成器源码和依赖版本.
 固定产物哈希将这些记录与输出绑定.
@@ -70,13 +71,47 @@ prefill argmax 选择 token 16 作为固定续算输入.
 
 此用例不是一次采样拒绝事件.
 它提供独立 CPU FP64 参考值, 而不是服务 DSpark 执行.
-完整媒体端点, 长上下文端点和模型专用数值阈值是后续门槛.
+长上下文端点和模型专用数值阈值是后续门槛.
 Phase 0 尚未完成.
 
 文件哈希将历史生成器源码和依赖记录与这些输出绑定.
 普通检查不将这些源码记录与当前生成器文件比较.
 后续生成器编辑不会改变此固定 reference.
 [构建指南](reference.zh.md) 给出生成器及其源码检查.
+
+## 媒体端点
+
+`load_media()` 仅通过 NumPy 加载固定的 2012626-byte `media.npz`.
+该文件逐字节复制已审查的外部 reference.
+它使用 schema 1, 用例 `still-and-video-frames` 和 reference kind `independent-pytorch-fp64-no-activation-quantization`.
+加载器先检查完整文件哈希, 再读取数组.
+它还检查内嵌的完整检查点清单, 完整输入身份, 历史源码记录和压缩 token 映射身份.
+
+输入身份包含消息, 编码器选项, 渲染文本, PNG 字节, token IDs, token 类型, 图片网格和 patch 身份.
+它还包含解码 token, 帧选择和视觉嵌入身份.
+其 SHA256 为 `968e863392fe7ec3531e4df6a7d43851a295f070c486fec80565abc63a7449bc`.
+21 个历史源码记录的 SHA256 为 `c099eb57db022052006567e726dbd3cd4f56c5bebd35eaf7bce45a3ed2383dd7`.
+
+两个身份均使用 UTF-8 JSON, 键排序, 分隔符 `(",", ":")` 和 `allow_nan=False`, 不含末尾换行.
+JSON 使用 `ensure_ascii=True`.
+测试不将历史源码记录与当前实现文件比较.
+完整文件哈希还绑定已记录的依赖版本和 CPU 设置.
+
+37-token 占位符提示词展开为 624 tokens.
+三个视觉嵌入按图片顺序具有形状 `(200, 5120)`, `(206, 5120)` 和 `(184, 5120)`.
+prefill argmax 选择解码 token 9544.
+解码从已接受的 prefill 状态继续.
+
+| 数组 | 形状 | 小端 FP64 字节的 SHA256 |
+|---|---|---|
+| `prefill` | `(129280,)` | `7edd90ed9122b9dab48dffbcc231fd06a284591bc4f04cfbf65ecf2384edfc38` |
+| `decode` | `(129280,)` | `b97f1fd3e53a8e90145a5db261ffa44b78228beb427f337145836336422b6c31` |
+
+加载器检查所有数组都存在, 使用 FP64, 并具有有限值.
+其形状, dtype 和哈希元数据必须与数组一致.
+[媒体构建指南](media-reference.zh.md) 规定合成的已解码静态图片和视频帧.
+此夹具不能证明解码器, 服务, 性能或容量通过验收.
+长上下文参考和数值限制仍待完成.
 
 ## 提示词编码
 

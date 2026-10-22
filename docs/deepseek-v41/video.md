@@ -118,5 +118,7 @@ The service must later check the complete encoded prompt plus requested output a
 It must reject excess input without silent truncation.
 Separate images and multiple videos contribute to the same request budget.
 
-Video decoding, timestamp token fixtures, numerical model outputs, runtime allocation bounds, and service integration are later work.
+The [fixed media fixture](fixtures.md#media-endpoints) supplies full model endpoints for one still image and two synthetic decoded frames.
+The [video prompt fixtures](video-fixtures.md) bind mixed media order, equal formatted timestamps, and context continuation.
+Video decoding, runtime allocation bounds, and service integration are later work.
 The [behavior tests](../../development/model/deepseek_v41/test_reference_video.py) check only selection, content order, and invalid inputs.

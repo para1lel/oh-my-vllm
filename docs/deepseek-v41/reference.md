@@ -4,8 +4,8 @@
 
 The [phase plan](plan.md) controls reference construction before native operator tuning.
 The tools supply checkpoint identities, decoded weights, Engram hashes, FP64 target and predictor mathematics, and a CPU text reference generator.
-The [fixed fixtures](fixtures.md) supply short-text endpoints, DSpark restoration endpoints, and prompt-codec cases.
-Media and long-context endpoint fixtures are not fixed at this time.
+The [fixed fixtures](fixtures.md) supply short-text, DSpark restoration, and media endpoints, with prompt-codec cases.
+Long-context endpoint fixtures are not fixed at this time.
 No runtime numerical acceptance is declared.
 The [checkpoint guide](checkpoint.md) specifies identity and row-loading checks.
 

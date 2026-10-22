@@ -2,7 +2,7 @@
 
 ## 当前范围
 
-阶段 1 抽取从 Python 适配器入口开始.
+阶段 1 抽取使用 Python 适配器入口.
 [注册表](../../python/oh_my_vllm/models/registry.py) 根据配置中的 architecture 和 model type 选择已实现的模型系列.
 目录名称不用于选择模型系列.
 目前只注册 Qwen.
@@ -15,8 +15,9 @@ DeepSeek 配置仍会导致启动错误, 不会通过 Qwen 后端执行.
 所有其他路径均使用注册表.
 Qwen 计算和已接受状态规则保持不变.
 
-这不是完整的阶段 1 抽取.
-共享状态契约, Rust 模型特定默认值及验证, 以及完整的 Qwen HTTP 回归矩阵是必要的后续步骤.
+阶段 1 抽取已完成.
+[Nightly Qwen 报告](qwen-regression.zh.md) 记录完整 HTTP 回归矩阵.
+阶段 2 提供通用缓存事务和四 rank 控制.
 这些接口不启用分布式执行或 DeepSeek 功能.
 
 ## Python 所有权
@@ -54,8 +55,15 @@ worker 客户端在其整个生命周期中保存该系列.
 
 ## 选择与启动
 
-加载器拒绝超过 1 MiB 的配置输入.
+[Rust 策略选择器](../../crates/zmq-worker/src/models/policy.rs)在绑定 socket 或启动 worker 前读取原始配置字节.
+它根据 architecture 和 model type 选择模型系列, 然后验证所支持的格式和配置身份.
+只有字面量 `stub` 路径会选择测试策略.
+未知配置不能选择该策略.
+
+Rust 和 Python 加载器各自拒绝超过 1 MiB 的配置输入.
+Python 加载器在导入 GPU 后端前再次选择模型.
 它拒绝重复 JSON 键和非对象配置值.
+
 architecture 列表必须仅包含已注册的 architecture.
 model type 也必须匹配.
 未知 architectures 和不兼容格式会在导入 GPU 后端前报错.
@@ -72,6 +80,29 @@ Qwen 入口在导入后端前, 将所使用的配置字节与冻结的 Qwen 配�
 它不检查权重载荷, 不分配缓存状态, 也不更改上下文上限.
 Qwen 后端保留原有启动检查和数值门槛.
 [阶段计划](plan.zh.md) 指定后续抽取与回归工作.
+
+## Rust 模型策略
+
+[Qwen 策略](../../crates/zmq-worker/src/models/qwen38/policy.rs)拥有模型特定默认值, 词表限制, 推测执行规则和就绪检查.
+对于调用方未提供的选项, 共享 CLI 使用所选策略.
+显式选项必须通过该策略的验证.
+成对缓存调度器使用解析后的块单位.
+此变更保留当前缓存事务格式.
+
+`WorkerConfig::default()` 为现有库调用方保留原有 Qwen 预设.
+它不为其他模型系列选择默认值.
+CLI 在构造 worker 配置前选择模型.
+模型选择和选项错误发生在绑定 IPC 或启动进程之前.
+
+`launch_with_model` 在启动 worker 前再次执行 CPU 选择.
+选择不同会导致错误.
+Ready 必须与所选策略匹配.
+worker 恢复保留初始模型策略, 并拒绝其他模型系列.
+
+已验证策略提供默认的 HTTP 模型名称.
+显式服务模型名称只改变公开名称, 不改变模型选择.
+Qwen 保留原有默认值和允许模式.
+这些检查不读取权重载荷, 也不证明 GPU 容量.
 
 ## Rust 描述契约
 

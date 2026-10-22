@@ -11,6 +11,13 @@ CODEC_PATH = Path(__file__).with_name("codec.json")
 CODEC_SHA256 = "30a3079291e9326961f3d79937fe25bac3235f49ad79c250edc6763619fe7a75"
 DSPARK_PATH = Path(__file__).with_name("dspark.npz")
 DSPARK_SHA256 = "c78d89d66d2ff38999af2aa44b845c6d2fea1702280c217a92e7a0d693ee6fa8"
+MEDIA_PATH = Path(__file__).with_name("media.npz")
+MEDIA_SHA256 = "a847254bb8a1b858d67eeb7405edb4a5435c24f2280585ed18f6b4b0eee86223"
+MEDIA_INPUTS_SHA256 = "968e863392fe7ec3531e4df6a7d43851a295f070c486fec80565abc63a7449bc"
+MEDIA_SOURCES_SHA256 = (
+    "c099eb57db022052006567e726dbd3cd4f56c5bebd35eaf7bce45a3ed2383dd7"
+)
+MEDIA_SHAPES = {"prefill": (129280,), "decode": (129280,)}
 CHECKPOINT_MANIFEST_SHA256 = (
     "0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67"
 )
@@ -52,6 +59,64 @@ DSPARK_INPUTS = {
     "next_pending_position": 131,
     "next_proposal_tokens": [54994, 1060, 270, 41638, 6397],
 }
+
+
+def load_media(path=MEDIA_PATH):
+    data = Path(path).read_bytes()
+    if hashlib.sha256(data).hexdigest() != MEDIA_SHA256:
+        raise ValueError("frozen media-reference artifact identity differs")
+    with np.load(io.BytesIO(data), allow_pickle=False) as stored:
+        if set(stored.files) != {"metadata", *MEDIA_SHAPES}:
+            raise ValueError("media-reference vocabulary endpoints are incomplete")
+        metadata = json.loads(stored["metadata"].item())
+        arrays = {name: stored[name].copy() for name in MEDIA_SHAPES}
+    manifest = (
+        json.dumps(metadata["checkpoint"], sort_keys=True, indent=2) + "\n"
+    ).encode()
+    inputs = json.dumps(
+        metadata["inputs"], sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode()
+    sources = json.dumps(
+        metadata["reference_sources"],
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode()
+    if (
+        metadata["schema_version"] != 1
+        or metadata["case"] != "still-and-video-frames"
+        or metadata["reference_kind"]
+        != "independent-pytorch-fp64-no-activation-quantization"
+        or metadata["checkpoint_manifest_sha256"] != CHECKPOINT_MANIFEST_SHA256
+        or hashlib.sha256(manifest).hexdigest() != CHECKPOINT_MANIFEST_SHA256
+        or metadata["checkpoint"]["verification"] != "full"
+        or metadata["execution"]
+        != {"device": "cpu", "threads": 8, "projection_row_limit": 2048}
+        or hashlib.sha256(inputs).hexdigest() != MEDIA_INPUTS_SHA256
+        or hashlib.sha256(sources).hexdigest() != MEDIA_SOURCES_SHA256
+        or metadata["token_map_sha256"]
+        != "26b9be2936d236a124ba318a998c417bc7032e3e92a3107fe98deee49f1dc496"
+    ):
+        raise ValueError("media-reference inputs or provenance differ")
+    if set(metadata["arrays"]) != set(MEDIA_SHAPES):
+        raise ValueError("media-reference array metadata is incomplete")
+    for name, value in arrays.items():
+        shape = MEDIA_SHAPES[name]
+        if (
+            value.shape != shape
+            or value.dtype != np.float64
+            or not np.isfinite(value).all()
+            or metadata["arrays"][name]
+            != {
+                "shape": list(shape),
+                "dtype": "float64",
+                "sha256": hashlib.sha256(value.astype("<f8").tobytes()).hexdigest(),
+            }
+        ):
+            raise ValueError(f"media-reference full-vector identity differs: {name}")
+    if int(arrays["prefill"].argmax()) != metadata["inputs"]["decode_token"]:
+        raise ValueError("media-reference continuation token differs")
+    return metadata, arrays
 
 
 def load_dspark(path=DSPARK_PATH):

@@ -8,7 +8,7 @@ The architecture and measurement matrix have approval.
 Execute all phases without additional phase approval.
 Phase 0 is active: freeze checkpoint identities, tensor layouts, model mathematics, and independent numerical references.
 
-Phase 1 [adapter extraction](deepseek-v41/adapters.md) is also active during reference generation.
+Phase 1 [adapter extraction](deepseek-v41/adapters.md) is complete.
 The Python registry selects Qwen before GPU backend imports.
 Init negotiates descriptor version 1, and Ready supplies the descriptor for validation before scheduler construction.
 The Python Qwen descriptor builder binds loaded identities and allocated cache capacities without GPU imports.
@@ -16,7 +16,11 @@ The Python Qwen descriptor builder binds loaded identities and allocated cache c
 Qwen Python control is in the model family directory.
 Shared tool constraints must use model-supplied grammar.
 Rust output parsing uses the model family accepted at Ready.
-Rust model-specific defaults and validation, shared state contracts, and the full Qwen HTTP regression matrix are also necessary for Phase 1.
+Rust model policies own defaults, option validation, and family-specific readiness rules.
+CPU model selection occurs before socket binding or worker startup.
+
+The [nightly Qwen report](deepseek-v41/qwen-regression.md) records the full HTTP regression matrix.
+Phase 2 supplies general cache transactions and four-rank control.
 
 Qwen computation and accepted-state semantics stay unchanged.
 DeepSeek execution is not enabled.
@@ -35,10 +39,13 @@ The image reference supplies source-compatible pixels and patch order without ru
 Use the separate media reference environment for combined image and vision checks.
 The [video reference](deepseek-v41/video.md) supplies frame selection and per-frame timestamp blocks.
 The [media generator](deepseek-v41/media-reference.md) supplies full target endpoints for a still image and synthetic decoded video frames.
-Its fixed artifact and video decoding are not present.
+Its fixed artifact binds full prefill and decode vectors.
+Video decoding is not present.
+
 The [sampling contract](deepseek-v41/sampling.md) defines pending-token alignment, exact correction, and request-local RNG addresses.
 
-Media and long-context reference outputs, numerical limits, and full runtime allocation bounds are still prerequisites.
+The [long-context generator](deepseek-v41/long-reference.md) supplies construction at the candidate-pool and original rotary-context boundaries.
+Its fixed outputs, numerical limits, and full runtime allocation bounds are still prerequisites.
 Keep DeepSeek and new nightly regression measurements in separate documents, not README.
 
 The following state applies to the Qwen implementation.
