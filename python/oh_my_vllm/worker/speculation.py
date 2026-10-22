@@ -37,7 +37,7 @@ class GraphOperation:
 
 
 class Context(GraphOperation):
-    def __init__(self, device, weights, arrays, plan, hidden, cache):
+    def __init__(self, device, weights, arrays, plan, hidden, cache, graph):
         super().__init__(device)
         self.weights = mtp.Weights(
             weights.mtp_input,
@@ -51,7 +51,9 @@ class Context(GraphOperation):
         )
         self.metadata_inputs = Metadata(device, arrays)
         self.arrays = self.metadata_inputs.arrays
-        self.hidden = hidden
+        self.hidden = (
+            device.scratch((cache.parallel * 5, 5120), "bfloat16") if graph else hidden
+        )
         self.boundary_hidden = cache.hidden
         self.cache = cache.fa[-1]
         self.media = self.media_rows = None
@@ -396,7 +398,7 @@ class Speculation:
             table_width=arrays[5].shape[1],
             max_queries=max(np.diff(starts)),
         )
-        key = (plan.reuse_key, id(hidden))
+        key = plan.reuse_key
         created = False
         if graph:
             if key not in self.context_decode:
@@ -407,6 +409,7 @@ class Speculation:
                     plan,
                     hidden,
                     self.cache,
+                    True,
                 )
                 created = True
             operation = self.context_decode[key]
@@ -422,12 +425,17 @@ class Speculation:
                     plan,
                     hidden,
                     self.cache,
+                    False,
                 )
                 self.context_key = key
                 created = True
             operation = self.context_prefill
         if not created:
             operation.metadata_inputs.update(arrays)
+        if graph:
+            operation.copy(self.device.view(operation.hidden, hidden.shape), hidden)
+        else:
+            operation.hidden = hidden
         operation.media, indices = self.media.rows(media_entries)
         operation.media_rows = None
         if indices is not None:

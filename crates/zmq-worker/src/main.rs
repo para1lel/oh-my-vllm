@@ -16,8 +16,8 @@ struct Cli {
     model: PathBuf,
     #[arg(long, default_value = "/tmp/oh-my-vllm.ipc")]
     socket: PathBuf,
-    #[arg(long, default_value_t = 1024)]
-    num_gpu_blocks: u32,
+    #[arg(long, value_parser = clap::value_parser!(u32).range(2..))]
+    num_gpu_blocks: Option<u32>,
     #[arg(long, default_value = "128")]
     mamba_blocks: Option<u32>,
     #[arg(long, default_value_t = 32768, value_parser = clap::value_parser!(u32).range(1..))]
@@ -173,7 +173,6 @@ async fn run() -> Result<()> {
         cli.block_size == 784 && cli.tp == 1,
         "requires block_size=784 and TP=1"
     );
-    ensure!(cli.num_gpu_blocks >= 6, "physical cache is too small");
     let mode = cli.speculative_mode.clone().unwrap_or_else(|| {
         if cli.num_speculative_tokens == 4 {
             "mtp"

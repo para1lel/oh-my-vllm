@@ -194,8 +194,14 @@ def verify_trace_identity(events, checkpoint, config, tokenizer=None, execution=
     if execution is not None and identity.get("execution") != execution:
         raise ValueError("trace execution differs from the selected phase paths")
     actual_config = identity.get("config", {})
-    if any(actual_config.get(name) != value for name, value in config.items()):
-        raise ValueError("trace configuration differs from the requested service")
+    for name, value in config.items():
+        actual_value = actual_config.get(name)
+        if name == "num_gpu_blocks" and value is None:
+            valid = type(actual_value) is int and 2 <= actual_value <= 0xFFFFFFFF
+        else:
+            valid = actual_value == value
+        if not valid:
+            raise ValueError("trace configuration differs from the requested service")
     actual = identity.get("checkpoint")
     if (
         not isinstance(actual, dict)
@@ -249,8 +255,6 @@ class Service:
             str(arguments.model),
             "--socket",
             str(self.ipc),
-            "--num-gpu-blocks",
-            str(arguments.blocks),
             "--mamba-blocks",
             str(arguments.mamba_blocks),
             "--max-num-batched-tokens",
@@ -258,6 +262,8 @@ class Service:
             "--max-num-seqs",
             "4",
         ]
+        if arguments.blocks is not None:
+            command += ["--num-gpu-blocks", str(arguments.blocks)]
         if mode == "mtp4":
             command += ["--num-speculative-tokens", "4", "--speculative-mode", "mtp"]
         command += [
@@ -438,7 +444,7 @@ def main():
         action="append",
     )
     parser.add_argument("--output-tokens", type=int, nargs="+", default=OUTPUT_LENGTHS)
-    parser.add_argument("--blocks", type=int, default=1024)
+    parser.add_argument("--blocks", type=int)
     parser.add_argument("--mamba-blocks", type=int, default=128)
     arguments = parser.parse_args()
     arguments.gpu_uuid = selected_uuid()

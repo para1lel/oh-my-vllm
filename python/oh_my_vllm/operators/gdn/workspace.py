@@ -21,6 +21,7 @@ class Storage(NamedTuple):
     partials: object
     gates: object
     chunk_metadata: object
+    chunk_offsets: object
     transforms: object
     prefixes: object
     snapshots: object
@@ -36,7 +37,7 @@ class Workspace:
         self.module, self.source_id, self.library = load("gdn", FUNCTIONS)
         self.plan, self.weights, self.device = plan, tuple(weights), device
         self.storage = Storage(*(allocate(*field) for field in plan.storage))
-        self.native_storage = self.storage[:19]
+        self.native_storage = self.storage[:20]
         self.outputs = Outputs(self.storage.value, self.storage.residual)
         self.closed = False
 

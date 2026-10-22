@@ -46,6 +46,7 @@ def timing_identity():
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
         "minimum_seconds": timing.TARGET_SECONDS,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups",
     }
 
 

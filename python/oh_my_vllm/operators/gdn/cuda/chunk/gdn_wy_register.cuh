@@ -85,8 +85,10 @@ __device__ inline void load_state_tile(Accumulator &value, const float *source, 
 template <bool EarlyPrefetch>
 __global__ __launch_bounds__(Threads, 2) void register_carry_kernel(
     const __nv_bfloat16 *qkv, const int *metadata, const int *reads, __nv_bfloat16 *transforms,
-    const float *prefixes, float *pool, __nv_bfloat16 *snapshots, int capacity) {
-  int sequence = blockIdx.x, head = blockIdx.y, first_chunk = sequence * capacity;
+    const float *prefixes, float *pool, __nv_bfloat16 *snapshots, const int *offsets) {
+  int sequence = blockIdx.x, head = blockIdx.y, first_chunk = offsets[sequence];
+  if (first_chunk == offsets[sequence + 1])
+    return;
   int chunks = metadata[first_chunk * 4 + 3];
   if (chunks <= 0)
     return;

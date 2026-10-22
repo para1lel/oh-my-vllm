@@ -8,7 +8,7 @@ import numpy as np
 import tvm_ffi
 
 from .native import load
-from .uploads import Uploads
+from .uploads import UploadPool, Uploads
 
 FUNCTIONS = (
     "allocate",
@@ -36,6 +36,10 @@ class Device:
         cuda = Path(os.environ.get("CUDA_HOME", "/usr/local/cuda"))
         self.runtime = ctypes.CDLL(str(cuda / "lib64/libcudart.so"))
         for name, arguments in {
+            "cudaMemGetInfo": [
+                ctypes.POINTER(ctypes.c_size_t),
+                ctypes.POINTER(ctypes.c_size_t),
+            ],
             "cudaHostAlloc": [
                 ctypes.POINTER(ctypes.c_void_p),
                 ctypes.c_size_t,
@@ -82,6 +86,17 @@ class Device:
             function.restype = ctypes.c_int
         self.runtime.cudaGetErrorString.argtypes = [ctypes.c_int]
         self.runtime.cudaGetErrorString.restype = ctypes.c_char_p
+        self.upload_pool = UploadPool(self)
+
+    def close(self):
+        self.upload_pool.close()
+
+    def memory_info(self):
+        free, total = ctypes.c_size_t(), ctypes.c_size_t()
+        self.checked(
+            self.runtime.cudaMemGetInfo(ctypes.byref(free), ctypes.byref(total))
+        )
+        return free.value, total.value
 
     def empty(self, shape, dtype):
         return self.module.allocate(tensor_shape(tuple(shape)), dtype, 0)

@@ -56,8 +56,11 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.benchmark 
 计时前完成短初始化请求.
 它还在计时前为每个模式检查一次完整工具调用.
 它检查 HTTP usage 中的 prompt 长度, 输出长度和无缓存前缀.
-默认缓存容量为 1024 个 FA block 和 128 个 GDN slot.
-使用 `--blocks` 和 `--mamba-blocks` 调整这些容量.
+
+Worker 在启动时按[服务显存预算](serving.zh.md#cache-内存)计算 FA 容量.
+默认 GDN 容量为 128 个 slot.
+使用 `--blocks` 显式设置较小的 FA 容量, 使用 `--mamba-blocks` 调整 GDN 容量.
+Trace 身份记录实际容量和显存预算.
 
 使用 `--case ordinary:1:32768` 选择两个输出长度.
 使用 `--case ordinary:1:32768:64` 选择一种配置.

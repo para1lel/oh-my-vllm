@@ -1,6 +1,6 @@
 import ctypes
 import math
-from contextlib import AbstractContextManager, ExitStack
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass
 from time import perf_counter
 
@@ -12,7 +12,7 @@ MINIMUM_SAMPLES = 30
 EXTENDED_SAMPLES = 120
 TARGET_SECONDS = 0.020
 PILOT_SECONDS = 0.025
-VERSION = "operator-timing-v1"
+VERSION = "operator-timing-v2"
 
 
 @dataclass(frozen=True)
@@ -126,6 +126,9 @@ def collect(sampler, count, repeatable, *, repeats=None, retries=None):
         repeats = (
             max(1, math.ceil(PILOT_SECONDS / pilot.gpu_seconds)) if repeatable else 1
         )
+    else:
+        for _ in range(4):
+            sampler(repeats)
     for _ in range(8):
         pilot = sampler(repeats)
         duration = pilot.gpu_seconds * repeats
@@ -153,8 +156,12 @@ def collect(sampler, count, repeatable, *, repeats=None, retries=None):
     raise ValueError("cannot obtain a stable measurement interval")
 
 
-def measure(prepared, *, count=MINIMUM_SAMPLES, events_factory=Events, repeats=None):
-    from .timing_graph import TimingGraph
+@contextmanager
+def measurement_session(prepared, *, events_factory=Events, graph_factory=None):
+    if graph_factory is None:
+        from .timing_graph import TimingGraph
+
+        graph_factory = TimingGraph
 
     with events_factory(prepared.device) as events, ExitStack() as graphs:
         active_repeats, replay = None, None
@@ -163,17 +170,27 @@ def measure(prepared, *, count=MINIMUM_SAMPLES, events_factory=Events, repeats=N
             nonlocal active_repeats, replay
             if prepared.case.mode == "graph" and active_repeats != number:
                 graphs.close()
-                replay = graphs.enter_context(TimingGraph(prepared, events, number))
+                replay = graphs.enter_context(graph_factory(prepared, events, number))
                 active_repeats = number
             return sample(prepared, events, number, graph=replay)
 
-        return collect(
-            sampler,
-            count,
-            repeat_safe(prepared.case),
-            repeats=repeats,
-            retries=prepared.setup.setdefault("timing_retries", []),
-        )
+        def measure_samples(*, count=MINIMUM_SAMPLES, repeats=None):
+            return collect(
+                sampler,
+                count,
+                repeat_safe(prepared.case),
+                repeats=repeats,
+                retries=prepared.setup.setdefault("timing_retries", []),
+            )
+
+        yield measure_samples
+
+
+def measure(prepared, *, count=MINIMUM_SAMPLES, events_factory=Events, repeats=None):
+    with measurement_session(
+        prepared, events_factory=events_factory
+    ) as collect_samples:
+        return collect_samples(count=count, repeats=repeats)
 
 
 def interval(values):
@@ -207,8 +224,13 @@ def check(samples, lower_bound, max_ratio):
     return PerformanceResult(median, low, high, decision)
 
 
-def accept(prepared, lower_bound, max_ratio, *, measure_function=measure):
-    samples = measure_function(prepared, count=MINIMUM_SAMPLES)
+def accept(prepared, lower_bound, max_ratio, *, session_factory=measurement_session):
+    with session_factory(prepared) as collect_samples:
+        return accept_samples(prepared, lower_bound, max_ratio, collect_samples)
+
+
+def accept_samples(prepared, lower_bound, max_ratio, collect_samples):
+    samples = collect_samples(count=MINIMUM_SAMPLES)
     result = check(samples, lower_bound, max_ratio)
     if result.decision != "unresolved":
         return samples, result
@@ -216,7 +238,7 @@ def accept(prepared, lower_bound, max_ratio, *, measure_function=measure):
     count = EXTENDED_SAMPLES - len(samples)
     for _ in range(8):
         try:
-            samples.extend(measure_function(prepared, count=count, repeats=repeats))
+            samples.extend(collect_samples(count=count, repeats=repeats))
             return samples, check(samples, lower_bound, max_ratio)
         except ShortInterval as error:
             prepared.setup.setdefault("timing_retries", []).append(

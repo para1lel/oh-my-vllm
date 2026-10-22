@@ -21,7 +21,7 @@ pub enum RustMessage {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InitMsg {
     pub model_path: String,
-    pub num_gpu_blocks: u32,
+    pub num_gpu_blocks: Option<u32>,
     pub mamba_blocks: Option<u32>,
     pub block_size: u32,
     pub tensor_parallel_size: u32,
@@ -87,6 +87,8 @@ pub enum WorkerMessage {
     Ready {
         logical_num_blocks: u32,
         mamba_blocks: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cache_memory: Option<serde_json::Value>,
     },
     ExecuteResult(ExecuteResultMsg),
     Prepared {

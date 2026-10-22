@@ -35,9 +35,9 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
          tvm::ffi::Tensor input_scales, tvm::ffi::Tensor qkvz, tvm::ffi::Tensor ba,
          tvm::ffi::Tensor qkv, tvm::ffi::Tensor output_data, tvm::ffi::Tensor output_scales,
          tvm::ffi::Tensor recurrent, tvm::ffi::Tensor projection_partials, tvm::ffi::Tensor gates,
-         tvm::ffi::Tensor chunk_metadata, tvm::ffi::Tensor chunk_transforms,
-         tvm::ffi::Tensor chunk_prefixes, tvm::ffi::Tensor chunk_snapshots,
-         tvm::ffi::Tensor chunk_coefficients, int max_queries) {
+         tvm::ffi::Tensor chunk_metadata, tvm::ffi::Tensor chunk_offsets,
+         tvm::ffi::Tensor chunk_transforms, tvm::ffi::Tensor chunk_prefixes,
+         tvm::ffi::Tensor chunk_snapshots, tvm::ffi::Tensor chunk_coefficients, int max_queries) {
   TVM_FFI_ICHECK(x.ndim() == 2 && x.size(1) == 5120 && x.size(0) >= 0 && x.size(0) <= 32768);
   TVM_FFI_ICHECK(reads.ndim() == 1 && reads.size(0) > 0 && reads.size(0) <= 32768);
   TVM_FFI_ICHECK(state.ndim() == 4 && state.size(0) > 0 && state.size(0) <= 65536);
@@ -82,8 +82,12 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
   tensor_contract(gates, x, kDLFloat, 32, {precomputed_gates ? rows : 0, 96});
   bool chunked = gdn_wy::selected(rows, batch, max_queries, verify);
   int chunk_capacity = chunked ? gdn_wy::chunk_capacity(max_queries) : 0;
-  gdn_wy::workspace_contract(x, chunk_metadata, chunk_transforms, chunk_prefixes, chunk_snapshots,
-                             chunk_coefficients, batch * chunk_capacity);
+  TVM_FFI_ICHECK(chunk_metadata.ndim() == 2 && chunk_metadata.size(0) >= 0 &&
+                 chunk_metadata.size(0) <= batch * chunk_capacity);
+  int chunks = chunk_metadata.size(0);
+  TVM_FFI_ICHECK(!chunked || chunks > 0);
+  gdn_wy::workspace_contract(x, chunk_metadata, chunk_offsets, chunk_transforms, chunk_prefixes,
+                             chunk_snapshots, chunk_coefficients, chunks, batch);
   if (rows <= 32)
     tensor_contract(projection_partials, x, kDLFloat, 32, {rows <= 8 ? 8 : 3, rows, 5120});
   else
@@ -124,6 +128,7 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
                   projection_partials,
                   gates,
                   chunk_metadata,
+                  chunk_offsets,
                   chunk_transforms,
                   chunk_prefixes,
                   chunk_snapshots,
@@ -265,12 +270,12 @@ void gdn(tvm::ffi::Tensor x, tvm::ffi::Tensor residual, tvm::ffi::Tensor norm,
         static_cast<const float *>(gates.data_ptr()), static_cast<const int *>(starts.data_ptr()),
         static_cast<const int *>(reads.data_ptr()), static_cast<const int *>(writes.data_ptr()),
         static_cast<float *>(state.data_ptr()), static_cast<__nv_bfloat16 *>(recurrent.data_ptr()),
-        static_cast<int *>(chunk_metadata.data_ptr()),
+        static_cast<int *>(chunk_metadata.data_ptr()), static_cast<int *>(chunk_offsets.data_ptr()),
         static_cast<__nv_bfloat16 *>(chunk_transforms.data_ptr()),
         static_cast<float *>(chunk_prefixes.data_ptr()),
         static_cast<__nv_bfloat16 *>(chunk_snapshots.data_ptr()),
         static_cast<__nv_bfloat16 *>(chunk_coefficients.data_ptr()), rows, slots, batch,
-        chunk_capacity, stream);
+        chunk_capacity, chunks, stream);
   } else if (precomputed_gates) {
     auto paired = [&](auto value_tile, auto kernel) {
       constexpr int ValueTile = decltype(value_tile)::value;

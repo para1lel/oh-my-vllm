@@ -12,11 +12,9 @@ from ..operators.ffn.workspace import prepare as prepare_ffn
 from ..operators.gdn import api as gdn
 from ..operators.gdn.plan import make_plan as gdn_plan
 from ..operators.gdn.workspace import prepare as prepare_gdn
-from ..operators.mtp.plan import context_plan
 from ..operators.output import api as output
 from ..operators.output.plan import make_plan as output_plan
 from ..operators.output.workspace import prepare as prepare_output
-from ..operators.runtime.storage import storage_bytes
 from .metadata import Metadata
 
 
@@ -45,36 +43,6 @@ def make_plans(batch, hidden):
         ffn_plan(rows=batch.rows),
         output_plan(rows=batch.rows, hidden_only=True) if hidden else None,
     )
-
-
-def scratch_capacity(weights, rows, hidden):
-    checkpoints = tuple(range(783, rows, 784))
-    if rows - 1 not in checkpoints:
-        checkpoints += (rows - 1,)
-    schedule = gdn.Schedule(
-        (0, rows),
-        (0,),
-        (-1,) * rows,
-        checkpoints,
-        tuple(range(1, len(checkpoints) + 1)),
-        (0,),
-        len(checkpoints) + 1,
-        False,
-    )
-    fields = (
-        gdn_plan(schedule).storage
-        + fa_plan(rows=rows, batch=1, table_width=335).storage
-        + ffn_plan(rows=rows).storage
-        + (((rows, 5120), "bfloat16"),) * 2
-    )
-    if hidden:
-        mtp = context_plan(rows=rows)
-        fields += (
-            output_plan(rows=rows, hidden_only=True).storage
-            + mtp.storage
-            + mtp.attention.storage
-        )
-    return storage_bytes(fields)
 
 
 class Workspace:

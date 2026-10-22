@@ -63,7 +63,7 @@ def graph_device(events, failure=None):
 
 class Execution(unittest.TestCase):
     def test_upload_snapshots_source_and_waits_before_reuse_or_release(self):
-        from oh_my_vllm.operators.runtime.uploads import Uploads
+        from oh_my_vllm.operators.runtime.uploads import UploadPool, Uploads
 
         events, allocations, pending = [], {}, []
 
@@ -112,6 +112,7 @@ class Execution(unittest.TestCase):
             synchronize=lambda: wait(None),
         )
         source, destination = np.array([1, 2], np.int32), np.zeros(2, np.int32)
+        device.upload_pool = UploadPool(device)
         with (
             patch("tvm_ffi.from_dlpack", side_effect=lambda array: array),
             patch("tvm_ffi.get_raw_stream", return_value=7),
@@ -125,10 +126,21 @@ class Execution(unittest.TestCase):
             source[:] = 4
             uploads.close()
             self.assertEqual(destination.tolist(), [3, 3])
-            self.assertEqual(events, ["wait", "wait", "free"])
+            self.assertEqual(events, ["wait", "wait"])
+            self.assertEqual(device.upload_pool.cached_bytes, source.nbytes)
+            uploads = Uploads(device)
+            uploads.copy(destination, source)
+            self.assertEqual(device.upload_pool.cached_bytes, 0)
+            self.assertEqual(len(allocations), 1)
+            uploads.close()
+            self.assertEqual(destination.tolist(), [4, 4])
+            self.assertEqual(events, ["wait", "wait", "wait"])
+            device.upload_pool.close()
+            self.assertEqual(events, ["wait", "wait", "wait", "free"])
             self.assertFalse(allocations)
             uploads.close()
 
+            device.upload_pool = UploadPool(device, limit=0)
             device.runtime.cudaStreamIsCapturing = capture
             device.runtime.cudaEventRecord = lambda *_: 0
             uploads = Uploads(device)

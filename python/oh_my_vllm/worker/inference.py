@@ -2,8 +2,10 @@ import os
 
 from ..operators.runtime.device import Device
 from .cache import Cache
+from .cache_budget import cache_budget
 from .media import MediaProcessor
-from .model import Model, scratch_capacity
+from .memory import workspace_budget
+from .model import Model
 from .request import Request
 from .sampling import Sampling
 from .speculation import Speculation
@@ -16,17 +18,27 @@ class Worker:
     def __init__(self, config):
         if config["block_size"] != 784 or config["tensor_parallel_size"] != 1:
             raise ValueError("invalid cache layout")
-        self.config = config
         self.tokenizer = Tokenization(config["model_path"])
         self.device = Device()
         self.weights = Weights(
             self.device, config["model_path"], bool(config["num_speculative_tokens"])
         )
-        self.trace = Trace(
+        workspace = workspace_budget(config, self.weights)
+        self.device.synchronize()
+        free, total = self.device.memory_info()
+        self.cache_memory = cache_budget(
             config,
-            self.weights.checkpoint.identity,
-            tokenizer=self.tokenizer.identity,
+            free_bytes=free,
+            total_bytes=total,
+            overhead_bytes=sum(workspace.values()),
         )
+        self.cache_memory["workspace_bytes"] = workspace
+        config = dict(
+            config,
+            num_gpu_blocks=self.cache_memory["num_gpu_blocks"],
+            mamba_blocks=self.cache_memory["mamba_blocks"],
+        )
+        self.config = config
         self.cache = Cache(self.device, config)
         self.media = MediaProcessor(self.device, self.weights, self.tokenizer)
         self.model = Model(
@@ -36,27 +48,31 @@ class Worker:
             bool(config["num_speculative_tokens"]),
             self.media,
         )
+        self.device.module.reserve_scratch(workspace["prefill"])
+        self.requests = {}
+        self.samplers = {}
+        self.device.synchronize()
+        free, total = self.device.memory_info()
+        self.cache_memory["initialized_free_bytes"] = free
+        self.cache_memory["initialized_used_bytes"] = total - free
+        self.trace = Trace(
+            config,
+            self.weights.checkpoint.identity,
+            tokenizer=self.tokenizer.identity,
+            cache_memory=self.cache_memory,
+        )
         self.speculation = (
             Speculation(self.device, self.weights, self.cache, self.media, self.trace)
             if config["num_speculative_tokens"]
             else None
         )
-        self.device.module.reserve_scratch(
-            scratch_capacity(
-                self.weights,
-                min(32768, config["max_num_batched_tokens"]),
-                bool(config["num_speculative_tokens"]),
-            )
-        )
-        self.requests = {}
-        self.samplers = {}
-        self.device.synchronize()
 
     def ready(self):
         return {
             "type": "ready",
             "logical_num_blocks": self.cache.blocks,
             "mamba_blocks": self.cache.mamba_blocks,
+            "cache_memory": self.cache_memory,
         }
 
     def release(self, request_id):
@@ -182,6 +198,8 @@ class Worker:
             request.state_slot = None
             request.state_position = request.mtp_position = 0
             request.drafts = []
+            request.proposals, request.proposal_rows = None, ()
+            self.media.offload(request)
         groups = {False: [], True: []}
         for row in message["scheduled"]:
             if row.get("fa_block_copies"):
@@ -269,3 +287,4 @@ class Worker:
         for sampler in self.samplers.values():
             sampler.close()
         self.device.synchronize()
+        self.device.close()

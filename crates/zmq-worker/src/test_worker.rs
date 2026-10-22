@@ -10,6 +10,7 @@ pub(crate) struct TestWorker {
 impl TestWorker {
     pub async fn launch(mut config: WorkerConfig) -> Result<Self> {
         static NEXT_SOCKET: AtomicU64 = AtomicU64::new(0);
+        let logical_num_blocks = config.num_gpu_blocks.expect("explicit test cache capacity");
         config.socket_path = std::env::temp_dir().join(format!(
             "omv-admit-{}-{}.ipc",
             std::process::id(),
@@ -33,8 +34,9 @@ impl TestWorker {
         peer.connect(&address).await?;
         peer.send(ZmqMessage::from(encode(
             &crate::protocol::WorkerMessage::Ready {
-                logical_num_blocks: config.num_gpu_blocks,
+                logical_num_blocks,
                 mamba_blocks: config.mamba_blocks.unwrap(),
+                cache_memory: None,
             },
         )?))
         .await?;
@@ -58,7 +60,7 @@ impl TestWorker {
             .process_group(0)
             .spawn()?;
         let client = WorkerClient {
-            logical_num_blocks: config.num_gpu_blocks,
+            logical_num_blocks,
             mamba_blocks: config.mamba_blocks.unwrap(),
             config,
             sock: send,

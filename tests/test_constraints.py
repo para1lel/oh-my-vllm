@@ -25,6 +25,9 @@ class ChainDevice:
     def empty(self, shape, dtype):
         return np.empty(shape, np.float32 if dtype == "bfloat16" else dtype)
 
+    def scratch(self, shape, dtype):
+        return self.empty(shape, dtype)
+
     def zeros(self, shape, dtype):
         return np.zeros(shape, np.float32 if dtype == "bfloat16" else dtype)
 

@@ -40,6 +40,31 @@ scripts/with-env.sh scripts/with-gpu.sh target/release/oh-my-vllm-zmq-worker --m
 服务没有身份认证. 主机地址保存在被忽略的本地配置中.
 使用 Ctrl-C 或 SIGTERM 停止服务及其 worker.
 
+## Cache 内存
+
+Worker 在启动时计算 FA cache 容量.
+其张量预算为 GPU 总内存的 85%.
+计算时减去已用内存, 全部 GDN 状态和计划的 workspace 存储.
+内存快照包含已加载的权重, 计算时不会再次减去它们.
+
+Workspace 预留量包含 prefill, decode workspace, 采样, MTP 和媒体张量.
+剩余 15% 可供 CUDA Graph 和 runtime 分配使用.
+张量预算不为进程总内存设置严格上限.
+
+被抢占的请求将已编码媒体保留在主机内存中.
+恢复执行前, worker 将同一份 BF16 数据复制回 GPU.
+抢占也会释放已丢弃草稿的 proposal 缓冲区.
+
+默认逻辑 GDN 容量为 `128` 个槽位.
+请求私有状态和临时 checkpoint 使用额外的物理槽位.
+使用 `--mamba-blocks` 更改逻辑 GDN 容量.
+使用 `--num-gpu-blocks` 请求显式 FA 容量.
+如果显式容量超过计算出的预算, worker 会拒绝它.
+
+Worker 在 Ready, 服务日志和执行 trace 的身份记录中报告实际容量和内存计算.
+Rust 在 Ready 后创建逻辑池和调度器.
+替换 worker 必须提供相同容量, 并满足当前内存预算.
+
 ## HTTP API
 
 | 方法和路由 | 功能 |

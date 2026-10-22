@@ -58653,14 +58653,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -58967,6 +58968,22 @@
             "maximum_seconds": 0.0011497079427657143,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 2.397978339895437,
+          "lower_seconds": 0.0004794488439023377,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -58992,14 +59009,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -59330,6 +59348,22 @@
             "maximum_seconds": 0.0070502150665309096,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.5119902431059316,
+          "lower_seconds": 0.004662870741843117,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -59355,14 +59389,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -59693,6 +59728,22 @@
             "maximum_seconds": 0.0077504534807804676,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.6621180195702023,
+          "lower_seconds": 0.004662998288644156,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -59718,14 +59769,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -60056,6 +60108,22 @@
             "maximum_seconds": 0.0030235153293785315,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 4.65597181903238,
+          "lower_seconds": 0.0006493843706311111,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -60081,14 +60149,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -60419,6 +60488,22 @@
             "maximum_seconds": 0.5142624909622276,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 2.7181951017984116,
+          "lower_seconds": 0.18919263397317632,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -60444,14 +60529,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -60758,6 +60844,22 @@
             "maximum_seconds": 0.002295332552757195,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 3.1506,
+          "lower_seconds": 0.0007285382316883117,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -60783,14 +60885,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -61121,6 +61224,22 @@
             "maximum_seconds": 0.002625891734860467,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 3.3301,
+          "lower_seconds": 0.0007885323968831169,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -61146,14 +61265,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -61436,6 +61556,22 @@
             "maximum_seconds": 0.003257778927908572,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 4.103268980200502,
+          "lower_seconds": 0.0007939472024935064,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -61461,14 +61597,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -61895,6 +62032,22 @@
             "maximum_seconds": 0.01349258309004165,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 6.429946129489089,
+          "lower_seconds": 0.00209839753216,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -61920,14 +62073,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -62354,6 +62508,22 @@
             "maximum_seconds": 0.36093690079850005,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 4.107997732809511,
+          "lower_seconds": 0.08786200097331864,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -62379,14 +62549,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -62621,6 +62792,22 @@
             "maximum_seconds": 0.00333681473115761,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.5128,
+          "lower_seconds": 0.0022057210015584416,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -62646,14 +62833,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -62888,6 +63076,22 @@
             "maximum_seconds": 0.0034120421603673766,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.5469000000000002,
+          "lower_seconds": 0.0022057289807792205,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -62913,14 +63117,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -63155,6 +63360,22 @@
             "maximum_seconds": 0.003978550120607584,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.8036999999999999,
+          "lower_seconds": 0.0022057715366233764,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -63180,14 +63401,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -63422,6 +63644,22 @@
             "maximum_seconds": 0.019215868365897726,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 3.2226,
+          "lower_seconds": 0.005962846262613333,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -63447,14 +63685,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -63713,6 +63952,22 @@
             "maximum_seconds": 0.6530629944028256,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 2.612282699035221,
+          "lower_seconds": 0.24999705990627183,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -63738,14 +63993,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -63932,6 +64188,22 @@
             "maximum_seconds": 3.189422333888e-06,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 9343.2808,
+          "lower_seconds": 3.4136e-10,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -63957,14 +64229,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -64151,6 +64424,22 @@
             "maximum_seconds": 3.3050486123519996e-06,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 2420.5008,
+          "lower_seconds": 1.36544e-09,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -64176,14 +64465,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -64370,6 +64660,22 @@
             "maximum_seconds": 3.36779563248e-06,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 493.2909,
+          "lower_seconds": 6.8272e-09,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -64395,14 +64701,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -64589,6 +64896,22 @@
             "maximum_seconds": 8.361419853696e-06,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 31.2429,
+          "lower_seconds": 2.6762624e-07,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -64614,14 +64937,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -64808,6 +65132,22 @@
             "maximum_seconds": 0.000254603933563013,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 2.2471,
+          "lower_seconds": 0.00011330333922077922,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -64833,14 +65173,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -65051,6 +65392,22 @@
             "maximum_seconds": 0.000381814819480935,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.2206,
+          "lower_seconds": 0.0003128091262337662,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -65076,14 +65433,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -65294,6 +65652,22 @@
             "maximum_seconds": 0.0004249824789011948,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.3586,
+          "lower_seconds": 0.0003128091262337662,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -65319,14 +65693,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -65537,6 +65912,22 @@
             "maximum_seconds": 0.0004681367687646753,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.4965,
+          "lower_seconds": 0.00031282109506493506,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -65562,14 +65953,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -65780,6 +66172,22 @@
             "maximum_seconds": 0.0004827203881624935,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.5431,
+          "lower_seconds": 0.00031282508467532467,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -65805,14 +66213,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -66023,6 +66432,22 @@
             "maximum_seconds": 0.0006594988529903377,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 2.1078,
+          "lower_seconds": 0.0003128849288311688,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -66048,14 +66473,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -66266,6 +66692,22 @@
             "maximum_seconds": 0.0003816271340051948,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.22,
+          "lower_seconds": 0.0003128091262337662,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -66291,14 +66733,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -66509,6 +66952,22 @@
             "maximum_seconds": 0.00043076944773651947,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.3771,
+          "lower_seconds": 0.0003128091262337662,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -66534,14 +66993,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -66752,6 +67212,22 @@
             "maximum_seconds": 0.0004755193466082078,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.5201,
+          "lower_seconds": 0.00031282109506493506,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -66777,14 +67253,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -66995,6 +67472,22 @@
             "maximum_seconds": 0.0004895399750084156,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.5649,
+          "lower_seconds": 0.00031282508467532467,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -67020,14 +67513,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -67238,6 +67732,22 @@
             "maximum_seconds": 0.0006662258789602078,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 2.1293,
+          "lower_seconds": 0.0003128849288311688,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -67263,14 +67773,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -67553,6 +68064,22 @@
             "maximum_seconds": 4.578519815873422e-05,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 877.9864458915787,
+          "lower_seconds": 5.214795555555555e-08,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -67578,14 +68105,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -67868,6 +68396,22 @@
             "maximum_seconds": 3.2127462670336e-05,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 154.02072012252322,
+          "lower_seconds": 2.085918222222222e-07,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -67893,14 +68437,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -68183,6 +68728,22 @@
             "maximum_seconds": 4.6438446559687115e-05,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 111.3141590714284,
+          "lower_seconds": 4.171836444444444e-07,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -68208,14 +68769,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -68498,6 +69060,22 @@
             "maximum_seconds": 3.387301269048889e-05,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 40.597244333004646,
+          "lower_seconds": 8.343672888888888e-07,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -68523,14 +69101,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -68813,6 +69392,22 @@
             "maximum_seconds": 0.004619811898028487,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 2.623975362411275,
+          "lower_seconds": 0.0017606155774965656,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -68838,14 +69433,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -69224,6 +69820,22 @@
             "maximum_seconds": 0.000561137632,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.487498664480087,
+          "lower_seconds": 0.00037723572155012983,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -69249,14 +69861,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -69683,6 +70296,22 @@
             "maximum_seconds": 0.0005902543202377143,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.504898961492892,
+          "lower_seconds": 0.0003922218935231169,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -69708,14 +70337,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -70190,6 +70820,22 @@
             "maximum_seconds": 0.0006471715352802078,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.5797933063068144,
+          "lower_seconds": 0.00040965582820017314,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -70215,14 +70861,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -70625,6 +71272,22 @@
             "maximum_seconds": 0.0006896969599434805,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.605693444101806,
+          "lower_seconds": 0.0004295321516550649,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -70650,14 +71313,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -71108,6 +71772,22 @@
             "maximum_seconds": 0.0007207876098825974,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1.6214931400974113,
+          "lower_seconds": 0.0004445209122742857,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -71133,14 +71813,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -72311,6 +72992,22 @@
             "maximum_seconds": 0.0021003817396097663,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 5.287359967693435,
+          "lower_seconds": 0.00039724583770415003,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -72336,14 +73033,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -73706,6 +74404,22 @@
             "maximum_seconds": 0.0022806173792016622,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 5.433812056460353,
+          "lower_seconds": 0.0004197085500022395,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -73731,14 +74445,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -75005,6 +75720,22 @@
             "maximum_seconds": 0.00250795836928,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 5.39786089759463,
+          "lower_seconds": 0.00046462078531841843,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -75030,14 +75761,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -75272,6 +76004,22 @@
             "maximum_seconds": 1.542240041104e-05,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 4657.908978272788,
+          "lower_seconds": 3.3110136936936934e-09,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -75297,14 +76045,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -75539,6 +76288,22 @@
             "maximum_seconds": 1.4622720819028001e-05,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 2208.2340871513293,
+          "lower_seconds": 6.621907027027027e-09,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -75564,14 +76329,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -75806,6 +76572,22 @@
             "maximum_seconds": 1.811519941062e-05,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1367.8193172987123,
+          "lower_seconds": 1.3243854054054054e-08,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -75831,14 +76613,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -76025,6 +76808,22 @@
             "maximum_seconds": 1.392096008176e-05,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 104407200.6132,
+          "lower_seconds": 1.3333333333333334e-13,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -76050,14 +76849,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -76292,6 +77092,22 @@
             "maximum_seconds": 2.0987521315824e-05,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 1584.6908643048976,
+          "lower_seconds": 1.324392144144144e-08,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -76317,14 +77133,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -76751,6 +77568,22 @@
             "maximum_seconds": 9.12007347830784e-05,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 22.23158257429064,
+          "lower_seconds": 4.102305109333333e-06,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -76776,14 +77609,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -77210,6 +78044,22 @@
             "maximum_seconds": 0.000142152304164864,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 10.599614003997043,
+          "lower_seconds": 1.3411083093333334e-05,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -77235,14 +78085,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -77669,6 +78520,22 @@
             "maximum_seconds": 0.0001013788026273792,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 16.263581385695762,
+          "lower_seconds": 6.233485738666667e-06,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -77694,14 +78561,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -78104,6 +78972,22 @@
             "maximum_seconds": 0.00184782208106496,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 20.05649658491982,
+          "lower_seconds": 9.213085013333333e-05,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -78129,14 +79013,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -78539,6 +79424,22 @@
             "maximum_seconds": 0.00272069230067712,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 8.96896821928269,
+          "lower_seconds": 0.0003033450709333333,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -78564,14 +79465,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -78974,6 +79876,22 @@
             "maximum_seconds": 0.0019847348733542398,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 14.189738280322226,
+          "lower_seconds": 0.00013987114026666668,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -78999,14 +79917,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -79505,6 +80424,22 @@
             "maximum_seconds": 0.0001387967536955392,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 22.16172891109325,
+          "lower_seconds": 6.262902784e-06,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -79530,14 +80465,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -80036,6 +80972,22 @@
             "maximum_seconds": 0.0001778829699842048,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 8.881752471763665,
+          "lower_seconds": 2.0027913472e-05,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     },
@@ -80061,14 +81013,15 @@
         "cache_policy": "one 128MiB budget for serial memory excess; no writes"
       },
       "timing": {
-        "version": "operator-timing-v1",
+        "version": "operator-timing-v2",
         "sources": {
-          "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+          "timing": "c1c4c9996cb6fa9070abc4f9c9d5e8409b1da52e4705229ad8255a62e0886cd3",
           "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
         },
         "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
         "host": "original-production-invoke",
-        "minimum_seconds": 0.02
+        "minimum_seconds": 0.02,
+        "extension": "retain-events-and-graph; same-repeat-count; four-pilot-warmups"
       },
       "device": {
         "name": "NVIDIA B200",
@@ -80567,6 +81520,22 @@
             "maximum_seconds": 0.0001462678459777024,
             "rule": "preserve maximum seconds; round ratio down only when needed"
           }
+        },
+        "timing_migration": {
+          "previous_limits_sha256": "fc7edf01143e77945d6f20c14622372456680c0d80ec1e7cc0c555de7bc52682",
+          "previous": {
+            "version": "operator-timing-v1",
+            "sources": {
+              "timing": "501436c58bd33c4f01ddaa3b8227da52bd5118144a011ed9881935bda642cdc9",
+              "graph": "0198e0424feeb93a06f29c536a765da95176d25356b83f84baec09d8910a9f7b"
+            },
+            "graph": "recaptured-production-child; serial-repeats; external-event-nodes",
+            "host": "original-production-invoke",
+            "minimum_seconds": 0.02
+          },
+          "max_ratio": 15.329004889213453,
+          "lower_seconds": 9.541900928000001e-06,
+          "rule": "retain measurement resources and equalize extension warmup; preserve limits"
         }
       }
     }

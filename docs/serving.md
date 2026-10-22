@@ -40,6 +40,31 @@ Use `serve --listen` to set the address. The default address is `127.0.0.1:8000`
 The service has no authentication. Keep host addresses in the ignored local configuration.
 Use Ctrl-C or SIGTERM to stop the service and its worker.
 
+## Cache memory
+
+The worker calculates FA cache capacity at startup.
+Its tensor budget is 85% of total GPU memory.
+The calculation subtracts memory already in use, all GDN state, and planned workspace storage.
+The memory snapshot includes loaded weights. The calculation does not subtract them again.
+
+The workspace allowance includes prefill, decode workspaces, sampling, MTP, and media tensors.
+The other 15% is available for CUDA Graph and runtime allocations.
+The tensor budget does not set a strict limit on total process memory.
+
+Preempted requests keep encoded media in host memory.
+Before execution continues, the worker copies the same BF16 data back to the GPU.
+Preemption also releases the proposal buffers for discarded drafts.
+
+The default logical GDN capacity is `128` slots.
+Private request states and temporary checkpoints use additional physical slots.
+Use `--mamba-blocks` to change the logical GDN capacity.
+Use `--num-gpu-blocks` to request an explicit FA capacity.
+The worker rejects an explicit capacity that exceeds the calculated budget.
+
+The worker reports resolved capacities and memory calculations in Ready, the service log, and the execution trace identity.
+Rust creates its logical pools and scheduler after Ready.
+Replacement workers must supply the same capacities and satisfy the current memory budget.
+
 ## HTTP APIs
 
 | Method and route | Function |

@@ -14,10 +14,10 @@ The maximum context length is `262144` tokens.
 The harness filters traces by this limit. It does not truncate requests.
 The service checks the prepared prompt length and the requested output length.
 
-Concurrency `4` means four active session trees.
-Child agents can cause more than four HTTP requests to be active.
+Concurrency `6` means six active session trees.
+Child agents can cause more than six HTTP requests to be active.
 The service schedules at most `4` requests with a token budget of `32768`.
-The cache has `1024` FA blocks and `128` GDN slots.
+The cache uses the [runtime tensor budget](serving.md#cache-memory).
 
 The harness uses streaming responses and `ignore_eos=true`.
 The request seed is `42`, with reasoning off and service sampling defaults.
@@ -58,6 +58,10 @@ The command starts and stops the MTP4 service.
 It records the source, executable, native module, checkpoint, tokenizer, device, and command identities.
 The `agentx` identity entry and `command.json` give the workload configuration.
 Shared HTTP accounting fields do not apply to these results.
+The execution trace identity gives resolved cache capacities and the memory calculation.
+
+The FA capacity is automatic unless `--blocks` supplies an explicit count.
+An explicit count must fit the runtime tensor budget.
 
 The raw records, service log, execution trace, and count report stay external to the repository.
 The approved AgentX CSV and figure are repository artifacts for this measurement.

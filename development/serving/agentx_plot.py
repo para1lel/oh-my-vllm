@@ -67,7 +67,7 @@ def plot(csv_path, figure_path):
     axis.text(
         0,
         1.025,
-        "4 session trees  /  Up to 4 scheduled requests  /  "
+        "6 session trees  /  Up to 4 scheduled requests  /  "
         f"{len(rows):,} completed requests",
         transform=axis.transAxes,
         color="#aebdcd",

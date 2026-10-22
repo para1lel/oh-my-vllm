@@ -52,7 +52,7 @@ struct Response {
 fn configuration() -> WorkerConfig {
     WorkerConfig {
         model_path: "stub".into(),
-        num_gpu_blocks: 128,
+        num_gpu_blocks: Some(128),
         mamba_blocks: Some(64),
         max_num_seqs: 4,
         max_num_batched_tokens: 16,

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..operators.gdn.api import Schedule
+from .cache_budget import cache_layout
 
 
 @dataclass
@@ -25,31 +26,32 @@ class Batch:
 
 
 class Cache:
+    @staticmethod
+    def layout(config):
+        return cache_layout(config)
+
     def __init__(self, device, config):
         self.device = device
         self.blocks = config["num_gpu_blocks"]
-        self.mamba_blocks = config["mamba_blocks"] or self.blocks
-        self.parallel = config["max_num_seqs"]
-        self.private_start = self.mamba_blocks
-        self.scratch_start = self.private_start + self.parallel * 6
-        self.slots = (
-            self.scratch_start
-            + (min(32768, config["max_num_batched_tokens"]) + 783) // 784
-            + self.parallel
-        )
-        if self.slots > 65536:
-            raise ValueError("GDN cache exceeds the state slot limit")
+        if type(self.blocks) is not int or not 2 <= self.blocks <= 0xFFFFFFFF:
+            raise ValueError("resolve the physical FA cache capacity before allocation")
+        layout = self.layout(config)
+        self.mamba_blocks = layout.mamba_blocks
+        self.parallel = layout.parallel
+        self.private_start = layout.private_start
+        self.scratch_start = layout.scratch_start
+        self.slots = layout.slots
         self.fa = tuple(
-            (device.zeros((self.blocks, 2, 784, 4, 256), "bfloat16"),)
-            for _ in range(16 + bool(config["num_speculative_tokens"]))
+            (device.zeros((self.blocks, *layout.fa_block_shape), "bfloat16"),)
+            for _ in range(layout.fa_layers)
         )
         self.state = tuple(
-            device.zeros((self.slots, 48, 128, 128), "float32") for _ in range(48)
+            device.zeros(layout.state_shape, "float32") for _ in range(48)
         )
         self.convolution = tuple(
-            device.zeros((self.slots, 10240, 3), "bfloat16") for _ in range(48)
+            device.zeros(layout.convolution_shape, "bfloat16") for _ in range(48)
         )
-        self.hidden = device.zeros((self.slots, 5120), "bfloat16")
+        self.hidden = device.zeros(layout.hidden_shape, "bfloat16")
         self.indices = {}
         self.free_indices = deque(range(self.parallel))
 

@@ -26,7 +26,7 @@ use crate::protocol::{
 pub struct WorkerConfig {
     pub model_path: PathBuf,
     pub socket_path: PathBuf,
-    pub num_gpu_blocks: u32,
+    pub num_gpu_blocks: Option<u32>,
     pub mamba_blocks: Option<u32>,
     pub block_size: u32,
     pub tensor_parallel_size: u32,
@@ -47,7 +47,7 @@ impl Default for WorkerConfig {
                 .map(PathBuf::from)
                 .unwrap_or_default(),
             socket_path: PathBuf::from("/tmp/oh-my-vllm.ipc"),
-            num_gpu_blocks: 1024,
+            num_gpu_blocks: None,
             mamba_blocks: Some(128),
             block_size: 784,
             tensor_parallel_size: 1,
@@ -283,7 +283,7 @@ fn reap_worker_group(child: &mut Child) {
 }
 
 impl WorkerClient {
-    pub async fn launch(config: WorkerConfig) -> Result<Self> {
+    pub async fn launch(mut config: WorkerConfig) -> Result<Self> {
         if config.model_path.as_os_str().is_empty() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -395,8 +395,14 @@ impl WorkerClient {
             crate::protocol::WorkerMessage::Ready {
                 logical_num_blocks,
                 mamba_blocks,
+                cache_memory,
             } => {
-                info!(logical_num_blocks, mamba_blocks, "Worker is ready");
+                info!(
+                    logical_num_blocks,
+                    mamba_blocks,
+                    ?cache_memory,
+                    "Worker is ready"
+                );
                 (logical_num_blocks, mamba_blocks)
             }
             crate::protocol::WorkerMessage::Error(e) => {
@@ -406,6 +412,21 @@ impl WorkerClient {
                 return Err(Error::UnexpectedMessageType(format!("{other:?}")));
             }
         };
+        if logical_num_blocks < 2
+            || mamba_blocks < 2
+            || config
+                .num_gpu_blocks
+                .is_some_and(|blocks| blocks != logical_num_blocks)
+            || config
+                .mamba_blocks
+                .is_some_and(|blocks| blocks != mamba_blocks)
+        {
+            return Err(Error::WorkerError(
+                "invalid worker cache capacities".to_owned(),
+            ));
+        }
+        config.num_gpu_blocks = Some(logical_num_blocks);
+        config.mamba_blocks = Some(mamba_blocks);
 
         let (send, mut receive) = sock.split();
         let (inbox_tx, inbox) = mpsc::channel(16);

@@ -210,7 +210,9 @@ class Worker:
     def __init__(self, config):
         if config["block_size"] != 784 or config["tensor_parallel_size"] != 1:
             raise ValueError("invalid cache layout")
-        self.config = config
+        self.config = dict(config)
+        if self.config["num_gpu_blocks"] is None:
+            self.config["num_gpu_blocks"] = 1024
         self.requests = {}
 
     def ready(self):

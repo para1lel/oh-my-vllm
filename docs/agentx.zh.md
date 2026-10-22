@@ -14,10 +14,10 @@
 测试工具按此上限筛选 trace, 不截断请求.
 服务检查准备后的提示词长度和请求的输出长度.
 
-并发 `4` 表示四个活跃的会话树.
-子 Agent 可以使活跃 HTTP 请求超过四个.
+并发 `6` 表示六个活跃的会话树.
+子 Agent 可以使活跃 HTTP 请求超过六个.
 服务最多调度 `4` 个请求, token 预算为 `32768`.
-缓存有 `1024` 个 FA 块和 `128` 个 GDN 槽位.
+缓存使用[运行时张量预算](serving.zh.md#cache-内存).
 
 测试工具使用流式响应和 `ignore_eos=true`.
 请求种子为 `42`, 关闭推理, 使用服务采样默认值.
@@ -58,6 +58,10 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.agentx \
 它记录源码, 可执行文件, 原生模块, checkpoint, tokenizer, 设备和命令的身份.
 身份文件中的 `agentx` 项和 `command.json` 给出工作负载配置.
 共享的 HTTP 性能核算字段不适用于这些结果.
+执行 trace 的身份记录给出实际 cache 容量和内存计算.
+
+除非通过 `--blocks` 提供显式数量, 否则 FA 容量自动计算.
+显式数量必须符合运行时张量预算.
 
 原始记录, 服务日志, 执行 trace 和计数报告保留在仓库外.
 获准保存的 AgentX CSV 和图片是此次测量的仓库产物.

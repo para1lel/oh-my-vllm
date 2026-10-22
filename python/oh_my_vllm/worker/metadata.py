@@ -27,7 +27,7 @@ class Metadata:
             dtype: np.zeros(size, dtype=dtype) for dtype, size in sizes.items()
         }
         self.device_arenas = {
-            dtype: device.empty(value.shape, str(dtype))
+            dtype: device.scratch(value.shape, str(dtype))
             for dtype, value in self.host_arenas.items()
         }
         self.host_views = tuple(

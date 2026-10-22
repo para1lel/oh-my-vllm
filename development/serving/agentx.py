@@ -40,7 +40,7 @@ def profile_command(python, model, artifacts, port, duration, seed):
         "--max-context-length",
         "262144",
         "--concurrency",
-        "4",
+        "6",
         "--benchmark-duration",
         str(duration),
         "--benchmark-grace-period",
@@ -121,7 +121,7 @@ def arguments():
     parser.add_argument("--figure", type=Path, required=True)
     parser.add_argument("--duration", type=int, default=900)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--blocks", type=int, default=1024)
+    parser.add_argument("--blocks", type=int)
     parser.add_argument("--mamba-blocks", type=int, default=128)
     parser.add_argument(
         "--binary", type=Path, default=ROOT / "target/release/oh-my-vllm-zmq-worker"

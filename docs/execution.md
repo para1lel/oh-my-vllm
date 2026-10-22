@@ -52,6 +52,14 @@ An event on the caller's stream protects that copy until the transfer completes.
 Wait for that event before storage reuse or release.
 Do not update these inputs during Graph recording.
 
+The device keeps completed host upload buffers in a bounded pool.
+New buffers use capacity classes. Workspace changes can reuse these buffers after their events complete.
+Device metadata uses the stream-ordered temporary storage pool.
+
+MTP context graphs own fixed hidden-state input buffers.
+The worker copies target hidden states into these buffers before replay on the same stream.
+Context reuse depends on the operator plan, not the target workspace address.
+
 Recording uses a different nonblocking stream and restores the caller's stream on exit.
 A failed recording releases the resources created before failure.
 A completed recording transfers its resource leases to the workspace.

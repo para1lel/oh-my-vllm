@@ -18,7 +18,7 @@ The [operator checks](docs/operators/microbench.md) use repository PyTorch fixtu
 
 ## AgentX trace performance
 
-This [AgentX measurement](docs/agentx.md) uses MTP4, four session trees, and 900 seconds of profiling on one B200.
+This [AgentX measurement](docs/agentx.md) uses MTP4, six session trees, and 900 seconds of profiling on one B200.
 Each point shows one completed request. Color shows its measured prefix cache hit ratio.
 Server processing time contains preparation and later scheduling waits. It excludes the preceding admission queue and complete network transport.
 
@@ -35,34 +35,37 @@ Requests use serving sampling defaults, auto tool constraints, and client ordina
 Requests have uncached prefixes, a 32768-token budget, and at most 4 running requests.
 
 The benchmark uses `http-reference-v4` with the [documented assumptions](docs/performance.md#memory).
-All 24 configurations have measurements for source `3800d3d7aec04529`.
+All 24 configurations have measurements for source `a4caca0e0e2f7728`.
 The table contains one complete measurement run.
-The run uses 1024 FA blocks, 128 GDN slots, and workload `serving-tools-v1`.
+
+Runtime sizing selects 1225 FA blocks for ordinary decode and 1016 for MTP4.
+The run uses 128 GDN slots and workload `serving-tools-v1`.
+FA sizing uses the 85% [service memory budget](docs/serving.md#cache-memory).
 The prompt seed is `d32f3d5d2c4b4174a1bc2e7c155f0c03`.
 
 | Mode | Batch | Input tokens per request | Output tokens per request | HTTP time (s) | Reference time (s) | Efficiency |
 |---|---:|---:|---:|---:|---:|---:|
-| Ordinary | 1 | 32768 | 64 | 1.846 | 0.697 | 37.76% |
-| Ordinary | 1 | 32768 | 8192 | 63.825 | 32.001 | 50.14% |
-| Ordinary | 2 | 32768 | 64 | 3.207 | 1.178 | 36.72% |
-| Ordinary | 2 | 32768 | 8192 | 74.546 | 35.359 | 47.43% |
-| Ordinary | 4 | 32768 | 64 | 5.823 | 2.131 | 36.59% |
-| Ordinary | 4 | 32768 | 8192 | 82.110 | 42.067 | 51.23% |
-| MTP4 | 1 | 32768 | 64 | 1.594 | 0.572 | 35.90% |
-| MTP4 | 1 | 32768 | 8192 | 20.959 | 10.384 | 49.55% |
-| MTP4 | 1 | 65536 | 64 | 4.689 | 1.230 | 26.23% |
-| MTP4 | 1 | 65536 | 8192 | 23.032 | 11.378 | 49.40% |
-| MTP4 | 1 | 131072 | 64 | 8.119 | 3.107 | 38.27% |
-| MTP4 | 1 | 131072 | 8192 | 32.112 | 14.558 | 45.34% |
-| MTP4 | 2 | 32768 | 64 | 3.021 | 1.037 | 34.32% |
-| MTP4 | 2 | 32768 | 8192 | 28.640 | 12.299 | 42.94% |
-| MTP4 | 2 | 65536 | 64 | 13.640 | 2.362 | 17.31% |
-| MTP4 | 2 | 65536 | 8192 | 34.524 | 15.550 | 45.04% |
-| MTP4 | 2 | 131072 | 64 | 15.167 | 6.076 | 40.06% |
-| MTP4 | 2 | 131072 | 8192 | 47.076 | 22.158 | 47.07% |
-| MTP4 | 4 | 32768 | 64 | 10.319 | 1.971 | 19.10% |
-| MTP4 | 4 | 32768 | 8192 | 39.925 | 16.159 | 40.47% |
-| MTP4 | 4 | 65536 | 64 | 12.357 | 4.601 | 37.23% |
-| MTP4 | 4 | 65536 | 8192 | 48.689 | 20.106 | 41.29% |
-| MTP4 | 4 | 131072 | 64 | 30.308 | 12.075 | 39.84% |
-| MTP4 | 4 | 131072 | 8192 | 75.209 | 34.489 | 45.86% |
+| Ordinary | 1 | 32768 | 64 | 1.847 | 0.697 | 37.75% |
+| Ordinary | 1 | 32768 | 8192 | 63.771 | 32.001 | 50.18% |
+| Ordinary | 2 | 32768 | 64 | 3.321 | 1.178 | 35.46% |
+| Ordinary | 2 | 32768 | 8192 | 75.280 | 35.359 | 46.97% |
+| Ordinary | 4 | 32768 | 64 | 5.813 | 2.131 | 36.65% |
+| Ordinary | 4 | 32768 | 8192 | 82.542 | 42.067 | 50.96% |
+| MTP4 | 1 | 32768 | 64 | 1.580 | 0.572 | 36.20% |
+| MTP4 | 1 | 32768 | 8192 | 20.866 | 10.384 | 49.77% |
+| MTP4 | 1 | 65536 | 64 | 3.311 | 1.230 | 37.15% |
+| MTP4 | 1 | 65536 | 8192 | 23.122 | 11.378 | 49.21% |
+| MTP4 | 1 | 131072 | 64 | 7.756 | 3.107 | 40.06% |
+| MTP4 | 1 | 131072 | 8192 | 29.443 | 14.558 | 49.45% |
+| MTP4 | 2 | 32768 | 64 | 2.918 | 1.037 | 35.53% |
+| MTP4 | 2 | 32768 | 8192 | 28.455 | 12.299 | 43.22% |
+| MTP4 | 2 | 65536 | 64 | 6.383 | 2.362 | 37.00% |
+| MTP4 | 2 | 65536 | 8192 | 34.645 | 15.550 | 44.88% |
+| MTP4 | 2 | 131072 | 64 | 15.145 | 6.076 | 40.12% |
+| MTP4 | 2 | 131072 | 8192 | 46.791 | 22.158 | 47.35% |
+| MTP4 | 4 | 32768 | 64 | 7.541 | 1.971 | 26.14% |
+| MTP4 | 4 | 32768 | 8192 | 39.418 | 16.159 | 40.99% |
+| MTP4 | 4 | 65536 | 64 | 13.087 | 4.601 | 35.15% |
+| MTP4 | 4 | 65536 | 8192 | 47.610 | 20.106 | 42.23% |
+| MTP4 | 4 | 131072 | 64 | 29.945 | 12.075 | 40.32% |
+| MTP4 | 4 | 131072 | 8192 | 74.403 | 34.489 | 46.35% |

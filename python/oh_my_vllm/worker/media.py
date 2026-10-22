@@ -201,6 +201,8 @@ class MediaProcessor:
         return expanded, items, positions, delta
 
     def encode(self, item):
+        if isinstance(item.embedding, np.ndarray):
+            item.embedding = self.device.upload(item.embedding, "bfloat16")
         if item.embedding is not None:
             return item.embedding
         d, weights = self.device, self.weights.vision()
@@ -241,6 +243,13 @@ class MediaProcessor:
                 d.synchronize()
         item.embedding, item.pixels = result, None
         return result
+
+    def offload(self, request):
+        for item in request.media:
+            if item.embedding is not None and not isinstance(
+                item.embedding, np.ndarray
+            ):
+                item.embedding = self.device.download(item.embedding, np.uint16)
 
     def rows(self, entries):
         selected = []

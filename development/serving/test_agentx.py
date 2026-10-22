@@ -121,7 +121,7 @@ class AgentXTests(unittest.TestCase):
         command = agentx.profile_command("/env/python", "/model", "/run", 1234, 900, 42)
         for flag, value in (
             ("--scenario", "inferencex-agentx-mvp"),
-            ("--concurrency", "4"),
+            ("--concurrency", "6"),
             ("--public-dataset", agentx.DATASET),
             ("--benchmark-duration", "900"),
             ("--random-seed", "42"),

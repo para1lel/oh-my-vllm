@@ -17,6 +17,11 @@ Rust 和 worker 控制持久状态选择.
 依赖前缀的 mask 和不支持的停止条件使用逐步路径.
 保持各草稿的 proposal 概率和 RNG offset 与逐步路径相同.
 
+GDN prefill 按序列顺序存放 chunk workspace, 并为每个序列计算容量.
+保持打包后的 offset 与当前 schedule 和 plan 容量一致.
+[服务 cache 预算](serving.zh.md)使用运行时显存信息和算子 workspace 预留量.
+Rust 使用 worker 返回的容量.
+
 小规模 FFN 和 GDN 运算在执行规则规定的边界使用依赖启动.
 FFN prefill 在 65 到 1024 行时使用这些依赖.
 [前缀 cache](serving.zh.md#前缀-cache) 可以使用来自未满块的 checkpoint.
@@ -27,6 +32,9 @@ FFN prefill 在 65 到 1024 行时使用这些依赖.
 常规数值测试读取仓库 fixture, 不执行 PyTorch.
 保持[精度策略](operators/precision.zh.md)和[全模型门槛](operators/evaluation.zh.md).
 实现改变后不得自动修改门槛.
+
+算子性能采样在不确定结果的扩展期间保留计时事件及其测量 Graph.
+计时迁移保持已批准的延迟门槛不变.
 
 FA 使用 BF16 attention 操作数和缓存状态. GDN 使用 FP32 保存循环状态.
 FP8 投影使用 checkpoint 中的 E4M3 权重和 FP32 block scales.
@@ -45,7 +53,7 @@ HTTP efficiency 不设最低交付门槛.
 交付前执行适用的[测试范围](testing.zh.md).
 同时执行全部 24 组 [HTTP 配置](performance.zh.md).
 
-[AgentX 入口](agentx.zh.md)使用四个会话树测量 MTP4.
+[AgentX 入口](agentx.zh.md)使用六个会话树测量 MTP4.
 它通过流式 usage 和完整响应 ID 关联服务指标.
 将其获准保存的 CSV 和图片保存在 `docs/assets`.
 将原始测量产物保存在仓库外.

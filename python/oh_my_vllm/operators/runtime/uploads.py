@@ -5,23 +5,83 @@ import numpy as np
 import tvm_ffi
 
 
+class HostStorage:
+    def __init__(self, device, size):
+        self.device, self.size = device, size
+        self.pointer = ctypes.c_void_p()
+        device.checked(
+            device.runtime.cudaHostAlloc(ctypes.byref(self.pointer), size, 0)
+        )
+
+    def close(self):
+        if self.pointer:
+            self.device.checked(self.device.runtime.cudaFreeHost(self.pointer))
+            self.pointer = ctypes.c_void_p()
+
+    def __del__(self):
+        with suppress(BaseException):
+            self.close()
+
+
+class UploadPool:
+    def __init__(self, device, limit=16 << 20):
+        self.device, self.limit = device, limit
+        self.available = {}
+        self.cached_bytes = 0
+        self.closed = False
+
+    def acquire(self, size):
+        if self.closed:
+            raise RuntimeError("host upload pool is closed")
+        capacity = 1 << (max(size, 1) - 1).bit_length()
+        available = self.available.get(capacity)
+        if available:
+            self.cached_bytes -= capacity
+            return available.pop()
+        return HostStorage(self.device, capacity)
+
+    def release(self, storage):
+        if not self.closed and self.cached_bytes + storage.size <= self.limit:
+            self.available.setdefault(storage.size, []).append(storage)
+            self.cached_bytes += storage.size
+        else:
+            storage.close()
+
+    def close(self):
+        self.closed = True
+        error = None
+        for size, available in self.available.items():
+            pending = []
+            for storage in available:
+                try:
+                    storage.close()
+                    self.cached_bytes -= size
+                except BaseException as failure:
+                    pending.append(storage)
+                    error = error or failure
+            self.available[size] = pending
+        if error is not None:
+            raise error
+        self.available.clear()
+
+    def __del__(self):
+        with suppress(BaseException):
+            self.close()
+
+
 class UploadBuffer:
     def __init__(self, device, destination, source):
         self.device, self.destination = device, destination
-        self.pointer, self.event = ctypes.c_void_p(), ctypes.c_void_p()
+        self.storage, self.event = None, ctypes.c_void_p()
         self.pending = self.untracked = False
         self.array = self.tensor = None
         try:
-            device.checked(
-                device.runtime.cudaHostAlloc(
-                    ctypes.byref(self.pointer), max(source.nbytes, 1), 0
-                )
-            )
+            self.storage = device.upload_pool.acquire(source.nbytes)
             device.checked(
                 device.runtime.cudaEventCreateWithFlags(ctypes.byref(self.event), 2)
             )
-            memory = (ctypes.c_byte * max(source.nbytes, 1)).from_address(
-                self.pointer.value
+            memory = (ctypes.c_byte * self.storage.size).from_address(
+                self.storage.pointer.value
             )
             self.array = np.ndarray(source.shape, source.dtype, buffer=memory)
             self.tensor = tvm_ffi.from_dlpack(self.array)
@@ -57,10 +117,10 @@ class UploadBuffer:
         self.wait()
         self.tensor = self.array = None
         error = None
-        if self.pointer:
+        if self.storage is not None:
             try:
-                self.device.checked(self.device.runtime.cudaFreeHost(self.pointer))
-                self.pointer = ctypes.c_void_p()
+                self.device.upload_pool.release(self.storage)
+                self.storage = None
             except BaseException as failure:
                 error = failure
         if self.event:

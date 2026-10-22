@@ -7,16 +7,46 @@ namespace gdn_wy {
 constexpr int Block = 64, Width = 128, Threads = 256, Parts = 1;
 constexpr int TokenStride = 72, ProductStride = 65;
 
+__host__ __device__ inline int chunk_capacity(int queries) {
+  return queries ? (queries + 63) / 64 + (queries + 783) / 784 + 1 : 0;
+}
+
+__device__ inline int sequence_chunk_base(const int *starts, int sequence, int batch, int rows,
+                                          int chunks, int max_capacity) {
+  gdn_require(starts[0] == 0 && starts[batch] == rows);
+  int base = 0, end = 0;
+  for (int index = 0; index <= sequence; ++index) {
+    int first = starts[index], last = starts[index + 1];
+    gdn_require(first >= 0 && first <= last && last <= rows);
+    int capacity = chunk_capacity(last - first);
+    gdn_require(capacity <= max_capacity);
+    base = end;
+    end += capacity;
+    gdn_require(end <= chunks);
+  }
+  gdn_require(sequence + 1 < batch || end == chunks);
+  return base;
+}
+
 __device__ inline int64_t transform_offset(int chunk, int head, int part, int kind) {
   return (((int64_t(chunk) * 48 + head) * Parts + part) * 2 + kind) * Block * Width;
 }
 
 __global__ void metadata_kernel(const int *starts, const int *reads, const int *writes,
-                                int *metadata, int capacity, int rows, int slots) {
+                                int *metadata, int *offsets, int chunks, int max_capacity, int rows,
+                                int slots) {
   int sequence = blockIdx.x, lane = threadIdx.x;
   int first = starts[sequence], last = starts[sequence + 1], source = reads[sequence];
   gdn_require(first >= 0 && first <= last && last <= rows && source >= 0 && source < slots);
-  int base = sequence * capacity;
+  int capacity = chunk_capacity(last - first);
+  int base = sequence_chunk_base(starts, sequence, gridDim.x, rows, chunks, max_capacity);
+  if (lane == 0) {
+    offsets[sequence] = base;
+    if (sequence + 1 == gridDim.x)
+      offsets[sequence + 1] = base + capacity;
+  }
+  if (!capacity)
+    return;
   for (int index = lane; index < capacity * 4; index += 32)
     metadata[base * 4 + index] = 0;
   __syncwarp();

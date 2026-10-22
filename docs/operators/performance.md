@@ -102,10 +102,15 @@ If any repeat-safe interval is shorter than 20 ms, discard the complete collecti
 Then increase the repeat count.
 
 An uncertain 30-sample result extends to 120 samples with the same count.
+The extension keeps the same timing events and measurement graph.
+Four discarded warmup calls precede the fixed-count pilot and extension samples.
 Start a new complete 120-sample collection after a short repeat-safe extension interval.
 Reports record these restarts.
 
-The initial timing policy is `operator-timing-v1`.
+The timing policy is `operator-timing-v2`.
+The timing migration keeps all approved ratios and lower bounds unchanged.
+Its provenance records the previous timing identity and limits file hash.
+
 Eager timing records events around the production calls on the caller stream.
 Graph timing captures the same production function into a separate child graph.
 A measurement graph contains serial child copies between two timing-event nodes.

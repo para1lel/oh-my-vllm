@@ -52,6 +52,14 @@ Metadata 和采样输入使用可复用的页锁定 host 缓冲区上传.
 复用或释放存储前, 必须等待该事件.
 不要在 Graph 录制期间更新这些输入.
 
+Device 在有容量上限的池中保留已完成传输的 host 上传缓冲区.
+新缓冲区使用容量分级. 事件完成后, 变更后的 workspace 可以复用这些缓冲区.
+Device metadata 使用按 stream 顺序管理的临时存储池.
+
+MTP context graph 拥有固定的隐藏状态输入缓冲区.
+Worker 在同一 stream 上重放前, 将 target 隐藏状态复制到这些缓冲区.
+Context 复用取决于算子 plan, 不取决于 target workspace 地址.
+
 录制使用独立的 nonblocking stream, 并在退出时恢复调用者的 stream.
 录制失败会释放失败前创建的资源.
 录制成功后, 资源 lease 转交给 workspace.

@@ -1,4 +1,5 @@
 import unittest
+from contextlib import contextmanager
 from dataclasses import asdict, replace
 from types import SimpleNamespace
 
@@ -12,7 +13,7 @@ class PerformanceContracts(unittest.TestCase):
         from development.serving.accounting import add, attention
 
         from .accounting import CACHE_CAPACITY, lower_bound, position_bytes, work
-        from .performance import accounting_identity
+        from .performance import accounting_identity, timing_identity
         from .validation import load_limits
 
         self.assertEqual(position_bytes(14, 14), 1679616)
@@ -30,6 +31,10 @@ class PerformanceContracts(unittest.TestCase):
             self.assertGreater(lower_bound(case, device), 0, case.id)
             approved = limits[case.id]
             self.assertEqual(approved["accounting"], identity, case.id)
+            self.assertEqual(approved["timing"], timing_identity(), case.id)
+            timing_migration = approved["provenance"]["timing_migration"]
+            for field in ("max_ratio", "lower_seconds"):
+                self.assertEqual(approved[field], timing_migration[field], case.id)
             self.assertEqual(approved["work"], asdict(work(case)), case.id)
             self.assertEqual(
                 approved["lower_seconds"], lower_bound(case, device), case.id
@@ -113,6 +118,7 @@ class PerformanceContracts(unittest.TestCase):
             calibrate,
             check,
             collect,
+            measurement_session,
             sample,
         )
 
@@ -161,14 +167,68 @@ class PerformanceContracts(unittest.TestCase):
             collect(lambda n: Sample(0.0001, 0, n), 30, True, repeats=25)
         calls = []
 
-        def measure(prepared, *, count, repeats=None):
-            calls.append(count)
-            return [Sample(value, 0, 1) for value in [0.9, 1.1] * (count // 2)]
+        @contextmanager
+        def session(prepared):
+            def measure(*, count, repeats=None):
+                calls.append(count)
+                return [Sample(value, 0, 1) for value in [0.9, 1.1] * (count // 2)]
 
-        samples, result = accept(None, 1, 1, measure_function=measure)
+            yield measure
+
+        samples, result = accept(None, 1, 1, session_factory=session)
         self.assertEqual(calls, [30, 90])
         self.assertEqual(len(samples), 120)
         self.assertEqual(result.decision, "unresolved")
+        lifecycle, replays = [], []
+
+        @contextmanager
+        def events_factory(device):
+            lifecycle.append("events-open")
+            try:
+                yield Events()
+            finally:
+                lifecycle.append("events-close")
+
+        @contextmanager
+        def graph_factory(prepared, events, repeats):
+            lifecycle.append("graph-open")
+
+            def replay():
+                replays.append(repeats)
+                events.begin()
+                clock.value += 0.9 if len(replays) % 2 else 1.1
+                events.record_end()
+
+            try:
+                yield replay
+            finally:
+                lifecycle.append("graph-close")
+
+        def session_factory(prepared):
+            return measurement_session(
+                prepared, events_factory=events_factory, graph_factory=graph_factory
+            )
+
+        prepared = Prepared()
+        prepared.case = SimpleNamespace(mode="graph", boundary="mtp.accept")
+        prepared.setup = {}
+        samples, result = accept(prepared, 1, 1, session_factory=session_factory)
+        self.assertEqual(len(samples), 120)
+        self.assertEqual(result.decision, "unresolved")
+        self.assertEqual(replays, [1] * 130)
+        self.assertEqual(
+            lifecycle, ["events-open", "graph-open", "graph-close", "events-close"]
+        )
+        lifecycle.clear()
+        with (
+            self.assertRaisesRegex(RuntimeError, "sample failure"),
+            session_factory(prepared) as collect_samples,
+        ):
+            collect_samples(count=1)
+            raise RuntimeError("sample failure")
+        self.assertEqual(
+            lifecycle, ["events-open", "graph-open", "graph-close", "events-close"]
+        )
         self.assertEqual(calibrate([[Sample(1.23451, 0, 1)] * 30] * 5, 1), 1.2346)
         with self.assertRaisesRegex(ValueError, "five"):
             calibrate([[Sample(1, 0, 1)] * 30], 1)

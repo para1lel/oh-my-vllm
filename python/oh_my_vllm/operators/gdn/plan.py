@@ -6,13 +6,14 @@ def chunked_prefill(rows, batch, max_queries, verify):
     return not verify and max_queries > 128
 
 
-def chunk_workspace(rows, batch, max_queries, verify):
-    chunks = 0
-    if chunked_prefill(rows, batch, max_queries, verify):
-        capacity = (max_queries + 63) // 64 + (max_queries + 783) // 784 + 1
-        chunks = batch * capacity
+def chunk_capacity(queries):
+    return (queries + 63) // 64 + (queries + 783) // 784 + 1 if queries else 0
+
+
+def chunk_workspace(chunks, batch):
     return (
         ((chunks, 4), "int32"),
+        ((batch + 1 if chunks else 0,), "int32"),
         ((chunks, 48, 1, 2, 64, 128), "bfloat16"),
         ((chunks, 48, 128), "float32"),
         ((chunks, 48, 128, 128), "bfloat16"),
@@ -26,11 +27,12 @@ class Plan:
     batch: int
     max_queries: int
     verify: bool
+    chunks: int
     storage: tuple
 
     @property
     def reuse_key(self):
-        return (self.rows, self.batch, self.max_queries, self.verify)
+        return (self.rows, self.batch, self.max_queries, self.verify, self.chunks)
 
     @property
     def needs_warmup(self):
@@ -42,7 +44,13 @@ def make_plan(schedule):
     rows, batch = schedule.sequence_rows[-1], len(schedule.read_slots)
     if rows < 1:
         raise ValueError("GDN requires at least one row")
-    maximum = max(b - a for a, b in pairwise(schedule.sequence_rows))
+    queries = tuple(b - a for a, b in pairwise(schedule.sequence_rows))
+    maximum = max(queries)
+    chunks = (
+        sum(chunk_capacity(count) for count in queries)
+        if chunked_prefill(rows, batch, maximum, schedule.verify)
+        else 0
+    )
     split = rows > 32 or schedule.verify
     storage = (
         ((rows, 5120), "bfloat16"),
@@ -59,10 +67,10 @@ def make_plan(schedule):
         ((rows if split else 0, 6144), "bfloat16"),
         ((8 if rows <= 8 else 3, rows, 5120) if rows <= 32 else (1,), "float32"),
         ((rows if not schedule.verify and rows > 32 else 0, 96), "float32"),
-        *chunk_workspace(rows, batch, maximum, schedule.verify),
+        *chunk_workspace(chunks, batch),
         ((1, 5120), "bfloat16"),
         ((rows,), "int64"),
         ((0, 5120), "bfloat16"),
         ((0,), "int32"),
     )
-    return Plan(rows, batch, maximum, schedule.verify, storage)
+    return Plan(rows, batch, maximum, schedule.verify, chunks, storage)

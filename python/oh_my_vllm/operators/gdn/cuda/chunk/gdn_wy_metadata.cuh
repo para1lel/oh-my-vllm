@@ -3,11 +3,21 @@
 
 namespace gdn_metadata_parallel {
 __global__ void initialize(const int *starts, const int *reads, const int *writes, int *metadata,
-                           int *phase, int capacity, int rows, int slots) {
+                           int *offsets, int *phase, int total_chunks, int max_capacity, int rows,
+                           int slots) {
   int sequence = blockIdx.x, tid = threadIdx.x, lane = tid % 32, warp = tid / 32;
   int first = starts[sequence], last = starts[sequence + 1], source = reads[sequence];
   gdn_require(first >= 0 && first <= last && last <= rows && source >= 0 && source < slots);
-  int base = sequence * capacity;
+  int capacity = gdn_wy::chunk_capacity(last - first);
+  int base =
+      gdn_wy::sequence_chunk_base(starts, sequence, gridDim.x, rows, total_chunks, max_capacity);
+  if (tid == 0) {
+    offsets[sequence] = base;
+    if (sequence + 1 == gridDim.x)
+      offsets[sequence + 1] = base + capacity;
+  }
+  if (!capacity)
+    return;
   for (int i = tid; i < capacity * 4; i += 256)
     metadata[base * 4 + i] = 0;
   int earliest = last, limit = min(first + 784, last);
@@ -39,11 +49,12 @@ __global__ void initialize(const int *starts, const int *reads, const int *write
 }
 
 __global__ void build(const int *starts, const int *reads, const int *writes, int *metadata,
-                      const int *phase, int capacity, int rows, int slots) {
+                      const int *offsets, const int *phase, int rows, int slots) {
   int sequence = blockIdx.x, chunk = blockIdx.y * 4 + threadIdx.x / 32, lane = threadIdx.x % 32;
+  int base = offsets[sequence], capacity = offsets[sequence + 1] - base;
   if (chunk >= capacity)
     return;
-  int base = sequence * capacity, count = metadata[base * 4 + 3];
+  int count = metadata[base * 4 + 3];
   if (chunk >= count)
     return;
   int first = starts[sequence], last = starts[sequence + 1], source = reads[sequence],
@@ -73,15 +84,15 @@ __global__ void build(const int *starts, const int *reads, const int *writes, in
 }
 
 inline void launch(const int *starts, const int *reads, const int *writes, int *metadata,
-                   __nv_bfloat16 *snapshots, int capacity, int rows, int slots, int batch,
-                   cudaStream_t stream) {
+                   int *offsets, __nv_bfloat16 *snapshots, int capacity, int chunks, int rows,
+                   int slots, int batch, cudaStream_t stream) {
   // Carry replaces this scratch before output reads the snapshots.
   auto *phase = reinterpret_cast<int *>(snapshots);
-  initialize<<<batch, 256, 0, stream>>>(starts, reads, writes, metadata, phase, capacity, rows,
-                                        slots);
+  initialize<<<batch, 256, 0, stream>>>(starts, reads, writes, metadata, offsets, phase, chunks,
+                                        capacity, rows, slots);
   check_cuda(cudaGetLastError());
-  build<<<dim3(batch, (capacity + 3) / 4), 128, 0, stream>>>(starts, reads, writes, metadata, phase,
-                                                             capacity, rows, slots);
+  build<<<dim3(batch, (capacity + 3) / 4), 128, 0, stream>>>(starts, reads, writes, metadata,
+                                                             offsets, phase, rows, slots);
   check_cuda(cudaGetLastError());
 }
 } // namespace gdn_metadata_parallel

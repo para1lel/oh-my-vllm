@@ -17,6 +17,11 @@ Subsequent draft steps use the GPU token output from the last step.
 Prefix-dependent masks and unsupported stopping conditions use the per-step path.
 Keep each draft's proposal probabilities and RNG offsets the same as the per-step path.
 
+GDN prefill stores chunk workspaces in sequence order, with a capacity calculated for each sequence.
+Keep the packed offsets consistent with the current schedule and the plan capacity.
+The [service cache budget](serving.md) uses runtime memory information and operator workspace allowances.
+Rust uses the capacities returned by the worker.
+
 Small FFN and GDN operations use dependent launches at the boundaries in the execution rules.
 FFN prefill uses these dependencies for 65 to 1024 rows.
 The [prefix cache](serving.md#prefix-cache) can use a checkpoint from a block that is not full.
@@ -27,6 +32,9 @@ It supplies fixed numerical fixtures, direct PyTorch references, and theoretical
 Usual numerical tests load repository fixtures without executing PyTorch.
 Keep the [precision policy](operators/precision.md) and [full-model limits](operators/evaluation.md).
 Do not automatically change limits after implementation changes.
+
+Operator performance sampling keeps timing events and its measurement graph across uncertain-result extensions.
+The timing migration keeps the approved latency limits.
 
 FA uses BF16 attention operands and cache state. GDN keeps recurrent state in FP32.
 FP8 projections use checkpoint E4M3 weights and FP32 block scales.
@@ -45,7 +53,7 @@ Report the measured performance.
 Run the applicable [test scope](testing.md) before delivery.
 Also run all 24 [HTTP configurations](performance.md).
 
-The [AgentX entry](agentx.md) measures MTP4 with four session trees.
+The [AgentX entry](agentx.md) measures MTP4 with six session trees.
 It uses streaming usage and full response IDs to join service metrics.
 Keep its approved CSV and figure in `docs/assets`.
 Keep raw measurement artifacts external to the repository.
