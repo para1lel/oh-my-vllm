@@ -2,7 +2,7 @@
 
 ## 范围和身份
 
-[夹具读取器](../../development/model/deepseek_v41/fixtures.py) 用 SHA256 绑定两个固定产物.
+[夹具读取器](../../development/model/deepseek_v41/fixtures.py) 用 SHA256 绑定三个固定产物.
 普通检查无需 PyTorch, GPU 执行或访问检查点即可加载它们.
 它们是参考输入和期望输出, 而不是服务性能结果.
 不要用运行时输出替换它们.
@@ -12,8 +12,9 @@
 |---|---|---|
 | [短文本](../../development/model/deepseek_v41/reference.npz) | 两个完整 FP64 词表向量 | `3bda8a9f03c797e65222a6eb85c82b758636514591f70f855e8f691a1f1fead0` |
 | [提示词编码](../../development/model/deepseek_v41/codec.json) | 二十个带完整 token IDs 的编码用例 | `30a3079291e9326961f3d79937fe25bac3235f49ad79c250edc6763619fe7a75` |
+| [DSpark 续算](../../development/model/deepseek_v41/dspark.npz) | 十八个完整 FP64 词表行和两个置信度向量 | `c78d89d66d2ff38999af2aa44b845c6d2fea1702280c217a92e7a0d693ee6fa8` |
 
-两个产物均绑定检查点清单 SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
+三个产物均绑定检查点清单 SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 该清单记录 48 个本地权重分片及已标识控制文件的完整身份.
 产物还记录各自的生成器源码和依赖版本.
 固定产物哈希将这些记录与输出绑定.
@@ -30,6 +31,52 @@ prefill argmax 选择 token 16 作为固定续算输入.
 权重解码和后续全部模型算术使用 FP64, 不进行激活量化.
 此产物不覆盖 DSpark 端点, 媒体, 长上下文或 native 舍入.
 该产物的存在不能证明运行时通过数值验收.
+
+## DSpark 续算
+
+`load_dspark()` 仅通过 NumPy 加载固定的 17870563-byte `dspark.npz`.
+该文件包含已验证外部 reference 的原始字节.
+它使用 schema 1, 用例 `dspark-restored` 和 reference kind `independent-pytorch-fp64-no-activation-quantization`.
+加载器先将完整文件哈希与固定身份比较, 再读取数组数据.
+它还验证存档的完整检查点清单, 固定输入, 状态选择, 形状, 有限 FP64 值和数组元数据哈希.
+其形状契约独立固定, 不随后续生成器变更而改变.
+
+输入前缀有 129 tokens.
+它将 16-token 短提示词重复八次, 再添加该提示词的第一个 token.
+目标模型 prefill 选择待处理 token 4787.
+前五个提议为 `[13769, 46012, 54994, 1060, 270]`.
+六个验证输入为 `[4787, 13769, 46012, 54994, 1060, 270]`.
+
+| 数组 | 形状 |
+|---|---|
+| `prefill` | `(129280,)` |
+| `draft_logits` | `(5, 129280)` |
+| `draft_confidence` | `(5,)` |
+| `verify_logits` | `(6, 129280)` |
+| `restored_logits` | `(129280,)` |
+| `next_draft_logits` | `(5, 129280)` |
+| `next_draft_confidence` | `(5,)` |
+
+全部十八个 logit 行包含完整词表.
+两个置信度向量各包含五个原始 FP64 值.
+它们独立于词表 logits.
+
+该用例从验证中强制选择两个输入的前缀, 相当于接受一个草稿.
+它独立重算该前缀, 而不是使用被拒绝的验证状态.
+目标模型 argmax 提供修正 token 46012.
+下一个待处理位置为 131, 位置从零开始计数.
+后续五个提议为 `[54994, 1060, 270, 41638, 6397]`.
+下一个草稿块仅使用已接受的特征, 目标模型续算使用选中的状态.
+
+此用例不是一次采样拒绝事件.
+它提供独立 CPU FP64 参考值, 而不是服务 DSpark 执行.
+完整媒体端点, 长上下文端点和模型专用数值阈值是后续门槛.
+Phase 0 尚未完成.
+
+文件哈希将历史生成器源码和依赖记录与这些输出绑定.
+普通检查不将这些源码记录与当前生成器文件比较.
+后续生成器编辑不会改变此固定 reference.
+[构建指南](reference.zh.md) 给出生成器及其源码检查.
 
 ## 提示词编码
 
@@ -86,6 +133,7 @@ DeepInfer 修订版 `9bd9cf243fc53ef9afbf8f04d391d989117d6ab9` 默认使用 `-10
 ```bash
 scripts/with-env.sh python -m unittest \
   development.model.deepseek_v41.test_fixtures \
+  development.model.deepseek_v41.test_reference_cases \
   development.model.deepseek_v41.test_codec_reference
 ```
 

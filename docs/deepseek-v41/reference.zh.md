@@ -4,8 +4,8 @@
 
 [阶段计划](plan.zh.md)控制 native 算子调优之前的参考构建.
 这些工具提供 checkpoint 身份, 解码后的权重, Engram 哈希, FP64 目标模型和预测器数学实现, 以及 CPU 文本参考生成器.
-[固定夹具](fixtures.zh.md) 提供短文本端点和提示词编码用例.
-目前尚未固定 DSpark, 媒体和长上下文端点夹具.
+[固定夹具](fixtures.zh.md) 提供短文本端点, DSpark 恢复端点和提示词编码用例.
+目前尚未固定媒体和长上下文端点夹具.
 未声明运行时数值验收.
 [checkpoint 指南](checkpoint.zh.md)规定身份和行加载检查.
 
@@ -97,6 +97,7 @@ scripts/with-env.sh "$REFERENCE_PYTHON" -m unittest \
   development.model.deepseek_v41.test_reference_math \
   development.model.deepseek_v41.test_reference_attention \
   development.model.deepseek_v41.test_reference_model \
+  development.model.deepseek_v41.test_reference_media_model \
   development.model.deepseek_v41.test_reference_dspark \
   development.model.deepseek_v41.test_reference_vision
 ```
@@ -143,7 +144,7 @@ scripts/with-env.sh "$REFERENCE_PYTHON" -m unittest \
 生成器记录检查点身份, 源码身份, 依赖版本, 全部输入 IDs 和全部输出数组哈希.
 发布前, 它检查所用控制字节和输入状态.
 排他链接发布完整的外部 NPZ 文件, 不替换已有文件.
-目前尚无固定的恢复产物.
+[固定夹具](fixtures.zh.md) 保存此恢复用例.
 
 将 `CASE_OUTPUT` 设为新的外部 NPZ 路径.
 使用固定参考环境:
@@ -209,3 +210,20 @@ scripts/with-env.sh "$MEDIA_REFERENCE_ENV/bin/python" -m unittest \
 展开后的提示 IDs, 类型和 patch 数组均为只读.
 辅助函数不运行视觉模型, 不插入 embeddings, 也不预留输出 tokens.
 调用者必须在服务接纳前确保输入输出合计长度不超过其上限.
+
+## 语言模型图像插入
+
+[目标模型参考](../../development/model/deepseek_v41/reference_model.py) 在第一个 prefill 块接受 `token_types` 和 `image_embeddings`.
+调用者按提示顺序, 为每个图像跨度位置提供一行有限的 CPU FP64 embedding.
+这些行包含视觉参考提供的已学习起始, 换行和结束 embeddings.
+它们在 hyper-connection 展开前替换 token embeddings.
+每个图像位置必须携带配置的图像 token ID.
+
+图像位置在 Engram 历史中变为 dead markers, 并且不接收 Engram 贡献.
+这些位置的专家选择使用视觉路由偏置.
+后续文本调用使用已接受状态, 不携带图像输入.
+参考拒绝在续算期间插入图像, 缺失图像行, 无效类型和错误的 embedding 数组.
+它不修改调用者的输入数组或先前状态.
+
+小型组合检查包含插入, 掩码, 路由和文本续算.
+它不提供固定的本地检查点媒体端点.

@@ -2,7 +2,7 @@
 
 ## Scope and identity
 
-The [fixture reader](../../development/model/deepseek_v41/fixtures.py) binds two fixed artifacts by SHA256.
+The [fixture reader](../../development/model/deepseek_v41/fixtures.py) binds three fixed artifacts by SHA256.
 Ordinary checks load them without PyTorch, GPU execution, or checkpoint access.
 They are reference inputs and expected outputs, not service performance results.
 Do not replace them with runtime outputs.
@@ -12,8 +12,9 @@ Model and operator numerical limits are separate gates in the [validation plan](
 |---|---|---|
 | [Short text](../../development/model/deepseek_v41/reference.npz) | Two full FP64 vocabulary vectors | `3bda8a9f03c797e65222a6eb85c82b758636514591f70f855e8f691a1f1fead0` |
 | [Prompt codec](../../development/model/deepseek_v41/codec.json) | Twenty encoding cases with complete token IDs | `30a3079291e9326961f3d79937fe25bac3235f49ad79c250edc6763619fe7a75` |
+| [DSpark continuation](../../development/model/deepseek_v41/dspark.npz) | Eighteen full FP64 vocabulary rows and two confidence vectors | `c78d89d66d2ff38999af2aa44b845c6d2fea1702280c217a92e7a0d693ee6fa8` |
 
-The two artifacts bind checkpoint manifest SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
+The three artifacts bind checkpoint manifest SHA256 `0f42736d2943ec4725cb33d9e860a10ed994ba1d33e50d79c191847d3facea67`.
 That manifest records full identities for the 48 local weight shards and identified control files.
 The artifacts also record their generator sources and dependency versions.
 The fixed artifact hash binds those records to their outputs.
@@ -30,6 +31,52 @@ Metadata records all 16 prompt token IDs, array hashes, checkpoint identity, sou
 Weight decoding and all subsequent model arithmetic use FP64 without activation quantization.
 This artifact does not cover DSpark endpoints, media, long contexts, or native rounding.
 Its existence does not prove runtime numerical acceptance.
+
+## DSpark continuation
+
+`load_dspark()` loads the fixed 17870563-byte `dspark.npz` through NumPy only.
+The file contains the validated external reference bytes.
+It uses schema 1, case `dspark-restored`, and reference kind `independent-pytorch-fp64-no-activation-quantization`.
+The loader compares the full file hash with its fixed identity before it reads array data.
+It also validates the archived full checkpoint manifest, fixed inputs, state selection, shapes, finite FP64 values, and array metadata hashes.
+Its shape contract is fixed separately from subsequent generator changes.
+
+The input prefix has 129 tokens.
+It repeats the 16-token short prompt eight times, then adds its first token.
+The target prefill selects pending token 4787.
+The first five proposals are `[13769, 46012, 54994, 1060, 270]`.
+The six verification inputs are `[4787, 13769, 46012, 54994, 1060, 270]`.
+
+| Array | Shape |
+|---|---|
+| `prefill` | `(129280,)` |
+| `draft_logits` | `(5, 129280)` |
+| `draft_confidence` | `(5,)` |
+| `verify_logits` | `(6, 129280)` |
+| `restored_logits` | `(129280,)` |
+| `next_draft_logits` | `(5, 129280)` |
+| `next_draft_confidence` | `(5,)` |
+
+All eighteen logit rows contain the complete vocabulary.
+The two confidence vectors each contain five raw FP64 values.
+They are separate from the vocabulary logits.
+
+The case forces a two-input prefix from verification, equivalent to one accepted draft.
+It independently recomputes that prefix instead of using rejected verification state.
+The target argmax supplies correction token 46012.
+The next pending position is 131, with positions counted from zero.
+The next five proposals are `[54994, 1060, 270, 41638, 6397]`.
+The next draft block uses only accepted features, and the target continuation uses the selected state.
+
+This case is not a sampled rejection event.
+It supplies independent CPU FP64 reference values, not service DSpark execution.
+Full media endpoints, long-context endpoints, and model-specific numerical thresholds are later gates.
+Phase 0 is not complete.
+
+The file hash binds the historical generator-source and dependency records to these outputs.
+Ordinary checks do not compare those source records with current generator files.
+Subsequent generator edits do not change this fixed reference.
+The [construction guide](reference.md) gives the generator and its source checks.
 
 ## Prompt codec
 
@@ -86,6 +133,7 @@ Run the fixed artifact and generator checks:
 ```bash
 scripts/with-env.sh python -m unittest \
   development.model.deepseek_v41.test_fixtures \
+  development.model.deepseek_v41.test_reference_cases \
   development.model.deepseek_v41.test_codec_reference
 ```
 

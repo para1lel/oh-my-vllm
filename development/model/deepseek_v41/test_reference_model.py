@@ -22,55 +22,81 @@ class ArrayWeights:
         return value.copy() if rows is None else value[rows].copy()
 
 
+def backbone_fixture():
+    text = dict(
+        hidden_size=2,
+        vocab_size=3,
+        num_hidden_layers=1,
+        hc_mult=2,
+        hc_sinkhorn_iters=2,
+        hc_eps=1e-6,
+        rms_norm_eps=1e-20,
+        max_position_embeddings=8,
+        engram_layer_ids=[],
+        dspark_target_layer_ids=[0],
+        head_dim=2,
+        num_attention_heads=1,
+        q_lora_rank=2,
+        o_groups=1,
+        o_lora_rank=2,
+        sliding_window=3,
+        compress_ratios=[0],
+        qk_rope_head_dim=0,
+        num_experts_per_tok=1,
+        routed_scaling_factor=1.5,
+        swiglu_limit=10.0,
+    )
+    arrays = {
+        "embed.weight": np.array([[3.0, 4.0], [1.0, 0.0], [-2.0, 1.0]]),
+        "head.weight": np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, -1.0]]),
+        "norm.weight": np.ones(2),
+        "layers.0.attn.attn_sink": np.zeros(1),
+        "layers.0.ffn.gate.weight": np.zeros((2, 2)),
+        "layers.0.ffn.gate.bias": np.array([1.0, 0.0]),
+    }
+    for branch in ("attn", "ffn"):
+        arrays[f"layers.0.{branch}_norm.weight"] = np.ones(2)
+        arrays[f"layers.0.hc_{branch}_fn"] = np.zeros((8, 4))
+        arrays[f"layers.0.hc_{branch}_base"] = np.zeros(8)
+        arrays[f"layers.0.hc_{branch}_scale"] = np.ones(3)
+    for norm in ("q_norm", "kv_norm"):
+        arrays[f"layers.0.attn.{norm}.weight"] = np.ones(2)
+    for projection in ("wq_a", "wq_b", "wkv", "wo_a", "wo_b"):
+        arrays[f"layers.0.attn.{projection}.weight"] = (
+            np.eye(2) if projection == "wkv" else np.zeros((2, 2))
+        )
+    for expert_name in ("experts.0", "shared_experts"):
+        for projection in ("w1", "w2", "w3"):
+            arrays[f"layers.0.ffn.{expert_name}.{projection}.weight"] = np.zeros((2, 2))
+    return text, arrays
+
+
+def add_engram(text, arrays):
+    text.update(
+        engram_layer_ids=[0],
+        engram_max_ngram_size=4,
+        engram_n_heads=1,
+        engram_vocab_size=5,
+        engram_compressed_vocab_size=3,
+        engram_num_embeddings=[23],
+        engram_pad_token_id=2,
+    )
+    arrays.update(
+        {
+            "layers.0.engram.embed.weight": np.arange(46, dtype=np.float64).reshape(
+                23, 2
+            )
+            / 20,
+            "layers.0.engram.wkv.weight": np.full((6, 6), 0.125),
+            "layers.0.engram.q_weight": np.ones((2, 2)),
+            "layers.0.engram.k_weight": np.ones((2, 2)),
+        }
+    )
+
+
 class StreamedReference(unittest.TestCase):
     def test_backbone_composition_keeps_endpoint_and_continuation_state(self):
-        text = dict(
-            hidden_size=2,
-            vocab_size=3,
-            num_hidden_layers=1,
-            hc_mult=2,
-            hc_sinkhorn_iters=2,
-            hc_eps=1e-6,
-            rms_norm_eps=1e-20,
-            max_position_embeddings=8,
-            engram_layer_ids=[],
-            dspark_target_layer_ids=[0],
-            head_dim=2,
-            num_attention_heads=1,
-            q_lora_rank=2,
-            o_groups=1,
-            o_lora_rank=2,
-            sliding_window=3,
-            compress_ratios=[0],
-            qk_rope_head_dim=0,
-            num_experts_per_tok=1,
-            routed_scaling_factor=1.5,
-            swiglu_limit=10.0,
-        )
-        arrays = {
-            "embed.weight": np.array([[3.0, 4.0], [1.0, 0.0], [-2.0, 1.0]]),
-            "head.weight": np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, -1.0]]),
-            "norm.weight": np.ones(2),
-            "layers.0.attn.attn_sink": np.zeros(1),
-            "layers.0.ffn.gate.weight": np.zeros((2, 2)),
-            "layers.0.ffn.gate.bias": np.array([1.0, 0.0]),
-        }
-        for branch in ("attn", "ffn"):
-            arrays[f"layers.0.{branch}_norm.weight"] = np.ones(2)
-            arrays[f"layers.0.hc_{branch}_fn"] = np.zeros((8, 4))
-            arrays[f"layers.0.hc_{branch}_base"] = np.zeros(8)
-            arrays[f"layers.0.hc_{branch}_scale"] = np.ones(3)
-        for norm in ("q_norm", "kv_norm"):
-            arrays[f"layers.0.attn.{norm}.weight"] = np.ones(2)
-        for projection in ("wq_a", "wq_b", "wkv", "wo_a", "wo_b"):
-            arrays[f"layers.0.attn.{projection}.weight"] = (
-                np.eye(2) if projection == "wkv" else np.zeros((2, 2))
-            )
-        for expert_name in ("experts.0", "shared_experts"):
-            for projection in ("w1", "w2", "w3"):
-                arrays[f"layers.0.ffn.{expert_name}.{projection}.weight"] = np.zeros(
-                    (2, 2)
-                )
+        text, arrays = backbone_fixture()
         model = Model(
             TorchWeights(ArrayWeights(arrays), device="cpu", row_limit=2),
             {"text_config": text},
@@ -101,26 +127,7 @@ class StreamedReference(unittest.TestCase):
             model.forward([True])
         with self.assertRaises(ValueError):
             model.forward([0] * 9)
-        text.update(
-            engram_layer_ids=[0],
-            engram_max_ngram_size=4,
-            engram_n_heads=1,
-            engram_vocab_size=5,
-            engram_compressed_vocab_size=3,
-            engram_num_embeddings=[23],
-            engram_pad_token_id=2,
-        )
-        arrays.update(
-            {
-                "layers.0.engram.embed.weight": np.arange(46, dtype=np.float64).reshape(
-                    23, 2
-                )
-                / 20,
-                "layers.0.engram.wkv.weight": np.full((6, 6), 0.125),
-                "layers.0.engram.q_weight": np.ones((2, 2)),
-                "layers.0.engram.k_weight": np.ones((2, 2)),
-            }
-        )
+        add_engram(text, arrays)
         model = Model(
             TorchWeights(ArrayWeights(arrays), device="cpu", row_limit=2),
             {"text_config": text},

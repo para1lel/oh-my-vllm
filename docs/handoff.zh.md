@@ -20,7 +20,7 @@ DeepSeek 执行未启用.
 checkpoint 工具还提供独立 CPU Engram 哈希和续算历史.
 
 [参考构建指南](deepseek-v41/reference.zh.md)规定流式权重和独立的 PyTorch FP64 数学检查.
-[固定夹具](deepseek-v41/fixtures.zh.md) 绑定短文本端点和提示词编码用例.
+[固定夹具](deepseek-v41/fixtures.zh.md) 绑定短文本端点, DSpark 恢复端点和提示词编码用例.
 其中的上游比较在没有相同权重身份凭据时拒绝检查点替换.
 其中的 DSpark 恢复生成器和视觉参考提供 CPU FP64 数学实现, 而不是服务执行.
 
@@ -30,7 +30,7 @@ checkpoint 工具还提供独立 CPU Engram 哈希和续算历史.
 视频解码和完整的媒体模型端点尚未实现.
 [采样约定](deepseek-v41/sampling.zh.md) 定义待处理 token 对齐, 精确修正和请求内 RNG 地址.
 
-DSpark, 媒体和长上下文参考输出及完整的运行时分配上界仍是前置条件.
+媒体和长上下文参考输出, 数值门槛和完整的运行时分配上界仍是前置条件.
 DeepSeek 和新的 nightly 回归测量放入独立文档, 不放进 README.
 
 以下状态描述 Qwen 实现.

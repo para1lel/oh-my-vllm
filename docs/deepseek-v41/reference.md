@@ -4,8 +4,8 @@
 
 The [phase plan](plan.md) controls reference construction before native operator tuning.
 The tools supply checkpoint identities, decoded weights, Engram hashes, FP64 target and predictor mathematics, and a CPU text reference generator.
-The [fixed fixtures](fixtures.md) supply short-text endpoints and prompt-codec cases.
-DSpark, media, and long-context endpoint fixtures are not fixed at this time.
+The [fixed fixtures](fixtures.md) supply short-text endpoints, DSpark restoration endpoints, and prompt-codec cases.
+Media and long-context endpoint fixtures are not fixed at this time.
 No runtime numerical acceptance is declared.
 The [checkpoint guide](checkpoint.md) specifies identity and row-loading checks.
 
@@ -97,6 +97,7 @@ scripts/with-env.sh "$REFERENCE_PYTHON" -m unittest \
   development.model.deepseek_v41.test_reference_math \
   development.model.deepseek_v41.test_reference_attention \
   development.model.deepseek_v41.test_reference_model \
+  development.model.deepseek_v41.test_reference_media_model \
   development.model.deepseek_v41.test_reference_dspark \
   development.model.deepseek_v41.test_reference_vision
 ```
@@ -143,7 +144,7 @@ It also contains five raw confidence values for each proposal block.
 The generator records checkpoint identity, source identity, dependency versions, all input IDs, and all output-array hashes.
 Before publication, it checks consumed control bytes and input states.
 An exclusive link publishes the complete external NPZ file without replacement.
-There is no fixed restoration artifact at this time.
+The [fixed fixture](fixtures.md) stores this restoration case.
 
 Set `CASE_OUTPUT` to a new external NPZ path.
 Use the pinned reference environment:
@@ -209,3 +210,20 @@ This limit does not include temporary storage for the preparation of one image.
 Prompt IDs, types, and patch arrays are read-only after expansion.
 The helper does not run vision, insert embeddings, or reserve output tokens.
 The caller must make sure that combined input/output length is not more than its limit before service admission.
+
+## Language-model image insertion
+
+The [target reference](../../development/model/deepseek_v41/reference_model.py) accepts `token_types` and `image_embeddings` for the first prefill chunk.
+The caller supplies one finite CPU FP64 embedding row for each image-span position, in prompt order.
+These rows include learned start, newline, and end embeddings from the vision reference.
+They replace token embeddings before hyper-connection expansion.
+Each image position must carry the configured image token ID.
+
+Image positions become dead markers in Engram history and receive no Engram contribution.
+Their expert selection uses the visual routing bias.
+Subsequent text calls use the accepted state without image inputs.
+The reference rejects image insertion during continuation, missing image rows, invalid types, and incorrect embedding arrays.
+It does not change the caller's input arrays or the previous state.
+
+The small composition check includes insertion, masks, routing, and text continuation.
+It does not supply a fixed local-checkpoint media endpoint.

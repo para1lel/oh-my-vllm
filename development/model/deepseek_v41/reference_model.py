@@ -34,6 +34,7 @@ class Model:
             )
         self.weights = weights
         self.config = copy.deepcopy(config["text_config"])
+        self.image_token_id = config.get("image_token_id")
         self.token_map = np.array(token_map, copy=True)
         text = self.config
         if (
@@ -70,7 +71,7 @@ class Model:
             norm_eps=self.config["rms_norm_eps"],
         )
 
-    def _block(self, value, pre_mix, layer, previous, start, shared):
+    def _block(self, value, pre_mix, layer, previous, start, shared, image_mask=None):
         from .reference_attention import forward
 
         prefix = f"layers.{layer}"
@@ -98,11 +99,57 @@ class Model:
             weights.tensor(prefix + ".ffn_norm.weight"),
             eps=config["rms_norm_eps"],
         )
-        output = moe(weights, prefix + ".ffn", normalized, config=config, layer=layer)
+        output = moe(
+            weights,
+            prefix + ".ffn",
+            normalized,
+            config=config,
+            layer=layer,
+            image_mask=image_mask,
+        )
         return hc_expand(output, value, post, comb), ffn_pre, state
 
+    def _image_mask(self, tokens, token_types, embeddings, start):
+        if token_types is None:
+            if embeddings is not None:
+                raise ValueError("image embeddings need explicit token types")
+            return None
+        types = np.asarray(token_types)
+        if (
+            types.shape != tokens.shape
+            or types.dtype.kind not in "iu"
+            or not np.isin(types, [-1, 0, 1, 2, 3]).all()
+        ):
+            raise ValueError("image token types must identify each input row")
+        mask = types >= 0
+        if not mask.any():
+            if embeddings is not None:
+                raise ValueError("image embeddings have no image token positions")
+            return None
+        if start != 0:
+            raise ValueError("image embeddings belong to the first prefill chunk")
+        if self.image_token_id is None or (tokens[mask] != self.image_token_id).any():
+            raise ValueError("image positions must carry the configured image token ID")
+        if (
+            not isinstance(embeddings, torch.Tensor)
+            or embeddings.device.type != "cpu"
+            or embeddings.dtype != torch.float64
+            or embeddings.shape != (int(mask.sum()), self.config["hidden_size"])
+            or not torch.isfinite(embeddings).all()
+        ):
+            raise ValueError("image embeddings must contain full finite CPU FP64 rows")
+        return torch.from_numpy(mask)
+
     @torch.inference_mode()
-    def forward(self, tokens, *, previous=None, endpoint_rows=None):
+    def forward(
+        self,
+        tokens,
+        *,
+        previous=None,
+        endpoint_rows=None,
+        token_types=None,
+        image_embeddings=None,
+    ):
         config = self.config
         tokens = select_rows(tokens, config["vocab_size"])
         if tokens.size == 0:
@@ -117,18 +164,24 @@ class Model:
         )
         if endpoints.size == 0:
             raise ValueError("reference forward needs at least one endpoint row")
+        image_mask = self._image_mask(tokens, token_types, image_embeddings, start)
         history = () if previous is None else previous.engram_history
         hashes = None
         if self.hash_layout is not None:
             if len(history) != min(start, config["engram_max_ngram_size"] - 1):
                 raise ValueError("reference continuation has incomplete Engram history")
+            compressed = self.token_map[tokens].astype(np.int64, copy=False)
+            if image_mask is not None:
+                compressed[image_mask.numpy()] = -1
             hashes, history = hash_rows(
-                self.token_map[tokens],
+                compressed,
                 self.hash_layout,
                 pad_id=self.token_map[config["engram_pad_token_id"]],
                 history=history,
             )
         value = self.weights.tensor("embed.weight", rows=tokens)
+        if image_mask is not None:
+            value[image_mask] = image_embeddings
         value = value[:, None, :].expand(-1, config["hc_mult"], -1).clone()
         pre_mix = value.new_zeros((len(tokens), config["hc_mult"]))
         pre_mix[:, 0] = 1.0
@@ -142,12 +195,13 @@ class Model:
                     value,
                     hashes[:, slot],
                     norm_eps=config["rms_norm_eps"],
+                    token_mask=None if image_mask is None else ~image_mask,
                 )
             if layer in config["dspark_target_layer_ids"]:
                 features[layer] = value.mean(-2)
             prior = None if previous is None else previous.layers[layer]
             value, pre_mix, state = self._block(
-                value, pre_mix, layer, prior, start, shared
+                value, pre_mix, layer, prior, start, shared, image_mask
             )
             states.append(state)
         collapsed = hc_collapse(value, pre_mix)[
