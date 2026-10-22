@@ -18,8 +18,10 @@ use zeromq::prelude::{Socket, SocketRecv, SocketSend};
 use zeromq::{DealerSendHalf, DealerSocket, ZmqMessage};
 
 use crate::error::{Error, Result};
+use crate::model_ready::validate_ready;
 use crate::protocol::{
-    AbortMsg, ExecuteMsg, InitMsg, RegisterMsg, RustMessage, ScheduledRequestMsg, decode, encode,
+    AbortMsg, ExecuteMsg, InitMsg, MODEL_DESCRIPTOR_VERSION, ModelDescriptor, RegisterMsg,
+    RustMessage, ScheduledRequestMsg, decode, encode,
 };
 
 #[derive(Debug, Clone)]
@@ -69,6 +71,7 @@ impl Default for WorkerConfig {
 
 pub struct WorkerClient {
     config: WorkerConfig,
+    descriptor: ModelDescriptor,
     sock: DealerSendHalf,
     inbox: mpsc::Receiver<Result<crate::protocol::WorkerMessage>>,
     reader: JoinHandle<()>,
@@ -347,6 +350,7 @@ impl WorkerClient {
         info!("Worker launched (pid {})", child.child().id());
 
         let init = RustMessage::Init(InitMsg {
+            descriptor_version: MODEL_DESCRIPTOR_VERSION,
             model_path: config.model_path.to_string_lossy().into_owned(),
             num_gpu_blocks: config.num_gpu_blocks,
             mamba_blocks: config.mamba_blocks,
@@ -395,13 +399,15 @@ impl WorkerClient {
         .await
         .map_err(|_| Error::Timeout)??;
 
-        let (logical_num_blocks, mamba_blocks, host_cache_bytes) = match ready_reply {
+        let (descriptor, logical_num_blocks, mamba_blocks, host_cache_bytes) = match ready_reply {
             crate::protocol::WorkerMessage::Ready {
+                descriptor,
                 logical_num_blocks,
                 mamba_blocks,
                 host_cache_bytes,
                 cache_memory,
             } => {
+                validate_ready(&config, &descriptor, logical_num_blocks, mamba_blocks)?;
                 info!(
                     logical_num_blocks,
                     mamba_blocks,
@@ -409,7 +415,12 @@ impl WorkerClient {
                     ?cache_memory,
                     "Worker is ready"
                 );
-                (logical_num_blocks, mamba_blocks, host_cache_bytes)
+                (
+                    descriptor,
+                    logical_num_blocks,
+                    mamba_blocks,
+                    host_cache_bytes,
+                )
             }
             crate::protocol::WorkerMessage::Error(e) => {
                 return Err(Error::WorkerError(e.message));
@@ -418,19 +429,6 @@ impl WorkerClient {
                 return Err(Error::UnexpectedMessageType(format!("{other:?}")));
             }
         };
-        if logical_num_blocks < 2
-            || mamba_blocks < 2
-            || config
-                .num_gpu_blocks
-                .is_some_and(|blocks| blocks != logical_num_blocks)
-            || config
-                .mamba_blocks
-                .is_some_and(|blocks| blocks != mamba_blocks)
-        {
-            return Err(Error::WorkerError(
-                "invalid worker cache capacities".to_owned(),
-            ));
-        }
         config.num_gpu_blocks = Some(logical_num_blocks);
         config.mamba_blocks = Some(mamba_blocks);
         if config
@@ -457,6 +455,7 @@ impl WorkerClient {
         });
         Ok(Self {
             config,
+            descriptor,
             sock: send,
             inbox,
             reader,
@@ -766,6 +765,10 @@ impl WorkerClient {
         self.config.clone()
     }
 
+    pub fn model_descriptor(&self) -> &ModelDescriptor {
+        &self.descriptor
+    }
+
     pub async fn cache_step(
         &mut self,
         scheduler: &mut oh_my_vllm_scheduler::Scheduler,
@@ -953,7 +956,7 @@ impl WorkerClient {
         sock: &mut DealerSocket,
         child: &mut ManagedChild,
     ) -> Result<crate::protocol::WorkerMessage> {
-        let receive = Self::recv_raw(sock);
+        let receive = Self::recv_raw_with_limit(sock, Some(MAX_READY_MESSAGE_BYTES));
         tokio::pin!(receive);
         let mut heartbeat = tokio::time::interval(Duration::from_millis(100));
         loop {
@@ -983,6 +986,13 @@ impl WorkerClient {
     async fn recv_raw<S: SocketRecv + Send>(
         sock: &mut S,
     ) -> Result<crate::protocol::WorkerMessage> {
+        Self::recv_raw_with_limit(sock, None).await
+    }
+
+    async fn recv_raw_with_limit<S: SocketRecv + Send>(
+        sock: &mut S,
+        byte_limit: Option<usize>,
+    ) -> Result<crate::protocol::WorkerMessage> {
         let raw: ZmqMessage = sock.recv().await?;
         if raw.len() != 1 {
             return Err(Error::UnexpectedMessageType(
@@ -990,9 +1000,16 @@ impl WorkerClient {
             ));
         }
         let bytes = raw.into_vec().into_iter().next().unwrap_or_default();
+        if byte_limit.is_some_and(|limit| bytes.len() > limit) {
+            return Err(Error::UnexpectedMessageType(
+                "oversized worker Ready message".to_owned(),
+            ));
+        }
         Ok(decode(&bytes)?)
     }
 }
+
+const MAX_READY_MESSAGE_BYTES: usize = 1 << 20;
 
 fn worker_error(error: crate::protocol::ErrorMsg) -> Error {
     use crate::protocol::WorkerErrorKind;

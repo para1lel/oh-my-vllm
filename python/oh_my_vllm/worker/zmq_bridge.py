@@ -3,6 +3,15 @@ import argparse
 import msgpack
 import zmq
 
+from ..models.descriptor import MODEL_DESCRIPTOR_VERSION
+
+
+def initialize(config):
+    version = config.get("descriptor_version")
+    if type(version) is not int or version != MODEL_DESCRIPTOR_VERSION:
+        raise ValueError("unsupported or missing model descriptor version")
+    return create_worker(config)
+
 
 def create_worker(config):
     if config["model_path"] == "stub":
@@ -54,7 +63,7 @@ def main():
                                 getattr(previous, "close", lambda: None)()
                             finally:
                                 del previous
-                        worker = create_worker(message)
+                        worker = initialize(message)
                         reply = worker.ready()
                     elif worker is None:
                         raise ValueError("worker is not initialized")

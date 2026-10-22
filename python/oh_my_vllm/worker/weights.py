@@ -204,5 +204,7 @@ class Weights:
         merger = tuple(
             self.upload("model.visual.merger." + name) for name in merger_names
         )
-        self.visual = VisionWeights(blocks, patch, merger)
+        visual = VisionWeights(blocks, patch, merger)
+        self.checkpoint.verify_identity()
+        self.visual = visual
         return self.visual

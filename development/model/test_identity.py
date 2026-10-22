@@ -5,6 +5,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -104,6 +105,70 @@ class Identity(unittest.TestCase):
             leaf.unlink()
             with self.assertRaises(FileNotFoundError):
                 source_digest(source, root)
+
+    def test_ready_identity_includes_shards_before_lazy_media_loading(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = checkpoint_fixture(root)
+            with patch.dict(MODEL, {"config_sha256": config}):
+                loaded = Checkpoint(root)
+                loaded.raw_tensor("weight")
+                complete = loaded.complete_identity()
+                self.assertEqual(
+                    set(complete),
+                    {"config", "index", "weight.safetensors", "embedding.safetensors"},
+                )
+                self.assertEqual(
+                    complete["embedding.safetensors"],
+                    hashlib.sha256(
+                        (root / "embedding.safetensors").read_bytes()
+                    ).hexdigest(),
+                )
+                path = root / "embedding.safetensors"
+                original = path.read_bytes()
+                path.write_bytes(original[:-1] + b"\x7f")
+                with self.assertRaisesRegex(ValueError, "file bytes changed"):
+                    loaded.raw_tensor("embedding")
+                self.assertEqual(loaded.identity, complete)
+                path.write_bytes(original)
+                loaded = Checkpoint(root)
+                complete = loaded.complete_identity()
+                loaded.raw_tensor("embedding")
+                self.assertEqual(loaded.verify_identity(complete), complete)
+                path.write_bytes(original + b"changed")
+                with self.assertRaisesRegex(ValueError, "file bytes changed"):
+                    loaded.raw_tensor("embedding")
+                with self.assertRaisesRegex(ValueError, "file bytes changed"):
+                    loaded.complete_identity()
+
+    def test_lazy_vision_publishes_only_after_final_identity_verification(self):
+        from oh_my_vllm.worker.weights import Weights
+
+        for changed in (False, True):
+            with self.subTest(changed=changed), TemporaryDirectory() as directory:
+                root = Path(directory)
+                digest = checkpoint_fixture(root)
+                with patch.dict(MODEL, {"config_sha256": digest}):
+                    weights = Weights.__new__(Weights)
+                    weights.checkpoint = Checkpoint(root)
+                    weights.checkpoint.complete_identity()
+                    weights.visual = None
+                    weights.device = SimpleNamespace(view=lambda *args: object())
+
+                    def upload(name, changed=changed, root=root):
+                        if changed and name == "model.visual.merger.linear_fc2.bias":
+                            path = root / "embedding.safetensors"
+                            original = path.read_bytes()
+                            path.write_bytes(original[:-1] + b"\x7f")
+                        return object()
+
+                    weights.upload = upload
+                    if changed:
+                        with self.assertRaisesRegex(ValueError, "file bytes changed"):
+                            weights.vision()
+                        self.assertIsNone(weights.visual)
+                    else:
+                        self.assertIs(weights.vision(), weights.visual)
 
     def test_added_references_bind_complete_inputs_and_endpoints(self):
         from development.operators.reference.shards import write_fixture

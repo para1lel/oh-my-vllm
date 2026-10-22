@@ -10,9 +10,11 @@
 
 阶段 1 [适配器抽取](deepseek-v41/adapters.zh.md) 也在参考生成期间进行.
 Python 注册表在导入 GPU 后端前选择 Qwen.
-Rust model-contract crate 提供描述符类型, 但当前 worker 消息尚不包含这些类型.
+Init 协商描述符版本 1, Ready 提供描述符, 在构建调度器前进行验证.
 Python Qwen 描述符构建器绑定已加载身份和已分配缓存容量, 不导入 GPU 模块.
-Qwen 后端及其状态语义保持不变.
+阶段 1 仍需提取 Qwen 特定控制, 并完成 GPU 回归检查.
+
+Qwen 计算和已接受状态语义保持不变.
 DeepSeek 执行未启用.
 
 [checkpoint 工具](deepseek-v41/checkpoint.zh.md)提供完整字节身份和惰性 CPU FP64 权重读取器.

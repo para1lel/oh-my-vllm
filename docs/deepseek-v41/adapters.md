@@ -16,7 +16,7 @@ All other paths use the registry.
 The old Qwen execution, cache, sampling, and media implementations are unchanged.
 
 This entry is not the full Phase 1 extraction.
-Model descriptor agreement, shared state contracts, and the move of Qwen-specific control are subsequent steps.
+Shared state contracts and the move of Qwen-specific control are subsequent steps.
 These interfaces do not enable distributed execution or DeepSeek capabilities.
 
 ## Selection and startup
@@ -42,7 +42,7 @@ The [phase plan](plan.md) specifies the subsequent extraction and regression wor
 
 ## Rust description contract
 
-The [model-contract crate](../../crates/model-contract/src/lib.rs) supplies versioned types for subsequent readiness agreement.
+The [model-contract crate](../../crates/model-contract/src/lib.rs) supplies versioned types for readiness agreement.
 It defines `ModelDescriptor`, `CacheSchema`, `ParallelPlan`, and `SpeculationSpec`.
 Deserialization rejects unknown fields and enum values.
 Call `validate()` before a consumer uses a descriptor.
@@ -64,7 +64,7 @@ Verification capacity equals the maximum draft count plus one.
 
 The family registry must validate supported layouts, dimensions, and family-specific combinations.
 The Rust types do not enable execution, validate weight contents, or replace rank readiness and state transactions.
-The current worker messages do not yet contain these descriptors.
+The Ready message contains the model descriptor.
 
 ## Python description contract
 
@@ -109,5 +109,36 @@ Private slots, scratch slots, host storage, and execution workspaces do not incr
 The layouts keep the existing paired reservation and commit rules.
 They are not independent state transactions or shared-producer stores.
 
-The builder is not connected to Ready messages yet.
-Readiness agreement must compare family-specific layouts, configured layer membership, and allocated capacities before scheduler construction.
+The worker uses the builder after cache allocation.
+The registry supplies the verified original configuration bytes without a new file read.
+Before Ready, the checkpoint reader hashes all index shards and verifies the file bytes again.
+This step prevents a later lazy vision load from changing the checkpoint file set.
+The tokenizer also verifies its original asset bytes.
+Ready returns a private descriptor copy.
+
+After Ready, the reader verifies shard file states before and after each tensor read.
+It verifies the frozen digest again before the first read of each shard after Ready.
+After vision weight loading, a full identity check occurs before the model can use the new weights.
+File timestamps alone do not prove unchanged file contents.
+
+## Readiness agreement
+
+Init must specify `descriptor_version=1`.
+Python rejects a missing or unsupported version before adapter construction.
+Ready must supply a descriptor.
+An older message cannot use default descriptor values.
+Rust validates its schema and implemented model family before scheduler construction.
+
+It compares the cache layouts, layer membership, block units, and allocated capacities with the selected mode.
+Legacy FA and GDN capacity fields must match their descriptor groups.
+The request context limit must not exceed the supported model limit.
+Qwen keeps TP1, ordinary decode, and MTP4.
+
+The explicit `stub` backend has separate test identities and metadata-only cache layouts.
+Its `f32` weight-format entry is a test wire sentinel, not loaded model weights.
+Its capability entries specify service-test simulations, not neural inference or media decoding.
+Rust accepts this descriptor only for the `stub` path.
+Qwen cannot use it after a load error.
+
+Readiness agreement does not supply numerical or GPU capacity acceptance.
+The [phase plan](plan.md) specifies Qwen regression checks and the next steps for model-specific control extraction.

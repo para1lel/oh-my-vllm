@@ -23,7 +23,7 @@ def build(config, raw_config):
         raise ValueError("checkpoint configuration differs from the model contract")
     from ...worker.inference import Worker
 
-    return Worker(config)
+    return Worker(config, raw_config=raw_config)
 
 
 SPEC = AdapterSpec(

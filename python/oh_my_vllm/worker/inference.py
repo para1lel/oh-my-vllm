@@ -1,5 +1,7 @@
+import copy
 import os
 
+from ..models.qwen38.descriptor import build_descriptor
 from ..operators.runtime.device import Device
 from .cache import Cache
 from .cache_budget import cache_budget
@@ -17,7 +19,7 @@ from .weights import Weights
 
 
 class Worker:
-    def __init__(self, config):
+    def __init__(self, config, *, raw_config):
         if config["block_size"] != 784 or config["tensor_parallel_size"] != 1:
             raise ValueError("invalid cache layout")
         self.tokenizer = Tokenization(config["model_path"])
@@ -57,6 +59,16 @@ class Worker:
         free, total = self.device.memory_info()
         self.cache_memory["initialized_free_bytes"] = free
         self.cache_memory["initialized_used_bytes"] = total - free
+        self.tokenizer.verify_identity(self.tokenizer.identity)
+        self.descriptor = build_descriptor(
+            self.weights.config,
+            raw_config=raw_config,
+            checkpoint_identity=self.weights.checkpoint.complete_identity(),
+            tokenizer_identity=self.tokenizer.identity,
+            fa_capacity_blocks=self.cache.blocks,
+            gdn_capacity_blocks=self.cache.mamba_blocks,
+            num_speculative_tokens=config["num_speculative_tokens"],
+        )
         self.trace = Trace(
             config,
             self.weights.checkpoint.identity,
@@ -81,6 +93,7 @@ class Worker:
     def ready(self):
         return {
             "type": "ready",
+            "descriptor": copy.deepcopy(self.descriptor),
             "logical_num_blocks": self.cache.blocks,
             "mamba_blocks": self.cache.mamba_blocks,
             "cache_memory": self.cache_memory,

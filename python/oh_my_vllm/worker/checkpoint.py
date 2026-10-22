@@ -8,6 +8,17 @@ import numpy as np
 from ..operators.specification import MODEL
 
 
+def file_state(path):
+    value = path.stat()
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
 class Checkpoint:
     def __init__(self, path):
         self.path = Path(path).resolve()
@@ -19,6 +30,9 @@ class Checkpoint:
         self.identity["index"] = hashlib.sha256(index).hexdigest()
         self.index = json.loads(index)["weight_map"]
         self.headers = {}
+        self._ready_identity = None
+        self._ready_states = {}
+        self._ready_unread = set()
 
     def stream_identity(self):
         loaded = dict(self.identity)
@@ -40,6 +54,37 @@ class Checkpoint:
             raise ValueError("checkpoint file bytes changed after loading")
         return observed
 
+    def complete_identity(self):
+        names = set(self.index.values())
+        for name in names:
+            if (
+                not isinstance(name, str)
+                or Path(name).name != name
+                or not name.endswith(".safetensors")
+            ):
+                raise ValueError("invalid checkpoint shard file name")
+        snapshot = {name: file_state(self.path / name) for name in names}
+        for name in sorted(names):
+            if name not in self.identity:
+                with (self.path / name).open("rb") as source:
+                    self.identity[name] = hashlib.file_digest(
+                        source, "sha256"
+                    ).hexdigest()
+        identity = self.verify_identity()
+        if snapshot != {name: file_state(self.path / name) for name in names}:
+            raise ValueError("checkpoint file bytes changed during readiness")
+        self._ready_identity = dict(identity)
+        self._ready_states = snapshot
+        self._ready_unread = set(names)
+        return identity
+
+    def _check_ready_shard(self, filename):
+        if self._ready_identity is not None and (
+            filename not in self._ready_states
+            or file_state(self.path / filename) != self._ready_states[filename]
+        ):
+            raise ValueError("checkpoint file bytes changed after readiness")
+
     def header(self, name):
         if name in self.headers:
             return self.headers[name]
@@ -54,11 +99,16 @@ class Checkpoint:
 
     def raw_tensor(self, name):
         filename = self.index[name]
-        if filename not in self.identity:
+        self._check_ready_shard(filename)
+        if filename not in self.identity or filename in self._ready_unread:
             with (self.path / filename).open("rb") as file:
-                self.identity[filename] = hashlib.file_digest(
-                    file, "sha256"
-                ).hexdigest()
+                digest = hashlib.file_digest(file, "sha256").hexdigest()
+            if self._ready_identity is not None and digest != self._ready_identity.get(
+                filename
+            ):
+                raise ValueError("checkpoint file bytes changed after readiness")
+            self._check_ready_shard(filename)
+            self.identity[filename] = digest
         header, base = self.header(filename)
         tensor = header[name]
         dtype = {"BF16": "<u2", "F8_E4M3": "u1", "F32": "<f4"}[tensor["dtype"]]
@@ -72,6 +122,8 @@ class Checkpoint:
         )
         if array.nbytes != end - begin:
             raise ValueError("checkpoint tensor length differs from shape")
+        self._check_ready_shard(filename)
+        self._ready_unread.discard(filename)
         return array, tensor["dtype"]
 
     def tensor(self, name):

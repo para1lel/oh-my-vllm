@@ -10,9 +10,11 @@ Phase 0 is active: freeze checkpoint identities, tensor layouts, model mathemati
 
 Phase 1 [adapter extraction](deepseek-v41/adapters.md) is also active during reference generation.
 The Python registry selects Qwen before GPU backend imports.
-The Rust model-contract crate supplies descriptor types, but current worker messages do not yet contain them.
+Init negotiates descriptor version 1, and Ready supplies the descriptor for validation before scheduler construction.
 The Python Qwen descriptor builder binds loaded identities and allocated cache capacities without GPU imports.
-The Qwen backend and its state semantics are unchanged.
+Qwen-specific control extraction and GPU regression checks are necessary for Phase 1.
+
+Qwen computation and accepted-state semantics stay unchanged.
 DeepSeek execution is not enabled.
 
 The [checkpoint tools](deepseek-v41/checkpoint.md) provide full byte identities and a lazy CPU FP64 weight reader.

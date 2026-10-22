@@ -699,6 +699,7 @@ dependencies = [
  "clap",
  "libc",
  "oh-my-vllm-kv-cache",
+ "oh-my-vllm-model-contract",
  "oh-my-vllm-scheduler",
  "rmp-serde",
  "serde",
