@@ -42,14 +42,24 @@ Use Ctrl-C or SIGTERM to stop the service and its worker.
 
 ## Cache memory
 
-The worker calculates FA cache capacity at startup.
-Its tensor budget is 85% of total GPU memory.
-The calculation subtracts memory already in use, all GDN state, and planned workspace storage.
-The memory snapshot includes loaded weights. The calculation does not subtract them again.
+FA cache capacity has fixed defaults: `1824` blocks for ordinary decode and `1608` blocks for MTP4.
+These defaults target 85% to 88% total GPU memory use during text inference on one B200 with the default scheduler settings.
+The worker does not calculate the block count from available memory.
 
-The workspace allowance includes prefill, decode workspaces, sampling, MTP, and media tensors.
-The other 15% is available for CUDA Graph and runtime allocations.
-The tensor budget does not set a strict limit on total process memory.
+Use `--num-gpu-blocks` or `OH_MY_VLLM_NUM_GPU_BLOCKS` to change this capacity.
+The service uses the command option if supplied.
+Otherwise, it uses the environment variable if set. Otherwise, it uses the mode default.
+Put the option before `serve`, `run`, or `bench`.
+
+At startup, the worker checks the selected capacity against an 88% tensor budget.
+This check includes memory already in use, FA and GDN storage, prefill, and stored decode and sampling workspaces.
+The memory snapshot includes loaded weights. The check does not count them again.
+The worker rejects a capacity that does not fit. It does not reduce the requested or default block count.
+
+Additional media storage is reported separately. It does not reduce the default text cache capacity.
+Media, CUDA Graph, and runtime allocations use the available memory.
+Large media workloads can exceed available memory. Use a lower block count in this case.
+The startup check does not set a strict limit on total process memory.
 
 The [host cache](kv-offload.md) keeps interrupted requests and reusable prefixes in pinned memory.
 Request restoration keeps recurrent state, media, pending drafts, and sampling offsets.
@@ -62,9 +72,6 @@ Use a zero limit to disable host offload for comparisons.
 The default logical GDN capacity is `128` slots.
 Private request states and temporary checkpoints use additional physical slots.
 Use `--mamba-blocks` to change the logical GDN capacity.
-Use `--num-gpu-blocks` to request an explicit FA capacity.
-The worker rejects an explicit capacity that exceeds the calculated budget.
-
 The worker reports resolved capacities and memory calculations in Ready, the service log, and the execution trace identity.
 Rust creates its logical pools and scheduler after Ready.
 Replacement workers must supply the same capacities and satisfy the current memory budget.

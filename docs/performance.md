@@ -57,7 +57,7 @@ It completes short initialization requests before timing.
 It also checks a complete tool call in each mode before timing.
 It checks prompt lengths, output lengths, and uncached prefixes in HTTP usage.
 
-The worker calculates the FA capacity at startup with the [service memory budget](serving.md#cache-memory).
+The worker uses fixed FA defaults and the startup checks in the [service memory budget](serving.md#cache-memory).
 The default GDN capacity is 128 slots.
 Use `--blocks` for a smaller explicit FA capacity and `--mamba-blocks` to change the GDN capacity.
 The trace identity records the resolved capacities and memory budget.

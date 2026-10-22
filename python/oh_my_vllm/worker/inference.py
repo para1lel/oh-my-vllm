@@ -32,7 +32,7 @@ class Worker:
             config,
             free_bytes=free,
             total_bytes=total,
-            overhead_bytes=sum(workspace.values()),
+            overhead_bytes=workspace["prefill"] + workspace["retained"],
         )
         self.cache_memory["workspace_bytes"] = workspace
         config = dict(

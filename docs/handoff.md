@@ -19,7 +19,7 @@ Keep each draft's proposal probabilities and RNG offsets the same as the per-ste
 
 GDN prefill stores chunk workspaces in sequence order, with a capacity calculated for each sequence.
 Keep the packed offsets consistent with the current schedule and the plan capacity.
-The [service cache budget](serving.md) uses runtime memory information and operator workspace allowances.
+The [service cache budget](serving.md) uses static FA defaults and checks runtime memory and text workspace allowances.
 Rust uses the capacities returned by the worker.
 
 Small FFN and GDN operations use dependent launches at the boundaries in the execution rules.

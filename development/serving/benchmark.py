@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 
 from oh_my_vllm.operators.runtime.native import cache_directory, file_sha256
+from oh_my_vllm.worker.cache_budget import gpu_blocks
 from oh_my_vllm.worker.execution import execution_policy
 from oh_my_vllm.worker.tokenizer import Tokenization, tokenizer_identity
 
@@ -22,6 +23,7 @@ from .roofline import lower_bound
 from .workload import PROFILE, SAMPLING_FIELDS, TOOLS, request_body, validate_tools
 
 ROOT = Path(__file__).resolve().parents[2]
+SHUTDOWN_GRACE_SECONDS = 35
 NATIVE_MODULES = (
     "device",
     "ffn",
@@ -196,11 +198,7 @@ def verify_trace_identity(events, checkpoint, config, tokenizer=None, execution=
     actual_config = identity.get("config", {})
     for name, value in config.items():
         actual_value = actual_config.get(name)
-        if name == "num_gpu_blocks" and value is None:
-            valid = type(actual_value) is int and 2 <= actual_value <= 0xFFFFFFFF
-        else:
-            valid = actual_value == value
-        if not valid:
+        if actual_value != value:
             raise ValueError("trace configuration differs from the requested service")
     actual = identity.get("checkpoint")
     if (
@@ -274,6 +272,8 @@ class Service:
             "7200",
             "--worker-step-timeout-seconds",
             "600",
+            "--shutdown-grace-seconds",
+            str(SHUTDOWN_GRACE_SECONDS),
         ]
         self.process = subprocess.Popen(
             command,
@@ -309,7 +309,7 @@ class Service:
         if self.process.poll() is None:
             os.killpg(self.process.pid, signal.SIGTERM)
             try:
-                self.process.wait(timeout=15)
+                self.process.wait(timeout=SHUTDOWN_GRACE_SECONDS + 10)
             except subprocess.TimeoutExpired:
                 os.killpg(self.process.pid, signal.SIGKILL)
                 self.process.wait()
@@ -319,9 +319,17 @@ class Service:
 
     def verify_identity(self, checkpoint, tokenizer):
         arguments = self.arguments
+        blocks = arguments.blocks
+        if blocks is None and "OH_MY_VLLM_NUM_GPU_BLOCKS" in os.environ:
+            blocks = int(os.environ["OH_MY_VLLM_NUM_GPU_BLOCKS"])
         config = {
             "model_path": str(arguments.model),
-            "num_gpu_blocks": arguments.blocks,
+            "num_gpu_blocks": gpu_blocks(
+                dict(
+                    num_gpu_blocks=blocks,
+                    num_speculative_tokens=4 if self.mode == "mtp4" else 0,
+                )
+            ),
             "mamba_blocks": arguments.mamba_blocks,
             "block_size": 784,
             "tensor_parallel_size": 1,

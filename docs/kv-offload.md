@@ -6,7 +6,7 @@ The host cache keeps interrupted requests and reusable prefixes.
 Rust owns logical identities, references, admission, and eviction.
 Python owns physical storage and CUDA transfers.
 The GPU cache keeps fixed addresses for CUDA Graph execution.
-The GPU capacity still uses the runtime 85% memory budget.
+GPU capacity uses the fixed defaults and startup checks in the [service guide](serving.md#cache-memory).
 
 ## Ownership
 
@@ -65,8 +65,10 @@ A restored partial checkpoint keeps a separate read slot until the first continu
 Ownership checks cover delayed completion, cancellation, capacity pressure, and stale results.
 GPU checks compare restored values and fixed-seed continuation.
 Timeline checks examine transfer overlap and allocation windows separately.
+
 The AgentX measurement uses MTP4 and four session trees.
-Its dataset, seed, profiling duration, and drain limit do not change.
+Its dataset, seed, and profiling duration do not change.
+The [AgentX guide](agentx.md) gives the current drain limit.
 The [test scope](testing.md) controls the other required checks.
 
 ## References

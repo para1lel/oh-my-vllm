@@ -1,6 +1,9 @@
+import contextlib
 import copy
+import io
 import json
 import unittest
+from unittest.mock import patch
 
 from . import agentx, agentx_data
 
@@ -124,6 +127,8 @@ class AgentXTests(unittest.TestCase):
             ("--concurrency", "4"),
             ("--public-dataset", agentx.DATASET),
             ("--benchmark-duration", "900"),
+            ("--benchmark-grace-period", "120"),
+            ("--agentic-warmup-grace-period", "1800"),
             ("--random-seed", "42"),
             ("--export-level", "raw"),
             ("--max-context-length", "262144"),
@@ -133,6 +138,53 @@ class AgentXTests(unittest.TestCase):
         self.assertNotIn("--ignore-trace-delays", command)
         with self.assertRaises(ValueError):
             agentx.profile_command("/env/python", "/model", "/run", 1234, 60, 42)
+        argv = [
+            "agentx",
+            "--model",
+            "/model",
+            "--artifacts",
+            "/run/agentx-test-artifacts",
+            "--agentx-python",
+            "/env/python",
+            "--csv",
+            "/run/agentx-test.csv",
+            "--figure",
+            "/run/agentx-test.png",
+        ]
+        with (
+            patch("sys.argv", argv),
+            patch.object(agentx, "selected_uuid", return_value="gpu"),
+        ):
+            self.assertEqual(agentx.arguments().grace_period, 120)
+        for value in ("0", "30.5", "600", "10000"):
+            with (
+                self.subTest(grace_period=value),
+                patch("sys.argv", [*argv, "--grace-period", value]),
+                patch.object(agentx, "selected_uuid", return_value="gpu"),
+            ):
+                args = agentx.arguments()
+                self.assertEqual(args.grace_period, float(value))
+                command = agentx.profile_command(
+                    "/env/python", "/model", "/run", 1234, 900, 42, args.grace_period
+                )
+                self.assertEqual(
+                    float(command[command.index("--benchmark-grace-period") + 1]),
+                    float(value),
+                )
+        for value in ("-1", "nan", "inf", "-inf", "bad"):
+            with self.subTest(grace_period=value):
+                with self.assertRaises(ValueError):
+                    agentx.profile_command(
+                        "/env/python", "/model", "/run", 1234, 900, 42, value
+                    )
+                with (
+                    patch("sys.argv", [*argv, f"--grace-period={value}"]),
+                    patch.object(agentx, "selected_uuid", return_value="gpu"),
+                    contextlib.redirect_stderr(io.StringIO()),
+                    self.assertRaises(SystemExit) as error,
+                ):
+                    agentx.arguments()
+                self.assertEqual(error.exception.code, 2)
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ Rust 和 worker 控制持久状态选择.
 
 GDN prefill 按序列顺序存放 chunk workspace, 并为每个序列计算容量.
 保持打包后的 offset 与当前 schedule 和 plan 容量一致.
-[服务 cache 预算](serving.zh.md)使用运行时显存信息和算子 workspace 预留量.
+[服务 cache 预算](serving.zh.md)使用固定 FA 默认值, 并检查运行时显存和文本 workspace 预留量.
 Rust 使用 worker 返回的容量.
 
 小规模 FFN 和 GDN 运算在执行规则规定的边界使用依赖启动.

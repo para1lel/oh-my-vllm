@@ -30,7 +30,20 @@ Snapshot requests warm the cache before profiling.
 Profiling starts after warmup. The final drain lets active requests complete.
 
 Warmup and drain time are additional to the `900` seconds.
-The drain limit is `600` seconds.
+The default benchmark drain limit is `120` seconds after the profiling deadline.
+Use `--grace-period SECONDS` to change this limit.
+The value must be finite and at least zero. There is no fixed upper limit.
+With zero grace, requests have no additional time after the profiling deadline.
+
+The separate agentic warmup grace limit stays at `1800` seconds.
+
+The harness includes responses that complete during the benchmark drain in the profiling results.
+The harness can finish the drain early when all credits return and all session-tree work is complete.
+Zero active HTTP requests alone does not guarantee an early finish.
+At the drain deadline, the harness cancels outstanding credits.
+Cancellation cleanup and result export can add time after this deadline.
+
+The launcher stops the harness after `7200` seconds. This limit includes setup and warmup.
 
 Use the [upstream procedure](https://github.com/SemiAnalysisAI/agentx-harness/blob/agentx-v1.0.7/docs/tutorials/agentx-mvp.md) for the scenario rules.
 
@@ -60,8 +73,9 @@ The `agentx` identity entry and `command.json` give the workload configuration.
 Shared HTTP accounting fields do not apply to these results.
 The execution trace identity gives resolved cache capacities and the memory calculation.
 
-The FA capacity is automatic unless `--blocks` supplies an explicit count.
-An explicit count must fit the runtime tensor budget.
+FA capacity uses the fixed MTP4 default in the [service memory settings](serving.md#cache-memory).
+Use `--blocks` or `OH_MY_VLLM_NUM_GPU_BLOCKS` to change it. The command option is used if supplied.
+The selected count must fit the startup tensor budget.
 
 The raw records, service log, execution trace, and count report stay external to the repository.
 The approved AgentX CSV and figure are repository artifacts for this measurement.
@@ -74,6 +88,9 @@ It rejects missing cache counts, duplicate IDs, inconsistent lengths, and invali
 The completed request count must agree with the harness summary.
 Failed, cancelled, incomplete, and context overflow requests have separate counts in the external report.
 The collector rejects a run without a valid scenario result.
+
+These requests do not become successful CSV rows when the drain limit changes.
+Compare these counts when you change the limit. A shorter limit can prevent active requests from completing.
 
 | Field | Definition |
 |---|---|

@@ -30,7 +30,20 @@ EOS token 计入输出上限, 不停止生成.
 预热后开始正式采样. 最后的排空阶段允许活跃请求完成.
 
 预热和排空时间不计入这 `900` 秒.
-排空时间上限为 `600` 秒.
+默认的正式采样排空上限为正式采样截止后的 `120` 秒.
+使用 `--grace-period SECONDS` 更改此上限.
+该值必须是有限数且至少为零. 没有固定的上限.
+零表示正式采样截止后不再提供额外响应时间.
+
+独立的 Agent 预热宽限上限保持为 `1800` 秒.
+
+正式采样排空期间完成的响应仍计入正式采样结果.
+所有 credit 返回且没有剩余会话树任务时, 测试工具可以提前结束排空.
+仅有零个活跃 HTTP 请求不能保证提前结束.
+排空截止时, 测试工具取消未返回的 credit.
+取消清理和结果导出可能在此截止时间后继续耗时.
+
+启动器在 `7200` 秒后停止测试工具, 该时间包含设置和预热.
 
 场景规则见[上游流程](https://github.com/SemiAnalysisAI/agentx-harness/blob/agentx-v1.0.7/docs/tutorials/agentx-mvp.md).
 
@@ -60,8 +73,9 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.agentx \
 共享的 HTTP 性能核算字段不适用于这些结果.
 执行 trace 的身份记录给出实际 cache 容量和内存计算.
 
-除非通过 `--blocks` 提供显式数量, 否则 FA 容量自动计算.
-显式数量必须符合运行时张量预算.
+FA 容量使用[服务显存设置](serving.zh.md#cache-内存)中的固定 MTP4 默认值.
+使用 `--blocks` 或 `OH_MY_VLLM_NUM_GPU_BLOCKS` 修改容量. 如果提供了命令参数, 则使用该参数.
+所选数量必须符合启动时的张量预算.
 
 原始记录, 服务日志, 执行 trace 和计数报告保留在仓库外.
 获准保存的 AgentX CSV 和图片是此次测量的仓库产物.
@@ -74,6 +88,9 @@ scripts/with-env.sh scripts/with-gpu.sh python -m development.serving.agentx \
 完成的请求数必须与测试工具的汇总一致.
 失败, 取消, 未完成和上下文溢出请求在外部报告中分别计数.
 没有有效场景结果的运行会被整理工具拒绝.
+
+更改排空上限不会将这些请求变成成功的 CSV 行.
+更改上限时应比较这些计数. 更短的上限可能使活跃请求无法完成.
 
 | 字段 | 定义 |
 |---|---|

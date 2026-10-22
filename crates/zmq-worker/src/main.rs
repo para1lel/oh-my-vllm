@@ -16,7 +16,9 @@ struct Cli {
     model: PathBuf,
     #[arg(long, default_value = "/tmp/oh-my-vllm.ipc")]
     socket: PathBuf,
-    #[arg(long, value_parser = clap::value_parser!(u32).range(2..))]
+    #[arg(long, env = "OH_MY_VLLM_NUM_GPU_BLOCKS",
+        value_parser = clap::value_parser!(u32).range(2..),
+        help = "FA cache blocks (default: ordinary 1824, MTP4 1608)")]
     num_gpu_blocks: Option<u32>,
     #[arg(long, default_value = "128")]
     mamba_blocks: Option<u32>,

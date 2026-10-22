@@ -42,14 +42,24 @@ scripts/with-env.sh scripts/with-gpu.sh target/release/oh-my-vllm-zmq-worker --m
 
 ## Cache 内存
 
-Worker 在启动时计算 FA cache 容量.
-其张量预算为 GPU 总内存的 85%.
-计算时减去已用内存, 全部 GDN 状态和计划的 workspace 存储.
-内存快照包含已加载的权重, 计算时不会再次减去它们.
+FA cache 容量使用固定默认值: 普通解码为 `1824` 个 block, MTP4 为 `1608` 个 block.
+这些默认值针对单张 B200 和默认调度设置, 目标是文本推理时总显存占用达到 85% 至 88%.
+Worker 不会根据可用显存计算 block 数量.
 
-Workspace 预留量包含 prefill, decode workspace, 采样, MTP 和媒体张量.
-剩余 15% 可供 CUDA Graph 和 runtime 分配使用.
-张量预算不为进程总内存设置严格上限.
+使用 `--num-gpu-blocks` 或 `OH_MY_VLLM_NUM_GPU_BLOCKS` 修改容量.
+如果提供命令参数, 服务会使用该参数.
+否则, 服务会使用已设置的环境变量. 如果环境变量也未设置, 则使用模式默认值.
+将参数放在 `serve`, `run` 或 `bench` 之前.
+
+启动时, worker 按 88% 的张量预算检查所选容量.
+检查包含已用内存, FA 和 GDN 存储, prefill, 以及保留的 decode 和采样 workspace.
+内存快照已包含加载的权重, 检查不会重复计入权重.
+容量不足时, worker 会拒绝启动, 不会减小指定或默认的 block 数量.
+
+额外媒体存储会单独报告, 不会减小默认文本 cache 容量.
+媒体, CUDA Graph 和 runtime 分配使用剩余显存.
+较大的媒体工作负载可能超出可用显存. 此时应减小 block 数量.
+启动检查不是进程总显存的严格上限.
 
 [Host 缓存](kv-offload.zh.md)在 pinned 内存中保留被中断的请求和可复用前缀.
 请求恢复保留递推状态, 媒体, 待验证 draft 和采样 offset.
@@ -62,9 +72,6 @@ Workspace 预留量包含 prefill, decode workspace, 采样, MTP 和媒体张量
 默认逻辑 GDN 容量为 `128` 个槽位.
 请求私有状态和临时 checkpoint 使用额外的物理槽位.
 使用 `--mamba-blocks` 更改逻辑 GDN 容量.
-使用 `--num-gpu-blocks` 请求显式 FA 容量.
-如果显式容量超过计算出的预算, worker 会拒绝它.
-
 Worker 在 Ready, 服务日志和执行 trace 的身份记录中报告实际容量和内存计算.
 Rust 在 Ready 后创建逻辑池和调度器.
 替换 worker 必须提供相同容量, 并满足当前内存预算.

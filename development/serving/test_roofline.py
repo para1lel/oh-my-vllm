@@ -1,4 +1,5 @@
 import json
+import signal
 import tempfile
 import unittest
 from copy import deepcopy
@@ -42,6 +43,25 @@ def tokenizer_fixture(root):
 
 
 class BenchmarkMeasurements(unittest.TestCase):
+    def test_service_close_allows_the_server_shutdown_window(self):
+        service = benchmark.Service.__new__(benchmark.Service)
+        service.process = Mock(pid=123)
+        service.process.poll.return_value = None
+        service.log = Mock()
+        service.ipc = Mock()
+        service.ipc.exists.return_value = False
+
+        def complete_shutdown(timeout=None):
+            if timeout is not None and timeout <= 35:
+                raise benchmark.subprocess.TimeoutExpired("service", timeout)
+            return 0
+
+        service.process.wait.side_effect = complete_shutdown
+        with patch.object(benchmark.os, "killpg") as kill:
+            service.close()
+        kill.assert_called_once_with(123, signal.SIGTERM)
+        service.log.close.assert_called_once()
+
     def test_case_selection_and_timing(self):
         self.assertEqual(len(CONFIGURATIONS), 24)
         self.assertEqual(select_configurations(None, (64, 8192)), CONFIGURATIONS)

@@ -1,6 +1,7 @@
 import argparse
 import contextlib
 import json
+import math
 import os
 import signal
 import subprocess
@@ -17,11 +18,22 @@ from .device import selected_uuid
 
 VERSION = "1.0.7"
 DATASET = "semianalysis_cc_traces_weka_062126_256k"
+DEFAULT_GRACE_PERIOD = 120
 
 
-def profile_command(python, model, artifacts, port, duration, seed):
+def grace_period_seconds(value):
+    seconds = float(value)
+    if not math.isfinite(seconds) or seconds < 0:
+        raise ValueError("AgentX grace period must be finite and at least zero seconds")
+    return seconds
+
+
+def profile_command(
+    python, model, artifacts, port, duration, seed, grace_period=DEFAULT_GRACE_PERIOD
+):
     if duration < 900:
         raise ValueError("AgentX profiling must last at least 900 seconds")
+    grace_period_seconds(grace_period)
     return [
         str(python),
         "-m",
@@ -44,7 +56,7 @@ def profile_command(python, model, artifacts, port, duration, seed):
         "--benchmark-duration",
         str(duration),
         "--benchmark-grace-period",
-        "600",
+        str(grace_period),
         "--agentic-warmup-grace-period",
         "1800",
         "--trajectory-start-min-ratio",
@@ -120,6 +132,12 @@ def arguments():
     parser.add_argument("--csv", type=Path, required=True)
     parser.add_argument("--figure", type=Path, required=True)
     parser.add_argument("--duration", type=int, default=900)
+    parser.add_argument(
+        "--grace-period",
+        type=grace_period_seconds,
+        default=DEFAULT_GRACE_PERIOD,
+        help="benchmark drain seconds (finite, at least zero; default: 120)",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--blocks", type=int)
     parser.add_argument("--mamba-blocks", type=int, default=128)
@@ -171,6 +189,7 @@ def main():
             service.port,
             args.duration,
             args.seed,
+            args.grace_period,
         )
         (args.artifacts / "command.json").write_text(json.dumps(command, indent=2))
         print(
