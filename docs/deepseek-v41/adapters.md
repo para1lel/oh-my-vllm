@@ -65,3 +65,49 @@ Verification capacity equals the maximum draft count plus one.
 The family registry must validate supported layouts, dimensions, and family-specific combinations.
 The Rust types do not enable execution, validate weight contents, or replace rank readiness and state transactions.
 The current worker messages do not yet contain these descriptors.
+
+## Python description contract
+
+The [Python validator](../../python/oh_my_vllm/models/descriptor.py) uses the same versioned named-map fields as Rust.
+It rejects unknown fields, invalid values, duplicate groups, invalid producer chains, and integers that do not fit their types.
+Boolean values do not substitute for integers.
+These checks use CPU data only.
+
+The [Qwen builder](../../python/oh_my_vllm/models/qwen38/descriptor.py) uses verified original configuration bytes and loaded checkpoint and tokenizer identity maps.
+It does not read checkpoint files or import a GPU backend.
+The caller must verify file bytes before supplying their identities.
+The parsed configuration must match the verified bytes.
+The value types must also match.
+
+Each identity map associates a file label with its lowercase SHA256 digest.
+The checkpoint map uses `config` and `index` labels, plus the file names of all loaded shards.
+The tokenizer map includes `tokenizer.json`, `generation_config.json`, and `chat_template.jinja`.
+The helper sorts keys and encodes compact ASCII JSON without a final newline.
+The SHA256 input starts with one versioned domain and ends with the JSON bytes:
+
+```python
+b"oh-my-vllm/checkpoint-identity/v1\0"
+b"oh-my-vllm/tokenizer-identity/v1\0"
+```
+
+Changing a file name, digest, or domain changes the identity.
+Changing cache capacity does not change checkpoint or tokenizer identity.
+The helper hashes all supplied identity entries.
+It does not prove file content or memory capacity.
+
+Qwen supplies the existing 262144-token limit, TP1, and MTP limits of one stage, four drafts, and five verification rows.
+The MTP limit does not enable MTP execution in ordinary-decode mode.
+Configured cache membership includes the predictor FA array only for MTP4.
+
+The two cache groups use versioned Qwen layout IDs.
+FA storage uses BF16.
+The GDN layout includes FP32 recurrent state, BF16 convolution history, and a BF16 boundary hidden-state array.
+Their capacities are allocated scheduler pool counts.
+Pool counts include null block or slot zero.
+
+Private slots, scratch slots, host storage, and execution workspaces do not increase scheduler capacity.
+The layouts keep the existing paired reservation and commit rules.
+They are not independent state transactions or shared-producer stores.
+
+The builder is not connected to Ready messages yet.
+Readiness agreement must compare family-specific layouts, configured layer membership, and allocated capacities before scheduler construction.

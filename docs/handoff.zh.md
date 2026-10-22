@@ -11,6 +11,7 @@
 阶段 1 [适配器抽取](deepseek-v41/adapters.zh.md) 也在参考生成期间进行.
 Python 注册表在导入 GPU 后端前选择 Qwen.
 Rust model-contract crate 提供描述符类型, 但当前 worker 消息尚不包含这些类型.
+Python Qwen 描述符构建器绑定已加载身份和已分配缓存容量, 不导入 GPU 模块.
 Qwen 后端及其状态语义保持不变.
 DeepSeek 执行未启用.
 
@@ -27,7 +28,8 @@ checkpoint 工具还提供独立 CPU Engram 哈希和续算历史.
 图像参考提供与源实现兼容的像素和 patch 顺序, 不导入运行时代码.
 组合图像和视觉检查时, 使用独立的媒体参考环境.
 [视频参考](deepseek-v41/video.zh.md) 提供帧选择和逐帧时间戳块.
-视频解码和完整的媒体模型端点尚未实现.
+[媒体生成器](deepseek-v41/media-reference.zh.md) 提供包含静态图片和合成已解码视频帧的完整目标模型端点.
+其固定产物和视频解码尚未提供.
 [采样约定](deepseek-v41/sampling.zh.md) 定义待处理 token 对齐, 精确修正和请求内 RNG 地址.
 
 媒体和长上下文参考输出, 数值门槛和完整的运行时分配上界仍是前置条件.

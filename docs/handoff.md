@@ -11,6 +11,7 @@ Phase 0 is active: freeze checkpoint identities, tensor layouts, model mathemati
 Phase 1 [adapter extraction](deepseek-v41/adapters.md) is also active during reference generation.
 The Python registry selects Qwen before GPU backend imports.
 The Rust model-contract crate supplies descriptor types, but current worker messages do not yet contain them.
+The Python Qwen descriptor builder binds loaded identities and allocated cache capacities without GPU imports.
 The Qwen backend and its state semantics are unchanged.
 DeepSeek execution is not enabled.
 
@@ -27,7 +28,8 @@ Its DSpark restoration generator and vision reference supply CPU FP64 mathematic
 The image reference supplies source-compatible pixels and patch order without runtime imports.
 Use the separate media reference environment for combined image and vision checks.
 The [video reference](deepseek-v41/video.md) supplies frame selection and per-frame timestamp blocks.
-Video decoding and complete media model endpoints are not implemented.
+The [media generator](deepseek-v41/media-reference.md) supplies full target endpoints for a still image and synthetic decoded video frames.
+Its fixed artifact and video decoding are not present.
 The [sampling contract](deepseek-v41/sampling.md) defines pending-token alignment, exact correction, and request-local RNG addresses.
 
 Media and long-context reference outputs, numerical limits, and full runtime allocation bounds are still prerequisites.
