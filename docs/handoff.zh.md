@@ -13,9 +13,10 @@ Python 注册表在导入 GPU 后端前选择 Qwen.
 Init 协商描述符版本 1, Ready 提供描述符, 在构建调度器前进行验证.
 Python Qwen 描述符构建器绑定已加载身份和已分配缓存容量, 不导入 GPU 模块.
 
-Qwen Python 控制现在位于模型系列目录.
+Qwen Python 控制位于模型系列目录.
 共享工具约束必须使用模型提供的语法.
-阶段 1 还需完成 Rust 模型特定控制, 共享状态契约和完整的 Qwen HTTP 回归矩阵.
+Rust 输出解析使用 Ready 阶段接受的模型系列.
+阶段 1 还需完成 Rust 模型特定默认值及验证, 共享状态契约和完整的 Qwen HTTP 回归矩阵.
 
 Qwen 计算和已接受状态语义保持不变.
 DeepSeek 执行未启用.

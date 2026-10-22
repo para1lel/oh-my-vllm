@@ -9,6 +9,55 @@ use zeromq::{DealerSocket, ZmqMessage, prelude::*};
 type Ready = oneshot::Receiver<std::result::Result<(), (StatusCode, String)>>;
 
 #[test]
+fn validated_model_families_preserve_incremental_output() {
+    use crate::models::{ModelFamily, output::Delta, output::Parser};
+
+    for family in [ModelFamily::Qwen38, ModelFamily::Stub] {
+        let tools = vec![json!({"function":{"name":"echo"}})];
+        let mut parser = Parser::new(family, true, tools.clone());
+        let arguments = json!({"text":"</tool_call>"});
+        let raw = format!(
+            "reason</think>answer<tool_call>{}</tool_call>",
+            json!({"name":"echo", "arguments":arguments})
+        );
+        let mut events = Vec::new();
+        for character in raw.chars() {
+            events.extend(parser.feed(&character.to_string(), false).unwrap());
+        }
+        events.extend(parser.feed("", true).unwrap());
+        let (mut reasoning, mut text, mut calls) = (String::new(), String::new(), Vec::new());
+        for event in events {
+            match event {
+                Delta::Reasoning(value) => reasoning.push_str(&value),
+                Delta::Text(value) => text.push_str(&value),
+                Delta::Tool {
+                    index,
+                    name,
+                    arguments,
+                } => {
+                    calls.push((
+                        index,
+                        name,
+                        serde_json::from_str::<Value>(&arguments).unwrap(),
+                    ));
+                }
+            }
+        }
+        assert_eq!(reasoning, "reason");
+        assert_eq!(text, "answer");
+        assert_eq!(calls, vec![(0, "echo".to_owned(), arguments)]);
+        let mut parser = Parser::new(family, false, Vec::new());
+        assert!(matches!(parser.feed_length("tail").unwrap().as_slice(),
+            [Delta::Text(text)] if text == "tail"));
+        let incomplete = "<tool_call>{\"name\":\"echo\",\"arguments\":{\"text\":\"unfinished";
+        let mut parser = Parser::new(family, false, tools.clone());
+        assert!(parser.feed(incomplete, true).is_err());
+        let mut parser = Parser::new(family, false, tools);
+        assert!(parser.feed_length(incomplete).unwrap().is_empty());
+    }
+}
+
+#[test]
 fn ignore_eos_is_boolean_and_preserves_independent_stop_and_length_options() {
     for responses in [false, true] {
         let mut body = json!({

@@ -2,16 +2,7 @@ use anyhow::{Result, bail, ensure};
 use serde::Deserialize;
 use serde_json::Value;
 
-#[derive(Debug, Clone)]
-pub enum Delta {
-    Reasoning(String),
-    Text(String),
-    Tool {
-        index: usize,
-        name: String,
-        arguments: String,
-    },
-}
+use crate::models::output::Delta;
 
 #[derive(Clone, Copy)]
 enum ToolStage {

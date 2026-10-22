@@ -1,13 +1,12 @@
 mod events;
 mod media;
-mod parser;
 mod request;
 mod resources;
 mod sampling;
 #[cfg(all(test, unix))]
 mod tests;
 
-use crate::{client::WorkerClient, error::Error as WorkerError};
+use crate::{client::WorkerClient, error::Error as WorkerError, models::output::Parser};
 use anyhow::{Context, Result};
 use axum::{
     Extension, Json, Router,
@@ -24,7 +23,6 @@ use axum::{
 use clap::Args;
 use events::Output;
 use oh_my_vllm_scheduler::{Request as EngineRequest, Scheduler};
-use parser::Parser;
 use request::Request;
 use resources::{Budget, Lease, serialized_bytes, unix_seconds};
 use serde_json::{Value, json};
@@ -845,6 +843,7 @@ async fn complete_admit(
     }
     let max_tokens = request.normalized["max_tokens"].as_u64().unwrap() as usize;
     let parser = Parser::new(
+        client.model_family(),
         request.normalized["effort"] != "off",
         if request.normalized["tool_choice"] == "none"
             || request.normalized["format"]["type"] != "text"

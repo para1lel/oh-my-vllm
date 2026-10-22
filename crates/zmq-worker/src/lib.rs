@@ -1,6 +1,7 @@
 pub mod client;
 pub mod error;
 mod model_ready;
+mod models;
 pub mod protocol;
 
 pub use client::WorkerClient;

@@ -43,15 +43,15 @@ impl TestWorker {
             },
         )?))
         .await?;
-        if let crate::protocol::WorkerMessage::Ready {
-            descriptor,
-            logical_num_blocks,
-            mamba_blocks,
-            ..
-        } = WorkerClient::recv_raw(&mut socket).await?
-        {
-            validate_ready(&config, &descriptor, logical_num_blocks, mamba_blocks)?;
-        }
+        let model_family = match WorkerClient::recv_raw(&mut socket).await? {
+            crate::protocol::WorkerMessage::Ready {
+                descriptor,
+                logical_num_blocks,
+                mamba_blocks,
+                ..
+            } => validate_ready(&config, &descriptor, logical_num_blocks, mamba_blocks)?,
+            other => return Err(Error::UnexpectedMessageType(format!("{other:?}"))),
+        };
         let (send, mut receive) = socket.split();
         let (inbox_tx, inbox) = mpsc::channel(16);
         let reader = tokio::spawn(async move {
@@ -75,6 +75,7 @@ impl TestWorker {
             mamba_blocks: config.mamba_blocks.unwrap(),
             host_cache_bytes: config.host_cache_bytes.unwrap_or(0),
             descriptor,
+            model_family,
             config,
             sock: send,
             inbox,

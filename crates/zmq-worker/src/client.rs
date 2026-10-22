@@ -19,6 +19,7 @@ use zeromq::{DealerSendHalf, DealerSocket, ZmqMessage};
 
 use crate::error::{Error, Result};
 use crate::model_ready::validate_ready;
+use crate::models::ModelFamily;
 use crate::protocol::{
     AbortMsg, ExecuteMsg, InitMsg, MODEL_DESCRIPTOR_VERSION, ModelDescriptor, RegisterMsg,
     RustMessage, ScheduledRequestMsg, decode, encode,
@@ -72,6 +73,7 @@ impl Default for WorkerConfig {
 pub struct WorkerClient {
     config: WorkerConfig,
     descriptor: ModelDescriptor,
+    model_family: ModelFamily,
     sock: DealerSendHalf,
     inbox: mpsc::Receiver<Result<crate::protocol::WorkerMessage>>,
     reader: JoinHandle<()>,
@@ -399,36 +401,39 @@ impl WorkerClient {
         .await
         .map_err(|_| Error::Timeout)??;
 
-        let (descriptor, logical_num_blocks, mamba_blocks, host_cache_bytes) = match ready_reply {
-            crate::protocol::WorkerMessage::Ready {
-                descriptor,
-                logical_num_blocks,
-                mamba_blocks,
-                host_cache_bytes,
-                cache_memory,
-            } => {
-                validate_ready(&config, &descriptor, logical_num_blocks, mamba_blocks)?;
-                info!(
-                    logical_num_blocks,
-                    mamba_blocks,
-                    host_cache_bytes,
-                    ?cache_memory,
-                    "Worker is ready"
-                );
-                (
+        let (model_family, descriptor, logical_num_blocks, mamba_blocks, host_cache_bytes) =
+            match ready_reply {
+                crate::protocol::WorkerMessage::Ready {
                     descriptor,
                     logical_num_blocks,
                     mamba_blocks,
                     host_cache_bytes,
-                )
-            }
-            crate::protocol::WorkerMessage::Error(e) => {
-                return Err(Error::WorkerError(e.message));
-            }
-            other => {
-                return Err(Error::UnexpectedMessageType(format!("{other:?}")));
-            }
-        };
+                    cache_memory,
+                } => {
+                    let model_family =
+                        validate_ready(&config, &descriptor, logical_num_blocks, mamba_blocks)?;
+                    info!(
+                        logical_num_blocks,
+                        mamba_blocks,
+                        host_cache_bytes,
+                        ?cache_memory,
+                        "Worker is ready"
+                    );
+                    (
+                        model_family,
+                        descriptor,
+                        logical_num_blocks,
+                        mamba_blocks,
+                        host_cache_bytes,
+                    )
+                }
+                crate::protocol::WorkerMessage::Error(e) => {
+                    return Err(Error::WorkerError(e.message));
+                }
+                other => {
+                    return Err(Error::UnexpectedMessageType(format!("{other:?}")));
+                }
+            };
         config.num_gpu_blocks = Some(logical_num_blocks);
         config.mamba_blocks = Some(mamba_blocks);
         if config
@@ -456,6 +461,7 @@ impl WorkerClient {
         Ok(Self {
             config,
             descriptor,
+            model_family,
             sock: send,
             inbox,
             reader,
@@ -767,6 +773,10 @@ impl WorkerClient {
 
     pub fn model_descriptor(&self) -> &ModelDescriptor {
         &self.descriptor
+    }
+
+    pub(crate) fn model_family(&self) -> ModelFamily {
+        self.model_family
     }
 
     pub async fn cache_step(

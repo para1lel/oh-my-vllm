@@ -16,7 +16,7 @@ All other paths use the registry.
 The Qwen computation and accepted-state rules are unchanged.
 
 This is not the full Phase 1 extraction.
-Shared state contracts, Rust model-specific control, and the full Qwen HTTP regression matrix are necessary subsequent steps.
+Shared state contracts, Rust model-specific defaults and validation, and the full Qwen HTTP regression matrix are necessary subsequent steps.
 These interfaces do not enable distributed execution or DeepSeek capabilities.
 
 ## Python ownership
@@ -38,6 +38,19 @@ The old `worker.checkpoint` module only imports the Qwen checkpoint class.
 This compatibility path keeps the frozen Qwen reference generator unchanged.
 Other model modules use the new family paths.
 The numerical fixtures and acceptance limits are unchanged.
+
+## Rust output ownership
+
+The [shared output interface](../../crates/zmq-worker/src/models/output.rs) supplies reasoning, text, and tool deltas.
+The [Qwen parser](../../crates/zmq-worker/src/models/qwen38/output.rs) owns incremental tag scanning and tool argument parsing.
+Readiness validation returns an internal model family only after all descriptor checks pass.
+The worker client stores that family for its lifetime.
+The service selects an output parser from this stored family, not from the public model name.
+
+The explicit test stub uses Qwen output syntax for service simulations.
+It cannot select a neural model after a startup error.
+Unknown descriptors still cause a startup error.
+This move does not change Qwen stream parsing or public response fields.
 
 ## Selection and startup
 

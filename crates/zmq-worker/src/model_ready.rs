@@ -7,6 +7,7 @@ use oh_my_vllm_model_contract::{
 
 use crate::client::WorkerConfig;
 use crate::error::{Error, Result};
+use crate::models::ModelFamily;
 
 const QWEN_CONFIG_SHA256: &str = "74227dd615bf1ea975aa676bdf355a0379858c12f394b5365cd9dfa5fc2c70bc";
 const STUB_CONFIG_SHA256: &str = "3b7c7f7627a034cd753e4d4db30346a940e49b635952460c51b2ba5f4f332f18";
@@ -30,7 +31,7 @@ pub(crate) fn validate_ready(
     descriptor: &ModelDescriptor,
     logical_num_blocks: u32,
     mamba_blocks: u32,
-) -> Result<()> {
+) -> Result<ModelFamily> {
     descriptor
         .validate()
         .map_err(|error| Error::WorkerError(format!("invalid model descriptor: {error}")))?;
@@ -82,9 +83,11 @@ pub(crate) fn validate_ready(
         "cache groups disagree with Ready capacities or Init block size",
     )?;
     if config.model_path.as_os_str() == "stub" {
-        validate_stub(descriptor, fa, gdn)
+        validate_stub(descriptor, fa, gdn)?;
+        Ok(ModelFamily::Stub)
     } else {
-        validate_qwen(config, descriptor, fa, gdn)
+        validate_qwen(config, descriptor, fa, gdn)?;
+        Ok(ModelFamily::Qwen38)
     }
 }
 
@@ -310,7 +313,10 @@ sys.stdout.buffer.write(msgpack.packb(ready, use_bin_type=True))
             else {
                 panic!("expected Python JSON Ready");
             };
-            validate_ready(&config, &descriptor, logical_num_blocks, mamba_blocks).unwrap();
+            assert_eq!(
+                validate_ready(&config, &descriptor, logical_num_blocks, mamba_blocks).unwrap(),
+                crate::models::ModelFamily::Qwen38
+            );
             let cases = [
                 ("/descriptor/schema_version", json!(2)),
                 ("/descriptor/cache_schema/schema_version", json!(2)),
@@ -490,6 +496,11 @@ sys.stdout.buffer.write(msgpack.packb(ready, use_bin_type=True))
         for drafts in [0, 4] {
             config.num_speculative_tokens = drafts;
             assert!(accepted(ready.clone(), &config));
+            let descriptor = serde_json::from_value(ready["descriptor"].clone()).unwrap();
+            assert_eq!(
+                validate_ready(&config, &descriptor, 1608, 128).unwrap(),
+                crate::models::ModelFamily::Stub
+            );
             for (path, value) in [
                 ("/descriptor/config_sha256", json!("a".repeat(64))),
                 ("/descriptor/checkpoint_sha256", json!("b".repeat(64))),

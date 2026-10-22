@@ -13,9 +13,10 @@ The Python registry selects Qwen before GPU backend imports.
 Init negotiates descriptor version 1, and Ready supplies the descriptor for validation before scheduler construction.
 The Python Qwen descriptor builder binds loaded identities and allocated cache capacities without GPU imports.
 
-Qwen Python control is now in the model family directory.
+Qwen Python control is in the model family directory.
 Shared tool constraints must use model-supplied grammar.
-Rust model-specific control, shared state contracts, and the full Qwen HTTP regression matrix are also necessary for Phase 1.
+Rust output parsing uses the model family accepted at Ready.
+Rust model-specific defaults and validation, shared state contracts, and the full Qwen HTTP regression matrix are also necessary for Phase 1.
 
 Qwen computation and accepted-state semantics stay unchanged.
 DeepSeek execution is not enabled.
