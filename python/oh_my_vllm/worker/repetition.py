@@ -6,6 +6,32 @@ MIN_REPEATED_TOKENS = 64
 HISTORY_WINDOW = MAX_PATTERN_TOKENS * MIN_PATTERN_REPEATS
 
 
+def may_repeat(history, additional_tokens):
+    size = min(len(history), HISTORY_WINDOW)
+    if size + additional_tokens < MIN_REPEATED_TOKENS:
+        return False
+    tail = np.asarray(history[-HISTORY_WINDOW:], dtype=np.int64)[::-1]
+    limit = min(MAX_PATTERN_TOKENS, (size + additional_tokens) // MIN_PATTERN_REPEATS)
+    matches = tail[1 : limit + 1] == tail[0]
+    for index in range(1, 4):
+        matches &= tail[1 + index : limit + 1 + index] == tail[index]
+    tail_bytes = tail.tobytes()
+    token_bytes = tail.itemsize
+    for offset in np.flatnonzero(matches):
+        period = int(offset) + 1
+        # Unknown suffix tokens can complete a cycle only if its known part repeats.
+        known = (
+            max(MIN_PATTERN_REPEATS * period, MIN_REPEATED_TOKENS) - additional_tokens
+        )
+        if known <= size and tail_bytes.startswith(
+            tail_bytes[: (known - period) * token_bytes],
+            period * token_bytes,
+            known * token_bytes,
+        ):
+            return True
+    return False
+
+
 def cycle_continuations(history):
     if len(history) < MIN_REPEATED_TOKENS:
         return set()

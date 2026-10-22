@@ -6,6 +6,7 @@ FUNCTIONS = (
     "sample_project",
     "sample_distribution",
     "sample",
+    "sample_advance_presence",
     "final_hidden",
 )
 

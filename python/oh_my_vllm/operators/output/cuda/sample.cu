@@ -9,6 +9,7 @@ constexpr uint64_t TokenMask = (1ull << TokenBits) - 1;
 constexpr int SampleNormThreads = 640;
 
 #include "hidden.cuh"
+#include "presence.cuh"
 
 inline cudaError_t sort_scores(void *workspace, size_t &bytes, const uint64_t *keys,
                                uint64_t *ordered, int rows, cudaStream_t stream) {

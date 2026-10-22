@@ -106,6 +106,11 @@ class Workspace:
         )
         return self.outputs
 
+    def advance_presence(self, history):
+        self.check_open()
+        self.module.sample_advance_presence(history, self.outputs.tokens)
+        return self.outputs
+
 
 def prepare(plan, device, weights, *, allocate=None):
     return Workspace(

@@ -90,6 +90,7 @@ def draft(prepared):
 
 def bind_sampling(stage, prepared):
     sampler = stage.sampling
+    sampler.inputs.compact = False
     sampler.history = prepared.inputs["history"]
     sampler.mask = prepared.inputs["mask"]
     sampler.parameters = prepared.inputs["parameters"]
@@ -113,7 +114,7 @@ def chain(prepared):
             )
         )
         stages.append(stage)
-    operation = prepared.own(DraftChain(device, stages, case.shape["batch"]))
+    operation = prepared.own(DraftChain(device, stages, case.shape["batch"], True))
     for index, stage in enumerate(stages):
         stage.metadata = tuple(
             inputs[f"stage{index}." + name]

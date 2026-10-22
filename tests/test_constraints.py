@@ -2,6 +2,7 @@ import unittest
 import weakref
 from contextlib import contextmanager
 from copy import deepcopy
+from itertools import product
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -70,12 +71,17 @@ class ChainSample:
         self.outputs.hidden[:] = inputs.value + inputs.residual + 1
 
     def draw(self, settings, rng):
+        rng[:, 1] += (settings.parameters[:, 0] > 0).astype(np.uint64)
         self.outputs.tokens[:] = self.outputs.hidden[:, 0].astype(np.int64)
         self.outputs.probabilities[:] = 0
         self.outputs.probabilities[
             np.arange(len(self.outputs.hidden)), self.outputs.tokens
         ] = 1
         return self.outputs
+
+    def advance_presence(self, history):
+        for row, token in enumerate(self.outputs.tokens):
+            history[row, token // 8] |= 1 << (token % 8)
 
     def close(self):
         pass
@@ -371,7 +377,7 @@ class Constraints(unittest.TestCase):
         request = None
         self.assertIsNone(constraint())
 
-    def test_greedy_draft_chain_keeps_stage_order_private_probabilities_and_fallback(
+    def test_draft_chain_keeps_stage_order_private_probabilities_and_fallback(
         self,
     ):
         from oh_my_vllm.worker.draft_chain import can_chain
@@ -392,8 +398,10 @@ class Constraints(unittest.TestCase):
             "sampling": {"temperature": 0, "repetition_guard": False},
         }
 
-        def request():
-            value = Request(tokenizer, [4, 4], deepcopy(options))
+        def request(sampling=None):
+            configured = deepcopy(options)
+            configured["sampling"].update(sampling or {})
+            value = Request(tokenizer, [4, 4], configured)
             value.append([5])
             value.state_position = 2
             return value
@@ -441,10 +449,28 @@ class Constraints(unittest.TestCase):
             self.assertEqual(second.drafts, [5, 11, 23, 47])
             self.assertEqual(d.downloads, 2)
             self.assertEqual(first.drafts, saved)
+            for seed, offset in ((7, 17), (19, 31)):
+                stochastic = request(
+                    dict(temperature=0.7, presence_penalty=0.5, seed=seed)
+                )
+                stochastic.proposal_offset = offset
+                batch.requests = [stochastic]
+                before = d.downloads
+                speculation.propose(batch, endpoints, True)
+                self.assertEqual(d.downloads - before, 1)
+                self.assertEqual(stochastic.proposal_offset, offset + 4)
+                self.assertFalse(stochastic.drafts_greedy)
+                expected = np.zeros((4, 248320), np.float32)
+                expected[np.arange(4), [5, 11, 23, 47]] = 1
+                np.testing.assert_array_equal(stochastic.proposals, expected)
+                endpoints[0] = (np.full((1, 5120), 2, np.float32), None)
+                batch.requests = [request()]
+                speculation.propose(batch, endpoints, True)
+                np.testing.assert_array_equal(stochastic.proposals, expected)
+                endpoints[0] = (np.full((1, 5120), 4, np.float32), None)
             for update in (
-                {"temperature": 0.5},
                 {"frequency_penalty": 0.2},
-                {"repetition_guard": True},
+                {"repetition_penalty": 1.2},
             ):
                 rejected = request()
                 rejected.options["sampling"].update(update)
@@ -479,6 +505,58 @@ class Constraints(unittest.TestCase):
                 with self.subTest(table=table):
                     self.assertFalse(can_chain(batch, [0], True, cache.blocks))
             speculation.close()
+
+    def test_stochastic_chain_requires_prefix_independent_masks(self):
+        from oh_my_vllm.worker.draft_chain import can_chain
+
+        tokenizer = SimpleNamespace(
+            eos={256},
+            grammar=SimpleNamespace(vocab_size=248320),
+            valid_tokens=259,
+            think_end=257,
+            generation={},
+        )
+        request = Request(
+            tokenizer,
+            [4],
+            {
+                "max_tokens": 4096,
+                "ignore_eos": True,
+                "sampling": {"temperature": 1, "presence_penalty": 0.5},
+            },
+        )
+        batch = SimpleNamespace(requests=[request], scheduled=[{"fa_block_table": [1]}])
+        request.state_position = 1
+        self.assertTrue(can_chain(batch, [0], True, 8))
+        for history in (
+            [1] * 60,
+            [1] * 61,
+            [1, 2] * 31,
+            [1, 2] * 30 + [3],
+            list(range(128)),
+            list(range(23)) * 3,
+        ):
+            request.history = [4, *history]
+            eligible = can_chain(batch, [0], True, 8)
+            if history == [1] * 61 or history == [1, 2] * 31:
+                self.assertFalse(eligible)
+            if eligible:
+                initial = request.mask()
+                for length in range(4):
+                    for prefix in product((1, 2, 3), repeat=length):
+                        np.testing.assert_array_equal(
+                            request.mask(
+                                generated=request.generated + length, prefix=prefix
+                            ),
+                            initial,
+                        )
+        request.history = [4, *range(128)]
+        self.assertTrue(can_chain(batch, [0], True, 8))
+        request.minimum = request.generated + 2
+        self.assertFalse(can_chain(batch, [0], True, 8))
+        request.minimum = 0
+        request.ignore_eos = False
+        self.assertFalse(can_chain(batch, [0], True, 8))
 
     def test_thinking_cannot_end_before_the_constraint_starts(self):
         tokenizer = SimpleNamespace(

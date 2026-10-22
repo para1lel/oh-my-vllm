@@ -11,6 +11,12 @@ worker 使用显式层权重, 命名输出和算子计划键.
 Rust 和 worker 控制持久状态选择.
 算子只写入调用方提供的状态位置.
 
+仅含 decode 的[草稿链](../python/oh_my_vllm/worker/draft_chain.py)可以将随机采样和私有 presence 历史保留在 GPU 上.
+仅第一个草稿步骤从主机元数据获取输入 token.
+后续草稿步骤使用上一步的 GPU token 输出.
+依赖前缀的 mask 和不支持的停止条件使用逐步路径.
+保持各草稿的 proposal 概率和 RNG offset 与逐步路径相同.
+
 小规模 FFN 和 GDN 运算在执行规则规定的边界使用依赖启动.
 FFN prefill 在 65 到 1024 行时使用这些依赖.
 [前缀 cache](serving.zh.md#前缀-cache) 可以使用来自未满块的 checkpoint.

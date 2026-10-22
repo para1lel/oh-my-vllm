@@ -16,6 +16,14 @@ The [execution tests](../tests/test_execution.py) check the execution decision f
 They check recording failures, replay on the caller's stream, interruption, and closure order.
 They do not supply model numerical or performance evidence.
 
+The [draft sampling check](../development/operators/check_draft_chain.py) compares CUDA Graph sampling with sequential sampling.
+It checks probabilities, RNG offsets, and sampling history after each graph replay.
+Run it through the GPU wrapper:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.operators.check_draft_chain
+```
+
 Use the [full-model evaluation](operators/evaluation.md) for numerical checks.
 Compare all vocabulary logits after a fixed short prompt and one decode iteration with an independent PyTorch FP64 model.
 Do not use sampled intermediate outputs or the old low-precision path as the numerical reference.

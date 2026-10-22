@@ -475,13 +475,16 @@ class Speculation:
                 )
         if can_chain(batch, active, graph, self.cache.blocks):
             count = len(active)
-            if count not in self.chains:
-                self.chains[count] = DraftChain(
+            greedy = all(batch.requests[index].drafts_greedy for index in active)
+            key = (count, greedy)
+            if key not in self.chains:
+                self.chains[key] = DraftChain(
                     d,
                     [Draft(d, self.weights, count, stage == 0) for stage in range(4)],
                     count,
+                    greedy,
                 )
-            operation = self.chains[count]
+            operation = self.chains[key]
             operation.prepare(batch, active, endpoints, self.cache)
             for stage in range(4):
                 self.record_draft(batch, active, stage)

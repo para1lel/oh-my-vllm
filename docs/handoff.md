@@ -11,6 +11,12 @@ Use the [execution rules](execution.md) for Eager execution, CUDA Graph replay, 
 Rust and the worker control persistent state selection.
 Operators write only to the state locations supplied by their callers.
 
+Decode-only [draft chains](../python/oh_my_vllm/worker/draft_chain.py) can keep stochastic sampling and private presence history on the GPU.
+Only the first draft step gets its input token from host metadata.
+Subsequent draft steps use the GPU token output from the last step.
+Prefix-dependent masks and unsupported stopping conditions use the per-step path.
+Keep each draft's proposal probabilities and RNG offsets the same as the per-step path.
+
 Small FFN and GDN operations use dependent launches at the boundaries in the execution rules.
 FFN prefill uses these dependencies for 65 to 1024 rows.
 The [prefix cache](serving.md#prefix-cache) can use a checkpoint from a block that is not full.

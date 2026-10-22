@@ -16,6 +16,14 @@ Rust 检查流式 JSON tool frames 和媒体请求的 prefix cache 隔离.
 它们检查录制失败, 调用者 stream 上的重放, 中断及关闭顺序.
 它们不提供模型数值或性能证据.
 
+[草稿采样检查](../development/operators/check_draft_chain.py)比较 CUDA Graph 采样和逐步采样.
+它在每次 graph 重放后检查概率, RNG offset 和采样历史.
+通过 GPU wrapper 运行:
+
+```bash
+scripts/with-env.sh scripts/with-gpu.sh python -m development.operators.check_draft_chain
+```
+
 数值检查使用 [全模型评估](operators/evaluation.zh.md).
 在固定短提示和一次 decode 迭代后, 将全部词表 logits 与独立 PyTorch FP64 模型比较.
 不使用抽样中间输出或旧低精度路径作为数值参考.
