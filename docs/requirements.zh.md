@@ -1,5 +1,9 @@
 # 运行时契约
 
+下列现有模型专属契约适用于 Qwen.
+[Nightly 提案](deepseek-v41/design.zh.md)定义规划的 DeepSeek 扩展, 不表示当前可执行程序已支持.
+扩展期间保持共享的语言, 传输, 算子和执行约束.
+
 构建在单张 NVIDIA B200 上运行的 Qwen3.8-27B-FP8 推理服务.
 Rust 负责服务, 调度器和逻辑 KV cache.
 
@@ -27,7 +31,7 @@ Python 负责 GPU 计算. 进程间使用 ZMQ DEALER 和 msgpack.
 使用 24 种 [HTTP 配置](performance.zh.md#配置)测量性能.
 使用[评估流程](operators/evaluation.zh.md)中的短输入, 单次迭代 logits 对照.
 保留适用的服务, 状态所有权和 graph 资源检查.
-每次交付前更新两种语言的 README 表格.
+交付范围和结果位置使用 [nightly 验证与记录策略](deepseek-v41/validation.zh.md).
 
 本文所述功能和模式的详细标准见以下历史契约:
 

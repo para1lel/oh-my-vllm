@@ -33,9 +33,9 @@ Before you add a test, tell the maintainer why it is necessary.
 Tell the maintainer why the other tests are not sufficient.
 Agents do the applicable tests in the repository for the maintainer.
 
-Keep test reports and logs external to the repository.
-Update the required performance tables in the two README files before each delivery.
-Do not add other result tables or pass/fail histories.
+Keep raw test reports and logs external to the repository.
+Use the [nightly reporting policy](docs/deepseek-v41/validation.md) for approved performance documents.
+Do not add unrelated result tables or pass/fail histories.
 
 ## Delivery
 

@@ -1,5 +1,9 @@
 # Runtime contracts
 
+The current model-specific contracts below apply to Qwen.
+The [nightly proposal](deepseek-v41/design.md) defines the planned DeepSeek extension, not current executable support.
+Keep the shared language, transport, operator, and execution constraints during that extension.
+
 Build the Qwen3.8-27B-FP8 inference service for one NVIDIA B200.
 Use Rust for the service, the scheduler, and the logical KV cache.
 
@@ -27,7 +31,7 @@ Use CUDA Graph recording and replay for decode-only Execute messages.
 Measure performance with the 24 [HTTP configurations](performance.md#configurations).
 Use the short-input, single-iteration logits comparison in the [evaluation procedure](operators/evaluation.md).
 Keep applicable service, state-ownership, and graph resource checks.
-Update the two README tables before each delivery.
+Use the [nightly validation and reporting policy](deepseek-v41/validation.md) for delivery scope and result placement.
 
 Use these archived contracts for the detailed criteria of the functions and modes in this document:
 

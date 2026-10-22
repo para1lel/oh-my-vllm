@@ -1,6 +1,14 @@
 # 工作状态
 
-使用 `main` 开展工作.
+从基线 `b99701a` 在 `nightly` 开展规划的 DeepSeek 扩展.
+阅读[架构提案](deepseek-v41/design.zh.md), [阶段计划](deepseek-v41/plan.zh.md)和[验证计划](deepseek-v41/validation.zh.md).
+实现仍然只支持 Qwen. 尚无 DeepSeek 运行时改动.
+
+取得维护者对架构和 HTTP 策略假设的批准.
+批准后开始阶段 0.
+DeepSeek 和新的 nightly 回归测量放入独立文档, 不放进 README.
+
+以下状态描述 Qwen 实现.
 [算子包](../python/oh_my_vllm/operators) 将各算子族的接口, 计划, 工作区和 CUDA 代码放在一起.
 [结构设计](operators/design.zh.md) 定义其依赖关系和所有权.
 将共享资源机制放入 `runtime`, 将共享计算放入 `primitives`.
@@ -51,7 +59,7 @@ HTTP efficiency 不设最低交付门槛.
 报告实测性能.
 
 交付前执行适用的[测试范围](testing.zh.md).
-同时执行全部 24 组 [HTTP 配置](performance.zh.md).
+实现交付时, 按 nightly 验证计划选择 24 组 Qwen [HTTP 配置](performance.zh.md).
 
 [Host KV cache](kv-offload.zh.md) 支持被中断请求及由容量压力触发的前缀存储.
 保持传输引用直到完成, 包括已取消请求.

@@ -3,6 +3,7 @@
 Use the [contribution procedure](../CONTRIBUTING.md) before you add tests.
 Agents do the tests for the maintainer.
 Do the hooks in the [development commands](development.md#git-hooks).
+Use the [nightly validation plan](deepseek-v41/validation.md) for model-specific scope and document-only changes.
 
 The Rust tests include checks of the service, scheduler, logical KV, and worker lifecycle.
 The HTTP tests use the Python placeholder through the process boundary.
@@ -54,5 +55,5 @@ Its approved CSV and figure can be stored in the repository.
 Keep its raw records and logs external to the repository.
 CPU checks cover its fixed configuration and request data validation.
 
-Update the required performance tables in the two README files before each delivery.
-Do not put other test results in project documents.
+Use the nightly validation plan for approved performance documents instead of new README result tables.
+Do not put unrelated test results in project documents.

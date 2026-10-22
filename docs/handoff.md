@@ -1,6 +1,14 @@
 # Work state
 
-Use `main` for work.
+Use `nightly` for the planned DeepSeek extension from base `b99701a`.
+Read the [architecture proposal](deepseek-v41/design.md), [phase plan](deepseek-v41/plan.md), and [validation plan](deepseek-v41/validation.md).
+The implementation is still Qwen-only. No DeepSeek runtime changes are present.
+
+Get maintainer approval of the architecture and HTTP strategy assumptions.
+Start Phase 0 after approval.
+Keep DeepSeek and new nightly regression measurements in separate documents, not README.
+
+The following state applies to the Qwen implementation.
 The [operator packages](../python/oh_my_vllm/operators) keep each family's interface, plan, workspace, and CUDA code together.
 The [structure design](operators/design.md) defines their dependencies and ownership.
 Keep shared resource mechanisms in `runtime` and shared computation in `primitives`.
@@ -51,7 +59,7 @@ Keep the numerical limits and operator ratio limits.
 Report the measured performance.
 
 Run the applicable [test scope](testing.md) before delivery.
-Also run all 24 [HTTP configurations](performance.md).
+For implementation deliveries, use the nightly validation plan to select the 24 Qwen [HTTP configurations](performance.md).
 
 The [host KV cache](kv-offload.md) supports interrupted requests and pressure-driven prefix storage.
 Keep transfer leases until completion, also for cancelled requests.

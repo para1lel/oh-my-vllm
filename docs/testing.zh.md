@@ -3,6 +3,7 @@
 新增测试前使用 [贡献流程](../CONTRIBUTING.zh.md).
 代理为维护者执行测试.
 运行[开发命令](development.zh.md#git-hooks)中的 hooks.
+模型专属范围及纯文档变更使用 [nightly 验证计划](deepseek-v41/validation.zh.md).
 
 Rust 测试包含服务, scheduler, 逻辑 KV 和 worker 生命周期检查.
 HTTP 测试通过进程边界使用 Python placeholder.
@@ -54,5 +55,5 @@ GPU 工作使用 GPU wrapper.
 原始记录和日志保留在仓库外.
 CPU 检查覆盖其固定配置和请求数据校验.
 
-每轮交付前更新两种语言 README 中要求的性能表.
-不要把其他测试结果写入项目文档.
+获批性能文档使用 nightly 验证计划, 不新增 README 结果表.
+不要把无关测试结果写入项目文档.
