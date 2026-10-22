@@ -1,6 +1,6 @@
 # DeepSeek V4.1 分阶段实施计划
 
-> 代理执行者: 使用 `superpowers:executing-plans` 或 `superpowers:subagent-driven-development`. 每次完成一个经过审查的阶段, 不再等待维护者逐阶段批准.
+> 代理执行者: 使用 `superpowers:executing-plans` 或 `superpowers:subagent-driven-development`. 保留阶段门槛和独立审查, 不再等待维护者逐阶段批准.
 
 **目标:** 增加四 GPU DeepSeek 推理, 不损失现有 Qwen 功能.
 
@@ -37,6 +37,11 @@
 每个阶段产出可独立检查的可运行软件, 或冻结的前置契约.
 每阶段编码前, 为其接口编写简短的实施清单.
 新行为没有现成检查时, 先编写失败的行为检查, 再实施.
+
+阶段 1 的契约抽取可以在阶段 0 参考生成期间进行.
+它不得修改正在使用的参考源码, 启用未经验证的 DeepSeek 执行, 或移除阶段 0 的门槛.
+冻结的阶段 0 数学和验收契约是阶段 3 算子的前置条件.
+
 不把这份路线图作为一次巨型实现变更.
 
 每个阶段都执行独立审查.

@@ -670,6 +670,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "oh-my-vllm-model-contract"
+version = "0.1.0"
+dependencies = [
+ "rmp-serde",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "oh-my-vllm-scheduler"
 version = "0.1.0"
 dependencies = [

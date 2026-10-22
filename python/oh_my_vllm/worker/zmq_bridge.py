@@ -7,9 +7,11 @@ import zmq
 def create_worker(config):
     if config["model_path"] == "stub":
         from .placeholder import Worker
-    else:
-        from .inference import Worker
-    return Worker(config)
+
+        return Worker(config)
+    from ..models.registry import create
+
+    return create(config)
 
 
 def error_kind(message, error):

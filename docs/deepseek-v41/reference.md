@@ -167,3 +167,45 @@ Projection-row limits bound weight reads.
 The reference uses CPU FP64 arithmetic without source BF16/FP32 rounding.
 It does not include image loading, resizing, normalization, video frame selection, or language-model image insertion.
 Small mathematical checks do not supply a fixed local-checkpoint media endpoint.
+
+## Image preparation
+
+The [image reference](../../development/model/deepseek_v41/reference_image.py) accepts encoded image bytes, not paths or URLs.
+Its grid calculation uses the source minimum pixel area, patch rounding, token bound, and optional wide-image resize rule.
+Pillow supplies the source RGB conversion, resize, and gray padding.
+No EXIF rotation occurs.
+The output has FP64 normalized patches and ordered start, image, newline, and end token types.
+FP64 normalization does not include the source FP32 arithmetic or the final BF16 conversion.
+
+The tool rejects encoded inputs above 64 MiB, decoded images above 67108864 pixels, and prepared FP64 arrays above 512 MiB.
+These are reference resource bounds, not a new service media contract.
+It does not execute the vision or language model.
+
+Use a separate environment from `requirements/deepseek-media-reference.lock` for image and vision checks together.
+Its versions match the text reference lock, with Pillow 12.3.0 added.
+Do not change packages used by an active reference-generation process.
+Set `MEDIA_REFERENCE_ENV` to a new external environment directory:
+
+```bash
+scripts/with-env.sh uv venv "$MEDIA_REFERENCE_ENV"
+scripts/with-env.sh uv pip sync --python "$MEDIA_REFERENCE_ENV/bin/python" \
+  requirements/deepseek-media-reference.lock
+scripts/with-env.sh "$MEDIA_REFERENCE_ENV/bin/python" -m unittest \
+  development.model.deepseek_v41.test_reference_image \
+  development.model.deepseek_v41.test_reference_vision
+```
+
+## Media prompt expansion
+
+The [prompt expansion helper](../../development/model/deepseek_v41/reference_media.py) accepts tokenizer IDs and ordered encoded image bytes.
+Each image placeholder becomes one full source image span.
+Each span position keeps the configured image token ID, with start, image, newline, and end types.
+Text positions have type -1.
+The helper keeps image order and records each span's start position.
+It rejects image-count mismatches, missing vision support, invalid token IDs, and expanded prompts above the context capacity.
+
+Combined patch storage has a 512 MiB limit for this reference helper.
+This limit does not include temporary storage for the preparation of one image.
+Prompt IDs, types, and patch arrays are read-only after expansion.
+The helper does not run vision, insert embeddings, or reserve output tokens.
+The caller must make sure that combined input/output length is not more than its limit before service admission.

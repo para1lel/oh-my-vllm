@@ -167,3 +167,45 @@ Query 分块限制分数存储, 不丢弃 keys.
 参考使用 CPU FP64 算术, 不进行源实现的 BF16/FP32 舍入.
 它不包含图像加载, resize, 归一化, 视频帧选择或语言模型图像插入.
 小型数学检查不提供固定的本地检查点媒体端点.
+
+## 图像准备
+
+[图像参考](../../development/model/deepseek_v41/reference_image.py) 接受编码后的图像字节, 而不是路径或 URLs.
+其网格计算使用源实现的最小像素面积, patch 对齐舍入, token 上限和可选的宽图像 resize 规则.
+Pillow 提供源实现的 RGB 转换, resize 和灰色填充.
+不进行 EXIF 旋转.
+输出包含 FP64 归一化 patches, 以及有序的起始, 图像, 换行和结束 token 类型.
+FP64 归一化不包含源实现的 FP32 算术和最终 BF16 转换.
+
+此工具拒绝超过 64 MiB 的编码输入, 超过 67108864 pixels 的解码图像, 以及超过 512 MiB 的准备后 FP64 数组.
+这些是参考资源上限, 不是新的服务媒体约定.
+它不执行视觉或语言模型.
+
+组合图像和视觉检查时, 使用 `requirements/deepseek-media-reference.lock` 指定的独立环境.
+其版本与文本参考锁定文件一致, 另加入 Pillow 12.3.0.
+不要修改正在生成参考的进程使用的包.
+将 `MEDIA_REFERENCE_ENV` 设为新的外部环境目录:
+
+```bash
+scripts/with-env.sh uv venv "$MEDIA_REFERENCE_ENV"
+scripts/with-env.sh uv pip sync --python "$MEDIA_REFERENCE_ENV/bin/python" \
+  requirements/deepseek-media-reference.lock
+scripts/with-env.sh "$MEDIA_REFERENCE_ENV/bin/python" -m unittest \
+  development.model.deepseek_v41.test_reference_image \
+  development.model.deepseek_v41.test_reference_vision
+```
+
+## 媒体提示展开
+
+[提示展开辅助函数](../../development/model/deepseek_v41/reference_media.py) 接受 tokenizer IDs 和有序的编码图像字节.
+每个图像占位符变为一个完整的源图像跨度.
+跨度内每个位置保持配置的图像 token ID, 通过独立类型区分起始, 图像, 换行和结束.
+文本位置的类型为 -1.
+辅助函数保持图像顺序, 并记录每个跨度的起始位置.
+它拒绝图像数量不匹配, 缺少视觉支持, 无效 token IDs, 以及展开后超过上下文容量的提示.
+
+此参考辅助函数的合计 patch 存储上限为 512 MiB.
+此上限不包含单张图像准备所需的临时存储.
+展开后的提示 IDs, 类型和 patch 数组均为只读.
+辅助函数不运行视觉模型, 不插入 embeddings, 也不预留输出 tokens.
+调用者必须在服务接纳前确保输入输出合计长度不超过其上限.

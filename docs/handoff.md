@@ -8,6 +8,12 @@ The architecture and measurement matrix have approval.
 Execute all phases without additional phase approval.
 Phase 0 is active: freeze checkpoint identities, tensor layouts, model mathematics, and independent numerical references.
 
+Phase 1 [adapter extraction](deepseek-v41/adapters.md) is also active during reference generation.
+The Python registry selects Qwen before GPU backend imports.
+The Rust model-contract crate supplies descriptor types, but current worker messages do not yet contain them.
+The Qwen backend and its state semantics are unchanged.
+DeepSeek execution is not enabled.
+
 The [checkpoint tools](deepseek-v41/checkpoint.md) provide full byte identities and a lazy CPU FP64 weight reader.
 The [model contract](deepseek-v41/model.md) and [state contract](deepseek-v41/state.md) give the local mathematical sources and subsequent reference gates.
 The [memory planner](deepseek-v41/memory.md) specifies tensor placement and storage budgets for all three four-rank strategies.
@@ -17,6 +23,11 @@ The [reference construction guide](deepseek-v41/reference.md) specifies streamed
 The [fixed fixtures](deepseek-v41/fixtures.md) bind short-text endpoints and prompt-codec cases.
 Their upstream comparison rejects checkpoint substitution without proof of equal weight identities.
 Its DSpark restoration generator and vision reference supply CPU FP64 mathematics, not service execution.
+
+The image reference supplies source-compatible pixels and patch order without runtime imports.
+Use the separate media reference environment for combined image and vision checks.
+The [video reference](deepseek-v41/video.md) supplies frame selection and per-frame timestamp blocks.
+Video decoding and complete media model endpoints are not implemented.
 The [sampling contract](deepseek-v41/sampling.md) defines pending-token alignment, exact correction, and request-local RNG addresses.
 
 DSpark, media, and long-context reference outputs and complete runtime allocation bounds are still prerequisites.

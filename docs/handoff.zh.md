@@ -8,6 +8,12 @@
 执行全部阶段, 不再逐阶段等待批准.
 阶段 0 正在进行: 冻结 checkpoint 身份, 张量布局, 模型数学行为和独立数值参考.
 
+阶段 1 [适配器抽取](deepseek-v41/adapters.zh.md) 也在参考生成期间进行.
+Python 注册表在导入 GPU 后端前选择 Qwen.
+Rust model-contract crate 提供描述符类型, 但当前 worker 消息尚不包含这些类型.
+Qwen 后端及其状态语义保持不变.
+DeepSeek 执行未启用.
+
 [checkpoint 工具](deepseek-v41/checkpoint.zh.md)提供完整字节身份和惰性 CPU FP64 权重读取器.
 [模型契约](deepseek-v41/model.zh.md)和[状态契约](deepseek-v41/state.zh.md)给出本地数学来源和后续参考门槛.
 [内存规划器](deepseek-v41/memory.zh.md)为全部三种四 rank 策略指定张量放置和存储预算.
@@ -17,6 +23,11 @@ checkpoint 工具还提供独立 CPU Engram 哈希和续算历史.
 [固定夹具](deepseek-v41/fixtures.zh.md) 绑定短文本端点和提示词编码用例.
 其中的上游比较在没有相同权重身份凭据时拒绝检查点替换.
 其中的 DSpark 恢复生成器和视觉参考提供 CPU FP64 数学实现, 而不是服务执行.
+
+图像参考提供与源实现兼容的像素和 patch 顺序, 不导入运行时代码.
+组合图像和视觉检查时, 使用独立的媒体参考环境.
+[视频参考](deepseek-v41/video.zh.md) 提供帧选择和逐帧时间戳块.
+视频解码和完整的媒体模型端点尚未实现.
 [采样约定](deepseek-v41/sampling.zh.md) 定义待处理 token 对齐, 精确修正和请求内 RNG 地址.
 
 DSpark, 媒体和长上下文参考输出及完整的运行时分配上界仍是前置条件.

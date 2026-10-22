@@ -1,6 +1,6 @@
 # DeepSeek V4.1 phased implementation plan
 
-> Agent workers: use `superpowers:executing-plans` or `superpowers:subagent-driven-development`. Complete one reviewed phase at a time without additional maintainer approval.
+> Agent workers: use `superpowers:executing-plans` or `superpowers:subagent-driven-development`. Keep phase gates and independent review without additional maintainer approval.
 
 **Goal:** Add four-GPU DeepSeek inference without loss of existing Qwen functions.
 
@@ -37,6 +37,10 @@
 Each phase produces working, independently checked software or a frozen prerequisite contract.
 Write a small implementation checklist for its interfaces before coding that phase.
 Use failing behavior checks before implementation when new behavior has no existing check.
+
+Phase 1 contract extraction can proceed during Phase 0 reference generation.
+It must not change active reference sources, enable unverified DeepSeek execution, or remove a Phase 0 gate.
+The frozen Phase 0 mathematics and acceptance contracts are prerequisites for Phase 3 operators.
 
 Do not copy this roadmap into one large implementation change.
 

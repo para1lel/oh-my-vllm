@@ -1,0 +1,2 @@
+-r deepseek-reference.txt
+pillow==12.3.0
